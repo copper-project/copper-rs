@@ -14,8 +14,10 @@ use nix::sys::stat;
 use nix::unistd::{fork, ForkResult};
 use nix::Error::Sys;
 use nix::errno::Errno::EEXIST;
-use spinlock::Spinlock;
 use shm;
+mod culist;
+mod rpc;
+use culist::Cu;
 
 fn main() {
     match fork() {
@@ -33,12 +35,6 @@ fn main() {
 
 
     thread::sleep(time::Duration::from_millis(1000));
-}
-
-struct Cu {
-    tov: Instant,
-    lock: Spinlock<Instant>,
-    value: i32,
 }
 
 
@@ -74,25 +70,11 @@ fn get_culist_from_shared_mem(id: &i32) -> &mut Cu {
     let cu: &mut Cu;
     let shared_mem_id = *id;
     unsafe {
-        cu = &mut *(get_shared_mem(shared_mem_id, round_to_page(size_of::<Cu>())) as *mut Cu);
+        cu = &mut *(rpc::sharedmem::get_shared_mem(shared_mem_id, rpc::sharedmem::round_to_page(size_of::<Cu>())) as *mut Cu);
     }
     return cu;
 }
 
-fn get_shared_mem(id: i32, size: usize) -> *mut i32
-{
-    let id = match shm::shmget!(id, 0o0666 | shm::ffi::Ipc::CREAT as i32 | shm::ffi::Ipc::EXCL as i32,
-                                    size) {
-        Some(id) => id,
-        None => shm::shmget!( id, 0o0666, size).unwrap(),
-    };
-
-    let ptr = match shm::shmat!(id, std::ptr::null_mut(), 0) {
-        Some(ptr) => ptr,
-        None => panic!("Could not attach to shared memory")
-    };
-    return ptr;
-}
 /*
 fn get_ro_shared_mem(id: i32, size: usize) -> *const i32
 {
@@ -111,11 +93,6 @@ fn get_ro_shared_mem(id: i32, size: usize) -> *const i32
 */
 
 
-fn round_to_page(size: usize) -> usize {
-    assert_ne!(size, 0);
-    let nb_pages = size % 4096 + 1;
-    return nb_pages * 4096;
-}
 
 fn setup() -> PathBuf {
     let fifo_path = PathBuf::from("./wave1");
