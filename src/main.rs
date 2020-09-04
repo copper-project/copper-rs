@@ -1,23 +1,18 @@
+#![feature(min_const_generics)]
+
 extern crate nix;
 
-
-use std::path::PathBuf;
-use std::fs::OpenOptions;
-use std::io::Write;
-use std::io::Read;
 use std::{thread, time};
 use std::time::Instant;
-use std::mem::size_of;
 
-use nix::unistd;
-use nix::sys::stat;
 use nix::unistd::{fork, ForkResult};
-use nix::Error::Sys;
-use nix::errno::Errno::EEXIST;
-use shm;
+
+use crate::culistserver::get_culist_source;
+
 mod culist;
-mod rpc;
-use culist::Cu;
+mod curpc;
+mod culistserver;
+mod common;
 
 fn main() {
     match fork() {
@@ -39,41 +34,47 @@ fn main() {
 
 
 fn server() {
-    let path = setup();
-    let origin_of_time = Instant::now();
-    let channel_id = get_channel_id();
-    println!("Channel ID: {:?}", channel_id);
-    let cu = get_culist_from_shared_mem(&channel_id);
-    emitter(origin_of_time, &path, cu);
+    //let path = setup();
+    //let origin_of_time = Instant::now();
+    //let channel_id = get_channel_id();
+    //println!("Channel ID: {:?}", channel_id);
+    //let cu = get_culist_from_shared_mem(&channel_id);
+    //emitter(origin_of_time, &path, cu);
+
+    let mut cuserver = get_culist_source();
+    cuserver.start();
     thread::sleep(time::Duration::from_millis(1000));
 
 }
 
 fn client() {
-    let path = setup();
-    let origin_of_time = Instant::now();
-    let channel_id = get_channel_id();
-    println!("Channel ID: {:?}", channel_id);
-    let cu = get_culist_from_shared_mem(&channel_id);
-    receiver(origin_of_time, &path, cu);
+    //let path = setup();
+    //let origin_of_time = Instant::now();
+    //let channel_id = get_channel_id();
+    //println!("Channel ID: {:?}", channel_id);
+    //let cu = get_culist_from_shared_mem(&channel_id);
+    //receiver(origin_of_time, &path, cu);
+    let mut cuserver = get_culist_source();
+    for i in 0..40 {
+        let cu0id: i32;
+        let cu1id: i32;
+        {
+            let cu0 = cuserver.get_fresh_cu();
+            println!("{:?}", cu0);
+            cu0id =  cu0.shared_mem_id;
+        }
+        {
+            let cu1 = cuserver.get_fresh_cu();
+            println!("{:?}", cu1);
+            cu1id =  cu1.shared_mem_id;
+        }
+        cuserver.recycle_cu(cu0id);
+        cuserver.recycle_cu(cu1id);
+    }
     thread::sleep(time::Duration::from_millis(1000));
 }
 
-fn get_channel_id() -> i32 {
-    return match shm::ftok!("./shared\0") {
-        Some(id) => id as i32,
-        None => -1,
-    };
-}
 
-fn get_culist_from_shared_mem(id: &i32) -> &mut Cu {
-    let cu: &mut Cu;
-    let shared_mem_id = *id;
-    unsafe {
-        cu = &mut *(rpc::sharedmem::get_shared_mem(shared_mem_id, rpc::sharedmem::round_to_page(size_of::<Cu>())) as *mut Cu);
-    }
-    return cu;
-}
 
 /*
 fn get_ro_shared_mem(id: i32, size: usize) -> *const i32
@@ -94,17 +95,7 @@ fn get_ro_shared_mem(id: i32, size: usize) -> *const i32
 
 
 
-fn setup() -> PathBuf {
-    let fifo_path = PathBuf::from("./wave1");
-    // create new fifo and give read, write and execute rights to the owner
-    match unistd::mkfifo(&fifo_path, stat::Mode::S_IRWXU) {
-        Ok(_) => println!("created {:?}", fifo_path),
-        Err(Sys(EEXIST)) => println!("Fifo is already existing, reusing it."),
-        Err(err) =>  println!("Error getting or creating Fifo {:?}", err),
-    }
-    return fifo_path;
-}
-
+/*
 fn emitter(timeref: Instant, outgoing_fifo: &PathBuf, cu: &mut Cu){
     let wave: [u8; 1] = [3];
     let mut file = OpenOptions::new().write(true).open(outgoing_fifo).unwrap();
@@ -140,4 +131,4 @@ fn receiver(timeref: Instant, incoming_fifo: &PathBuf, cu: &mut Cu) {
         Err(err) => println!("Error reading fifo: {}", err),
     }
 }
-
+*/
