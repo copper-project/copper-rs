@@ -1,16 +1,24 @@
 [package]
 name = "copper"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Guillaume Binet <gbin@gootz.net>"]
-edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+edition = "2021"
 
 [dependencies]
-shm = "*"
+# old stuff
 tempdir ="*"
 nix = "*"
 libc = "*"
-spinlock = "*"
+spin = "0.9.8"
 generic-array = "*"
 arrayvec = "*"
+
+# new stuff
+shm = "0.1.0"
+zerocopy = "0.7.34"
+zerocopy-derive = "0.7.34"
+petgraph = { version = "0.6.5", features = ["serde", "serde-1", "serde_derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_derive = "1.0"
+uom = {version="0.36.0", features=["rational"]}
+ron = "0.8.1"
