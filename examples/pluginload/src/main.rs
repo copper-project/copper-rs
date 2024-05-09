@@ -1,12 +1,11 @@
-mod config;
-
-use config::ConfigNode;
+use copper::CopperConfig;
+use copper::ConfigNode;
 use uom::si::rational::Time;
 use uom::si::time::second;
 
 fn main() {
 
-    let mut copperconfig = config::CopperConfig::new();
+    let mut copperconfig = CopperConfig::new();
     let isp = ConfigNode::new("copper-isp").set_base_period(Time::new::<second>(1.into()));
     let camera = ConfigNode::new("copper-camera").set_base_period(Time::new::<second>(60.into()));
     let algo = ConfigNode::new("copper-algo").set_base_period(Time::new::<second>(5.into()));
