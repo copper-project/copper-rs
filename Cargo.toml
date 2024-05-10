@@ -1,4 +1,4 @@
-workspace = { members = [ "examples/pluginload", "plugins/camreader"] }
+workspace = { members = [ "copper_mine", "copper_mine_test", "examples/pluginload", "plugins/camreader"] }
 
 [package]
 name = "copper"
@@ -17,6 +17,7 @@ arrayvec = "*"
 
 # new stuff
 shm = "0.1.0"
+lazy_static = "1.4.0"
 zerocopy = "0.7.34"
 zerocopy-derive = "0.7.34"
 petgraph = { version = "0.6.5", features = ["serde", "serde-1", "serde_derive"] }
@@ -24,5 +25,6 @@ serde = { version = "1.0", features = ["derive"] }
 serde_derive = "1.0"
 uom = {version="0.36.0", features=["rational"]}
 ron = "0.8.1"
+
 
 

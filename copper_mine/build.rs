@@ -1,6 +1,4 @@
 use cargo_metadata::{MetadataCommand, Package};
-use std::fs;
-use std::path::Path;
 
 fn main() {
     let metadata = MetadataCommand::new()
@@ -11,6 +9,7 @@ fn main() {
         // println!("cargo:warning=Found package {}", package.name);
         check_metadata(&package);
     }
+    println!("cargo:rustc-cfg=procmacro2_semver_exempt");
 }
 
 fn check_metadata(package: &Package) {

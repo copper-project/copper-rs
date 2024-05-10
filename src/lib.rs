@@ -1,5 +1,7 @@
-mod config;
-pub use config::*;
-fn main_copper() {
-    println!("Hello, world!");
-}
+pub mod config;
+pub mod core;
+
+#[macro_use]
+extern crate lazy_static;
+
+
