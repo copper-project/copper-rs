@@ -1,3 +1,5 @@
+use petgraph::dot::Dot;
+use petgraph::dot::Config as PetConfig;
 use petgraph::stable_graph::StableDiGraph;
 use serde::{Serialize, Deserialize};
 use uom::si::rational::Time;
@@ -87,6 +89,11 @@ impl CopperConfig {
     #[allow(dead_code)]
     pub fn deserialize(ron: &str) -> Self {
         ron::de::from_str(ron).expect("Syntax Error in config")
+    }
+
+    pub fn render(&self, output: &mut dyn std::io::Write) {
+        let dot = Dot::with_config(&self.graph, &[PetConfig::EdgeNoLabel]);
+        write!(output, "{:?}", dot).unwrap();
     }
 }
 
