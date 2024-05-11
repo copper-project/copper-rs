@@ -6,37 +6,96 @@ use uom::si::rational::Time;
 use uom::si::time::nanosecond;
 use ron::Options;
 use ron::extensions::Extensions;
+use std::collections::HashMap;
+use ron::value::Value as RonValue;
 
 
 pub type ConfigNodeId = u32;
+pub type NodeConfig = HashMap<String, Value>;
 
-#[derive(Serialize, Deserialize, Debug)]
-pub enum LinkType {
-    Local,
-    Network
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Value(RonValue);
+
+impl From<i32> for Value {
+    fn from(value: i32) -> Self {
+        Value(RonValue::Number(value.into()))
+    }
 }
+impl From<f64> for Value {
+    fn from(value: f64) -> Self {
+        Value(RonValue::Number(value.into()))
+    }
+}
+
+impl From<Value> for i32 {
+    fn from(value: Value) -> Self {
+        if let RonValue::Number(num) = value.0 {
+            if let Some(i) = num.as_i64() {
+                i as i32
+            } else {
+                panic!("Expected an integer value")
+            }
+        } else {
+            panic!("Expected a Number variant")
+        }
+    }
+}
+
+impl From<Value> for f64 {
+    fn from(value: Value) -> Self {
+        if let RonValue::Number(num) = value.0 {
+            if let Some(f) = num.as_f64() {
+                f
+            } else {
+                panic!("Expected a float value")
+            }
+        } else {
+            panic!("Expected a Number variant")
+        }
+    }
+}
+
+impl From<String> for Value {
+    fn from(value: String) -> Self {
+        Value(RonValue::String(value))
+    }
+}
+
+impl From<Value> for String {
+    fn from(value: Value) -> Self {
+        if let RonValue::String(s) = value.0 {
+            s
+        } else {
+            panic!("Expected a String variant")
+        }
+    }
+}
+
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ConfigNode {
     name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    plugin_package: Option<String>,
+    ptype: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     base_period_ns: Option<isize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pconfig:Option<NodeConfig>, 
 }
 
 impl ConfigNode {
-    pub fn new(name: &str) -> Self {
+    pub fn new(name: &str, ptype: &str) -> Self {
         ConfigNode {
             name: name.to_string(),
-            plugin_package:None,
+            ptype: Some(ptype.to_string()),
             base_period_ns: None,
+            pconfig: None,
         }
     }
 
     #[allow(dead_code)]
     pub fn set_plugin_package(mut self, package: Option<String>) -> Self {
-        self.plugin_package = package;
+        self.ptype = package;
         self
     }
 
@@ -52,12 +111,32 @@ impl ConfigNode {
         self
     }
 
+    pub fn get_param<T: From<Value>>(&self, key: &str) -> Option<T> {
+        let pc = self.pconfig.as_ref();
+        if pc.is_none() {
+            return None;
+        }
+        let pc = pc.unwrap();
+        let v = pc.get(key);
+        if v.is_none() {
+            return None;
+        }
+        Some(T::from(v.unwrap().clone()))
+    }
+
+    pub fn set_param<T: Into<Value>>(&mut self, key: &str, value: T) {
+        if self.pconfig.is_none() {
+            self.pconfig = Some(HashMap::new());
+        }
+        self.pconfig.as_mut().unwrap().insert(key.to_string(), value.into());
+    }
+
 }
 
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct CopperConfig {
-    pub graph: StableDiGraph<ConfigNode, LinkType, ConfigNodeId>,
+    pub graph: StableDiGraph<ConfigNode, String, ConfigNodeId>,
 }
 
 impl CopperConfig {
@@ -69,8 +148,8 @@ impl CopperConfig {
     pub fn add_node(&mut self, node: ConfigNode) -> ConfigNodeId {
         self.graph.add_node(node).index() as ConfigNodeId
     }
-    pub fn connect(&mut self, source: ConfigNodeId, target: ConfigNodeId) {
-        self.graph.add_edge(source.into(), target.into(), LinkType::Local);
+    pub fn connect(&mut self, source: ConfigNodeId, target: ConfigNodeId, msg_type: &str) {
+        self.graph.add_edge(source.into(), target.into(), msg_type.to_string());
     }
 
     #[allow(dead_code)]
@@ -108,12 +187,13 @@ mod tests {
     fn test_base_period() {
         let node = ConfigNode {
             name: "test".to_string(),
-            plugin_package: Some("test".to_string()),
+            ptype: Some("test".to_string()),
+            pconfig: Some(HashMap::new()),
             base_period_ns: Some(1_000_000_000),
         };
         assert_eq!(node.base_period(), Some(Time::new::<second>(1.into())));
         
-        let node = ConfigNode::new("test2").set_base_period(Time::new::<millisecond>(500.into()));
+        let node = ConfigNode::new("test2", "package::Plugin").set_base_period(Time::new::<millisecond>(500.into()));
         assert_eq!(node.base_period_ns, Some(500_000_000));
         assert_eq!(node.base_period(), Some(Time::new::<nanosecond>(500_000_000.into())));
     }
@@ -121,9 +201,9 @@ mod tests {
     #[test]
     fn test_serialize() {
         let mut config = CopperConfig::new();
-        let n1 = config.add_node(ConfigNode::new("test1"));
-        let n2 = config.add_node(ConfigNode::new("test2"));
-        config.connect(n1, n2);
+        let n1 = config.add_node(ConfigNode::new("test1", "package::Plugin1"));
+        let n2 = config.add_node(ConfigNode::new("test2", "package::Plugin2"));
+        config.connect(n1, n2, "msgpkg::MsgType");
         let serialized = config.serialize();
         println!("{}", serialized);
         let deserialized = CopperConfig::deserialize(&serialized);

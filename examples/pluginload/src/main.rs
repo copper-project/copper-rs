@@ -1,8 +1,8 @@
 use copper::register_plugin;
 use copper::config::CopperConfig;
 use copper::config::ConfigNode;
+use copper::config::Value;
 use copper::core::Plugin;
-use copper::core::PluginType;
 use uom::si::rational::Time;
 use uom::si::time::second;
 
@@ -10,17 +10,6 @@ use uom::si::time::second;
 struct MyPlugin;
 
 impl Plugin for MyPlugin {
-    fn name(&self) -> &'static str {
-        "MyPlugin"
-    }
-
-    fn initialize(&self) {
-        println!("Initializing MyPlugin");
-    }
-
-    fn plugin_type(&self) -> PluginType {
-        PluginType::Algorithm
-    }
 }
 
 register_plugin!(MyPlugin);
@@ -28,15 +17,18 @@ register_plugin!(MyPlugin);
 fn main() {
 
     let mut copperconfig = CopperConfig::new();
-    let camera = ConfigNode::new("copper-camera").set_base_period(Time::new::<second>(60.into()));
-    let isp = ConfigNode::new("copper-isp").set_base_period(Time::new::<second>(1.into()));
-    let algo = ConfigNode::new("copper-algo").set_base_period(Time::new::<second>(5.into()));
+    let mut camera = ConfigNode::new("copper-camera", "camerapkg::Camera").set_base_period(Time::new::<second>(60.into()));
+    camera.set_param("resolution-height", 1080.into()); 
+    camera.set_param("resolution-width", 1920.into()); 
+    let mut isp = ConfigNode::new("copper-isp", "isppkg::Isp").set_base_period(Time::new::<second>(1.into()));
+    isp.set_param("tone", 1.3.into()); 
+    let algo = ConfigNode::new("copper-algo", "algopkg::Algo").set_base_period(Time::new::<second>(5.into()));
     let n1 = copperconfig.add_node(isp);
     let n2 = copperconfig.add_node(camera);
     let n3 = copperconfig.add_node(algo);
 
-    copperconfig.connect(n1, n2);
-    copperconfig.connect(n2, n3);
+    copperconfig.connect(n2, n1, "imgmsgpkg::Image");
+    copperconfig.connect(n1, n3, "imgmsgpkg::Image");
     println!("{}", copperconfig.serialize());
     
 
