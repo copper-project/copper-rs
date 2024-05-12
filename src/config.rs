@@ -74,28 +74,28 @@ impl From<Value> for String {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ConfigNode {
-    name: String,
+    instance_name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    ptype: Option<String>,
+    type_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     base_period_ns: Option<isize>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pconfig:Option<NodeConfig>, 
+    instance_config:Option<NodeConfig>, 
 }
 
 impl ConfigNode {
     pub fn new(name: &str, ptype: &str) -> Self {
         ConfigNode {
-            name: name.to_string(),
-            ptype: Some(ptype.to_string()),
+            instance_name: name.to_string(),
+            type_name: Some(ptype.to_string()),
             base_period_ns: None,
-            pconfig: None,
+            instance_config: None,
         }
     }
 
     #[allow(dead_code)]
-    pub fn set_plugin_package(mut self, package: Option<String>) -> Self {
-        self.ptype = package;
+    pub fn set_type_name(mut self, type_name: Option<String>) -> Self {
+        self.type_name = type_name;
         self
     }
 
@@ -112,23 +112,16 @@ impl ConfigNode {
     }
 
     pub fn get_param<T: From<Value>>(&self, key: &str) -> Option<T> {
-        let pc = self.pconfig.as_ref();
-        if pc.is_none() {
-            return None;
-        }
-        let pc = pc.unwrap();
-        let v = pc.get(key);
-        if v.is_none() {
-            return None;
-        }
-        Some(T::from(v.unwrap().clone()))
+        let pc = self.instance_config.as_ref()?;
+        let v = pc.get(key)?;
+        Some(T::from(v.clone()))
     }
 
     pub fn set_param<T: Into<Value>>(&mut self, key: &str, value: T) {
-        if self.pconfig.is_none() {
-            self.pconfig = Some(HashMap::new());
+        if self.instance_config.is_none() {
+            self.instance_config = Some(HashMap::new());
         }
-        self.pconfig.as_mut().unwrap().insert(key.to_string(), value.into());
+        self.instance_config.as_mut().unwrap().insert(key.to_string(), value.into());
     }
 
 }
@@ -186,9 +179,9 @@ mod tests {
     #[test]
     fn test_base_period() {
         let node = ConfigNode {
-            name: "test".to_string(),
-            ptype: Some("test".to_string()),
-            pconfig: Some(HashMap::new()),
+            instance_name: "test".to_string(),
+            type_name: Some("test".to_string()),
+            instance_config: Some(HashMap::new()),
             base_period_ns: Some(1_000_000_000),
         };
         assert_eq!(node.base_period(), Some(Time::new::<second>(1.into())));

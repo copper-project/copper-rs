@@ -1,4 +1,4 @@
-workspace = { members = [ "copper_mine", "copper_mine_test", "examples/pluginload", "plugins/camreader"] }
+workspace = { members = [ "copper_derive", "copper_derive_test", "examples/pluginload", "plugins/camreader"] }
 
 [package]
 name = "copper"

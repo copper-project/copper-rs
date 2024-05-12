@@ -1,3 +1,17 @@
+
+struct CamReaderConfig {
+
+}
+
+struct CamReader {
+
+}
+
+pub fn build(config: CamReaderConfig) -> CamReader {
+    CamReader {}
+}
+
+
 pub fn add(left: usize, right: usize) -> usize {
     left + right
 }

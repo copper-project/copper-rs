@@ -1,0 +1,11 @@
+[package]
+name = "copper-derive-test"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+copper-derive = { path = "../copper_derive" }
+
+[build-dependencies]
+copper = { path = "../" }
+uom = "0.36.0"
