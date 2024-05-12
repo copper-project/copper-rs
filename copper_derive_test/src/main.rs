@@ -1,7 +1,7 @@
-use copper_mine::CopperRuntime;
+use copper_derive::CopperRuntime;
 
 #[derive(CopperRuntime)]
-#[config(file = "test.ron")]
+#[config(file = "copperconfig.ron")]
 struct MyRuntime{}
 
 fn main() {
