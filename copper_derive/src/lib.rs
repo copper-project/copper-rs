@@ -1,70 +1,98 @@
 extern crate proc_macro;
-use syn::Expr;
-use syn::Lit;
-use syn::MetaNameValue;
-use syn::Meta;
-use syn::DeriveInput;
-use syn::parse_macro_input;
-use proc_macro::TokenStream;
-use quote::quote;
 use std::path::PathBuf;
+use std::process::Command;
+use std::io::Write;
+
+use syn::Attribute;
+use proc_macro::TokenStream;
+
+use syn::parse::{Parse, ParseStream, Parser, Result};
+use syn::meta::ParseNestedMeta;
+use syn::{parse, parse_macro_input, punctuated::Punctuated, Ident, ItemStruct, LitStr, Token};
+
+use quote::quote;
 use walkdir::WalkDir;
 
-#[proc_macro_derive(CopperRuntime, attributes(config))]
-pub fn generate_runtime(input: TokenStream) -> TokenStream {
-    println!("generate runtime called");
-    let input: DeriveInput = parse_macro_input!(input as DeriveInput);
+use syntect::easy::HighlightLines;
+use syntect::highlighting::{ThemeSet, Style};
+use syntect::parsing::SyntaxSet;
+use syntect::util::{as_24_bit_terminal_escaped, LinesWithEndings};
+use syntect::highlighting::Color;
+use syntect::highlighting::Theme;
 
+struct Args {
+    pub vars: Vec<LitStr>,
+}
 
-    let name = &input.ident;
-
-    // Find the attribute and read the configuration file
-    let mut config_file:Option<String> = None;
-    for attr in &input.attrs {
-        // Search of another attribute called "config" on the same structure
-        if attr.path().is_ident("config") {
-            // parse it as a key / value pair with an equal in between.
-            if let Ok(Meta::NameValue(MetaNameValue { value: Expr::Lit(value), ..})) = attr.parse_args() {
-                // the path should be a string litteral.
-                if let Lit::Str(strlit) = value.lit {
-                    config_file = Some(strlit.value());
-                }
-            }
-            else {
-                panic!("The config attribute for CopperRuntime is malformed. The syntax is #[config=\"filepath\"] after the #[CopperRuntime].")
-            }
-        }
-        else {
-            panic!("A CopperRuntime needs a #[config=\"filepath\"] attribute after it.");
-        }
+impl Parse for Args {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let vars = Punctuated::<syn::LitStr, Token![,]>::parse_terminated(input)?;
+        Ok(Args {
+            vars: vars.into_iter().collect::<Vec<LitStr>>(),
+        })
     }
-    if config_file.is_none() {
-        panic!("No CopperRuntime found in your project, you need to tag a struct with #[CopperRuntime].");
-    }
-    let config_file = PathBuf::from(config_file.unwrap());
+}
+
+// Parses the CopperRuntime attribute like #[CopperRuntime(config = "path")]
+#[proc_macro_attribute]
+pub fn CopperRuntime(args: TokenStream, input: TokenStream) -> TokenStream {
+    let mut item_struct = parse_macro_input!(input as ItemStruct);
+
+    let mut config_file: Option<LitStr> = None;
+     let attribute_config_parser = syn::meta::parser(|meta| {
+        if meta.path.is_ident("config") {
+            config_file = Some(meta.value()?.parse()?);
+            Ok(())
+        } else {
+            Err(meta.error("unsupported tea property"))
+        }
+    });
+
+    parse_macro_input!(args with attribute_config_parser);
+    let config_file = config_file.expect("Expected config file attribute like #[CopperRuntime(config = \"path\")]").value();
     let mut config_full_path = caller_crate_root();
     config_full_path.push(config_file);
-    println!("Called on: {:?}", config_full_path);
-
     let config_content = std::fs::read_to_string(&config_full_path).unwrap_or_else(|_| panic!("Failed to read configuration file: {:?}", &config_full_path));
+    println!("Config content:\n {}", config_content);
 
-    println!("Config content: {}", config_content);
+    let name = &item_struct.ident;
+    
+    let new_field: syn::Field = syn::parse_quote! {
+        node_instances: (u32, i32)
+    };
+    
+    match &mut item_struct.fields {
+        syn::Fields::Named(fields_named) => {
+            fields_named.named.push(new_field);
+        },
+        syn::Fields::Unnamed(fields_unnamed) => {
+            fields_unnamed.unnamed.push(new_field);
+        },
+        syn::Fields::Unit => {
+            // Handle unit structs if necessary
+        }
+    };
 
+    // Convert the modified struct back into a TokenStream
+    let result = quote! {
+        #item_struct
+        impl #name {
+            pub fn hello(&self) {
+                println!("Hello from CopperRuntime");
+            }
+        }
+    };
 
-    // Generate code based on the configuration
-    // let field = "myfield";
-    // let value = "myvalue";
-    // let expanded = quote! {
-    //     impl #name {
-    //         pub fn new() -> Self {
-    //             Self {
-    //                 #field: #value.to_string(),
-    //             }
-    //         }
-    //     }
-    // };
-    let expanded = quote! {};
-    TokenStream::from(expanded)
+    let tokens: TokenStream = result.into();
+
+    // Print and format the generated code using rustfmt
+    println!("Generated tokens: {}", tokens);
+    let formatted_code = rustfmt_generated_code(tokens.to_string());
+    // println!("\n     ===    Gen. Runtime ===\n");
+    println!("{}", highlight_rust_code(formatted_code));
+    // println!("\n     === === === === === ===\n");
+
+    tokens
 }
 
 // Lifted this HORROR but it works.
@@ -100,3 +128,43 @@ fn caller_crate_root() -> PathBuf {
     current_dir
 }
 
+fn rustfmt_generated_code(code: String) -> String {
+    let mut rustfmt = Command::new("rustfmt")
+        .arg("--emit")
+        .arg("stdout")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .expect("Failed to spawn rustfmt");
+
+    {
+        let stdin = rustfmt.stdin.as_mut().expect("Failed to open stdin");
+        stdin.write_all(code.as_bytes()).expect("Failed to write to stdin");
+    }
+
+    let output = rustfmt.wait_with_output().expect("Failed to read stdout");
+    String::from_utf8(output.stdout).expect("Output was not valid UTF-8")
+}
+
+fn create_black_theme() -> Theme {
+    let mut theme = ThemeSet::load_defaults().themes["base16-ocean.dark"].clone();
+    theme.settings.background = Some(Color { r: 0, g: 0, b: 0, a: 255 });
+    theme
+}
+
+fn highlight_rust_code(code: String) -> String {
+    let ps = SyntaxSet::load_defaults_newlines();
+    let syntax = ps.find_syntax_by_extension("rs").unwrap();
+    let theme = create_black_theme();
+    let mut h = HighlightLines::new(syntax, &theme);
+
+    let mut highlighted_code = String::new();
+
+    for line in LinesWithEndings::from(&code) {
+        let ranges: Vec<(Style, &str)> = h.highlight_line(line, &ps).unwrap();
+        let escaped = as_24_bit_terminal_escaped(&ranges[..], true);
+        highlighted_code.push_str(&escaped);
+    }
+
+    highlighted_code
+}
