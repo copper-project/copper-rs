@@ -1,6 +1,6 @@
-use copper_derive::CopperRuntime;
+use copper_derive::copper_runtime;
 
-#[CopperRuntime(config = "copperconfig.ron")]
+#[copper_runtime(config = "copperconfig.ron")]
 struct MyRuntime {}
 
 fn main() {

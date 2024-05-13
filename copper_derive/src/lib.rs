@@ -3,12 +3,9 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::io::Write;
 
-use syn::Attribute;
 use proc_macro::TokenStream;
 
-use syn::parse::{Parse, ParseStream, Parser, Result};
-use syn::meta::ParseNestedMeta;
-use syn::{parse, parse_macro_input, punctuated::Punctuated, Ident, ItemStruct, LitStr, Token};
+use syn::{parse_macro_input, ItemStruct, LitStr};
 
 use quote::quote;
 use walkdir::WalkDir;
@@ -20,22 +17,9 @@ use syntect::util::{as_24_bit_terminal_escaped, LinesWithEndings};
 use syntect::highlighting::Color;
 use syntect::highlighting::Theme;
 
-struct Args {
-    pub vars: Vec<LitStr>,
-}
-
-impl Parse for Args {
-    fn parse(input: ParseStream) -> Result<Self> {
-        let vars = Punctuated::<syn::LitStr, Token![,]>::parse_terminated(input)?;
-        Ok(Args {
-            vars: vars.into_iter().collect::<Vec<LitStr>>(),
-        })
-    }
-}
-
-// Parses the CopperRuntime attribute like #[CopperRuntime(config = "path")]
+// Parses the CopperRuntime attribute like #[copper_runtime(config = "path")]
 #[proc_macro_attribute]
-pub fn CopperRuntime(args: TokenStream, input: TokenStream) -> TokenStream {
+pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let mut item_struct = parse_macro_input!(input as ItemStruct);
 
     let mut config_file: Option<LitStr> = None;
@@ -88,9 +72,9 @@ pub fn CopperRuntime(args: TokenStream, input: TokenStream) -> TokenStream {
     // Print and format the generated code using rustfmt
     println!("Generated tokens: {}", tokens);
     let formatted_code = rustfmt_generated_code(tokens.to_string());
-    // println!("\n     ===    Gen. Runtime ===\n");
+    println!("\n     ===    Gen. Runtime ===\n");
     println!("{}", highlight_rust_code(formatted_code));
-    // println!("\n     === === === === === ===\n");
+    println!("\n     === === === === === ===\n");
 
     tokens
 }
