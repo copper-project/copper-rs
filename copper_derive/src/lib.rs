@@ -13,6 +13,8 @@ use walkdir::WalkDir;
 
 use format::{rustfmt_generated_code, highlight_rust_code};
 
+use copper::config::CopperConfig;
+
 
 // Parses the CopperRuntime attribute like #[copper_runtime(config = "path")]
 #[proc_macro_attribute]
@@ -35,6 +37,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     config_full_path.push(config_file);
     let config_content = std::fs::read_to_string(&config_full_path).unwrap_or_else(|_| panic!("Failed to read configuration file: {:?}", &config_full_path));
     println!("Config content:\n {}", config_content);
+    let deserialized = CopperConfig::deserialize(&config_content);
 
     let name = &item_struct.ident;
     
@@ -57,6 +60,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     // Convert the modified struct back into a TokenStream
     let result = quote! {
         #item_struct
+
         impl #name {
             pub fn hello(&self) {
                 println!("Hello from CopperRuntime");
