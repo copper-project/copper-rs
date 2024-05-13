@@ -1,21 +1,18 @@
 extern crate proc_macro;
+mod format;
+
 use std::path::PathBuf;
-use std::process::Command;
-use std::io::Write;
 
+use syn::Fields::{Named, Unnamed, Unit};
+use syn::{parse_macro_input, parse_quote, ItemStruct, LitStr, Field};
+use syn::meta::parser;
 use proc_macro::TokenStream;
-
-use syn::{parse_macro_input, ItemStruct, LitStr};
 
 use quote::quote;
 use walkdir::WalkDir;
 
-use syntect::easy::HighlightLines;
-use syntect::highlighting::{ThemeSet, Style};
-use syntect::parsing::SyntaxSet;
-use syntect::util::{as_24_bit_terminal_escaped, LinesWithEndings};
-use syntect::highlighting::Color;
-use syntect::highlighting::Theme;
+use format::{rustfmt_generated_code, highlight_rust_code};
+
 
 // Parses the CopperRuntime attribute like #[copper_runtime(config = "path")]
 #[proc_macro_attribute]
@@ -23,7 +20,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let mut item_struct = parse_macro_input!(input as ItemStruct);
 
     let mut config_file: Option<LitStr> = None;
-     let attribute_config_parser = syn::meta::parser(|meta| {
+     let attribute_config_parser = parser(|meta| {
         if meta.path.is_ident("config") {
             config_file = Some(meta.value()?.parse()?);
             Ok(())
@@ -41,18 +38,18 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let name = &item_struct.ident;
     
-    let new_field: syn::Field = syn::parse_quote! {
+    let new_field: Field = parse_quote! {
         node_instances: (u32, i32)
     };
     
     match &mut item_struct.fields {
-        syn::Fields::Named(fields_named) => {
+        Named(fields_named) => {
             fields_named.named.push(new_field);
         },
-        syn::Fields::Unnamed(fields_unnamed) => {
+        Unnamed(fields_unnamed) => {
             fields_unnamed.unnamed.push(new_field);
         },
-        syn::Fields::Unit => {
+        Unit => {
             // Handle unit structs if necessary
         }
     };
@@ -112,43 +109,3 @@ fn caller_crate_root() -> PathBuf {
     current_dir
 }
 
-fn rustfmt_generated_code(code: String) -> String {
-    let mut rustfmt = Command::new("rustfmt")
-        .arg("--emit")
-        .arg("stdout")
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .spawn()
-        .expect("Failed to spawn rustfmt");
-
-    {
-        let stdin = rustfmt.stdin.as_mut().expect("Failed to open stdin");
-        stdin.write_all(code.as_bytes()).expect("Failed to write to stdin");
-    }
-
-    let output = rustfmt.wait_with_output().expect("Failed to read stdout");
-    String::from_utf8(output.stdout).expect("Output was not valid UTF-8")
-}
-
-fn create_black_theme() -> Theme {
-    let mut theme = ThemeSet::load_defaults().themes["base16-ocean.dark"].clone();
-    theme.settings.background = Some(Color { r: 0, g: 0, b: 0, a: 255 });
-    theme
-}
-
-fn highlight_rust_code(code: String) -> String {
-    let ps = SyntaxSet::load_defaults_newlines();
-    let syntax = ps.find_syntax_by_extension("rs").unwrap();
-    let theme = create_black_theme();
-    let mut h = HighlightLines::new(syntax, &theme);
-
-    let mut highlighted_code = String::new();
-
-    for line in LinesWithEndings::from(&code) {
-        let ranges: Vec<(Style, &str)> = h.highlight_line(line, &ps).unwrap();
-        let escaped = as_24_bit_terminal_escaped(&ranges[..], true);
-        highlighted_code.push_str(&escaped);
-    }
-
-    highlighted_code
-}
