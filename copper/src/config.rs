@@ -141,26 +141,30 @@ impl CopperConfig {
     pub fn add_node(&mut self, node: ConfigNode) -> ConfigNodeId {
         self.graph.add_node(node).index() as ConfigNodeId
     }
+
+    pub fn get_node(&self, node_id: ConfigNodeId) -> Option<&ConfigNode> {
+        self.graph.node_weight(node_id.into())
+    }
+
     pub fn connect(&mut self, source: ConfigNodeId, target: ConfigNodeId, msg_type: &str) {
         self.graph.add_edge(source.into(), target.into(), msg_type.to_string());
     }
 
-    #[allow(dead_code)]
-    pub fn serialize(&self) -> String {
-        let ron = Options::default()
+    pub fn get_options() -> Options {
+        Options::default()
             .with_default_extension(Extensions::IMPLICIT_SOME)
             .with_default_extension(Extensions::UNWRAP_NEWTYPES)
-            .with_default_extension(Extensions::UNWRAP_VARIANT_NEWTYPES);
-        let pretty = ron::ser::PrettyConfig::default();
-        let answer = ron.to_string_pretty(&self, pretty).unwrap();
-        // RON doesn't put its own options in the serialization format, so we have to add it manually
-        format!("#![enable(implicit_some)]\n{}\n", answer)
-
+            .with_default_extension(Extensions::UNWRAP_VARIANT_NEWTYPES)
     }
 
-    #[allow(dead_code)]
+    pub fn serialize(&self) -> String {
+        let ron = Self::get_options();
+        let pretty = ron::ser::PrettyConfig::default();
+        ron.to_string_pretty(&self, pretty).unwrap()
+    }
+
     pub fn deserialize(ron: &str) -> Self {
-        ron::de::from_str(ron).expect("Syntax Error in config")
+        Self::get_options().from_str(ron).expect("Syntax Error in config")
     }
 
     pub fn render(&self, output: &mut dyn std::io::Write) {
@@ -192,15 +196,26 @@ mod tests {
     }
 
     #[test]
-    fn test_serialize() {
+    fn test_plain_serialize() {
         let mut config = CopperConfig::new();
         let n1 = config.add_node(ConfigNode::new("test1", "package::Plugin1"));
         let n2 = config.add_node(ConfigNode::new("test2", "package::Plugin2"));
         config.connect(n1, n2, "msgpkg::MsgType");
         let serialized = config.serialize();
-        println!("{}", serialized);
         let deserialized = CopperConfig::deserialize(&serialized);
         assert_eq!(config.graph.node_count(), deserialized.graph.node_count());
         assert_eq!(config.graph.edge_count(), deserialized.graph.edge_count());
+    }
+
+    #[test]
+    fn test_serialize_with_params() {
+        let mut config = CopperConfig::new();
+        let mut camera = ConfigNode::new("copper-camera", "camerapkg::Camera").set_base_period(Time::new::<second>(60.into()));
+        camera.set_param::<Value>("resolution-height", 1080.into());
+        config.add_node(camera);
+        let serialized = config.serialize();
+        println!("{}", serialized);
+        let deserialized = CopperConfig::deserialize(&serialized);
+        assert_eq!(deserialized.get_node(0).unwrap().get_param::<i32>("resolution-height").unwrap(), 1080);
     }
 }
