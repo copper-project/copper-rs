@@ -5,8 +5,8 @@ edition = "2021"
 
 [dependencies]
 uom = {version="0.36.0", features=["rational"]}
-copper = { path = "../.." }
-camreader = { path = "../../plugins/camreader" }
+copper = { path = "../../copper" }
+camreader = { path = "../camreader" }
 
 [build-dependencies]
 cargo_metadata = "0.18.1"

@@ -7,5 +7,5 @@ edition = "2021"
 copper-derive = { path = "../copper_derive" }
 
 [build-dependencies]
-copper = { path = "../" }
+copper = { path = "../copper" }
 uom = "0.36.0"

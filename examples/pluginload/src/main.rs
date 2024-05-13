@@ -1,27 +1,16 @@
-use copper::register_plugin;
 use copper::config::CopperConfig;
 use copper::config::ConfigNode;
-use copper::config::Value;
-use copper::core::Plugin;
 use uom::si::rational::Time;
 use uom::si::time::second;
-
-#[derive(Default)]
-struct MyPlugin;
-
-impl Plugin for MyPlugin {
-}
-
-register_plugin!(MyPlugin);
 
 fn main() {
 
     let mut copperconfig = CopperConfig::new();
     let mut camera = ConfigNode::new("copper-camera", "camerapkg::Camera").set_base_period(Time::new::<second>(60.into()));
-    camera.set_param("resolution-height", 1080.into()); 
-    camera.set_param("resolution-width", 1920.into()); 
+    camera.set_param::<i32>("resolution-height", 1080);
+    camera.set_param::<i32>("resolution-width", 1920);
     let mut isp = ConfigNode::new("copper-isp", "isppkg::Isp").set_base_period(Time::new::<second>(1.into()));
-    isp.set_param("tone", 1.3.into()); 
+    isp.set_param::<f64>("tone", 1.3);
     let algo = ConfigNode::new("copper-algo", "algopkg::Algo").set_base_period(Time::new::<second>(5.into()));
     let n1 = copperconfig.add_node(isp);
     let n2 = copperconfig.add_node(camera);
