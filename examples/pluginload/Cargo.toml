@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-uom = {version="0.36.0", features=["rational"]}
+uom = { version = "0.36.0", features = ["rational"] }
 copper = { path = "../../copper" }
-camreader = { path = "../camreader" }
+camreader = { path = "../v4lsrc" }
 
 [build-dependencies]
 cargo_metadata = "0.18.1"
