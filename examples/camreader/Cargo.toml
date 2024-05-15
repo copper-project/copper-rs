@@ -7,3 +7,5 @@ edition = "2021"
 copper_plugin_type = "driver"
 
 [dependencies]
+copper = { path = "../../copper" }
+serde = { version = "1.0.201", features = ["derive"] }

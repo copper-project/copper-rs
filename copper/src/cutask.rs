@@ -1,20 +1,30 @@
-use crate::config::NodeConfig;
 use serde::{Deserialize, Serialize};
 
-pub trait CuStateful<'a>: Default + Serialize + Deserialize<'a> {}
+use crate::config::NodeConfig;
 
-pub trait CuMsg<'a>: CuStateful<'a> {}
+// Everything that is stateful in copper for zero copy constraints need to be restricted to this trait.
+pub trait CuMsg: Default + Serialize + for<'a> Deserialize<'a> + Sized {}
 
-pub trait CuSrcTask<'a, O>: CuStateful<'a> {
-    fn initialize(&self, config: NodeConfig, get_buffer: dyn Fn() -> &'a mut O, push_buffer: dyn Fn(&O));
+// Also anything that follows this contract can be a message
+impl<T> CuMsg for T where T: Default + Serialize + for<'a> Deserialize<'a> + Sized {}
+
+pub trait CuMsgLifecycle: Sync + Send + Clone + 'static {
+    type Msg: CuMsg;
+
+    fn create(&self) -> &mut Self::Msg;
+    fn send(&self, msg: &Self::Msg);
 }
 
-pub trait CuTask<'a, I,O>: CuStateful<'a> {
-    fn initialize(&self, config: NodeConfig);
+pub trait CuSrcTask<O: CuMsg, L: CuMsgLifecycle<Msg = O>> {
+    fn new(config: NodeConfig, msgif: L) -> Self;
+}
+
+pub trait CuTask<I: CuMsg, O: CuMsg> {
+    fn new(config: NodeConfig) -> Self;
     fn process(&self, input: &I, output: &O) -> Result<(), String>;
 }
 
-pub trait CuSinkTask<'a, I>: CuStateful<'a> {
-    fn initialize(&self, config: NodeConfig);
+pub trait CuSinkTask<I: CuMsg> {
+    fn new(&self, config: NodeConfig) -> Self;
     fn process(&self, input: &I) -> Result<(), String>;
 }
