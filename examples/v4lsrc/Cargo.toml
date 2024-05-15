@@ -8,4 +8,5 @@ copper_plugin_type = "driver"
 
 [dependencies]
 copper = { path = "../../copper" }
-serde = { version = "1.0.201", features = ["derive"] }
+serde = { version = "1.0.202", features = ["derive"] }
+linux-video = { version = "0.1.1" }

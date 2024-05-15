@@ -8,23 +8,54 @@ pub trait CuMsg: Default + Serialize + for<'a> Deserialize<'a> + Sized {}
 // Also anything that follows this contract can be a message
 impl<T> CuMsg for T where T: Default + Serialize + for<'a> Deserialize<'a> + Sized {}
 
-pub trait CuMsgLifecycle: Sync + Send + Clone + 'static {
+pub type CuError = String;
+
+// Define your custom Result type alias
+pub type CuResult<T> = std::result::Result<T, CuError>;
+
+// Because of the Rust orphan rule, we need to define the common methods in a macro.
+// This can be cleaned up with a proc macro or with a negative impl
+// https://doc.rust-lang.org/beta/unstable-book/language-features/negative-impls.html when
+// they are stabilized.
+macro_rules! cu_task_common {
+    () => {
+        fn new(config: NodeConfig) -> CuResult<Self>
+        where
+            Self: Sized;
+
+        fn start(&mut self) -> CuResult<()> {
+            Ok(())
+        }
+
+        fn preprocess(&mut self) -> CuResult<()> {
+            Ok(())
+        }
+
+        fn postprocess(&mut self) -> CuResult<()> {
+            Ok(())
+        }
+
+        fn stop(&mut self) -> CuResult<()> {
+            Ok(())
+        }
+    };
+}
+
+pub trait CuSrcTask {
     type Msg: CuMsg;
-
-    fn create(&self) -> &mut Self::Msg;
-    fn send(&self, msg: &Self::Msg);
+    cu_task_common!();
+    fn process(&mut self, empty_msg: &mut Self::Msg) -> CuResult<()>;
 }
 
-pub trait CuSrcTask<O: CuMsg, L: CuMsgLifecycle<Msg = O>> {
-    fn new(config: NodeConfig, msgif: L) -> Self;
+pub trait CuTask {
+    type Input: CuMsg;
+    type Output: CuMsg;
+    cu_task_common!();
+    fn process(&mut self, input: &Self::Input, output: &Self::Output) -> CuResult<()>;
 }
 
-pub trait CuTask<I: CuMsg, O: CuMsg> {
-    fn new(config: NodeConfig) -> Self;
-    fn process(&self, input: &I, output: &O) -> Result<(), String>;
-}
-
-pub trait CuSinkTask<I: CuMsg> {
-    fn new(&self, config: NodeConfig) -> Self;
-    fn process(&self, input: &I) -> Result<(), String>;
+pub trait CuSinkTask {
+    type Input: CuMsg;
+    cu_task_common!();
+    fn process(&mut self, input: &Self::Input) -> CuResult<()>;
 }
