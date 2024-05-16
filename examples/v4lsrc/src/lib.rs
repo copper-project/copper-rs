@@ -87,6 +87,9 @@ mod tests {
 
     use super::*;
 
+    // ignore this test because it requires a camera to be connected to the computer
+    // it is still runnable if specifically called with `cargo test emulate_runtime`
+    #[ignore]
     #[test]
     fn emulate_runtime() -> CuResult<()> {
         println!("Build config");
