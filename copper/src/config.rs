@@ -1,14 +1,14 @@
-use petgraph::dot::Dot;
+use std::collections::HashMap;
+
 use petgraph::dot::Config as PetConfig;
+use petgraph::dot::Dot;
 use petgraph::stable_graph::StableDiGraph;
-use serde::{Serialize, Deserialize};
+use ron::extensions::Extensions;
+use ron::Options;
+use ron::value::Value as RonValue;
+use serde::{Deserialize, Serialize};
 use uom::si::rational::Time;
 use uom::si::time::nanosecond;
-use ron::Options;
-use ron::extensions::Extensions;
-use std::collections::HashMap;
-use ron::value::Value as RonValue;
-
 
 pub type ConfigNodeId = u32;
 pub type NodeConfig = HashMap<String, Value>;
@@ -71,7 +71,6 @@ impl From<Value> for String {
     }
 }
 
-
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ConfigNode {
     instance_name: String,
@@ -80,7 +79,7 @@ pub struct ConfigNode {
     #[serde(skip_serializing_if = "Option::is_none")]
     base_period_ns: Option<isize>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    instance_config:Option<NodeConfig>, 
+    instance_config: Option<NodeConfig>,
 }
 
 impl ConfigNode {
@@ -101,7 +100,8 @@ impl ConfigNode {
 
     #[allow(dead_code)]
     pub fn base_period(&self) -> Option<Time> {
-        self.base_period_ns.map(|frequency| Time::new::<nanosecond>(frequency.into()))
+        self.base_period_ns
+            .map(|frequency| Time::new::<nanosecond>(frequency.into()))
     }
 
     pub fn set_base_period(mut self, period: Time) -> Self {
@@ -121,11 +121,12 @@ impl ConfigNode {
         if self.instance_config.is_none() {
             self.instance_config = Some(HashMap::new());
         }
-        self.instance_config.as_mut().unwrap().insert(key.to_string(), value.into());
+        self.instance_config
+            .as_mut()
+            .unwrap()
+            .insert(key.to_string(), value.into());
     }
-
 }
-
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct CopperConfig {
@@ -147,7 +148,8 @@ impl CopperConfig {
     }
 
     pub fn connect(&mut self, source: ConfigNodeId, target: ConfigNodeId, msg_type: &str) {
-        self.graph.add_edge(source.into(), target.into(), msg_type.to_string());
+        self.graph
+            .add_edge(source.into(), target.into(), msg_type.to_string());
     }
 
     pub fn get_options() -> Options {
@@ -164,7 +166,9 @@ impl CopperConfig {
     }
 
     pub fn deserialize(ron: &str) -> Self {
-        Self::get_options().from_str(ron).expect("Syntax Error in config")
+        Self::get_options()
+            .from_str(ron)
+            .expect("Syntax Error in config")
     }
 
     pub fn render(&self, output: &mut dyn std::io::Write) {
@@ -176,9 +180,10 @@ impl CopperConfig {
 // tests
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use uom::si::time::second;
     use uom::si::time::millisecond;
+    use uom::si::time::second;
+
+    use super::*;
 
     #[test]
     fn test_base_period() {
@@ -189,10 +194,15 @@ mod tests {
             base_period_ns: Some(1_000_000_000),
         };
         assert_eq!(node.base_period(), Some(Time::new::<second>(1.into())));
-        
-        let node = ConfigNode::new("test2", "package::Plugin").set_base_period(Time::new::<millisecond>(500.into()));
+
+        let node =
+            ConfigNode::new("test2", "package::Plugin")
+                .set_base_period(Time::new::<millisecond>(500.into()));
         assert_eq!(node.base_period_ns, Some(500_000_000));
-        assert_eq!(node.base_period(), Some(Time::new::<nanosecond>(500_000_000.into())));
+        assert_eq!(
+            node.base_period(),
+            Some(Time::new::<nanosecond>(500_000_000.into()))
+        );
     }
 
     #[test]
@@ -210,12 +220,20 @@ mod tests {
     #[test]
     fn test_serialize_with_params() {
         let mut config = CopperConfig::new();
-        let mut camera = ConfigNode::new("copper-camera", "camerapkg::Camera").set_base_period(Time::new::<second>(60.into()));
+        let mut camera = ConfigNode::new("copper-camera", "camerapkg::Camera")
+            .set_base_period(Time::new::<second>(60.into()));
         camera.set_param::<Value>("resolution-height", 1080.into());
         config.add_node(camera);
         let serialized = config.serialize();
         println!("{}", serialized);
         let deserialized = CopperConfig::deserialize(&serialized);
-        assert_eq!(deserialized.get_node(0).unwrap().get_param::<i32>("resolution-height").unwrap(), 1080);
+        assert_eq!(
+            deserialized
+                .get_node(0)
+                .unwrap()
+                .get_param::<i32>("resolution-height")
+                .unwrap(),
+            1080
+        );
     }
 }
