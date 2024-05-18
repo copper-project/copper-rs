@@ -1,0 +1,9 @@
+[package]
+name = "config-gen"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+copper = { path = "../../copper"}
+uom = "0.36.0"
