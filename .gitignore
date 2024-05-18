@@ -1,4 +1,3 @@
 /target
 /.idea
 /Cargo.lock
-/copper_derive_test/copperconfig.ron
