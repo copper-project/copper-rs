@@ -7,9 +7,9 @@ use copper::cutask::{CuResult, CuSrcTask};
 use copper::serde::arrays;
 
 #[derive(Serialize, Deserialize)]
-struct ImageMsg {
+pub struct ImageMsg {
     #[serde(with = "arrays")]
-    buffer: [[u8; 1920]; 1200],
+    pub buffer: [[u8; 1920]; 1200],
 }
 
 impl Default for ImageMsg {
@@ -51,7 +51,8 @@ impl CuSrcTask for Video4LinuxSource {
     where
         Self: Sized,
     {
-        let device = Device::open("/dev/video0").unwrap();
+        let dev: String = (*config.get("dev").unwrap()).clone().into();
+        let device = Device::open(dev).unwrap();
         Ok(Video4LinuxSource {
             device,
             stream: None,

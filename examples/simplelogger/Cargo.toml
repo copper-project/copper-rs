@@ -1,13 +1,9 @@
 [package]
-name = "pluginload"
+name = "simplelogger"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-uom = { version = "0.36.0", features = ["rational"] }
 copper = { path = "../../copper" }
 v4lsrc = { path = "../v4lsrc" }
-
-[build-dependencies]
-cargo_metadata = "0.18.1"
-
+serde = { version = "1.0.202", features = ["derive"] }
