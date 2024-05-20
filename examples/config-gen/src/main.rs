@@ -9,7 +9,7 @@ use copper::config::Value;
 /// This is useful for making variations of your robot more easily.
 fn main() {
     // Generate a config
-    let mut copperconfig = CopperConfig::new();
+    let mut copperconfig = CopperConfig::default();
     let mut camera =
         ConfigNode::new("camera", "camerapkg::Camera")
             .set_base_period(Time::new::<second>(60.into()));

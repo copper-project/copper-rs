@@ -7,7 +7,7 @@ use copper::config::NodeConfig;
 use copper::cutask::{CuResult, CuSinkTask};
 use v4lsrc::ImageMsg;
 
-struct SimpleLogger {
+pub struct SimpleLogger {
     path: String,
     log_file: Option<File>,
 }

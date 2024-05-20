@@ -39,7 +39,7 @@ impl ImageMsg {
     }
 }
 
-struct Video4LinuxSource {
+pub struct Video4LinuxSource {
     device: Device,
     stream: Option<Stream<In, Mmap>>,
 }
