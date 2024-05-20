@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-use crate::config::NodeConfig;
+use crate::config::NodeInstanceConfig;
+use crate::CuResult;
 
 // Everything that is stateful in copper for zero copy constraints need to be restricted to this trait.
 pub trait CuMsg: Default + Serialize + for<'a> Deserialize<'a> + Sized {}
@@ -8,18 +9,13 @@ pub trait CuMsg: Default + Serialize + for<'a> Deserialize<'a> + Sized {}
 // Also anything that follows this contract can be a message
 impl<T> CuMsg for T where T: Default + Serialize + for<'a> Deserialize<'a> + Sized {}
 
-pub type CuError = String;
-
-// Define your custom Result type alias
-pub type CuResult<T> = std::result::Result<T, CuError>;
-
 // Because of the Rust orphan rule, we need to define the common methods in a macro.
 // This can be cleaned up with a proc macro or with a negative impl
 // https://doc.rust-lang.org/beta/unstable-book/language-features/negative-impls.html when
 // they are stabilized.
 macro_rules! cu_task_common {
     () => {
-        fn new(config: NodeConfig) -> CuResult<Self>
+        fn new(config: Option<&NodeInstanceConfig>) -> CuResult<Self>
         where
             Self: Sized;
 

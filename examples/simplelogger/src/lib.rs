@@ -1,10 +1,9 @@
 use std::fs::File;
 use std::io::Write;
 
-use serde::{Deserialize, Serialize};
-
-use copper::config::NodeConfig;
-use copper::cutask::{CuResult, CuSinkTask};
+use copper::config::NodeInstanceConfig;
+use copper::CuResult;
+use copper::cutask::CuSinkTask;
 use v4lsrc::ImageMsg;
 
 pub struct SimpleLogger {
@@ -15,10 +14,12 @@ pub struct SimpleLogger {
 impl CuSinkTask for SimpleLogger {
     type Input = ImageMsg;
 
-    fn new(config: NodeConfig) -> CuResult<Self>
+    fn new(config: Option<&NodeInstanceConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {
+        let config = config
+            .ok_or_else(|| "SimpleLogger needs a config, None was passed as NodeInstanceConfig")?;
         let path = (*config.get("path").unwrap()).clone().into();
         Ok(SimpleLogger {
             path,

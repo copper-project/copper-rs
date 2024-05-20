@@ -2,8 +2,9 @@ use linux_video::{Device, Stream};
 use linux_video::types::*;
 use serde::{Deserialize, Serialize};
 
-use copper::config::NodeConfig;
-use copper::cutask::{CuResult, CuSrcTask};
+use copper::config::NodeInstanceConfig;
+use copper::CuResult;
+use copper::cutask::CuSrcTask;
 use copper::serde::arrays;
 
 #[derive(Serialize, Deserialize)]
@@ -47,11 +48,19 @@ pub struct Video4LinuxSource {
 impl CuSrcTask for Video4LinuxSource {
     type Msg = ImageMsg;
 
-    fn new(config: NodeConfig) -> CuResult<Self>
+    fn new(config: Option<&NodeInstanceConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {
-        let dev: String = (*config.get("dev").unwrap()).clone().into();
+        let config = config.ok_or_else(|| {
+            "Video4LinuxSource needs a config, None was passed as NodeInstanceConfig"
+        })?;
+
+        let dev: String = (*config
+            .get("dev")
+            .expect("v4lsrc expects a dev config value pointing to the video device"))
+        .clone()
+        .into();
         let device = Device::open(dev).unwrap();
         Ok(Video4LinuxSource {
             device,
@@ -94,7 +103,7 @@ mod tests {
     #[test]
     fn emulate_runtime() -> CuResult<()> {
         println!("Build config");
-        let config = NodeConfig::default();
+        let config = NodeInstanceConfig::default();
         println!("Build task");
         let mut task = Video4LinuxSource::new(config)?;
         println!("Build img");

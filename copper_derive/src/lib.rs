@@ -1,17 +1,18 @@
 extern crate proc_macro;
 
-use copper::config::CopperConfig;
-use format::{highlight_rust_code, rustfmt_generated_code};
 use proc_macro::TokenStream;
+
 use proc_macro2::Ident;
 use quote::quote;
+use syn::{
+    Field, FieldMutability, ItemStruct, LitStr, parse_macro_input, parse_str, Type, TypeTuple,
+};
+use syn::Fields::{Named, Unit, Unnamed};
 use syn::meta::parser;
 use syn::punctuated::Punctuated;
-use syn::Fields::{Named, Unit, Unnamed};
-use syn::{
-    parse_macro_input, parse_quote, parse_str, Field, FieldMutability, ItemStruct, LitStr, Type,
-    TypeTuple,
-};
+
+use copper::config::CopperConfig;
+use format::{highlight_rust_code, rustfmt_generated_code};
 
 mod format;
 mod utils;
@@ -36,7 +37,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         .expect("Expected config file attribute like #[CopperRuntime(config = \"path\")]")
         .value();
     let mut config_full_path = utils::caller_crate_root();
-    config_full_path.push(config_file);
+    config_full_path.push(&config_file);
     let config_content = std::fs::read_to_string(&config_full_path)
         .unwrap_or_else(|_| panic!("Failed to read configuration file: {:?}", &config_full_path));
 
@@ -44,12 +45,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let all_node_configs = copper_config.get_all_nodes();
 
     // Collect all the type names used by our configs.
-    let all_configs_type_names = all_node_configs
+    let all_configs_type_names: Vec<String> = all_node_configs
         .iter()
-        .map(|node_config| node_config.get_type_name());
+        .map(|node_config| node_config.get_type_name().to_string())
+        .collect();
 
     // Transform them as Rust types
     let all_configs_types: Vec<Type> = all_configs_type_names
+        .iter()
         .map(|name| {
             println!("Found type: {}", name);
             parse_str(name).unwrap()
@@ -59,7 +62,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     // Build the tuple of all those types
     let tuple_types = TypeTuple {
         paren_token: Default::default(),
-        elems: Punctuated::from_iter(all_configs_types),
+        elems: Punctuated::from_iter(all_configs_types.clone()),
     };
 
     // add that to a new field
@@ -86,10 +89,54 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     };
 
+    // Generate the code to create instances of the nodes
+    // It maps the types to their index
+    let node_instances_init_code: Vec<_> = all_configs_types
+        .iter()
+        .enumerate()
+        .map(|(index, ty)| {
+            let ty_name = &all_configs_type_names[index];
+            let error = format!(
+                "Failed to get create instance for {}, instance index {}.",
+                ty_name, index
+            );
+            quote! {
+                #ty::new(all_instances_configs[#index]).expect(#error)
+            }
+        })
+        .collect();
+
     // Convert the modified struct back into a TokenStream
     let result = quote! {
+        use copper::config::ConfigNode;
+        use copper::config::CopperConfig;
+        use copper::config::NodeInstanceConfig;
+        use copper::cutask::CuSrcTask; // Needed for the instantiation of tasks
+        use copper::cutask::CuTask; // Needed for the instantiation of tasks
+        use copper::cutask::CuSinkTask; // Needed for the instantiation of tasks
+        use copper::CuResult;
+        use std::fs::read_to_string;
+
         pub #item_struct
+
         impl #name {
+
+            pub fn new() -> CuResult<Self> {
+                let config_filename = #config_file;
+
+                let config_content = read_to_string(config_filename)
+                    .unwrap_or_else(|_| panic!("Failed to read configuration file: {:?}", &config_filename));
+                let copper_config = CopperConfig::deserialize(&config_content);
+                let all_instances_configs: Vec<Option<&NodeInstanceConfig>>  = copper_config.get_all_nodes().iter().map(|node_config| node_config.get_instance_config()).collect();
+
+                let node_instances = (
+                    #(#node_instances_init_code),*
+                );
+                Ok(#name {
+                    node_instances,
+                })
+            }
+
             pub fn hello(&self) {
                 println!("Hello from CopperRuntime");
             }
