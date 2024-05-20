@@ -1,11 +1,11 @@
-use linux_video::{Device, Stream};
 use linux_video::types::*;
+use linux_video::{Device, Stream};
 use serde::{Deserialize, Serialize};
 
 use copper::config::NodeInstanceConfig;
-use copper::CuResult;
 use copper::cutask::CuSrcTask;
 use copper::serde::arrays;
+use copper::CuResult;
 
 #[derive(Serialize, Deserialize)]
 pub struct ImageMsg {
@@ -105,7 +105,7 @@ mod tests {
         println!("Build config");
         let config = NodeInstanceConfig::default();
         println!("Build task");
-        let mut task = Video4LinuxSource::new(config)?;
+        let mut task = Video4LinuxSource::new(Some(&config))?;
         println!("Build img");
         // emulates the inplace behavior of copper's runtime.
         let size_of_image_msg = mem::size_of::<ImageMsg>();

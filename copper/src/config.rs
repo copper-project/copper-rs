@@ -4,8 +4,8 @@ use petgraph::dot::Config as PetConfig;
 use petgraph::dot::Dot;
 use petgraph::stable_graph::StableDiGraph;
 use ron::extensions::Extensions;
-use ron::Options;
 use ron::value::Value as RonValue;
+use ron::Options;
 use serde::{Deserialize, Serialize};
 use uom::si::rational::Time;
 use uom::si::time::nanosecond;
@@ -225,7 +225,7 @@ mod tests {
 
     #[test]
     fn test_plain_serialize() {
-        let mut config = CopperConfig::new();
+        let mut config = CopperConfig::default();
         let n1 = config.add_node(ConfigNode::new("test1", "package::Plugin1"));
         let n2 = config.add_node(ConfigNode::new("test2", "package::Plugin2"));
         config.connect(n1, n2, "msgpkg::MsgType");
@@ -237,7 +237,7 @@ mod tests {
 
     #[test]
     fn test_serialize_with_params() {
-        let mut config = CopperConfig::new();
+        let mut config = CopperConfig::default();
         let mut camera = ConfigNode::new("copper-camera", "camerapkg::Camera")
             .set_base_period(Time::new::<second>(60.into()));
         camera.set_param::<Value>("resolution-height", 1080.into());
