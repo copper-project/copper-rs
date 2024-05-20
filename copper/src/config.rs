@@ -1,20 +1,17 @@
 use std::collections::HashMap;
-use std::iter::Map;
-use std::path::Iter;
 
 use petgraph::dot::Config as PetConfig;
 use petgraph::dot::Dot;
-use petgraph::graph::NodeIndex;
-use petgraph::stable_graph::{NodeIndices, StableDiGraph};
+use petgraph::stable_graph::StableDiGraph;
 use ron::extensions::Extensions;
-use ron::value::Value as RonValue;
 use ron::Options;
+use ron::value::Value as RonValue;
 use serde::{Deserialize, Serialize};
 use uom::si::rational::Time;
 use uom::si::time::nanosecond;
 
 pub type ConfigNodeId = u32;
-pub type NodeConfig = HashMap<String, Value>;
+pub type NodeInstanceConfig = HashMap<String, Value>;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Value(RonValue);
@@ -82,7 +79,7 @@ pub struct ConfigNode {
     #[serde(skip_serializing_if = "Option::is_none")]
     base_period_ns: Option<isize>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    instance_config: Option<NodeConfig>,
+    instance_config: Option<NodeInstanceConfig>,
 }
 
 impl ConfigNode {
@@ -103,6 +100,10 @@ impl ConfigNode {
 
     pub fn get_type_name(&self) -> &str {
         self.type_name.as_ref().unwrap()
+    }
+
+    pub fn get_instance_config(&self) -> Option<&NodeInstanceConfig> {
+        self.instance_config.as_ref()
     }
 
     #[allow(dead_code)]

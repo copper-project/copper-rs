@@ -4,6 +4,6 @@ use copper_derive::copper_runtime;
 struct MyRuntime {}
 
 fn main() {
-    let runtime = MyRuntime{node_instances: (1,2)};
+    let runtime = MyRuntime::new().expect("Failed to create runtime.");
     runtime.hello();
 }

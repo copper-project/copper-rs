@@ -6,7 +6,7 @@
                 type_name: "v4lsrc::Video4LinuxSource",
                 base_period_ns: 1000000000,
                 instance_config: {
-                    "device": "/dev/video0",
+                    "dev": "/dev/video0",
                 },
             ),
             (
