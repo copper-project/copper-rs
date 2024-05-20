@@ -5,6 +5,8 @@ edition = "2021"
 
 [dependencies]
 copper-derive = { path = "../copper_derive" }
+simplelogger = { path = "../examples/simplelogger" }
+v4lsrc = { path = "../examples/v4lsrc" }
 
 [build-dependencies]
 copper = { path = "../copper" }
