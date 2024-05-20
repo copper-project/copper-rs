@@ -52,9 +52,8 @@ impl CuSrcTask for Video4LinuxSource {
     where
         Self: Sized,
     {
-        let config = config.ok_or_else(|| {
-            "Video4LinuxSource needs a config, None was passed as NodeInstanceConfig"
-        })?;
+        let config = config
+            .ok_or("Video4LinuxSource needs a config, None was passed as NodeInstanceConfig")?;
 
         let dev: String = (*config
             .get("dev")
@@ -62,6 +61,11 @@ impl CuSrcTask for Video4LinuxSource {
         .clone()
         .into();
         let device = Device::open(dev).unwrap();
+        let mut fmt = device
+            .format(BufferType::VideoCapture)
+            .expect("Failed to get formats");
+        println!("Found supported format {}", fmt);
+        device.set_format(&mut fmt).expect("Failed to set format");
         Ok(Video4LinuxSource {
             device,
             stream: None,
@@ -72,7 +76,7 @@ impl CuSrcTask for Video4LinuxSource {
         self.stream = Some(
             self.device
                 .stream::<In, Mmap>(ContentType::Video, 4)
-                .unwrap(),
+                .expect("Failed to start streaming from the v4l device."),
         );
         Ok(())
     }
@@ -103,7 +107,8 @@ mod tests {
     #[test]
     fn emulate_runtime() -> CuResult<()> {
         println!("Build config");
-        let config = NodeInstanceConfig::default();
+        let mut config = NodeInstanceConfig::default();
+        config.insert("dev".to_string(), "/dev/video0".to_string().into());
         println!("Build task");
         let mut task = Video4LinuxSource::new(Some(&config))?;
         println!("Build img");
