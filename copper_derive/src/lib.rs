@@ -3,10 +3,15 @@ extern crate proc_macro;
 use copper::config::CopperConfig;
 use format::{highlight_rust_code, rustfmt_generated_code};
 use proc_macro::TokenStream;
+use proc_macro2::Ident;
 use quote::quote;
 use syn::meta::parser;
+use syn::punctuated::Punctuated;
 use syn::Fields::{Named, Unit, Unnamed};
-use syn::{parse_macro_input, parse_quote, Field, ItemStruct, LitStr};
+use syn::{
+    parse_macro_input, parse_quote, parse_str, Field, FieldMutability, ItemStruct, LitStr, Type,
+    TypeTuple,
+};
 
 mod format;
 mod utils;
@@ -34,14 +39,40 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     config_full_path.push(config_file);
     let config_content = std::fs::read_to_string(&config_full_path)
         .unwrap_or_else(|_| panic!("Failed to read configuration file: {:?}", &config_full_path));
-    println!("Config content:\n {}", config_content);
-    let deserialized = CopperConfig::deserialize(&config_content);
+
+    let copper_config = CopperConfig::deserialize(&config_content);
+    let all_node_configs = copper_config.get_all_nodes();
+
+    // Collect all the type names used by our configs.
+    let all_configs_type_names = all_node_configs
+        .iter()
+        .map(|node_config| node_config.get_type_name());
+
+    // Transform them as Rust types
+    let all_configs_types: Vec<Type> = all_configs_type_names
+        .map(|name| {
+            println!("Found type: {}", name);
+            parse_str(name).unwrap()
+        })
+        .collect();
+
+    // Build the tuple of all those types
+    let tuple_types = TypeTuple {
+        paren_token: Default::default(),
+        elems: Punctuated::from_iter(all_configs_types),
+    };
+
+    // add that to a new field
+    let new_field = Field {
+        attrs: Vec::new(),
+        vis: syn::Visibility::Inherited,
+        mutability: FieldMutability::None,
+        ident: Some(Ident::new("node_instances", proc_macro2::Span::call_site())),
+        colon_token: Some(syn::Token![:](proc_macro2::Span::call_site())),
+        ty: Type::Tuple(tuple_types),
+    };
 
     let name = &item_struct.ident;
-
-    let new_field: Field = parse_quote! {
-        node_instances: (u32, i32)
-    };
 
     match &mut item_struct.fields {
         Named(fields_named) => {

@@ -1,11 +1,14 @@
 use std::collections::HashMap;
+use std::iter::Map;
+use std::path::Iter;
 
 use petgraph::dot::Config as PetConfig;
 use petgraph::dot::Dot;
-use petgraph::stable_graph::StableDiGraph;
+use petgraph::graph::NodeIndex;
+use petgraph::stable_graph::{NodeIndices, StableDiGraph};
 use ron::extensions::Extensions;
-use ron::Options;
 use ron::value::Value as RonValue;
+use ron::Options;
 use serde::{Deserialize, Serialize};
 use uom::si::rational::Time;
 use uom::si::time::nanosecond;
@@ -98,6 +101,10 @@ impl ConfigNode {
         self
     }
 
+    pub fn get_type_name(&self) -> &str {
+        self.type_name.as_ref().unwrap()
+    }
+
     #[allow(dead_code)]
     pub fn base_period(&self) -> Option<Time> {
         self.base_period_ns
@@ -133,18 +140,28 @@ pub struct CopperConfig {
     pub graph: StableDiGraph<ConfigNode, String, ConfigNodeId>,
 }
 
-impl CopperConfig {
-    pub fn new() -> Self {
+impl Default for CopperConfig {
+    fn default() -> Self {
         CopperConfig {
             graph: StableDiGraph::new(),
         }
     }
+}
+
+impl CopperConfig {
     pub fn add_node(&mut self, node: ConfigNode) -> ConfigNodeId {
         self.graph.add_node(node).index() as ConfigNodeId
     }
 
     pub fn get_node(&self, node_id: ConfigNodeId) -> Option<&ConfigNode> {
         self.graph.node_weight(node_id.into())
+    }
+
+    pub fn get_all_nodes(&self) -> Vec<&ConfigNode> {
+        self.graph
+            .node_indices()
+            .map(|node| &self.graph[node])
+            .collect()
     }
 
     pub fn connect(&mut self, source: ConfigNodeId, target: ConfigNodeId, msg_type: &str) {

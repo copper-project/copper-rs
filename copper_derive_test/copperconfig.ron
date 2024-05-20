@@ -2,29 +2,26 @@
     graph: (
         nodes: [
             (
-                instance_name: "copper-isp",
-                type_name: "isppkg::Isp",
-                base_period_ns: 1000000000,
-            ),
-            (
                 instance_name: "camera",
-                type_name: "camerapkg::Camera",
-                base_period_ns: 60000000000,
+                type_name: "v4lsrc::Video4LinuxSource",
+                base_period_ns: 1000000000,
                 instance_config: {
-                    "resolution-height": 1080,
+                    "device": "/dev/video0",
                 },
             ),
             (
-                instance_name: "copper-algo",
-                type_name: "algopkg::Algo",
-                base_period_ns: 5000000000,
+                instance_name: "logger",
+                type_name: "simplelogger::SimpleLogger",
+                base_period_ns: 60000000000,
+                instance_config: {
+                    "path": "/tmp/stuff.cu",
+                },
             ),
         ],
         node_holes: [],
         edge_property: directed,
         edges: [
-            (1, 0, "imgmsgpkg::Image"),
-            (0, 2, "imgmsgpkg::Image"),
+            (0, 1, "v4lsrc::ImageMsg"),
         ],
     ),
 )
