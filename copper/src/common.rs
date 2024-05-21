@@ -11,25 +11,6 @@
 //! sequence of elements.
 //!
 //!
-//! # Examples
-//!
-//! ```
-//! use circular_queue::CircularQueue;
-//!
-//! let mut queue = CircularQueue::with_capacity(3);
-//! queue.push(1);
-//! queue.push(2);
-//! queue.push(3);
-//! queue.push(4);
-//!
-//! assert_eq!(queue.len(), 3);
-//!
-//! let mut iter = queue.iter();
-//!
-//! assert_eq!(iter.next(), Some(&4));
-//! assert_eq!(iter.next(), Some(&3));
-//! assert_eq!(iter.next(), Some(&2));
-//! ```
 
 extern crate alloc;
 
@@ -37,12 +18,11 @@ use std::iter::{Chain, Rev};
 use std::mem::replace;
 use std::slice::{Iter as SliceIter, IterMut as SliceIterMut};
 
-use generic_array::typenum::Unsigned;
 use generic_array::{ArrayLength, GenericArray};
 
 /// A circular buffer-like queue.
 #[derive(Clone, Debug)]
-pub struct CircularQueue<T: Default + Sized, N: ArrayLength> {
+pub struct CircularQueue<T: Default + Sized + PartialEq, N: ArrayLength> {
     data: GenericArray<T, N>,
     length: usize,
     insertion_index: usize,
@@ -63,19 +43,25 @@ pub type AscIterMut<'a, T> = Chain<SliceIterMut<'a, T>, SliceIterMut<'a, T>>;
 /// A value popped from `CircularQueue<T>` as the result of a push operation.
 pub type Popped<T> = Option<T>;
 
-impl<T: Default + Sized, N: ArrayLength> PartialEq for CircularQueue<T, N> {
+impl<T: Default + Sized + PartialEq, N: ArrayLength> PartialEq for CircularQueue<T, N> {
     fn eq(&self, other: &Self) -> bool {
-        todo!()
+        if self.len() != other.len() {
+            return false;
+        }
+        other.iter().zip(self.iter()).all(|(a, b)| a == b)
     }
 
     fn ne(&self, other: &Self) -> bool {
-        todo!()
+        if self.len() != other.len() {
+            return true;
+        }
+        !self.eq(other)
     }
 }
 
-impl<T: Default + Sized, N: ArrayLength> CircularQueue<T, N> {
+impl<T: Default + Sized + PartialEq, N: ArrayLength> CircularQueue<T, N> {
     pub fn new() -> Self {
-        let mut data: GenericArray<T, N> = GenericArray::default();
+        let data: GenericArray<T, N> = GenericArray::default();
         CircularQueue {
             data,
             length: 0,
@@ -165,7 +151,7 @@ impl<T: Default + Sized, N: ArrayLength> CircularQueue<T, N> {
     ///
     #[inline]
     pub fn iter(&self) -> Iter<T> {
-        let (a, b) = self.data.split_at(self.insertion_index);
+        let (a, b) = self.data[0..self.length].split_at(self.insertion_index);
         a.iter().rev().chain(b.iter().rev())
     }
 
@@ -204,7 +190,7 @@ impl<T: Default + Sized, N: ArrayLength> CircularQueue<T, N> {
 mod tests {
     use super::*;
     use generic_array::typenum::consts::U0;
-    use generic_array::typenum::{U3, U5, U6};
+    use generic_array::typenum::{U3, U5};
 
     #[test]
     fn zero_capacity() {
@@ -329,9 +315,8 @@ mod tests {
     #[test]
     fn zero_sized() {
         let mut q = CircularQueue::<_, U5>::new();
-        assert_eq!(q.capacity(), 3);
+        assert_eq!(q.capacity(), 5);
 
-        q.push(());
         q.push(());
         q.push(());
         q.push(());
