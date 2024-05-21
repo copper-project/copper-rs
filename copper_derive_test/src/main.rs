@@ -5,5 +5,4 @@ struct MyRuntime {}
 
 fn main() {
     let runtime = MyRuntime::new().expect("Failed to create runtime.");
-    runtime.hello();
 }

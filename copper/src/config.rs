@@ -4,14 +4,15 @@ use petgraph::dot::Config as PetConfig;
 use petgraph::dot::Dot;
 use petgraph::stable_graph::StableDiGraph;
 use ron::extensions::Extensions;
-use ron::value::Value as RonValue;
 use ron::Options;
+use ron::value::Value as RonValue;
 use serde::{Deserialize, Serialize};
 use uom::si::rational::Time;
 use uom::si::time::nanosecond;
 
-pub type ConfigNodeId = u32;
+pub type NodeId = u32;
 pub type NodeInstanceConfig = HashMap<String, Value>;
+pub type Edge = (NodeId, NodeId, String);
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Value(RonValue);
@@ -72,7 +73,7 @@ impl From<Value> for String {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ConfigNode {
+pub struct Node {
     instance_name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     type_name: Option<String>,
@@ -82,9 +83,9 @@ pub struct ConfigNode {
     instance_config: Option<NodeInstanceConfig>,
 }
 
-impl ConfigNode {
+impl Node {
     pub fn new(name: &str, ptype: &str) -> Self {
-        ConfigNode {
+        Node {
             instance_name: name.to_string(),
             type_name: Some(ptype.to_string()),
             base_period_ns: None,
@@ -138,7 +139,7 @@ impl ConfigNode {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct CopperConfig {
-    pub graph: StableDiGraph<ConfigNode, String, ConfigNodeId>,
+    pub graph: StableDiGraph<Node, String, NodeId>,
 }
 
 impl Default for CopperConfig {
@@ -150,22 +151,36 @@ impl Default for CopperConfig {
 }
 
 impl CopperConfig {
-    pub fn add_node(&mut self, node: ConfigNode) -> ConfigNodeId {
-        self.graph.add_node(node).index() as ConfigNodeId
+    pub fn add_node(&mut self, node: Node) -> NodeId {
+        self.graph.add_node(node).index() as NodeId
     }
 
-    pub fn get_node(&self, node_id: ConfigNodeId) -> Option<&ConfigNode> {
+    pub fn get_node(&self, node_id: NodeId) -> Option<&Node> {
         self.graph.node_weight(node_id.into())
     }
 
-    pub fn get_all_nodes(&self) -> Vec<&ConfigNode> {
+    pub fn get_all_nodes(&self) -> Vec<&Node> {
         self.graph
             .node_indices()
             .map(|node| &self.graph[node])
             .collect()
     }
 
-    pub fn connect(&mut self, source: ConfigNodeId, target: ConfigNodeId, msg_type: &str) {
+    pub fn get_all_edges(&self) -> Vec<Edge> {
+        self.graph
+            .edge_indices()
+            .map(|edge| {
+                let (source, target) = self.graph.edge_endpoints(edge).unwrap();
+                (
+                    source.index() as NodeId,
+                    target.index() as NodeId,
+                    self.graph[edge].clone(),
+                )
+            })
+            .collect()
+    }
+
+    pub fn connect(&mut self, source: NodeId, target: NodeId, msg_type: &str) {
         self.graph
             .add_edge(source.into(), target.into(), msg_type.to_string());
     }
@@ -205,7 +220,7 @@ mod tests {
 
     #[test]
     fn test_base_period() {
-        let node = ConfigNode {
+        let node = Node {
             instance_name: "test".to_string(),
             type_name: Some("test".to_string()),
             instance_config: Some(HashMap::new()),
@@ -213,9 +228,8 @@ mod tests {
         };
         assert_eq!(node.base_period(), Some(Time::new::<second>(1.into())));
 
-        let node =
-            ConfigNode::new("test2", "package::Plugin")
-                .set_base_period(Time::new::<millisecond>(500.into()));
+        let node = Node::new("test2", "package::Plugin")
+            .set_base_period(Time::new::<millisecond>(500.into()));
         assert_eq!(node.base_period_ns, Some(500_000_000));
         assert_eq!(
             node.base_period(),
@@ -226,8 +240,8 @@ mod tests {
     #[test]
     fn test_plain_serialize() {
         let mut config = CopperConfig::default();
-        let n1 = config.add_node(ConfigNode::new("test1", "package::Plugin1"));
-        let n2 = config.add_node(ConfigNode::new("test2", "package::Plugin2"));
+        let n1 = config.add_node(Node::new("test1", "package::Plugin1"));
+        let n2 = config.add_node(Node::new("test2", "package::Plugin2"));
         config.connect(n1, n2, "msgpkg::MsgType");
         let serialized = config.serialize();
         let deserialized = CopperConfig::deserialize(&serialized);
@@ -238,7 +252,7 @@ mod tests {
     #[test]
     fn test_serialize_with_params() {
         let mut config = CopperConfig::default();
-        let mut camera = ConfigNode::new("copper-camera", "camerapkg::Camera")
+        let mut camera = Node::new("copper-camera", "camerapkg::Camera")
             .set_base_period(Time::new::<second>(60.into()));
         camera.set_param::<Value>("resolution-height", 1080.into());
         config.add_node(camera);
