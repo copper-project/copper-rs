@@ -14,15 +14,15 @@ struct CopperLiskMask {
 
 #[derive(Debug)]
 enum CopperListState {
-    Empty,
-    PrecessingTasks(CopperLiskMask),
+    Free,
+    ProcessingTasks(CopperLiskMask),
     BeingSerialized,
 }
 
 /// A circular buffer-like queue.
 #[derive(Debug)]
 pub struct CopperListsManager<T: Sized + PartialEq, const N: usize> {
-    // copper_list_masks: CopperListMask,
+    copper_list_states: [CopperListState; N],
     data: Box<[T; N]>,
     length: usize,
     insertion_index: usize,
@@ -40,9 +40,6 @@ pub type AscIter<'a, T> = Chain<SliceIter<'a, T>, SliceIter<'a, T>>;
 /// An mutable ascending iterator over `CircularQueue<T>`.
 pub type AscIterMut<'a, T> = Chain<SliceIterMut<'a, T>, SliceIterMut<'a, T>>;
 
-/// A value popped from `CircularQueue<T>` as the result of a push operation.
-pub type Popped<T> = Option<T>;
-
 impl<T: Sized + PartialEq, const N: usize> PartialEq for CopperListsManager<T, N> {
     fn eq(&self, other: &Self) -> bool {
         if self.len() != other.len() {
@@ -59,7 +56,9 @@ impl<T: Sized + PartialEq, const N: usize> CopperListsManager<T, N> {
             let ptr = std::alloc::alloc_zeroed(layout) as *mut [T; N];
             Box::from_raw(ptr)
         };
+        const INITIAL_SLSTATE: CopperListState = CopperListState::Free;
         CopperListsManager {
+            copper_list_states: [INITIAL_SLSTATE; N],
             data,
             length: 0,
             insertion_index: 0,
@@ -84,14 +83,7 @@ impl<T: Sized + PartialEq, const N: usize> CopperListsManager<T, N> {
     ///
     #[inline]
     pub fn is_full(&self) -> bool {
-        self.capacity() == self.len()
-    }
-
-    /// Returns the capacity of the queue.
-    ///
-    #[inline]
-    pub fn capacity(&self) -> usize {
-        N
+        N == self.len()
     }
 
     /// Clears the queue.
@@ -102,39 +94,25 @@ impl<T: Sized + PartialEq, const N: usize> CopperListsManager<T, N> {
         self.length = 0;
     }
 
-    /// Pushes a new element into the queue.
-    ///
-    /// Once the capacity is reached, pushing new items will overwrite old ones.
-    ///
-    /// In case an old value is overwritten, it will be returned.
-    ///
     #[inline]
-    pub fn push(&mut self, x: T) -> Popped<T> {
-        let mut old = None;
-
-        if self.capacity() == 0 {
-            return old;
+    pub fn create(&mut self) -> Option<&mut T> {
+        if self.is_full() {
+            return None;
         }
+        let result = &mut self.data[self.insertion_index];
+        self.insertion_index = (self.insertion_index + 1) % N;
+        self.length += 1;
 
-        if !self.is_full() {
-            self.data[self.insertion_index] = x;
-            self.length += 1;
-        } else {
-            old = Some(replace(&mut self.data[self.insertion_index], x));
-        }
-
-        self.insertion_index = (self.insertion_index + 1) % self.capacity();
-
-        old
+        Some(result)
     }
 
     #[inline]
-    pub fn pop(&mut self) -> Popped<&T> {
-        if self.capacity() == 0 || self.length == 0 {
+    pub fn pop(&mut self) -> Option<&T> {
+        if self.length == 0 {
             return None;
         }
         if self.insertion_index == 0 {
-            self.insertion_index = self.capacity() - 1;
+            self.insertion_index = N - 1;
         } else {
             self.insertion_index -= 1;
         }
@@ -188,27 +166,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn zero_capacity() {
-        let mut q = CopperListsManager::<i32, 0>::new();
-        assert_eq!(q.len(), 0);
-        assert_eq!(q.capacity(), 0);
-        assert!(q.is_empty());
-
-        q.push(3);
-        q.push(4);
-        q.push(5);
-
-        assert_eq!(q.len(), 0);
-        assert_eq!(q.capacity(), 0);
-        assert!(q.is_empty());
-
-        assert_eq!(q.iter().count(), 0);
-        assert_eq!(q.asc_iter().count(), 0);
-
-        q.clear();
-    }
-
-    #[test]
     fn empty_queue() {
         let q = CopperListsManager::<i32, 5>::new();
 
@@ -218,10 +175,10 @@ mod tests {
 
     #[test]
     fn partially_full_queue() {
-        let mut q = CopperListsManager::<_, 5>::new();
-        q.push(1);
-        q.push(2);
-        q.push(3);
+        let mut q = CopperListsManager::<i32, 5>::new();
+        *q.create().unwrap() = 1;
+        *q.create().unwrap() = 2;
+        *q.create().unwrap() = 3;
 
         assert!(!q.is_empty());
         assert_eq!(q.len(), 3);
@@ -233,12 +190,11 @@ mod tests {
     #[test]
     fn full_queue() {
         let mut q = CopperListsManager::<_, 5>::new();
-        q.push(1);
-        q.push(2);
-        q.push(3);
-        q.push(4);
-        q.push(5);
-
+        *q.create().unwrap() = 1;
+        *q.create().unwrap() = 2;
+        *q.create().unwrap() = 3;
+        *q.create().unwrap() = 4;
+        *q.create().unwrap() = 5;
         assert_eq!(q.len(), 5);
 
         let res: Vec<_> = q.iter().map(|&x| x).collect();
@@ -248,39 +204,37 @@ mod tests {
     #[test]
     fn over_full_queue() {
         let mut q = CopperListsManager::<_, 5>::new();
-        q.push(1);
-        q.push(2);
-        q.push(3);
-        q.push(4);
-        q.push(5);
-        q.push(6);
-        q.push(7);
-
+        *q.create().unwrap() = 1;
+        *q.create().unwrap() = 2;
+        *q.create().unwrap() = 3;
+        *q.create().unwrap() = 4;
+        *q.create().unwrap() = 5;
+        assert_eq!(q.create(), None);
         assert_eq!(q.len(), 5);
 
         let res: Vec<_> = q.iter().map(|&x| x).collect();
-        assert_eq!(res, [7, 6, 5, 4, 3]);
+        assert_eq!(res, [5, 4, 3, 2, 1]);
     }
 
     #[test]
     fn clear() {
         let mut q = CopperListsManager::<_, 5>::new();
-        q.push(1);
-        q.push(2);
-        q.push(3);
-        q.push(4);
-        q.push(5);
-        q.push(6);
-        q.push(7);
+        *q.create().unwrap() = 1;
+        *q.create().unwrap() = 2;
+        *q.create().unwrap() = 3;
+        *q.create().unwrap() = 4;
+        *q.create().unwrap() = 5;
+        assert_eq!(q.create(), None);
+        assert_eq!(q.len(), 5);
 
         q.clear();
 
         assert_eq!(q.len(), 0);
         assert_eq!(q.iter().next(), None);
 
-        q.push(1);
-        q.push(2);
-        q.push(3);
+        *q.create().unwrap() = 1;
+        *q.create().unwrap() = 2;
+        *q.create().unwrap() = 3;
 
         assert_eq!(q.len(), 3);
 
@@ -291,30 +245,26 @@ mod tests {
     #[test]
     fn mutable_iterator() {
         let mut q = CopperListsManager::<_, 5>::new();
-        q.push(1);
-        q.push(2);
-        q.push(3);
-        q.push(4);
-        q.push(5);
-        q.push(6);
-        q.push(7);
+        *q.create().unwrap() = 1;
+        *q.create().unwrap() = 2;
+        *q.create().unwrap() = 3;
+        *q.create().unwrap() = 4;
+        *q.create().unwrap() = 5;
 
         for x in q.iter_mut() {
             *x *= 2;
         }
 
         let res: Vec<_> = q.iter().map(|&x| x).collect();
-        assert_eq!(res, [14, 12, 10, 8, 6]);
+        assert_eq!(res, [10, 8, 6, 4, 2]);
     }
 
     #[test]
     fn zero_sized() {
         let mut q = CopperListsManager::<_, 5>::new();
-        assert_eq!(q.capacity(), 5);
-
-        q.push(());
-        q.push(());
-        q.push(());
+        *q.create().unwrap() = ();
+        *q.create().unwrap() = ();
+        *q.create().unwrap() = ();
 
         assert_eq!(q.len(), 3);
 
@@ -330,100 +280,60 @@ mod tests {
         let q1 = CopperListsManager::<i32, 5>::new();
         let q2 = CopperListsManager::<i32, 5>::new();
         assert_eq!(q1, q2);
-
-        // I am not sure here
-        // let q3 = CircularQueue::<i32, U6>::new();
-        // assert_eq!(q1, q3); // Capacity doesn't matter as long as the same elements are yielded.
     }
 
     #[test]
     fn partially_full_queue_eq() {
         let mut q1 = CopperListsManager::<i32, 5>::new();
-        q1.push(1);
-        q1.push(2);
-        q1.push(3);
+        *q1.create().unwrap() = 1;
+        *q1.create().unwrap() = 2;
+        *q1.create().unwrap() = 3;
 
         let mut q2 = CopperListsManager::<i32, 5>::new();
-        q2.push(1);
-        q2.push(2);
+        *q2.create().unwrap() = 1;
+        *q2.create().unwrap() = 2;
         assert_ne!(q1, q2);
 
-        q2.push(3);
+        *q2.create().unwrap() = 3;
         assert_eq!(q1, q2);
 
-        q2.push(4);
+        *q2.create().unwrap() = 4;
         assert_ne!(q1, q2);
     }
 
     #[test]
     fn full_queue_eq() {
         let mut q1 = CopperListsManager::<i32, 5>::new();
-        q1.push(1);
-        q1.push(2);
-        q1.push(3);
-        q1.push(4);
-        q1.push(5);
+        *q1.create().unwrap() = 1;
+        *q1.create().unwrap() = 2;
+        *q1.create().unwrap() = 3;
+        *q1.create().unwrap() = 4;
+        *q1.create().unwrap() = 5;
 
         let mut q2 = CopperListsManager::<i32, 5>::new();
-        q2.push(1);
-        q2.push(2);
-        q2.push(3);
-        q2.push(4);
-        q2.push(5);
+        *q2.create().unwrap() = 1;
+        *q2.create().unwrap() = 2;
+        *q2.create().unwrap() = 3;
+        *q2.create().unwrap() = 4;
+        *q2.create().unwrap() = 5;
 
-        assert_eq!(q1, q2);
-    }
-
-    #[test]
-    fn over_full_queue_eq() {
-        let mut q1 = CopperListsManager::<i32, 5>::new();
-        q1.push(1);
-        q1.push(2);
-        q1.push(3);
-        q1.push(4);
-        q1.push(5);
-        q1.push(6);
-        q1.push(7);
-
-        let mut q2 = CopperListsManager::<i32, 5>::new();
-        q2.push(1);
-        q2.push(2);
-        q2.push(3);
-        q2.push(4);
-        q2.push(5);
-        q2.push(6);
-        assert_ne!(q1, q2);
-
-        q2.push(7);
-        assert_eq!(q1, q2);
-
-        q2.push(8);
-        assert_ne!(q1, q2);
-
-        q2.push(3);
-        q2.push(4);
-        q2.push(5);
-        q2.push(6);
-        q2.push(7);
         assert_eq!(q1, q2);
     }
 
     #[test]
     fn clear_eq() {
         let mut q1 = CopperListsManager::<i32, 5>::new();
-        q1.push(1);
-        q1.push(2);
-        q1.push(3);
-        q1.push(4);
-        q1.push(5);
-        q1.push(6);
-        q1.push(7);
+        *q1.create().unwrap() = 1;
+        *q1.create().unwrap() = 2;
+        *q1.create().unwrap() = 3;
+        *q1.create().unwrap() = 4;
+        *q1.create().unwrap() = 5;
         q1.clear();
 
         let mut q2 = CopperListsManager::<i32, 5>::new();
         assert_eq!(q1, q2);
 
-        q2.push(1);
+        *q2.create().unwrap() = 1;
         q2.clear();
         assert_eq!(q1, q2);
     }
@@ -431,23 +341,22 @@ mod tests {
     #[test]
     fn zero_sized_eq() {
         let mut q1 = CopperListsManager::<_, 3>::new();
-        q1.push(());
-        q1.push(());
-        q1.push(());
-        q1.push(());
+        *q1.create().unwrap() = ();
+        *q1.create().unwrap() = ();
+        *q1.create().unwrap() = ();
 
         let mut q2 = CopperListsManager::<_, 3>::new();
-        q2.push(());
-        q2.push(());
+        *q2.create().unwrap() = ();
+        *q2.create().unwrap() = ();
         assert_ne!(q1, q2);
 
-        q2.push(());
+        *q2.create().unwrap() = ();
         assert_eq!(q1, q2);
 
-        q2.push(());
+        q2.create();
         assert_eq!(q1, q2);
 
-        q2.push(());
+        q2.create();
         assert_eq!(q1, q2);
     }
 
