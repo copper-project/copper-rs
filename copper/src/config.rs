@@ -4,8 +4,8 @@ use petgraph::dot::Config as PetConfig;
 use petgraph::dot::Dot;
 use petgraph::stable_graph::StableDiGraph;
 use ron::extensions::Extensions;
-use ron::Options;
 use ron::value::Value as RonValue;
+use ron::Options;
 use serde::{Deserialize, Serialize};
 use uom::si::rational::Time;
 use uom::si::time::nanosecond;
@@ -138,19 +138,19 @@ impl Node {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct CopperConfig {
+pub struct CuConfig {
     pub graph: StableDiGraph<Node, String, NodeId>,
 }
 
-impl Default for CopperConfig {
+impl Default for CuConfig {
     fn default() -> Self {
-        CopperConfig {
+        CuConfig {
             graph: StableDiGraph::new(),
         }
     }
 }
 
-impl CopperConfig {
+impl CuConfig {
     pub fn add_node(&mut self, node: Node) -> NodeId {
         self.graph.add_node(node).index() as NodeId
     }
@@ -239,26 +239,26 @@ mod tests {
 
     #[test]
     fn test_plain_serialize() {
-        let mut config = CopperConfig::default();
+        let mut config = CuConfig::default();
         let n1 = config.add_node(Node::new("test1", "package::Plugin1"));
         let n2 = config.add_node(Node::new("test2", "package::Plugin2"));
         config.connect(n1, n2, "msgpkg::MsgType");
         let serialized = config.serialize();
-        let deserialized = CopperConfig::deserialize(&serialized);
+        let deserialized = CuConfig::deserialize(&serialized);
         assert_eq!(config.graph.node_count(), deserialized.graph.node_count());
         assert_eq!(config.graph.edge_count(), deserialized.graph.edge_count());
     }
 
     #[test]
     fn test_serialize_with_params() {
-        let mut config = CopperConfig::default();
+        let mut config = CuConfig::default();
         let mut camera = Node::new("copper-camera", "camerapkg::Camera")
             .set_base_period(Time::new::<second>(60.into()));
         camera.set_param::<Value>("resolution-height", 1080.into());
         config.add_node(camera);
         let serialized = config.serialize();
         println!("{}", serialized);
-        let deserialized = CopperConfig::deserialize(&serialized);
+        let deserialized = CuConfig::deserialize(&serialized);
         assert_eq!(
             deserialized
                 .get_node(0)

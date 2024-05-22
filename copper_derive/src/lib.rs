@@ -10,7 +10,7 @@ use syn::meta::parser;
 use syn::Fields::{Named, Unit, Unnamed};
 use syn::{parse_macro_input, parse_quote, parse_str, Field, ItemStruct, LitStr, Type, TypeTuple};
 
-use copper::config::CopperConfig;
+use copper::config::CuConfig;
 use format::{highlight_rust_code, rustfmt_generated_code};
 
 mod format;
@@ -40,7 +40,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let config_content = std::fs::read_to_string(&config_full_path)
         .unwrap_or_else(|_| panic!("Failed to read configuration file: {:?}", &config_full_path));
 
-    let copper_config = CopperConfig::deserialize(&config_content);
+    let copper_config = CuConfig::deserialize(&config_content);
 
     let (all_tasks_types_names, all_tasks_types) = extract_tasks_types(&copper_config);
 
@@ -52,7 +52,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
     // add that to a new field
     let task_instances_field: Field = parse_quote! {
-        task_instances: CopperTasks
+        task_instances: CuTasks
     };
 
     let (all_msgs_types_names, all_msgs_types) = extract_msgs_types(&copper_config);
@@ -60,7 +60,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let msgs_types_tuple: TypeTuple = parse_quote! { (#(#all_msgs_types),*,)};
 
     let copper_lists_field: Field = parse_quote! {
-        copper_lists: CircularQueue<CopperList, 10>
+        copper_lists: CuListsManager<CuList, 10>
     };
 
     let name = &item_struct.ident;
@@ -109,17 +109,17 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     // Convert the modified struct back into a TokenStream
     let result = quote! {
         use std::fs::read_to_string;
-        use copper::common::CircularQueue;
+        use copper::config::CuConfig;
         use copper::config::Node;
-        use copper::config::CopperConfig;
         use copper::config::NodeInstanceConfig;
+        use copper::common::CuListsManager;
+        use copper::cutask::CuSinkTask; // Needed for the instantiation of tasks
         use copper::cutask::CuSrcTask; // Needed for the instantiation of tasks
         use copper::cutask::CuTask; // Needed for the instantiation of tasks
-        use copper::cutask::CuSinkTask; // Needed for the instantiation of tasks
         use copper::CuResult;
 
-        pub type CopperList = #msgs_types_tuple;
-        pub type CopperTasks = #task_types_tuple;
+        pub type CuList = #msgs_types_tuple;
+        pub type CuTasks = #task_types_tuple;
 
         pub #item_struct
 
@@ -130,7 +130,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 let config_content = read_to_string(config_filename)
                     .unwrap_or_else(|_| panic!("Failed to read configuration file: {:?}", &config_filename));
-                let copper_config = CopperConfig::deserialize(&config_content);
+                let copper_config = CuConfig::deserialize(&config_content);
                 let all_instances_configs: Vec<Option<&NodeInstanceConfig>>  = copper_config.get_all_nodes().iter().map(|node_config| node_config.get_instance_config()).collect();
 
                 let task_instances = (
@@ -138,7 +138,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 );
                 Ok(#name {
                     task_instances,
-                    copper_lists: CircularQueue::new(),
+                    copper_lists: CuListsManager::new(),
                 })
             }
 
@@ -161,7 +161,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 }
 
 /// Extract all the tasks types in their index order
-fn extract_tasks_types(copper_config: &CopperConfig) -> (Vec<String>, Vec<Type>) {
+fn extract_tasks_types(copper_config: &CuConfig) -> (Vec<String>, Vec<Type>) {
     let all_nodes = copper_config.get_all_nodes();
 
     // Collect all the type names used by our configs.
@@ -179,7 +179,7 @@ fn extract_tasks_types(copper_config: &CopperConfig) -> (Vec<String>, Vec<Type>)
 }
 
 /// Extract all the messages types in their index order
-fn extract_msgs_types(copper_config: &CopperConfig) -> (Vec<String>, Vec<Type>) {
+fn extract_msgs_types(copper_config: &CuConfig) -> (Vec<String>, Vec<Type>) {
     let all_edges = copper_config.get_all_edges();
 
     let all_types_names: Vec<String> = all_edges

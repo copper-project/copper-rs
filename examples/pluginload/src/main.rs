@@ -1,11 +1,11 @@
 use uom::si::rational::Time;
 use uom::si::time::second;
 
-use copper::config::CopperConfig;
+use copper::config::CuConfig;
 use copper::config::Node;
 
 fn main() {
-    let mut copperconfig = CopperConfig::default();
+    let mut copperconfig = CuConfig::default();
     let mut camera =
         Node::new("copper-camera", "camerapkg::Camera")
             .set_base_period(Time::new::<second>(60.into()));

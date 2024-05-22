@@ -19,7 +19,7 @@ enum CopperListState {
 
 /// This structure maintains the entire memory needed by Copper for one process for the inter task communication.
 #[derive(Debug)]
-pub struct CopperListsManager<T: Sized + PartialEq, const N: usize> {
+pub struct CuListsManager<T: Sized + PartialEq, const N: usize> {
     copper_list_states: [CopperListState; N],
     data: Box<[T; N]>,
     length: usize,
@@ -38,7 +38,7 @@ pub type AscIter<'a, T> = Chain<SliceIter<'a, T>, SliceIter<'a, T>>;
 /// An mutable ascending iterator over `CircularQueue<T>`.
 pub type AscIterMut<'a, T> = Chain<SliceIterMut<'a, T>, SliceIterMut<'a, T>>;
 
-impl<T: Sized + PartialEq, const N: usize> PartialEq for CopperListsManager<T, N> {
+impl<T: Sized + PartialEq, const N: usize> PartialEq for CuListsManager<T, N> {
     fn eq(&self, other: &Self) -> bool {
         if self.len() != other.len() {
             return false;
@@ -47,7 +47,7 @@ impl<T: Sized + PartialEq, const N: usize> PartialEq for CopperListsManager<T, N
     }
 }
 
-impl<T: Sized + PartialEq, const N: usize> CopperListsManager<T, N> {
+impl<T: Sized + PartialEq, const N: usize> CuListsManager<T, N> {
     pub fn new() -> Self {
         let data = unsafe {
             let layout = std::alloc::Layout::new::<[T; N]>();
@@ -55,7 +55,7 @@ impl<T: Sized + PartialEq, const N: usize> CopperListsManager<T, N> {
             Box::from_raw(ptr)
         };
         const INITIAL_SLSTATE: CopperListState = CopperListState::Free;
-        CopperListsManager {
+        CuListsManager {
             copper_list_states: [INITIAL_SLSTATE; N],
             data,
             length: 0,
@@ -165,7 +165,7 @@ mod tests {
 
     #[test]
     fn empty_queue() {
-        let q = CopperListsManager::<i32, 5>::new();
+        let q = CuListsManager::<i32, 5>::new();
 
         assert!(q.is_empty());
         assert_eq!(q.iter().next(), None);
@@ -173,7 +173,7 @@ mod tests {
 
     #[test]
     fn partially_full_queue() {
-        let mut q = CopperListsManager::<i32, 5>::new();
+        let mut q = CuListsManager::<i32, 5>::new();
         *q.create().unwrap() = 1;
         *q.create().unwrap() = 2;
         *q.create().unwrap() = 3;
@@ -187,7 +187,7 @@ mod tests {
 
     #[test]
     fn full_queue() {
-        let mut q = CopperListsManager::<_, 5>::new();
+        let mut q = CuListsManager::<_, 5>::new();
         *q.create().unwrap() = 1;
         *q.create().unwrap() = 2;
         *q.create().unwrap() = 3;
@@ -201,7 +201,7 @@ mod tests {
 
     #[test]
     fn over_full_queue() {
-        let mut q = CopperListsManager::<_, 5>::new();
+        let mut q = CuListsManager::<_, 5>::new();
         *q.create().unwrap() = 1;
         *q.create().unwrap() = 2;
         *q.create().unwrap() = 3;
@@ -216,7 +216,7 @@ mod tests {
 
     #[test]
     fn clear() {
-        let mut q = CopperListsManager::<_, 5>::new();
+        let mut q = CuListsManager::<_, 5>::new();
         *q.create().unwrap() = 1;
         *q.create().unwrap() = 2;
         *q.create().unwrap() = 3;
@@ -242,7 +242,7 @@ mod tests {
 
     #[test]
     fn mutable_iterator() {
-        let mut q = CopperListsManager::<_, 5>::new();
+        let mut q = CuListsManager::<_, 5>::new();
         *q.create().unwrap() = 1;
         *q.create().unwrap() = 2;
         *q.create().unwrap() = 3;
@@ -259,7 +259,7 @@ mod tests {
 
     #[test]
     fn zero_sized() {
-        let mut q = CopperListsManager::<_, 5>::new();
+        let mut q = CuListsManager::<_, 5>::new();
         *q.create().unwrap() = ();
         *q.create().unwrap() = ();
         *q.create().unwrap() = ();
@@ -275,19 +275,19 @@ mod tests {
 
     #[test]
     fn empty_queue_eq() {
-        let q1 = CopperListsManager::<i32, 5>::new();
-        let q2 = CopperListsManager::<i32, 5>::new();
+        let q1 = CuListsManager::<i32, 5>::new();
+        let q2 = CuListsManager::<i32, 5>::new();
         assert_eq!(q1, q2);
     }
 
     #[test]
     fn partially_full_queue_eq() {
-        let mut q1 = CopperListsManager::<i32, 5>::new();
+        let mut q1 = CuListsManager::<i32, 5>::new();
         *q1.create().unwrap() = 1;
         *q1.create().unwrap() = 2;
         *q1.create().unwrap() = 3;
 
-        let mut q2 = CopperListsManager::<i32, 5>::new();
+        let mut q2 = CuListsManager::<i32, 5>::new();
         *q2.create().unwrap() = 1;
         *q2.create().unwrap() = 2;
         assert_ne!(q1, q2);
@@ -301,14 +301,14 @@ mod tests {
 
     #[test]
     fn full_queue_eq() {
-        let mut q1 = CopperListsManager::<i32, 5>::new();
+        let mut q1 = CuListsManager::<i32, 5>::new();
         *q1.create().unwrap() = 1;
         *q1.create().unwrap() = 2;
         *q1.create().unwrap() = 3;
         *q1.create().unwrap() = 4;
         *q1.create().unwrap() = 5;
 
-        let mut q2 = CopperListsManager::<i32, 5>::new();
+        let mut q2 = CuListsManager::<i32, 5>::new();
         *q2.create().unwrap() = 1;
         *q2.create().unwrap() = 2;
         *q2.create().unwrap() = 3;
@@ -320,7 +320,7 @@ mod tests {
 
     #[test]
     fn clear_eq() {
-        let mut q1 = CopperListsManager::<i32, 5>::new();
+        let mut q1 = CuListsManager::<i32, 5>::new();
         *q1.create().unwrap() = 1;
         *q1.create().unwrap() = 2;
         *q1.create().unwrap() = 3;
@@ -328,7 +328,7 @@ mod tests {
         *q1.create().unwrap() = 5;
         q1.clear();
 
-        let mut q2 = CopperListsManager::<i32, 5>::new();
+        let mut q2 = CuListsManager::<i32, 5>::new();
         assert_eq!(q1, q2);
 
         *q2.create().unwrap() = 1;
@@ -338,12 +338,12 @@ mod tests {
 
     #[test]
     fn zero_sized_eq() {
-        let mut q1 = CopperListsManager::<_, 3>::new();
+        let mut q1 = CuListsManager::<_, 3>::new();
         *q1.create().unwrap() = ();
         *q1.create().unwrap() = ();
         *q1.create().unwrap() = ();
 
-        let mut q2 = CopperListsManager::<_, 3>::new();
+        let mut q2 = CuListsManager::<_, 3>::new();
         *q2.create().unwrap() = ();
         *q2.create().unwrap() = ();
         assert_ne!(q1, q2);
@@ -360,6 +360,6 @@ mod tests {
 
     #[test]
     fn be_sure_we_wont_stackoverflow_at_init() {
-        let _ = CopperListsManager::<[u8; 10_000_000], 3>::new();
+        let _ = CuListsManager::<[u8; 10_000_000], 3>::new();
     }
 }
