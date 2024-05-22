@@ -1,11 +1,9 @@
 extern crate alloc;
 
 use std::iter::{Chain, Rev};
-use std::mem::replace;
 use std::slice::{Iter as SliceIter, IterMut as SliceIterMut};
 
-const MAX_TASKS: usize = 255;
-const MAX_CONCURRENT_TASKS: usize = 8;
+const MAX_TASKS: usize = 512;
 
 #[derive(Debug)]
 struct CopperLiskMask {
@@ -19,7 +17,7 @@ enum CopperListState {
     BeingSerialized,
 }
 
-/// A circular buffer-like queue.
+/// This structure maintains the entire memory needed by Copper for one process for the inter task communication.
 #[derive(Debug)]
 pub struct CopperListsManager<T: Sized + PartialEq, const N: usize> {
     copper_list_states: [CopperListState; N],
