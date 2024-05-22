@@ -60,7 +60,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let msgs_types_tuple: TypeTuple = parse_quote! { (#(#all_msgs_types),*,)};
 
     let copper_lists_field: Field = parse_quote! {
-        copper_lists: CircularQueue<CopperList, U1>
+        copper_lists: CircularQueue<CopperList, 10>
     };
 
     let name = &item_struct.ident;
@@ -110,7 +110,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let result = quote! {
         use std::fs::read_to_string;
         use copper::common::CircularQueue;
-        use copper::common::U1;
         use copper::config::Node;
         use copper::config::CopperConfig;
         use copper::config::NodeInstanceConfig;
@@ -139,7 +138,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 );
                 Ok(#name {
                     task_instances,
-                    copper_lists: Box::new(CircularQueue::new()),
+                    copper_lists: CircularQueue::new(),
                 })
             }
 
