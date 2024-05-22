@@ -7,11 +7,12 @@ edition = "2021"
 proc-macro = true
 
 [dependencies]
-syn = { version = "2.0.63", features = ["full"]}
+syn = { version = "2.0.63", features = ["full"] }
 quote = "1.0.36"
 proc-macro2 = { version = "1.0.82" }
 walkdir = "2.5.0"
 syntect = "5.2.0"
+backtrace = "0.3.71"
 copper = { path = "../copper" }
 
 [build-dependencies]
