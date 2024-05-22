@@ -1,7 +1,7 @@
 use uom::si::time::second;
 use uom::si::time::Time;
 
-use copper::config::CopperConfig;
+use copper::config::CuConfig;
 use copper::config::Node;
 use copper::config::Value;
 
@@ -9,7 +9,7 @@ use copper::config::Value;
 /// This is useful for making variations of your robot more easily.
 fn main() {
     // Generate a config
-    let mut copperconfig = CopperConfig::default();
+    let mut copperconfig = CuConfig::default();
     let mut camera =
         Node::new("camera", "camerapkg::Camera").set_base_period(Time::new::<second>(60.into()));
     camera.set_param::<Value>("resolution-height", 1080.into());
