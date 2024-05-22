@@ -21,6 +21,15 @@ impl Default for ImageMsg {
     }
 }
 
+impl PartialEq for ImageMsg {
+    fn eq(&self, other: &Self) -> bool {
+        self.buffer
+            .iter()
+            .flatten()
+            .eq(other.buffer.iter().flatten())
+    }
+}
+
 impl ImageMsg {
     fn copy_from(&mut self, buff_src: &[u8]) {
         let mut x = 0usize;
