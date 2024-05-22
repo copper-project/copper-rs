@@ -15,15 +15,15 @@
 extern crate alloc;
 
 use std::iter::{Chain, Rev};
-use std::mem::replace;
+use std::mem::{replace, MaybeUninit};
 use std::slice::{Iter as SliceIter, IterMut as SliceIterMut};
 
-use generic_array::{ArrayLength, GenericArray};
+pub use generic_array::typenum::consts::*;
 
 /// A circular buffer-like queue.
-#[derive(Clone, Debug)]
-pub struct CircularQueue<T: Default + Sized + PartialEq, N: ArrayLength> {
-    data: GenericArray<T, N>,
+#[derive(Debug)]
+pub struct CircularQueue<T: Default + Sized + PartialEq, const N: usize> {
+    data: [MaybeUninit<T>; N],
     length: usize,
     insertion_index: usize,
 }
@@ -43,7 +43,7 @@ pub type AscIterMut<'a, T> = Chain<SliceIterMut<'a, T>, SliceIterMut<'a, T>>;
 /// A value popped from `CircularQueue<T>` as the result of a push operation.
 pub type Popped<T> = Option<T>;
 
-impl<T: Default + Sized + PartialEq, N: ArrayLength> PartialEq for CircularQueue<T, N> {
+impl<T: Default + Copy + Sized + PartialEq, const N: usize> PartialEq for CircularQueue<T, N> {
     fn eq(&self, other: &Self) -> bool {
         if self.len() != other.len() {
             return false;
@@ -59,11 +59,10 @@ impl<T: Default + Sized + PartialEq, N: ArrayLength> PartialEq for CircularQueue
     }
 }
 
-impl<T: Default + Sized + PartialEq, N: ArrayLength> CircularQueue<T, N> {
+impl<T: Default + Copy + Sized + PartialEq, const N: usize> CircularQueue<T, N> {
     pub fn new() -> Self {
-        let data: GenericArray<T, N> = GenericArray::default();
         CircularQueue {
-            data,
+            data: unsafe { MaybeUninit::uninit().assume_init() },
             length: 0,
             insertion_index: 0,
         }
@@ -94,7 +93,7 @@ impl<T: Default + Sized + PartialEq, N: ArrayLength> CircularQueue<T, N> {
     ///
     #[inline]
     pub fn capacity(&self) -> usize {
-        N::to_usize()
+        N
     }
 
     /// Clears the queue.
@@ -103,6 +102,14 @@ impl<T: Default + Sized + PartialEq, N: ArrayLength> CircularQueue<T, N> {
     pub fn clear(&mut self) {
         self.insertion_index = 0;
         self.length = 0;
+    }
+
+    unsafe fn initialized_slice(&self) -> &[T] {
+        &*(self.data.get_unchecked(0..self.length) as *const _ as *const [T])
+    }
+
+    unsafe fn initialized_slice_mut(&mut self) -> &mut [T] {
+        &mut *(self.data.get_unchecked_mut(0..self.length) as *mut _ as *mut [T])
     }
 
     /// Pushes a new element into the queue.
@@ -119,30 +126,39 @@ impl<T: Default + Sized + PartialEq, N: ArrayLength> CircularQueue<T, N> {
             return old;
         }
 
-        if !self.is_full() {
-            self.data[self.insertion_index] = x;
-            self.length += 1;
+        if self.is_full() {
+            // Replace the element and take ownership of the old value
+            unsafe {
+                old = Some(self.data[self.insertion_index].as_ptr().read());
+            }
         } else {
-            old = Some(replace(&mut self.data[self.insertion_index], x));
+            self.length += 1;
         }
 
+        // Write the new element in place
+        unsafe {
+            self.data[self.insertion_index].as_mut_ptr().write(x);
+        }
         self.insertion_index = (self.insertion_index + 1) % self.capacity();
 
         old
     }
 
     #[inline]
-    pub fn pop(&mut self) -> Popped<&T> {
+    pub fn pop(&mut self) -> Option<T> {
         if self.capacity() == 0 || self.length == 0 {
             return None;
         }
+
         if self.insertion_index == 0 {
             self.insertion_index = self.capacity() - 1;
         } else {
             self.insertion_index -= 1;
         }
         self.length -= 1;
-        Some(&self.data[self.insertion_index])
+
+        // Take ownership of the element
+        unsafe { Some(self.data[self.insertion_index].as_ptr().read()) }
     }
 
     /// Returns an iterator over the queue's contents.
@@ -151,7 +167,8 @@ impl<T: Default + Sized + PartialEq, N: ArrayLength> CircularQueue<T, N> {
     ///
     #[inline]
     pub fn iter(&self) -> Iter<T> {
-        let (a, b) = self.data[0..self.length].split_at(self.insertion_index);
+        let initialized_part = unsafe { self.initialized_slice() };
+        let (a, b) = initialized_part.split_at(self.insertion_index);
         a.iter().rev().chain(b.iter().rev())
     }
 
@@ -161,7 +178,9 @@ impl<T: Default + Sized + PartialEq, N: ArrayLength> CircularQueue<T, N> {
     ///
     #[inline]
     pub fn iter_mut(&mut self) -> IterMut<T> {
-        let (a, b) = self.data.split_at_mut(self.insertion_index);
+        let insertion_index = self.insertion_index;
+        let initialized_part = unsafe { self.initialized_slice_mut() };
+        let (a, b) = initialized_part.split_at_mut(insertion_index);
         a.iter_mut().rev().chain(b.iter_mut().rev())
     }
 
@@ -171,7 +190,8 @@ impl<T: Default + Sized + PartialEq, N: ArrayLength> CircularQueue<T, N> {
     ///
     #[inline]
     pub fn asc_iter(&self) -> AscIter<T> {
-        let (a, b) = self.data.split_at(self.insertion_index);
+        let initialized_part = unsafe { self.initialized_slice() };
+        let (a, b) = initialized_part.split_at(self.insertion_index);
         b.iter().chain(a.iter())
     }
 
@@ -181,7 +201,9 @@ impl<T: Default + Sized + PartialEq, N: ArrayLength> CircularQueue<T, N> {
     ///
     #[inline]
     pub fn asc_iter_mut(&mut self) -> AscIterMut<T> {
-        let (a, b) = self.data.split_at_mut(self.insertion_index);
+        let insertion_index = self.insertion_index;
+        let initialized_part = unsafe { self.initialized_slice_mut() };
+        let (a, b) = initialized_part.split_at_mut(insertion_index);
         b.iter_mut().chain(a.iter_mut())
     }
 }
@@ -189,12 +211,10 @@ impl<T: Default + Sized + PartialEq, N: ArrayLength> CircularQueue<T, N> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use generic_array::typenum::consts::U0;
-    use generic_array::typenum::{U3, U5};
 
     #[test]
     fn zero_capacity() {
-        let mut q = CircularQueue::<i32, U0>::new();
+        let mut q = CircularQueue::<i32, 0>::new();
         assert_eq!(q.len(), 0);
         assert_eq!(q.capacity(), 0);
         assert!(q.is_empty());
@@ -215,7 +235,7 @@ mod tests {
 
     #[test]
     fn empty_queue() {
-        let q = CircularQueue::<i32, U5>::new();
+        let q = CircularQueue::<i32, 5>::new();
 
         assert!(q.is_empty());
         assert_eq!(q.iter().next(), None);
@@ -223,7 +243,7 @@ mod tests {
 
     #[test]
     fn partially_full_queue() {
-        let mut q = CircularQueue::<_, U5>::new();
+        let mut q = CircularQueue::<_, 5>::new();
         q.push(1);
         q.push(2);
         q.push(3);
@@ -237,7 +257,7 @@ mod tests {
 
     #[test]
     fn full_queue() {
-        let mut q = CircularQueue::<_, U5>::new();
+        let mut q = CircularQueue::<_, 5>::new();
         q.push(1);
         q.push(2);
         q.push(3);
@@ -252,7 +272,7 @@ mod tests {
 
     #[test]
     fn over_full_queue() {
-        let mut q = CircularQueue::<_, U5>::new();
+        let mut q = CircularQueue::<_, 5>::new();
         q.push(1);
         q.push(2);
         q.push(3);
@@ -269,7 +289,7 @@ mod tests {
 
     #[test]
     fn clear() {
-        let mut q = CircularQueue::<_, U5>::new();
+        let mut q = CircularQueue::<_, 5>::new();
         q.push(1);
         q.push(2);
         q.push(3);
@@ -295,7 +315,7 @@ mod tests {
 
     #[test]
     fn mutable_iterator() {
-        let mut q = CircularQueue::<_, U5>::new();
+        let mut q = CircularQueue::<_, 5>::new();
         q.push(1);
         q.push(2);
         q.push(3);
@@ -314,7 +334,7 @@ mod tests {
 
     #[test]
     fn zero_sized() {
-        let mut q = CircularQueue::<_, U5>::new();
+        let mut q = CircularQueue::<_, 5>::new();
         assert_eq!(q.capacity(), 5);
 
         q.push(());
@@ -332,8 +352,8 @@ mod tests {
 
     #[test]
     fn empty_queue_eq() {
-        let q1 = CircularQueue::<i32, U5>::new();
-        let q2 = CircularQueue::<i32, U5>::new();
+        let q1 = CircularQueue::<i32, 5>::new();
+        let q2 = CircularQueue::<i32, 5>::new();
         assert_eq!(q1, q2);
 
         // I am not sure here
@@ -343,12 +363,12 @@ mod tests {
 
     #[test]
     fn partially_full_queue_eq() {
-        let mut q1 = CircularQueue::<i32, U5>::new();
+        let mut q1 = CircularQueue::<i32, 5>::new();
         q1.push(1);
         q1.push(2);
         q1.push(3);
 
-        let mut q2 = CircularQueue::<i32, U5>::new();
+        let mut q2 = CircularQueue::<i32, 5>::new();
         q2.push(1);
         q2.push(2);
         assert_ne!(q1, q2);
@@ -362,14 +382,14 @@ mod tests {
 
     #[test]
     fn full_queue_eq() {
-        let mut q1 = CircularQueue::<i32, U5>::new();
+        let mut q1 = CircularQueue::<i32, 5>::new();
         q1.push(1);
         q1.push(2);
         q1.push(3);
         q1.push(4);
         q1.push(5);
 
-        let mut q2 = CircularQueue::<i32, U5>::new();
+        let mut q2 = CircularQueue::<i32, 5>::new();
         q2.push(1);
         q2.push(2);
         q2.push(3);
@@ -381,7 +401,7 @@ mod tests {
 
     #[test]
     fn over_full_queue_eq() {
-        let mut q1 = CircularQueue::<i32, U5>::new();
+        let mut q1 = CircularQueue::<i32, 5>::new();
         q1.push(1);
         q1.push(2);
         q1.push(3);
@@ -390,7 +410,7 @@ mod tests {
         q1.push(6);
         q1.push(7);
 
-        let mut q2 = CircularQueue::<i32, U5>::new();
+        let mut q2 = CircularQueue::<i32, 5>::new();
         q2.push(1);
         q2.push(2);
         q2.push(3);
@@ -415,7 +435,7 @@ mod tests {
 
     #[test]
     fn clear_eq() {
-        let mut q1 = CircularQueue::<i32, U5>::new();
+        let mut q1 = CircularQueue::<i32, 5>::new();
         q1.push(1);
         q1.push(2);
         q1.push(3);
@@ -425,7 +445,7 @@ mod tests {
         q1.push(7);
         q1.clear();
 
-        let mut q2 = CircularQueue::<i32, U5>::new();
+        let mut q2 = CircularQueue::<i32, 5>::new();
         assert_eq!(q1, q2);
 
         q2.push(1);
@@ -435,13 +455,13 @@ mod tests {
 
     #[test]
     fn zero_sized_eq() {
-        let mut q1 = CircularQueue::<_, U3>::new();
+        let mut q1 = CircularQueue::<_, 3>::new();
         q1.push(());
         q1.push(());
         q1.push(());
         q1.push(());
 
-        let mut q2 = CircularQueue::<_, U3>::new();
+        let mut q2 = CircularQueue::<_, 3>::new();
         q2.push(());
         q2.push(());
         assert_ne!(q1, q2);
@@ -454,5 +474,34 @@ mod tests {
 
         q2.push(());
         assert_eq!(q1, q2);
+    }
+
+    struct Big {
+        _data: [u8; 10000000],
+    }
+    impl Default for Big {
+        fn default() -> Self {
+            Big {
+                _data: [0; 10000000],
+            }
+        }
+    }
+
+    impl Clone for Big {
+        fn clone(&self) -> Self {
+            Big { _data: self._data }
+        }
+    }
+
+    impl Copy for Big {}
+    impl PartialEq for Big {
+        fn eq(&self, _: &Self) -> bool {
+            true
+        }
+    }
+
+    #[test]
+    fn no_stack_allocation() {
+        let _ = CircularQueue::<Big, 5>::new(); // this should not stack overflow
     }
 }
