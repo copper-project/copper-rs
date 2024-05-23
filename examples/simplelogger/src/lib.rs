@@ -2,8 +2,8 @@ use std::fs::File;
 use std::io::Write;
 
 use copper::config::NodeInstanceConfig;
+use copper::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle};
 use copper::CuResult;
-use copper::cutask::CuSinkTask;
 use v4lsrc::ImageMsg;
 
 pub struct SimpleLogger {
@@ -11,9 +11,7 @@ pub struct SimpleLogger {
     log_file: Option<File>,
 }
 
-impl CuSinkTask for SimpleLogger {
-    type Input = ImageMsg;
-
+impl CuTaskLifecycle for SimpleLogger {
     fn new(config: Option<&NodeInstanceConfig>) -> CuResult<Self>
     where
         Self: Sized,
@@ -34,12 +32,17 @@ impl CuSinkTask for SimpleLogger {
     }
 
     fn stop(&mut self) -> CuResult<()> {
+        self.log_file = None;
         Ok(())
     }
+}
 
-    fn process(&mut self, input: &Self::Input) -> CuResult<()> {
+impl CuSinkTask for SimpleLogger {
+    type Input = ImageMsg;
+
+    fn process(&mut self, input: &CuMsg<Self::Input>) -> CuResult<()> {
         let log_file = self.log_file.as_mut().unwrap();
-        for line in input.buffer.iter() {
+        for line in input.payload.buffer.iter() {
             log_file.write_all(line).unwrap();
         }
         Ok(())
