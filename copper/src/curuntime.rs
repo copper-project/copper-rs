@@ -1,6 +1,6 @@
 use crate::common::CuListsManager;
-use crate::config::CuConfig;
 use crate::config::NodeInstanceConfig;
+use crate::config::{CuConfig, NodeId};
 use crate::CuResult;
 
 // CT is a tuple of all the tasks
@@ -26,6 +26,15 @@ impl<CT, CL: Sized + PartialEq> CuRuntime<CT, CL> {
             copper_lists: CuListsManager::new(),
         })
     }
+}
+use petgraph::algo::toposort;
+pub fn compute_runtime_plan(config: &CuConfig) -> CuResult<Vec<String>> {
+    let sorted_nodes = toposort(&config.graph, None).expect("Cycle detected in the graph");
+    let result = sorted_nodes
+        .iter()
+        .map(|node| config.get_node(node.index() as NodeId).unwrap().get_id())
+        .collect();
+    Ok(result)
 }
 
 //tests
