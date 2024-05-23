@@ -95,6 +95,10 @@ impl Node {
         }
     }
 
+    pub fn get_id(&self) -> String {
+        self.id.clone()
+    }
+
     #[allow(dead_code)]
     pub fn set_type(mut self, name: Option<String>) -> Self {
         self.type_ = name;

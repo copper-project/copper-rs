@@ -39,6 +39,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             &format!("Failed to read configuration file: {:?}", &config_full_path),
         );
 
+    println!(
+        "Compute plan cycle: {}.",
+        copper::curuntime::compute_runtime_plan(&copper_config)
+            .unwrap()
+            .join(", ")
+    );
+
     let (all_tasks_types_names, all_tasks_types) = extract_tasks_types(&copper_config);
 
     // Build the tuple of all those types
