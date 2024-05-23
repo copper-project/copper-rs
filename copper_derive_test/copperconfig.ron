@@ -17,11 +17,17 @@
                     "path": "/tmp/stuff.cu",
                 },
             ),
+            (
+                instance_name: "monitoring",
+                type_name: "copper::monitoring::MonitoringTask",
+                base_period_ns: 60000000000,
+            ),
         ],
         node_holes: [],
         edge_property: directed,
         edges: [
             (0, 1, "v4lsrc::ImageMsg"),
+            (2, 1, "()"),
         ],
     ),
 )
