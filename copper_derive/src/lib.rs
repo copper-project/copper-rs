@@ -4,7 +4,7 @@ use proc_macro::TokenStream;
 
 use quote::quote;
 use syn::meta::parser;
-use syn::Fields::{Named, Unit, Unnamed};
+use syn::Fields::{Named, Unnamed};
 use syn::{parse_macro_input, parse_quote, parse_str, Field, ItemStruct, LitStr, Type, TypeTuple};
 
 use copper::config::CuConfig;
@@ -75,12 +75,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         .enumerate()
         .map(|(index, ty)| {
             let ty_name = &all_tasks_types_names[index];
-            let error = format!(
+            let additional_error_info = format!(
                 "Failed to get create instance for {}, instance index {}.",
                 ty_name, index
             );
             quote! {
-                #ty::new(all_instances_configs[#index]).expect(#error)
+                #ty::new(all_instances_configs[#index]).map_err(|e| e.add_context(#additional_error_info))?
             }
         })
         .collect();
@@ -95,15 +95,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         use copper::cutask::CuSrcTask; // Needed for the instantiation of tasks
         use copper::cutask::CuTask; // Needed for the instantiation of tasks
         use copper::CuResult;
+        use copper::CuError;
 
         pub type CuTasks = #task_types_tuple;
         pub type CuList = #msgs_types_tuple;
 
 
-        fn tasks_instanciator(all_instances_configs: Vec<Option<&NodeInstanceConfig>>) -> CuTasks {
-            (
-                #(#task_instances_init_code),*,
-            )
+        fn tasks_instanciator(all_instances_configs: Vec<Option<&NodeInstanceConfig>>) -> CuResult<CuTasks> {
+            Ok(( #(#task_instances_init_code),*, ))
         }
 
         pub #item_struct
@@ -117,17 +116,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     copper_runtime: CuRuntime::<CuTasks, CuList>::new(&config, tasks_instanciator)?
                 })
             }
-
-            //fn create_new_copper_list() -> CopperList {
-            //    (#(#msg_instances_init_code),*,)
-            //}
-
         }
     };
     let tokens: TokenStream = result.into();
 
     // Print and format the generated code using rustfmt
-    println!("Generated tokens: {}", tokens);
+    // println!("Generated tokens: {}", tokens);
     let formatted_code = rustfmt_generated_code(tokens.to_string());
     println!("\n     ===    Gen. Runtime ===\n");
     println!("{}", highlight_rust_code(formatted_code));
