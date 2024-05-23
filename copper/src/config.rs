@@ -76,37 +76,37 @@ impl From<Value> for String {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Node {
-    instance_name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    type_name: Option<String>,
+    id: String,
+    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
+    type_: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     base_period_ns: Option<isize>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    instance_config: Option<NodeInstanceConfig>,
+    config: Option<NodeInstanceConfig>,
 }
 
 impl Node {
-    pub fn new(name: &str, ptype: &str) -> Self {
+    pub fn new(id: &str, ptype: &str) -> Self {
         Node {
-            instance_name: name.to_string(),
-            type_name: Some(ptype.to_string()),
+            id: id.to_string(),
+            type_: Some(ptype.to_string()),
             base_period_ns: None,
-            instance_config: None,
+            config: None,
         }
     }
 
     #[allow(dead_code)]
-    pub fn set_type_name(mut self, type_name: Option<String>) -> Self {
-        self.type_name = type_name;
+    pub fn set_type(mut self, name: Option<String>) -> Self {
+        self.type_ = name;
         self
     }
 
-    pub fn get_type_name(&self) -> &str {
-        self.type_name.as_ref().unwrap()
+    pub fn get_type(&self) -> &str {
+        self.type_.as_ref().unwrap()
     }
 
     pub fn get_instance_config(&self) -> Option<&NodeInstanceConfig> {
-        self.instance_config.as_ref()
+        self.config.as_ref()
     }
 
     #[allow(dead_code)]
@@ -123,16 +123,16 @@ impl Node {
     }
 
     pub fn get_param<T: From<Value>>(&self, key: &str) -> Option<T> {
-        let pc = self.instance_config.as_ref()?;
+        let pc = self.config.as_ref()?;
         let v = pc.get(key)?;
         Some(T::from(v.clone()))
     }
 
     pub fn set_param<T: Into<Value>>(&mut self, key: &str, value: T) {
-        if self.instance_config.is_none() {
-            self.instance_config = Some(HashMap::new());
+        if self.config.is_none() {
+            self.config = Some(HashMap::new());
         }
-        self.instance_config
+        self.config
             .as_mut()
             .unwrap()
             .insert(key.to_string(), value.into());
@@ -241,9 +241,9 @@ mod tests {
     #[test]
     fn test_base_period() {
         let node = Node {
-            instance_name: "test".to_string(),
-            type_name: Some("test".to_string()),
-            instance_config: Some(HashMap::new()),
+            id: "test".to_string(),
+            type_: Some("test".to_string()),
+            config: Some(HashMap::new()),
             base_period_ns: Some(1_000_000_000),
         };
         assert_eq!(node.base_period(), Some(Time::new::<second>(1.into())));
