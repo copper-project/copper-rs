@@ -4,7 +4,8 @@ use std::fs::read_to_string;
 use crate::{CuError, CuResult};
 use petgraph::dot::Config as PetConfig;
 use petgraph::dot::Dot;
-use petgraph::stable_graph::StableDiGraph;
+use petgraph::stable_graph::{EdgeIndex, StableDiGraph};
+use petgraph::visit::EdgeRef;
 use ron::extensions::Extensions;
 use ron::value::Value as RonValue;
 use ron::Options;
@@ -244,6 +245,24 @@ impl CuConfig {
 
     pub fn get_node(&self, node_id: NodeId) -> Option<&Node> {
         self.graph.node_weight(node_id.into())
+    }
+
+    pub fn get_src_edges(&self, node_id: NodeId) -> Vec<usize> {
+        self.graph
+            .edges_directed(node_id.into(), petgraph::Direction::Outgoing)
+            .map(|edge| edge.id().index())
+            .collect()
+    }
+    pub fn get_dst_edges(&self, node_id: NodeId) -> Vec<usize> {
+        self.graph
+            .edges_directed(node_id.into(), petgraph::Direction::Incoming)
+            .map(|edge| edge.id().index())
+            .collect()
+    }
+    pub fn get_edge_weight(&self, index: usize) -> Option<String> {
+        self.graph
+            .edge_weight(EdgeIndex::new(index))
+            .map(|s| s.clone())
     }
 
     pub fn get_all_nodes(&self) -> Vec<&Node> {

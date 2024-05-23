@@ -8,6 +8,7 @@ use syn::Fields::{Named, Unnamed};
 use syn::{parse_macro_input, parse_quote, parse_str, Field, ItemStruct, LitStr, Type, TypeTuple};
 
 use copper::config::CuConfig;
+use copper::curuntime::compute_runtime_plan;
 use format::{highlight_rust_code, rustfmt_generated_code};
 
 mod format;
@@ -39,12 +40,23 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             &format!("Failed to read configuration file: {:?}", &config_full_path),
         );
 
-    println!(
-        "Compute plan cycle: {}.",
-        copper::curuntime::compute_runtime_plan(&copper_config)
-            .unwrap()
-            .join(", ")
-    );
+    for (node_index, node) in compute_runtime_plan(&copper_config).unwrap() {
+        let dst_edges = copper_config.get_dst_edges(node_index);
+        for edge_index in dst_edges {
+            let edge_type = copper_config.get_edge_weight(edge_index);
+            if let Some(edge_type) = edge_type {
+                println!("[edge:{}]   {} -> ", edge_index, edge_type);
+            }
+        }
+        println!("   {}: {}", node_index, node.get_id());
+        let src_edges = copper_config.get_src_edges(node_index);
+        for edge_index in src_edges {
+            let edge_type = copper_config.get_edge_weight(edge_index);
+            if let Some(edge_type) = edge_type {
+                println!("     -> [edge:{}]   {} ", edge_index, edge_type);
+            }
+        }
+    }
 
     let (all_tasks_types_names, all_tasks_types) = extract_tasks_types(&copper_config);
 
