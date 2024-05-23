@@ -8,7 +8,7 @@ use petgraph::stable_graph::StableDiGraph;
 use ron::extensions::Extensions;
 use ron::value::Value as RonValue;
 use ron::Options;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use uom::si::rational::Time;
 use uom::si::time::nanosecond;
 
@@ -74,7 +74,7 @@ impl From<Value> for String {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Node {
     id: String,
     #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
@@ -143,9 +143,90 @@ impl Node {
     }
 }
 
+// Serialization format
+// (
+//   tasks : [ (id: "toto", type: "zorglub::MyType", config: {...}),
+//             (id: "titi", type: "zorglub::MyType2", config: {...})]
+//   cnx : [ (src: "toto", dst: "titi", msg: "zorglub::MyMsgType"),...]
+// )
+
 #[derive(Serialize, Deserialize, Debug)]
+pub struct Cnx {
+    src: String,
+    dst: String,
+    msg: String,
+}
+
+#[derive(Debug)]
 pub struct CuConfig {
+    // This is not what is directly serialized, see the custom serialization below.
     pub graph: StableDiGraph<Node, String, NodeId>,
+}
+
+#[derive(Serialize, Deserialize, Default)]
+struct CuConfigRepresentation {
+    tasks: Vec<Node>,
+    cnx: Vec<Cnx>,
+}
+
+impl<'de> Deserialize<'de> for CuConfig {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let representation = CuConfigRepresentation::deserialize(deserializer)
+            .expect("Failed to deserialize config");
+
+        let mut cuconfig = CuConfig::default();
+        for task in representation.tasks {
+            cuconfig.add_node(task);
+        }
+
+        for c in representation.cnx {
+            let src = cuconfig
+                .graph
+                .node_indices()
+                .find(|i| cuconfig.graph[*i].id == c.src)
+                .expect("Source node not found");
+            let dst = cuconfig
+                .graph
+                .node_indices()
+                .find(|i| cuconfig.graph[*i].id == c.dst)
+                .expect("Destination node not found");
+            cuconfig.connect(src.index() as NodeId, dst.index() as NodeId, &c.msg);
+        }
+
+        Ok(cuconfig)
+    }
+}
+
+impl Serialize for CuConfig {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let tasks: Vec<Node> = self
+            .graph
+            .node_indices()
+            .map(|idx| self.graph[idx].clone())
+            .collect();
+
+        let cnx: Vec<Cnx> = self
+            .graph
+            .edge_indices()
+            .map(|edge| {
+                let (source, target) = self.graph.edge_endpoints(edge).unwrap();
+                (
+                    self.graph[source].id.clone(),
+                    self.graph[target].id.clone(),
+                    self.graph[edge].clone(),
+                )
+            })
+            .map(|(src, dst, msg)| Cnx { src, dst, msg })
+            .collect();
+
+        CuConfigRepresentation { tasks, cnx }.serialize(serializer)
+    }
 }
 
 impl Default for CuConfig {
@@ -198,13 +279,13 @@ impl CuConfig {
             .with_default_extension(Extensions::UNWRAP_VARIANT_NEWTYPES)
     }
 
-    pub fn serialize(&self) -> String {
+    pub fn serialize_ron(&self) -> String {
         let ron = Self::get_options();
         let pretty = ron::ser::PrettyConfig::default();
         ron.to_string_pretty(&self, pretty).unwrap()
     }
 
-    pub fn deserialize(ron: &str) -> Self {
+    pub fn deserialize_ron(ron: &str) -> Self {
         Self::get_options()
             .from_str(ron)
             .expect("Syntax Error in config")
@@ -231,12 +312,13 @@ pub fn read_configuration(config_filename: &str) -> CuResult<CuConfig> {
         ))
         .add_context(e.to_string().as_str())
     })?;
-    Ok(CuConfig::deserialize(&config_content))
+    Ok(CuConfig::deserialize_ron(&config_content))
 }
 
 // tests
 #[cfg(test)]
 mod tests {
+    use uom::si::power::watt;
     use uom::si::time::millisecond;
     use uom::si::time::second;
 
@@ -267,8 +349,8 @@ mod tests {
         let n1 = config.add_node(Node::new("test1", "package::Plugin1"));
         let n2 = config.add_node(Node::new("test2", "package::Plugin2"));
         config.connect(n1, n2, "msgpkg::MsgType");
-        let serialized = config.serialize();
-        let deserialized = CuConfig::deserialize(&serialized);
+        let serialized = config.serialize_ron();
+        let deserialized = CuConfig::deserialize_ron(&serialized);
         assert_eq!(config.graph.node_count(), deserialized.graph.node_count());
         assert_eq!(config.graph.edge_count(), deserialized.graph.edge_count());
     }
@@ -280,9 +362,9 @@ mod tests {
             .set_base_period(Time::new::<second>(60.into()));
         camera.set_param::<Value>("resolution-height", 1080.into());
         config.add_node(camera);
-        let serialized = config.serialize();
+        let serialized = config.serialize_ron();
         println!("{}", serialized);
-        let deserialized = CuConfig::deserialize(&serialized);
+        let deserialized = CuConfig::deserialize_ron(&serialized);
         assert_eq!(
             deserialized
                 .get_node(0)
