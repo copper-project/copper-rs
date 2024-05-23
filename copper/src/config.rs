@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fs::read_to_string;
 
-use crate::CuResult;
+use crate::{CuError, CuResult};
 use petgraph::dot::Config as PetConfig;
 use petgraph::dot::Dot;
 use petgraph::stable_graph::StableDiGraph;
@@ -220,8 +220,13 @@ impl CuConfig {
 }
 
 pub fn read_configuration(config_filename: &str) -> CuResult<CuConfig> {
-    let config_content = read_to_string(config_filename)
-        .map_err(|e| format!("Failed to read configuration file: {:?}", &config_filename))?;
+    let config_content = read_to_string(config_filename).map_err(|e| {
+        CuError::from(format!(
+            "Failed to read configuration file: {:?}",
+            &config_filename
+        ))
+        .add_context(e.to_string().as_str())
+    })?;
     Ok(CuConfig::deserialize(&config_content))
 }
 

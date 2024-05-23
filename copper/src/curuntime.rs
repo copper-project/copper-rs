@@ -1,11 +1,6 @@
-use std::fs::read_to_string;
-
 use crate::common::CuListsManager;
 use crate::config::CuConfig;
 use crate::config::NodeInstanceConfig;
-use crate::cutask::CuSinkTask;
-use crate::cutask::CuSrcTask;
-use crate::cutask::CuTask;
 use crate::CuResult;
 
 // CT is a tuple of all the tasks
@@ -18,14 +13,14 @@ pub struct CuRuntime<CT, CL: Sized + PartialEq> {
 impl<CT, CL: Sized + PartialEq> CuRuntime<CT, CL> {
     pub fn new(
         config: &CuConfig,
-        tasks_instanciator: impl Fn(Vec<Option<&NodeInstanceConfig>>) -> CT,
+        tasks_instanciator: impl Fn(Vec<Option<&NodeInstanceConfig>>) -> CuResult<CT>,
     ) -> CuResult<Self> {
         let all_instances_configs: Vec<Option<&NodeInstanceConfig>> = config
             .get_all_nodes()
             .iter()
             .map(|node_config| node_config.get_instance_config())
             .collect();
-        let task_instances = tasks_instanciator(all_instances_configs);
+        let task_instances = tasks_instanciator(all_instances_configs)?;
         Ok(Self {
             task_instances,
             copper_lists: CuListsManager::new(),
@@ -38,6 +33,8 @@ impl<CT, CL: Sized + PartialEq> CuRuntime<CT, CL> {
 mod tests {
     use super::*;
     use crate::config::Node;
+    use crate::cutask::CuSinkTask;
+    use crate::cutask::CuSrcTask;
     pub struct TestSource {}
 
     impl CuSrcTask for TestSource {
@@ -75,11 +72,13 @@ mod tests {
     type Tasks = (TestSource, TestSink);
     type Msgs = ((),);
 
-    fn tasks_instanciator(all_instances_configs: Vec<Option<&NodeInstanceConfig>>) -> Tasks {
-        (
-            TestSource::new(all_instances_configs[0usize]).unwrap(),
-            TestSink::new(all_instances_configs[1usize]).unwrap(),
-        )
+    fn tasks_instanciator(
+        all_instances_configs: Vec<Option<&NodeInstanceConfig>>,
+    ) -> CuResult<Tasks> {
+        Ok((
+            TestSource::new(all_instances_configs[0])?,
+            TestSink::new(all_instances_configs[1])?,
+        ))
     }
 
     #[test]
@@ -89,35 +88,6 @@ mod tests {
         config.add_node(Node::new("b", "TestSink"));
         config.connect(0, 1, "()");
         let runtime = CuRuntime::<Tasks, Msgs>::new(&config, tasks_instanciator);
+        assert!(runtime.is_ok());
     }
 }
-
-// use std::fs::read_to_string;
-// pub type CuList = (v4lsrc::ImageMsg,);
-// pub type CuTasks = (v4lsrc::Video4LinuxSource, simplelogger::SimpleLogger);
-// impl MyRuntime {
-//     pub fn new() -> CuResult<Self> {
-//         let config_filename = "copperconfig.ron";
-//         let config_content = read_to_string(config_filename).unwrap_or_else(|_| {
-//             panic!("Failed to read configuration file: {:?}", &config_filename)
-//         });
-//         let copper_config = CuConfig::deserialize(&config_content);
-//         let all_instances_configs: Vec<Option<&NodeInstanceConfig>> = copper_config
-//             .get_all_nodes()
-//             .iter()
-//             .map(|node_config| node_config.get_instance_config())
-//             .collect();
-//         let task_instances = (
-//             v4lsrc::Video4LinuxSource::new(all_instances_configs[0usize]).expect(
-//                 "Failed to get create instance for v4lsrc::Video4LinuxSource, instance index 0.",
-//             ),
-//             simplelogger::SimpleLogger::new(all_instances_configs[1usize]).expect(
-//                 "Failed to get create instance for simplelogger::SimpleLogger, instance index 1.",
-//             ),
-//         );
-//         Ok(MyRuntime {
-//             task_instances,
-//             copper_lists: CuListsManager::new(),
-//         })
-//     }
-// }
