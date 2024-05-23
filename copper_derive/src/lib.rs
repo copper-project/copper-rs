@@ -135,7 +135,7 @@ fn extract_tasks_types(copper_config: &CuConfig) -> (Vec<String>, Vec<Type>) {
     // Collect all the type names used by our configs.
     let all_types_names: Vec<String> = all_nodes
         .iter()
-        .map(|node_config| node_config.get_type_name().to_string())
+        .map(|node_config| node_config.get_type().to_string())
         .collect();
 
     // Transform them as Rust types

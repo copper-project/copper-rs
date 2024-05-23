@@ -2,32 +2,32 @@
     graph: (
         nodes: [
             (
-                instance_name: "camera",
-                type_name: "v4lsrc::Video4LinuxSource",
+                id: "monitoring",
+                type: "copper::monitoring::MonitoringTask",
+                base_period_ns: 60000000000,
+            ),
+            (
+                id: "camera",
+                type: "v4lsrc::Video4LinuxSource",
                 base_period_ns: 1000000000,
-                instance_config: {
+                config: {
                     "dev": "/dev/video0",
                 },
             ),
             (
-                instance_name: "logger",
-                type_name: "simplelogger::SimpleLogger",
+                id: "logger",
+                type: "simplelogger::SimpleLogger",
                 base_period_ns: 60000000000,
-                instance_config: {
+                config: {
                     "path": "/tmp/stuff.cu",
                 },
-            ),
-            (
-                instance_name: "monitoring",
-                type_name: "copper::monitoring::MonitoringTask",
-                base_period_ns: 60000000000,
             ),
         ],
         node_holes: [],
         edge_property: directed,
         edges: [
-            (0, 1, "v4lsrc::ImageMsg"),
-            (2, 1, "()"),
+            (1, 2, "v4lsrc::ImageMsg"),
+            (0, 2, "()"),
         ],
     ),
 )
