@@ -1,0 +1,13 @@
+[package]
+name = "copper-log"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+proc-macro = true
+
+
+[dependencies]
+proc-macro2 = { version = "1.0.83", features = ["span-locations"] }
+quote = "1.0.36"
+syn = { version = "2.0.65", features = ["full"] }
