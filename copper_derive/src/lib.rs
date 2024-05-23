@@ -2,10 +2,7 @@ extern crate proc_macro;
 
 use proc_macro::TokenStream;
 
-use backtrace::Backtrace;
-use std::panic;
-
-use quote::{quote, ToTokens};
+use quote::quote;
 use syn::meta::parser;
 use syn::Fields::{Named, Unit, Unnamed};
 use syn::{parse_macro_input, parse_quote, parse_str, Field, ItemStruct, LitStr, Type, TypeTuple};
@@ -27,7 +24,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             config_file = Some(meta.value()?.parse()?);
             Ok(())
         } else {
-            Err(meta.error("unsupported tea property"))
+            Err(meta.error("unsupported property"))
         }
     });
 
@@ -37,10 +34,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         .value();
     let mut config_full_path = utils::caller_crate_root();
     config_full_path.push(&config_file);
-    let config_content = std::fs::read_to_string(&config_full_path)
-        .unwrap_or_else(|_| panic!("Failed to read configuration file: {:?}", &config_full_path));
-
-    let copper_config = CuConfig::deserialize(&config_content);
+    let copper_config =
+        copper::config::read_configuration(config_full_path.as_os_str().to_str().unwrap()).expect(
+            &format!("Failed to read configuration file: {:?}", &config_full_path),
+        );
 
     let (all_tasks_types_names, all_tasks_types) = extract_tasks_types(&copper_config);
 
@@ -51,32 +48,24 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     };
 
     // add that to a new field
-    let task_instances_field: Field = parse_quote! {
-        task_instances: CuTasks
+    let runtime_field: Field = parse_quote! {
+        copper_runtime: CuRuntime<CuTasks, CuList>
     };
 
-    let (all_msgs_types_names, all_msgs_types) = extract_msgs_types(&copper_config);
+    let (_, all_msgs_types) = extract_msgs_types(&copper_config);
 
     let msgs_types_tuple: TypeTuple = parse_quote! { (#(#all_msgs_types),*,)};
-
-    let copper_lists_field: Field = parse_quote! {
-        copper_lists: CuListsManager<CuList, 10>
-    };
 
     let name = &item_struct.ident;
 
     match &mut item_struct.fields {
         Named(fields_named) => {
-            fields_named.named.push(task_instances_field);
-            fields_named.named.push(copper_lists_field);
+            fields_named.named.push(runtime_field);
         }
         Unnamed(fields_unnamed) => {
-            fields_unnamed.unnamed.push(task_instances_field);
-            // fields_unnamed.unnamed.push(copper_lists_field);
+            fields_unnamed.unnamed.push(runtime_field);
         }
-        Unit => {
-            // Handle unit structs if necessary
-        }
+        _ => (),
     };
 
     // Generate the code to create instances of the nodes
@@ -96,49 +85,36 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         })
         .collect();
 
-    // Generate the code to create instances of the messages
-    let msg_instances_init_code: Vec<_> = all_msgs_types
-        .iter()
-        .map(|ty| {
-            quote! {
-                #ty::default()
-            }
-        })
-        .collect();
-
     // Convert the modified struct back into a TokenStream
     let result = quote! {
-        use std::fs::read_to_string;
         use copper::config::CuConfig;
-        use copper::config::Node;
         use copper::config::NodeInstanceConfig;
-        use copper::common::CuListsManager;
+        use copper::config::read_configuration;
+        use copper::curuntime::CuRuntime;
         use copper::cutask::CuSinkTask; // Needed for the instantiation of tasks
         use copper::cutask::CuSrcTask; // Needed for the instantiation of tasks
         use copper::cutask::CuTask; // Needed for the instantiation of tasks
         use copper::CuResult;
 
-        pub type CuList = #msgs_types_tuple;
         pub type CuTasks = #task_types_tuple;
+        pub type CuList = #msgs_types_tuple;
+
+
+        fn tasks_instanciator(all_instances_configs: Vec<Option<&NodeInstanceConfig>>) -> CuTasks {
+            (
+                #(#task_instances_init_code),*,
+            )
+        }
 
         pub #item_struct
 
         impl #name {
 
             pub fn new() -> CuResult<Self> {
-                let config_filename = #config_file;
+                let config = read_configuration(#config_file)?;
 
-                let config_content = read_to_string(config_filename)
-                    .unwrap_or_else(|_| panic!("Failed to read configuration file: {:?}", &config_filename));
-                let copper_config = CuConfig::deserialize(&config_content);
-                let all_instances_configs: Vec<Option<&NodeInstanceConfig>>  = copper_config.get_all_nodes().iter().map(|node_config| node_config.get_instance_config()).collect();
-
-                let task_instances = (
-                    #(#task_instances_init_code),*,
-                );
                 Ok(#name {
-                    task_instances,
-                    copper_lists: CuListsManager::new(),
+                    copper_runtime: CuRuntime::<CuTasks, CuList>::new(&config, tasks_instanciator)?
                 })
             }
 

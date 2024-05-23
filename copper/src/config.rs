@@ -1,5 +1,7 @@
 use std::collections::HashMap;
+use std::fs::read_to_string;
 
+use crate::CuResult;
 use petgraph::dot::Config as PetConfig;
 use petgraph::dot::Dot;
 use petgraph::stable_graph::StableDiGraph;
@@ -208,6 +210,19 @@ impl CuConfig {
         let dot = Dot::with_config(&self.graph, &[PetConfig::EdgeNoLabel]);
         write!(output, "{:?}", dot).unwrap();
     }
+
+    pub fn get_all_instances_configs(&self) -> Vec<Option<&NodeInstanceConfig>> {
+        self.get_all_nodes()
+            .iter()
+            .map(|node_config| node_config.get_instance_config())
+            .collect()
+    }
+}
+
+pub fn read_configuration(config_filename: &str) -> CuResult<CuConfig> {
+    let config_content = read_to_string(config_filename)
+        .map_err(|e| format!("Failed to read configuration file: {:?}", &config_filename))?;
+    Ok(CuConfig::deserialize(&config_content))
 }
 
 // tests
