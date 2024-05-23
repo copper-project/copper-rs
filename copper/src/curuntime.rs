@@ -33,37 +33,41 @@ impl<CT, CL: Sized + PartialEq> CuRuntime<CT, CL> {
 mod tests {
     use super::*;
     use crate::config::Node;
-    use crate::cutask::CuSinkTask;
-    use crate::cutask::CuSrcTask;
+    use crate::cutask::{CuMsg, CuSrcTask};
+    use crate::cutask::{CuSinkTask, CuTaskLifecycle};
     pub struct TestSource {}
 
-    impl CuSrcTask for TestSource {
-        type Msg = ();
-
+    impl CuTaskLifecycle for TestSource {
         fn new(config: Option<&NodeInstanceConfig>) -> CuResult<Self>
         where
             Self: Sized,
         {
             Ok(Self {})
         }
+    }
 
-        fn process(&mut self, empty_msg: &mut Self::Msg) -> CuResult<()> {
+    impl CuSrcTask for TestSource {
+        type Payload = ();
+        fn process(&mut self, empty_msg: &mut CuMsg<Self::Payload>) -> CuResult<()> {
             Ok(())
         }
     }
 
     pub struct TestSink {}
-    impl CuSinkTask for TestSink {
-        type Input = ();
 
+    impl CuTaskLifecycle for TestSink {
         fn new(config: Option<&NodeInstanceConfig>) -> CuResult<Self>
         where
             Self: Sized,
         {
             Ok(Self {})
         }
+    }
 
-        fn process(&mut self, input: &Self::Input) -> CuResult<()> {
+    impl CuSinkTask for TestSink {
+        type Input = ();
+
+        fn process(&mut self, input: &CuMsg<Self::Input>) -> CuResult<()> {
             Ok(())
         }
     }

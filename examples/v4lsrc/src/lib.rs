@@ -3,7 +3,7 @@ use linux_video::{Device, Stream};
 use serde::{Deserialize, Serialize};
 
 use copper::config::NodeInstanceConfig;
-use copper::cutask::CuSrcTask;
+use copper::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle};
 use copper::serde::arrays;
 use copper::CuResult;
 
@@ -53,10 +53,7 @@ pub struct Video4LinuxSource {
     device: Device,
     stream: Option<Stream<In, Mmap>>,
 }
-
-impl CuSrcTask for Video4LinuxSource {
-    type Msg = ImageMsg;
-
+impl CuTaskLifecycle for Video4LinuxSource {
     fn new(config: Option<&NodeInstanceConfig>) -> CuResult<Self>
     where
         Self: Sized,
@@ -90,16 +87,21 @@ impl CuSrcTask for Video4LinuxSource {
         Ok(())
     }
 
-    fn process(&mut self, empty_msg: &mut Self::Msg) -> CuResult<()> {
+    fn stop(&mut self) -> CuResult<()> {
+        self.stream = None; // This will trigger the Drop implementation on Stream
+        Ok(())
+    }
+}
+
+impl CuSrcTask for Video4LinuxSource {
+    type Payload = ImageMsg;
+
+    fn process(&mut self, empty_msg: &mut CuMsg<Self::Payload>) -> CuResult<()> {
         let stream = self.stream.as_ref().unwrap();
         if let Ok(buffer) = stream.next() {
             let buffer = buffer.lock();
-            empty_msg.copy_from(buffer.as_ref());
+            empty_msg.payload.copy_from(buffer.as_ref());
         }
-        Ok(())
-    }
-    fn stop(&mut self) -> CuResult<()> {
-        self.stream = None; // This will trigger the Drop implementation on Stream
         Ok(())
     }
 }
@@ -122,16 +124,16 @@ mod tests {
         let mut task = Video4LinuxSource::new(Some(&config))?;
         println!("Build img");
         // emulates the inplace behavior of copper's runtime.
-        let size_of_image_msg = mem::size_of::<ImageMsg>();
+        let size_of_image_msg = mem::size_of::<CuMsg<ImageMsg>>();
         let mut memory: Vec<u8> = vec![0; size_of_image_msg];
-        let ptr = memory.as_mut_ptr() as *mut ImageMsg;
-        let img = unsafe { &mut *ptr };
+        let ptr = memory.as_mut_ptr() as *mut CuMsg<ImageMsg>;
+        let msg = unsafe { &mut *ptr };
 
         println!("Start");
         task.start()?;
         println!("Process");
-        task.process(img)?;
-        println!("First byte: {}", img.buffer[0][0]);
+        task.process(msg)?;
+        println!("First byte: {}", msg.payload.buffer[0][0]);
         println!("Stop");
         task.stop()?;
         Ok(())

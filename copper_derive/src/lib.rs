@@ -91,9 +91,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         use copper::config::NodeInstanceConfig;
         use copper::config::read_configuration;
         use copper::curuntime::CuRuntime;
-        use copper::cutask::CuSinkTask; // Needed for the instantiation of tasks
-        use copper::cutask::CuSrcTask; // Needed for the instantiation of tasks
-        use copper::cutask::CuTask; // Needed for the instantiation of tasks
+        use copper::cutask::CuTaskLifecycle; // Needed for the instantiation of tasks
         use copper::CuResult;
         use copper::CuError;
 
