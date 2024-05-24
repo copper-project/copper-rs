@@ -11,3 +11,5 @@ proc-macro = true
 proc-macro2 = { version = "1.0.83", features = ["span-locations"] }
 quote = "1.0.36"
 syn = { version = "2.0.65", features = ["full"] }
+rkv = { version = "0.19.0", features = ["lmdb"] }
+lazy_static = { version = "1.4.0" }
