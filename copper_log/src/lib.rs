@@ -1,7 +1,8 @@
+mod index;
+
 extern crate proc_macro;
 
 use proc_macro::TokenStream;
-use proc_macro2::Span;
 use quote::quote;
 use syn::{parse_macro_input, LitStr};
 
@@ -13,7 +14,7 @@ pub fn debug(input: TokenStream) -> TokenStream {
     let expanded = quote! {
         {
             let log_message = #message;
-            println!("Log: {:?}", log_message);
+            println!("{}:{} Log: {:?}", file!(), line!(), log_message);
             log_message
         }
     };
