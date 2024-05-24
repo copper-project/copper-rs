@@ -1,0 +1,7 @@
+[package]
+name = "copper-log-test"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+copper-log = { path = "../copper_log" }
