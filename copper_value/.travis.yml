@@ -1,0 +1,37 @@
+language: rust
+rust:
+    - nightly
+    - beta
+    - stable
+sudo: false
+os: linux
+cache:
+    directories:
+        - $HOME/.cargo
+        - target
+env:
+    global:
+        - secure: "RFoJK/j05ZzCrx3zJJjqn8FqL2UwAH0iSTE/pTNsEn4Xl1DFTC/ubb+cu8gFS8wpTY0+zPSmBrHp3R0MNKIpbQqZ2WexEpbzNEdpftcW+eUlEj45HvNWw3LdKn8w0O7txdRxbUVzgDgto+XGsFypMsA5wxjOryYDJWPnpXvt1QL520ro0/IzYToubBj0e6hhlXXvDY0gr4ip/Y/dooWJ0XmPdmHi1atHLBYaH5l0qd5Rc6pfqvj+ctaZQyVV6JEK84ODUeK6IHbthl45/ZwecMZW/egAXX2CCViv2FmCkqoIjGynPd5dVTMMZGYVEYpDMzdkvYze6JoNsj2YZkO3WprpTqUTgwf+7XdRIce0X7rIVm6P5fBiN/8NPcRVgfBR6WthJoRfQYdjkqhrg70wcBrJxRUulPxNxwcCkC9RDEbI8ZlG4ZhNKfAVzV0xMwztcJoz5qqsMSAkWc8HIAZ7CL9zplLe6P7tomaLcWFxkyvGsdOXCHtyBnp8TOwgvG4kGzuZ7myEOrGodWn23F9e5h00Kio9k/j1HDa7+ESQ7UW6MJu4YT+5XTTJi8Dr+kdrUVDwFirab8+A8/tfFmQxZhZdzny48uTjGeDFqmr4hQ+hC3elg+ZDpEl72/A8HMQcpxtpiBkyky0B5sJSCUOeCU8A5DN+UJN/9d6my+10flA="
+        - secure: "GNs+Daj2ses715lQWto6a+zFWjBBZ/4Rt/F6j0rpqYjm7NEForoRdDmRWHbN3xGSrxT83G7yuPdGRlAKG1AjM91Dxi2fEw/THvT61QXB5LSW21/2h7WETAJYoBzlFwAPo3RVM0tzkjPQfAm5C3zxbPXjo42D5GQkF50vKixBQZ5QG2FIQHAv80Ed9y2aozf6Z5V6lojjLm2xEfdSNA8Mj8/N3ux2eWESddufk6wdEoRkcpRe2e09TZaeamYQ48yj1paDPKNLFhyRFehtOFGdMQQgbWJ1GsYgtWkHu8f7ohuC4Pdx94f0xTApz+jpeADtDmgX8Cvd2IVCUEB8WLMJv2W+Zp2xrn1Ufr88uCzOUT78c6kiRJfQ9n9IEZSTuie/JtwgjlWuud1raarDDfmRKAGWHRx0WL1TKt4ADuy63pyV78FlLNnMTJ9BwZhUpxQqIbKtw31eIwWxkUiwpvEQ1IYLts4U9rSi8xjnLhA7B97ahIq1pMOWnC4HM2jCggCw2AQtkNNM6vuPli//3i1aF02JrLnlwsXparxnQ70HmyaxX0u38Tgr8zbobtJE8+TsDh2d3uFcI6BNARmsO7I1ifDbPj6aB2JOYK4M8knoP3MG28jO5v3qVXrEmfWm361LMNkmw1cM2MnDBq3uxKWhGZzW4XB72kcSzYgFNzUaaUw="
+before_script:
+    - curl -L https://github.com/arcnmx/ci/archive/master.tar.gz | tar -xzC $HOME && . $HOME/ci-master/src
+
+script:
+    - cargo build
+    - cargo test
+
+deploy:
+    provider: script
+    script: "true"
+    on:
+        tags: true
+        all_branches: true
+        condition: "$TRAVIS_RUST_VERSION = stable"
+
+before_deploy:
+    - cargo doc
+    - cargo package
+
+after_deploy:
+    - cargo pages-publish
+    - cargo publish
