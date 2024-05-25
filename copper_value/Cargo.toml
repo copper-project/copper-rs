@@ -12,6 +12,7 @@ license = "MIT"
 [dependencies]
 serde = "1.0.202"
 ordered-float = "4.2.0"
+bincode = "2.0.0-rc.3"
 
 [dev-dependencies]
 serde_derive = "1.0.202"
