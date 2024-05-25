@@ -4,4 +4,5 @@ fn main() {
     let b = 3;
     // debug!("Hello, world! {} {}", a, b);
     debug!("Hello, world!");
+    debug!("Hello, world2!", a);
 }
