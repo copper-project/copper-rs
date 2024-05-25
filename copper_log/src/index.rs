@@ -42,22 +42,16 @@ lazy_static! {
         ))
     };
 }
-
-pub fn check_and_insert(filename: &str, line_number: u32, log_string: &str) -> Option<IndexType> {
-    let (counter_store, index_to_string, string_to_index, index_to_callsite) =
-        &mut *DBS.lock().unwrap();
+pub fn intern_string(s: &str) -> Option<IndexType> {
+    let (counter_store, index_to_string, string_to_index, _) = &mut *DBS.lock().unwrap();
     let index = {
         let env = RKV.lock().unwrap();
         // If this string already exists in the store, return the index
         {
             let reader = env.read().unwrap();
-            let entry = string_to_index.get(&reader, log_string);
             // check if log_string is already in the string_to_index store
-            if let Ok(Some(Value::U64(index))) = string_to_index.get(&reader, log_string) {
-                println!(
-                    "CLog: Returning existing index #{} -> {}",
-                    index, log_string
-                );
+            if let Ok(Some(Value::U64(index))) = string_to_index.get(&reader, s) {
+                println!("CLog: Returning existing index #{} -> {}", index, s);
                 return Some(index as IndexType);
             };
         }
@@ -65,26 +59,36 @@ pub fn check_and_insert(filename: &str, line_number: u32, log_string: &str) -> O
         let next_index = get_next_index(&mut writer, counter_store).unwrap();
         // Insert the new string into the store
         index_to_string
-            .put(
-                &mut writer,
-                next_index.to_le_bytes(),
-                &Value::Str(log_string),
-            )
+            .put(&mut writer, next_index.to_le_bytes(), &Value::Str(s))
             .unwrap();
         string_to_index
-            .put(&mut writer, log_string, &Value::U64(next_index as u64))
-            .unwrap();
-        index_to_callsite
-            .put(
-                &mut writer,
-                next_index.to_le_bytes(),
-                &Value::Str(format!("{}:{}", filename, line_number).as_str()),
-            )
+            .put(&mut writer, s, &Value::U64(next_index as u64))
             .unwrap();
         writer.commit().unwrap();
         Some(next_index)
     };
-    println!("CLog: Inserted #{} -> {}", index.unwrap(), log_string);
+    println!("CLog: Inserted #{} -> {}", index.unwrap(), s);
+    index
+}
+
+pub fn check_and_insert(filename: &str, line_number: u32, log_string: &str) -> Option<IndexType> {
+    let index = intern_string(log_string);
+    {
+        let (_, _, _, index_to_callsite) = &mut *DBS.lock().unwrap();
+        index?;
+        let lindex = index.unwrap();
+        let env = RKV.lock().unwrap();
+        let mut writer = env.write().unwrap();
+        index_to_callsite
+            .put(
+                &mut writer,
+                lindex.to_le_bytes(),
+                &Value::Str(format!("{}:{}", filename, line_number).as_str()),
+            )
+            .unwrap();
+        writer.commit().unwrap();
+        println!("CLog: Inserted #{} -> {}", lindex, log_string);
+    }
     index
 }
 
