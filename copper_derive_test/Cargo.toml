@@ -9,6 +9,7 @@ simplelogger = { path = "../examples/simplelogger" }
 v4lsrc = { path = "../examples/v4lsrc" }
 copper = { path = "../copper" }
 copper-log = { path = "../copper_log" }
+copper-log-runtime = { path = "../copper_log_runtime" }
 
 [build-dependencies]
 copper = { path = "../copper" }

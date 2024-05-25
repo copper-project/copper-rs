@@ -23,5 +23,5 @@ fn main() {
 
     copperconfig.connect(n2, n1, "imgmsgpkg::Image");
     copperconfig.connect(n1, n3, "imgmsgpkg::Image");
-    println!("{}", copperconfig.serialize());
+    // println!("{}", copperconfig.serialize());
 }

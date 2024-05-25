@@ -22,7 +22,6 @@ fn main() {
 
     copperconfig.connect(n2, n1, "imgmsgpkg::Image");
     copperconfig.connect(n1, n3, "imgmsgpkg::Image");
-    println!("{}", copperconfig.serialize());
 
     {
         let mut file = std::fs::File::create("/tmp/copperconfig.dot").unwrap();

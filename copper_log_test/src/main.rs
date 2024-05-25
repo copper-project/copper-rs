@@ -1,8 +1,10 @@
 use copper_log::debug;
+use copper_log_runtime::LoggerRuntime;
 use copper_value::to_value;
 use serde::Serialize;
 
 fn main() {
+    let rt = LoggerRuntime {};
     #[derive(Serialize)]
     struct Test {
         a: i32,
@@ -21,5 +23,6 @@ fn main() {
     debug!("anonymous param constants {} {}", 3u16, 2u8);
     debug!("named param constants {} {}", a = 3, b = 2);
     debug!("mixed named param constants, {} {} {}", a = 3, 54, b = 2);
-    debug!("a tuple {}", mytuple);
+    rt.close();
+    debug!(" AFTER CLOSE {} ", "AFTER CLOSE");
 }

@@ -34,7 +34,8 @@ pub fn debug(input: TokenStream) -> TokenStream {
         let msg = #msg;
         let index = #index;
         println!("{} -> [{}]", index, msg);
-        let mut params = Vec::<(Value, Value)>::new();
+        let mut params = Vec::<Value>::new();
+        let mut params_istring = Vec::<Value>::new();
 
     };
 
@@ -49,11 +50,11 @@ pub fn debug(input: TokenStream) -> TokenStream {
         }
     }
 
-    let unnamed_prints = unnamed_params.iter().map(|param| {
+    let unnamed_prints = unnamed_params.iter().map(|value| {
         quote! {
-            // 0 means an unnamed parameter
-            let param = (ANONYMOUS, to_value(#param).expect("Failed to convert a parameter to a Value"));
-            println!("anon param: {:?}", &param);
+            let istring = ANONYMOUS;
+            let param = to_value(#value).expect("Failed to convert a parameter to a Value");
+            params_istring.push(istring);
             params.push(param);
         }
     });
@@ -62,14 +63,16 @@ pub fn debug(input: TokenStream) -> TokenStream {
         let index = intern_string(quote!(#name).to_string().as_str())
             .expect("Failed to insert log string.");
         quote! {
-            let param = (to_value(#index).unwrap(), to_value(#value).expect("Failed to convert a parameter to a Value"));
-            println!("named param: {:?}", &param);
+            let istring = to_value(#index).unwrap();
+            let param = to_value(#value).expect("Failed to convert a parameter to a Value");
+            params_istring.push(istring);
             params.push(param);
         }
     });
 
     let postfix = quote! {
-        println!("Would send {:?}", (index, params));
+        let packed_value = Value::Seq(vec![to_value(index).unwrap(), Value::Seq(params_istring), Value::Seq(params)]);
+        copper_log_runtime::log(packed_value);
     };
 
     let expanded = quote! {
