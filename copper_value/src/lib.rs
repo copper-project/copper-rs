@@ -7,12 +7,15 @@ use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 
-pub use de::*;
-pub use ser::*;
-
+mod bdec;
 mod benc;
 mod de;
 mod ser;
+
+pub use bdec::*;
+pub use benc::*;
+pub use de::*;
+pub use ser::*;
 
 #[derive(Clone, Debug)]
 pub enum Value {

@@ -30,11 +30,10 @@ pub fn debug(input: TokenStream) -> TokenStream {
     let prefix = quote! {
         use copper_log_runtime::value::Value;
         use copper_log_runtime::value::to_value;
+        use copper_log_runtime::CuLogEntry;
         use copper_log_runtime::ANONYMOUS;
         let msg = #msg;
-        let index = #index;
-        let mut params = Vec::<Value>::new();
-        let mut params_istring = Vec::<Value>::new();
+        let mut log_entry = CuLogEntry::new(#index);
     };
 
     let mut unnamed_params = vec![];
@@ -50,10 +49,8 @@ pub fn debug(input: TokenStream) -> TokenStream {
 
     let unnamed_prints = unnamed_params.iter().map(|value| {
         quote! {
-            let istring = ANONYMOUS;
             let param = to_value(#value).expect("Failed to convert a parameter to a Value");
-            params_istring.push(istring);
-            params.push(param);
+            log_entry.add_param(ANONYMOUS, param);
         }
     });
 
@@ -61,18 +58,14 @@ pub fn debug(input: TokenStream) -> TokenStream {
         let index = intern_string(quote!(#name).to_string().as_str())
             .expect("Failed to insert log string.");
         quote! {
-            let istring = to_value(#index).unwrap();
             let param = to_value(#value).expect("Failed to convert a parameter to a Value");
-            params_istring.push(istring);
-            params.push(param);
+            log_entry.add_param(#index, param);
         }
     });
     let postfix = quote! {
-        let vparams = Value::Seq(params);
         // to do add conditional
-        println!("{} {}", msg, &vparams);
-        let packed_value = Value::Seq(vec![to_value(index).unwrap(), Value::Seq(params_istring), vparams]);
-        copper_log_runtime::log(packed_value);
+        println!("{} {}", msg, &log_entry);
+        copper_log_runtime::log(log_entry);
     };
 
     let expanded = quote! {

@@ -8,6 +8,7 @@ copper-value = { path = "../copper_value" }
 lazy_static = "1.4.0"
 serde = { version = "1.0.202", features = ["derive"] }
 bincode = { version = "2.0.0-rc.3", features = ["serde"] }
+bincode_derive = "2.0.0-rc.3"
 pretty-hex = "0.4.1"
 ctor = "0.2.8"
 ctrlc = { version = "3.4.4", features = ["termination"] }
