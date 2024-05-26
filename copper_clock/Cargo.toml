@@ -1,0 +1,12 @@
+[package]
+name = "copper_clock"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+quanta = "0.12.3"
+bincode = "2.0.0-rc.3"
+bincode_derive = "2.0.0-rc.3"
+
+[dev-dependencies]
+approx = "0.5.1"
