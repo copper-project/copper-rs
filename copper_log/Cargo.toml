@@ -5,7 +5,7 @@ edition = "2021"
 
 [lib]
 name = "copper_log"
-path = "src/macros.rs"
+path = "src/lib.rs"
 proc-macro = true
 
 [[bin]]
