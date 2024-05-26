@@ -33,10 +33,8 @@ pub fn debug(input: TokenStream) -> TokenStream {
         use copper_log_runtime::ANONYMOUS;
         let msg = #msg;
         let index = #index;
-        println!("{} -> [{}]", index, msg);
         let mut params = Vec::<Value>::new();
         let mut params_istring = Vec::<Value>::new();
-
     };
 
     let mut unnamed_params = vec![];
@@ -69,9 +67,11 @@ pub fn debug(input: TokenStream) -> TokenStream {
             params.push(param);
         }
     });
-
     let postfix = quote! {
-        let packed_value = Value::Seq(vec![to_value(index).unwrap(), Value::Seq(params_istring), Value::Seq(params)]);
+        let vparams = Value::Seq(params);
+        // to do add conditional
+        println!("{} {}", msg, &vparams);
+        let packed_value = Value::Seq(vec![to_value(index).unwrap(), Value::Seq(params_istring), vparams]);
         copper_log_runtime::log(packed_value);
     };
 

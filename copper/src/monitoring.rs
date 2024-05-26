@@ -4,7 +4,11 @@ use crate::CuResult;
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Once;
+
+use copper_log::debug;
+
+#[global_allocator]
+pub static GLOBAL: CountingAllocator = CountingAllocator::new();
 
 pub struct CountingAllocator {
     allocated: AtomicUsize,
@@ -48,8 +52,31 @@ unsafe impl GlobalAlloc for CountingAllocator {
     }
 }
 
-#[global_allocator]
-pub static GLOBAL: CountingAllocator = CountingAllocator::new();
+pub struct ScopedAllocCounter {
+    bf_allocated: usize,
+    bf_deallocated: usize,
+}
+
+impl ScopedAllocCounter {
+    pub fn new() -> Self {
+        ScopedAllocCounter {
+            bf_allocated: GLOBAL.get_allocated(),
+            bf_deallocated: GLOBAL.get_deallocated(),
+        }
+    }
+}
+
+impl Drop for ScopedAllocCounter {
+    fn drop(&mut self) {
+        let allocated = GLOBAL.get_allocated() - self.bf_allocated;
+        let deallocated = GLOBAL.get_deallocated() - self.bf_deallocated;
+        debug!(
+            "Allocations: +{}B -{}B",
+            allocated = allocated,
+            deallocated = deallocated,
+        );
+    }
+}
 
 pub struct MonitoringTask {}
 

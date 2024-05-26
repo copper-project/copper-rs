@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+copper = { path = "../copper" }
 copper-log = { path = "../copper_log" }
 copper-log-runtime = { path = "../copper_log_runtime" }
 copper-value = { path = "../copper_value" }
