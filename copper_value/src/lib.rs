@@ -4,6 +4,7 @@ use ordered_float::OrderedFloat;
 use serde::Deserialize;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
+use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 
 pub use de::*;
@@ -39,6 +40,61 @@ pub enum Value {
     Seq(Vec<Value>),
     Map(BTreeMap<Value, Value>),
     Bytes(Vec<u8>),
+}
+impl Display for Value {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Bool(v) => write!(f, "{}", v),
+            Value::U8(v) => write!(f, "{}", v),
+            Value::U16(v) => write!(f, "{}", v),
+            Value::U32(v) => write!(f, "{}", v),
+            Value::U64(v) => write!(f, "{}", v),
+            Value::I8(v) => write!(f, "{}", v),
+            Value::I16(v) => write!(f, "{}", v),
+            Value::I32(v) => write!(f, "{}", v),
+            Value::I64(v) => write!(f, "{}", v),
+            Value::F32(v) => write!(f, "{}", v),
+            Value::F64(v) => write!(f, "{}", v),
+            Value::Char(v) => write!(f, "{}", v),
+            Value::String(v) => write!(f, "{}", v),
+            Value::Unit => write!(f, "()"),
+            Value::Option(v) => match v {
+                Some(v) => write!(f, "Some({})", v),
+                None => write!(f, "None"),
+            },
+            Value::Newtype(v) => write!(f, "Newtype({})", v),
+            Value::Seq(v) => {
+                write!(f, "[")?;
+                for (i, v) in v.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", v)?;
+                }
+                write!(f, "]")
+            }
+            Value::Map(v) => {
+                write!(f, "{{")?;
+                for (i, (k, v)) in v.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}: {}", k, v)?;
+                }
+                write!(f, "}}")
+            }
+            Value::Bytes(v) => {
+                write!(f, "[")?;
+                for (i, b) in v.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, " ")?;
+                    }
+                    write!(f, "{:02x}", b)?;
+                }
+                write!(f, "]")
+            }
+        }
+    }
 }
 
 impl Hash for Value {
