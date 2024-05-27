@@ -46,7 +46,9 @@ impl RobotClock {
         )
     }
 
-    pub fn elapsed(&self) -> Duration {
+    // Now returns the time that passed since the reference time, usually the start time.
+    // It is a monotonically increasing value.
+    pub fn now(&self) -> Duration {
         self.inner.now() - self.ref_time
     }
 }
@@ -64,9 +66,9 @@ mod tests {
     #[test]
     fn test_mock() {
         let (clock, mock) = RobotClock::mock();
-        assert_eq!(clock.elapsed(), Duration::from_secs(0));
+        assert_eq!(clock.now(), Duration::from_secs(0));
         mock.increment(Duration::from_secs(1));
-        assert_eq!(clock.elapsed(), Duration::from_secs(1));
+        assert_eq!(clock.now(), Duration::from_secs(1));
     }
 
     #[test]
@@ -74,7 +76,7 @@ mod tests {
         let tolerance_ms = 10;
         let clock = RobotClock::from_ref_time(1_000_000_000);
         assert_relative_eq!(
-            clock.elapsed().as_millis() as f64,
+            clock.now().as_millis() as f64,
             Duration::from_secs(1).as_millis() as f64,
             epsilon = tolerance_ms as f64
         );
