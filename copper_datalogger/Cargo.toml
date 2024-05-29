@@ -1,5 +1,5 @@
 [package]
-name = "copper_datalogger"
+name = "copper-datalogger"
 version = "0.1.0"
 edition = "2021"
 

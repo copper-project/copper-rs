@@ -19,7 +19,7 @@ use bincode::{decode_from_reader, decode_from_slice};
 use bincode_derive::Decode as dDecode;
 use bincode_derive::Encode as dEncode;
 
-use copper::Stream;
+use copper::{CuError, CuResult, Stream};
 
 const MAIN_MAGIC: [u8; 4] = [0xB4, 0xA5, 0x50, 0xFF];
 
@@ -70,7 +70,7 @@ impl MmapStream {
 }
 
 impl Stream for MmapStream {
-    fn log(&mut self, obj: &impl Encode) {
+    fn log(&mut self, obj: &impl Encode) -> CuResult<()> {
         let result = encode_into_slice(
             obj,
             &mut self.current_slice[self.current_position..],
@@ -79,6 +79,7 @@ impl Stream for MmapStream {
         match result {
             Ok(nb_bytes) => {
                 self.current_position += nb_bytes;
+                Ok(())
             }
             Err(e) => match e {
                 EncodeError::UnexpectedEnd => {
@@ -91,8 +92,14 @@ impl Stream for MmapStream {
                     self.current_slice = unsafe {
                         from_raw_parts_mut(underlying_slice.as_mut_ptr(), underlying_slice.len())
                     };
+                    Ok(())
                 }
-                _ => panic!("Unexpected error while encoding object: {:?}", e),
+                _ => {
+                    let err =
+                        <&str as Into<CuError>>::into("Unexpected error while encoding object.")
+                            .add_context(e.to_string().as_str());
+                    Err(err)
+                }
             },
         }
     }

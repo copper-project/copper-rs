@@ -1,14 +1,17 @@
 use bincode::enc::write::Writer;
 use bincode_derive::{Decode, Encode};
+use copper_traits::{CuResult, Stream};
 pub use copper_value as value; // Part of the API, do not remove.
 use copper_value::Value;
 use kanal::{bounded, Sender};
-use lazy_static::lazy_static;
-use pretty_hex::pretty_hex;
+use once_cell::sync::OnceCell;
 use std::fmt::Display;
 use std::io::{stdout, Write};
 use std::sync::{Arc, Mutex};
 use std::thread;
+
+// The logging system is basically a global queue.
+static QUEUE: OnceCell<Sender<CuLogEntry>> = OnceCell::new();
 
 #[allow(dead_code)]
 pub const ANONYMOUS: u32 = 0;
@@ -45,21 +48,22 @@ impl CuLogEntry {
     }
 }
 
-lazy_static! {
-    static ref QUEUE: Sender<CuLogEntry> = initialize_queue();
-}
-
 /// The lifetime of this struct is the lifetime of the logger.
 pub struct LoggerRuntime {}
 
 impl LoggerRuntime {
-    pub fn init() -> Self {
-        lazy_static::initialize(&QUEUE);
+    pub fn init(destination: impl Stream + 'static) -> Self {
+        QUEUE
+            .set(initialize_queue(destination))
+            .expect("Failed to initialize the logger queue.");
         LoggerRuntime {}
     }
 
     pub fn close(&self) {
-        QUEUE.close();
+        QUEUE
+            .get()
+            .expect("Logger Runtime closed before beeing open.")
+            .close();
     }
 }
 
@@ -69,14 +73,13 @@ impl Drop for LoggerRuntime {
     }
 }
 
-fn initialize_queue() -> Sender<CuLogEntry> {
+fn initialize_queue(mut destination: impl Stream + 'static) -> Sender<CuLogEntry> {
     let (sender, receiver) = bounded::<CuLogEntry>(100);
     let config = bincode::config::standard();
 
     let handle = thread::spawn(move || loop {
         if let Ok(data) = receiver.recv() {
-            let binary = bincode::encode_to_vec(&data, config).unwrap();
-            println!("{}", pretty_hex(&binary.as_slice()));
+            destination.log(&data);
         } else {
             break;
         }
@@ -97,16 +100,12 @@ fn initialize_queue() -> Sender<CuLogEntry> {
 
 /// Function called from generated code to log data.
 #[inline]
-pub fn log(entry: CuLogEntry) {
-    // If the queue is closed, we just drop the data.
-    if QUEUE.send(entry).is_err() {
-        if !QUEUE.is_closed() {
-            eprintln!("Copper: Failed to send data to the logger, some data got dropped.");
-            if QUEUE.is_full() {
-                eprintln!(
-                    "Copper: The logger queue is full, consider increasing the size of the queue."
-                );
-            }
-        }
+pub fn log(entry: CuLogEntry) -> CuResult<()> {
+    if let Some(queue) = QUEUE.get() {
+        queue
+            .send(entry)
+            .map_err(|_| "Failed to send data to the logger.".into())
+    } else {
+        Err("Logger not initialized.".into())
     }
 }

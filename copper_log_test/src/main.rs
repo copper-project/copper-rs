@@ -1,10 +1,18 @@
+use copper_datalogger::{stream, DataLogger, EntryType};
 use copper_log::debug;
 use copper_log_runtime::LoggerRuntime;
 use copper_value::to_value;
 use serde::Serialize;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 fn main() {
-    let rt = LoggerRuntime {};
+    let path: PathBuf = PathBuf::from("/tmp/teststructlog.copper");
+    let data_logger = Arc::new(Mutex::new(
+        DataLogger::new(path.as_path(), Some(100000)).expect("Failed to create logger"),
+    ));
+    let mut stream = stream(data_logger.clone(), EntryType::StructuredLogLine, 1024);
+    let rt = LoggerRuntime::init(stream);
     #[derive(Serialize)]
     struct Test {
         a: i32,
