@@ -1,5 +1,17 @@
 use libc;
 
+use std::fs::{File, OpenOptions};
+use std::io;
+use std::io::Read;
+use std::io::{BufReader, Seek};
+use std::path::Path;
+use std::slice::from_raw_parts_mut;
+use std::sync::{Arc, Mutex};
+
+use memmap2::{MmapMut, RemapOptions};
+
+use bincode::config::standard;
+use bincode::de::read::Reader;
 use bincode::encode_into_slice;
 use bincode::error::EncodeError;
 use bincode::Encode;
@@ -7,16 +19,7 @@ use bincode::{decode_from_reader, decode_from_slice};
 use bincode_derive::Decode as dDecode;
 use bincode_derive::Encode as dEncode;
 
-use bincode::config::{standard, Configuration};
-use bincode::de::read::Reader;
-use memmap2::{MmapMut, RemapOptions};
-use std::fs::{File, OpenOptions};
-use std::io;
-use std::io::{BufReader, Seek};
-use std::io::{Read, SeekFrom};
-use std::path::Path;
-use std::slice::from_raw_parts_mut;
-use std::sync::{Arc, Mutex};
+use copper::Stream;
 
 const MAIN_MAGIC: [u8; 4] = [0xB4, 0xA5, 0x50, 0xFF];
 
@@ -39,10 +42,6 @@ struct SectionHeader {
     magic: [u8; 2],
     entry_type: EntryType,
     section_size: u32, // offset of section_magic + section_size -> should be the index of the next section_magic
-}
-
-pub trait Stream {
-    fn log(&mut self, obj: &impl Encode);
 }
 
 struct MmapStream {

@@ -5,6 +5,7 @@ pub mod cutask;
 pub mod monitoring;
 pub mod serde;
 
+use bincode::Encode;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 
@@ -55,3 +56,8 @@ impl CuError {
 }
 
 pub type CuResult<T> = Result<T, CuError>;
+
+/// Defines a basic write, append only stream trait to be able to log or send serializable objects.
+pub trait Stream {
+    fn log(&mut self, obj: &impl Encode);
+}
