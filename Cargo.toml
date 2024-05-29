@@ -1,3 +1,15 @@
 [workspace]
-members = ["copper", "copper_log_test", "copper_derive", "copper_derive_test", "copper_log", "examples/config_gen", "examples/pluginload", "examples/simplelogger", "examples/v4lsrc", "copper_log_runtime", "copper_datalogger", "copper_clock"]
+members = ["copper",
+    "copper_log_test",
+    "copper_derive",
+    "copper_derive_test",
+    "copper_log",
+    "examples/config_gen",
+    "examples/pluginload",
+    "examples/simplelogger",
+    "examples/v4lsrc",
+    "copper_log_runtime",
+    "copper_datalogger",
+    "copper_clock",
+    "copper_traits"]
 resolver = "2"
