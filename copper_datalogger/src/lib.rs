@@ -19,7 +19,7 @@ use bincode::{decode_from_reader, decode_from_slice};
 use bincode_derive::Decode as dDecode;
 use bincode_derive::Encode as dEncode;
 
-use copper::{CuError, CuResult, Stream};
+use copper::{CuError, CuResult, DataLogType, Stream};
 
 const MAIN_MAGIC: [u8; 4] = [0xB4, 0xA5, 0x50, 0xFF];
 
@@ -31,21 +31,15 @@ struct MainHeader {
     first_section_offset: u16, // This is to align with a page at write time.
 }
 
-#[derive(dEncode, dDecode, Copy, Clone)]
-pub enum EntryType {
-    StructuredLogLine,
-    CopperList,
-}
-
 #[derive(dEncode, dDecode)]
 struct SectionHeader {
     magic: [u8; 2],
-    entry_type: EntryType,
+    entry_type: DataLogType,
     section_size: u32, // offset of section_magic + section_size -> should be the index of the next section_magic
 }
 
 struct MmapStream {
-    entry_type: EntryType,
+    entry_type: DataLogType,
     parent_logger: Arc<Mutex<DataLogger>>,
     current_slice: &'static mut [u8],
     current_position: usize,
@@ -54,7 +48,7 @@ struct MmapStream {
 
 impl MmapStream {
     fn new(
-        entry_type: EntryType,
+        entry_type: DataLogType,
         parent_logger: Arc<Mutex<DataLogger>>,
         current_slice: &'static mut [u8],
         minimum_allocation_amount: usize,
@@ -114,7 +108,7 @@ impl Drop for MmapStream {
 
 pub fn stream(
     logger: Arc<Mutex<DataLogger>>,
-    entry_type: EntryType,
+    entry_type: DataLogType,
     minimum_allocation_amount: usize,
 ) -> impl Stream {
     let clone = logger.clone();
@@ -208,7 +202,7 @@ impl DataLogger {
     }
 
     /// The returned slice is section_size or greater.
-    fn add_section(&mut self, entry_type: EntryType, section_size: usize) -> &mut [u8] {
+    fn add_section(&mut self, entry_type: DataLogType, section_size: usize) -> &mut [u8] {
         // align current_position to the next page
         self.current_global_position =
             (self.current_global_position + self.page_size - 1) & !(self.page_size - 1);
@@ -264,24 +258,41 @@ impl Drop for DataLogger {
 // Section iterator returning the [u8] of the current section
 pub struct SectionIterator {
     reader: BufReader<File>,
+    datalogtype: Option<DataLogType>,
 }
 
 impl Iterator for SectionIterator {
     type Item = Vec<u8>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let section_header: SectionHeader = decode_from_reader(&mut self.reader, standard())
-            .expect("Failed to decode section header");
-        let mut section = vec![0; section_header.section_size as usize];
-        self.reader
-            .read_exact(section.as_mut_slice())
-            .expect("Failed to read section");
-        Some(section)
+        let answer: Option<Vec<u8>> = loop {
+            if let Ok(section_header) =
+                decode_from_reader::<SectionHeader, _, _>(&mut self.reader, standard())
+            {
+                let mut section = vec![0; section_header.section_size as usize];
+                let read = self.reader.read_exact(section.as_mut_slice());
+                if read.is_err() {
+                    break None;
+                }
+                if let Some(datalogtype) = self.datalogtype {
+                    if section_header.entry_type == datalogtype {
+                        break Some(section);
+                    }
+                }
+            } else {
+                break None;
+            }
+        };
+        answer
     }
 }
 
 // make an iterator to read back a serialzed datalogger from a file
-pub fn read_datalogger(file_path: &Path) -> io::Result<impl Iterator<Item = Vec<u8>>> {
+// optionally filter by type
+pub fn read_datalogger(
+    file_path: &Path,
+    datalogtype: Option<DataLogType>,
+) -> io::Result<impl Iterator<Item = Vec<u8>>> {
     let mut file = OpenOptions::new().read(true).open(file_path)?;
     let mut header = [0; 4096];
     let s = file.read(&mut header).unwrap();
@@ -306,6 +317,7 @@ pub fn read_datalogger(file_path: &Path) -> io::Result<impl Iterator<Item = Vec<
 
     Ok(SectionIterator {
         reader: BufReader::new(file),
+        datalogtype,
     })
 }
 
@@ -332,8 +344,8 @@ mod tests {
         let used = {
             let mut logger =
                 DataLogger::new(&file_path, Some(100000)).expect("Failed to create logger");
-            logger.add_section(EntryType::StructuredLogLine, 1024);
-            logger.add_section(EntryType::CopperList, 2048);
+            logger.add_section(DataLogType::StructuredLogLine, 1024);
+            logger.add_section(DataLogType::CopperList, 2048);
             let used = logger.used();
             assert!(used < 3 * 4096); // ie. 3 headers, 1 page max per
                                       // logger drops
@@ -353,7 +365,7 @@ mod tests {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let (logger, _) = make_a_logger(&tmp_dir);
         {
-            let stream = stream(logger.clone(), EntryType::StructuredLogLine, 1024);
+            let stream = stream(logger.clone(), DataLogType::StructuredLogLine, 1024);
             assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 1);
         }
         let lg = logger.lock().unwrap();
@@ -365,9 +377,9 @@ mod tests {
     fn test_two_sections_self_cleaning_in_order() {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let (logger, _) = make_a_logger(&tmp_dir);
-        let s1 = stream(logger.clone(), EntryType::StructuredLogLine, 1024);
+        let s1 = stream(logger.clone(), DataLogType::StructuredLogLine, 1024);
         assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 1);
-        let s2 = stream(logger.clone(), EntryType::StructuredLogLine, 1024);
+        let s2 = stream(logger.clone(), DataLogType::StructuredLogLine, 1024);
         assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 2);
         drop(s2);
         assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 1);
@@ -381,9 +393,9 @@ mod tests {
     fn test_two_sections_self_cleaning_out_of_order() {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let (logger, _) = make_a_logger(&tmp_dir);
-        let s1 = stream(logger.clone(), EntryType::StructuredLogLine, 1024);
+        let s1 = stream(logger.clone(), DataLogType::StructuredLogLine, 1024);
         assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 1);
-        let s2 = stream(logger.clone(), EntryType::StructuredLogLine, 1024);
+        let s2 = stream(logger.clone(), DataLogType::StructuredLogLine, 1024);
         assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 2);
         drop(s1);
         assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 1);
@@ -400,12 +412,12 @@ mod tests {
         let p = f.as_path();
         println!("Path : {:?}", p);
         {
-            let mut stream = stream(logger.clone(), EntryType::StructuredLogLine, 1024);
+            let mut stream = stream(logger.clone(), DataLogType::StructuredLogLine, 1024);
             stream.log(&1u32);
             stream.log(&2u32);
             stream.log(&3u32);
         }
-        let mut sections = read_datalogger(p).unwrap();
+        let mut sections = read_datalogger(p, Some(DataLogType::StructuredLogLine)).unwrap();
         let section = sections.next().unwrap();
         let mut reader = BufReader::new(&section[..]);
         let v1: u32 = decode_from_reader(&mut reader, standard()).unwrap();

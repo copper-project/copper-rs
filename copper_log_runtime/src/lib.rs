@@ -1,7 +1,7 @@
 use bincode::enc::write::Writer;
 use bincode_derive::{Decode, Encode};
 use copper_traits::{CuResult, Stream};
-pub use copper_value as value; // Part of the API, do not remove.
+pub use copper_value as value;
 use copper_value::Value;
 use kanal::{bounded, Sender};
 use once_cell::sync::OnceCell;
@@ -15,6 +15,9 @@ static QUEUE: OnceCell<Sender<CuLogEntry>> = OnceCell::new();
 
 #[allow(dead_code)]
 pub const ANONYMOUS: u32 = 0;
+
+/// The lifetime of this struct is the lifetime of the logger.
+pub struct LoggerRuntime {}
 
 #[derive(Debug, Encode, Decode)]
 pub struct CuLogEntry {
@@ -47,10 +50,6 @@ impl CuLogEntry {
         self.params.push(param);
     }
 }
-
-/// The lifetime of this struct is the lifetime of the logger.
-pub struct LoggerRuntime {}
-
 impl LoggerRuntime {
     pub fn init(destination: impl Stream + 'static) -> Self {
         QUEUE
@@ -79,7 +78,9 @@ fn initialize_queue(mut destination: impl Stream + 'static) -> Sender<CuLogEntry
 
     let handle = thread::spawn(move || loop {
         if let Ok(data) = receiver.recv() {
-            destination.log(&data);
+            if let Err(err) = destination.log(&data) {
+                eprintln!("Failed to log data: {}", err);
+            }
         } else {
             break;
         }
