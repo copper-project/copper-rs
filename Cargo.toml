@@ -11,5 +11,5 @@ members = ["copper",
     "copper_log_runtime",
     "copper_datalogger",
     "copper_clock",
-    "copper_traits"]
+    "copper_traits", "copper_log_reader"]
 resolver = "2"

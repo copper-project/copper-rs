@@ -1,4 +1,4 @@
-use bincode::Encode;
+use bincode::{Decode as dDecode, Encode, Encode as dEncode};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
@@ -53,4 +53,10 @@ pub type CuResult<T> = Result<T, CuError>;
 /// Defines a basic write, append only stream trait to be able to log or send serializable objects.
 pub trait Stream: Sync + Send {
     fn log(&mut self, obj: &impl Encode) -> CuResult<()>;
+}
+
+#[derive(dEncode, dDecode, Copy, Clone, Debug, PartialEq)]
+pub enum DataLogType {
+    StructuredLogLine,
+    CopperList,
 }
