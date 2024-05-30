@@ -283,6 +283,7 @@ impl<'de> de::Visitor<'de> for ValueVisitor {
     }
 
     fn visit_newtype_struct<D: de::Deserializer<'de>>(self, d: D) -> Result<Value, D::Error> {
+        println!("visit_newtype_struct");
         d.deserialize_any(ValueVisitor)
             .map(|v| Value::Newtype(Box::new(v)))
     }
@@ -314,6 +315,7 @@ impl<'de> de::Visitor<'de> for ValueVisitor {
 
 impl<'de> de::Deserialize<'de> for Value {
     fn deserialize<D: de::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        println!("Value::deserialize");
         d.deserialize_any(ValueVisitor)
     }
 }

@@ -337,7 +337,6 @@ pub fn read_configuration(config_filename: &str) -> CuResult<CuConfig> {
 // tests
 #[cfg(test)]
 mod tests {
-    use uom::si::power::watt;
     use uom::si::time::millisecond;
     use uom::si::time::second;
 
