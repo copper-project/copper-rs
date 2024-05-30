@@ -36,7 +36,6 @@ pub enum Value {
 
     Char(char),
     String(String),
-    // InternedString(u32),
     Unit,
     Option(Option<Box<Value>>),
     Newtype(Box<Value>),
@@ -44,6 +43,7 @@ pub enum Value {
     Map(BTreeMap<Value, Value>),
     Bytes(Vec<u8>),
 }
+
 impl Display for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {

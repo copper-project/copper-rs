@@ -5,7 +5,6 @@ extern crate proc_macro;
 use crate::index::{check_and_insert, intern_string};
 use proc_macro::TokenStream;
 use quote::quote;
-use std::fmt::Display;
 use syn::parse::Parser;
 use syn::Token;
 use syn::{Expr, ExprAssign, ExprLit, Lit};

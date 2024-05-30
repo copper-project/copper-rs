@@ -29,7 +29,7 @@ impl Decode for Value {
             16 => Ok(Value::Map(BTreeMap::<Value, Value>::decode(decoder)?)),
             17 => Ok(Value::Option(Option::<Box<Value>>::decode(decoder)?)),
             18 => Ok(Value::Newtype(Box::<Value>::decode(decoder)?)),
-            _ => Err(DecodeError::Other("Unknown Value variant")),
+            _ => Err(DecodeError::Other("Unknown Value varian")),
         }
     }
 }

@@ -6,6 +6,8 @@ use bincode::error::EncodeError;
 
 impl Encode for Value {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        let discriminant = self.discriminant() as u8;
+        discriminant.encode(encoder)?;
         match self {
             Value::U8(v) => v.to_owned().encode(encoder),
             Value::U16(v) => v.to_owned().encode(encoder),
