@@ -3,21 +3,50 @@ use rkv::backend::{Lmdb, LmdbDatabase};
 use rkv::backend::{LmdbEnvironment, LmdbRwTransaction};
 use rkv::{MultiStore, Rkv, SingleStore, StoreOptions, Value, Writer};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 type SStore = SingleStore<LmdbDatabase>;
 type MStore = MultiStore<LmdbDatabase>;
 type IndexType = u32;
 
+const INDEX_DIR_NAME: &str = "copper_log_index";
+
+const COLORED_PREFIX_BUILD_LOG: &str = "\x1b[32mCLog:\x1b[0m";
+
+macro_rules! build_log {
+    ($($arg:tt)*) => {
+        println!("{} {}", COLORED_PREFIX_BUILD_LOG, format!($($arg)*));
+    };
+}
+
+fn parent_n_times(path: &Path, n: usize) -> Option<PathBuf> {
+    let mut result = Some(path.to_path_buf());
+    for _ in 0..n {
+        result = result?.parent().map(PathBuf::from);
+    }
+    result
+}
+
 lazy_static! {
     static ref RKV: Mutex<Rkv<LmdbEnvironment>> = {
         let outdir = std::env::var("OUT_DIR").expect("no OUT_DIR set, build.rs must be broken");
-        let path = Path::new(&outdir).join("copper_log_index");
+        let outdir_path = Path::new(&outdir);
+        let path = outdir_path.join(INDEX_DIR_NAME);
         if !path.exists() {
             fs::create_dir_all(&path).unwrap();
         }
-        println!("CLog: Storing log index at: {:?}", path);
+        let target_dir_link = parent_n_times(&outdir_path, 3)
+            .unwrap()
+            .join(INDEX_DIR_NAME);
+        build_log!(
+            "=================================================================================="
+        );
+        build_log!("Path to interned strings storage: {:?}", target_dir_link);
+        build_log!("   [r] is reused index and [n] is new index.");
+        build_log!(
+            "=================================================================================="
+        );
         let env = Rkv::new::<Lmdb>(&path).unwrap();
         Mutex::new(env)
     };
@@ -51,7 +80,7 @@ pub fn intern_string(s: &str) -> Option<IndexType> {
             let reader = env.read().unwrap();
             // check if log_string is already in the string_to_index store
             if let Ok(Some(Value::U64(index))) = string_to_index.get(&reader, s) {
-                println!("CLog: Returning existing index #{} -> {}", index, s);
+                build_log!("#{:0>3} [r] -> {}.", index, s);
                 return Some(index as IndexType);
             };
         }
@@ -67,29 +96,12 @@ pub fn intern_string(s: &str) -> Option<IndexType> {
         writer.commit().unwrap();
         Some(next_index)
     };
-    println!("CLog: Inserted #{} -> {}", index.unwrap(), s);
+    build_log!("#{:0>3} [n] -> {}.", index.unwrap(), s);
     index
 }
 
-pub fn check_and_insert(filename: &str, line_number: u32, log_string: &str) -> Option<IndexType> {
-    let index = intern_string(log_string);
-    {
-        let (_, _, _, index_to_callsite) = &mut *DBS.lock().unwrap();
-        index?;
-        let lindex = index.unwrap();
-        let env = RKV.lock().unwrap();
-        let mut writer = env.write().unwrap();
-        index_to_callsite
-            .put(
-                &mut writer,
-                lindex.to_le_bytes(),
-                &Value::Str(format!("{}:{}", filename, line_number).as_str()),
-            )
-            .unwrap();
-        writer.commit().unwrap();
-        println!("CLog: Inserted #{} -> {}", lindex, log_string);
-    }
-    index
+pub fn record_callsite(filename: &str, line_number: u32) -> Option<IndexType> {
+    intern_string(format!("{}:{}", filename, line_number).as_str())
 }
 
 const COUNTER_KEY: &str = "__counter__";

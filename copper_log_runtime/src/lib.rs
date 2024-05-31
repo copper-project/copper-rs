@@ -98,6 +98,7 @@ fn initialize_queue(mut destination: impl Stream + 'static) -> Sender<CuLogEntry
 }
 
 /// Function called from generated code to log data.
+/// It moves entry by design, it will be absorbed in the queue.
 #[inline]
 pub fn log(entry: CuLogEntry) -> CuResult<()> {
     if let Some(queue) = QUEUE.get() {

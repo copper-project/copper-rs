@@ -81,7 +81,7 @@ impl Drop for ScopedAllocCounter {
 pub struct MonitoringTask {}
 
 impl CuTaskLifecycle for MonitoringTask {
-    fn new(config: Option<&NodeInstanceConfig>) -> CuResult<Self>
+    fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -102,7 +102,7 @@ impl CuTaskLifecycle for MonitoringTask {
 impl CuSrcTask for MonitoringTask {
     type Payload = ();
 
-    fn process(&mut self, empty_msg: &mut CuMsg<Self::Payload>) -> CuResult<()> {
+    fn process(&mut self, _empty_msg: &mut CuMsg<Self::Payload>) -> CuResult<()> {
         Ok(())
     }
 }
