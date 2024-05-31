@@ -2,7 +2,7 @@ mod index;
 
 extern crate proc_macro;
 
-use crate::index::{check_and_insert, intern_string};
+use crate::index::{intern_string, record_callsite};
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse::Parser;
@@ -22,7 +22,7 @@ pub fn debug(input: TokenStream) -> TokenStream {
     }) = msg_expr
     {
         let msg = msg.value();
-        let index = check_and_insert("dummy", 0, &msg).expect("Failed to insert log string.");
+        let index = intern_string(&msg).expect("Failed to insert log string.");
         (index, msg)
     } else {
         panic!("The first parameter of the argument needs to be a string literal.");
@@ -65,7 +65,12 @@ pub fn debug(input: TokenStream) -> TokenStream {
     let postfix = quote! {
         // to do add conditional
         println!("{} {}", msg, &log_entry);
-        copper_log_runtime::log(log_entry);
+        let r = copper_log_runtime::log(log_entry);
+        if let Err(e) = r {
+            eprintln!("Warning: Failed to log: {}", e);
+            let backtrace = std::backtrace::Backtrace::capture();
+            eprintln!("{:?}", backtrace);
+        }
     };
 
     let expanded = quote! {

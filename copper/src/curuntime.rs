@@ -51,7 +51,7 @@ mod tests {
     pub struct TestSource {}
 
     impl CuTaskLifecycle for TestSource {
-        fn new(config: Option<&NodeInstanceConfig>) -> CuResult<Self>
+        fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self>
         where
             Self: Sized,
         {
@@ -61,7 +61,7 @@ mod tests {
 
     impl CuSrcTask for TestSource {
         type Payload = ();
-        fn process(&mut self, empty_msg: &mut CuMsg<Self::Payload>) -> CuResult<()> {
+        fn process(&mut self, _empty_msg: &mut CuMsg<Self::Payload>) -> CuResult<()> {
             Ok(())
         }
     }
@@ -69,7 +69,7 @@ mod tests {
     pub struct TestSink {}
 
     impl CuTaskLifecycle for TestSink {
-        fn new(config: Option<&NodeInstanceConfig>) -> CuResult<Self>
+        fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self>
         where
             Self: Sized,
         {
@@ -80,7 +80,7 @@ mod tests {
     impl CuSinkTask for TestSink {
         type Input = ();
 
-        fn process(&mut self, input: &CuMsg<Self::Input>) -> CuResult<()> {
+        fn process(&mut self, _input: &CuMsg<Self::Input>) -> CuResult<()> {
             Ok(())
         }
     }
