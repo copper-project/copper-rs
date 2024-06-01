@@ -91,7 +91,7 @@ impl Stream for MmapStream {
                 _ => {
                     let err =
                         <&str as Into<CuError>>::into("Unexpected error while encoding object.")
-                            .add_context(e.to_string().as_str());
+                            .add_cause(e.to_string().as_str());
                     Err(err)
                 }
             },

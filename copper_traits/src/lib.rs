@@ -6,12 +6,12 @@ use std::fmt::{Display, Formatter};
 #[derive(Debug)]
 pub struct CuError {
     message: String,
-    context: Option<String>,
+    cause: Option<String>,
 }
 
 impl Display for CuError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let context_str = match &self.context {
+        let context_str = match &self.cause {
             Some(c) => format!("{}", c),
             None => "None".to_string(),
         };
@@ -26,7 +26,7 @@ impl From<&str> for CuError {
     fn from(s: &str) -> CuError {
         CuError {
             message: s.to_string(),
-            context: None,
+            cause: None,
         }
     }
 }
@@ -35,14 +35,21 @@ impl From<String> for CuError {
     fn from(s: String) -> CuError {
         CuError {
             message: s,
-            context: None,
+            cause: None,
         }
     }
 }
 
 impl CuError {
-    pub fn add_context(mut self, context: &str) -> CuError {
-        self.context = Some(context.into());
+    pub fn new_with_cause(message: &str, cause: impl Error) -> CuError {
+        CuError {
+            message: message.to_string(),
+            cause: Some(cause.to_string()),
+        }
+    }
+
+    pub fn add_cause(mut self, context: &str) -> CuError {
+        self.cause = Some(context.into());
         self
     }
 }
