@@ -11,5 +11,5 @@ members = ["copper",
     "copper_log_runtime",
     "copper_datalogger",
     "copper_clock",
-    "copper_traits", "copper_log_reader"]
+    "copper_traits", "copper_log_reader", "examples/rp-gpio"]
 resolver = "2"

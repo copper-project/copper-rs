@@ -25,9 +25,30 @@ impl From<i32> for Value {
         Value(RonValue::Number(value.into()))
     }
 }
+
+impl From<u8> for Value {
+    fn from(value: u8) -> Self {
+        Value(RonValue::Number((value as u64).into()))
+    }
+}
+
 impl From<f64> for Value {
     fn from(value: f64) -> Self {
         Value(RonValue::Number(value.into()))
+    }
+}
+
+impl From<Value> for u8 {
+    fn from(value: Value) -> Self {
+        if let RonValue::Number(num) = value.0 {
+            if let Some(i) = num.as_i64() {
+                i as u8
+            } else {
+                panic!("Expected an integer value")
+            }
+        } else {
+            panic!("Expected a Number variant")
+        }
     }
 }
 
@@ -329,7 +350,7 @@ pub fn read_configuration(config_filename: &str) -> CuResult<CuConfig> {
             "Failed to read configuration file: {:?}",
             &config_filename
         ))
-        .add_context(e.to_string().as_str())
+        .add_cause(e.to_string().as_str())
     })?;
     Ok(CuConfig::deserialize_ron(&config_content))
 }

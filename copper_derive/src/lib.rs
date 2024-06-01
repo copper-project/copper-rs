@@ -99,7 +99,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 ty_name, index
             );
             quote! {
-                #ty::new(all_instances_configs[#index]).map_err(|e| e.add_context(#additional_error_info))?
+                #ty::new(all_instances_configs[#index]).map_err(|e| e.add_cause(#additional_error_info))?
             }
         })
         .collect();
