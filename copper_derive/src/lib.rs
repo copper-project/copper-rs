@@ -7,6 +7,7 @@ use syn::meta::parser;
 use syn::Fields::{Named, Unnamed};
 use syn::{parse_macro_input, parse_quote, parse_str, Field, ItemStruct, LitStr, Type, TypeTuple};
 
+use copper::config::read_configuration;
 use copper::config::CuConfig;
 use copper::curuntime::compute_runtime_plan;
 use format::{highlight_rust_code, rustfmt_generated_code};
@@ -14,11 +15,13 @@ use format::{highlight_rust_code, rustfmt_generated_code};
 mod format;
 mod utils;
 
+// TODO: this needs to be determined when the runtime is sizing itself.
 const DEFAULT_CLNB: usize = 10;
 
 // Parses the CopperRuntime attribute like #[copper_runtime(config = "path")]
 #[proc_macro_attribute]
 pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
+    println!("[entry]");
     let mut item_struct = parse_macro_input!(input as ItemStruct);
 
     let mut config_file: Option<LitStr> = None;
@@ -31,18 +34,26 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     });
 
+    println!("[parse]");
     parse_macro_input!(args with attribute_config_parser);
     let config_file = config_file
         .expect("Expected config file attribute like #[CopperRuntime(config = \"path\")]")
         .value();
     let mut config_full_path = utils::caller_crate_root();
     config_full_path.push(&config_file);
-    let copper_config =
-        copper::config::read_configuration(config_full_path.as_os_str().to_str().unwrap()).expect(
-            &format!("Failed to read configuration file: {:?}", &config_full_path),
-        );
+    let filename = config_full_path
+        .as_os_str()
+        .to_str()
+        .expect("Could not interpret the config file name");
+    let copper_config = read_configuration(filename).expect(&format!(
+        "Failed to read configuration file: {:?}",
+        &config_full_path
+    ));
 
-    for (node_index, node) in compute_runtime_plan(&copper_config).unwrap() {
+    println!("[runtime plan]");
+    let runtime_plan =
+        compute_runtime_plan(&copper_config).expect("Could not compute runtime plan");
+    for (node_index, node) in runtime_plan {
         let dst_edges = copper_config.get_dst_edges(node_index);
         for edge_index in dst_edges {
             let edge_type = copper_config.get_edge_weight(edge_index);
@@ -60,25 +71,38 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     }
 
+    println!("[extract tasks types]");
     let (all_tasks_types_names, all_tasks_types) = extract_tasks_types(&copper_config);
 
+    println!("[build task tuples]");
     // Build the tuple of all those types
     // note the extraneous , at the end is to make the tuple work even if this is only one element
     let task_types_tuple: TypeTuple = parse_quote! {
         (#(#all_tasks_types),*,)
     };
 
+    println!("[build runtime field]");
     // add that to a new field
     let runtime_field: Field = parse_quote! {
-        copper_runtime: CuRuntime<CuTasks, CuList, #DEFAULT_CLNB>
+        copper_runtime: _CuRuntime<CuTasks, CuList, #DEFAULT_CLNB>
     };
 
+    println!("[extract msg types]");
     let (_, all_msgs_types) = extract_msgs_types(&copper_config);
 
-    let msgs_types_tuple: TypeTuple = parse_quote! { (#(#all_msgs_types),*,)};
+    println!("[build the copper list tuple]");
+    let msgs_types_tuple: TypeTuple = if all_msgs_types.is_empty() {
+        parse_quote! {()}
+        // panic!("No messages types found. You need to at least define one message between tasks.");
+    } else {
+        parse_quote! { (#(#all_msgs_types),*,)}
+    };
+
+    // let msgs_types_tuple: TypeTuple = parse_quote! { (#(#all_msgs_types),*,)};
 
     let name = &item_struct.ident;
 
+    println!("[match struct anonymity]");
     match &mut item_struct.fields {
         Named(fields_named) => {
             fields_named.named.push(runtime_field);
@@ -89,6 +113,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         _ => (),
     };
 
+    println!("[gen instances]");
     // Generate the code to create instances of the nodes
     // It maps the types to their index
     let task_instances_init_code: Vec<_> = all_tasks_types
@@ -106,21 +131,23 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         })
         .collect();
 
+    println!("[build result]");
     // Convert the modified struct back into a TokenStream
     let result = quote! {
-        use copper::config::CuConfig;
-        use copper::config::NodeInstanceConfig;
-        use copper::config::read_configuration;
-        use copper::curuntime::CuRuntime;
-        use copper::cutask::CuTaskLifecycle; // Needed for the instantiation of tasks
-        use copper::CuResult;
-        use copper::CuError;
+        // import everything with an _ to avoid clashes with the user's code
+        use copper::config::CuConfig as _CuConfig;
+        use copper::config::NodeInstanceConfig as _NodeInstanceConfig;
+        use copper::config::read_configuration as _read_configuration;
+        use copper::curuntime::CuRuntime as _CuRuntime;
+        use copper::cutask::CuTaskLifecycle as _CuTaskLifecycle; // Needed for the instantiation of tasks
+        use copper::CuResult as _CuResult;
+        use copper::CuError as _CuError;
 
         pub type CuTasks = #task_types_tuple;
         pub type CuList = #msgs_types_tuple;
 
 
-        fn tasks_instanciator(all_instances_configs: Vec<Option<&NodeInstanceConfig>>) -> CuResult<CuTasks> {
+        fn tasks_instanciator(all_instances_configs: Vec<Option<&_NodeInstanceConfig>>) -> _CuResult<CuTasks> {
             Ok(( #(#task_instances_init_code),*, ))
         }
 
@@ -128,11 +155,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         impl #name {
 
-            pub fn new() -> CuResult<Self> {
-                let config = read_configuration(#config_file)?;
+            pub fn new() -> _CuResult<Self> {
+                let config = _read_configuration(#config_file)?;
 
                 Ok(#name {
-                    copper_runtime: CuRuntime::<CuTasks, CuList, #DEFAULT_CLNB>::new(&config, tasks_instanciator)?
+                    copper_runtime: _CuRuntime::<CuTasks, CuList, #DEFAULT_CLNB>::new(&config, tasks_instanciator)?
                 })
             }
         }
@@ -162,7 +189,10 @@ fn extract_tasks_types(copper_config: &CuConfig) -> (Vec<String>, Vec<Type>) {
     // Transform them as Rust types
     let all_types: Vec<Type> = all_types_names
         .iter()
-        .map(|name| parse_str(name).unwrap())
+        .map(|name| {
+            parse_str(name)
+                .expect(format!("Could not transform {} into a Task Rust type.", name).as_str())
+        })
         .collect();
     (all_types_names, all_types)
 }
@@ -178,11 +208,17 @@ fn extract_msgs_types(copper_config: &CuConfig) -> (Vec<String>, Vec<Type>) {
             type_name.clone()
         })
         .collect();
+    println!("extract_msgs_types: all_types names: {:?}", all_types_names);
 
     // Transform them as Rust types
     let all_types: Vec<Type> = all_types_names
         .iter()
-        .map(|name| parse_str(name).unwrap())
+        .map(|name| {
+            parse_str(name)
+                .expect(format!("Could not transform {} into a Msg Rust type.", name).as_str())
+        })
         .collect();
+
+    println!("extract_msgs_types: {} types extracted", all_types.len());
     (all_types_names, all_types)
 }
