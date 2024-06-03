@@ -22,36 +22,60 @@ impl<T: CuMsgPayload> CuMsg<T> {
     }
 }
 
+/// The CuTaskLifecycle trait is the base trait for all tasks in Copper.
+/// It defines the lifecycle of a task.
+/// It provides a default empty implementation as all those execution steps are optional.
 pub trait CuTaskLifecycle {
     fn new(config: Option<&NodeInstanceConfig>) -> CuResult<Self>
     where
         Self: Sized;
 
+    /// Start is called once for a long period of time.
+    /// Here you need to initialize everything your task will need for the duration of its lifetime.
     fn start(&mut self) -> CuResult<()> {
         Ok(())
     }
 
+    /// This is a method called by the runtime before "process". This is a kind of best effort,
+    /// as soon as possible call to give a chance for the task to do some work before to prepare
+    /// to make "process" as short as possible.
     fn preprocess(&mut self) -> CuResult<()> {
         Ok(())
     }
 
+    /// This is a method called by the runtime after "process". It is best effort a chance for
+    /// the task to update some state after process is out of the way.
+    /// It can be use for example to maintain statistics etc. that are not time critical for the robot.
     fn postprocess(&mut self) -> CuResult<()> {
         Ok(())
     }
 
+    /// Call at the end of the lifecycle of the task.
     fn stop(&mut self) -> CuResult<()> {
         Ok(())
     }
 }
 
+/// A Src Task is a task that only produces messages. For example drivers for sensors are Src Tasks.
+/// They are in push mode from the runtime.
+/// To set the frequency of the pulls and align them to any hw, see the runtime configuration.
 pub trait CuSrcTask: CuTaskLifecycle {
-    type Payload: CuMsgPayload;
-    fn process(&mut self, empty_msg: &mut CuMsg<Self::Payload>) -> CuResult<()>;
+    type Output: CuMsgPayload;
+
+    /// Process is the most critical execution of the task.
+    /// The goal will be to produce the output message as soon as possible.
+    /// Use preprocess to prepare the task to make this method as short as possible.
+    fn process(&mut self, new_msg: &mut CuMsg<Self::Output>) -> CuResult<()>;
 }
 
+/// This is the most generic Task of copper. It is a "transform" task deriving an output from an input.
 pub trait CuTask: CuTaskLifecycle {
     type Input: CuMsgPayload;
     type Output: CuMsgPayload;
+
+    /// Process is the most critical execution of the task.
+    /// The goal will be to produce the output message as soon as possible.
+    /// Use preprocess to prepare the task to make this method as short as possible.
     fn process(
         &mut self,
         input: &CuMsg<Self::Input>,
@@ -59,7 +83,12 @@ pub trait CuTask: CuTaskLifecycle {
     ) -> CuResult<()>;
 }
 
+/// A Sink Task is a task that only consumes messages. For example drivers for actuators are Sink Tasks.
 pub trait CuSinkTask: CuTaskLifecycle {
     type Input: CuMsgPayload;
+
+    /// Process is the most critical execution of the task.
+    /// The goal will be to produce the output message as soon as possible.
+    /// Use preprocess to prepare the task to make this method as short as possible.
     fn process(&mut self, input: &CuMsg<Self::Input>) -> CuResult<()>;
 }

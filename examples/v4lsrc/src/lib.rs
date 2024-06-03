@@ -94,9 +94,9 @@ impl CuTaskLifecycle for Video4LinuxSource {
 }
 
 impl CuSrcTask for Video4LinuxSource {
-    type Payload = ImageMsg;
+    type Output = ImageMsg;
 
-    fn process(&mut self, empty_msg: &mut CuMsg<Self::Payload>) -> CuResult<()> {
+    fn process(&mut self, empty_msg: &mut CuMsg<Self::Output>) -> CuResult<()> {
         let stream = self.stream.as_ref().unwrap();
         if let Ok(buffer) = stream.next() {
             let buffer = buffer.lock();

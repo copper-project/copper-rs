@@ -100,9 +100,9 @@ impl CuTaskLifecycle for MonitoringTask {
 }
 
 impl CuSrcTask for MonitoringTask {
-    type Payload = ();
+    type Output = ();
 
-    fn process(&mut self, _empty_msg: &mut CuMsg<Self::Payload>) -> CuResult<()> {
+    fn process(&mut self, _empty_msg: &mut CuMsg<Self::Output>) -> CuResult<()> {
         Ok(())
     }
 }
