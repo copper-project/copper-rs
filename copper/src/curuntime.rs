@@ -5,12 +5,12 @@ use crate::CuResult;
 
 // CT is a tuple of all the tasks
 // CL is the type of the copper list
-pub struct CuRuntime<CT, CL: Sized + PartialEq> {
+pub struct CuRuntime<CT, CL: Sized + PartialEq, const NBCL: usize> {
     task_instances: CT,
-    copper_lists: CuListsManager<CL, 10>,
+    copper_lists: CuListsManager<CL, NBCL>,
 }
 
-impl<CT, CL: Sized + PartialEq> CuRuntime<CT, CL> {
+impl<CT, CL: Sized + PartialEq, const NBCL: usize> CuRuntime<CT, CL, NBCL> {
     pub fn new(
         config: &CuConfig,
         tasks_instanciator: impl Fn(Vec<Option<&NodeInstanceConfig>>) -> CuResult<CT>,
@@ -104,7 +104,7 @@ mod tests {
         config.add_node(Node::new("a", "TestSource"));
         config.add_node(Node::new("b", "TestSink"));
         config.connect(0, 1, "()");
-        let runtime = CuRuntime::<Tasks, Msgs>::new(&config, tasks_instanciator);
+        let runtime = CuRuntime::<Tasks, Msgs, 2>::new(&config, tasks_instanciator);
         assert!(runtime.is_ok());
     }
 }

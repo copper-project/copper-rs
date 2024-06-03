@@ -14,6 +14,8 @@ use format::{highlight_rust_code, rustfmt_generated_code};
 mod format;
 mod utils;
 
+const DEFAULT_CLNB: usize = 10;
+
 // Parses the CopperRuntime attribute like #[copper_runtime(config = "path")]
 #[proc_macro_attribute]
 pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
@@ -68,7 +70,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
     // add that to a new field
     let runtime_field: Field = parse_quote! {
-        copper_runtime: CuRuntime<CuTasks, CuList>
+        copper_runtime: CuRuntime<CuTasks, CuList, #DEFAULT_CLNB>
     };
 
     let (_, all_msgs_types) = extract_msgs_types(&copper_config);
@@ -130,7 +132,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let config = read_configuration(#config_file)?;
 
                 Ok(#name {
-                    copper_runtime: CuRuntime::<CuTasks, CuList>::new(&config, tasks_instanciator)?
+                    copper_runtime: CuRuntime::<CuTasks, CuList, #DEFAULT_CLNB>::new(&config, tasks_instanciator)?
                 })
             }
         }
