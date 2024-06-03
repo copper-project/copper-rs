@@ -60,8 +60,8 @@ mod tests {
     }
 
     impl CuSrcTask for TestSource {
-        type Payload = ();
-        fn process(&mut self, _empty_msg: &mut CuMsg<Self::Payload>) -> CuResult<()> {
+        type Output = ();
+        fn process(&mut self, _empty_msg: &mut CuMsg<Self::Output>) -> CuResult<()> {
             Ok(())
         }
     }
