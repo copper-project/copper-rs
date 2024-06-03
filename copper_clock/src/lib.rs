@@ -57,6 +57,40 @@ impl Add for CuDuration {
 /// A robot time is just a duration from a fixed point in time.
 pub type CuTime = CuDuration;
 
+/// Homebrewed Option<CuDuration> to avoid using 128bits just to represent an Option.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OptionCuTime(CuTime);
+
+const NONE_VALUE: u64 = 0xFFFFFFFFFFFFFFFF;
+
+impl OptionCuTime {
+    pub fn is_none(&self) -> bool {
+        self.0 .0 == NONE_VALUE
+    }
+    pub fn none() -> Self {
+        OptionCuTime(CuDuration(NONE_VALUE))
+    }
+}
+
+impl From<Option<CuTime>> for OptionCuTime {
+    fn from(duration: Option<CuTime>) -> Self {
+        match duration {
+            Some(duration) => OptionCuTime(duration.into()),
+            None => OptionCuTime(CuDuration(NONE_VALUE)),
+        }
+    }
+}
+
+impl Into<Option<CuTime>> for OptionCuTime {
+    fn into(self) -> Option<CuTime> {
+        if self.0 .0 == NONE_VALUE {
+            None
+        } else {
+            Some(self.0.into())
+        }
+    }
+}
+
 /// A running Robot clock.
 pub struct RobotClock {
     inner: Clock,
