@@ -50,26 +50,30 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         &config_full_path
     ));
 
-    println!("[runtime plan]");
     let runtime_plan =
         compute_runtime_plan(&copper_config).expect("Could not compute runtime plan");
-    for (node_index, node) in runtime_plan {
-        let dst_edges = copper_config.get_dst_edges(node_index);
-        for edge_index in dst_edges {
-            let edge_type = copper_config.get_edge_weight(edge_index);
-            if let Some(edge_type) = edge_type {
-                println!("[edge:{}]   {} -> ", edge_index, edge_type);
-            }
-        }
-        println!("   {}: {}", node_index, node.get_id());
-        let src_edges = copper_config.get_src_edges(node_index);
-        for edge_index in src_edges {
-            let edge_type = copper_config.get_edge_weight(edge_index);
-            if let Some(edge_type) = edge_type {
-                println!("     -> [edge:{}]   {} ", edge_index, edge_type);
-            }
-        }
+    println!("[runtime plan]");
+    for (_, node) in runtime_plan {
+        println!("-> {} ({})", node.get_id(), node.get_type());
     }
+    println!("------------------------------");
+    //for (node_index, node) in runtime_plan {
+    //    let dst_edges = copper_config.get_dst_edges(node_index);
+    //    for edge_index in dst_edges {
+    //        let edge_type = copper_config.get_edge_weight(edge_index);
+    //        if let Some(edge_type) = edge_type {
+    //            println!("[edge:{}]   {} -> ", edge_index, edge_type);
+    //        }
+    //    }
+    //    println!("   {}: {}", node_index, node.get_id());
+    //    let src_edges = copper_config.get_src_edges(node_index);
+    //    for edge_index in src_edges {
+    //        let edge_type = copper_config.get_edge_weight(edge_index);
+    //        if let Some(edge_type) = edge_type {
+    //            println!("     -> [edge:{}]   {} ", edge_index, edge_type);
+    //        }
+    //    }
+    //}
 
     println!("[extract tasks types]");
     let (all_tasks_types_names, all_tasks_types) = extract_tasks_types(&copper_config);

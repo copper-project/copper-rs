@@ -2,6 +2,16 @@
 (
     tasks: [
         (
+            id: "src",
+            type: "CaterpillarSource",
+            base_period_ns: 1000000000,
+        ),
+        (
+            id: "ct-0",
+            type: "CaterpillarTask",
+            base_period_ns: 1000000000,
+        ),
+        (
             id: "gpio-0",
             type: "cu_rp_gpio::RPGpio",
             base_period_ns: 1000000000,
@@ -10,7 +20,7 @@
             },
         ),
         (
-            id: "ct-0",
+            id: "ct-1",
             type: "CaterpillarTask",
             base_period_ns: 1000000000,
         ),
@@ -23,15 +33,57 @@
             },
         ),
         (
-            id: "ct-1",
+            id: "ct-2",
             type: "CaterpillarTask",
             base_period_ns: 1000000000,
-        )
+        ),
+        (
+            id: "gpio-2",
+            type: "cu_rp_gpio::RPGpio",
+            base_period_ns: 1000000000,
+            config: {
+                "pin": 27,
+            },
+        ),
+        (
+            id: "ct-3",
+            type: "CaterpillarTask",
+            base_period_ns: 1000000000,
+        ),
+        (
+            id: "gpio-3",
+            type: "cu_rp_gpio::RPGpio",
+            base_period_ns: 1000000000,
+            config: {
+                "pin": 22,
+            },
+        ),
+        (
+            id: "ct-4",
+            type: "CaterpillarTask",
+            base_period_ns: 1000000000,
+        ),
+        (
+            id: "gpio-4",
+            type: "cu_rp_gpio::RPGpio",
+            base_period_ns: 1000000000,
+            config: {
+                "pin": 5,
+            },
+        ),
      ],
     cnx: [
-        (src: "ct-0",     dst: "gpio-0", msg: "cu_rp_gpio::RPGpioMsg"),
-        (src: "ct-0",     dst: "ct-1", msg: "cu_rp_gpio::RPGpioMsg"),
-        (src: "ct-1",     dst: "gpio-1", msg: "cu_rp_gpio::RPGpioMsg"),
-        // (src: "monitoring", dst: "logger", msg: "()"              ),
+        // Make a caterpillar by propagating messages from the source to the GPIOs
+        (src: "src",  dst: "ct-0",   msg: "cu_rp_gpio::RPGpioMsg"),
+        (src: "ct-0", dst: "ct-1",   msg: "cu_rp_gpio::RPGpioMsg"),
+        (src: "ct-1", dst: "ct-2",   msg: "cu_rp_gpio::RPGpioMsg"),
+        (src: "ct-2", dst: "ct-3",   msg: "cu_rp_gpio::RPGpioMsg"),
+        (src: "ct-3", dst: "ct-4",   msg: "cu_rp_gpio::RPGpioMsg"),
+
+        (src: "ct-0", dst: "gpio-0", msg: "cu_rp_gpio::RPGpioMsg"),
+        (src: "ct-1", dst: "gpio-1", msg: "cu_rp_gpio::RPGpioMsg"),
+        (src: "ct-2", dst: "gpio-2", msg: "cu_rp_gpio::RPGpioMsg"),
+        (src: "ct-3", dst: "gpio-3", msg: "cu_rp_gpio::RPGpioMsg"),
+        (src: "ct-4", dst: "gpio-4", msg: "cu_rp_gpio::RPGpioMsg"),
     ],
 )
