@@ -2,6 +2,7 @@ use crate::common::CuListsManager;
 use crate::config::{CuConfig, NodeId};
 use crate::config::{Node, NodeInstanceConfig};
 use crate::CuResult;
+use petgraph::visit::Walker;
 
 // CT is a tuple of all the tasks
 // CL is the type of the copper list
@@ -29,15 +30,16 @@ impl<CT, CL: Sized + PartialEq, const NBCL: usize> CuRuntime<CT, CL, NBCL> {
 }
 use petgraph::algo::toposort;
 pub fn compute_runtime_plan(config: &CuConfig) -> CuResult<Vec<(NodeId, &Node)>> {
-    let sorted_nodes = toposort(&config.graph, None).expect("Cycle detected in the graph");
-    let result = sorted_nodes
-        .iter()
-        .map(|node| {
-            let id = node.index() as NodeId;
-            let node = config.get_node(id).unwrap();
-            (id, node)
-        })
-        .collect();
+    // prob not exactly what we want but to get us started
+    let mut visitor = petgraph::visit::Bfs::new(&config.graph, 0.into());
+
+    let mut result = Vec::new();
+
+    while let Some(node) = visitor.next(&config.graph) {
+        let id = node.index() as NodeId;
+        let node = config.get_node(id).unwrap();
+        result.push((id, node));
+    }
     Ok(result)
 }
 

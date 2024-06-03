@@ -1,4 +1,4 @@
-use copper::cutask::{CuMsg, CuTask, CuTaskLifecycle};
+use copper::cutask::{CuMsg, CuSrcTask, CuTask, CuTaskLifecycle};
 use copper::CuResult;
 use copper_derive::copper_runtime;
 use copper_log::debug;
@@ -9,6 +9,30 @@ struct TheVeryHungryCaterpillar {}
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct CaterpillarMsg(bool);
+
+pub struct CaterpillarSource {
+    state: bool,
+}
+
+impl CuTaskLifecycle for CaterpillarSource {
+    fn new(_config: Option<&copper::config::NodeInstanceConfig>) -> CuResult<Self>
+    where
+        Self: Sized,
+    {
+        Ok(Self { state: true })
+    }
+}
+
+impl CuSrcTask for CaterpillarSource {
+    type Output = CaterpillarMsg;
+
+    fn process(&mut self, output: &mut CuMsg<Self::Output>) -> CuResult<()> {
+        // forward the state to the next task
+        self.state = !self.state;
+        output.payload = CaterpillarMsg(self.state);
+        Ok(())
+    }
+}
 
 pub struct CaterpillarTask {}
 
