@@ -1,8 +1,9 @@
 [package]
-name = "rp-gpio"
+name = "cu-rp-gpio"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 copper = { path = "../../copper" }
 rppal = "0.18.0"
+serde = { version = "1.0.203", features = ["derive"] }

@@ -1,0 +1,37 @@
+// (4, 17, 27, 22, 5, 6, 19, 26)
+(
+    tasks: [
+        (
+            id: "gpio-0",
+            type: "cu_rp_gpio::RPGpio",
+            base_period_ns: 1000000000,
+            config: {
+                "pin": 4,
+            },
+        ),
+        (
+            id: "ct-0",
+            type: "CaterpillarTask",
+            base_period_ns: 1000000000,
+        ),
+        (
+            id: "gpio-1",
+            type: "cu_rp_gpio::RPGpio",
+            base_period_ns: 1000000000,
+            config: {
+                "pin": 17,
+            },
+        ),
+        (
+            id: "ct-1",
+            type: "CaterpillarTask",
+            base_period_ns: 1000000000,
+        )
+     ],
+    cnx: [
+        (src: "ct-0",     dst: "gpio-0", msg: "cu_rp_gpio::RPGpioMsg"),
+        (src: "ct-0",     dst: "ct-1", msg: "cu_rp_gpio::RPGpioMsg"),
+        (src: "ct-1",     dst: "gpio-1", msg: "cu_rp_gpio::RPGpioMsg"),
+        // (src: "monitoring", dst: "logger", msg: "()"              ),
+    ],
+)
