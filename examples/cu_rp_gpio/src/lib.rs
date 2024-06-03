@@ -2,13 +2,42 @@ use copper::config::NodeInstanceConfig;
 use copper::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle};
 use copper::{CuError, CuResult};
 
-use rppal::gpio::{Gpio, OutputPin};
+use rppal::gpio::{Gpio, Level, OutputPin};
 
 /// Example of a GPIO output driver for the Raspberry Pi
 /// The config takes one config value: `pin` which is the pin you want to address
 /// Gpio uses BCM pin numbering. For example: BCM GPIO 23 is tied to physical pin 16.
 pub struct RPGpio {
     pin: OutputPin,
+}
+
+#[derive(Debug, Clone, Copy, Default, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct RPGpioMsg(pub bool);
+
+impl From<RPGpioMsg> for bool {
+    fn from(msg: RPGpioMsg) -> Self {
+        msg.0
+    }
+}
+
+impl From<RPGpioMsg> for u8 {
+    fn from(msg: RPGpioMsg) -> Self {
+        if msg.0 {
+            1
+        } else {
+            0
+        }
+    }
+}
+
+impl From<RPGpioMsg> for Level {
+    fn from(msg: RPGpioMsg) -> Self {
+        if msg.0 {
+            Level::Low
+        } else {
+            Level::High
+        }
+    }
 }
 
 impl CuTaskLifecycle for RPGpio {
@@ -35,7 +64,7 @@ impl CuTaskLifecycle for RPGpio {
 }
 
 impl CuSinkTask for RPGpio {
-    type Input = u8;
+    type Input = RPGpioMsg;
 
     fn process(&mut self, msg: &CuMsg<Self::Input>) -> CuResult<()> {
         self.pin.write(msg.payload.into());
