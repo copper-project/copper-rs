@@ -16,3 +16,4 @@ ron = "0.8.1"
 copper-traits = { path = "../copper_traits" }
 copper-log = { path = "../copper_log" }
 copper-log-runtime = { path = "../copper_log_runtime" }
+copper-clock = { path = "../copper_clock" }
