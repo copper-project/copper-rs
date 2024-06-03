@@ -1,3 +1,4 @@
+use copper_clock::OptionCuTime;
 use serde::{Deserialize, Serialize};
 
 use crate::config::NodeInstanceConfig;
@@ -9,16 +10,29 @@ pub trait CuMsgPayload: Default + Serialize + for<'a> Deserialize<'a> + Sized {}
 // Also anything that follows this contract can be a payload (blanket implementation)
 impl<T> CuMsgPayload for T where T: Default + Serialize + for<'a> Deserialize<'a> + Sized {}
 
+const DEFAULT_MAX_RECEIVERS: usize = 2;
+
 pub struct CuMsg<T>
 where
     T: CuMsgPayload,
 {
     pub payload: T,
+
+    // Runtime statistics
+    pub sent_time: OptionCuTime,
+    pub received_times: [OptionCuTime; DEFAULT_MAX_RECEIVERS],
 }
 
-impl<T: CuMsgPayload> CuMsg<T> {
+impl<T> CuMsg<T>
+where
+    T: CuMsgPayload,
+{
     pub fn new(payload: T) -> Self {
-        CuMsg { payload }
+        CuMsg {
+            payload,
+            sent_time: OptionCuTime::none(),
+            received_times: [OptionCuTime::none(); DEFAULT_MAX_RECEIVERS],
+        }
     }
 }
 
