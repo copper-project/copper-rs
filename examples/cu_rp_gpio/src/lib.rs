@@ -8,7 +8,10 @@ use rppal::gpio::{Gpio, Level, OutputPin};
 /// The config takes one config value: `pin` which is the pin you want to address
 /// Gpio uses BCM pin numbering. For example: BCM GPIO 23 is tied to physical pin 16.
 pub struct RPGpio {
+    #[cfg(target_arch = "arm")]
     pin: OutputPin,
+    #[cfg(target_arch = "x86_64")]
+    pin: u8,
 }
 
 #[derive(Debug, Clone, Copy, Default, serde::Serialize, serde::Deserialize, PartialEq)]
@@ -54,11 +57,14 @@ impl CuTaskLifecycle for RPGpio {
         .clone()
         .into();
 
+        #[cfg(target_arch = "arm")]
         let pin = Gpio::new()
             .map_err(|e| CuError::new_with_cause("Failed to initialize GPIO", e))?
             .get(pin_nb)
             .map_err(|e| CuError::new_with_cause("Could not get pin", e))?
             .into_output();
+        #[cfg(target_arch = "x86_64")]
+        let pin = pin_nb;
         Ok(Self { pin })
     }
 }
@@ -67,7 +73,10 @@ impl CuSinkTask for RPGpio {
     type Input = RPGpioMsg;
 
     fn process(&mut self, msg: &CuMsg<Self::Input>) -> CuResult<()> {
+        #[cfg(target_arch = "arm")]
         self.pin.write(msg.payload.into());
+        #[cfg(target_arch = "x86_64")]
+        println!("Would write to pin {} the value {}", self.pin, msg.payload.0);
         Ok(())
     }
 }
