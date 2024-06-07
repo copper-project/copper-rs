@@ -1,8 +1,12 @@
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use copper::cutask::{CuMsg, CuSrcTask, CuTask, CuTaskLifecycle};
-use copper::CuResult;
+use copper::{CuResult, DataLogType};
 use copper_derive::copper_runtime;
 use copper_log::debug;
 use serde::{Deserialize, Serialize};
+use copper_datalogger::{DataLogger, stream};
+use copper_log_runtime::LoggerRuntime;
 
 #[copper_runtime(config = "copperconfig.ron")]
 struct TheVeryHungryCaterpillar {}
@@ -61,6 +65,12 @@ impl CuTask for CaterpillarTask {
 }
 
 fn main() {
+    let path: PathBuf = PathBuf::from("/tmp/teststructlog.copper");
+    let data_logger = Arc::new(Mutex::new(
+        DataLogger::new(path.as_path(), Some(100000)).expect("Failed to create logger"),
+    ));
+    let mut stream = stream(data_logger.clone(), DataLogType::StructuredLogLine, 1024);
+    let rt = LoggerRuntime::init(stream);
     debug!("Application created.");
     let application = TheVeryHungryCaterpillar::new().expect("Failed to create runtime.");
     debug!("End of program.");

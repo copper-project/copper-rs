@@ -7,7 +7,7 @@ use syn::meta::parser;
 use syn::Fields::{Named, Unnamed};
 use syn::{parse_macro_input, parse_quote, parse_str, Field, ItemStruct, LitStr, Type, TypeTuple};
 
-use copper::config::read_configuration;
+use copper::config::{Node, NodeId, read_configuration};
 use copper::config::CuConfig;
 use copper::curuntime::compute_runtime_plan;
 use format::{highlight_rust_code, rustfmt_generated_code};
@@ -50,7 +50,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         &config_full_path
     ));
 
-    let runtime_plan =
+    let runtime_plan: Vec<(NodeId, &Node)> =
         compute_runtime_plan(&copper_config).expect("Could not compute runtime plan");
     println!("[runtime plan]");
     for (_, node) in runtime_plan {
