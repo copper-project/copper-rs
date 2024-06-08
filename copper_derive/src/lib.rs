@@ -9,7 +9,7 @@ use syn::{parse_macro_input, parse_quote, parse_str, Field, ItemStruct, LitStr, 
 
 use copper::config::{Node, NodeId, read_configuration};
 use copper::config::CuConfig;
-use copper::curuntime::compute_runtime_plan;
+use copper::curuntime::{compute_runtime_plan, CuExecutionStep, CuTaskType};
 use format::{highlight_rust_code, rustfmt_generated_code};
 
 mod format;
@@ -17,6 +17,11 @@ mod utils;
 
 // TODO: this needs to be determined when the runtime is sizing itself.
 const DEFAULT_CLNB: usize = 10;
+
+#[inline]
+fn int2index(i: u32) -> syn::Index {
+    syn::Index::from(i as usize)
+}
 
 // Parses the CopperRuntime attribute like #[copper_runtime(config = "path")]
 #[proc_macro_attribute]
@@ -50,30 +55,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         &config_full_path
     ));
 
-    let runtime_plan: Vec<(NodeId, &Node)> =
-        compute_runtime_plan(&copper_config).expect("Could not compute runtime plan");
     println!("[runtime plan]");
-    for (_, node) in runtime_plan {
-        println!("-> {} ({})", node.get_id(), node.get_type());
-    }
-    println!("------------------------------");
-    //for (node_index, node) in runtime_plan {
-    //    let dst_edges = copper_config.get_dst_edges(node_index);
-    //    for edge_index in dst_edges {
-    //        let edge_type = copper_config.get_edge_weight(edge_index);
-    //        if let Some(edge_type) = edge_type {
-    //            println!("[edge:{}]   {} -> ", edge_index, edge_type);
-    //        }
-    //    }
-    //    println!("   {}: {}", node_index, node.get_id());
-    //    let src_edges = copper_config.get_src_edges(node_index);
-    //    for edge_index in src_edges {
-    //        let edge_type = copper_config.get_edge_weight(edge_index);
-    //        if let Some(edge_type) = edge_type {
-    //            println!("     -> [edge:{}]   {} ", edge_index, edge_type);
-    //        }
-    //    }
-    //}
+    let runtime_plan: Vec<CuExecutionStep> =
+        compute_runtime_plan(&copper_config).expect("Could not compute runtime plan");
 
     println!("[extract tasks types]");
     let (all_tasks_types_names, all_tasks_types) = extract_tasks_types(&copper_config);
@@ -91,18 +75,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         copper_runtime: _CuRuntime<CuTasks, CuList, #DEFAULT_CLNB>
     };
 
-    println!("[extract msg types]");
-    let (_, all_msgs_types) = extract_msgs_types(&copper_config);
-
-    println!("[build the copper list tuple]");
-    let msgs_types_tuple: TypeTuple = if all_msgs_types.is_empty() {
-        parse_quote! {()}
-        // panic!("No messages types found. You need to at least define one message between tasks.");
-    } else {
-        parse_quote! { (#(#all_msgs_types),*,)}
-    };
-
-    // let msgs_types_tuple: TypeTuple = parse_quote! { (#(#all_msgs_types),*,)};
 
     let name = &item_struct.ident;
 
@@ -135,6 +107,87 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         })
         .collect();
 
+    let runtime_plan_code: Vec<_> = runtime_plan
+        .iter()
+        .map(|step| {
+
+            println!("{} -> {} as {:?}. Input={:?}, Output={:?}", step.node.get_id(), step.node.get_type(), step.task_type, step.input_msg_type, step.output_msg_type);
+
+            let node_index = int2index(step.node_id);
+            let task_instance = quote! { self.copper_runtime.task_instances.#node_index };
+            let comment_str = format!("/// {} ({:?}) I:{:?} O:{:?}",step.node.get_id(), step.task_type, step.input_msg_type, step.output_msg_type);
+            let comment_tokens: proc_macro2::TokenStream = parse_str(&comment_str).unwrap();
+
+            let process_call = match step.task_type {
+                CuTaskType::Source => {
+                    let output_culist_index = int2index(step.culist_output_index.expect("Src task should have an output message index."));
+                    quote! {
+                    {
+                        #comment_tokens
+                        let cumsg_output = &mut culist.#output_culist_index;
+                        #task_instance.process(cumsg_output)?;
+                    }
+                }
+                },
+                CuTaskType::Sink => {
+                    let input_culist_index = int2index(step.culist_input_index.expect("Sink task should have an input message index."));
+                    quote! {
+                    {
+                        #comment_tokens
+                        let cumsg_input = &mut culist.#input_culist_index;
+                        #task_instance.process(cumsg_input)?;
+                    }
+                }
+                },
+                CuTaskType::Regular => {
+                    {
+                    let input_culist_index = int2index(step.culist_input_index.expect("Sink task should have an input message index."));
+                    let output_culist_index = int2index(step.culist_output_index.expect("Src task should have an output message index."));
+                    quote! {
+                    {
+                        #comment_tokens
+                        let cumsg_input = &mut culist.#input_culist_index;
+                        let cumsg_output = &mut culist.#output_culist_index;
+                        #task_instance.process(cumsg_input, cumsg_output)?;
+                    }
+                    }
+                }
+                },
+            };
+
+            process_call
+        })
+        .collect();
+
+    println!("[extract msg types]");
+    let all_msgs_types_in_culist_order: Vec<Type> = runtime_plan
+        .iter()
+        .filter_map(|step| {
+            if step.output_msg_type.is_none() {
+                None
+            } else {
+                Some(parse_str::<Type>(step.output_msg_type.clone().unwrap().as_str()).unwrap())
+            }
+        }).collect();
+
+    println!("[build the copper list tuple]");
+    let msgs_types_tuple: TypeTuple = if all_msgs_types_in_culist_order.is_empty() {
+        parse_quote! {()}
+        // panic!("No messages types found. You need to at least define one message between tasks.");
+    } else {
+        parse_quote! { (#(_CuMsg<#all_msgs_types_in_culist_order>),*,)}
+    };
+
+    let run_method = quote! {
+    pub fn run(&mut self, iterations: u32) -> _CuResult<()> {
+        let culist = self.copper_runtime.copper_lists.create().expect("Ran out of space for copper lists"); // FIXME: error handling.
+        for _ in 0..iterations {
+            #(#runtime_plan_code)*
+        }
+        Ok(())
+        }
+    };
+
     println!("[build result]");
     // Convert the modified struct back into a TokenStream
     let result = quote! {
@@ -146,6 +199,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         use copper::cutask::CuTaskLifecycle as _CuTaskLifecycle; // Needed for the instantiation of tasks
         use copper::CuResult as _CuResult;
         use copper::CuError as _CuError;
+        use copper::cutask::CuSrcTask as _CuSrcTask;
+        use copper::cutask::CuSinkTask as _CuSinkTask;
+        use copper::cutask::CuTask as _CuTask;
+        use copper::cutask::CuMsg as _CuMsg;
 
         pub type CuTasks = #task_types_tuple;
         pub type CuList = #msgs_types_tuple;
@@ -166,6 +223,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     copper_runtime: _CuRuntime::<CuTasks, CuList, #DEFAULT_CLNB>::new(&config, tasks_instanciator)?
                 })
             }
+
+            #run_method
         }
     };
     let tokens: TokenStream = result.into();
@@ -204,6 +263,7 @@ fn extract_tasks_types(copper_config: &CuConfig) -> (Vec<String>, Vec<Type>) {
 /// Extract all the messages types in their index order
 fn extract_msgs_types(copper_config: &CuConfig) -> (Vec<String>, Vec<Type>) {
     let all_edges = copper_config.get_all_edges();
+    println!("Nb of edges: {:?}", all_edges.len());
 
     let all_types_names: Vec<String> = all_edges
         .iter()

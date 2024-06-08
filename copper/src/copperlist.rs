@@ -105,7 +105,7 @@ impl<T: Sized + PartialEq, const N: usize> CuListsManager<T, N> {
     }
 
     #[inline]
-    pub fn pop(&mut self) -> Option<&T> {
+    pub fn pop(&mut self) -> Option<&mut T> {
         if self.length == 0 {
             return None;
         }
@@ -115,7 +115,7 @@ impl<T: Sized + PartialEq, const N: usize> CuListsManager<T, N> {
             self.insertion_index -= 1;
         }
         self.length -= 1;
-        Some(&self.data[self.insertion_index])
+        Some(&mut self.data[self.insertion_index])
     }
 
     /// Returns an iterator over the queue's contents.

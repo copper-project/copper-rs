@@ -1,14 +1,15 @@
-use crate::common::CuListsManager;
+use crate::copperlist::CuListsManager;
 use crate::config::{CuConfig, NodeId};
 use crate::config::{Node, NodeInstanceConfig};
 use crate::CuResult;
 use petgraph::visit::Walker;
+use petgraph::prelude::*;
 
 // CT is a tuple of all the tasks
 // CL is the type of the copper list
 pub struct CuRuntime<CT, CL: Sized + PartialEq, const NBCL: usize> {
-    task_instances: CT,
-    copper_lists: CuListsManager<CL, NBCL>,
+    pub task_instances: CT,
+    pub copper_lists: CuListsManager<CL, NBCL>,
 }
 
 impl<CT, CL: Sized + PartialEq, const NBCL: usize> CuRuntime<CT, CL, NBCL> {
@@ -28,8 +29,47 @@ impl<CT, CL: Sized + PartialEq, const NBCL: usize> CuRuntime<CT, CL, NBCL> {
         })
     }
 }
-use petgraph::algo::toposort;
-pub fn compute_runtime_plan(config: &CuConfig) -> CuResult<Vec<(NodeId, &Node)>> {
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum CuTaskType {
+    Source,
+    Sink,
+    Regular,
+}
+
+/// Steps give:
+/// NodeId: node id of the task to execute
+/// Node: node instance
+/// CuTaskType: type of the task
+/// Option<String>: input message type
+/// u32: index in the culist of the input message
+/// Option<String>: output message type
+/// u32: index in the culist of the output message
+pub struct CuExecutionStep {
+    pub node_id: NodeId,
+    pub node: Node,
+    pub task_type: CuTaskType,
+    pub input_msg_type: Option<String>,
+    pub culist_input_index: Option<u32>,
+    pub output_msg_type: Option<String>,
+    pub culist_output_index: Option<u32>,
+}
+
+fn find_output_index_from_nodeid(
+    node_id: NodeId,
+    steps: &Vec<CuExecutionStep>,
+) -> Option<u32> {
+    for step in steps {
+        if step.node_id == node_id {
+            return step.culist_output_index;
+        }
+    }
+    None
+}
+
+pub fn compute_runtime_plan(config: &CuConfig) -> CuResult<Vec<CuExecutionStep>> {
+    let mut next_culist_output_index = 0u32;
+
     // prob not exactly what we want but to get us started
     let mut visitor = petgraph::visit::Bfs::new(&config.graph, 0.into());
 
@@ -38,7 +78,44 @@ pub fn compute_runtime_plan(config: &CuConfig) -> CuResult<Vec<(NodeId, &Node)>>
     while let Some(node) = visitor.next(&config.graph) {
         let id = node.index() as NodeId;
         let node = config.get_node(id).unwrap();
-        result.push((id, node));
+        let mut input_msg_type : Option<String> = None;
+        let mut output_msg_type : Option<String> = None;
+
+        let mut culist_input_index : Option<u32> = None;
+        let mut culist_output_index : Option<u32> = None;
+
+        // if a node has no parent it means it is a source
+        let task_type = if config.graph.neighbors_directed(id.into(), petgraph::Direction::Incoming).count() == 0 {
+            output_msg_type = Some(config.graph.edge_weight(EdgeIndex::new(config.get_src_edges(id)[0])).unwrap().clone());
+            culist_output_index = Some(next_culist_output_index);
+            next_culist_output_index += 1;
+            CuTaskType::Source
+        } else if config.graph.neighbors_directed(id.into(), petgraph::Direction::Outgoing).count() == 0 {
+            input_msg_type = Some(config.graph.edge_weight(EdgeIndex::new(config.get_dst_edges(id)[0])).unwrap().clone());
+            // get the node from where the message is coming from
+            let parent = config.graph.neighbors_directed(id.into(), petgraph::Direction::Incoming).next().unwrap();
+            culist_input_index = find_output_index_from_nodeid(parent.index() as NodeId, &result);
+            CuTaskType::Sink
+        } else {
+            output_msg_type = Some(config.graph.edge_weight(EdgeIndex::new(config.get_src_edges(id)[0])).unwrap().clone());
+            culist_output_index = Some(next_culist_output_index);
+            next_culist_output_index += 1;
+            input_msg_type = Some(config.graph.edge_weight(EdgeIndex::new(config.get_dst_edges(id)[0])).unwrap().clone());
+            // get the node from where the message is coming from
+            let parent = config.graph.neighbors_directed(id.into(), petgraph::Direction::Incoming).next().unwrap();
+            culist_input_index = find_output_index_from_nodeid(parent.index() as NodeId, &result);
+            CuTaskType::Regular
+        };
+        let step = CuExecutionStep {
+            node_id: id,
+            node: node.clone(),
+            task_type,
+            input_msg_type,
+            culist_input_index,
+            output_msg_type,
+            culist_output_index,
+        };
+        result.push(step);
     }
     Ok(result)
 }

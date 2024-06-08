@@ -7,3 +7,4 @@ edition = "2021"
 copper = { path = "../../copper" }
 rppal = "0.18.0"
 serde = { version = "1.0.203", features = ["derive"] }
+lazy_static = "1.4.0"

@@ -7,6 +7,7 @@ use copper_log::debug;
 use serde::{Deserialize, Serialize};
 use copper_datalogger::{DataLogger, stream};
 use copper_log_runtime::LoggerRuntime;
+use cu_rp_gpio::RPGpioMsg;
 
 #[copper_runtime(config = "copperconfig.ron")]
 struct TheVeryHungryCaterpillar {}
@@ -28,12 +29,12 @@ impl CuTaskLifecycle for CaterpillarSource {
 }
 
 impl CuSrcTask for CaterpillarSource {
-    type Output = CaterpillarMsg;
+    type Output = RPGpioMsg;
 
     fn process(&mut self, output: &mut CuMsg<Self::Output>) -> CuResult<()> {
         // forward the state to the next task
         self.state = !self.state;
-        output.payload = CaterpillarMsg(self.state);
+        output.payload = RPGpioMsg(self.state);
         Ok(())
     }
 }
@@ -50,8 +51,8 @@ impl CuTaskLifecycle for CaterpillarTask {
 }
 
 impl CuTask for CaterpillarTask {
-    type Input = CaterpillarMsg;
-    type Output = CaterpillarMsg;
+    type Input = RPGpioMsg;
+    type Output = RPGpioMsg;
 
     fn process(
         &mut self,
@@ -59,7 +60,7 @@ impl CuTask for CaterpillarTask {
         output: &mut CuMsg<Self::Output>,
     ) -> CuResult<()> {
         // forward the state to the next task
-        output.payload = CaterpillarMsg(input.payload.0);
+        output.payload = input.payload;
         Ok(())
     }
 }
@@ -72,6 +73,8 @@ fn main() {
     let mut stream = stream(data_logger.clone(), DataLogType::StructuredLogLine, 1024);
     let rt = LoggerRuntime::init(stream);
     debug!("Application created.");
-    let application = TheVeryHungryCaterpillar::new().expect("Failed to create runtime.");
+    let mut application = TheVeryHungryCaterpillar::new().expect("Failed to create runtime.");
+    debug!("Running...");
+    application.run(2).expect("Failed to run application.");
     debug!("End of program.");
 }

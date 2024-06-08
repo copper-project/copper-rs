@@ -12,6 +12,7 @@ impl<T> CuMsgPayload for T where T: Default + Serialize + for<'a> Deserialize<'a
 
 const DEFAULT_MAX_RECEIVERS: usize = 2;
 
+#[derive(Debug, PartialEq)]
 pub struct CuMsg<T>
 where
     T: CuMsgPayload,
