@@ -125,7 +125,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     {
                         #comment_tokens
                         let cumsg_output = &mut culist.#output_culist_index;
-                        #task_instance.process(cumsg_output)?;
+                        cumsg_output.before_process = self.copper_runtime.clock.now().into();
+                        #task_instance.process(&self.copper_runtime.clock, cumsg_output)?;
+                        cumsg_output.after_process = self.copper_runtime.clock.now().into();
                     }
                 }
                 },
@@ -135,7 +137,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     {
                         #comment_tokens
                         let cumsg_input = &mut culist.#input_culist_index;
-                        #task_instance.process(cumsg_input)?;
+                        #task_instance.process(&self.copper_runtime.clock, cumsg_input)?;
                     }
                 }
                 },
@@ -148,7 +150,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         #comment_tokens
                         let cumsg_input = &mut culist.#input_culist_index;
                         let cumsg_output = &mut culist.#output_culist_index;
-                        #task_instance.process(cumsg_input, cumsg_output)?;
+                        cumsg_output.before_process = self.copper_runtime.clock.now().into();
+                        #task_instance.process(&self.copper_runtime.clock, cumsg_input, cumsg_output)?;
+                        cumsg_output.after_process = self.copper_runtime.clock.now().into();
                     }
                     }
                 }
@@ -203,6 +207,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         use copper::cutask::CuSinkTask as _CuSinkTask;
         use copper::cutask::CuTask as _CuTask;
         use copper::cutask::CuMsg as _CuMsg;
+        use copper::clock::OptionCuTime as _OptionCuTime;
 
         pub type CuTasks = #task_types_tuple;
         pub type CuList = #msgs_types_tuple;

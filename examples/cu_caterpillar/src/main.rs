@@ -5,6 +5,7 @@ use copper::{CuResult, DataLogType};
 use copper_derive::copper_runtime;
 use copper_log::debug;
 use serde::{Deserialize, Serialize};
+use copper::clock::{OptionCuTime, RobotClock};
 use copper_datalogger::{DataLogger, stream};
 use copper_log_runtime::LoggerRuntime;
 use cu_rp_gpio::RPGpioMsg;
@@ -31,10 +32,14 @@ impl CuTaskLifecycle for CaterpillarSource {
 impl CuSrcTask for CaterpillarSource {
     type Output = RPGpioMsg;
 
-    fn process(&mut self, output: &mut CuMsg<Self::Output>) -> CuResult<()> {
+    fn process(&mut self, clock: &RobotClock, output: &mut CuMsg<Self::Output>) -> CuResult<()> {
         // forward the state to the next task
         self.state = !self.state;
-        output.payload = RPGpioMsg(self.state);
+        output.payload = RPGpioMsg {
+            on: self.state,
+            creation: clock.now().into(),
+            actuation: OptionCuTime::none(),
+        };
         Ok(())
     }
 }
@@ -56,6 +61,7 @@ impl CuTask for CaterpillarTask {
 
     fn process(
         &mut self,
+        _clock: &RobotClock,
         input: &CuMsg<Self::Input>,
         output: &mut CuMsg<Self::Output>,
     ) -> CuResult<()> {

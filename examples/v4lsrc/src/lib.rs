@@ -1,6 +1,7 @@
 use linux_video::types::*;
 use linux_video::{Device, Stream};
 use serde::{Deserialize, Serialize};
+use copper::clock::RobotClock;
 
 use copper::config::NodeInstanceConfig;
 use copper::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle};
@@ -78,7 +79,7 @@ impl CuTaskLifecycle for Video4LinuxSource {
         })
     }
 
-    fn start(&mut self) -> CuResult<()> {
+    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
         self.stream = Some(
             self.device
                 .stream::<In, Mmap>(ContentType::Video, 4)
@@ -87,7 +88,7 @@ impl CuTaskLifecycle for Video4LinuxSource {
         Ok(())
     }
 
-    fn stop(&mut self) -> CuResult<()> {
+    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
         self.stream = None; // This will trigger the Drop implementation on Stream
         Ok(())
     }
@@ -96,7 +97,7 @@ impl CuTaskLifecycle for Video4LinuxSource {
 impl CuSrcTask for Video4LinuxSource {
     type Output = ImageMsg;
 
-    fn process(&mut self, empty_msg: &mut CuMsg<Self::Output>) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, empty_msg: &mut CuMsg<Self::Output>) -> CuResult<()> {
         let stream = self.stream.as_ref().unwrap();
         if let Ok(buffer) = stream.next() {
             let buffer = buffer.lock();

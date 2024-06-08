@@ -21,17 +21,21 @@ pub struct RPGpio {
 }
 
 #[derive(Debug, Clone, Copy, Default, serde::Serialize, serde::Deserialize, PartialEq)]
-pub struct RPGpioMsg(pub bool);
+pub struct RPGpioMsg {
+    pub on: bool,
+    pub creation: copper::clock::OptionCuTime,
+    pub actuation: copper::clock::OptionCuTime,
+}
 
 impl From<RPGpioMsg> for bool {
     fn from(msg: RPGpioMsg) -> Self {
-        msg.0
+        msg.on
     }
 }
 
 impl From<RPGpioMsg> for u8 {
     fn from(msg: RPGpioMsg) -> Self {
-        if msg.0 {
+        if msg.on {
             1
         } else {
             0
@@ -41,7 +45,7 @@ impl From<RPGpioMsg> for u8 {
 
 impl From<RPGpioMsg> for Level {
     fn from(msg: RPGpioMsg) -> Self {
-        if msg.0 {
+        if msg.on {
             Level::Low
         } else {
             Level::High
@@ -76,12 +80,13 @@ impl CuTaskLifecycle for RPGpio {
 impl CuSinkTask for RPGpio {
     type Input = RPGpioMsg;
 
-    fn process(&mut self, msg: &CuMsg<Self::Input>) -> CuResult<()> {
+    fn process(&mut self, clock: &copper::clock::RobotClock, msg: &mut CuMsg<Self::Input>) -> CuResult<()> {
+        msg.payload.actuation = clock.now().into();
         #[cfg(target_arch = "arm")]
         self.pin.write(msg.payload.into());
-        sleep(std::time::Duration::from_millis(1000));
         #[cfg(target_arch = "x86_64")]
-        println!("Would write to pin {} the value {}", self.pin, msg.payload.0);
+        println!("Would write to pin {} the value {}. Creation to Actuation: {}", self.pin, msg.payload.on, msg.payload.actuation.unwrap() - msg.payload.creation.unwrap());
+
         Ok(())
     }
 }

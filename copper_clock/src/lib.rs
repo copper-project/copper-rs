@@ -1,8 +1,10 @@
 use core::ops::{Add, Sub};
+use std::fmt::{Display, Formatter};
 pub use quanta::Instant;
 use quanta::{Clock, Mock};
 use std::sync::Arc;
 use std::time::Duration;
+use serde::{Deserialize, Serialize};
 
 #[cfg(test)]
 #[macro_use]
@@ -10,7 +12,7 @@ extern crate approx;
 
 /// For Robot times, the underlying type is a u64 representing nanoseconds.
 /// It is always positive to simplify the reasoning on the user side.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct CuDuration(u64);
 
 /// bridge the API with standard Durations.
@@ -54,25 +56,64 @@ impl Add for CuDuration {
     }
 }
 
+impl Display for CuDuration {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let nanos = self.0;
+        if nanos >= 86_400_000_000_000 {
+            write!(f, "{:.2} d", nanos as f64 / 86_400_000_000_000.0)
+        } else if nanos >= 3_600_000_000_000 {
+            write!(f, "{:.2} h", nanos as f64 / 3_600_000_000_000.0)
+        } else if nanos >= 60_000_000_000 {
+            write!(f, "{:.2} m", nanos as f64 / 60_000_000_000.0)
+        } else if nanos >= 1_000_000_000 {
+            write!(f, "{:.2} s", nanos as f64 / 1_000_000_000.0)
+        } else if nanos >= 1_000_000 {
+            write!(f, "{:.2} ms", nanos as f64 / 1_000_000.0)
+        } else if nanos >= 1_000 {
+            write!(f, "{:.2} µs", nanos as f64 / 1_000.0)
+        } else {
+            write!(f, "{} ns", nanos)
+        }
+    }
+}
+
 /// A robot time is just a duration from a fixed point in time.
 pub type CuTime = CuDuration;
 
 /// Homebrewed Option<CuDuration> to avoid using 128bits just to represent an Option.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct OptionCuTime(CuTime);
 
 const NONE_VALUE: u64 = 0xFFFFFFFFFFFFFFFF;
 
 impl OptionCuTime {
+    #[inline]
     pub fn is_none(&self) -> bool {
         self.0 .0 == NONE_VALUE
     }
+
+    #[inline]
     pub fn none() -> Self {
         OptionCuTime(CuDuration(NONE_VALUE))
+    }
+
+    #[inline]
+    pub fn unwrap(self) -> CuTime {
+        if self.is_none() {
+            panic!("called `OptionCuTime::unwrap()` on a `None` value");
+        }
+        self.0
+    }
+}
+
+impl Default for OptionCuTime {
+    fn default() -> Self {
+        Self::none()
     }
 }
 
 impl From<Option<CuTime>> for OptionCuTime {
+    #[inline]
     fn from(duration: Option<CuTime>) -> Self {
         match duration {
             Some(duration) => OptionCuTime(duration.into()),
@@ -82,12 +123,20 @@ impl From<Option<CuTime>> for OptionCuTime {
 }
 
 impl Into<Option<CuTime>> for OptionCuTime {
+    #[inline]
     fn into(self) -> Option<CuTime> {
         if self.0 .0 == NONE_VALUE {
             None
         } else {
             Some(self.0.into())
         }
+    }
+}
+
+impl Into<OptionCuTime> for CuTime {
+    #[inline]
+    fn into(self) -> OptionCuTime {
+        Some(self).into()
     }
 }
 
@@ -134,6 +183,7 @@ impl RobotClock {
 
     // Now returns the time that passed since the reference time, usually the start time.
     // It is a monotonically increasing value.
+    #[inline]
     pub fn now(&self) -> CuTime {
         // TODO: this could be further optimized to avoid this constant conversion from 2 fields to one under the hood.
         // Let's say this is the default implementation.
