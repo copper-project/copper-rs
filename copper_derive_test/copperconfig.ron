@@ -1,11 +1,6 @@
 (
     tasks: [
         (
-            id: "monitoring",
-            type: "copper::monitoring::MonitoringTask",
-            base_period_ns: 60000000000,
-        ),
-        (
             id: "camera",
             type: "v4lsrc::Video4LinuxSource",
             base_period_ns: 1000000000,
@@ -24,6 +19,5 @@
     ],
     cnx: [
         (src: "camera",     dst: "logger", msg: "v4lsrc::ImageMsg"),
-        (src: "monitoring", dst: "logger", msg: "()"              ),
     ],
 )

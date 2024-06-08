@@ -1,8 +1,14 @@
+use std::thread::sleep;
 use copper::config::NodeInstanceConfig;
 use copper::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle};
 use copper::{CuError, CuResult};
 
 use rppal::gpio::{Gpio, Level, OutputPin};
+use lazy_static::lazy_static;
+
+lazy_static! {
+    static ref GPIO: Gpio = Gpio::new().expect("Could not create GPIO bindings");
+}
 
 /// Example of a GPIO output driver for the Raspberry Pi
 /// The config takes one config value: `pin` which is the pin you want to address
@@ -58,9 +64,7 @@ impl CuTaskLifecycle for RPGpio {
         .into();
 
         #[cfg(target_arch = "arm")]
-        let pin = Gpio::new()
-            .map_err(|e| CuError::new_with_cause("Failed to initialize GPIO", e))?
-            .get(pin_nb)
+        let pin = GPIO.get(pin_nb)
             .map_err(|e| CuError::new_with_cause("Could not get pin", e))?
             .into_output();
         #[cfg(target_arch = "x86_64")]
@@ -75,6 +79,7 @@ impl CuSinkTask for RPGpio {
     fn process(&mut self, msg: &CuMsg<Self::Input>) -> CuResult<()> {
         #[cfg(target_arch = "arm")]
         self.pin.write(msg.payload.into());
+        sleep(std::time::Duration::from_millis(1000));
         #[cfg(target_arch = "x86_64")]
         println!("Would write to pin {} the value {}", self.pin, msg.payload.0);
         Ok(())

@@ -71,6 +71,45 @@
                 "pin": 5,
             },
         ),
+        (
+            id: "ct-5",
+            type: "CaterpillarTask",
+            base_period_ns: 1000000000,
+        ),
+        (
+            id: "gpio-5",
+            type: "cu_rp_gpio::RPGpio",
+            base_period_ns: 1000000000,
+            config: {
+                "pin": 6,
+            },
+        ),
+        (
+            id: "ct-6",
+            type: "CaterpillarTask",
+            base_period_ns: 1000000000,
+        ),
+        (
+            id: "gpio-6",
+            type: "cu_rp_gpio::RPGpio",
+            base_period_ns: 1000000000,
+            config: {
+                "pin": 19,
+            },
+        ),
+        (
+            id: "ct-7",
+            type: "CaterpillarTask",
+            base_period_ns: 1000000000,
+        ),
+        (
+            id: "gpio-7",
+            type: "cu_rp_gpio::RPGpio",
+            base_period_ns: 1000000000,
+            config: {
+                "pin": 26,
+            },
+        ),
      ],
     cnx: [
         // Make a caterpillar by propagating messages from the source to the GPIOs
@@ -79,11 +118,17 @@
         (src: "ct-1", dst: "ct-2",   msg: "cu_rp_gpio::RPGpioMsg"),
         (src: "ct-2", dst: "ct-3",   msg: "cu_rp_gpio::RPGpioMsg"),
         (src: "ct-3", dst: "ct-4",   msg: "cu_rp_gpio::RPGpioMsg"),
+        (src: "ct-4", dst: "ct-5",   msg: "cu_rp_gpio::RPGpioMsg"),
+        (src: "ct-5", dst: "ct-6",   msg: "cu_rp_gpio::RPGpioMsg"),
+        (src: "ct-6", dst: "ct-7",   msg: "cu_rp_gpio::RPGpioMsg"),
 
         (src: "ct-0", dst: "gpio-0", msg: "cu_rp_gpio::RPGpioMsg"),
         (src: "ct-1", dst: "gpio-1", msg: "cu_rp_gpio::RPGpioMsg"),
         (src: "ct-2", dst: "gpio-2", msg: "cu_rp_gpio::RPGpioMsg"),
         (src: "ct-3", dst: "gpio-3", msg: "cu_rp_gpio::RPGpioMsg"),
         (src: "ct-4", dst: "gpio-4", msg: "cu_rp_gpio::RPGpioMsg"),
+        (src: "ct-5", dst: "gpio-5", msg: "cu_rp_gpio::RPGpioMsg"),
+        (src: "ct-6", dst: "gpio-6", msg: "cu_rp_gpio::RPGpioMsg"),
+        (src: "ct-7", dst: "gpio-7", msg: "cu_rp_gpio::RPGpioMsg"),
     ],
 )
