@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::io::Write;
+use copper::clock::RobotClock;
 
 use copper::config::NodeInstanceConfig;
 use copper::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle};
@@ -25,13 +26,13 @@ impl CuTaskLifecycle for SimpleLogger {
         })
     }
 
-    fn start(&mut self) -> CuResult<()> {
+    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
         let log_file = File::create(&self.path).unwrap();
         self.log_file = Some(log_file);
         Ok(())
     }
 
-    fn stop(&mut self) -> CuResult<()> {
+    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
         self.log_file = None;
         Ok(())
     }
@@ -40,7 +41,7 @@ impl CuTaskLifecycle for SimpleLogger {
 impl CuSinkTask for SimpleLogger {
     type Input = ImageMsg;
 
-    fn process(&mut self, input: &CuMsg<Self::Input>) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, input: &mut CuMsg<Self::Input>) -> CuResult<()> {
         let log_file = self.log_file.as_mut().unwrap();
         for line in input.payload.buffer.iter() {
             log_file.write_all(line).unwrap();

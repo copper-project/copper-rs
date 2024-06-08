@@ -4,6 +4,7 @@ use crate::CuResult;
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use copper_clock::RobotClock;
 
 use copper_log::debug;
 
@@ -92,7 +93,7 @@ impl CuTaskLifecycle for MonitoringTask {
         Ok(Self {})
     }
 
-    fn start(&mut self) -> CuResult<()> {
+    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
         println!("Start: Reset counting");
         GLOBAL.reset();
         Ok(())
@@ -102,7 +103,7 @@ impl CuTaskLifecycle for MonitoringTask {
 impl CuSrcTask for MonitoringTask {
     type Output = ();
 
-    fn process(&mut self, _empty_msg: &mut CuMsg<Self::Output>) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, _empty_msg: &mut CuMsg<Self::Output>) -> CuResult<()> {
         Ok(())
     }
 }

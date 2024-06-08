@@ -7,6 +7,7 @@ edition = "2021"
 quanta = "0.12.3"
 bincode = "2.0.0-rc.3"
 bincode_derive = "2.0.0-rc.3"
+serde = { version = "1.0.203", features = ["derive"] }
 
 [dev-dependencies]
 approx = "0.5.1"

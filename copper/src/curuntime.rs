@@ -2,6 +2,7 @@ use crate::copperlist::CuListsManager;
 use crate::config::{CuConfig, NodeId};
 use crate::config::{Node, NodeInstanceConfig};
 use crate::CuResult;
+use crate::clock::RobotClock;
 use petgraph::visit::Walker;
 use petgraph::prelude::*;
 
@@ -10,6 +11,7 @@ use petgraph::prelude::*;
 pub struct CuRuntime<CT, CL: Sized + PartialEq, const NBCL: usize> {
     pub task_instances: CT,
     pub copper_lists: CuListsManager<CL, NBCL>,
+    pub clock: RobotClock,
 }
 
 impl<CT, CL: Sized + PartialEq, const NBCL: usize> CuRuntime<CT, CL, NBCL> {
@@ -26,6 +28,7 @@ impl<CT, CL: Sized + PartialEq, const NBCL: usize> CuRuntime<CT, CL, NBCL> {
         Ok(Self {
             task_instances,
             copper_lists: CuListsManager::new(),
+            clock: RobotClock::default(),
         })
     }
 }

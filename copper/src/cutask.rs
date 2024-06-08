@@ -1,16 +1,15 @@
-use copper_clock::OptionCuTime;
 use serde::{Deserialize, Serialize};
+use copper_clock::RobotClock;
 
 use crate::config::NodeInstanceConfig;
 use crate::CuResult;
+use crate::clock::OptionCuTime;
 
 // Everything that is stateful in copper for zero copy constraints need to be restricted to this trait.
 pub trait CuMsgPayload: Default + Serialize + for<'a> Deserialize<'a> + Sized {}
 
 // Also anything that follows this contract can be a payload (blanket implementation)
 impl<T> CuMsgPayload for T where T: Default + Serialize + for<'a> Deserialize<'a> + Sized {}
-
-const DEFAULT_MAX_RECEIVERS: usize = 2;
 
 #[derive(Debug, PartialEq)]
 pub struct CuMsg<T>
@@ -20,8 +19,8 @@ where
     pub payload: T,
 
     // Runtime statistics
-    pub sent_time: OptionCuTime,
-    pub received_times: [OptionCuTime; DEFAULT_MAX_RECEIVERS],
+    pub before_process: OptionCuTime,
+    pub after_process: OptionCuTime,
 }
 
 impl<T> CuMsg<T>
@@ -31,8 +30,8 @@ where
     pub fn new(payload: T) -> Self {
         CuMsg {
             payload,
-            sent_time: OptionCuTime::none(),
-            received_times: [OptionCuTime::none(); DEFAULT_MAX_RECEIVERS],
+            before_process: OptionCuTime::none(),
+            after_process: OptionCuTime::none(),
         }
     }
 }
@@ -47,26 +46,26 @@ pub trait CuTaskLifecycle {
 
     /// Start is called once for a long period of time.
     /// Here you need to initialize everything your task will need for the duration of its lifetime.
-    fn start(&mut self) -> CuResult<()> {
+    fn start(&mut self, clock: &RobotClock) -> CuResult<()> {
         Ok(())
     }
 
     /// This is a method called by the runtime before "process". This is a kind of best effort,
     /// as soon as possible call to give a chance for the task to do some work before to prepare
     /// to make "process" as short as possible.
-    fn preprocess(&mut self) -> CuResult<()> {
+    fn preprocess(&mut self, clock: &RobotClock) -> CuResult<()> {
         Ok(())
     }
 
     /// This is a method called by the runtime after "process". It is best effort a chance for
     /// the task to update some state after process is out of the way.
     /// It can be use for example to maintain statistics etc. that are not time critical for the robot.
-    fn postprocess(&mut self) -> CuResult<()> {
+    fn postprocess(&mut self, clock: &RobotClock) -> CuResult<()> {
         Ok(())
     }
 
     /// Call at the end of the lifecycle of the task.
-    fn stop(&mut self) -> CuResult<()> {
+    fn stop(&mut self, clock: &RobotClock) -> CuResult<()> {
         Ok(())
     }
 }
@@ -80,7 +79,7 @@ pub trait CuSrcTask: CuTaskLifecycle {
     /// Process is the most critical execution of the task.
     /// The goal will be to produce the output message as soon as possible.
     /// Use preprocess to prepare the task to make this method as short as possible.
-    fn process(&mut self, new_msg: &mut CuMsg<Self::Output>) -> CuResult<()>;
+    fn process(&mut self, clock: &RobotClock, new_msg: &mut CuMsg<Self::Output>) -> CuResult<()>;
 }
 
 /// This is the most generic Task of copper. It is a "transform" task deriving an output from an input.
@@ -93,6 +92,7 @@ pub trait CuTask: CuTaskLifecycle {
     /// Use preprocess to prepare the task to make this method as short as possible.
     fn process(
         &mut self,
+        clock: &RobotClock,
         input: &CuMsg<Self::Input>,
         output: &mut CuMsg<Self::Output>,
     ) -> CuResult<()>;
@@ -105,5 +105,6 @@ pub trait CuSinkTask: CuTaskLifecycle {
     /// Process is the most critical execution of the task.
     /// The goal will be to produce the output message as soon as possible.
     /// Use preprocess to prepare the task to make this method as short as possible.
-    fn process(&mut self, input: &CuMsg<Self::Input>) -> CuResult<()>;
+    /// TODO: Still on the fence for this mutable input but sometimes you want to record one last thing before logging the message.
+    fn process(&mut self, clock: &RobotClock, input: &mut CuMsg<Self::Input>) -> CuResult<()>;
 }
