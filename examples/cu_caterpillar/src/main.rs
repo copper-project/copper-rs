@@ -72,15 +72,22 @@ impl CuTask for CaterpillarTask {
 }
 
 fn main() {
-    let path: PathBuf = PathBuf::from("/tmp/teststructlog.copper");
+    let path: PathBuf = PathBuf::from("/tmp/caterpillar.copper");
     let data_logger = Arc::new(Mutex::new(
         DataLogger::new(path.as_path(), Some(100000)).expect("Failed to create logger"),
     ));
     let stream = stream(data_logger.clone(), DataLogType::StructuredLogLine, 1024);
-    let _ = LoggerRuntime::init(stream);
+    let _needed = LoggerRuntime::init(stream);
     debug!("Application created.");
     let mut application = TheVeryHungryCaterpillar::new().expect("Failed to create runtime.");
-    debug!("Running...");
+    debug!("Running... starting clock: {}.", application.copper_runtime.clock.now());
     application.run(2).expect("Failed to run application.");
     debug!("End of program.");
+}
+
+/// adds a panic handler that logs the panic message
+fn setup_panic_hook() {
+    std::panic::set_hook(Box::new(|info| {
+        debug!("Panic: {}", panic_msg = info.to_string());
+    }));
 }

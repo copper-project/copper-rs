@@ -63,8 +63,6 @@ pub fn debug(input: TokenStream) -> TokenStream {
         }
     });
     let postfix = quote! {
-        // to do add conditional
-        println!("{} {}", msg, &log_entry);
         let r = copper_log_runtime::log(log_entry);
         if let Err(e) = r {
             eprintln!("Warning: Failed to log: {}", e);
