@@ -46,26 +46,26 @@ pub trait CuTaskLifecycle {
 
     /// Start is called once for a long period of time.
     /// Here you need to initialize everything your task will need for the duration of its lifetime.
-    fn start(&mut self, clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
         Ok(())
     }
 
     /// This is a method called by the runtime before "process". This is a kind of best effort,
     /// as soon as possible call to give a chance for the task to do some work before to prepare
     /// to make "process" as short as possible.
-    fn preprocess(&mut self, clock: &RobotClock) -> CuResult<()> {
+    fn preprocess(&mut self, _clock: &RobotClock) -> CuResult<()> {
         Ok(())
     }
 
     /// This is a method called by the runtime after "process". It is best effort a chance for
     /// the task to update some state after process is out of the way.
     /// It can be use for example to maintain statistics etc. that are not time critical for the robot.
-    fn postprocess(&mut self, clock: &RobotClock) -> CuResult<()> {
+    fn postprocess(&mut self, _clock: &RobotClock) -> CuResult<()> {
         Ok(())
     }
 
     /// Call at the end of the lifecycle of the task.
-    fn stop(&mut self, clock: &RobotClock) -> CuResult<()> {
+    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
         Ok(())
     }
 }

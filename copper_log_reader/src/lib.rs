@@ -20,7 +20,11 @@ pub fn full_log_dump(mut src: impl Read, index: &Path) {
         let entry = entry.unwrap();
 
         let result = rebuild_logline(&all_strings, entry);
-        println!("Copper: {}", result);
+        if result.is_err() {
+            println!("Failed to rebuild log line: {:?}", result);
+            continue;
+        }
+        println!("Copper: {}", result.unwrap());
     }
 }
 

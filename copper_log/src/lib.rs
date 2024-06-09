@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use strfmt::strfmt;
 pub use copper_value as value;
 use value::Value;
+use copper_traits::{CuError, CuResult};
 
 #[allow(dead_code)]
 pub const ANONYMOUS: u32 = 0;
@@ -52,7 +53,7 @@ impl CuLogEntry {
 
 /// Rebuild a log line from the interned strings and the CuLogEntry.
 /// This basically translates the world of copper logs to text logs.
-pub fn rebuild_logline(all_interned_strings: &Vec<String>, entry: CuLogEntry) -> String {
+pub fn rebuild_logline(all_interned_strings: &Vec<String>, entry: CuLogEntry) -> CuResult<String> {
     let mut format_string = all_interned_strings[entry.msg_index as usize].clone();
     let mut vars = HashMap::new();
 
@@ -69,7 +70,6 @@ pub fn rebuild_logline(all_interned_strings: &Vec<String>, entry: CuLogEntry) ->
     }
 
     // Use strfmt to replace named parameters
-    let result = strfmt(&format_string, &vars).unwrap();
-    result
+    strfmt(&format_string, &vars).map_err(|e| CuError::new_with_cause(format!("Failed to format log line: {:?} with {:?}", format_string, vars).as_str(), e))
 }
 

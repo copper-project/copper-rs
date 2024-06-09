@@ -2,7 +2,7 @@ mod index;
 
 extern crate proc_macro;
 
-use crate::index::{intern_string, record_callsite};
+use crate::index::intern_string;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse::Parser;
@@ -17,7 +17,7 @@ pub fn debug(input: TokenStream) -> TokenStream {
     let mut exprs_iter = exprs.iter();
 
     let msg_expr = exprs_iter.next().expect("Expected at least one expression");
-    let (index, msg) = if let Expr::Lit(ExprLit {
+    let (index, _msg) = if let Expr::Lit(ExprLit {
         lit: Lit::Str(msg), ..
     }) = msg_expr
     {
@@ -32,7 +32,7 @@ pub fn debug(input: TokenStream) -> TokenStream {
         use copper_log::value::to_value;
         use copper_log::CuLogEntry;
         use copper_log::ANONYMOUS;
-        let msg = #msg;
+        // let msg = #msg;
         let mut log_entry = CuLogEntry::new(#index);
     };
 

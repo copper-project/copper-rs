@@ -1,13 +1,16 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::thread::sleep;
+use std::time::Duration;
 use copper::cutask::{CuMsg, CuSrcTask, CuTask, CuTaskLifecycle};
 use copper::{CuResult, DataLogType};
 use copper_derive::copper_runtime;
 use copper_log_derive::debug;
 use serde::{Deserialize, Serialize};
+use simplelog::{ColorChoice, Config, LevelFilter, TerminalMode, TermLogger};
 use copper::clock::{OptionCuTime, RobotClock};
 use copper_datalogger::{DataLogger, stream};
-use copper_log_runtime::LoggerRuntime;
+use copper_log_runtime::{ExtraTextLogger, LoggerRuntime};
 use cu_rp_gpio::RPGpioMsg;
 
 #[copper_runtime(config = "copperconfig.ron")]
@@ -77,17 +80,16 @@ fn main() {
         DataLogger::new(path.as_path(), Some(100000)).expect("Failed to create logger"),
     ));
     let stream = stream(data_logger.clone(), DataLogType::StructuredLogLine, 1024);
-    let _needed = LoggerRuntime::init(stream);
+
+    //
+    let slow_text_logger = TermLogger::new(LevelFilter::Debug, Config::default(), TerminalMode::Mixed, ColorChoice::Auto);
+    let extra: ExtraTextLogger = ExtraTextLogger::new("/home/gbin/projects/copper/copper-project/target/debug/copper_log_index".into(), slow_text_logger);
+    let _needed = LoggerRuntime::init(stream, Some(extra));
     debug!("Application created.");
     let mut application = TheVeryHungryCaterpillar::new().expect("Failed to create runtime.");
     debug!("Running... starting clock: {}.", application.copper_runtime.clock.now());
     application.run(2).expect("Failed to run application.");
     debug!("End of program.");
+    sleep(Duration::from_secs(1));
 }
 
-/// adds a panic handler that logs the panic message
-fn setup_panic_hook() {
-    std::panic::set_hook(Box::new(|info| {
-        debug!("Panic: {}", panic_msg = info.to_string());
-    }));
-}
