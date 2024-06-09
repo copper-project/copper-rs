@@ -17,6 +17,7 @@ static QUEUE: OnceCell<Sender<CuLogEntry>> = OnceCell::new();
 pub struct LoggerRuntime {}
 
 impl LoggerRuntime {
+    /// destination is the binary stream in which we will log the structured log.
     pub fn init(destination: impl Stream + 'static) -> Self {
         QUEUE
             .set(initialize_queue(destination))
@@ -70,7 +71,7 @@ pub fn log(entry: CuLogEntry) -> CuResult<()> {
     if let Some(queue) = QUEUE.get() {
         queue
             .send(entry)
-            .map_err(|_| "Failed to send data to the logger.".into())
+            .map_err(|_| "Failed to send data to the logger, did you hold the reference to the logger long enough?".into())
     } else {
         Err("Logger not initialized.".into())
     }

@@ -141,6 +141,7 @@ impl Into<OptionCuTime> for CuTime {
 }
 
 /// A running Robot clock.
+#[derive(Clone, Debug)]
 pub struct RobotClock {
     inner: Clock,
     ref_time: Instant,

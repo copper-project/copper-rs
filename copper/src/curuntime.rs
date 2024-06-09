@@ -6,12 +6,23 @@ use crate::clock::RobotClock;
 use petgraph::visit::Walker;
 use petgraph::prelude::*;
 
+/// Simple trait to get the clock from the runtime externally
+pub trait ClockProvider {
+    fn get_clock(&self) -> RobotClock;
+}
+
 // CT is a tuple of all the tasks
 // CL is the type of the copper list
 pub struct CuRuntime<CT, CL: Sized + PartialEq, const NBCL: usize> {
     pub task_instances: CT,
     pub copper_lists: CuListsManager<CL, NBCL>,
     pub clock: RobotClock,
+}
+
+impl<CT, CL: Sized + PartialEq, const NBCL: usize> ClockProvider for CuRuntime<CT, CL, NBCL> {
+    fn get_clock(&self) -> RobotClock {
+        self.clock.clone()
+    }
 }
 
 impl<CT, CL: Sized + PartialEq, const NBCL: usize> CuRuntime<CT, CL, NBCL> {
