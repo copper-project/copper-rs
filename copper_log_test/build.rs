@@ -1,5 +1,4 @@
 use std::env;
-use std::path::Path;
 
 const INDEX_DIR_NAME: &str = "copper_log_index";
 
