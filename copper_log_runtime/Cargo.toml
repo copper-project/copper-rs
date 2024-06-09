@@ -4,13 +4,22 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-copper-value = { path = "../copper_value" }
+copper-log = { path = "../copper_log" }
 copper-traits = { path = "../copper_traits" }
 serde = { version = "1.0.202", features = ["derive"] }
-bincode = { version = "2.0.0-rc.3", features = ["serde"] }
-bincode_derive = "2.0.0-rc.3"
 pretty-hex = "0.4.1"
 ctor = "0.2.8"
 ctrlc = { version = "3.4.4", features = ["termination"] }
 kanal = { version = "0.1.0-pre8" }
 once_cell = "1.19.0"
+simplelog = "0.12.2"
+
+[dev-dependencies]
+bincode = "2.0.0-rc.3"
+
+[dependencies.copper-log-reader]
+path = "../copper_log_reader"
+optional = true
+
+[features]
+realtime-logging = ["copper-log-reader"]

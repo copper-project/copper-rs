@@ -6,7 +6,7 @@ use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use copper_clock::RobotClock;
 
-use copper_log::debug;
+use copper_log_derive::debug;
 
 #[global_allocator]
 pub static GLOBAL: CountingAllocator = CountingAllocator::new();

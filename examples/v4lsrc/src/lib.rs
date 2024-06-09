@@ -129,14 +129,15 @@ mod tests {
         let mut memory: Vec<u8> = vec![0; size_of_image_msg];
         let ptr = memory.as_mut_ptr() as *mut CuMsg<ImageMsg>;
         let msg = unsafe { &mut *ptr };
+        let clock = RobotClock::default();
 
         println!("Start");
-        task.start()?;
+        task.start(&clock)?;
         println!("Process");
-        task.process(msg)?;
+        task.process(&clock, msg)?;
         println!("First byte: {}", msg.payload.buffer[0][0]);
         println!("Stop");
-        task.stop()?;
+        task.stop(&clock)?;
         Ok(())
     }
 }

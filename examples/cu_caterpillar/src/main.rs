@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use copper::cutask::{CuMsg, CuSrcTask, CuTask, CuTaskLifecycle};
 use copper::{CuResult, DataLogType};
 use copper_derive::copper_runtime;
-use copper_log::debug;
+use copper_log_derive::debug;
 use serde::{Deserialize, Serialize};
 use copper::clock::{OptionCuTime, RobotClock};
 use copper_datalogger::{DataLogger, stream};
@@ -76,8 +76,8 @@ fn main() {
     let data_logger = Arc::new(Mutex::new(
         DataLogger::new(path.as_path(), Some(100000)).expect("Failed to create logger"),
     ));
-    let mut stream = stream(data_logger.clone(), DataLogType::StructuredLogLine, 1024);
-    let rt = LoggerRuntime::init(stream);
+    let stream = stream(data_logger.clone(), DataLogType::StructuredLogLine, 1024);
+    let _ = LoggerRuntime::init(stream);
     debug!("Application created.");
     let mut application = TheVeryHungryCaterpillar::new().expect("Failed to create runtime.");
     debug!("Running...");

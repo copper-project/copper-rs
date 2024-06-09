@@ -1,5 +1,5 @@
 use copper_derive::copper_runtime;
-use copper_log::debug;
+use copper_log_derive::debug;
 
 #[copper_runtime(config = "copperconfig.ron")]
 struct MyApplication {}

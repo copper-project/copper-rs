@@ -1,6 +1,6 @@
 use copper::DataLogType;
 use copper_datalogger::{stream, DataLogger};
-use copper_log::debug;
+use copper_log_derive::debug;
 use copper_log_runtime::LoggerRuntime;
 use serde::Serialize;
 use std::path::PathBuf;

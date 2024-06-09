@@ -1,7 +1,6 @@
-use bincode_derive::{Decode, Encode};
 use copper_traits::{CuResult, Stream};
-pub use copper_value as value;
-use copper_value::Value;
+use copper_log::CuLogEntry;
+use copper_log::value::Value;
 use kanal::{bounded, Sender};
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
@@ -13,43 +12,10 @@ use std::thread;
 // The logging system is basically a global queue.
 static QUEUE: OnceCell<Sender<CuLogEntry>> = OnceCell::new();
 
-#[allow(dead_code)]
-pub const ANONYMOUS: u32 = 0;
 
 /// The lifetime of this struct is the lifetime of the logger.
 pub struct LoggerRuntime {}
 
-#[derive(Debug, Encode, Decode, Serialize, Deserialize, PartialEq)]
-pub struct CuLogEntry {
-    pub msg_index: u32,
-    pub paramname_indexes: Vec<u32>,
-    pub params: Vec<Value>,
-}
-
-impl Display for CuLogEntry {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "CuLogEntry {{ msg_index: {}, paramname_indexes: {:?}, params: {:?} }}",
-            self.msg_index, self.paramname_indexes, self.params
-        )
-    }
-}
-
-impl CuLogEntry {
-    pub fn new(msg_index: u32) -> Self {
-        CuLogEntry {
-            msg_index,
-            paramname_indexes: Vec::new(),
-            params: Vec::new(),
-        }
-    }
-
-    pub fn add_param(&mut self, paramname_index: u32, param: Value) {
-        self.paramname_indexes.push(paramname_index);
-        self.params.push(param);
-    }
-}
 impl LoggerRuntime {
     pub fn init(destination: impl Stream + 'static) -> Self {
         QUEUE
@@ -115,7 +81,7 @@ mod tests {
     use super::*;
     use crate::CuLogEntry;
     use bincode::config::standard;
-    use copper_value::Value;
+    use copper_log::value::Value;
 
     #[test]
     fn test_encode_decode_structured_log() {

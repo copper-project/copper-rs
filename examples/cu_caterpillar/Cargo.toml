@@ -7,6 +7,7 @@ edition = "2021"
 copper-derive = { path = "../../copper_derive" }
 copper = { path = "../../copper" }
 copper-log = { path = "../../copper_log" }
+copper-log-derive = { path = "../../copper_log_derive" }
 copper-log-runtime = { path = "../../copper_log_runtime" }
 copper-datalogger = { path = "../../copper_datalogger" }
 cu-rp-gpio = { path = "../cu_rp_gpio" }
