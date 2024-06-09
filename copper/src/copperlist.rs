@@ -7,10 +7,12 @@ const MAX_TASKS: usize = 512;
 
 #[derive(Debug)]
 struct CopperLiskMask {
+    #[allow(dead_code)]
     mask: [u128; MAX_TASKS / 128 + 1],
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 enum CopperListState {
     Free,
     ProcessingTasks(CopperLiskMask),
@@ -20,6 +22,7 @@ enum CopperListState {
 /// This structure maintains the entire memory needed by Copper for one process for the inter task communication.
 #[derive(Debug)]
 pub struct CuListsManager<T: Sized + PartialEq, const N: usize> {
+    #[allow(dead_code)]
     copper_list_states: [CopperListState; N],
     data: Box<[T; N]>,
     length: usize,

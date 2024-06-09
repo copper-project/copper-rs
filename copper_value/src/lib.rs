@@ -63,7 +63,7 @@ impl Display for Value {
                 Some(v) => write!(f, "Some({})", v),
                 None => write!(f, "None"),
             },
-            Value::Newtype(v) => write!(f, "Newtype({})", v),
+            Value::Newtype(v) => write!(f, "{}", v),
             Value::Seq(v) => {
                 write!(f, "[")?;
                 for (i, v) in v.iter().enumerate() {

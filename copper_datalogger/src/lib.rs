@@ -3,7 +3,7 @@ use libc;
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::io::Read;
-use std::io::{BufReader, Seek};
+use std::io::BufReader;
 use std::path::Path;
 use std::slice::from_raw_parts_mut;
 use std::sync::{Arc, Mutex};
@@ -11,7 +11,6 @@ use std::sync::{Arc, Mutex};
 use memmap2::{MmapMut, RemapOptions};
 
 use bincode::config::standard;
-use bincode::de::read::Reader;
 use bincode::encode_into_slice;
 use bincode::error::EncodeError;
 use bincode::Encode;
@@ -236,11 +235,13 @@ impl DataLogger {
         user_buffer
     }
 
+    #[allow(dead_code)]
     #[inline]
     fn allocated_len(&self) -> usize {
         self.mmap_buffer.len()
     }
 
+    #[allow(dead_code)]
     #[inline]
     fn used(&self) -> usize {
         self.current_global_position
@@ -304,8 +305,8 @@ pub fn read_datalogger(
     }
 
     let main_header: MainHeader;
-    let read: usize;
-    (main_header, read) =
+    let _read: usize;
+    (main_header, _read) =
         decode_from_slice(&header[..], standard()).expect("Failed to decode main header");
 
     if main_header.magic != MAIN_MAGIC {

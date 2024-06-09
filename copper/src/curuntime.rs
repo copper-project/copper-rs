@@ -3,7 +3,6 @@ use crate::config::{CuConfig, NodeId};
 use crate::config::{Node, NodeInstanceConfig};
 use crate::CuResult;
 use crate::clock::RobotClock;
-use petgraph::visit::Walker;
 use petgraph::prelude::*;
 
 /// Simple trait to get the clock from the runtime externally

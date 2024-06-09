@@ -1,12 +1,5 @@
-use crate::config::NodeInstanceConfig;
-use crate::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle};
-use crate::CuResult;
-
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use copper_clock::RobotClock;
-
-use copper_log_derive::debug;
 
 #[global_allocator]
 pub static GLOBAL: CountingAllocator = CountingAllocator::new();
@@ -69,41 +62,14 @@ impl ScopedAllocCounter {
 
 impl Drop for ScopedAllocCounter {
     fn drop(&mut self) {
-        let allocated = GLOBAL.get_allocated() - self.bf_allocated;
-        let deallocated = GLOBAL.get_deallocated() - self.bf_deallocated;
-        debug!(
-            "Allocations: +{}B -{}B",
-            allocated = allocated,
-            deallocated = deallocated,
-        );
+        let _allocated = GLOBAL.get_allocated() - self.bf_allocated;
+        let _deallocated = GLOBAL.get_deallocated() - self.bf_deallocated;
+        // TODO(gbin): Fix this when the logger is ready.
+        // debug!(
+        //     "Allocations: +{}B -{}B",
+        //     allocated = allocated,
+        //     deallocated = deallocated,
+        // );
     }
 }
 
-pub struct MonitoringTask {}
-
-impl CuTaskLifecycle for MonitoringTask {
-    fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self>
-    where
-        Self: Sized,
-    {
-        let allocated = GLOBAL.get_allocated();
-        let deallocated = GLOBAL.get_deallocated();
-        println!("New: Allocated: {} bytes", allocated);
-        println!("New: Deallocated: {} bytes", deallocated);
-        Ok(Self {})
-    }
-
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
-        println!("Start: Reset counting");
-        GLOBAL.reset();
-        Ok(())
-    }
-}
-
-impl CuSrcTask for MonitoringTask {
-    type Output = ();
-
-    fn process(&mut self, _clock: &RobotClock, _empty_msg: &mut CuMsg<Self::Output>) -> CuResult<()> {
-        Ok(())
-    }
-}

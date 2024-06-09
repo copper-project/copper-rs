@@ -32,22 +32,24 @@ lazy_static! {
     static ref RKV: Mutex<Rkv<LmdbEnvironment>> = {
         let outdir = std::env::var("OUT_DIR").expect("no OUT_DIR set, build.rs must be broken");
         let outdir_path = Path::new(&outdir);
-        let path = outdir_path.join(INDEX_DIR_NAME);
-        if !path.exists() {
-            fs::create_dir_all(&path).unwrap();
-        }
-        let target_dir_link = parent_n_times(&outdir_path, 3)
+        let target_dir = parent_n_times(&outdir_path, 3)
             .unwrap()
             .join(INDEX_DIR_NAME);
+
+        // Should never happen I believe.
+        if !target_dir.exists() {
+            fs::create_dir_all(&target_dir).unwrap();
+        }
+
         build_log!(
             "=================================================================================="
         );
-        build_log!("Path to interned strings storage: {:?}", target_dir_link);
+        build_log!("Interned strings are stored in: {:?}", target_dir);
         build_log!("   [r] is reused index and [n] is new index.");
         build_log!(
             "=================================================================================="
         );
-        let env = Rkv::new::<Lmdb>(&path).unwrap();
+        let env = Rkv::new::<Lmdb>(&target_dir).unwrap();
         Mutex::new(env)
     };
     static ref DBS: Mutex<(SStore, SStore, SStore, MStore)> = {
@@ -100,6 +102,7 @@ pub fn intern_string(s: &str) -> Option<IndexType> {
     index
 }
 
+#[allow(dead_code)]
 pub fn record_callsite(filename: &str, line_number: u32) -> Option<IndexType> {
     intern_string(format!("{}:{}", filename, line_number).as_str())
 }

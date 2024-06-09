@@ -7,7 +7,7 @@ use syn::meta::parser;
 use syn::Fields::{Named, Unnamed};
 use syn::{parse_macro_input, parse_quote, parse_str, Field, ItemStruct, LitStr, Type, TypeTuple};
 
-use copper::config::{Node, NodeId, read_configuration};
+use copper::config::read_configuration;
 use copper::config::CuConfig;
 use copper::curuntime::{compute_runtime_plan, CuExecutionStep, CuTaskType};
 use format::{highlight_rust_code, rustfmt_generated_code};
@@ -265,29 +265,3 @@ fn extract_tasks_types(copper_config: &CuConfig) -> (Vec<String>, Vec<Type>) {
     (all_types_names, all_types)
 }
 
-/// Extract all the messages types in their index order
-fn extract_msgs_types(copper_config: &CuConfig) -> (Vec<String>, Vec<Type>) {
-    let all_edges = copper_config.get_all_edges();
-    println!("Nb of edges: {:?}", all_edges.len());
-
-    let all_types_names: Vec<String> = all_edges
-        .iter()
-        .map(|edge| {
-            let (_, _, type_name) = edge;
-            type_name.clone()
-        })
-        .collect();
-    println!("extract_msgs_types: all_types names: {:?}", all_types_names);
-
-    // Transform them as Rust types
-    let all_types: Vec<Type> = all_types_names
-        .iter()
-        .map(|name| {
-            parse_str(name)
-                .expect(format!("Could not transform {} into a Msg Rust type.", name).as_str())
-        })
-        .collect();
-
-    println!("extract_msgs_types: {} types extracted", all_types.len());
-    (all_types_names, all_types)
-}

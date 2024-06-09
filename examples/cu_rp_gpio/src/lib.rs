@@ -1,9 +1,9 @@
-use std::thread::sleep;
 use copper::config::NodeInstanceConfig;
 use copper::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle};
-use copper::{CuError, CuResult};
+use copper::CuResult;
+use copper_log_derive::debug;
 
-use rppal::gpio::{Gpio, Level, OutputPin};
+use rppal::gpio::{Gpio, Level};
 use lazy_static::lazy_static;
 
 lazy_static! {
@@ -85,7 +85,7 @@ impl CuSinkTask for RPGpio {
         #[cfg(target_arch = "arm")]
         self.pin.write(msg.payload.into());
         #[cfg(target_arch = "x86_64")]
-        println!("Would write to pin {} the value {}. Creation to Actuation: {}", self.pin, msg.payload.on, msg.payload.actuation.unwrap() - msg.payload.creation.unwrap());
+        debug!("Would write to pin {} the value {}. Creation to Actuation: {}", self.pin, msg.payload.on, msg.payload.actuation.unwrap() - msg.payload.creation.unwrap());
 
         Ok(())
     }

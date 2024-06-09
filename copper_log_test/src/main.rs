@@ -12,7 +12,7 @@ fn main() {
         DataLogger::new(path.as_path(), Some(100000)).expect("Failed to create logger"),
     ));
     let mut stream = stream(data_logger.clone(), DataLogType::StructuredLogLine, 1024);
-    let rt = LoggerRuntime::init(stream);
+    let rt = LoggerRuntime::init(stream, None);
     #[derive(Serialize)]
     struct Test {
         a: i32,
