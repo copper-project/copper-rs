@@ -1,86 +1,75 @@
-mod index;
+use std::collections::HashMap;
+use std::fmt::Display;
+use bincode_derive::{Decode, Encode};
+use serde::{Deserialize, Serialize};
+use strfmt::strfmt;
+pub use copper_value as value;
+use value::Value;
 
-extern crate proc_macro;
+#[allow(dead_code)]
+pub const ANONYMOUS: u32 = 0;
 
-use crate::index::{intern_string, record_callsite};
-use proc_macro::TokenStream;
-use quote::quote;
-use syn::parse::Parser;
-use syn::Token;
-use syn::{Expr, ExprAssign, ExprLit, Lit};
+/// This is the basic structure for a log entry in Copper.
+#[derive(Debug, Encode, Decode, Serialize, Deserialize, PartialEq)]
+pub struct CuLogEntry {
+    // interned index of the message
+    pub msg_index: u32,
+    // interned indexes of the parameter names
+    pub paramname_indexes: Vec<u32>,
+    // Serializable values for the parameters (Values are acting like an Any Value).
+    pub params: Vec<Value>,
+}
 
-#[proc_macro]
-pub fn debug(input: TokenStream) -> TokenStream {
-    let parser = syn::punctuated::Punctuated::<Expr, Token![,]>::parse_terminated;
-    let exprs = parser.parse(input).expect("Failed to parse input");
+// This is for internal debug purposes.
+impl Display for CuLogEntry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "CuLogEntry {{ msg_index: {}, paramname_indexes: {:?}, params: {:?} }}",
+            self.msg_index, self.paramname_indexes, self.params
+        )
+    }
+}
 
-    let mut exprs_iter = exprs.iter();
-
-    let msg_expr = exprs_iter.next().expect("Expected at least one expression");
-    let (index, msg) = if let Expr::Lit(ExprLit {
-        lit: Lit::Str(msg), ..
-    }) = msg_expr
-    {
-        let msg = msg.value();
-        let index = intern_string(&msg).expect("Failed to insert log string.");
-        (index, msg)
-    } else {
-        panic!("The first parameter of the argument needs to be a string literal.");
-    };
-    let prefix = quote! {
-        use copper_log_runtime::value::Value;
-        use copper_log_runtime::value::to_value;
-        use copper_log_runtime::CuLogEntry;
-        use copper_log_runtime::ANONYMOUS;
-        let msg = #msg;
-        let mut log_entry = CuLogEntry::new(#index);
-    };
-
-    let mut unnamed_params = vec![];
-    let mut named_params = vec![];
-
-    for expr in exprs_iter {
-        if let Expr::Assign(ExprAssign { left, right, .. }) = expr {
-            named_params.push((left, right));
-        } else {
-            unnamed_params.push(expr);
+impl CuLogEntry {
+    /// msg_index is the interned index of the message.
+    pub fn new(msg_index: u32) -> Self {
+        CuLogEntry {
+            msg_index,
+            paramname_indexes: Vec::new(),
+            params: Vec::new(),
         }
     }
 
-    let unnamed_prints = unnamed_params.iter().map(|value| {
-        quote! {
-            let param = to_value(#value).expect("Failed to convert a parameter to a Value");
-            log_entry.add_param(ANONYMOUS, param);
-        }
-    });
-
-    let named_prints = named_params.iter().map(|(name, value)| {
-        let index = intern_string(quote!(#name).to_string().as_str())
-            .expect("Failed to insert log string.");
-        quote! {
-            let param = to_value(#value).expect("Failed to convert a parameter to a Value");
-            log_entry.add_param(#index, param);
-        }
-    });
-    let postfix = quote! {
-        // to do add conditional
-        println!("{} {}", msg, &log_entry);
-        let r = copper_log_runtime::log(log_entry);
-        if let Err(e) = r {
-            eprintln!("Warning: Failed to log: {}", e);
-            let backtrace = std::backtrace::Backtrace::capture();
-            eprintln!("{:?}", backtrace);
-        }
-    };
-
-    let expanded = quote! {
-        {
-            #prefix
-            #(#unnamed_prints)*
-            #(#named_prints)*
-            #postfix
-        }
-    };
-
-    expanded.into()
+    /// Add a parameter to the log entry.
+    /// paramname_index is the interned index of the parameter name.
+    pub fn add_param(&mut self, paramname_index: u32, param: Value) {
+        self.paramname_indexes.push(paramname_index);
+        self.params.push(param);
+    }
 }
+
+
+/// Rebuild a log line from the interned strings and the CuLogEntry.
+/// This basically translates the world of copper logs to text logs.
+pub fn rebuild_logline(all_interned_strings: &Vec<String>, entry: CuLogEntry) -> String {
+    let mut format_string = all_interned_strings[entry.msg_index as usize].clone();
+    let mut vars = HashMap::new();
+
+    for (i, param) in entry.params.iter().enumerate() {
+        let param_as_string = format!("{}", param);
+        if entry.paramname_indexes[i] == 0 {
+            // Anonymous parameter
+            format_string = format_string.replacen("{}", &param_as_string, 1);
+        } else {
+            // Named parameter
+            let name = all_interned_strings[entry.paramname_indexes[i] as usize].clone();
+            vars.insert(name, param_as_string);
+        }
+    }
+
+    // Use strfmt to replace named parameters
+    let result = strfmt(&format_string, &vars).unwrap();
+    result
+}
+

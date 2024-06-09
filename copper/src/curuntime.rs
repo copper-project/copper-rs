@@ -130,6 +130,7 @@ mod tests {
     use crate::config::Node;
     use crate::cutask::{CuMsg, CuSrcTask};
     use crate::cutask::{CuSinkTask, CuTaskLifecycle};
+    use crate::clock::RobotClock;
     pub struct TestSource {}
 
     impl CuTaskLifecycle for TestSource {
@@ -143,7 +144,7 @@ mod tests {
 
     impl CuSrcTask for TestSource {
         type Output = ();
-        fn process(&mut self, _empty_msg: &mut CuMsg<Self::Output>) -> CuResult<()> {
+        fn process(&mut self, clock: &RobotClock, _empty_msg: &mut CuMsg<Self::Output>) -> CuResult<()> {
             Ok(())
         }
     }
@@ -162,7 +163,7 @@ mod tests {
     impl CuSinkTask for TestSink {
         type Input = ();
 
-        fn process(&mut self, _input: &CuMsg<Self::Input>) -> CuResult<()> {
+        fn process(&mut self, clock: &RobotClock, _input: &mut CuMsg<Self::Input>) -> CuResult<()> {
             Ok(())
         }
     }

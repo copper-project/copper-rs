@@ -1,0 +1,19 @@
+[package]
+name = "copper-log-derive"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "copper_log_derive"
+path = "src/lib.rs"
+proc-macro = true
+
+[dependencies]
+proc-macro2 = { version = "1.0.83" }
+quote = "1.0.36"
+syn = { version = "2.0.65", features = ["full"] }
+rkv = { version = "0.19.0", features = ["lmdb"] }
+lazy_static = { version = "1.4.0" }
+bincode_derive = "2.0.0-rc.3"
+bincode = "2.0.0-rc.3"
+copper-log = { path = "../copper_log" }

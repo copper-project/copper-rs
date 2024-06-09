@@ -1,17 +1,34 @@
 use bincode::config::standard;
 use bincode::decode_from_std_read;
 use byteorder::{ByteOrder, LittleEndian};
-use copper_log_runtime::CuLogEntry;
+use copper_log::{CuLogEntry, rebuild_logline};
 use rkv::backend::Lmdb;
-use rkv::{Rkv, StoreOptions, Writer};
-use std::collections::HashMap;
+use rkv::{Rkv, StoreOptions};
 use std::io::Read;
 use std::path::Path;
-use strfmt::strfmt;
 
-pub fn extract_copper_log_with_index(mut src: impl Read, index: &Path) {
+/// Full dump of the copper structured log from its binary representation.
+/// src: the source of the log data
+/// index: the path to the index file (containing the interned strings constructed at build time)
+pub fn full_log_dump(mut src: impl Read, index: &Path) {
+    let all_strings = read_interned_strings(index);
+    loop {
+        let entry = decode_from_std_read::<CuLogEntry, _, _>(&mut src, standard());
+        if entry.is_err() {
+            break;
+        }
+        let entry = entry.unwrap();
+
+        let result = rebuild_logline(&all_strings, entry);
+        println!("Copper: {}", result);
+    }
+}
+
+
+/// Rebuild the interned string index in memory.
+pub fn read_interned_strings(index: &Path) -> Vec<String> {
     let mut all_strings = Vec::<String>::new();
-    let env = Rkv::new::<Lmdb>(&index).unwrap();
+    let env = Rkv::new::<Lmdb>(index).unwrap();
     let index_to_string = env
         .open_single("index_to_string", StoreOptions::default())
         .expect("Failed to open index_to_string store");
@@ -31,31 +48,7 @@ pub fn extract_copper_log_with_index(mut src: impl Read, index: &Path) {
             println!("{} -> {}", index, s);
         }
     }
-    loop {
-        let entry = decode_from_std_read::<CuLogEntry, _, _>(&mut src, standard());
-        if entry.is_err() {
-            break;
-        }
-        let entry = entry.unwrap();
-        let mut format_string = all_strings[entry.msg_index as usize].clone();
-        let mut vars = HashMap::new();
-
-        for (i, param) in entry.params.iter().enumerate() {
-            let param_as_string = format!("{}", param);
-            if entry.paramname_indexes[i] == 0 {
-                // Anonymous parameter
-                format_string = format_string.replacen("{}", &param_as_string, 1);
-            } else {
-                // Named parameter
-                let name = all_strings[entry.paramname_indexes[i] as usize].clone();
-                vars.insert(name, param_as_string);
-            }
-        }
-
-        // Use strfmt to replace named parameters
-        let result = strfmt(&format_string, &vars).unwrap();
-        println!("Copper: {}", result);
-    }
+    all_strings
 }
 
 #[cfg(test)]
@@ -73,6 +66,6 @@ mod tests {
             .collect();
 
         let reader = Cursor::new(bytes.as_slice());
-        extract_copper_log_with_index(reader, Path::new("test/copper_log_index"));
+        full_log_dump(reader, Path::new("test/copper_log_index"));
     }
 }
