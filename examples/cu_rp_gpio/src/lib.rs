@@ -1,9 +1,11 @@
 use copper::config::NodeInstanceConfig;
 use copper::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle};
-use copper::CuResult;
+use copper::{CuResult, CuError};
 use copper_log_derive::debug;
 
-use rppal::gpio::{Gpio, Level};
+#[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
+use rppal::gpio::{Gpio, Level, OutputPin};
+
 use lazy_static::lazy_static;
 
 lazy_static! {
@@ -14,7 +16,7 @@ lazy_static! {
 /// The config takes one config value: `pin` which is the pin you want to address
 /// Gpio uses BCM pin numbering. For example: BCM GPIO 23 is tied to physical pin 16.
 pub struct RPGpio {
-    #[cfg(target_arch = "arm")]
+    #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
     pin: OutputPin,
     #[cfg(target_arch = "x86_64")]
     pin: u8,
@@ -67,7 +69,7 @@ impl CuTaskLifecycle for RPGpio {
         .clone()
         .into();
 
-        #[cfg(target_arch = "arm")]
+        #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
         let pin = GPIO.get(pin_nb)
             .map_err(|e| CuError::new_with_cause("Could not get pin", e))?
             .into_output();
@@ -82,7 +84,7 @@ impl CuSinkTask for RPGpio {
 
     fn process(&mut self, clock: &copper::clock::RobotClock, msg: &mut CuMsg<Self::Input>) -> CuResult<()> {
         msg.payload.actuation = clock.now().into();
-        #[cfg(target_arch = "arm")]
+        #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
         self.pin.write(msg.payload.into());
         #[cfg(target_arch = "x86_64")]
         debug!("Would write to pin {} the value {}. Creation to Actuation: {}", self.pin, msg.payload.on, msg.payload.actuation.unwrap() - msg.payload.creation.unwrap());
