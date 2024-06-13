@@ -13,7 +13,7 @@ extern crate approx;
 /// For Robot times, the underlying type is a u64 representing nanoseconds.
 /// It is always positive to simplify the reasoning on the user side.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct CuDuration(u64);
+pub struct CuDuration(pub u64);
 
 /// bridge the API with standard Durations.
 impl From<Duration> for CuDuration {
@@ -60,17 +60,17 @@ impl Display for CuDuration {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let nanos = self.0;
         if nanos >= 86_400_000_000_000 {
-            write!(f, "{:.2} d", nanos as f64 / 86_400_000_000_000.0)
+            write!(f, "{:.3} d", nanos as f64 / 86_400_000_000_000.0)
         } else if nanos >= 3_600_000_000_000 {
-            write!(f, "{:.2} h", nanos as f64 / 3_600_000_000_000.0)
+            write!(f, "{:.3} h", nanos as f64 / 3_600_000_000_000.0)
         } else if nanos >= 60_000_000_000 {
-            write!(f, "{:.2} m", nanos as f64 / 60_000_000_000.0)
+            write!(f, "{:.3} m", nanos as f64 / 60_000_000_000.0)
         } else if nanos >= 1_000_000_000 {
-            write!(f, "{:.2} s", nanos as f64 / 1_000_000_000.0)
+            write!(f, "{:.3} s", nanos as f64 / 1_000_000_000.0)
         } else if nanos >= 1_000_000 {
-            write!(f, "{:.2} ms", nanos as f64 / 1_000_000.0)
+            write!(f, "{:.3} ms", nanos as f64 / 1_000_000.0)
         } else if nanos >= 1_000 {
-            write!(f, "{:.2} µs", nanos as f64 / 1_000.0)
+            write!(f, "{:.3} µs", nanos as f64 / 1_000.0)
         } else {
             write!(f, "{} ns", nanos)
         }
