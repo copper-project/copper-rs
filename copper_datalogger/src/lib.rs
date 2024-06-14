@@ -1,14 +1,15 @@
 use libc;
+use std::fmt::Write;
 
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::io::BufReader;
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::slice::from_raw_parts_mut;
 use std::sync::{Arc, Mutex};
 
-use memmap2::{MmapMut, RemapOptions};
+use memmap2::{Mmap, MmapMut, RemapOptions};
 
 use bincode::config::standard;
 use bincode::encode_into_slice;
@@ -39,7 +40,7 @@ struct SectionHeader {
 
 struct MmapStream {
     entry_type: DataLogType,
-    parent_logger: Arc<Mutex<DataLogger>>,
+    parent_logger: Arc<Mutex<DataLoggerWrite>>,
     current_slice: &'static mut [u8],
     current_position: usize,
     minimum_allocation_amount: usize,
@@ -48,7 +49,7 @@ struct MmapStream {
 impl MmapStream {
     fn new(
         entry_type: DataLogType,
-        parent_logger: Arc<Mutex<DataLogger>>,
+        parent_logger: Arc<Mutex<DataLoggerWrite>>,
         current_slice: &'static mut [u8],
         minimum_allocation_amount: usize,
     ) -> Self {
@@ -106,25 +107,143 @@ impl Drop for MmapStream {
 }
 
 pub fn stream(
-    logger: Arc<Mutex<DataLogger>>,
+    logger: Arc<Mutex<DataLoggerWrite>>,
     entry_type: DataLogType,
     minimum_allocation_amount: usize,
 ) -> impl Stream {
-    let clone = logger.clone();
+    let aclone = logger.clone();
     let mut logger = logger.lock().unwrap();
     let underlying_slice = logger.add_section(entry_type, minimum_allocation_amount);
-    MmapStream::new(
+    return MmapStream::new(
         entry_type,
-        clone,
+        aclone,
         // here we have the guarantee for exclusive access to that memory, the borrow checker cannot understand that ever.
         unsafe { from_raw_parts_mut(underlying_slice.as_mut_ptr(), underlying_slice.len()) },
         minimum_allocation_amount,
-    )
+    );
 }
 
 const DEFAULT_LOGGER_SIZE: usize = 1024 * 1024 * 1024; // 1GB
 
-pub struct DataLogger {
+pub enum DataLogger {
+    Read(DataLoggerRead),
+    Write(DataLoggerWrite),
+}
+
+pub struct DataLoggerBuilder {
+    file_path: Option<PathBuf>,
+    preallocated_size: Option<usize>,
+    write: bool,
+    create: bool,
+}
+
+impl DataLoggerBuilder {
+    pub fn new() -> Self {
+        Self {
+            file_path: None,
+            preallocated_size: None,
+            write: false,
+            create: false, // This is the safest default
+        }
+    }
+
+    pub fn file_path(mut self, file_path: &PathBuf) -> Self {
+        self.file_path = Some(file_path.clone());
+        self
+    }
+
+    pub fn preallocated_size(mut self, preallocated_size: usize) -> Self {
+        self.preallocated_size = Some(preallocated_size);
+        self
+    }
+
+    pub fn write(mut self, write: bool) -> Self {
+        self.write = write;
+        self
+    }
+
+    pub fn create(mut self, create: bool) -> Self {
+        self.create = create;
+        self
+    }
+
+    pub fn build(self) -> io::Result<DataLogger> {
+        if self.create && !self.write {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Cannot create a read-only file",
+            ));
+        }
+        let file_path = self
+            .file_path
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "File path is required"))?;
+        let mut options = OpenOptions::new();
+        let mut options = options.read(true);
+        if self.write {
+            options = options.write(true);
+            if self.create {
+                options = options.create(true);
+            } else {
+                options = options.append(true);
+            }
+        }
+
+        let file = options.open(file_path)?;
+
+        let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize };
+
+        if self.write && self.create {
+            if let Some(size) = self.preallocated_size {
+                file.set_len(size as u64)?;
+            } else {
+                file.set_len(DEFAULT_LOGGER_SIZE as u64)?;
+            }
+
+            let mut mmap = unsafe { MmapMut::map_mut(&file) }?;
+            let main_header = MainHeader {
+                magic: MAIN_MAGIC,
+                first_section_offset: page_size as u16,
+            };
+            let nb_bytes = encode_into_slice(&main_header, &mut mmap[..], standard())
+                .expect("Failed to encode main header");
+            assert!(nb_bytes < page_size);
+            Ok(DataLogger::Write(DataLoggerWrite {
+                file,
+                mmap_buffer: mmap,
+                page_size,
+                current_global_position: page_size,
+                sections_in_flight: Vec::with_capacity(16),
+                flushed_until: 0,
+            }))
+        } else {
+            let mmap = unsafe { Mmap::map(&file) }?;
+            let main_header: MainHeader;
+            let _read: usize;
+            (main_header, _read) =
+                decode_from_slice(&mmap[..], standard()).expect("Failed to decode main header");
+            if main_header.magic != MAIN_MAGIC {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Invalid magic number in main header",
+                ));
+            }
+            println!("First section offset: {}", main_header.first_section_offset);
+            Ok(DataLogger::Read(DataLoggerRead {
+                file,
+                mmap_buffer: mmap,
+                reading_position: main_header.first_section_offset as usize,
+            }))
+        }
+    }
+}
+
+pub struct DataLoggerRead {
+    file: File,
+    mmap_buffer: Mmap,
+    reading_position: usize,
+}
+
+pub struct DataLoggerWrite {
     file: File,
     mmap_buffer: MmapMut,
     page_size: usize,
@@ -133,38 +252,7 @@ pub struct DataLogger {
     flushed_until: usize,
 }
 
-impl DataLogger {
-    pub fn create(file_path: &Path, preallocated_size: Option<usize>) -> io::Result<Self> {
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(file_path)?;
-        let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize };
-        if let Some(size) = preallocated_size {
-            file.set_len(size as u64)?;
-        } else {
-            file.set_len(DEFAULT_LOGGER_SIZE as u64)?;
-        }
-        let mut mmap = unsafe { MmapMut::map_mut(&file)? };
-        let main_header = MainHeader {
-            magic: MAIN_MAGIC,
-            first_section_offset: page_size as u16,
-        };
-        let nb_bytes = encode_into_slice(&main_header, &mut mmap[..], standard())
-            .expect("Failed to encode main header");
-        assert!(nb_bytes < page_size);
-
-        Ok(Self {
-            file,
-            mmap_buffer: mmap,
-            page_size,
-            current_global_position: page_size,
-            sections_in_flight: Vec::with_capacity(16),
-            flushed_until: 0,
-        })
-    }
-
+impl DataLoggerWrite {
     fn unsure_size(&mut self, size: usize) -> io::Result<()> {
         // Here it is important that the memory map resizes in place.
         // According to the documentation this is something unique to Linux to be able to do that.
@@ -185,6 +273,10 @@ impl DataLogger {
             .flush_async_range(self.flushed_until, position)
             .expect("Failed to flush memory map");
         self.flushed_until = position;
+    }
+
+    fn flush(&mut self) {
+        self.flush_until(self.current_global_position);
     }
 
     fn unlock_section(&mut self, section: &mut [u8]) {
@@ -248,78 +340,83 @@ impl DataLogger {
     }
 }
 
-impl Drop for DataLogger {
+impl Drop for DataLoggerWrite {
     fn drop(&mut self) {
+        self.add_section(DataLogType::LastEntry, 0);
+        self.flush();
         self.file
             .set_len(self.current_global_position as u64)
             .expect("Failed to trim datalogger file");
     }
 }
 
-// Section iterator returning the [u8] of the current section
-pub struct SectionIterator {
-    reader: BufReader<File>,
-    datalogtype: Option<DataLogType>,
-}
+impl DataLoggerRead {
+    pub fn read_next_section_type(
+        &mut self,
+        datalogtype: DataLogType,
+    ) -> CuResult<Option<Vec<u8>>> {
+        // TODO: eventually implement a 0 copy of this too.
+        loop {
+            let header_result = self.read_section_header();
+            if let Err(error) = header_result {
+                return Err(CuError::new_with_cause(
+                    "Could not read a sections header",
+                    error,
+                ));
+            };
+            let header = header_result.unwrap();
 
-impl Iterator for SectionIterator {
-    type Item = Vec<u8>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let answer: Option<Vec<u8>> = loop {
-            if let Ok(section_header) =
-                decode_from_reader::<SectionHeader, _, _>(&mut self.reader, standard())
-            {
-                let mut section = vec![0; section_header.section_size as usize];
-                let read = self.reader.read_exact(section.as_mut_slice());
-                if read.is_err() {
-                    break None;
-                }
-                if let Some(datalogtype) = self.datalogtype {
-                    if section_header.entry_type == datalogtype {
-                        break Some(section);
-                    }
-                }
-            } else {
-                break None;
+            // Reached the end of file
+            if header.entry_type == DataLogType::LastEntry {
+                return Ok(None);
             }
+
+            // Found a section of the requested type
+            if header.entry_type == datalogtype {
+                return Ok(Some(self.read_section_content(&header)?));
+            }
+
+            // Keep reading until we find the requested type
+            self.reading_position += header.section_size as usize;
+            if self.reading_position >= self.mmap_buffer.len() {
+                return Err("Corrupted Log, past end of file".into());
+            }
+        }
+    }
+    pub fn read_section(&mut self) -> CuResult<Vec<u8>> {
+        let read_result = self.read_section_header();
+        if let Err(error) = read_result {
+            return Err(CuError::new_with_cause(
+                "Could not read a sections header",
+                error,
+            ));
         };
-        answer
-    }
-}
 
-// make an iterator to read back a serialzed datalogger from a file
-// optionally filter by type
-pub fn read_datalogger(
-    file_path: &Path,
-    datalogtype: Option<DataLogType>,
-) -> io::Result<impl Iterator<Item = Vec<u8>>> {
-    let mut file = OpenOptions::new().read(true).open(file_path)?;
-    let mut header = [0; 4096];
-    let s = file.read(&mut header).unwrap();
-    if s < 4096 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "Failed to read main header",
-        ));
+        self.read_section_content(&read_result.unwrap())
     }
 
-    let main_header: MainHeader;
-    let _read: usize;
-    (main_header, _read) =
-        decode_from_slice(&header[..], standard()).expect("Failed to decode main header");
-
-    if main_header.magic != MAIN_MAGIC {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "Invalid magic number in main header",
-        ));
+    fn read_section_content(&mut self, header: &SectionHeader) -> CuResult<Vec<u8>> {
+        // TODO: we could optimize by asking the buffer to fill
+        let mut section = vec![0; header.section_size as usize];
+        let read = self.file.read_exact(&mut section[..]);
+        if read.is_err() {
+            return Err("Could not read a sections header".into());
+        }
+        self.reading_position += header.section_size as usize;
+        Ok(section)
     }
 
-    Ok(SectionIterator {
-        reader: BufReader::new(file),
-        datalogtype,
-    })
+    fn read_section_header(&mut self) -> CuResult<SectionHeader> {
+        let section_header: SectionHeader;
+        let _read: usize;
+        (section_header, _read) =
+            decode_from_slice(&self.mmap_buffer[self.reading_position..], standard())
+                .expect("Failed to decode section header");
+        if section_header.magic != SECTION_MAGIC {
+            return Err("Invalid magic number in section header".into());
+        }
+        Ok(section_header)
+    }
 }
 
 #[cfg(test)]
@@ -327,24 +424,37 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
     use tempfile::TempDir;
-    fn make_a_logger(tmp_dir: &TempDir) -> (Arc<Mutex<DataLogger>>, PathBuf) {
+    fn make_a_logger(tmp_dir: &TempDir) -> (Arc<Mutex<DataLoggerWrite>>, PathBuf) {
         let file_path = tmp_dir.path().join("test.bin");
-        (
-            Arc::new(Mutex::new(
-                DataLogger::create(&file_path, Some(100000)).expect("Failed to create logger"),
-            )),
-            file_path,
-        )
+        let DataLogger::Write(data_logger) = DataLoggerBuilder::new()
+            .write(true)
+            .create(true)
+            .file_path(&file_path)
+            .preallocated_size(100000)
+            .build()
+            .expect("Failed to create logger")
+        else {
+            panic!("Failed to create logger")
+        };
+
+        (Arc::new(Mutex::new(data_logger)), file_path)
     }
 
     #[test]
     fn test_truncation_and_sections_creations() {
-        // create a randomized temporary file path using tempfile
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let file_path = tmp_dir.path().join("test.bin");
         let used = {
-            let mut logger =
-                DataLogger::create(&file_path, Some(100000)).expect("Failed to create logger");
+            let DataLogger::Write(mut logger) = DataLoggerBuilder::new()
+                .write(true)
+                .create(true)
+                .file_path(&file_path)
+                .preallocated_size(100000)
+                .build()
+                .expect("Failed to create logger")
+            else {
+                panic!("Failed to create logger")
+            };
             logger.add_section(DataLogType::StructuredLogLine, 1024);
             logger.add_section(DataLogType::CopperList, 2048);
             let used = logger.used();
@@ -369,9 +479,11 @@ mod tests {
             let stream = stream(logger.clone(), DataLogType::StructuredLogLine, 1024);
             assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 1);
         }
-        let lg = logger.lock().unwrap();
-        assert_eq!(lg.sections_in_flight.len(), 0);
-        assert_eq!(lg.flushed_until, lg.current_global_position);
+        assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 0);
+        assert_eq!(
+            logger.lock().unwrap().flushed_until,
+            logger.lock().unwrap().current_global_position
+        );
     }
 
     #[test]
@@ -414,12 +526,21 @@ mod tests {
         println!("Path : {:?}", p);
         {
             let mut stream = stream(logger.clone(), DataLogType::StructuredLogLine, 1024);
-            stream.log(&1u32);
-            stream.log(&2u32);
-            stream.log(&3u32);
+            stream.log(&1u32).unwrap();
+            stream.log(&2u32).unwrap();
+            stream.log(&3u32).unwrap();
         }
-        let mut sections = read_datalogger(p, Some(DataLogType::StructuredLogLine)).unwrap();
-        let section = sections.next().unwrap();
+        drop(logger);
+        let DataLogger::Read(mut dl) = DataLoggerBuilder::new()
+            .file_path(&f.to_path_buf())
+            .build()
+            .expect("Failed to build logger")
+        else {
+            panic!("Failed to build logger");
+        };
+        let section = dl
+            .read_next_section_type(DataLogType::StructuredLogLine)
+            .expect("Failed to read section");
         let mut reader = BufReader::new(&section[..]);
         let v1: u32 = decode_from_reader(&mut reader, standard()).unwrap();
         let v2: u32 = decode_from_reader(&mut reader, standard()).unwrap();

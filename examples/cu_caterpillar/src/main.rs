@@ -1,7 +1,7 @@
 use copper::clock::{OptionCuTime, RobotClock};
 use copper::cutask::{CuMsg, CuSrcTask, CuTask, CuTaskLifecycle};
 use copper::{CuResult, DataLogType};
-use copper_datalogger::{stream, DataLogger};
+use copper_datalogger::{stream, DataLogger, DataLoggerBuilder};
 use copper_derive::copper_runtime;
 use copper_log_derive::debug;
 use copper_log_runtime::{ExtraTextLogger, LoggerRuntime};
@@ -76,9 +76,17 @@ impl CuTask for CaterpillarTask {
 
 fn main() {
     let path: PathBuf = PathBuf::from("/tmp/caterpillar.copper");
-    let data_logger = Arc::new(Mutex::new(
-        DataLogger::create(path.as_path(), Some(100000)).expect("Failed to create logger"),
-    ));
+    let DataLogger::Write(logger) = DataLoggerBuilder::new()
+        .write(true)
+        .create(true)
+        .file_path(&path)
+        .preallocated_size(100000)
+        .build()
+        .expect("Failed to create logger")
+    else {
+        panic!("Failed to create logger")
+    };
+    let data_logger = Arc::new(Mutex::new(logger));
     let stream = stream(data_logger.clone(), DataLogType::StructuredLogLine, 1024);
 
     //
