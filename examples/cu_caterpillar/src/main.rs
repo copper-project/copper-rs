@@ -77,7 +77,7 @@ impl CuTask for CaterpillarTask {
 fn main() {
     let path: PathBuf = PathBuf::from("/tmp/caterpillar.copper");
     let data_logger = Arc::new(Mutex::new(
-        DataLogger::new(path.as_path(), Some(100000)).expect("Failed to create logger"),
+        DataLogger::create(path.as_path(), Some(100000)).expect("Failed to create logger"),
     ));
     let stream = stream(data_logger.clone(), DataLogType::StructuredLogLine, 1024);
 
