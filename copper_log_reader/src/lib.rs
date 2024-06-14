@@ -3,7 +3,7 @@ use bincode::decode_from_std_read;
 use byteorder::{ByteOrder, LittleEndian};
 use copper_log::{rebuild_logline, CuLogEntry};
 use copper_traits::{CuError, CuResult};
-use rkv::backend::{Lmdb, LmdbEnvironment};
+use rkv::backend::Lmdb;
 use rkv::{Rkv, StoreOptions};
 use std::io::Read;
 use std::path::Path;
