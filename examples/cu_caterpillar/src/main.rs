@@ -1,17 +1,17 @@
+use copper::clock::{OptionCuTime, RobotClock};
+use copper::cutask::{CuMsg, CuSrcTask, CuTask, CuTaskLifecycle};
+use copper::{CuResult, DataLogType};
+use copper_datalogger::{stream, DataLogger};
+use copper_derive::copper_runtime;
+use copper_log_derive::debug;
+use copper_log_runtime::{ExtraTextLogger, LoggerRuntime};
+use cu_rp_gpio::RPGpioMsg;
+use serde::{Deserialize, Serialize};
+use simplelog::{ColorChoice, Config, LevelFilter, TermLogger, TerminalMode};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
-use copper::cutask::{CuMsg, CuSrcTask, CuTask, CuTaskLifecycle};
-use copper::{CuResult, DataLogType};
-use copper_derive::copper_runtime;
-use copper_log_derive::debug;
-use serde::{Deserialize, Serialize};
-use simplelog::{ColorChoice, Config, LevelFilter, TerminalMode, TermLogger};
-use copper::clock::{OptionCuTime, RobotClock};
-use copper_datalogger::{DataLogger, stream};
-use copper_log_runtime::{ExtraTextLogger, LoggerRuntime};
-use cu_rp_gpio::RPGpioMsg;
 
 #[copper_runtime(config = "copperconfig.ron")]
 struct TheVeryHungryCaterpillar {}
@@ -82,14 +82,28 @@ fn main() {
     let stream = stream(data_logger.clone(), DataLogType::StructuredLogLine, 1024);
 
     //
-    let slow_text_logger = TermLogger::new(LevelFilter::Debug, Config::default(), TerminalMode::Mixed, ColorChoice::Auto);
-    let extra: ExtraTextLogger = ExtraTextLogger::new("/home/gbin/projects/copper/copper-project/target/debug/copper_log_index".into(), slow_text_logger);
+    let slow_text_logger = TermLogger::new(
+        LevelFilter::Debug,
+        Config::default(),
+        TerminalMode::Mixed,
+        ColorChoice::Auto,
+    );
+
+    // This is the path to the index file that was created at build time.
+    let log_index_path = PathBuf::from("../..").join("target/debug/copper_log_index");
+    println!("log_index_path: {:?}", log_index_path);
+
+    //    .join("target/debug/copper_log_index");
+
+    let extra: ExtraTextLogger = ExtraTextLogger::new(log_index_path, slow_text_logger);
     let _needed = LoggerRuntime::init(stream, Some(extra));
     debug!("Application created.");
     let mut application = TheVeryHungryCaterpillar::new().expect("Failed to create runtime.");
-    debug!("Running... starting clock: {}.", application.copper_runtime.clock.now());
+    debug!(
+        "Running... starting clock: {}.",
+        application.copper_runtime.clock.now()
+    );
     application.run(2).expect("Failed to run application.");
     debug!("End of program.");
     sleep(Duration::from_secs(1));
 }
-
