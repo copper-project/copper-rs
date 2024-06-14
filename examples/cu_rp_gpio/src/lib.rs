@@ -1,13 +1,16 @@
 use copper::config::NodeInstanceConfig;
 use copper::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle};
-use copper::{CuResult, CuError};
+use copper::CuResult;
 use copper_log_derive::debug;
 
 #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
-use rppal::gpio::{Gpio, Level, OutputPin};
+use {
+    copper::CuError,
+    lazy_static::lazy_static,
+    rppal::gpio::{Gpio, Level, OutputPin},
+};
 
-use lazy_static::lazy_static;
-
+#[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
 lazy_static! {
     static ref GPIO: Gpio = Gpio::new().expect("Could not create GPIO bindings");
 }
@@ -45,6 +48,7 @@ impl From<RPGpioMsg> for u8 {
     }
 }
 
+#[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
 impl From<RPGpioMsg> for Level {
     fn from(msg: RPGpioMsg) -> Self {
         if msg.on {
@@ -70,7 +74,8 @@ impl CuTaskLifecycle for RPGpio {
         .into();
 
         #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
-        let pin = GPIO.get(pin_nb)
+        let pin = GPIO
+            .get(pin_nb)
             .map_err(|e| CuError::new_with_cause("Could not get pin", e))?
             .into_output();
         #[cfg(target_arch = "x86_64")]
@@ -82,12 +87,21 @@ impl CuTaskLifecycle for RPGpio {
 impl CuSinkTask for RPGpio {
     type Input = RPGpioMsg;
 
-    fn process(&mut self, clock: &copper::clock::RobotClock, msg: &mut CuMsg<Self::Input>) -> CuResult<()> {
+    fn process(
+        &mut self,
+        clock: &copper::clock::RobotClock,
+        msg: &mut CuMsg<Self::Input>,
+    ) -> CuResult<()> {
         msg.payload.actuation = clock.now().into();
         #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
         self.pin.write(msg.payload.into());
         #[cfg(target_arch = "x86_64")]
-        debug!("Would write to pin {} the value {}. Creation to Actuation: {}", self.pin, msg.payload.on, msg.payload.actuation.unwrap() - msg.payload.creation.unwrap());
+        debug!(
+            "Would write to pin {} the value {}. Creation to Actuation: {}",
+            self.pin,
+            msg.payload.on,
+            msg.payload.actuation.unwrap() - msg.payload.creation.unwrap()
+        );
 
         Ok(())
     }
