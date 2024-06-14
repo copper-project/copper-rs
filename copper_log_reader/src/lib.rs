@@ -1,8 +1,9 @@
 use bincode::config::standard;
 use bincode::decode_from_std_read;
 use byteorder::{ByteOrder, LittleEndian};
-use copper_log::{CuLogEntry, rebuild_logline};
-use rkv::backend::Lmdb;
+use copper_log::{rebuild_logline, CuLogEntry};
+use copper_traits::{CuError, CuResult};
+use rkv::backend::{Lmdb, LmdbEnvironment};
 use rkv::{Rkv, StoreOptions};
 use std::io::Read;
 use std::path::Path;
@@ -10,8 +11,8 @@ use std::path::Path;
 /// Full dump of the copper structured log from its binary representation.
 /// src: the source of the log data
 /// index: the path to the index file (containing the interned strings constructed at build time)
-pub fn full_log_dump(mut src: impl Read, index: &Path) {
-    let all_strings = read_interned_strings(index);
+pub fn full_log_dump(mut src: impl Read, index: &Path) -> CuResult<()> {
+    let all_strings = read_interned_strings(index)?;
     loop {
         let entry = decode_from_std_read::<CuLogEntry, _, _>(&mut src, standard());
         if entry.is_err() {
@@ -26,13 +27,17 @@ pub fn full_log_dump(mut src: impl Read, index: &Path) {
         }
         println!("Copper: {}", result.unwrap());
     }
+    Ok(())
 }
 
-
 /// Rebuild the interned string index in memory.
-pub fn read_interned_strings(index: &Path) -> Vec<String> {
+pub fn read_interned_strings(index: &Path) -> CuResult<Vec<String>> {
     let mut all_strings = Vec::<String>::new();
-    let env = Rkv::new::<Lmdb>(index).unwrap();
+    let env = Rkv::new::<Lmdb>(index).map_err(|e| {
+        CuError::from("Could not open the string index. Check the path.")
+            .add_cause(e.to_string().as_str())
+    })?;
+
     let index_to_string = env
         .open_single("index_to_string", StoreOptions::default())
         .expect("Failed to open index_to_string store");
@@ -52,7 +57,7 @@ pub fn read_interned_strings(index: &Path) -> Vec<String> {
             println!("{} -> {}", index, s);
         }
     }
-    all_strings
+    Ok(all_strings)
 }
 
 #[cfg(test)]
