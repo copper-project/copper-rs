@@ -2,8 +2,8 @@ use libc;
 
 use std::fs::{File, OpenOptions};
 use std::io;
-use std::io::Read;
 use std::io::BufReader;
+use std::io::Read;
 use std::path::Path;
 use std::slice::from_raw_parts_mut;
 use std::sync::{Arc, Mutex};
@@ -67,7 +67,7 @@ impl Stream for MmapStream {
         let result = encode_into_slice(
             obj,
             &mut self.current_slice[self.current_position..],
-            bincode::config::standard(),
+            standard(),
         );
         match result {
             Ok(nb_bytes) => {
@@ -134,7 +134,7 @@ pub struct DataLogger {
 }
 
 impl DataLogger {
-    pub fn new(file_path: &Path, preallocated_size: Option<usize>) -> std::io::Result<Self> {
+    pub fn create(file_path: &Path, preallocated_size: Option<usize>) -> io::Result<Self> {
         let file = OpenOptions::new()
             .read(true)
             .write(true)
@@ -331,7 +331,7 @@ mod tests {
         let file_path = tmp_dir.path().join("test.bin");
         (
             Arc::new(Mutex::new(
-                DataLogger::new(&file_path, Some(100000)).expect("Failed to create logger"),
+                DataLogger::create(&file_path, Some(100000)).expect("Failed to create logger"),
             )),
             file_path,
         )
@@ -344,7 +344,7 @@ mod tests {
         let file_path = tmp_dir.path().join("test.bin");
         let used = {
             let mut logger =
-                DataLogger::new(&file_path, Some(100000)).expect("Failed to create logger");
+                DataLogger::create(&file_path, Some(100000)).expect("Failed to create logger");
             logger.add_section(DataLogType::StructuredLogLine, 1024);
             logger.add_section(DataLogType::CopperList, 2048);
             let used = logger.used();

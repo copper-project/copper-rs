@@ -3,9 +3,15 @@ name = "copper-log-reader"
 version = "0.1.0"
 edition = "2021"
 
+# add cli.rs as executable and name it copper-log-reader
+[[bin]]
+name = "copper-log-reader"
+path = "src/cli.rs"
+
 [dependencies]
 copper-traits = { path = "../copper_traits" }
 copper-log = { path = "../copper_log" }
+clap = { version = "4.5.7", features = ["derive"] }
 rkv = { version = "0.19.0", features = ["lmdb"] }
 byteorder = "1.5.0"
 bincode = { version = "2.0.0-rc.3", features = ["serde", "derive"] }
