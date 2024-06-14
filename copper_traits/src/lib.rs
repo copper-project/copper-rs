@@ -66,4 +66,5 @@ pub trait Stream: Sync + Send {
 pub enum DataLogType {
     StructuredLogLine,
     CopperList,
+    LastEntry, // This is a special entry that is used to signal the end of the log.
 }
