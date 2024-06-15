@@ -1,7 +1,7 @@
 use copper::clock::{OptionCuTime, RobotClock};
 use copper::cutask::{CuMsg, CuSrcTask, CuTask, CuTaskLifecycle};
 use copper::{CuResult, DataLogType};
-use copper_datalogger::{stream, DataLogger, DataLoggerBuilder};
+use copper_datalogger::{stream_write, DataLogger, DataLoggerBuilder};
 use copper_derive::copper_runtime;
 use copper_log_derive::debug;
 use copper_log_runtime::{ExtraTextLogger, LoggerRuntime};
@@ -87,7 +87,7 @@ fn main() {
         panic!("Failed to create logger")
     };
     let data_logger = Arc::new(Mutex::new(logger));
-    let stream = stream(data_logger.clone(), DataLogType::StructuredLogLine, 1024);
+    let stream = stream_write(data_logger.clone(), DataLogType::StructuredLogLine, 1024);
 
     //
     let slow_text_logger = TermLogger::new(
