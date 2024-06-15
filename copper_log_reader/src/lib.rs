@@ -13,12 +13,18 @@ use std::path::Path;
 /// index: the path to the index file (containing the interned strings constructed at build time)
 pub fn full_log_dump(mut src: impl Read, index: &Path) -> CuResult<()> {
     let all_strings = read_interned_strings(index)?;
+    println!("Copper: -> Beginning of log <-");
     loop {
         let entry = decode_from_std_read::<CuLogEntry, _, _>(&mut src, standard());
         if entry.is_err() {
             break;
         }
         let entry = entry.unwrap();
+
+        if entry.msg_index == 0 {
+            println!("Copper: -> End of log <-");
+            break;
+        }
 
         let result = rebuild_logline(&all_strings, entry);
         if result.is_err() {
@@ -54,7 +60,6 @@ pub fn read_interned_strings(index: &Path) -> CuResult<Vec<String>> {
             }
 
             all_strings[index] = s.to_string();
-            println!("{} -> {}", index, s);
         }
     }
     Ok(all_strings)
@@ -64,10 +69,17 @@ pub fn read_interned_strings(index: &Path) -> CuResult<Vec<String>> {
 mod tests {
 
     use super::*;
-    use std::io::Cursor;
+    use copper_datalogger::{stream_write, DataLogger, DataLoggerBuilder, DataLoggerIOReader};
+    use copper_log::value::Value;
+    use copper_log_runtime::log;
+    use copper_log_runtime::LoggerRuntime;
+    use copper_traits::{DataLogType, WriteStream};
+    use std::io::{Cursor, Write};
+    use std::sync::{Arc, Mutex};
+    use tempfile::tempdir;
 
     #[test]
-    fn test_extract_copper_log() {
+    fn test_extract_low_level_copper_log() {
         let hex_string = "01 01 00 01 0C 05 7A 61 72 6D 61";
         let bytes: Vec<u8> = hex_string
             .split_whitespace()
@@ -75,6 +87,49 @@ mod tests {
             .collect();
 
         let reader = Cursor::new(bytes.as_slice());
+        full_log_dump(reader, Path::new("test/copper_log_index"));
+    }
+
+    #[test]
+    fn end_to_end_datalogger_and_structlog_test() {
+        let dir = tempdir().expect("Failed to create temp dir");
+        let path = dir
+            .path()
+            .join("end_to_end_datalogger_and_structlog_test.coppper");
+        {
+            // Write a couple log entries
+            let DataLogger::Write(logger) = DataLoggerBuilder::new()
+                .write(true)
+                .create(true)
+                .file_path(&path)
+                .preallocated_size(100000)
+                .build()
+                .expect("Failed to create logger")
+            else {
+                panic!("Failed to create logger")
+            };
+            let data_logger = Arc::new(Mutex::new(logger));
+            let stream = stream_write(data_logger.clone(), DataLogType::StructuredLogLine, 1024);
+            let rt = LoggerRuntime::init(stream, None);
+
+            let mut entry = CuLogEntry::new(4); // this is a "Just a String {}" log line
+            entry.add_param(0, Value::String("Parameter for the log line".into()));
+            log(entry).expect("Failed to log");
+            let mut entry = CuLogEntry::new(2); // this is a "Just a String {}" log line
+            entry.add_param(0, Value::String("Parameter for the log line".into()));
+            log(entry).expect("Failed to log");
+
+            // everything is dropped here
+        }
+        // Read back the log
+        let DataLogger::Read(logger) = DataLoggerBuilder::new()
+            .file_path(&path)
+            .build()
+            .expect("Failed to create logger")
+        else {
+            panic!("Failed to create logger")
+        };
+        let reader = DataLoggerIOReader::new(logger, DataLogType::StructuredLogLine);
         full_log_dump(reader, Path::new("test/copper_log_index"));
     }
 }

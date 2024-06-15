@@ -1,5 +1,5 @@
 use copper::DataLogType;
-use copper_datalogger::{stream, DataLogger, DataLoggerBuilder};
+use copper_datalogger::{stream_write, DataLogger, DataLoggerBuilder};
 use copper_log_derive::debug;
 use copper_log_runtime::LoggerRuntime;
 use serde::Serialize;
@@ -19,7 +19,7 @@ fn main() {
         panic!("Failed to create logger")
     };
     let data_logger = Arc::new(Mutex::new(logger));
-    let stream = stream(data_logger.clone(), DataLogType::StructuredLogLine, 1024);
+    let stream = stream_write(data_logger.clone(), DataLogType::StructuredLogLine, 1024);
     let mut rt = LoggerRuntime::init(stream, None);
     #[derive(Serialize)]
     struct Test {

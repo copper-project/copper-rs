@@ -1,13 +1,15 @@
 use copper_log::CuLogEntry;
 use copper_log_reader::read_interned_strings;
-use copper_traits::{CuResult, Stream};
+use copper_traits::{CuResult, WriteStream};
 use kanal::{bounded, Sender};
 use log::{Log, Record};
 use once_cell::sync::OnceCell;
+use std::cell::RefCell;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
-use std::thread::JoinHandle;
+use std::thread::{sleep, JoinHandle};
+use std::time::Duration;
 
 // The logging system is basically a global queue.
 static QUEUE: OnceCell<Sender<CuLogEntry>> = OnceCell::new();
@@ -22,7 +24,7 @@ impl LoggerRuntime {
     /// destination is the binary stream in which we will log the structured log.
     /// extra_text_logger is the logger that will log the text logs in real time. This is slow and only for debug builds.
     pub fn init(
-        destination: impl Stream + 'static,
+        destination: impl WriteStream + 'static,
         extra_text_logger: Option<ExtraTextLogger>,
     ) -> Self {
         if (!cfg!(debug_assertions)) && extra_text_logger.is_some() {
@@ -43,12 +45,12 @@ impl LoggerRuntime {
 
     fn initialize_queue(
         &self,
-        mut destination: impl Stream + 'static,
+        mut destination: impl WriteStream + 'static,
     ) -> (Sender<CuLogEntry>, JoinHandle<()>) {
         let (sender, receiver) = bounded::<CuLogEntry>(100);
 
         #[cfg(debug_assertions)]
-        let (index, logger) = if let Some(extra) = &self.extra_text_logger {
+        let (index, extra_text_logger) = if let Some(extra) = &self.extra_text_logger {
             let index = Some(
                 read_interned_strings(extra.path_to_index.as_path())
                     .expect("Failed to read the interned strings"),
@@ -61,33 +63,36 @@ impl LoggerRuntime {
 
         let handle = thread::spawn(move || {
             let receiver = receiver.clone();
-            #[cfg(debug_assertions)]
-            let logger = logger.expect("Could not get logger");
             loop {
                 if let Ok(cu_log_entry) = receiver.recv() {
+                    println!("Dequeued: {:?}", cu_log_entry);
                     if let Err(err) = destination.log(&cu_log_entry) {
                         eprintln!("Failed to log data: {}", err);
                     }
+
+                    // This is only for debug builds with standard textual logging implemented.
                     #[cfg(debug_assertions)]
                     if let Some(index) = &index {
-                        let stringified = copper_log::rebuild_logline(index, cu_log_entry);
-                        match stringified {
-                            Ok(s) => {
-                                logger.log(
-                                    &Record::builder()
-                                        // TODO: forward this info in the CuLogEntry
-                                        .level(log::Level::Debug)
-                                        // .target("copper")
-                                        //.module_path_static(Some("copper_log"))
-                                        //.file_static(Some("copper_log"))
-                                        //.line(Some(0))
-                                        .args(format_args!("{}", s))
-                                        .build(),
-                                ); // DO NOT TRY to split off this statement.
-                                   // format_args! has to be in the same statement per structure and scoping.
-                            }
-                            Err(e) => {
-                                eprintln!("Failed to rebuild log line: {}", e);
+                        if let Some(ref logger) = extra_text_logger {
+                            let stringified = copper_log::rebuild_logline(index, cu_log_entry);
+                            match stringified {
+                                Ok(s) => {
+                                    logger.log(
+                                        &Record::builder()
+                                            // TODO: forward this info in the CuLogEntry
+                                            .level(log::Level::Debug)
+                                            // .target("copper")
+                                            //.module_path_static(Some("copper_log"))
+                                            //.file_static(Some("copper_log"))
+                                            //.line(Some(0))
+                                            .args(format_args!("{}", s))
+                                            .build(),
+                                    ); // DO NOT TRY to split off this statement.
+                                       // format_args! has to be in the same statement per structure and scoping.
+                                }
+                                Err(e) => {
+                                    eprintln!("Failed to rebuild log line: {}", e);
+                                }
                             }
                         }
                     }
@@ -103,14 +108,29 @@ impl LoggerRuntime {
         QUEUE.get().is_some()
     }
 
+    pub fn flush(&self) {
+        if let Some(queue) = QUEUE.get() {
+            loop {
+                if queue.is_empty() {
+                    break;
+                }
+                println!("Waiting for the queue to empty.");
+                sleep(Duration::from_millis(1));
+            }
+        }
+    }
+
     pub fn close(&mut self) {
         let queue = QUEUE.get();
         if queue.is_none() {
             eprintln!("Logger closed before it was initialized.");
             return;
         }
+        self.flush();
+        queue.unwrap().close();
         if let Some(handle) = self.handle.take() {
             handle.join().expect("Failed to join the logger thread.");
+            self.handle = None;
         }
     }
 }

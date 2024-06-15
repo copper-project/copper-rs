@@ -18,7 +18,7 @@ use bincode::{decode_from_reader, decode_from_slice};
 use bincode_derive::Decode as dDecode;
 use bincode_derive::Encode as dEncode;
 
-use copper::{CuError, CuResult, DataLogType, Stream};
+use copper_traits::{CuError, CuResult, DataLogType, WriteStream};
 
 const MAIN_MAGIC: [u8; 4] = [0xB4, 0xA5, 0x50, 0xFF];
 
@@ -62,8 +62,9 @@ impl MmapStream {
     }
 }
 
-impl Stream for MmapStream {
+impl WriteStream for MmapStream {
     fn log(&mut self, obj: &impl Encode) -> CuResult<()> {
+        println!("Write Stream: log");
         let result = encode_into_slice(
             obj,
             &mut self.current_slice[self.current_position..],
@@ -71,6 +72,10 @@ impl Stream for MmapStream {
         );
         match result {
             Ok(nb_bytes) => {
+                println!(
+                    "Write Stream: Encoded bytes : {:?}",
+                    &self.current_slice[self.current_position..self.current_position + nb_bytes]
+                );
                 self.current_position += nb_bytes;
                 Ok(())
             }
@@ -105,11 +110,11 @@ impl Drop for MmapStream {
     }
 }
 
-pub fn stream(
+pub fn stream_write(
     logger: Arc<Mutex<DataLoggerWrite>>,
     entry_type: DataLogType,
     minimum_allocation_amount: usize,
-) -> impl Stream {
+) -> impl WriteStream {
     let aclone = logger.clone();
     let mut logger = logger.lock().unwrap();
     let underlying_slice = logger.add_section(entry_type, minimum_allocation_amount);
@@ -400,6 +405,10 @@ impl DataLoggerRead {
             &self.mmap_buffer
                 [self.reading_position..self.reading_position + header.section_size as usize],
         );
+        println!(
+            "read_section: Section content starts with {:?}",
+            &section[0..10]
+        );
 
         self.reading_position += header.section_size as usize;
         Ok(section)
@@ -417,6 +426,56 @@ impl DataLoggerRead {
         self.reading_position += read;
 
         Ok(section_header)
+    }
+}
+
+/// This a a convience wrapper around the DataLoggerRead to implement the Read trait.
+pub struct DataLoggerIOReader {
+    logger: DataLoggerRead,
+    log_type: DataLogType,
+    buffer: Vec<u8>,
+    buffer_pos: usize,
+}
+
+impl DataLoggerIOReader {
+    pub fn new(logger: DataLoggerRead, log_type: DataLogType) -> Self {
+        Self {
+            logger,
+            log_type,
+            buffer: Vec::new(),
+            buffer_pos: 0,
+        }
+    }
+
+    fn fill_buffer(&mut self) -> io::Result<()> {
+        match self.logger.read_next_section_type(self.log_type) {
+            Ok(Some(section)) => {
+                self.buffer = section;
+                self.buffer_pos = 0;
+            }
+            Ok(None) => (), // No more sections of this type
+            Err(e) => return Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
+        }
+        Ok(())
+    }
+}
+
+impl Read for DataLoggerIOReader {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if self.buffer_pos >= self.buffer.len() {
+            self.fill_buffer()?;
+        }
+
+        // If we still have no data after trying to fill the buffer, we're at EOF
+        if self.buffer_pos >= self.buffer.len() {
+            return Ok(0);
+        }
+
+        // Copy as much as we can from the buffer to `buf`
+        let len = std::cmp::min(buf.len(), self.buffer.len() - self.buffer_pos);
+        buf[..len].copy_from_slice(&self.buffer[self.buffer_pos..self.buffer_pos + len]);
+        self.buffer_pos += len;
+        Ok(len)
     }
 }
 
@@ -481,7 +540,7 @@ mod tests {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let (logger, _) = make_a_logger(&tmp_dir);
         {
-            let _stream = stream(logger.clone(), DataLogType::StructuredLogLine, 1024);
+            let _stream = stream_write(logger.clone(), DataLogType::StructuredLogLine, 1024);
             assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 1);
         }
         assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 0);
@@ -493,9 +552,9 @@ mod tests {
     fn test_two_sections_self_cleaning_in_order() {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let (logger, _) = make_a_logger(&tmp_dir);
-        let s1 = stream(logger.clone(), DataLogType::StructuredLogLine, 1024);
+        let s1 = stream_write(logger.clone(), DataLogType::StructuredLogLine, 1024);
         assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 1);
-        let s2 = stream(logger.clone(), DataLogType::StructuredLogLine, 1024);
+        let s2 = stream_write(logger.clone(), DataLogType::StructuredLogLine, 1024);
         assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 2);
         drop(s2);
         assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 1);
@@ -509,9 +568,9 @@ mod tests {
     fn test_two_sections_self_cleaning_out_of_order() {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let (logger, _) = make_a_logger(&tmp_dir);
-        let s1 = stream(logger.clone(), DataLogType::StructuredLogLine, 1024);
+        let s1 = stream_write(logger.clone(), DataLogType::StructuredLogLine, 1024);
         assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 1);
-        let s2 = stream(logger.clone(), DataLogType::StructuredLogLine, 1024);
+        let s2 = stream_write(logger.clone(), DataLogType::StructuredLogLine, 1024);
         assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 2);
         drop(s1);
         assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 1);
@@ -528,7 +587,7 @@ mod tests {
         let p = f.as_path();
         println!("Path : {:?}", p);
         {
-            let mut stream = stream(logger.clone(), DataLogType::StructuredLogLine, 1024);
+            let mut stream = stream_write(logger.clone(), DataLogType::StructuredLogLine, 1024);
             stream.log(&1u32).unwrap();
             stream.log(&2u32).unwrap();
             stream.log(&3u32).unwrap();

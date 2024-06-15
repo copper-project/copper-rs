@@ -1,11 +1,11 @@
+use bincode_derive::{Decode, Encode};
+use copper_traits::{CuError, CuResult};
+pub use copper_value as value;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Display;
-use bincode_derive::{Decode, Encode};
-use serde::{Deserialize, Serialize};
 use strfmt::strfmt;
-pub use copper_value as value;
 use value::Value;
-use copper_traits::{CuError, CuResult};
 
 #[allow(dead_code)]
 pub const ANONYMOUS: u32 = 0;
@@ -50,7 +50,6 @@ impl CuLogEntry {
     }
 }
 
-
 /// Rebuild a log line from the interned strings and the CuLogEntry.
 /// This basically translates the world of copper logs to text logs.
 pub fn rebuild_logline(all_interned_strings: &Vec<String>, entry: CuLogEntry) -> CuResult<String> {
@@ -69,7 +68,19 @@ pub fn rebuild_logline(all_interned_strings: &Vec<String>, entry: CuLogEntry) ->
         }
     }
 
-    // Use strfmt to replace named parameters
-    strfmt(&format_string, &vars).map_err(|e| CuError::new_with_cause(format!("Failed to format log line: {:?} with {:?}", format_string, vars).as_str(), e))
-}
+    if vars.is_empty() {
+        return Ok(format_string);
+    }
 
+    // Use strfmt to replace named parameters
+    strfmt(&format_string, &vars).map_err(|e| {
+        CuError::new_with_cause(
+            format!(
+                "Failed to format log line: {:?} with variables [{:?}]",
+                format_string, vars
+            )
+            .as_str(),
+            e,
+        )
+    })
+}
