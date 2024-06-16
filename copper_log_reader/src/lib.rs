@@ -81,12 +81,8 @@ mod tests {
 
     #[test]
     fn test_extract_low_level_copper_log() {
-        let hex_string = "01 01 00 01 0C 05 7A 61 72 6D 61";
-        let bytes: Vec<u8> = hex_string
-            .split_whitespace()
-            .map(|s| u8::from_str_radix(s, 16).expect("Parse error"))
-            .collect();
-
+        let entry = CuLogEntry::new(5);
+        let bytes = bincode::encode_to_vec(&entry, standard()).unwrap();
         let reader = Cursor::new(bytes.as_slice());
         full_log_dump(reader, Path::new("test/copper_log_index"));
     }
