@@ -124,9 +124,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     {
                         #comment_tokens
                         let cumsg_output = &mut culist.#output_culist_index;
-                        cumsg_output.before_process = self.copper_runtime.clock.now().into();
+                        cumsg_output.metadata.before_process = self.copper_runtime.clock.now().into();
                         #task_instance.process(&self.copper_runtime.clock, cumsg_output)?;
-                        cumsg_output.after_process = self.copper_runtime.clock.now().into();
+                        cumsg_output.metadata.after_process = self.copper_runtime.clock.now().into();
                     }
                 }
                 },
@@ -149,9 +149,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         #comment_tokens
                         let cumsg_input = &mut culist.#input_culist_index;
                         let cumsg_output = &mut culist.#output_culist_index;
-                        cumsg_output.before_process = self.copper_runtime.clock.now().into();
+                        cumsg_output.metadata.before_process = self.copper_runtime.clock.now().into();
                         #task_instance.process(&self.copper_runtime.clock, cumsg_input, cumsg_output)?;
-                        cumsg_output.after_process = self.copper_runtime.clock.now().into();
+                        cumsg_output.metadata.after_process = self.copper_runtime.clock.now().into();
                     }
                     }
                 }
@@ -182,14 +182,34 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         parse_quote! { (#(_CuMsg<#all_msgs_types_in_culist_order>),*,)}
     };
 
+    println!("[build the collect metadata function]");
+    let culist_size = all_msgs_types_in_culist_order.len();
+    let culist_indices = 0..culist_size;
+    let collect_metadata_function = quote! {
+        pub fn collect_metadata<'a>(culist: &'a CuList) -> [&'a _CuMsgMetadata; #culist_size] {
+            [#( &culist.#culist_indices.metadata, )*]
+        }
+    };
+
+    println!("[build the run method]");
     let run_method = quote! {
-    pub fn run(&mut self, iterations: u32) -> _CuResult<()> {
-        let culist = self.copper_runtime.copper_lists.create().expect("Ran out of space for copper lists"); // FIXME: error handling.
-        for _ in 0..iterations {
-            #(#runtime_plan_code)*
-        }
-        Ok(())
-        }
+        pub fn run(&mut self, iterations: u32) -> _CuResult<()> {
+            let culist = self.copper_runtime.copper_lists.create().expect("Ran out of space for copper lists"); // FIXME: error handling.
+            for _ in 0..iterations {
+                #(#runtime_plan_code)*
+            }
+
+            let md = collect_metadata(&culist);
+            for m in md.iter() {
+                println!("Metadata: {}", m);
+            }
+
+            let e2e = md.last().unwrap().after_process.unwrap() - md.first().unwrap().before_process.unwrap();
+            let e2en: u64 = e2e.into();
+            println!("End to end latency {}, mean latency per hop: {}", e2e, e2en / (md.len() as u64));
+
+            Ok(())
+            }
     };
 
     println!("[build result]");
@@ -200,19 +220,25 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         use copper::config::NodeInstanceConfig as _NodeInstanceConfig;
         use copper::config::read_configuration as _read_configuration;
         use copper::curuntime::CuRuntime as _CuRuntime;
-        use copper::cutask::CuTaskLifecycle as _CuTaskLifecycle; // Needed for the instantiation of tasks
         use copper::CuResult as _CuResult;
         use copper::CuError as _CuError;
+        use copper::cutask::CuTaskLifecycle as _CuTaskLifecycle; // Needed for the instantiation of tasks
         use copper::cutask::CuSrcTask as _CuSrcTask;
         use copper::cutask::CuSinkTask as _CuSinkTask;
         use copper::cutask::CuTask as _CuTask;
         use copper::cutask::CuMsg as _CuMsg;
+        use copper::cutask::CuMsgMetadata as _CuMsgMetadata;
         use copper::clock::RobotClock as _RobotClock;
         use copper::clock::OptionCuTime as _OptionCuTime;
 
+        // This is the heart of everything.
+        // CuTasks is the list of all the tasks types.
+        // CuList is the list of all the messages types.
         pub type CuTasks = #task_types_tuple;
         pub type CuList = #msgs_types_tuple;
 
+        // This generates a way to get the metadata of every single message of a culist at low cost
+        #collect_metadata_function
 
         fn tasks_instanciator(all_instances_configs: Vec<Option<&_NodeInstanceConfig>>) -> _CuResult<CuTasks> {
             Ok(( #(#task_instances_init_code),*, ))

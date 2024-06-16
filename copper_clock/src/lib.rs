@@ -130,6 +130,16 @@ impl OptionCuTime {
     }
 }
 
+impl Display for OptionCuTime {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.is_none() {
+            write!(f, "None")
+        } else {
+            write!(f, "{}", self.0)
+        }
+    }
+}
+
 impl Default for OptionCuTime {
     fn default() -> Self {
         Self::none()

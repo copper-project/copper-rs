@@ -19,7 +19,8 @@ enum CopperListState {
     BeingSerialized,
 }
 
-/// This structure maintains the entire memory needed by Copper for one process for the inter task communication.
+/// This structure maintains the entire memory needed by Copper for one loop for the inter tasks communication within a process.
+/// T is typically a Tuple of various types of messages that are exchanged between tasks.
 #[derive(Debug)]
 pub struct CuListsManager<T: Sized + PartialEq, const N: usize> {
     #[allow(dead_code)]
