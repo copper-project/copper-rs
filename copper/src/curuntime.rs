@@ -103,6 +103,7 @@ pub fn compute_runtime_plan(config: &CuConfig) -> CuResult<Vec<CuExecutionStep>>
             next_culist_output_index += 1;
             CuTaskType::Source
         } else if config.graph.neighbors_directed(id.into(), Outgoing).count() == 0 {
+            // this is a Sink.
             input_msg_type = Some(
                 config
                     .graph
@@ -116,6 +117,7 @@ pub fn compute_runtime_plan(config: &CuConfig) -> CuResult<Vec<CuExecutionStep>>
                 .neighbors_directed(id.into(), Incoming)
                 .next()
                 .unwrap();
+            // Find the source of the incoming message
             culist_input_index = find_output_index_from_nodeid(parent.index() as NodeId, &result);
             CuTaskType::Sink
         } else {

@@ -105,7 +105,8 @@ fn main() {
 
     let extra: ExtraTextLogger = ExtraTextLogger::new(log_index_path, slow_text_logger);
     let clock = RobotClock::default();
-    let _needed = LoggerRuntime::init(clock.clone(), stream, Some(extra));
+    //let _needed = LoggerRuntime::init(clock.clone(), stream, Some(extra)); // with the slow textual logger on top.
+    let _needed = LoggerRuntime::init(clock.clone(), stream, None); // with only the fast copper logger.
     debug!("Application created.");
     let mut application =
         TheVeryHungryCaterpillar::new(clock.clone()).expect("Failed to create runtime.");

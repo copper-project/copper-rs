@@ -1,9 +1,11 @@
-use serde::{Deserialize, Serialize};
 use copper_clock::RobotClock;
+use serde::{Deserialize, Serialize};
+use std::fmt;
+use std::fmt::{Display, Formatter};
 
+use crate::clock::OptionCuTime;
 use crate::config::NodeInstanceConfig;
 use crate::CuResult;
-use crate::clock::OptionCuTime;
 
 // Everything that is stateful in copper for zero copy constraints need to be restricted to this trait.
 pub trait CuMsgPayload: Default + Serialize + for<'a> Deserialize<'a> + Sized {}
@@ -11,16 +13,29 @@ pub trait CuMsgPayload: Default + Serialize + for<'a> Deserialize<'a> + Sized {}
 // Also anything that follows this contract can be a payload (blanket implementation)
 impl<T> CuMsgPayload for T where T: Default + Serialize + for<'a> Deserialize<'a> + Sized {}
 
+#[derive(Debug, PartialEq, Default)]
+pub struct CuMsgMetadata {
+    pub before_process: OptionCuTime,
+    pub after_process: OptionCuTime,
+}
+
+impl Display for CuMsgMetadata {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "before_process: {}, after_process: {}",
+            self.before_process, self.after_process
+        )
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub struct CuMsg<T>
 where
     T: CuMsgPayload,
 {
     pub payload: T,
-
-    // Runtime statistics
-    pub before_process: OptionCuTime,
-    pub after_process: OptionCuTime,
+    pub metadata: CuMsgMetadata,
 }
 
 impl<T> CuMsg<T>
@@ -30,8 +45,10 @@ where
     pub fn new(payload: T) -> Self {
         CuMsg {
             payload,
-            before_process: OptionCuTime::none(),
-            after_process: OptionCuTime::none(),
+            metadata: CuMsgMetadata {
+                before_process: OptionCuTime::none(),
+                after_process: OptionCuTime::none(),
+            },
         }
     }
 }
