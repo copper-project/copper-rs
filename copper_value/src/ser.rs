@@ -63,6 +63,9 @@ impl ser::Serialize for Value {
             }
             Value::Seq(ref v) => v.serialize(s),
             Value::Map(ref v) => v.serialize(s),
+            Value::CuTime(v) => {
+                s.serialize_newtype_struct("Value", &(self.discriminant() as u8, v))
+            }
         }
     }
 }

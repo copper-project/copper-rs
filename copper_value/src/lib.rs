@@ -1,5 +1,6 @@
 #![doc(html_root_url = "https://docs.rs/serde-value/0.7.0/")]
 
+use copper_clock::CuTime;
 use ordered_float::OrderedFloat;
 use serde::Deserialize;
 use std::cmp::Ordering;
@@ -40,6 +41,8 @@ pub enum Value {
     Seq(Vec<Value>),
     Map(BTreeMap<Value, Value>),
     Bytes(Vec<u8>),
+
+    CuTime(CuTime),
 }
 
 impl Display for Value {
@@ -94,6 +97,7 @@ impl Display for Value {
                 }
                 write!(f, "]")
             }
+            Value::CuTime(v) => write!(f, "{}", v),
         }
     }
 }
@@ -124,6 +128,7 @@ impl Hash for Value {
             Value::Seq(ref v) => v.hash(hasher),
             Value::Map(ref v) => v.hash(hasher),
             Value::Bytes(ref v) => v.hash(hasher),
+            Value::CuTime(v) => v.0.hash(hasher),
         }
     }
 }
@@ -150,6 +155,7 @@ impl PartialEq for Value {
             (&Value::Seq(ref v0), &Value::Seq(ref v1)) if v0 == v1 => true,
             (&Value::Map(ref v0), &Value::Map(ref v1)) if v0 == v1 => true,
             (&Value::Bytes(ref v0), &Value::Bytes(ref v1)) if v0 == v1 => true,
+            (&Value::CuTime(v0), &Value::CuTime(v1)) if v0 == v1 => true,
             _ => false,
         }
     }
@@ -177,6 +183,7 @@ impl Ord for Value {
             (&Value::Seq(ref v0), &Value::Seq(ref v1)) => v0.cmp(v1),
             (&Value::Map(ref v0), &Value::Map(ref v1)) => v0.cmp(v1),
             (&Value::Bytes(ref v0), &Value::Bytes(ref v1)) => v0.cmp(v1),
+            (&Value::CuTime(v0), &Value::CuTime(v1)) => v0.cmp(&v1),
             (ref v0, ref v1) => v0.discriminant().cmp(&v1.discriminant()),
         }
     }
@@ -204,6 +211,7 @@ impl Value {
             Value::Seq(..) => 16,
             Value::Map(..) => 17,
             Value::Bytes(..) => 18,
+            Value::CuTime(..) => 32,
         }
     }
 
@@ -228,35 +236,13 @@ impl Value {
             Value::Seq(_) => serde::de::Unexpected::Seq,
             Value::Map(_) => serde::de::Unexpected::Map,
             Value::Bytes(ref b) => serde::de::Unexpected::Bytes(b),
+            Value::CuTime(n) => serde::de::Unexpected::Unsigned(n.0),
         }
     }
 
     pub fn deserialize_into<'de, T: Deserialize<'de>>(self) -> Result<T, DeserializerError> {
         T::deserialize(self)
     }
-
-    //pub fn intern_strings(&self, keygen: fn(&str) -> u32) -> Self {
-    //    match self {
-    //        Value::Map(map) => {
-    //            let new_map: BTreeMap<Value, Value> = map
-    //                .iter()
-    //                .map(|(key, value)| {
-    //                    let new_key = match key {
-    //                        Value::String(orig_key) => Value::InternedString(keygen(orig_key)),
-    //                        _ => key.clone(),
-    //                    };
-    //                    (new_key, value.intern_strings(keygen))
-    //                })
-    //                .collect();
-    //            Value::Map(new_map)
-    //        }
-    //        Value::Seq(seq) => {
-    //            let new_seq: Vec<Value> = seq.iter().map(|v| v.intern_strings(keygen)).collect();
-    //            Value::Seq(new_seq)
-    //        }
-    //        _ => self.clone(),
-    //    }
-    //}
 }
 
 impl Eq for Value {}
@@ -269,7 +255,9 @@ impl PartialOrd for Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use copper_clock::RobotClock;
     use serde_derive::{Deserialize, Serialize};
+    use std::time::Duration;
 
     #[test]
     fn de_smoke_test() {
@@ -507,5 +495,16 @@ mod tests {
         );
         let bar = Bar::deserialize(input).unwrap();
         assert_eq!(bar, Bar { foo: Foo(5) });
+    }
+
+    #[test]
+    fn clock_ser_deser() {
+        let (clock, mock) = RobotClock::mock();
+        mock.increment(42);
+        let c = clock.now();
+
+        let input = Value::CuTime(c);
+        let foo = CuTime::deserialize(input).unwrap();
+        assert_eq!(foo, CuTime::from(Duration::from_nanos(42)));
     }
 }
