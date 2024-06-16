@@ -1,3 +1,4 @@
+use copper::clock::RobotClock;
 use copper::DataLogType;
 use copper_datalogger::{stream_write, DataLogger, DataLoggerBuilder};
 use copper_log_derive::debug;
@@ -19,8 +20,9 @@ fn main() {
         panic!("Failed to create logger")
     };
     let data_logger = Arc::new(Mutex::new(logger));
+    let clock = RobotClock::new();
     let stream = stream_write(data_logger.clone(), DataLogType::StructuredLogLine, 1024);
-    let mut rt = LoggerRuntime::init(stream, None);
+    let mut rt = LoggerRuntime::init(clock, stream, None);
     #[derive(Serialize)]
     struct Test {
         a: i32,

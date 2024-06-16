@@ -1,14 +1,9 @@
-use crate::copperlist::CuListsManager;
+use crate::clock::{ClockProvider, RobotClock};
 use crate::config::{CuConfig, NodeId};
 use crate::config::{Node, NodeInstanceConfig};
+use crate::copperlist::CuListsManager;
 use crate::CuResult;
-use crate::clock::RobotClock;
 use petgraph::prelude::*;
-
-/// Simple trait to get the clock from the runtime externally
-pub trait ClockProvider {
-    fn get_clock(&self) -> RobotClock;
-}
 
 // CT is a tuple of all the tasks
 // CL is the type of the copper list
@@ -26,6 +21,7 @@ impl<CT, CL: Sized + PartialEq, const NBCL: usize> ClockProvider for CuRuntime<C
 
 impl<CT, CL: Sized + PartialEq, const NBCL: usize> CuRuntime<CT, CL, NBCL> {
     pub fn new(
+        clock: RobotClock,
         config: &CuConfig,
         tasks_instanciator: impl Fn(Vec<Option<&NodeInstanceConfig>>) -> CuResult<CT>,
     ) -> CuResult<Self> {
@@ -38,7 +34,7 @@ impl<CT, CL: Sized + PartialEq, const NBCL: usize> CuRuntime<CT, CL, NBCL> {
         Ok(Self {
             task_instances,
             copper_lists: CuListsManager::new(),
-            clock: RobotClock::default(),
+            clock,
         })
     }
 }
@@ -68,10 +64,7 @@ pub struct CuExecutionStep {
     pub culist_output_index: Option<u32>,
 }
 
-fn find_output_index_from_nodeid(
-    node_id: NodeId,
-    steps: &Vec<CuExecutionStep>,
-) -> Option<u32> {
+fn find_output_index_from_nodeid(node_id: NodeId, steps: &Vec<CuExecutionStep>) -> Option<u32> {
     for step in steps {
         if step.node_id == node_id {
             return step.culist_output_index;
@@ -84,38 +77,70 @@ pub fn compute_runtime_plan(config: &CuConfig) -> CuResult<Vec<CuExecutionStep>>
     let mut next_culist_output_index = 0u32;
 
     // prob not exactly what we want but to get us started
-    let mut visitor = petgraph::visit::Bfs::new(&config.graph, 0.into());
+    let mut visitor = Bfs::new(&config.graph, 0.into());
 
     let mut result = Vec::new();
 
     while let Some(node) = visitor.next(&config.graph) {
         let id = node.index() as NodeId;
         let node = config.get_node(id).unwrap();
-        let mut input_msg_type : Option<String> = None;
-        let mut output_msg_type : Option<String> = None;
+        let mut input_msg_type: Option<String> = None;
+        let mut output_msg_type: Option<String> = None;
 
-        let mut culist_input_index : Option<u32> = None;
-        let mut culist_output_index : Option<u32> = None;
+        let mut culist_input_index: Option<u32> = None;
+        let mut culist_output_index: Option<u32> = None;
 
         // if a node has no parent it means it is a source
-        let task_type = if config.graph.neighbors_directed(id.into(), petgraph::Direction::Incoming).count() == 0 {
-            output_msg_type = Some(config.graph.edge_weight(EdgeIndex::new(config.get_src_edges(id)[0])).unwrap().clone());
+        let task_type = if config.graph.neighbors_directed(id.into(), Incoming).count() == 0 {
+            output_msg_type = Some(
+                config
+                    .graph
+                    .edge_weight(EdgeIndex::new(config.get_src_edges(id)[0]))
+                    .unwrap()
+                    .clone(),
+            );
             culist_output_index = Some(next_culist_output_index);
             next_culist_output_index += 1;
             CuTaskType::Source
-        } else if config.graph.neighbors_directed(id.into(), petgraph::Direction::Outgoing).count() == 0 {
-            input_msg_type = Some(config.graph.edge_weight(EdgeIndex::new(config.get_dst_edges(id)[0])).unwrap().clone());
+        } else if config.graph.neighbors_directed(id.into(), Outgoing).count() == 0 {
+            input_msg_type = Some(
+                config
+                    .graph
+                    .edge_weight(EdgeIndex::new(config.get_dst_edges(id)[0]))
+                    .unwrap()
+                    .clone(),
+            );
             // get the node from where the message is coming from
-            let parent = config.graph.neighbors_directed(id.into(), petgraph::Direction::Incoming).next().unwrap();
+            let parent = config
+                .graph
+                .neighbors_directed(id.into(), Incoming)
+                .next()
+                .unwrap();
             culist_input_index = find_output_index_from_nodeid(parent.index() as NodeId, &result);
             CuTaskType::Sink
         } else {
-            output_msg_type = Some(config.graph.edge_weight(EdgeIndex::new(config.get_src_edges(id)[0])).unwrap().clone());
+            output_msg_type = Some(
+                config
+                    .graph
+                    .edge_weight(EdgeIndex::new(config.get_src_edges(id)[0]))
+                    .unwrap()
+                    .clone(),
+            );
             culist_output_index = Some(next_culist_output_index);
             next_culist_output_index += 1;
-            input_msg_type = Some(config.graph.edge_weight(EdgeIndex::new(config.get_dst_edges(id)[0])).unwrap().clone());
+            input_msg_type = Some(
+                config
+                    .graph
+                    .edge_weight(EdgeIndex::new(config.get_dst_edges(id)[0]))
+                    .unwrap()
+                    .clone(),
+            );
             // get the node from where the message is coming from
-            let parent = config.graph.neighbors_directed(id.into(), petgraph::Direction::Incoming).next().unwrap();
+            let parent = config
+                .graph
+                .neighbors_directed(id.into(), Incoming)
+                .next()
+                .unwrap();
             culist_input_index = find_output_index_from_nodeid(parent.index() as NodeId, &result);
             CuTaskType::Regular
         };
@@ -137,10 +162,10 @@ pub fn compute_runtime_plan(config: &CuConfig) -> CuResult<Vec<CuExecutionStep>>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::clock::RobotClock;
     use crate::config::Node;
     use crate::cutask::{CuMsg, CuSrcTask};
     use crate::cutask::{CuSinkTask, CuTaskLifecycle};
-    use crate::clock::RobotClock;
     pub struct TestSource {}
 
     impl CuTaskLifecycle for TestSource {
@@ -154,7 +179,11 @@ mod tests {
 
     impl CuSrcTask for TestSource {
         type Output = ();
-        fn process(&mut self, clock: &RobotClock, _empty_msg: &mut CuMsg<Self::Output>) -> CuResult<()> {
+        fn process(
+            &mut self,
+            clock: &RobotClock,
+            _empty_msg: &mut CuMsg<Self::Output>,
+        ) -> CuResult<()> {
             Ok(())
         }
     }
@@ -197,7 +226,8 @@ mod tests {
         config.add_node(Node::new("a", "TestSource"));
         config.add_node(Node::new("b", "TestSink"));
         config.connect(0, 1, "()");
-        let runtime = CuRuntime::<Tasks, Msgs, 2>::new(&config, tasks_instanciator);
+        let runtime =
+            CuRuntime::<Tasks, Msgs, 2>::new(RobotClock::default(), &config, tasks_instanciator);
         assert!(runtime.is_ok());
     }
 }

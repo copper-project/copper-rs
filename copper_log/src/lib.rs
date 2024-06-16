@@ -1,4 +1,5 @@
 use bincode_derive::{Decode, Encode};
+use copper_clock::CuTime;
 use copper_traits::{CuError, CuResult};
 pub use copper_value as value;
 use serde::{Deserialize, Serialize};
@@ -13,6 +14,9 @@ pub const ANONYMOUS: u32 = 0;
 /// This is the basic structure for a log entry in Copper.
 #[derive(Debug, Encode, Decode, Serialize, Deserialize, PartialEq)]
 pub struct CuLogEntry {
+    // Approximate time when the log entry was created.
+    pub time: CuTime,
+
     // interned index of the message
     pub msg_index: u32,
     // interned indexes of the parameter names
@@ -36,6 +40,8 @@ impl CuLogEntry {
     /// msg_index is the interned index of the message.
     pub fn new(msg_index: u32) -> Self {
         CuLogEntry {
+            time: 0.into(), // We have no clock at that point it is called from random places
+            // the clock will be set at actual log time from clock source provided
             msg_index,
             paramname_indexes: Vec::new(),
             params: Vec::new(),

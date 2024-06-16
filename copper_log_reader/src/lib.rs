@@ -69,6 +69,7 @@ pub fn read_interned_strings(index: &Path) -> CuResult<Vec<String>> {
 mod tests {
 
     use super::*;
+    use copper_clock::RobotClock;
     use copper_datalogger::{stream_write, DataLogger, DataLoggerBuilder, DataLoggerIOReader};
     use copper_log::value::Value;
     use copper_log_runtime::log;
@@ -110,7 +111,7 @@ mod tests {
             };
             let data_logger = Arc::new(Mutex::new(logger));
             let stream = stream_write(data_logger.clone(), DataLogType::StructuredLogLine, 1024);
-            let rt = LoggerRuntime::init(stream, None);
+            let rt = LoggerRuntime::init(RobotClock::default(), stream, None);
 
             let mut entry = CuLogEntry::new(4); // this is a "Just a String {}" log line
             entry.add_param(0, Value::String("Parameter for the log line".into()));

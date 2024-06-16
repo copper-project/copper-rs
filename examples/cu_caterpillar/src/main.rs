@@ -104,13 +104,12 @@ fn main() {
     //    .join("target/debug/copper_log_index");
 
     let extra: ExtraTextLogger = ExtraTextLogger::new(log_index_path, slow_text_logger);
-    let _needed = LoggerRuntime::init(stream, Some(extra));
+    let clock = RobotClock::default();
+    let _needed = LoggerRuntime::init(clock.clone(), stream, Some(extra));
     debug!("Application created.");
-    let mut application = TheVeryHungryCaterpillar::new().expect("Failed to create runtime.");
-    debug!(
-        "Running... starting clock: {}.",
-        application.copper_runtime.clock.now()
-    );
+    let mut application =
+        TheVeryHungryCaterpillar::new(clock.clone()).expect("Failed to create runtime.");
+    debug!("Running... starting clock: {}.", clock.now());
     application.run(2).expect("Failed to run application.");
     debug!("End of program.");
     sleep(Duration::from_secs(1));

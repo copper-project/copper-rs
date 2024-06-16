@@ -75,7 +75,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         copper_runtime: _CuRuntime<CuTasks, CuList, #DEFAULT_CLNB>
     };
 
-
     let name = &item_struct.ident;
 
     println!("[match struct anonymity]");
@@ -172,7 +171,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             } else {
                 Some(parse_str::<Type>(step.output_msg_type.clone().unwrap().as_str()).unwrap())
             }
-        }).collect();
+        })
+        .collect();
 
     println!("[build the copper list tuple]");
     let msgs_types_tuple: TypeTuple = if all_msgs_types_in_culist_order.is_empty() {
@@ -207,6 +207,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         use copper::cutask::CuSinkTask as _CuSinkTask;
         use copper::cutask::CuTask as _CuTask;
         use copper::cutask::CuMsg as _CuMsg;
+        use copper::clock::RobotClock as _RobotClock;
         use copper::clock::OptionCuTime as _OptionCuTime;
 
         pub type CuTasks = #task_types_tuple;
@@ -221,11 +222,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         impl #name {
 
-            pub fn new() -> _CuResult<Self> {
+            pub fn new(clock:_RobotClock) -> _CuResult<Self> {
                 let config = _read_configuration(#config_file)?;
 
                 Ok(#name {
-                    copper_runtime: _CuRuntime::<CuTasks, CuList, #DEFAULT_CLNB>::new(&config, tasks_instanciator)?
+                    copper_runtime: _CuRuntime::<CuTasks, CuList, #DEFAULT_CLNB>::new(clock, &config, tasks_instanciator)?
                 })
             }
 
@@ -264,4 +265,3 @@ fn extract_tasks_types(copper_config: &CuConfig) -> (Vec<String>, Vec<Type>) {
         .collect();
     (all_types_names, all_types)
 }
-
