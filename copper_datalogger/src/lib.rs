@@ -64,7 +64,6 @@ impl MmapStream {
 
 impl WriteStream for MmapStream {
     fn log(&mut self, obj: &impl Encode) -> CuResult<()> {
-        println!("Write Stream: log");
         let result = encode_into_slice(
             obj,
             &mut self.current_slice[self.current_position..],
@@ -72,10 +71,6 @@ impl WriteStream for MmapStream {
         );
         match result {
             Ok(nb_bytes) => {
-                println!(
-                    "Write Stream: Encoded bytes : {:?}",
-                    &self.current_slice[self.current_position..self.current_position + nb_bytes]
-                );
                 self.current_position += nb_bytes;
                 Ok(())
             }

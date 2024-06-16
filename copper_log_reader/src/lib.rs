@@ -26,12 +26,12 @@ pub fn full_log_dump(mut src: impl Read, index: &Path) -> CuResult<()> {
             break;
         }
 
-        let result = rebuild_logline(&all_strings, entry);
+        let result = rebuild_logline(&all_strings, &entry);
         if result.is_err() {
             println!("Failed to rebuild log line: {:?}", result);
             continue;
         }
-        println!("Copper: {}", result.unwrap());
+        println!("Culog: [{}] {}", entry.time, result.unwrap());
     }
     Ok(())
 }
@@ -81,7 +81,7 @@ mod tests {
 
     #[test]
     fn test_extract_low_level_copper_log() {
-        let hex_string = "01 01 01 00 01 0C 05 7A 61 72 6D 61";
+        let hex_string = "01 01 00 01 0C 05 7A 61 72 6D 61";
         let bytes: Vec<u8> = hex_string
             .split_whitespace()
             .map(|s| u8::from_str_radix(s, 16).expect("Parse error"))
