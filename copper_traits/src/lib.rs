@@ -62,6 +62,7 @@ pub trait WriteStream: Sync + Send {
     fn log(&mut self, obj: &impl Encode) -> CuResult<()>;
 }
 
+/// Defines the types of what can be logged.
 #[derive(dEncode, dDecode, Copy, Clone, Debug, PartialEq)]
 pub enum DataLogType {
     StructuredLogLine,

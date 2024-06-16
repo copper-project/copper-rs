@@ -500,7 +500,7 @@ mod tests {
     #[test]
     fn clock_ser_deser() {
         let (clock, mock) = RobotClock::mock();
-        mock.increment(42);
+        mock.increment(Duration::from_nanos(42));
         let c = clock.now();
 
         let input = Value::CuTime(c);

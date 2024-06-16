@@ -165,14 +165,49 @@ impl Into<OptionCuTime> for CuTime {
 }
 
 /// A running Robot clock.
+/// The clock is a monotonic clock that starts at an arbitrary reference time.
+/// It is clone resilient, ie a clone will be the same clock, even when mocked.
 #[derive(Clone, Debug)]
 pub struct RobotClock {
-    inner: Clock,
-    ref_time: Instant,
+    inner: Clock,      // This is a wrapper on quanta::Clock today.
+    ref_time: Instant, // The reference instant on which this clock is based.
+}
+
+/// A mock clock that can be controlled by the user.
+#[derive(Debug, Clone)]
+pub struct RobotClockMock(Arc<Mock>); // wraps the Mock from quanta today.
+
+impl RobotClockMock {
+    pub fn increment(&self, amount: Duration) {
+        self.0.increment(amount);
+    }
+
+    /// Decrements the time by the given amount.
+    /// Be careful this brakes the monotonicity of the clock.
+    pub fn decrement(&self, amount: Duration) {
+        self.0.decrement(amount);
+    }
+
+    /// Gets the current value of time.
+    pub fn value(&self) -> u64 {
+        self.0.value()
+    }
+
+    /// Sets the absolute value of the time.
+    pub fn set_value(&self, value: u64) {
+        let v = self.0.value();
+        // had to work around the quata API here.
+        if v < value {
+            self.increment(Duration::from_nanos(value) - Duration::from_nanos(v));
+        } else {
+            self.decrement(Duration::from_nanos(v) - Duration::from_nanos(value));
+        }
+    }
 }
 
 impl RobotClock {
-    /// Creates a RobotClock using the call time as its reference point.
+    /// Creates a RobotClock using now as its reference time.
+    /// It will start a 0ns incrementing monotonically.
     pub fn new() -> Self {
         let clock = Clock::new();
         let ref_time = clock.now();
@@ -193,8 +228,8 @@ impl RobotClock {
     }
 
     /// Build a fake clock with a reference time of 0.
-    /// The Mock interface enables you to increment and decrement the time.
-    pub fn mock() -> (Self, Arc<Mock>) {
+    /// The RobotMock interface enables you to control all the clones of the clock given.
+    pub fn mock() -> (Self, RobotClockMock) {
         let (clock, mock) = Clock::mock();
         let ref_time = clock.now();
         (
@@ -202,7 +237,7 @@ impl RobotClock {
                 inner: clock,
                 ref_time,
             },
-            mock,
+            RobotClockMock(mock),
         )
     }
 
@@ -243,6 +278,15 @@ mod tests {
         assert_eq!(clock.now(), Duration::from_secs(0).into());
         mock.increment(Duration::from_secs(1));
         assert_eq!(clock.now(), Duration::from_secs(1).into());
+    }
+
+    #[test]
+    fn test_mock_clone() {
+        let (clock, mock) = RobotClock::mock();
+        assert_eq!(clock.now(), Duration::from_secs(0).into());
+        let clock_clone = clock.clone();
+        mock.increment(Duration::from_secs(1));
+        assert_eq!(clock_clone.now(), Duration::from_secs(1).into());
     }
 
     #[test]
