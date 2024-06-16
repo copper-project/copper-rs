@@ -27,4 +27,99 @@ Copper is a data oriented runtime that is made of those key components:
 Enough! Show me how it is easy to build something!
 
 
+```toml
+[dependencies]
+copper-derive = "*"       # the macro support that will generate your robot runtime at compile time
+copper = "*"              # the supporting runtime
+copper-log = "*"          # the super fast structured logging facility
+copper-log-derive = "*"   # the macro to index the strcuture logging statements at compile time
+copper-log-runtime = "*"  # the supporting runtime for the structured logging
+copper-datalogger = "*"   # the datalogger (to log messages)
+cu-rp-gpio = "*"          # a copper task we reuse from another crate
+```
 
+```RON
+(
+    tasks: [
+        (
+            id: "src",                   // this is a friendly name
+            type: "FlippingSource",      // This is a Rust struct name for this task
+        ),
+        (
+            id: "gpio",                // another task, another name
+            type: "cu_rp_gpio::RPGpio",  // This is the Rust struct name
+            config: {                    // You can attach config elements to yout task
+                "pin": 4,
+            },
+        ),
+    ],
+     cnx: [
+        // Here we simply connect the tasks telling to the framework what type of messages we want to use. 
+        (src: "src",  dst: "gpio",   msg: "cu_rp_gpio::RPGpioMsg"),
+    ],    
+```
+
+Then, on your main.rs:
+
+```rust,no_run
+
+#[copper_runtime(config = "copperconfig.ron")]  // this is the ron config we just created.
+struct MyApplication {}
+
+// Here we define our own Copper Task
+// It will be a source flipping a boolean
+pub struct FlippingSource {
+    state: bool,
+}
+
+impl CuTaskLifecycle for FlippingSource {
+    fn new(_config: Option<&copper::config::NodeInstanceConfig>) -> CuResult<Self>
+    where
+        Self: Sized,
+    {
+        Ok(Self { state: true })
+    }
+}
+
+impl CuSrcTask for FlippingSource {
+    type Output = RPGpioMsg;
+
+    fn process(&mut self, clock: &RobotClock, output: &mut CuMsg<Self::Output>) -> CuResult<()> {
+        self.state = !self.state;   // Flip our internal state and send the message in our output.
+        output.payload = RPGpioMsg {
+            on: self.state,
+            creation: clock.now().into(),
+        };
+        Ok(())
+    }
+}
+
+
+// And that's it we can create the runtime and run it!
+fn main() {
+    // This is where we want to log the data at runtime.
+    let path: PathBuf = PathBuf::from("/tmp/caterpillar.copper");
+    let DataLogger::Write(logger) = DataLoggerBuilder::new()
+        .write(true)
+        .create(true)
+        .file_path(&path)
+        .preallocated_size(100000)
+        .build()
+        .expect("Failed to create logger")
+    else {
+        panic!("Failed to create logger")
+    };
+    let data_logger = Arc::new(Mutex::new(logger));
+
+    // This hooks up the structure logging to the main data logger
+    let stream = stream_write(data_logger.clone(), DataLogType::StructuredLogLine, 1024);
+
+    // We define our main robot clock
+    let clock = RobotClock::default();
+    let mut application = MyApplication::new(clock.clone()).expect("Failed to create runtime.");
+    debug!("Running... starting clock: {}.", mytime = clock.now());  // this will be indexed as "mytime" in the main datalogger
+    application.run().expect("Failed to run application.");
+}
+
+
+```
