@@ -1,10 +1,15 @@
+use bincode::de::Decode;
+use bincode::de::Decoder;
+use bincode::enc::Encode;
+use bincode::enc::Encoder;
+use bincode::error::EncodeError;
 use core::ops::{Add, Sub};
-use std::fmt::{Display, Formatter};
 pub use quanta::Instant;
 use quanta::{Clock, Mock};
+use serde::{Deserialize, Serialize};
+use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use std::time::Duration;
-use serde::{Deserialize, Serialize};
 
 #[cfg(test)]
 #[macro_use]
@@ -53,6 +58,12 @@ impl Add for CuDuration {
 
     fn add(self, rhs: Self) -> Self::Output {
         CuDuration(self.0 + rhs.0)
+    }
+}
+
+impl Encode for CuDuration {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        self.0.encode(encoder)
     }
 }
 

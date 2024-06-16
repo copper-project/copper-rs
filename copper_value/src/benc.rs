@@ -28,6 +28,7 @@ impl Encode for Value {
             Value::Map(v) => v.to_owned().encode(encoder),
             Value::Option(v) => v.to_owned().encode(encoder),
             Value::Newtype(v) => v.to_owned().encode(encoder),
+            Value::CuTime(v) => v.to_owned().encode(encoder),
         }
     }
 }

@@ -379,6 +379,7 @@ where
                     |(k, v)| (ValueDeserializer::new(k), ValueDeserializer::new(v)),
                 ))),
             Value::Bytes(v) => visitor.visit_byte_buf(v),
+            Value::CuTime(v) => visitor.visit_u64(v.0),
         }
     }
 
