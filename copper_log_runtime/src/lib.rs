@@ -77,7 +77,7 @@ impl LoggerRuntime {
                 if let Ok(mut cu_log_entry) = receiver.recv() {
                     // We don't need to be precise on this clock.
                     // If the user wants to really log a clock they should add it as a structured field.
-                    cu_log_entry.time = clock.recent();
+                    cu_log_entry.time = clock.now();
                     if let Err(err) = destination.log(&cu_log_entry) {
                         eprintln!("Failed to log data: {}", err);
                     }
@@ -86,9 +86,10 @@ impl LoggerRuntime {
                     #[cfg(debug_assertions)]
                     if let Some(index) = &index {
                         if let Some(ref logger) = extra_text_logger {
-                            let stringified = copper_log::rebuild_logline(index, cu_log_entry);
+                            let stringified = copper_log::rebuild_logline(index, &cu_log_entry);
                             match stringified {
                                 Ok(s) => {
+                                    let s = format!("[{}] {}", cu_log_entry.time, s);
                                     logger.log(
                                         &Record::builder()
                                             // TODO: forward this info in the CuLogEntry
