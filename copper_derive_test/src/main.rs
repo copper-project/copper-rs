@@ -1,3 +1,4 @@
+use copper::clock::RobotClock;
 use copper_derive::copper_runtime;
 use copper_log_derive::debug;
 
@@ -6,6 +7,6 @@ struct MyApplication {}
 
 fn main() {
     debug!("Application created.");
-    let application = MyApplication::new().expect("Failed to create runtime.");
+    let application = MyApplication::new(RobotClock::default()).expect("Failed to create runtime.");
     debug!("End of program.");
 }

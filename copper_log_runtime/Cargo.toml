@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 copper-log = { path = "../copper_log" }
 copper-traits = { path = "../copper_traits" }
+copper-clock = { path = "../copper_clock" }
 serde = { version = "1.0.202", features = ["derive"] }
 pretty-hex = "0.4.1"
 ctor = "0.2.8"

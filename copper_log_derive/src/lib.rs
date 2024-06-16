@@ -32,7 +32,6 @@ pub fn debug(input: TokenStream) -> TokenStream {
         use copper_log::value::to_value;
         use copper_log::CuLogEntry;
         use copper_log::ANONYMOUS;
-        // let msg = #msg;
         let mut log_entry = CuLogEntry::new(#index);
     };
 

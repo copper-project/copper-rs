@@ -1,10 +1,10 @@
+use copper_clock::{ClockProvider, RobotClock};
 use copper_log::CuLogEntry;
 use copper_log_reader::read_interned_strings;
 use copper_traits::{CuResult, WriteStream};
 use kanal::{bounded, Sender};
 use log::{Log, Record};
 use once_cell::sync::OnceCell;
-use std::cell::RefCell;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
@@ -16,14 +16,22 @@ static QUEUE: OnceCell<Sender<CuLogEntry>> = OnceCell::new();
 
 /// The lifetime of this struct is the lifetime of the logger.
 pub struct LoggerRuntime {
+    clock: RobotClock,
     handle: Option<JoinHandle<()>>,
     extra_text_logger: Option<ExtraTextLogger>,
+}
+
+impl ClockProvider for LoggerRuntime {
+    fn get_clock(&self) -> RobotClock {
+        self.clock.clone()
+    }
 }
 
 impl LoggerRuntime {
     /// destination is the binary stream in which we will log the structured log.
     /// extra_text_logger is the logger that will log the text logs in real time. This is slow and only for debug builds.
     pub fn init(
+        clock_source: RobotClock,
         destination: impl WriteStream + 'static,
         extra_text_logger: Option<ExtraTextLogger>,
     ) -> Self {
@@ -32,6 +40,7 @@ impl LoggerRuntime {
         };
 
         let mut runtime = LoggerRuntime {
+            clock: clock_source,
             extra_text_logger,
             handle: None,
         };
@@ -60,12 +69,15 @@ impl LoggerRuntime {
         } else {
             (None, None)
         };
+        let clock = self.clock.clone();
 
         let handle = thread::spawn(move || {
             let receiver = receiver.clone();
             loop {
-                if let Ok(cu_log_entry) = receiver.recv() {
-                    println!("Dequeued: {:?}", cu_log_entry);
+                if let Ok(mut cu_log_entry) = receiver.recv() {
+                    // We don't need to be precise on this clock.
+                    // If the user wants to really log a clock they should add it as a structured field.
+                    cu_log_entry.time = clock.recent();
                     if let Err(err) = destination.log(&cu_log_entry) {
                         eprintln!("Failed to log data: {}", err);
                     }
@@ -181,6 +193,7 @@ mod tests {
     #[test]
     fn test_encode_decode_structured_log() {
         let log_entry = CuLogEntry {
+            time: 0.into(),
             msg_index: 1,
             paramname_indexes: vec![2, 3],
             params: vec![Value::String("test".to_string())],
@@ -197,6 +210,7 @@ mod tests {
     fn test_serialize_deserialize_structured_log() {
         // tests compatibility with std serde
         let log_entry = CuLogEntry {
+            time: 0.into(),
             msg_index: 1,
             paramname_indexes: vec![2, 3],
             params: vec![Value::String("test".to_string())],

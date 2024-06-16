@@ -9,4 +9,5 @@ bincode_derive = "2.0.0-rc.3"
 serde = { version = "1.0.202", features = ["derive"] }
 copper-value = { path = "../copper_value" }
 copper-traits = { path = "../copper_traits" }
+copper-clock = { path = "../copper_clock" }
 strfmt = "0.2.0"

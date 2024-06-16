@@ -1,8 +1,9 @@
-use bincode::de::Decode;
 use bincode::de::Decoder;
+use bincode::de::{BorrowDecoder, Decode};
 use bincode::enc::Encode;
 use bincode::enc::Encoder;
-use bincode::error::EncodeError;
+use bincode::error::{DecodeError, EncodeError};
+use bincode::BorrowDecode;
 use core::ops::{Add, Sub};
 pub use quanta::Instant;
 use quanta::{Clock, Mock};
@@ -64,6 +65,18 @@ impl Add for CuDuration {
 impl Encode for CuDuration {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         self.0.encode(encoder)
+    }
+}
+
+impl Decode for CuDuration {
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+        Ok(CuDuration(u64::decode(decoder)?))
+    }
+}
+
+impl<'de> BorrowDecode<'de> for CuDuration {
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        Ok(CuDuration(u64::decode(decoder)?))
     }
 }
 
@@ -201,12 +214,23 @@ impl RobotClock {
         // Let's say this is the default implementation.
         (self.inner.now() - self.ref_time).into()
     }
+
+    // A less precise but quicker time
+    #[inline]
+    pub fn recent(&self) -> CuTime {
+        (self.inner.recent() - self.ref_time).into()
+    }
 }
 
 impl Default for RobotClock {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// A trait to provide a clock to the runtime.
+pub trait ClockProvider {
+    fn get_clock(&self) -> RobotClock;
 }
 
 #[cfg(test)]
