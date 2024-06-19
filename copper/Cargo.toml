@@ -4,6 +4,7 @@ version = "0.2.0"
 authors = ["Guillaume Binet <gbin@gootz.net>"]
 edition = "2021"
 license = "Apache-2.0"
+keywords = ["robotics", "middleware", "copper", "real-time"]
 
 [dependencies]
 lazy_static = "1.4.0"
