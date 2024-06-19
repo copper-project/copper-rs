@@ -402,7 +402,7 @@ impl DataLoggerRead {
         );
         println!(
             "read_section: Section content starts with {:?}",
-            &section[0..10]
+            &section[0..100]
         );
 
         self.reading_position += header.section_size as usize;
@@ -469,6 +469,7 @@ impl Read for DataLoggerIOReader {
         // Copy as much as we can from the buffer to `buf`
         let len = std::cmp::min(buf.len(), self.buffer.len() - self.buffer_pos);
         buf[..len].copy_from_slice(&self.buffer[self.buffer_pos..self.buffer_pos + len]);
+        println!("Read buffer: {:?}", &buf[0..len]);
         self.buffer_pos += len;
         Ok(len)
     }

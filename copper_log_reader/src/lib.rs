@@ -17,6 +17,7 @@ pub fn full_log_dump(mut src: impl Read, index: &Path) -> CuResult<()> {
     loop {
         let entry = decode_from_std_read::<CuLogEntry, _, _>(&mut src, standard());
         if entry.is_err() {
+            println!("Error {:?}", entry);
             break;
         }
         let entry = entry.unwrap();
