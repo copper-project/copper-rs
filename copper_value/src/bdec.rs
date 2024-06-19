@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use bincode::de::Decoder;
 use bincode::de::{BorrowDecoder, Decode};
 use bincode::error::DecodeError;
+use copper_clock::CuTime;
 
 // TODO: Unharcode all those enum types values
 impl Decode for Value {
@@ -29,7 +30,11 @@ impl Decode for Value {
             16 => Ok(Value::Map(BTreeMap::<Value, Value>::decode(decoder)?)),
             17 => Ok(Value::Option(Option::<Box<Value>>::decode(decoder)?)),
             18 => Ok(Value::Newtype(Box::<Value>::decode(decoder)?)),
-            _ => Err(DecodeError::Other("Unknown Value varian")),
+            32 => Ok(Value::CuTime(CuTime::decode(decoder)?)),
+            r => {
+                println!("Unknown Value variant: {}", r);
+                Err(DecodeError::Other("Unknown Value variant"))
+            }
         }
     }
 }
