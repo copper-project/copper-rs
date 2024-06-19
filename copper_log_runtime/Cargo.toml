@@ -3,6 +3,7 @@ name = "copper-log-runtime"
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
+keywords = ["robotics", "middleware", "copper", "real-time"]
 
 [dependencies]
 copper-log = { path = "../copper_log" }
