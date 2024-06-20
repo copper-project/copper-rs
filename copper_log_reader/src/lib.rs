@@ -82,7 +82,7 @@ mod tests {
 
     #[test]
     fn test_extract_low_level_copper_log() {
-        let entry = CuLogEntry::new(5);
+        let entry = CuLogEntry::new(3);
         let bytes = bincode::encode_to_vec(&entry, standard()).unwrap();
         let reader = Cursor::new(bytes.as_slice());
         full_log_dump(reader, Path::new("test/copper_log_index"));
