@@ -1,10 +1,11 @@
 use std::fmt;
 use std::marker::PhantomData;
 
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::{self, SeqAccess, Visitor};
 use serde::ser::SerializeSeq;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+/// Serialize a fixed 2D array.
 pub fn serialize<S, T, const WIDTH: usize, const HEIGHT: usize>(
     array: &[[T; WIDTH]; HEIGHT],
     serializer: S,
@@ -22,6 +23,7 @@ where
     seq.end()
 }
 
+/// Deserialize a fixed 2D array.
 pub fn deserialize<'de, D, T, const WIDTH: usize, const HEIGHT: usize>(
     deserializer: D,
 ) -> Result<[[T; WIDTH]; HEIGHT], D::Error>
