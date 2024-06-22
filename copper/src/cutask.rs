@@ -13,9 +13,12 @@ pub trait CuMsgPayload: Default + Serialize + for<'a> Deserialize<'a> + Sized {}
 // Also anything that follows this contract can be a payload (blanket implementation)
 impl<T> CuMsgPayload for T where T: Default + Serialize + for<'a> Deserialize<'a> + Sized {}
 
+/// CuMsgMetadata is a structure that contains metadata common to all CuMsgs.
 #[derive(Debug, PartialEq, Default)]
 pub struct CuMsgMetadata {
+    /// The time before the process method is called.
     pub before_process: OptionCuTime,
+    /// The time after the process method is called.
     pub after_process: OptionCuTime,
 }
 
@@ -29,12 +32,16 @@ impl Display for CuMsgMetadata {
     }
 }
 
+/// CuMsg is the envelope holding the msg payload and the metadata between tasks.
 #[derive(Debug, PartialEq)]
 pub struct CuMsg<T>
 where
     T: CuMsgPayload,
 {
+    /// This payload is the actual data exchanged between tasks.
     pub payload: T,
+
+    /// This metadata is the data that is common to all messages.
     pub metadata: CuMsgMetadata,
 }
 

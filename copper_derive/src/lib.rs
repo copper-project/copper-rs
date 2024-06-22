@@ -23,7 +23,8 @@ fn int2index(i: u32) -> syn::Index {
     syn::Index::from(i as usize)
 }
 
-// Parses the CopperRuntime attribute like #[copper_runtime(config = "path")]
+/// Adds #[copper_runtime(config = "path")] to your application struct to generate the runtime.
+/// This will add a "runtime" field to your struct and implement the "new" and "run" methods.
 #[proc_macro_attribute]
 pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     println!("[entry]");

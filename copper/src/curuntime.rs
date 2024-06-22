@@ -5,14 +5,21 @@ use crate::copperlist::CuListsManager;
 use crate::CuResult;
 use petgraph::prelude::*;
 
-// CT is a tuple of all the tasks
-// CL is the type of the copper list
+/// This is the main structure that will be injected as a member of the Application struct.
+/// CT is the tuple of all the tasks in order of execution.
+/// CL is the type of the copper list, representing the input/output messages for all the tasks.
 pub struct CuRuntime<CT, CL: Sized + PartialEq, const NBCL: usize> {
+    /// The tuple of all the tasks in order of execution.
     pub task_instances: CT,
+
+    /// Copper lists hold in order all the input/output messages for all the tasks.
     pub copper_lists: CuListsManager<CL, NBCL>,
+
+    /// The base clock the runtime will be using to record time.
     pub clock: RobotClock,
 }
 
+/// To be able to share the clock we make the runtime a clock provider.:w
 impl<CT, CL: Sized + PartialEq, const NBCL: usize> ClockProvider for CuRuntime<CT, CL, NBCL> {
     fn get_clock(&self) -> RobotClock {
         self.clock.clone()
@@ -39,28 +46,32 @@ impl<CT, CL: Sized + PartialEq, const NBCL: usize> CuRuntime<CT, CL, NBCL> {
     }
 }
 
+/// Copper tasks can be of 3 types:
+/// - Source: only producing output messages (usually used for drivers)
+/// - Regular: processing input messages and producing output messages, more like compute nodes.
+/// - Sink: only consuming input messages (usually used for actuators)
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum CuTaskType {
     Source,
-    Sink,
     Regular,
+    Sink,
 }
 
-/// Steps give:
-/// NodeId: node id of the task to execute
-/// Node: node instance
-/// CuTaskType: type of the task
-/// Option<String>: input message type
-/// u32: index in the culist of the input message
-/// Option<String>: output message type
-/// u32: index in the culist of the output message
+/// This structure represents a step in the execution plan.
 pub struct CuExecutionStep {
+    /// NodeId: node id of the task to execute
     pub node_id: NodeId,
+    /// Node: node instance
     pub node: Node,
+    /// CuTaskType: type of the task
     pub task_type: CuTaskType,
+    /// Option<String>: input message type
     pub input_msg_type: Option<String>,
+    /// u32: index in the culist of the input message
     pub culist_input_index: Option<u32>,
+    /// Option<String>: output message type
     pub output_msg_type: Option<String>,
+    /// u32: index in the culist of the output message
     pub culist_output_index: Option<u32>,
 }
 
@@ -73,6 +84,8 @@ fn find_output_index_from_nodeid(node_id: NodeId, steps: &Vec<CuExecutionStep>) 
     None
 }
 
+/// This is the main heuristics to compute an execution plan at compilation time.
+/// TODO: Make that heuristic plugable.
 pub fn compute_runtime_plan(config: &CuConfig) -> CuResult<Vec<CuExecutionStep>> {
     let mut next_culist_output_index = 0u32;
 

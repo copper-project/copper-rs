@@ -17,6 +17,13 @@ pub type NodeId = u32;
 pub type NodeInstanceConfig = HashMap<String, Value>;
 pub type Edge = (NodeId, NodeId, String);
 
+// The confifuration Serialization format is as follows:
+// (
+//   tasks : [ (id: "toto", type: "zorglub::MyType", config: {...}),
+//             (id: "titi", type: "zorglub::MyType2", config: {...})]
+//   cnx : [ (src: "toto", dst: "titi", msg: "zorglub::MyMsgType"),...]
+// )
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Value(RonValue);
 
@@ -96,6 +103,8 @@ impl From<Value> for String {
     }
 }
 
+/// A node in the configuration graph.
+/// A node represents a Task in the system Graph.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Node {
     id: String,
@@ -165,17 +174,16 @@ impl Node {
     }
 }
 
-// Serialization format
-// (
-//   tasks : [ (id: "toto", type: "zorglub::MyType", config: {...}),
-//             (id: "titi", type: "zorglub::MyType2", config: {...})]
-//   cnx : [ (src: "toto", dst: "titi", msg: "zorglub::MyMsgType"),...]
-// )
-
+/// This represent a conenction between 2 tasks (nodes) in the configuration graph.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Cnx {
+    /// Source node id.
     src: String,
+
+    // Destination node id.
     dst: String,
+
+    /// Message type exchanged betwee src and dst.
     msg: String,
 }
 
@@ -185,6 +193,7 @@ pub struct CuConfig {
     pub graph: StableDiGraph<Node, String, NodeId>,
 }
 
+/// The config is a list of tasks and their connections.
 #[derive(Serialize, Deserialize, Default)]
 struct CuConfigRepresentation {
     tasks: Vec<Node>,
@@ -344,6 +353,7 @@ impl CuConfig {
     }
 }
 
+/// Read a copper configuration from a file.
 pub fn read_configuration(config_filename: &str) -> CuResult<CuConfig> {
     let config_content = read_to_string(config_filename).map_err(|e| {
         CuError::from(format!(

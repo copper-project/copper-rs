@@ -24,12 +24,15 @@ const MAIN_MAGIC: [u8; 4] = [0xB4, 0xA5, 0x50, 0xFF];
 
 const SECTION_MAGIC: [u8; 2] = [0xFA, 0x57];
 
+/// The main header of the datalogger.
 #[derive(dEncode, dDecode)]
 struct MainHeader {
     magic: [u8; 4],
     first_section_offset: u16, // This is to align with a page at write time.
 }
 
+/// Each concurrent sublogger is tracked through a section header.
+/// The entry type is used to identify the type of data in the section.
 #[derive(dEncode, dDecode)]
 struct SectionHeader {
     magic: [u8; 2],
@@ -37,6 +40,7 @@ struct SectionHeader {
     section_size: u32, // offset of section_magic + section_size -> should be the index of the next section_magic
 }
 
+/// A wrapper around a memory mapped file to write to.
 struct MmapStream {
     entry_type: DataLogType,
     parent_logger: Arc<Mutex<DataLoggerWrite>>,
@@ -105,6 +109,7 @@ impl Drop for MmapStream {
     }
 }
 
+/// Create a new stream to write to the datalogger.
 pub fn stream_write(
     logger: Arc<Mutex<DataLoggerWrite>>,
     entry_type: DataLogType,
@@ -124,11 +129,13 @@ pub fn stream_write(
 
 const DEFAULT_LOGGER_SIZE: usize = 1024 * 1024 * 1024; // 1GB
 
+/// Holder of the read or write side of the datalogger.
 pub enum DataLogger {
     Read(DataLoggerRead),
     Write(DataLoggerWrite),
 }
 
+/// Use this builder to create a new DataLogger.
 pub struct DataLoggerBuilder {
     file_path: Option<PathBuf>,
     preallocated_size: Option<usize>,
@@ -235,12 +242,14 @@ impl DataLoggerBuilder {
     }
 }
 
+/// A read side of the datalogger.
 pub struct DataLoggerRead {
     file: File,
     mmap_buffer: Mmap,
     reading_position: usize,
 }
 
+/// A write side of the datalogger.
 pub struct DataLoggerWrite {
     file: File,
     mmap_buffer: MmapMut,
