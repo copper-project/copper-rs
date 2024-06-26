@@ -120,6 +120,5 @@ fn main() {
     debug!("Running... starting clock: {}.", mytime = clock.now());  // this will be indexed as "mytime" in the main datalogger
     application.run().expect("Failed to run application.");
 }
-
-
 ```
+
