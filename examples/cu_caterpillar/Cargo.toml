@@ -16,5 +16,3 @@ copper-datalogger = { path = "../../copper_datalogger" }
 cu-rp-gpio = { path = "../cu_rp_gpio" }
 serde = { version = "1.0.203", features = ["derive"] }
 simplelog = "0.12.2"
-
-
