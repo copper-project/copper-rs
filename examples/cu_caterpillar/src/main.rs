@@ -1,8 +1,6 @@
 pub mod tasks;
 
 use copper::clock::ClockProvider;
-use copper::clock::CuDuration;
-use copper::clock::CuTime;
 use copper_derive::copper_runtime;
 use copper_helpers::basic_logger_runtime_setup;
 use copper_log_derive::debug;

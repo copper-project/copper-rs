@@ -185,7 +185,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
     println!("[build the collect metadata function]");
     let culist_size = all_msgs_types_in_culist_order.len();
-    let culist_indices = 0..culist_size;
+    let culist_indices = (0..(culist_size as u32)).map(int2index);
     let collect_metadata_function = quote! {
         pub fn collect_metadata<'a>(culist: &'a CuList) -> [&'a _CuMsgMetadata; #culist_size] {
             [#( &culist.#culist_indices.metadata, )*]
