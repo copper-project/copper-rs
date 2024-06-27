@@ -1,10 +1,9 @@
+use crate::Value;
 use serde::{de, forward_to_deserialize_any};
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt;
 use std::marker::PhantomData;
-
-use crate::Value;
 
 #[derive(Debug)]
 pub enum Unexpected {
@@ -283,7 +282,6 @@ impl<'de> de::Visitor<'de> for ValueVisitor {
     }
 
     fn visit_newtype_struct<D: de::Deserializer<'de>>(self, d: D) -> Result<Value, D::Error> {
-        println!("visit_newtype_struct");
         d.deserialize_any(ValueVisitor)
             .map(|v| Value::Newtype(Box::new(v)))
     }
@@ -315,7 +313,6 @@ impl<'de> de::Visitor<'de> for ValueVisitor {
 
 impl<'de> de::Deserialize<'de> for Value {
     fn deserialize<D: de::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        println!("Value::deserialize");
         d.deserialize_any(ValueVisitor)
     }
 }
