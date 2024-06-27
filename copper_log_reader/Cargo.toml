@@ -15,7 +15,7 @@ path = "src/cli.rs"
 copper-traits = { path = "../copper_traits" }
 copper-log = { path = "../copper_log" }
 copper-clock = { path = "../copper_clock" }
-copper-datalogger = { path = "../copper_datalogger" }
+copper-unifiedlog = { path = "../copper_unifiedlog" }
 clap = { version = "4.5.7", features = ["derive"] }
 rkv = { version = "0.19.0", features = ["lmdb"] }
 byteorder = "1.5.0"

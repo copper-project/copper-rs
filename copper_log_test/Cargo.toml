@@ -8,13 +8,8 @@ categories = ["science::robotics"]
 
 [dependencies]
 copper = { path = "../copper" }
-copper-log-derive = { path = "../copper_log_derive" }
 copper-log = { path = "../copper_log" }
-copper-log-runtime = { path = "../copper_log_runtime" }
-copper-datalogger = { path = "../copper_datalogger" }
-copper-value = { path = "../copper_value" }
-serde = { version = "1.0.202", features = ["derive"] }
-
-[build-dependencies]
 copper-log-derive = { path = "../copper_log_derive" }
-
+copper-log-runtime = { path = "../copper_log_runtime" }
+copper-helpers = { path = "../copper_helpers" }
+serde = { version = "1.0.202", features = ["derive"] }

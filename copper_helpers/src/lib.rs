@@ -1,8 +1,8 @@
 use copper_clock::RobotClock;
-use copper_datalogger::{stream_write, DataLogger, DataLoggerBuilder};
 use copper_log::default_log_index_dir;
 use copper_log_runtime::{ExtraTextLogger, LoggerRuntime};
 use copper_traits::{CuResult, DataLogType};
+use copper_unifiedlog::{stream_write, UnifiedLogger, UnifiedLoggerBuilder};
 use simplelog::{ColorChoice, Config, LevelFilter, TermLogger, TerminalMode};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -18,7 +18,7 @@ pub fn basic_logger_runtime_setup(
     datalogger_output_path: &Path,
     text_log: bool,
 ) -> CuResult<LoggerRuntime> {
-    let DataLogger::Write(logger) = DataLoggerBuilder::new()
+    let UnifiedLogger::Write(logger) = UnifiedLoggerBuilder::new()
         .write(true)
         .create(true)
         .file_path(datalogger_output_path)

@@ -43,7 +43,7 @@ struct SectionHeader {
 /// A wrapper around a memory mapped file to write to.
 struct MmapStream {
     entry_type: DataLogType,
-    parent_logger: Arc<Mutex<DataLoggerWrite>>,
+    parent_logger: Arc<Mutex<UnifiedLoggerWrite>>,
     current_slice: &'static mut [u8],
     current_position: usize,
     minimum_allocation_amount: usize,
@@ -52,7 +52,7 @@ struct MmapStream {
 impl MmapStream {
     fn new(
         entry_type: DataLogType,
-        parent_logger: Arc<Mutex<DataLoggerWrite>>,
+        parent_logger: Arc<Mutex<UnifiedLoggerWrite>>,
         current_slice: &'static mut [u8],
         minimum_allocation_amount: usize,
     ) -> Self {
@@ -109,9 +109,9 @@ impl Drop for MmapStream {
     }
 }
 
-/// Create a new stream to write to the datalogger.
+/// Create a new stream to write to the unifiedlogger.
 pub fn stream_write(
-    logger: Arc<Mutex<DataLoggerWrite>>,
+    logger: Arc<Mutex<UnifiedLoggerWrite>>,
     entry_type: DataLogType,
     minimum_allocation_amount: usize,
 ) -> impl WriteStream {
@@ -130,20 +130,20 @@ pub fn stream_write(
 const DEFAULT_LOGGER_SIZE: usize = 1024 * 1024 * 1024; // 1GB
 
 /// Holder of the read or write side of the datalogger.
-pub enum DataLogger {
-    Read(DataLoggerRead),
-    Write(DataLoggerWrite),
+pub enum UnifiedLogger {
+    Read(UnifiedLoggerRead),
+    Write(UnifiedLoggerWrite),
 }
 
 /// Use this builder to create a new DataLogger.
-pub struct DataLoggerBuilder {
+pub struct UnifiedLoggerBuilder {
     file_path: Option<PathBuf>,
     preallocated_size: Option<usize>,
     write: bool,
     create: bool,
 }
 
-impl DataLoggerBuilder {
+impl UnifiedLoggerBuilder {
     pub fn new() -> Self {
         Self {
             file_path: None,
@@ -173,7 +173,7 @@ impl DataLoggerBuilder {
         self
     }
 
-    pub fn build(self) -> io::Result<DataLogger> {
+    pub fn build(self) -> io::Result<UnifiedLogger> {
         if self.create && !self.write {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -213,7 +213,7 @@ impl DataLoggerBuilder {
             let nb_bytes = encode_into_slice(&main_header, &mut mmap[..], standard())
                 .expect("Failed to encode main header");
             assert!(nb_bytes < page_size);
-            Ok(DataLogger::Write(DataLoggerWrite {
+            Ok(UnifiedLogger::Write(UnifiedLoggerWrite {
                 file,
                 mmap_buffer: mmap,
                 page_size,
@@ -233,7 +233,7 @@ impl DataLoggerBuilder {
                     "Invalid magic number in main header",
                 ));
             }
-            Ok(DataLogger::Read(DataLoggerRead {
+            Ok(UnifiedLogger::Read(UnifiedLoggerRead {
                 file,
                 mmap_buffer: mmap,
                 reading_position: main_header.first_section_offset as usize,
@@ -243,14 +243,14 @@ impl DataLoggerBuilder {
 }
 
 /// A read side of the datalogger.
-pub struct DataLoggerRead {
+pub struct UnifiedLoggerRead {
     file: File,
     mmap_buffer: Mmap,
     reading_position: usize,
 }
 
 /// A write side of the datalogger.
-pub struct DataLoggerWrite {
+pub struct UnifiedLoggerWrite {
     file: File,
     mmap_buffer: MmapMut,
     page_size: usize,
@@ -259,7 +259,7 @@ pub struct DataLoggerWrite {
     flushed_until: usize,
 }
 
-impl DataLoggerWrite {
+impl UnifiedLoggerWrite {
     fn unsure_size(&mut self, size: usize) -> io::Result<()> {
         // Here it is important that the memory map resizes in place.
         // According to the documentation this is something unique to Linux to be able to do that.
@@ -346,7 +346,7 @@ impl DataLoggerWrite {
     }
 }
 
-impl Drop for DataLoggerWrite {
+impl Drop for UnifiedLoggerWrite {
     fn drop(&mut self) {
         self.add_section(DataLogType::LastEntry, 0);
         self.flush();
@@ -356,7 +356,7 @@ impl Drop for DataLoggerWrite {
     }
 }
 
-impl DataLoggerRead {
+impl UnifiedLoggerRead {
     pub fn read_next_section_type(
         &mut self,
         datalogtype: DataLogType,
@@ -433,16 +433,16 @@ impl DataLoggerRead {
     }
 }
 
-/// This a a convience wrapper around the DataLoggerRead to implement the Read trait.
-pub struct DataLoggerIOReader {
-    logger: DataLoggerRead,
+/// This a a convience wrapper around the UnifiedLoggerRead to implement the Read trait.
+pub struct UnifiedLoggerIOReader {
+    logger: UnifiedLoggerRead,
     log_type: DataLogType,
     buffer: Vec<u8>,
     buffer_pos: usize,
 }
 
-impl DataLoggerIOReader {
-    pub fn new(logger: DataLoggerRead, log_type: DataLogType) -> Self {
+impl UnifiedLoggerIOReader {
+    pub fn new(logger: UnifiedLoggerRead, log_type: DataLogType) -> Self {
         Self {
             logger,
             log_type,
@@ -464,7 +464,7 @@ impl DataLoggerIOReader {
     }
 }
 
-impl Read for DataLoggerIOReader {
+impl Read for UnifiedLoggerIOReader {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if self.buffer_pos >= self.buffer.len() {
             self.fill_buffer()?;
@@ -489,9 +489,9 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
     use tempfile::TempDir;
-    fn make_a_logger(tmp_dir: &TempDir) -> (Arc<Mutex<DataLoggerWrite>>, PathBuf) {
+    fn make_a_logger(tmp_dir: &TempDir) -> (Arc<Mutex<UnifiedLoggerWrite>>, PathBuf) {
         let file_path = tmp_dir.path().join("test.bin");
-        let DataLogger::Write(data_logger) = DataLoggerBuilder::new()
+        let UnifiedLogger::Write(data_logger) = UnifiedLoggerBuilder::new()
             .write(true)
             .create(true)
             .file_path(&file_path)
@@ -510,7 +510,7 @@ mod tests {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let file_path = tmp_dir.path().join("test.bin");
         let _used = {
-            let DataLogger::Write(mut logger) = DataLoggerBuilder::new()
+            let UnifiedLogger::Write(mut logger) = UnifiedLoggerBuilder::new()
                 .write(true)
                 .create(true)
                 .file_path(&file_path)
@@ -598,7 +598,7 @@ mod tests {
             stream.log(&3u32).unwrap();
         }
         drop(logger);
-        let DataLogger::Read(mut dl) = DataLoggerBuilder::new()
+        let UnifiedLogger::Read(mut dl) = UnifiedLoggerBuilder::new()
             .file_path(&f.to_path_buf())
             .build()
             .expect("Failed to build logger")
