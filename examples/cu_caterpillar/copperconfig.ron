@@ -3,12 +3,12 @@
     tasks: [
         (
             id: "src",
-            type: "CaterpillarSource",
+            type: "tasks::CaterpillarSource",
             base_period_ns: 1000000000,
         ),
         (
             id: "ct-0",
-            type: "CaterpillarTask",
+            type: "tasks::CaterpillarTask",
             base_period_ns: 1000000000,
         ),
         (
@@ -21,7 +21,7 @@
         ),
         (
             id: "ct-1",
-            type: "CaterpillarTask",
+            type: "tasks::CaterpillarTask",
             base_period_ns: 1000000000,
         ),
         (
@@ -34,7 +34,7 @@
         ),
         (
             id: "ct-2",
-            type: "CaterpillarTask",
+            type: "tasks::CaterpillarTask",
             base_period_ns: 1000000000,
         ),
         (
@@ -47,7 +47,7 @@
         ),
         (
             id: "ct-3",
-            type: "CaterpillarTask",
+            type: "tasks::CaterpillarTask",
             base_period_ns: 1000000000,
         ),
         (
@@ -60,7 +60,7 @@
         ),
         (
             id: "ct-4",
-            type: "CaterpillarTask",
+            type: "tasks::CaterpillarTask",
             base_period_ns: 1000000000,
         ),
         (
@@ -73,7 +73,7 @@
         ),
         (
             id: "ct-5",
-            type: "CaterpillarTask",
+            type: "tasks::CaterpillarTask",
             base_period_ns: 1000000000,
         ),
         (
@@ -86,7 +86,7 @@
         ),
         (
             id: "ct-6",
-            type: "CaterpillarTask",
+            type: "tasks::CaterpillarTask",
             base_period_ns: 1000000000,
         ),
         (
@@ -99,7 +99,7 @@
         ),
         (
             id: "ct-7",
-            type: "CaterpillarTask",
+            type: "tasks::CaterpillarTask",
             base_period_ns: 1000000000,
         ),
         (
