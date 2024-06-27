@@ -1,7 +1,7 @@
 use copper_clock::RobotClock;
 use copper_log::default_log_index_dir;
 use copper_log_runtime::{ExtraTextLogger, LoggerRuntime};
-use copper_traits::{CuResult, DataLogType};
+use copper_traits::{CuResult, UnifiedLogType};
 use copper_unifiedlog::{stream_write, UnifiedLogger, UnifiedLoggerBuilder};
 use simplelog::{ColorChoice, Config, LevelFilter, TermLogger, TerminalMode};
 use std::path::Path;
@@ -29,7 +29,7 @@ pub fn basic_logger_runtime_setup(
         panic!("Failed to create logger")
     };
     let data_logger = Arc::new(Mutex::new(logger));
-    let stream = stream_write(data_logger.clone(), DataLogType::StructuredLogLine, 1024);
+    let stream = stream_write(data_logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
 
     let extra = if text_log {
         let slow_text_logger = TermLogger::new(

@@ -62,10 +62,10 @@ pub trait WriteStream: Sync + Send {
     fn log(&mut self, obj: &impl Encode) -> CuResult<()>;
 }
 
-/// Defines the types of what can be logged.
+/// Defines the types of what can be logged in the unified logger.
 #[derive(dEncode, dDecode, Copy, Clone, Debug, PartialEq)]
-pub enum DataLogType {
-    StructuredLogLine,
-    CopperList,
-    LastEntry, // This is a special entry that is used to signal the end of the log.
+pub enum UnifiedLogType {
+    StructuredLogLine, // This is for the structured logs (ie. debug! etc..)
+    CopperList,        // This is the actual data log storing activities between tasks.
+    LastEntry,         // This is a special entry that is used to signal the end of the log.
 }
