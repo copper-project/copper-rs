@@ -8,7 +8,7 @@ members = [
     "copper_log_test",
     "copper_log_runtime",
     "copper_log_reader",
-    "copper_datalogger",
+    "copper_unifiedlog",
     "copper_clock",
     "copper_traits",
     "examples/cu_rp_gpio",
@@ -17,7 +17,7 @@ members = [
     "examples/pluginload",
     "examples/simplelogger",
     "examples/v4lsrc"
-, "copper_helpers"]
+    , "copper_helpers"]
 resolver = "2"
 
 
