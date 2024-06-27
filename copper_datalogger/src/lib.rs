@@ -4,7 +4,7 @@ use std::fs::{File, OpenOptions};
 use std::io;
 use std::io::BufReader;
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::slice::from_raw_parts_mut;
 use std::sync::{Arc, Mutex};
 
@@ -153,8 +153,8 @@ impl DataLoggerBuilder {
         }
     }
 
-    pub fn file_path(mut self, file_path: &PathBuf) -> Self {
-        self.file_path = Some(file_path.clone());
+    pub fn file_path(mut self, file_path: &Path) -> Self {
+        self.file_path = Some(file_path.to_path_buf());
         self
     }
 

@@ -17,7 +17,7 @@ members = [
     "examples/pluginload",
     "examples/simplelogger",
     "examples/v4lsrc"
-]
+, "copper_helpers"]
 resolver = "2"
 
 
