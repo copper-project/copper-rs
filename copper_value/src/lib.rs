@@ -255,6 +255,7 @@ impl PartialOrd for Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bincode::config::standard;
     use copper_clock::RobotClock;
     use serde_derive::{Deserialize, Serialize};
     use std::time::Duration;
@@ -506,5 +507,21 @@ mod tests {
         let input = Value::CuTime(c);
         let foo = CuTime::deserialize(input).unwrap();
         assert_eq!(foo, CuTime::from(Duration::from_nanos(42)));
+    }
+    #[test]
+    fn cutime_value_encode_decode() {
+        let c = Value::CuTime(CuTime::from(Duration::from_nanos(42)));
+        let v = bincode::encode_to_vec(&c, standard()).expect("encode failed");
+        let (v2, s) = bincode::decode_from_slice::<Value, _>(v.as_slice(), standard())
+            .expect("decode failed");
+        assert_eq!(s, v.len());
+        assert_eq!(&v2, &c);
+    }
+
+    #[test]
+    fn test_cutime_tovalue() {
+        let c = CuTime::from(Duration::from_nanos(42));
+        let v = to_value(&c).expect("to_value failed");
+        assert_eq!(v, Value::CuTime(c));
     }
 }

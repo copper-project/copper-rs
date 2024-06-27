@@ -1,9 +1,9 @@
+use crate::Value;
+use copper_clock::CuTime;
 use serde::ser;
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt;
-
-use crate::Value;
 
 #[derive(Debug)]
 pub enum SerializerError {
@@ -175,12 +175,21 @@ impl ser::Serializer for Serializer {
 
     fn serialize_newtype_struct<T: ?Sized>(
         self,
-        _name: &'static str,
+        name: &'static str,
         value: &T,
     ) -> Result<Self::Ok, Self::Error>
     where
         T: ser::Serialize,
     {
+        if name == "CuDuration" || name == "CuTime" {
+            return value.serialize(Serializer).map(|v| {
+                if let Value::U64(v) = v {
+                    Value::CuTime(CuTime::from(v))
+                } else {
+                    v
+                }
+            });
+        }
         value
             .serialize(Serializer)
             .map(|v| Value::Newtype(Box::new(v)))
