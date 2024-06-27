@@ -3,6 +3,7 @@ use copper::cutask::{CuMsg, CuSrcTask, CuTask, CuTaskLifecycle};
 use copper::{CuResult, DataLogType};
 use copper_datalogger::{stream_write, DataLogger, DataLoggerBuilder};
 use copper_derive::copper_runtime;
+use copper_log::default_log_index_dir;
 use copper_log_derive::debug;
 use copper_log_runtime::{ExtraTextLogger, LoggerRuntime};
 use cu_rp_gpio::RPGpioMsg;
@@ -89,7 +90,6 @@ fn main() {
     let data_logger = Arc::new(Mutex::new(logger));
     let stream = stream_write(data_logger.clone(), DataLogType::StructuredLogLine, 1024);
 
-    //
     let slow_text_logger = TermLogger::new(
         LevelFilter::Debug,
         Config::default(),
@@ -98,10 +98,8 @@ fn main() {
     );
 
     // This is the path to the index file that was created at build time.
-    let log_index_path = PathBuf::from("../..").join("target/debug/copper_log_index");
-    println!("log_index_path: {:?}", log_index_path);
-
-    //    .join("target/debug/copper_log_index");
+    // depending if we build with debug pick it from debug or release:
+    let log_index_path = default_log_index_dir();
 
     let extra: ExtraTextLogger = ExtraTextLogger::new(log_index_path, slow_text_logger);
     let clock = RobotClock::default();

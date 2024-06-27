@@ -1,16 +1,14 @@
+use copper_log::default_log_index_dir;
 use lazy_static::lazy_static;
 use rkv::backend::{Lmdb, LmdbDatabase};
 use rkv::backend::{LmdbEnvironment, LmdbRwTransaction};
 use rkv::{MultiStore, Rkv, SingleStore, StoreOptions, Value, Writer};
 use std::fs;
-use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 type SStore = SingleStore<LmdbDatabase>;
 type MStore = MultiStore<LmdbDatabase>;
 type IndexType = u32;
-
-const INDEX_DIR_NAME: &str = "copper_log_index";
 
 const COLORED_PREFIX_BUILD_LOG: &str = "\x1b[32mCLog:\x1b[0m";
 
@@ -20,21 +18,10 @@ macro_rules! build_log {
     };
 }
 
-fn parent_n_times(path: &Path, n: usize) -> Option<PathBuf> {
-    let mut result = Some(path.to_path_buf());
-    for _ in 0..n {
-        result = result?.parent().map(PathBuf::from);
-    }
-    result
-}
-
 lazy_static! {
     static ref RKV: Mutex<Rkv<LmdbEnvironment>> = {
-        let outdir = std::env::var("OUT_DIR").expect("no OUT_DIR set, build.rs must be broken");
-        let outdir_path = Path::new(&outdir);
-        let target_dir = parent_n_times(&outdir_path, 3)
-            .unwrap()
-            .join(INDEX_DIR_NAME);
+
+        let target_dir = default_log_index_dir();
 
         // Should never happen I believe.
         if !target_dir.exists() {

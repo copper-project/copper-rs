@@ -5,8 +5,12 @@ pub use copper_value as value;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::path::{Path, PathBuf};
 use strfmt::strfmt;
 use value::Value;
+
+/// The name of the directory where the log index is stored.
+const INDEX_DIR_NAME: &str = "copper_log_index";
 
 #[allow(dead_code)]
 pub const ANONYMOUS: u32 = 0;
@@ -89,4 +93,22 @@ pub fn rebuild_logline(all_interned_strings: &Vec<String>, entry: &CuLogEntry) -
             e,
         )
     })
+}
+
+fn parent_n_times(path: &Path, n: usize) -> Option<PathBuf> {
+    let mut result = Some(path.to_path_buf());
+    for _ in 0..n {
+        result = result?.parent().map(PathBuf::from);
+    }
+    result
+}
+
+/// Convenience function to returns the default path for the log index directory.
+pub fn default_log_index_dir() -> PathBuf {
+    let outdir = std::env::var("OUT_DIR").expect("no OUT_DIR set, build.rs must be broken");
+    let outdir_path = Path::new(&outdir);
+    let target_dir = parent_n_times(&outdir_path, 3)
+        .unwrap()
+        .join(INDEX_DIR_NAME);
+    target_dir
 }
