@@ -1,6 +1,6 @@
 [package]
-name = "copper"
-version = "0.2.0"
+name = "copper-helpers"
+version = "0.1.0"
 authors = ["Guillaume Binet <gbin@gootz.net>"]
 edition = "2021"
 license = "Apache-2.0"
@@ -8,16 +8,9 @@ keywords = ["robotics", "middleware", "copper", "real-time"]
 categories = ["science::robotics"]
 
 [dependencies]
-lazy_static = "1.4.0"
-zerocopy = "0.7.34"
-zerocopy-derive = "0.7.34"
-petgraph = { version = "0.6.5", features = ["serde", "serde-1", "serde_derive"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_derive = "1.0"
-uom = { version = "0.36.0", features = ["rational"] }
-ron = "0.8.1"
 copper-traits = { path = "../copper_traits" }
+copper-datalogger = { path = "../copper_datalogger" }
 copper-log = { path = "../copper_log" }
-copper-log-derive = { path = "../copper_log_derive" }
 copper-log-runtime = { path = "../copper_log_runtime" }
 copper-clock = { path = "../copper_clock" }
+simplelog = "0.12.2"
