@@ -2,10 +2,17 @@ use copper_clock::RobotClock;
 use copper_log::default_log_index_dir;
 use copper_log_runtime::{ExtraTextLogger, LoggerRuntime};
 use copper_traits::{CuResult, UnifiedLogType};
-use copper_unifiedlog::{stream_write, UnifiedLogger, UnifiedLoggerBuilder};
+use copper_unifiedlog::{stream_write, UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerWrite};
 use simplelog::{ColorChoice, Config, LevelFilter, TermLogger, TerminalMode};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+
+/// Just a simple struct to hold the various bits needed to run a Copper application.
+pub struct CopperContext {
+    pub unified_logger: Arc<Mutex<UnifiedLoggerWrite>>,
+    pub logger_runtime: LoggerRuntime,
+    pub clock: RobotClock,
+}
 
 /// This is a basic setup for a copper application to get you started.
 /// Duplicate and customize as needed when your needs grow.
@@ -14,22 +21,26 @@ use std::sync::{Arc, Mutex};
 /// It is useful to debug an application in real-time but should be set to false in production
 /// as it is an order of magnitude slower than the default copper structured logging.
 /// It will create a LoggerRuntime that can be used as a robot clock source too.
-pub fn basic_logger_runtime_setup(
-    datalogger_output_path: &Path,
+pub fn basic_copper_setup(
+    unifiedlogger_output_path: &Path,
     text_log: bool,
-) -> CuResult<LoggerRuntime> {
+) -> CuResult<CopperContext> {
     let UnifiedLogger::Write(logger) = UnifiedLoggerBuilder::new()
         .write(true)
         .create(true)
-        .file_path(datalogger_output_path)
+        .file_path(unifiedlogger_output_path)
         .preallocated_size(100000)
         .build()
         .expect("Failed to create logger")
     else {
         panic!("Failed to create logger")
     };
-    let data_logger = Arc::new(Mutex::new(logger));
-    let stream = stream_write(data_logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
+    let unified_logger = Arc::new(Mutex::new(logger));
+    let stream = stream_write(
+        unified_logger.clone(),
+        UnifiedLogType::StructuredLogLine,
+        1024,
+    );
 
     let extra = if text_log {
         let slow_text_logger = TermLogger::new(
@@ -49,5 +60,12 @@ pub fn basic_logger_runtime_setup(
     } else {
         None
     };
-    Ok(LoggerRuntime::init(RobotClock::default(), stream, extra))
+
+    let clock = RobotClock::default();
+    let structured_logging = LoggerRuntime::init(clock.clone(), stream, extra);
+    Ok(CopperContext {
+        unified_logger: unified_logger.clone(),
+        logger_runtime: structured_logging,
+        clock,
+    })
 }

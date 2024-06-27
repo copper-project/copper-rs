@@ -1,11 +1,11 @@
 use copper::monitoring::ScopedAllocCounter;
-use copper_helpers::basic_logger_runtime_setup;
+use copper_helpers::basic_copper_setup;
 use copper_log_derive::debug;
 use serde::Serialize;
 use std::path::PathBuf;
 
 fn main() {
-    let rt = basic_logger_runtime_setup(&PathBuf::from("/tmp/teststructlog.copper"), true)
+    let _ = basic_copper_setup(&PathBuf::from("/tmp/teststructlog.copper"), true)
         .expect("Failed to setup logger.");
     debug!("Logger created.");
 
