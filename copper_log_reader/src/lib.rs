@@ -75,7 +75,7 @@ mod tests {
     use copper_log::value::Value;
     use copper_log_runtime::log;
     use copper_log_runtime::LoggerRuntime;
-    use copper_traits::{DataLogType, WriteStream};
+    use copper_traits::{UnifiedLogType, WriteStream};
     use std::io::{Cursor, Write};
     use std::sync::{Arc, Mutex};
     use tempfile::tempdir;
@@ -107,7 +107,7 @@ mod tests {
                 panic!("Failed to create logger")
             };
             let data_logger = Arc::new(Mutex::new(logger));
-            let stream = stream_write(data_logger.clone(), DataLogType::StructuredLogLine, 1024);
+            let stream = stream_write(data_logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
             let rt = LoggerRuntime::init(RobotClock::default(), stream, None);
 
             let mut entry = CuLogEntry::new(4); // this is a "Just a String {}" log line
@@ -127,7 +127,7 @@ mod tests {
         else {
             panic!("Failed to create logger")
         };
-        let reader = DataLoggerIOReader::new(logger, DataLogType::StructuredLogLine);
+        let reader = DataLoggerIOReader::new(logger, UnifiedLogType::StructuredLogLine);
         full_log_dump(reader, Path::new("test/copper_log_index"));
     }
 }

@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use copper_log_reader::full_log_dump;
-use copper_traits::DataLogType;
+use copper_traits::UnifiedLogType;
 use copper_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader};
 use std::io::Read;
 use std::path::PathBuf;
@@ -36,6 +36,6 @@ fn main() {
         panic!("Failed to create logger");
     };
 
-    let reader = UnifiedLoggerIOReader::new(dl, DataLogType::StructuredLogLine);
+    let reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::StructuredLogLine);
     full_log_dump(reader, &index).expect("Failed to dump log");
 }

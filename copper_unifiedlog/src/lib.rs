@@ -18,7 +18,7 @@ use bincode::{decode_from_reader, decode_from_slice};
 use bincode_derive::Decode as dDecode;
 use bincode_derive::Encode as dEncode;
 
-use copper_traits::{CuError, CuResult, DataLogType, WriteStream};
+use copper_traits::{CuError, CuResult, UnifiedLogType, WriteStream};
 
 const MAIN_MAGIC: [u8; 4] = [0xB4, 0xA5, 0x50, 0xFF];
 
@@ -36,13 +36,13 @@ struct MainHeader {
 #[derive(dEncode, dDecode)]
 struct SectionHeader {
     magic: [u8; 2],
-    entry_type: DataLogType,
+    entry_type: UnifiedLogType,
     section_size: u32, // offset of section_magic + section_size -> should be the index of the next section_magic
 }
 
 /// A wrapper around a memory mapped file to write to.
 struct MmapStream {
-    entry_type: DataLogType,
+    entry_type: UnifiedLogType,
     parent_logger: Arc<Mutex<UnifiedLoggerWrite>>,
     current_slice: &'static mut [u8],
     current_position: usize,
@@ -51,7 +51,7 @@ struct MmapStream {
 
 impl MmapStream {
     fn new(
-        entry_type: DataLogType,
+        entry_type: UnifiedLogType,
         parent_logger: Arc<Mutex<UnifiedLoggerWrite>>,
         current_slice: &'static mut [u8],
         minimum_allocation_amount: usize,
@@ -112,7 +112,7 @@ impl Drop for MmapStream {
 /// Create a new stream to write to the unifiedlogger.
 pub fn stream_write(
     logger: Arc<Mutex<UnifiedLoggerWrite>>,
-    entry_type: DataLogType,
+    entry_type: UnifiedLogType,
     minimum_allocation_amount: usize,
 ) -> impl WriteStream {
     let aclone = logger.clone();
@@ -299,7 +299,7 @@ impl UnifiedLoggerWrite {
     }
 
     /// The returned slice is section_size or greater.
-    fn add_section(&mut self, entry_type: DataLogType, section_size: usize) -> &mut [u8] {
+    fn add_section(&mut self, entry_type: UnifiedLogType, section_size: usize) -> &mut [u8] {
         // align current_position to the next page
         self.current_global_position =
             (self.current_global_position + self.page_size - 1) & !(self.page_size - 1);
@@ -348,7 +348,7 @@ impl UnifiedLoggerWrite {
 
 impl Drop for UnifiedLoggerWrite {
     fn drop(&mut self) {
-        self.add_section(DataLogType::LastEntry, 0);
+        self.add_section(UnifiedLogType::LastEntry, 0);
         self.flush();
         self.file
             .set_len(self.current_global_position as u64)
@@ -359,7 +359,7 @@ impl Drop for UnifiedLoggerWrite {
 impl UnifiedLoggerRead {
     pub fn read_next_section_type(
         &mut self,
-        datalogtype: DataLogType,
+        datalogtype: UnifiedLogType,
     ) -> CuResult<Option<Vec<u8>>> {
         // TODO: eventually implement a 0 copy of this too.
         loop {
@@ -373,7 +373,7 @@ impl UnifiedLoggerRead {
             let header = header_result.unwrap();
 
             // Reached the end of file
-            if header.entry_type == DataLogType::LastEntry {
+            if header.entry_type == UnifiedLogType::LastEntry {
                 return Ok(None);
             }
 
@@ -436,13 +436,13 @@ impl UnifiedLoggerRead {
 /// This a a convience wrapper around the UnifiedLoggerRead to implement the Read trait.
 pub struct UnifiedLoggerIOReader {
     logger: UnifiedLoggerRead,
-    log_type: DataLogType,
+    log_type: UnifiedLogType,
     buffer: Vec<u8>,
     buffer_pos: usize,
 }
 
 impl UnifiedLoggerIOReader {
-    pub fn new(logger: UnifiedLoggerRead, log_type: DataLogType) -> Self {
+    pub fn new(logger: UnifiedLoggerRead, log_type: UnifiedLogType) -> Self {
         Self {
             logger,
             log_type,
@@ -520,8 +520,8 @@ mod tests {
             else {
                 panic!("Failed to create logger")
             };
-            logger.add_section(DataLogType::StructuredLogLine, 1024);
-            logger.add_section(DataLogType::CopperList, 2048);
+            logger.add_section(UnifiedLogType::StructuredLogLine, 1024);
+            logger.add_section(UnifiedLogType::CopperList, 2048);
             let used = logger.used();
             assert!(used < 4 * 4096); // ie. 3 headers, 1 page max per
                                       // logger drops
@@ -545,7 +545,7 @@ mod tests {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let (logger, _) = make_a_logger(&tmp_dir);
         {
-            let _stream = stream_write(logger.clone(), DataLogType::StructuredLogLine, 1024);
+            let _stream = stream_write(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
             assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 1);
         }
         assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 0);
@@ -557,9 +557,9 @@ mod tests {
     fn test_two_sections_self_cleaning_in_order() {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let (logger, _) = make_a_logger(&tmp_dir);
-        let s1 = stream_write(logger.clone(), DataLogType::StructuredLogLine, 1024);
+        let s1 = stream_write(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
         assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 1);
-        let s2 = stream_write(logger.clone(), DataLogType::StructuredLogLine, 1024);
+        let s2 = stream_write(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
         assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 2);
         drop(s2);
         assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 1);
@@ -573,9 +573,9 @@ mod tests {
     fn test_two_sections_self_cleaning_out_of_order() {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let (logger, _) = make_a_logger(&tmp_dir);
-        let s1 = stream_write(logger.clone(), DataLogType::StructuredLogLine, 1024);
+        let s1 = stream_write(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
         assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 1);
-        let s2 = stream_write(logger.clone(), DataLogType::StructuredLogLine, 1024);
+        let s2 = stream_write(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
         assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 2);
         drop(s1);
         assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 1);
@@ -592,7 +592,7 @@ mod tests {
         let p = f.as_path();
         println!("Path : {:?}", p);
         {
-            let mut stream = stream_write(logger.clone(), DataLogType::StructuredLogLine, 1024);
+            let mut stream = stream_write(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
             stream.log(&1u32).unwrap();
             stream.log(&2u32).unwrap();
             stream.log(&3u32).unwrap();
@@ -606,7 +606,7 @@ mod tests {
             panic!("Failed to build logger");
         };
         let section = dl
-            .read_next_section_type(DataLogType::StructuredLogLine)
+            .read_next_section_type(UnifiedLogType::StructuredLogLine)
             .expect("Failed to read section");
         assert!(section.is_some());
         let section = section.unwrap();
