@@ -71,11 +71,13 @@ mod tests {
 
     use super::*;
     use copper_clock::RobotClock;
-    use copper_datalogger::{stream_write, DataLogger, DataLoggerBuilder, DataLoggerIOReader};
     use copper_log::value::Value;
     use copper_log_runtime::log;
     use copper_log_runtime::LoggerRuntime;
     use copper_traits::{UnifiedLogType, WriteStream};
+    use copper_unifiedlog::{
+        stream_write, UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader,
+    };
     use std::io::{Cursor, Write};
     use std::sync::{Arc, Mutex};
     use tempfile::tempdir;
@@ -96,7 +98,7 @@ mod tests {
             .join("end_to_end_datalogger_and_structlog_test.coppper");
         {
             // Write a couple log entries
-            let DataLogger::Write(logger) = DataLoggerBuilder::new()
+            let UnifiedLogger::Write(logger) = UnifiedLoggerBuilder::new()
                 .write(true)
                 .create(true)
                 .file_path(&path)
@@ -120,14 +122,14 @@ mod tests {
             // everything is dropped here
         }
         // Read back the log
-        let DataLogger::Read(logger) = DataLoggerBuilder::new()
+        let UnifiedLogger::Read(logger) = UnifiedLoggerBuilder::new()
             .file_path(&path)
             .build()
             .expect("Failed to create logger")
         else {
             panic!("Failed to create logger")
         };
-        let reader = DataLoggerIOReader::new(logger, UnifiedLogType::StructuredLogLine);
+        let reader = UnifiedLoggerIOReader::new(logger, UnifiedLogType::StructuredLogLine);
         full_log_dump(reader, Path::new("test/copper_log_index"));
     }
 }
