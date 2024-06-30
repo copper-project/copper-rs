@@ -3,30 +3,31 @@ use crate::config::{CuConfig, NodeId};
 use crate::config::{Node, NodeInstanceConfig};
 use crate::copperlist::CuListsManager;
 use crate::CuResult;
+use copper_traits::CopperListPayload;
 use petgraph::prelude::*;
 
 /// This is the main structure that will be injected as a member of the Application struct.
 /// CT is the tuple of all the tasks in order of execution.
 /// CL is the type of the copper list, representing the input/output messages for all the tasks.
-pub struct CuRuntime<CT, CL: Sized + PartialEq, const NBCL: usize> {
+pub struct CuRuntime<CT, P: CopperListPayload, const NBCL: usize> {
     /// The tuple of all the tasks in order of execution.
     pub task_instances: CT,
 
     /// Copper lists hold in order all the input/output messages for all the tasks.
-    pub copper_lists: CuListsManager<CL, NBCL>,
+    pub copper_lists: CuListsManager<P, NBCL>,
 
     /// The base clock the runtime will be using to record time.
     pub clock: RobotClock,
 }
 
 /// To be able to share the clock we make the runtime a clock provider.:w
-impl<CT, CL: Sized + PartialEq, const NBCL: usize> ClockProvider for CuRuntime<CT, CL, NBCL> {
+impl<CT, P: CopperListPayload, const NBCL: usize> ClockProvider for CuRuntime<CT, P, NBCL> {
     fn get_clock(&self) -> RobotClock {
         self.clock.clone()
     }
 }
 
-impl<CT, CL: Sized + PartialEq, const NBCL: usize> CuRuntime<CT, CL, NBCL> {
+impl<CT, P: CopperListPayload, const NBCL: usize> CuRuntime<CT, P, NBCL> {
     pub fn new(
         clock: RobotClock,
         config: &CuConfig,

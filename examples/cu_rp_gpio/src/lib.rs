@@ -25,7 +25,9 @@ pub struct RPGpio {
     pin: u8,
 }
 
-#[derive(Debug, Clone, Copy, Default, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(
+    Debug, Clone, Copy, Default, bincode_derive::Encode, bincode_derive::Decode, PartialEq,
+)]
 pub struct RPGpioMsg {
     pub on: bool,
     pub creation: copper::clock::OptionCuTime,

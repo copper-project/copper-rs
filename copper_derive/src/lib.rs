@@ -73,7 +73,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     println!("[build runtime field]");
     // add that to a new field
     let runtime_field: Field = parse_quote! {
-        copper_runtime: _CuRuntime<CuTasks, CuList, #DEFAULT_CLNB>
+        copper_runtime: _CuRuntime<CuTasks, CuPayload, #DEFAULT_CLNB>
     };
 
     let name = &item_struct.ident;
@@ -110,53 +110,77 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let runtime_plan_code: Vec<_> = runtime_plan
         .iter()
         .map(|step| {
-
-            println!("{} -> {} as {:?}. Input={:?}, Output={:?}", step.node.get_id(), step.node.get_type(), step.task_type, step.input_msg_type, step.output_msg_type);
+            println!(
+                "{} -> {} as {:?}. Input={:?}, Output={:?}",
+                step.node.get_id(),
+                step.node.get_type(),
+                step.task_type,
+                step.input_msg_type,
+                step.output_msg_type
+            );
 
             let node_index = int2index(step.node_id);
             let task_instance = quote! { self.copper_runtime.task_instances.#node_index };
-            let comment_str = format!("/// {} ({:?}) I:{:?} O:{:?}",step.node.get_id(), step.task_type, step.input_msg_type, step.output_msg_type);
+            let comment_str = format!(
+                "/// {} ({:?}) I:{:?} O:{:?}",
+                step.node.get_id(),
+                step.task_type,
+                step.input_msg_type,
+                step.output_msg_type
+            );
             let comment_tokens: proc_macro2::TokenStream = parse_str(&comment_str).unwrap();
 
             let process_call = match step.task_type {
                 CuTaskType::Source => {
-                    let output_culist_index = int2index(step.culist_output_index.expect("Src task should have an output message index."));
+                    let output_culist_index = int2index(
+                        step.culist_output_index
+                            .expect("Src task should have an output message index."),
+                    );
                     quote! {
-                    {
-                        #comment_tokens
-                        let cumsg_output = &mut culist.#output_culist_index;
-                        cumsg_output.metadata.before_process = self.copper_runtime.clock.now().into();
-                        #task_instance.process(&self.copper_runtime.clock, cumsg_output)?;
-                        cumsg_output.metadata.after_process = self.copper_runtime.clock.now().into();
+                        {
+                            #comment_tokens
+                            let cumsg_output = &mut payload.#output_culist_index;
+                            cumsg_output.metadata.before_process = self.copper_runtime.clock.now().into();
+                            #task_instance.process(&self.copper_runtime.clock, cumsg_output)?;
+                            cumsg_output.metadata.after_process = self.copper_runtime.clock.now().into();
+                        }
                     }
                 }
-                },
                 CuTaskType::Sink => {
-                    let input_culist_index = int2index(step.culist_input_index.expect("Sink task should have an input message index."));
+                    let input_culist_index = int2index(
+                        step.culist_input_index
+                            .expect("Sink task should have an input message index."),
+                    );
                     quote! {
-                    {
-                        #comment_tokens
-                        let cumsg_input = &mut culist.#input_culist_index;
-                        #task_instance.process(&self.copper_runtime.clock, cumsg_input)?;
+                        {
+                            #comment_tokens
+                            let cumsg_input = &mut payload.#input_culist_index;
+                            #task_instance.process(&self.copper_runtime.clock, cumsg_input)?;
+                        }
                     }
                 }
-                },
                 CuTaskType::Regular => {
                     {
-                    let input_culist_index = int2index(step.culist_input_index.expect("Sink task should have an input message index."));
-                    let output_culist_index = int2index(step.culist_output_index.expect("Src task should have an output message index."));
-                    quote! {
-                    {
-                        #comment_tokens
-                        let cumsg_input = &mut culist.#input_culist_index;
-                        let cumsg_output = &mut culist.#output_culist_index;
-                        cumsg_output.metadata.before_process = self.copper_runtime.clock.now().into();
-                        #task_instance.process(&self.copper_runtime.clock, cumsg_input, cumsg_output)?;
-                        cumsg_output.metadata.after_process = self.copper_runtime.clock.now().into();
-                    }
+                        let input_culist_index = int2index(
+                            step.culist_input_index
+                                .expect("Sink task should have an input message index."),
+                        );
+                        let output_culist_index = int2index(
+                            step.culist_output_index
+                                .expect("Src task should have an output message index."),
+                        );
+                        quote! {
+                        {
+                            #comment_tokens
+                            let cumsg_input = &mut payload.#input_culist_index;
+                            let cumsg_output = &mut payload.#output_culist_index;
+                            cumsg_output.metadata.before_process = self.copper_runtime.clock.now().into();
+                            #task_instance.process(&self.copper_runtime.clock, cumsg_input, cumsg_output)?;
+                            cumsg_output.metadata.after_process = self.copper_runtime.clock.now().into();
+                        }
+                        }
                     }
                 }
-                },
             };
 
             process_call
@@ -188,14 +212,15 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let culist_indices = (0..(culist_size as u32)).map(int2index);
     let collect_metadata_function = quote! {
         pub fn collect_metadata<'a>(culist: &'a CuList) -> [&'a _CuMsgMetadata; #culist_size] {
-            [#( &culist.#culist_indices.metadata, )*]
+            [#( &culist.payload.#culist_indices.metadata, )*]
         }
     };
 
     println!("[build the run method]");
     let run_method = quote! {
         pub fn run(&mut self, iterations: u32) -> _CuResult<()> {
-            let culist = self.copper_runtime.copper_lists.create().expect("Ran out of space for copper lists"); // FIXME: error handling.
+            let mut culist = self.copper_runtime.copper_lists.create().expect("Ran out of space for copper lists"); // FIXME: error handling.
+            let payload = &mut culist.payload;
             for _ in 0..iterations {
                 #(#runtime_plan_code)*
             }
@@ -229,14 +254,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         use copper::cutask::CuTask as _CuTask;
         use copper::cutask::CuMsg as _CuMsg;
         use copper::cutask::CuMsgMetadata as _CuMsgMetadata;
+        use copper::copperlist::CopperList as _CopperList;
         use copper::clock::RobotClock as _RobotClock;
         use copper::clock::OptionCuTime as _OptionCuTime;
 
         // This is the heart of everything.
         // CuTasks is the list of all the tasks types.
-        // CuList is the list of all the messages types.
+        // CuList is a CopperList with the list of all the messages types as payload.
         pub type CuTasks = #task_types_tuple;
-        pub type CuList = #msgs_types_tuple;
+        pub type CuPayload = #msgs_types_tuple;
+        pub type CuList = _CopperList<CuPayload>;
 
         // This generates a way to get the metadata of every single message of a culist at low cost
         #collect_metadata_function
@@ -253,7 +280,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let config = _read_configuration(#config_file)?;
 
                 Ok(#name {
-                    copper_runtime: _CuRuntime::<CuTasks, CuList, #DEFAULT_CLNB>::new(clock, &config, tasks_instanciator)?
+                    copper_runtime: _CuRuntime::<CuTasks, CuPayload, #DEFAULT_CLNB>::new(clock, &config, tasks_instanciator)?
                 })
             }
 

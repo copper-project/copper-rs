@@ -1,20 +1,20 @@
 use copper_clock::RobotClock;
-use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::{Display, Formatter};
 
 use crate::clock::OptionCuTime;
 use crate::config::NodeInstanceConfig;
 use crate::CuResult;
+use bincode_derive::{Decode, Encode};
 
 // Everything that is stateful in copper for zero copy constraints need to be restricted to this trait.
-pub trait CuMsgPayload: Default + Serialize + for<'a> Deserialize<'a> + Sized {}
+pub trait CuMsgPayload: Default + bincode::Encode + bincode::Decode + Sized {}
 
 // Also anything that follows this contract can be a payload (blanket implementation)
-impl<T> CuMsgPayload for T where T: Default + Serialize + for<'a> Deserialize<'a> + Sized {}
+impl<T> CuMsgPayload for T where T: Default + bincode::Encode + bincode::Decode + Sized {}
 
 /// CuMsgMetadata is a structure that contains metadata common to all CuMsgs.
-#[derive(Debug, PartialEq, Default)]
+#[derive(Debug, Default, Encode, Decode)]
 pub struct CuMsgMetadata {
     /// The time before the process method is called.
     pub before_process: OptionCuTime,
@@ -33,7 +33,7 @@ impl Display for CuMsgMetadata {
 }
 
 /// CuMsg is the envelope holding the msg payload and the metadata between tasks.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Encode, Decode)]
 pub struct CuMsg<T>
 where
     T: CuMsgPayload,

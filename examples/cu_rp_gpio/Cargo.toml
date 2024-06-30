@@ -12,5 +12,6 @@ copper-log-derive = { path = "../../copper_log_derive" }
 copper-log-runtime = { path = "../../copper_log_runtime" }
 copper-log = { path = "../../copper_log" }
 rppal = "0.18.0"
-serde = { version = "1.0.203", features = ["derive"] }
+bincode_derive = "2.0.0-rc.3"
+bincode = { version = "2.0.0-rc.3" }
 lazy_static = "1.4.0"
