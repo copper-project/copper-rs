@@ -21,7 +21,7 @@ enum CopperListState {
 }
 
 #[derive(Debug, Encode, Decode)]
-struct CopperList<P: Serialize> {
+struct CopperList<P: bincode::Encode + bincode::Decode> {
     state: CopperListState,
     payload: P, // This is generated from the runtime.
 }
