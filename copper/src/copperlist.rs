@@ -1,22 +1,29 @@
 extern crate alloc;
 
+use bincode_derive::{Decode, Encode};
+
 use std::iter::{Chain, Rev};
 use std::slice::{Iter as SliceIter, IterMut as SliceIterMut};
 
 const MAX_TASKS: usize = 512;
 
-#[derive(Debug)]
+#[derive(Debug, Encode, Decode)]
 struct CopperLiskMask {
     #[allow(dead_code)]
     mask: [u128; MAX_TASKS / 128 + 1],
 }
 
-#[derive(Debug)]
-#[allow(dead_code)]
+#[derive(Debug, Encode, Decode)]
 enum CopperListState {
     Free,
     ProcessingTasks(CopperLiskMask),
     BeingSerialized,
+}
+
+#[derive(Debug, Encode, Decode)]
+struct CopperList<P: Serialize> {
+    state: CopperListState,
+    payload: P, // This is generated from the runtime.
 }
 
 /// This structure maintains the entire memory needed by Copper for one loop for the inter tasks communication within a process.

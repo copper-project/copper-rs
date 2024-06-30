@@ -619,4 +619,60 @@ mod tests {
         assert_eq!(v2, 2);
         assert_eq!(v3, 3);
     }
+
+    /// Mimic a basic CopperList implementation.
+
+    #[derive(Debug, dEncode, dDecode)]
+    enum CopperListStateMock {
+        Free,
+        ProcessingTasks,
+        BeingSerialized,
+    }
+
+    #[derive(dEncode, dDecode)]
+    struct CopperList<P: Encode> {
+        state: CopperListStateMock,
+        payload: P, // This is generated from the runtime.
+    }
+
+    #[test]
+    fn test_copperlist_list_like_logging() {
+        let tmp_dir = TempDir::new().expect("could not create a tmp dir");
+        let (logger, f) = make_a_logger(&tmp_dir);
+        let p = f.as_path();
+        println!("Path : {:?}", p);
+        {
+            let mut stream = stream_write(logger.clone(), UnifiedLogType::CopperList, 1024);
+            let cl0 = CopperList {
+                state: CopperListStateMock::Free,
+                payload: (1u32, 2u32, 3u32),
+            };
+            let cl1 = CopperList {
+                state: CopperListStateMock::ProcessingTasks,
+                payload: (4u32, 5u32, 6u32),
+            };
+            stream.log(&cl0).unwrap();
+            stream.log(&cl1).unwrap();
+        }
+        drop(logger);
+
+        let UnifiedLogger::Read(mut dl) = UnifiedLoggerBuilder::new()
+            .file_path(&f.to_path_buf())
+            .build()
+            .expect("Failed to build logger")
+        else {
+            panic!("Failed to build logger");
+        };
+        let section = dl
+            .read_next_section_type(UnifiedLogType::CopperList)
+            .expect("Failed to read section");
+        assert!(section.is_some());
+        let section = section.unwrap();
+
+        let mut reader = BufReader::new(&section[..]);
+        let cl0: CopperList<(u32, u32, u32)> = decode_from_reader(&mut reader, standard()).unwrap();
+        let cl1: CopperList<(u32, u32, u32)> = decode_from_reader(&mut reader, standard()).unwrap();
+        assert_eq!(cl0.payload.1, 2);
+        assert_eq!(cl1.payload.2, 6);
+    }
 }
