@@ -1,16 +1,14 @@
+use copper::clock::RobotClock;
 use linux_video::types::*;
 use linux_video::{Device, Stream};
-use serde::{Deserialize, Serialize};
-use copper::clock::RobotClock;
 
+use bincode_derive::{Decode, Encode};
 use copper::config::NodeInstanceConfig;
 use copper::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle};
-use copper::serde::arrays;
 use copper::CuResult;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Decode, Encode)]
 pub struct ImageMsg {
-    #[serde(with = "arrays")]
     pub buffer: [[u8; 1920]; 1200],
 }
 
@@ -19,15 +17,6 @@ impl Default for ImageMsg {
         ImageMsg {
             buffer: [[0; 1920]; 1200],
         }
-    }
-}
-
-impl PartialEq for ImageMsg {
-    fn eq(&self, other: &Self) -> bool {
-        self.buffer
-            .iter()
-            .flatten()
-            .eq(other.buffer.iter().flatten())
     }
 }
 
@@ -97,7 +86,11 @@ impl CuTaskLifecycle for Video4LinuxSource {
 impl CuSrcTask for Video4LinuxSource {
     type Output = ImageMsg;
 
-    fn process(&mut self, _clock: &RobotClock, empty_msg: &mut CuMsg<Self::Output>) -> CuResult<()> {
+    fn process(
+        &mut self,
+        _clock: &RobotClock,
+        empty_msg: &mut CuMsg<Self::Output>,
+    ) -> CuResult<()> {
         let stream = self.stream.as_ref().unwrap();
         if let Ok(buffer) = stream.next() {
             let buffer = buffer.lock();

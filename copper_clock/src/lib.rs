@@ -4,6 +4,7 @@ use bincode::enc::Encode;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::BorrowDecode;
+use bincode_derive::{Decode, Encode};
 use core::ops::{Add, Sub};
 pub use quanta::Instant;
 use quanta::{Clock, Mock};
@@ -105,7 +106,7 @@ impl Display for CuDuration {
 pub type CuTime = CuDuration;
 
 /// Homebrewed Option<CuDuration> to avoid using 128bits just to represent an Option.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Encode, Decode)]
 pub struct OptionCuTime(CuTime);
 
 const NONE_VALUE: u64 = 0xFFFFFFFFFFFFFFFF;
