@@ -1,10 +1,11 @@
 use crate::clock::{ClockProvider, RobotClock};
 use crate::config::{CuConfig, NodeId};
 use crate::config::{Node, NodeInstanceConfig};
-use crate::copperlist::{CopperList, CuListsManager};
+use crate::copperlist::{CopperList, CopperListState, CuListsManager};
 use crate::CuResult;
 use copper_traits::CopperListPayload;
 use petgraph::prelude::*;
+use std::sync::{Arc, Mutex};
 
 /// This is the main structure that will be injected as a member of the Application struct.
 /// CT is the tuple of all the tasks in order of execution.
@@ -14,7 +15,7 @@ pub struct CuRuntime<CT, P: CopperListPayload, const NBCL: usize> {
     pub task_instances: CT,
 
     /// Copper lists hold in order all the input/output messages for all the tasks.
-    pub copper_lists: CuListsManager<P, fn(&CopperList<P>), NBCL>,
+    pub copper_lists: CuListsManager<P, NBCL>,
 
     /// The base clock the runtime will be using to record time.
     pub clock: RobotClock,
@@ -42,11 +43,23 @@ impl<CT, P: CopperListPayload + 'static, const NBCL: usize> CuRuntime<CT, P, NBC
             .map(|node_config| node_config.get_instance_config())
             .collect();
         let task_instances = tasks_instanciator(all_instances_configs)?;
-        Ok(Self {
+
+        let runtime = Self {
             task_instances,
-            copper_lists: CuListsManager::new(no_action), // FIXME: here add the cleanup logic
+            copper_lists: CuListsManager::new(), // placeholder
             clock,
-        })
+        };
+
+        Ok(runtime)
+    }
+
+    fn end_of_processing(&mut self, dropping: &mut CopperList<P>) {
+        dropping.change_state(CopperListState::DoneProcessing);
+        self.copper_lists.asc_iter_mut().for_each(|cl| {
+            if cl.get_state() == CopperListState::DoneProcessing {
+                cl.change_state(CopperListState::BeingSerialized);
+            }
+        });
     }
 }
 
