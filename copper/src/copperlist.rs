@@ -27,14 +27,16 @@ pub enum CopperListState {
 
 #[derive(Debug, Encode, Decode)]
 pub struct CopperList<P: CopperListPayload> {
+    pub id: u32,
     state: CopperListState,
     pub payload: P, // This is generated from the runtime.
 }
 
 impl<P: CopperListPayload> CopperList<P> {
     // This is not the usual way to create a CopperList, this is just for testing.
-    fn new(payload: P) -> Self {
+    fn new(id: u32, payload: P) -> Self {
         CopperList {
+            id,
             state: CopperListState::Initialized,
             payload,
         }
@@ -56,6 +58,7 @@ pub struct CuListsManager<P: CopperListPayload, const N: usize> {
     data: Box<[CopperList<P>; N]>,
     length: usize,
     insertion_index: usize,
+    current_cl_id: u32,
 }
 
 impl<P: CopperListPayload + fmt::Debug, const N: usize> fmt::Debug for CuListsManager<P, N> {
@@ -93,6 +96,7 @@ impl<P: CopperListPayload, const N: usize> CuListsManager<P, N> {
             data,
             length: 0,
             insertion_index: 0,
+            current_cl_id: 0,
         }
     }
 
@@ -133,6 +137,10 @@ impl<P: CopperListPayload, const N: usize> CuListsManager<P, N> {
         let result = &mut self.data[self.insertion_index];
         self.insertion_index = (self.insertion_index + 1) % N;
         self.length += 1;
+
+        // We assign a unique id to each CopperList to be able to track them across their lifetime.
+        result.id = self.current_cl_id;
+        self.current_cl_id += 1;
 
         Some(result)
     }
@@ -333,9 +341,9 @@ mod tests {
     #[test]
     fn zero_sized() {
         let mut q = CuListsManager::<(), 5>::new();
-        *q.create().unwrap() = CopperList::new(());
-        *q.create().unwrap() = CopperList::new(());
-        *q.create().unwrap() = CopperList::new(());
+        *q.create().unwrap() = CopperList::new(0, ());
+        *q.create().unwrap() = CopperList::new(1, ());
+        *q.create().unwrap() = CopperList::new(2, ());
 
         assert_eq!(q.len(), 3);
 

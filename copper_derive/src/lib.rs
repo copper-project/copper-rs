@@ -219,23 +219,30 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     println!("[build the run method]");
     let run_method = quote! {
         pub fn run(&mut self, iterations: u32) -> _CuResult<()> {
-            let mut culist = self.copper_runtime.copper_lists.create().expect("Ran out of space for copper lists"); // FIXME: error handling.
-            let payload = &mut culist.payload;
             for _ in 0..iterations {
+
+                let mut culist = &mut self.copper_runtime.copper_lists.create().expect("Ran out of space for copper lists"); // FIXME: error handling.
+                let id = culist.id;
+                let payload = &mut culist.payload;
+
                 #(#runtime_plan_code)*
+                drop(payload);
+
+                let md = collect_metadata(&culist);
+                for m in md.iter() {
+                     println!("Metadata: {}", m);
+                }
+                let e2e = md.last().unwrap().after_process.unwrap() - md.first().unwrap().before_process.unwrap();
+                let e2en: u64 = e2e.into();
+                println!("End to end latency {}, mean latency per hop: {}", e2e, e2en / (md.len() as u64));
+
+                drop(md);
+                drop(culist); // avoids a double mutable borrow
+                &mut self.copper_runtime.end_of_processing(id);
+
             }
-
-            let md = collect_metadata(&culist);
-            for m in md.iter() {
-                println!("Metadata: {}", m);
-            }
-
-            let e2e = md.last().unwrap().after_process.unwrap() - md.first().unwrap().before_process.unwrap();
-            let e2en: u64 = e2e.into();
-            println!("End to end latency {}, mean latency per hop: {}", e2e, e2en / (md.len() as u64));
-
             Ok(())
-            }
+        }
     };
 
     println!("[build result]");
