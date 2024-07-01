@@ -42,15 +42,17 @@ impl<P: CopperListPayload> CopperList<P> {
 
 /// This structure maintains the entire memory needed by Copper for one loop for the inter tasks communication within a process.
 /// T is typically a Tuple of various types of messages that are exchanged between tasks.
-pub struct CuListsManager<P: CopperListPayload, const N: usize> {
+pub struct CuListsManager<P: CopperListPayload, DC: Fn(&CopperList<P>), const N: usize> {
     #[allow(dead_code)]
     data: Box<[CopperList<P>; N]>,
     length: usize,
     insertion_index: usize,
-    on_drop: Box<dyn Fn(&CopperList<P>)>, // callback when the top of the queue is dropped.
+    on_drop: DC, // callback when the top of the queue is dropped.
 }
 
-impl<P: CopperListPayload + fmt::Debug, const N: usize> fmt::Debug for CuListsManager<P, N> {
+impl<P: CopperListPayload + fmt::Debug, DC: Fn(&CopperList<P>), const N: usize> fmt::Debug
+    for CuListsManager<P, DC, N>
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("CuListsManager")
             .field("data", &self.data)
@@ -73,8 +75,8 @@ pub type AscIter<'a, T> = Chain<SliceIter<'a, T>, SliceIter<'a, T>>;
 /// An mutable ascending iterator over `CircularQueue<T>`.
 pub type AscIterMut<'a, T> = Chain<SliceIterMut<'a, T>, SliceIterMut<'a, T>>;
 
-impl<P: CopperListPayload, const N: usize> CuListsManager<P, N> {
-    pub fn new<F>(on_drop: Box<dyn Fn(&CopperList<P>)>) -> Self {
+impl<P: CopperListPayload, DC: Fn(&CopperList<P>), const N: usize> CuListsManager<P, DC, N> {
+    pub fn new(on_drop: DC) -> Self {
         let data = unsafe {
             let layout = std::alloc::Layout::new::<[CopperList<P>; N]>();
             let ptr = std::alloc::alloc_zeroed(layout) as *mut [CopperList<P>; N];
@@ -229,13 +231,15 @@ impl<P: CopperListPayload, const N: usize> CuListsManager<P, N> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::cell::RefCell;
-    use std::rc::Rc;
+    use crate::curuntime::no_action;
     use std::sync::{Arc, Mutex};
+
+    type NoAction32 = fn(&CopperList<i32>);
+    pub fn no_action_32(_: &CopperList<i32>) {}
 
     #[test]
     fn empty_queue() {
-        let q = CuListsManager::<i32, 5>::new::<fn(&CopperList<i32>)>(Box::new(|_| {}));
+        let q = CuListsManager::<i32, NoAction32, 5>::new(|_| {});
 
         assert!(q.is_empty());
         assert!(q.iter().next().is_none());
@@ -243,7 +247,7 @@ mod tests {
 
     #[test]
     fn partially_full_queue() {
-        let mut q = CuListsManager::<i32, 5>::new::<fn(&CopperList<i32>)>(Box::new(|_| {}));
+        let mut q = CuListsManager::<i32, NoAction32, 5>::new(|_| {});
         q.create().unwrap().payload = 1;
         q.create().unwrap().payload = 2;
         q.create().unwrap().payload = 3;
@@ -257,7 +261,7 @@ mod tests {
 
     #[test]
     fn full_queue() {
-        let mut q = CuListsManager::<i32, 5>::new::<fn(&CopperList<i32>)>(Box::new(|_| {}));
+        let mut q = CuListsManager::<i32, NoAction32, 5>::new(|_| {});
         q.create().unwrap().payload = 1;
         q.create().unwrap().payload = 2;
         q.create().unwrap().payload = 3;
@@ -271,7 +275,7 @@ mod tests {
 
     #[test]
     fn over_full_queue() {
-        let mut q = CuListsManager::<i32, 5>::new::<fn(&CopperList<i32>)>(Box::new(|_| {}));
+        let mut q = CuListsManager::<i32, NoAction32, 5>::new(|_| {});
         q.create().unwrap().payload = 1;
         q.create().unwrap().payload = 2;
         q.create().unwrap().payload = 3;
@@ -286,7 +290,7 @@ mod tests {
 
     #[test]
     fn clear() {
-        let mut q = CuListsManager::<i32, 5>::new::<fn(&CopperList<i32>)>(Box::new(|_| {}));
+        let mut q = CuListsManager::<i32, NoAction32, 5>::new(|_| {});
         q.create().unwrap().payload = 1;
         q.create().unwrap().payload = 2;
         q.create().unwrap().payload = 3;
@@ -312,7 +316,7 @@ mod tests {
 
     #[test]
     fn mutable_iterator() {
-        let mut q = CuListsManager::<i32, 5>::new::<fn(&CopperList<i32>)>(Box::new(|_| {}));
+        let mut q = CuListsManager::<i32, NoAction32, 5>::new(|_| {});
         q.create().unwrap().payload = 1;
         q.create().unwrap().payload = 2;
         q.create().unwrap().payload = 3;
@@ -329,7 +333,7 @@ mod tests {
 
     #[test]
     fn zero_sized() {
-        let mut q = CuListsManager::<(), 5>::new::<fn(&CopperList<()>)>(Box::new(|_| {}));
+        let mut q = CuListsManager::<(), fn(&CopperList<()>), 5>::new(|_| {});
         *q.create().unwrap() = CopperList::new(());
         *q.create().unwrap() = CopperList::new(());
         *q.create().unwrap() = CopperList::new(());
@@ -345,14 +349,13 @@ mod tests {
 
     #[test]
     fn be_sure_we_wont_stackoverflow_at_init() {
-        let _ = CuListsManager::<[u8; 10_000_000], 3>::new::<fn(&CopperList<[u8; 10_000_000]>)>(
-            Box::new(|_| {}),
-        );
+        let _ =
+            CuListsManager::<[u8; 10_000_000], fn(&CopperList<[u8; 10_000_000]>), 3>::new(|_| {});
     }
 
     #[test]
     fn test_drop_last() {
-        let mut q = CuListsManager::<i32, 5>::new::<fn(&CopperList<i32>)>(Box::new(|_| {}));
+        let mut q = CuListsManager::<i32, NoAction32, 5>::new(|_| {});
         q.create().unwrap().payload = 1;
         q.create().unwrap().payload = 2;
         q.create().unwrap().payload = 3;
@@ -369,7 +372,7 @@ mod tests {
 
     #[test]
     fn test_pop() {
-        let mut q = CuListsManager::<i32, 5>::new::<fn(&CopperList<i32>)>(Box::new(|_| {}));
+        let mut q = CuListsManager::<i32, NoAction32, 5>::new(|_| {});
         q.create().unwrap().payload = 1;
         q.create().unwrap().payload = 2;
         q.create().unwrap().payload = 3;
@@ -387,7 +390,7 @@ mod tests {
 
     #[test]
     fn test_peek() {
-        let mut q = CuListsManager::<i32, 5>::new::<fn(&CopperList<i32>)>(Box::new(|_| {}));
+        let mut q = CuListsManager::<i32, NoAction32, 5>::new(|_| {});
         q.create().unwrap().payload = 1;
         q.create().unwrap().payload = 2;
         q.create().unwrap().payload = 3;
@@ -407,18 +410,17 @@ mod tests {
     fn test_callback() {
         let called = Arc::new(Mutex::new(false));
         let called_clone = Arc::clone(&called);
-        let binding = move |_: &CopperList<i32>| *called_clone.lock().unwrap() = true;
-        {
-            let mut q = CuListsManager::<i32, 5>::new::<fn(&CopperList<i32>)>(Box::new(binding));
-            q.create().unwrap().payload = 1;
-            q.create().unwrap().payload = 2;
-            q.create().unwrap().payload = 3;
-            q.create().unwrap().payload = 4;
-            q.create().unwrap().payload = 5;
-            assert_eq!(q.len(), 5);
+        let mut q = CuListsManager::<i32, _, 5>::new(move |_: &CopperList<i32>| {
+            *called_clone.lock().unwrap() = true
+        });
+        q.create().unwrap().payload = 1;
+        q.create().unwrap().payload = 2;
+        q.create().unwrap().payload = 3;
+        q.create().unwrap().payload = 4;
+        q.create().unwrap().payload = 5;
+        assert_eq!(q.len(), 5);
 
-            q.pop();
-            assert!(*called.lock().unwrap());
-        }
+        q.pop();
+        assert!(*called.lock().unwrap());
     }
 }
