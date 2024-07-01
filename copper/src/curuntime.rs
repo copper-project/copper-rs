@@ -3,6 +3,7 @@ use crate::config::{CuConfig, NodeId};
 use crate::config::{Node, NodeInstanceConfig};
 use crate::copperlist::{CopperList, CopperListState, CuListsManager};
 use crate::CuResult;
+use copper_log_derive::debug;
 use copper_traits::CopperListPayload;
 use petgraph::prelude::*;
 use std::sync::{Arc, Mutex};
@@ -28,9 +29,6 @@ impl<CT, P: CopperListPayload, const NBCL: usize> ClockProvider for CuRuntime<CT
     }
 }
 
-/// Small helper function to do nothing for the drop callback.
-pub fn no_action<P: CopperListPayload>(_: &CopperList<P>) {}
-
 impl<CT, P: CopperListPayload + 'static, const NBCL: usize> CuRuntime<CT, P, NBCL> {
     pub fn new(
         clock: RobotClock,
@@ -53,9 +51,12 @@ impl<CT, P: CopperListPayload + 'static, const NBCL: usize> CuRuntime<CT, P, NBC
         Ok(runtime)
     }
 
-    fn end_of_processing(&mut self, dropping: &mut CopperList<P>) {
-        dropping.change_state(CopperListState::DoneProcessing);
+    pub fn end_of_processing(&mut self, dropping: u32) {
+        debug!("End of processing for CL #{}", dropping);
         self.copper_lists.asc_iter_mut().for_each(|cl| {
+            if cl.id == dropping {
+                cl.change_state(CopperListState::DoneProcessing);
+            }
             if cl.get_state() == CopperListState::DoneProcessing {
                 cl.change_state(CopperListState::BeingSerialized);
             }
