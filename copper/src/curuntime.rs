@@ -14,7 +14,7 @@ pub struct CuRuntime<CT, P: CopperListPayload, const NBCL: usize> {
     pub task_instances: CT,
 
     /// Copper lists hold in order all the input/output messages for all the tasks.
-    pub copper_lists: CuListsManager<P, NBCL>,
+    pub copper_lists: CuListsManager<P, fn(&CopperList<P>), NBCL>,
 
     /// The base clock the runtime will be using to record time.
     pub clock: RobotClock,
@@ -27,6 +27,7 @@ impl<CT, P: CopperListPayload, const NBCL: usize> ClockProvider for CuRuntime<CT
     }
 }
 
+/// Small helper function to do nothing for the drop callback.
 pub fn no_action<P: CopperListPayload>(_: &CopperList<P>) {}
 
 impl<CT, P: CopperListPayload + 'static, const NBCL: usize> CuRuntime<CT, P, NBCL> {
@@ -43,7 +44,7 @@ impl<CT, P: CopperListPayload + 'static, const NBCL: usize> CuRuntime<CT, P, NBC
         let task_instances = tasks_instanciator(all_instances_configs)?;
         Ok(Self {
             task_instances,
-            copper_lists: CuListsManager::new::<fn(&CopperList<P>)>(Box::new(no_action)), // FIXME: here add the cleanup logic
+            copper_lists: CuListsManager::new(no_action), // FIXME: here add the cleanup logic
             clock,
         })
     }
