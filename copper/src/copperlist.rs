@@ -118,6 +118,45 @@ impl<P: CopperListPayload, const N: usize> CuListsManager<P, N> {
     }
 
     #[inline]
+    pub fn peek(&self) -> Option<&CopperList<P>> {
+        if self.length == 0 {
+            return None;
+        }
+        let index = if self.insertion_index == 0 {
+            N - 1
+        } else {
+            self.insertion_index - 1
+        };
+        Some(&self.data[index])
+    }
+
+    #[inline]
+    pub fn peek_mut(&mut self) -> Option<&mut CopperList<P>> {
+        if self.length == 0 {
+            return None;
+        }
+        let index = if self.insertion_index == 0 {
+            N - 1
+        } else {
+            self.insertion_index - 1
+        };
+        Some(&mut self.data[index])
+    }
+
+    #[inline]
+    fn drop_last(&mut self) {
+        if self.length == 0 {
+            return;
+        }
+        if self.insertion_index == 0 {
+            self.insertion_index = N - 1;
+        } else {
+            self.insertion_index -= 1;
+        }
+        self.length -= 1;
+    }
+
+    #[inline]
     pub fn pop(&mut self) -> Option<&mut CopperList<P>> {
         if self.length == 0 {
             return None;
@@ -289,5 +328,58 @@ mod tests {
     #[test]
     fn be_sure_we_wont_stackoverflow_at_init() {
         let _ = CuListsManager::<[u8; 10_000_000], 3>::new();
+    }
+
+    #[test]
+    fn test_drop_last() {
+        let mut q = CuListsManager::<i32, 5>::new();
+        q.create().unwrap().payload = 1;
+        q.create().unwrap().payload = 2;
+        q.create().unwrap().payload = 3;
+        q.create().unwrap().payload = 4;
+        q.create().unwrap().payload = 5;
+        assert_eq!(q.len(), 5);
+
+        q.drop_last();
+        assert_eq!(q.len(), 4);
+
+        let res: Vec<_> = q.iter().map(|x| x.payload).collect();
+        assert_eq!(res, [4, 3, 2, 1]);
+    }
+
+    #[test]
+    fn test_pop() {
+        let mut q = CuListsManager::<i32, 5>::new();
+        q.create().unwrap().payload = 1;
+        q.create().unwrap().payload = 2;
+        q.create().unwrap().payload = 3;
+        q.create().unwrap().payload = 4;
+        q.create().unwrap().payload = 5;
+        assert_eq!(q.len(), 5);
+
+        let mut last = q.pop().unwrap();
+        assert_eq!(last.payload, 5);
+        assert_eq!(q.len(), 4);
+
+        let res: Vec<_> = q.iter().map(|x| x.payload).collect();
+        assert_eq!(res, [4, 3, 2, 1]);
+    }
+
+    #[test]
+    fn test_peek() {
+        let mut q = CuListsManager::<i32, 5>::new();
+        q.create().unwrap().payload = 1;
+        q.create().unwrap().payload = 2;
+        q.create().unwrap().payload = 3;
+        q.create().unwrap().payload = 4;
+        q.create().unwrap().payload = 5;
+        assert_eq!(q.len(), 5);
+
+        let last = q.peek().unwrap();
+        assert_eq!(last.payload, 5);
+        assert_eq!(q.len(), 5);
+
+        let res: Vec<_> = q.iter().map(|x| x.payload).collect();
+        assert_eq!(res, [5, 4, 3, 2, 1]);
     }
 }
