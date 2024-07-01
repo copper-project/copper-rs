@@ -1,7 +1,7 @@
 use crate::clock::{ClockProvider, RobotClock};
 use crate::config::{CuConfig, NodeId};
 use crate::config::{Node, NodeInstanceConfig};
-use crate::copperlist::CuListsManager;
+use crate::copperlist::{CopperList, CuListsManager};
 use crate::CuResult;
 use copper_traits::CopperListPayload;
 use petgraph::prelude::*;
@@ -27,7 +27,9 @@ impl<CT, P: CopperListPayload, const NBCL: usize> ClockProvider for CuRuntime<CT
     }
 }
 
-impl<CT, P: CopperListPayload, const NBCL: usize> CuRuntime<CT, P, NBCL> {
+pub fn no_action<P: CopperListPayload>(_: &CopperList<P>) {}
+
+impl<CT, P: CopperListPayload + 'static, const NBCL: usize> CuRuntime<CT, P, NBCL> {
     pub fn new(
         clock: RobotClock,
         config: &CuConfig,
@@ -41,7 +43,7 @@ impl<CT, P: CopperListPayload, const NBCL: usize> CuRuntime<CT, P, NBCL> {
         let task_instances = tasks_instanciator(all_instances_configs)?;
         Ok(Self {
             task_instances,
-            copper_lists: CuListsManager::new(),
+            copper_lists: CuListsManager::new::<fn(&CopperList<P>)>(Box::new(no_action)), // FIXME: here add the cleanup logic
             clock,
         })
     }
