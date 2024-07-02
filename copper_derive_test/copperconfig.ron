@@ -3,7 +3,6 @@
         (
             id: "camera",
             type: "v4lsrc::Video4LinuxSource",
-            base_period_ns: 1000000000,
             config: {
                 "dev": "/dev/video0",
             },
@@ -11,7 +10,6 @@
         (
             id: "logger",
             type: "simplelogger::SimpleLogger",
-            base_period_ns: 60000000000,
             config: {
                 "path": "/tmp/stuff.cu",
             },
