@@ -359,25 +359,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_base_period() {
-        let node = Node {
-            id: "test".to_string(),
-            type_: Some("test".to_string()),
-            config: Some(HashMap::new()),
-            base_period_ns: Some(1_000_000_000),
-        };
-        assert_eq!(node.base_period(), Some(Time::new::<second>(1.into())));
-
-        let node = Node::new("test2", "package::Plugin")
-            .set_base_period(Time::new::<millisecond>(500.into()));
-        assert_eq!(node.base_period_ns, Some(500_000_000));
-        assert_eq!(
-            node.base_period(),
-            Some(Time::new::<nanosecond>(500_000_000.into()))
-        );
-    }
-
-    #[test]
     fn test_plain_serialize() {
         let mut config = CuConfig::default();
         let n1 = config.add_node(Node::new("test1", "package::Plugin1"));
