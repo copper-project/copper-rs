@@ -10,7 +10,7 @@ use std::path::PathBuf;
 struct Opts {
     #[arg(short, long)]
     index: Option<PathBuf>, // Those are default to the test case for now.
-    datalog: Option<PathBuf>,
+    unifiedlog: Option<PathBuf>,
 }
 
 fn main() {
@@ -22,14 +22,14 @@ fn main() {
         PathBuf::from("test/copper_log_index")
     };
 
-    let datalog = if let Some(datalog) = opts.datalog {
+    let unifiedlog = if let Some(datalog) = opts.unifiedlog {
         datalog
     } else {
         PathBuf::from("test/test.copper")
     };
 
     let UnifiedLogger::Read(dl) = UnifiedLoggerBuilder::new()
-        .file_path(&datalog)
+        .file_path(&unifiedlog)
         .build()
         .expect("Failed to create logger")
     else {
