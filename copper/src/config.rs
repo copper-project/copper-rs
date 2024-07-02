@@ -1,21 +1,37 @@
-use std::collections::HashMap;
-use std::fs::read_to_string;
-
 use crate::{CuError, CuResult};
 use petgraph::dot::Config as PetConfig;
 use petgraph::dot::Dot;
+use petgraph::graph::NodeIndex;
 use petgraph::stable_graph::{EdgeIndex, StableDiGraph};
-use petgraph::visit::EdgeRef;
+use petgraph::visit::{EdgeRef, NodeRef};
 use ron::extensions::Extensions;
 use ron::value::Value as RonValue;
 use ron::Options;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use uom::si::rational::Time;
-use uom::si::time::nanosecond;
+use std::collections::HashMap;
+use std::fmt::Display;
+use std::fs::read_to_string;
+use std::path::Path;
 
 pub type NodeId = u32;
-pub type NodeInstanceConfig = HashMap<String, Value>;
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct NodeInstanceConfig(HashMap<String, Value>);
 pub type Edge = (NodeId, NodeId, String);
+
+impl Display for NodeInstanceConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut first = true;
+        write!(f, "{{")?;
+        for (key, value) in self.0.iter() {
+            if !first {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}: {:?}", key, value)?;
+            first = false;
+        }
+        write!(f, "}}")
+    }
+}
 
 // The confifuration Serialization format is as follows:
 // (
@@ -144,17 +160,18 @@ impl Node {
 
     pub fn get_param<T: From<Value>>(&self, key: &str) -> Option<T> {
         let pc = self.config.as_ref()?;
-        let v = pc.get(key)?;
+        let v = pc.0.get(key)?;
         Some(T::from(v.clone()))
     }
 
     pub fn set_param<T: Into<Value>>(&mut self, key: &str, value: T) {
         if self.config.is_none() {
-            self.config = Some(HashMap::new());
+            self.config = Some(NodeInstanceConfig(HashMap::new()));
         }
         self.config
             .as_mut()
             .unwrap()
+            .0
             .insert(key.to_string(), value.into());
     }
 }
@@ -326,7 +343,24 @@ impl CuConfig {
     }
 
     pub fn render(&self, output: &mut dyn std::io::Write) {
-        let dot = Dot::with_config(&self.graph, &[PetConfig::EdgeNoLabel]);
+        // Customize node and edge attributes
+        let get_node_attributes = |_graph: &StableDiGraph<Node, String, NodeId>,
+                                   (index, node): (NodeIndex, &Node)|
+         -> String {
+            println!("Node: {:?}", node);
+            let config_str = match &node.config {
+                Some(config) => format!("config: {}", config), // Replace with your actual Config to string conversion
+                None => String::new(),
+            };
+            format!("label=\"{}: {}\n{}\"", node.id, node.get_type(), config_str)
+        };
+
+        let dot = Dot::with_attr_getters(
+            &self.graph,
+            &[PetConfig::EdgeNoLabel],
+            &|_, _| String::new(),
+            &get_node_attributes,
+        );
         write!(output, "{:?}", dot).unwrap();
     }
 
@@ -339,7 +373,7 @@ impl CuConfig {
 }
 
 /// Read a copper configuration from a file.
-pub fn read_configuration(config_filename: &str) -> CuResult<CuConfig> {
+pub fn read_configuration(config_filename: &Path) -> CuResult<CuConfig> {
     let config_content = read_to_string(config_filename).map_err(|e| {
         CuError::from(format!(
             "Failed to read configuration file: {:?}",
@@ -353,9 +387,6 @@ pub fn read_configuration(config_filename: &str) -> CuResult<CuConfig> {
 // tests
 #[cfg(test)]
 mod tests {
-    use uom::si::time::millisecond;
-    use uom::si::time::second;
-
     use super::*;
 
     #[test]
