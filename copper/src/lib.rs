@@ -4,5 +4,6 @@ pub mod curuntime;
 pub mod cutask;
 pub mod monitoring;
 
+pub use config::read_configuration;
 pub use copper_clock as clock;
 pub use copper_traits::*;
