@@ -66,8 +66,8 @@ impl MmapStream {
     }
 }
 
-impl WriteStream for MmapStream {
-    fn log(&mut self, obj: &impl Encode) -> CuResult<()> {
+impl<E: Encode> WriteStream<E> for MmapStream {
+    fn log(&mut self, obj: &E) -> CuResult<()> {
         let result = encode_into_slice(
             obj,
             &mut self.current_slice[self.current_position..],
@@ -110,11 +110,11 @@ impl Drop for MmapStream {
 }
 
 /// Create a new stream to write to the unifiedlogger.
-pub fn stream_write(
+pub fn stream_write<E: Encode>(
     logger: Arc<Mutex<UnifiedLoggerWrite>>,
     entry_type: UnifiedLogType,
     minimum_allocation_amount: usize,
-) -> impl WriteStream {
+) -> impl WriteStream<E> {
     let aclone = logger.clone();
     let mut logger = logger.lock().unwrap();
     let underlying_slice = logger.add_section(entry_type, minimum_allocation_amount);
@@ -545,7 +545,8 @@ mod tests {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let (logger, _) = make_a_logger(&tmp_dir);
         {
-            let _stream = stream_write(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
+            let _stream =
+                stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
             assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 1);
         }
         assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 0);
@@ -557,9 +558,9 @@ mod tests {
     fn test_two_sections_self_cleaning_in_order() {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let (logger, _) = make_a_logger(&tmp_dir);
-        let s1 = stream_write(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
+        let s1 = stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
         assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 1);
-        let s2 = stream_write(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
+        let s2 = stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
         assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 2);
         drop(s2);
         assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 1);
@@ -573,9 +574,9 @@ mod tests {
     fn test_two_sections_self_cleaning_out_of_order() {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let (logger, _) = make_a_logger(&tmp_dir);
-        let s1 = stream_write(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
+        let s1 = stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
         assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 1);
-        let s2 = stream_write(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
+        let s2 = stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
         assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 2);
         drop(s1);
         assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 1);
