@@ -4,17 +4,14 @@
         (
             id: "src",
             type: "tasks::CaterpillarSource",
-            base_period_ns: 1000000000,
         ),
         (
             id: "ct-0",
             type: "tasks::CaterpillarTask",
-            base_period_ns: 1000000000,
         ),
         (
             id: "gpio-0",
             type: "cu_rp_gpio::RPGpio",
-            base_period_ns: 1000000000,
             config: {
                 "pin": 4,
             },
@@ -22,12 +19,10 @@
         (
             id: "ct-1",
             type: "tasks::CaterpillarTask",
-            base_period_ns: 1000000000,
         ),
         (
             id: "gpio-1",
             type: "cu_rp_gpio::RPGpio",
-            base_period_ns: 1000000000,
             config: {
                 "pin": 17,
             },
@@ -35,12 +30,10 @@
         (
             id: "ct-2",
             type: "tasks::CaterpillarTask",
-            base_period_ns: 1000000000,
         ),
         (
             id: "gpio-2",
             type: "cu_rp_gpio::RPGpio",
-            base_period_ns: 1000000000,
             config: {
                 "pin": 27,
             },
@@ -48,12 +41,10 @@
         (
             id: "ct-3",
             type: "tasks::CaterpillarTask",
-            base_period_ns: 1000000000,
         ),
         (
             id: "gpio-3",
             type: "cu_rp_gpio::RPGpio",
-            base_period_ns: 1000000000,
             config: {
                 "pin": 22,
             },
@@ -61,12 +52,10 @@
         (
             id: "ct-4",
             type: "tasks::CaterpillarTask",
-            base_period_ns: 1000000000,
         ),
         (
             id: "gpio-4",
             type: "cu_rp_gpio::RPGpio",
-            base_period_ns: 1000000000,
             config: {
                 "pin": 5,
             },
@@ -74,12 +63,10 @@
         (
             id: "ct-5",
             type: "tasks::CaterpillarTask",
-            base_period_ns: 1000000000,
         ),
         (
             id: "gpio-5",
             type: "cu_rp_gpio::RPGpio",
-            base_period_ns: 1000000000,
             config: {
                 "pin": 6,
             },
@@ -87,12 +74,10 @@
         (
             id: "ct-6",
             type: "tasks::CaterpillarTask",
-            base_period_ns: 1000000000,
         ),
         (
             id: "gpio-6",
             type: "cu_rp_gpio::RPGpio",
-            base_period_ns: 1000000000,
             config: {
                 "pin": 19,
             },
@@ -100,12 +85,10 @@
         (
             id: "ct-7",
             type: "tasks::CaterpillarTask",
-            base_period_ns: 1000000000,
         ),
         (
             id: "gpio-7",
             type: "cu_rp_gpio::RPGpio",
-            base_period_ns: 1000000000,
             config: {
                 "pin": 26,
             },

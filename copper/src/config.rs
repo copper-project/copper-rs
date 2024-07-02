@@ -111,8 +111,6 @@ pub struct Node {
     #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
     type_: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    base_period_ns: Option<isize>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     config: Option<NodeInstanceConfig>,
 }
 
@@ -121,7 +119,7 @@ impl Node {
         Node {
             id: id.to_string(),
             type_: Some(ptype.to_string()),
-            base_period_ns: None,
+            // base_period_ns: None,
             config: None,
         }
     }
@@ -142,19 +140,6 @@ impl Node {
 
     pub fn get_instance_config(&self) -> Option<&NodeInstanceConfig> {
         self.config.as_ref()
-    }
-
-    #[allow(dead_code)]
-    pub fn base_period(&self) -> Option<Time> {
-        self.base_period_ns
-            .map(|frequency| Time::new::<nanosecond>(frequency.into()))
-    }
-
-    pub fn set_base_period(mut self, period: Time) -> Self {
-        let as_ns = &period.get::<nanosecond>();
-        debug_assert_eq!(*as_ns.denom(), 1isize); // We normalize to the ns
-        self.base_period_ns = Some(*as_ns.numer());
-        self
     }
 
     pub fn get_param<T: From<Value>>(&self, key: &str) -> Option<T> {
