@@ -373,8 +373,7 @@ mod tests {
     #[test]
     fn test_serialize_with_params() {
         let mut config = CuConfig::default();
-        let mut camera = Node::new("copper-camera", "camerapkg::Camera")
-            .set_base_period(Time::new::<second>(60.into()));
+        let mut camera = Node::new("copper-camera", "camerapkg::Camera");
         camera.set_param::<Value>("resolution-height", 1080.into());
         config.add_node(camera);
         let serialized = config.serialize_ron();
