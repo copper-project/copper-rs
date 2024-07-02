@@ -59,12 +59,20 @@ impl<CT, P: CopperListPayload + 'static, const NBCL: usize> CuRuntime<CT, P, NBC
 
     pub fn end_of_processing(&mut self, culistid: u32) {
         debug!("End of processing for CL #{}", culistid);
-        self.copper_lists.asc_iter_mut().for_each(|cl| {
-            if cl.id == culistid {
+        let mut is_top = true;
+        self.copper_lists.iter_mut().for_each(|cl| {
+            if cl.id == culistid && cl.get_state() == CopperListState::Processing {
                 cl.change_state(CopperListState::DoneProcessing);
             }
-            if cl.get_state() == CopperListState::DoneProcessing {
+            // if we have a series of copper lists that are done processing at the top of the circular buffer
+            // serialize them all and Free them.
+            if is_top && cl.get_state() == CopperListState::DoneProcessing {
                 cl.change_state(CopperListState::BeingSerialized);
+                debug!("Logging CL #{}", cl.id);
+                self.logger.log(&cl).unwrap();
+                cl.change_state(CopperListState::Free);
+            } else {
+                is_top = false;
             }
         });
     }

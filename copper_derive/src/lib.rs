@@ -221,15 +221,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 let mut culist = &mut self.copper_runtime.copper_lists.create().expect("Ran out of space for copper lists"); // FIXME: error handling.
                 let id = culist.id;
+                culist.change_state(copper::copperlist::CopperListState::Processing);
                 let payload = &mut culist.payload;
 
                 #(#runtime_plan_code)*
                 drop(payload);
 
                 let md = collect_metadata(&culist);
-                for m in md.iter() {
-                     println!("Metadata: {}", m);
-                }
                 let e2e = md.last().unwrap().after_process.unwrap() - md.first().unwrap().before_process.unwrap();
                 let e2en: u64 = e2e.into();
                 println!("End to end latency {}, mean latency per hop: {}", e2e, e2en / (md.len() as u64));

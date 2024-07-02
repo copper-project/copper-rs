@@ -3,10 +3,11 @@ extern crate alloc;
 use bincode_derive::{Decode, Encode};
 use std::fmt;
 
+use copper_traits::CopperListPayload;
+use serde_derive::Serialize;
+use std::fmt::Display;
 use std::iter::{Chain, Rev};
 use std::slice::{Iter as SliceIter, IterMut as SliceIterMut};
-
-use copper_traits::CopperListPayload;
 
 const MAX_TASKS: usize = 512;
 
@@ -16,13 +17,25 @@ pub struct CopperLiskMask {
     mask: [u128; MAX_TASKS / 128 + 1],
 }
 
-#[derive(Debug, Encode, Decode, PartialEq, Copy, Clone)]
+#[derive(Debug, Encode, Decode, Serialize, PartialEq, Copy, Clone)]
 pub enum CopperListState {
     Free,
     Initialized,
-    ProcessingTasks(CopperLiskMask),
+    Processing,
     DoneProcessing,
     BeingSerialized,
+}
+
+impl Display for CopperListState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CopperListState::Free => write!(f, "Free"),
+            CopperListState::Initialized => write!(f, "Initialized"),
+            CopperListState::Processing => write!(f, "Processing"),
+            CopperListState::DoneProcessing => write!(f, "DoneProcessing"),
+            CopperListState::BeingSerialized => write!(f, "BeingSerialized"),
+        }
+    }
 }
 
 #[derive(Debug, Encode, Decode)]
@@ -42,11 +55,11 @@ impl<P: CopperListPayload> CopperList<P> {
         }
     }
 
-    pub(crate) fn change_state(&mut self, new_state: CopperListState) {
+    pub fn change_state(&mut self, new_state: CopperListState) {
         self.state = new_state; // TODO: probably wise here to enforce a state machine.
     }
 
-    pub(crate) fn get_state(&self) -> CopperListState {
+    pub fn get_state(&self) -> CopperListState {
         self.state
     }
 }
