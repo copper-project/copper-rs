@@ -160,25 +160,23 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     }
                 }
                 CuTaskType::Regular => {
+                    let input_culist_index = int2index(
+                        step.culist_input_index
+                            .expect("Sink task should have an input message index."),
+                    );
+                    let output_culist_index = int2index(
+                        step.culist_output_index
+                            .expect("Src task should have an output message index."),
+                    );
+                    quote! {
                     {
-                        let input_culist_index = int2index(
-                            step.culist_input_index
-                                .expect("Sink task should have an input message index."),
-                        );
-                        let output_culist_index = int2index(
-                            step.culist_output_index
-                                .expect("Src task should have an output message index."),
-                        );
-                        quote! {
-                        {
-                            #comment_tokens
-                            let cumsg_input = &mut payload.#input_culist_index;
-                            let cumsg_output = &mut payload.#output_culist_index;
-                            cumsg_output.metadata.before_process = self.copper_runtime.clock.now().into();
-                            #task_instance.process(&self.copper_runtime.clock, cumsg_input, cumsg_output)?;
-                            cumsg_output.metadata.after_process = self.copper_runtime.clock.now().into();
-                        }
-                        }
+                        #comment_tokens
+                        let cumsg_input = &mut payload.#input_culist_index;
+                        let cumsg_output = &mut payload.#output_culist_index;
+                        cumsg_output.metadata.before_process = self.copper_runtime.clock.now().into();
+                        #task_instance.process(&self.copper_runtime.clock, cumsg_input, cumsg_output)?;
+                        cumsg_output.metadata.after_process = self.copper_runtime.clock.now().into();
+                    }
                     }
                 }
             };
@@ -238,7 +236,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 drop(md);
                 drop(culist); // avoids a double mutable borrow
-                &mut self.copper_runtime.end_of_processing(id);
+                self.copper_runtime.end_of_processing(id);
 
             }
             Ok(())
@@ -264,6 +262,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         use copper::copperlist::CopperList as _CopperList;
         use copper::clock::RobotClock as _RobotClock;
         use copper::clock::OptionCuTime as _OptionCuTime;
+        use std::sync::Arc as _Arc;
+        use std::sync::Mutex as _Mutex;
+        use copper_unifiedlog::stream_write as _stream_write;
+        use copper_unifiedlog::UnifiedLoggerWrite as _UnifiedLoggerWrite;
+        use copper_traits::UnifiedLogType as _UnifiedLogType;
+        use copper::clock::ClockProvider as _ClockProvider;
 
         // This is the heart of everything.
         // CuTasks is the list of all the tasks types.
@@ -283,11 +287,17 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         impl #name {
 
-            pub fn new(clock:_RobotClock) -> _CuResult<Self> {
+            pub fn new(clock:_RobotClock, unified_logger: _Arc<_Mutex<_UnifiedLoggerWrite>>) -> _CuResult<Self> {
                 let config = _read_configuration(#config_file)?;
 
+                let copperlist_stream = _stream_write::<CuList>(
+                    unified_logger.clone(),
+                    _UnifiedLogType::CopperList,
+                    1024,
+                );
+
                 Ok(#name {
-                    copper_runtime: _CuRuntime::<CuTasks, CuPayload, #DEFAULT_CLNB>::new(clock, &config, tasks_instanciator)?
+                    copper_runtime: _CuRuntime::<CuTasks, CuPayload, #DEFAULT_CLNB>::new(clock, &config, tasks_instanciator, copperlist_stream)?
                 })
             }
 

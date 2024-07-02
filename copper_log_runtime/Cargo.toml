@@ -19,6 +19,7 @@ once_cell = "1.19.0"
 simplelog = "0.12.2"
 log = "0.4.21"
 copper-log-reader = { path = "../copper_log_reader" }
+bincode = "2.0.0-rc.3"
 
 [dev-dependencies]
 bincode = "2.0.0-rc.3"

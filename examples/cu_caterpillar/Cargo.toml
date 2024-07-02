@@ -13,5 +13,7 @@ copper-helpers = { path = "../../copper_helpers" }
 copper-log = { path = "../../copper_log" }
 copper-log-derive = { path = "../../copper_log_derive" }
 copper-log-runtime = { path = "../../copper_log_runtime" }
+copper-unifiedlog = { path = "../../copper_unifiedlog" }
+copper-traits = { path = "../../copper_traits" }
 cu-rp-gpio = { path = "../cu_rp_gpio" }
 serde = { version = "1.0.203", features = ["derive"] }

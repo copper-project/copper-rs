@@ -20,4 +20,5 @@ copper = { path = "../copper" }
 
 [build-dependencies]
 cargo_metadata = "0.18.1"
+copper-unifiedlog = { path = "../copper_unifiedlog" }
 

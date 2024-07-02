@@ -1,3 +1,4 @@
+use bincode::Encode;
 use copper_clock::{ClockProvider, RobotClock};
 use copper_log::CuLogEntry;
 use copper_log_reader::read_interned_strings;
@@ -32,7 +33,7 @@ impl LoggerRuntime {
     /// extra_text_logger is the logger that will log the text logs in real time. This is slow and only for debug builds.
     pub fn init(
         clock_source: RobotClock,
-        destination: impl WriteStream + 'static,
+        destination: impl WriteStream<CuLogEntry> + 'static,
         extra_text_logger: Option<ExtraTextLogger>,
     ) -> Self {
         if (!cfg!(debug_assertions)) && extra_text_logger.is_some() {
@@ -54,7 +55,7 @@ impl LoggerRuntime {
 
     fn initialize_queue(
         &self,
-        mut destination: impl WriteStream + 'static,
+        mut destination: impl WriteStream<CuLogEntry> + 'static,
     ) -> (Sender<CuLogEntry>, JoinHandle<()>) {
         let (sender, receiver) = bounded::<CuLogEntry>(100);
 

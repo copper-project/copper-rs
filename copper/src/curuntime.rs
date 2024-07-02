@@ -5,6 +5,7 @@ use crate::copperlist::{CopperList, CopperListState, CuListsManager};
 use crate::CuResult;
 use copper_log_derive::debug;
 use copper_traits::CopperListPayload;
+use copper_traits::WriteStream;
 use petgraph::prelude::*;
 use std::sync::{Arc, Mutex};
 
@@ -19,10 +20,13 @@ pub struct CuRuntime<CT, P: CopperListPayload, const NBCL: usize> {
     pub copper_lists: CuListsManager<P, NBCL>,
 
     /// The base clock the runtime will be using to record time.
-    pub clock: RobotClock,
+    pub clock: RobotClock, // TODO: remove public at some point
+
+    /// Logger
+    logger: Box<dyn WriteStream<CopperList<P>>>,
 }
 
-/// To be able to share the clock we make the runtime a clock provider.:w
+/// To be able to share the clock we make the runtime a clock provider.
 impl<CT, P: CopperListPayload, const NBCL: usize> ClockProvider for CuRuntime<CT, P, NBCL> {
     fn get_clock(&self) -> RobotClock {
         self.clock.clone()
@@ -34,6 +38,7 @@ impl<CT, P: CopperListPayload + 'static, const NBCL: usize> CuRuntime<CT, P, NBC
         clock: RobotClock,
         config: &CuConfig,
         tasks_instanciator: impl Fn(Vec<Option<&NodeInstanceConfig>>) -> CuResult<CT>,
+        logger: impl WriteStream<CopperList<P>> + 'static,
     ) -> CuResult<Self> {
         let all_instances_configs: Vec<Option<&NodeInstanceConfig>> = config
             .get_all_nodes()
@@ -46,15 +51,16 @@ impl<CT, P: CopperListPayload + 'static, const NBCL: usize> CuRuntime<CT, P, NBC
             task_instances,
             copper_lists: CuListsManager::new(), // placeholder
             clock,
+            logger: Box::new(logger),
         };
 
         Ok(runtime)
     }
 
-    pub fn end_of_processing(&mut self, dropping: u32) {
-        debug!("End of processing for CL #{}", dropping);
+    pub fn end_of_processing(&mut self, culistid: u32) {
+        debug!("End of processing for CL #{}", culistid);
         self.copper_lists.asc_iter_mut().for_each(|cl| {
-            if cl.id == dropping {
+            if cl.id == culistid {
                 cl.change_state(CopperListState::DoneProcessing);
             }
             if cl.get_state() == CopperListState::DoneProcessing {
@@ -199,6 +205,7 @@ mod tests {
     use crate::config::Node;
     use crate::cutask::{CuMsg, CuSrcTask};
     use crate::cutask::{CuSinkTask, CuTaskLifecycle};
+    use bincode::Encode;
     pub struct TestSource {}
 
     impl CuTaskLifecycle for TestSource {
@@ -253,14 +260,26 @@ mod tests {
         ))
     }
 
+    struct FakeWriter {}
+
+    impl<E: Encode> WriteStream<E> for FakeWriter {
+        fn log(&mut self, obj: &E) -> CuResult<()> {
+            Ok(())
+        }
+    }
+
     #[test]
     fn test_runtime_instanciation() {
         let mut config = CuConfig::default();
         config.add_node(Node::new("a", "TestSource"));
         config.add_node(Node::new("b", "TestSink"));
         config.connect(0, 1, "()");
-        let runtime =
-            CuRuntime::<Tasks, Msgs, 2>::new(RobotClock::default(), &config, tasks_instanciator);
+        let runtime = CuRuntime::<Tasks, Msgs, 2>::new(
+            RobotClock::default(),
+            &config,
+            tasks_instanciator,
+            FakeWriter {},
+        );
         assert!(runtime.is_ok());
     }
 }

@@ -36,7 +36,7 @@ pub fn basic_copper_setup(
         panic!("Failed to create logger")
     };
     let unified_logger = Arc::new(Mutex::new(logger));
-    let stream = stream_write(
+    let structured_stream = stream_write(
         unified_logger.clone(),
         UnifiedLogType::StructuredLogLine,
         1024,
@@ -62,7 +62,7 @@ pub fn basic_copper_setup(
     };
 
     let clock = RobotClock::default();
-    let structured_logging = LoggerRuntime::init(clock.clone(), stream, extra);
+    let structured_logging = LoggerRuntime::init(clock.clone(), structured_stream, extra);
     Ok(CopperContext {
         unified_logger: unified_logger.clone(),
         logger_runtime: structured_logging,
