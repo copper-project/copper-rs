@@ -1,39 +1,41 @@
 use crate::{CuError, CuResult};
-use petgraph::dot::Config as PetConfig;
 use petgraph::dot::Dot;
+use petgraph::dot::{Config as PetConfig, Config};
 use petgraph::graph::NodeIndex;
 use petgraph::stable_graph::{EdgeIndex, StableDiGraph};
 use petgraph::visit::{EdgeRef, NodeRef};
 use ron::extensions::Extensions;
 use ron::value::Value as RonValue;
 use ron::Options;
+use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
+use std::fmt;
 use std::fmt::Display;
 use std::fs::read_to_string;
-use std::path::Path;
 
 pub type NodeId = u32;
+
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct NodeInstanceConfig(pub HashMap<String, Value>);
 pub type Edge = (NodeId, NodeId, String);
 
 impl Display for NodeInstanceConfig {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut first = true;
         write!(f, "{{")?;
         for (key, value) in self.0.iter() {
             if !first {
                 write!(f, ", ")?;
             }
-            write!(f, "{}: {:?}", key, value)?;
+            write!(f, "{}: {}", key, value)?;
             first = false;
         }
         write!(f, "}}")
     }
 }
 
-// The confifuration Serialization format is as follows:
+// The configuration Serialization format is as follows:
 // (
 //   tasks : [ (id: "toto", type: "zorglub::MyType", config: {...}),
 //             (id: "titi", type: "zorglub::MyType2", config: {...})]
@@ -115,6 +117,21 @@ impl From<Value> for String {
             s
         } else {
             panic!("Expected a String variant")
+        }
+    }
+}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.0 {
+            RonValue::Number(n) => write!(f, "{}", n.as_i64().unwrap()),
+            RonValue::String(s) => write!(f, "{}", s),
+            RonValue::Bool(b) => write!(f, "{}", b),
+            RonValue::Map(m) => write!(f, "{:?}", m),
+            RonValue::Char(c) => write!(f, "{:?}", c),
+            RonValue::Unit => write!(f, "unit"),
+            RonValue::Option(o) => write!(f, "{:?}", o),
+            RonValue::Seq(s) => write!(f, "{:?}", s),
         }
     }
 }
@@ -343,25 +360,67 @@ impl CuConfig {
     }
 
     pub fn render(&self, output: &mut dyn std::io::Write) {
-        // Customize node and edge attributes
-        let get_node_attributes = |_graph: &StableDiGraph<Node, String, NodeId>,
-                                   (index, node): (NodeIndex, &Node)|
-         -> String {
-            println!("Node: {:?}", node);
+        // let style = Attribute(
+        //     Id::Plain("style".into()),
+        //     Id::Escaped("\"rounded,filled\"".into()),
+        // );
+        // let shape = Attribute(Id::Plain("shape".into()), Id::Plain("box".into()));
+        write!(output, "digraph G {{\n").unwrap();
+
+        for index in self.graph.node_indices() {
+            let node = &self.graph[index];
             let config_str = match &node.config {
-                Some(config) => format!("config: {}", config), // Replace with your actual Config to string conversion
+                Some(config) => {
+                    let config_str = config
+                        .0
+                        .iter()
+                        .map(|(k, v)| format!("<B>{}</B> = {}<BR ALIGN=\"LEFT\"/>", k, v))
+                        .collect::<Vec<String>>()
+                        .join("\n");
+                    format!("<BR/>____________<BR ALIGN=\"LEFT\"/>{}", config_str)
+                }
                 None => String::new(),
             };
-            format!("label=\"{}: {}\n{}\"", node.id, node.get_type(), config_str)
-        };
+            writeln!(output, "{} [", index.index()).unwrap();
+            writeln!(output, "shape=box,").unwrap();
+            writeln!(output, "style=\"rounded, filled\",").unwrap();
+            writeln!(output, "fontname=\"Noto Sans\"").unwrap();
 
-        let dot = Dot::with_attr_getters(
-            &self.graph,
-            &[PetConfig::EdgeNoLabel],
-            &|_, _| String::new(),
-            &get_node_attributes,
-        );
-        write!(output, "{:?}", dot).unwrap();
+            let is_src = self.get_dst_edges(index.index() as NodeId).is_empty();
+            let is_sink = self.get_src_edges(index.index() as NodeId).is_empty();
+            if is_src {
+                writeln!(output, "fillcolor=lightgreen,").unwrap();
+            } else if is_sink {
+                writeln!(output, "fillcolor=lightblue,").unwrap();
+            } else {
+                writeln!(output, "fillcolor=lightgrey,").unwrap();
+            }
+            writeln!(output, "color=grey,").unwrap();
+
+            writeln!(output, "labeljust=l,").unwrap();
+            writeln!(
+                output,
+                "label=< <FONT COLOR=\"red\"><B>{}</B></FONT><BR ALIGN=\"LEFT\"/><BR ALIGN=\"RIGHT\"/><FONT COLOR=\"dimgray\">{}</FONT><BR ALIGN=\"LEFT\"/>{} >",
+                node.id,
+                node.get_type(),
+                config_str
+            )
+            .unwrap();
+
+            writeln!(output, "];").unwrap();
+        }
+        for edge in self.graph.edge_indices() {
+            let (src, dst) = self.graph.edge_endpoints(edge).unwrap();
+            writeln!(
+                output,
+                "{} -> {} [label=< <B><FONT COLOR=\"gray\">{}</FONT></B> >];",
+                src.index(),
+                dst.index(),
+                self.graph[edge]
+            )
+            .unwrap();
+        }
+        writeln!(output, "}}").unwrap();
     }
 
     pub fn get_all_instances_configs(&self) -> Vec<Option<&NodeInstanceConfig>> {
