@@ -2,15 +2,11 @@ mod config;
 use clap::{Parser, Subcommand};
 use config::read_configuration;
 pub use copper_traits::*;
-use graphviz_rust::cmd::Format;
-use graphviz_rust::exec;
-use graphviz_rust::parse;
-use graphviz_rust::printer::PrinterContext;
 use std::io::Cursor;
 use std::io::Write;
 use std::path::PathBuf;
-use std::process::Command;
-use tempfile::NamedTempFile;
+use std::process::{Command, Stdio};
+use tempfile::Builder;
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -34,24 +30,37 @@ fn main() -> std::io::Result<()> {
         let mut cursor = Cursor::new(&mut content);
         config.render(&mut cursor);
     }
-    // Parse the DOT content
-    let graph = parse(String::from_utf8(content).unwrap().as_str()).unwrap();
+    println!("{}", String::from_utf8(content.clone()).unwrap());
 
-    // Convert the graph to SVG content
-    let graph_svg = exec(
-        graph,
-        &mut PrinterContext::default(),
-        vec![Format::Svg.into()],
-    )
-    .unwrap();
+    // Generate SVG from DOT
+    let mut child = Command::new("dot")
+        .arg("-Tsvg")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("Failed to start dot process");
 
+    {
+        let stdin = child.stdin.as_mut().expect("Failed to open stdin");
+        stdin.write_all(&content)?;
+    }
+
+    let output = child.wait_with_output().expect("Failed to read stdout");
+
+    if !output.status.success() {
+        eprintln!("dot command failed with error: {:?}", output.status);
+        std::process::exit(1);
+    }
+
+    let graph_svg = output.stdout;
     if args.open {
         // Create a temporary file to store the SVG
-        let mut temp_file = NamedTempFile::new()?;
+        let mut temp_file = Builder::new().suffix(".svg").tempfile()?;
+        println!("temp file: {:?}", temp_file.path());
         temp_file.write_all(graph_svg.as_slice())?;
 
         // Open the SVG in the default system viewer
-        Command::new("xdg-open")
+        Command::new("inkscape") // xdg-open fails silently (while it works from a standard bash on the same file :shrug:)
             .arg(temp_file.path())
             .status()
             .expect("failed to open SVG file");

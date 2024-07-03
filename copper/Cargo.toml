@@ -28,5 +28,4 @@ copper-log-derive = { path = "../copper_log_derive" }
 copper-log-runtime = { path = "../copper_log_runtime" }
 copper-clock = { path = "../copper_clock" }
 clap = { version = "4.5.8", features = ["derive"] }
-graphviz-rust = "0.9.0"
 tempfile = "3.10.1"
