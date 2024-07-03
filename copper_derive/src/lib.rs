@@ -1,6 +1,7 @@
 extern crate proc_macro;
 
 use proc_macro::TokenStream;
+use std::path::Path;
 
 use quote::quote;
 use syn::meta::parser;
@@ -51,7 +52,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         .as_os_str()
         .to_str()
         .expect("Could not interpret the config file name");
-    let copper_config = read_configuration(Path::from(filename)).expect(&format!(
+    let copper_config = read_configuration(filename).expect(&format!(
         "Failed to read configuration file: {:?}",
         &config_full_path
     ));

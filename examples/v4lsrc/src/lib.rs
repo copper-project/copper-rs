@@ -52,6 +52,7 @@ impl CuTaskLifecycle for Video4LinuxSource {
             .ok_or("Video4LinuxSource needs a config, None was passed as NodeInstanceConfig")?;
 
         let dev: String = (*config
+            .0
             .get("dev")
             .expect("v4lsrc expects a dev config value pointing to the video device"))
         .clone()
@@ -113,7 +114,9 @@ mod tests {
     fn emulate_runtime() -> CuResult<()> {
         println!("Build config");
         let mut config = NodeInstanceConfig::default();
-        config.insert("dev".to_string(), "/dev/video0".to_string().into());
+        config
+            .0
+            .insert("dev".to_string(), "/dev/video0".to_string().into());
         println!("Build task");
         let mut task = Video4LinuxSource::new(Some(&config))?;
         println!("Build img");

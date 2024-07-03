@@ -27,7 +27,8 @@ fn main() -> std::io::Result<()> {
     // Parse command line arguments
     let args = Args::parse();
 
-    let config = read_configuration(&args.config).expect("Failed to read configuration file");
+    let config = read_configuration(args.config.to_str().unwrap())
+        .expect("Failed to read configuration file");
     let mut content = Vec::<u8>::new();
     {
         let mut cursor = Cursor::new(&mut content);

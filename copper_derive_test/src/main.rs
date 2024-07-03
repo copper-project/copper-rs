@@ -12,7 +12,7 @@ fn main() {
     let UnifiedLogger::Write(logger) = UnifiedLoggerBuilder::new()
         .write(true)
         .create(true)
-        .file_path(Path::new("/tmp/test.copper".into()))
+        .file_path(&Path::new("/tmp/test.copper"))
         .preallocated_size(100000)
         .build()
         .expect("Failed to create logger")
