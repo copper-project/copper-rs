@@ -14,8 +14,8 @@ use std::fs::read_to_string;
 use std::path::Path;
 
 pub type NodeId = u32;
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct NodeInstanceConfig(HashMap<String, Value>);
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+pub struct NodeInstanceConfig(pub HashMap<String, Value>);
 pub type Edge = (NodeId, NodeId, String);
 
 impl Display for NodeInstanceConfig {
@@ -373,7 +373,7 @@ impl CuConfig {
 }
 
 /// Read a copper configuration from a file.
-pub fn read_configuration(config_filename: &Path) -> CuResult<CuConfig> {
+pub fn read_configuration(config_filename: &str) -> CuResult<CuConfig> {
     let config_content = read_to_string(config_filename).map_err(|e| {
         CuError::from(format!(
             "Failed to read configuration file: {:?}",

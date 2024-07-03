@@ -1,6 +1,6 @@
+use copper::clock::RobotClock;
 use std::fs::File;
 use std::io::Write;
-use copper::clock::RobotClock;
 
 use copper::config::NodeInstanceConfig;
 use copper::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle};
@@ -19,7 +19,7 @@ impl CuTaskLifecycle for SimpleLogger {
     {
         let config = config
             .ok_or_else(|| "SimpleLogger needs a config, None was passed as NodeInstanceConfig")?;
-        let path = (*config.get("path").unwrap()).clone().into();
+        let path = (*config.0.get("path").unwrap()).clone().into();
         Ok(SimpleLogger {
             path,
             log_file: None,
