@@ -7,7 +7,7 @@ use copper::config::NodeInstanceConfig;
 use copper::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle};
 use copper::CuResult;
 
-#[derive(Decode, Encode)]
+#[derive(Decode, Encode, Debug)]
 pub struct ImageMsg {
     pub buffer: [[u8; 1920]; 1200],
 }

@@ -1,7 +1,7 @@
 use bincode::Encode;
 use copper_clock::{ClockProvider, RobotClock};
+use copper_intern_strs::read_interned_strings;
 use copper_log::CuLogEntry;
-use copper_log_reader::read_interned_strings;
 use copper_traits::{CuResult, WriteStream};
 use kanal::{bounded, Sender};
 use log::{Log, Record};
