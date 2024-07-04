@@ -47,7 +47,7 @@ pub struct CopperList<P: CopperListPayload> {
 
 impl<P: CopperListPayload> CopperList<P> {
     // This is not the usual way to create a CopperList, this is just for testing.
-    fn new(id: u32, payload: P) -> Self {
+    pub fn new(id: u32, payload: P) -> Self {
         CopperList {
             id,
             state: CopperListState::Initialized,

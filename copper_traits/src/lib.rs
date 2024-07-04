@@ -1,6 +1,6 @@
 use bincode::{Decode as dDecode, Encode, Encode as dEncode};
 use std::error::Error;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 
 /// Common copper Error type.
 #[derive(Debug)]
@@ -71,7 +71,7 @@ pub enum UnifiedLogType {
 }
 
 /// A CopperListPayload needs to be encodable, decodable and fixed size in memory.
-pub trait CopperListPayload: bincode::Encode + bincode::Decode + Sized {}
+pub trait CopperListPayload: bincode::Encode + bincode::Decode + Sized + Debug {}
 
 // Also anything that follows this contract can be a payload (blanket implementation)
-impl<T> CopperListPayload for T where T: bincode::Encode + bincode::Decode + Sized {}
+impl<T> CopperListPayload for T where T: bincode::Encode + bincode::Decode + Debug + Sized {}
