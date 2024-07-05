@@ -33,11 +33,7 @@ impl Display for ExportFormat {
 #[derive(Parser)]
 #[command(author, version, about)]
 pub struct LogReaderCli {
-    #[arg(short, long)]
     pub unifiedlog: PathBuf,
-
-    #[arg(short, long)]
-    pub verbose: u8,
 
     #[command(subcommand)]
     pub command: Command,
@@ -46,10 +42,7 @@ pub struct LogReaderCli {
 #[derive(Subcommand)]
 pub enum Command {
     /// Extract logs
-    ExtractLog {
-        #[arg(short, long)]
-        log_index: PathBuf,
-    },
+    ExtractLog { log_index: PathBuf },
     /// Extract copperlists
     ExtractCopperlist {
         #[arg(short, long, default_value_t = ExportFormat::Json)]
@@ -80,11 +73,16 @@ where
             textlog_dump(reader, &log_index)?;
         }
         Command::ExtractCopperlist { export_format } => {
+            println!("Extracting copperlists");
             let mut reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
+            // let mut buf = [0u8; 8];
+            // reader.read(&mut buf);
+            // println!("Bytes ... {:x?}", buf);
             let iter = copperlists_dump::<P>(&mut reader);
             for entry in iter {
-                println!("{:?}", entry);
+                println!("{:#?}", entry);
             }
+            println!("The end.");
         }
     }
 
@@ -100,7 +98,10 @@ pub fn copperlists_dump<P: CopperListPayload>(
         let entry = decode_from_std_read::<CopperList<P>, _, _>(&mut src, standard());
         match entry {
             Ok(entry) => Some(entry),
-            Err(_) => None,
+            Err(e) => {
+                println!("Error {:?}", e);
+                None
+            }
         }
     })
 }

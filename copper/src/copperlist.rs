@@ -40,6 +40,7 @@ impl Display for CopperListState {
 
 #[derive(Debug, Encode, Decode)]
 pub struct CopperList<P: CopperListPayload> {
+    pub marker: [u8; 4],
     pub id: u32,
     state: CopperListState,
     pub payload: P, // This is generated from the runtime.
@@ -49,6 +50,7 @@ impl<P: CopperListPayload> CopperList<P> {
     // This is not the usual way to create a CopperList, this is just for testing.
     pub fn new(id: u32, payload: P) -> Self {
         CopperList {
+            marker: [0xBA, 0xD0, 0xCA, 0xFE],
             id,
             state: CopperListState::Initialized,
             payload,
@@ -99,11 +101,14 @@ pub type AscIterMut<'a, T> = Chain<SliceIterMut<'a, T>, SliceIterMut<'a, T>>;
 
 impl<P: CopperListPayload, const N: usize> CuListsManager<P, N> {
     pub fn new() -> Self {
-        let data = unsafe {
+        let mut data = unsafe {
             let layout = std::alloc::Layout::new::<[CopperList<P>; N]>();
             let ptr = std::alloc::alloc_zeroed(layout) as *mut [CopperList<P>; N];
             Box::from_raw(ptr)
         };
+        for i in 0..N {
+            data[i].marker = [0xBA, 0xD0, 0xCA, 0xFE];
+        }
         const INITIAL_SLSTATE: CopperListState = CopperListState::Free;
         CuListsManager {
             data,
