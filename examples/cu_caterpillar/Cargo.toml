@@ -5,6 +5,16 @@ edition = "2021"
 license = "Apache-2.0"
 keywords = ["robotics", "middleware", "copper", "real-time"]
 categories = ["science::robotics"]
+default-run = "cucaterpillar"
+
+[[bin]]
+name = "cucaterpillar"
+path = "src/main.rs"
+
+[[bin]]
+name = "logreader"
+path = "src/logreader.rs"
+
 
 [dependencies]
 copper-derive = { path = "../../copper_derive" }
@@ -15,5 +25,6 @@ copper-log-derive = { path = "../../copper_log_derive" }
 copper-log-runtime = { path = "../../copper_log_runtime" }
 copper-unifiedlog = { path = "../../copper_unifiedlog" }
 copper-traits = { path = "../../copper_traits" }
+copper-export = { path = "../../copper_export" }
 cu-rp-gpio = { path = "../cu_rp_gpio" }
 serde = { version = "1.0.203", features = ["derive"] }

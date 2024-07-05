@@ -65,6 +65,7 @@ pub trait WriteStream<E: Encode>: Sync + Send {
 /// Defines the types of what can be logged in the unified logger.
 #[derive(dEncode, dDecode, Copy, Clone, Debug, PartialEq)]
 pub enum UnifiedLogType {
+    Empty,             // Dummmy default used as a debug marker
     StructuredLogLine, // This is for the structured logs (ie. debug! etc..)
     CopperList,        // This is the actual data log storing activities between tasks.
     LastEntry,         // This is a special entry that is used to signal the end of the log.

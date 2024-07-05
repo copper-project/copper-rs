@@ -29,7 +29,7 @@ pub fn basic_copper_setup(
         .write(true)
         .create(true)
         .file_path(unifiedlogger_output_path)
-        .preallocated_size(100000)
+        .preallocated_size(100 * 1024)
         .build()
         .expect("Failed to create logger")
     else {
@@ -39,7 +39,7 @@ pub fn basic_copper_setup(
     let structured_stream = stream_write(
         unified_logger.clone(),
         UnifiedLogType::StructuredLogLine,
-        1024,
+        4096,
     );
 
     let extra = if text_log {

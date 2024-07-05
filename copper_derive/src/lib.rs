@@ -1,9 +1,8 @@
 extern crate proc_macro;
 
 use proc_macro::TokenStream;
-use std::path::Path;
 
-use quote::quote;
+use quote::{quote, ToTokens};
 use syn::meta::parser;
 use syn::Fields::{Named, Unnamed};
 use syn::{parse_macro_input, parse_quote, parse_str, Field, ItemStruct, LitStr, Type, TypeTuple};
@@ -22,6 +21,19 @@ const DEFAULT_CLNB: usize = 10;
 #[inline]
 fn int2index(i: u32) -> syn::Index {
     syn::Index::from(i as usize)
+}
+
+#[proc_macro]
+pub fn gen_culist_payload(config_path_lit: TokenStream) -> TokenStream {
+    let mut config = parse_macro_input!(config_path_lit as LitStr).value();
+    println!("[gen culist payload with {:?}]", config);
+    let cuconfig = read_config(&config);
+    let runtime_plan: Vec<CuExecutionStep> =
+        compute_runtime_plan(&cuconfig).expect("Could not compute runtime plan");
+    let all_msgs_types_in_culist_order = extract_msg_types(&runtime_plan);
+    build_culist_payload(&all_msgs_types_in_culist_order)
+        .into_token_stream()
+        .into()
 }
 
 /// Adds #[copper_runtime(config = "path")] to your application struct to generate the runtime.
@@ -46,16 +58,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let config_file = config_file
         .expect("Expected config file attribute like #[CopperRuntime(config = \"path\")]")
         .value();
-    let mut config_full_path = utils::caller_crate_root();
-    config_full_path.push(&config_file);
-    let filename = config_full_path
-        .as_os_str()
-        .to_str()
-        .expect("Could not interpret the config file name");
-    let copper_config = read_configuration(filename).expect(&format!(
-        "Failed to read configuration file: {:?}",
-        &config_full_path
-    ));
+    let copper_config = read_config(&config_file);
 
     println!("[runtime plan]");
     let runtime_plan: Vec<CuExecutionStep> =
@@ -187,24 +190,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         .collect();
 
     println!("[extract msg types]");
-    let all_msgs_types_in_culist_order: Vec<Type> = runtime_plan
-        .iter()
-        .filter_map(|step| {
-            if step.output_msg_type.is_none() {
-                None
-            } else {
-                Some(parse_str::<Type>(step.output_msg_type.clone().unwrap().as_str()).unwrap())
-            }
-        })
-        .collect();
+    let all_msgs_types_in_culist_order: Vec<Type> = extract_msg_types(&runtime_plan);
 
-    println!("[build the copper list tuple]");
-    let msgs_types_tuple: TypeTuple = if all_msgs_types_in_culist_order.is_empty() {
-        parse_quote! {()}
-        // panic!("No messages types found. You need to at least define one message between tasks.");
-    } else {
-        parse_quote! { (#(_CuMsg<#all_msgs_types_in_culist_order>),*,)}
-    };
+    println!("[build the copper payload]");
+    let msgs_types_tuple: TypeTuple = build_culist_payload(&all_msgs_types_in_culist_order);
 
     println!("[build the collect metadata function]");
     let culist_size = all_msgs_types_in_culist_order.len();
@@ -256,7 +245,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         use copper::cutask::CuSrcTask as _CuSrcTask;
         use copper::cutask::CuSinkTask as _CuSinkTask;
         use copper::cutask::CuTask as _CuTask;
-        use copper::cutask::CuMsg as _CuMsg;
+        use copper::cutask::CuMsg as CuMsg;
         use copper::cutask::CuMsgMetadata as _CuMsgMetadata;
         use copper::copperlist::CopperList as _CopperList;
         use copper::clock::RobotClock as _RobotClock;
@@ -292,7 +281,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let copperlist_stream = _stream_write::<CuList>(
                     unified_logger.clone(),
                     _UnifiedLogType::CopperList,
-                    1024,
+                    60 * 1024, // FIXME: make this a config
                 );
 
                 Ok(#name {
@@ -315,6 +304,20 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     tokens
 }
 
+fn read_config(config_file: &String) -> CuConfig {
+    let mut config_full_path = utils::caller_crate_root();
+    config_full_path.push(&config_file);
+    let filename = config_full_path
+        .as_os_str()
+        .to_str()
+        .expect("Could not interpret the config file name");
+    let copper_config = read_configuration(filename).expect(&format!(
+        "Failed to read configuration file: {:?}",
+        &config_full_path
+    ));
+    copper_config
+}
+
 /// Extract all the tasks types in their index order
 fn extract_tasks_types(copper_config: &CuConfig) -> (Vec<String>, Vec<Type>) {
     let all_nodes = copper_config.get_all_nodes();
@@ -334,4 +337,25 @@ fn extract_tasks_types(copper_config: &CuConfig) -> (Vec<String>, Vec<Type>) {
         })
         .collect();
     (all_types_names, all_types)
+}
+
+fn extract_msg_types(runtime_plan: &Vec<CuExecutionStep>) -> Vec<Type> {
+    runtime_plan
+        .iter()
+        .filter_map(|step| {
+            if step.output_msg_type.is_none() {
+                None
+            } else {
+                Some(parse_str::<Type>(step.output_msg_type.clone().unwrap().as_str()).unwrap())
+            }
+        })
+        .collect()
+}
+
+fn build_culist_payload(all_msgs_types_in_culist_order: &Vec<Type>) -> TypeTuple {
+    if all_msgs_types_in_culist_order.is_empty() {
+        parse_quote! {()}
+    } else {
+        parse_quote! { (#(CuMsg<#all_msgs_types_in_culist_order>),*,)}
+    }
 }

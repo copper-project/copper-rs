@@ -11,9 +11,10 @@ use std::time::Duration;
 struct CaterpillarApplication {}
 
 fn main() {
-    let copper_ctx = basic_copper_setup(&PathBuf::from("/tmp/caterpillar.copper"), true)
-        .expect("Failed to setup logger.");
-    debug!("Logger created.");
+    let logger_path = "/tmp/caterpillar.copper";
+    let copper_ctx =
+        basic_copper_setup(&PathBuf::from(logger_path), true).expect("Failed to setup logger.");
+    debug!("Logger created at {}.", logger_path);
     let clock = copper_ctx.clock;
     debug!("Creating application... ");
     let mut application =
