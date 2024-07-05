@@ -3,12 +3,12 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use bincode::config::standard;
+use bincode::error::DecodeError;
 use bincode::{decode_from_std_read, Decode, Encode};
-
 use copper::copperlist::CopperList;
 use copper_intern_strs::read_interned_strings;
 use copper_log::{rebuild_logline, CuLogEntry};
-use copper_traits::{CuResult, UnifiedLogType};
+use copper_traits::{CuError, CuResult, UnifiedLogType};
 
 use clap::{Parser, Subcommand, ValueEnum};
 use copper_traits::CopperListPayload;
@@ -73,16 +73,12 @@ where
             textlog_dump(reader, &log_index)?;
         }
         Command::ExtractCopperlist { export_format } => {
-            println!("Extracting copperlists");
+            println!("Extracting copperlists with format: {}", export_format);
             let mut reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
-            // let mut buf = [0u8; 8];
-            // reader.read(&mut buf);
-            // println!("Bytes ... {:x?}", buf);
             let iter = copperlists_dump::<P>(&mut reader);
             for entry in iter {
                 println!("{:#?}", entry);
             }
-            println!("The end.");
         }
     }
 
@@ -98,10 +94,21 @@ pub fn copperlists_dump<P: CopperListPayload>(
         let entry = decode_from_std_read::<CopperList<P>, _, _>(&mut src, standard());
         match entry {
             Ok(entry) => Some(entry),
-            Err(e) => {
-                println!("Error {:?}", e);
-                None
-            }
+            Err(e) => match e {
+                DecodeError::UnexpectedEnd { .. } => return None,
+                DecodeError::Io { inner, additional } => {
+                    if inner.kind() == std::io::ErrorKind::UnexpectedEof {
+                        return None;
+                    } else {
+                        println!("Error {:?} additional:{}", inner, additional);
+                        return None;
+                    }
+                }
+                _ => {
+                    println!("Error {:?}", e);
+                    return None;
+                }
+            },
         }
     })
 }
@@ -112,26 +119,36 @@ pub fn copperlists_dump<P: CopperListPayload>(
 /// index: the path to the index file (containing the interned strings constructed at build time)
 pub fn textlog_dump(mut src: impl Read, index: &Path) -> CuResult<()> {
     let all_strings = read_interned_strings(index)?;
-    println!("Copper: -> Beginning of log <-");
     loop {
         let entry = decode_from_std_read::<CuLogEntry, _, _>(&mut src, standard());
-        if entry.is_err() {
-            println!("Error {:?}", entry);
-            break;
-        }
-        let entry = entry.unwrap();
 
-        if entry.msg_index == 0 {
-            println!("Copper: -> End of log <-");
-            break;
-        }
+        match entry {
+            Err(DecodeError::UnexpectedEnd { .. }) => return Ok(()),
+            Err(DecodeError::Io { inner, additional }) => {
+                if inner.kind() == std::io::ErrorKind::UnexpectedEof {
+                    return Ok(());
+                } else {
+                    println!("Error {:?} additional:{}", inner, additional);
+                    return Err(CuError::new_with_cause("Error reading log", inner));
+                }
+            }
+            Err(e) => {
+                println!("Error {:?}", e);
+                return Err(CuError::new_with_cause("Error reading log", e));
+            }
+            Ok(entry) => {
+                if entry.msg_index == 0 {
+                    break;
+                }
 
-        let result = rebuild_logline(&all_strings, &entry);
-        if result.is_err() {
-            println!("Failed to rebuild log line: {:?}", result);
-            continue;
-        }
-        println!("Culog: [{}] {}", entry.time, result.unwrap());
+                let result = rebuild_logline(&all_strings, &entry);
+                if result.is_err() {
+                    println!("Failed to rebuild log line: {:?}", result);
+                    continue;
+                }
+                println!("Culog: [{}] {}", entry.time, result.unwrap());
+            }
+        };
     }
     Ok(())
 }
