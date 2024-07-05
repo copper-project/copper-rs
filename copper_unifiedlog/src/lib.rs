@@ -40,8 +40,9 @@ struct SectionHeader {
     entry_type: UnifiedLogType,
     section_size: u32, // offset of section_magic + section_size + page rounding -> should be the index of the next section_magic
     filled_size: u32,  // how much of the section is filled.
-    emagic: [u8; 2],
 }
+
+const MAX_HEADER_SIZE: usize = mem::size_of::<SectionHeader>() + 3usize; // 3 == additional worse case scenario for the 3 int variable encoding
 
 impl Default for SectionHeader {
     fn default() -> Self {
@@ -50,7 +51,6 @@ impl Default for SectionHeader {
             entry_type: UnifiedLogType::Empty,
             section_size: 0,
             filled_size: 0,
-            emagic: [SECTION_MAGIC[1], SECTION_MAGIC[0]],
         }
     }
 }
@@ -70,12 +70,10 @@ impl MmapStream {
         parent_logger: Arc<Mutex<UnifiedLoggerWrite>>,
         minimum_allocation_amount: usize,
     ) -> Self {
-        println!("Creating a new stream of type {:?}", entry_type);
         let section = parent_logger
             .lock()
             .unwrap()
             .add_section(entry_type, minimum_allocation_amount);
-        println!("Returning Creating a new stream of type {:?}", entry_type);
         Self {
             entry_type,
             parent_logger: parent_logger,
@@ -92,14 +90,12 @@ impl<E: Encode> WriteStream<E> for MmapStream {
         let result = encode_into_slice(obj, dst, standard());
         match result {
             Ok(nb_bytes) => {
-                println!("Encoded object into slice {:x?}", &dst[0..nb_bytes]);
                 self.current_position += nb_bytes;
                 self.current_section.used += nb_bytes as u32;
                 Ok(())
             }
             Err(e) => match e {
                 EncodeError::UnexpectedEnd => {
-                    println!("Unexpected end, creating a new section.");
                     let mut logger_guard = self.parent_logger.lock().unwrap();
                     self.current_section =
                         logger_guard.add_section(self.entry_type, self.minimum_allocation_amount);
@@ -128,13 +124,8 @@ impl<E: Encode> WriteStream<E> for MmapStream {
 
 impl Drop for MmapStream {
     fn drop(&mut self) {
-        println!("Dropping stream of type {:?}", self.entry_type);
         let mut logger_guard = self.parent_logger.lock().unwrap();
         logger_guard.unlock_section(&mut self.current_section);
-        println!(
-            "End of Dropping stream should drop entry type {:?}",
-            self.entry_type
-        );
         mem::take(&mut self.current_section);
     }
 }
@@ -300,8 +291,6 @@ impl Default for SectionHandle {
     }
 }
 
-const MAX_HEADER_SIZE: usize = 128;
-
 impl SectionHandle {
     // The buffer is considered static as it is a dedicated piece for the section.
     pub fn create(section_header: SectionHeader, buffer: &'static mut [u8]) -> Self {
@@ -333,18 +322,10 @@ impl Drop for SectionHandle {
     fn drop(&mut self) {
         // no need to do anything if we never used the section.
         if self.used == 0 {
-            println!(
-                "Section {:?}: Dropping with no update, empty section",
-                self.section_header.entry_type
-            );
             return;
         }
 
         self.section_header.filled_size = self.used;
-        println!(
-            "Section {:?}: Dropping updating the header, we used {}",
-            self.section_header.entry_type, self.used
-        );
 
         let sz = encode_into_slice(&self.section_header, &mut self.buffer, standard())
             .expect("Failed to encode section header");
@@ -353,12 +334,6 @@ impl Drop for SectionHandle {
         for i in sz..MAX_HEADER_SIZE {
             self.buffer[i] = 0x43;
         }
-
-        println!(
-            "Section buffer: {:x?} [...], header = {} bytes",
-            &self.buffer[0usize..MAX_HEADER_SIZE + self.used as usize],
-            sz
-        );
     }
 }
 
@@ -389,10 +364,6 @@ impl UnifiedLoggerWrite {
     }
 
     fn unlock_section(&mut self, section: &mut SectionHandle) {
-        println!(
-            "Section {:?}: Unlocking section, used {}",
-            section.section_header.entry_type, section.used
-        );
         let base = self.mmap_buffer.as_mut_ptr() as usize;
         let section_buffer_addr = section.buffer.as_mut_ptr() as usize;
         self.sections_in_flight
@@ -421,13 +392,8 @@ impl UnifiedLoggerWrite {
             entry_type,
             section_size: section_size as u32,
             filled_size: 0u32,
-            emagic: [SECTION_MAGIC[1], SECTION_MAGIC[0]],
         };
 
-        println!(
-            "Section {:?}: encoding into slice at {}",
-            entry_type, self.current_global_position
-        );
         let nb_bytes = encode_into_slice(
             &section_header,
             &mut self.mmap_buffer[self.current_global_position..],
@@ -435,10 +401,6 @@ impl UnifiedLoggerWrite {
         )
         .expect("Failed to encode section header");
         assert!(nb_bytes < self.page_size);
-        println!(
-            "Section {:?}: Section created with header using: {}",
-            entry_type, nb_bytes
-        );
 
         // save the position to keep track for in flight sections
         self.sections_in_flight.push(self.current_global_position);
@@ -451,7 +413,6 @@ impl UnifiedLoggerWrite {
 
         self.current_global_position = end_of_section;
 
-        println!("Section {:?}: new with size {}", entry_type, section_size);
         SectionHandle::create(section_header, handle_buffer)
     }
 
@@ -470,14 +431,12 @@ impl UnifiedLoggerWrite {
 
 impl Drop for UnifiedLoggerWrite {
     fn drop(&mut self) {
-        println!("Dropping UnifiedLoggerWrite logger");
         let section = self.add_section(UnifiedLogType::LastEntry, 4096);
         drop(section);
         self.flush();
         self.file
             .set_len(self.current_global_position as u64)
             .expect("Failed to trim datalogger file");
-        println!("End of Dropping UnifiedLoggerWrite logger");
     }
 }
 
@@ -504,7 +463,9 @@ impl UnifiedLoggerRead {
 
             // Found a section of the requested type
             if header.entry_type == datalogtype {
-                return Ok(Some(self.read_section_content(&header)?));
+                let result = Some(self.read_section_content(&header)?);
+                self.reading_position += header.section_size as usize;
+                return Ok(result);
             }
 
             // Keep reading until we find the requested type
@@ -532,15 +493,12 @@ impl UnifiedLoggerRead {
     /// Reads the section content from the section header pos.
     fn read_section_content(&mut self, header: &SectionHeader) -> CuResult<Vec<u8>> {
         // TODO: we could optimize by asking the buffer to fill
-        println!("Reading section of size {}", header.filled_size);
 
         let mut section = vec![0; header.filled_size as usize];
         let start_of_data = self.reading_position + MAX_HEADER_SIZE;
         section.copy_from_slice(
             &self.mmap_buffer[start_of_data..start_of_data + header.filled_size as usize],
         );
-
-        println!("Read section: {:x?}", section);
 
         Ok(section)
     }
@@ -554,8 +512,6 @@ impl UnifiedLoggerRead {
         if section_header.magic != SECTION_MAGIC {
             return Err("Invalid magic number in section header".into());
         }
-        println!("Read section header: {:?}", section_header);
-
         Ok(section_header)
     }
 }
@@ -578,28 +534,25 @@ impl UnifiedLoggerIOReader {
         }
     }
 
-    fn fill_buffer(&mut self) -> io::Result<()> {
-        println!("Filling buffer");
+    /// returns true if there is more data to read.
+    fn fill_buffer(&mut self) -> io::Result<bool> {
         match self.logger.read_next_section_type(self.log_type) {
             Ok(Some(section)) => {
                 self.buffer = section;
                 self.buffer_pos = 0;
+                Ok(true)
             }
-            Ok(None) => (), // No more sections of this type
+            Ok(None) => Ok(false), // No more sections of this type
             Err(e) => return Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
         }
-        println!("Filled buffer done");
-        Ok(())
     }
 }
 
 impl Read for UnifiedLoggerIOReader {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        //println!("buf.len() {}", buf.len());
-        //println!("self.buffer.len() {}", self.buffer.len());
-        //println!("self.buffer_pos {}", self.buffer_pos);
-        if self.buffer_pos >= self.buffer.len() {
-            self.fill_buffer()?;
+        if self.buffer_pos >= self.buffer.len() && !self.fill_buffer()? {
+            // This means we hit the last section.
+            return Ok(0);
         }
 
         // If we still have no data after trying to fill the buffer, we're at EOF
@@ -611,7 +564,6 @@ impl Read for UnifiedLoggerIOReader {
         let len = std::cmp::min(buf.len(), self.buffer.len() - self.buffer_pos);
         buf[..len].copy_from_slice(&self.buffer[self.buffer_pos..self.buffer_pos + len]);
         self.buffer_pos += len;
-        //println!("Read {} bytes", len);
         Ok(len)
     }
 }
@@ -723,7 +675,6 @@ mod tests {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let (logger, f) = make_a_logger(&tmp_dir);
         let p = f.as_path();
-        println!("Path : {:?}", p);
         {
             let mut stream = stream_write(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
             stream.log(&1u32).unwrap();
@@ -773,7 +724,6 @@ mod tests {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let (logger, f) = make_a_logger(&tmp_dir);
         let p = f.as_path();
-        println!("Path : {:?}", p);
         {
             let mut stream = stream_write(logger.clone(), UnifiedLogType::CopperList, 1024);
             let cl0 = CopperList {
