@@ -1,0 +1,12 @@
+[package]
+name = "cu-wt901"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+linux-embedded-hal = "0.4.0"
+i2cdev = "0.6.1"
+uom = "0.36.0"
+copper = { path = "../../copper" }
+bincode = "2.0.0-rc.3"
+bin_codec_derive = "*"
