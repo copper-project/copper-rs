@@ -245,7 +245,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         use copper::cutask::CuSrcTask as _CuSrcTask;
         use copper::cutask::CuSinkTask as _CuSinkTask;
         use copper::cutask::CuTask as _CuTask;
-        use copper::cutask::CuMsg as CuMsg;
+        use copper::cutask::CuMsg as _CuMsg;
         use copper::cutask::CuMsgMetadata as _CuMsgMetadata;
         use copper::copperlist::CopperList as _CopperList;
         use copper::clock::RobotClock as _RobotClock;
@@ -356,6 +356,6 @@ fn build_culist_payload(all_msgs_types_in_culist_order: &Vec<Type>) -> TypeTuple
     if all_msgs_types_in_culist_order.is_empty() {
         parse_quote! {()}
     } else {
-        parse_quote! { (#(CuMsg<#all_msgs_types_in_culist_order>),*,)}
+        parse_quote! { (#(_CuMsg<#all_msgs_types_in_culist_order>),*,)}
     }
 }

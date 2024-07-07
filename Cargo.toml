@@ -18,8 +18,8 @@ members = [
     "examples/config_gen",
     "examples/pluginload",
     "examples/simplelogger",
-    "examples/v4lsrc"
-]
+    "examples/v4lsrc",
+    "drivers/cu_wt901_tester"]
 resolver = "2"
 
 

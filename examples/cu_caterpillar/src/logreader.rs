@@ -1,4 +1,4 @@
-use copper::cutask::CuMsg;
+use copper::cutask::CuMsg as _CuMsg;
 use copper_derive::gen_culist_payload;
 use copper_export::run_cli;
 

@@ -1,0 +1,17 @@
+[package]
+name = "cu_wt901_tester"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+copper = { path = "../../copper" }
+copper-derive = { path = "../../copper_derive" }
+cu-wt901 = { path = "../cu_wt901" }
+copper-log = { path = "../../copper_log" }
+copper-log-derive = { path = "../../copper_log_derive" }
+copper-log-runtime = { path = "../../copper_log_runtime" }
+copper-unifiedlog = { path = "../../copper_unifiedlog" }
+copper-traits = { path = "../../copper_traits" }
+copper-helpers = { path = "../../copper_helpers" }
+uom = "0.36.0"
+
