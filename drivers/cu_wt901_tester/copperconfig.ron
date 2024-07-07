@@ -1,0 +1,14 @@
+(
+    tasks: [
+        (
+            id: "src",
+            type: "cu_wt901::WT901",
+        ),
+        (   id: "tester",
+            type: "WT910TestSink"
+        ),
+     ],
+    cnx: [
+        (src: "src",  dst: "tester",   msg: "cu_wt901::PositionalReadings"),
+    ],
+)
