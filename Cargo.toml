@@ -19,7 +19,7 @@ members = [
     "examples/pluginload",
     "examples/simplelogger",
     "examples/v4lsrc",
-    "drivers/cu_wt901_tester"]
+    "drivers/cu_wt901_tester", "drivers/cu_lewansoul"]
 resolver = "2"
 
 
