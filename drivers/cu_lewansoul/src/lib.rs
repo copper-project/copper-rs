@@ -68,6 +68,7 @@ fn angle_to_position(angle: Angle) -> i16 {
     (angle * 1000.0 / 240.0) as i16
 }
 
+/// This is a driver for the LewanSoul LX-16A, LX-225 etc.  Serial Bus Servos.
 pub struct Lewansoul {
     port: Box<dyn SerialPort>,
     ids: [u8; 8],
@@ -85,13 +86,63 @@ impl Lewansoul {
         Ok(())
     }
 
+    /// This should only be use at HW setup. I leave it there for you to make a tool around it if needed.
+    /// See the unit test how you can reuse independently those functions
+    #[allow(dead_code)]
     fn reassign_servo_id(&mut self, id: u8, new_id: u8) -> io::Result<()> {
-        println!("[{}] Set ID to {}", id, new_id);
         self.send_packet(id, SERVO_ID_WRITE, &[new_id])?;
-        let response = self.read_response()?;
-        println!("Response: {:02x?}{:02x?}", response.1, response.2);
+        self.read_response()?;
         Ok(())
     }
+
+    fn read_current_position(&mut self, id: u8) -> io::Result<f32> {
+        self.send_packet(id, SERVO_POS_READ, &[])?;
+        let response = self.read_response()?;
+        Ok((i16::from_le_bytes([response.2[0], response.2[1]])) as f32 * 240.0 / 1000.0)
+    }
+
+    fn read_present_voltage(&mut self, id: u8) -> io::Result<f32> {
+        println!("[{}] Read voltage", id);
+        self.send_packet(id, SERVO_VIN_READ, &[])?;
+        let response = self.read_response()?;
+        Ok(u16::from_le_bytes([response.2[0], response.2[1]]) as f32 / 1000.0)
+    }
+
+    fn read_temperature(&mut self, id: u8) -> io::Result<u8> {
+        println!("[{}] Read temperature", id);
+        self.send_packet(id, SERVO_TEMP_READ, &[])?;
+        let response = self.read_response()?;
+        Ok(response.2[0])
+    }
+
+    fn read_angle_limits(&mut self, id: u8) -> io::Result<(f32, f32)> {
+        println!("[{}] Read angle limits", id);
+        self.send_packet(id, SERVO_ANGLE_LIMIT_READ, &[])?;
+        let response = self.read_response()?;
+        Ok((
+            (i16::from_le_bytes([response.2[0], response.2[1]]) as f32) * 240.0 / 1000.0,
+            (i16::from_le_bytes([response.2[2], response.2[3]]) as f32) * 240.0 / 1000.0,
+        ))
+    }
+
+    fn ping(&mut self, id: u8) -> CuResult<()> {
+        self.send_packet(id, SERVO_ID_READ, &[])
+            .map_err(|e| CuError::new_with_cause("IO Error trying to write to the SBUS", &e))?;
+        let response = self.read_response().map_err(|e| {
+            CuError::new_with_cause("IO Error trying to read the ping response from SBUS", &e)
+        })?;
+
+        if response.2[0] == id {
+            Ok(())
+        } else {
+            Err(format!(
+                "The servo ID {} did not respond to ping got {} as ID instead.",
+                id, response.2[0]
+            )
+            .into())
+        }
+    }
+
     fn read_response(&mut self) -> io::Result<(u8, u8, Vec<u8>)> {
         let mut header = [0; 5];
         self.port.read_exact(&mut header)?;
@@ -119,30 +170,6 @@ impl Lewansoul {
             return Err(io::Error::new(io::ErrorKind::Other, "Invalid checksum"));
         }
         Ok((id, command, remaining[..remaining.len() - 1].to_vec()))
-    }
-
-    fn read_current_position(&mut self, id: u8) -> io::Result<f32> {
-        self.send_packet(id, SERVO_POS_READ, &[])?;
-        let response = self.read_response()?;
-        Ok((i16::from_le_bytes([response.2[0], response.2[1]])) as f32 * 240.0 / 1000.0)
-    }
-
-    fn ping(&mut self, id: u8) -> CuResult<()> {
-        self.send_packet(id, SERVO_ID_READ, &[])
-            .map_err(|e| CuError::new_with_cause("IO Error trying to write to the SBUS", &e))?;
-        let response = self.read_response().map_err(|e| {
-            CuError::new_with_cause("IO Error trying to read the ping response from SBUS", &e)
-        })?;
-
-        if response.2[0] == id {
-            Ok(())
-        } else {
-            Err(format!(
-                "The servo ID {} did not respond to ping got {} as ID instead.",
-                id, response.2[0]
-            )
-            .into())
-        }
     }
 }
 
@@ -238,5 +265,8 @@ mod tests {
         let mut lewansoul = Lewansoul::new(Some(&config)).unwrap();
         let position = lewansoul.read_current_position(1).unwrap();
         println!("Position: {}", position);
+
+        let angle_limits = lewansoul.read_angle_limits(1).unwrap();
+        println!("Angle limits: {:?}", angle_limits);
     }
 }
