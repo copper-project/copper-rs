@@ -9,14 +9,14 @@ use copper::CuResult;
 use embedded_hal::i2c::I2c;
 use linux_embedded_hal::{I2CError, I2cdev};
 use std::fmt::Display;
-use uom::si::acceleration::standard_gravity;
-use uom::si::angle::degree;
-use uom::si::angular_velocity::degree_per_second;
+use uom::si::acceleration::{meter_per_second_squared, standard_gravity};
+use uom::si::angle::{degree, radian};
+use uom::si::angular_velocity::{degree_per_second, radian_per_second};
 use uom::si::f32::Acceleration;
 use uom::si::f32::Angle;
 use uom::si::f32::AngularVelocity;
 use uom::si::f32::MagneticFluxDensity;
-use uom::si::magnetic_flux_density::nanotesla;
+use uom::si::magnetic_flux_density::{nanotesla, tesla};
 
 // FIXME: remove.
 const I2C_BUS: &str = "/dev/i2c-9";
@@ -58,6 +58,7 @@ use copper_log_derive::debug;
 use serde::de::{Deserialize, Deserializer};
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 use uom::fmt::DisplayStyle::{Abbreviation, Description};
+use uom::si::velocity::meter_per_second;
 
 #[derive(Default, Debug)]
 pub struct PositionalReadings {
@@ -134,6 +135,7 @@ impl<'de> Deserialize<'de> for PositionalReadings {
 
 impl Encode for PositionalReadings {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        // Encode in natural SI units
         self.acc_x.value.encode(encoder)?;
         self.acc_y.value.encode(encoder)?;
         self.acc_z.value.encode(encoder)?;
@@ -153,18 +155,19 @@ impl Encode for PositionalReadings {
 impl Decode for PositionalReadings {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         Ok(PositionalReadings {
-            acc_x: Acceleration::new::<standard_gravity>(f32::decode(decoder)?),
-            acc_y: Acceleration::new::<standard_gravity>(f32::decode(decoder)?),
-            acc_z: Acceleration::new::<standard_gravity>(f32::decode(decoder)?),
-            gyro_x: AngularVelocity::new::<degree_per_second>(f32::decode(decoder)?),
-            gyro_y: AngularVelocity::new::<degree_per_second>(f32::decode(decoder)?),
-            gyro_z: AngularVelocity::new::<degree_per_second>(f32::decode(decoder)?),
-            mag_x: MagneticFluxDensity::new::<nanotesla>(f32::decode(decoder)?),
-            mag_y: MagneticFluxDensity::new::<nanotesla>(f32::decode(decoder)?),
-            mag_z: MagneticFluxDensity::new::<nanotesla>(f32::decode(decoder)?),
-            roll: Angle::new::<degree>(f32::decode(decoder)?),
-            pitch: Angle::new::<degree>(f32::decode(decoder)?),
-            yaw: Angle::new::<degree>(f32::decode(decoder)?),
+            // Decode back from the natural SI units
+            acc_x: Acceleration::new::<meter_per_second_squared>(f32::decode(decoder)?),
+            acc_y: Acceleration::new::<meter_per_second_squared>(f32::decode(decoder)?),
+            acc_z: Acceleration::new::<meter_per_second_squared>(f32::decode(decoder)?),
+            gyro_x: AngularVelocity::new::<radian_per_second>(f32::decode(decoder)?),
+            gyro_y: AngularVelocity::new::<radian_per_second>(f32::decode(decoder)?),
+            gyro_z: AngularVelocity::new::<radian_per_second>(f32::decode(decoder)?),
+            mag_x: MagneticFluxDensity::new::<tesla>(f32::decode(decoder)?),
+            mag_y: MagneticFluxDensity::new::<tesla>(f32::decode(decoder)?),
+            mag_z: MagneticFluxDensity::new::<tesla>(f32::decode(decoder)?),
+            roll: Angle::new::<radian>(f32::decode(decoder)?),
+            pitch: Angle::new::<radian>(f32::decode(decoder)?),
+            yaw: Angle::new::<radian>(f32::decode(decoder)?),
         })
     }
 }
