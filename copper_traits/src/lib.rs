@@ -1,9 +1,10 @@
 use bincode::{Decode as dDecode, Encode, Encode as dEncode};
+use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 
 /// Common copper Error type.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CuError {
     message: String,
     cause: Option<String>,

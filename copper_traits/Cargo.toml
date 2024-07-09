@@ -8,3 +8,4 @@ categories = ["science::robotics"]
 
 [dependencies]
 bincode = "2.0.0-rc.3"
+serde = { version = "1.0.203", features = ["derive"] }

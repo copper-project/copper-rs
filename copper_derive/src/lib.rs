@@ -111,6 +111,62 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         })
         .collect();
 
+    let start_calls: Vec<_> = all_tasks_types
+        .iter()
+        .enumerate()
+        .map(|(index, ty)| {
+            let node_index = int2index(index as u32);
+            quote! {
+                {
+                    let task_instance = &mut self.copper_runtime.task_instances.#node_index;
+                    task_instance.start(&self.copper_runtime.clock)?;
+                }
+            }
+        })
+        .collect();
+
+    let stop_calls: Vec<_> = all_tasks_types
+        .iter()
+        .enumerate()
+        .map(|(index, ty)| {
+            let node_index = int2index(index as u32);
+            quote! {
+                {
+                    let task_instance = &mut self.copper_runtime.task_instances.#node_index;
+                    task_instance.stop(&self.copper_runtime.clock)?;
+                }
+            }
+        })
+        .collect();
+
+    let preprocess_calls: Vec<_> = all_tasks_types
+        .iter()
+        .enumerate()
+        .map(|(index, ty)| {
+            let node_index = int2index(index as u32);
+            quote! {
+                {
+                    let task_instance = &mut self.copper_runtime.task_instances.#node_index;
+                    task_instance.preprocess(&self.copper_runtime.clock)?;
+                }
+            }
+        })
+        .collect();
+
+    let postprocess_calls: Vec<_> = all_tasks_types
+        .iter()
+        .enumerate()
+        .map(|(index, ty)| {
+            let node_index = int2index(index as u32);
+            quote! {
+                {
+                    let task_instance = &mut self.copper_runtime.task_instances.#node_index;
+                    task_instance.postprocess(&self.copper_runtime.clock)?;
+                }
+            }
+        })
+        .collect();
+
     let runtime_plan_code: Vec<_> = runtime_plan
         .iter()
         .map(|step| {
@@ -133,6 +189,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 step.output_msg_type
             );
             let comment_tokens: proc_macro2::TokenStream = parse_str(&comment_str).unwrap();
+
 
             let process_call = match step.task_type {
                 CuTaskType::Source => {
@@ -207,8 +264,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     println!("[build the run method]");
     let run_method = quote! {
 
+        pub fn start_all_tasks(&mut self) -> _CuResult<()> {
+            #(#start_calls)*
+            Ok(())
+        }
+
         #[inline]
         pub fn run_one_iteration(&mut self) -> _CuResult<()> {
+            #(#preprocess_calls)*
             {
                 let mut culist = &mut self.copper_runtime.copper_lists.create().expect("Ran out of space for copper lists"); // FIXME: error handling.
                 let id = culist.id;
@@ -225,14 +288,29 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     debug!("End to end latency {}, mean latency per node: {}", e2e, e2en / (md.len() as u64));
                 } // drop(md);
 
+                self.copper_runtime.end_of_processing(id);
+
            }// drop(culist); avoids a double mutable borrow
+           #(#postprocess_calls)*
            Ok(())
         }
 
+        pub fn stop_all_tasks(&mut self) -> _CuResult<()> {
+            #(#stop_calls)*
+            Ok(())
+        }
+
         pub fn run(&mut self) -> _CuResult<()> {
-            loop {
-                self.run_one_iteration()?;
-            }
+            self.start_all_tasks()?;
+            let error = loop {
+                let error = self.run_one_iteration();
+                if error.is_err() {
+                    break error;
+                }
+            };
+            debug!("A task errored out: {}", &error);
+            self.stop_all_tasks()?;
+            error
         }
     };
 
