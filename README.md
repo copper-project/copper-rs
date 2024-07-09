@@ -4,7 +4,8 @@ A user friendly robotics framework to create fast and reliable robots.
 
 Easy: Copper combines a high level configuration and a natural Rust first API.
 
-Fast: Copper leverages the 0-cost abstraction features of Rust with a data oriented approach (ie. hardware friendly, no allocation on head during the execution etc...) to achieve sub microsecond latency on commodity hardware.
+Fast: Copper leverages the 0-cost abstraction features of Rust with a data oriented approach (ie. hardware friendly, no
+allocation on head during the execution etc...) to achieve sub microsecond latency on commodity hardware.
 
 Reliable: Copper leverages Rust's ownership, type system, and concurrency model to reduce bugs and ensure thread safety.
 
@@ -17,15 +18,18 @@ Reliable: Copper leverages Rust's ownership, type system, and concurrency model 
 
 Copper is a data oriented runtime that is made of those key components:
 
-* A task graph described in RON configuring the overall topology of the system (ie. which task talk to which) and sets types for the nodes and messages betweens the tasks.
-* A runtime generator that will decide on an execution plan based on the metadata from the graph. Based on this execution plan, the internal datastructure for the communication will be preallocated called a "Copper List" that will maximize sequential memory accesses during execution
+* A task graph described in RON configuring the overall topology of the system (ie. which task talk to which) and sets
+  types for the nodes and messages betweens the tasks.
+* A runtime generator that will decide on an execution plan based on the metadata from the graph. Based on this
+  execution plan, the internal datastructure for the communication will be preallocated called a "Copper List" that will
+  maximize sequential memory accesses during execution
 * A 0 copy data logging facility that will record all the messages between all the tasks
-* A super fast structured logging for regular textual logs. All the logging strings are interned and indexes at compile time to avoid any string construction at runtime.
+* A super fast structured logging for regular textual logs. All the logging strings are interned and indexes at compile
+  time to avoid any string construction at runtime.
 
 ## Hello World for Copper
 
 Enough! Show me how it is easy to build something!
-
 
 ```toml
 [dependencies]
@@ -95,30 +99,18 @@ impl CuSrcTask for FlippingSource {
 }
 
 
-// And that's it we can create the runtime and run it!
 fn main() {
-    // This is where we want to log the data at runtime.
-    let path: PathBuf = PathBuf::from("/tmp/caterpillar.copper");
-    let DataLogger::Write(logger) = DataLoggerBuilder::new()
-        .write(true)
-        .create(true)
-        .file_path(&path)
-        .preallocated_size(100000)
-        .build()
-        .expect("Failed to create logger")
-    else {
-        panic!("Failed to create logger")
-    };
-    let data_logger = Arc::new(Mutex::new(logger));
-
-    // This hooks up the structure logging to the main data logger
-    let stream = stream_write(data_logger.clone(), DataLogType::StructuredLogLine, 1024);
-
-    // We define our main robot clock
-    let clock = RobotClock::default();
-    let mut application = MyApplication::new(clock.clone()).expect("Failed to create runtime.");
-    debug!("Running... starting clock: {}.", mytime = clock.now());  // this will be indexed as "mytime" in the main datalogger
+    let logger_path = "/tmp/mylogfile.copper";
+    let copper_ctx =
+        basic_copper_setup(&PathBuf::from(logger_path), true).expect("Failed to setup logger.");
+    debug!("Logger created at {}.", logger_path);
+    let clock = copper_ctx.clock;
+    debug!("Creating application... ");
+    let mut application =
+        MyApplication::new(clock.clone(), copper_ctx.unified_logger.clone())
+            .expect("Failed to create runtime.");
+    debug!("Running... starting clock: {}.", clock.now());
     application.run().expect("Failed to run application.");
+    debug!("End of program: {}.", clock.now());
+    sleep(Duration::from_secs(1));
 }
-```
-
