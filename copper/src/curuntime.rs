@@ -57,9 +57,14 @@ impl<CT, P: CopperListPayload + 'static, const NBCL: usize> CuRuntime<CT, P, NBC
         Ok(runtime)
     }
 
+    pub fn available_copper_lists(&self) -> usize {
+        NBCL - self.copper_lists.len()
+    }
+
     pub fn end_of_processing(&mut self, culistid: u32) {
         debug!("End of processing for CL #{}", culistid);
         let mut is_top = true;
+        let mut nb_done = 0;
         self.copper_lists.iter_mut().for_each(|cl| {
             if cl.id == culistid && cl.get_state() == CopperListState::Processing {
                 cl.change_state(CopperListState::DoneProcessing);
@@ -71,10 +76,15 @@ impl<CT, P: CopperListPayload + 'static, const NBCL: usize> CuRuntime<CT, P, NBC
                 debug!("Logging CL #{}", cl.id);
                 self.logger.log(&cl).unwrap();
                 cl.change_state(CopperListState::Free);
+                nb_done += 1;
             } else {
                 is_top = false;
             }
         });
+        for _ in 0..nb_done {
+            let cl = self.copper_lists.pop();
+            debug!("Popped CL #{}", cl.unwrap().id);
+        }
     }
 }
 
@@ -289,5 +299,78 @@ mod tests {
             FakeWriter {},
         );
         assert!(runtime.is_ok());
+    }
+
+    #[test]
+    fn test_copperlists_manager_lifecycle() {
+        let mut config = CuConfig::default();
+        config.add_node(Node::new("a", "TestSource"));
+        config.add_node(Node::new("b", "TestSink"));
+        config.connect(0, 1, "()");
+        let mut runtime = CuRuntime::<Tasks, Msgs, 2>::new(
+            RobotClock::default(),
+            &config,
+            tasks_instanciator,
+            FakeWriter {},
+        )
+        .unwrap();
+
+        // Now emulates the generated runtime
+        {
+            let copperlists = &mut runtime.copper_lists;
+            let mut culist0 = copperlists
+                .create()
+                .expect("Ran out of space for copper lists");
+            // FIXME: error handling.
+            let id = culist0.id;
+            assert_eq!(id, 0);
+            culist0.change_state(CopperListState::Processing);
+            assert_eq!(runtime.available_copper_lists(), 1);
+        }
+
+        {
+            let copperlists = &mut runtime.copper_lists;
+            let mut culist1 = copperlists
+                .create()
+                .expect("Ran out of space for copper lists"); // FIXME: error handling.
+            let id = culist1.id;
+            assert_eq!(id, 1);
+            culist1.change_state(CopperListState::Processing);
+            assert_eq!(runtime.available_copper_lists(), 0);
+        }
+
+        {
+            let copperlists = &mut runtime.copper_lists;
+            let mut culist2 = copperlists.create();
+            assert!(culist2.is_none());
+            assert_eq!(runtime.available_copper_lists(), 0);
+        }
+
+        // Free in order, should let the top of the stack be serialized and freed.
+        runtime.end_of_processing(1);
+        assert_eq!(runtime.available_copper_lists(), 1);
+
+        // Readd a CL
+        {
+            let copperlists = &mut runtime.copper_lists;
+            let mut culist2 = copperlists
+                .create()
+                .expect("Ran out of space for copper lists"); // FIXME: error handling.
+            let id = culist2.id;
+            assert_eq!(id, 2);
+            culist2.change_state(CopperListState::Processing);
+            assert_eq!(runtime.available_copper_lists(), 0);
+        }
+
+        // Free out of order, the #0 first
+        runtime.end_of_processing(0);
+        // Should not free up the top of the stack
+        assert_eq!(runtime.available_copper_lists(), 0);
+
+        // Free up the top of the stack
+        runtime.end_of_processing(2);
+        // This should free up 2 CLs
+
+        assert_eq!(runtime.available_copper_lists(), 2);
     }
 }
