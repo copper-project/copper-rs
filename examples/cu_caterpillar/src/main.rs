@@ -21,7 +21,8 @@ fn main() {
         CaterpillarApplication::new(clock.clone(), copper_ctx.unified_logger.clone())
             .expect("Failed to create runtime.");
     debug!("Running... starting clock: {}.", clock.now());
-    application.run(2).expect("Failed to run application.");
+
+    application.run().expect("Failed to run application.");
     debug!("End of program: {}.", clock.now());
     sleep(Duration::from_secs(1));
 }

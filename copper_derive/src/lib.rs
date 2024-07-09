@@ -206,28 +206,33 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
     println!("[build the run method]");
     let run_method = quote! {
-        pub fn run(&mut self, iterations: u32) -> _CuResult<()> {
-            for _ in 0..iterations {
 
+        #[inline]
+        pub fn run_one_iteration(&mut self) -> _CuResult<()> {
+            {
                 let mut culist = &mut self.copper_runtime.copper_lists.create().expect("Ran out of space for copper lists"); // FIXME: error handling.
                 let id = culist.id;
                 culist.change_state(copper::copperlist::CopperListState::Processing);
-                let payload = &mut culist.payload;
+                {
+                    let payload = &mut culist.payload;
+                    #(#runtime_plan_code)*
+                } // drop(payload);
 
-                #(#runtime_plan_code)*
-                drop(payload);
+                {
+                    let md = collect_metadata(&culist);
+                    let e2e = md.last().unwrap().after_process.unwrap() - md.first().unwrap().before_process.unwrap();
+                    let e2en: u64 = e2e.into();
+                    debug!("End to end latency {}, mean latency per node: {}", e2e, e2en / (md.len() as u64));
+                } // drop(md);
 
-                let md = collect_metadata(&culist);
-                let e2e = md.last().unwrap().after_process.unwrap() - md.first().unwrap().before_process.unwrap();
-                let e2en: u64 = e2e.into();
-                println!("End to end latency {}, mean latency per hop: {}", e2e, e2en / (md.len() as u64));
+           }// drop(culist); avoids a double mutable borrow
+           Ok(())
+        }
 
-                drop(md);
-                drop(culist); // avoids a double mutable borrow
-                self.copper_runtime.end_of_processing(id);
-
+        pub fn run(&mut self) -> _CuResult<()> {
+            loop {
+                self.run_one_iteration()?;
             }
-            Ok(())
         }
     };
 

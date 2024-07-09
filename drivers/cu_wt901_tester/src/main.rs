@@ -43,7 +43,11 @@ fn main() {
     let mut application = WT910Tester::new(clock.clone(), copper_ctx.unified_logger.clone())
         .expect("Failed to create runtime.");
     debug!("Running... starting clock: {}.", clock.now());
-    application.run(100).expect("Failed to run application.");
+    for _ in 0..1000 {
+        application
+            .run_one_iteration()
+            .expect("Failed to run application.");
+    }
     debug!("End of program: {}.", clock.now());
     sleep(Duration::from_secs(1));
 }
