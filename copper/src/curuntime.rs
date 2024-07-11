@@ -221,10 +221,12 @@ mod tests {
     use super::*;
     use crate::clock::RobotClock;
     use crate::config::Node;
-    use crate::cutask::{CuMsg, CuSrcTask};
+    use crate::cutask::{CuMsg, CuSrcTask, Freezable};
     use crate::cutask::{CuSinkTask, CuTaskLifecycle};
     use bincode::Encode;
     pub struct TestSource {}
+
+    impl Freezable for TestSource {}
 
     impl CuTaskLifecycle for TestSource {
         fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self>
@@ -247,6 +249,8 @@ mod tests {
     }
 
     pub struct TestSink {}
+
+    impl Freezable for TestSink {}
 
     impl CuTaskLifecycle for TestSink {
         fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self>
