@@ -2,7 +2,6 @@
 members = [
     "copper",
     "copper_derive",
-    "copper_derive_test",
     "copper_helpers",
     "copper_intern_strs",
     "copper_log",
@@ -16,10 +15,8 @@ members = [
     "examples/cu_rp_gpio",
     "examples/cu_caterpillar",
     "examples/config_gen",
-    "examples/pluginload",
-    "examples/simplelogger",
-    "examples/v4lsrc",
-    "drivers/cu_wt901_tester", "drivers/cu_lewansoul"]
+    "drivers/cu_wt901_tester",
+    "drivers/cu_lewansoul"]
 resolver = "2"
 
 

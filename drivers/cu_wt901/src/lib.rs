@@ -4,7 +4,7 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use copper::clock::RobotClock;
 use copper::config::NodeInstanceConfig;
-use copper::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle};
+use copper::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
 use copper::CuResult;
 use embedded_hal::i2c::I2c;
 use linux_embedded_hal::{I2CError, I2cdev};
@@ -57,8 +57,11 @@ const TEMP: u8 = 0x40;
 use copper_log_derive::debug;
 use serde::de::{Deserialize, Deserializer};
 use serde::ser::{Serialize, SerializeStruct, Serializer};
-use uom::fmt::DisplayStyle::{Abbreviation, Description};
-use uom::si::velocity::meter_per_second;
+use uom::fmt::DisplayStyle::Abbreviation;
+
+pub struct WT901 {
+    i2c: Box<dyn I2c<Error = I2CError>>,
+}
 
 #[derive(Default, Debug)]
 pub struct PositionalReadings {
@@ -172,10 +175,6 @@ impl Decode for PositionalReadings {
     }
 }
 
-pub struct WT901 {
-    i2c: Box<dyn I2c<Error = I2CError>>,
-}
-
 // Number of registers to read in one go
 const REGISTER_SPAN_SIZE: usize = ((Registers::Yaw as u8 - Registers::AccX as u8) * 2 + 2) as usize;
 
@@ -205,6 +204,10 @@ impl WT901 {
         println!("{}", pr);
         Ok(())
     }
+}
+
+impl Freezable for WT901 {
+    // WT901 has no internal state, we can leave the default implementation.
 }
 
 impl CuTaskLifecycle for WT901 {

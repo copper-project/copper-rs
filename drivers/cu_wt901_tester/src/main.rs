@@ -1,6 +1,6 @@
 use copper::clock::RobotClock;
 use copper::config::NodeInstanceConfig;
-use copper::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle};
+use copper::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle, Freezable};
 use copper::CuResult;
 use copper_derive::copper_runtime;
 use copper_helpers::basic_copper_setup;
@@ -11,6 +11,8 @@ use std::thread::sleep;
 use std::time::Duration;
 
 struct WT910TestSink {}
+
+impl Freezable for WT910TestSink {}
 
 impl CuTaskLifecycle for WT910TestSink {
     fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self>

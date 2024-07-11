@@ -1,14 +1,26 @@
+use bincode::de::Decoder;
+use bincode::enc::Encoder;
+use bincode::error::{DecodeError, EncodeError};
+use bincode::{Decode, Encode};
 use copper::clock::{OptionCuTime, RobotClock};
-use copper::cutask::{CuMsg, CuSrcTask, CuTask, CuTaskLifecycle};
+use copper::cutask::{CuMsg, CuSrcTask, CuTask, CuTaskLifecycle, Freezable};
 use copper::CuResult;
 use cu_rp_gpio::RPGpioMsg;
-use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Default)]
-pub struct CaterpillarMsg(bool);
-
+#[derive(Default)]
 pub struct CaterpillarSource {
     state: bool,
+}
+
+impl Freezable for CaterpillarSource {
+    fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        Encode::encode(&self.state, encoder)
+    }
+
+    fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+        self.state = Decode::decode(decoder)?;
+        Ok(())
+    }
 }
 
 impl CuTaskLifecycle for CaterpillarSource {
@@ -36,6 +48,8 @@ impl CuSrcTask for CaterpillarSource {
 }
 
 pub struct CaterpillarTask {}
+
+impl Freezable for CaterpillarTask {}
 
 impl CuTaskLifecycle for CaterpillarTask {
     fn new(_config: Option<&copper::config::NodeInstanceConfig>) -> CuResult<Self>
