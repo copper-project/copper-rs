@@ -28,3 +28,4 @@ copper-traits = { path = "../../copper_traits" }
 copper-export = { path = "../../copper_export" }
 cu-rp-gpio = { path = "../cu_rp_gpio" }
 serde = { version = "1.0.203", features = ["derive"] }
+bincode = { version = "2.0.0-rc.3", features = ["derive"] }

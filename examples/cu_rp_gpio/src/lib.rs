@@ -1,5 +1,6 @@
+use bincode_derive::{Decode, Encode};
 use copper::config::NodeInstanceConfig;
-use copper::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle};
+use copper::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle, Freezable};
 use copper::CuResult;
 use copper_log_derive::debug;
 
@@ -18,6 +19,7 @@ lazy_static! {
 /// Example of a GPIO output driver for the Raspberry Pi
 /// The config takes one config value: `pin` which is the pin you want to address
 /// Gpio uses BCM pin numbering. For example: BCM GPIO 23 is tied to physical pin 16.
+#[derive(Encode, Decode)]
 pub struct RPGpio {
     #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
     pin: OutputPin,
@@ -25,9 +27,7 @@ pub struct RPGpio {
     pin: u8,
 }
 
-#[derive(
-    Debug, Clone, Copy, Default, bincode_derive::Encode, bincode_derive::Decode, PartialEq,
-)]
+#[derive(Debug, Clone, Copy, Default, Encode, Decode, PartialEq)]
 pub struct RPGpioMsg {
     pub on: bool,
     pub creation: copper::clock::OptionCuTime,
@@ -59,6 +59,10 @@ impl From<RPGpioMsg> for Level {
             Level::High
         }
     }
+}
+
+impl Freezable for RPGpio {
+    // pin is derived from the config, so we keep the default implementation.
 }
 
 impl CuTaskLifecycle for RPGpio {

@@ -1,11 +1,13 @@
-use copper_clock::RobotClock;
-use std::fmt;
-use std::fmt::{Display, Formatter};
-
 use crate::clock::OptionCuTime;
 use crate::config::NodeInstanceConfig;
 use crate::CuResult;
-use bincode_derive::{Decode, Encode};
+use bincode::de::Decoder;
+use bincode::enc::Encoder;
+use bincode::error::{DecodeError, EncodeError};
+use bincode::{Decode, Encode};
+use copper_clock::RobotClock;
+use std::fmt;
+use std::fmt::{Display, Formatter};
 
 // Everything that is stateful in copper for zero copy constraints need to be restricted to this trait.
 pub trait CuMsgPayload: Default + bincode::Encode + bincode::Decode + Sized {}
@@ -14,7 +16,7 @@ pub trait CuMsgPayload: Default + bincode::Encode + bincode::Decode + Sized {}
 impl<T> CuMsgPayload for T where T: Default + bincode::Encode + bincode::Decode + Sized {}
 
 /// CuMsgMetadata is a structure that contains metadata common to all CuMsgs.
-#[derive(Debug, Default, Encode, Decode)]
+#[derive(Debug, Default, bincode_derive::Encode, bincode_derive::Decode)]
 pub struct CuMsgMetadata {
     /// The time before the process method is called.
     pub before_process: OptionCuTime,
@@ -33,7 +35,7 @@ impl Display for CuMsgMetadata {
 }
 
 /// CuMsg is the envelope holding the msg payload and the metadata between tasks.
-#[derive(Debug, Encode, Decode)]
+#[derive(Debug, bincode_derive::Encode, bincode_derive::Decode)]
 pub struct CuMsg<T>
 where
     T: CuMsgPayload,
@@ -60,10 +62,28 @@ where
     }
 }
 
+/// The internal state of a task needs to be serializable
+/// so the framework can take a snapshop of the task graph.
+pub trait Freezable {
+    /// This method is called by the framework when it wants to save the task state.
+    /// The default implementation is to encode nothing (stateless).
+    /// If you have a state, you need to implement this method.
+    fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        Encode::encode(&(), encoder) // default is stateless
+    }
+
+    /// This method is called by the framework when it wants to restore the task to a specific state.
+    /// Here it is similar to Decode but the framework will give you a new instance of the task (the new method will be called)
+    ///
+    fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+        Ok(())
+    }
+}
+
 /// The CuTaskLifecycle trait is the base trait for all tasks in Copper.
 /// It defines the lifecycle of a task.
 /// It provides a default empty implementation as all those execution steps are optional.
-pub trait CuTaskLifecycle {
+pub trait CuTaskLifecycle: Freezable {
     fn new(config: Option<&NodeInstanceConfig>) -> CuResult<Self>
     where
         Self: Sized;

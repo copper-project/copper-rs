@@ -4,7 +4,7 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use copper::clock::RobotClock;
 use copper::config::NodeInstanceConfig;
-use copper::cutask::{CuMsg, CuSinkTask, CuSrcTask, CuTaskLifecycle};
+use copper::cutask::{CuMsg, CuSinkTask, CuSrcTask, CuTaskLifecycle, Freezable};
 use copper::{CuError, CuResult};
 use serialport::{DataBits, FlowControl, Parity, SerialPort, StopBits};
 use std::fmt::Display;
@@ -171,6 +171,10 @@ impl Lewansoul {
         }
         Ok((id, command, remaining[..remaining.len() - 1].to_vec()))
     }
+}
+
+impl Freezable for Lewansoul {
+    // This driver is stateless as the IDs are recreate at new time, we keep the default implementation.
 }
 
 impl CuTaskLifecycle for Lewansoul {
