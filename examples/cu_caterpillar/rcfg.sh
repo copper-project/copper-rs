@@ -1,2 +1,2 @@
 #!/bin/bash
-../../target/debug/copper-rendercfg copperconfig.ron --open
+../../target/release/copper-rendercfg copperconfig.ron --open
