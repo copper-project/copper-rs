@@ -1,4 +1,4 @@
-use bincode_derive::{Decode, Encode};
+use bincode::{Decode, Encode};
 use copper::config::NodeInstanceConfig;
 use copper::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle, Freezable};
 use copper::CuResult;

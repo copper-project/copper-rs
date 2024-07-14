@@ -1,7 +1,6 @@
 use libc;
 
 use std::fs::{File, OpenOptions};
-use std::io::BufReader;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::slice::from_raw_parts_mut;
@@ -14,7 +13,7 @@ use bincode::config::standard;
 use bincode::encode_into_slice;
 use bincode::error::EncodeError;
 use bincode::Encode;
-use bincode::{decode_from_reader, decode_from_slice};
+use bincode::{decode_from_slice};
 use bincode_derive::Decode as dDecode;
 use bincode_derive::Encode as dEncode;
 
@@ -35,7 +34,7 @@ struct MainHeader {
 /// Each concurrent sublogger is tracked through a section header.
 /// The entry type is used to identify the type of data in the section.
 #[derive(dEncode, dDecode, Debug)]
-struct SectionHeader {
+pub struct SectionHeader {
     magic: [u8; 2],
     entry_type: UnifiedLogType,
     section_size: u32, // offset of section_magic + section_size + page rounding -> should be the index of the next section_magic
@@ -76,7 +75,7 @@ impl MmapStream {
             .add_section(entry_type, minimum_allocation_amount);
         Self {
             entry_type,
-            parent_logger: parent_logger,
+            parent_logger,
             current_section: section,
             current_position: 0,
             minimum_allocation_amount,
@@ -342,7 +341,7 @@ impl UnifiedLoggerWrite {
         // Here it is important that the memory map resizes in place.
         // According to the documentation this is something unique to Linux to be able to do that.
         // TODO: support more platforms by pausing, flushing, remapping not in place.
-        if size as usize > self.mmap_buffer.len() {
+        if size > self.mmap_buffer.len() {
             let ropts = RemapOptions::default().may_move(false);
             self.file
                 .set_len(size as u64)
@@ -367,7 +366,7 @@ impl UnifiedLoggerWrite {
         let base = self.mmap_buffer.as_mut_ptr() as usize;
         let section_buffer_addr = section.buffer.as_mut_ptr() as usize;
         self.sections_in_flight
-            .retain(|&x| x != section_buffer_addr as usize - base);
+            .retain(|&x| x != section_buffer_addr - base);
         if self.sections_in_flight.is_empty() {
             self.flush_until(self.current_global_position);
             return;
@@ -505,8 +504,7 @@ impl UnifiedLoggerRead {
 
     fn read_section_header(&mut self) -> CuResult<SectionHeader> {
         let section_header: SectionHeader;
-        let read: usize;
-        (section_header, read) =
+        (section_header, _) =
             decode_from_slice(&self.mmap_buffer[self.reading_position..], standard())
                 .expect("Failed to decode section header");
         if section_header.magic != SECTION_MAGIC {
@@ -516,7 +514,7 @@ impl UnifiedLoggerRead {
     }
 }
 
-/// This a a convience wrapper around the UnifiedLoggerRead to implement the Read trait.
+/// This a convience wrapper around the UnifiedLoggerRead to implement the Read trait.
 pub struct UnifiedLoggerIOReader {
     logger: UnifiedLoggerRead,
     log_type: UnifiedLogType,
@@ -572,6 +570,8 @@ impl Read for UnifiedLoggerIOReader {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+    use std::io::BufReader;
+    use bincode::decode_from_reader;
     use tempfile::TempDir;
     fn make_a_logger(tmp_dir: &TempDir) -> (Arc<Mutex<UnifiedLoggerWrite>>, PathBuf) {
         let file_path = tmp_dir.path().join("test.bin");
@@ -674,7 +674,6 @@ mod tests {
     fn test_write_then_read_one_section() {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let (logger, f) = make_a_logger(&tmp_dir);
-        let p = f.as_path();
         {
             let mut stream = stream_write(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
             stream.log(&1u32).unwrap();
@@ -723,7 +722,6 @@ mod tests {
     fn test_copperlist_list_like_logging() {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let (logger, f) = make_a_logger(&tmp_dir);
-        let p = f.as_path();
         {
             let mut stream = stream_write(logger.clone(), UnifiedLogType::CopperList, 1024);
             let cl0 = CopperList {
