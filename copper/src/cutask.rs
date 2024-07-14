@@ -3,20 +3,21 @@ use crate::config::NodeInstanceConfig;
 use crate::CuResult;
 use bincode::de::Decoder;
 use bincode::enc::Encoder;
+use bincode::de::Decode;
+use bincode::enc::Encode;
 use bincode::error::{DecodeError, EncodeError};
-use bincode::{Decode, Encode};
 use copper_clock::RobotClock;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 
 // Everything that is stateful in copper for zero copy constraints need to be restricted to this trait.
-pub trait CuMsgPayload: Default + bincode::Encode + bincode::Decode + Sized {}
+pub trait CuMsgPayload: Default + Encode + Decode + Sized {}
 
 // Also anything that follows this contract can be a payload (blanket implementation)
-impl<T> CuMsgPayload for T where T: Default + bincode::Encode + bincode::Decode + Sized {}
+impl<T> CuMsgPayload for T where T: Default + Encode + Decode + Sized {}
 
 /// CuMsgMetadata is a structure that contains metadata common to all CuMsgs.
-#[derive(Debug, Default, bincode_derive::Encode, bincode_derive::Decode)]
+#[derive(Debug, Default, bincode::Encode, bincode::Decode)]
 pub struct CuMsgMetadata {
     /// The time before the process method is called.
     pub before_process: OptionCuTime,
@@ -35,7 +36,7 @@ impl Display for CuMsgMetadata {
 }
 
 /// CuMsg is the envelope holding the msg payload and the metadata between tasks.
-#[derive(Debug, bincode_derive::Encode, bincode_derive::Decode)]
+#[derive(Debug, bincode::Encode, bincode::Decode)]
 pub struct CuMsg<T>
 where
     T: CuMsgPayload,
@@ -75,6 +76,7 @@ pub trait Freezable {
     /// This method is called by the framework when it wants to restore the task to a specific state.
     /// Here it is similar to Decode but the framework will give you a new instance of the task (the new method will be called)
     ///
+    #[allow(unused_variables)]
     fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
         Ok(())
     }

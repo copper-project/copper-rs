@@ -25,7 +25,7 @@ fn int2index(i: u32) -> syn::Index {
 
 #[proc_macro]
 pub fn gen_culist_payload(config_path_lit: TokenStream) -> TokenStream {
-    let mut config = parse_macro_input!(config_path_lit as LitStr).value();
+    let config = parse_macro_input!(config_path_lit as LitStr).value();
     println!("[gen culist payload with {:?}]", config);
     let cuconfig = read_config(&config);
     let runtime_plan: Vec<CuExecutionStep> =
@@ -114,7 +114,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let start_calls: Vec<_> = all_tasks_types
         .iter()
         .enumerate()
-        .map(|(index, ty)| {
+        .map(|(index, _ty)| {
             let node_index = int2index(index as u32);
             quote! {
                 {
@@ -128,7 +128,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let stop_calls: Vec<_> = all_tasks_types
         .iter()
         .enumerate()
-        .map(|(index, ty)| {
+        .map(|(index, _ty)| {
             let node_index = int2index(index as u32);
             quote! {
                 {
@@ -142,7 +142,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let preprocess_calls: Vec<_> = all_tasks_types
         .iter()
         .enumerate()
-        .map(|(index, ty)| {
+        .map(|(index, _ty)| {
             let node_index = int2index(index as u32);
             quote! {
                 {
@@ -156,7 +156,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let postprocess_calls: Vec<_> = all_tasks_types
         .iter()
         .enumerate()
-        .map(|(index, ty)| {
+        .map(|(index, _ty)| {
             let node_index = int2index(index as u32);
             quote! {
                 {

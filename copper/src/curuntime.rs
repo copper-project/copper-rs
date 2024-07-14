@@ -7,7 +7,6 @@ use copper_log_derive::debug;
 use copper_traits::CopperListPayload;
 use copper_traits::WriteStream;
 use petgraph::prelude::*;
-use std::sync::{Arc, Mutex};
 
 /// This is the main structure that will be injected as a member of the Application struct.
 /// CT is the tuple of all the tasks in order of execution.
@@ -241,7 +240,7 @@ mod tests {
         type Output = ();
         fn process(
             &mut self,
-            clock: &RobotClock,
+            _clock: &RobotClock,
             _empty_msg: &mut CuMsg<Self::Output>,
         ) -> CuResult<()> {
             Ok(())
@@ -264,7 +263,7 @@ mod tests {
     impl CuSinkTask for TestSink {
         type Input = ();
 
-        fn process(&mut self, clock: &RobotClock, _input: &mut CuMsg<Self::Input>) -> CuResult<()> {
+        fn process(&mut self, _clock: &RobotClock, _input: &mut CuMsg<Self::Input>) -> CuResult<()> {
             Ok(())
         }
     }
@@ -285,7 +284,7 @@ mod tests {
     struct FakeWriter {}
 
     impl<E: Encode> WriteStream<E> for FakeWriter {
-        fn log(&mut self, obj: &E) -> CuResult<()> {
+        fn log(&mut self, _obj: &E) -> CuResult<()> {
             Ok(())
         }
     }
@@ -322,7 +321,7 @@ mod tests {
         // Now emulates the generated runtime
         {
             let copperlists = &mut runtime.copper_lists;
-            let mut culist0 = copperlists
+            let culist0 = copperlists
                 .create()
                 .expect("Ran out of space for copper lists");
             // FIXME: error handling.
@@ -334,7 +333,7 @@ mod tests {
 
         {
             let copperlists = &mut runtime.copper_lists;
-            let mut culist1 = copperlists
+            let culist1 = copperlists
                 .create()
                 .expect("Ran out of space for copper lists"); // FIXME: error handling.
             let id = culist1.id;
@@ -345,7 +344,7 @@ mod tests {
 
         {
             let copperlists = &mut runtime.copper_lists;
-            let mut culist2 = copperlists.create();
+            let culist2 = copperlists.create();
             assert!(culist2.is_none());
             assert_eq!(runtime.available_copper_lists(), 0);
         }
@@ -357,7 +356,7 @@ mod tests {
         // Readd a CL
         {
             let copperlists = &mut runtime.copper_lists;
-            let mut culist2 = copperlists
+            let culist2 = copperlists
                 .create()
                 .expect("Ran out of space for copper lists"); // FIXME: error handling.
             let id = culist2.id;

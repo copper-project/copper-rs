@@ -186,7 +186,6 @@ pub fn log(entry: CuLogEntry) -> CuResult<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::CuLogEntry;
     use bincode::config::standard;
     use copper_log::value::Value;

@@ -1,5 +1,5 @@
 mod config;
-use clap::{Parser, Subcommand};
+use clap::Parser;
 use config::read_configuration;
 pub use copper_traits::*;
 use std::io::Cursor;

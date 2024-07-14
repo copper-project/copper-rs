@@ -1,13 +1,9 @@
 use crate::{CuError, CuResult};
-use petgraph::dot::Dot;
-use petgraph::dot::{Config as PetConfig, Config};
-use petgraph::graph::NodeIndex;
 use petgraph::stable_graph::{EdgeIndex, StableDiGraph};
-use petgraph::visit::{EdgeRef, NodeRef};
+use petgraph::visit::EdgeRef;
 use ron::extensions::Extensions;
 use ron::value::Value as RonValue;
 use ron::Options;
-use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 use std::fmt;
@@ -148,6 +144,7 @@ pub struct Node {
 }
 
 impl Node {
+    #[cfg(test)]
     pub fn new(id: &str, ptype: &str) -> Self {
         Node {
             id: id.to_string(),
@@ -157,6 +154,7 @@ impl Node {
         }
     }
 
+    #[allow(dead_code)]
     pub fn get_id(&self) -> String {
         self.id.clone()
     }
@@ -171,16 +169,19 @@ impl Node {
         self.type_.as_ref().unwrap()
     }
 
+    #[allow(dead_code)]
     pub fn get_instance_config(&self) -> Option<&NodeInstanceConfig> {
         self.config.as_ref()
     }
 
+    #[cfg(test)]
     pub fn get_param<T: From<Value>>(&self, key: &str) -> Option<T> {
         let pc = self.config.as_ref()?;
         let v = pc.0.get(key)?;
         Some(T::from(v.clone()))
     }
 
+    #[cfg(test)]
     pub fn set_param<T: Into<Value>>(&mut self, key: &str, value: T) {
         if self.config.is_none() {
             self.config = Some(NodeInstanceConfig(HashMap::new()));
@@ -292,6 +293,7 @@ impl CuConfig {
         self.graph.add_node(node).index() as NodeId
     }
 
+    #[allow(dead_code)]   // Used in proc macro
     pub fn get_node(&self, node_id: NodeId) -> Option<&Node> {
         self.graph.node_weight(node_id.into())
     }
@@ -308,12 +310,15 @@ impl CuConfig {
             .map(|edge| edge.id().index())
             .collect()
     }
+
+    #[allow(dead_code)]
     pub fn get_edge_weight(&self, index: usize) -> Option<String> {
         self.graph
             .edge_weight(EdgeIndex::new(index))
             .map(|s| s.clone())
     }
 
+    #[allow(dead_code)]
     pub fn get_all_nodes(&self) -> Vec<&Node> {
         self.graph
             .node_indices()
@@ -321,6 +326,7 @@ impl CuConfig {
             .collect()
     }
 
+    #[allow(dead_code)]
     pub fn get_all_edges(&self) -> Vec<Edge> {
         self.graph
             .edge_indices()
@@ -347,6 +353,7 @@ impl CuConfig {
             .with_default_extension(Extensions::UNWRAP_VARIANT_NEWTYPES)
     }
 
+    #[allow(dead_code)]
     pub fn serialize_ron(&self) -> String {
         let ron = Self::get_options();
         let pretty = ron::ser::PrettyConfig::default();
@@ -423,6 +430,7 @@ impl CuConfig {
         writeln!(output, "}}").unwrap();
     }
 
+    #[allow(dead_code)]
     pub fn get_all_instances_configs(&self) -> Vec<Option<&NodeInstanceConfig>> {
         self.get_all_nodes()
             .iter()

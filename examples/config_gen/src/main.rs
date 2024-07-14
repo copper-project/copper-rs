@@ -1,6 +1,3 @@
-use uom::si::time::second;
-use uom::si::time::Time;
-
 use copper::config::CuConfig;
 use copper::config::Node;
 use copper::config::Value;

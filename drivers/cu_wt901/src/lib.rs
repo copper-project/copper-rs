@@ -52,8 +52,6 @@ impl Registers {
     }
 }
 
-const TEMP: u8 = 0x40;
-
 use copper_log_derive::debug;
 use serde::de::{Deserialize, Deserializer};
 use serde::ser::{Serialize, SerializeStruct, Serializer};
@@ -211,7 +209,7 @@ impl Freezable for WT901 {
 }
 
 impl CuTaskLifecycle for WT901 {
-    fn new(config: Option<&NodeInstanceConfig>) -> CuResult<Self>
+    fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -227,7 +225,7 @@ impl CuTaskLifecycle for WT901 {
 impl CuSrcTask for WT901 {
     type Output = PositionalReadings;
 
-    fn process(&mut self, clock: &RobotClock, new_msg: &mut CuMsg<Self::Output>) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, new_msg: &mut CuMsg<Self::Output>) -> CuResult<()> {
         self.bulk_position_read(&mut new_msg.payload)
             .map_err(|e| format!("Error reading WT901: {:?}", e).into())
     }
@@ -235,6 +233,7 @@ impl CuSrcTask for WT901 {
 
 /// Get a u16 value out of a u8 buffer
 #[inline]
+#[allow(dead_code)]
 fn get_vec_u16(buf: &[u8], offset: usize) -> u16 {
     u16::from_le_bytes([buf[offset], buf[offset + 1]])
 }

@@ -1,6 +1,6 @@
 extern crate alloc;
 
-use bincode_derive::{Decode, Encode};
+use bincode::{Decode, Encode};
 use std::fmt;
 
 use copper_traits::CopperListPayload;
@@ -99,12 +99,11 @@ pub type AscIterMut<'a, T> = Chain<SliceIterMut<'a, T>, SliceIterMut<'a, T>>;
 
 impl<P: CopperListPayload, const N: usize> CuListsManager<P, N> {
     pub fn new() -> Self {
-        let mut data = unsafe {
+        let data = unsafe {
             let layout = std::alloc::Layout::new::<[CopperList<P>; N]>();
             let ptr = std::alloc::alloc_zeroed(layout) as *mut [CopperList<P>; N];
             Box::from_raw(ptr)
         };
-        const INITIAL_SLSTATE: CopperListState = CopperListState::Free;
         CuListsManager {
             data,
             length: 0,
@@ -185,6 +184,7 @@ impl<P: CopperListPayload, const N: usize> CuListsManager<P, N> {
     }
 
     #[inline]
+    #[allow(dead_code)]
     fn drop_last(&mut self) {
         if self.length == 0 {
             return;
@@ -255,7 +255,6 @@ impl<P: CopperListPayload, const N: usize> CuListsManager<P, N> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Arc, Mutex};
 
     #[test]
     fn empty_queue() {
@@ -399,7 +398,7 @@ mod tests {
         q.create().unwrap().payload = 5;
         assert_eq!(q.len(), 5);
 
-        let mut last = q.pop().unwrap();
+        let last = q.pop().unwrap();
         assert_eq!(last.payload, 5);
         assert_eq!(q.len(), 4);
 
