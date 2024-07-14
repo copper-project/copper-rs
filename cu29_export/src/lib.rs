@@ -211,7 +211,6 @@ mod tests {
             // everything is dropped here
             drop(rt);
         }
-        std::thread::sleep(std::time::Duration::from_millis(2000));
         // Read back the log
         let UnifiedLogger::Read(logger) = UnifiedLoggerBuilder::new()
             .file_path(&path)
@@ -221,12 +220,7 @@ mod tests {
             panic!("Failed to create logger")
         };
         let reader = UnifiedLoggerIOReader::new(logger, UnifiedLogType::StructuredLogLine);
-        // let mut header: [u8;10]= [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-        // reader.read_exact(&mut header).unwrap();
-        // println!("Header: {:x?}", header);
-        // println!("----");
-
-        textlog_dump(reader, Path::new("test/cu29_log_index")).unwrap();
+        textlog_dump(reader, Path::new("test/cu29_log_index")).expect("Failed to dump log");
     }
 
     // This is normally generated at compile time in CuPayload.

@@ -14,7 +14,6 @@ use bincode::encode_into_slice;
 use bincode::error::EncodeError;
 use bincode::{Encode, Decode};
 use bincode::{decode_from_slice};
-
 use cu29_traits::{CuError, CuResult, UnifiedLogType, WriteStream};
 
 const MAIN_MAGIC: [u8; 4] = [0xB4, 0xA5, 0x50, 0xFF];
@@ -35,7 +34,7 @@ struct MainHeader {
 pub struct SectionHeader {
     magic: [u8; 2],
     entry_type: UnifiedLogType,
-    section_size: u32, // offset of section_magic + section_size + page rounding -> should be the index of the next section_magic
+    section_size: u32, // offset from the first byte of this header to the first byte of the next header (MAGIC to MAGIC).
     filled_size: u32,  // how much of the section is filled.
 }
 
@@ -292,6 +291,7 @@ impl Default for SectionHandle {
 impl SectionHandle {
     // The buffer is considered static as it is a dedicated piece for the section.
     pub fn create(section_header: SectionHeader, buffer: &'static mut [u8]) -> Self {
+
         // here we assume with are passed a valid section.
         if buffer[0] != SECTION_MAGIC[0] || buffer[1] != SECTION_MAGIC[1] {
             panic!("Invalid section buffer, magic number not found");
@@ -319,7 +319,7 @@ impl SectionHandle {
 impl Drop for SectionHandle {
     fn drop(&mut self) {
         // no need to do anything if we never used the section.
-        if self.used == 0 {
+        if self.section_header.entry_type == UnifiedLogType::Empty || self.used == 0 {
             return;
         }
 
@@ -375,20 +375,25 @@ impl UnifiedLoggerWrite {
         }
     }
 
+    #[inline]
+    fn align_to_next_page(&self, ptr: usize) -> usize {
+        (ptr + self.page_size - 1) & !(self.page_size - 1)
+    }
+
     /// The returned slice is section_size or greater.
-    fn add_section(&mut self, entry_type: UnifiedLogType, section_size: usize) -> SectionHandle {
+    fn add_section(&mut self, entry_type: UnifiedLogType, requested_section_size: usize) -> SectionHandle {
         // align current_position to the next page
-        self.current_global_position =
-            (self.current_global_position + self.page_size - 1) & !(self.page_size - 1);
+        self.current_global_position = self.align_to_next_page(self.current_global_position);
+        let section_size = self.align_to_next_page(requested_section_size) as u32;
 
         // We have the assumption here that the section header fits into a page.
-        self.unsure_size(self.current_global_position + section_size + self.page_size)
+        self.unsure_size(self.current_global_position + requested_section_size + self.page_size)
             .expect("Failed to resize memory map");
 
         let section_header = SectionHeader {
             magic: SECTION_MAGIC,
             entry_type,
-            section_size: section_size as u32,
+            section_size,
             filled_size: 0u32,
         };
 
@@ -402,7 +407,7 @@ impl UnifiedLoggerWrite {
 
         // save the position to keep track for in flight sections
         self.sections_in_flight.push(self.current_global_position);
-        let end_of_section = self.current_global_position + section_size;
+        let end_of_section = self.current_global_position + requested_section_size;
         let user_buffer = &mut self.mmap_buffer[self.current_global_position..end_of_section];
 
         // here we have the guarantee for exclusive access to that memory for the lifetime of the handle, the borrow checker cannot understand that ever.
@@ -410,7 +415,6 @@ impl UnifiedLoggerWrite {
             unsafe { from_raw_parts_mut(user_buffer.as_mut_ptr(), user_buffer.len()) };
 
         self.current_global_position = end_of_section;
-
         SectionHandle::create(section_header, handle_buffer)
     }
 
@@ -429,12 +433,12 @@ impl UnifiedLoggerWrite {
 
 impl Drop for UnifiedLoggerWrite {
     fn drop(&mut self) {
-        let section = self.add_section(UnifiedLogType::LastEntry, 4096);
+        let section = self.add_section(UnifiedLogType::LastEntry, 80); // TODO: determine that exactly
         drop(section);
-        self.flush();
         self.file
             .set_len(self.current_global_position as u64)
             .expect("Failed to trim datalogger file");
+        self.flush();
     }
 }
 
