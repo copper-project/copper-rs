@@ -7,8 +7,7 @@ keywords = ["robotics", "middleware", "copper", "real-time"]
 categories = ["science::robotics"]
 
 [dependencies]
-bincode = { version = "2.0.0-rc.3", features = ["serde"] }
-bincode_derive = "2.0.0-rc.3"
+bincode = { version = "2.0.0-rc.3", features = ["derive"] }
 serde = { version = "1.0.202", features = ["derive"] }
 copper-value = { path = "../copper_value" }
 copper-traits = { path = "../copper_traits" }

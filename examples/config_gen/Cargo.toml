@@ -6,6 +6,5 @@ license = "Apache-2.0"
 categories = ["science::robotics"]
 
 [dependencies]
-serde = { version = "1.0", features = ["derive"] }
 copper = { path = "../../copper" }
 uom = "0.36.0"

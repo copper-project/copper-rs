@@ -1,4 +1,4 @@
-use bincode_derive::{Decode, Encode};
+use bincode::{Decode, Encode};
 use copper_clock::CuTime;
 use copper_traits::{CuError, CuResult};
 pub use copper_value as value;
