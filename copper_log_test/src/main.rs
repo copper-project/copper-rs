@@ -16,8 +16,8 @@ fn main() {
     }
     let mytuple = (1, "toto", 3.34f64, true, 'a');
     {
-        let hop = ScopedAllocCounter::new();
-        let gigantic_vec = vec![0u8; 1_000_000];
+        let _hop = ScopedAllocCounter::new();
+        let _gigantic_vec = vec![0u8; 1_000_000];
         debug!("Just a string {}", "zarma");
         debug!("anonymous param constants {} {}", 42u16, 43u8);
         debug!("named param constants {} {}", a = 3, b = 2);

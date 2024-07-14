@@ -256,6 +256,7 @@ impl UnifiedLoggerBuilder {
 }
 
 /// A read side of the datalogger.
+#[allow(dead_code)]
 pub struct UnifiedLoggerRead {
     file: File,
     mmap_buffer: Mmap,

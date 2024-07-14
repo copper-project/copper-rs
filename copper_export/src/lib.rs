@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use bincode::config::standard;
 use bincode::error::DecodeError;
-use bincode::{decode_from_std_read, Decode, Encode};
+use bincode::decode_from_std_read;
 use copper::copperlist::CopperList;
 use copper_intern_strs::read_interned_strings;
 use copper_log::{rebuild_logline, CuLogEntry};
@@ -155,9 +155,8 @@ pub fn textlog_dump(mut src: impl Read, index: &Path) -> CuResult<()> {
 
 #[cfg(test)]
 mod tests {
-    use bincode::enc::write::Writer;
-    use bincode::{encode_into_slice, encode_into_writer};
-    use std::io::{Cursor, Write};
+    use bincode::encode_into_slice;
+    use std::io::Cursor;
     use std::sync::{Arc, Mutex};
     use tempfile::tempdir;
 
@@ -165,7 +164,7 @@ mod tests {
     use copper_log::value::Value;
     use copper_log_runtime::log;
     use copper_log_runtime::LoggerRuntime;
-    use copper_traits::{UnifiedLogType, WriteStream};
+    use copper_traits::UnifiedLogType;
     use copper_unifiedlog::{
         stream_write, UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader,
     };
@@ -177,7 +176,7 @@ mod tests {
         let entry = CuLogEntry::new(3);
         let bytes = bincode::encode_to_vec(&entry, standard()).unwrap();
         let reader = Cursor::new(bytes.as_slice());
-        textlog_dump(reader, Path::new("test/copper_log_index"));
+        textlog_dump(reader, Path::new("test/copper_log_index")).unwrap();
     }
 
     #[test]
@@ -200,7 +199,7 @@ mod tests {
             };
             let data_logger = Arc::new(Mutex::new(logger));
             let stream = stream_write(data_logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
-            let rt = LoggerRuntime::init(RobotClock::default(), stream, None);
+            let _rt = LoggerRuntime::init(RobotClock::default(), stream, None);
 
             let mut entry = CuLogEntry::new(4); // this is a "Just a String {}" log line
             entry.add_param(0, Value::String("Parameter for the log line".into()));
@@ -220,7 +219,7 @@ mod tests {
             panic!("Failed to create logger")
         };
         let reader = UnifiedLoggerIOReader::new(logger, UnifiedLogType::StructuredLogLine);
-        textlog_dump(reader, Path::new("test/copper_log_index"));
+        textlog_dump(reader, Path::new("test/copper_log_index")).unwrap();
     }
 
     // This is normally generated at compile time in CuPayload.
