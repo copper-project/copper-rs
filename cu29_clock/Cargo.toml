@@ -1,0 +1,16 @@
+[package]
+name = "cu29-clock"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+quanta = "0.12.3"
+bincode = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+approx = "0.5.1"

@@ -2,10 +2,10 @@ use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
-use copper::clock::RobotClock;
-use copper::config::NodeInstanceConfig;
-use copper::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
-use copper::CuResult;
+use cu29::clock::RobotClock;
+use cu29::config::NodeInstanceConfig;
+use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
+use cu29::CuResult;
 use embedded_hal::i2c::I2c;
 use linux_embedded_hal::{I2CError, I2cdev};
 use std::fmt::Display;
@@ -52,7 +52,7 @@ impl Registers {
     }
 }
 
-use copper_log_derive::debug;
+use cu29_log_derive::debug;
 use serde::de::{Deserialize, Deserializer};
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 use uom::fmt::DisplayStyle::Abbreviation;

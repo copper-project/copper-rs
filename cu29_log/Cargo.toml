@@ -1,0 +1,16 @@
+[package]
+name = "cu29-log"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+bincode = { workspace = true }
+serde = { workspace = true }
+cu29-value = { workspace = true }
+cu29-traits = { workspace = true }
+cu29-clock = { workspace = true }
+strfmt = "0.2.0"

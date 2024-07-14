@@ -4,16 +4,16 @@ version = "0.1.0"
 edition = "2021"
 
 [package.metadata.cargo-machete]
-ignored = ["copper-log", "copper-log-runtime", "copper-unifiedlog", "copper-traits"]  # proc macro
+ignored = ["cu29-log", "cu29-log-runtime", "cu29-unifiedlog", "copper-traits"]  # proc macro
 
 [dependencies]
-copper = { path = "../../copper" }
-copper-log = { path = "../../copper_log" }
-copper-log-derive = { path = "../../copper_log_derive" }
-copper-log-runtime = { path = "../../copper_log_runtime" }
-copper-traits = { path = "../../copper_traits" }
-copper-derive = { path = "../../copper_derive" }
-copper-unifiedlog = { path = "../../copper_unifiedlog" }
-copper-helpers = { path = "../../copper_helpers" }
+cu29 = { path = "../../cu29" }
+cu29-log = { path = "../../cu29_log" }
+cu29-log-derive = { path = "../../cu29_log_derive" }
+cu29-log-runtime = { path = "../../cu29_log_runtime" }
+cu29-traits = { path = "../../cu29_traits" }
+cu29-derive = { path = "../../cu29_derive" }
+cu29-unifiedlog = { path = "../../cu29_unifiedlog" }
+cu29-helpers = { path = "../../cu29_helpers" }
 cu-wt901 = { path = "../cu_wt901" }
 

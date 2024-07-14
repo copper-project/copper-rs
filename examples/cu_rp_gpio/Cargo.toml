@@ -7,13 +7,13 @@ keywords = ["robotics", "middleware", "copper", "real-time"]
 categories = ["science::robotics"]
 
 [package.metadata.cargo-machete]
-ignored = ["copper-log", "copper-log-runtime"]  # proc macro
+ignored = ["cu29-log", "cu29-log-runtime"]  # proc macro
 
 [dependencies]
-copper = { path = "../../copper" }
-copper-log = { path = "../../copper_log" }
-copper-log-runtime = { path = "../../copper_log_runtime" }
-copper-log-derive = { path = "../../copper_log_derive" }
+cu29 = { path = "../../cu29" }
+cu29-log = { path = "../../cu29_log" }
+cu29-log-runtime = { path = "../../cu29_log_runtime" }
+cu29-log-derive = { path = "../../cu29_log_derive" }
 rppal = "0.18.0"
 bincode = { version = "2.0.0-rc.3" , features = ["derive"]}
 lazy_static = "1.4.0"

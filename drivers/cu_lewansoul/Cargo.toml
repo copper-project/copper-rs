@@ -5,6 +5,6 @@ edition = "2021"
 
 [dependencies]
 uom = "0.36.0"
-copper = { path = "../../copper" }
+cu29 = { path = "../../cu29" }
 bincode = "2.0.0-rc.3"
 serialport = "4.4.0"

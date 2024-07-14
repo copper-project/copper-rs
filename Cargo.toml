@@ -1,17 +1,17 @@
 [workspace]
 members = [
-    "copper",
-    "copper_derive",
-    "copper_helpers",
-    "copper_intern_strs",
-    "copper_log",
-    "copper_log_derive",
-    "copper_log_test",
-    "copper_log_runtime",
-    "copper_export",
-    "copper_unifiedlog",
-    "copper_clock",
-    "copper_traits",
+    "cu29",
+    "cu29_derive",
+    "cu29_helpers",
+    "cu29_intern_strs",
+    "cu29_log",
+    "cu29_log_derive",
+    "cu29_log_test",
+    "cu29_log_runtime",
+    "cu29_export",
+    "cu29_unifiedlog",
+    "cu29_clock",
+    "cu29_traits",
     "examples/cu_rp_gpio",
     "examples/cu_caterpillar",
     "examples/config_gen",
@@ -19,6 +19,42 @@ members = [
     "drivers/cu_lewansoul"]
 resolver = "2"
 
+[workspace.package]
+version = "0.2.0"
+authors = ["Guillaume Binet <gbin@gootz.net>"]
+edition = "2021"
+license = "Apache-2.0"
+keywords = ["robotics", "middleware", "copper", "real-time"]
+categories = ["science::robotics"]
+
+[workspace.dependencies]
+
+# Internal
+cu29 = { path = "cu29" }
+cu29-clock = { path = "cu29_clock" }
+cu29-derive = { path = "cu29_derive" }
+cu29-helpers = { path = "cu29_helpers" }
+cu29-export = { path = "cu29_export" }
+cu29-log = { path = "cu29_log" }
+cu29-log-derive = { path = "cu29_log_derive" }
+cu29-log-runtime = { path = "cu29_log_runtime" }
+cu29-intern-strs = { path = "cu29_intern_strs" }
+cu29-unifiedlog = { path = "cu29_unifiedlog" }
+cu29-traits = { path = "cu29_traits" }
+cu29-value = { path = "cu29_value" }
+
+# External serialization
+bincode = { version = "2.0.0-rc.3", features = ["derive"] }
+serde = { version = "1.0.204", features = ["derive"] }
+serde_derive = "1.0.204"
+
+# External CLI
+clap = { version = "4.5.9", features = ["derive"] }
+
+# External proc macroS
+proc-macro2 = { version = "1.0.86" }
+quote = "1.0.36" # proc macros
+syn = { version = "2.0.71", features = ["full"] } # proc macros
 
 [profile.release]
 lto = true

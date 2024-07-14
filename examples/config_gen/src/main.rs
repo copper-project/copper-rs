@@ -1,6 +1,6 @@
-use copper::config::CuConfig;
-use copper::config::Node;
-use copper::config::Value;
+use cu29::config::CuConfig;
+use cu29::config::Node;
+use cu29::config::Value;
 
 /// This is a simple example to show how to programmatically generate a configuration.
 /// This is useful for making variations of your robot more easily.
