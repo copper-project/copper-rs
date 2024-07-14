@@ -1,0 +1,12 @@
+[package]
+name = "cu29-traits"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+bincode = { workspace = true }
+serde = { workspace = true }

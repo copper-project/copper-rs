@@ -1,8 +1,8 @@
 pub mod tasks;
 
-use copper_derive::copper_runtime;
-use copper_helpers::basic_copper_setup;
-use copper_log_derive::debug;
+use cu29_derive::copper_runtime;
+use cu29_helpers::basic_copper_setup;
+use cu29_log_derive::debug;
 use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::Duration;

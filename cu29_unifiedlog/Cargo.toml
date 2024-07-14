@@ -1,0 +1,19 @@
+[package]
+name = "cu29-unifiedlog"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+cu29-traits = { workspace = true }
+bincode = { workspace = true }
+memmap2 = "0.9.4"
+libc = "0.2.155"
+
+[dev-dependencies]
+tempfile = "3.2.0"
+
+

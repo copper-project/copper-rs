@@ -1,0 +1,20 @@
+[package]
+name = "cu29-log-derive"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lib]
+name = "cu29_log_derive"
+path = "src/lib.rs"
+proc-macro = true
+
+[dependencies]
+cu29-log = { workspace = true }
+syn = { workspace = true }
+quote = { workspace = true }
+rkv = { version = "0.19.0", features = ["lmdb"] }
+lazy_static = "1.5.0"

@@ -1,0 +1,13 @@
+[package]
+name = "cu29-intern-strs"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+cu29-traits = { workspace = true }
+rkv = { version = "0.19.0", features = ["lmdb"] }
+byteorder = "1.5.0"

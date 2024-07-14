@@ -1,0 +1,19 @@
+[package]
+name = "cu29-value"
+version.workspace = true
+edition.workspace = true
+authors = ["arcnmx", "gbin"]
+
+description = "Serialization value trees"
+readme = "README.md"
+keywords = ["serde"]
+license = "MIT"
+
+[dependencies]
+bincode = { workspace = true }
+serde = { workspace = true }
+cu29-clock = { workspace = true }
+ordered-float = "4.2.0"
+
+[dev-dependencies]
+serde_derive = { workspace = true }

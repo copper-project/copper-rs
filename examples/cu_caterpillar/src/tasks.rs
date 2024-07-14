@@ -2,9 +2,10 @@ use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
-use copper::clock::{OptionCuTime, RobotClock};
-use copper::cutask::{CuMsg, CuSrcTask, CuTask, CuTaskLifecycle, Freezable};
-use copper::CuResult;
+use cu29::clock::{OptionCuTime, RobotClock};
+use cu29::cutask::{CuMsg, CuSrcTask, CuTask, CuTaskLifecycle, Freezable};
+use cu29::CuResult;
+use cu29::config::NodeInstanceConfig;
 use cu_rp_gpio::RPGpioMsg;
 
 #[derive(Default)]
@@ -24,7 +25,7 @@ impl Freezable for CaterpillarSource {
 }
 
 impl CuTaskLifecycle for CaterpillarSource {
-    fn new(_config: Option<&copper::config::NodeInstanceConfig>) -> CuResult<Self>
+    fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -52,7 +53,7 @@ pub struct CaterpillarTask {}
 impl Freezable for CaterpillarTask {}
 
 impl CuTaskLifecycle for CaterpillarTask {
-    fn new(_config: Option<&copper::config::NodeInstanceConfig>) -> CuResult<Self>
+    fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {

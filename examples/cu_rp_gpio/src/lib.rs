@@ -1,8 +1,9 @@
 use bincode::{Decode, Encode};
-use copper::config::NodeInstanceConfig;
-use copper::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle, Freezable};
-use copper::CuResult;
-use copper_log_derive::debug;
+use cu29::config::NodeInstanceConfig;
+use cu29::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle, Freezable};
+use cu29::CuResult;
+use cu29::clock;
+use cu29_log_derive::debug;
 
 #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
 use {
@@ -30,8 +31,8 @@ pub struct RPGpio {
 #[derive(Debug, Clone, Copy, Default, Encode, Decode, PartialEq)]
 pub struct RPGpioMsg {
     pub on: bool,
-    pub creation: copper::clock::OptionCuTime,
-    pub actuation: copper::clock::OptionCuTime,
+    pub creation: clock::OptionCuTime,
+    pub actuation: clock::OptionCuTime,
 }
 
 impl From<RPGpioMsg> for bool {
@@ -95,7 +96,7 @@ impl CuSinkTask for RPGpio {
 
     fn process(
         &mut self,
-        clock: &copper::clock::RobotClock,
+        clock: &clock::RobotClock,
         msg: &mut CuMsg<Self::Input>,
     ) -> CuResult<()> {
         msg.payload.actuation = clock.now().into();
