@@ -9,9 +9,6 @@ categories = ["science::robotics"]
 [dependencies]
 copper = { path = "../../copper" }
 copper-log-derive = { path = "../../copper_log_derive" }
-copper-log-runtime = { path = "../../copper_log_runtime" }
-copper-log = { path = "../../copper_log" }
 rppal = "0.18.0"
 bincode_derive = "2.0.0-rc.3"
-bincode = { version = "2.0.0-rc.3" }
 lazy_static = "1.4.0"

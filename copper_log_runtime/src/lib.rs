@@ -1,4 +1,3 @@
-use bincode::Encode;
 use copper_clock::{ClockProvider, RobotClock};
 use copper_intern_strs::read_interned_strings;
 use copper_log::CuLogEntry;
