@@ -1,22 +1,24 @@
 [workspace]
 members = [
     "cu29",
+    "cu29_clock",
     "cu29_derive",
+    "cu29_export",
     "cu29_helpers",
     "cu29_intern_strs",
     "cu29_log",
     "cu29_log_derive",
-    "cu29_log_test",
     "cu29_log_runtime",
-    "cu29_export",
-    "cu29_unifiedlog",
-    "cu29_clock",
+    "cu29_log_test",
     "cu29_traits",
-    "examples/cu_rp_gpio",
+    "cu29_unifiedlog",
+    "drivers/cu_rp_gpio",
+    "drivers/cu_wt901",
+    "drivers/cu_wt901_tester",
+    "drivers/cu_lewansoul",
     "examples/cu_caterpillar",
     "examples/config_gen",
-    "drivers/cu_wt901_tester",
-    "drivers/cu_lewansoul"]
+    ]
 resolver = "2"
 
 [workspace.package]
