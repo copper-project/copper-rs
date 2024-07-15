@@ -1,6 +1,6 @@
-# Copper Project
+<img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/static/cu29.jpg?raw=true" alt="logo"/>
 
-<img align="right" width="100" height="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/static/cu29.jpg?raw=true" alt="logo"/>
+# Copper Project
 
 [![copper](https://github.com/gbin/copper-project/actions/workflows/general.yml/badge.svg)](https://github.com/gbin/copper-project/actions/workflows/general.yml)
 ![GitHub last commit](https://img.shields.io/github/last-commit/gbin/copper-project)
