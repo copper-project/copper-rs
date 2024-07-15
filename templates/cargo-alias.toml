@@ -1,0 +1,2 @@
+[alias]
+cunew = "generate -v -p cu_full --destination "

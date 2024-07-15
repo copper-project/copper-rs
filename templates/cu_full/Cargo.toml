@@ -1,0 +1,27 @@
+[package]
+name = "{{project-name}}"
+version = "0.1.0"
+edition = "2021"
+
+# The main executable of your application
+[[bin]]
+name = "{{project-name|kebab_case}}"
+path = "src/main.rs"
+
+# A custom made log reader application for your application.
+[[bin]]
+name = "logreader"
+path = "src/logreader.rs"
+
+# FIXME: It is recommended to pin your dependencies here at some point.
+[dependencies]
+cu29 = "*"
+cu29-traits = "*"
+cu29-derive = "*"
+cu29-helpers = "*"
+cu29-log = "*"
+cu29-log-runtime = "*"
+cu29-log-derive = "*"
+cu29-unifiedlog = "*"
+cu29-export = "*"
+bincode = "*"
