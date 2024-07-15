@@ -1,5 +1,11 @@
-<img src="https://github.com/copper-project/copper-rs/blob/master/doc/static/cu29.jpg?raw=true" alt="logo" style="position: relative; top: 10px; right: -1000px; width: 150px;" />
 # Copper Project
+
+<img align="right" width="100" height="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/static/cu29.jpg?raw=true" alt="logo"/>
+
+[![copper](https://github.com/gbin/copper-project/actions/workflows/general.yml/badge.svg)](https://github.com/gbin/copper-project/actions/workflows/general.yml)
+![GitHub last commit](https://img.shields.io/github/last-commit/gbin/copper-project)
+![](https://img.shields.io/badge/Rust-1.79+-orange.svg)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 A user friendly robotics framework to create fast and reliable robots.
 
@@ -10,10 +16,6 @@ allocation on head during the execution etc...) to achieve sub microsecond laten
 
 Reliable: Copper leverages Rust's ownership, type system, and concurrency model to reduce bugs and ensure thread safety.
 
-[![copper](https://github.com/gbin/copper-project/actions/workflows/general.yml/badge.svg)](https://github.com/gbin/copper-project/actions/workflows/general.yml)
-![GitHub last commit](https://img.shields.io/github/last-commit/gbin/copper-project)
-![](https://img.shields.io/badge/Rust-1.79+-orange.svg)
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 ## Overview
 
