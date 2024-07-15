@@ -1,3 +1,5 @@
+<img src="https://github.com/copper-project/copper-rs/blob/master/doc/static/cu29.jpg?raw=true" alt="logo" style="position: absolute; top: 10px; right: 10px;" />
+
 # Copper Project
 
 A user friendly robotics framework to create fast and reliable robots.
