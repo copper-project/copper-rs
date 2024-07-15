@@ -29,5 +29,5 @@ cu29-log-runtime = { workspace = true }
 cu29-log-derive = { workspace = true }
 cu29-unifiedlog = { workspace = true }
 cu29-export = { workspace = true }
-cu-rp-gpio = { path = "../cu_rp_gpio" }
+cu-rp-gpio = { path = "../../drivers/cu_rp_gpio" }
 bincode = { workspace = true }
