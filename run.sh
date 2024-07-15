@@ -1,1 +1,0 @@
-cargo +nightly run --release

@@ -1,4 +1,0 @@
-Ideas.
-
-Monitoring signal counts: make a dead man switch ie. be sure the monitored process actually changed the value from a sentinel preset value.
-Derived monitoring signals, no circular dependencies + simple formula to compute them.
