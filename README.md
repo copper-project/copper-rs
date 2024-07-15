@@ -50,9 +50,9 @@ cu-rp-gpio = "*"          # a copper task we reuse from another crate
             type: "FlippingSource",      // This is a Rust struct name for this task
         ),
         (
-            id: "gpio",                // another task, another name
+            id: "gpio",                  // another task, another name
             type: "cu_rp_gpio::RPGpio",  // This is the Rust struct name
-            config: {                    // You can attach config elements to yout task
+            config: {                    // You can attach config elements to your task
                 "pin": 4,
             },
         ),
