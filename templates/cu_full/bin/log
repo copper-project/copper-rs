@@ -1,0 +1,3 @@
+#!/bin/bash
+# A small shortcut to be able to extract your structured log.
+RUST_BACKTRACE=1 cargo run --bin logreader {{project-name | kebab_case}} extract-log target/debug/copper_log_index

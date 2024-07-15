@@ -1,0 +1,16 @@
+// A sample configuration to get you started.
+(
+    tasks: [
+        (
+            id: "src",
+            type: "tasks::MySource",
+        ),
+        (
+            id: "t-0",
+            type: "tasks::MyTask",
+        ),
+     ],
+    cnx: [
+        (src: "src",  dst: "t-0",   msg: "tasks::MyMsg"),
+    ],
+)
