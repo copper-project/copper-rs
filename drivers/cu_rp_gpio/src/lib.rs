@@ -74,7 +74,7 @@ impl CuTaskLifecycle for RPGpio {
         let config =
             config.ok_or("RPGpio needs a config, None was passed as NodeInstanceConfig")?;
 
-        let pin_nb: u8 = (*config.0.get("pin").expect(
+        let pin_nb: u8 = (*config.get("pin").expect(
             "RPGpio expects a pin config value pointing to output pin you want to address",
         ))
         .clone()
