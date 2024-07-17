@@ -31,6 +31,13 @@ impl Display for NodeInstanceConfig {
     }
 }
 
+// forward map interface
+impl NodeInstanceConfig {
+    pub fn get<T: From<Value>>(&self, key: &str) -> Option<T> {
+        self.0.get(key).map(|v| T::from(v.clone()))
+    }
+}
+
 // The configuration Serialization format is as follows:
 // (
 //   tasks : [ (id: "toto", type: "zorglub::MyType", config: {...}),
