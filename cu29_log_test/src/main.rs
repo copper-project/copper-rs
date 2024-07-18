@@ -5,7 +5,7 @@ use serde::Serialize;
 use std::path::PathBuf;
 
 fn main() {
-    let _ = basic_copper_setup(&PathBuf::from("/tmp/teststructlog.copper"), true)
+    let _ = basic_copper_setup(&PathBuf::from("/tmp/teststructlog.copper"), None, true)
         .expect("Failed to setup logger.");
     debug!("Logger created.");
 
