@@ -30,9 +30,9 @@ Copper is a data oriented runtime that is made of those key components:
 * A super fast structured logging for regular textual logs. All the logging strings are interned and indexes at compile
   time to avoid any string construction at runtime.
 
-## For the impatient
+## For the impatients
 
-You can generate a project from a template. Check out [copper-templates](templetes/README.md).
+You can generate a project from a template. Check out [copper-templates](templates/README.md).
 
 ## How a Copper application looks like, some concepts and insights about how it can be that fast.
 
