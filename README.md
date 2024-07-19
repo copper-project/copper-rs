@@ -1,4 +1,4 @@
-<img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/static/cu29.jpg?raw=true" alt="logo"/>
+<img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/static/cu29.png?raw=true" alt="logo"/>
 
 # Copper Project
 
