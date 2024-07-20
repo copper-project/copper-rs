@@ -6,7 +6,7 @@
 ![GitHub last commit](https://img.shields.io/github/last-commit/gbin/copper-project)
 ![](https://img.shields.io/badge/Rust-1.79+-orange.svg)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-![Gitter](https://img.shields.io/gitter/room/copper-project/copper-rs)
+[![Gitter](https://img.shields.io/gitter/room/copper-project/copper-rs)](https://app.gitter.im/#/room/#copper:gitter.im)
 
 
 A user friendly robotics framework to create fast and reliable robots.
