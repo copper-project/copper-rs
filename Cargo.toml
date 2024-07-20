@@ -13,6 +13,7 @@ members = [
     "cu29_traits",
     "cu29_unifiedlog",
     "drivers/cu_rp_gpio",
+    "drivers/cu_vlp16",
     "drivers/cu_wt901",
     "drivers/cu_wt901_tester",
     "drivers/cu_lewansoul",
