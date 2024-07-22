@@ -273,7 +273,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         pub fn run_one_iteration(&mut self) -> _CuResult<()> {
             #(#preprocess_calls)*
             {
-                let mut culist = &mut self.copper_runtime.copper_lists.create().expect("Ran out of space for copper lists"); // FIXME: error handling.
+                let mut culist = &mut self.copper_runtime.copper_lists_manager.create().expect("Ran out of space for copper lists"); // FIXME: error handling.
                 let id = culist.id;
                 culist.change_state(cu29::copperlist::CopperListState::Processing);
                 {
