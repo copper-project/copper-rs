@@ -73,9 +73,21 @@ impl CuSrcTask for Vlp16 {
         let mut packet = [0u8; 1206];
         let (read_size, peer_addr) = socket.recv_from(&mut packet).unwrap();
         let packet = &packet[..read_size];
+
         let packet = Packet::from_slice(packet).unwrap();
         let packets = [Ok::<Packet, ()>(packet)].into_iter(); // 🤮
         let frame:FrameXyz =  try_packet_to_frame_xyz(self.velo_config.clone(), packets).unwrap().next().unwrap().unwrap();
+        frame.firing_iter().for_each(|firing| {
+            firing.point_iter().for_each(|point| {
+                let point = point.as_single().unwrap();
+                let  x = point.measurement.xyz[0].as_meters();
+                let  y = point.measurement.xyz[0].as_meters();
+                let  z = point.measurement.xyz[0].as_meters();
+
+                println!("x: {}, y: {}, z: {}", x, y, z);
+            });
+        });
+        println!("{:?}", frame);
 
         Ok(())
     }
@@ -83,10 +95,32 @@ impl CuSrcTask for Vlp16 {
 
 #[cfg(test)]
 mod tests {
+    use std::fs::File;
+    use pcap_file::pcap::PcapReader;
+    use pretty_hex::*;
+
     use super::*;
 
     #[test]
-    fn it_works() {
-        assert!(true);
+    fn vlp16_end_2_end_test() {
+        let clk = RobotClock::new();
+        let mut cfg = NodeInstanceConfig::new();
+        let mut drv = Vlp16::new(Some(&cfg)).unwrap();
+        let file_in = File::open("test/VLP_16_Single.pcap").expect("Error opening file");
+        let mut pcap_reader = PcapReader::new(file_in).unwrap();
+
+        drv.start(&clk).unwrap();
+
+        // Read test.pcap
+        while let Some(pkt) = pcap_reader.next_packet() {
+            let pkt = pkt.unwrap();
+            let data = &pkt.data[0x2a..];
+            // send udp packet to 2368
+            let socket = UdpSocket::bind("0.0.0.0:2367").unwrap();
+            socket.send_to(&data, "127.0.0.1:2368").unwrap();
+            // process
+            drv.process(&clk, &mut CuMsg::new(())).unwrap();
+            break;
+        }
     }
 }

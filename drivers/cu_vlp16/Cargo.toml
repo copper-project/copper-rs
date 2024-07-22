@@ -15,3 +15,7 @@ uom = "0.36.0"
 bincode = { version = "2.0.0-rc.3", features = ["derive"] }
 serde = { version = "1.0.203", features = ["derive"] }
 velodyne-lidar = { version = "0.2.0", features = ["full"] }
+
+[dev-dependencies]
+pcap-file = "2.0.0"
+pretty-hex = "0.4.1"
