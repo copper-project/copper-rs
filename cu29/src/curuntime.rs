@@ -16,7 +16,7 @@ pub struct CuRuntime<CT, P: CopperListPayload, const NBCL: usize> {
     pub task_instances: CT,
 
     /// Copper lists hold in order all the input/output messages for all the tasks.
-    pub copper_lists: CuListsManager<P, NBCL>,
+    pub copper_lists_manager: CuListsManager<P, NBCL>,
 
     /// The base clock the runtime will be using to record time.
     pub clock: RobotClock, // TODO: remove public at some point
@@ -48,7 +48,7 @@ impl<CT, P: CopperListPayload + 'static, const NBCL: usize> CuRuntime<CT, P, NBC
 
         let runtime = Self {
             task_instances,
-            copper_lists: CuListsManager::new(), // placeholder
+            copper_lists_manager: CuListsManager::new(), // placeholder
             clock,
             logger: Box::new(logger),
         };
@@ -57,14 +57,14 @@ impl<CT, P: CopperListPayload + 'static, const NBCL: usize> CuRuntime<CT, P, NBC
     }
 
     pub fn available_copper_lists(&self) -> usize {
-        NBCL - self.copper_lists.len()
+        NBCL - self.copper_lists_manager.len()
     }
 
     pub fn end_of_processing(&mut self, culistid: u32) {
         debug!("End of processing for CL #{}", culistid);
         let mut is_top = true;
         let mut nb_done = 0;
-        self.copper_lists.iter_mut().for_each(|cl| {
+        self.copper_lists_manager.iter_mut().for_each(|cl| {
             if cl.id == culistid && cl.get_state() == CopperListState::Processing {
                 cl.change_state(CopperListState::DoneProcessing);
             }
@@ -81,7 +81,7 @@ impl<CT, P: CopperListPayload + 'static, const NBCL: usize> CuRuntime<CT, P, NBC
             }
         });
         for _ in 0..nb_done {
-            let cl = self.copper_lists.pop();
+            let cl = self.copper_lists_manager.pop();
             debug!("Popped CL #{}", cl.unwrap().id);
         }
     }
@@ -320,7 +320,7 @@ mod tests {
 
         // Now emulates the generated runtime
         {
-            let copperlists = &mut runtime.copper_lists;
+            let copperlists = &mut runtime.copper_lists_manager;
             let culist0 = copperlists
                 .create()
                 .expect("Ran out of space for copper lists");
@@ -332,7 +332,7 @@ mod tests {
         }
 
         {
-            let copperlists = &mut runtime.copper_lists;
+            let copperlists = &mut runtime.copper_lists_manager;
             let culist1 = copperlists
                 .create()
                 .expect("Ran out of space for copper lists"); // FIXME: error handling.
@@ -343,7 +343,7 @@ mod tests {
         }
 
         {
-            let copperlists = &mut runtime.copper_lists;
+            let copperlists = &mut runtime.copper_lists_manager;
             let culist2 = copperlists.create();
             assert!(culist2.is_none());
             assert_eq!(runtime.available_copper_lists(), 0);
@@ -355,7 +355,7 @@ mod tests {
 
         // Readd a CL
         {
-            let copperlists = &mut runtime.copper_lists;
+            let copperlists = &mut runtime.copper_lists_manager;
             let culist2 = copperlists
                 .create()
                 .expect("Ran out of space for copper lists"); // FIXME: error handling.
