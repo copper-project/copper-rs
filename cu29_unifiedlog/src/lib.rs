@@ -327,11 +327,6 @@ impl Drop for SectionHandle {
 
         let sz = encode_into_slice(&self.section_header, &mut self.buffer, standard())
             .expect("Failed to encode section header");
-
-        // Fill with 0x43 the buffer between the end of the section header and MAX_HEADER_SIZE
-        for i in sz..MAX_HEADER_SIZE {
-            self.buffer[i] = 0x43;
-        }
     }
 }
 
@@ -339,6 +334,7 @@ impl UnifiedLoggerWrite {
     fn unsure_size(&mut self, size: usize) -> io::Result<()> {
         // Here it is important that the memory map resizes in place.
         // According to the documentation this is something unique to Linux to be able to do that.
+        // FIXME: It does actually *always* fails under linux
         // TODO: support more platforms by pausing, flushing, remapping not in place.
         if size > self.mmap_buffer.len() {
             let ropts = RemapOptions::default().may_move(false);
@@ -415,6 +411,7 @@ impl UnifiedLoggerWrite {
             unsafe { from_raw_parts_mut(user_buffer.as_mut_ptr(), user_buffer.len()) };
 
         self.current_global_position = end_of_section;
+        println!("Log Used {}MB", self.current_global_position / 1024 / 1024);
         SectionHandle::create(section_header, handle_buffer)
     }
 
@@ -758,5 +755,29 @@ mod tests {
         let cl1: CopperList<(u32, u32, u32)> = decode_from_reader(&mut reader, standard()).unwrap();
         assert_eq!(cl0.payload.1, 2);
         assert_eq!(cl1.payload.2, 6);
+    }
+
+    #[test]
+    fn test_mmap_resize() {
+        let tmp_dir = TempDir::new().expect("could not create a tmp dir");
+        let file_path = tmp_dir.path().join("test.bin");
+        let UnifiedLogger::Write(mut logger) = UnifiedLoggerBuilder::new()
+            .write(true)
+            .create(true)
+            .file_path(&file_path)
+            .preallocated_size(8000) // Very small size to force a resize
+            .build()
+            .expect("Failed to create logger")
+        else {
+            panic!("Failed to create logger")
+        };
+        let handler = logger.add_section(UnifiedLogType::StructuredLogLine, 1024);
+
+        handler.buffer[0] = 42;
+        for _ in 0..100 {
+            logger.add_section(UnifiedLogType::StructuredLogLine, 1024);
+        }
+        println!("AF: {}", handler.buffer[0] );
+
     }
 }
