@@ -1,5 +1,5 @@
 [package]
-name = "cu29-soa"
+name = "cu29-soa-derive"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
