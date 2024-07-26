@@ -1,7 +1,7 @@
 
 #[cfg(test)]
 mod tests {
-    use cu29_soa::soa;
+    use cu29_soa_derive::soa;
 
     #[derive(Debug, Default, PartialEq)]
     #[soa]
