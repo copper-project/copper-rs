@@ -9,26 +9,26 @@
 [![Gitter](https://img.shields.io/gitter/room/copper-project/copper-rs)](https://app.gitter.im/#/room/#copper:gitter.im)
 
 
-Copper is a user-friendly robotics framework designed for creating fast and reliable robots.
+Copper is a user-friendly robotics framework designed for creating fast and reliable robots. Copper is to robots what a game engine is for games.
 
-Easy: Copper offers a high-level configuration system and a natural Rust-first API.
+* Easy: Copper offers a high-level configuration system and a natural Rust-first API.
 
-Fast: Copper uses Rust's zero-cost abstractions and a data-oriented approach to achieve sub-microsecond latency on commodity hardware, avoiding heap allocation during execution.
+* Fast: Copper uses Rust's zero-cost abstractions and a data-oriented approach to achieve sub-microsecond latency on commodity hardware, avoiding heap allocation during execution.
 
-Reliable: Copper leverages Rust's ownership, type system, and concurrency model to minimize bugs and ensure thread safety.
+* Reliable: Copper leverages Rust's ownership, type system, and concurrency model to minimize bugs and ensure thread safety.
 
 ## Overview
 
-Copper is a data oriented runtime that is made of those key components:
+Copper is a data-oriented runtime with these key components:
 
-* A task graph described in RON configuring the overall topology of the system (ie. which task talk to which) and sets
-  types for the nodes and messages betweens the tasks.
-* A runtime generator that will decide on an execution plan based on the metadata from the graph. Based on this
-  execution plan, the internal datastructure called a "Copper List" will be preallocated to maximize sequential memory 
-  accesses during execution
-* A 0 copy data logging facility that will record all the messages between all the tasks
-* A super fast structured logging for regular textual logs. All the logging strings are interned and indexes at compile
-  time to avoid any string construction at runtime.
+* Task Graph: Described in RON, this configures the system's topology, specifying which tasks communicate and setting types for nodes and messages.
+
+* Runtime Generator: This component decides on an execution plan based on the graph's metadata. It preallocates a "Copper List" to maximize sequential memory access during execution.
+
+* Zero-Copy Data Logging: Records all messages between tasks without copying data, ensuring efficient logging.
+
+* Fast Structured Logging: Interns and indexes logging strings at compile time, avoiding runtime string construction and ensuring high-speed textual logging.
+
 
 ## For the impatients
 
