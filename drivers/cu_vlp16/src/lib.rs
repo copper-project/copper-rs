@@ -1,16 +1,20 @@
-use velodyne_lidar::{Config, Config16, DataPacket};
+use velodyne_lidar::{Config, Config16};
 use velodyne_lidar::Packet;
 
-use std::net::{Ipv4Addr, SocketAddr, UdpSocket};
+use std::net::UdpSocket;
 use std::time::Duration;
 use bincode::enc::Encoder;
-use bincode::error::EncodeError;
+use bincode::{Decode, Encode};
+use bincode::de::Decoder;
+use bincode::error::{DecodeError, EncodeError};
+use uom::si::length::meter;
 use velodyne_lidar::iter::try_packet_to_frame_xyz;
 use velodyne_lidar::types::frame_xyz::FrameXyz;
 use cu29::clock::RobotClock;
 use cu29::config::NodeInstanceConfig;
 use cu29::CuResult;
 use cu29::cutask::{CuTaskLifecycle, CuSrcTask, Freezable, CuMsg};
+// use cu29_soa::soa;
 
 const MAX_UDP_PACKET_SIZE: usize = 65507;
 
@@ -59,14 +63,46 @@ impl CuTaskLifecycle for Vlp16 {
     }
 }
 
-struct XYZ {
+#[derive(PartialEq, Debug)]
+// #[soa]
+pub struct XYZ {
     x: uom::si::f32::Length,
     y: uom::si::f32::Length,
     z: uom::si::f32::Length,
 }
 
+impl Encode for XYZ {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        Encode::encode(&self.x.value, encoder)?;
+        Encode::encode(&self.y.value, encoder)?;
+        Encode::encode(&self.z.value, encoder)
+    }
+}
+impl Decode for XYZ {
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let x:f32 = Decode::decode(decoder)?;
+        let y:f32 = Decode::decode(decoder)?;
+        let z:f32 = Decode::decode(decoder)?;
+        Ok(XYZ {
+            x: uom::si::f32::Length::new::<meter>(x),
+            y: uom::si::f32::Length::new::<meter>(y),
+            z: uom::si::f32::Length::new::<meter>(z),
+        })
+    }
+}
+
+impl Default for XYZ {
+    fn default() -> Self {
+        XYZ {
+            x: uom::si::f32::Length::new::<meter>(0.0),
+            y: uom::si::f32::Length::new::<meter>(0.0),
+            z: uom::si::f32::Length::new::<meter>(0.0),
+        }
+    }
+}
+
 impl CuSrcTask for Vlp16 {
-    type Output = ();
+    type Output = (); //  XYZSoa;
 
     fn process(&mut self, clock: &RobotClock, new_msg: &mut CuMsg<Self::Output>) -> CuResult<()> {
         let socket = self.socket.as_ref().unwrap();

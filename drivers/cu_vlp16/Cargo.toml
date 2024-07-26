@@ -9,6 +9,7 @@ ignored = ["cu29-log", "cu29-log-runtime"]  # proc macro
 [dependencies]
 cu29 = { path = "../../cu29" }
 cu29-log = { path = "../../cu29_log" }
+cu29-soa = { path = "../../cu29_soa" }
 cu29-log-derive = { path = "../../cu29_log_derive" }
 cu29-log-runtime = { path = "../../cu29_log_runtime" }
 uom = "0.36.0"
