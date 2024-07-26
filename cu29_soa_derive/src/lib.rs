@@ -81,8 +81,6 @@ pub fn soa(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
         }
     };
-    println!("{}", expanded);
-
     expanded.into()
 }
 
