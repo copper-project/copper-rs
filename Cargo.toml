@@ -10,6 +10,7 @@ members = [
     "cu29_log_derive",
     "cu29_log_runtime",
     "cu29_log_test",
+    "cu29_soa_derive",
     "cu29_traits",
     "cu29_unifiedlog",
     "drivers/cu_rp_gpio",
@@ -18,7 +19,6 @@ members = [
     "drivers/cu_lewansoul",
     "examples/cu_caterpillar",
     "examples/config_gen",
-    "cu29_soa",
     ]
 resolver = "2"
 
@@ -36,14 +36,14 @@ categories = ["science::robotics"]
 cu29 = { path = "cu29" }
 cu29-clock = { path = "cu29_clock" }
 cu29-derive = { path = "cu29_derive" }
-cu29-helpers = { path = "cu29_helpers" }
 cu29-export = { path = "cu29_export" }
+cu29-helpers = { path = "cu29_helpers" }
+cu29-intern-strs = { path = "cu29_intern_strs" }
 cu29-log = { path = "cu29_log" }
 cu29-log-derive = { path = "cu29_log_derive" }
 cu29-log-runtime = { path = "cu29_log_runtime" }
-cu29-intern-strs = { path = "cu29_intern_strs" }
-cu29-unifiedlog = { path = "cu29_unifiedlog" }
 cu29-traits = { path = "cu29_traits" }
+cu29-unifiedlog = { path = "cu29_unifiedlog" }
 cu29-value = { path = "cu29_value" }
 
 # External serialization
