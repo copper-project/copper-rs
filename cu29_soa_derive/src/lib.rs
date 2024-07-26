@@ -1,6 +1,8 @@
+mod format;
+use format::{highlight_rust_code, rustfmt_generated_code};
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, DeriveInput, Fields, Lit, Data, LitInt};
+use syn::{parse_macro_input, DeriveInput, Fields, Data};
 
 #[proc_macro_attribute]
 pub fn soa(_attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -61,7 +63,20 @@ pub fn soa(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
             }
 
-             #(
+            pub fn apply<F>(&mut self, mut f: F)
+            where
+                F: FnMut(#(#field_types),*) -> (#(#field_types),*)
+            {
+                for i in 0..N {
+                    let result = f(#(self.#field_names[i]),*);
+                    let (#(#field_names),*) = result;
+                    #(
+                        self.#field_names[i] = #field_names;
+                    )*
+                }
+            }
+
+            #(
                 pub fn #field_names(&self) -> &[#field_types] {
                     &self.#field_names
                 }
@@ -80,8 +95,74 @@ pub fn soa(_attr: TokenStream, item: TokenStream) -> TokenStream {
             )*
 
         }
+
+        // Implements a basic element by element add
+        impl<const N: usize> std::ops::Add for #soa_struct_name<N>
+        where
+            #(
+                #field_types: std::ops::Add<Output = #field_types> + Copy,
+            )*
+        {
+            type Output = Self;
+
+            fn add(self, other: Self) -> Self {
+                Self {
+                    #(
+                        #field_names: {
+                            let mut result = [self.#field_names[0]; N];
+                            result.iter_mut().zip(self.#field_names.iter().zip(other.#field_names.iter()))
+                                .for_each(|(res, (a, b))| *res = *a + *b);
+                            result
+                        }
+                    ),*
+                }
+            }
+        }
+
+        // Implements a basic element by element sub
+        impl<const N: usize> std::ops::Sub for #soa_struct_name<N>
+        where
+            #(
+                #field_types: std::ops::Sub<Output = #field_types> + Copy,
+            )*
+        {
+            type Output = Self;
+
+            fn sub(self, other: Self) -> Self {
+                Self {
+                    #(
+                        #field_names: {
+                            let mut result = [self.#field_names[0]; N];
+                            result.iter_mut().zip(self.#field_names.iter().zip(other.#field_names.iter()))
+                                .for_each(|(res, (a, b))| *res = *a - *b);
+                            result
+                        }
+                    ),*
+                }
+            }
+        }
+
+
+        impl<const N: usize> Clone for #soa_struct_name<N>
+        where
+            #(
+                #field_types: Clone,
+            )*
+        {
+            fn clone(&self) -> Self {
+                Self {
+                    #( #field_names: self.#field_names.clone(), )*
+                }
+            }
+        }
     };
-    expanded.into()
+    let tokens: TokenStream  = expanded.into();
+
+    let formatted_code = rustfmt_generated_code(tokens.to_string());
+    println!("\n     ===    Gen. SOA     ===\n");
+    println!("{}", highlight_rust_code(formatted_code));
+    println!("\n     === === === === === ===\n");
+    tokens
 }
 
 
