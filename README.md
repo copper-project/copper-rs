@@ -9,15 +9,13 @@
 [![Gitter](https://img.shields.io/gitter/room/copper-project/copper-rs)](https://app.gitter.im/#/room/#copper:gitter.im)
 
 
-A user friendly robotics framework to create fast and reliable robots.
+Copper is a user-friendly robotics framework designed for creating fast and reliable robots.
 
-Easy: Copper combines a high level configuration and a natural Rust first API.
+Easy: Copper offers a high-level configuration system and a natural Rust-first API.
 
-Fast: Copper leverages the 0-cost abstraction features of Rust with a data oriented approach (ie. hardware friendly, no
-allocation on head during the execution etc...) to achieve sub microsecond latency on commodity hardware.
+Fast: Copper uses Rust's zero-cost abstractions and a data-oriented approach to achieve sub-microsecond latency on commodity hardware, avoiding heap allocation during execution.
 
-Reliable: Copper leverages Rust's ownership, type system, and concurrency model to reduce bugs and ensure thread safety.
-
+Reliable: Copper leverages Rust's ownership, type system, and concurrency model to minimize bugs and ensure thread safety.
 
 ## Overview
 
