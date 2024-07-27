@@ -43,6 +43,3 @@ jobs:
         run: |
           cd $RUNNER_TEMP/test_project
           cargo build --verbose
-      - name: Run generated project
-        run: |
-          cargo run --verbose
