@@ -31,12 +31,11 @@ jobs:
       - name: Install cargo-generate
         run: cargo install cargo-generate
       - name: Generate new project in temporary directory
-        run: cargo generate --git . --name test_project --destination $RUNNER_TEMP
+        run: cargo generate -p cu_full --name test_project --destination $RUNNER_TEMP --silent
       - name: Compile generated project
         run: |
           cd $RUNNER_TEMP/test_project
           cargo build --verbose
       - name: Run generated project
         run: |
-          cd $RUNNER_TEMP/test_project
           cargo run --verbose
