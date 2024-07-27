@@ -11,7 +11,6 @@ env:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
@@ -21,10 +20,23 @@ jobs:
         with:
           toolchain: stable
           profile: minimal
-      - name: Install libudev-dev
+      - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y libudev-dev
       - name: Build
         run: cargo build --verbose
       - name: Run tests
         run: cargo test --verbose
 
+      # Integration Test for the 1 liner generation of a project.
+      - name: Install cargo-generate
+        run: cargo install cargo-generate
+      - name: Generate new project in temporary directory
+        run: cargo generate --git . --name test_project --destination $RUNNER_TEMP
+      - name: Compile generated project
+        run: |
+          cd $RUNNER_TEMP/test_project
+          cargo build --verbose
+      - name: Run generated project
+        run: |
+          cd $RUNNER_TEMP/test_project
+          cargo run --verbose
