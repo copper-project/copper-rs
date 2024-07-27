@@ -1,9 +1,6 @@
-use bincode::de::Decoder;
-use bincode::enc::Encoder;
-use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 
-use cu29::clock::{OptionCuTime, RobotClock};
+use cu29::clock::RobotClock;
 use cu29::config::NodeInstanceConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, CuSinkTask, CuTask, CuTaskLifecycle, Freezable};
 use cu29::CuResult;
@@ -38,7 +35,7 @@ impl CuTaskLifecycle for MySource {
 impl CuSrcTask for MySource {
     type Output = MyMsg;
 
-    fn process(&mut self, clock: &RobotClock, output: &mut CuMsg<Self::Output>) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, output: &mut CuMsg<Self::Output>) -> CuResult<()> {
         // Generated a 42 message.
         output.payload = MyMsg {
             value: 42,
