@@ -28,6 +28,11 @@ jobs:
         run: cargo test --verbose
 
       # Integration Test for the 1 liner generation of a project.
+      # This secret install is temporary while the repo is not public.
+      - name: Install git repo secrets
+        run: |
+          eval `ssh-agent -s`
+          ssh-add - <<< '${{ secrets.PRIVATE_SSH_KEY }}'
       - name: Install cargo-generate
         run: cargo install cargo-generate
       - name: Generate new project in temporary directory
