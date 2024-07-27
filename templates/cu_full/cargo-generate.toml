@@ -1,0 +1,2 @@
+[hooks]
+pre = ["rename_cargo_toml.rhai"]
