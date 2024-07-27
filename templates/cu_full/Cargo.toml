@@ -13,15 +13,15 @@ path = "src/main.rs"
 name = "logreader"
 path = "src/logreader.rs"
 
-# FIXME: It is recommended to pin your dependencies here at some point.
 [dependencies]
-cu29 = "*"
-cu29-traits = "*"
-cu29-derive = "*"
-cu29-helpers = "*"
-cu29-log = "*"
-cu29-log-runtime = "*"
-cu29-log-derive = "*"
-cu29-unifiedlog = "*"
-cu29-export = "*"
-bincode = "*"
+# FIXME: This is to be able to test pre-release.
+cu29 = { git = "https://github.com/copper-project/copper-rs.git", path = "cu29" }
+cu29-traits = { git = "https://github.com/copper-project/copper-rs.git", path = "cu29-traits" }
+cu29-derive = { git = "https://github.com/copper-project/copper-rs.git", path = "cu29-derive" }
+cu29-helpers = { git = "https://github.com/copper-project/copper-rs.git", path = "cu29-helpers" }
+cu29-log = { git = "https://github.com/copper-project/copper-rs.git", path = "cu29-log" }
+cu29-log-runtime = { git = "https://github.com/copper-project/copper-rs.git", path = "cu29-log-runtime" }
+cu29-log-derive = { git = "https://github.com/copper-project/copper-rs.git", path = "cu29-log-derive" }
+cu29-unifiedlog = { git = "https://github.com/copper-project/copper-rs.git", path = "cu29-unifiedlog" }
+cu29-export = { git = "https://github.com/copper-project/copper-rs.git", path = "cu29-export" }
+bincode = { version = "2.0.0-rc.3", features = ["derive"] }
