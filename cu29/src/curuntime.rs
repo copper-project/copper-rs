@@ -106,11 +106,11 @@ pub struct CuExecutionStep {
     pub node: Node,
     /// CuTaskType: type of the task
     pub task_type: CuTaskType,
-    /// Option<String>: input message type
+    /// `Option<String>`: input message type
     pub input_msg_type: Option<String>,
     /// u32: index in the culist of the input message
     pub culist_input_index: Option<u32>,
-    /// Option<String>: output message type
+    /// `Option<String>`: output message type
     pub output_msg_type: Option<String>,
     /// u32: index in the culist of the output message
     pub culist_output_index: Option<u32>,

@@ -104,7 +104,7 @@ impl Display for CuDuration {
 /// A robot time is just a duration from a fixed point in time.
 pub type CuTime = CuDuration;
 
-/// Homebrewed Option<CuDuration> to avoid using 128bits just to represent an Option.
+/// Homebrewed `Option<CuDuration>` to avoid using 128bits just to represent an Option.
 #[derive(Clone, Copy, Debug, PartialEq, Encode, Decode)]
 pub struct OptionCuTime(CuTime);
 

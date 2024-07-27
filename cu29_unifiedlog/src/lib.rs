@@ -325,7 +325,7 @@ impl Drop for SectionHandle {
 
         self.section_header.filled_size = self.used;
 
-        let sz = encode_into_slice(&self.section_header, &mut self.buffer, standard())
+        let _sz = encode_into_slice(&self.section_header, &mut self.buffer, standard())
             .expect("Failed to encode section header");
     }
 }
