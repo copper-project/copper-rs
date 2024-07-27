@@ -15,13 +15,13 @@ path = "src/logreader.rs"
 
 [dependencies]
 # FIXME: This is to be able to test pre-release.
-cu29 = { git = "ssh://git@github.com/copper-project/copper-rs" }
-cu29-traits = { git = "ssh://git@github.com/copper-project/copper-rs" }
-cu29-derive = { git = "ssh://git@github.com/copper-project/copper-rs" }
-cu29-helpers = { git = "ssh://git@github.com/copper-project/copper-rs" }
-cu29-log = { git = "ssh://git@github.com/copper-project/copper-rs" }
-cu29-log-runtime = { git = "ssh://git@github.com/copper-project/copper-rs" }
-cu29-log-derive = { git = "ssh://git@github.com/copper-project/copper-rs" }
-cu29-unifiedlog = { git = "ssh://git@github.com/copper-project/copper-rs" }
-cu29-export = { git = "ssh://git@github.com/copper-project/copper-rs" }
+cu29 = { git = "https://github.com/copper-project/copper-rs.git" }
+cu29-traits = { git = "https://github.com/copper-project/copper-rs.git" }
+cu29-derive = { git = "https://github.com/copper-project/copper-rs.git" }
+cu29-helpers = { git = "https://github.com/copper-project/copper-rs.git" }
+cu29-log = { git = "https://github.com/copper-project/copper-rs.git" }
+cu29-log-runtime = { git = "https://github.com/copper-project/copper-rs.git" }
+cu29-log-derive = { git = "https://github.com/copper-project/copper-rs.git" }
+cu29-unifiedlog = { git = "https://github.com/copper-project/copper-rs.git" }
+cu29-export = { git = "https://github.com/copper-project/copper-rs.git" }
 bincode = { version = "2.0.0-rc.3", features = ["derive"] }
