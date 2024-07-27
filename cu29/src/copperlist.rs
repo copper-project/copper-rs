@@ -1,3 +1,5 @@
+//! CopperList is the main data structure used by Copper to communicate between tasks.
+//! It is a queue that can be used to store preallocated messages between tasks in memory order.
 extern crate alloc;
 
 use bincode::{Decode, Encode};
@@ -11,12 +13,16 @@ use std::slice::{Iter as SliceIter, IterMut as SliceIterMut};
 
 const MAX_TASKS: usize = 512;
 
+/// Not implemented yet.
+/// This mask will be used to for example filter out necessary regions of a copper list between remote systems.
 #[derive(Debug, Encode, Decode, PartialEq, Clone, Copy)]
 pub struct CopperLiskMask {
     #[allow(dead_code)]
     mask: [u128; MAX_TASKS / 128 + 1],
 }
 
+
+/// Those are the possible states along the lifetime of a CopperList.
 #[derive(Debug, Encode, Decode, Serialize, PartialEq, Copy, Clone)]
 pub enum CopperListState {
     Free,
@@ -27,7 +33,7 @@ pub enum CopperListState {
 }
 
 impl Display for CopperListState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             CopperListState::Free => write!(f, "Free"),
             CopperListState::Initialized => write!(f, "Initialized"),
@@ -65,9 +71,9 @@ impl<P: CopperListPayload> CopperList<P> {
 }
 
 /// This structure maintains the entire memory needed by Copper for one loop for the inter tasks communication within a process.
-/// T is typically a Tuple of various types of messages that are exchanged between tasks.
+/// P or Payload is typically a Tuple of various types of messages that are exchanged between tasks.
+/// N is the maximum number of in flight Copper List the runtime can support.
 pub struct CuListsManager<P: CopperListPayload, const N: usize> {
-    #[allow(dead_code)]
     data: Box<[CopperList<P>; N]>,
     length: usize,
     insertion_index: usize,
@@ -85,16 +91,9 @@ impl<P: CopperListPayload + fmt::Debug, const N: usize> fmt::Debug for CuListsMa
     }
 }
 
-/// An iterator over `CircularQueue<T>`.
 pub type Iter<'a, T> = Chain<Rev<SliceIter<'a, T>>, Rev<SliceIter<'a, T>>>;
-
-/// A mutable iterator over `CircularQueue<T>`.
 pub type IterMut<'a, T> = Chain<Rev<SliceIterMut<'a, T>>, Rev<SliceIterMut<'a, T>>>;
-
-/// An ascending iterator over `CircularQueue<T>`.
 pub type AscIter<'a, T> = Chain<SliceIter<'a, T>, SliceIter<'a, T>>;
-
-/// An mutable ascending iterator over `CircularQueue<T>`.
 pub type AscIterMut<'a, T> = Chain<SliceIterMut<'a, T>, SliceIterMut<'a, T>>;
 
 impl<P: CopperListPayload, const N: usize> CuListsManager<P, N> {
@@ -157,6 +156,7 @@ impl<P: CopperListPayload, const N: usize> CuListsManager<P, N> {
         Some(result)
     }
 
+    /// Peeks at the last element in the queue.
     #[inline]
     pub fn peek(&self) -> Option<&CopperList<P>> {
         if self.length == 0 {
@@ -168,19 +168,6 @@ impl<P: CopperListPayload, const N: usize> CuListsManager<P, N> {
             self.insertion_index - 1
         };
         Some(&self.data[index])
-    }
-
-    #[inline]
-    pub fn peek_mut(&mut self) -> Option<&mut CopperList<P>> {
-        if self.length == 0 {
-            return None;
-        }
-        let index = if self.insertion_index == 0 {
-            N - 1
-        } else {
-            self.insertion_index - 1
-        };
-        Some(&mut self.data[index])
     }
 
     #[inline]

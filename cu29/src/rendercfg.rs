@@ -19,6 +19,7 @@ struct Args {
     open: bool,
 }
 
+/// Render the configuration file to a dot file then convert it to an SVG and optionally opens it with inkscape.
 fn main() -> std::io::Result<()> {
     // Parse command line arguments
     let args = Args::parse();

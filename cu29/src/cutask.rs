@@ -1,3 +1,6 @@
+//! This module contains all the main definition of the traits you need to implement
+//! or interact with to create a Copper task.
+
 use crate::clock::OptionCuTime;
 use crate::config::NodeInstanceConfig;
 use crate::CuResult;

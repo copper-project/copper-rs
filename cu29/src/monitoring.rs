@@ -1,9 +1,13 @@
+//! Some basic internal monitoring tooling Copper uses to monitor itself and the tasks it is running.
+//!
+
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[global_allocator]
 pub static GLOBAL: CountingAllocator = CountingAllocator::new();
 
+/// A simple allocator that counts the number of bytes allocated and deallocated.
 pub struct CountingAllocator {
     allocated: AtomicUsize,
     deallocated: AtomicUsize,
@@ -46,6 +50,7 @@ unsafe impl GlobalAlloc for CountingAllocator {
     }
 }
 
+/// A simple struct that counts the number of bytes allocated and deallocated in a scope.
 pub struct ScopedAllocCounter {
     bf_allocated: usize,
     bf_deallocated: usize,
@@ -60,6 +65,7 @@ impl ScopedAllocCounter {
     }
 }
 
+/// Build a difference between the number of bytes allocated and deallocated in the scope at drop time.
 impl Drop for ScopedAllocCounter {
     fn drop(&mut self) {
         let _allocated = GLOBAL.get_allocated() - self.bf_allocated;
