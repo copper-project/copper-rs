@@ -9,7 +9,7 @@
 [![Gitter](https://img.shields.io/gitter/room/copper-project/copper-rs)](https://app.gitter.im/#/room/#copper:gitter.im)
 
 
-Copper is a user-friendly robotics framework designed for creating fast and reliable robots. Copper is to robots what a game engine is for games.
+Copper is a user-friendly robotics framework designed for creating fast and reliable robots. Copper is to robots what a game engine is to games.
 
 * Easy: Copper offers a high-level configuration system and a natural Rust-first API.
 
@@ -17,7 +17,9 @@ Copper is a user-friendly robotics framework designed for creating fast and reli
 
 * Reliable: Copper leverages Rust's ownership, type system, and concurrency model to minimize bugs and ensure thread safety.
 
-## Overview
+* Product Oriented: Copper trying hard to avoid late infra related integration issues by generating a very predictable runtime.
+
+### Technical Overview
 
 Copper is a data-oriented runtime with these key components:
 
@@ -30,22 +32,21 @@ Copper is a data-oriented runtime with these key components:
 * Fast Structured Logging: Interns and indexes logging strings at compile time, avoiding runtime string construction and ensuring high-speed textual logging.
 
 
-## For the impatients
+### Kickstarting a copper project for the impatients
 
-You can generate a project from a template.
+You can generate a project from a template present in the repo.
+It will ask you the name you want to pick interactively.
 
 ```bash
 cargo install cargo-generate
 cd templates
 cargo nunew [path_where_you_want_your_project_created]
-# Then it will ask you the name you want to pick interactively.
-🤷   Project Name:
-
+    🤷   Project Name:
 ```
 
 Check out [copper-templates](templates/README.md) for more info.
 
-## How a Copper application looks like, some concepts and insights about how it can be that fast.
+### How a Copper application looks like, some concepts and insights about how it can be that fast.
 
 Here is a simple example of a task graph in RON:
 
@@ -149,3 +150,22 @@ fn main() {
 }
 
 ```
+
+## How is it better or different from ROS?
+
+### Performance
+
+In the example directory, we have 2 equivalent applications. One written in C++ for ROS and a port in Rust with Copper.
+```bash
+examples/cu_caterpillar
+examples/ros_caterpillar
+```
+Try them out and you should see a couple order of magnitude difference in performance.
+
+Copper has been design for performance first. Unlike a game engine we use a data oriented approach to minimize latency and maximize throughput.
+
+### Safety
+
+As Copper is written in Rust, it is memory safe and thread safe by design. It is also designed to be easy to use and to avoid common pitfalls.
+
+As we progress on this project we plan on implementing more and more early warning to help you avoid "the death by a thousand cuts" that can happen in a complex system.
