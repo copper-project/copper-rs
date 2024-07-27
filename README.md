@@ -32,7 +32,18 @@ Copper is a data-oriented runtime with these key components:
 
 ## For the impatients
 
-You can generate a project from a template. Check out [copper-templates](templates/README.md).
+You can generate a project from a template.
+
+```bash
+cargo install cargo-generate
+cd templates
+cargo nunew [path_where_you_want_your_project_created]
+# Then it will ask you the name you want to pick interactively.
+🤷   Project Name:
+
+```
+
+Check out [copper-templates](templates/README.md) for more info.
 
 ## How a Copper application looks like, some concepts and insights about how it can be that fast.
 
