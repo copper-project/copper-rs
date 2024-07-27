@@ -1,3 +1,7 @@
+//! CuRuntime is the heart of what copper is running on the robot.
+//! It is exposed to the user via the `copper_runtime` macro injecting it as a field in their application struct.
+//!
+
 use crate::clock::{ClockProvider, RobotClock};
 use crate::config::{CuConfig, NodeId};
 use crate::config::{Node, NodeInstanceConfig};

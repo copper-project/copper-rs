@@ -1,3 +1,8 @@
+//! This module defines the configuration of the copper runtime.
+//! The configuration is a directed graph where nodes are tasks and edges are connections between tasks.
+//! The configuration is serialized in the RON format.
+//! The configuration is used to generate the runtime code at compile time.
+
 use crate::{CuError, CuResult};
 use petgraph::stable_graph::{EdgeIndex, StableDiGraph};
 use petgraph::visit::EdgeRef;
@@ -10,8 +15,13 @@ use std::fmt;
 use std::fmt::Display;
 use std::fs::read_to_string;
 
+/// NodeId is the unique identifier of a node in the configuration graph for petgraph
+/// and the code generation.
 pub type NodeId = u32;
 
+/// This is the configuration of a task instance.
+/// It is a map of key-value pairs.
+/// It is given to the new method of the task implementation.
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct NodeInstanceConfig(pub HashMap<String, Value>);
 pub type Edge = (NodeId, NodeId, String);
@@ -45,6 +55,8 @@ impl NodeInstanceConfig {
 //   cnx : [ (src: "toto", dst: "titi", msg: "zorglub::MyMsgType"),...]
 // )
 
+
+/// Wrapper around the ron::Value to allow for custom serialization.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Value(RonValue);
 
@@ -211,6 +223,8 @@ pub struct Cnx {
     msg: String,
 }
 
+/// CuConfig is the programmatic representation of the configuration graph.
+/// It is a directed graph where nodes are tasks and edges are connections between tasks.
 #[derive(Debug)]
 pub struct CuConfig {
     // This is not what is directly serialized, see the custom serialization below.
@@ -225,6 +239,7 @@ struct CuConfigRepresentation {
 }
 
 impl<'de> Deserialize<'de> for CuConfig {
+    /// This is a custom serialization to make this implementation independent from petgraph.
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -256,6 +271,7 @@ impl<'de> Deserialize<'de> for CuConfig {
 }
 
 impl Serialize for CuConfig {
+    /// This is a custom serialization to make this implementation independent from petgraph.
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -292,28 +308,38 @@ impl Default for CuConfig {
     }
 }
 
+/// The implementation has a lot of conveinence methods to manipulate
+/// the configuration to give some flexibility into programmatically creating the configuration.
 impl CuConfig {
+
+    /// Add a new node to the configuration graph.
     pub fn add_node(&mut self, node: Node) -> NodeId {
         self.graph.add_node(node).index() as NodeId
     }
 
+    /// Get the node with the given id.
     #[allow(dead_code)]   // Used in proc macro
     pub fn get_node(&self, node_id: NodeId) -> Option<&Node> {
         self.graph.node_weight(node_id.into())
     }
 
+
+    /// Get the list of edges that are connected to the given node as a source.
     pub fn get_src_edges(&self, node_id: NodeId) -> Vec<usize> {
         self.graph
             .edges_directed(node_id.into(), petgraph::Direction::Outgoing)
             .map(|edge| edge.id().index())
             .collect()
     }
+
+    /// Get the list of edges that are connected to the given node as a destination.
     pub fn get_dst_edges(&self, node_id: NodeId) -> Vec<usize> {
         self.graph
             .edges_directed(node_id.into(), petgraph::Direction::Incoming)
             .map(|edge| edge.id().index())
             .collect()
     }
+
 
     #[allow(dead_code)]
     pub fn get_edge_weight(&self, index: usize) -> Option<String> {
@@ -322,6 +348,7 @@ impl CuConfig {
             .map(|s| s.clone())
     }
 
+    /// Convenience method to get all nodes in the configuration graph.
     #[allow(dead_code)]
     pub fn get_all_nodes(&self) -> Vec<&Node> {
         self.graph
@@ -330,6 +357,7 @@ impl CuConfig {
             .collect()
     }
 
+    /// Convenience method to get all edges in the configuration graph.
     #[allow(dead_code)]
     pub fn get_all_edges(&self) -> Vec<Edge> {
         self.graph
@@ -345,12 +373,14 @@ impl CuConfig {
             .collect()
     }
 
+    /// Adds an edge between two nodes/tasks in the configuration graph.
+    /// msg_type is the type of message exchanged between the two nodes/tasks.
     pub fn connect(&mut self, source: NodeId, target: NodeId, msg_type: &str) {
         self.graph
             .add_edge(source.into(), target.into(), msg_type.to_string());
     }
 
-    pub fn get_options() -> Options {
+    fn get_options() -> Options {
         Options::default()
             .with_default_extension(Extensions::IMPLICIT_SOME)
             .with_default_extension(Extensions::UNWRAP_NEWTYPES)
@@ -370,12 +400,8 @@ impl CuConfig {
             .expect("Syntax Error in config")
     }
 
+    /// Render the configuration graph in the dot format.
     pub fn render(&self, output: &mut dyn std::io::Write) {
-        // let style = Attribute(
-        //     Id::Plain("style".into()),
-        //     Id::Escaped("\"rounded,filled\"".into()),
-        // );
-        // let shape = Attribute(Id::Plain("shape".into()), Id::Plain("box".into()));
         write!(output, "digraph G {{\n").unwrap();
 
         for index in self.graph.node_indices() {
