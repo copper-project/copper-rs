@@ -16,23 +16,24 @@ use bincode::{Encode, Decode};
 use bincode::{decode_from_slice};
 use cu29_traits::{CuError, CuResult, UnifiedLogType, WriteStream};
 
-const MAIN_MAGIC: [u8; 4] = [0xB4, 0xA5, 0x50, 0xFF];
+const MAIN_MAGIC: [u8; 4] = [0xB4, 0xA5, 0x50, 0xFF]; 
 
 const SECTION_MAGIC: [u8; 2] = [0xFA, 0x57];
 
-/// The main header of the datalogger.
+/// The main file header of the datalogger.
 #[derive(Encode, Decode, Debug)]
 struct MainHeader {
-    magic: [u8; 4],
+    magic: [u8; 4], // Magic number to identify the file.
     first_section_offset: u16, // This is to align with a page at write time.
     page_size: u16,
 }
 
 /// Each concurrent sublogger is tracked through a section header.
+/// They form a linked list of sections.
 /// The entry type is used to identify the type of data in the section.
 #[derive(Encode, Decode, Debug)]
 pub struct SectionHeader {
-    magic: [u8; 2],
+    magic: [u8; 2], // Magic number to identify the section.
     entry_type: UnifiedLogType,
     section_size: u32, // offset from the first byte of this header to the first byte of the next header (MAGIC to MAGIC).
     filled_size: u32,  // how much of the section is filled.
@@ -253,7 +254,6 @@ impl UnifiedLoggerBuilder {
 }
 
 /// A read side of the datalogger.
-#[allow(dead_code)]
 pub struct UnifiedLoggerRead {
     file: File,
     mmap_buffer: Mmap,
@@ -271,6 +271,8 @@ pub struct UnifiedLoggerWrite {
     flushed_until: usize,
 }
 
+/// A SectionHandle is a handle to a section in the datalogger.
+/// It allows to track the lifecycle of a section of the datalogger.
 pub struct SectionHandle {
     section_header: SectionHeader,
     buffer: &'static mut [u8], // This includes the encoded header for end of section patching.
