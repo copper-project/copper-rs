@@ -1,6 +1,4 @@
 var srcIndex = new Map(JSON.parse('[\
-["config_gen",["",[],["main.rs"]]],\
-["copper_rendercfg",["",[],["config.rs","rendercfg.rs"]]],\
 ["cu29",["",[],["config.rs","copperlist.rs","curuntime.rs","cutask.rs","lib.rs","monitoring.rs"]]],\
 ["cu29_clock",["",[],["lib.rs"]]],\
 ["cu29_derive",["",[],["format.rs","lib.rs","utils.rs"]]],\
@@ -11,15 +9,17 @@ var srcIndex = new Map(JSON.parse('[\
 ["cu29_log_derive",["",[],["index.rs","lib.rs"]]],\
 ["cu29_log_runtime",["",[],["lib.rs"]]],\
 ["cu29_log_test",["",[],["main.rs"]]],\
+["cu29_rendercfg",["",[],["config.rs","rendercfg.rs"]]],\
 ["cu29_soa_derive",["",[],["format.rs","lib.rs"]]],\
 ["cu29_traits",["",[],["lib.rs"]]],\
 ["cu29_unifiedlog",["",[],["lib.rs"]]],\
 ["cu29_value",["",[],["bdec.rs","benc.rs","de.rs","lib.rs","ser.rs"]]],\
+["cu_caterpillar",["",[],["main.rs","tasks.rs"]]],\
+["cu_caterpillar_logreader",["",[],["logreader.rs"]]],\
+["cu_config_gen",["",[],["main.rs"]]],\
 ["cu_lewansoul",["",[],["lib.rs"]]],\
 ["cu_rp_gpio",["",[],["lib.rs"]]],\
 ["cu_wt901",["",[],["lib.rs"]]],\
-["cu_wt901_tester",["",[],["main.rs"]]],\
-["cucaterpillar",["",[],["main.rs","tasks.rs"]]],\
-["logreader",["",[],["logreader.rs"]]]\
+["cu_wt901_tester",["",[],["main.rs"]]]\
 ]'));
 createSrcSidebar();

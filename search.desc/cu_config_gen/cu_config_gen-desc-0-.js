@@ -1,0 +1,1 @@
+searchState.loadedDescShard("cu_config_gen", 0, "This is a small example to show how to programmatically …")
