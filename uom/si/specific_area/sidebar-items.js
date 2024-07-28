@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["square_centimeter_per_gram","square_centimeter_per_kilogram","square_meter_per_gram","square_meter_per_kilogram"],"trait":["Conversion","Unit"],"type":["Dimension","SpecificArea"]};

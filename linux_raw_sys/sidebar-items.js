@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["ctypes","elf","errno","general","ioctl","select_macros","signal_macros"]};

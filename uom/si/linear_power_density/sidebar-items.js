@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["watt_per_centimeter","watt_per_meter","watt_per_millimeter"],"trait":["Conversion","Unit"],"type":["Dimension","LinearPowerDensity"]};

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["henry_per_meter","vacuum_magnetic_permeability"],"trait":["Conversion","Unit"],"type":["Dimension","MagneticPermeability"]};

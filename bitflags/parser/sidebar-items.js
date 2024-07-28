@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["from_str","from_str_strict","from_str_truncate","to_writer","to_writer_strict","to_writer_truncate"],"struct":["ParseError"],"trait":["ParseHex","WriteHex"]};

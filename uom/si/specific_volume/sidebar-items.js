@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["cubic_centimeter_per_gram","cubic_centimeter_per_kilogram","cubic_meter_per_gram","cubic_meter_per_kilogram"],"trait":["Conversion","Unit"],"type":["Dimension","SpecificVolume"]};

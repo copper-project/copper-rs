@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["Event"],"struct":["Parser"],"trait":["EventReceiver","MarkedEventReceiver"],"type":["ParseResult"]};

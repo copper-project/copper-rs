@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["is_single_threaded","num_threads"]};

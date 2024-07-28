@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["SIG_DFL"],"fn":["sig_ign"]};

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"struct":["Day","Hour","Microsecond","Millisecond","Minute","Nanosecond","Second","Week"]};

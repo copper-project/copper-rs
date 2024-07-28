@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["degree_per_second_squared","radian_per_second_squared"],"trait":["Conversion","Unit"],"type":["AngularAcceleration","Dimension"]};

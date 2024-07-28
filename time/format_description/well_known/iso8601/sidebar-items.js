@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["DateKind","FormattedComponents","OffsetPrecision","TimePrecision"],"struct":["Config","Iso8601"],"type":["EncodedConfig"]};

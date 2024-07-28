@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["ContextReference","MatchOperation","Pattern"],"fn":["context_iter"],"struct":["Context","ContextId","MatchIter","MatchPattern","SyntaxDefinition"],"type":["CaptureMapping"]};

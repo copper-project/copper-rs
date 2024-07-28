@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["Error"],"fn":["unescape"],"struct":["Unescaper"],"type":["Result"]};

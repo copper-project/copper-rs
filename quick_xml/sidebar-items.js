@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["encoding","errors","escape","events","name","reader","writer"]};

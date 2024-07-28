@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["PrefixDeclaration","ResolveResult"],"struct":["LocalName","Namespace","Prefix","PrefixIter","QName"]};

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"trait":["FusedStream","Stream","TryStream"],"type":["BoxStream","LocalBoxStream"]};

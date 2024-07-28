@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["days_in_year","days_in_year_month","is_leap_year","weeks_in_year"],"mod":["local_offset"]};

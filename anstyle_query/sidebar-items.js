@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["clicolor","clicolor_force","is_ci","no_color","term_supports_ansi_color","term_supports_color","truecolor"],"mod":["windows"]};

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"macro":["format_ident","quote","quote_spanned"],"trait":["IdentFragment","ToTokens","TokenStreamExt"]};

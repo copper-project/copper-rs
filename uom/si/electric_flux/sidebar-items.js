@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["volt_centimeter","volt_meter"],"trait":["Conversion","Unit"],"type":["Dimension","ElectricFlux"]};

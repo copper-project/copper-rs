@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["ioctl","signal","sysinfo","time"]};

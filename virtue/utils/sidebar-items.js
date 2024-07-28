@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["ParsedAttribute"],"fn":["parse_tagged_attribute"]};

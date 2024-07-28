@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["ampere_per_square_centimeter","ampere_per_square_meter","ampere_per_square_millimeter"],"trait":["Conversion","Unit"],"type":["Dimension","ElectricCurrentDensity"]};

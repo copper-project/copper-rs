@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["strip_bytes","strip_str"],"struct":["StripBytes","StripBytesIter","StripStr","StripStrIter","StrippedBytes","StrippedStr","WinconBytes","WinconBytesIter"]};

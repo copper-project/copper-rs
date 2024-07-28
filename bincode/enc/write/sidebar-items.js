@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"struct":["SizeWriter","SliceWriter"],"trait":["Writer"]};

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"trait":["AngleKind","ConstituentConcentrationKind","InformationKind","SolidAngleKind","TemperatureKind"]};

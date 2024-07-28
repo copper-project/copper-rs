@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["Error","Iter","IterDup"],"struct":["Database","DatabaseFlags","Environment","EnvironmentBuilder","EnvironmentFlags","InactiveTransaction","Info","RoCursor","RoTransaction","RwCursor","RwTransaction","Stat","WriteFlags"],"trait":["Cursor","Transaction"],"type":["Result"]};

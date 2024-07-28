@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["read"],"struct":["DecoderImpl"],"trait":["BorrowDecode","BorrowDecoder","Decode","Decoder"]};

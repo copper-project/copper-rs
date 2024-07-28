@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["Action","State"],"fn":["state_change"]};

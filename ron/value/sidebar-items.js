@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["Number","Value"],"struct":["Float","Map"]};

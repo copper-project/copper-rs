@@ -1,4 +1,0 @@
-(function() {var implementors = {
-"embedded_hal":[],
-"linux_embedded_hal":[["impl <a class=\"trait\" href=\"embedded_hal/digital/trait.Error.html\" title=\"trait embedded_hal::digital::Error\">Error</a> for <a class=\"struct\" href=\"linux_embedded_hal/struct.CdevPinError.html\" title=\"struct linux_embedded_hal::CdevPinError\">CdevPinError</a>"],["impl <a class=\"trait\" href=\"embedded_hal/digital/trait.Error.html\" title=\"trait embedded_hal::digital::Error\">Error</a> for <a class=\"struct\" href=\"linux_embedded_hal/struct.SysfsPinError.html\" title=\"struct linux_embedded_hal::SysfsPinError\">SysfsPinError</a>"]]
-};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["legacy","standard"],"struct":["BigEndian","Configuration","Fixint","Limit","LittleEndian","NoLimit","Varint"],"trait":["Config"]};

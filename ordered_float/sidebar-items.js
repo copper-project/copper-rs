@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["ParseNotNanError"],"struct":["FloatIsNan","NotNan","OrderedFloat"],"trait":["Float","FloatCore","Pow"]};

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["RawEntryMut"],"struct":["RawEntryBuilder","RawEntryBuilderMut","RawOccupiedEntryMut","RawVacantEntryMut"],"trait":["RawEntryApiV1"]};

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["mock"],"struct":["OsRng","ReseedingRng","StdRng","ThreadRng"]};

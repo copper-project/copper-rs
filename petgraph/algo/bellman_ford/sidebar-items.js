@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["bellman_ford","find_negative_cycle"],"struct":["Paths"]};

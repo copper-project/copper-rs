@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["calorie_per_cubic_meter_kelvin","joule_per_cubic_meter_kelvin"],"trait":["Conversion","Unit"],"type":["Dimension","VolumetricHeatCapacity"]};

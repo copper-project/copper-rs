@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["ConstantOp"],"macro":["ISQ","impl_from","prefix","quantity","storage_types","system","unit"],"mod":["fmt","marker","si","str"],"trait":["ConstZero","Conversion","ConversionFactor","Kind"]};

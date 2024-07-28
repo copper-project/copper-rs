@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["siemens_per_centimeter","siemens_per_meter"],"trait":["Conversion","Unit"],"type":["Dimension","ElectricalConductivity"]};

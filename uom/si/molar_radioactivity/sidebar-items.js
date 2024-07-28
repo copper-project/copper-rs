@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["becquerel_per_mole","curie_per_mole","disintegrations_per_minute_per_mole"],"trait":["Conversion","Unit"],"type":["Dimension","MolarRadioactivity"]};

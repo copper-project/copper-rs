@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"macro":["request_code_none","request_code_read","request_code_readwrite","request_code_write"]};

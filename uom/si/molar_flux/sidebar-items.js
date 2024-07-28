@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["mole_per_square_meter_second"],"trait":["Conversion","Unit"],"type":["Dimension","MolarFlux"]};

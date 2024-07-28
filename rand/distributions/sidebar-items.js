@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["BernoulliError","WeightError"],"mod":["uniform"],"struct":["Alphanumeric","Bernoulli","DistIter","DistMap","Open01","OpenClosed01","Slice","Standard","Uniform","WeightedIndex"],"trait":["DistString","Distribution","Weight"]};

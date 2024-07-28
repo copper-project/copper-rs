@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["Soundness"],"fn":["get_soundness","set_soundness"]};
