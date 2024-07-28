@@ -1,4 +1,4 @@
-name: "Copper CI/CD"
+name: "Docs"
 
 on:
   push:
