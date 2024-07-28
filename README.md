@@ -43,12 +43,13 @@ It will ask you the name you want to pick interactively.
 
 ```bash
 cargo install cargo-generate
-cd templates
+git clone https://github.com/copper-project/copper-rs
+cd copper-rs/templates
 cargo nunew [path_where_you_want_your_project_created]
     🤷   Project Name:
 ```
 
-Check out [copper-templates](templates/README.md) for more info.
+Check out [copper-templates](https://github.com/copper-project/copper-rs/templates/README.md) for more info.
 
 ### How a Copper application looks like, some concepts and insights about how it can be that fast.
 
