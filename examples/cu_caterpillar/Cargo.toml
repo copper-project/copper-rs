@@ -1,21 +1,21 @@
 [package]
-name = "cucaterpillar"
+name = "cu_caterpillar"
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
 keywords = ["robotics", "middleware", "copper", "real-time"]
 categories = ["science::robotics"]
-default-run = "cucaterpillar"
+default-run = "cu-caterpillar"
 
 [package.metadata.cargo-machete]
 ignored = ["cu29-log", "cu29-log-runtime", "cu29-unifiedlog", "copper-traits"]  # proc macro
 
 [[bin]]
-name = "cucaterpillar"
+name = "cu-caterpillar"
 path = "src/main.rs"
 
 [[bin]]
-name = "logreader"
+name = "cu-caterpillar-logreader"
 path = "src/logreader.rs"
 
 

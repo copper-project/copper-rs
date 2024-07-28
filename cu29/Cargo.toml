@@ -11,7 +11,7 @@ categories.workspace = true
 ignored = ["cu29-log-runtime", "cu29-log"] # It is used from a proc macro
 
 [[bin]]
-name = "copper-rendercfg"
+name = "cu29-rendercfg"
 path = "src/rendercfg.rs"
 
 [dependencies]

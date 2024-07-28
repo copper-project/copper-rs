@@ -11,7 +11,7 @@ path = "src/main.rs"
 
 # A custom made log reader application for your application.
 [[bin]]
-name = "logreader"
+name = "{{project-name|kebab_case}}-logreader"
 path = "src/logreader.rs"
 
 [dependencies]
