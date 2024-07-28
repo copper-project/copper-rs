@@ -1,5 +1,5 @@
 [package]
-name = "cu_lewansoul"
+name = "cu-lewansoul"
 description = "This is a driver for the Lewansoul serial servos."
 
 version.workspace = true
