@@ -23,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y libudev-dev
       - name: Run docs
-        run: cargo doc --no-deps
+        run: cargo +nightly doc --no-deps
         env:
           RUSTDOCFLAGS: --enable-index-page -Zunstable-options
       - name: Deploy docs preview to GitHub Pages
