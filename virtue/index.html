@@ -1,0 +1,65 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Virtue, a sinless derive macro helper"><title>virtue - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../static.files/rustdoc-dd39b87e5fcfba68.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="virtue" data-themes="" data-resource-suffix="" data-rustdoc-version="1.80.0 (051478957 2024-07-21)" data-channel="1.80.0" data-search-js="search-d52510db62a78183.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-20a3ad099b048cf2.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-df360f571f6edeae.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../virtue/index.html">virtue</a><span class="version">0.0.13</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section><ul class="block"><li><a href="#modules">Modules</a></li><li><a href="#enums">Enums</a></li><li><a href="#types">Type Aliases</a></li></ul></section></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Crate <a class="mod" href="#">virtue</a><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><span class="out-of-band"><a class="src" href="../src/virtue/lib.rs.html#1-106">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="virtue-a-sinless-derive-macro-helper"><a class="doc-anchor" href="#virtue-a-sinless-derive-macro-helper">§</a>Virtue, a sinless derive macro helper</h2><h3 id="goals"><a class="doc-anchor" href="#goals">§</a>Goals</h3>
+<ul>
+<li>Zero dependencies, so fast compile times</li>
+<li>No other dependencies needed</li>
+<li>Declarative code generation</li>
+<li>As much typesystem checking as possible</li>
+<li>Build for modern rust: 1.57 and up</li>
+<li>Build with popular crates in mind:
+<ul>
+<li><a href="https://docs.rs/bincode">bincode</a></li>
+</ul>
+</li>
+<li>Will always respect semver. Minor releases will never have:
+<ul>
+<li>Breaking API changes</li>
+<li>MSRV changes</li>
+</ul>
+</li>
+</ul>
+<h3 id="example"><a class="doc-anchor" href="#example">§</a>Example</h3>
+<div class="example-wrap ignore"><a href="#" class="tooltip" title="This example is not tested">ⓘ</a><pre class="rust rust-example-rendered"><code><span class="kw">use </span>virtue::prelude::<span class="kw-2">*</span>;
+
+<span class="attr">#[proc_macro_derive(YourDerive, attributes(some, attributes, go, here))]
+</span><span class="kw">pub fn </span>derive_your_derive(input: TokenStream) -&gt; TokenStream {
+    derive_your_derive_inner(input)
+        .unwrap_or_else(|error| error.into_token_stream())
+}
+
+<span class="kw">fn </span>derive_your_derive_inner(input: TokenStream) -&gt; <span class="prelude-ty">Result</span>&lt;TokenStream&gt; {
+    <span class="comment">// Parse the struct or enum you want to implement a derive for
+    </span><span class="kw">let </span>parse = Parse::new(input)<span class="question-mark">?</span>;
+    <span class="comment">// Get a reference to the generator
+    </span><span class="kw">let </span>(<span class="kw-2">mut </span>generator, body) = parse.into_generator();
+    <span class="kw">match </span>body {
+        Body::Struct(body) =&gt; {
+            <span class="comment">// Implement your struct body here
+            // See `Generator` for more information
+            </span>generator.impl_for(<span class="string">"YourTrait"</span>)<span class="question-mark">?
+                    </span>.generate_fn(<span class="string">"your_fn"</span>)
+                    .with_self_arg(FnSelfArg::RefSelf)
+                    .body(|fn_body| {
+                        fn_body.push_parsed(<span class="string">"println!(\"Hello world\");"</span>);
+                    })<span class="question-mark">?</span>;
+        },
+        Body::Enum(body) =&gt; {
+            <span class="comment">// Implement your enum body here
+            // See `Generator` for more information
+            </span>generator.impl_for(<span class="string">"YourTrait"</span>)<span class="question-mark">?
+                    </span>.generate_fn(<span class="string">"your_fn"</span>)
+                    .with_self_arg(FnSelfArg::RefSelf)
+                    .body(|fn_body| {
+                        fn_body.push_parsed(<span class="string">"println!(\"Hello world\");"</span>);
+                    })<span class="question-mark">?</span>;
+        },
+    }
+    generator.finish()
+}</code></pre></div>
+<p>Will generate</p>
+
+<div class="example-wrap ignore"><a href="#" class="tooltip" title="This example is not tested">ⓘ</a><pre class="rust rust-example-rendered"><code><span class="kw">impl </span>YourTrait <span class="kw">for </span>&lt;Struct or Enum&gt; {
+    <span class="kw">fn </span>your_fn(<span class="kw-2">&amp;</span><span class="self">self</span>) { <span class="comment">// .generate_fn("your_fn").with_self_arg(FnSelfArg::RefSelf)
+        </span><span class="macro">println!</span>(<span class="string">"Hello world"</span>); <span class="comment">// fn_body.push_parsed(...)
+    </span>}
+}</code></pre></div>
+</div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="mod" href="generate/index.html" title="mod virtue::generate">generate</a></div><div class="desc docblock-short">Code to help generate functions.</div></li><li><div class="item-name"><a class="mod" href="parse/index.html" title="mod virtue::parse">parse</a></div><div class="desc docblock-short">Module for parsing code. The main enum is <a href="parse/enum.Parse.html" title="enum virtue::parse::Parse"><code>Parse</code></a>.</div></li><li><div class="item-name"><a class="mod" href="prelude/index.html" title="mod virtue::prelude">prelude</a></div><div class="desc docblock-short">Useful includes</div></li><li><div class="item-name"><a class="mod" href="utils/index.html" title="mod virtue::utils">utils</a></div><div class="desc docblock-short">Utility functions</div></li></ul><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="enum" href="enum.Error.html" title="enum virtue::Error">Error</a></div><div class="desc docblock-short">Errors that can occur while parsing or generator your derive macro.</div></li></ul><h2 id="types" class="section-header">Type Aliases<a href="#types" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="type" href="type.Result.html" title="type virtue::Result">Result</a></div><div class="desc docblock-short">Result alias for virtue’s errors</div></li></ul></section></div></main></body></html>

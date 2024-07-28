@@ -1,0 +1,51 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="@brief Store items into a database."><title>mdb_put in lmdb_sys - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../static.files/rustdoc-dd39b87e5fcfba68.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="lmdb_sys" data-themes="" data-resource-suffix="" data-rustdoc-version="1.80.0 (051478957 2024-07-21)" data-channel="1.80.0" data-search-js="search-d52510db62a78183.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../static.files/storage-118b08c4c78b968e.js"></script><script defer src="sidebar-items.js"></script><script defer src="../static.files/main-20a3ad099b048cf2.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-df360f571f6edeae.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc fn"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../lmdb_sys/index.html">lmdb_sys</a><span class="version">0.11.2</span></h2></div><div class="sidebar-elems"></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Function <a href="index.html">lmdb_sys</a>::<wbr><a class="fn" href="#">mdb_put</a><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><span class="out-of-band"><a class="src" href="../src/lmdb_sys/bindings.rs.html#1102-1108">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><pre class="rust item-decl"><code>pub unsafe extern &quot;C&quot; fn mdb_put(
+    txn: <a class="primitive" href="https://doc.rust-lang.org/1.80.0/std/primitive.pointer.html">*mut </a><a class="struct" href="struct.MDB_txn.html" title="struct lmdb_sys::MDB_txn">MDB_txn</a>,
+    dbi: <a class="type" href="type.MDB_dbi.html" title="type lmdb_sys::MDB_dbi">MDB_dbi</a>,
+    key: <a class="primitive" href="https://doc.rust-lang.org/1.80.0/std/primitive.pointer.html">*mut </a><a class="struct" href="struct.MDB_val.html" title="struct lmdb_sys::MDB_val">MDB_val</a>,
+    data: <a class="primitive" href="https://doc.rust-lang.org/1.80.0/std/primitive.pointer.html">*mut </a><a class="struct" href="struct.MDB_val.html" title="struct lmdb_sys::MDB_val">MDB_val</a>,
+    flags: <a class="type" href="../libc/unix/type.c_uint.html" title="type libc::unix::c_uint">c_uint</a>,
+) -&gt; <a class="type" href="../libc/unix/type.c_int.html" title="type libc::unix::c_int">c_int</a></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>@brief Store items into a database.</p>
+<p>This function stores key/data pairs in the database. The default behavior
+is to enter the new key/data pair, replacing any previously existing key
+if duplicates are disallowed, or adding a duplicate data item if
+duplicates are allowed (#MDB_DUPSORT).
+@param[in] txn A transaction handle returned by #mdb_txn_begin()
+@param[in] dbi A database handle returned by #mdb_dbi_open()
+@param[in] key The key to store in the database
+@param[in,out] data The data to store
+@param[in] flags Special options for this operation. This parameter
+must be set to 0 or by bitwise OR’ing together one or more of the
+values described here.</p>
+<ul>
+<li>#MDB_NODUPDATA - enter the new key/data pair only if it does not
+	already appear in the database. This flag may only be specified
+	if the database was opened with #MDB_DUPSORT. The function will
+	return #MDB_KEYEXIST if the key/data pair already appears in the
+	database.
+<li>#MDB_NOOVERWRITE - enter the new key/data pair only if the key
+	does not already appear in the database. The function will return
+	#MDB_KEYEXIST if the key already appears in the database, even if
+	the database supports duplicates (#MDB_DUPSORT). The \b data
+	parameter will be set to point to the existing item.
+<li>#MDB_RESERVE - reserve space for data of the given size, but
+	don't copy the given data. Instead, return a pointer to the
+	reserved space, which the caller can fill in later - before
+	the next update operation or the transaction ends. This saves
+	an extra memcpy if the data is being generated later.
+	LMDB does nothing else with this memory, the caller is expected
+	to modify all of the space requested. This flag must not be
+	specified if the database was opened with #MDB_DUPSORT.
+<li>#MDB_APPEND - append the given key/data pair to the end of the
+	database. This option allows fast bulk loading when keys are
+	already known to be in the correct order. Loading unsorted keys
+	with this flag will cause a #MDB_KEYEXIST error.
+<li>#MDB_APPENDDUP - as above, but for sorted dup data.
+</ul>
+@return A non-zero error value on failure and 0 on success. Some possible
+errors are:
+<ul>
+<li>#MDB_MAP_FULL - the database is full, see #mdb_env_set_mapsize().
+<li>#MDB_TXN_FULL - the transaction has too many dirty pages.
+<li>EACCES - an attempt was made to write in a read-only transaction.
+<li>EINVAL - an invalid parameter was specified.
+</ul></div></details></section></div></main></body></html>

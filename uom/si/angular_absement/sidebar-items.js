@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["degree_second","radian_second"],"trait":["Conversion","Unit"],"type":["AngularAbsement","Dimension"]};

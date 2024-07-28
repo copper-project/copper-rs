@@ -1,0 +1,75 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="i2cdev"><title>i2cdev - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../static.files/rustdoc-dd39b87e5fcfba68.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="i2cdev" data-themes="" data-resource-suffix="" data-rustdoc-version="1.80.0 (051478957 2024-07-21)" data-channel="1.80.0" data-search-js="search-d52510db62a78183.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-20a3ad099b048cf2.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-df360f571f6edeae.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../i2cdev/index.html">i2cdev</a><span class="version">0.6.1</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section><ul class="block"><li><a href="#modules">Modules</a></li></ul></section></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Crate <a class="mod" href="#">i2cdev</a><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><span class="out-of-band"><a class="src" href="../src/i2cdev/lib.rs.html#9-120">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="i2cdev"><a class="doc-anchor" href="#i2cdev">§</a>i2cdev</h2>
+<p>The <code>i2cdev</code> crate provides a safe interface for interface
+with i2c devices under Linux.  The API wraps the <a href="https://www.kernel.org/doc/Documentation/i2c/dev-interface">Linux
+kernel interface for interacting with i2c in userspace</a>.</p>
+<h3 id="examples"><a class="doc-anchor" href="#examples">§</a>Examples</h3><h4 id="using-the-smbus-methods-to-read-from-a-wii-nunchuk"><a class="doc-anchor" href="#using-the-smbus-methods-to-read-from-a-wii-nunchuk">§</a>Using the SMBus methods to read from a Wii Nunchuk</h4>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">extern crate </span>i2cdev;
+
+<span class="kw">use </span>std::thread;
+<span class="kw">use </span>std::time::Duration;
+
+<span class="kw">use </span>i2cdev::core::<span class="kw-2">*</span>;
+<span class="kw">use </span>i2cdev::linux::{LinuxI2CDevice, LinuxI2CError};
+
+<span class="kw">const </span>NUNCHUCK_SLAVE_ADDR: u16 = <span class="number">0x52</span>;
+
+<span class="comment">// real code should probably not use unwrap()
+</span><span class="kw">fn </span>i2cfun() -&gt; <span class="prelude-ty">Result</span>&lt;(), LinuxI2CError&gt; {
+    <span class="kw">let </span><span class="kw-2">mut </span>dev = LinuxI2CDevice::new(<span class="string">"/dev/i2c-1"</span>, NUNCHUCK_SLAVE_ADDR)<span class="question-mark">?</span>;
+
+    <span class="comment">// init sequence
+    </span>dev.smbus_write_byte_data(<span class="number">0xF0</span>, <span class="number">0x55</span>)<span class="question-mark">?</span>;
+    dev.smbus_write_byte_data(<span class="number">0xFB</span>, <span class="number">0x00</span>)<span class="question-mark">?</span>;
+    thread::sleep(Duration::from_millis(<span class="number">100</span>));
+
+    <span class="kw">loop </span>{
+        <span class="kw">let </span><span class="kw-2">mut </span>buf: [u8; <span class="number">6</span>] = [<span class="number">0</span>; <span class="number">6</span>];
+        dev.smbus_write_byte(<span class="number">0x00</span>).unwrap();
+        thread::sleep(Duration::from_millis(<span class="number">10</span>));
+        dev.read(<span class="kw-2">&amp;mut </span>buf).unwrap();
+        <span class="macro">println!</span>(<span class="string">"Reading: {:?}"</span>, buf);
+    }
+}</code></pre></div>
+<h4 id="using-the-transfer-api-with-an-individual-device"><a class="doc-anchor" href="#using-the-transfer-api-with-an-individual-device">§</a>Using the <code>transfer</code> API with an individual device</h4>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">extern crate </span>i2cdev;
+
+<span class="kw">use </span>i2cdev::core::<span class="kw-2">*</span>;
+<span class="kw">use </span>i2cdev::linux::{LinuxI2CDevice, LinuxI2CError, LinuxI2CMessage};
+
+<span class="kw">const </span>SLAVE_ADDR: u16 = <span class="number">0x57</span>;
+
+<span class="kw">fn </span>write_read_transaction() -&gt; <span class="prelude-ty">Result</span>&lt;(), LinuxI2CError&gt; {
+    <span class="kw">let </span><span class="kw-2">mut </span>dev = LinuxI2CDevice::new(<span class="string">"/dev/i2c-1"</span>, SLAVE_ADDR)<span class="question-mark">?</span>;
+
+    <span class="kw">let </span><span class="kw-2">mut </span>read_data = [<span class="number">0</span>; <span class="number">2</span>];
+    <span class="kw">let </span><span class="kw-2">mut </span>msgs = [
+        LinuxI2CMessage::write(<span class="kw-2">&amp;</span>[<span class="number">0x01</span>]),
+        LinuxI2CMessage::read(<span class="kw-2">&amp;mut </span>read_data)
+    ];
+    dev.transfer(<span class="kw-2">&amp;mut </span>msgs)<span class="question-mark">?</span>;
+
+    <span class="macro">println!</span>(<span class="string">"Reading: {:?}"</span>, read_data);
+    <span class="prelude-val">Ok</span>(())
+}</code></pre></div>
+<h4 id="using-transfer-with-linuxi2cbus"><a class="doc-anchor" href="#using-transfer-with-linuxi2cbus">§</a>Using <code>transfer</code> with <code>LinuxI2CBus</code></h4>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">extern crate </span>i2cdev;
+
+<span class="kw">use </span>i2cdev::core::<span class="kw-2">*</span>;
+<span class="kw">use </span>i2cdev::linux::{LinuxI2CBus, LinuxI2CError, LinuxI2CMessage};
+
+<span class="kw">const </span>SLAVE_ADDR: u16 = <span class="number">0x57</span>;
+
+<span class="kw">fn </span>write_read_transaction_using_bus() -&gt; <span class="prelude-ty">Result</span>&lt;(), LinuxI2CError&gt; {
+    <span class="kw">let </span><span class="kw-2">mut </span>dev = LinuxI2CBus::new(<span class="string">"/dev/i2c-1"</span>)<span class="question-mark">?</span>;
+
+    <span class="kw">let </span><span class="kw-2">mut </span>read_data = [<span class="number">0</span>; <span class="number">2</span>];
+    <span class="kw">let </span><span class="kw-2">mut </span>msgs = [
+        LinuxI2CMessage::write(<span class="kw-2">&amp;</span>[<span class="number">0x01</span>]).with_address(SLAVE_ADDR),
+        LinuxI2CMessage::read(<span class="kw-2">&amp;mut </span>read_data).with_address(SLAVE_ADDR)
+    ];
+    dev.transfer(<span class="kw-2">&amp;mut </span>msgs)<span class="question-mark">?</span>;
+
+    <span class="macro">println!</span>(<span class="string">"Reading: {:?}"</span>, read_data);
+    <span class="prelude-val">Ok</span>(())
+}</code></pre></div>
+</div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="mod" href="core/index.html" title="mod i2cdev::core">core</a></div><div class="desc docblock-short">Core I2C abstractions</div></li><li><div class="item-name"><a class="mod" href="linux/index.html" title="mod i2cdev::linux">linux</a></div><div class="desc docblock-short">Linux I2C device support</div></li><li><div class="item-name"><a class="mod" href="mock/index.html" title="mod i2cdev::mock">mock</a></div><div class="desc docblock-short">Mock I2C device</div></li></ul></section></div></main></body></html>

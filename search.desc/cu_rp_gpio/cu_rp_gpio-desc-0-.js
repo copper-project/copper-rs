@@ -1,0 +1,1 @@
+searchState.loadedDescShard("cu_rp_gpio", 0, "Example of a GPIO output driver for the Raspberry Pi The …\nReturns the argument unchanged.\nReturns the argument unchanged.\nCalls <code>U::from(self)</code>.\nCalls <code>U::from(self)</code>.")

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["FnSelfArg"],"struct":["FnBuilder","GenConst","GenStruct","GenerateMod","Generator","Impl","ImplFor","PushParseError","StreamBuilder"],"trait":["Parent"]};

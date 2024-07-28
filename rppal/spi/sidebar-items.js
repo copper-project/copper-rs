@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["BitOrder","Bus","Error","Mode","Polarity","SlaveSelect"],"fn":["reverse_bits"],"struct":["Segment","Spi"],"type":["Result"]};

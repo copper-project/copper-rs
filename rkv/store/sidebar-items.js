@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["integer","integermulti","keys","multi","single"],"struct":["CloseOptions","Options"]};

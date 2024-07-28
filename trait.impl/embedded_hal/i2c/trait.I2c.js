@@ -1,0 +1,4 @@
+(function() {var implementors = {
+"embedded_hal":[],
+"linux_embedded_hal":[["impl <a class=\"trait\" href=\"embedded_hal/i2c/trait.I2c.html\" title=\"trait embedded_hal::i2c::I2c\">I2c</a> for <a class=\"struct\" href=\"linux_embedded_hal/struct.I2cdev.html\" title=\"struct linux_embedded_hal::I2cdev\">I2cdev</a>"],["impl <a class=\"trait\" href=\"embedded_hal/i2c/trait.I2c.html\" title=\"trait embedded_hal::i2c::I2c\">I2c</a>&lt;<a class=\"primitive\" href=\"https://doc.rust-lang.org/1.80.0/std/primitive.u16.html\">u16</a>&gt; for <a class=\"struct\" href=\"linux_embedded_hal/struct.I2cdev.html\" title=\"struct linux_embedded_hal::I2cdev\">I2cdev</a>"]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

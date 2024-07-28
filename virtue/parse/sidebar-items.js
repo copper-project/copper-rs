@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["AttributeLocation","Body","Fields","Generic","IdentOrIndex","Parse","Visibility"],"struct":["Attribute","ConstGeneric","EnumBody","EnumVariant","GenericConstraints","Generics","Lifetime","SimpleGeneric","StructBody","UnnamedField"],"trait":["AttributeAccess","FromAttribute"]};

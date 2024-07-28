@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["gram_per_square_centimeter","gram_per_square_meter","kilogram_per_square_meter","ounce_per_square_foot"],"trait":["Conversion","Unit"],"type":["ArealMassDensity","Dimension"]};

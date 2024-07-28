@@ -1,0 +1,97 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Interface for the UART peripherals and any USB to serial adapters."><title>rppal::uart - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-dd39b87e5fcfba68.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="rppal" data-themes="" data-resource-suffix="" data-rustdoc-version="1.80.0 (051478957 2024-07-21)" data-channel="1.80.0" data-search-js="search-d52510db62a78183.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../static.files/main-20a3ad099b048cf2.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-df360f571f6edeae.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../rppal/index.html">rppal</a><span class="version">0.18.0</span></h2></div><h2 class="location"><a href="#">Module uart</a></h2><div class="sidebar-elems"><section><ul class="block"><li><a href="#structs">Structs</a></li><li><a href="#enums">Enums</a></li><li><a href="#types">Type Aliases</a></li></ul></section><h2><a href="../index.html">In crate rppal</a></h2></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Module <a href="../index.html">rppal</a>::<wbr><a class="mod" href="#">uart</a><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><span class="out-of-band"><a class="src" href="../../src/rppal/uart.rs.html#1-959">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Interface for the UART peripherals and any USB to serial adapters.</p>
+<p>RPPAL controls the Raspberry Pi’s UART peripherals through the <code>ttyAMA0</code>
+(PL011) and <code>ttyS0</code> (mini UART) character devices. USB to serial adapters
+are controlled using the <code>ttyUSBx</code> and <code>ttyACMx</code> character devices.</p>
+<h3 id="uart-peripherals"><a class="doc-anchor" href="#uart-peripherals">§</a>UART peripherals</h3>
+<p>The Raspberry Pi’s BCM283x SoC features two UART peripherals.
+<code>/dev/ttyAMA0</code> represents the PL011 UART, which offers a full set of
+features. <code>/dev/ttyS0</code> represents an auxiliary peripheral that’s referred
+to as mini UART, with limited capabilities. More details on the differences
+between the PL011 and mini UART can be found in the official Raspberry Pi
+<a href="https://www.raspberrypi.org/documentation/configuration/uart.md">documentation</a>.</p>
+<p>On earlier Raspberry Pi models without Bluetooth, <code>/dev/ttyAMA0</code> is
+configured as a Linux serial console. On more recent models with Bluetooth,
+<code>/dev/ttyAMA0</code> is connected to the Bluetooth
+module, and <code>/dev/ttyS0</code> is used as a serial console instead. Due to the
+limitations of <code>/dev/ttyS0</code> and the requirement for a fixed core frequency,
+in most cases you’ll want to use <code>/dev/ttyAMA0</code> for serial communication.</p>
+<p>By default, TX (outgoing data) is tied to BCM GPIO 14 (physical pin 8) and
+RX (incoming data) is tied to BCM GPIO 15 (physical pin 10). You can move
+these lines to different GPIO pins using the <code>uart0</code> and <code>uart1</code> overlays,
+but the alternative pin options aren’t exposed through the GPIO header on
+any of the current Raspberry Pi models. They are only available on the
+Compute Module’s SO-DIMM pads.</p>
+<h3 id="configure-devttyama0-for-serial-communication-recommended"><a class="doc-anchor" href="#configure-devttyama0-for-serial-communication-recommended">§</a>Configure <code>/dev/ttyAMA0</code> for serial communication (recommended)</h3>
+<p>Disable the Linux serial console by either deactivating it through
+<code>sudo raspi-config</code>, or manually removing the parameter
+<code>console=serial0,115200</code> from <code>/boot/firmware/cmdline.txt</code>.</p>
+<p>Remove any lines containing <code>enable_uart=0</code> or <code>enable_uart=1</code> from
+<code>/boot/firmware/config.txt</code>.</p>
+<p>On Raspberry Pi models with a Bluetooth module, an extra step is required
+to either disable Bluetooth or move it to <code>/dev/ttyS0</code>, so <code>/dev/ttyAMA0</code>
+becomes available for serial communication.</p>
+<p>To disable Bluetooth, add <code>dtoverlay=pi3-disable-bt</code> to <code>/boot/firmware/config.txt</code>.
+You’ll also need to disable the service that initializes Bluetooth with
+<code>sudo systemctl disable hciuart</code>.</p>
+<p>To move the Bluetooth module to <code>/dev/ttyS0</code>, instead of disabling it with
+the above-mentioned steps, add <code>dtoverlay=pi3-miniuart-bt</code> and
+<code>core_freq=250</code> to <code>/boot/firmware/config.txt</code>.</p>
+<p>Remember to reboot the Raspberry Pi after making any changes.</p>
+<h3 id="configure-devttys0-for-serial-communication"><a class="doc-anchor" href="#configure-devttys0-for-serial-communication">§</a>Configure <code>/dev/ttyS0</code> for serial communication</h3>
+<p>If you prefer to leave the Bluetooth module connected to <code>/dev/ttyAMA0</code>,
+you can configure <code>/dev/ttyS0</code> for serial communication instead.</p>
+<p>Disable the Linux serial console by either deactivating it through
+<code>sudo raspi-config</code>, or manually removing the parameter
+<code>console=serial0,115200</code> from <code>/boot/firmware/cmdline.txt</code>.</p>
+<p>Add the line <code>enable_uart=1</code> to <code>/boot/firmware/config.txt</code> to enable serial
+communication on <code>/dev/ttyS0</code>, which also sets a fixed core frequency.</p>
+<p>Remember to reboot the Raspberry Pi after making any changes.</p>
+<h3 id="usb-to-serial-adapters"><a class="doc-anchor" href="#usb-to-serial-adapters">§</a>USB to serial adapters</h3>
+<p>In addition to controlling the hardware UART peripherals, <a href="struct.Uart.html"><code>Uart</code></a> can
+also be used for USB to serial adapters. Depending on the type of
+device, these can be accessed either through <code>/dev/ttyUSBx</code> or
+<code>/dev/ttyACMx</code>, where <code>x</code> is an index starting at <code>0</code>. The numbering is
+based on the order in which the devices are discovered by the kernel.</p>
+<p>When you have multiple USB to serial adapters connected at the same time,
+you can uniquely identify a specific device by searching for the relevant
+symlink in the <code>/dev/serial/by-id</code> directory, or by adding your own
+<code>udev</code> rules.</p>
+<p>Support for automatic software (XON/XOFF) and hardware (RTS/CTS) flow
+control for USB to serial adapters depends on the USB interface IC on the
+device, and the relevant Linux driver. Some ICs use an older,
+incompatible RTS/CTS implementation, sometimes referred to as legacy or
+simplex mode, where RTS is used to indicate data is about to be
+transmitted, rather than to request the external device to resume its
+transmission.</p>
+<h3 id="hardware-flow-control"><a class="doc-anchor" href="#hardware-flow-control">§</a>Hardware flow control</h3>
+<p>The RTS/CTS hardware flow control implementation supported by <a href="struct.Uart.html"><code>Uart</code></a>
+and used by the Raspberry Pi’s UART peripherals requires RTS on one
+device to be connected to CTS on the other device. The RTS signal is
+used to request the other device to pause or resume its transmission.</p>
+<p>Some devices use an older, incompatible RTS/CTS implementation, sometimes
+referred to as legacy or simplex mode, where RTS is connected to RTS, and
+CTS to CTS. The RTS signal is used to indicate data is about to be
+transmitted. <a href="struct.Uart.html"><code>Uart</code></a> is not compatible with this implementation.
+Connecting the Raspberry Pi’s RTS and CTS pins incorrectly could damage
+the Pi or the external device.</p>
+<p>When <a href="struct.Uart.html"><code>Uart</code></a> is controlling a UART peripheral, enabling hardware flow
+control will also configure the RTS and CTS pins. On Raspberry Pi models
+with a 40-pin GPIO header, RTS is tied to BCM GPIO 17 (physical pin 11)
+and CTS is tied to BCM GPIO 16 (physical pin 36). RTS and CTS aren’t
+available on models with a 26-pin header, except for the Raspberry Pi B
+Rev 2, which exposes RTS and CTS through its unpopulated P5 header with
+RTS on BCM GPIO 31 (physical pin 6) and CTS on BCM GPIO 30 (physical pin
+5).</p>
+<p>The RTS and CTS pins are reset to their original state when <a href="struct.Uart.html"><code>Uart</code></a> goes
+out of scope. Note that <code>drop</code> methods aren’t called when a process is
+abnormally terminated, for instance when a user presses <kbd>Ctrl</kbd> +
+<kbd>C</kbd> and the <code>SIGINT</code> signal isn’t caught, which prevents <a href="struct.Uart.html"><code>Uart</code></a>
+from resetting the pins. You can catch those using crates such as
+<a href="https://crates.io/crates/simple-signal"><code>simple_signal</code></a>.</p>
+<h3 id="troubleshooting"><a class="doc-anchor" href="#troubleshooting">§</a>Troubleshooting</h3><h4 id="permission-denied"><a class="doc-anchor" href="#permission-denied">§</a>Permission denied</h4>
+<p>If <a href="struct.Uart.html#method.new"><code>new</code></a> or <a href="struct.Uart.html#method.with_path"><code>with_path</code></a> returns an <code>io::ErrorKind::PermissionDenied</code>
+error, make sure the file permissions for the specified device are correct,
+and the current user is a member of the group that owns the device, which is
+usually either <code>dialout</code> or <code>tty</code>.</p>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="struct" href="struct.Status.html" title="struct rppal::uart::Status">Status</a></div><div class="desc docblock-short">Control signal status.</div></li><li><div class="item-name"><a class="struct" href="struct.Uart.html" title="struct rppal::uart::Uart">Uart</a></div><div class="desc docblock-short">Provides access to the Raspberry Pi’s UART peripherals and any USB to
+serial adapters.</div></li></ul><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="enum" href="enum.Error.html" title="enum rppal::uart::Error">Error</a></div><div class="desc docblock-short">Errors that can occur when accessing the UART peripheral.</div></li><li><div class="item-name"><a class="enum" href="enum.Parity.html" title="enum rppal::uart::Parity">Parity</a></div><div class="desc docblock-short">Parity bit modes.</div></li><li><div class="item-name"><a class="enum" href="enum.ParityCheck.html" title="enum rppal::uart::ParityCheck">ParityCheck</a></div><div class="desc docblock-short">Parity check modes.</div></li><li><div class="item-name"><a class="enum" href="enum.Queue.html" title="enum rppal::uart::Queue">Queue</a></div><div class="desc docblock-short">Queue types.</div></li></ul><h2 id="types" class="section-header">Type Aliases<a href="#types" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="type" href="type.Result.html" title="type rppal::uart::Result">Result</a></div><div class="desc docblock-short">Result type returned from methods that can have <code>uart::Error</code>s.</div></li></ul></section></div></main></body></html>

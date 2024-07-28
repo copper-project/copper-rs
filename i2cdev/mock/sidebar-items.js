@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["I2CRegisterMap","MockI2CDevice","MockI2CMessage"],"type":["I2CResult"]};

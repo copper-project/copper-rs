@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["gigahertz_per_second","hertz_per_second","kilohertz_per_second","megahertz_per_second","terahertz_per_second"],"trait":["Conversion","Unit"],"type":["Dimension","FrequencyDrift"]};

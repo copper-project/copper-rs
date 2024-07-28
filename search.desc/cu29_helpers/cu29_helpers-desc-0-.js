@@ -1,0 +1,1 @@
+searchState.loadedDescShard("cu29_helpers", 0, "Just a simple struct to hold the various bits needed to …\nThis is a basic setup for a copper application to get you …\nReturns the argument unchanged.\nCalls <code>U::from(self)</code>.")

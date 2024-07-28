@@ -1,0 +1,59 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Macro to implement a quantity and associated measurement units. Note that this macro must be executed in direct submodules of the module where the `system!` macro was executed. `@...` match arms are considered private."><title>quantity in uom - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../static.files/rustdoc-dd39b87e5fcfba68.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="uom" data-themes="" data-resource-suffix="" data-rustdoc-version="1.80.0 (051478957 2024-07-21)" data-channel="1.80.0" data-search-js="search-d52510db62a78183.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../static.files/storage-118b08c4c78b968e.js"></script><script defer src="sidebar-items.js"></script><script defer src="../static.files/main-20a3ad099b048cf2.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-df360f571f6edeae.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc macro"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../uom/index.html">uom</a><span class="version">0.36.0</span></h2></div><div class="sidebar-elems"></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Macro <a href="index.html">uom</a>::<wbr><a class="macro" href="#">quantity</a><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><span class="out-of-band"><a class="src" href="../src/uom/quantity.rs.html#98-453">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><pre class="rust item-decl"><span class="macro">macro_rules!</span> quantity {
+    (
+        $(<span class="attr">#[<span class="macro-nonterminal">$quantity_attr</span>:meta]</span>)* quantity: <span class="macro-nonterminal">$quantity</span>:ident; <span class="macro-nonterminal">$description</span>:expr;
+        $(<span class="attr">#[<span class="macro-nonterminal">$dim_attr</span>:meta]</span>)* dimension: <span class="macro-nonterminal">$system</span>:ident&lt;$(<span class="macro-nonterminal">$dimension</span>:ident),+&gt;;
+        $(kind: <span class="macro-nonterminal">$kind</span>:ty;)<span class="question-mark">?
+        </span>units {
+            $($(<span class="attr">#[<span class="macro-nonterminal">$unit_attr</span>:meta]</span>)* @<span class="macro-nonterminal">$unit</span>:ident: $(<span class="macro-nonterminal">$conversion</span>:expr),+; <span class="macro-nonterminal">$abbreviation</span>:expr,
+                <span class="macro-nonterminal">$singular</span>:expr, <span class="macro-nonterminal">$plural</span>:expr;)+
+        }
+    ) =&gt; { ... };
+    (@kind <span class="macro-nonterminal">$kind</span>:ty) =&gt; { ... };
+    (@kind) =&gt; { ... };
+}</pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Macro to implement a <a href="https://jcgm.bipm.org/vim/en/1.1.html">quantity</a> and associated <a href="https://jcgm.bipm.org/vim/en/1.9.html">measurement units</a>. Note
+that this macro must be executed in direct submodules of the module where the <a href="macro.system.html" title="macro uom::system"><code>system!</code></a> macro
+was executed. <code>@...</code> match arms are considered private.</p>
+<ul>
+<li><code>$quantity_attr</code>: Quantity attributes. Generally used to set documentation comments for the
+quantity.</li>
+<li><code>$quantity</code>: Quantity name (e.g. <code>Length</code>).</li>
+<li><code>$description</code>: Quantity description (e.g. <code>&quot;length&quot;</code>).</li>
+<li><code>$dim_attr</code>: Dimension attributes. Generally used to set documentation comments for the
+quantity’s dimension type alias.</li>
+<li><code>$system</code>: System of quantities type (e.g. <code>ISQ</code>).</li>
+<li><code>$dimension</code>: Power of a factor for each base quantity in the system. Power should be
+represented as a <code>typenum</code> type-level integer (e.g. <code>N1</code>, <code>Z0</code>, <code>P1</code>, <code>P2</code>, …).</li>
+<li><code>$kind</code>: <a href="https://jcgm.bipm.org/vim/en/1.2.html">Kind</a> of the quantity. Optional. This variable should only be specified when
+defining a quantity that has the same dimensions as another quantity but isn’t comparable.
+When not specified <a href="trait.Kind.html" title="trait uom::Kind"><code>crate::Kind</code></a> is used.</li>
+<li><code>$unit</code>: Unit name (e.g. <code>meter</code>, <code>foot</code>).</li>
+<li><code>$conversion</code>: Conversion (coefficient and constant factor) from the unit to the base unit of
+the quantity (e.g. <code>3.048_E-1</code> to convert <code>foot</code> to <code>meter</code>. <code>1.0_E0, 273.15_E0</code> to convert
+<code>celsius</code> to <code>kelvin</code>.). The coefficient is required and the constant factor is optional.
+Note that using a unit with a non-zero constant factor is not currently supported as a base
+unit.</li>
+<li><code>$abbreviation</code>: Unit abbreviation (e.g. <code>&quot;m&quot;</code>).</li>
+<li><code>$singular</code>: Singular unit description (e.g. <code>&quot;meter&quot;</code>).</li>
+<li><code>$plural</code>: Plural unit description (e.g. <code>&quot;meters&quot;</code>).</li>
+</ul>
+<p>An example invocation is given below for the quantity of length in a meter-kilogram-second
+system. The <code>#[macro_use]</code> attribute must be used when including the <code>uom</code> crate to make the
+<code>quantity!</code> macro available.</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="attr">#[macro_use]
+</span><span class="kw">extern crate </span>uom;
+
+<span class="attr">#[macro_use]
+</span><span class="kw">mod </span>length {
+    <span class="macro">quantity!</span> {
+        <span class="doccomment">/// Length (base unit meter, m).
+        </span>quantity: Length; <span class="string">"length"</span>;
+        <span class="doccomment">/// Length dimension, m.
+        </span>dimension: Q&lt;P1 <span class="comment">/*length*/</span>, Z0 <span class="comment">/*mass*/</span>, Z0 <span class="comment">/*time*/</span>&gt;;
+        units {
+            @meter: <span class="number">1.0E0</span>; <span class="string">"m"</span>, <span class="string">"meter"</span>, <span class="string">"meters"</span>;
+            @foot: <span class="number">3.048E-1</span>; <span class="string">"ft"</span>, <span class="string">"foot"</span>, <span class="string">"feet"</span>;
+        }
+    }
+}</code></pre></div>
+</div></details></section></div></main></body></html>

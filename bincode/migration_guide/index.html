@@ -1,0 +1,91 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Migrating from bincode 1 to 2"><title>bincode::migration_guide - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-dd39b87e5fcfba68.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="bincode" data-themes="" data-resource-suffix="" data-rustdoc-version="1.80.0 (051478957 2024-07-21)" data-channel="1.80.0" data-search-js="search-d52510db62a78183.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../static.files/main-20a3ad099b048cf2.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-df360f571f6edeae.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../bincode/index.html">bincode</a><span class="version">2.0.0-rc.3</span></h2></div><h2 class="location"><a href="#">Module migration_guide</a></h2><div class="sidebar-elems"><h2><a href="../index.html">In crate bincode</a></h2></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Module <a href="../index.html">bincode</a>::<wbr><a class="mod" href="#">migration_guide</a><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><span class="out-of-band"><a class="src" href="../../src/bincode/lib.rs.html#188">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="migrating-from-bincode-1-to-2"><a class="doc-anchor" href="#migrating-from-bincode-1-to-2">§</a>Migrating from bincode 1 to 2</h2>
+<p>Bincode 2 now has an optional dependency on <code>serde</code>. You can either use <code>serde</code>, or use bincode’s own <code>derive</code> feature and macros.</p>
+<h3 id="from-options-to-configuration"><a class="doc-anchor" href="#from-options-to-configuration">§</a>From <code>Options</code> to <code>Configuration</code></h3>
+<p>Bincode 1 had the <a href="https://docs.rs/bincode/1/bincode/config/trait.Options.html">Options</a> trait. This has been replaced with the <a href="https://docs.rs/bincode/2.0.0-rc/bincode/config/struct.Configuration.html">Configuration</a> struct.</p>
+<p>If you’re using <code>Options</code>, you can change it like this:</p>
+
+<div class="example-wrap ignore"><a href="#" class="tooltip" title="This example is not tested">ⓘ</a><pre class="rust rust-example-rendered"><code>bincode_1::DefaultOptions::new().with_varint_encoding()
+
+bincode_2::config::legacy().with_variable_int_encoding()</code></pre></div>
+<p>If you want to be compatible with bincode 1, use the following table:</p>
+<div><table><thead><tr><th>Bincode 1</th><th>Bincode 2</th></tr></thead><tbody>
+<tr><td>version 1.0 - 1.2 with <code>bincode_1::DefaultOptions::new().serialize(T)</code></td><td><code>config::legacy()</code></td></tr>
+<tr><td>version 1.3+ with <code>bincode_1::DefaultOptions::new().serialize(T)</code></td><td><code>config::legacy().with_variable_int_encoding()</code></td></tr>
+<tr><td>No explicit <code>Options</code>, e.g. <code>bincode::serialize(T)</code></td><td><code>config::legacy()</code></td></tr>
+</tbody></table>
+</div>
+<p>If you do not care about compatibility with bincode 1, we recommend using <code>config::standard()</code></p>
+<p>The following changes have been made:</p>
+<ul>
+<li><code>.with_limit(n)</code> has been changed to <code>.with_limit::&lt;n&gt;()</code>.</li>
+<li><code>.with_native_endian()</code> has been removed. Use <code>.with_big_endian()</code> or <code>with_little_endian()</code> instead.</li>
+<li><code>.with_varint_encoding()</code> has been renamed to <code>.with_variable_int_encoding()</code>.</li>
+<li><code>.with_fixint_encoding()</code> has been renamed to <code>.with_fixed_int_encoding()</code>.</li>
+<li><code>.reject_trailing_bytes()</code> has been removed.</li>
+<li><code>.allow_trailing_bytes()</code> has been removed.</li>
+<li>You can no longer (de)serialize from the <code>Options</code> trait directly. Use one of the <code>encode_</code> or <code>decode_</code> methods.</li>
+</ul>
+<p>Because of confusion with <code>Options</code> defaults in bincode 1, we have made <code>Configuration</code> mandatory in all calls in bincode 2.</p>
+<h3 id="migrating-with-serde"><a class="doc-anchor" href="#migrating-with-serde">§</a>Migrating with <code>serde</code></h3>
+<p>Make sure to include bincode 2 with the <code>serde</code> feature enabled.</p>
+<div class="example-wrap"><pre class="language-toml"><code>[dependencies]
+bincode = { version = &quot;2.0.0-rc&quot;, features = [&quot;serde&quot;] }
+
+# Optionally you can disable the `derive` feature:
+# bincode = { version = &quot;2.0.0-rc&quot;, default-features = false, features = [&quot;std&quot;, &quot;serde&quot;] }
+</code></pre></div>
+<p>Then replace the following functions: (<code>Configuration</code> is <code>bincode::config::legacy()</code> by default)</p>
+<div><table><thead><tr><th>Bincode 1</th><th>Bincode 2</th></tr></thead><tbody>
+<tr><td><code>bincode::deserialize(&amp;[u8])</code></td><td><code>bincode::serde::decode_from_slice(&amp;[u8], Configuration)</code><br /><code>bincode::serde::decode_borrowed_from_slice(&amp;[u8], Configuration)</code></td></tr>
+<tr><td><code>bincode::deserialize_from(std::io::Read)</code></td><td><code>bincode::serde::decode_from_std_read(std::io::Read, Configuration)</code></td></tr>
+<tr><td><code>bincode::deserialize_from_custom(BincodeRead)</code></td><td><code>bincode::serde::decode_from_reader(Reader, Configuration)</code></td></tr>
+<tr><td></td><td></td></tr>
+<tr><td><code>bincode::serialize(T)</code></td><td><code>bincode::serde::encode_to_vec(T, Configuration)</code><br /><code>bincode::serde::encode_into_slice(T, &amp;mut [u8], Configuration)</code></td></tr>
+<tr><td><code>bincode::serialize_into(std::io::Write, T)</code></td><td><code>bincode::serde::encode_into_std_write(T, std::io::Write, Configuration)</code></td></tr>
+<tr><td><code>bincode::serialized_size(T)</code></td><td>Currently not implemented</td></tr>
+</tbody></table>
+</div><h3 id="migrating-to-bincode-derive"><a class="doc-anchor" href="#migrating-to-bincode-derive">§</a>Migrating to <code>bincode-derive</code></h3>
+<p><code>bincode-derive</code> is enabled by default. If you’re using <code>default-features = false</code>, make sure to add <code>features = [&quot;derive&quot;]</code> to your <code>Cargo.toml</code>.</p>
+<div class="example-wrap"><pre class="language-toml"><code>[dependencies]
+bincode = &quot;2.0.0-rc&quot;
+
+# If you need `no_std` with `alloc`:
+# bincode = { version = &quot;2.0.0-rc&quot;, default-features = false, features = [&quot;derive&quot;, &quot;alloc&quot;] }
+
+# If you need `no_std` and no `alloc`:
+# bincode = { version = &quot;2.0.0-rc&quot;, default-features = false, features = [&quot;derive&quot;] }
+</code></pre></div>
+<p>Replace or add the following attributes. You are able to use both <code>serde-derive</code> and <code>bincode-derive</code> side-by-side.</p>
+<div><table><thead><tr><th>serde-derive</th><th>bincode-derive</th></tr></thead><tbody>
+<tr><td><code>#[derive(serde::Serialize)]</code></td><td><code>#[derive(bincode::Encode)]</code></td></tr>
+<tr><td><code>#[derive(serde::Deserialize)]</code></td><td><code>#[derive(bincode::Decode)]</code></td></tr>
+</tbody></table>
+</div>
+<p><strong>note:</strong> To implement these traits manually, see the documentation of <a href="https://docs.rs/bincode/2.0.0-rc/bincode/enc/trait.Encode.html">Encode</a> and <a href="https://docs.rs/bincode/2.0.0-rc/bincode/de/trait.Decode.html">Decode</a>.</p>
+<p><strong>note:</strong> For more information on using <code>bincode-derive</code> with external libraries, see <a href="#bincode-derive-and-libraries">below</a>.</p>
+<p>Then replace the following functions: (<code>Configuration</code> is <code>bincode::config::legacy()</code> by default)</p>
+<div><table><thead><tr><th>Bincode 1</th><th>Bincode 2</th></tr></thead><tbody>
+<tr><td><code>bincode::deserialize(&amp;[u8])</code></td><td><code>bincode::decode_from_slice(&amp;bytes, Configuration)</code><br /><code>bincode::decode_borrowed_from_slice(&amp;[u8], Configuration)</code></td></tr>
+<tr><td><code>bincode::deserialize_from(std::io::Read)</code></td><td><code>bincode::decode_from_std_read(std::io::Read, Configuration)</code></td></tr>
+<tr><td><code>bincode::deserialize_from_custom(BincodeRead)</code></td><td><code>bincode::decode_from_reader(Reader, Configuration)</code></td></tr>
+<tr><td></td><td></td></tr>
+<tr><td><code>bincode::serialize(T)</code></td><td><code>bincode::encode_to_vec(T, Configuration)</code><br /><code>bincode::encode_into_slice(t: T, &amp;mut [u8], Configuration)</code></td></tr>
+<tr><td><code>bincode::serialize_into(std::io::Write, T)</code></td><td><code>bincode::encode_into_std_write(T, std::io::Write, Configuration)</code></td></tr>
+<tr><td><code>bincode::serialized_size(T)</code></td><td>Currently not implemented</td></tr>
+</tbody></table>
+</div><h4 id="bincode-derive-and-libraries"><a class="doc-anchor" href="#bincode-derive-and-libraries">§</a>Bincode derive and libraries</h4>
+<p>Currently not many libraries support the traits <code>Encode</code> and <code>Decode</code>. There are a couple of options if you want to use <code>#[derive(bincode::Encode, bincode::Decode)]</code>:</p>
+<ul>
+<li>Enable the <code>serde</code> feature and add a <code>#[bincode(with_serde)]</code> above each field that implements <code>serde::Serialize/Deserialize</code> but not <code>Encode/Decode</code></li>
+<li>Enable the <code>serde</code> feature and wrap your field in <a href="https://docs.rs/bincode/2.0.0-rc/bincode/serde/struct.Compat.html">bincode::serde::Compat</a> or <a href="https://docs.rs/bincode/2.0.0-rc/bincode/serde/struct.BorrowCompat.html">bincode::serde::BorrowCompat</a></li>
+<li>Make a pull request to the library:
+<ul>
+<li>Make sure to be respectful, most of the developers are doing this in their free time.</li>
+<li>Add a dependency <code>bincode = { version = &quot;2.0.0-rc&quot;, default-features = false, optional = true }</code> to the <code>Cargo.toml</code></li>
+<li>Implement <a href="https://docs.rs/bincode/2.0.0-rc/bincode/enc/trait.Encode.html">Encode</a></li>
+<li>Implement <a href="https://docs.rs/bincode/2.0.0-rc/bincode/de/trait.Decode.html">Decode</a></li>
+<li>Make sure both of these implementations have a <code>#[cfg(feature = &quot;bincode&quot;)]</code> attribute.</li>
+</ul>
+</li>
+</ul>
+</div></details></section></div></main></body></html>

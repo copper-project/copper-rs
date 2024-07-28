@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Value"],"fn":["from_bytes","from_file","from_reader","from_reader_ascii","from_reader_xml","from_value","to_file_binary","to_file_xml","to_value","to_writer_binary","to_writer_xml","to_writer_xml_with_options"],"mod":["dictionary"],"struct":["Data","Date","Error","Integer","InvalidXmlDate","Uid","XmlWriteOptions"]};

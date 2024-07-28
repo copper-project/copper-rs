@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["diopter","reciprocal_angstrom","reciprocal_centimeter","reciprocal_decimeter","reciprocal_kilometer","reciprocal_meter","reciprocal_micrometer","reciprocal_millimeter","reciprocal_nanometer","rydberg_constant"],"trait":["Conversion","Unit"],"type":["Dimension","ReciprocalLength"]};

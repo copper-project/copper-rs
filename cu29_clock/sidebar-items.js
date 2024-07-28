@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["CuDuration","Instant","OptionCuTime","RobotClock","RobotClockMock"],"trait":["ClockProvider"],"type":["CuTime"]};

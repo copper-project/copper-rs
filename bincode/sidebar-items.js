@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"derive":["BorrowDecode","Decode","Encode"],"fn":["borrow_decode_from_slice","decode_from_reader","decode_from_slice","decode_from_std_read","encode_into_slice","encode_into_std_write","encode_into_writer","encode_to_vec"],"macro":["impl_borrow_decode"],"mod":["config","de","enc","error","migration_guide","spec"]};

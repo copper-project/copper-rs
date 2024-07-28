@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["get_bits_per_word","get_lsb_first","get_max_speed_hz","get_mode","set_bits_per_word","set_lsb_first","set_max_speed_hz","set_mode","transfer","transfer_multiple"],"struct":["spi_ioc_transfer"],"type":["SpidevTransfer"]};

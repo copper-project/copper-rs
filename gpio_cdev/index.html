@@ -1,0 +1,63 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="The `gpio-cdev` crate provides access to the GPIO character device ABI.  This API, stabilized with Linux v4.4, deprecates the legacy sysfs interface to GPIOs that is planned to be removed from the upstream kernel after year 2020 (which is coming up quickly)."><title>gpio_cdev - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../static.files/rustdoc-dd39b87e5fcfba68.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="gpio_cdev" data-themes="" data-resource-suffix="" data-rustdoc-version="1.80.0 (051478957 2024-07-21)" data-channel="1.80.0" data-search-js="search-d52510db62a78183.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-20a3ad099b048cf2.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-df360f571f6edeae.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../gpio_cdev/index.html">gpio_cdev</a><span class="version">0.6.0</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section><ul class="block"><li><a href="#modules">Modules</a></li><li><a href="#structs">Structs</a></li><li><a href="#enums">Enums</a></li><li><a href="#functions">Functions</a></li></ul></section></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Crate <a class="mod" href="#">gpio_cdev</a><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><span class="out-of-band"><a class="src" href="../src/gpio_cdev/lib.rs.html#9-1041">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>The <code>gpio-cdev</code> crate provides access to the <a href="https://www.kernel.org/doc/Documentation/ABI/testing/gpio-cdev">GPIO character device
+ABI</a>.  This API,
+stabilized with Linux v4.4, deprecates the legacy sysfs interface to GPIOs that is
+planned to be removed from the upstream kernel after
+year 2020 (which is coming up quickly).</p>
+<p>This crate attempts to wrap this interface in a moderately direction fashion
+while retaining safety and using Rust idioms (where doing so could be mapped
+to the underlying abstraction without significant overhead or loss of
+functionality).</p>
+<p>For additional context for why the kernel is moving from the sysfs API to the
+character device API, please see the main <a href="https://github.com/rust-embedded/rust-gpio-cdev">README on Github</a>.</p>
+<h2 id="examples"><a class="doc-anchor" href="#examples">§</a>Examples</h2>
+<p>The following example reads the state of a GPIO line/pin and writes the matching
+state to another line/pin.</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>gpio_cdev::{Chip, LineRequestFlags, EventRequestFlags, EventType};
+
+<span class="comment">// Lines are offset within gpiochip0; see docs for more info on chips/lines
+</span><span class="kw">fn </span>mirror_gpio(inputline: u32, outputline: u32) -&gt; <span class="prelude-ty">Result</span>&lt;(), gpio_cdev::Error&gt; {
+    <span class="kw">let </span><span class="kw-2">mut </span>chip = Chip::new(<span class="string">"/dev/gpiochip0"</span>)<span class="question-mark">?</span>;
+    <span class="kw">let </span>input = chip.get_line(inputline)<span class="question-mark">?</span>;
+    <span class="kw">let </span>output = chip.get_line(outputline)<span class="question-mark">?</span>;
+    <span class="kw">let </span>output_handle = output.request(LineRequestFlags::OUTPUT, <span class="number">0</span>, <span class="string">"mirror-gpio"</span>)<span class="question-mark">?</span>;
+    <span class="kw">for </span>event <span class="kw">in </span>input.events(
+        LineRequestFlags::INPUT,
+        EventRequestFlags::BOTH_EDGES,
+        <span class="string">"mirror-gpio"</span>,
+    )<span class="question-mark">? </span>{
+        <span class="kw">let </span>evt = event<span class="question-mark">?</span>;
+        <span class="macro">println!</span>(<span class="string">"{:?}"</span>, evt);
+        <span class="kw">match </span>evt.event_type() {
+            EventType::RisingEdge =&gt; {
+                output_handle.set_value(<span class="number">1</span>)<span class="question-mark">?</span>;
+            }
+            EventType::FallingEdge =&gt; {
+                output_handle.set_value(<span class="number">0</span>)<span class="question-mark">?</span>;
+            }
+        }
+    }
+
+    <span class="prelude-val">Ok</span>(())
+}
+</code></pre></div>
+<p>To get the state of a GPIO Line on a given chip:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>gpio_cdev::{Chip, LineRequestFlags};
+
+<span class="comment">// Read the state of GPIO4 on a raspberry pi.  /dev/gpiochip0
+// maps to the driver for the SoC (builtin) GPIO controller.
+// The LineHandle returned by request must be assigned to a
+// variable (in this case the variable handle) to ensure that
+// the corresponding file descriptor is not closed.
+</span><span class="kw">let </span><span class="kw-2">mut </span>chip = Chip::new(<span class="string">"/dev/gpiochip0"</span>)<span class="question-mark">?</span>;
+<span class="kw">let </span>handle = chip
+    .get_line(<span class="number">4</span>)<span class="question-mark">?
+    </span>.request(LineRequestFlags::INPUT, <span class="number">0</span>, <span class="string">"read-input"</span>)<span class="question-mark">?</span>;
+<span class="kw">for _ in </span><span class="number">1</span>..<span class="number">4 </span>{
+    <span class="macro">println!</span>(<span class="string">"Value: {:?}"</span>, handle.get_value()<span class="question-mark">?</span>);
+}</code></pre></div>
+</div></details><h2 id="reexports" class="section-header">Re-exports<a href="#reexports" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><code>pub use <a class="mod" href="errors/index.html" title="mod gpio_cdev::errors">errors</a>::*;</code></div></li></ul><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="mod" href="errors/index.html" title="mod gpio_cdev::errors">errors</a></div><div class="desc docblock-short">This module is deprecated and types are exported from the top-level of the crate</div></li></ul><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="struct" href="struct.Chip.html" title="struct gpio_cdev::Chip">Chip</a></div><div class="desc docblock-short">A GPIO Chip maps to the actual device driver instance in hardware that
+one interacts with to interact with individual GPIOs.  Often these chips
+map to IP chunks on an SoC but could also be enumerated within the kernel
+via something like a PCI or USB bus.</div></li><li><div class="item-name"><a class="struct" href="struct.ChipIterator.html" title="struct gpio_cdev::ChipIterator">ChipIterator</a></div><div class="desc docblock-short">Iterator over chips</div></li><li><div class="item-name"><a class="struct" href="struct.EventRequestFlags.html" title="struct gpio_cdev::EventRequestFlags">EventRequestFlags</a></div><div class="desc docblock-short">Event request flags</div></li><li><div class="item-name"><a class="struct" href="struct.Line.html" title="struct gpio_cdev::Line">Line</a></div><div class="desc docblock-short">Access to a specific GPIO Line</div></li><li><div class="item-name"><a class="struct" href="struct.LineEvent.html" title="struct gpio_cdev::LineEvent">LineEvent</a></div><div class="desc docblock-short">Information about a change to the state of a Line</div></li><li><div class="item-name"><a class="struct" href="struct.LineEventHandle.html" title="struct gpio_cdev::LineEventHandle">LineEventHandle</a></div><div class="desc docblock-short">Handle for retrieving events from the kernel for a line</div></li><li><div class="item-name"><a class="struct" href="struct.LineFlags.html" title="struct gpio_cdev::LineFlags">LineFlags</a></div><div class="desc docblock-short">Informational Flags</div></li><li><div class="item-name"><a class="struct" href="struct.LineHandle.html" title="struct gpio_cdev::LineHandle">LineHandle</a></div><div class="desc docblock-short">Handle for interacting with a “requested” line</div></li><li><div class="item-name"><a class="struct" href="struct.LineInfo.html" title="struct gpio_cdev::LineInfo">LineInfo</a></div><div class="desc docblock-short">Information about a specific GPIO Line</div></li><li><div class="item-name"><a class="struct" href="struct.LineIterator.html" title="struct gpio_cdev::LineIterator">LineIterator</a></div><div class="desc docblock-short">Iterator over GPIO Lines for a given chip.</div></li><li><div class="item-name"><a class="struct" href="struct.LineRequestFlags.html" title="struct gpio_cdev::LineRequestFlags">LineRequestFlags</a></div><div class="desc docblock-short">Line Request Flags</div></li><li><div class="item-name"><a class="struct" href="struct.Lines.html" title="struct gpio_cdev::Lines">Lines</a></div><div class="desc docblock-short">A collection of lines that can be accesses simultaneously</div></li><li><div class="item-name"><a class="struct" href="struct.MultiLineHandle.html" title="struct gpio_cdev::MultiLineHandle">MultiLineHandle</a></div><div class="desc docblock-short">Handle for interacting with a “requested” line</div></li></ul><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="enum" href="enum.EventType.html" title="enum gpio_cdev::EventType">EventType</a></div><div class="desc docblock-short">Did the Line rise (go active) or fall (go inactive)?</div></li><li><div class="item-name"><a class="enum" href="enum.IoctlKind.html" title="enum gpio_cdev::IoctlKind">IoctlKind</a></div></li><li><div class="item-name"><a class="enum" href="enum.LineDirection.html" title="enum gpio_cdev::LineDirection">LineDirection</a></div><div class="desc docblock-short">In or Out</div></li></ul><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="fn" href="fn.chips.html" title="fn gpio_cdev::chips">chips</a></div><div class="desc docblock-short">Iterate over all GPIO chips currently present on this system</div></li></ul></section></div></main></body></html>

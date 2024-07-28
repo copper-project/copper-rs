@@ -1,0 +1,39 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="You can use `mut_array_refs` to generate a series of mutable array references to an input mutable array reference.  The idea is if you want to break an array into a series of contiguous and non-overlapping mutable array references.  Like `array_refs!`, `mut_array_refs!` is a bit funny in that it insists on slicing up the entire array.  This is intentional, as I find it handy to make me ensure that my sub-arrays add up to the entire array. This macro will never panic, since the sizes are all checked at compile time."><title>mut_array_refs in arrayref - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../static.files/rustdoc-dd39b87e5fcfba68.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="arrayref" data-themes="" data-resource-suffix="" data-rustdoc-version="1.80.0 (051478957 2024-07-21)" data-channel="1.80.0" data-search-js="search-d52510db62a78183.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../static.files/storage-118b08c4c78b968e.js"></script><script defer src="sidebar-items.js"></script><script defer src="../static.files/main-20a3ad099b048cf2.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-df360f571f6edeae.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc macro"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../arrayref/index.html">arrayref</a><span class="version">0.3.8</span></h2></div><div class="sidebar-elems"></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Macro <a href="index.html">arrayref</a>::<wbr><a class="macro" href="#">mut_array_refs</a><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><span class="out-of-band"><a class="src" href="../src/arrayref/lib.rs.html#202-256">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><pre class="rust item-decl"><span class="macro">macro_rules!</span> mut_array_refs {
+    ( <span class="macro-nonterminal">$arr</span>:expr, $( <span class="macro-nonterminal">$pre</span>:expr ),* ; .. ;  $( <span class="macro-nonterminal">$post</span>:expr ),* ) =&gt; { ... };
+    ( <span class="macro-nonterminal">$arr</span>:expr, $( <span class="macro-nonterminal">$len</span>:expr ),* ) =&gt; { ... };
+}</pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>You can use <code>mut_array_refs</code> to generate a series of mutable array
+references to an input mutable array reference.  The idea is if
+you want to break an array into a series of contiguous and
+non-overlapping mutable array references.  Like <code>array_refs!</code>,
+<code>mut_array_refs!</code> is a bit funny in that it insists on slicing up
+the <em>entire</em> array.  This is intentional, as I find it handy to
+make me ensure that my sub-arrays add up to the entire array.
+This macro will <em>never</em> panic, since the sizes are all checked at
+compile time.</p>
+<p>Note that unlike <code>array_mut_ref!</code>, <code>mut_array_refs</code> <em>requires</em>
+that the first argument be a mutable array reference.  The
+following arguments are the lengths of each subarray you wish a
+reference to.  The total of these arguments <em>must</em> equal the size
+of the array itself.  Also note that this macro allows you to take
+out multiple mutable references to a single object, which is both
+weird and powerful.</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="attr">#[macro_use]
+</span><span class="kw">extern crate </span>arrayref;
+
+<span class="kw">fn </span>write_u16(bytes: <span class="kw-2">&amp;mut </span>[u8; <span class="number">2</span>], num: u16) {
+     bytes[<span class="number">0</span>] = num <span class="kw">as </span>u8;
+     bytes[<span class="number">1</span>] = (num &gt;&gt; <span class="number">8</span>) <span class="kw">as </span>u8;
+}
+<span class="kw">fn </span>write_u32(bytes: <span class="kw-2">&amp;mut </span>[u8; <span class="number">4</span>], num: u32) {
+     bytes[<span class="number">0</span>] = num <span class="kw">as </span>u8;
+     bytes[<span class="number">1</span>] = (num &gt;&gt; <span class="number">8</span>) <span class="kw">as </span>u8; <span class="comment">// this is buggy to save space...
+</span>}
+<span class="comment">// ...
+</span><span class="kw">let </span><span class="kw-2">mut </span>data = [<span class="number">0</span>,<span class="number">1</span>,<span class="number">2</span>,<span class="number">3</span>,<span class="number">4</span>,<span class="number">0</span>,<span class="number">6</span>,<span class="number">7</span>];
+<span class="kw">let </span>(a,b,c) = <span class="macro">mut_array_refs!</span>[<span class="kw-2">&amp;mut </span>data,<span class="number">2</span>,<span class="number">2</span>,<span class="number">4</span>];
+<span class="comment">// let's write out some nice prime numbers!
+</span>write_u16(a, <span class="number">37</span>);
+write_u16(b, <span class="number">73</span>);
+write_u32(c, <span class="number">137</span>); <span class="comment">// approximate inverse of the fine structure constant!</span></code></pre></div>
+</div></details></section></div></main></body></html>

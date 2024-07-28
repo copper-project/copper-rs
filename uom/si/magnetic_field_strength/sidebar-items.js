@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["ampere_per_centimeter","ampere_per_meter","ampere_per_micrometer","ampere_per_millimeter","oersted"],"trait":["Conversion","Unit"],"type":["Dimension","MagneticFieldStrength"]};

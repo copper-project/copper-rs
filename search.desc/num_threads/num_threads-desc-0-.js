@@ -1,0 +1,1 @@
+searchState.loadedDescShard("num_threads", 0, "Minimum supported Rust version: 1.28\nDetermine if the current process is single-threaded. …\nObtain the number of threads currently part of the active …")

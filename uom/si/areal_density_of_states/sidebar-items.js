@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["state_per_square_centimeter_electronvolt","state_per_square_centimeter_joule","state_per_square_meter_joule"],"trait":["Conversion","Unit"],"type":["ArealDensityOfStates","Dimension"]};

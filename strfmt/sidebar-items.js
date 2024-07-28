@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Alignment","FmtError","Sign"],"fn":["strfmt","strfmt_display","strfmt_map"],"macro":["strfmt","strfmt_builder"],"struct":["Formatter"],"trait":["DisplayStr","Format"],"type":["Result"]};

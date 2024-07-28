@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"trait":["I2CDevice","I2CMessage","I2CTransfer"]};

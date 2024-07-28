@@ -1,0 +1,255 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-6f17d22bba15001f/syntect-5.2.0/src/highlighting/theme.rs`."><title>theme.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../static.files/rustdoc-dd39b87e5fcfba68.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="syntect" data-themes="" data-resource-suffix="" data-rustdoc-version="1.80.0 (051478957 2024-07-21)" data-channel="1.80.0" data-search-js="search-d52510db62a78183.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../../../static.files/src-script-e66d777a5a92e9b2.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-20a3ad099b048cf2.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-df360f571f6edeae.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
+<a href="#2" id="2">2</a>
+<a href="#3" id="3">3</a>
+<a href="#4" id="4">4</a>
+<a href="#5" id="5">5</a>
+<a href="#6" id="6">6</a>
+<a href="#7" id="7">7</a>
+<a href="#8" id="8">8</a>
+<a href="#9" id="9">9</a>
+<a href="#10" id="10">10</a>
+<a href="#11" id="11">11</a>
+<a href="#12" id="12">12</a>
+<a href="#13" id="13">13</a>
+<a href="#14" id="14">14</a>
+<a href="#15" id="15">15</a>
+<a href="#16" id="16">16</a>
+<a href="#17" id="17">17</a>
+<a href="#18" id="18">18</a>
+<a href="#19" id="19">19</a>
+<a href="#20" id="20">20</a>
+<a href="#21" id="21">21</a>
+<a href="#22" id="22">22</a>
+<a href="#23" id="23">23</a>
+<a href="#24" id="24">24</a>
+<a href="#25" id="25">25</a>
+<a href="#26" id="26">26</a>
+<a href="#27" id="27">27</a>
+<a href="#28" id="28">28</a>
+<a href="#29" id="29">29</a>
+<a href="#30" id="30">30</a>
+<a href="#31" id="31">31</a>
+<a href="#32" id="32">32</a>
+<a href="#33" id="33">33</a>
+<a href="#34" id="34">34</a>
+<a href="#35" id="35">35</a>
+<a href="#36" id="36">36</a>
+<a href="#37" id="37">37</a>
+<a href="#38" id="38">38</a>
+<a href="#39" id="39">39</a>
+<a href="#40" id="40">40</a>
+<a href="#41" id="41">41</a>
+<a href="#42" id="42">42</a>
+<a href="#43" id="43">43</a>
+<a href="#44" id="44">44</a>
+<a href="#45" id="45">45</a>
+<a href="#46" id="46">46</a>
+<a href="#47" id="47">47</a>
+<a href="#48" id="48">48</a>
+<a href="#49" id="49">49</a>
+<a href="#50" id="50">50</a>
+<a href="#51" id="51">51</a>
+<a href="#52" id="52">52</a>
+<a href="#53" id="53">53</a>
+<a href="#54" id="54">54</a>
+<a href="#55" id="55">55</a>
+<a href="#56" id="56">56</a>
+<a href="#57" id="57">57</a>
+<a href="#58" id="58">58</a>
+<a href="#59" id="59">59</a>
+<a href="#60" id="60">60</a>
+<a href="#61" id="61">61</a>
+<a href="#62" id="62">62</a>
+<a href="#63" id="63">63</a>
+<a href="#64" id="64">64</a>
+<a href="#65" id="65">65</a>
+<a href="#66" id="66">66</a>
+<a href="#67" id="67">67</a>
+<a href="#68" id="68">68</a>
+<a href="#69" id="69">69</a>
+<a href="#70" id="70">70</a>
+<a href="#71" id="71">71</a>
+<a href="#72" id="72">72</a>
+<a href="#73" id="73">73</a>
+<a href="#74" id="74">74</a>
+<a href="#75" id="75">75</a>
+<a href="#76" id="76">76</a>
+<a href="#77" id="77">77</a>
+<a href="#78" id="78">78</a>
+<a href="#79" id="79">79</a>
+<a href="#80" id="80">80</a>
+<a href="#81" id="81">81</a>
+<a href="#82" id="82">82</a>
+<a href="#83" id="83">83</a>
+<a href="#84" id="84">84</a>
+<a href="#85" id="85">85</a>
+<a href="#86" id="86">86</a>
+<a href="#87" id="87">87</a>
+<a href="#88" id="88">88</a>
+<a href="#89" id="89">89</a>
+<a href="#90" id="90">90</a>
+<a href="#91" id="91">91</a>
+<a href="#92" id="92">92</a>
+<a href="#93" id="93">93</a>
+<a href="#94" id="94">94</a>
+<a href="#95" id="95">95</a>
+<a href="#96" id="96">96</a>
+<a href="#97" id="97">97</a>
+<a href="#98" id="98">98</a>
+<a href="#99" id="99">99</a>
+<a href="#100" id="100">100</a>
+<a href="#101" id="101">101</a>
+<a href="#102" id="102">102</a>
+<a href="#103" id="103">103</a>
+<a href="#104" id="104">104</a>
+<a href="#105" id="105">105</a>
+<a href="#106" id="106">106</a>
+<a href="#107" id="107">107</a>
+<a href="#108" id="108">108</a>
+<a href="#109" id="109">109</a>
+<a href="#110" id="110">110</a>
+<a href="#111" id="111">111</a>
+<a href="#112" id="112">112</a>
+<a href="#113" id="113">113</a>
+<a href="#114" id="114">114</a>
+<a href="#115" id="115">115</a>
+<a href="#116" id="116">116</a>
+<a href="#117" id="117">117</a>
+<a href="#118" id="118">118</a>
+<a href="#119" id="119">119</a>
+<a href="#120" id="120">120</a>
+<a href="#121" id="121">121</a>
+<a href="#122" id="122">122</a>
+<a href="#123" id="123">123</a>
+<a href="#124" id="124">124</a>
+<a href="#125" id="125">125</a>
+<a href="#126" id="126">126</a>
+<a href="#127" id="127">127</a>
+</pre></div><pre class="rust"><code><span class="comment">// Code based on https://github.com/defuz/sublimate/blob/master/src/core/syntax/theme.rs
+// released under the MIT license by @defuz
+</span><span class="kw">use </span><span class="kw">super</span>::style::<span class="kw-2">*</span>;
+<span class="kw">use </span><span class="kw">super</span>::selector::<span class="kw-2">*</span>;
+<span class="kw">use </span>serde_derive::{Deserialize, Serialize};
+
+<span class="doccomment">/// A theme parsed from a `.tmTheme` file.
+///
+/// This contains additional fields useful for a theme list as well as `settings` for styling your editor.
+</span><span class="attr">#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+</span><span class="kw">pub struct </span>Theme {
+    <span class="kw">pub </span>name: <span class="prelude-ty">Option</span>&lt;String&gt;,
+    <span class="kw">pub </span>author: <span class="prelude-ty">Option</span>&lt;String&gt;,
+    <span class="doccomment">/// External settings for the editor using this theme
+    </span><span class="kw">pub </span>settings: ThemeSettings,
+    <span class="doccomment">/// The styling rules for the viewed text
+    </span><span class="kw">pub </span>scopes: Vec&lt;ThemeItem&gt;,
+}
+
+<span class="doccomment">/// Properties for styling the UI of a text editor
+///
+/// This essentially consists of the styles that aren't directly applied to the text being viewed.
+/// `ThemeSettings` are intended to be used to make the UI of the editor match the styling of the
+/// text itself.
+</span><span class="attr">#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+</span><span class="kw">pub struct </span>ThemeSettings {
+    <span class="doccomment">/// The default color for text.
+    </span><span class="kw">pub </span>foreground: <span class="prelude-ty">Option</span>&lt;Color&gt;,
+    <span class="doccomment">/// The default backgound color of the view.
+    </span><span class="kw">pub </span>background: <span class="prelude-ty">Option</span>&lt;Color&gt;,
+    <span class="doccomment">/// Color of the caret.
+    </span><span class="kw">pub </span>caret: <span class="prelude-ty">Option</span>&lt;Color&gt;,
+    <span class="doccomment">/// Color of the line the caret is in.
+    /// Only used when the `highlight_line` setting is set to `true`.
+    </span><span class="kw">pub </span>line_highlight: <span class="prelude-ty">Option</span>&lt;Color&gt;,
+
+    <span class="doccomment">/// The color to use for the squiggly underline drawn under misspelled words.
+    </span><span class="kw">pub </span>misspelling: <span class="prelude-ty">Option</span>&lt;Color&gt;,
+    <span class="doccomment">/// The color of the border drawn around the viewport area of the minimap.
+    /// Only used when the `draw_minimap_border` setting is enabled.
+    </span><span class="kw">pub </span>minimap_border: <span class="prelude-ty">Option</span>&lt;Color&gt;,
+    <span class="doccomment">/// A color made available for use by the theme.
+    </span><span class="kw">pub </span>accent: <span class="prelude-ty">Option</span>&lt;Color&gt;,
+    <span class="doccomment">/// CSS passed to popups.
+    </span><span class="kw">pub </span>popup_css: <span class="prelude-ty">Option</span>&lt;String&gt;,
+    <span class="doccomment">/// CSS passed to phantoms.
+    </span><span class="kw">pub </span>phantom_css: <span class="prelude-ty">Option</span>&lt;String&gt;,
+
+    <span class="doccomment">/// Color of bracketed sections of text when the caret is in a bracketed section.
+    /// Only applied when the `match_brackets` setting is set to `true`.
+    </span><span class="kw">pub </span>bracket_contents_foreground: <span class="prelude-ty">Option</span>&lt;Color&gt;,
+    <span class="doccomment">/// Controls certain options when the caret is in a bracket section.
+    /// Only applied when the `match_brackets` setting is set to `true`.
+    </span><span class="kw">pub </span>bracket_contents_options: <span class="prelude-ty">Option</span>&lt;UnderlineOption&gt;,
+    <span class="doccomment">/// Foreground color of the brackets when the caret is next to a bracket.
+    /// Only applied when the `match_brackets` setting is set to `true`.
+    </span><span class="kw">pub </span>brackets_foreground: <span class="prelude-ty">Option</span>&lt;Color&gt;,
+    <span class="doccomment">/// Background color of the brackets when the caret is next to a bracket.
+    /// Only applied when the `match_brackets` setting is set to `true`.
+    </span><span class="kw">pub </span>brackets_background: <span class="prelude-ty">Option</span>&lt;Color&gt;,
+    <span class="doccomment">/// Controls certain options when the caret is next to a bracket.
+    /// Only applied when the `match_brackets` setting is set to `true`.
+    </span><span class="kw">pub </span>brackets_options: <span class="prelude-ty">Option</span>&lt;UnderlineOption&gt;,
+
+    <span class="doccomment">/// Color of tags when the caret is next to a tag.
+    /// Only used when the `match_tags` setting is set to `true`.
+    </span><span class="kw">pub </span>tags_foreground: <span class="prelude-ty">Option</span>&lt;Color&gt;,
+    <span class="doccomment">/// Controls certain options when the caret is next to a tag.
+    /// Only applied when the `match_tags` setting is set to `true`.
+    </span><span class="kw">pub </span>tags_options: <span class="prelude-ty">Option</span>&lt;UnderlineOption&gt;,
+
+    <span class="doccomment">/// The border color for "other" matches.
+    </span><span class="kw">pub </span>highlight: <span class="prelude-ty">Option</span>&lt;Color&gt;,
+    <span class="doccomment">/// Background color of regions matching the current search.
+    </span><span class="kw">pub </span>find_highlight: <span class="prelude-ty">Option</span>&lt;Color&gt;,
+    <span class="doccomment">/// Text color of regions matching the current search.
+    </span><span class="kw">pub </span>find_highlight_foreground: <span class="prelude-ty">Option</span>&lt;Color&gt;,
+
+    <span class="doccomment">/// Background color of the gutter.
+    </span><span class="kw">pub </span>gutter: <span class="prelude-ty">Option</span>&lt;Color&gt;,
+    <span class="doccomment">/// Foreground color of the gutter.
+    </span><span class="kw">pub </span>gutter_foreground: <span class="prelude-ty">Option</span>&lt;Color&gt;,
+
+    <span class="doccomment">/// The background color of selected text.
+    </span><span class="kw">pub </span>selection: <span class="prelude-ty">Option</span>&lt;Color&gt;,
+    <span class="doccomment">/// A color that will override the scope-based text color of the selection.
+    </span><span class="kw">pub </span>selection_foreground: <span class="prelude-ty">Option</span>&lt;Color&gt;,
+
+    <span class="doccomment">/// Color of the selection regions border.
+    </span><span class="kw">pub </span>selection_border: <span class="prelude-ty">Option</span>&lt;Color&gt;,
+    <span class="doccomment">/// The background color of a selection in a view that is not currently focused.
+    </span><span class="kw">pub </span>inactive_selection: <span class="prelude-ty">Option</span>&lt;Color&gt;,
+    <span class="doccomment">/// A color that will override the scope-based text color of the selection
+    /// in a view that is not currently focused.
+    </span><span class="kw">pub </span>inactive_selection_foreground: <span class="prelude-ty">Option</span>&lt;Color&gt;,
+
+    <span class="doccomment">/// Color of the guides displayed to indicate nesting levels.
+    </span><span class="kw">pub </span>guide: <span class="prelude-ty">Option</span>&lt;Color&gt;,
+    <span class="doccomment">/// Color of the guide lined up with the caret.
+    /// Only applied if the `indent_guide_options` setting is set to `draw_active`.
+    </span><span class="kw">pub </span>active_guide: <span class="prelude-ty">Option</span>&lt;Color&gt;,
+    <span class="doccomment">/// Color of the current guide’s parent guide level.
+    /// Only used if the `indent_guide_options` setting is set to `draw_active`.
+    </span><span class="kw">pub </span>stack_guide: <span class="prelude-ty">Option</span>&lt;Color&gt;,
+
+    <span class="doccomment">/// The color of the shadow used when a text area can be horizontally scrolled.
+    </span><span class="kw">pub </span>shadow: <span class="prelude-ty">Option</span>&lt;Color&gt;,
+}
+
+<span class="doccomment">/// A component of a theme meant to highlight a specific thing (e.g string literals)
+/// in a certain way.
+</span><span class="attr">#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+</span><span class="kw">pub struct </span>ThemeItem {
+    <span class="doccomment">/// Target scope name.
+    </span><span class="kw">pub </span>scope: ScopeSelectors,
+    <span class="doccomment">/// The style to use for this component
+    </span><span class="kw">pub </span>style: StyleModifier,
+}
+
+<span class="attr">#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
+</span><span class="kw">pub enum </span>UnderlineOption {
+    <span class="attr">#[default]
+    </span><span class="prelude-val">None</span>,
+    Underline,
+    StippledUnderline,
+    SquigglyUnderline,
+}
+</code></pre></div></section></main></body></html>

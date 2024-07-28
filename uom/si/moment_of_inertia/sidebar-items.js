@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["dalton_square_angstrom","kilogram_square_meter"],"trait":["Conversion","Unit"],"type":["Dimension","MomentOfInertia"]};

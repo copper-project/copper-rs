@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["per_centimeter","per_decimeter","per_foot","per_foot_survey","per_inch","per_kilometer","per_meter","per_mile","per_mile_survey","per_millimeter","per_nautical_mile","per_yard"],"trait":["Conversion","Unit"],"type":["Dimension","LinearNumberDensity"]};

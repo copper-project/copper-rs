@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["LinuxI2CError"],"struct":["I2CMessageFlags","LinuxI2CBus","LinuxI2CDevice","LinuxI2CMessage"]};

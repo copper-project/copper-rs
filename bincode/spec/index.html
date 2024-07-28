@@ -1,0 +1,131 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Serialization specification"><title>bincode::spec - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-dd39b87e5fcfba68.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="bincode" data-themes="" data-resource-suffix="" data-rustdoc-version="1.80.0 (051478957 2024-07-21)" data-channel="1.80.0" data-search-js="search-d52510db62a78183.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../static.files/main-20a3ad099b048cf2.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-df360f571f6edeae.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../bincode/index.html">bincode</a><span class="version">2.0.0-rc.3</span></h2></div><h2 class="location"><a href="#">Module spec</a></h2><div class="sidebar-elems"><h2><a href="../index.html">In crate bincode</a></h2></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Module <a href="../index.html">bincode</a>::<wbr><a class="mod" href="#">spec</a><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><span class="out-of-band"><a class="src" href="../../src/bincode/lib.rs.html#183">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="serialization-specification"><a class="doc-anchor" href="#serialization-specification">§</a>Serialization specification</h2>
+<p><em>NOTE</em>: Serialization is done by <code>bincode_derive</code> by default. If you enable the <code>serde</code> flag, serialization with <code>serde-derive</code> is supported as well. <code>serde-derive</code> has the same guarantees as <code>bincode_derive</code> for now.</p>
+<p>Related issue: <a href="https://github.com/serde-rs/serde/issues/1756#issuecomment-689682123">https://github.com/serde-rs/serde/issues/1756#issuecomment-689682123</a></p>
+<h3 id="endian"><a class="doc-anchor" href="#endian">§</a>Endian</h3>
+<p>By default <code>bincode</code> will serialize values in little endian encoding. This can be overwritten in the <code>Config</code>.</p>
+<h3 id="basic-types"><a class="doc-anchor" href="#basic-types">§</a>Basic types</h3>
+<p>Boolean types are encoded with 1 byte for each boolean type, with <code>0</code> being <code>false</code>, <code>1</code> being true. Whilst deserializing every other value will throw an error.</p>
+<p>All basic numeric types will be encoded based on the configured <a href="#intencoding">IntEncoding</a>.</p>
+<p>All floating point types will take up exactly 4 (for <code>f32</code>) or 8 (for <code>f64</code>) bytes.</p>
+<p>All tuples have no additional bytes, and are encoded in their specified order, e.g.</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">let </span>tuple = (u32::min_value(), i32::max_value()); <span class="comment">// 8 bytes
+</span><span class="kw">let </span>encoded = bincode::encode_to_vec(tuple, bincode::config::legacy()).unwrap();
+<span class="macro">assert_eq!</span>(encoded.as_slice(), <span class="kw-2">&amp;</span>[
+    <span class="number">0</span>,   <span class="number">0</span>,   <span class="number">0</span>,   <span class="number">0</span>,  <span class="comment">// 4 bytes for first type:  u32
+    </span><span class="number">255</span>, <span class="number">255</span>, <span class="number">255</span>, <span class="number">127 </span><span class="comment">// 4 bytes for second type: i32
+</span>]);</code></pre></div>
+<h3 id="intencoding"><a class="doc-anchor" href="#intencoding">§</a>IntEncoding</h3>
+<p>Bincode currently supports 2 different types of <code>IntEncoding</code>. With the default config, <code>VarintEncoding</code> is selected.</p>
+<h4 id="varintencoding"><a class="doc-anchor" href="#varintencoding">§</a>VarintEncoding</h4>
+<p>Encoding an unsigned integer v (of any type excepting u8/i8) works as follows:</p>
+<ol>
+<li>If <code>u &lt; 251</code>, encode it as a single byte with that value.</li>
+<li>If <code>251 &lt;= u &lt; 2**16</code>, encode it as a literal byte 251, followed by a u16 with value <code>u</code>.</li>
+<li>If <code>2**16 &lt;= u &lt; 2**32</code>, encode it as a literal byte 252, followed by a u32 with value <code>u</code>.</li>
+<li>If <code>2**32 &lt;= u &lt; 2**64</code>, encode it as a literal byte 253, followed by a u64 with value <code>u</code>.</li>
+<li>If <code>2**64 &lt;= u &lt; 2**128</code>, encode it as a literal byte 254, followed by a u128 with value <code>u</code>.</li>
+</ol>
+<p><code>usize</code> is being encoded/decoded as a <code>u64</code> and <code>isize</code> is being encoded/decoded as a <code>i64</code>.</p>
+<p>See the documentation of <a href="https://docs.rs/bincode/2.0.0-rc/bincode/config/struct.Configuration.html#method.with_variable_int_encoding">VarintEncoding</a> for more information.</p>
+<h4 id="fixintencoding"><a class="doc-anchor" href="#fixintencoding">§</a>FixintEncoding</h4>
+<ul>
+<li>Fixed size integers are encoded directly</li>
+<li>Enum discriminants are encoded as u32</li>
+<li>Lengths and usize are encoded as u64</li>
+</ul>
+<p>See the documentation of <a href="https://docs.rs/bincode/2.0.0-rc/bincode/config/struct.Configuration.html#method.with_fixed_int_encoding">FixintEncoding</a> for more information.</p>
+<h3 id="enums"><a class="doc-anchor" href="#enums">§</a>Enums</h3>
+<p>Enums are encoded with their variant first, followed by optionally the variant fields. The variant index is based on the <code>IntEncoding</code> during serialization.</p>
+<p>Both named and unnamed fields are serialized with their values only, and therefor encode to the same value.</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="attr">#[derive(bincode::Encode)]
+</span><span class="kw">pub enum </span>SomeEnum {
+    A,
+    B(u32),
+    C { value: u32 },
+}
+
+<span class="comment">// SomeEnum::A
+</span><span class="kw">let </span>encoded = bincode::encode_to_vec(SomeEnum::A, bincode::config::legacy()).unwrap();
+<span class="macro">assert_eq!</span>(encoded.as_slice(), <span class="kw-2">&amp;</span>[
+    <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="comment">// first variant, A
+    // no extra bytes because A has no fields
+</span>]);
+
+<span class="comment">// SomeEnum::B(0)
+</span><span class="kw">let </span>encoded = bincode::encode_to_vec(SomeEnum::B(<span class="number">0</span>), bincode::config::legacy()).unwrap();
+<span class="macro">assert_eq!</span>(encoded.as_slice(), <span class="kw-2">&amp;</span>[
+    <span class="number">1</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="comment">// first variant, B
+    </span><span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0  </span><span class="comment">// B has 1 unnamed field, which is an u32, so 4 bytes
+</span>]);
+
+<span class="comment">// SomeEnum::C { value: 0u32 }
+</span><span class="kw">let </span>encoded = bincode::encode_to_vec(SomeEnum::C { value: <span class="number">0u32 </span>}, bincode::config::legacy()).unwrap();
+<span class="macro">assert_eq!</span>(encoded.as_slice(), <span class="kw-2">&amp;</span>[
+    <span class="number">2</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="comment">// first variant, C
+    </span><span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0  </span><span class="comment">// C has 1 named field which is a u32, so 4 bytes
+</span>]);</code></pre></div>
+<h2 id="collections"><a class="doc-anchor" href="#collections">§</a>Collections</h2>
+<p>Collections are encoded with their length value first, following by each entry of the collection. The length value is based on your <code>IntEncoding</code>.</p>
+<p><strong>note</strong>: fixed array length may not have their <code>len</code> encoded. See <a href="#arrays">Arrays</a></p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">let </span>list = <span class="macro">vec!</span>[
+    <span class="number">0u8</span>,
+    <span class="number">1u8</span>,
+    <span class="number">2u8
+</span>];
+
+<span class="kw">let </span>encoded = bincode::encode_to_vec(list, bincode::config::legacy()).unwrap();
+<span class="macro">assert_eq!</span>(encoded.as_slice(), <span class="kw-2">&amp;</span>[
+    <span class="number">3</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="comment">// length of 3u64
+    </span><span class="number">0</span>, <span class="comment">// entry 0
+    </span><span class="number">1</span>, <span class="comment">// entry 1
+    </span><span class="number">2</span>, <span class="comment">// entry 2
+</span>]);</code></pre></div>
+<p>This also applies to e.g. <code>HashMap</code>, where each entry is a <a href="#basic-types">tuple</a> of the key and value.</p>
+<h2 id="string-and-str"><a class="doc-anchor" href="#string-and-str">§</a>String and &amp;str</h2>
+<p>Both <code>String</code> and <code>&amp;str</code> are treated as a <code>Vec&lt;u8&gt;</code>. See <a href="#collections">Collections</a> for more information.</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">let </span>str = <span class="string">"Hello"</span>; <span class="comment">// Could also be `String::new(...)`
+
+</span><span class="kw">let </span>encoded = bincode::encode_to_vec(str, bincode::config::legacy()).unwrap();
+<span class="macro">assert_eq!</span>(encoded.as_slice(), <span class="kw-2">&amp;</span>[
+    <span class="number">5</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="comment">// length of the string, 5 bytes
+    </span><span class="string">b'H'</span>, <span class="string">b'e'</span>, <span class="string">b'l'</span>, <span class="string">b'l'</span>, <span class="string">b'o'
+</span>]);</code></pre></div>
+<h2 id="arrays"><a class="doc-anchor" href="#arrays">§</a>Arrays</h2>
+<p>Array length is never encoded.</p>
+<p>Note that <code>&amp;[T]</code> is encoded as a <a href="#collections">Collection</a>.</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">let </span>arr: [u8; <span class="number">5</span>] = [<span class="number">10</span>, <span class="number">20</span>, <span class="number">30</span>, <span class="number">40</span>, <span class="number">50</span>];
+<span class="kw">let </span>encoded = bincode::encode_to_vec(arr, bincode::config::legacy()).unwrap();
+<span class="macro">assert_eq!</span>(encoded.as_slice(), <span class="kw-2">&amp;</span>[
+    <span class="number">10</span>, <span class="number">20</span>, <span class="number">30</span>, <span class="number">40</span>, <span class="number">50</span>, <span class="comment">// the bytes
+</span>]);
+</code></pre></div>
+<p>This applies to any type <code>T</code> that implements <code>Encode</code>/<code>Decode</code></p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="attr">#[derive(bincode::Encode)]
+</span><span class="kw">struct </span>Foo {
+    first: u8,
+    second: u8
+};
+
+<span class="kw">let </span>arr: [Foo; <span class="number">2</span>] = [
+    Foo {
+        first: <span class="number">10</span>,
+        second: <span class="number">20</span>,
+    },
+    Foo {
+        first: <span class="number">30</span>,
+        second: <span class="number">40</span>,
+    },
+];
+
+<span class="kw">let </span>encoded = bincode::encode_to_vec(<span class="kw-2">&amp;</span>arr, bincode::config::legacy()).unwrap();
+<span class="macro">assert_eq!</span>(encoded.as_slice(), <span class="kw-2">&amp;</span>[
+    <span class="number">10</span>, <span class="number">20</span>, <span class="comment">// First Foo
+    </span><span class="number">30</span>, <span class="number">40</span>, <span class="comment">// Second Foo
+</span>]);</code></pre></div>
+</div></details></section></div></main></body></html>

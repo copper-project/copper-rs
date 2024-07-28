@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ParseThemeError","SettingsError","UnderlineOption"],"struct":["Color","FontStyle","HighlightIterator","HighlightState","Highlighter","RangedHighlightIterator","ScopeSelector","ScopeSelectors","ScoredStyle","Style","StyleModifier","Theme","ThemeItem","ThemeSet","ThemeSettings"]};

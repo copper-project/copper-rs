@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Units"],"fn":["description","units"],"struct":["coulomb_per_centimeter","coulomb_per_meter"],"trait":["Conversion","Unit"],"type":["Dimension","ElectricChargeLinearDensity"]};
