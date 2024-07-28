@@ -16,7 +16,7 @@ use bincode::{Encode, Decode};
 use bincode::{decode_from_slice};
 use cu29_traits::{CuError, CuResult, UnifiedLogType, WriteStream};
 
-const MAIN_MAGIC: [u8; 4] = [0xB4, 0xA5, 0x50, 0xFF]; 
+const MAIN_MAGIC: [u8; 4] = [0xB4, 0xA5, 0x50, 0xFF];
 
 const SECTION_MAGIC: [u8; 2] = [0xFA, 0x57];
 
@@ -255,9 +255,11 @@ impl UnifiedLoggerBuilder {
 
 /// A read side of the datalogger.
 pub struct UnifiedLoggerRead {
+    #[allow(dead_code)]
     file: File,
     mmap_buffer: Mmap,
     reading_position: usize,
+    #[allow(dead_code)]
     page_size: usize,
 }
 
