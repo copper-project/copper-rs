@@ -18,7 +18,7 @@ Copper is a user-friendly robotics framework designed for creating fast and reli
 
 * Reliable: Copper leverages Rust's ownership, type system, and concurrency model to minimize bugs and ensure thread safety.
 
-* Product Oriented: Copper trying hard to avoid late infra related integration issues by generating a very predictable runtime.
+* Product Oriented: Copper aims to avoid late-stage infra integration issues by generating a very predictable runtime.
 
 > [!NOTE]
 > Copper is still in **early development**, and the API is subject to change. We are looking for contributors to help us build the best robotics framework possible. If you are interested, please join us on [Gitter](https://gitter.im/copper-project/copper-rs) or open an issue.
@@ -27,7 +27,7 @@ Copper is a user-friendly robotics framework designed for creating fast and reli
 
 Copper is a data-oriented runtime with these key components:
 
-* Task Graph: Described in RON, this configures the system's topology, specifying which tasks communicate and setting types for nodes and messages.
+* Task Graph: Described in [RON](https://github.com/ron-rs/ron), this configures the system's topology, specifying which tasks communicate and setting types for nodes and messages.
 
 * Runtime Generator: This component decides on an execution plan based on the graph's metadata. It preallocates a "Copper List" to maximize sequential memory access during execution.
 
@@ -45,11 +45,11 @@ It will ask you the name you want to pick interactively.
 cargo install cargo-generate
 git clone https://github.com/copper-project/copper-rs
 cd copper-rs/templates
-cargo nunew [path_where_you_want_your_project_created]
+cargo cunew [path_where_you_want_your_project_created]
     🤷   Project Name:
 ```
 
-Check out [copper-templates](https://github.com/copper-project/copper-rs/templates/README.md) for more info.
+Check out [copper-templates](templates/README.md) for more info.
 
 ### How a Copper application looks like, some concepts and insights about how it can be that fast.
 
@@ -158,7 +158,7 @@ fn main() {
 
 ## Deployment and lifecycle of the application
 
-Check out the [deployment](https://github.com/copper-project/copper-rs/doc/deploy.md) page for more information.
+Check out the [deployment](doc/deploy.md) page for more information.
 
 ## How is it better or different from ROS?
 
