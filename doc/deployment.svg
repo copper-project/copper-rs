@@ -2,9 +2,9 @@
 <!-- Created with Inkscape (http://www.inkscape.org/) -->
 
 <svg
-   width="200.87823mm"
-   height="267.37561mm"
-   viewBox="0 0 200.87823 267.37561"
+   width="205.65805mm"
+   height="292.71359mm"
+   viewBox="0 0 205.65805 292.71359"
    version="1.1"
    id="svg1"
    xmlns="http://www.w3.org/2000/svg"
@@ -75,47 +75,81 @@
          d="M 5.77,0 -2.88,5 V -5 Z"
          id="path37-9" />
     </marker>
+    <marker
+       style="overflow:visible"
+       id="marker37-6"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       markerWidth="1"
+       markerHeight="1"
+       viewBox="0 0 1 1"
+       preserveAspectRatio="xMidYMid">
+      <path
+         transform="scale(0.5)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:context-stroke;stroke-width:1pt"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path37-6" />
+    </marker>
   </defs>
   <g
      id="layer1"
-     transform="translate(-2.3341618,-2.941826)">
+     transform="translate(-1.0947625,-1.5165588)">
     <rect
-       style="fill:#ffffff;fill-opacity:1;stroke:#e6e6e6;stroke-width:1;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
+       style="fill:#ffffff;fill-opacity:1;stroke:#e6e6e6;stroke-width:0.846832;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
        id="rect38"
-       width="199.87823"
-       height="266.37561"
-       x="2.8341618"
-       y="3.4418261"
-       ry="2.5619714" />
+       width="204.81122"
+       height="291.86673"
+       x="1.5181785"
+       y="1.9399748"
+       ry="2.1695602" />
     <rect
-       style="fill:#b3b3b3;stroke:#999999;stroke-width:0.5;stroke-dasharray:none;stroke-opacity:1"
+       style="fill:#b3b3b3;stroke:#999999;stroke-width:0.423416;stroke-dasharray:none;stroke-opacity:1"
        id="rect1-0-8"
-       width="106.97491"
-       height="58.305798"
-       x="53.85342"
-       y="206.66891"
-       ry="2.5619714" />
+       width="90.589806"
+       height="49.375233"
+       x="62.404903"
+       y="236.13657"
+       ry="2.1695602" />
     <rect
-       style="fill:#cccccc;stroke:#999999;stroke-width:0.5;stroke-dasharray:none;stroke-opacity:1"
+       style="fill:#cccccc;stroke:#999999;stroke-width:0.423416;stroke-dasharray:none;stroke-opacity:1"
        id="rect1"
-       width="78.021065"
-       height="88.637863"
-       x="55.759449"
-       y="16.345083"
-       ry="2.5619714" />
+       width="68.10955"
+       height="85.772377"
+       x="64.01899"
+       y="74.964195"
+       ry="2.1695602" />
     <text
        xml:space="preserve"
-       style="font-size:4.93889px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#0066ff;fill-opacity:1;stroke:none;stroke-width:0.5;stroke-dasharray:none;stroke-opacity:1"
-       x="60.455299"
-       y="24.89555"
+       style="font-size:4.18241px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.183727px;fill:#0066ff;fill-opacity:1;stroke:none;stroke-width:0.423416;stroke-dasharray:none;stroke-opacity:1"
+       x="67.99559"
+       y="82.205009"
        id="text1"><tspan
          id="tspan1"
-         style="font-weight:bold;font-size:4.93889px;fill:#0066ff;stroke:none;stroke-width:0.5;stroke-dasharray:none;stroke-opacity:1"
-         x="60.455299"
-         y="24.89555">Compile time</tspan></text>
+         style="font-weight:bold;font-size:4.18241px;fill:#0066ff;stroke:none;stroke-width:0.423416;stroke-dasharray:none;stroke-opacity:1"
+         x="67.99559"
+         y="82.205009">Compile time</tspan></text>
+    <rect
+       style="fill:#cccccc;stroke:#999999;stroke-width:0.423416;stroke-dasharray:none;stroke-opacity:1"
+       id="rect1-3"
+       width="48.969563"
+       height="60.934219"
+       x="9.1459332"
+       y="11.355456"
+       ry="2.1695602" />
+    <text
+       xml:space="preserve"
+       style="font-size:4.18241px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.183727px;fill:#0066ff;fill-opacity:1;stroke:none;stroke-width:0.423416;stroke-dasharray:none;stroke-opacity:1"
+       x="13.338247"
+       y="18.770576"
+       id="text1-8"><tspan
+         id="tspan1-0"
+         style="font-weight:bold;font-size:4.18241px;fill:#0066ff;stroke:none;stroke-width:0.423416;stroke-dasharray:none;stroke-opacity:1"
+         x="13.338247"
+         y="18.770576">App crate sources</tspan></text>
     <g
        id="g1"
-       transform="matrix(0.03781543,0,0,0.03781543,-46.469512,63.274444)">
+       transform="matrix(0.03202333,0,0,0.03202333,-22.551797,114.7055)">
       <g
          id="g540"
          style="clip-rule:evenodd;fill-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2">
@@ -1301,7 +1335,8 @@
         </g>
     </g>
     <g
-       id="g34">
+       id="g34"
+       transform="matrix(0.84683232,0,0,0.84683232,16.800087,61.122651)">
       <rect
          style="fill:#ffeeaa;fill-opacity:1;stroke:#ff0000;stroke-width:1;stroke-dasharray:none;stroke-opacity:1"
          id="rect34"
@@ -1342,7 +1377,8 @@
            id="tspan7-8">target/release/[appname]</tspan></text>
     </g>
     <g
-       id="g35">
+       id="g35"
+       transform="matrix(0.84683232,0,0,0.84683232,16.800087,61.122651)">
       <rect
          style="fill:#e5ff80;fill-opacity:1;stroke:#ff0000;stroke-width:1;stroke-dasharray:none;stroke-opacity:1"
          id="rect5-3"
@@ -1384,7 +1420,7 @@
     </g>
     <g
        id="g28"
-       transform="translate(30.149777,21.278413)">
+       transform="matrix(0.84683232,0,0,0.84683232,42.331893,79.141899)">
       <rect
          style="fill:#e5ff80;fill-opacity:1;stroke:#000000;stroke-width:0.7;stroke-dasharray:none;stroke-opacity:1"
          id="rect5-3-6"
@@ -1404,47 +1440,51 @@
            x="38.389217"
            y="219.85103">Log Reader</tspan></text>
     </g>
-    <rect
-       style="fill:#ffb380;fill-opacity:1;stroke:#ff0000;stroke-width:1;stroke-dasharray:none;stroke-opacity:1"
-       id="rect5-2"
-       width="63.040291"
-       height="17.187332"
-       x="64.364571"
-       y="81.945343"
-       ry="2.9805954" />
-    <text
-       xml:space="preserve"
-       style="font-size:4.23333px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.499999;stroke-dasharray:none;stroke-opacity:1"
-       x="66.655029"
-       y="87.776566"
-       id="text5-9"><tspan
-         id="tspan5-1"
-         style="fill:#000000;stroke-width:0.5"
+    <g
+       id="g53"
+       transform="matrix(0.84683232,0,0,0.84683232,16.800087,61.122651)">
+      <rect
+         style="fill:#ffb380;fill-opacity:1;stroke:#ff0000;stroke-width:1;stroke-dasharray:none;stroke-opacity:1"
+         id="rect5-2"
+         width="63.040291"
+         height="17.187332"
+         x="64.364571"
+         y="81.945343"
+         ry="2.9805954" />
+      <text
+         xml:space="preserve"
+         style="font-size:4.23333px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.499999;stroke-dasharray:none;stroke-opacity:1"
          x="66.655029"
-         y="87.776566">String Index</tspan></text>
-    <text
-       xml:space="preserve"
-       style="font-size:2.82222px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.499999;stroke-dasharray:none;stroke-opacity:1"
-       x="69.762009"
-       y="91.673187"
-       id="text6-2"><tspan
-         style="font-size:2.82222px;fill:#000000;stroke-width:0.5"
+         y="87.776566"
+         id="text5-9"><tspan
+           id="tspan5-1"
+           style="fill:#000000;stroke-width:0.5"
+           x="66.655029"
+           y="87.776566">String Index</tspan></text>
+      <text
+         xml:space="preserve"
+         style="font-size:2.82222px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.499999;stroke-dasharray:none;stroke-opacity:1"
          x="69.762009"
          y="91.673187"
-         id="tspan7-3">target/debug/cu29_log_index</tspan></text>
-    <text
-       xml:space="preserve"
-       style="font-size:2.82222px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.499999;stroke-dasharray:none;stroke-opacity:1"
-       x="69.806137"
-       y="95.071304"
-       id="text6-1-7"><tspan
-         style="font-size:2.82222px;fill:#000000;stroke-width:0.5"
+         id="text6-2"><tspan
+           style="font-size:2.82222px;fill:#000000;stroke-width:0.5"
+           x="69.762009"
+           y="91.673187"
+           id="tspan7-3">target/debug/cu29_log_index</tspan></text>
+      <text
+         xml:space="preserve"
+         style="font-size:2.82222px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.499999;stroke-dasharray:none;stroke-opacity:1"
          x="69.806137"
          y="95.071304"
-         id="tspan7-8-5">target/release/cu29_log_index</tspan></text>
+         id="text6-1-7"><tspan
+           style="font-size:2.82222px;fill:#000000;stroke-width:0.5"
+           x="69.806137"
+           y="95.071304"
+           id="tspan7-8-5">target/release/cu29_log_index</tspan></text>
+    </g>
     <g
        id="g38"
-       transform="translate(0.67381154,9.3303166)">
+       transform="matrix(0.84683232,0,0,0.84683232,17.370692,69.023865)">
       <rect
          style="fill:#ffb380;fill-opacity:1;stroke:#000000;stroke-width:0.7;stroke-dasharray:none;stroke-opacity:1"
          id="rect5-2-1"
@@ -1465,82 +1505,130 @@
            y="244.78209">String Index</tspan></text>
     </g>
     <rect
-       style="fill:#b3b3b3;stroke:#999999;stroke-width:0.5;stroke-dasharray:none;stroke-opacity:1"
+       style="fill:#b3b3b3;stroke:#999999;stroke-width:0.423416;stroke-dasharray:none;stroke-opacity:1"
        id="rect1-0"
-       width="60.162868"
-       height="55.021812"
-       x="91.721451"
-       y="126.35696"
-       ry="2.5619714" />
+       width="50.947861"
+       height="46.59425"
+       x="94.472771"
+       y="168.12581"
+       ry="2.1695602" />
     <text
        xml:space="preserve"
-       style="font-size:4.93889px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#0066ff;fill-opacity:1;stroke:none;stroke-width:0.5;stroke-dasharray:none;stroke-opacity:1"
-       x="94.979057"
-       y="133.89525"
+       style="font-size:4.18241px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.183727px;fill:#0066ff;fill-opacity:1;stroke:none;stroke-width:0.423416;stroke-dasharray:none;stroke-opacity:1"
+       x="97.231422"
+       y="174.50948"
        id="text1-3"><tspan
          id="tspan1-6"
-         style="font-weight:bold;font-size:4.93889px;fill:#0066ff;stroke:none;stroke-width:0.5;stroke-dasharray:none;stroke-opacity:1"
-         x="94.979057"
-         y="133.89525">Runtime (on the robot)</tspan></text>
+         style="font-weight:bold;font-size:4.18241px;fill:#0066ff;stroke:none;stroke-width:0.423416;stroke-dasharray:none;stroke-opacity:1"
+         x="97.231422"
+         y="174.50948">Runtime (on the robot)</tspan></text>
     <text
        xml:space="preserve"
-       style="font-size:4.93889px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#0066ff;fill-opacity:1;stroke:none;stroke-width:0.5;stroke-dasharray:none;stroke-opacity:1"
-       x="59.513309"
-       y="215.59206"
+       style="font-size:4.18241px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.183727px;fill:#0066ff;fill-opacity:1;stroke:none;stroke-width:0.423416;stroke-dasharray:none;stroke-opacity:1"
+       x="67.197876"
+       y="243.69298"
        id="text1-3-3"><tspan
          id="tspan1-6-0"
-         style="font-weight:bold;font-size:4.93889px;fill:#0066ff;stroke:none;stroke-width:0.5;stroke-dasharray:none;stroke-opacity:1"
-         x="59.513309"
-         y="215.59206">Post runtime log analysis</tspan></text>
+         style="font-weight:bold;font-size:4.18241px;fill:#0066ff;stroke:none;stroke-width:0.423416;stroke-dasharray:none;stroke-opacity:1"
+         x="67.197876"
+         y="243.69298">Post runtime log analysis</tspan></text>
     <rect
-       style="fill:#ffeeaa;fill-opacity:1;stroke:#000000;stroke-width:1;stroke-dasharray:none;stroke-opacity:1"
+       style="fill:#ffeeaa;fill-opacity:1;stroke:#000000;stroke-width:0.846832;stroke-dasharray:none;stroke-opacity:1"
        id="rect5-6"
-       width="41.286823"
-       height="9.8743896"
-       x="98.957024"
-       y="142.48306"
-       ry="2.9805954" />
+       width="34.963017"
+       height="8.3619518"
+       x="100.60009"
+       y="181.78192"
+       ry="2.5240645" />
+    <rect
+       style="fill:#ffeeaa;fill-opacity:1;stroke:#000000;stroke-width:0.846832;stroke-dasharray:none;stroke-opacity:1"
+       id="rect5-6-3"
+       width="40.771942"
+       height="18.289707"
+       x="11.741428"
+       y="25.417278"
+       ry="2.5240645" />
     <text
        xml:space="preserve"
-       style="font-size:4.23333px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.499999;stroke-dasharray:none;stroke-opacity:1"
-       x="104.2645"
-       y="148.98709"
+       style="font-size:3.58492px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.183727px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.423415;stroke-dasharray:none;stroke-opacity:1"
+       x="105.09464"
+       y="187.28975"
        id="text5-3"><tspan
          id="tspan5-2"
-         style="fill:#000000;stroke-width:0.5"
-         x="104.2645"
-         y="148.98709">Main Executable</tspan></text>
-    <rect
-       style="fill:#c8b7be;fill-opacity:1;stroke:#ff0000;stroke-width:1;stroke-dasharray:none;stroke-opacity:1"
-       id="rect5-6-4"
-       width="40.227863"
-       height="13.673898"
-       x="99.483002"
-       y="156.65063"
-       ry="2.9805954" />
+         style="fill:#000000;stroke-width:0.423416"
+         x="105.09464"
+         y="187.28975">Main Executable</tspan></text>
     <text
        xml:space="preserve"
-       style="font-size:4.23333px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.499999;stroke-dasharray:none;stroke-opacity:1"
-       x="101.72993"
-       y="162.47876"
+       style="font-size:3.58492px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.183727px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.423415;stroke-dasharray:none;stroke-opacity:1"
+       x="15.927996"
+       y="30.710693"
+       id="text5-3-1"><tspan
+         id="tspan5-2-2"
+         style="fill:#000000;stroke-width:0.423416"
+         x="15.927996"
+         y="30.710693">src/*</tspan><tspan
+         style="fill:#000000;stroke-width:0.423416"
+         x="15.927996"
+         y="35.191845"
+         id="tspan55">Cargo.toml</tspan><tspan
+         style="fill:#000000;stroke-width:0.423416"
+         x="15.927996"
+         y="39.672993"
+         id="tspan56">build.rs</tspan></text>
+    <g
+       id="g55"
+       transform="translate(-0.66159335,9.9460502)">
+      <rect
+         style="fill:#ffeeaa;fill-opacity:1;stroke:#000000;stroke-width:0.846832;stroke-dasharray:none;stroke-opacity:1"
+         id="rect5-6-3-7"
+         width="40.609188"
+         height="8.4804029"
+         x="12.403022"
+         y="36.349152"
+         ry="2.5240645" />
+      <text
+         xml:space="preserve"
+         style="font-size:3.58492px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.183727px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.423415;stroke-dasharray:none;stroke-opacity:1"
+         x="15.952983"
+         y="41.672882"
+         id="text5-3-1-1"><tspan
+           style="fill:#000000;stroke-width:0.423416"
+           x="15.952983"
+           y="41.672882"
+           id="tspan54">[appname]-config.ron</tspan></text>
+    </g>
+    <rect
+       style="fill:#c8b7be;fill-opacity:1;stroke:#ff0000;stroke-width:0.846832;stroke-dasharray:none;stroke-opacity:1"
+       id="rect5-6-4"
+       width="34.066254"
+       height="11.579498"
+       x="101.0455"
+       y="193.77946"
+       ry="2.5240645" />
+    <text
+       xml:space="preserve"
+       style="font-size:3.58492px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.183727px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.423415;stroke-dasharray:none;stroke-opacity:1"
+       x="102.94827"
+       y="198.71492"
        id="text5-3-3"><tspan
          id="tspan5-2-1"
-         style="fill:#000000;stroke-width:0.5"
-         x="101.72993"
-         y="162.47876">Unified Log</tspan></text>
+         style="fill:#000000;stroke-width:0.423416"
+         x="102.94827"
+         y="198.71492">Unified Log</tspan></text>
     <text
        xml:space="preserve"
-       style="font-size:2.82222px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.499999;stroke-dasharray:none;stroke-opacity:1"
-       x="105.87847"
-       y="166.7271"
+       style="font-size:2.38995px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.183727px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.423415;stroke-dasharray:none;stroke-opacity:1"
+       x="106.4614"
+       y="202.31255"
        id="text6-0-4"><tspan
-         style="font-size:2.82222px;fill:#000000;stroke-width:0.5"
-         x="105.87847"
-         y="166.7271"
+         style="font-size:2.38995px;fill:#000000;stroke-width:0.423416"
+         x="106.4614"
+         y="202.31255"
          id="tspan7-6-9">[appname].copper</tspan></text>
     <g
        id="g30"
-       transform="translate(29.444541,-16.262829)">
+       transform="matrix(0.84683232,0,0,0.84683232,41.734676,47.350763)">
       <rect
          style="fill:#c8b7be;fill-opacity:1;stroke:#000000;stroke-width:0.7;stroke-dasharray:none;stroke-opacity:1"
          id="rect5-6-4-5"
@@ -1562,7 +1650,7 @@
     </g>
     <g
        id="g1-2"
-       transform="matrix(0.03571882,0,0,0.03571882,159.71534,7.2272468)">
+       transform="matrix(0.03024785,0,0,0.03024785,152.0522,67.242917)">
       <g
          id="g437"
          style="clip-rule:evenodd;fill-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2">
@@ -2749,7 +2837,7 @@
     </g>
     <g
        id="g23"
-       transform="matrix(0.64877956,0,0,0.64877956,50.142758,-4.9620781)">
+       transform="matrix(0.5494075,0,0,0.5494075,59.262595,56.920603)">
       <rect
          style="fill:#b3b3b3;fill-opacity:1;stroke:#000000;stroke-width:1;stroke-dasharray:none;stroke-opacity:1"
          id="rect5-63-6"
@@ -2774,74 +2862,88 @@
            id="tspan4-1" /></text>
     </g>
     <rect
-       style="fill:#b3b3b3;fill-opacity:1;stroke:#ff0000;stroke-width:0.64878;stroke-dasharray:none;stroke-opacity:1"
+       style="fill:#b3b3b3;fill-opacity:1;stroke:#ff0000;stroke-width:0.549408;stroke-dasharray:none;stroke-opacity:1"
        id="rect5-63-6-1"
-       width="26.290098"
-       height="7.3284984"
-       x="140.80693"
-       y="20.537834"
-       ry="1.9337493" />
+       width="22.263306"
+       height="6.2060094"
+       x="136.03993"
+       y="78.514755"
+       ry="1.6375614" />
     <text
        xml:space="preserve"
-       style="font-size:2.7465px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.140758px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.324389;stroke-dasharray:none;stroke-opacity:1"
-       x="142.17456"
-       y="25.164398"
+       style="font-size:2.32582px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.119198px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.274703;stroke-dasharray:none;stroke-opacity:1"
+       x="137.1981"
+       y="82.432678"
        id="text2-8-7"><tspan
-         style="stroke-width:0.32439"
-         x="142.17456"
-         y="25.164398"
+         style="stroke-width:0.274704"
+         x="137.1981"
+         y="82.432678"
          id="tspan4-1-9">Artifacts Generated</tspan></text>
     <path
-       style="fill:#c8b7be;fill-opacity:1;stroke:#000000;stroke-width:0.7;stroke-dasharray:none;stroke-opacity:1;marker-end:url(#Triangle)"
-       d="m 100.5106,236.88567 13.75613,-9.14469"
+       style="fill:#c8b7be;fill-opacity:1;stroke:#000000;stroke-width:0.592783;stroke-dasharray:none;stroke-opacity:1;marker-end:url(#Triangle)"
+       d="m 101.91571,261.72509 11.64914,-7.74402"
        id="path32" />
     <path
-       style="fill:#c8b7be;fill-opacity:1;stroke:#000000;stroke-width:0.7;stroke-dasharray:none;stroke-opacity:1;marker-end:url(#Triangle-4)"
-       d="m 101.27247,243.50652 13.75613,9.14469"
+       style="fill:#c8b7be;fill-opacity:1;stroke:#000000;stroke-width:0.592783;stroke-dasharray:none;stroke-opacity:1;marker-end:url(#Triangle-4)"
+       d="m 102.56089,267.33184 11.64913,7.74402"
        id="path32-8" />
     <text
        xml:space="preserve"
-       style="font-size:4.93889px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.7;stroke-dasharray:none;stroke-opacity:1"
-       x="122.79739"
-       y="227.68669"
+       style="font-size:4.18241px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.183727px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.592783;stroke-dasharray:none;stroke-opacity:1"
+       x="120.78889"
+       y="253.9351"
        id="text32"><tspan
          id="tspan32"
-         style="font-size:4.93889px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.7"
-         x="122.79739"
-         y="227.68669">Text logs</tspan></text>
+         style="font-size:4.18241px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.592783"
+         x="120.78889"
+         y="253.9351">Text logs</tspan></text>
     <text
        xml:space="preserve"
-       style="font-size:4.93889px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.7;stroke-dasharray:none;stroke-opacity:1"
-       x="122.28886"
-       y="252.70929"
+       style="font-size:4.18241px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.183727px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.592783;stroke-dasharray:none;stroke-opacity:1"
+       x="120.35824"
+       y="275.12506"
        id="text32-9"><tspan
          id="tspan32-3"
-         style="font-size:4.93889px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.7"
-         x="122.28886"
-         y="252.70929">Runtime logs</tspan><tspan
-         style="font-size:4.93889px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.7"
-         x="122.28886"
-         y="258.8829"
+         style="font-size:4.18241px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.592783"
+         x="120.35824"
+         y="275.12506">Runtime logs</tspan><tspan
+         style="font-size:4.18241px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.592783"
+         x="120.35824"
+         y="280.35309"
          id="tspan33">(messages etc)</tspan></text>
     <path
-       style="fill:none;fill-opacity:1;stroke:#1a1a1a;stroke-width:1;stroke-dasharray:6, 2;stroke-dashoffset:0;stroke-opacity:1;marker-end:url(#marker37)"
-       d="m 130.8276,44.939283 c 0,0 42.46693,22.217509 42.2053,46.340254 0.20536,24.670853 -28.78681,53.548283 -28.78681,53.548283"
+       style="fill:none;fill-opacity:1;stroke:#1a1a1a;stroke-width:0.846832;stroke-dasharray:5.08099, 1.69366;stroke-dashoffset:0;stroke-opacity:1;marker-end:url(#marker37)"
+       d="m 127.58913,99.178689 c 0,0 35.96237,18.814501 35.74081,39.242421 0.1739,20.89208 -24.3776,45.34642 -24.3776,45.34642"
        id="path36" />
     <path
-       style="fill:none;fill-opacity:1;stroke:#1a1a1a;stroke-width:1;stroke-dasharray:6, 2;stroke-dashoffset:0;stroke-opacity:1;marker-end:url(#marker37)"
-       d="m 57.172399,78.564086 c 0,0 -40.566091,102.267344 -34.034064,127.039044 0.20536,24.67086 33.027624,38.50235 33.027624,38.50235"
+       style="fill:none;fill-opacity:1;stroke:#1a1a1a;stroke-width:0.846832;stroke-dasharray:5.08099, 1.69366;stroke-dashoffset:0;stroke-opacity:1;marker-end:url(#marker37)"
+       d="m 65.215522,127.65326 c 0,0 -34.352677,86.60329 -28.821145,107.58077 0.173905,20.89208 27.968859,32.60503 27.968859,32.60503"
        id="path38" />
     <path
-       style="fill:none;fill-opacity:1;stroke:#1a1a1a;stroke-width:1;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
-       d="m 62.653174,234.66873 0.05888,23.24414"
+       style="fill:none;fill-opacity:1;stroke:#1a1a1a;stroke-width:0.846832;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
+       d="m 69.85682,259.84772 0.04986,19.68389"
        id="path38-3" />
     <path
-       style="fill:none;fill-opacity:1;stroke:#1a1a1a;stroke-width:1;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
-       d="m 60.429072,60.178773 0.05888,37.752487"
+       style="fill:none;fill-opacity:1;stroke:#1a1a1a;stroke-width:0.846832;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
+       d="m 67.973378,112.08398 0.04986,31.97003"
        id="path38-3-1" />
     <path
-       style="fill:none;fill-opacity:1;stroke:#1a1a1a;stroke-width:1;stroke-dasharray:6, 2;stroke-dashoffset:0;stroke-opacity:1;marker-end:url(#marker37-4)"
-       d="m 94.947672,161.37217 c 0,0 -54.286414,8.34737 -54.548044,32.47011 0.20536,24.67086 17.038221,31.76415 17.038221,31.76415"
+       style="fill:none;fill-opacity:1;stroke:#1a1a1a;stroke-width:0.846832;stroke-dasharray:5.08099, 1.69366;stroke-dashoffset:0;stroke-opacity:1;marker-end:url(#marker37-4)"
+       d="m 97.204844,197.77782 c 0,0 -45.971489,7.06882 -46.193046,27.49674 0.173905,20.89208 14.428516,26.89891 14.428516,26.89891"
        id="path38-7" />
+    <path
+       style="fill:none;fill-opacity:1;stroke:#1a1a1a;stroke-width:0.846832;stroke-dasharray:5.08099, 1.69366;stroke-dashoffset:0;stroke-opacity:1;marker-end:url(#marker37-6)"
+       d="m 61.712006,33.811627 c 0,0 40.145484,-4.765044 39.923924,15.662876 0.1739,20.89208 0.18725,21.956689 0.18725,21.956689"
+       id="path36-9" />
+    <text
+       xml:space="preserve"
+       style="font-size:4.9389px;font-family:'Roboto Condensed';-inkscape-font-specification:'Roboto Condensed, ';letter-spacing:0.216958px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
+       x="100.58273"
+       y="39.522038"
+       id="text57"><tspan
+         id="tspan57"
+         style="fill:#000000;stroke:none;stroke-width:1"
+         x="100.58273"
+         y="39.522038">cargo build</tspan></text>
   </g>
 </svg>
