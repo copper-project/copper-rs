@@ -17,7 +17,7 @@
 <p>Reliable: Copper leverages Rust’s ownership, type system, and concurrency model to minimize bugs and ensure thread safety.</p>
 </li>
 <li>
-<p>Product Oriented: Copper trying hard to avoid late infra related integration issues by generating a very predictable runtime.</p>
+<p>Product Oriented: Copper aims to avoid late-stage infra integration issues by generating a very predictable runtime.</p>
 </li>
 </ul>
 <blockquote>
@@ -28,7 +28,7 @@ Copper is still in <strong>early development</strong>, and the API is subject to
 <p>Copper is a data-oriented runtime with these key components:</p>
 <ul>
 <li>
-<p>Task Graph: Described in RON, this configures the system’s topology, specifying which tasks communicate and setting types for nodes and messages.</p>
+<p>Task Graph: Described in <a href="https://github.com/ron-rs/ron">RON</a>, this configures the system’s topology, specifying which tasks communicate and setting types for nodes and messages.</p>
 </li>
 <li>
 <p>Runtime Generator: This component decides on an execution plan based on the graph’s metadata. It preallocates a “Copper List” to maximize sequential memory access during execution.</p>
@@ -46,10 +46,10 @@ It will ask you the name you want to pick interactively.</p>
 <div class="example-wrap"><pre class="language-bash"><code>cargo install cargo-generate
 git clone https://github.com/copper-project/copper-rs
 cd copper-rs/templates
-cargo nunew [path_where_you_want_your_project_created]
+cargo cunew [path_where_you_want_your_project_created]
     🤷   Project Name:
 </code></pre></div>
-<p>Check out <a href="https://github.com/copper-project/copper-rs/templates/README.md">copper-templates</a> for more info.</p>
+<p>Check out <a href="templates/README.md">copper-templates</a> for more info.</p>
 <h4 id="how-a-copper-application-looks-like-some-concepts-and-insights-about-how-it-can-be-that-fast"><a class="doc-anchor" href="#how-a-copper-application-looks-like-some-concepts-and-insights-about-how-it-can-be-that-fast">§</a>How a Copper application looks like, some concepts and insights about how it can be that fast.</h4>
 <p>Here is a simple example of a task graph in RON:</p>
 <div class="example-wrap"><pre class="language-RON"><code>(
@@ -149,7 +149,7 @@ cargo nunew [path_where_you_want_your_project_created]
 }
 </code></pre></div>
 <h3 id="deployment-and-lifecycle-of-the-application"><a class="doc-anchor" href="#deployment-and-lifecycle-of-the-application">§</a>Deployment and lifecycle of the application</h3>
-<p>Check out the <a href="https://github.com/copper-project/copper-rs/doc/deploy.md">deployment</a> page for more information.</p>
+<p>Check out the <a href="doc/deploy.md">deployment</a> page for more information.</p>
 <h3 id="how-is-it-better-or-different-from-ros"><a class="doc-anchor" href="#how-is-it-better-or-different-from-ros">§</a>How is it better or different from ROS?</h3><h4 id="performance"><a class="doc-anchor" href="#performance">§</a>Performance</h4>
 <p>In the example directory, we have 2 equivalent applications. One written in C++ for ROS and a port in Rust with Copper.</p>
 <div class="example-wrap"><pre class="language-bash"><code>examples/cu_caterpillar
