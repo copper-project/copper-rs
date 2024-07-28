@@ -9,6 +9,26 @@ use syn::parse::Parser;
 use syn::Token;
 use syn::{Expr, ExprAssign, ExprLit, Lit};
 
+/// This macro is used to log a message with parameters.
+/// The first parameter is a string literal that represents the message to be logged.
+/// Only `{}` is supported as a placeholder for parameters.
+/// The rest of the parameters are the values to be logged.
+/// The parameters can be named or unnamed.
+/// Named parameters are specified as `name = value`.
+/// Unnamed parameters are specified as `value`.
+/// # Example
+/// ```
+/// use cu29_log_derive::debug;
+/// let a = 1;
+/// let b = 2;
+/// debug!("a = {}, b = {}", my_value = a, b); // named and unnamed parameters
+/// ```
+///
+/// You can retreive this data using the log_reader generated with your project and giving it the
+/// unified .copper log file and the string index file generated at compile time.
+/// 
+/// Note: In debug mode, the log will also be printed to the console. (ie slooow).
+/// In release mode, the log will be only be written to the unified logger.
 #[proc_macro]
 pub fn debug(input: TokenStream) -> TokenStream {
     let parser = syn::punctuated::Punctuated::<Expr, Token![,]>::parse_terminated;
