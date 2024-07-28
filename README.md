@@ -20,8 +20,8 @@ Copper is a user-friendly robotics framework designed for creating fast and reli
 
 * Product Oriented: Copper trying hard to avoid late infra related integration issues by generating a very predictable runtime.
 
-
-> Note: Copper is still in **early development**, and the API is subject to change. We are looking for contributors to help us build the best robotics framework possible. If you are interested, please join us on [Gitter](https://gitter.im/copper-project/copper-rs) or open an issue.
+> [!NOTE]
+> Copper is still in **early development**, and the API is subject to change. We are looking for contributors to help us build the best robotics framework possible. If you are interested, please join us on [Gitter](https://gitter.im/copper-project/copper-rs) or open an issue.
 
 ### Technical Overview
 
