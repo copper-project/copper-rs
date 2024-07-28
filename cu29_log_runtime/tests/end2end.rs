@@ -2,13 +2,16 @@ use cu29::monitoring::ScopedAllocCounter;
 use cu29_helpers::basic_copper_setup;
 use cu29_log_derive::debug;
 use serde::Serialize;
-use std::path::PathBuf;
+use tempdir::TempDir;
 
 #[test]
 fn log_derive_end2end() {
-    let _ = basic_copper_setup(&PathBuf::from("/tmp/teststructlog.copper"), None, true)
+    let tmp_dir = TempDir::new("teststructlog").expect("Failed to create temp dir");
+    let log_path = tmp_dir.path().join("teststructlog.copper");
+
+    let _ = basic_copper_setup(&log_path, None, true)
         .expect("Failed to setup logger.");
-    debug!("Logger created.");
+    debug!("Logger created at {}.", log_path);
 
     #[derive(Serialize)]
     struct Test {
