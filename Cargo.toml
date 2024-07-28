@@ -9,7 +9,6 @@ members = [
     "cu29_log",
     "cu29_log_derive",
     "cu29_log_runtime",
-    "cu29_log_test",
     "cu29_soa_derive",
     "cu29_traits",
     "cu29_unifiedlog",
