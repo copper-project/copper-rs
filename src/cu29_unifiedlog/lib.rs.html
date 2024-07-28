@@ -782,6 +782,8 @@
 <a href="#782" id="782">782</a>
 <a href="#783" id="783">783</a>
 <a href="#784" id="784">784</a>
+<a href="#785" id="785">785</a>
+<a href="#786" id="786">786</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>libc;
 
 <span class="kw">use </span>std::fs::{File, OpenOptions};
@@ -800,24 +802,25 @@
 <span class="kw">use </span>bincode::{decode_from_slice};
 <span class="kw">use </span>cu29_traits::{CuError, CuResult, UnifiedLogType, WriteStream};
 
-<span class="kw">const </span>MAIN_MAGIC: [u8; <span class="number">4</span>] = [<span class="number">0xB4</span>, <span class="number">0xA5</span>, <span class="number">0x50</span>, <span class="number">0xFF</span>];
+<span class="kw">const </span>MAIN_MAGIC: [u8; <span class="number">4</span>] = [<span class="number">0xB4</span>, <span class="number">0xA5</span>, <span class="number">0x50</span>, <span class="number">0xFF</span>]; 
 
 <span class="kw">const </span>SECTION_MAGIC: [u8; <span class="number">2</span>] = [<span class="number">0xFA</span>, <span class="number">0x57</span>];
 
-<span class="doccomment">/// The main header of the datalogger.
+<span class="doccomment">/// The main file header of the datalogger.
 </span><span class="attr">#[derive(Encode, Decode, Debug)]
 </span><span class="kw">struct </span>MainHeader {
-    magic: [u8; <span class="number">4</span>],
-    first_section_offset: u16, <span class="comment">// This is to align with a page at write time.
+    magic: [u8; <span class="number">4</span>], <span class="comment">// Magic number to identify the file.
+    </span>first_section_offset: u16, <span class="comment">// This is to align with a page at write time.
     </span>page_size: u16,
 }
 
 <span class="doccomment">/// Each concurrent sublogger is tracked through a section header.
+/// They form a linked list of sections.
 /// The entry type is used to identify the type of data in the section.
 </span><span class="attr">#[derive(Encode, Decode, Debug)]
 </span><span class="kw">pub struct </span>SectionHeader {
-    magic: [u8; <span class="number">2</span>],
-    entry_type: UnifiedLogType,
+    magic: [u8; <span class="number">2</span>], <span class="comment">// Magic number to identify the section.
+    </span>entry_type: UnifiedLogType,
     section_size: u32, <span class="comment">// offset from the first byte of this header to the first byte of the next header (MAGIC to MAGIC).
     </span>filled_size: u32,  <span class="comment">// how much of the section is filled.
 </span>}
@@ -1037,7 +1040,6 @@
 }
 
 <span class="doccomment">/// A read side of the datalogger.
-</span><span class="attr">#[allow(dead_code)]
 </span><span class="kw">pub struct </span>UnifiedLoggerRead {
     file: File,
     mmap_buffer: Mmap,
@@ -1055,7 +1057,9 @@
     flushed_until: usize,
 }
 
-<span class="kw">pub struct </span>SectionHandle {
+<span class="doccomment">/// A SectionHandle is a handle to a section in the datalogger.
+/// It allows to track the lifecycle of a section of the datalogger.
+</span><span class="kw">pub struct </span>SectionHandle {
     section_header: SectionHeader,
     buffer: <span class="kw-2">&amp;</span><span class="lifetime">'static </span><span class="kw-2">mut </span>[u8], <span class="comment">// This includes the encoded header for end of section patching.
     </span>used: u32,                 <span class="comment">// this is the size of the used part of the buffer.
