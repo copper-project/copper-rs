@@ -1,11 +1,15 @@
 [package]
 name = "cu29-log"
+description = "This is part of the text logging runtime for Copper. It cannot be used independently from the copper project."
+documentation = "https://docs.rs/cu29-log"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
 keywords.workspace = true
 categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 bincode = { workspace = true }
@@ -13,4 +17,4 @@ serde = { workspace = true }
 cu29-value = { workspace = true }
 cu29-traits = { workspace = true }
 cu29-clock = { workspace = true }
-strfmt = "0.2.0"
+strfmt = "0.2.4"

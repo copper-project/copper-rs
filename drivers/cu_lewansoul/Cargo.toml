@@ -1,10 +1,18 @@
 [package]
 name = "cu_lewansoul"
-version = "0.1.0"
-edition = "2021"
+description = "This is a driver for the Lewansoul serial servos."
+
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
-uom = "0.36.0"
-cu29 = { path = "../../cu29" }
-bincode = "2.0.0-rc.3"
+uom = { workspace = true }
+cu29 = { workspace = true }
+bincode = { workspace = true }
 serialport = "4.4.0"

@@ -1,11 +1,16 @@
 [package]
 name = "cu29"
+description = "Copper Runtime Core crate. Copper is an engine for robotics."
+documentation = "https://docs.rs/cu29"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
 keywords.workspace = true
 categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
 
 [package.metadata.cargo-machete]
 ignored = ["cu29-log-runtime", "cu29-log"] # It is used from a proc macro

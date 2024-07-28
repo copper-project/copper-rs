@@ -1,19 +1,25 @@
 [package]
 name = "cu29-value"
+description = "This is a fork of Value with custom types added for Copper like the time and units."
+
 version.workspace = true
 edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
 authors = ["arcnmx", "gbin"]
 
-description = "Serialization value trees"
 readme = "README.md"
 keywords = ["serde"]
 license = "MIT"
+
+documentation = "https://docs.rs/cu29-value"
 
 [dependencies]
 bincode = { workspace = true }
 serde = { workspace = true }
 cu29-clock = { workspace = true }
-ordered-float = "4.2.0"
+ordered-float = "4.2.1"
 
 [dev-dependencies]
 serde_derive = { workspace = true }
