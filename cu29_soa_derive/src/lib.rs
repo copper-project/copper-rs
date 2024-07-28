@@ -4,6 +4,66 @@ use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{parse_macro_input, DeriveInput, Fields, Data};
 
+/// Build a fixed sized SoA (Structure of Arrays) from a struct.
+/// The outputted SoA will be suitable for in place storage in messages and should be
+/// easier for the compiler to vectorize.
+///
+/// for example:
+///
+/// ```ignore
+/// #[derive(Soa)]
+/// struct MyStruct {
+///    a: i32,
+///    b: f32,
+/// }
+/// ```
+///
+/// will generate:
+/// ```ignore
+/// pub struct MyStructSoa<const N: usize> {
+///     pub a: [i32; N],
+///     pub b: [f32; N],
+/// }
+/// ```
+///
+/// You can then use the generated struct to store multiple
+/// instances of the original struct in an SoA format.
+///
+/// ```ignore
+/// // makes an SOA with a default value
+/// let soa1: MyStructSoa<8> = XyzSoa::new(MyStruct{ a: 1, b: 2.3 });
+/// ```
+/// 
+/// Then you can access the fields of the SoA as slices:
+/// ```ignore
+/// let a = soa1.a();
+/// let b = soa1.b();
+/// ```
+/// 
+/// You can also access a range of the fields:
+/// ```ignore
+/// let a = soa1.a_range(0..4);
+/// let b = soa1.b_range(0..4);
+/// ```
+/// 
+/// You can also modify the fields of the SoA:
+/// ```ignore
+/// soa1.a_mut()[0] = 42;
+/// soa1.b_mut()[0] = 42.0;
+/// ```
+/// 
+/// You can also modify a range of the fields:
+/// ```ignore
+/// soa1.a_range_mut(0..4)[0] = 42;
+/// soa1.b_range_mut(0..4)[0] = 42.0;
+/// ```
+/// 
+/// You can also apply a function to all the fields of the SoA:
+/// ```ignore
+/// soa1.apply(|a, b| {
+///    (a + 1, b + 1.0)
+/// });
+/// ```
 #[proc_macro_attribute]
 pub fn soa(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
