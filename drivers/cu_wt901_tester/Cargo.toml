@@ -1,5 +1,5 @@
 [package]
-name = "cu_wt901_tester"
+name = "cu-wt901-tester"
 description = "This is a tester for the WT901 IMU driver in the Copper Project."
 version.workspace = true
 authors.workspace = true

@@ -1,5 +1,5 @@
 [package]
-name = "cu_caterpillar"
+name = "cu-caterpillar"
 default-run = "cu-caterpillar"
 description = "This is an example for the Copper project to measure a base latency from the runtime. It can be used dry running on a host or on a Raspberry Pi flipping GPIO pins."
 
