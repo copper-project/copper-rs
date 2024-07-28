@@ -4,7 +4,8 @@ use cu29_log_derive::debug;
 use serde::Serialize;
 use std::path::PathBuf;
 
-fn main() {
+#[test]
+fn log_derive_end2end() {
     let _ = basic_copper_setup(&PathBuf::from("/tmp/teststructlog.copper"), None, true)
         .expect("Failed to setup logger.");
     debug!("Logger created.");
