@@ -784,6 +784,8 @@
 <a href="#784" id="784">784</a>
 <a href="#785" id="785">785</a>
 <a href="#786" id="786">786</a>
+<a href="#787" id="787">787</a>
+<a href="#788" id="788">788</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>libc;
 
 <span class="kw">use </span>std::fs::{File, OpenOptions};
@@ -802,7 +804,7 @@
 <span class="kw">use </span>bincode::{decode_from_slice};
 <span class="kw">use </span>cu29_traits::{CuError, CuResult, UnifiedLogType, WriteStream};
 
-<span class="kw">const </span>MAIN_MAGIC: [u8; <span class="number">4</span>] = [<span class="number">0xB4</span>, <span class="number">0xA5</span>, <span class="number">0x50</span>, <span class="number">0xFF</span>]; 
+<span class="kw">const </span>MAIN_MAGIC: [u8; <span class="number">4</span>] = [<span class="number">0xB4</span>, <span class="number">0xA5</span>, <span class="number">0x50</span>, <span class="number">0xFF</span>];
 
 <span class="kw">const </span>SECTION_MAGIC: [u8; <span class="number">2</span>] = [<span class="number">0xFA</span>, <span class="number">0x57</span>];
 
@@ -1041,10 +1043,12 @@
 
 <span class="doccomment">/// A read side of the datalogger.
 </span><span class="kw">pub struct </span>UnifiedLoggerRead {
-    file: File,
+    <span class="attr">#[allow(dead_code)]
+    </span>file: File,
     mmap_buffer: Mmap,
     reading_position: usize,
-    page_size: usize,
+    <span class="attr">#[allow(dead_code)]
+    </span>page_size: usize,
 }
 
 <span class="doccomment">/// A write side of the datalogger.
