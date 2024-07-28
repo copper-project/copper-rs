@@ -17,7 +17,7 @@ use syn::{Expr, ExprAssign, ExprLit, Lit};
 /// Named parameters are specified as `name = value`.
 /// Unnamed parameters are specified as `value`.
 /// # Example
-/// ```
+/// ```ignore
 /// use cu29_log_derive::debug;
 /// let a = 1;
 /// let b = 2;
@@ -26,7 +26,7 @@ use syn::{Expr, ExprAssign, ExprLit, Lit};
 ///
 /// You can retreive this data using the log_reader generated with your project and giving it the
 /// unified .copper log file and the string index file generated at compile time.
-/// 
+///
 /// Note: In debug mode, the log will also be printed to the console. (ie slooow).
 /// In release mode, the log will be only be written to the unified logger.
 #[proc_macro]
