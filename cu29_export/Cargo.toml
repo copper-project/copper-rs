@@ -1,11 +1,15 @@
 [package]
 name = "cu29-export"
+description = "This is the library support to build log exports for the copper project. It cannot be used independently from the copper project."
+documentation = "https://docs.rs/cu29-export"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
 keywords.workspace = true
 categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
 cu29 = { workspace = true }
@@ -14,7 +18,7 @@ cu29-log = { workspace = true }
 cu29-clock = { workspace = true }
 cu29-unifiedlog = { workspace = true }
 cu29-intern-strs = { workspace = true }
-clap = { version = "4.5.7", features = ["derive"] }
+clap = { version = "4.5.11", features = ["derive"] }
 bincode = { workspace = true }
 
 [dev-dependencies]

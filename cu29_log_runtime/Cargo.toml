@@ -1,11 +1,15 @@
 [package]
 name = "cu29-log-runtime"
+description = "This is part the runtime part of the text logger for Copper. It cannot be used independently from the Copper project."
+documentation = "https://docs.rs/cu29-log-runtime"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
 keywords.workspace = true
 categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
 
 [package.metadata.cargo-machete]
 ignored = ["simplelog"]  # Used from conditional compilation
@@ -20,12 +24,12 @@ bincode = { workspace = true }
 kanal = { version = "0.1.0-pre8" }
 once_cell = "1.19.0"
 simplelog = "0.12.2"
-log = "0.4.21"
+log = "0.4.22"
 
 # this is for the integration tests
 [dev-dependencies]
-tempdir = "0.3.7"
 cu29 = { workspace = true }
 cu29-log-derive = { workspace = true }
 cu29-helpers = { workspace = true }
 serde = { workspace = true }
+tempdir = "0.3.7"

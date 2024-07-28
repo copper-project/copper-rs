@@ -1,19 +1,26 @@
 [package]
 name = "cu_wt901_tester"
-version = "0.1.0"
-edition = "2021"
+description = "This is a tester for the WT901 IMU driver in the Copper Project."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
 
 [package.metadata.cargo-machete]
 ignored = ["cu29-log", "cu29-log-runtime", "cu29-unifiedlog", "copper-traits"]  # proc macro
 
 [dependencies]
-cu29 = { path = "../../cu29" }
-cu29-log = { path = "../../cu29_log" }
-cu29-log-derive = { path = "../../cu29_log_derive" }
-cu29-log-runtime = { path = "../../cu29_log_runtime" }
-cu29-traits = { path = "../../cu29_traits" }
-cu29-derive = { path = "../../cu29_derive" }
-cu29-unifiedlog = { path = "../../cu29_unifiedlog" }
-cu29-helpers = { path = "../../cu29_helpers" }
-cu-wt901 = { path = "../cu_wt901" }
+cu29 = { workspace = true }
+cu29-log = { workspace = true }
+cu29-log-derive = { workspace = true }
+cu29-log-runtime = { workspace = true }
+cu29-traits = { workspace = true }
+cu29-derive = { workspace = true }
+cu29-unifiedlog = { workspace = true }
+cu29-helpers = { workspace = true }
+cu-wt901 = { workspace = true }
 

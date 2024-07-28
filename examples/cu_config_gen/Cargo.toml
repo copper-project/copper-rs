@@ -1,10 +1,15 @@
 [package]
 name = "cu-config-gen"
-version = "0.1.0"
-edition = "2021"
-license = "Apache-2.0"
-categories = ["science::robotics"]
+description = "This is an example for the Copper project to show how to programmatically generate a config."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
 
 [dependencies]
-cu29 = { path = "../../cu29" }
-uom = "0.36.0"
+cu29 = { workspace = true }
+uom = { workspace = true }

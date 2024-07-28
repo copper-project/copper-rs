@@ -1,19 +1,24 @@
 [package]
 name = "cu-rp-gpio"
-version = "0.1.0"
-edition = "2021"
-license = "Apache-2.0"
-keywords = ["robotics", "middleware", "copper", "real-time"]
-categories = ["science::robotics"]
+description = "This is a driver for the Raspberry Pi GPIOs."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
 
 [package.metadata.cargo-machete]
 ignored = ["cu29-log", "cu29-log-runtime"]  # proc macro
 
 [dependencies]
-cu29 = { path = "../../cu29" }
-cu29-log = { path = "../../cu29_log" }
-cu29-log-runtime = { path = "../../cu29_log_runtime" }
-cu29-log-derive = { path = "../../cu29_log_derive" }
+cu29 = { workspace = true }
+cu29-log = { workspace = true }
+cu29-log-runtime = { workspace = true }
+cu29-log-derive = { workspace = true }
+bincode = { workspace = true }
+
 rppal = "0.18.0"
-bincode = { version = "2.0.0-rc.3" , features = ["derive"]}
-lazy_static = "1.4.0"
+lazy_static = "1.5.0"
