@@ -81,6 +81,26 @@
 <a href="#81" id="81">81</a>
 <a href="#82" id="82">82</a>
 <a href="#83" id="83">83</a>
+<a href="#84" id="84">84</a>
+<a href="#85" id="85">85</a>
+<a href="#86" id="86">86</a>
+<a href="#87" id="87">87</a>
+<a href="#88" id="88">88</a>
+<a href="#89" id="89">89</a>
+<a href="#90" id="90">90</a>
+<a href="#91" id="91">91</a>
+<a href="#92" id="92">92</a>
+<a href="#93" id="93">93</a>
+<a href="#94" id="94">94</a>
+<a href="#95" id="95">95</a>
+<a href="#96" id="96">96</a>
+<a href="#97" id="97">97</a>
+<a href="#98" id="98">98</a>
+<a href="#99" id="99">99</a>
+<a href="#100" id="100">100</a>
+<a href="#101" id="101">101</a>
+<a href="#102" id="102">102</a>
+<a href="#103" id="103">103</a>
 </pre></div><pre class="rust"><code><span class="kw">mod </span>index;
 
 <span class="kw">extern crate </span>proc_macro;
@@ -92,7 +112,27 @@
 <span class="kw">use </span>syn::Token;
 <span class="kw">use </span>syn::{Expr, ExprAssign, ExprLit, Lit};
 
-<span class="attr">#[proc_macro]
+<span class="doccomment">/// This macro is used to log a message with parameters.
+/// The first parameter is a string literal that represents the message to be logged.
+/// Only `{}` is supported as a placeholder for parameters.
+/// The rest of the parameters are the values to be logged.
+/// The parameters can be named or unnamed.
+/// Named parameters are specified as `name = value`.
+/// Unnamed parameters are specified as `value`.
+/// # Example
+/// ```
+/// use cu29_log_derive::debug;
+/// let a = 1;
+/// let b = 2;
+/// debug!("a = {}, b = {}", my_value = a, b); // named and unnamed parameters
+/// ```
+///
+/// You can retreive this data using the log_reader generated with your project and giving it the
+/// unified .copper log file and the string index file generated at compile time.
+/// 
+/// Note: In debug mode, the log will also be printed to the console. (ie slooow).
+/// In release mode, the log will be only be written to the unified logger.
+</span><span class="attr">#[proc_macro]
 </span><span class="kw">pub fn </span>debug(input: TokenStream) -&gt; TokenStream {
     <span class="kw">let </span>parser = syn::punctuated::Punctuated::&lt;Expr, <span class="macro">Token!</span>[,]&gt;::parse_terminated;
     <span class="kw">let </span>exprs = parser.parse(input).expect(<span class="string">"Failed to parse input"</span>);
