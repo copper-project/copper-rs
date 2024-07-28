@@ -22,10 +22,6 @@ jobs:
           profile: minimal
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y libudev-dev
-      - name: Build
-        run: cargo build
-      - name: Run tests
-        run: cargo test
       - name: Run docs
         run: cargo doc
       - name: Deploy docs preview to GitHub Pages
@@ -33,15 +29,3 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./target/doc
-
-      # Integration Test for the 1 liner generation of a project.
-      - name: Install cargo-generate
-        run: cargo install cargo-generate
-      - name: Generate new project in temporary directory
-        run: |
-          cd templates
-          cargo generate -p cu_full --name test_project --destination $RUNNER_TEMP --silent
-      - name: Compile generated project
-        run: |
-          cd $RUNNER_TEMP/test_project
-          cargo build --release
