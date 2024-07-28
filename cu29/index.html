@@ -44,11 +44,12 @@ Copper is still in <strong>early development</strong>, and the API is subject to
 <p>You can generate a project from a template present in the repo.
 It will ask you the name you want to pick interactively.</p>
 <div class="example-wrap"><pre class="language-bash"><code>cargo install cargo-generate
-cd templates
+git clone https://github.com/copper-project/copper-rs
+cd copper-rs/templates
 cargo nunew [path_where_you_want_your_project_created]
     🤷   Project Name:
 </code></pre></div>
-<p>Check out <a href="templates/README.md">copper-templates</a> for more info.</p>
+<p>Check out <a href="https://github.com/copper-project/copper-rs/templates/README.md">copper-templates</a> for more info.</p>
 <h4 id="how-a-copper-application-looks-like-some-concepts-and-insights-about-how-it-can-be-that-fast"><a class="doc-anchor" href="#how-a-copper-application-looks-like-some-concepts-and-insights-about-how-it-can-be-that-fast">§</a>How a Copper application looks like, some concepts and insights about how it can be that fast.</h4>
 <p>Here is a simple example of a task graph in RON:</p>
 <div class="example-wrap"><pre class="language-RON"><code>(
