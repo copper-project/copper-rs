@@ -18,7 +18,7 @@ members = [
     "drivers/cu_wt901_tester",
     "drivers/cu_lewansoul",
     "examples/cu_caterpillar",
-    "examples/config_gen",
+    "examples/cu_config_gen",
     ]
 resolver = "2"
 
@@ -32,7 +32,7 @@ categories = ["science::robotics"]
 
 [workspace.dependencies]
 
-# Internal
+# Copper Core
 cu29 = { path = "cu29" }
 cu29-clock = { path = "cu29_clock" }
 cu29-derive = { path = "cu29_derive" }
