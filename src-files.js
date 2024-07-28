@@ -8,7 +8,6 @@ var srcIndex = new Map(JSON.parse('[\
 ["cu29_log",["",[],["lib.rs"]]],\
 ["cu29_log_derive",["",[],["index.rs","lib.rs"]]],\
 ["cu29_log_runtime",["",[],["lib.rs"]]],\
-["cu29_log_test",["",[],["main.rs"]]],\
 ["cu29_rendercfg",["",[],["config.rs","rendercfg.rs"]]],\
 ["cu29_soa_derive",["",[],["format.rs","lib.rs"]]],\
 ["cu29_traits",["",[],["lib.rs"]]],\
