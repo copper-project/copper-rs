@@ -2,7 +2,7 @@
 
 ### Here is a quick illustration of how to build and deploy a Copper application.
 
-<img src="deployment.svg" alt="Copper Deployment illustration">
+<img src="https://raw.githubusercontent.com/copper-project/copper-rs/master/doc/deployment.svg" alt="Copper Deployment illustration">
 
 At compile time, `cargo build` or `cargo build -r` will generate 3 artifacts.
 1. the actual binary that will run on the target.
