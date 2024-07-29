@@ -36,6 +36,10 @@ Copper is a data-oriented runtime with these key components:
 * Fast Structured Logging: Interns and indexes logging strings at compile time, avoiding runtime string construction and ensuring high-speed textual logging.
 
 
+### What feaures are implemented, what features are missing? What do we plan to implement next?
+
+
+
 ### Kickstarting a copper project for the impatients
 
 You can generate a project from a template present in the repo.
