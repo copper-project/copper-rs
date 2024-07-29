@@ -16,12 +16,14 @@ use cu29::config::NodeInstanceConfig;
 use cu29::CuResult;
 use cu29::cutask::{CuTaskLifecycle, CuSrcTask, Freezable, CuMsg};
 use cu29_soa_derive::soa;
+use uom::si::f32::Length;
 
-const MAX_UDP_PACKET_SIZE: usize = 65507;
+// const MAX_UDP_PACKET_SIZE: usize = 65507;
 
 pub struct Vlp16 {
     velo_config: Config,
     listen_addr: String,
+    #[allow(dead_code)]
     test_mode: bool,
     socket: Option<UdpSocket>,
 }
@@ -65,7 +67,7 @@ impl CuTaskLifecycle for Vlp16 {
 }
 
 #[derive(Default, PartialEq, Debug, Copy, Clone)]
-struct LidarLength(uom::si::f32::Length);
+struct LidarLength(Length);
 
 impl Encode for LidarLength {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
@@ -76,7 +78,7 @@ impl Encode for LidarLength {
 impl Decode for LidarLength {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let value:f32 = Decode::decode(decoder)?;
-        Ok(LidarLength(uom::si::f32::Length::new::<meter>(value)))
+        Ok(LidarLength(Length::new::<meter>(value)))
     }
 }
 
@@ -105,25 +107,38 @@ pub struct XYZ {
     z: LidarLength,
 }
 
+impl XYZ {
+    pub fn new(x: f32, y: f32, z: f32) -> Self {
+        Self {
+            x: LidarLength(Length::new::<meter>(x)),
+            y: LidarLength(Length::new::<meter>(y)),
+            z: LidarLength(Length::new::<meter>(z)),
+        }
+    }
+
+}
+
 impl CuSrcTask for Vlp16 {
     type Output = XYZSoa<10000>;
 
-    fn process(&mut self, clock: &RobotClock, new_msg: &mut CuMsg<Self::Output>) -> CuResult<()> {
-        let m = uom::si::f32::Length::default();
+    fn process(&mut self, _clock: &RobotClock, new_msg: &mut CuMsg<Self::Output>) -> CuResult<()> {
         let socket = self.socket.as_ref().unwrap();
         let mut packet = [0u8; 1206];
-        let (read_size, peer_addr) = socket.recv_from(&mut packet).unwrap();
+        let (read_size, _peer_addr) = socket.recv_from(&mut packet).unwrap();
         let packet = &packet[..read_size];
 
         let packet = Packet::from_slice(packet).unwrap();
         let packets = [Ok::<Packet, ()>(packet)].into_iter(); // 🤮
         let frame:FrameXyz =  try_packet_to_frame_xyz(self.velo_config.clone(), packets).unwrap().next().unwrap().unwrap();
+        let i = 0;
         frame.firing_iter().for_each(|firing| {
             firing.point_iter().for_each(|point| {
                 let point = point.as_single().unwrap();
-                let  x = point.measurement.xyz[0].as_meters();
-                let  y = point.measurement.xyz[0].as_meters();
-                let  z = point.measurement.xyz[0].as_meters();
+                let  x = point.measurement.xyz[0].as_meters() as f32;
+                let  y = point.measurement.xyz[0].as_meters() as f32;
+                let  z = point.measurement.xyz[0].as_meters() as f32;
+                let el = &mut new_msg.payload;
+                el.set(i, XYZ::new(x, y, z));
             });
         });
         Ok(())
@@ -134,7 +149,6 @@ impl CuSrcTask for Vlp16 {
 mod tests {
     use std::fs::File;
     use pcap_file::pcap::PcapReader;
-    use pretty_hex::*;
 
     use super::*;
 
@@ -156,8 +170,11 @@ mod tests {
             let socket = UdpSocket::bind("0.0.0.0:2367").unwrap();
             socket.send_to(&data, "127.0.0.1:2368").unwrap();
             // process
-            drv.process(&clk, &mut CuMsg::new(XYZSoa::default())).unwrap();
+            let mut msg = CuMsg::new(XYZSoa::<10000>::default());
+            drv.process(&clk, &mut msg).unwrap();
+            assert_eq!(0.009406593f32, msg.payload.x[0].0.value);
             break;
         }
+        drv.stop(&clk).unwrap();
     }
 }

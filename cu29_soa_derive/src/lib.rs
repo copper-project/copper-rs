@@ -119,6 +119,7 @@ pub fn soa(_attr: TokenStream, item: TokenStream) -> TokenStream {
         use bincode::error::DecodeError as _DecodeError;
         use bincode::error::EncodeError as _EncodeError;
 
+        #[derive(Debug)] 
         pub struct #soa_struct_name<const N: usize> {
             #(pub #field_names: [#field_types; N]),*
         }
