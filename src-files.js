@@ -18,6 +18,7 @@ var srcIndex = new Map(JSON.parse('[\
 ["cu_config_gen",["",[],["main.rs"]]],\
 ["cu_lewansoul",["",[],["lib.rs"]]],\
 ["cu_rp_gpio",["",[],["lib.rs"]]],\
+["cu_vlp16",["",[],["lib.rs"]]],\
 ["cu_wt901",["",[],["lib.rs"]]],\
 ["cu_wt901_tester",["",[],["main.rs"]]]\
 ]'));

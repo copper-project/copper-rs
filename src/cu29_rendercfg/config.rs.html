@@ -517,6 +517,14 @@
 <a href="#517" id="517">517</a>
 <a href="#518" id="518">518</a>
 <a href="#519" id="519">519</a>
+<a href="#520" id="520">520</a>
+<a href="#521" id="521">521</a>
+<a href="#522" id="522">522</a>
+<a href="#523" id="523">523</a>
+<a href="#524" id="524">524</a>
+<a href="#525" id="525">525</a>
+<a href="#526" id="526">526</a>
+<a href="#527" id="527">527</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! This module defines the configuration of the copper runtime.
 //! The configuration is a directed graph where nodes are tasks and edges are connections between tasks.
 //! The configuration is serialized in the RON format.
@@ -562,8 +570,16 @@
 
 <span class="comment">// forward map interface
 </span><span class="kw">impl </span>NodeInstanceConfig {
+    <span class="kw">pub fn </span>new() -&gt; <span class="self">Self </span>{
+        NodeInstanceConfig(HashMap::new())
+    }
+
     <span class="kw">pub fn </span>get&lt;T: From&lt;Value&gt;&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, key: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;T&gt; {
         <span class="self">self</span>.<span class="number">0</span>.get(key).map(|v| T::from(v.clone()))
+    }
+
+    <span class="kw">pub fn </span>set&lt;T: Into&lt;Value&gt;&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, key: <span class="kw-2">&amp;</span>str, value: T) {
+        <span class="self">self</span>.<span class="number">0</span>.insert(key.to_string(), value.into());
     }
 }
 
