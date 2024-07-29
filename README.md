@@ -21,25 +21,56 @@ Copper is a user-friendly robotics framework designed for creating fast and reli
 * Product Oriented: Copper aims to avoid late-stage infra integration issues by generating a very predictable runtime.
 
 > [!NOTE]
-> Copper is still in **early development**, and the API is subject to change. We are looking for contributors to help us build the best robotics framework possible. If you are interested, please join us on [Gitter](https://gitter.im/copper-project/copper-rs) or open an issue.
+> Copper is still in **early development / alpha stage**, and the APIs are subject to change. We are looking for contributors to help us build the best robotics framework possible. If you are interested, please join us on [Gitter](https://gitter.im/copper-project/copper-rs) or open an issue.
 
 ### Technical Overview
 
 Copper is a data-oriented runtime with these key components:
 
-* Task Graph: Described in [RON](https://github.com/ron-rs/ron), this configures the system's topology, specifying which tasks communicate and setting types for nodes and messages.
+* **Task Graph**: Described in [RON](https://github.com/ron-rs/ron), this configures the system's topology, specifying which tasks communicate and setting types for nodes and messages.
 
-* Runtime Generator: This component decides on an execution plan based on the graph's metadata. It preallocates a "Copper List" to maximize sequential memory access during execution.
+* **Runtime Generator**: This component decides on an execution plan based on the graph's metadata. It preallocates a "Copper List" to maximize sequential memory access during execution.
 
-* Zero-Copy Data Logging: Records all messages between tasks without copying data, ensuring efficient logging.
+* **Zero-Copy Data Logging**: Records all messages between tasks without copying data, ensuring efficient logging.
 
-* Fast Structured Logging: Interns and indexes logging strings at compile time, avoiding runtime string construction and ensuring high-speed textual logging.
+* **Fast Structured Logging**: Interns and indexes logging strings at compile time, avoiding runtime string construction and ensuring high-speed textual logging.
 
+### What features are already implemented?
 
-### What feaures are implemented, what features are missing? What do we plan to implement next?
+1. **Basic task lifecycle interface**: Should be relatively stable for you to start contributing new algorithms, sensors, and actuators.
+2. **Runtime generation**: Works but is very simple; this is just a BFS type of execution.
+3. **Log reader & structured log reader**: Can export data, currently in Rust debug format.
+4. **Simple/minimal drivers included**: These are more to show you how to implement your own:
 
+   **Sensors**:
+    1. Lidar: [Velodyne/Ouster VLP16](drivers/cu_vlp16) / crate name: cu_vlp16
+       <img align="right" width="100" src="doc/vlp16.jpg" alt="vlp16"/>
+    2. IMU: [WitMotion WT901](drivers/cu_wt901) / crate name: cu_wt901
+       <img align="right" width="100" src="doc/wt901.jpg" alt="wt901"/>
 
+   **Actuators**:
+    1. GPIO: [Raspberry Pi](drivers/cu_rp_gpio) / crate name: cu_rp_gpio
+       <img align="right" width="100" src="doc/rp.jpg" alt="rp"/>
+    2. Servo: [Lewansoul Servo Bus (LX-16A, etc.)](drivers/cu_lewansoul) / crate name: cu_lewansoul
+       <img align="right" width="100" src="doc/lewansoul.jpg" alt="vlp16"/>
 
+### What features are missing? What do we plan to implement next?
+
+A lot! If any of these items pique your interest and you would like to contribute, feel free to reach out!
+
+Here are some of the features we plan to implement next (in ~order of priority):
+
+- [ ] **Deterministic log replay**: As the runtime is generated in a deterministic fashion, we need to add hooks to inject messages into an existing runtime.
+- [ ] **Parallel Copper Lists**: Today Copper is monothreaded; this should enable concurrent Copper Lists to be executed at the same time with no contention.
+- [ ] **Bunching**: as various sensors can vary a lot in output frequencies, we need to be able to bunch messages together with a dropping/algorithmic policy (mean max etc...). Today this can be achieved on the user side but it is painful.
+- [ ] **Monitoring**: We need a parallel system that can listen to monitoring messages and act accordingly.
+- [ ] **Distributed Copper**: Currently, we can only create one process. We need proper RPC filtering copper lists per subsystem.
+- [ ] **ROS interfacing**: Build a pair of sink and source to connect to existing ROS systems, helping users migrate their infra bit by bit.
+- [ ] **Modular Configuration**: As robots built with Copper gain complexity, users will need to build "variations" of their robots without duplicating their entire RON file.
+- [ ] **"PGO"-like scheduling**: Pass previous log runs to the runtime generator to allow it to make better scheduling decisions.
+
+So we are only at the beginning, but so much cool stuff is coming up!
+ 
 ### Kickstarting a copper project for the impatients
 
 You can generate a project from a template present in the repo.
