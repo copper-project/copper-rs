@@ -22,24 +22,75 @@
 </ul>
 <blockquote>
 <p>[!NOTE]
-Copper is still in <strong>early development</strong>, and the API is subject to change. We are looking for contributors to help us build the best robotics framework possible. If you are interested, please join us on <a href="https://gitter.im/copper-project/copper-rs">Gitter</a> or open an issue.</p>
+Copper is still in <strong>early development / alpha stage</strong>, and the APIs are subject to change. We are looking for contributors to help us build the best robotics framework possible. If you are interested, please join us on <a href="https://gitter.im/copper-project/copper-rs">Gitter</a> or open an issue.</p>
 </blockquote>
 <h4 id="technical-overview"><a class="doc-anchor" href="#technical-overview">§</a>Technical Overview</h4>
 <p>Copper is a data-oriented runtime with these key components:</p>
 <ul>
 <li>
-<p>Task Graph: Described in <a href="https://github.com/ron-rs/ron">RON</a>, this configures the system’s topology, specifying which tasks communicate and setting types for nodes and messages.</p>
+<p><strong>Task Graph</strong>: Described in <a href="https://github.com/ron-rs/ron">RON</a>, this configures the system’s topology, specifying which tasks communicate and setting types for nodes and messages.</p>
 </li>
 <li>
-<p>Runtime Generator: This component decides on an execution plan based on the graph’s metadata. It preallocates a “Copper List” to maximize sequential memory access during execution.</p>
+<p><strong>Runtime Generator</strong>: This component decides on an execution plan based on the graph’s metadata. It preallocates a “Copper List” to maximize sequential memory access during execution.</p>
 </li>
 <li>
-<p>Zero-Copy Data Logging: Records all messages between tasks without copying data, ensuring efficient logging.</p>
+<p><strong>Zero-Copy Data Logging</strong>: Records all messages between tasks without copying data, ensuring efficient logging.</p>
 </li>
 <li>
-<p>Fast Structured Logging: Interns and indexes logging strings at compile time, avoiding runtime string construction and ensuring high-speed textual logging.</p>
+<p><strong>Fast Structured Logging</strong>: Interns and indexes logging strings at compile time, avoiding runtime string construction and ensuring high-speed textual logging.</p>
 </li>
 </ul>
+<h4 id="what-features-are-already-implemented"><a class="doc-anchor" href="#what-features-are-already-implemented">§</a>What features are already implemented?</h4>
+<ol>
+<li>
+<p><strong>Basic task lifecycle interface</strong>: Should be relatively stable for you to start contributing new algorithms, sensors, and actuators.</p>
+</li>
+<li>
+<p><strong>Runtime generation</strong>: Works but is very simple; this is just a BFS type of execution.</p>
+</li>
+<li>
+<p><strong>Log reader &amp; structured log reader</strong>: Can export data, currently in Rust debug format.</p>
+</li>
+<li>
+<p><strong>Simple/minimal drivers included</strong>: These are more to show you how to implement your own:</p>
+<p><strong>Sensors</strong>:</p>
+<ol>
+<li>Lidar: <a href="drivers/cu_vlp16">Velodyne/Ouster VLP16</a> / crate name: cu_vlp16
+<img align="right" width="100" src="doc/vlp16.jpg" alt="vlp16"/></li>
+<li>IMU: <a href="drivers/cu_wt901">WitMotion WT901</a> / crate name: cu_wt901
+<img align="right" width="100" src="doc/wt901.jpg" alt="wt901"/></li>
+</ol>
+<p><strong>Actuators</strong>:</p>
+<ol>
+<li>GPIO: <a href="drivers/cu_rp_gpio">Raspberry Pi</a> / crate name: cu_rp_gpio
+<img align="right" width="100" src="doc/rp.jpg" alt="rp"/></li>
+<li>Servo: <a href="drivers/cu_lewansoul">Lewansoul Servo Bus (LX-16A, etc.)</a> / crate name: cu_lewansoul
+<img align="right" width="100" src="doc/lewansoul.jpg" alt="vlp16"/></li>
+</ol>
+</li>
+</ol>
+<h4 id="what-features-are-missing-what-do-we-plan-to-implement-next"><a class="doc-anchor" href="#what-features-are-missing-what-do-we-plan-to-implement-next">§</a>What features are missing? What do we plan to implement next?</h4>
+<p>A lot! If any of these items pique your interest and you would like to contribute, feel free to reach out!</p>
+<p>Here are some of the features we plan to implement next (in ~order of priority):</p>
+<ul>
+<li><input disabled="" type="checkbox"/>
+<strong>Deterministic log replay</strong>: As the runtime is generated in a deterministic fashion, we need to add hooks to inject messages into an existing runtime.</li>
+<li><input disabled="" type="checkbox"/>
+<strong>Parallel Copper Lists</strong>: Today Copper is monothreaded; this should enable concurrent Copper Lists to be executed at the same time with no contention.</li>
+<li><input disabled="" type="checkbox"/>
+<strong>Bunching</strong>: as various sensors can vary a lot in output frequencies, we need to be able to bunch messages together with a dropping/algorithmic policy (mean max etc…). Today this can be achieved on the user side but it is painful.</li>
+<li><input disabled="" type="checkbox"/>
+<strong>Monitoring</strong>: We need a parallel system that can listen to monitoring messages and act accordingly.</li>
+<li><input disabled="" type="checkbox"/>
+<strong>Distributed Copper</strong>: Currently, we can only create one process. We need proper RPC filtering copper lists per subsystem.</li>
+<li><input disabled="" type="checkbox"/>
+<strong>ROS interfacing</strong>: Build a pair of sink and source to connect to existing ROS systems, helping users migrate their infra bit by bit.</li>
+<li><input disabled="" type="checkbox"/>
+<strong>Modular Configuration</strong>: As robots built with Copper gain complexity, users will need to build “variations” of their robots without duplicating their entire RON file.</li>
+<li><input disabled="" type="checkbox"/>
+<strong>“PGO”-like scheduling</strong>: Pass previous log runs to the runtime generator to allow it to make better scheduling decisions.</li>
+</ul>
+<p>So we are only at the beginning, but so much cool stuff is coming up!</p>
 <h4 id="kickstarting-a-copper-project-for-the-impatients"><a class="doc-anchor" href="#kickstarting-a-copper-project-for-the-impatients">§</a>Kickstarting a copper project for the impatients</h4>
 <p>You can generate a project from a template present in the repo.
 It will ask you the name you want to pick interactively.</p>
