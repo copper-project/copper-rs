@@ -1,7 +1,7 @@
 mod format;
 use format::{highlight_rust_code, rustfmt_generated_code};
 use proc_macro::TokenStream;
-use quote::{format_ident, quote};
+use quote::{format_ident, quote, ToTokens};
 use syn::{parse_macro_input, DeriveInput, Fields, Data};
 
 /// Build a fixed sized SoA (Structure of Arrays) from a struct.
@@ -83,12 +83,22 @@ pub fn soa(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut field_names_range = vec![];
     let mut field_names_range_mut = vec![];
     let mut field_types = vec![];
+    let mut unique_field_names = vec![];
+    let mut unique_field_types = vec![];
 
     for field in fields {
         let field_name = field.ident.as_ref().unwrap();
         let field_type = &field.ty;
         field_names.push(field_name);
         field_types.push(field_type);
+
+        // find unique field types by name
+        let type_name = field_type.into_token_stream().to_string();
+        if !unique_field_names.contains(&type_name) {
+            unique_field_names.push(type_name);
+            unique_field_types.push(field_type);
+        }
+
         field_names_mut.push(format_ident!("{}_mut", field_name));
         field_names_range.push(format_ident!("{}_range", field_name));
         field_names_range_mut.push(format_ident!("{}_range_mut", field_name));
@@ -99,6 +109,15 @@ pub fn soa(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let expanded = quote! {
         #input
+
+        use bincode::Decode as _Decode;
+        use bincode::Encode as _Encode;
+
+        use bincode::enc::Encoder as _Encoder;
+        use bincode::de::Decoder as _Decoder;
+
+        use bincode::error::DecodeError as _DecodeError;
+        use bincode::error::EncodeError as _EncodeError;
 
         pub struct #soa_struct_name<const N: usize> {
             #(pub #field_names: [#field_types; N]),*
@@ -154,6 +173,37 @@ pub fn soa(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
             )*
 
+        }
+
+        impl<const N: usize> _Encode for #soa_struct_name<N>  {
+            fn encode<E: _Encoder>(&self, encoder: &mut E) -> Result<(), _EncodeError> {
+            #(
+                for i in 0..N {
+                    self.#field_names[i].encode(encoder)?;
+                }
+            )*
+            Ok(())
+            }
+        }
+
+        impl<const N: usize> _Decode for #soa_struct_name<N> {
+            fn decode<D: _Decoder>(decoder: &mut D) -> Result<Self, _DecodeError> {
+                let mut result = Self::default();
+                #(
+                    for i in 0..N {
+                        result.#field_names[i] = _Decode::decode(decoder)?;
+                    }
+                )*
+                Ok(result)
+            }
+        }
+
+        impl<const N: usize> Default for #soa_struct_name<N> {
+            fn default() -> Self {
+                 Self {
+                    #( #field_names: [#field_types::default(); N] ),*
+                 }
+            }
         }
 
         // Implements a basic element by element add

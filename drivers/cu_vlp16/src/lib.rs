@@ -2,6 +2,7 @@ use velodyne_lidar::{Config, Config16};
 use velodyne_lidar::Packet;
 
 use std::net::UdpSocket;
+use std::ops::{Add, Sub};
 use std::time::Duration;
 use bincode::enc::Encoder;
 use bincode::{Decode, Encode};
@@ -14,7 +15,7 @@ use cu29::clock::RobotClock;
 use cu29::config::NodeInstanceConfig;
 use cu29::CuResult;
 use cu29::cutask::{CuTaskLifecycle, CuSrcTask, Freezable, CuMsg};
-// use cu29_soa::soa;
+use cu29_soa_derive::soa;
 
 const MAX_UDP_PACKET_SIZE: usize = 65507;
 
@@ -63,48 +64,52 @@ impl CuTaskLifecycle for Vlp16 {
     }
 }
 
-#[derive(PartialEq, Debug)]
-// #[soa]
-pub struct XYZ {
-    x: uom::si::f32::Length,
-    y: uom::si::f32::Length,
-    z: uom::si::f32::Length,
-}
+#[derive(Default, PartialEq, Debug, Copy, Clone)]
+struct LidarLength(uom::si::f32::Length);
 
-impl Encode for XYZ {
+impl Encode for LidarLength {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        Encode::encode(&self.x.value, encoder)?;
-        Encode::encode(&self.y.value, encoder)?;
-        Encode::encode(&self.z.value, encoder)
-    }
-}
-impl Decode for XYZ {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let x:f32 = Decode::decode(decoder)?;
-        let y:f32 = Decode::decode(decoder)?;
-        let z:f32 = Decode::decode(decoder)?;
-        Ok(XYZ {
-            x: uom::si::f32::Length::new::<meter>(x),
-            y: uom::si::f32::Length::new::<meter>(y),
-            z: uom::si::f32::Length::new::<meter>(z),
-        })
+        Encode::encode(&self.0.value, encoder)
     }
 }
 
-impl Default for XYZ {
-    fn default() -> Self {
-        XYZ {
-            x: uom::si::f32::Length::new::<meter>(0.0),
-            y: uom::si::f32::Length::new::<meter>(0.0),
-            z: uom::si::f32::Length::new::<meter>(0.0),
-        }
+impl Decode for LidarLength {
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let value:f32 = Decode::decode(decoder)?;
+        Ok(LidarLength(uom::si::f32::Length::new::<meter>(value)))
     }
+}
+
+impl Add for LidarLength {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        LidarLength(self.0 + other.0)
+    }
+}
+
+impl Sub for LidarLength {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self {
+        LidarLength(self.0 - other.0)
+    }
+}
+
+
+#[soa]
+#[derive(Default, PartialEq, Debug)]
+pub struct XYZ {
+    x: LidarLength,
+    y: LidarLength,
+    z: LidarLength,
 }
 
 impl CuSrcTask for Vlp16 {
-    type Output = (); //  XYZSoa;
+    type Output = XYZSoa<10000>;
 
     fn process(&mut self, clock: &RobotClock, new_msg: &mut CuMsg<Self::Output>) -> CuResult<()> {
+        let m = uom::si::f32::Length::default();
         let socket = self.socket.as_ref().unwrap();
         let mut packet = [0u8; 1206];
         let (read_size, peer_addr) = socket.recv_from(&mut packet).unwrap();
@@ -155,7 +160,7 @@ mod tests {
             let socket = UdpSocket::bind("0.0.0.0:2367").unwrap();
             socket.send_to(&data, "127.0.0.1:2368").unwrap();
             // process
-            drv.process(&clk, &mut CuMsg::new(())).unwrap();
+            drv.process(&clk, &mut CuMsg::new(XYZSoa::default())).unwrap();
             break;
         }
     }
