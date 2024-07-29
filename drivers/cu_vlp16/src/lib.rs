@@ -124,12 +124,8 @@ impl CuSrcTask for Vlp16 {
                 let  x = point.measurement.xyz[0].as_meters();
                 let  y = point.measurement.xyz[0].as_meters();
                 let  z = point.measurement.xyz[0].as_meters();
-
-                println!("x: {}, y: {}, z: {}", x, y, z);
             });
         });
-        println!("{:?}", frame);
-
         Ok(())
     }
 }
