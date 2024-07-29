@@ -43,8 +43,16 @@ impl Display for NodeInstanceConfig {
 
 // forward map interface
 impl NodeInstanceConfig {
+    pub fn new() -> Self {
+        NodeInstanceConfig(HashMap::new())
+    }
+
     pub fn get<T: From<Value>>(&self, key: &str) -> Option<T> {
         self.0.get(key).map(|v| T::from(v.clone()))
+    }
+
+    pub fn set<T: Into<Value>>(&mut self, key: &str, value: T) {
+        self.0.insert(key.to_string(), value.into());
     }
 }
 

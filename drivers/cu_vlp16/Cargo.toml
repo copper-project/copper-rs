@@ -1,0 +1,29 @@
+[package]
+name = "cu-vlp16"
+description = "This is a driver for the Velodyne VLP-16 for the Copper engine."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[package.metadata.cargo-machete]
+ignored = ["cu29-log", "cu29-log-runtime", "cu29-soa-derive"]  # proc macro
+
+[dependencies]
+cu29 = { workspace = true }
+cu29-log = { workspace = true }
+cu29-log-runtime = { workspace = true }
+cu29-log-derive = { workspace = true }
+bincode = { workspace = true }
+cu29-soa-derive = { workspace = true }
+uom = { workspace = true }
+serde = { workspace = true }
+velodyne-lidar = { version = "0.2.0", features = ["full"] }
+
+[dev-dependencies]
+pcap-file = "2.0.0"
+pretty-hex = "0.4.1"
