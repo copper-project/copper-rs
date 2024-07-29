@@ -29,7 +29,7 @@ Copper is a data-oriented runtime with these key components:
 
 
   
-* **Task Graph**: <img align="right" width="100" src="doc/graph.png" alt="graph"/> Described in [RON](https://github.com/ron-rs/ron), this configures the system's topology, specifying which tasks communicate and setting types for nodes and messages.
+* **Task Graph**: <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/graph.png?raw=true" alt="graph"/> Described in [RON](https://github.com/ron-rs/ron), this configures the system's topology, specifying which tasks communicate and setting types for nodes and messages.
 
 * **Runtime Generator**: This component decides on an execution plan based on the graph's metadata. It preallocates a "Copper List" to maximize sequential memory access during execution.
 
@@ -46,10 +46,10 @@ Copper is a data-oriented runtime with these key components:
 
 | **Category** | **Type**  |                                          | **Description**                                                      | **Crate Name**   |
 |--------------|-----------|---------------------------------------------------|----------------------------------------------------------------------|------------------|
-| Sensors      | Lidar     | <img align="right" width="100" src="doc/vlp16.jpg" alt="vlp16"/>    | [Velodyne/Ouster VLP16](drivers/cu_vlp16)                             | cu_vlp16         |
-|              | IMU       | <img align="right" width="100" src="doc/wt901.jpg" alt="wt901"/>    | [WitMotion WT901](drivers/cu_wt901)                                   | cu_wt901         |
-| Actuators    | GPIO      | <img align="right" width="100" src="doc/rp.jpg" alt="rp"/>          | [Raspberry Pi](drivers/cu_rp_gpio)                                    | cu_rp_gpio       |
-|              | Servo     | <img align="right" width="100" src="doc/lewansoul.jpg" alt="lewansoul"/> | [Lewansoul Servo Bus (LX-16A, etc.)](drivers/cu_lewansoul)            | cu_lewansoul     |
+| Sensors      | Lidar     | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/vlp16.jpg?raw=true" alt="vlp16"/>    | [Velodyne/Ouster VLP16](drivers/cu_vlp16)                             | cu_vlp16         |
+|              | IMU       | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/wt901.jpg?raw=true" alt="wt901"/>    | [WitMotion WT901](drivers/cu_wt901)                                   | cu_wt901         |
+| Actuators    | GPIO      | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/rp.jpg?raw=true" alt="rp"/>          | [Raspberry Pi](drivers/cu_rp_gpio)                                    | cu_rp_gpio       |
+|              | Servo     | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/lewansoul.jpg?raw=true" alt="lewansoul"/> | [Lewansoul Servo Bus (LX-16A, etc.)](drivers/cu_lewansoul)            | cu_lewansoul     |
 
 ### What features are missing? What do we plan to implement next?
 
