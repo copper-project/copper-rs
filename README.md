@@ -156,9 +156,12 @@ fn main() {
 
 ```
 
-## Deployment and lifecycle of the application
+But this is a very minimal example for a task, please see [lifecycle](doc/lifecycle.md) for complete explanation of a task lifecycle.
+
+## Deployment of the application
 
 Check out the [deployment](doc/deploy.md) page for more information.
+
 
 ## How is it better or different from ROS?
 
