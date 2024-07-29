@@ -44,6 +44,7 @@ cu29-intern-strs = { path = "cu29_intern_strs", version = "0.2.0" }
 cu29-log = { path = "cu29_log", version = "0.2.0" }
 cu29-log-derive = { path = "cu29_log_derive", version = "0.2.0" }
 cu29-log-runtime = { path = "cu29_log_runtime", version = "0.2.0" }
+cu29-soa-derive = { path = "cu29_soa_derive", version = "0.2.0" }
 cu29-traits = { path = "cu29_traits", version = "0.2.0" }
 cu29-unifiedlog = { path = "cu29_unifiedlog", version = "0.2.0" }
 cu29-value = { path = "cu29_value", version = "0.2.0" }

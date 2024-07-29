@@ -140,7 +140,7 @@ mod tests {
     #[test]
     fn vlp16_end_2_end_test() {
         let clk = RobotClock::new();
-        let mut cfg = NodeInstanceConfig::new();
+        let cfg = NodeInstanceConfig::new();
         let mut drv = Vlp16::new(Some(&cfg)).unwrap();
         let file_in = File::open("test/VLP_16_Single.pcap").expect("Error opening file");
         let mut pcap_reader = PcapReader::new(file_in).unwrap();
