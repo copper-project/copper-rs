@@ -21,7 +21,7 @@ jobs:
           toolchain: stable
           profile: minimal
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y libudev-dev
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev libpcap-dev
       - name: Build
         run: cargo build
       - name: Run tests
