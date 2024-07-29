@@ -28,7 +28,7 @@ Copper is still in <strong>early development / alpha stage</strong>, and the API
 <p>Copper is a data-oriented runtime with these key components:</p>
 <ul>
 <li>
-<p><strong>Task Graph</strong>: Described in <a href="https://github.com/ron-rs/ron">RON</a>, this configures the system’s topology, specifying which tasks communicate and setting types for nodes and messages.</p>
+<p><strong>Task Graph</strong>: <img align="right" width="100" src="doc/graph.png" alt="graph"/> Described in <a href="https://github.com/ron-rs/ron">RON</a>, this configures the system’s topology, specifying which tasks communicate and setting types for nodes and messages.</p>
 </li>
 <li>
 <p><strong>Runtime Generator</strong>: This component decides on an execution plan based on the graph’s metadata. It preallocates a “Copper List” to maximize sequential memory access during execution.</p>
@@ -42,34 +42,18 @@ Copper is still in <strong>early development / alpha stage</strong>, and the API
 </ul>
 <h4 id="what-features-are-already-implemented"><a class="doc-anchor" href="#what-features-are-already-implemented">§</a>What features are already implemented?</h4>
 <ol>
-<li>
-<p><strong>Basic task lifecycle interface</strong>: Should be relatively stable for you to start contributing new algorithms, sensors, and actuators.</p>
-</li>
-<li>
-<p><strong>Runtime generation</strong>: Works but is very simple; this is just a BFS type of execution.</p>
-</li>
-<li>
-<p><strong>Log reader &amp; structured log reader</strong>: Can export data, currently in Rust debug format.</p>
-</li>
-<li>
-<p><strong>Simple/minimal drivers included</strong>: These are more to show you how to implement your own:</p>
-<p><strong>Sensors</strong>:</p>
-<ol>
-<li>Lidar: <a href="drivers/cu_vlp16">Velodyne/Ouster VLP16</a> / crate name: cu_vlp16
-<img align="right" width="100" src="doc/vlp16.jpg" alt="vlp16"/></li>
-<li>IMU: <a href="drivers/cu_wt901">WitMotion WT901</a> / crate name: cu_wt901
-<img align="right" width="100" src="doc/wt901.jpg" alt="wt901"/></li>
+<li><strong>Basic task lifecycle interface</strong>: Should be relatively stable for you to start contributing new algorithms, sensors, and actuators.</li>
+<li><strong>Runtime generation</strong>: Works but is very simple; this is just a BFS type of execution.</li>
+<li><strong>Log reader &amp; structured log reader</strong>: Can export data, currently in Rust debug format.</li>
+<li><strong>Simple/minimal drivers included</strong>: These are more to show you how to implement your own:</li>
 </ol>
-<p><strong>Actuators</strong>:</p>
-<ol>
-<li>GPIO: <a href="drivers/cu_rp_gpio">Raspberry Pi</a> / crate name: cu_rp_gpio
-<img align="right" width="100" src="doc/rp.jpg" alt="rp"/></li>
-<li>Servo: <a href="drivers/cu_lewansoul">Lewansoul Servo Bus (LX-16A, etc.)</a> / crate name: cu_lewansoul
-<img align="right" width="100" src="doc/lewansoul.jpg" alt="vlp16"/></li>
-</ol>
-</li>
-</ol>
-<h4 id="what-features-are-missing-what-do-we-plan-to-implement-next"><a class="doc-anchor" href="#what-features-are-missing-what-do-we-plan-to-implement-next">§</a>What features are missing? What do we plan to implement next?</h4>
+<div><table><thead><tr><th><strong>Category</strong></th><th><strong>Type</strong></th><th></th><th><strong>Description</strong></th><th><strong>Crate Name</strong></th></tr></thead><tbody>
+<tr><td>Sensors</td><td>Lidar</td><td><img align="right" width="100" src="doc/vlp16.jpg" alt="vlp16"/></td><td><a href="drivers/cu_vlp16">Velodyne/Ouster VLP16</a></td><td>cu_vlp16</td></tr>
+<tr><td></td><td>IMU</td><td><img align="right" width="100" src="doc/wt901.jpg" alt="wt901"/></td><td><a href="drivers/cu_wt901">WitMotion WT901</a></td><td>cu_wt901</td></tr>
+<tr><td>Actuators</td><td>GPIO</td><td><img align="right" width="100" src="doc/rp.jpg" alt="rp"/></td><td><a href="drivers/cu_rp_gpio">Raspberry Pi</a></td><td>cu_rp_gpio</td></tr>
+<tr><td></td><td>Servo</td><td><img align="right" width="100" src="doc/lewansoul.jpg" alt="lewansoul"/></td><td><a href="drivers/cu_lewansoul">Lewansoul Servo Bus (LX-16A, etc.)</a></td><td>cu_lewansoul</td></tr>
+</tbody></table>
+</div><h4 id="what-features-are-missing-what-do-we-plan-to-implement-next"><a class="doc-anchor" href="#what-features-are-missing-what-do-we-plan-to-implement-next">§</a>What features are missing? What do we plan to implement next?</h4>
 <p>A lot! If any of these items pique your interest and you would like to contribute, feel free to reach out!</p>
 <p>Here are some of the features we plan to implement next (in ~order of priority):</p>
 <ul>
