@@ -83,7 +83,7 @@ cargo cunew [path_where_you_want_your_project_created]
 
 Check out [copper-templates](templates/README.md) for more info.
 
-### How a Copper application looks like, some concepts and insights about how it can be that fast.
+### How does a Copper application look like?
 
 Here is a simple example of a task graph in RON:
 
