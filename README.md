@@ -188,7 +188,7 @@ fn main() {
 
 ```
 
-But this is a very minimal example for a task, please see [lifecycle](doc/lifecycle.md) for complete explanation of a task lifecycle.
+But this is a very minimal example for a task, please see [lifecycle](doc/lifecycle.md) for a more complete explanation of a task lifecycle.
 
 ## Deployment of the application
 
