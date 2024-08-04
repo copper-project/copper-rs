@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cu29_derive/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-99073656bbb10eb3.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_derive" data-themes="" data-resource-suffix="" data-rustdoc-version="1.82.0-nightly (612a33f20 2024-07-29)" data-channel="nightly" data-search-js="search-ef54e092fea9c776.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../../static.files/src-script-e66d777a5a92e9b2.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-2a506944c89e7bb4.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-df360f571f6edeae.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cu29_derive/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-970bf1bf55bd1c15.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_derive" data-themes="" data-resource-suffix="" data-rustdoc-version="1.82.0-nightly (64ebd39da 2024-08-03)" data-channel="nightly" data-search-js="search-ef54e092fea9c776.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../../static.files/src-script-e66d777a5a92e9b2.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-9345f17bf569ecba.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-df360f571f6edeae.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
 <a href="#4" id="4">4</a>
@@ -417,31 +417,6 @@
 <a href="#417" id="417">417</a>
 <a href="#418" id="418">418</a>
 <a href="#419" id="419">419</a>
-<a href="#420" id="420">420</a>
-<a href="#421" id="421">421</a>
-<a href="#422" id="422">422</a>
-<a href="#423" id="423">423</a>
-<a href="#424" id="424">424</a>
-<a href="#425" id="425">425</a>
-<a href="#426" id="426">426</a>
-<a href="#427" id="427">427</a>
-<a href="#428" id="428">428</a>
-<a href="#429" id="429">429</a>
-<a href="#430" id="430">430</a>
-<a href="#431" id="431">431</a>
-<a href="#432" id="432">432</a>
-<a href="#433" id="433">433</a>
-<a href="#434" id="434">434</a>
-<a href="#435" id="435">435</a>
-<a href="#436" id="436">436</a>
-<a href="#437" id="437">437</a>
-<a href="#438" id="438">438</a>
-<a href="#439" id="439">439</a>
-<a href="#440" id="440">440</a>
-<a href="#441" id="441">441</a>
-<a href="#442" id="442">442</a>
-<a href="#443" id="443">443</a>
-<a href="#444" id="444">444</a>
 </pre></div><pre class="rust"><code><span class="kw">extern crate </span>proc_macro;
 
 <span class="kw">use </span>proc_macro::TokenStream;
@@ -455,6 +430,7 @@
 <span class="kw">use </span>cu29::config::CuConfig;
 <span class="kw">use </span>cu29::curuntime::{compute_runtime_plan, CuExecutionStep, CuTaskType};
 <span class="kw">use </span>format::{highlight_rust_code, rustfmt_generated_code};
+<span class="kw">use </span>itertools;
 
 <span class="kw">mod </span>format;
 <span class="kw">mod </span>utils;
@@ -540,76 +516,50 @@
     <span class="macro">println!</span>(<span class="string">"[gen instances]"</span>);
     <span class="comment">// Generate the code to create instances of the nodes
     // It maps the types to their index
-    </span><span class="kw">let </span>task_instances_init_code: Vec&lt;<span class="kw">_</span>&gt; = all_tasks_types
+    </span><span class="kw">let </span>(task_instances_init_code,
+         start_calls,
+         stop_calls,
+         preprocess_calls,
+         postprocess_calls): (Vec&lt;<span class="kw">_</span>&gt;, Vec&lt;<span class="kw">_</span>&gt;, Vec&lt;<span class="kw">_</span>&gt;, Vec&lt;<span class="kw">_</span>&gt;, Vec&lt;<span class="kw">_</span>&gt;) = itertools::multiunzip(all_tasks_types
         .iter()
         .enumerate()
         .map(|(index, ty)| {
-            <span class="kw">let </span>ty_name = <span class="kw-2">&amp;</span>all_tasks_types_names[index];
+            <span class="kw">let </span>node_index = int2index(index <span class="kw">as </span>u32);
             <span class="kw">let </span>additional_error_info = <span class="macro">format!</span>(
                 <span class="string">"Failed to get create instance for {}, instance index {}."</span>,
-                ty_name, index
+                all_tasks_types_names[index], index
             );
-            <span class="macro">quote!</span> {
-                #ty::new(all_instances_configs[#index]).map_err(|e| e.add_cause(#additional_error_info))<span class="question-mark">?
-            </span>}
-        })
-        .collect();
-
-    <span class="kw">let </span>start_calls: Vec&lt;<span class="kw">_</span>&gt; = all_tasks_types
-        .iter()
-        .enumerate()
-        .map(|(index, _ty)| {
-            <span class="kw">let </span>node_index = int2index(index <span class="kw">as </span>u32);
-            <span class="macro">quote!</span> {
-                {
-                    <span class="kw">let </span>task_instance = <span class="kw-2">&amp;mut </span><span class="self">self</span>.copper_runtime.task_instances.#node_index;
-                    task_instance.start(<span class="kw-2">&amp;</span><span class="self">self</span>.copper_runtime.clock)<span class="question-mark">?</span>;
+            (
+                <span class="macro">quote!</span> {
+                    #ty::new(all_instances_configs[#index]).map_err(|e| e.add_cause(#additional_error_info))<span class="question-mark">?
+                </span>},
+                <span class="macro">quote!</span> {
+                    {
+                        <span class="kw">let </span>task_instance = <span class="kw-2">&amp;mut </span><span class="self">self</span>.copper_runtime.task_instances.#node_index;
+                        task_instance.start(<span class="kw-2">&amp;</span><span class="self">self</span>.copper_runtime.clock)<span class="question-mark">?</span>;
+                    }
+                },
+                <span class="macro">quote!</span> {
+                    {
+                        <span class="kw">let </span>task_instance = <span class="kw-2">&amp;mut </span><span class="self">self</span>.copper_runtime.task_instances.#node_index;
+                        task_instance.stop(<span class="kw-2">&amp;</span><span class="self">self</span>.copper_runtime.clock)<span class="question-mark">?</span>;
+                    }
+                },
+                <span class="macro">quote!</span> {
+                    {
+                        <span class="kw">let </span>task_instance = <span class="kw-2">&amp;mut </span><span class="self">self</span>.copper_runtime.task_instances.#node_index;
+                        task_instance.preprocess(<span class="kw-2">&amp;</span><span class="self">self</span>.copper_runtime.clock)<span class="question-mark">?</span>;
+                    }
+                },
+                <span class="macro">quote!</span> {
+                    {
+                        <span class="kw">let </span>task_instance = <span class="kw-2">&amp;mut </span><span class="self">self</span>.copper_runtime.task_instances.#node_index;
+                        task_instance.postprocess(<span class="kw-2">&amp;</span><span class="self">self</span>.copper_runtime.clock)<span class="question-mark">?</span>;
+                    }
                 }
-            }
+            )
         })
-        .collect();
-
-    <span class="kw">let </span>stop_calls: Vec&lt;<span class="kw">_</span>&gt; = all_tasks_types
-        .iter()
-        .enumerate()
-        .map(|(index, _ty)| {
-            <span class="kw">let </span>node_index = int2index(index <span class="kw">as </span>u32);
-            <span class="macro">quote!</span> {
-                {
-                    <span class="kw">let </span>task_instance = <span class="kw-2">&amp;mut </span><span class="self">self</span>.copper_runtime.task_instances.#node_index;
-                    task_instance.stop(<span class="kw-2">&amp;</span><span class="self">self</span>.copper_runtime.clock)<span class="question-mark">?</span>;
-                }
-            }
-        })
-        .collect();
-
-    <span class="kw">let </span>preprocess_calls: Vec&lt;<span class="kw">_</span>&gt; = all_tasks_types
-        .iter()
-        .enumerate()
-        .map(|(index, _ty)| {
-            <span class="kw">let </span>node_index = int2index(index <span class="kw">as </span>u32);
-            <span class="macro">quote!</span> {
-                {
-                    <span class="kw">let </span>task_instance = <span class="kw-2">&amp;mut </span><span class="self">self</span>.copper_runtime.task_instances.#node_index;
-                    task_instance.preprocess(<span class="kw-2">&amp;</span><span class="self">self</span>.copper_runtime.clock)<span class="question-mark">?</span>;
-                }
-            }
-        })
-        .collect();
-
-    <span class="kw">let </span>postprocess_calls: Vec&lt;<span class="kw">_</span>&gt; = all_tasks_types
-        .iter()
-        .enumerate()
-        .map(|(index, _ty)| {
-            <span class="kw">let </span>node_index = int2index(index <span class="kw">as </span>u32);
-            <span class="macro">quote!</span> {
-                {
-                    <span class="kw">let </span>task_instance = <span class="kw-2">&amp;mut </span><span class="self">self</span>.copper_runtime.task_instances.#node_index;
-                    task_instance.postprocess(<span class="kw-2">&amp;</span><span class="self">self</span>.copper_runtime.clock)<span class="question-mark">?</span>;
-                }
-            }
-        })
-        .collect();
+    );
 
     <span class="kw">let </span>runtime_plan_code: Vec&lt;<span class="kw">_</span>&gt; = runtime_plan
         .iter()
