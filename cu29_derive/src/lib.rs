@@ -11,6 +11,7 @@ use cu29::config::read_configuration;
 use cu29::config::CuConfig;
 use cu29::curuntime::{compute_runtime_plan, CuExecutionStep, CuTaskType};
 use format::{highlight_rust_code, rustfmt_generated_code};
+use itertools;
 
 mod format;
 mod utils;
@@ -96,76 +97,50 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     println!("[gen instances]");
     // Generate the code to create instances of the nodes
     // It maps the types to their index
-    let task_instances_init_code: Vec<_> = all_tasks_types
+    let (task_instances_init_code,
+         start_calls,
+         stop_calls,
+         preprocess_calls,
+         postprocess_calls): (Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>) = itertools::multiunzip(all_tasks_types
         .iter()
         .enumerate()
         .map(|(index, ty)| {
-            let ty_name = &all_tasks_types_names[index];
+            let node_index = int2index(index as u32);
             let additional_error_info = format!(
                 "Failed to get create instance for {}, instance index {}.",
-                ty_name, index
+                all_tasks_types_names[index], index
             );
-            quote! {
-                #ty::new(all_instances_configs[#index]).map_err(|e| e.add_cause(#additional_error_info))?
-            }
-        })
-        .collect();
-
-    let start_calls: Vec<_> = all_tasks_types
-        .iter()
-        .enumerate()
-        .map(|(index, _ty)| {
-            let node_index = int2index(index as u32);
-            quote! {
-                {
-                    let task_instance = &mut self.copper_runtime.task_instances.#node_index;
-                    task_instance.start(&self.copper_runtime.clock)?;
+            (
+                quote! {
+                    #ty::new(all_instances_configs[#index]).map_err(|e| e.add_cause(#additional_error_info))?
+                },
+                quote! {
+                    {
+                        let task_instance = &mut self.copper_runtime.task_instances.#node_index;
+                        task_instance.start(&self.copper_runtime.clock)?;
+                    }
+                },
+                quote! {
+                    {
+                        let task_instance = &mut self.copper_runtime.task_instances.#node_index;
+                        task_instance.stop(&self.copper_runtime.clock)?;
+                    }
+                },
+                quote! {
+                    {
+                        let task_instance = &mut self.copper_runtime.task_instances.#node_index;
+                        task_instance.preprocess(&self.copper_runtime.clock)?;
+                    }
+                },
+                quote! {
+                    {
+                        let task_instance = &mut self.copper_runtime.task_instances.#node_index;
+                        task_instance.postprocess(&self.copper_runtime.clock)?;
+                    }
                 }
-            }
+            )
         })
-        .collect();
-
-    let stop_calls: Vec<_> = all_tasks_types
-        .iter()
-        .enumerate()
-        .map(|(index, _ty)| {
-            let node_index = int2index(index as u32);
-            quote! {
-                {
-                    let task_instance = &mut self.copper_runtime.task_instances.#node_index;
-                    task_instance.stop(&self.copper_runtime.clock)?;
-                }
-            }
-        })
-        .collect();
-
-    let preprocess_calls: Vec<_> = all_tasks_types
-        .iter()
-        .enumerate()
-        .map(|(index, _ty)| {
-            let node_index = int2index(index as u32);
-            quote! {
-                {
-                    let task_instance = &mut self.copper_runtime.task_instances.#node_index;
-                    task_instance.preprocess(&self.copper_runtime.clock)?;
-                }
-            }
-        })
-        .collect();
-
-    let postprocess_calls: Vec<_> = all_tasks_types
-        .iter()
-        .enumerate()
-        .map(|(index, _ty)| {
-            let node_index = int2index(index as u32);
-            quote! {
-                {
-                    let task_instance = &mut self.copper_runtime.task_instances.#node_index;
-                    task_instance.postprocess(&self.copper_runtime.clock)?;
-                }
-            }
-        })
-        .collect();
+    );
 
     let runtime_plan_code: Vec<_> = runtime_plan
         .iter()
