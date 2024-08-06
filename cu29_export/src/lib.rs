@@ -158,7 +158,8 @@ mod tests {
     use bincode::encode_into_slice;
     use std::io::Cursor;
     use std::sync::{Arc, Mutex};
-    use tempfile::tempdir;
+    use fs_extra::dir::{copy, CopyOptions};
+    use tempfile::{tempdir, TempDir};
 
     use cu29_clock::RobotClock;
     use cu29_log::value::Value;
@@ -171,13 +172,27 @@ mod tests {
 
     use super::*;
 
+    fn copy_stringindex_to_temp(tmpdir:&TempDir) -> PathBuf {
+        // for some reason using the index in real only locks it and generates a change in the file.
+        let temp_path = tmpdir.path();
+
+        let mut copy_options = CopyOptions::new();
+        copy_options.copy_inside = true;
+
+        copy("test/cu29_log_index", &temp_path, &copy_options).unwrap();
+        temp_path.join("cu29_log_index")
+    }
+
     #[test]
     fn test_extract_low_level_cu29_log() {
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = copy_stringindex_to_temp(&temp_dir);
         let entry = CuLogEntry::new(3);
         let bytes = bincode::encode_to_vec(&entry, standard()).unwrap();
         let reader = Cursor::new(bytes.as_slice());
-        textlog_dump(reader, Path::new("test/cu29_log_index")).unwrap();
+        textlog_dump(reader, temp_path.as_path()).unwrap();
     }
+
 
     #[test]
     fn end_to_end_datalogger_and_structlog_test() {
@@ -220,7 +235,8 @@ mod tests {
             panic!("Failed to create logger")
         };
         let reader = UnifiedLoggerIOReader::new(logger, UnifiedLogType::StructuredLogLine);
-        textlog_dump(reader, Path::new("test/cu29_log_index")).expect("Failed to dump log");
+        let temp_dir = TempDir::new().unwrap();
+        textlog_dump(reader, Path::new(copy_stringindex_to_temp(&temp_dir).as_path())).expect("Failed to dump log");
     }
 
     // This is normally generated at compile time in CuPayload.
