@@ -1,37 +1,38 @@
+use std::sync::OnceLock;
+use std::io::Write;
 use cu29_clock::{ClockProvider, RobotClock};
 use cu29_intern_strs::read_interned_strings;
 use cu29_log::CuLogEntry;
 use cu29_traits::{CuResult, WriteStream};
 use kanal::{bounded, Sender};
-use log::{Log, Record};
-use once_cell::sync::OnceCell;
+use log::{warn, Log, Record};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
+use std::sync::Once;
 use std::thread::{sleep, JoinHandle};
 use std::time::Duration;
+use bincode::config::Configuration;
+use bincode::enc;
+use bincode::enc::EncoderImpl;
+use bincode::error::EncodeError;
+use bincode::enc::write::{SliceWriter, Writer};
+use bincode::enc::Encode;
 
 // The logging system is basically a global queue.
-static QUEUE: OnceCell<Sender<CuLogEntry>> = OnceCell::new();
+static QUEUE_CLOCK: OnceLock<(Sender<CuLogEntry>, RobotClock)> = OnceLock::new();
 
 /// The lifetime of this struct is the lifetime of the logger.
 pub struct LoggerRuntime {
-    clock: RobotClock,
     handle: Option<JoinHandle<()>>,
     extra_text_logger: Option<ExtraTextLogger>,
-}
-
-impl ClockProvider for LoggerRuntime {
-    fn get_clock(&self) -> RobotClock {
-        self.clock.clone()
-    }
 }
 
 impl LoggerRuntime {
     /// destination is the binary stream in which we will log the structured log.
     /// extra_text_logger is the logger that will log the text logs in real time. This is slow and only for debug builds.
     pub fn init(
-        clock_source: RobotClock,
+        clock: RobotClock,
         destination: impl WriteStream<CuLogEntry> + 'static,
         extra_text_logger: Option<ExtraTextLogger>,
     ) -> Self {
@@ -40,13 +41,12 @@ impl LoggerRuntime {
         };
 
         let mut runtime = LoggerRuntime {
-            clock: clock_source,
             extra_text_logger,
             handle: None,
         };
         let (s, handle) = runtime.initialize_queue(destination);
-        QUEUE
-            .set(s)
+        QUEUE_CLOCK
+            .set((s, clock))
             .expect("Failed to initialize the logger queue.");
         runtime.handle = Some(handle);
         runtime
@@ -69,15 +69,12 @@ impl LoggerRuntime {
         } else {
             (None, None)
         };
-        let clock = self.clock.clone();
 
         let handle = thread::spawn(move || {
             let receiver = receiver.clone();
             loop {
-                if let Ok(mut cu_log_entry) = receiver.recv() {
-                    // We don't need to be precise on this clock.
+                if let Ok(cu_log_entry) = receiver.recv() {
                     // If the user wants to really log a clock they should add it as a structured field.
-                    cu_log_entry.time = clock.now();
                     if let Err(err) = destination.log(&cu_log_entry) {
                         eprintln!("Failed to log data: {}", err);
                     }
@@ -118,11 +115,11 @@ impl LoggerRuntime {
         (sender, handle)
     }
     pub fn is_alive(&self) -> bool {
-        QUEUE.get().is_some()
+        QUEUE_CLOCK.get().is_some()
     }
 
     pub fn flush(&self) {
-        if let Some(queue) = QUEUE.get() {
+        if let Some((queue, _)) = QUEUE_CLOCK.get() {
             loop {
                 if queue.is_empty() {
                     break;
@@ -134,13 +131,13 @@ impl LoggerRuntime {
     }
 
     pub fn close(&mut self) {
-        let queue = QUEUE.get();
+        let queue = QUEUE_CLOCK.get();
         if queue.is_none() {
             eprintln!("Logger closed before it was initialized.");
             return;
         }
         self.flush();
-        queue.unwrap().close();
+        queue.unwrap().0.close();
         if let Some(handle) = self.handle.take() {
             handle.join().expect("Failed to join the logger thread.");
             self.handle = None;
@@ -172,15 +169,87 @@ impl ExtraTextLogger {
 
 /// Function called from generated code to log data.
 /// It moves entry by design, it will be absorbed in the queue.
-#[inline]
-pub fn log(entry: CuLogEntry) -> CuResult<()> {
-    if let Some(queue) = QUEUE.get() {
+#[inline(always)]
+pub fn log(mut entry: CuLogEntry) -> CuResult<()> {
+    if let Some((queue, clock)) = QUEUE_CLOCK.get() {
+        entry.time = clock.now();
         let err = queue
             .send(entry)
             .map_err(|e| format!("Failed to send data to the logger, did you hold the reference to the logger long enough? {:?}", e).into());
         err
     } else {
         Err("Logger not initialized.".into())
+    }
+}
+
+pub struct IoWriter<'a, W: Write> {
+    writer: &'a mut W,
+    bytes_written: usize,
+}
+
+impl<'a, W: Write> IoWriter<'a, W> {
+    pub fn new(writer: &'a mut W) -> Self {
+        Self {
+            writer,
+            bytes_written: 0,
+        }
+    }
+
+    pub fn bytes_written(&self) -> usize {
+        self.bytes_written
+    }
+}
+
+impl<'storage, W: Write> Writer for IoWriter<'storage, W> {
+    #[inline(always)]
+    fn write(&mut self, bytes: &[u8]) -> Result<(), EncodeError> {
+        self.writer
+            .write_all(bytes)
+            .map_err(|inner| EncodeError::Io {
+                inner,
+                index: self.bytes_written,
+            })?;
+        self.bytes_written += bytes.len();
+        Ok(())
+    }
+}
+
+
+/// This allows this crate to be used outside of Copper (ie. decoupling it from the unifiedlog.
+pub struct SimpleFileWriter<'a> {
+    file: std::fs::File,
+    buff: Vec<u8>,
+    encoder: EncoderImpl<SliceWriter<'a>, Configuration>,
+}
+
+impl<'a> SimpleFileWriter<'a> {
+    pub fn new(path: &PathBuf) -> CuResult<Self> {
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open(path)
+            .map_err(|e| format!("Failed to open file: {:?}", e))?;
+
+        let mut buff = vec![0u8; 10000];
+        let mut encoder = {
+            let writer = SliceWriter::new(&mut buff);
+            EncoderImpl::new(writer, bincode::config::standard())
+        };
+
+        Ok(SimpleFileWriter { file, buff, encoder})
+    }
+}
+
+impl<'a> WriteStream<CuLogEntry> for SimpleFileWriter<'a> {
+    #[inline(always)]
+    fn log(&mut self, obj: &CuLogEntry) -> CuResult<()> {
+
+        obj.encode(&mut self.encoder).unwrap();
+        let written = (&self.encoder).into_writer().bytes_written();
+
+        let i = bincode::encode_into_slice(obj, self.buff.as_mut_slice(), bincode::config::standard()).map_err(|e| format!("Failed to serialize: {:?}", e))?;
+        self.file.write_all(&self.buff[..i]).map_err(|e| format!("Failed to write to file: {:?}", e))?;
+        Ok(())
     }
 }
 
