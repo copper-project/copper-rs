@@ -3,6 +3,7 @@ use cu29_clock::CuTime;
 use cu29_traits::{CuError, CuResult};
 pub use cu29_value as value;
 use serde::{Deserialize, Serialize};
+use smallvec::SmallVec;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
@@ -15,19 +16,69 @@ const INDEX_DIR_NAME: &str = "cu29_log_index";
 #[allow(dead_code)]
 pub const ANONYMOUS: u32 = 0;
 
+pub const MAX_PARAMS: usize = 10;
+
 /// This is the basic structure for a log entry in Copper.
-#[derive(Debug, Encode, Decode, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct CuLogEntry {
     // Approximate time when the log entry was created.
     pub time: CuTime,
 
     // interned index of the message
     pub msg_index: u32,
+    
     // interned indexes of the parameter names
-    pub paramname_indexes: Vec<u32>,
+    pub paramname_indexes: SmallVec<[u32; MAX_PARAMS]>,
+    
     // Serializable values for the parameters (Values are acting like an Any Value).
-    pub params: Vec<Value>,
+    pub params: SmallVec<[Value; MAX_PARAMS]>,
 }
+
+impl Encode for CuLogEntry {
+    fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E) -> Result<(), bincode::error::EncodeError> {
+        self.time.encode(encoder)?;
+        self.msg_index.encode(encoder)?;
+
+        (self.paramname_indexes.len() as u64).encode(encoder)?;
+        for &index in &self.paramname_indexes {
+            index.encode(encoder)?;
+        }
+
+        (self.params.len() as u64).encode(encoder)?;
+        for param in &self.params {
+            param.encode(encoder)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl Decode for CuLogEntry {
+    fn decode<D: bincode::de::Decoder>(decoder: &mut D) -> Result<Self, bincode::error::DecodeError> {
+        let time = CuTime::decode(decoder)?;
+        let msg_index = u32::decode(decoder)?;
+
+        let paramname_len = u64::decode(decoder)? as usize;
+        let mut paramname_indexes = SmallVec::with_capacity(paramname_len);
+        for _ in 0..paramname_len {
+            paramname_indexes.push(u32::decode(decoder)?);
+        }
+
+        let params_len = u64::decode(decoder)? as usize;
+        let mut params = SmallVec::with_capacity(params_len);
+        for _ in 0..params_len {
+            params.push(Value::decode(decoder)?);
+        }
+
+        Ok(CuLogEntry {
+            time,
+            msg_index,
+            paramname_indexes,
+            params,
+        })
+    }
+}
+
 
 // This is for internal debug purposes.
 impl Display for CuLogEntry {
@@ -47,8 +98,8 @@ impl CuLogEntry {
             time: 0.into(), // We have no clock at that point it is called from random places
             // the clock will be set at actual log time from clock source provided
             msg_index,
-            paramname_indexes: Vec::new(),
-            params: Vec::new(),
+            paramname_indexes: SmallVec::new(),
+            params: SmallVec::new(),
         }
     }
 

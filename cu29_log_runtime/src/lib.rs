@@ -1,3 +1,4 @@
+use std::fs::File;
 use std::sync::OnceLock;
 use std::io::Write;
 use cu29_clock::{ClockProvider, RobotClock};
@@ -14,7 +15,7 @@ use std::thread::{sleep, JoinHandle};
 use std::time::Duration;
 use bincode::config::Configuration;
 use bincode::enc;
-use bincode::enc::EncoderImpl;
+use bincode::enc::{Encoder, EncoderImpl};
 use bincode::error::EncodeError;
 use bincode::enc::write::{SliceWriter, Writer};
 use bincode::enc::Encode;
@@ -56,7 +57,7 @@ impl LoggerRuntime {
         &self,
         mut destination: impl WriteStream<CuLogEntry> + 'static,
     ) -> (Sender<CuLogEntry>, JoinHandle<()>) {
-        let (sender, receiver) = bounded::<CuLogEntry>(100);
+        let (sender, receiver) = bounded::<CuLogEntry>(10000);
 
         #[cfg(debug_assertions)]
         let (index, extra_text_logger) = if let Some(extra) = &self.extra_text_logger {
@@ -182,13 +183,14 @@ pub fn log(mut entry: CuLogEntry) -> CuResult<()> {
     }
 }
 
-pub struct IoWriter<'a, W: Write> {
-    writer: &'a mut W,
+// This is an adaptation of the Iowriter from bincode.
+pub struct OwningIoWriter<W: Write> {
+    writer: W,
     bytes_written: usize,
 }
 
-impl<'a, W: Write> IoWriter<'a, W> {
-    pub fn new(writer: &'a mut W) -> Self {
+impl<'a, W: Write> OwningIoWriter<W> {
+    pub fn new(writer: W) -> Self {
         Self {
             writer,
             bytes_written: 0,
@@ -200,7 +202,7 @@ impl<'a, W: Write> IoWriter<'a, W> {
     }
 }
 
-impl<'storage, W: Write> Writer for IoWriter<'storage, W> {
+impl<W: Write> Writer for OwningIoWriter<W> {
     #[inline(always)]
     fn write(&mut self, bytes: &[u8]) -> Result<(), EncodeError> {
         self.writer
@@ -216,13 +218,11 @@ impl<'storage, W: Write> Writer for IoWriter<'storage, W> {
 
 
 /// This allows this crate to be used outside of Copper (ie. decoupling it from the unifiedlog.
-pub struct SimpleFileWriter<'a> {
-    file: std::fs::File,
-    buff: Vec<u8>,
-    encoder: EncoderImpl<SliceWriter<'a>, Configuration>,
+pub struct SimpleFileWriter {
+    encoder: EncoderImpl<OwningIoWriter<File>, Configuration>,
 }
 
-impl<'a> SimpleFileWriter<'a> {
+impl SimpleFileWriter {
     pub fn new(path: &PathBuf) -> CuResult<Self> {
         let file = std::fs::OpenOptions::new()
             .create(true)
@@ -230,25 +230,17 @@ impl<'a> SimpleFileWriter<'a> {
             .open(path)
             .map_err(|e| format!("Failed to open file: {:?}", e))?;
 
-        let mut buff = vec![0u8; 10000];
-        let mut encoder = {
-            let writer = SliceWriter::new(&mut buff);
-            EncoderImpl::new(writer, bincode::config::standard())
-        };
+        let writer = OwningIoWriter::new(file);
+        let encoder = EncoderImpl::new(writer, bincode::config::standard());
 
-        Ok(SimpleFileWriter { file, buff, encoder})
+        Ok(SimpleFileWriter { encoder})
     }
 }
 
-impl<'a> WriteStream<CuLogEntry> for SimpleFileWriter<'a> {
+impl WriteStream<CuLogEntry> for SimpleFileWriter {
     #[inline(always)]
     fn log(&mut self, obj: &CuLogEntry) -> CuResult<()> {
-
-        obj.encode(&mut self.encoder).unwrap();
-        let written = (&self.encoder).into_writer().bytes_written();
-
-        let i = bincode::encode_into_slice(obj, self.buff.as_mut_slice(), bincode::config::standard()).map_err(|e| format!("Failed to serialize: {:?}", e))?;
-        self.file.write_all(&self.buff[..i]).map_err(|e| format!("Failed to write to file: {:?}", e))?;
+        obj.encode(&mut self.encoder).map_err(|e| format!("Failed to write to file: {:?}", e))?;
         Ok(())
     }
 }

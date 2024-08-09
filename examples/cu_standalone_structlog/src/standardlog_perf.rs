@@ -4,7 +4,7 @@ use log::{info, LevelFilter, Log};
 use simplelog::{Config, WriteLogger};
 use cu29_clock::RobotClock;
 
-const LOG_FILE: &str = "/tmp/logfile.txt";
+const LOG_FILE: &str = "./logfile.txt";
 
 pub fn main() {
     let clock = RobotClock::new();
@@ -16,7 +16,7 @@ pub fn main() {
 
     let bf = clock.now();
     for i in 0..1_000_000 {
-        info!("This is the logline associated with the log Logging an int = {}", i)
+        info!("This is the logline {} associated with the log Logging and some more = {}, {}", i , i+2, i+3);
     }
     log::logger().flush();
     let af = clock.now();

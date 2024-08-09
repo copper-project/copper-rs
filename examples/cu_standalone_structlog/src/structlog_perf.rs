@@ -4,7 +4,7 @@ use cu29_log_derive::debug;
 use cu29_log_runtime::SimpleFileWriter;
 use cu29_log_runtime::LoggerRuntime;
 
-const LOG_FILE: &str = "/tmp/logfile.bin";
+const LOG_FILE: &str = "./logfile.bin";
 
 fn main() {
     let clock = RobotClock::new();
@@ -13,7 +13,7 @@ fn main() {
         let log_runtime = LoggerRuntime::init(clock.clone(), writer, None);
         let bf : CuTime = clock.now();
         for i in 0..1_000_000 {
-            debug!("Logging an int = {}", i)
+            debug!("This is the logline {} associated with the log Logging and some more = {}, {}", i , i+2, i+3);
         }
         bf
     };
