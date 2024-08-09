@@ -61,6 +61,9 @@ pub type CuResult<T> = Result<T, CuError>;
 /// Defines a basic write, append only stream trait to be able to log or send serializable objects.
 pub trait WriteStream<E: Encode>: Sync + Send {
     fn log(&mut self, obj: &E) -> CuResult<()>;
+    fn flush(&mut self) -> CuResult<()> {
+        Ok(())
+    }
 }
 
 /// Defines the types of what can be logged in the unified logger.
