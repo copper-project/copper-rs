@@ -5,17 +5,22 @@ use std::io::{BufWriter, Write};
 use cu29_clock::RobotClock;
 use cu29_log::CuLogEntry;
 use cu29_traits::{CuResult, WriteStream};
+#[cfg(debug_assertions)]
 use log::{Log, Record};
 use std::path::PathBuf;
+#[cfg(debug_assertions)]
 use std::sync::Arc;
 use bincode::config::Configuration;
 use bincode::enc::{Encoder, EncoderImpl};
 use bincode::error::EncodeError;
 use bincode::enc::write::Writer;
 use bincode::enc::Encode;
+#[cfg(debug_assertions)]
 use cu29_intern_strs::read_interned_strings;
 
 static WRITER: OnceLock<(Mutex<Box<dyn WriteStream<CuLogEntry>>>, RobotClock)> = OnceLock::new();
+
+#[cfg(debug_assertions)]
 static EXTRA_TEXT_LOGGER: OnceLock<Option<ExtraTextLogger>> = OnceLock::new();
 
 /// The lifetime of this struct is the lifetime of the logger.
@@ -27,12 +32,9 @@ impl LoggerRuntime {
     pub fn init(
         clock: RobotClock,
         destination: impl WriteStream<CuLogEntry> + 'static,
+        #[allow(unused_variables)]
         extra_text_logger: Option<ExtraTextLogger>,
     ) -> Self {
-        if (!cfg!(debug_assertions)) && extra_text_logger.is_some() {
-            eprintln!("cu29_log: Extra text logger is only available in debug builds. Extra text logger will be disabled for this release build.");
-        };
-
         let runtime = LoggerRuntime {};
 
         // If WRITER is already initialized, update the inner value.
@@ -42,6 +44,10 @@ impl LoggerRuntime {
             *writer_guard = Box::new(destination);
         } else {
             WRITER.set((Mutex::new(Box::new(destination)), clock)).unwrap();
+        }
+        #[cfg(debug_assertions)]
+        if let Some(logger) = extra_text_logger {
+            let _ = EXTRA_TEXT_LOGGER.set(Some(logger));
         }
 
         runtime
@@ -72,9 +78,12 @@ impl Drop for LoggerRuntime {
 /// This will only be active for debug builds.
 pub struct ExtraTextLogger {
     // We reload the entire index in memory.
+    #[cfg(debug_assertions)]
     all_strings: Vec<String>,
+    #[cfg(debug_assertions)]
     inner: Arc<dyn Log>,
 }
+#[cfg(debug_assertions)]
 impl ExtraTextLogger {
     pub fn new(path_to_index: PathBuf, logger: Box<dyn Log>) -> Self {
         let all_strings = read_interned_strings(&path_to_index).unwrap();
