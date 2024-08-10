@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::slice::from_raw_parts_mut;
 use std::sync::{Arc, Mutex};
 use std::{io, mem};
-
+use std::fmt::{Debug, Formatter};
 use memmap2::{Mmap, MmapMut, RemapOptions};
 
 use bincode::config::standard;
@@ -81,6 +81,12 @@ impl MmapStream {
     }
 }
 
+impl Debug for MmapStream {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "MmapStream {{ entry_type: {:?}, current_position: {}, minimum_allocation_amount: {} }}", self.entry_type, self.current_position, self.minimum_allocation_amount)
+    }
+}
+
 impl<E: Encode> WriteStream<E> for MmapStream {
     fn log(&mut self, obj: &E) -> CuResult<()> {
         let dst = self.current_section.get_user_buffer();
@@ -133,7 +139,7 @@ pub fn stream_write<E: Encode>(
     entry_type: UnifiedLogType,
     minimum_allocation_amount: usize,
 ) -> impl WriteStream<E> {
-    return MmapStream::new(entry_type, logger.clone(), minimum_allocation_amount);
+    MmapStream::new(entry_type, logger.clone(), minimum_allocation_amount)
 }
 
 const DEFAULT_LOGGER_SIZE: usize = 1024 * 1024 * 1024; // 1GB

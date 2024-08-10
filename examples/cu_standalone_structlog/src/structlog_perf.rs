@@ -10,7 +10,7 @@ fn main() {
     let clock = RobotClock::new();
     let bf = {
         let writer  = SimpleFileWriter::new(&PathBuf::from(LOG_FILE)).unwrap();
-        let log_runtime = LoggerRuntime::init(clock.clone(), writer, None);
+        let _log_runtime = LoggerRuntime::init(clock.clone(), writer, None);
         let bf : CuTime = clock.now();
         for i in 0..1_000_000 {
             debug!("This is the logline {} associated with the log Logging and some more = {}, {}", i , i+2, i+3);

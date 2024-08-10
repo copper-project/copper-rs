@@ -59,7 +59,7 @@ impl CuError {
 pub type CuResult<T> = Result<T, CuError>;
 
 /// Defines a basic write, append only stream trait to be able to log or send serializable objects.
-pub trait WriteStream<E: Encode>: Sync + Send {
+pub trait WriteStream<E: Encode>: Sync + Send + Debug {
     fn log(&mut self, obj: &E) -> CuResult<()>;
     fn flush(&mut self) -> CuResult<()> {
         Ok(())

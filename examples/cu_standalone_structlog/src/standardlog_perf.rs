@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::path::Path;
-use log::{info, LevelFilter, Log};
+use log::{info, LevelFilter};
 use simplelog::{Config, WriteLogger};
 use cu29_clock::RobotClock;
 
