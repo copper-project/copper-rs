@@ -18,7 +18,8 @@ members = [
     "drivers/cu_wt901_tester",
     "drivers/cu_lewansoul",
     "examples/cu_caterpillar",
-    "examples/cu_config_gen", "examples/cu_standalone_structlog",
+    "examples/cu_config_gen",
+    "examples/cu_standalone_structlog",
     ]
 resolver = "2"
 
