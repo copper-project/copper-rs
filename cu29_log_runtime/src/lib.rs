@@ -98,33 +98,35 @@ pub fn log(mut entry: CuLogEntry) -> CuResult<()> {
     if let Err(err) = writer.lock().unwrap().log(&entry) {
         eprintln!("Failed to log data: {}", err);
     }
-    // TODO(gbin): Put that back
     // This is only for debug builds with standard textual logging implemented.
     #[cfg(debug_assertions)]
-    // if we have not passed a text logger in debug mode, it is ok just move along.
-    if EXTRA_TEXT_LOGGER.get().is_none() {
-        return Ok(());
-    }
-    if let Some(logger) = EXTRA_TEXT_LOGGER.get().unwrap() {
-        let stringified = cu29_log::rebuild_logline(&logger.all_strings, &entry);
-        match stringified {
-            Ok(s) => {
-                let s = format!("[{}] {}", entry.time, s);
-                logger.inner.log(
-                    &Record::builder()
-                        // TODO: forward this info in the CuLogEntry
-                        .level(log::Level::Debug)
-                        // .target("copper")
-                        //.module_path_static(Some("cu29_log"))
-                        //.file_static(Some("cu29_log"))
-                        //.line(Some(0))
-                        .args(format_args!("{}", s))
-                        .build(),
-                ); // DO NOT TRY to split off this statement.
-                // format_args! has to be in the same statement per structure and scoping.
-            }
-            Err(e) => {
-                eprintln!("Failed to rebuild log line: {}", e);
+    {   // This scope is important :).
+        // if we have not passed a text logger in debug mode, it is ok just move along.
+        let guarded_logger = EXTRA_TEXT_LOGGER.get();
+        if guarded_logger.is_none() {
+            return Ok(());
+        }
+        if let Some(logger) = guarded_logger.unwrap() {
+            let stringified = cu29_log::rebuild_logline(&logger.all_strings, &entry);
+            match stringified {
+                Ok(s) => {
+                    let s = format!("[{}] {}", entry.time, s);
+                    logger.inner.log(
+                        &Record::builder()
+                            // TODO: forward this info in the CuLogEntry
+                            .level(log::Level::Debug)
+                            // .target("copper")
+                            //.module_path_static(Some("cu29_log"))
+                            //.file_static(Some("cu29_log"))
+                            //.line(Some(0))
+                            .args(format_args!("{}", s))
+                            .build(),
+                    ); // DO NOT TRY to split off this statement.
+                    // format_args! has to be in the same statement per structure and scoping.
+                }
+                Err(e) => {
+                    eprintln!("Failed to rebuild log line: {}", e);
+                }
             }
         }
     }
