@@ -1,6 +1,5 @@
 use std::fmt::{Display, Formatter};
-use std::fs::File;
-use std::io::{BufReader, Read};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use bincode::config::standard;
@@ -17,7 +16,6 @@ use cu29_traits::CopperListPayload;
 use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
-use cu29_clock::CuTime;
 use cu29_log::value::Value;
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
@@ -119,49 +117,6 @@ pub fn copperlists_dump<P: CopperListPayload>(
     })
 }
 
-#[pyclass]
-pub struct PyLogIterator {
-    reader: BufReader<File>,
-    all_strings: Vec<String>,
-}
-
-#[pymethods]
-impl PyLogIterator {
-    #[new]
-    pub fn new(src: &str, index: &str) -> PyResult<Self> {
-        let file = std::fs::File::open(src).map_err(|e| PyIOError::new_err(e.to_string()))?;
-        let all_strings = read_interned_strings(Path::new(index)).map_err(|e| PyIOError::new_err(e.to_string()))?;
-        Ok(PyLogIterator {
-            reader: BufReader::new(file),
-            all_strings,
-        })
-    }
-    
-    fn all_strings(&self) -> Vec<String> {
-        self.all_strings.clone()
-    }
-    
-
-    fn __iter__(slf: PyRefMut<Self>) -> PyRefMut<Self> {
-        slf
-    }
-
-    fn __next__(mut slf: PyRefMut<Self>) -> Option<PyResult<PyCuLogEntry>> {
-        match decode_from_std_read::<CuLogEntry, _, _>(&mut slf.reader, standard()) {
-            Ok(entry) => {
-                if entry.msg_index == 0 {
-                    None
-                } else {
-                    Some(Ok(PyCuLogEntry { inner: entry }))
-                }
-            }
-            Err(DecodeError::UnexpectedEnd { .. }) => None,
-            Err(DecodeError::Io { inner, .. }) if inner.kind() == std::io::ErrorKind::UnexpectedEof => None,
-            Err(e) => Some(Err(PyIOError::new_err(e.to_string()))),
-        }
-    }
-}
-
 /// Full dump of the copper structured log from its binary representation.
 /// This rebuilds a textual log.
 /// src: the source of the log data
@@ -195,15 +150,76 @@ pub fn textlog_dump(mut src: impl Read, index: &Path) -> CuResult<()> {
                     println!("Failed to rebuild log line: {:?}", result);
                     continue;
                 }
-                println!("Culog: [{}] {}", entry.time, result.unwrap());
+                println!("{}: {}", entry.time, result.unwrap());
             }
         };
     }
     Ok(())
 }
 
+#[pyclass]
+pub struct PyLogIterator {
+    reader: Box<dyn Read + Send>,
+}
 
-// On top of that let's offer some python bindings for the log reader.
+#[pymethods]
+impl PyLogIterator {
+
+    fn __iter__(slf: PyRefMut<Self>) -> PyRefMut<Self> {
+        slf
+    }
+
+    fn __next__(mut slf: PyRefMut<Self>) -> Option<PyResult<PyCuLogEntry>> {
+        match decode_from_std_read::<CuLogEntry, _, _>(&mut slf.reader, standard()) {
+            Ok(entry) => {
+                if entry.msg_index == 0 {
+                    None
+                } else {
+                    Some(Ok(PyCuLogEntry { inner: entry }))
+                }
+            }
+            Err(DecodeError::UnexpectedEnd { .. }) => None,
+            Err(DecodeError::Io { inner, .. }) if inner.kind() == std::io::ErrorKind::UnexpectedEof => None,
+            Err(e) => Some(Err(PyIOError::new_err(e.to_string()))),
+        }
+    }
+}
+
+/// Creates an iterator of CuLogEntries from a bare binary structured log file (ie. not within a unified log).
+/// This is mainly used for using the structured logging out of the Copper framework.
+/// it returns a tuple with the iterator of log entries and the list of interned strings.
+#[pyfunction]
+pub fn struct_log_iterator_bare(bare_struct_src_path: &str, index_path: &str) -> PyResult<(PyLogIterator, Vec<String>)> {
+    let file = std::fs::File::open(bare_struct_src_path).map_err(|e| PyIOError::new_err(e.to_string()))?;
+    let all_strings = read_interned_strings(Path::new(index_path)).map_err(|e| PyIOError::new_err(e.to_string()))?;
+    Ok((PyLogIterator {
+        reader: Box::new(file),
+    }, all_strings))
+}
+
+/// Creates an iterator of CuLogEntries from a unified log file.
+/// This function allows you to easily use python to datamind Copper's structured text logs.
+/// it returns a tuple with the iterator of log entries and the list of interned strings.
+#[pyfunction]
+pub fn struct_log_iterator_unified(unified_src_path: &str, index_path: &str) -> PyResult<(PyLogIterator, Vec<String>)> {
+    let all_strings = read_interned_strings(Path::new(index_path)).map_err(|e| PyIOError::new_err(e.to_string()))?;
+
+    let UnifiedLogger::Read(dl) = UnifiedLoggerBuilder::new()
+        .file_path(&Path::new(unified_src_path))
+        .build()
+        .expect("Failed to create logger")
+    else {
+        panic!("Failed to create logger");
+    };
+
+    let reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::StructuredLogLine);
+    Ok((PyLogIterator {
+        reader: Box::new(reader),
+    }, all_strings))
+}
+
+
+/// This is a python wrapper for CuLogEntries.
 #[pyclass]
 pub struct PyCuLogEntry {
     pub inner: CuLogEntry,
@@ -212,18 +228,22 @@ pub struct PyCuLogEntry {
 #[pymethods]
 impl PyCuLogEntry {
 
+    /// Returns the time of the log entry in nanoseconds.
     pub fn time_ns(&self) -> u64 {
         self.inner.time.0
     }
 
+    /// Returns the index of the message in the vector of interned strings.
     pub fn msg_index(&self) -> u32 {
         self.inner.msg_index
     }
 
+    /// Returns the index of the parameter names in the vector of interned strings.
     pub fn paramname_indexes(&self) -> Vec<u32> {
         self.inner.paramname_indexes.iter().map(|x| *x).collect()
     }
 
+    /// Returns the parameters of this log line
     pub fn params(&self) -> Vec<PyObject> {
         self.inner.params.iter().map(|x| value_to_py(x)).collect()
     }
@@ -233,6 +253,8 @@ impl PyCuLogEntry {
 fn cu29_export(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyCuLogEntry>()?;
     m.add_class::<PyLogIterator>()?;
+    m.add_function(wrap_pyfunction!(struct_log_iterator_bare, m)?)?;
+    m.add_function(wrap_pyfunction!(struct_log_iterator_unified, m)?)?;
     Ok(())
 }
 

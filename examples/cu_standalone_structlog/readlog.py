@@ -14,8 +14,7 @@ from datetime import datetime, timedelta
 log_file_path = "logfile.bin"
 index_file_path = target_dir / "cu29_log_index"
 
-log_iterator = cu29_export.PyLogIterator(str(log_file_path), str(index_file_path))
-all_strings = log_iterator.all_strings()
+log_iterator, all_strings = cu29_export.struct_log_iterator_bare(log_file_path, str(index_file_path))
 
 
 for log_entry in log_iterator:
