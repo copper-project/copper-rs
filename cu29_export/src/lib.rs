@@ -17,6 +17,7 @@ use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 use cu29_log::value::Value;
+use pyo3::types::PyDelta;
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum ExportFormat {
@@ -228,9 +229,16 @@ pub struct PyCuLogEntry {
 #[pymethods]
 impl PyCuLogEntry {
 
-    /// Returns the time of the log entry in nanoseconds.
-    pub fn time_ns(&self) -> u64 {
-        self.inner.time.0
+    /// Returns the timestamp of the log entry.
+    pub fn ts<'a>(&self, py: Python<'a>) -> Bound<'a, PyDelta> {
+        let nanoseconds = self.inner.time.0;
+
+        // Convert nanoseconds to seconds and microseconds
+        let days = (nanoseconds / 86_400_000_000_000) as i32;
+        let seconds = (nanoseconds / 1_000_000_000) as i32;
+        let microseconds = ((nanoseconds % 1_000_000_000) / 1_000) as i32;
+
+        PyDelta::new_bound(py, days, seconds, microseconds, false).unwrap()
     }
 
     /// Returns the index of the message in the vector of interned strings.
