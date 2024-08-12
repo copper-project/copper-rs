@@ -73,6 +73,10 @@
 <a href="#73" id="73">73</a>
 <a href="#74" id="74">74</a>
 <a href="#75" id="75">75</a>
+<a href="#76" id="76">76</a>
+<a href="#77" id="77">77</a>
+<a href="#78" id="78">78</a>
+<a href="#79" id="79">79</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>cu29_clock::RobotClock;
 <span class="kw">use </span>cu29_log::default_log_index_dir;
 <span class="kw">use </span>cu29_log_runtime::{ExtraTextLogger, LoggerRuntime};
@@ -120,8 +124,9 @@
         UnifiedLogType::StructuredLogLine,
         <span class="number">4096</span>,
     );
-
-    <span class="kw">let </span>extra = <span class="kw">if </span>text_log {
+ 
+    <span class="attr">#[cfg(debug_assertions)]
+    </span><span class="kw">let </span>extra = <span class="kw">if </span>text_log {
         <span class="kw">let </span>slow_text_logger = TermLogger::new(
             LevelFilter::Debug,
             Config::default(),
@@ -139,6 +144,9 @@
     } <span class="kw">else </span>{
         <span class="prelude-val">None
     </span>};
+    
+    <span class="attr">#[cfg(not(debug_assertions))]
+    </span><span class="kw">let </span>extra = <span class="prelude-val">None</span>;
 
     <span class="kw">let </span>clock = RobotClock::default();
     <span class="kw">let </span>structured_logging = LoggerRuntime::init(clock.clone(), structured_stream, extra);
