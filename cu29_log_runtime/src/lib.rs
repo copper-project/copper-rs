@@ -2,9 +2,6 @@ use std::fmt::{Debug, Formatter};
 use std::fs::File;
 use std::sync::{Mutex, OnceLock};
 use std::io::{BufWriter, Write};
-use cu29_clock::RobotClock;
-use cu29_log::CuLogEntry;
-use cu29_traits::{CuResult, WriteStream};
 #[cfg(debug_assertions)]
 use log::{Log, Record};
 use std::path::PathBuf;
@@ -17,6 +14,9 @@ use bincode::enc::write::Writer;
 use bincode::enc::Encode;
 #[cfg(debug_assertions)]
 use cu29_intern_strs::read_interned_strings;
+use cu29_clock::RobotClock;
+use cu29_log::CuLogEntry;
+use cu29_traits::{CuResult, WriteStream};
 
 static WRITER: OnceLock<(Mutex<Box<dyn WriteStream<CuLogEntry>>>, RobotClock)> = OnceLock::new();
 
@@ -225,24 +225,25 @@ impl WriteStream<CuLogEntry> for SimpleFileWriter {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use crate::CuLogEntry;
-//     use bincode::config::standard;
-//     use cu29_log::value::Value;
-//
-//     #[test]
-//     fn test_encode_decode_structured_log() {
-//         let log_entry = CuLogEntry {
-//             time: 0.into(),
-//             msg_index: 1,
-//             paramname_indexes: vec![2, 3],
-//             params: vec![Value::String("test".to_string())],
-//         };
-//         let encoded = bincode::encode_to_vec(&log_entry, standard()).unwrap();
-//         println!("{:?}", encoded);
-//         let decoded_tuple: (CuLogEntry, usize) =
-//             bincode::decode_from_slice(&encoded, standard()).unwrap();
-//         assert_eq!(log_entry, decoded_tuple.0);
-//     }
-// }
+#[cfg(test)]
+mod tests {
+    use crate::CuLogEntry;
+    use bincode::config::standard;
+    use cu29_log::value::Value;
+    use smallvec::smallvec;
+
+    #[test]
+    fn test_encode_decode_structured_log() {
+        let log_entry = CuLogEntry {
+            time: 0.into(),
+            msg_index: 1,
+            paramname_indexes: smallvec![2, 3],
+            params: smallvec![Value::String("test".to_string())],
+        };
+        let encoded = bincode::encode_to_vec(&log_entry, standard()).unwrap();
+        println!("{:?}", encoded);
+        let decoded_tuple: (CuLogEntry, usize) =
+            bincode::decode_from_slice(&encoded, standard()).unwrap();
+        assert_eq!(log_entry, decoded_tuple.0);
+    }
+}

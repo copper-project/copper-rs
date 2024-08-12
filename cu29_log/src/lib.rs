@@ -16,7 +16,7 @@ const INDEX_DIR_NAME: &str = "cu29_log_index";
 #[allow(dead_code)]
 pub const ANONYMOUS: u32 = 0;
 
-pub const MAX_PARAMS: usize = 10;
+pub const MAX_LOG_PARAMS_ON_STACK: usize = 10;
 
 /// This is the basic structure for a log entry in Copper.
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -28,10 +28,10 @@ pub struct CuLogEntry {
     pub msg_index: u32,
     
     // interned indexes of the parameter names
-    pub paramname_indexes: SmallVec<[u32; MAX_PARAMS]>,
+    pub paramname_indexes: SmallVec<[u32; MAX_LOG_PARAMS_ON_STACK]>,
     
     // Serializable values for the parameters (Values are acting like an Any Value).
-    pub params: SmallVec<[Value; MAX_PARAMS]>,
+    pub params: SmallVec<[Value; MAX_LOG_PARAMS_ON_STACK]>,
 }
 
 impl Encode for CuLogEntry {

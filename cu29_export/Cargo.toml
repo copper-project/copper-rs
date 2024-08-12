@@ -13,7 +13,7 @@ repository.workspace = true
 
 # This is a python binding
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 cu29 = { workspace = true }
