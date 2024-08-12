@@ -1,0 +1,27 @@
+[package]
+name = "cu_standalone_structlog"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "structlog_perf"
+path = "src/structlog_perf.rs"
+
+[[bin]]
+name = "standardlog_perf"
+path = "src/standardlog_perf.rs"
+
+[dependencies]
+cu29-traits = { workspace = true }
+cu29-log = { workspace = true }
+cu29-log-derive = { workspace = true }
+cu29-log-runtime = { workspace = true }
+cu29-clock = { workspace = true }
+log = "0.4.22"
+simplelog = "0.12.2"

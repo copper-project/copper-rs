@@ -285,6 +285,7 @@ mod tests {
         ))
     }
 
+    #[derive(Debug)]
     struct FakeWriter {}
 
     impl<E: Encode> WriteStream<E> for FakeWriter {
