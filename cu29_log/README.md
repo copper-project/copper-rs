@@ -1,5 +1,8 @@
-## Copper log
+## Copper Structured Logger
 
-This crate is part of the Copper project, those are common onboard and offboard definition to be able to log structured messages in the unified logger and reread them. 
+The `cu29_log` crate provides common onboard and offboard definitions to log structured messages in the Unified Logger
+and retrieve them efficiently.
 
-See cu29_log_derive for more information.
+For more information on how to leverage structured logging in your projects, check
+out [cu29_log_derive](https://github.com/copper-project/copper-rs/tree/master/cu29_log_derive).
+
