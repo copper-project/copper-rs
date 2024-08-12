@@ -1,4 +1,9 @@
-## Copper log runtime 
+## Structure log runtime
 
-This crate is part of the Copper project, it need to be used in tandem with the cu29_log_derive crate.
-It is the runtime associated with it to buffer and redirect log messages to the unified logger.
+This is a supporting crate
+for [cu29_log_derive](https://github.com/copper-project/copper-rs/tree/master/cu29_log_derive), check this crate for the
+actual usage.
+
+This crate provides the runtime part that is called my the macros like `!debug`.
+
+It can be use with or without Copper.
