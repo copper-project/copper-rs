@@ -20,6 +20,8 @@ var srcIndex = new Map(JSON.parse('[\
 ["cu_rp_gpio",["",[],["lib.rs"]]],\
 ["cu_vlp16",["",[],["lib.rs"]]],\
 ["cu_wt901",["",[],["lib.rs"]]],\
-["cu_wt901_tester",["",[],["main.rs"]]]\
+["cu_wt901_tester",["",[],["main.rs"]]],\
+["standardlog_perf",["",[],["standardlog_perf.rs"]]],\
+["structlog_perf",["",[],["structlog_perf.rs"]]]\
 ]'));
 createSrcSidebar();

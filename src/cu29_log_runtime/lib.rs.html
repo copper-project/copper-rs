@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cu29_log_runtime/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-d10b2a06af903387.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_log_runtime" data-themes="" data-resource-suffix="" data-rustdoc-version="1.82.0-nightly (e57f3090a 2024-08-05)" data-channel="nightly" data-search-js="search-ef54e092fea9c776.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../../static.files/src-script-e66d777a5a92e9b2.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-9345f17bf569ecba.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-df360f571f6edeae.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cu29_log_runtime/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-d10b2a06af903387.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_log_runtime" data-themes="" data-resource-suffix="" data-rustdoc-version="1.82.0-nightly (41dd149fd 2024-08-11)" data-channel="nightly" data-search-js="search-ef54e092fea9c776.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../../static.files/src-script-e66d777a5a92e9b2.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-04a29ac50d05d0b1.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-df360f571f6edeae.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
 <a href="#4" id="4">4</a>
@@ -205,189 +205,272 @@
 <a href="#205" id="205">205</a>
 <a href="#206" id="206">206</a>
 <a href="#207" id="207">207</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>cu29_clock::{ClockProvider, RobotClock};
-<span class="kw">use </span>cu29_intern_strs::read_interned_strings;
+<a href="#208" id="208">208</a>
+<a href="#209" id="209">209</a>
+<a href="#210" id="210">210</a>
+<a href="#211" id="211">211</a>
+<a href="#212" id="212">212</a>
+<a href="#213" id="213">213</a>
+<a href="#214" id="214">214</a>
+<a href="#215" id="215">215</a>
+<a href="#216" id="216">216</a>
+<a href="#217" id="217">217</a>
+<a href="#218" id="218">218</a>
+<a href="#219" id="219">219</a>
+<a href="#220" id="220">220</a>
+<a href="#221" id="221">221</a>
+<a href="#222" id="222">222</a>
+<a href="#223" id="223">223</a>
+<a href="#224" id="224">224</a>
+<a href="#225" id="225">225</a>
+<a href="#226" id="226">226</a>
+<a href="#227" id="227">227</a>
+<a href="#228" id="228">228</a>
+<a href="#229" id="229">229</a>
+<a href="#230" id="230">230</a>
+<a href="#231" id="231">231</a>
+<a href="#232" id="232">232</a>
+<a href="#233" id="233">233</a>
+<a href="#234" id="234">234</a>
+<a href="#235" id="235">235</a>
+<a href="#236" id="236">236</a>
+<a href="#237" id="237">237</a>
+<a href="#238" id="238">238</a>
+<a href="#239" id="239">239</a>
+<a href="#240" id="240">240</a>
+<a href="#241" id="241">241</a>
+<a href="#242" id="242">242</a>
+<a href="#243" id="243">243</a>
+<a href="#244" id="244">244</a>
+<a href="#245" id="245">245</a>
+<a href="#246" id="246">246</a>
+<a href="#247" id="247">247</a>
+<a href="#248" id="248">248</a>
+<a href="#249" id="249">249</a>
+</pre></div><pre class="rust"><code><span class="kw">use </span>std::fmt::{Debug, Formatter};
+<span class="kw">use </span>std::fs::File;
+<span class="kw">use </span>std::sync::{Mutex, OnceLock};
+<span class="kw">use </span>std::io::{BufWriter, Write};
+<span class="attr">#[cfg(debug_assertions)]
+</span><span class="kw">use </span>log::{Log, Record};
+<span class="kw">use </span>std::path::PathBuf;
+<span class="attr">#[cfg(debug_assertions)]
+</span><span class="kw">use </span>std::sync::Arc;
+<span class="kw">use </span>bincode::config::Configuration;
+<span class="kw">use </span>bincode::enc::{Encoder, EncoderImpl};
+<span class="kw">use </span>bincode::error::EncodeError;
+<span class="kw">use </span>bincode::enc::write::Writer;
+<span class="kw">use </span>bincode::enc::Encode;
+<span class="attr">#[cfg(debug_assertions)]
+</span><span class="kw">use </span>cu29_intern_strs::read_interned_strings;
+<span class="kw">use </span>cu29_clock::RobotClock;
 <span class="kw">use </span>cu29_log::CuLogEntry;
 <span class="kw">use </span>cu29_traits::{CuResult, WriteStream};
-<span class="kw">use </span>kanal::{bounded, Sender};
-<span class="kw">use </span>log::{Log, Record};
-<span class="kw">use </span>once_cell::sync::OnceCell;
-<span class="kw">use </span>std::path::PathBuf;
-<span class="kw">use </span>std::sync::Arc;
-<span class="kw">use </span>std::thread;
-<span class="kw">use </span>std::thread::{sleep, JoinHandle};
-<span class="kw">use </span>std::time::Duration;
 
-<span class="comment">// The logging system is basically a global queue.
-</span><span class="kw">static </span>QUEUE: OnceCell&lt;Sender&lt;CuLogEntry&gt;&gt; = OnceCell::new();
+<span class="kw">static </span>WRITER: OnceLock&lt;(Mutex&lt;Box&lt;<span class="kw">dyn </span>WriteStream&lt;CuLogEntry&gt;&gt;&gt;, RobotClock)&gt; = OnceLock::new();
+
+<span class="attr">#[cfg(debug_assertions)]
+</span><span class="kw">static </span>EXTRA_TEXT_LOGGER: OnceLock&lt;<span class="prelude-ty">Option</span>&lt;ExtraTextLogger&gt;&gt; = OnceLock::new();
 
 <span class="doccomment">/// The lifetime of this struct is the lifetime of the logger.
-</span><span class="kw">pub struct </span>LoggerRuntime {
-    clock: RobotClock,
-    handle: <span class="prelude-ty">Option</span>&lt;JoinHandle&lt;()&gt;&gt;,
-    extra_text_logger: <span class="prelude-ty">Option</span>&lt;ExtraTextLogger&gt;,
-}
-
-<span class="kw">impl </span>ClockProvider <span class="kw">for </span>LoggerRuntime {
-    <span class="kw">fn </span>get_clock(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; RobotClock {
-        <span class="self">self</span>.clock.clone()
-    }
-}
+</span><span class="kw">pub struct </span>LoggerRuntime {}
 
 <span class="kw">impl </span>LoggerRuntime {
     <span class="doccomment">/// destination is the binary stream in which we will log the structured log.
     /// extra_text_logger is the logger that will log the text logs in real time. This is slow and only for debug builds.
     </span><span class="kw">pub fn </span>init(
-        clock_source: RobotClock,
+        clock: RobotClock,
         destination: <span class="kw">impl </span>WriteStream&lt;CuLogEntry&gt; + <span class="lifetime">'static</span>,
-        extra_text_logger: <span class="prelude-ty">Option</span>&lt;ExtraTextLogger&gt;,
+        <span class="attr">#[allow(unused_variables)]
+        </span>extra_text_logger: <span class="prelude-ty">Option</span>&lt;ExtraTextLogger&gt;,
     ) -&gt; <span class="self">Self </span>{
-        <span class="kw">if </span>(!<span class="macro">cfg!</span>(debug_assertions)) &amp;&amp; extra_text_logger.is_some() {
-            <span class="macro">eprintln!</span>(<span class="string">"Extra text logger is only available in debug builds. Ignoring the extra text logger."</span>);
-        };
+        <span class="kw">let </span>runtime = LoggerRuntime {};
 
-        <span class="kw">let </span><span class="kw-2">mut </span>runtime = LoggerRuntime {
-            clock: clock_source,
-            extra_text_logger,
-            handle: <span class="prelude-val">None</span>,
-        };
-        <span class="kw">let </span>(s, handle) = runtime.initialize_queue(destination);
-        QUEUE
-            .set(s)
-            .expect(<span class="string">"Failed to initialize the logger queue."</span>);
-        runtime.handle = <span class="prelude-val">Some</span>(handle);
+        <span class="comment">// If WRITER is already initialized, update the inner value.
+        // This should only be useful for unit testing.
+        </span><span class="kw">if let </span><span class="prelude-val">Some</span>((writer, <span class="kw">_</span>)) = WRITER.get() {
+            <span class="kw">let </span><span class="kw-2">mut </span>writer_guard = writer.lock().unwrap();
+            <span class="kw-2">*</span>writer_guard = Box::new(destination);
+        } <span class="kw">else </span>{
+            WRITER.set((Mutex::new(Box::new(destination)), clock)).unwrap();
+        }
+        <span class="attr">#[cfg(debug_assertions)]
+        </span><span class="kw">if let </span><span class="prelude-val">Some</span>(logger) = extra_text_logger {
+            <span class="kw">let _ </span>= EXTRA_TEXT_LOGGER.set(<span class="prelude-val">Some</span>(logger));
+        }
+
         runtime
     }
 
-    <span class="kw">fn </span>initialize_queue(
-        <span class="kw-2">&amp;</span><span class="self">self</span>,
-        <span class="kw-2">mut </span>destination: <span class="kw">impl </span>WriteStream&lt;CuLogEntry&gt; + <span class="lifetime">'static</span>,
-    ) -&gt; (Sender&lt;CuLogEntry&gt;, JoinHandle&lt;()&gt;) {
-        <span class="kw">let </span>(sender, receiver) = bounded::&lt;CuLogEntry&gt;(<span class="number">100</span>);
-
-        <span class="attr">#[cfg(debug_assertions)]
-        </span><span class="kw">let </span>(index, extra_text_logger) = <span class="kw">if let </span><span class="prelude-val">Some</span>(extra) = <span class="kw-2">&amp;</span><span class="self">self</span>.extra_text_logger {
-            <span class="kw">let </span>index = <span class="prelude-val">Some</span>(
-                read_interned_strings(extra.path_to_index.as_path())
-                    .expect(<span class="string">"Failed to read the interned strings"</span>),
-            );
-            <span class="kw">let </span>logger = <span class="prelude-val">Some</span>(extra.logger.clone());
-            (index, logger)
-        } <span class="kw">else </span>{
-            (<span class="prelude-val">None</span>, <span class="prelude-val">None</span>)
-        };
-        <span class="kw">let </span>clock = <span class="self">self</span>.clock.clone();
-
-        <span class="kw">let </span>handle = thread::spawn(<span class="kw">move </span>|| {
-            <span class="kw">let </span>receiver = receiver.clone();
-            <span class="kw">loop </span>{
-                <span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>cu_log_entry) = receiver.recv() {
-                    <span class="comment">// We don't need to be precise on this clock.
-                    // If the user wants to really log a clock they should add it as a structured field.
-                    </span>cu_log_entry.time = clock.now();
-                    <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = destination.log(<span class="kw-2">&amp;</span>cu_log_entry) {
-                        <span class="macro">eprintln!</span>(<span class="string">"Failed to log data: {}"</span>, err);
-                    }
-
-                    <span class="comment">// This is only for debug builds with standard textual logging implemented.
-                    </span><span class="attr">#[cfg(debug_assertions)]
-                    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(index) = <span class="kw-2">&amp;</span>index {
-                        <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>logger) = extra_text_logger {
-                            <span class="kw">let </span>stringified = cu29_log::rebuild_logline(index, <span class="kw-2">&amp;</span>cu_log_entry);
-                            <span class="kw">match </span>stringified {
-                                <span class="prelude-val">Ok</span>(s) =&gt; {
-                                    <span class="kw">let </span>s = <span class="macro">format!</span>(<span class="string">"[{}] {}"</span>, cu_log_entry.time, s);
-                                    logger.log(
-                                        <span class="kw-2">&amp;</span>Record::builder()
-                                            <span class="comment">// TODO: forward this info in the CuLogEntry
-                                            </span>.level(log::Level::Debug)
-                                            <span class="comment">// .target("copper")
-                                            //.module_path_static(Some("cu29_log"))
-                                            //.file_static(Some("cu29_log"))
-                                            //.line(Some(0))
-                                            </span>.args(<span class="macro">format_args!</span>(<span class="string">"{}"</span>, s))
-                                            .build(),
-                                    ); <span class="comment">// DO NOT TRY to split off this statement.
-                                       // format_args! has to be in the same statement per structure and scoping.
-                                </span>}
-                                <span class="prelude-val">Err</span>(e) =&gt; {
-                                    <span class="macro">eprintln!</span>(<span class="string">"Failed to rebuild log line: {}"</span>, e);
-                                }
-                            }
-                        }
-                    }
-                } <span class="kw">else </span>{
-                    <span class="comment">// means that the sender has disconnected, we can stop the thread.
-                    </span><span class="kw">break</span>;
-                }
-            }
-        });
-        (sender, handle)
-    }
-    <span class="kw">pub fn </span>is_alive(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
-        QUEUE.get().is_some()
-    }
-
     <span class="kw">pub fn </span>flush(<span class="kw-2">&amp;</span><span class="self">self</span>) {
-        <span class="kw">if let </span><span class="prelude-val">Some</span>(queue) = QUEUE.get() {
-            <span class="kw">loop </span>{
-                <span class="kw">if </span>queue.is_empty() {
-                    <span class="kw">break</span>;
+        <span class="kw">if let </span><span class="prelude-val">Some</span>((writer, _clock)) = WRITER.get() {
+            <span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>writer) = writer.lock() {
+                <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = writer.flush() {
+                    <span class="macro">eprintln!</span>(<span class="string">"cu29_log: Failed to flush writer: {}"</span>, err);
                 }
-                <span class="macro">println!</span>(<span class="string">"Waiting for the queue to empty."</span>);
-                sleep(Duration::from_millis(<span class="number">1</span>));
+            } <span class="kw">else </span>{
+                <span class="macro">eprintln!</span>(<span class="string">"cu29_log: Failed to lock writer."</span>);
             }
-        }
-    }
-
-    <span class="kw">pub fn </span>close(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-        <span class="kw">let </span>queue = QUEUE.get();
-        <span class="kw">if </span>queue.is_none() {
-            <span class="macro">eprintln!</span>(<span class="string">"Logger closed before it was initialized."</span>);
-            <span class="kw">return</span>;
-        }
-        <span class="self">self</span>.flush();
-        queue.unwrap().close();
-        <span class="kw">if let </span><span class="prelude-val">Some</span>(handle) = <span class="self">self</span>.handle.take() {
-            handle.join().expect(<span class="string">"Failed to join the logger thread."</span>);
-            <span class="self">self</span>.handle = <span class="prelude-val">None</span>;
+        } <span class="kw">else </span>{
+            <span class="macro">eprintln!</span>(<span class="string">"cu29_log: Logger not initialized."</span>);
         }
     }
 }
 
 <span class="kw">impl </span>Drop <span class="kw">for </span>LoggerRuntime {
     <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-        <span class="self">self</span>.close();
+        <span class="self">self</span>.flush();
     }
 }
 
 <span class="doccomment">/// This is to basically be able to see the logs in text format in real time.
-/// THIS WILL SLOW DOWN THE LOGGING SYSTEM by an order of magnitude.
 /// This will only be active for debug builds.
 </span><span class="kw">pub struct </span>ExtraTextLogger {
-    path_to_index: PathBuf,
-    logger: Arc&lt;<span class="kw">dyn </span>Log&gt;,
+    <span class="comment">// We reload the entire index in memory.
+    </span><span class="attr">#[cfg(debug_assertions)]
+    </span>all_strings: Vec&lt;String&gt;,
+    <span class="attr">#[cfg(debug_assertions)]
+    </span>inner: Arc&lt;<span class="kw">dyn </span>Log&gt;,
 }
-<span class="kw">impl </span>ExtraTextLogger {
+<span class="attr">#[cfg(debug_assertions)]
+</span><span class="kw">impl </span>ExtraTextLogger {
     <span class="kw">pub fn </span>new(path_to_index: PathBuf, logger: Box&lt;<span class="kw">dyn </span>Log&gt;) -&gt; <span class="self">Self </span>{
+        <span class="kw">let </span>all_strings = read_interned_strings(<span class="kw-2">&amp;</span>path_to_index).unwrap();
         ExtraTextLogger {
-            path_to_index,
-            logger: Arc::new(logger),
+            all_strings,
+            inner: Arc::new(logger),
         }
     }
 }
 
 <span class="doccomment">/// Function called from generated code to log data.
 /// It moves entry by design, it will be absorbed in the queue.
-</span><span class="attr">#[inline]
-</span><span class="kw">pub fn </span>log(entry: CuLogEntry) -&gt; CuResult&lt;()&gt; {
-    <span class="kw">if let </span><span class="prelude-val">Some</span>(queue) = QUEUE.get() {
-        <span class="kw">let </span>err = queue
-            .send(entry)
-            .map_err(|e| <span class="macro">format!</span>(<span class="string">"Failed to send data to the logger, did you hold the reference to the logger long enough? {:?}"</span>, e).into());
-        err
-    } <span class="kw">else </span>{
-        <span class="prelude-val">Err</span>(<span class="string">"Logger not initialized."</span>.into())
+</span><span class="attr">#[inline(always)]
+</span><span class="kw">pub fn </span>log(<span class="kw-2">mut </span>entry: CuLogEntry) -&gt; CuResult&lt;()&gt; {
+    <span class="kw">let </span>d = WRITER.get().map(|(writer, clock)| (writer, clock));
+    <span class="kw">if </span>d.is_none() {
+        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Logger not initialized."</span>.into());
+    }
+    <span class="kw">let </span>(writer, clock) = d.unwrap();
+    entry.time = clock.now();
+    <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = writer.lock().unwrap().log(<span class="kw-2">&amp;</span>entry) {
+        <span class="macro">eprintln!</span>(<span class="string">"Failed to log data: {}"</span>, err);
+    }
+    <span class="comment">// This is only for debug builds with standard textual logging implemented.
+    </span><span class="attr">#[cfg(debug_assertions)]
+    </span>{   <span class="comment">// This scope is important :).
+        // if we have not passed a text logger in debug mode, it is ok just move along.
+        </span><span class="kw">let </span>guarded_logger = EXTRA_TEXT_LOGGER.get();
+        <span class="kw">if </span>guarded_logger.is_none() {
+            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+        }
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(logger) = guarded_logger.unwrap() {
+            <span class="kw">let </span>stringified = cu29_log::rebuild_logline(<span class="kw-2">&amp;</span>logger.all_strings, <span class="kw-2">&amp;</span>entry);
+            <span class="kw">match </span>stringified {
+                <span class="prelude-val">Ok</span>(s) =&gt; {
+                    <span class="kw">let </span>s = <span class="macro">format!</span>(<span class="string">"[{}] {}"</span>, entry.time, s);
+                    logger.inner.log(
+                        <span class="kw-2">&amp;</span>Record::builder()
+                            <span class="comment">// TODO: forward this info in the CuLogEntry
+                            </span>.level(log::Level::Debug)
+                            <span class="comment">// .target("copper")
+                            //.module_path_static(Some("cu29_log"))
+                            //.file_static(Some("cu29_log"))
+                            //.line(Some(0))
+                            </span>.args(<span class="macro">format_args!</span>(<span class="string">"{}"</span>, s))
+                            .build(),
+                    ); <span class="comment">// DO NOT TRY to split off this statement.
+                    // format_args! has to be in the same statement per structure and scoping.
+                </span>}
+                <span class="prelude-val">Err</span>(e) =&gt; {
+                    <span class="macro">eprintln!</span>(<span class="string">"Failed to rebuild log line: {}"</span>, e);
+                }
+            }
+        }
+    }
+
+    <span class="prelude-val">Ok</span>(())
+}
+
+<span class="comment">// This is an adaptation of the Iowriter from bincode.
+</span><span class="kw">pub struct </span>OwningIoWriter&lt;W: Write&gt; {
+    writer: BufWriter&lt;W&gt;,
+    bytes_written: usize,
+}
+
+<span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, W: Write&gt; OwningIoWriter&lt;W&gt; {
+    <span class="kw">pub fn </span>new(writer: W) -&gt; <span class="self">Self </span>{
+
+        <span class="self">Self </span>{
+            writer: BufWriter::new(writer),
+            bytes_written: <span class="number">0</span>,
+        }
+    }
+
+    <span class="kw">pub fn </span>bytes_written(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
+        <span class="self">self</span>.bytes_written
+    }
+
+    <span class="kw">pub fn </span>flush(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), EncodeError&gt; {
+        <span class="self">self</span>.writer.flush().map_err(|inner| EncodeError::Io {
+            inner,
+            index: <span class="self">self</span>.bytes_written,
+        })
+    }
+}
+
+<span class="kw">impl</span>&lt;W: Write&gt; Writer <span class="kw">for </span>OwningIoWriter&lt;W&gt; {
+    <span class="attr">#[inline(always)]
+    </span><span class="kw">fn </span>write(<span class="kw-2">&amp;mut </span><span class="self">self</span>, bytes: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;(), EncodeError&gt; {
+        <span class="self">self</span>.writer
+            .write_all(bytes)
+            .map_err(|inner| EncodeError::Io {
+                inner,
+                index: <span class="self">self</span>.bytes_written,
+            })<span class="question-mark">?</span>;
+        <span class="self">self</span>.bytes_written += bytes.len();
+        <span class="prelude-val">Ok</span>(())
+    }
+}
+
+
+<span class="doccomment">/// This allows this crate to be used outside of Copper (ie. decoupling it from the unifiedlog.
+</span><span class="kw">pub struct </span>SimpleFileWriter {
+    path: PathBuf,
+    encoder: EncoderImpl&lt;OwningIoWriter&lt;File&gt;, Configuration&gt;,
+}
+
+<span class="kw">impl </span>SimpleFileWriter {
+    <span class="kw">pub fn </span>new(path: <span class="kw-2">&amp;</span>PathBuf) -&gt; CuResult&lt;<span class="self">Self</span>&gt; {
+        <span class="kw">let </span>file = std::fs::OpenOptions::new()
+            .create(<span class="bool-val">true</span>)
+            .write(<span class="bool-val">true</span>)
+            .open(path)
+            .map_err(|e| <span class="macro">format!</span>(<span class="string">"Failed to open file: {:?}"</span>, e))<span class="question-mark">?</span>;
+
+        <span class="kw">let </span>writer = OwningIoWriter::new(file);
+        <span class="kw">let </span>encoder = EncoderImpl::new(writer, bincode::config::standard());
+
+        <span class="prelude-val">Ok</span>(SimpleFileWriter { path: path.clone(), encoder})
+    }
+}
+
+<span class="kw">impl </span>Debug <span class="kw">for </span>SimpleFileWriter {
+    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; std::fmt::Result {
+        <span class="macro">write!</span>(f, <span class="string">"SimpleFileWriter for path {:?}"</span>, <span class="self">self</span>.path)
+    }
+}
+
+<span class="kw">impl </span>WriteStream&lt;CuLogEntry&gt; <span class="kw">for </span>SimpleFileWriter {
+    <span class="attr">#[inline(always)]
+    </span><span class="kw">fn </span>log(<span class="kw-2">&amp;mut </span><span class="self">self</span>, obj: <span class="kw-2">&amp;</span>CuLogEntry) -&gt; CuResult&lt;()&gt; {
+        obj.encode(<span class="kw-2">&amp;mut </span><span class="self">self</span>.encoder).map_err(|e| <span class="macro">format!</span>(<span class="string">"Failed to write to file: {:?}"</span>, e))<span class="question-mark">?</span>;
+        <span class="prelude-val">Ok</span>(())
+    }
+
+    <span class="kw">fn </span>flush(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; CuResult&lt;()&gt; {
+        <span class="self">self</span>.encoder.writer().flush().map_err(|e| <span class="macro">format!</span>(<span class="string">"Failed to flush file: {:?}"</span>, e))<span class="question-mark">?</span>;
+        <span class="prelude-val">Ok</span>(())
     }
 }
 
@@ -396,14 +479,15 @@
     <span class="kw">use </span><span class="kw">crate</span>::CuLogEntry;
     <span class="kw">use </span>bincode::config::standard;
     <span class="kw">use </span>cu29_log::value::Value;
+    <span class="kw">use </span>smallvec::smallvec;
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>test_encode_decode_structured_log() {
         <span class="kw">let </span>log_entry = CuLogEntry {
             time: <span class="number">0</span>.into(),
             msg_index: <span class="number">1</span>,
-            paramname_indexes: <span class="macro">vec!</span>[<span class="number">2</span>, <span class="number">3</span>],
-            params: <span class="macro">vec!</span>[Value::String(<span class="string">"test"</span>.to_string())],
+            paramname_indexes: <span class="macro">smallvec!</span>[<span class="number">2</span>, <span class="number">3</span>],
+            params: <span class="macro">smallvec!</span>[Value::String(<span class="string">"test"</span>.to_string())],
         };
         <span class="kw">let </span>encoded = bincode::encode_to_vec(<span class="kw-2">&amp;</span>log_entry, standard()).unwrap();
         <span class="macro">println!</span>(<span class="string">"{:?}"</span>, encoded);

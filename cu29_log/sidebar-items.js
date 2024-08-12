@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["ANONYMOUS"],"fn":["default_log_index_dir","rebuild_logline"],"struct":["CuLogEntry"]};
+window.SIDEBAR_ITEMS = {"constant":["ANONYMOUS","MAX_LOG_PARAMS_ON_STACK"],"fn":["default_log_index_dir","rebuild_logline"],"struct":["CuLogEntry"]};

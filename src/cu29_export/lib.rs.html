@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cu29_export/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-d10b2a06af903387.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_export" data-themes="" data-resource-suffix="" data-rustdoc-version="1.82.0-nightly (e57f3090a 2024-08-05)" data-channel="nightly" data-search-js="search-ef54e092fea9c776.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../../static.files/src-script-e66d777a5a92e9b2.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-9345f17bf569ecba.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-df360f571f6edeae.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cu29_export/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-d10b2a06af903387.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_export" data-themes="" data-resource-suffix="" data-rustdoc-version="1.82.0-nightly (41dd149fd 2024-08-11)" data-channel="nightly" data-search-js="search-ef54e092fea9c776.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../../static.files/src-script-e66d777a5a92e9b2.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-04a29ac50d05d0b1.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-df360f571f6edeae.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
 <a href="#4" id="4">4</a>
@@ -264,6 +264,167 @@
 <a href="#264" id="264">264</a>
 <a href="#265" id="265">265</a>
 <a href="#266" id="266">266</a>
+<a href="#267" id="267">267</a>
+<a href="#268" id="268">268</a>
+<a href="#269" id="269">269</a>
+<a href="#270" id="270">270</a>
+<a href="#271" id="271">271</a>
+<a href="#272" id="272">272</a>
+<a href="#273" id="273">273</a>
+<a href="#274" id="274">274</a>
+<a href="#275" id="275">275</a>
+<a href="#276" id="276">276</a>
+<a href="#277" id="277">277</a>
+<a href="#278" id="278">278</a>
+<a href="#279" id="279">279</a>
+<a href="#280" id="280">280</a>
+<a href="#281" id="281">281</a>
+<a href="#282" id="282">282</a>
+<a href="#283" id="283">283</a>
+<a href="#284" id="284">284</a>
+<a href="#285" id="285">285</a>
+<a href="#286" id="286">286</a>
+<a href="#287" id="287">287</a>
+<a href="#288" id="288">288</a>
+<a href="#289" id="289">289</a>
+<a href="#290" id="290">290</a>
+<a href="#291" id="291">291</a>
+<a href="#292" id="292">292</a>
+<a href="#293" id="293">293</a>
+<a href="#294" id="294">294</a>
+<a href="#295" id="295">295</a>
+<a href="#296" id="296">296</a>
+<a href="#297" id="297">297</a>
+<a href="#298" id="298">298</a>
+<a href="#299" id="299">299</a>
+<a href="#300" id="300">300</a>
+<a href="#301" id="301">301</a>
+<a href="#302" id="302">302</a>
+<a href="#303" id="303">303</a>
+<a href="#304" id="304">304</a>
+<a href="#305" id="305">305</a>
+<a href="#306" id="306">306</a>
+<a href="#307" id="307">307</a>
+<a href="#308" id="308">308</a>
+<a href="#309" id="309">309</a>
+<a href="#310" id="310">310</a>
+<a href="#311" id="311">311</a>
+<a href="#312" id="312">312</a>
+<a href="#313" id="313">313</a>
+<a href="#314" id="314">314</a>
+<a href="#315" id="315">315</a>
+<a href="#316" id="316">316</a>
+<a href="#317" id="317">317</a>
+<a href="#318" id="318">318</a>
+<a href="#319" id="319">319</a>
+<a href="#320" id="320">320</a>
+<a href="#321" id="321">321</a>
+<a href="#322" id="322">322</a>
+<a href="#323" id="323">323</a>
+<a href="#324" id="324">324</a>
+<a href="#325" id="325">325</a>
+<a href="#326" id="326">326</a>
+<a href="#327" id="327">327</a>
+<a href="#328" id="328">328</a>
+<a href="#329" id="329">329</a>
+<a href="#330" id="330">330</a>
+<a href="#331" id="331">331</a>
+<a href="#332" id="332">332</a>
+<a href="#333" id="333">333</a>
+<a href="#334" id="334">334</a>
+<a href="#335" id="335">335</a>
+<a href="#336" id="336">336</a>
+<a href="#337" id="337">337</a>
+<a href="#338" id="338">338</a>
+<a href="#339" id="339">339</a>
+<a href="#340" id="340">340</a>
+<a href="#341" id="341">341</a>
+<a href="#342" id="342">342</a>
+<a href="#343" id="343">343</a>
+<a href="#344" id="344">344</a>
+<a href="#345" id="345">345</a>
+<a href="#346" id="346">346</a>
+<a href="#347" id="347">347</a>
+<a href="#348" id="348">348</a>
+<a href="#349" id="349">349</a>
+<a href="#350" id="350">350</a>
+<a href="#351" id="351">351</a>
+<a href="#352" id="352">352</a>
+<a href="#353" id="353">353</a>
+<a href="#354" id="354">354</a>
+<a href="#355" id="355">355</a>
+<a href="#356" id="356">356</a>
+<a href="#357" id="357">357</a>
+<a href="#358" id="358">358</a>
+<a href="#359" id="359">359</a>
+<a href="#360" id="360">360</a>
+<a href="#361" id="361">361</a>
+<a href="#362" id="362">362</a>
+<a href="#363" id="363">363</a>
+<a href="#364" id="364">364</a>
+<a href="#365" id="365">365</a>
+<a href="#366" id="366">366</a>
+<a href="#367" id="367">367</a>
+<a href="#368" id="368">368</a>
+<a href="#369" id="369">369</a>
+<a href="#370" id="370">370</a>
+<a href="#371" id="371">371</a>
+<a href="#372" id="372">372</a>
+<a href="#373" id="373">373</a>
+<a href="#374" id="374">374</a>
+<a href="#375" id="375">375</a>
+<a href="#376" id="376">376</a>
+<a href="#377" id="377">377</a>
+<a href="#378" id="378">378</a>
+<a href="#379" id="379">379</a>
+<a href="#380" id="380">380</a>
+<a href="#381" id="381">381</a>
+<a href="#382" id="382">382</a>
+<a href="#383" id="383">383</a>
+<a href="#384" id="384">384</a>
+<a href="#385" id="385">385</a>
+<a href="#386" id="386">386</a>
+<a href="#387" id="387">387</a>
+<a href="#388" id="388">388</a>
+<a href="#389" id="389">389</a>
+<a href="#390" id="390">390</a>
+<a href="#391" id="391">391</a>
+<a href="#392" id="392">392</a>
+<a href="#393" id="393">393</a>
+<a href="#394" id="394">394</a>
+<a href="#395" id="395">395</a>
+<a href="#396" id="396">396</a>
+<a href="#397" id="397">397</a>
+<a href="#398" id="398">398</a>
+<a href="#399" id="399">399</a>
+<a href="#400" id="400">400</a>
+<a href="#401" id="401">401</a>
+<a href="#402" id="402">402</a>
+<a href="#403" id="403">403</a>
+<a href="#404" id="404">404</a>
+<a href="#405" id="405">405</a>
+<a href="#406" id="406">406</a>
+<a href="#407" id="407">407</a>
+<a href="#408" id="408">408</a>
+<a href="#409" id="409">409</a>
+<a href="#410" id="410">410</a>
+<a href="#411" id="411">411</a>
+<a href="#412" id="412">412</a>
+<a href="#413" id="413">413</a>
+<a href="#414" id="414">414</a>
+<a href="#415" id="415">415</a>
+<a href="#416" id="416">416</a>
+<a href="#417" id="417">417</a>
+<a href="#418" id="418">418</a>
+<a href="#419" id="419">419</a>
+<a href="#420" id="420">420</a>
+<a href="#421" id="421">421</a>
+<a href="#422" id="422">422</a>
+<a href="#423" id="423">423</a>
+<a href="#424" id="424">424</a>
+<a href="#425" id="425">425</a>
+<a href="#426" id="426">426</a>
+<a href="#427" id="427">427</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::fmt::{Display, Formatter};
 <span class="kw">use </span>std::io::Read;
 <span class="kw">use </span>std::path::{Path, PathBuf};
@@ -277,8 +438,13 @@
 <span class="kw">use </span>cu29_traits::{CuError, CuResult, UnifiedLogType};
 
 <span class="kw">use </span>clap::{Parser, Subcommand, ValueEnum};
+<span class="kw">use </span>pyo3::exceptions::PyIOError;
 <span class="kw">use </span>cu29_traits::CopperListPayload;
 <span class="kw">use </span>cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader};
+<span class="kw">use </span>pyo3::prelude::<span class="kw-2">*</span>;
+<span class="kw">use </span>pyo3::types::{PyDict, PyList};
+<span class="kw">use </span>cu29_log::value::Value;
+<span class="kw">use </span>pyo3::types::PyDelta;
 
 <span class="attr">#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 </span><span class="kw">pub enum </span>ExportFormat {
@@ -412,12 +578,168 @@
                     <span class="macro">println!</span>(<span class="string">"Failed to rebuild log line: {:?}"</span>, result);
                     <span class="kw">continue</span>;
                 }
-                <span class="macro">println!</span>(<span class="string">"Culog: [{}] {}"</span>, entry.time, result.unwrap());
+                <span class="macro">println!</span>(<span class="string">"{}: {}"</span>, entry.time, result.unwrap());
             }
         };
     }
     <span class="prelude-val">Ok</span>(())
 }
+
+<span class="attr">#[pyclass]
+</span><span class="kw">pub struct </span>PyLogIterator {
+    reader: Box&lt;<span class="kw">dyn </span>Read + Send&gt;,
+}
+
+<span class="attr">#[pymethods]
+</span><span class="kw">impl </span>PyLogIterator {
+
+    <span class="kw">fn </span>__iter__(slf: PyRefMut&lt;<span class="self">Self</span>&gt;) -&gt; PyRefMut&lt;<span class="self">Self</span>&gt; {
+        slf
+    }
+
+    <span class="kw">fn </span>__next__(<span class="kw-2">mut </span>slf: PyRefMut&lt;<span class="self">Self</span>&gt;) -&gt; <span class="prelude-ty">Option</span>&lt;PyResult&lt;PyCuLogEntry&gt;&gt; {
+        <span class="kw">match </span>decode_from_std_read::&lt;CuLogEntry, <span class="kw">_</span>, <span class="kw">_</span>&gt;(<span class="kw-2">&amp;mut </span>slf.reader, standard()) {
+            <span class="prelude-val">Ok</span>(entry) =&gt; {
+                <span class="kw">if </span>entry.msg_index == <span class="number">0 </span>{
+                    <span class="prelude-val">None
+                </span>} <span class="kw">else </span>{
+                    <span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(PyCuLogEntry { inner: entry }))
+                }
+            }
+            <span class="prelude-val">Err</span>(DecodeError::UnexpectedEnd { .. }) =&gt; <span class="prelude-val">None</span>,
+            <span class="prelude-val">Err</span>(DecodeError::Io { inner, .. }) <span class="kw">if </span>inner.kind() == std::io::ErrorKind::UnexpectedEof =&gt; <span class="prelude-val">None</span>,
+            <span class="prelude-val">Err</span>(e) =&gt; <span class="prelude-val">Some</span>(<span class="prelude-val">Err</span>(PyIOError::new_err(e.to_string()))),
+        }
+    }
+}
+
+<span class="doccomment">/// Creates an iterator of CuLogEntries from a bare binary structured log file (ie. not within a unified log).
+/// This is mainly used for using the structured logging out of the Copper framework.
+/// it returns a tuple with the iterator of log entries and the list of interned strings.
+</span><span class="attr">#[pyfunction]
+</span><span class="kw">pub fn </span>struct_log_iterator_bare(bare_struct_src_path: <span class="kw-2">&amp;</span>str, index_path: <span class="kw-2">&amp;</span>str) -&gt; PyResult&lt;(PyLogIterator, Vec&lt;String&gt;)&gt; {
+    <span class="kw">let </span>file = std::fs::File::open(bare_struct_src_path).map_err(|e| PyIOError::new_err(e.to_string()))<span class="question-mark">?</span>;
+    <span class="kw">let </span>all_strings = read_interned_strings(Path::new(index_path)).map_err(|e| PyIOError::new_err(e.to_string()))<span class="question-mark">?</span>;
+    <span class="prelude-val">Ok</span>((PyLogIterator {
+        reader: Box::new(file),
+    }, all_strings))
+}
+
+<span class="doccomment">/// Creates an iterator of CuLogEntries from a unified log file.
+/// This function allows you to easily use python to datamind Copper's structured text logs.
+/// it returns a tuple with the iterator of log entries and the list of interned strings.
+</span><span class="attr">#[pyfunction]
+</span><span class="kw">pub fn </span>struct_log_iterator_unified(unified_src_path: <span class="kw-2">&amp;</span>str, index_path: <span class="kw-2">&amp;</span>str) -&gt; PyResult&lt;(PyLogIterator, Vec&lt;String&gt;)&gt; {
+    <span class="kw">let </span>all_strings = read_interned_strings(Path::new(index_path)).map_err(|e| PyIOError::new_err(e.to_string()))<span class="question-mark">?</span>;
+
+    <span class="kw">let </span>UnifiedLogger::Read(dl) = UnifiedLoggerBuilder::new()
+        .file_path(<span class="kw-2">&amp;</span>Path::new(unified_src_path))
+        .build()
+        .expect(<span class="string">"Failed to create logger"</span>)
+    <span class="kw">else </span>{
+        <span class="macro">panic!</span>(<span class="string">"Failed to create logger"</span>);
+    };
+
+    <span class="kw">let </span>reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::StructuredLogLine);
+    <span class="prelude-val">Ok</span>((PyLogIterator {
+        reader: Box::new(reader),
+    }, all_strings))
+}
+
+
+<span class="doccomment">/// This is a python wrapper for CuLogEntries.
+</span><span class="attr">#[pyclass]
+</span><span class="kw">pub struct </span>PyCuLogEntry {
+    <span class="kw">pub </span>inner: CuLogEntry,
+}
+
+<span class="attr">#[pymethods]
+</span><span class="kw">impl </span>PyCuLogEntry {
+
+    <span class="doccomment">/// Returns the timestamp of the log entry.
+    </span><span class="kw">pub fn </span>ts&lt;<span class="lifetime">'a</span>&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, py: Python&lt;<span class="lifetime">'a</span>&gt;) -&gt; Bound&lt;<span class="lifetime">'a</span>, PyDelta&gt; {
+        <span class="kw">let </span>nanoseconds = <span class="self">self</span>.inner.time.<span class="number">0</span>;
+
+        <span class="comment">// Convert nanoseconds to seconds and microseconds
+        </span><span class="kw">let </span>days = (nanoseconds / <span class="number">86_400_000_000_000</span>) <span class="kw">as </span>i32;
+        <span class="kw">let </span>seconds = (nanoseconds / <span class="number">1_000_000_000</span>) <span class="kw">as </span>i32;
+        <span class="kw">let </span>microseconds = ((nanoseconds % <span class="number">1_000_000_000</span>) / <span class="number">1_000</span>) <span class="kw">as </span>i32;
+
+        PyDelta::new_bound(py, days, seconds, microseconds, <span class="bool-val">false</span>).unwrap()
+    }
+
+    <span class="doccomment">/// Returns the index of the message in the vector of interned strings.
+    </span><span class="kw">pub fn </span>msg_index(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u32 {
+        <span class="self">self</span>.inner.msg_index
+    }
+
+    <span class="doccomment">/// Returns the index of the parameter names in the vector of interned strings.
+    </span><span class="kw">pub fn </span>paramname_indexes(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;u32&gt; {
+        <span class="self">self</span>.inner.paramname_indexes.iter().map(|x| <span class="kw-2">*</span>x).collect()
+    }
+
+    <span class="doccomment">/// Returns the parameters of this log line
+    </span><span class="kw">pub fn </span>params(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;PyObject&gt; {
+        <span class="self">self</span>.inner.params.iter().map(|x| value_to_py(x)).collect()
+    }
+}
+
+<span class="attr">#[pymodule]
+</span><span class="kw">fn </span>cu29_export(m: <span class="kw-2">&amp;</span>Bound&lt;<span class="lifetime">'_</span>, PyModule&gt;) -&gt; PyResult&lt;()&gt; {
+    m.add_class::&lt;PyCuLogEntry&gt;()<span class="question-mark">?</span>;
+    m.add_class::&lt;PyLogIterator&gt;()<span class="question-mark">?</span>;
+    m.add_function(<span class="macro">wrap_pyfunction!</span>(struct_log_iterator_bare, m)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
+    m.add_function(<span class="macro">wrap_pyfunction!</span>(struct_log_iterator_unified, m)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
+    <span class="prelude-val">Ok</span>(())
+}
+
+
+<span class="kw">fn </span>value_to_py(value: <span class="kw-2">&amp;</span>Value) -&gt; PyObject {
+    <span class="kw">match </span>value {
+        Value::String(s) =&gt; Python::with_gil(|py| s.to_object(py)),
+        Value::U64(u) =&gt; Python::with_gil(|py| u.to_object(py)),
+        Value::I64(i) =&gt; Python::with_gil(|py| i.to_object(py)),
+        Value::F64(f) =&gt; Python::with_gil(|py| f.to_object(py)),
+        Value::Bool(b) =&gt; Python::with_gil(|py| b.to_object(py)),
+        Value::CuTime(t) =&gt; Python::with_gil(|py| t.<span class="number">0</span>.to_object(py)),
+        Value::Bytes(b) =&gt; Python::with_gil(|py| b.to_object(py)),
+        Value::Char(c) =&gt; Python::with_gil(|py| c.to_object(py)),
+        Value::I8(i) =&gt; Python::with_gil(|py| i.to_object(py)),
+        Value::U8(u) =&gt; Python::with_gil(|py| u.to_object(py)),
+        Value::I16(i) =&gt; Python::with_gil(|py| i.to_object(py)),
+        Value::U16(u) =&gt; Python::with_gil(|py| u.to_object(py)),
+        Value::I32(i) =&gt; Python::with_gil(|py| i.to_object(py)),
+        Value::U32(u) =&gt; Python::with_gil(|py| u.to_object(py)),
+        Value::Map(m) =&gt; {
+            Python::with_gil(|py| {
+                <span class="kw">let </span>dict = PyDict::new_bound(py);
+                <span class="kw">for </span>(k, v) <span class="kw">in </span>m.iter() {
+                    dict.set_item(value_to_py(k), value_to_py(v)).unwrap();
+                }
+                dict.to_object(py)
+            })
+        }
+        Value::F32(f) =&gt; Python::with_gil(|py| f.to_object(py)),
+        Value::Option(o) =&gt; {
+            Python::with_gil(|py| {
+                <span class="kw">if </span>o.is_none() {
+                    py.<span class="prelude-val">None</span>()
+                } <span class="kw">else </span>{
+                    o.clone().map(|v| value_to_py(<span class="kw-2">&amp;</span>v)).unwrap()
+                }
+            })
+        }
+        Value::Unit =&gt; Python::with_gil(|py| py.<span class="prelude-val">None</span>()),
+        Value::Newtype(v) =&gt; value_to_py(v),
+        Value::Seq(s) =&gt; {
+            Python::with_gil(|py| {
+                <span class="kw">let </span>list = PyList::new_bound(py, s.iter().map(|v| value_to_py(v)));
+                list.to_object(py)
+            })
+        }
+    }
+}
+
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>tests {

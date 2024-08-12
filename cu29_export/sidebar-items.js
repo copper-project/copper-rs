@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Command","ExportFormat"],"fn":["copperlists_dump","run_cli","textlog_dump"],"struct":["LogReaderCli"]};
+window.SIDEBAR_ITEMS = {"enum":["Command","ExportFormat"],"fn":["copperlists_dump","run_cli","struct_log_iterator_bare","struct_log_iterator_unified","textlog_dump"],"struct":["LogReaderCli","PyCuLogEntry","PyLogIterator"]};
