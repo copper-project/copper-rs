@@ -45,7 +45,8 @@ pub fn basic_copper_setup(
         UnifiedLogType::StructuredLogLine,
         4096,
     );
-
+ 
+    #[cfg(debug_assertions)]
     let extra = if text_log {
         let slow_text_logger = TermLogger::new(
             LevelFilter::Debug,
@@ -64,6 +65,9 @@ pub fn basic_copper_setup(
     } else {
         None
     };
+    
+    #[cfg(not(debug_assertions))]
+    let extra = None;
 
     let clock = RobotClock::default();
     let structured_logging = LoggerRuntime::init(clock.clone(), structured_stream, extra);
