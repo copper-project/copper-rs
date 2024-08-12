@@ -45,7 +45,7 @@ pub fn basic_copper_setup(
         UnifiedLogType::StructuredLogLine,
         4096,
     );
- 
+
     #[cfg(debug_assertions)]
     let extra = if text_log {
         let slow_text_logger = TermLogger::new(
@@ -65,7 +65,7 @@ pub fn basic_copper_setup(
     } else {
         None
     };
-    
+
     #[cfg(not(debug_assertions))]
     let extra = None;
 
