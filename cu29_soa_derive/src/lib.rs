@@ -2,7 +2,7 @@ mod format;
 use format::{highlight_rust_code, rustfmt_generated_code};
 use proc_macro::TokenStream;
 use quote::{format_ident, quote, ToTokens};
-use syn::{parse_macro_input, DeriveInput, Fields, Data};
+use syn::{parse_macro_input, Data, DeriveInput, Fields};
 
 /// Build a fixed sized SoA (Structure of Arrays) from a struct.
 /// The outputted SoA will be suitable for in place storage in messages and should be
@@ -33,31 +33,31 @@ use syn::{parse_macro_input, DeriveInput, Fields, Data};
 /// // makes an SOA with a default value
 /// let soa1: MyStructSoa<8> = XyzSoa::new(MyStruct{ a: 1, b: 2.3 });
 /// ```
-/// 
+///
 /// Then you can access the fields of the SoA as slices:
 /// ```ignore
 /// let a = soa1.a();
 /// let b = soa1.b();
 /// ```
-/// 
+///
 /// You can also access a range of the fields:
 /// ```ignore
 /// let a = soa1.a_range(0..4);
 /// let b = soa1.b_range(0..4);
 /// ```
-/// 
+///
 /// You can also modify the fields of the SoA:
 /// ```ignore
 /// soa1.a_mut()[0] = 42;
 /// soa1.b_mut()[0] = 42.0;
 /// ```
-/// 
+///
 /// You can also modify a range of the fields:
 /// ```ignore
 /// soa1.a_range_mut(0..4)[0] = 42;
 /// soa1.b_range_mut(0..4)[0] = 42.0;
 /// ```
-/// 
+///
 /// You can also apply a function to all the fields of the SoA:
 /// ```ignore
 /// soa1.apply(|a, b| {
@@ -102,7 +102,6 @@ pub fn soa(_attr: TokenStream, item: TokenStream) -> TokenStream {
         field_names_mut.push(format_ident!("{}_mut", field_name));
         field_names_range.push(format_ident!("{}_range", field_name));
         field_names_range_mut.push(format_ident!("{}_range_mut", field_name));
-
     }
 
     let soa_struct_name = format_ident!("{}Soa", name);
@@ -119,7 +118,7 @@ pub fn soa(_attr: TokenStream, item: TokenStream) -> TokenStream {
         use bincode::error::DecodeError as _DecodeError;
         use bincode::error::EncodeError as _EncodeError;
 
-        #[derive(Debug)] 
+        #[derive(Debug)]
         pub struct #soa_struct_name<const N: usize> {
             #(pub #field_names: [#field_types; N]),*
         }
@@ -267,7 +266,7 @@ pub fn soa(_attr: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
     };
-    let tokens: TokenStream  = expanded.into();
+    let tokens: TokenStream = expanded.into();
 
     let formatted_code = rustfmt_generated_code(tokens.to_string());
     println!("\n     ===    Gen. SOA     ===\n");
@@ -275,5 +274,3 @@ pub fn soa(_attr: TokenStream, item: TokenStream) -> TokenStream {
     println!("\n     === === === === === ===\n");
     tokens
 }
-
-

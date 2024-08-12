@@ -21,7 +21,6 @@ pub struct CopperLiskMask {
     mask: [u128; MAX_TASKS / 128 + 1],
 }
 
-
 /// Those are the possible states along the lifetime of a CopperList.
 #[derive(Debug, Encode, Decode, Serialize, PartialEq, Copy, Clone)]
 pub enum CopperListState {

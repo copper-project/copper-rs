@@ -26,16 +26,19 @@ pub struct CuLogEntry {
 
     // interned index of the message
     pub msg_index: u32,
-    
+
     // interned indexes of the parameter names
     pub paramname_indexes: SmallVec<[u32; MAX_LOG_PARAMS_ON_STACK]>,
-    
+
     // Serializable values for the parameters (Values are acting like an Any Value).
     pub params: SmallVec<[Value; MAX_LOG_PARAMS_ON_STACK]>,
 }
 
 impl Encode for CuLogEntry {
-    fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E) -> Result<(), bincode::error::EncodeError> {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
         self.time.encode(encoder)?;
         self.msg_index.encode(encoder)?;
 
@@ -54,7 +57,9 @@ impl Encode for CuLogEntry {
 }
 
 impl Decode for CuLogEntry {
-    fn decode<D: bincode::de::Decoder>(decoder: &mut D) -> Result<Self, bincode::error::DecodeError> {
+    fn decode<D: bincode::de::Decoder>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
         let time = CuTime::decode(decoder)?;
         let msg_index = u32::decode(decoder)?;
 
@@ -78,7 +83,6 @@ impl Decode for CuLogEntry {
         })
     }
 }
-
 
 // This is for internal debug purposes.
 impl Display for CuLogEntry {

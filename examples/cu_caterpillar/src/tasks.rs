@@ -3,9 +3,9 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29::clock::{OptionCuTime, RobotClock};
+use cu29::config::NodeInstanceConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, CuTask, CuTaskLifecycle, Freezable};
 use cu29::CuResult;
-use cu29::config::NodeInstanceConfig;
 use cu_rp_gpio::RPGpioMsg;
 
 #[derive(Default)]

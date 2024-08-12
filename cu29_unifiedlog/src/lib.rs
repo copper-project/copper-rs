@@ -1,19 +1,19 @@
 use libc;
 
+use memmap2::{Mmap, MmapMut, RemapOptions};
+use std::fmt::{Debug, Formatter};
 use std::fs::{File, OpenOptions};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::slice::from_raw_parts_mut;
 use std::sync::{Arc, Mutex};
 use std::{io, mem};
-use std::fmt::{Debug, Formatter};
-use memmap2::{Mmap, MmapMut, RemapOptions};
 
 use bincode::config::standard;
+use bincode::decode_from_slice;
 use bincode::encode_into_slice;
 use bincode::error::EncodeError;
-use bincode::{Encode, Decode};
-use bincode::{decode_from_slice};
+use bincode::{Decode, Encode};
 use cu29_traits::{CuError, CuResult, UnifiedLogType, WriteStream};
 
 const MAIN_MAGIC: [u8; 4] = [0xB4, 0xA5, 0x50, 0xFF];
@@ -23,7 +23,7 @@ const SECTION_MAGIC: [u8; 2] = [0xFA, 0x57];
 /// The main file header of the datalogger.
 #[derive(Encode, Decode, Debug)]
 struct MainHeader {
-    magic: [u8; 4], // Magic number to identify the file.
+    magic: [u8; 4],            // Magic number to identify the file.
     first_section_offset: u16, // This is to align with a page at write time.
     page_size: u16,
 }
@@ -301,7 +301,6 @@ impl Default for SectionHandle {
 impl SectionHandle {
     // The buffer is considered static as it is a dedicated piece for the section.
     pub fn create(section_header: SectionHeader, buffer: &'static mut [u8]) -> Self {
-
         // here we assume with are passed a valid section.
         if buffer[0] != SECTION_MAGIC[0] || buffer[1] != SECTION_MAGIC[1] {
             panic!("Invalid section buffer, magic number not found");
@@ -387,7 +386,11 @@ impl UnifiedLoggerWrite {
     }
 
     /// The returned slice is section_size or greater.
-    fn add_section(&mut self, entry_type: UnifiedLogType, requested_section_size: usize) -> SectionHandle {
+    fn add_section(
+        &mut self,
+        entry_type: UnifiedLogType,
+        requested_section_size: usize,
+    ) -> SectionHandle {
         // align current_position to the next page
         self.current_global_position = self.align_to_next_page(self.current_global_position);
         let section_size = self.align_to_next_page(requested_section_size) as u32;
@@ -579,9 +582,9 @@ impl Read for UnifiedLoggerIOReader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
-    use std::io::BufReader;
     use bincode::decode_from_reader;
+    use std::io::BufReader;
+    use std::path::PathBuf;
     use tempfile::TempDir;
     fn make_a_logger(tmp_dir: &TempDir) -> (Arc<Mutex<UnifiedLoggerWrite>>, PathBuf) {
         let file_path = tmp_dir.path().join("test.bin");
@@ -788,7 +791,6 @@ mod tests {
         for _ in 0..100 {
             logger.add_section(UnifiedLogType::StructuredLogLine, 1024);
         }
-        println!("AF: {}", handler.buffer[0] );
-
+        println!("AF: {}", handler.buffer[0]);
     }
 }

@@ -1,22 +1,22 @@
-use std::fmt::{Debug, Formatter};
-use std::fs::File;
-use std::sync::{Mutex, OnceLock};
-use std::io::{BufWriter, Write};
+use bincode::config::Configuration;
+use bincode::enc::write::Writer;
+use bincode::enc::Encode;
+use bincode::enc::{Encoder, EncoderImpl};
+use bincode::error::EncodeError;
+use cu29_clock::RobotClock;
+#[cfg(debug_assertions)]
+use cu29_intern_strs::read_interned_strings;
+use cu29_log::CuLogEntry;
+use cu29_traits::{CuResult, WriteStream};
 #[cfg(debug_assertions)]
 use log::{Log, Record};
+use std::fmt::{Debug, Formatter};
+use std::fs::File;
+use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 #[cfg(debug_assertions)]
 use std::sync::Arc;
-use bincode::config::Configuration;
-use bincode::enc::{Encoder, EncoderImpl};
-use bincode::error::EncodeError;
-use bincode::enc::write::Writer;
-use bincode::enc::Encode;
-#[cfg(debug_assertions)]
-use cu29_intern_strs::read_interned_strings;
-use cu29_clock::RobotClock;
-use cu29_log::CuLogEntry;
-use cu29_traits::{CuResult, WriteStream};
+use std::sync::{Mutex, OnceLock};
 
 static WRITER: OnceLock<(Mutex<Box<dyn WriteStream<CuLogEntry>>>, RobotClock)> = OnceLock::new();
 
@@ -32,8 +32,7 @@ impl LoggerRuntime {
     pub fn init(
         clock: RobotClock,
         destination: impl WriteStream<CuLogEntry> + 'static,
-        #[allow(unused_variables)]
-        extra_text_logger: Option<ExtraTextLogger>,
+        #[allow(unused_variables)] extra_text_logger: Option<ExtraTextLogger>,
     ) -> Self {
         let runtime = LoggerRuntime {};
 
@@ -43,7 +42,9 @@ impl LoggerRuntime {
             let mut writer_guard = writer.lock().unwrap();
             *writer_guard = Box::new(destination);
         } else {
-            WRITER.set((Mutex::new(Box::new(destination)), clock)).unwrap();
+            WRITER
+                .set((Mutex::new(Box::new(destination)), clock))
+                .unwrap();
         }
         #[cfg(debug_assertions)]
         if let Some(logger) = extra_text_logger {
@@ -109,7 +110,8 @@ pub fn log(mut entry: CuLogEntry) -> CuResult<()> {
     }
     // This is only for debug builds with standard textual logging implemented.
     #[cfg(debug_assertions)]
-    {   // This scope is important :).
+    {
+        // This scope is important :).
         // if we have not passed a text logger in debug mode, it is ok just move along.
         let guarded_logger = EXTRA_TEXT_LOGGER.get();
         if guarded_logger.is_none() {
@@ -131,7 +133,7 @@ pub fn log(mut entry: CuLogEntry) -> CuResult<()> {
                             .args(format_args!("{}", s))
                             .build(),
                     ); // DO NOT TRY to split off this statement.
-                    // format_args! has to be in the same statement per structure and scoping.
+                       // format_args! has to be in the same statement per structure and scoping.
                 }
                 Err(e) => {
                     eprintln!("Failed to rebuild log line: {}", e);
@@ -151,7 +153,6 @@ pub struct OwningIoWriter<W: Write> {
 
 impl<'a, W: Write> OwningIoWriter<W> {
     pub fn new(writer: W) -> Self {
-
         Self {
             writer: BufWriter::new(writer),
             bytes_written: 0,
@@ -184,7 +185,6 @@ impl<W: Write> Writer for OwningIoWriter<W> {
     }
 }
 
-
 /// This allows this crate to be used outside of Copper (ie. decoupling it from the unifiedlog.
 pub struct SimpleFileWriter {
     path: PathBuf,
@@ -202,7 +202,10 @@ impl SimpleFileWriter {
         let writer = OwningIoWriter::new(file);
         let encoder = EncoderImpl::new(writer, bincode::config::standard());
 
-        Ok(SimpleFileWriter { path: path.clone(), encoder})
+        Ok(SimpleFileWriter {
+            path: path.clone(),
+            encoder,
+        })
     }
 }
 
@@ -215,12 +218,16 @@ impl Debug for SimpleFileWriter {
 impl WriteStream<CuLogEntry> for SimpleFileWriter {
     #[inline(always)]
     fn log(&mut self, obj: &CuLogEntry) -> CuResult<()> {
-        obj.encode(&mut self.encoder).map_err(|e| format!("Failed to write to file: {:?}", e))?;
+        obj.encode(&mut self.encoder)
+            .map_err(|e| format!("Failed to write to file: {:?}", e))?;
         Ok(())
     }
 
     fn flush(&mut self) -> CuResult<()> {
-        self.encoder.writer().flush().map_err(|e| format!("Failed to flush file: {:?}", e))?;
+        self.encoder
+            .writer()
+            .flush()
+            .map_err(|e| format!("Failed to flush file: {:?}", e))?;
         Ok(())
     }
 }
