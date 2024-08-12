@@ -10,13 +10,13 @@ use std::time::Duration;
 #[copper_runtime(config = "copperconfig.ron")]
 struct CaterpillarApplication {}
 
-
 const PREALLOCATED_STORAGE_SIZE: Option<usize> = Some(1024 * 1024 * 100);
 
 fn main() {
     let logger_path = "/tmp/caterpillar.copper";
     let copper_ctx =
-        basic_copper_setup(&PathBuf::from(logger_path), PREALLOCATED_STORAGE_SIZE, true).expect("Failed to setup logger.");
+        basic_copper_setup(&PathBuf::from(logger_path), PREALLOCATED_STORAGE_SIZE, true)
+            .expect("Failed to setup logger.");
     debug!("Logger created at {}.", path = logger_path);
     let clock = copper_ctx.clock;
     debug!("Creating application... ");

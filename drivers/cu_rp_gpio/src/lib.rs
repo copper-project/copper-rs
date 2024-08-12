@@ -1,8 +1,8 @@
 use bincode::{Decode, Encode};
+use cu29::clock;
 use cu29::config::NodeInstanceConfig;
 use cu29::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle, Freezable};
 use cu29::CuResult;
-use cu29::clock;
 use cu29_log_derive::debug;
 
 #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
@@ -94,11 +94,7 @@ impl CuTaskLifecycle for RPGpio {
 impl CuSinkTask for RPGpio {
     type Input = RPGpioMsg;
 
-    fn process(
-        &mut self,
-        clock: &clock::RobotClock,
-        msg: &mut CuMsg<Self::Input>,
-    ) -> CuResult<()> {
+    fn process(&mut self, clock: &clock::RobotClock, msg: &mut CuMsg<Self::Input>) -> CuResult<()> {
         msg.payload.actuation = clock.now().into();
         #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
         self.pin.write(msg.payload.into());

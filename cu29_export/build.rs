@@ -2,10 +2,9 @@ use std::env;
 use std::path::PathBuf;
 
 fn main() {
-
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
 
-    let target_dir =  out_dir.join("../../..");
+    let target_dir = out_dir.join("../../..");
     let lib_name = "libcu29_export.so";
     let new_name = "cu29_export.so";
 
@@ -16,4 +15,3 @@ fn main() {
         std::os::unix::fs::symlink(&lib_path, &new_path).expect("Failed to create symlink");
     }
 }
-

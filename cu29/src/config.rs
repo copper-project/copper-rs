@@ -63,7 +63,6 @@ impl NodeInstanceConfig {
 //   cnx : [ (src: "toto", dst: "titi", msg: "zorglub::MyMsgType"),...]
 // )
 
-
 /// Wrapper around the ron::Value to allow for custom serialization.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Value(RonValue);
@@ -319,18 +318,16 @@ impl Default for CuConfig {
 /// The implementation has a lot of conveinence methods to manipulate
 /// the configuration to give some flexibility into programmatically creating the configuration.
 impl CuConfig {
-
     /// Add a new node to the configuration graph.
     pub fn add_node(&mut self, node: Node) -> NodeId {
         self.graph.add_node(node).index() as NodeId
     }
 
     /// Get the node with the given id.
-    #[allow(dead_code)]   // Used in proc macro
+    #[allow(dead_code)] // Used in proc macro
     pub fn get_node(&self, node_id: NodeId) -> Option<&Node> {
         self.graph.node_weight(node_id.into())
     }
-
 
     /// Get the list of edges that are connected to the given node as a source.
     pub fn get_src_edges(&self, node_id: NodeId) -> Vec<usize> {
@@ -347,7 +344,6 @@ impl CuConfig {
             .map(|edge| edge.id().index())
             .collect()
     }
-
 
     #[allow(dead_code)]
     pub fn get_edge_weight(&self, index: usize) -> Option<String> {
