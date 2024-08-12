@@ -178,25 +178,33 @@
 <a href="#178" id="178">178</a>
 <a href="#179" id="179">179</a>
 <a href="#180" id="180">180</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>velodyne_lidar::{Config, Config16};
-<span class="kw">use </span>velodyne_lidar::Packet;
+<a href="#181" id="181">181</a>
+<a href="#182" id="182">182</a>
+<a href="#183" id="183">183</a>
+<a href="#184" id="184">184</a>
+<a href="#185" id="185">185</a>
+<a href="#186" id="186">186</a>
+<a href="#187" id="187">187</a>
+<a href="#188" id="188">188</a>
+</pre></div><pre class="rust"><code><span class="kw">use </span>velodyne_lidar::Packet;
+<span class="kw">use </span>velodyne_lidar::{Config, Config16};
 
+<span class="kw">use </span>bincode::de::Decoder;
+<span class="kw">use </span>bincode::enc::Encoder;
+<span class="kw">use </span>bincode::error::{DecodeError, EncodeError};
+<span class="kw">use </span>bincode::{Decode, Encode};
+<span class="kw">use </span>cu29::clock::RobotClock;
+<span class="kw">use </span>cu29::config::NodeInstanceConfig;
+<span class="kw">use </span>cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
+<span class="kw">use </span>cu29::CuResult;
+<span class="kw">use </span>cu29_soa_derive::soa;
 <span class="kw">use </span>std::net::UdpSocket;
 <span class="kw">use </span>std::ops::{Add, Sub};
 <span class="kw">use </span>std::time::Duration;
-<span class="kw">use </span>bincode::enc::Encoder;
-<span class="kw">use </span>bincode::{Decode, Encode};
-<span class="kw">use </span>bincode::de::Decoder;
-<span class="kw">use </span>bincode::error::{DecodeError, EncodeError};
+<span class="kw">use </span>uom::si::f32::Length;
 <span class="kw">use </span>uom::si::length::meter;
 <span class="kw">use </span>velodyne_lidar::iter::try_packet_to_frame_xyz;
 <span class="kw">use </span>velodyne_lidar::types::frame_xyz::FrameXyz;
-<span class="kw">use </span>cu29::clock::RobotClock;
-<span class="kw">use </span>cu29::config::NodeInstanceConfig;
-<span class="kw">use </span>cu29::CuResult;
-<span class="kw">use </span>cu29::cutask::{CuTaskLifecycle, CuSrcTask, Freezable, CuMsg};
-<span class="kw">use </span>cu29_soa_derive::soa;
-<span class="kw">use </span>uom::si::f32::Length;
 
 <span class="comment">// const MAX_UDP_PACKET_SIZE: usize = 65507;
 
@@ -216,14 +224,18 @@
         </span><span class="self">Self</span>: Sized,
     {
         <span class="kw">let </span>config: <span class="kw-2">&amp;</span>NodeInstanceConfig = config.expect(<span class="string">"Vlp16 requires a config"</span>);
-        <span class="kw">let </span>listen_addr: String = config.get(<span class="string">"listen_addr"</span>).unwrap_or(<span class="string">"0.0.0.0:2368"</span>.to_string());
+        <span class="kw">let </span>listen_addr: String = config
+            .get(<span class="string">"listen_addr"</span>)
+            .unwrap_or(<span class="string">"0.0.0.0:2368"</span>.to_string());
         <span class="kw">let </span>return_type: String = config.get(<span class="string">"return_type"</span>).unwrap_or(<span class="string">"last"</span>.to_string());
         <span class="kw">let </span>test_mode: String = config.get(<span class="string">"test_mode"</span>).unwrap_or(<span class="string">"false"</span>.to_string());
         <span class="kw">let </span>velo_config = <span class="kw">match </span>return_type.as_str() {
             <span class="string">"strongest" </span>=&gt; Config16::new_vlp_16_strongest(),
             <span class="string">"last" </span>=&gt; Config16::new_vlp_16_last(),
             <span class="string">"dual" </span>=&gt; Config16::new_vlp_16_dual(),
-            <span class="kw">_ </span>=&gt; { <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Invalid return_type for Vlp16."</span>.into()); }
+            <span class="kw">_ </span>=&gt; {
+                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Invalid return_type for Vlp16."</span>.into());
+            }
         };
         <span class="prelude-val">Ok</span>(Vlp16 {
             velo_config: velo_config.into(),
@@ -235,7 +247,9 @@
 
     <span class="kw">fn </span>start(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _clock: <span class="kw-2">&amp;</span>RobotClock) -&gt; CuResult&lt;()&gt; {
         <span class="kw">let </span>socket = UdpSocket::bind(<span class="kw-2">&amp;</span><span class="self">self</span>.listen_addr).unwrap();
-        socket.set_read_timeout(<span class="prelude-val">Some</span>(Duration::from_millis(<span class="number">100</span>))).unwrap();
+        socket
+            .set_read_timeout(<span class="prelude-val">Some</span>(Duration::from_millis(<span class="number">100</span>)))
+            .unwrap();
         <span class="self">self</span>.socket = <span class="prelude-val">Some</span>(socket);
         <span class="prelude-val">Ok</span>(())
     }
@@ -257,7 +271,7 @@
 
 <span class="kw">impl </span>Decode <span class="kw">for </span>LidarLength {
     <span class="kw">fn </span>decode&lt;D: Decoder&gt;(decoder: <span class="kw-2">&amp;mut </span>D) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, DecodeError&gt; {
-        <span class="kw">let </span>value:f32 = Decode::decode(decoder)<span class="question-mark">?</span>;
+        <span class="kw">let </span>value: f32 = Decode::decode(decoder)<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(LidarLength(Length::new::&lt;meter&gt;(value)))
     }
 }
@@ -278,7 +292,6 @@
     }
 }
 
-
 <span class="attr">#[soa]
 #[derive(Default, PartialEq, Debug)]
 </span><span class="kw">pub struct </span>XYZ {
@@ -295,7 +308,6 @@
             z: LidarLength(Length::new::&lt;meter&gt;(z)),
         }
     }
-
 }
 
 <span class="kw">impl </span>CuSrcTask <span class="kw">for </span>Vlp16 {
@@ -309,14 +321,18 @@
 
         <span class="kw">let </span>packet = Packet::from_slice(packet).unwrap();
         <span class="kw">let </span>packets = [<span class="prelude-val">Ok</span>::&lt;Packet, ()&gt;(packet)].into_iter(); <span class="comment">// 🤮
-        </span><span class="kw">let </span>frame:FrameXyz =  try_packet_to_frame_xyz(<span class="self">self</span>.velo_config.clone(), packets).unwrap().next().unwrap().unwrap();
+        </span><span class="kw">let </span>frame: FrameXyz = try_packet_to_frame_xyz(<span class="self">self</span>.velo_config.clone(), packets)
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap();
         <span class="kw">let </span>i = <span class="number">0</span>;
         frame.firing_iter().for_each(|firing| {
             firing.point_iter().for_each(|point| {
                 <span class="kw">let </span>point = point.as_single().unwrap();
-                <span class="kw">let  </span>x = point.measurement.xyz[<span class="number">0</span>].as_meters() <span class="kw">as </span>f32;
-                <span class="kw">let  </span>y = point.measurement.xyz[<span class="number">0</span>].as_meters() <span class="kw">as </span>f32;
-                <span class="kw">let  </span>z = point.measurement.xyz[<span class="number">0</span>].as_meters() <span class="kw">as </span>f32;
+                <span class="kw">let </span>x = point.measurement.xyz[<span class="number">0</span>].as_meters() <span class="kw">as </span>f32;
+                <span class="kw">let </span>y = point.measurement.xyz[<span class="number">0</span>].as_meters() <span class="kw">as </span>f32;
+                <span class="kw">let </span>z = point.measurement.xyz[<span class="number">0</span>].as_meters() <span class="kw">as </span>f32;
                 <span class="kw">let </span>el = <span class="kw-2">&amp;mut </span>new_msg.payload;
                 el.set(i, XYZ::new(x, y, z));
             });
@@ -327,8 +343,8 @@
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>tests {
-    <span class="kw">use </span>std::fs::File;
     <span class="kw">use </span>pcap_file::pcap::PcapReader;
+    <span class="kw">use </span>std::fs::File;
 
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
 

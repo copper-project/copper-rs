@@ -21,22 +21,32 @@
 <a href="#21" id="21">21</a>
 <a href="#22" id="22">22</a>
 <a href="#23" id="23">23</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>std::path::PathBuf;
-<span class="kw">use </span>cu29_clock::{CuTime, RobotClock};
+<a href="#24" id="24">24</a>
+<a href="#25" id="25">25</a>
+<a href="#26" id="26">26</a>
+<a href="#27" id="27">27</a>
+<a href="#28" id="28">28</a>
+</pre></div><pre class="rust"><code><span class="kw">use </span>cu29_clock::{CuTime, RobotClock};
 <span class="kw">use </span>cu29_log_derive::debug;
-<span class="kw">use </span>cu29_log_runtime::SimpleFileWriter;
 <span class="kw">use </span>cu29_log_runtime::LoggerRuntime;
+<span class="kw">use </span>cu29_log_runtime::SimpleFileWriter;
+<span class="kw">use </span>std::path::PathBuf;
 
 <span class="kw">const </span>LOG_FILE: <span class="kw-2">&amp;</span>str = <span class="string">"./logfile.bin"</span>;
 
 <span class="kw">fn </span>main() {
     <span class="kw">let </span>clock = RobotClock::new();
     <span class="kw">let </span>bf = {
-        <span class="kw">let </span>writer  = SimpleFileWriter::new(<span class="kw-2">&amp;</span>PathBuf::from(LOG_FILE)).unwrap();
+        <span class="kw">let </span>writer = SimpleFileWriter::new(<span class="kw-2">&amp;</span>PathBuf::from(LOG_FILE)).unwrap();
         <span class="kw">let </span>_log_runtime = LoggerRuntime::init(clock.clone(), writer, <span class="prelude-val">None</span>);
-        <span class="kw">let </span>bf : CuTime = clock.now();
+        <span class="kw">let </span>bf: CuTime = clock.now();
         <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">1_000_000 </span>{
-            <span class="macro">debug!</span>(<span class="string">"This is the logline {} associated with the log Logging and some more = {}, {}"</span>, i , i+<span class="number">2</span>, i+<span class="number">3</span>);
+            <span class="macro">debug!</span>(
+                <span class="string">"This is the logline {} associated with the log Logging and some more = {}, {}"</span>,
+                i,
+                i + <span class="number">2</span>,
+                i + <span class="number">3
+            </span>);
         }
         bf
     };

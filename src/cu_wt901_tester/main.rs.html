@@ -92,8 +92,8 @@
 
 <span class="kw">fn </span>main() {
     <span class="kw">let </span>logger_path = <span class="string">"/tmp/caterpillar.copper"</span>;
-    <span class="kw">let </span>copper_ctx =
-        basic_copper_setup(<span class="kw-2">&amp;</span>PathBuf::from(logger_path), <span class="prelude-val">None</span>,<span class="bool-val">true</span>).expect(<span class="string">"Failed to setup logger."</span>);
+    <span class="kw">let </span>copper_ctx = basic_copper_setup(<span class="kw-2">&amp;</span>PathBuf::from(logger_path), <span class="prelude-val">None</span>, <span class="bool-val">true</span>)
+        .expect(<span class="string">"Failed to setup logger."</span>);
     <span class="macro">debug!</span>(<span class="string">"Logger created at {}."</span>, logger_path);
     <span class="kw">let </span>clock = copper_ctx.clock;
     <span class="macro">debug!</span>(<span class="string">"Creating application... "</span>);

@@ -425,26 +425,37 @@
 <a href="#425" id="425">425</a>
 <a href="#426" id="426">426</a>
 <a href="#427" id="427">427</a>
+<a href="#428" id="428">428</a>
+<a href="#429" id="429">429</a>
+<a href="#430" id="430">430</a>
+<a href="#431" id="431">431</a>
+<a href="#432" id="432">432</a>
+<a href="#433" id="433">433</a>
+<a href="#434" id="434">434</a>
+<a href="#435" id="435">435</a>
+<a href="#436" id="436">436</a>
+<a href="#437" id="437">437</a>
+<a href="#438" id="438">438</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::fmt::{Display, Formatter};
 <span class="kw">use </span>std::io::Read;
 <span class="kw">use </span>std::path::{Path, PathBuf};
 
 <span class="kw">use </span>bincode::config::standard;
-<span class="kw">use </span>bincode::error::DecodeError;
 <span class="kw">use </span>bincode::decode_from_std_read;
+<span class="kw">use </span>bincode::error::DecodeError;
 <span class="kw">use </span>cu29::copperlist::CopperList;
 <span class="kw">use </span>cu29_intern_strs::read_interned_strings;
 <span class="kw">use </span>cu29_log::{rebuild_logline, CuLogEntry};
 <span class="kw">use </span>cu29_traits::{CuError, CuResult, UnifiedLogType};
 
 <span class="kw">use </span>clap::{Parser, Subcommand, ValueEnum};
-<span class="kw">use </span>pyo3::exceptions::PyIOError;
+<span class="kw">use </span>cu29_log::value::Value;
 <span class="kw">use </span>cu29_traits::CopperListPayload;
 <span class="kw">use </span>cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader};
+<span class="kw">use </span>pyo3::exceptions::PyIOError;
 <span class="kw">use </span>pyo3::prelude::<span class="kw-2">*</span>;
-<span class="kw">use </span>pyo3::types::{PyDict, PyList};
-<span class="kw">use </span>cu29_log::value::Value;
 <span class="kw">use </span>pyo3::types::PyDelta;
+<span class="kw">use </span>pyo3::types::{PyDict, PyList};
 
 <span class="attr">#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 </span><span class="kw">pub enum </span>ExportFormat {
@@ -592,7 +603,6 @@
 
 <span class="attr">#[pymethods]
 </span><span class="kw">impl </span>PyLogIterator {
-
     <span class="kw">fn </span>__iter__(slf: PyRefMut&lt;<span class="self">Self</span>&gt;) -&gt; PyRefMut&lt;<span class="self">Self</span>&gt; {
         slf
     }
@@ -607,7 +617,11 @@
                 }
             }
             <span class="prelude-val">Err</span>(DecodeError::UnexpectedEnd { .. }) =&gt; <span class="prelude-val">None</span>,
-            <span class="prelude-val">Err</span>(DecodeError::Io { inner, .. }) <span class="kw">if </span>inner.kind() == std::io::ErrorKind::UnexpectedEof =&gt; <span class="prelude-val">None</span>,
+            <span class="prelude-val">Err</span>(DecodeError::Io { inner, .. })
+                <span class="kw">if </span>inner.kind() == std::io::ErrorKind::UnexpectedEof =&gt;
+            {
+                <span class="prelude-val">None
+            </span>}
             <span class="prelude-val">Err</span>(e) =&gt; <span class="prelude-val">Some</span>(<span class="prelude-val">Err</span>(PyIOError::new_err(e.to_string()))),
         }
     }
@@ -617,20 +631,32 @@
 /// This is mainly used for using the structured logging out of the Copper framework.
 /// it returns a tuple with the iterator of log entries and the list of interned strings.
 </span><span class="attr">#[pyfunction]
-</span><span class="kw">pub fn </span>struct_log_iterator_bare(bare_struct_src_path: <span class="kw-2">&amp;</span>str, index_path: <span class="kw-2">&amp;</span>str) -&gt; PyResult&lt;(PyLogIterator, Vec&lt;String&gt;)&gt; {
-    <span class="kw">let </span>file = std::fs::File::open(bare_struct_src_path).map_err(|e| PyIOError::new_err(e.to_string()))<span class="question-mark">?</span>;
-    <span class="kw">let </span>all_strings = read_interned_strings(Path::new(index_path)).map_err(|e| PyIOError::new_err(e.to_string()))<span class="question-mark">?</span>;
-    <span class="prelude-val">Ok</span>((PyLogIterator {
-        reader: Box::new(file),
-    }, all_strings))
+</span><span class="kw">pub fn </span>struct_log_iterator_bare(
+    bare_struct_src_path: <span class="kw-2">&amp;</span>str,
+    index_path: <span class="kw-2">&amp;</span>str,
+) -&gt; PyResult&lt;(PyLogIterator, Vec&lt;String&gt;)&gt; {
+    <span class="kw">let </span>file =
+        std::fs::File::open(bare_struct_src_path).map_err(|e| PyIOError::new_err(e.to_string()))<span class="question-mark">?</span>;
+    <span class="kw">let </span>all_strings = read_interned_strings(Path::new(index_path))
+        .map_err(|e| PyIOError::new_err(e.to_string()))<span class="question-mark">?</span>;
+    <span class="prelude-val">Ok</span>((
+        PyLogIterator {
+            reader: Box::new(file),
+        },
+        all_strings,
+    ))
 }
 
 <span class="doccomment">/// Creates an iterator of CuLogEntries from a unified log file.
 /// This function allows you to easily use python to datamind Copper's structured text logs.
 /// it returns a tuple with the iterator of log entries and the list of interned strings.
 </span><span class="attr">#[pyfunction]
-</span><span class="kw">pub fn </span>struct_log_iterator_unified(unified_src_path: <span class="kw-2">&amp;</span>str, index_path: <span class="kw-2">&amp;</span>str) -&gt; PyResult&lt;(PyLogIterator, Vec&lt;String&gt;)&gt; {
-    <span class="kw">let </span>all_strings = read_interned_strings(Path::new(index_path)).map_err(|e| PyIOError::new_err(e.to_string()))<span class="question-mark">?</span>;
+</span><span class="kw">pub fn </span>struct_log_iterator_unified(
+    unified_src_path: <span class="kw-2">&amp;</span>str,
+    index_path: <span class="kw-2">&amp;</span>str,
+) -&gt; PyResult&lt;(PyLogIterator, Vec&lt;String&gt;)&gt; {
+    <span class="kw">let </span>all_strings = read_interned_strings(Path::new(index_path))
+        .map_err(|e| PyIOError::new_err(e.to_string()))<span class="question-mark">?</span>;
 
     <span class="kw">let </span>UnifiedLogger::Read(dl) = UnifiedLoggerBuilder::new()
         .file_path(<span class="kw-2">&amp;</span>Path::new(unified_src_path))
@@ -641,11 +667,13 @@
     };
 
     <span class="kw">let </span>reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::StructuredLogLine);
-    <span class="prelude-val">Ok</span>((PyLogIterator {
-        reader: Box::new(reader),
-    }, all_strings))
+    <span class="prelude-val">Ok</span>((
+        PyLogIterator {
+            reader: Box::new(reader),
+        },
+        all_strings,
+    ))
 }
-
 
 <span class="doccomment">/// This is a python wrapper for CuLogEntries.
 </span><span class="attr">#[pyclass]
@@ -655,7 +683,6 @@
 
 <span class="attr">#[pymethods]
 </span><span class="kw">impl </span>PyCuLogEntry {
-
     <span class="doccomment">/// Returns the timestamp of the log entry.
     </span><span class="kw">pub fn </span>ts&lt;<span class="lifetime">'a</span>&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, py: Python&lt;<span class="lifetime">'a</span>&gt;) -&gt; Bound&lt;<span class="lifetime">'a</span>, PyDelta&gt; {
         <span class="kw">let </span>nanoseconds = <span class="self">self</span>.inner.time.<span class="number">0</span>;
@@ -693,7 +720,6 @@
     <span class="prelude-val">Ok</span>(())
 }
 
-
 <span class="kw">fn </span>value_to_py(value: <span class="kw-2">&amp;</span>Value) -&gt; PyObject {
     <span class="kw">match </span>value {
         Value::String(s) =&gt; Python::with_gil(|py| s.to_object(py)),
@@ -710,43 +736,36 @@
         Value::U16(u) =&gt; Python::with_gil(|py| u.to_object(py)),
         Value::I32(i) =&gt; Python::with_gil(|py| i.to_object(py)),
         Value::U32(u) =&gt; Python::with_gil(|py| u.to_object(py)),
-        Value::Map(m) =&gt; {
-            Python::with_gil(|py| {
-                <span class="kw">let </span>dict = PyDict::new_bound(py);
-                <span class="kw">for </span>(k, v) <span class="kw">in </span>m.iter() {
-                    dict.set_item(value_to_py(k), value_to_py(v)).unwrap();
-                }
-                dict.to_object(py)
-            })
-        }
+        Value::Map(m) =&gt; Python::with_gil(|py| {
+            <span class="kw">let </span>dict = PyDict::new_bound(py);
+            <span class="kw">for </span>(k, v) <span class="kw">in </span>m.iter() {
+                dict.set_item(value_to_py(k), value_to_py(v)).unwrap();
+            }
+            dict.to_object(py)
+        }),
         Value::F32(f) =&gt; Python::with_gil(|py| f.to_object(py)),
-        Value::Option(o) =&gt; {
-            Python::with_gil(|py| {
-                <span class="kw">if </span>o.is_none() {
-                    py.<span class="prelude-val">None</span>()
-                } <span class="kw">else </span>{
-                    o.clone().map(|v| value_to_py(<span class="kw-2">&amp;</span>v)).unwrap()
-                }
-            })
-        }
+        Value::Option(o) =&gt; Python::with_gil(|py| {
+            <span class="kw">if </span>o.is_none() {
+                py.<span class="prelude-val">None</span>()
+            } <span class="kw">else </span>{
+                o.clone().map(|v| value_to_py(<span class="kw-2">&amp;</span>v)).unwrap()
+            }
+        }),
         Value::Unit =&gt; Python::with_gil(|py| py.<span class="prelude-val">None</span>()),
         Value::Newtype(v) =&gt; value_to_py(v),
-        Value::Seq(s) =&gt; {
-            Python::with_gil(|py| {
-                <span class="kw">let </span>list = PyList::new_bound(py, s.iter().map(|v| value_to_py(v)));
-                list.to_object(py)
-            })
-        }
+        Value::Seq(s) =&gt; Python::with_gil(|py| {
+            <span class="kw">let </span>list = PyList::new_bound(py, s.iter().map(|v| value_to_py(v)));
+            list.to_object(py)
+        }),
     }
 }
-
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>tests {
     <span class="kw">use </span>bincode::encode_into_slice;
+    <span class="kw">use </span>fs_extra::dir::{copy, CopyOptions};
     <span class="kw">use </span>std::io::Cursor;
     <span class="kw">use </span>std::sync::{Arc, Mutex};
-    <span class="kw">use </span>fs_extra::dir::{copy, CopyOptions};
     <span class="kw">use </span>tempfile::{tempdir, TempDir};
 
     <span class="kw">use </span>cu29_clock::RobotClock;
@@ -760,7 +779,7 @@
 
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
 
-    <span class="kw">fn </span>copy_stringindex_to_temp(tmpdir:<span class="kw-2">&amp;</span>TempDir) -&gt; PathBuf {
+    <span class="kw">fn </span>copy_stringindex_to_temp(tmpdir: <span class="kw-2">&amp;</span>TempDir) -&gt; PathBuf {
         <span class="comment">// for some reason using the index in real only locks it and generates a change in the file.
         </span><span class="kw">let </span>temp_path = tmpdir.path();
 
@@ -780,7 +799,6 @@
         <span class="kw">let </span>reader = Cursor::new(bytes.as_slice());
         textlog_dump(reader, temp_path.as_path()).unwrap();
     }
-
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>end_to_end_datalogger_and_structlog_test() {
@@ -824,7 +842,11 @@
         };
         <span class="kw">let </span>reader = UnifiedLoggerIOReader::new(logger, UnifiedLogType::StructuredLogLine);
         <span class="kw">let </span>temp_dir = TempDir::new().unwrap();
-        textlog_dump(reader, Path::new(copy_stringindex_to_temp(<span class="kw-2">&amp;</span>temp_dir).as_path())).expect(<span class="string">"Failed to dump log"</span>);
+        textlog_dump(
+            reader,
+            Path::new(copy_stringindex_to_temp(<span class="kw-2">&amp;</span>temp_dir).as_path()),
+        )
+        .expect(<span class="string">"Failed to dump log"</span>);
     }
 
     <span class="comment">// This is normally generated at compile time in CuPayload.

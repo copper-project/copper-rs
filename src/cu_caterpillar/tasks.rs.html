@@ -81,9 +81,9 @@
 <span class="kw">use </span>bincode::error::{DecodeError, EncodeError};
 <span class="kw">use </span>bincode::{Decode, Encode};
 <span class="kw">use </span>cu29::clock::{OptionCuTime, RobotClock};
+<span class="kw">use </span>cu29::config::NodeInstanceConfig;
 <span class="kw">use </span>cu29::cutask::{CuMsg, CuSrcTask, CuTask, CuTaskLifecycle, Freezable};
 <span class="kw">use </span>cu29::CuResult;
-<span class="kw">use </span>cu29::config::NodeInstanceConfig;
 <span class="kw">use </span>cu_rp_gpio::RPGpioMsg;
 
 <span class="attr">#[derive(Default)]

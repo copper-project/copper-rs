@@ -410,7 +410,6 @@
 <a href="#410" id="410">410</a>
 <a href="#411" id="411">411</a>
 <a href="#412" id="412">412</a>
-<a href="#413" id="413">413</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! CopperList is the main data structure used by Copper to communicate between tasks.
 //! It is a queue that can be used to store preallocated messages between tasks in memory order.
 </span><span class="kw">extern crate </span>alloc;
@@ -433,7 +432,6 @@
     <span class="attr">#[allow(dead_code)]
     </span>mask: [u128; MAX_TASKS / <span class="number">128 </span>+ <span class="number">1</span>],
 }
-
 
 <span class="doccomment">/// Those are the possible states along the lifetime of a CopperList.
 </span><span class="attr">#[derive(Debug, Encode, Decode, Serialize, PartialEq, Copy, Clone)]

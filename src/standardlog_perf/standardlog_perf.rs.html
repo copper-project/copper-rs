@@ -24,29 +24,40 @@
 <a href="#24" id="24">24</a>
 <a href="#25" id="25">25</a>
 <a href="#26" id="26">26</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>std::fs::File;
-<span class="kw">use </span>std::path::Path;
+<a href="#27" id="27">27</a>
+<a href="#28" id="28">28</a>
+<a href="#29" id="29">29</a>
+<a href="#30" id="30">30</a>
+<a href="#31" id="31">31</a>
+</pre></div><pre class="rust"><code><span class="kw">use </span>cu29_clock::RobotClock;
 <span class="kw">use </span>log::{info, LevelFilter};
 <span class="kw">use </span>simplelog::{Config, WriteLogger};
-<span class="kw">use </span>cu29_clock::RobotClock;
+<span class="kw">use </span>std::fs::File;
+<span class="kw">use </span>std::path::Path;
 
 <span class="kw">const </span>LOG_FILE: <span class="kw-2">&amp;</span>str = <span class="string">"./logfile.txt"</span>;
-
-
 
 <span class="kw">pub fn </span>main() {
     <span class="kw">let </span>clock = RobotClock::new();
 
     WriteLogger::init(
-        LevelFilter::Info,  <span class="comment">// Set the desired log level
+        LevelFilter::Info, <span class="comment">// Set the desired log level
         </span>Config::default(),
-        File::create(Path::new(LOG_FILE)).unwrap()).unwrap();
+        File::create(Path::new(LOG_FILE)).unwrap(),
+    )
+    .unwrap();
 
     <span class="kw">let </span>bf = clock.now();
     <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..<span class="number">1_000_000 </span>{
-        <span class="macro">info!</span>(<span class="string">"This is the logline {} associated with the log logging and some more = {}, {}"</span>, i , i+<span class="number">2</span>, i+<span class="number">3</span>);
+        <span class="macro">info!</span>(
+            <span class="string">"This is the logline {} associated with the log logging and some more = {}, {}"</span>,
+            i,
+            i + <span class="number">2</span>,
+            i + <span class="number">3
+        </span>);
     }
     log::logger().flush();
     <span class="kw">let </span>af = clock.now();
     <span class="macro">println!</span>(<span class="string">"Total time: {} in {}"</span>, af - bf, LOG_FILE);
-}</code></pre></div></section></main></body></html>
+}
+</code></pre></div></section></main></body></html>

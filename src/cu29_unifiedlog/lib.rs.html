@@ -792,22 +792,24 @@
 <a href="#792" id="792">792</a>
 <a href="#793" id="793">793</a>
 <a href="#794" id="794">794</a>
+<a href="#795" id="795">795</a>
+<a href="#796" id="796">796</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>libc;
 
+<span class="kw">use </span>memmap2::{Mmap, MmapMut, RemapOptions};
+<span class="kw">use </span>std::fmt::{Debug, Formatter};
 <span class="kw">use </span>std::fs::{File, OpenOptions};
 <span class="kw">use </span>std::io::Read;
 <span class="kw">use </span>std::path::{Path, PathBuf};
 <span class="kw">use </span>std::slice::from_raw_parts_mut;
 <span class="kw">use </span>std::sync::{Arc, Mutex};
 <span class="kw">use </span>std::{io, mem};
-<span class="kw">use </span>std::fmt::{Debug, Formatter};
-<span class="kw">use </span>memmap2::{Mmap, MmapMut, RemapOptions};
 
 <span class="kw">use </span>bincode::config::standard;
+<span class="kw">use </span>bincode::decode_from_slice;
 <span class="kw">use </span>bincode::encode_into_slice;
 <span class="kw">use </span>bincode::error::EncodeError;
-<span class="kw">use </span>bincode::{Encode, Decode};
-<span class="kw">use </span>bincode::{decode_from_slice};
+<span class="kw">use </span>bincode::{Decode, Encode};
 <span class="kw">use </span>cu29_traits::{CuError, CuResult, UnifiedLogType, WriteStream};
 
 <span class="kw">const </span>MAIN_MAGIC: [u8; <span class="number">4</span>] = [<span class="number">0xB4</span>, <span class="number">0xA5</span>, <span class="number">0x50</span>, <span class="number">0xFF</span>];
@@ -817,7 +819,7 @@
 <span class="doccomment">/// The main file header of the datalogger.
 </span><span class="attr">#[derive(Encode, Decode, Debug)]
 </span><span class="kw">struct </span>MainHeader {
-    magic: [u8; <span class="number">4</span>], <span class="comment">// Magic number to identify the file.
+    magic: [u8; <span class="number">4</span>],            <span class="comment">// Magic number to identify the file.
     </span>first_section_offset: u16, <span class="comment">// This is to align with a page at write time.
     </span>page_size: u16,
 }
@@ -1095,7 +1097,6 @@
 <span class="kw">impl </span>SectionHandle {
     <span class="comment">// The buffer is considered static as it is a dedicated piece for the section.
     </span><span class="kw">pub fn </span>create(section_header: SectionHeader, buffer: <span class="kw-2">&amp;</span><span class="lifetime">'static </span><span class="kw-2">mut </span>[u8]) -&gt; <span class="self">Self </span>{
-
         <span class="comment">// here we assume with are passed a valid section.
         </span><span class="kw">if </span>buffer[<span class="number">0</span>] != SECTION_MAGIC[<span class="number">0</span>] || buffer[<span class="number">1</span>] != SECTION_MAGIC[<span class="number">1</span>] {
             <span class="macro">panic!</span>(<span class="string">"Invalid section buffer, magic number not found"</span>);
@@ -1181,7 +1182,11 @@
     }
 
     <span class="doccomment">/// The returned slice is section_size or greater.
-    </span><span class="kw">fn </span>add_section(<span class="kw-2">&amp;mut </span><span class="self">self</span>, entry_type: UnifiedLogType, requested_section_size: usize) -&gt; SectionHandle {
+    </span><span class="kw">fn </span>add_section(
+        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        entry_type: UnifiedLogType,
+        requested_section_size: usize,
+    ) -&gt; SectionHandle {
         <span class="comment">// align current_position to the next page
         </span><span class="self">self</span>.current_global_position = <span class="self">self</span>.align_to_next_page(<span class="self">self</span>.current_global_position);
         <span class="kw">let </span>section_size = <span class="self">self</span>.align_to_next_page(requested_section_size) <span class="kw">as </span>u32;
@@ -1373,9 +1378,9 @@
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>tests {
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
-    <span class="kw">use </span>std::path::PathBuf;
-    <span class="kw">use </span>std::io::BufReader;
     <span class="kw">use </span>bincode::decode_from_reader;
+    <span class="kw">use </span>std::io::BufReader;
+    <span class="kw">use </span>std::path::PathBuf;
     <span class="kw">use </span>tempfile::TempDir;
     <span class="kw">fn </span>make_a_logger(tmp_dir: <span class="kw-2">&amp;</span>TempDir) -&gt; (Arc&lt;Mutex&lt;UnifiedLoggerWrite&gt;&gt;, PathBuf) {
         <span class="kw">let </span>file_path = tmp_dir.path().join(<span class="string">"test.bin"</span>);
@@ -1582,8 +1587,7 @@
         <span class="kw">for _ in </span><span class="number">0</span>..<span class="number">100 </span>{
             logger.add_section(UnifiedLogType::StructuredLogLine, <span class="number">1024</span>);
         }
-        <span class="macro">println!</span>(<span class="string">"AF: {}"</span>, handler.buffer[<span class="number">0</span>] );
-
+        <span class="macro">println!</span>(<span class="string">"AF: {}"</span>, handler.buffer[<span class="number">0</span>]);
     }
 }
 </code></pre></div></section></main></body></html>

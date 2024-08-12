@@ -521,10 +521,6 @@
 <a href="#521" id="521">521</a>
 <a href="#522" id="522">522</a>
 <a href="#523" id="523">523</a>
-<a href="#524" id="524">524</a>
-<a href="#525" id="525">525</a>
-<a href="#526" id="526">526</a>
-<a href="#527" id="527">527</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! This module defines the configuration of the copper runtime.
 //! The configuration is a directed graph where nodes are tasks and edges are connections between tasks.
 //! The configuration is serialized in the RON format.
@@ -589,7 +585,6 @@
 //             (id: "titi", type: "zorglub::MyType2", config: {...})]
 //   cnx : [ (src: "toto", dst: "titi", msg: "zorglub::MyMsgType"),...]
 // )
-
 
 </span><span class="doccomment">/// Wrapper around the ron::Value to allow for custom serialization.
 </span><span class="attr">#[derive(Serialize, Deserialize, Debug, Clone)]
@@ -846,18 +841,16 @@
 <span class="doccomment">/// The implementation has a lot of conveinence methods to manipulate
 /// the configuration to give some flexibility into programmatically creating the configuration.
 </span><span class="kw">impl </span>CuConfig {
-
     <span class="doccomment">/// Add a new node to the configuration graph.
     </span><span class="kw">pub fn </span>add_node(<span class="kw-2">&amp;mut </span><span class="self">self</span>, node: Node) -&gt; NodeId {
         <span class="self">self</span>.graph.add_node(node).index() <span class="kw">as </span>NodeId
     }
 
     <span class="doccomment">/// Get the node with the given id.
-    </span><span class="attr">#[allow(dead_code)]   </span><span class="comment">// Used in proc macro
+    </span><span class="attr">#[allow(dead_code)] </span><span class="comment">// Used in proc macro
     </span><span class="kw">pub fn </span>get_node(<span class="kw-2">&amp;</span><span class="self">self</span>, node_id: NodeId) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>Node&gt; {
         <span class="self">self</span>.graph.node_weight(node_id.into())
     }
-
 
     <span class="doccomment">/// Get the list of edges that are connected to the given node as a source.
     </span><span class="kw">pub fn </span>get_src_edges(<span class="kw-2">&amp;</span><span class="self">self</span>, node_id: NodeId) -&gt; Vec&lt;usize&gt; {
@@ -874,7 +867,6 @@
             .map(|edge| edge.id().index())
             .collect()
     }
-
 
     <span class="attr">#[allow(dead_code)]
     </span><span class="kw">pub fn </span>get_edge_weight(<span class="kw-2">&amp;</span><span class="self">self</span>, index: usize) -&gt; <span class="prelude-ty">Option</span>&lt;String&gt; {

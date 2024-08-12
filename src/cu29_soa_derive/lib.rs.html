@@ -274,14 +274,11 @@
 <a href="#274" id="274">274</a>
 <a href="#275" id="275">275</a>
 <a href="#276" id="276">276</a>
-<a href="#277" id="277">277</a>
-<a href="#278" id="278">278</a>
-<a href="#279" id="279">279</a>
 </pre></div><pre class="rust"><code><span class="kw">mod </span>format;
 <span class="kw">use </span>format::{highlight_rust_code, rustfmt_generated_code};
 <span class="kw">use </span>proc_macro::TokenStream;
 <span class="kw">use </span>quote::{format_ident, quote, ToTokens};
-<span class="kw">use </span>syn::{parse_macro_input, DeriveInput, Fields, Data};
+<span class="kw">use </span>syn::{parse_macro_input, Data, DeriveInput, Fields};
 
 <span class="doccomment">/// Build a fixed sized SoA (Structure of Arrays) from a struct.
 /// The outputted SoA will be suitable for in place storage in messages and should be
@@ -312,31 +309,31 @@
 /// // makes an SOA with a default value
 /// let soa1: MyStructSoa&lt;8&gt; = XyzSoa::new(MyStruct{ a: 1, b: 2.3 });
 /// ```
-/// 
+///
 /// Then you can access the fields of the SoA as slices:
 /// ```ignore
 /// let a = soa1.a();
 /// let b = soa1.b();
 /// ```
-/// 
+///
 /// You can also access a range of the fields:
 /// ```ignore
 /// let a = soa1.a_range(0..4);
 /// let b = soa1.b_range(0..4);
 /// ```
-/// 
+///
 /// You can also modify the fields of the SoA:
 /// ```ignore
 /// soa1.a_mut()[0] = 42;
 /// soa1.b_mut()[0] = 42.0;
 /// ```
-/// 
+///
 /// You can also modify a range of the fields:
 /// ```ignore
 /// soa1.a_range_mut(0..4)[0] = 42;
 /// soa1.b_range_mut(0..4)[0] = 42.0;
 /// ```
-/// 
+///
 /// You can also apply a function to all the fields of the SoA:
 /// ```ignore
 /// soa1.apply(|a, b| {
@@ -381,7 +378,6 @@
         field_names_mut.push(<span class="macro">format_ident!</span>(<span class="string">"{}_mut"</span>, field_name));
         field_names_range.push(<span class="macro">format_ident!</span>(<span class="string">"{}_range"</span>, field_name));
         field_names_range_mut.push(<span class="macro">format_ident!</span>(<span class="string">"{}_range_mut"</span>, field_name));
-
     }
 
     <span class="kw">let </span>soa_struct_name = <span class="macro">format_ident!</span>(<span class="string">"{}Soa"</span>, name);
@@ -398,7 +394,7 @@
         <span class="kw">use </span>bincode::error::DecodeError <span class="kw">as </span>_DecodeError;
         <span class="kw">use </span>bincode::error::EncodeError <span class="kw">as </span>_EncodeError;
 
-        <span class="attr">#[derive(Debug)] 
+        <span class="attr">#[derive(Debug)]
         </span><span class="kw">pub struct </span>#soa_struct_name&lt;<span class="kw">const </span>N: usize&gt; {
             #(<span class="kw">pub </span>#field_names: [#field_types; N]),*
         }
@@ -546,7 +542,7 @@
             }
         }
     };
-    <span class="kw">let </span>tokens: TokenStream  = expanded.into();
+    <span class="kw">let </span>tokens: TokenStream = expanded.into();
 
     <span class="kw">let </span>formatted_code = rustfmt_generated_code(tokens.to_string());
     <span class="macro">println!</span>(<span class="string">"\n     ===    Gen. SOA     ===\n"</span>);
@@ -554,6 +550,4 @@
     <span class="macro">println!</span>(<span class="string">"\n     === === === === === ===\n"</span>);
     tokens
 }
-
-
 </code></pre></div></section></main></body></html>

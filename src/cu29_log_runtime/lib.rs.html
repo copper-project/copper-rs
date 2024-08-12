@@ -247,25 +247,32 @@
 <a href="#247" id="247">247</a>
 <a href="#248" id="248">248</a>
 <a href="#249" id="249">249</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>std::fmt::{Debug, Formatter};
-<span class="kw">use </span>std::fs::File;
-<span class="kw">use </span>std::sync::{Mutex, OnceLock};
-<span class="kw">use </span>std::io::{BufWriter, Write};
+<a href="#250" id="250">250</a>
+<a href="#251" id="251">251</a>
+<a href="#252" id="252">252</a>
+<a href="#253" id="253">253</a>
+<a href="#254" id="254">254</a>
+<a href="#255" id="255">255</a>
+<a href="#256" id="256">256</a>
+</pre></div><pre class="rust"><code><span class="kw">use </span>bincode::config::Configuration;
+<span class="kw">use </span>bincode::enc::write::Writer;
+<span class="kw">use </span>bincode::enc::Encode;
+<span class="kw">use </span>bincode::enc::{Encoder, EncoderImpl};
+<span class="kw">use </span>bincode::error::EncodeError;
+<span class="kw">use </span>cu29_clock::RobotClock;
+<span class="attr">#[cfg(debug_assertions)]
+</span><span class="kw">use </span>cu29_intern_strs::read_interned_strings;
+<span class="kw">use </span>cu29_log::CuLogEntry;
+<span class="kw">use </span>cu29_traits::{CuResult, WriteStream};
 <span class="attr">#[cfg(debug_assertions)]
 </span><span class="kw">use </span>log::{Log, Record};
+<span class="kw">use </span>std::fmt::{Debug, Formatter};
+<span class="kw">use </span>std::fs::File;
+<span class="kw">use </span>std::io::{BufWriter, Write};
 <span class="kw">use </span>std::path::PathBuf;
 <span class="attr">#[cfg(debug_assertions)]
 </span><span class="kw">use </span>std::sync::Arc;
-<span class="kw">use </span>bincode::config::Configuration;
-<span class="kw">use </span>bincode::enc::{Encoder, EncoderImpl};
-<span class="kw">use </span>bincode::error::EncodeError;
-<span class="kw">use </span>bincode::enc::write::Writer;
-<span class="kw">use </span>bincode::enc::Encode;
-<span class="attr">#[cfg(debug_assertions)]
-</span><span class="kw">use </span>cu29_intern_strs::read_interned_strings;
-<span class="kw">use </span>cu29_clock::RobotClock;
-<span class="kw">use </span>cu29_log::CuLogEntry;
-<span class="kw">use </span>cu29_traits::{CuResult, WriteStream};
+<span class="kw">use </span>std::sync::{Mutex, OnceLock};
 
 <span class="kw">static </span>WRITER: OnceLock&lt;(Mutex&lt;Box&lt;<span class="kw">dyn </span>WriteStream&lt;CuLogEntry&gt;&gt;&gt;, RobotClock)&gt; = OnceLock::new();
 
@@ -281,8 +288,7 @@
     </span><span class="kw">pub fn </span>init(
         clock: RobotClock,
         destination: <span class="kw">impl </span>WriteStream&lt;CuLogEntry&gt; + <span class="lifetime">'static</span>,
-        <span class="attr">#[allow(unused_variables)]
-        </span>extra_text_logger: <span class="prelude-ty">Option</span>&lt;ExtraTextLogger&gt;,
+        <span class="attr">#[allow(unused_variables)] </span>extra_text_logger: <span class="prelude-ty">Option</span>&lt;ExtraTextLogger&gt;,
     ) -&gt; <span class="self">Self </span>{
         <span class="kw">let </span>runtime = LoggerRuntime {};
 
@@ -292,7 +298,9 @@
             <span class="kw">let </span><span class="kw-2">mut </span>writer_guard = writer.lock().unwrap();
             <span class="kw-2">*</span>writer_guard = Box::new(destination);
         } <span class="kw">else </span>{
-            WRITER.set((Mutex::new(Box::new(destination)), clock)).unwrap();
+            WRITER
+                .set((Mutex::new(Box::new(destination)), clock))
+                .unwrap();
         }
         <span class="attr">#[cfg(debug_assertions)]
         </span><span class="kw">if let </span><span class="prelude-val">Some</span>(logger) = extra_text_logger {
@@ -358,7 +366,8 @@
     }
     <span class="comment">// This is only for debug builds with standard textual logging implemented.
     </span><span class="attr">#[cfg(debug_assertions)]
-    </span>{   <span class="comment">// This scope is important :).
+    </span>{
+        <span class="comment">// This scope is important :).
         // if we have not passed a text logger in debug mode, it is ok just move along.
         </span><span class="kw">let </span>guarded_logger = EXTRA_TEXT_LOGGER.get();
         <span class="kw">if </span>guarded_logger.is_none() {
@@ -380,7 +389,7 @@
                             </span>.args(<span class="macro">format_args!</span>(<span class="string">"{}"</span>, s))
                             .build(),
                     ); <span class="comment">// DO NOT TRY to split off this statement.
-                    // format_args! has to be in the same statement per structure and scoping.
+                       // format_args! has to be in the same statement per structure and scoping.
                 </span>}
                 <span class="prelude-val">Err</span>(e) =&gt; {
                     <span class="macro">eprintln!</span>(<span class="string">"Failed to rebuild log line: {}"</span>, e);
@@ -400,7 +409,6 @@
 
 <span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, W: Write&gt; OwningIoWriter&lt;W&gt; {
     <span class="kw">pub fn </span>new(writer: W) -&gt; <span class="self">Self </span>{
-
         <span class="self">Self </span>{
             writer: BufWriter::new(writer),
             bytes_written: <span class="number">0</span>,
@@ -433,7 +441,6 @@
     }
 }
 
-
 <span class="doccomment">/// This allows this crate to be used outside of Copper (ie. decoupling it from the unifiedlog.
 </span><span class="kw">pub struct </span>SimpleFileWriter {
     path: PathBuf,
@@ -451,7 +458,10 @@
         <span class="kw">let </span>writer = OwningIoWriter::new(file);
         <span class="kw">let </span>encoder = EncoderImpl::new(writer, bincode::config::standard());
 
-        <span class="prelude-val">Ok</span>(SimpleFileWriter { path: path.clone(), encoder})
+        <span class="prelude-val">Ok</span>(SimpleFileWriter {
+            path: path.clone(),
+            encoder,
+        })
     }
 }
 
@@ -464,12 +474,16 @@
 <span class="kw">impl </span>WriteStream&lt;CuLogEntry&gt; <span class="kw">for </span>SimpleFileWriter {
     <span class="attr">#[inline(always)]
     </span><span class="kw">fn </span>log(<span class="kw-2">&amp;mut </span><span class="self">self</span>, obj: <span class="kw-2">&amp;</span>CuLogEntry) -&gt; CuResult&lt;()&gt; {
-        obj.encode(<span class="kw-2">&amp;mut </span><span class="self">self</span>.encoder).map_err(|e| <span class="macro">format!</span>(<span class="string">"Failed to write to file: {:?}"</span>, e))<span class="question-mark">?</span>;
+        obj.encode(<span class="kw-2">&amp;mut </span><span class="self">self</span>.encoder)
+            .map_err(|e| <span class="macro">format!</span>(<span class="string">"Failed to write to file: {:?}"</span>, e))<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
     }
 
     <span class="kw">fn </span>flush(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; CuResult&lt;()&gt; {
-        <span class="self">self</span>.encoder.writer().flush().map_err(|e| <span class="macro">format!</span>(<span class="string">"Failed to flush file: {:?}"</span>, e))<span class="question-mark">?</span>;
+        <span class="self">self</span>.encoder
+            .writer()
+            .flush()
+            .map_err(|e| <span class="macro">format!</span>(<span class="string">"Failed to flush file: {:?}"</span>, e))<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
     }
 }

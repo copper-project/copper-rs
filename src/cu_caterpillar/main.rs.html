@@ -41,13 +41,13 @@
 <span class="attr">#[copper_runtime(config = <span class="string">"copperconfig.ron"</span>)]
 </span><span class="kw">struct </span>CaterpillarApplication {}
 
-
 <span class="kw">const </span>PREALLOCATED_STORAGE_SIZE: <span class="prelude-ty">Option</span>&lt;usize&gt; = <span class="prelude-val">Some</span>(<span class="number">1024 </span>* <span class="number">1024 </span>* <span class="number">100</span>);
 
 <span class="kw">fn </span>main() {
     <span class="kw">let </span>logger_path = <span class="string">"/tmp/caterpillar.copper"</span>;
     <span class="kw">let </span>copper_ctx =
-        basic_copper_setup(<span class="kw-2">&amp;</span>PathBuf::from(logger_path), PREALLOCATED_STORAGE_SIZE, <span class="bool-val">true</span>).expect(<span class="string">"Failed to setup logger."</span>);
+        basic_copper_setup(<span class="kw-2">&amp;</span>PathBuf::from(logger_path), PREALLOCATED_STORAGE_SIZE, <span class="bool-val">true</span>)
+            .expect(<span class="string">"Failed to setup logger."</span>);
     <span class="macro">debug!</span>(<span class="string">"Logger created at {}."</span>, path = logger_path);
     <span class="kw">let </span>clock = copper_ctx.clock;
     <span class="macro">debug!</span>(<span class="string">"Creating application... "</span>);

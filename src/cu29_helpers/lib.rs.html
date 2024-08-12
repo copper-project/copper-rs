@@ -100,7 +100,7 @@
 /// It is useful to debug an application in real-time but should be set to false in production
 /// as it is an order of magnitude slower than the default copper structured logging.
 /// It will create a LoggerRuntime that can be used as a robot clock source too.
-/// 
+///
 /// preallocated_storage_size: The size of the preallocated storage for the unified logger.
 </span><span class="kw">pub fn </span>basic_copper_setup(
     unifiedlogger_output_path: <span class="kw-2">&amp;</span>Path,
@@ -124,7 +124,7 @@
         UnifiedLogType::StructuredLogLine,
         <span class="number">4096</span>,
     );
- 
+
     <span class="attr">#[cfg(debug_assertions)]
     </span><span class="kw">let </span>extra = <span class="kw">if </span>text_log {
         <span class="kw">let </span>slow_text_logger = TermLogger::new(
@@ -144,7 +144,7 @@
     } <span class="kw">else </span>{
         <span class="prelude-val">None
     </span>};
-    
+
     <span class="attr">#[cfg(not(debug_assertions))]
     </span><span class="kw">let </span>extra = <span class="prelude-val">None</span>;
 
