@@ -1,22 +1,22 @@
-use velodyne_lidar::{Config, Config16};
 use velodyne_lidar::Packet;
+use velodyne_lidar::{Config, Config16};
 
+use bincode::de::Decoder;
+use bincode::enc::Encoder;
+use bincode::error::{DecodeError, EncodeError};
+use bincode::{Decode, Encode};
+use cu29::clock::RobotClock;
+use cu29::config::NodeInstanceConfig;
+use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
+use cu29::CuResult;
+use cu29_soa_derive::soa;
 use std::net::UdpSocket;
 use std::ops::{Add, Sub};
 use std::time::Duration;
-use bincode::enc::Encoder;
-use bincode::{Decode, Encode};
-use bincode::de::Decoder;
-use bincode::error::{DecodeError, EncodeError};
+use uom::si::f32::Length;
 use uom::si::length::meter;
 use velodyne_lidar::iter::try_packet_to_frame_xyz;
 use velodyne_lidar::types::frame_xyz::FrameXyz;
-use cu29::clock::RobotClock;
-use cu29::config::NodeInstanceConfig;
-use cu29::CuResult;
-use cu29::cutask::{CuTaskLifecycle, CuSrcTask, Freezable, CuMsg};
-use cu29_soa_derive::soa;
-use uom::si::f32::Length;
 
 // const MAX_UDP_PACKET_SIZE: usize = 65507;
 
@@ -36,14 +36,18 @@ impl CuTaskLifecycle for Vlp16 {
         Self: Sized,
     {
         let config: &NodeInstanceConfig = config.expect("Vlp16 requires a config");
-        let listen_addr: String = config.get("listen_addr").unwrap_or("0.0.0.0:2368".to_string());
+        let listen_addr: String = config
+            .get("listen_addr")
+            .unwrap_or("0.0.0.0:2368".to_string());
         let return_type: String = config.get("return_type").unwrap_or("last".to_string());
         let test_mode: String = config.get("test_mode").unwrap_or("false".to_string());
         let velo_config = match return_type.as_str() {
             "strongest" => Config16::new_vlp_16_strongest(),
             "last" => Config16::new_vlp_16_last(),
             "dual" => Config16::new_vlp_16_dual(),
-            _ => { return Err("Invalid return_type for Vlp16.".into()); }
+            _ => {
+                return Err("Invalid return_type for Vlp16.".into());
+            }
         };
         Ok(Vlp16 {
             velo_config: velo_config.into(),
@@ -55,7 +59,9 @@ impl CuTaskLifecycle for Vlp16 {
 
     fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
         let socket = UdpSocket::bind(&self.listen_addr).unwrap();
-        socket.set_read_timeout(Some(Duration::from_millis(100))).unwrap();
+        socket
+            .set_read_timeout(Some(Duration::from_millis(100)))
+            .unwrap();
         self.socket = Some(socket);
         Ok(())
     }
@@ -77,7 +83,7 @@ impl Encode for LidarLength {
 
 impl Decode for LidarLength {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let value:f32 = Decode::decode(decoder)?;
+        let value: f32 = Decode::decode(decoder)?;
         Ok(LidarLength(Length::new::<meter>(value)))
     }
 }
@@ -98,7 +104,6 @@ impl Sub for LidarLength {
     }
 }
 
-
 #[soa]
 #[derive(Default, PartialEq, Debug)]
 pub struct XYZ {
@@ -115,7 +120,6 @@ impl XYZ {
             z: LidarLength(Length::new::<meter>(z)),
         }
     }
-
 }
 
 impl CuSrcTask for Vlp16 {
@@ -129,14 +133,18 @@ impl CuSrcTask for Vlp16 {
 
         let packet = Packet::from_slice(packet).unwrap();
         let packets = [Ok::<Packet, ()>(packet)].into_iter(); // 🤮
-        let frame:FrameXyz =  try_packet_to_frame_xyz(self.velo_config.clone(), packets).unwrap().next().unwrap().unwrap();
+        let frame: FrameXyz = try_packet_to_frame_xyz(self.velo_config.clone(), packets)
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap();
         let i = 0;
         frame.firing_iter().for_each(|firing| {
             firing.point_iter().for_each(|point| {
                 let point = point.as_single().unwrap();
-                let  x = point.measurement.xyz[0].as_meters() as f32;
-                let  y = point.measurement.xyz[0].as_meters() as f32;
-                let  z = point.measurement.xyz[0].as_meters() as f32;
+                let x = point.measurement.xyz[0].as_meters() as f32;
+                let y = point.measurement.xyz[0].as_meters() as f32;
+                let z = point.measurement.xyz[0].as_meters() as f32;
                 let el = &mut new_msg.payload;
                 el.set(i, XYZ::new(x, y, z));
             });
@@ -147,8 +155,8 @@ impl CuSrcTask for Vlp16 {
 
 #[cfg(test)]
 mod tests {
-    use std::fs::File;
     use pcap_file::pcap::PcapReader;
+    use std::fs::File;
 
     use super::*;
 

@@ -267,7 +267,11 @@ mod tests {
     impl CuSinkTask for TestSink {
         type Input = ();
 
-        fn process(&mut self, _clock: &RobotClock, _input: &mut CuMsg<Self::Input>) -> CuResult<()> {
+        fn process(
+            &mut self,
+            _clock: &RobotClock,
+            _input: &mut CuMsg<Self::Input>,
+        ) -> CuResult<()> {
             Ok(())
         }
     }

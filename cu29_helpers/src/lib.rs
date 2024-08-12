@@ -21,7 +21,7 @@ pub struct CopperContext {
 /// It is useful to debug an application in real-time but should be set to false in production
 /// as it is an order of magnitude slower than the default copper structured logging.
 /// It will create a LoggerRuntime that can be used as a robot clock source too.
-/// 
+///
 /// preallocated_storage_size: The size of the preallocated storage for the unified logger.
 pub fn basic_copper_setup(
     unifiedlogger_output_path: &Path,

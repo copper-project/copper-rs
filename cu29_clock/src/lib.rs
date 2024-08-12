@@ -1,5 +1,5 @@
+use bincode::de::BorrowDecoder;
 use bincode::de::Decoder;
-use bincode::de::{BorrowDecoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::BorrowDecode;

@@ -78,4 +78,3 @@ impl Drop for ScopedAllocCounter {
         // );
     }
 }
-

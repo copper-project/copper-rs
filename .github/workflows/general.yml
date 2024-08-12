@@ -20,6 +20,8 @@ jobs:
         with:
           toolchain: stable
           profile: minimal
+      - name: Cargo fmt check
+        run: cargo fmt --all -- --check
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y libudev-dev libpcap-dev
       - name: Build

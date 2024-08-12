@@ -4,10 +4,10 @@
 use crate::clock::OptionCuTime;
 use crate::config::NodeInstanceConfig;
 use crate::CuResult;
-use bincode::de::Decoder;
-use bincode::enc::Encoder;
 use bincode::de::Decode;
+use bincode::de::Decoder;
 use bincode::enc::Encode;
+use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use cu29_clock::RobotClock;
 use std::fmt;
