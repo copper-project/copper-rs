@@ -160,7 +160,7 @@ fn parent_n_times(path: &Path, n: usize) -> Option<PathBuf> {
 
 /// Convenience function to returns the default path for the log index directory.
 pub fn default_log_index_dir() -> PathBuf {
-    let outdir = std::env::var("OUT_DIR").expect("no OUT_DIR set, build.rs must be broken");
+    let outdir = std::env::var("LOG_INDEX_DIR").expect("no LOGIN_INDEX_DIR system variable set, be sure build.rs sets it, see cu29_log/build.rs for example.");
     let outdir_path = Path::new(&outdir);
     let target_dir = parent_n_times(&outdir_path, 3)
         .unwrap()
