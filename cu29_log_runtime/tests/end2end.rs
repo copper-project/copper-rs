@@ -1,4 +1,3 @@
-use cu29::monitoring::ScopedAllocCounter;
 use cu29_helpers::basic_copper_setup;
 use cu29_log_derive::debug;
 use serde::Serialize;
@@ -19,7 +18,6 @@ fn log_derive_end2end() {
     }
     let mytuple = (1, "toto", 3.34f64, true, 'a');
     {
-        let _hop = ScopedAllocCounter::new();
         let _gigantic_vec = vec![0u8; 1_000_000];
         debug!("Just a string {}", "zarma");
         debug!("anonymous param constants {} {}", 42u16, 43u8);
