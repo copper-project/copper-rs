@@ -1,3 +1,3 @@
 (function() {var implementors = {
-"cu29_value":[["impl <a class=\"trait\" href=\"https://docs.rs/serde/1.0.206/serde/de/trait.Error.html\" title=\"trait serde::de::Error\">Error</a> for <a class=\"enum\" href=\"cu29_value/enum.DeserializerError.html\" title=\"enum cu29_value::DeserializerError\">DeserializerError</a>"]]
+"cu29_value":[["impl <a class=\"trait\" href=\"https://docs.rs/serde/1.0.207/serde/de/trait.Error.html\" title=\"trait serde::de::Error\">Error</a> for <a class=\"enum\" href=\"cu29_value/enum.DeserializerError.html\" title=\"enum cu29_value::DeserializerError\">DeserializerError</a>"]]
 };if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()
