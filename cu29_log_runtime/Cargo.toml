@@ -27,7 +27,6 @@ log = "0.4.22"
 
 # this is for the integration tests
 [dev-dependencies]
-cu29 = { workspace = true }
 cu29-log-derive = { workspace = true }
 cu29-helpers = { workspace = true }
 serde = { workspace = true }
