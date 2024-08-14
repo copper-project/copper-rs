@@ -155,6 +155,7 @@ pub fn compute_runtime_plan(config: &CuConfig) -> CuResult<Vec<CuExecutionStep>>
                     .graph
                     .edge_weight(EdgeIndex::new(config.get_src_edges(id)[0]))
                     .unwrap()
+                    .msg
                     .clone(),
             );
             culist_output_index = Some(next_culist_output_index);
@@ -167,6 +168,7 @@ pub fn compute_runtime_plan(config: &CuConfig) -> CuResult<Vec<CuExecutionStep>>
                     .graph
                     .edge_weight(EdgeIndex::new(config.get_dst_edges(id)[0]))
                     .unwrap()
+                    .msg
                     .clone(),
             );
             // get the node from where the message is coming from
@@ -184,6 +186,7 @@ pub fn compute_runtime_plan(config: &CuConfig) -> CuResult<Vec<CuExecutionStep>>
                     .graph
                     .edge_weight(EdgeIndex::new(config.get_src_edges(id)[0]))
                     .unwrap()
+                    .msg
                     .clone(),
             );
             culist_output_index = Some(next_culist_output_index);
@@ -193,6 +196,7 @@ pub fn compute_runtime_plan(config: &CuConfig) -> CuResult<Vec<CuExecutionStep>>
                     .graph
                     .edge_weight(EdgeIndex::new(config.get_dst_edges(id)[0]))
                     .unwrap()
+                    .msg
                     .clone(),
             );
             // get the node from where the message is coming from
@@ -227,6 +231,7 @@ mod tests {
     use crate::cutask::{CuMsg, CuSrcTask, Freezable};
     use crate::cutask::{CuSinkTask, CuTaskLifecycle};
     use bincode::Encode;
+
     pub struct TestSource {}
 
     impl Freezable for TestSource {}
@@ -303,7 +308,7 @@ mod tests {
         let mut config = CuConfig::default();
         config.add_node(Node::new("a", "TestSource"));
         config.add_node(Node::new("b", "TestSink"));
-        config.connect(0, 1, "()");
+        config.connect(0, 1, "()", None, None);
         let runtime = CuRuntime::<Tasks, Msgs, 2>::new(
             RobotClock::default(),
             &config,
@@ -318,7 +323,7 @@ mod tests {
         let mut config = CuConfig::default();
         config.add_node(Node::new("a", "TestSource"));
         config.add_node(Node::new("b", "TestSink"));
-        config.connect(0, 1, "()");
+        config.connect(0, 1, "()", None, None);
         let mut runtime = CuRuntime::<Tasks, Msgs, 2>::new(
             RobotClock::default(),
             &config,

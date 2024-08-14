@@ -24,7 +24,6 @@ pub type NodeId = u32;
 /// It is given to the new method of the task implementation.
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct NodeInstanceConfig(pub HashMap<String, Value>);
-pub type Edge = (NodeId, NodeId, String);
 
 impl Display for NodeInstanceConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -43,14 +42,17 @@ impl Display for NodeInstanceConfig {
 
 // forward map interface
 impl NodeInstanceConfig {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         NodeInstanceConfig(HashMap::new())
     }
 
+    #[allow(dead_code)]
     pub fn get<T: From<Value>>(&self, key: &str) -> Option<T> {
         self.0.get(key).map(|v| T::from(v.clone()))
     }
 
+    #[allow(dead_code)]
     pub fn set<T: Into<Value>>(&mut self, key: &str, value: T) {
         self.0.insert(key.to_string(), value.into());
     }
@@ -170,6 +172,7 @@ pub struct Node {
 }
 
 impl Node {
+    #[allow(dead_code)]
     pub fn new(id: &str, ptype: &str) -> Self {
         Node {
             id: id.to_string(),
@@ -199,12 +202,14 @@ impl Node {
         self.config.as_ref()
     }
 
+    #[allow(dead_code)]
     pub fn get_param<T: From<Value>>(&self, key: &str) -> Option<T> {
         let pc = self.config.as_ref()?;
         let v = pc.0.get(key)?;
         Some(T::from(v.clone()))
     }
 
+    #[allow(dead_code)]
     pub fn set_param<T: Into<Value>>(&mut self, key: &str, value: T) {
         if self.config.is_none() {
             self.config = Some(NodeInstanceConfig(HashMap::new()));
@@ -217,8 +222,8 @@ impl Node {
     }
 }
 
-/// This represent a conenction between 2 tasks (nodes) in the configuration graph.
-#[derive(Serialize, Deserialize, Debug)]
+/// This represents a connection between 2 tasks (nodes) in the configuration graph.
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Cnx {
     /// Source node id.
     src: String,
@@ -227,7 +232,15 @@ pub struct Cnx {
     dst: String,
 
     /// Message type exchanged betwee src and dst.
-    msg: String,
+    pub msg: String,
+
+    /// Tells Copper to batch messages before sending the buffer to the next node.
+    /// If None, Copper will just send 1 message at a time.
+    /// If Some(n), Copper will batch n messages before sending the buffer.
+    pub batch: Option<u32>,
+
+    /// Tells Copper if it needs to log the messages.
+    pub store: Option<bool>,
 }
 
 /// CuConfig is the programmatic representation of the configuration graph.
@@ -235,7 +248,7 @@ pub struct Cnx {
 #[derive(Debug)]
 pub struct CuConfig {
     // This is not what is directly serialized, see the custom serialization below.
-    pub graph: StableDiGraph<Node, String, NodeId>,
+    pub graph: StableDiGraph<Node, Cnx, NodeId>,
 }
 
 /// The config is a list of tasks and their connections.
@@ -246,7 +259,7 @@ struct CuConfigRepresentation {
 }
 
 impl<'de> Deserialize<'de> for CuConfig {
-    /// This is a custom serialization to make this implementation independent from petgraph.
+    /// This is a custom serialization to make this implementation independent of petgraph.
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -270,7 +283,13 @@ impl<'de> Deserialize<'de> for CuConfig {
                 .node_indices()
                 .find(|i| cuconfig.graph[*i].id == c.dst)
                 .expect("Destination node not found");
-            cuconfig.connect(src.index() as NodeId, dst.index() as NodeId, &c.msg);
+            cuconfig.connect(
+                src.index() as NodeId,
+                dst.index() as NodeId,
+                &c.msg,
+                c.batch,
+                c.store,
+            );
         }
 
         Ok(cuconfig)
@@ -278,7 +297,7 @@ impl<'de> Deserialize<'de> for CuConfig {
 }
 
 impl Serialize for CuConfig {
-    /// This is a custom serialization to make this implementation independent from petgraph.
+    /// This is a custom serialization to make this implementation independent of petgraph.
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -292,15 +311,7 @@ impl Serialize for CuConfig {
         let cnx: Vec<Cnx> = self
             .graph
             .edge_indices()
-            .map(|edge| {
-                let (source, target) = self.graph.edge_endpoints(edge).unwrap();
-                (
-                    self.graph[source].id.clone(),
-                    self.graph[target].id.clone(),
-                    self.graph[edge].clone(),
-                )
-            })
-            .map(|(src, dst, msg)| Cnx { src, dst, msg })
+            .map(|edge| self.graph[edge].clone())
             .collect();
 
         CuConfigRepresentation { tasks, cnx }.serialize(serializer)
@@ -346,7 +357,7 @@ impl CuConfig {
     }
 
     #[allow(dead_code)]
-    pub fn get_edge_weight(&self, index: usize) -> Option<String> {
+    pub fn get_edge_weight(&self, index: usize) -> Option<Cnx> {
         self.graph
             .edge_weight(EdgeIndex::new(index))
             .map(|s| s.clone())
@@ -361,27 +372,35 @@ impl CuConfig {
             .collect()
     }
 
-    /// Convenience method to get all edges in the configuration graph.
-    #[allow(dead_code)]
-    pub fn get_all_edges(&self) -> Vec<Edge> {
-        self.graph
-            .edge_indices()
-            .map(|edge| {
-                let (source, target) = self.graph.edge_endpoints(edge).unwrap();
-                (
-                    source.index() as NodeId,
-                    target.index() as NodeId,
-                    self.graph[edge].clone(),
-                )
-            })
-            .collect()
-    }
-
     /// Adds an edge between two nodes/tasks in the configuration graph.
     /// msg_type is the type of message exchanged between the two nodes/tasks.
-    pub fn connect(&mut self, source: NodeId, target: NodeId, msg_type: &str) {
-        self.graph
-            .add_edge(source.into(), target.into(), msg_type.to_string());
+    pub fn connect(
+        &mut self,
+        source: NodeId,
+        target: NodeId,
+        msg_type: &str,
+        batch: Option<u32>,
+        store: Option<bool>,
+    ) {
+        self.graph.add_edge(
+            source.into(),
+            target.into(),
+            Cnx {
+                src: self
+                    .get_node(source)
+                    .expect("Source node not found")
+                    .id
+                    .clone(),
+                dst: self
+                    .get_node(target)
+                    .expect("Target node not found")
+                    .id
+                    .clone(),
+                msg: msg_type.to_string(),
+                batch,
+                store,
+            },
+        );
     }
 
     fn get_options() -> Options {
@@ -446,18 +465,22 @@ impl CuConfig {
                 node.get_type(),
                 config_str
             )
-            .unwrap();
+                .unwrap();
 
             writeln!(output, "];").unwrap();
         }
         for edge in self.graph.edge_indices() {
             let (src, dst) = self.graph.edge_endpoints(edge).unwrap();
+
+            let cnx = &self.graph[edge];
             writeln!(
                 output,
-                "{} -> {} [label=< <B><FONT COLOR=\"gray\">{}</FONT></B> >];",
+                "{} -> {} [label=< <B><FONT COLOR=\"gray\">{}/{}/{}</FONT></B> >];",
                 src.index(),
                 dst.index(),
-                self.graph[edge]
+                cnx.msg,
+                cnx.batch.unwrap_or(1),
+                cnx.store.unwrap_or(false)
             )
             .unwrap();
         }
@@ -495,8 +518,9 @@ mod tests {
         let mut config = CuConfig::default();
         let n1 = config.add_node(Node::new("test1", "package::Plugin1"));
         let n2 = config.add_node(Node::new("test2", "package::Plugin2"));
-        config.connect(n1, n2, "msgpkg::MsgType");
+        config.connect(n1, n2, "msgpkg::MsgType", None, None);
         let serialized = config.serialize_ron();
+        println!("{}", serialized);
         let deserialized = CuConfig::deserialize_ron(&serialized);
         assert_eq!(config.graph.node_count(), deserialized.graph.node_count());
         assert_eq!(config.graph.edge_count(), deserialized.graph.edge_count());
