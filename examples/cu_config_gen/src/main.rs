@@ -15,7 +15,7 @@ fn main() {
     let n2 = copperconfig.add_node(camera);
     let n3 = copperconfig.add_node(algo);
 
-    copperconfig.connect(n2, n1, "imgmsgpkg::Image", None, None);
-    copperconfig.connect(n1, n3, "imgmsgpkg::Image", None, None);
+    copperconfig.connect(n2, n1, "imgmsgpkg::Image");
+    copperconfig.connect(n1, n3, "imgmsgpkg::Image");
     println!("{}", copperconfig.serialize_ron());
 }

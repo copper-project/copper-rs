@@ -308,7 +308,7 @@ mod tests {
         let mut config = CuConfig::default();
         config.add_node(Node::new("a", "TestSource"));
         config.add_node(Node::new("b", "TestSink"));
-        config.connect(0, 1, "()", None, None);
+        config.connect(0, 1, "()");
         let runtime = CuRuntime::<Tasks, Msgs, 2>::new(
             RobotClock::default(),
             &config,
@@ -323,7 +323,7 @@ mod tests {
         let mut config = CuConfig::default();
         config.add_node(Node::new("a", "TestSource"));
         config.add_node(Node::new("b", "TestSink"));
-        config.connect(0, 1, "()", None, None);
+        config.connect(0, 1, "()");
         let mut runtime = CuRuntime::<Tasks, Msgs, 2>::new(
             RobotClock::default(),
             &config,

@@ -283,7 +283,7 @@ impl<'de> Deserialize<'de> for CuConfig {
                 .node_indices()
                 .find(|i| cuconfig.graph[*i].id == c.dst)
                 .expect("Destination node not found");
-            cuconfig.connect(
+            cuconfig.connect_ext(
                 src.index() as NodeId,
                 dst.index() as NodeId,
                 &c.msg,
@@ -374,7 +374,9 @@ impl CuConfig {
 
     /// Adds an edge between two nodes/tasks in the configuration graph.
     /// msg_type is the type of message exchanged between the two nodes/tasks.
-    pub fn connect(
+    /// batch is the number of messages to batch before sending the buffer.
+    /// store tells Copper if it needs to log the messages.
+    pub fn connect_ext(
         &mut self,
         source: NodeId,
         target: NodeId,
@@ -401,6 +403,12 @@ impl CuConfig {
                 store,
             },
         );
+    }
+
+    /// Adds an edge between two nodes/tasks in the configuration graph.
+    /// msg_type is the type of message exchanged between the two nodes/tasks.
+    pub fn connect(&mut self, source: NodeId, target: NodeId, msg_type: &str) {
+        self.connect_ext(source, target, msg_type, None, None);
     }
 
     fn get_options() -> Options {
@@ -518,7 +526,7 @@ mod tests {
         let mut config = CuConfig::default();
         let n1 = config.add_node(Node::new("test1", "package::Plugin1"));
         let n2 = config.add_node(Node::new("test2", "package::Plugin2"));
-        config.connect(n1, n2, "msgpkg::MsgType", None, None);
+        config.connect(n1, n2, "msgpkg::MsgType");
         let serialized = config.serialize_ron();
         println!("{}", serialized);
         let deserialized = CuConfig::deserialize_ron(&serialized);
