@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cu29/src/config.rs`."><title>config.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-b25d77b18a16a9a4.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_rendercfg" data-themes="" data-resource-suffix="" data-rustdoc-version="1.82.0-nightly (80eb5a8e9 2024-08-13)" data-channel="nightly" data-search-js="search-ef54e092fea9c776.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../../static.files/src-script-e66d777a5a92e9b2.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-cb0df477c2d67d00.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-3b12f09e550e0385.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cu29/src/config.rs`."><title>config.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-b25d77b18a16a9a4.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_rendercfg" data-themes="" data-resource-suffix="" data-rustdoc-version="1.82.0-nightly (2c93fabd9 2024-08-15)" data-channel="nightly" data-search-js="search-ef54e092fea9c776.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../../static.files/src-script-e66d777a5a92e9b2.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-cb0df477c2d67d00.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-3b12f09e550e0385.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
 <a href="#4" id="4">4</a>
@@ -521,6 +521,38 @@
 <a href="#521" id="521">521</a>
 <a href="#522" id="522">522</a>
 <a href="#523" id="523">523</a>
+<a href="#524" id="524">524</a>
+<a href="#525" id="525">525</a>
+<a href="#526" id="526">526</a>
+<a href="#527" id="527">527</a>
+<a href="#528" id="528">528</a>
+<a href="#529" id="529">529</a>
+<a href="#530" id="530">530</a>
+<a href="#531" id="531">531</a>
+<a href="#532" id="532">532</a>
+<a href="#533" id="533">533</a>
+<a href="#534" id="534">534</a>
+<a href="#535" id="535">535</a>
+<a href="#536" id="536">536</a>
+<a href="#537" id="537">537</a>
+<a href="#538" id="538">538</a>
+<a href="#539" id="539">539</a>
+<a href="#540" id="540">540</a>
+<a href="#541" id="541">541</a>
+<a href="#542" id="542">542</a>
+<a href="#543" id="543">543</a>
+<a href="#544" id="544">544</a>
+<a href="#545" id="545">545</a>
+<a href="#546" id="546">546</a>
+<a href="#547" id="547">547</a>
+<a href="#548" id="548">548</a>
+<a href="#549" id="549">549</a>
+<a href="#550" id="550">550</a>
+<a href="#551" id="551">551</a>
+<a href="#552" id="552">552</a>
+<a href="#553" id="553">553</a>
+<a href="#554" id="554">554</a>
+<a href="#555" id="555">555</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! This module defines the configuration of the copper runtime.
 //! The configuration is a directed graph where nodes are tasks and edges are connections between tasks.
 //! The configuration is serialized in the RON format.
@@ -547,7 +579,6 @@
 /// It is given to the new method of the task implementation.
 </span><span class="attr">#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 </span><span class="kw">pub struct </span>NodeInstanceConfig(<span class="kw">pub </span>HashMap&lt;String, Value&gt;);
-<span class="kw">pub type </span>Edge = (NodeId, NodeId, String);
 
 <span class="kw">impl </span>Display <span class="kw">for </span>NodeInstanceConfig {
     <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
@@ -566,15 +597,18 @@
 
 <span class="comment">// forward map interface
 </span><span class="kw">impl </span>NodeInstanceConfig {
-    <span class="kw">pub fn </span>new() -&gt; <span class="self">Self </span>{
+    <span class="attr">#[allow(dead_code)]
+    </span><span class="kw">pub fn </span>new() -&gt; <span class="self">Self </span>{
         NodeInstanceConfig(HashMap::new())
     }
 
-    <span class="kw">pub fn </span>get&lt;T: From&lt;Value&gt;&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, key: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;T&gt; {
+    <span class="attr">#[allow(dead_code)]
+    </span><span class="kw">pub fn </span>get&lt;T: From&lt;Value&gt;&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, key: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;T&gt; {
         <span class="self">self</span>.<span class="number">0</span>.get(key).map(|v| T::from(v.clone()))
     }
 
-    <span class="kw">pub fn </span>set&lt;T: Into&lt;Value&gt;&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, key: <span class="kw-2">&amp;</span>str, value: T) {
+    <span class="attr">#[allow(dead_code)]
+    </span><span class="kw">pub fn </span>set&lt;T: Into&lt;Value&gt;&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, key: <span class="kw-2">&amp;</span>str, value: T) {
         <span class="self">self</span>.<span class="number">0</span>.insert(key.to_string(), value.into());
     }
 }
@@ -693,7 +727,8 @@
 }
 
 <span class="kw">impl </span>Node {
-    <span class="kw">pub fn </span>new(id: <span class="kw-2">&amp;</span>str, ptype: <span class="kw-2">&amp;</span>str) -&gt; <span class="self">Self </span>{
+    <span class="attr">#[allow(dead_code)]
+    </span><span class="kw">pub fn </span>new(id: <span class="kw-2">&amp;</span>str, ptype: <span class="kw-2">&amp;</span>str) -&gt; <span class="self">Self </span>{
         Node {
             id: id.to_string(),
             type_: <span class="prelude-val">Some</span>(ptype.to_string()),
@@ -722,13 +757,15 @@
         <span class="self">self</span>.config.as_ref()
     }
 
-    <span class="kw">pub fn </span>get_param&lt;T: From&lt;Value&gt;&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, key: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;T&gt; {
+    <span class="attr">#[allow(dead_code)]
+    </span><span class="kw">pub fn </span>get_param&lt;T: From&lt;Value&gt;&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, key: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;T&gt; {
         <span class="kw">let </span>pc = <span class="self">self</span>.config.as_ref()<span class="question-mark">?</span>;
         <span class="kw">let </span>v = pc.<span class="number">0</span>.get(key)<span class="question-mark">?</span>;
         <span class="prelude-val">Some</span>(T::from(v.clone()))
     }
 
-    <span class="kw">pub fn </span>set_param&lt;T: Into&lt;Value&gt;&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, key: <span class="kw-2">&amp;</span>str, value: T) {
+    <span class="attr">#[allow(dead_code)]
+    </span><span class="kw">pub fn </span>set_param&lt;T: Into&lt;Value&gt;&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, key: <span class="kw-2">&amp;</span>str, value: T) {
         <span class="kw">if </span><span class="self">self</span>.config.is_none() {
             <span class="self">self</span>.config = <span class="prelude-val">Some</span>(NodeInstanceConfig(HashMap::new()));
         }
@@ -740,8 +777,8 @@
     }
 }
 
-<span class="doccomment">/// This represent a conenction between 2 tasks (nodes) in the configuration graph.
-</span><span class="attr">#[derive(Serialize, Deserialize, Debug)]
+<span class="doccomment">/// This represents a connection between 2 tasks (nodes) in the configuration graph.
+</span><span class="attr">#[derive(Serialize, Deserialize, Debug, Clone)]
 </span><span class="kw">pub struct </span>Cnx {
     <span class="doccomment">/// Source node id.
     </span>src: String,
@@ -750,7 +787,15 @@
     </span>dst: String,
 
     <span class="doccomment">/// Message type exchanged betwee src and dst.
-    </span>msg: String,
+    </span><span class="kw">pub </span>msg: String,
+
+    <span class="doccomment">/// Tells Copper to batch messages before sending the buffer to the next node.
+    /// If None, Copper will just send 1 message at a time.
+    /// If Some(n), Copper will batch n messages before sending the buffer.
+    </span><span class="kw">pub </span>batch: <span class="prelude-ty">Option</span>&lt;u32&gt;,
+
+    <span class="doccomment">/// Tells Copper if it needs to log the messages.
+    </span><span class="kw">pub </span>store: <span class="prelude-ty">Option</span>&lt;bool&gt;,
 }
 
 <span class="doccomment">/// CuConfig is the programmatic representation of the configuration graph.
@@ -758,7 +803,7 @@
 </span><span class="attr">#[derive(Debug)]
 </span><span class="kw">pub struct </span>CuConfig {
     <span class="comment">// This is not what is directly serialized, see the custom serialization below.
-    </span><span class="kw">pub </span>graph: StableDiGraph&lt;Node, String, NodeId&gt;,
+    </span><span class="kw">pub </span>graph: StableDiGraph&lt;Node, Cnx, NodeId&gt;,
 }
 
 <span class="doccomment">/// The config is a list of tasks and their connections.
@@ -769,7 +814,7 @@
 }
 
 <span class="kw">impl</span>&lt;<span class="lifetime">'de</span>&gt; Deserialize&lt;<span class="lifetime">'de</span>&gt; <span class="kw">for </span>CuConfig {
-    <span class="doccomment">/// This is a custom serialization to make this implementation independent from petgraph.
+    <span class="doccomment">/// This is a custom serialization to make this implementation independent of petgraph.
     </span><span class="kw">fn </span>deserialize&lt;D&gt;(deserializer: D) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, D::Error&gt;
     <span class="kw">where
         </span>D: Deserializer&lt;<span class="lifetime">'de</span>&gt;,
@@ -793,7 +838,13 @@
                 .node_indices()
                 .find(|i| cuconfig.graph[<span class="kw-2">*</span>i].id == c.dst)
                 .expect(<span class="string">"Destination node not found"</span>);
-            cuconfig.connect(src.index() <span class="kw">as </span>NodeId, dst.index() <span class="kw">as </span>NodeId, <span class="kw-2">&amp;</span>c.msg);
+            cuconfig.connect_ext(
+                src.index() <span class="kw">as </span>NodeId,
+                dst.index() <span class="kw">as </span>NodeId,
+                <span class="kw-2">&amp;</span>c.msg,
+                c.batch,
+                c.store,
+            );
         }
 
         <span class="prelude-val">Ok</span>(cuconfig)
@@ -801,7 +852,7 @@
 }
 
 <span class="kw">impl </span>Serialize <span class="kw">for </span>CuConfig {
-    <span class="doccomment">/// This is a custom serialization to make this implementation independent from petgraph.
+    <span class="doccomment">/// This is a custom serialization to make this implementation independent of petgraph.
     </span><span class="kw">fn </span>serialize&lt;S&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, serializer: S) -&gt; <span class="prelude-ty">Result</span>&lt;S::Ok, S::Error&gt;
     <span class="kw">where
         </span>S: Serializer,
@@ -815,15 +866,7 @@
         <span class="kw">let </span>cnx: Vec&lt;Cnx&gt; = <span class="self">self
             </span>.graph
             .edge_indices()
-            .map(|edge| {
-                <span class="kw">let </span>(source, target) = <span class="self">self</span>.graph.edge_endpoints(edge).unwrap();
-                (
-                    <span class="self">self</span>.graph[source].id.clone(),
-                    <span class="self">self</span>.graph[target].id.clone(),
-                    <span class="self">self</span>.graph[edge].clone(),
-                )
-            })
-            .map(|(src, dst, msg)| Cnx { src, dst, msg })
+            .map(|edge| <span class="self">self</span>.graph[edge].clone())
             .collect();
 
         CuConfigRepresentation { tasks, cnx }.serialize(serializer)
@@ -869,7 +912,7 @@
     }
 
     <span class="attr">#[allow(dead_code)]
-    </span><span class="kw">pub fn </span>get_edge_weight(<span class="kw-2">&amp;</span><span class="self">self</span>, index: usize) -&gt; <span class="prelude-ty">Option</span>&lt;String&gt; {
+    </span><span class="kw">pub fn </span>get_edge_weight(<span class="kw-2">&amp;</span><span class="self">self</span>, index: usize) -&gt; <span class="prelude-ty">Option</span>&lt;Cnx&gt; {
         <span class="self">self</span>.graph
             .edge_weight(EdgeIndex::new(index))
             .map(|s| s.clone())
@@ -884,27 +927,43 @@
             .collect()
     }
 
-    <span class="doccomment">/// Convenience method to get all edges in the configuration graph.
-    </span><span class="attr">#[allow(dead_code)]
-    </span><span class="kw">pub fn </span>get_all_edges(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;Edge&gt; {
-        <span class="self">self</span>.graph
-            .edge_indices()
-            .map(|edge| {
-                <span class="kw">let </span>(source, target) = <span class="self">self</span>.graph.edge_endpoints(edge).unwrap();
-                (
-                    source.index() <span class="kw">as </span>NodeId,
-                    target.index() <span class="kw">as </span>NodeId,
-                    <span class="self">self</span>.graph[edge].clone(),
-                )
-            })
-            .collect()
+    <span class="doccomment">/// Adds an edge between two nodes/tasks in the configuration graph.
+    /// msg_type is the type of message exchanged between the two nodes/tasks.
+    /// batch is the number of messages to batch before sending the buffer.
+    /// store tells Copper if it needs to log the messages.
+    </span><span class="kw">pub fn </span>connect_ext(
+        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        source: NodeId,
+        target: NodeId,
+        msg_type: <span class="kw-2">&amp;</span>str,
+        batch: <span class="prelude-ty">Option</span>&lt;u32&gt;,
+        store: <span class="prelude-ty">Option</span>&lt;bool&gt;,
+    ) {
+        <span class="self">self</span>.graph.add_edge(
+            source.into(),
+            target.into(),
+            Cnx {
+                src: <span class="self">self
+                    </span>.get_node(source)
+                    .expect(<span class="string">"Source node not found"</span>)
+                    .id
+                    .clone(),
+                dst: <span class="self">self
+                    </span>.get_node(target)
+                    .expect(<span class="string">"Target node not found"</span>)
+                    .id
+                    .clone(),
+                msg: msg_type.to_string(),
+                batch,
+                store,
+            },
+        );
     }
 
     <span class="doccomment">/// Adds an edge between two nodes/tasks in the configuration graph.
     /// msg_type is the type of message exchanged between the two nodes/tasks.
     </span><span class="kw">pub fn </span>connect(<span class="kw-2">&amp;mut </span><span class="self">self</span>, source: NodeId, target: NodeId, msg_type: <span class="kw-2">&amp;</span>str) {
-        <span class="self">self</span>.graph
-            .add_edge(source.into(), target.into(), msg_type.to_string());
+        <span class="self">self</span>.connect_ext(source, target, msg_type, <span class="prelude-val">None</span>, <span class="prelude-val">None</span>);
     }
 
     <span class="kw">fn </span>get_options() -&gt; Options {
@@ -969,18 +1028,22 @@
                 node.get_type(),
                 config_str
             )
-            .unwrap();
+                .unwrap();
 
             <span class="macro">writeln!</span>(output, <span class="string">"];"</span>).unwrap();
         }
         <span class="kw">for </span>edge <span class="kw">in </span><span class="self">self</span>.graph.edge_indices() {
             <span class="kw">let </span>(src, dst) = <span class="self">self</span>.graph.edge_endpoints(edge).unwrap();
+
+            <span class="kw">let </span>cnx = <span class="kw-2">&amp;</span><span class="self">self</span>.graph[edge];
             <span class="macro">writeln!</span>(
                 output,
-                <span class="string">"{} -&gt; {} [label=&lt; &lt;B&gt;&lt;FONT COLOR=\"gray\"&gt;{}&lt;/FONT&gt;&lt;/B&gt; &gt;];"</span>,
+                <span class="string">"{} -&gt; {} [label=&lt; &lt;B&gt;&lt;FONT COLOR=\"gray\"&gt;{}/{}/{}&lt;/FONT&gt;&lt;/B&gt; &gt;];"</span>,
                 src.index(),
                 dst.index(),
-                <span class="self">self</span>.graph[edge]
+                cnx.msg,
+                cnx.batch.unwrap_or(<span class="number">1</span>),
+                cnx.store.unwrap_or(<span class="bool-val">false</span>)
             )
             .unwrap();
         }
@@ -1020,6 +1083,7 @@
         <span class="kw">let </span>n2 = config.add_node(Node::new(<span class="string">"test2"</span>, <span class="string">"package::Plugin2"</span>));
         config.connect(n1, n2, <span class="string">"msgpkg::MsgType"</span>);
         <span class="kw">let </span>serialized = config.serialize_ron();
+        <span class="macro">println!</span>(<span class="string">"{}"</span>, serialized);
         <span class="kw">let </span>deserialized = CuConfig::deserialize_ron(<span class="kw-2">&amp;</span>serialized);
         <span class="macro">assert_eq!</span>(config.graph.node_count(), deserialized.graph.node_count());
         <span class="macro">assert_eq!</span>(config.graph.edge_count(), deserialized.graph.edge_count());

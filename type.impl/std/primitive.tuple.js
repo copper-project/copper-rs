@@ -1,6 +1,4 @@
 (function() {var type_impls = {
-"cu29":[],
-"cu29_rendercfg":[],
 "cu_caterpillar":[],
 "cu_caterpillar_logreader":[],
 "cu_wt901_tester":[]
