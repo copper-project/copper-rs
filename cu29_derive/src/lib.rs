@@ -9,7 +9,7 @@ use syn::{parse_macro_input, parse_quote, parse_str, Field, ItemStruct, LitStr, 
 
 use cu29::config::read_configuration;
 use cu29::config::CuConfig;
-use cu29::curuntime::{compute_runtime_plan, CuExecutionStep, CuTaskType};
+use cu29::curuntime::{compute_runtime_plan, CuExecutionLoop, CuExecutionUnit, CuTaskType};
 use format::{highlight_rust_code, rustfmt_generated_code};
 use itertools;
 
@@ -29,7 +29,7 @@ pub fn gen_culist_payload(config_path_lit: TokenStream) -> TokenStream {
     let config = parse_macro_input!(config_path_lit as LitStr).value();
     println!("[gen culist payload with {:?}]", config);
     let cuconfig = read_config(&config);
-    let runtime_plan: Vec<CuExecutionStep> =
+    let runtime_plan: CuExecutionLoop =
         compute_runtime_plan(&cuconfig).expect("Could not compute runtime plan");
     let all_msgs_types_in_culist_order = extract_msg_types(&runtime_plan);
     build_culist_payload(&all_msgs_types_in_culist_order)
@@ -62,7 +62,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let copper_config = read_config(&config_file);
 
     println!("[runtime plan]");
-    let runtime_plan: Vec<CuExecutionStep> =
+    let runtime_plan: CuExecutionLoop =
         compute_runtime_plan(&copper_config).expect("Could not compute runtime plan");
 
     println!("[extract tasks types]");
@@ -98,10 +98,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     // Generate the code to create instances of the nodes
     // It maps the types to their index
     let (task_instances_init_code,
-         start_calls,
-         stop_calls,
-         preprocess_calls,
-         postprocess_calls): (Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>) = itertools::multiunzip(all_tasks_types
+        start_calls,
+        stop_calls,
+        preprocess_calls,
+        postprocess_calls): (Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>) = itertools::multiunzip(all_tasks_types
         .iter()
         .enumerate()
         .map(|(index, ty)| {
@@ -142,84 +142,88 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         })
     );
 
-    let runtime_plan_code: Vec<_> = runtime_plan
+    let runtime_plan_code: Vec<proc_macro2::TokenStream> = runtime_plan.steps
         .iter()
-        .map(|step| {
-            println!(
-                "{} -> {} as {:?}. Input={:?}, Output={:?}",
-                step.node.get_id(),
-                step.node.get_type(),
-                step.task_type,
-                step.input_msg_type,
-                step.output_msg_type
-            );
-
-            let node_index = int2index(step.node_id);
-            let task_instance = quote! { self.copper_runtime.task_instances.#node_index };
-            let comment_str = format!(
-                "/// {} ({:?}) I:{:?} O:{:?}",
-                step.node.get_id(),
-                step.task_type,
-                step.input_msg_type,
-                step.output_msg_type
-            );
-            let comment_tokens: proc_macro2::TokenStream = parse_str(&comment_str).unwrap();
-
-
-            let process_call = match step.task_type {
-                CuTaskType::Source => {
-                    let output_culist_index = int2index(
-                        step.culist_output_index
-                            .expect("Src task should have an output message index."),
+        .map(|unit| {
+            match unit {
+                CuExecutionUnit::Step(step) => {
+                    println!(
+                        "{} -> {} as {:?}. Input={:?}, Output={:?}",
+                        step.node.get_id(),
+                        step.node.get_type(),
+                        step.task_type,
+                        step.input_msg_type,
+                        step.output_msg_type
                     );
-                    quote! {
-                        {
-                            #comment_tokens
-                            let cumsg_output = &mut payload.#output_culist_index;
-                            cumsg_output.metadata.before_process = self.copper_runtime.clock.now().into();
-                            #task_instance.process(&self.copper_runtime.clock, cumsg_output)?;
-                            cumsg_output.metadata.after_process = self.copper_runtime.clock.now().into();
+
+                    let node_index = int2index(step.node_id);
+                    let task_instance = quote! { self.copper_runtime.task_instances.#node_index };
+                    let comment_str = format!(
+                        "/// {} ({:?}) I:{:?} O:{:?}",
+                        step.node.get_id(),
+                        step.task_type,
+                        step.input_msg_type,
+                        step.output_msg_type
+                    );
+                    let comment_tokens: proc_macro2::TokenStream = parse_str(&comment_str).unwrap();
+
+
+                    let process_call = match step.task_type {
+                        CuTaskType::Source => {
+                            let output_culist_index = int2index(
+                                step.culist_output_index
+                                    .expect("Src task should have an output message index."),
+                            );
+                            quote! {
+                                {
+                                    #comment_tokens
+                                    let cumsg_output = &mut payload.#output_culist_index;
+                                    cumsg_output.metadata.before_process = self.copper_runtime.clock.now().into();
+                                    #task_instance.process(&self.copper_runtime.clock, cumsg_output)?;
+                                    cumsg_output.metadata.after_process = self.copper_runtime.clock.now().into();
+                                }
+                            }
                         }
-                    }
-                }
-                CuTaskType::Sink => {
-                    let input_culist_index = int2index(
-                        step.culist_input_index
-                            .expect("Sink task should have an input message index."),
-                    );
-                    quote! {
-                        {
-                            #comment_tokens
-                            let cumsg_input = &mut payload.#input_culist_index;
-                            #task_instance.process(&self.copper_runtime.clock, cumsg_input)?;
+                        CuTaskType::Sink => {
+                            let input_culist_index = int2index(
+                                step.culist_input_index
+                                    .expect("Sink task should have an input message index."),
+                            );
+                            quote! {
+                                {
+                                    #comment_tokens
+                                    let cumsg_input = &mut payload.#input_culist_index;
+                                    #task_instance.process(&self.copper_runtime.clock, cumsg_input)?;
+                                }
+                            }
                         }
-                    }
-                }
-                CuTaskType::Regular => {
-                    let input_culist_index = int2index(
-                        step.culist_input_index
-                            .expect("Sink task should have an input message index."),
-                    );
-                    let output_culist_index = int2index(
-                        step.culist_output_index
-                            .expect("Src task should have an output message index."),
-                    );
-                    quote! {
-                    {
-                        #comment_tokens
-                        let cumsg_input = &mut payload.#input_culist_index;
-                        let cumsg_output = &mut payload.#output_culist_index;
-                        cumsg_output.metadata.before_process = self.copper_runtime.clock.now().into();
-                        #task_instance.process(&self.copper_runtime.clock, cumsg_input, cumsg_output)?;
-                        cumsg_output.metadata.after_process = self.copper_runtime.clock.now().into();
-                    }
-                    }
-                }
-            };
+                        CuTaskType::Regular => {
+                            let input_culist_index = int2index(
+                                step.culist_input_index
+                                    .expect("Sink task should have an input message index."),
+                            );
+                            let output_culist_index = int2index(
+                                step.culist_output_index
+                                    .expect("Src task should have an output message index."),
+                            );
+                            quote! {
+                                {
+                                    #comment_tokens
+                                    let cumsg_input = &mut payload.#input_culist_index;
+                                    let cumsg_output = &mut payload.#output_culist_index;
+                                    cumsg_output.metadata.before_process = self.copper_runtime.clock.now().into();
+                                    #task_instance.process(&self.copper_runtime.clock, cumsg_input, cumsg_output)?;
+                                    cumsg_output.metadata.after_process = self.copper_runtime.clock.now().into();
+                                }
+                            }
+                        }
+                    };
 
-            process_call
-        })
-        .collect();
+                    process_call
+                }
+                CuExecutionUnit::Loop(_) => todo!("Needs to be implemented"),
+            }
+        }).collect();
 
     println!("[extract msg types]");
     let all_msgs_types_in_culist_order: Vec<Type> = extract_msg_types(&runtime_plan);
@@ -397,15 +401,19 @@ fn extract_tasks_types(copper_config: &CuConfig) -> (Vec<String>, Vec<Type>) {
     (all_types_names, all_types)
 }
 
-fn extract_msg_types(runtime_plan: &Vec<CuExecutionStep>) -> Vec<Type> {
+fn extract_msg_types(runtime_plan: &CuExecutionLoop) -> Vec<Type> {
     runtime_plan
+        .steps
         .iter()
-        .filter_map(|step| {
-            if step.output_msg_type.is_none() {
-                None
-            } else {
-                Some(parse_str::<Type>(step.output_msg_type.clone().unwrap().as_str()).unwrap())
+        .filter_map(|unit| match unit {
+            CuExecutionUnit::Step(step) => {
+                if step.output_msg_type.is_none() {
+                    None
+                } else {
+                    Some(parse_str::<Type>(step.output_msg_type.clone().unwrap().as_str()).unwrap())
+                }
             }
+            CuExecutionUnit::Loop(_) => todo!("Needs to be implemented"),
         })
         .collect()
 }
