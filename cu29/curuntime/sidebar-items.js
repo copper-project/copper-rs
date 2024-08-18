@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["CuTaskType"],"fn":["compute_runtime_plan"],"struct":["CuExecutionStep","CuRuntime"]};
+window.SIDEBAR_ITEMS = {"enum":["CuExecutionUnit","CuTaskType"],"fn":["compute_runtime_plan"],"struct":["CuExecutionLoop","CuExecutionStep","CuRuntime"]};
