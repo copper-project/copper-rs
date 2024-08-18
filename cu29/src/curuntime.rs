@@ -121,7 +121,8 @@ pub struct CuExecutionStep {
 }
 
 /// This structure represents a loop in the execution plan.
-/// It is used to represent a sequence of steps that are executed multiple times.
+/// It is used to represent a sequence of Execution units (loop or steps) that are executed
+/// multiple times.
 /// if loop_count is None, the loop is infinite.
 pub struct CuExecutionLoop {
     pub steps: Vec<CuExecutionUnit>,

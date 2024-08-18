@@ -200,11 +200,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         CuTaskType::Regular => {
                             let input_culist_index = int2index(
                                 step.culist_input_index
-                                    .expect("Sink task should have an input message index."),
+                                    .expect("Regular task should have an input message index."),
                             );
                             let output_culist_index = int2index(
                                 step.culist_output_index
-                                    .expect("Src task should have an output message index."),
+                                    .expect("Regular task should have an output message index."),
                             );
                             quote! {
                                 {
@@ -407,10 +407,10 @@ fn extract_msg_types(runtime_plan: &CuExecutionLoop) -> Vec<Type> {
         .iter()
         .filter_map(|unit| match unit {
             CuExecutionUnit::Step(step) => {
-                if step.output_msg_type.is_none() {
-                    None
+                if let Some(output_msg_type) = &step.output_msg_type {
+                    Some(parse_str::<Type>(output_msg_type.as_str()).unwrap())
                 } else {
-                    Some(parse_str::<Type>(step.output_msg_type.clone().unwrap().as_str()).unwrap())
+                    None
                 }
             }
             CuExecutionUnit::Loop(_) => todo!("Needs to be implemented"),
