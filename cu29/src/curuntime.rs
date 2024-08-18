@@ -120,10 +120,34 @@ pub struct CuExecutionStep {
     pub culist_output_index: Option<u32>,
 }
 
-fn find_output_index_from_nodeid(node_id: NodeId, steps: &Vec<CuExecutionStep>) -> Option<u32> {
+/// This structure represents a loop in the execution plan.
+/// It is used to represent a sequence of Execution units (loop or steps) that are executed
+/// multiple times.
+/// if loop_count is None, the loop is infinite.
+pub struct CuExecutionLoop {
+    pub steps: Vec<CuExecutionUnit>,
+    pub loop_count: Option<u32>,
+}
+
+/// This structure represents a step in the execution plan.
+pub enum CuExecutionUnit {
+    Step(CuExecutionStep),
+    Loop(CuExecutionLoop),
+}
+
+fn find_output_index_from_nodeid(node_id: NodeId, steps: &Vec<CuExecutionUnit>) -> Option<u32> {
     for step in steps {
-        if step.node_id == node_id {
-            return step.culist_output_index;
+        match step {
+            CuExecutionUnit::Loop(loop_unit) => {
+                if let Some(index) = find_output_index_from_nodeid(node_id, &loop_unit.steps) {
+                    return Some(index);
+                }
+            }
+            CuExecutionUnit::Step(step) => {
+                if step.node_id == node_id {
+                    return step.culist_output_index;
+                }
+            }
         }
     }
     None
@@ -131,13 +155,13 @@ fn find_output_index_from_nodeid(node_id: NodeId, steps: &Vec<CuExecutionStep>) 
 
 /// This is the main heuristics to compute an execution plan at compilation time.
 /// TODO: Make that heuristic plugable.
-pub fn compute_runtime_plan(config: &CuConfig) -> CuResult<Vec<CuExecutionStep>> {
+pub fn compute_runtime_plan(config: &CuConfig) -> CuResult<CuExecutionLoop> {
     let mut next_culist_output_index = 0u32;
 
     // prob not exactly what we want but to get us started
     let mut visitor = Bfs::new(&config.graph, 0.into());
 
-    let mut result = Vec::new();
+    let mut result: Vec<CuExecutionUnit> = Vec::new();
 
     while let Some(node) = visitor.next(&config.graph) {
         let id = node.index() as NodeId;
@@ -217,9 +241,12 @@ pub fn compute_runtime_plan(config: &CuConfig) -> CuResult<Vec<CuExecutionStep>>
             output_msg_type,
             culist_output_index,
         };
-        result.push(step);
+        result.push(CuExecutionUnit::Step(step));
     }
-    Ok(result)
+    Ok(CuExecutionLoop {
+        steps: result,
+        loop_count: None, // if in not unit testing, the main loop is infinite
+    })
 }
 
 //tests
