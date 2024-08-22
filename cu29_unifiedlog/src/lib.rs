@@ -142,8 +142,6 @@ pub fn stream_write<E: Encode>(
     MmapStream::new(entry_type, logger.clone(), minimum_allocation_amount)
 }
 
-const DEFAULT_LOGGER_SIZE: usize = 1024 * 1024 * 1024; // 1GB
-
 /// Holder of the read or write side of the datalogger.
 pub enum UnifiedLogger {
     Read(UnifiedLoggerRead),
@@ -189,57 +187,23 @@ impl UnifiedLoggerBuilder {
     }
 
     pub fn build(self) -> io::Result<UnifiedLogger> {
-        if self.create && !self.write {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Cannot create a read-only file",
-            ));
-        }
-        let file_path = self
-            .file_path
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "File path is required"))?;
-        let mut options = OpenOptions::new();
-        let mut options = options.read(true);
-        if self.write {
-            options = options.write(true);
-            if self.create {
-                options = options.create(true);
-            } else {
-                options = options.append(true);
-            }
-        }
-
-        let file = options.open(file_path)?;
-
         let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize };
 
         if self.write && self.create {
-            if let Some(size) = self.preallocated_size {
-                file.set_len(size as u64)?;
-            } else {
-                file.set_len(DEFAULT_LOGGER_SIZE as u64)?;
-            }
+            let ulw = UnifiedLoggerWrite::new(
+                &self.file_path.unwrap(),
+                self.preallocated_size.unwrap(),
+                page_size,
+            );
 
-            let mut mmap = unsafe { MmapMut::map_mut(&file) }?;
-            let main_header = MainHeader {
-                magic: MAIN_MAGIC,
-                first_section_offset: page_size as u16,
-                page_size: page_size as u16,
-            };
-            let nb_bytes = encode_into_slice(&main_header, &mut mmap[..], standard())
-                .expect("Failed to encode main header");
-            assert!(nb_bytes < page_size);
-            Ok(UnifiedLogger::Write(UnifiedLoggerWrite {
-                current_slab: SlabEntry {
-                    file,
-                    mmap_buffer: mmap,
-                    current_global_position: page_size,
-                    sections_in_flight: Vec::with_capacity(16),
-                    flushed_until: 0,
-                    page_size,
-                },
-            }))
+            Ok(UnifiedLogger::Write(ulw))
         } else {
+            let file_path = self.file_path.ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidInput, "File path is required")
+            })?;
+            let mut options = OpenOptions::new();
+            let options = options.read(true);
+            let file = options.open(file_path)?;
             let mmap = unsafe { Mmap::map(&file) }?;
             let main_header: MainHeader;
             let _read: usize;
@@ -280,7 +244,34 @@ struct SlabEntry {
     page_size: usize,
 }
 
+impl Drop for SlabEntry {
+    fn drop(&mut self) {
+        self.close();
+        if self.sections_in_flight.len() > 0 {
+            self.sections_in_flight.clear(); // This is the best we can do.
+            eprintln!("Sections in flight in a slab while it is being dropped.");
+        }
+    }
+}
+
+pub enum AllocatedSection {
+    NoMoreSpace,
+    Section(SectionHandle),
+}
+
 impl SlabEntry {
+    fn new(file: File, page_size: usize) -> Self {
+        let mmap_buffer = unsafe { MmapMut::map_mut(&file).expect("Failed to map file") };
+        Self {
+            file,
+            mmap_buffer,
+            current_global_position: 0,
+            sections_in_flight: Vec::with_capacity(16),
+            flushed_until: 0,
+            page_size,
+        }
+    }
+
     fn flush_until(&mut self, position: usize) {
         self.mmap_buffer
             .flush_async_range(self.flushed_until, position)
@@ -312,16 +303,15 @@ impl SlabEntry {
         &mut self,
         entry_type: UnifiedLogType,
         requested_section_size: usize,
-    ) -> SectionHandle {
+    ) -> AllocatedSection {
         // align current_position to the next page
         self.current_global_position = self.align_to_next_page(self.current_global_position);
         let section_size = self.align_to_next_page(requested_section_size) as u32;
 
-        // We have the assumption here that the section header fits into a page.
-        // self.unsure_size(self.current_global_position + requested_section_size + self.page_size)
-        //     .expect("Failed to resize memory map");
-
-        // FIXME: here return a None so the main Writer can allocate another slab.
+        // We need to have enough space to store the section in that slab
+        if self.current_global_position + section_size as usize > self.mmap_buffer.len() {
+            return AllocatedSection::NoMoreSpace;
+        }
 
         let section_header = SectionHeader {
             magic: SECTION_MAGIC,
@@ -349,7 +339,8 @@ impl SlabEntry {
 
         self.current_global_position = end_of_section;
         println!("Log Used {}MB", self.current_global_position / 1024 / 1024);
-        SectionHandle::create(section_header, handle_buffer)
+
+        AllocatedSection::Section(SectionHandle::create(section_header, handle_buffer))
     }
 
     fn close(&mut self) {
@@ -363,11 +354,6 @@ impl SlabEntry {
     fn used(&self) -> usize {
         self.current_global_position
     }
-}
-
-/// A write side of the datalogger.
-pub struct UnifiedLoggerWrite {
-    current_slab: SlabEntry,
 }
 
 /// A SectionHandle is a handle to a section in the datalogger.
@@ -430,9 +416,77 @@ impl Drop for SectionHandle {
     }
 }
 
+/// A write side of the datalogger.
+pub struct UnifiedLoggerWrite {
+    /// the front slab is the current active slab for any new section.
+    front_slab: SlabEntry,
+    /// the back slab is the previous slab that is being flushed.
+    back_slab: Option<SlabEntry>,
+    /// base file path to create the backing files from.
+    base_file_path: PathBuf,
+    /// allocation size for the backing files.
+    slab_size: usize,
+    /// current suffix for the backing files.
+    front_slab_suffix: usize,
+}
+
+fn build_file_path(file_path: &PathBuf, suffix: usize) -> PathBuf {
+    let mut file_path = file_path.clone();
+    let file_name = file_path.file_name().unwrap().to_str().unwrap();
+    let mut file_name = file_name.split('.').collect::<Vec<&str>>();
+    let extension = file_name.pop().unwrap();
+    let file_name = file_name.join(".");
+    let file_name = format!("{}_{}.{}", file_name, suffix, extension);
+    file_path.set_file_name(file_name);
+    file_path
+}
+
+fn make_slab_file(base_file_path: &PathBuf, slab_size: usize, slab_suffix: usize) -> File {
+    let file_path = build_file_path(base_file_path, slab_suffix);
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(&file_path)
+        .expect("Failed to open file");
+    file.set_len(slab_size as u64)
+        .expect("Failed to set file length");
+    file
+}
+
 impl UnifiedLoggerWrite {
+    fn make_new_mmfile(&mut self) -> File {
+        let file = make_slab_file(&self.base_file_path, self.slab_size, self.front_slab_suffix);
+        self.front_slab_suffix += 1;
+        file
+    }
+
+    fn new(base_file_path: &PathBuf, slab_size: usize, page_size: usize) -> Self {
+        let file = make_slab_file(base_file_path, slab_size, 0);
+        let mut front_slab = SlabEntry::new(file, page_size);
+
+        // This is the first slab so add the main header.
+        let main_header = MainHeader {
+            magic: MAIN_MAGIC,
+            first_section_offset: page_size as u16,
+            page_size: page_size as u16,
+        };
+        let nb_bytes = encode_into_slice(&main_header, &mut front_slab.mmap_buffer[..], standard())
+            .expect("Failed to encode main header");
+        assert!(nb_bytes < page_size);
+        front_slab.current_global_position = page_size; // align to the next page
+
+        Self {
+            front_slab,
+            back_slab: None,
+            base_file_path: base_file_path.clone(),
+            slab_size,
+            front_slab_suffix: 0,
+        }
+    }
+
     fn unlock_section(&mut self, section: &mut SectionHandle) {
-        self.current_slab.unlock_section(section);
+        self.front_slab.unlock_section(section);
     }
 
     /// The returned slice is section_size or greater.
@@ -441,8 +495,27 @@ impl UnifiedLoggerWrite {
         entry_type: UnifiedLogType,
         requested_section_size: usize,
     ) -> SectionHandle {
-        self.current_slab
-            .add_section(entry_type, requested_section_size)
+        let maybe_section = self
+            .front_slab
+            .add_section(entry_type, requested_section_size);
+
+        match maybe_section {
+            AllocatedSection::NoMoreSpace => {
+                // move the front slab to the back slab.
+                let new_slab = SlabEntry::new(self.make_new_mmfile(), self.front_slab.page_size);
+                self.back_slab = Some(mem::replace(&mut self.front_slab, new_slab));
+                match self
+                    .front_slab
+                    .add_section(entry_type, requested_section_size)
+                {
+                    AllocatedSection::NoMoreSpace => {
+                        panic!("Failed to allocate a section in a new slab");
+                    }
+                    AllocatedSection::Section(section) => section,
+                }
+            }
+            AllocatedSection::Section(section) => section,
+        }
     }
 }
 
@@ -450,7 +523,7 @@ impl Drop for UnifiedLoggerWrite {
     fn drop(&mut self) {
         let section = self.add_section(UnifiedLogType::LastEntry, 80); // TODO: determine that exactly
         drop(section);
-        self.current_slab.close();
+        self.front_slab.close();
     }
 }
 
@@ -588,7 +661,7 @@ mod tests {
     use std::io::BufReader;
     use std::path::PathBuf;
     use tempfile::TempDir;
-    fn make_a_logger(tmp_dir: &TempDir) -> (Arc<Mutex<UnifiedLoggerWrite>>, PathBuf) {
+    fn make_a_logger(tmp_dir: &TempDir) -> (Arc<Mutex<UnifiedLoggerWrite>>, PathBuf, PathBuf) {
         let file_path = tmp_dir.path().join("test.bin");
         let UnifiedLogger::Write(data_logger) = UnifiedLoggerBuilder::new()
             .write(true)
@@ -601,7 +674,11 @@ mod tests {
             panic!("Failed to create logger")
         };
 
-        (Arc::new(Mutex::new(data_logger)), file_path)
+        (
+            Arc::new(Mutex::new(data_logger)),
+            file_path,
+            tmp_dir.path().join("test_0.bin"),
+        )
     }
 
     #[test]
@@ -621,7 +698,7 @@ mod tests {
             };
             logger.add_section(UnifiedLogType::StructuredLogLine, 1024);
             logger.add_section(UnifiedLogType::CopperList, 2048);
-            let used = logger.current_slab.used();
+            let used = logger.front_slab.used();
             assert!(used < 4 * 4096); // ie. 3 headers, 1 page max per
                                       // logger drops
             used
@@ -629,7 +706,7 @@ mod tests {
 
         let _file = OpenOptions::new()
             .read(true)
-            .open(file_path)
+            .open(tmp_dir.path().join("test_0.bin"))
             .expect("Could not reopen the file");
         // Check if we have correctly truncated the file
         // TODO: recompute this math
@@ -642,86 +719,86 @@ mod tests {
     #[test]
     fn test_one_section_self_cleaning() {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let (logger, _) = make_a_logger(&tmp_dir);
+        let (logger, _, _) = make_a_logger(&tmp_dir);
         {
             let _stream =
                 stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
             assert_eq!(
-                logger.lock().unwrap().current_slab.sections_in_flight.len(),
+                logger.lock().unwrap().front_slab.sections_in_flight.len(),
                 1
             );
         }
         assert_eq!(
-            logger.lock().unwrap().current_slab.sections_in_flight.len(),
+            logger.lock().unwrap().front_slab.sections_in_flight.len(),
             0
         );
         let logger = logger.lock().unwrap();
         assert_eq!(
-            logger.current_slab.flushed_until,
-            logger.current_slab.current_global_position
+            logger.front_slab.flushed_until,
+            logger.front_slab.current_global_position
         );
     }
 
     #[test]
     fn test_two_sections_self_cleaning_in_order() {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let (logger, _) = make_a_logger(&tmp_dir);
+        let (logger, _, _) = make_a_logger(&tmp_dir);
         let s1 = stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
         assert_eq!(
-            logger.lock().unwrap().current_slab.sections_in_flight.len(),
+            logger.lock().unwrap().front_slab.sections_in_flight.len(),
             1
         );
         let s2 = stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
         assert_eq!(
-            logger.lock().unwrap().current_slab.sections_in_flight.len(),
+            logger.lock().unwrap().front_slab.sections_in_flight.len(),
             2
         );
         drop(s2);
         assert_eq!(
-            logger.lock().unwrap().current_slab.sections_in_flight.len(),
+            logger.lock().unwrap().front_slab.sections_in_flight.len(),
             1
         );
         drop(s1);
         let lg = logger.lock().unwrap();
-        assert_eq!(lg.current_slab.sections_in_flight.len(), 0);
+        assert_eq!(lg.front_slab.sections_in_flight.len(), 0);
         assert_eq!(
-            lg.current_slab.flushed_until,
-            lg.current_slab.current_global_position
+            lg.front_slab.flushed_until,
+            lg.front_slab.current_global_position
         );
     }
 
     #[test]
     fn test_two_sections_self_cleaning_out_of_order() {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let (logger, _) = make_a_logger(&tmp_dir);
+        let (logger, _, _) = make_a_logger(&tmp_dir);
         let s1 = stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
         assert_eq!(
-            logger.lock().unwrap().current_slab.sections_in_flight.len(),
+            logger.lock().unwrap().front_slab.sections_in_flight.len(),
             1
         );
         let s2 = stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
         assert_eq!(
-            logger.lock().unwrap().current_slab.sections_in_flight.len(),
+            logger.lock().unwrap().front_slab.sections_in_flight.len(),
             2
         );
         drop(s1);
         assert_eq!(
-            logger.lock().unwrap().current_slab.sections_in_flight.len(),
+            logger.lock().unwrap().front_slab.sections_in_flight.len(),
             1
         );
         drop(s2);
         let lg = logger.lock().unwrap();
-        assert_eq!(lg.current_slab.sections_in_flight.len(), 0);
+        assert_eq!(lg.front_slab.sections_in_flight.len(), 0);
         assert_eq!(
-            lg.current_slab.flushed_until,
-            lg.current_slab.current_global_position
+            lg.front_slab.flushed_until,
+            lg.front_slab.current_global_position
         );
     }
 
     #[test]
     fn test_write_then_read_one_section() {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let (logger, f) = make_a_logger(&tmp_dir);
+        let (logger, f, rb) = make_a_logger(&tmp_dir);
         {
             let mut stream = stream_write(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
             stream.log(&1u32).unwrap();
@@ -730,7 +807,7 @@ mod tests {
         }
         drop(logger);
         let UnifiedLogger::Read(mut dl) = UnifiedLoggerBuilder::new()
-            .file_path(&f.to_path_buf())
+            .file_path(&rb)
             .build()
             .expect("Failed to build logger")
         else {
@@ -769,7 +846,7 @@ mod tests {
     #[test]
     fn test_copperlist_list_like_logging() {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let (logger, f) = make_a_logger(&tmp_dir);
+        let (logger, f, rb) = make_a_logger(&tmp_dir);
         {
             let mut stream = stream_write(logger.clone(), UnifiedLogType::CopperList, 1024);
             let cl0 = CopperList {
@@ -786,7 +863,7 @@ mod tests {
         drop(logger);
 
         let UnifiedLogger::Read(mut dl) = UnifiedLoggerBuilder::new()
-            .file_path(&f.to_path_buf())
+            .file_path(&rb)
             .build()
             .expect("Failed to build logger")
         else {
@@ -803,29 +880,5 @@ mod tests {
         let cl1: CopperList<(u32, u32, u32)> = decode_from_reader(&mut reader, standard()).unwrap();
         assert_eq!(cl0.payload.1, 2);
         assert_eq!(cl1.payload.2, 6);
-    }
-
-    #[test]
-    #[ignore = "will be fixed later"]
-    fn test_mmap_resize() {
-        let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let file_path = tmp_dir.path().join("test.bin");
-        let UnifiedLogger::Write(mut logger) = UnifiedLoggerBuilder::new()
-            .write(true)
-            .create(true)
-            .file_path(&file_path)
-            .preallocated_size(8000) // Very small size to force a resize
-            .build()
-            .expect("Failed to create logger")
-        else {
-            panic!("Failed to create logger")
-        };
-        let handler = logger.add_section(UnifiedLogType::StructuredLogLine, 1024);
-
-        handler.buffer[0] = 42;
-        for _ in 0..100 {
-            logger.add_section(UnifiedLogType::StructuredLogLine, 1024);
-        }
-        println!("AF: {}", handler.buffer[0]);
     }
 }
