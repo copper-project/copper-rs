@@ -1,6 +1,6 @@
 use libc;
 
-use memmap2::{Mmap, MmapMut, RemapOptions};
+use memmap2::{Mmap, MmapMut};
 use std::fmt::{Debug, Formatter};
 use std::fs::{File, OpenOptions};
 use std::io::Read;
@@ -230,12 +230,14 @@ impl UnifiedLoggerBuilder {
                 .expect("Failed to encode main header");
             assert!(nb_bytes < page_size);
             Ok(UnifiedLogger::Write(UnifiedLoggerWrite {
-                file,
-                mmap_buffer: mmap,
-                page_size,
-                current_global_position: page_size,
-                sections_in_flight: Vec::with_capacity(16),
-                flushed_until: 0,
+                current_slab: SlabEntry {
+                    file,
+                    mmap_buffer: mmap,
+                    current_global_position: page_size,
+                    sections_in_flight: Vec::with_capacity(16),
+                    flushed_until: 0,
+                    page_size,
+                },
             }))
         } else {
             let mmap = unsafe { Mmap::map(&file) }?;
@@ -269,14 +271,103 @@ pub struct UnifiedLoggerRead {
     page_size: usize,
 }
 
-/// A write side of the datalogger.
-pub struct UnifiedLoggerWrite {
+struct SlabEntry {
     file: File,
     mmap_buffer: MmapMut,
-    page_size: usize,
     current_global_position: usize,
     sections_in_flight: Vec<usize>,
     flushed_until: usize,
+    page_size: usize,
+}
+
+impl SlabEntry {
+    fn flush_until(&mut self, position: usize) {
+        self.mmap_buffer
+            .flush_async_range(self.flushed_until, position)
+            .expect("Failed to flush memory map");
+        self.flushed_until = position;
+    }
+
+    fn unlock_section(&mut self, section: &mut SectionHandle) {
+        let base = self.mmap_buffer.as_mut_ptr() as usize;
+        let section_buffer_addr = section.buffer.as_mut_ptr() as usize;
+        self.sections_in_flight
+            .retain(|&x| x != section_buffer_addr - base);
+        if self.sections_in_flight.is_empty() {
+            self.flush_until(self.current_global_position);
+            return;
+        }
+        if self.flushed_until < self.sections_in_flight[0] {
+            self.flush_until(self.sections_in_flight[0]);
+        }
+    }
+
+    #[inline]
+    fn align_to_next_page(&self, ptr: usize) -> usize {
+        (ptr + self.page_size - 1) & !(self.page_size - 1)
+    }
+
+    /// The returned slice is section_size or greater.
+    fn add_section(
+        &mut self,
+        entry_type: UnifiedLogType,
+        requested_section_size: usize,
+    ) -> SectionHandle {
+        // align current_position to the next page
+        self.current_global_position = self.align_to_next_page(self.current_global_position);
+        let section_size = self.align_to_next_page(requested_section_size) as u32;
+
+        // We have the assumption here that the section header fits into a page.
+        // self.unsure_size(self.current_global_position + requested_section_size + self.page_size)
+        //     .expect("Failed to resize memory map");
+
+        // FIXME: here return a None so the main Writer can allocate another slab.
+
+        let section_header = SectionHeader {
+            magic: SECTION_MAGIC,
+            entry_type,
+            section_size,
+            filled_size: 0u32,
+        };
+
+        let nb_bytes = encode_into_slice(
+            &section_header,
+            &mut self.mmap_buffer[self.current_global_position..],
+            standard(),
+        )
+        .expect("Failed to encode section header");
+        assert!(nb_bytes < self.page_size);
+
+        // save the position to keep track for in flight sections
+        self.sections_in_flight.push(self.current_global_position);
+        let end_of_section = self.current_global_position + requested_section_size;
+        let user_buffer = &mut self.mmap_buffer[self.current_global_position..end_of_section];
+
+        // here we have the guarantee for exclusive access to that memory for the lifetime of the handle, the borrow checker cannot understand that ever.
+        let handle_buffer =
+            unsafe { from_raw_parts_mut(user_buffer.as_mut_ptr(), user_buffer.len()) };
+
+        self.current_global_position = end_of_section;
+        println!("Log Used {}MB", self.current_global_position / 1024 / 1024);
+        SectionHandle::create(section_header, handle_buffer)
+    }
+
+    fn close(&mut self) {
+        self.flush_until(self.current_global_position);
+        self.file
+            .set_len(self.current_global_position as u64)
+            .expect("Failed to trim datalogger file");
+    }
+
+    #[cfg(test)]
+    fn used(&self) -> usize {
+        self.current_global_position
+    }
+}
+
+/// A write side of the datalogger.
+pub struct UnifiedLoggerWrite {
+    current_slab: SlabEntry,
 }
 
 /// A SectionHandle is a handle to a section in the datalogger.
@@ -340,49 +431,8 @@ impl Drop for SectionHandle {
 }
 
 impl UnifiedLoggerWrite {
-    fn unsure_size(&mut self, size: usize) -> io::Result<()> {
-        // Here it is important that the memory map resizes in place.
-        // According to the documentation this is something unique to Linux to be able to do that.
-        // FIXME: It does actually *always* fails under linux
-        // TODO: support more platforms by pausing, flushing, remapping not in place.
-        if size > self.mmap_buffer.len() {
-            let ropts = RemapOptions::default().may_move(false);
-            self.file
-                .set_len(size as u64)
-                .expect("Failed to extend file");
-            unsafe { self.mmap_buffer.remap(size, ropts) }?;
-        }
-        Ok(())
-    }
-
-    fn flush_until(&mut self, position: usize) {
-        self.mmap_buffer
-            .flush_async_range(self.flushed_until, position)
-            .expect("Failed to flush memory map");
-        self.flushed_until = position;
-    }
-
-    fn flush(&mut self) {
-        self.flush_until(self.current_global_position);
-    }
-
     fn unlock_section(&mut self, section: &mut SectionHandle) {
-        let base = self.mmap_buffer.as_mut_ptr() as usize;
-        let section_buffer_addr = section.buffer.as_mut_ptr() as usize;
-        self.sections_in_flight
-            .retain(|&x| x != section_buffer_addr - base);
-        if self.sections_in_flight.is_empty() {
-            self.flush_until(self.current_global_position);
-            return;
-        }
-        if self.flushed_until < self.sections_in_flight[0] {
-            self.flush_until(self.sections_in_flight[0]);
-        }
-    }
-
-    #[inline]
-    fn align_to_next_page(&self, ptr: usize) -> usize {
-        (ptr + self.page_size - 1) & !(self.page_size - 1)
+        self.current_slab.unlock_section(section);
     }
 
     /// The returned slice is section_size or greater.
@@ -391,53 +441,8 @@ impl UnifiedLoggerWrite {
         entry_type: UnifiedLogType,
         requested_section_size: usize,
     ) -> SectionHandle {
-        // align current_position to the next page
-        self.current_global_position = self.align_to_next_page(self.current_global_position);
-        let section_size = self.align_to_next_page(requested_section_size) as u32;
-
-        // We have the assumption here that the section header fits into a page.
-        self.unsure_size(self.current_global_position + requested_section_size + self.page_size)
-            .expect("Failed to resize memory map");
-
-        let section_header = SectionHeader {
-            magic: SECTION_MAGIC,
-            entry_type,
-            section_size,
-            filled_size: 0u32,
-        };
-
-        let nb_bytes = encode_into_slice(
-            &section_header,
-            &mut self.mmap_buffer[self.current_global_position..],
-            standard(),
-        )
-        .expect("Failed to encode section header");
-        assert!(nb_bytes < self.page_size);
-
-        // save the position to keep track for in flight sections
-        self.sections_in_flight.push(self.current_global_position);
-        let end_of_section = self.current_global_position + requested_section_size;
-        let user_buffer = &mut self.mmap_buffer[self.current_global_position..end_of_section];
-
-        // here we have the guarantee for exclusive access to that memory for the lifetime of the handle, the borrow checker cannot understand that ever.
-        let handle_buffer =
-            unsafe { from_raw_parts_mut(user_buffer.as_mut_ptr(), user_buffer.len()) };
-
-        self.current_global_position = end_of_section;
-        println!("Log Used {}MB", self.current_global_position / 1024 / 1024);
-        SectionHandle::create(section_header, handle_buffer)
-    }
-
-    #[allow(dead_code)]
-    #[inline]
-    fn allocated_len(&self) -> usize {
-        self.mmap_buffer.len()
-    }
-
-    #[allow(dead_code)]
-    #[inline]
-    fn used(&self) -> usize {
-        self.current_global_position
+        self.current_slab
+            .add_section(entry_type, requested_section_size)
     }
 }
 
@@ -445,10 +450,7 @@ impl Drop for UnifiedLoggerWrite {
     fn drop(&mut self) {
         let section = self.add_section(UnifiedLogType::LastEntry, 80); // TODO: determine that exactly
         drop(section);
-        self.file
-            .set_len(self.current_global_position as u64)
-            .expect("Failed to trim datalogger file");
-        self.flush();
+        self.current_slab.close();
     }
 }
 
@@ -619,7 +621,7 @@ mod tests {
             };
             logger.add_section(UnifiedLogType::StructuredLogLine, 1024);
             logger.add_section(UnifiedLogType::CopperList, 2048);
-            let used = logger.used();
+            let used = logger.current_slab.used();
             assert!(used < 4 * 4096); // ie. 3 headers, 1 page max per
                                       // logger drops
             used
@@ -644,11 +646,20 @@ mod tests {
         {
             let _stream =
                 stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
-            assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 1);
+            assert_eq!(
+                logger.lock().unwrap().current_slab.sections_in_flight.len(),
+                1
+            );
         }
-        assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 0);
+        assert_eq!(
+            logger.lock().unwrap().current_slab.sections_in_flight.len(),
+            0
+        );
         let logger = logger.lock().unwrap();
-        assert_eq!(logger.flushed_until, logger.current_global_position);
+        assert_eq!(
+            logger.current_slab.flushed_until,
+            logger.current_slab.current_global_position
+        );
     }
 
     #[test]
@@ -656,15 +667,27 @@ mod tests {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let (logger, _) = make_a_logger(&tmp_dir);
         let s1 = stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
-        assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 1);
+        assert_eq!(
+            logger.lock().unwrap().current_slab.sections_in_flight.len(),
+            1
+        );
         let s2 = stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
-        assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 2);
+        assert_eq!(
+            logger.lock().unwrap().current_slab.sections_in_flight.len(),
+            2
+        );
         drop(s2);
-        assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 1);
+        assert_eq!(
+            logger.lock().unwrap().current_slab.sections_in_flight.len(),
+            1
+        );
         drop(s1);
         let lg = logger.lock().unwrap();
-        assert_eq!(lg.sections_in_flight.len(), 0);
-        assert_eq!(lg.flushed_until, lg.current_global_position);
+        assert_eq!(lg.current_slab.sections_in_flight.len(), 0);
+        assert_eq!(
+            lg.current_slab.flushed_until,
+            lg.current_slab.current_global_position
+        );
     }
 
     #[test]
@@ -672,15 +695,27 @@ mod tests {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let (logger, _) = make_a_logger(&tmp_dir);
         let s1 = stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
-        assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 1);
+        assert_eq!(
+            logger.lock().unwrap().current_slab.sections_in_flight.len(),
+            1
+        );
         let s2 = stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
-        assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 2);
+        assert_eq!(
+            logger.lock().unwrap().current_slab.sections_in_flight.len(),
+            2
+        );
         drop(s1);
-        assert_eq!(logger.lock().unwrap().sections_in_flight.len(), 1);
+        assert_eq!(
+            logger.lock().unwrap().current_slab.sections_in_flight.len(),
+            1
+        );
         drop(s2);
         let lg = logger.lock().unwrap();
-        assert_eq!(lg.sections_in_flight.len(), 0);
-        assert_eq!(lg.flushed_until, lg.current_global_position);
+        assert_eq!(lg.current_slab.sections_in_flight.len(), 0);
+        assert_eq!(
+            lg.current_slab.flushed_until,
+            lg.current_slab.current_global_position
+        );
     }
 
     #[test]
