@@ -24,6 +24,8 @@ cu29-unifiedlog = { workspace = true }
 cu29-intern-strs = { workspace = true }
 clap = { version = "4.5.11", features = ["derive"] }
 bincode = { workspace = true }
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
 pyo3 = { version = "0.22.2", features = ["extension-module"] }
 
 
