@@ -14,10 +14,6 @@ use clap::{Parser, Subcommand, ValueEnum};
 use cu29_log::value::Value;
 use cu29_traits::CopperListPayload;
 use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader};
-use pyo3::exceptions::PyIOError;
-use pyo3::prelude::*;
-use pyo3::types::PyDelta;
-use pyo3::types::{PyDict, PyList};
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum ExportFormat {
@@ -158,167 +154,184 @@ pub fn textlog_dump(mut src: impl Read, index: &Path) -> CuResult<()> {
     Ok(())
 }
 
-#[pyclass]
-pub struct PyLogIterator {
-    reader: Box<dyn Read + Send>,
-}
+// only for not macos platforms
+#[cfg(not(target_os = "macos"))]
+mod python {
+    use bincode::config::standard;
+    use bincode::decode_from_std_read;
+    use bincode::error::DecodeError;
+    use cu29_intern_strs::read_interned_strings;
+    use cu29_log::value::Value;
+    use cu29_log::CuLogEntry;
+    use cu29_traits::UnifiedLogType;
+    use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader};
+    use pyo3::exceptions::PyIOError;
+    use pyo3::prelude::*;
+    use pyo3::types::{PyDelta, PyDict, PyList};
+    use std::io::Read;
+    use std::path::Path;
 
-#[pymethods]
-impl PyLogIterator {
-    fn __iter__(slf: PyRefMut<Self>) -> PyRefMut<Self> {
-        slf
+    #[pyclass]
+    pub struct PyLogIterator {
+        reader: Box<dyn Read + Send>,
     }
 
-    fn __next__(mut slf: PyRefMut<Self>) -> Option<PyResult<PyCuLogEntry>> {
-        match decode_from_std_read::<CuLogEntry, _, _>(&mut slf.reader, standard()) {
-            Ok(entry) => {
-                if entry.msg_index == 0 {
-                    None
-                } else {
-                    Some(Ok(PyCuLogEntry { inner: entry }))
+    #[pymethods]
+    impl PyLogIterator {
+        fn __iter__(slf: PyRefMut<Self>) -> PyRefMut<Self> {
+            slf
+        }
+
+        fn __next__(mut slf: PyRefMut<Self>) -> Option<PyResult<PyCuLogEntry>> {
+            match decode_from_std_read::<CuLogEntry, _, _>(&mut slf.reader, standard()) {
+                Ok(entry) => {
+                    if entry.msg_index == 0 {
+                        None
+                    } else {
+                        Some(Ok(PyCuLogEntry { inner: entry }))
+                    }
                 }
+                Err(DecodeError::UnexpectedEnd { .. }) => None,
+                Err(DecodeError::Io { inner, .. })
+                    if inner.kind() == std::io::ErrorKind::UnexpectedEof =>
+                {
+                    None
+                }
+                Err(e) => Some(Err(PyIOError::new_err(e.to_string()))),
             }
-            Err(DecodeError::UnexpectedEnd { .. }) => None,
-            Err(DecodeError::Io { inner, .. })
-                if inner.kind() == std::io::ErrorKind::UnexpectedEof =>
-            {
-                None
-            }
-            Err(e) => Some(Err(PyIOError::new_err(e.to_string()))),
         }
     }
-}
 
-/// Creates an iterator of CuLogEntries from a bare binary structured log file (ie. not within a unified log).
-/// This is mainly used for using the structured logging out of the Copper framework.
-/// it returns a tuple with the iterator of log entries and the list of interned strings.
-#[pyfunction]
-pub fn struct_log_iterator_bare(
-    bare_struct_src_path: &str,
-    index_path: &str,
-) -> PyResult<(PyLogIterator, Vec<String>)> {
-    let file =
-        std::fs::File::open(bare_struct_src_path).map_err(|e| PyIOError::new_err(e.to_string()))?;
-    let all_strings = read_interned_strings(Path::new(index_path))
-        .map_err(|e| PyIOError::new_err(e.to_string()))?;
-    Ok((
-        PyLogIterator {
-            reader: Box::new(file),
-        },
-        all_strings,
-    ))
-}
+    /// Creates an iterator of CuLogEntries from a bare binary structured log file (ie. not within a unified log).
+    /// This is mainly used for using the structured logging out of the Copper framework.
+    /// it returns a tuple with the iterator of log entries and the list of interned strings.
+    #[pyfunction]
+    pub fn struct_log_iterator_bare(
+        bare_struct_src_path: &str,
+        index_path: &str,
+    ) -> PyResult<(PyLogIterator, Vec<String>)> {
+        let file = std::fs::File::open(bare_struct_src_path)
+            .map_err(|e| PyIOError::new_err(e.to_string()))?;
+        let all_strings = read_interned_strings(Path::new(index_path))
+            .map_err(|e| PyIOError::new_err(e.to_string()))?;
+        Ok((
+            PyLogIterator {
+                reader: Box::new(file),
+            },
+            all_strings,
+        ))
+    }
+    /// Creates an iterator of CuLogEntries from a unified log file.
+    /// This function allows you to easily use python to datamind Copper's structured text logs.
+    /// it returns a tuple with the iterator of log entries and the list of interned strings.
+    #[pyfunction]
+    pub fn struct_log_iterator_unified(
+        unified_src_path: &str,
+        index_path: &str,
+    ) -> PyResult<(PyLogIterator, Vec<String>)> {
+        let all_strings = read_interned_strings(Path::new(index_path))
+            .map_err(|e| PyIOError::new_err(e.to_string()))?;
 
-/// Creates an iterator of CuLogEntries from a unified log file.
-/// This function allows you to easily use python to datamind Copper's structured text logs.
-/// it returns a tuple with the iterator of log entries and the list of interned strings.
-#[pyfunction]
-pub fn struct_log_iterator_unified(
-    unified_src_path: &str,
-    index_path: &str,
-) -> PyResult<(PyLogIterator, Vec<String>)> {
-    let all_strings = read_interned_strings(Path::new(index_path))
-        .map_err(|e| PyIOError::new_err(e.to_string()))?;
+        let UnifiedLogger::Read(dl) = UnifiedLoggerBuilder::new()
+            .file_path(&Path::new(unified_src_path))
+            .build()
+            .expect("Failed to create logger")
+        else {
+            panic!("Failed to create logger");
+        };
 
-    let UnifiedLogger::Read(dl) = UnifiedLoggerBuilder::new()
-        .file_path(&Path::new(unified_src_path))
-        .build()
-        .expect("Failed to create logger")
-    else {
-        panic!("Failed to create logger");
-    };
-
-    let reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::StructuredLogLine);
-    Ok((
-        PyLogIterator {
-            reader: Box::new(reader),
-        },
-        all_strings,
-    ))
-}
-
-/// This is a python wrapper for CuLogEntries.
-#[pyclass]
-pub struct PyCuLogEntry {
-    pub inner: CuLogEntry,
-}
-
-#[pymethods]
-impl PyCuLogEntry {
-    /// Returns the timestamp of the log entry.
-    pub fn ts<'a>(&self, py: Python<'a>) -> Bound<'a, PyDelta> {
-        let nanoseconds = self.inner.time.0;
-
-        // Convert nanoseconds to seconds and microseconds
-        let days = (nanoseconds / 86_400_000_000_000) as i32;
-        let seconds = (nanoseconds / 1_000_000_000) as i32;
-        let microseconds = ((nanoseconds % 1_000_000_000) / 1_000) as i32;
-
-        PyDelta::new_bound(py, days, seconds, microseconds, false).unwrap()
+        let reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::StructuredLogLine);
+        Ok((
+            PyLogIterator {
+                reader: Box::new(reader),
+            },
+            all_strings,
+        ))
     }
 
-    /// Returns the index of the message in the vector of interned strings.
-    pub fn msg_index(&self) -> u32 {
-        self.inner.msg_index
+    /// This is a python wrapper for CuLogEntries.
+    #[pyclass]
+    pub struct PyCuLogEntry {
+        pub inner: CuLogEntry,
     }
 
-    /// Returns the index of the parameter names in the vector of interned strings.
-    pub fn paramname_indexes(&self) -> Vec<u32> {
-        self.inner.paramname_indexes.iter().map(|x| *x).collect()
+    #[pymethods]
+    impl PyCuLogEntry {
+        /// Returns the timestamp of the log entry.
+        pub fn ts<'a>(&self, py: Python<'a>) -> Bound<'a, PyDelta> {
+            let nanoseconds = self.inner.time.0;
+
+            // Convert nanoseconds to seconds and microseconds
+            let days = (nanoseconds / 86_400_000_000_000) as i32;
+            let seconds = (nanoseconds / 1_000_000_000) as i32;
+            let microseconds = ((nanoseconds % 1_000_000_000) / 1_000) as i32;
+
+            PyDelta::new_bound(py, days, seconds, microseconds, false).unwrap()
+        }
+
+        /// Returns the index of the message in the vector of interned strings.
+        pub fn msg_index(&self) -> u32 {
+            self.inner.msg_index
+        }
+
+        /// Returns the index of the parameter names in the vector of interned strings.
+        pub fn paramname_indexes(&self) -> Vec<u32> {
+            self.inner.paramname_indexes.iter().map(|x| *x).collect()
+        }
+
+        /// Returns the parameters of this log line
+        pub fn params(&self) -> Vec<PyObject> {
+            self.inner.params.iter().map(|x| value_to_py(x)).collect()
+        }
     }
 
-    /// Returns the parameters of this log line
-    pub fn params(&self) -> Vec<PyObject> {
-        self.inner.params.iter().map(|x| value_to_py(x)).collect()
+    #[pymodule]
+    fn cu29_export(m: &Bound<'_, PyModule>) -> PyResult<()> {
+        m.add_class::<PyCuLogEntry>()?;
+        m.add_class::<PyLogIterator>()?;
+        m.add_function(wrap_pyfunction!(struct_log_iterator_bare, m)?)?;
+        m.add_function(wrap_pyfunction!(struct_log_iterator_unified, m)?)?;
+        Ok(())
     }
-}
 
-#[pymodule]
-fn cu29_export(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<PyCuLogEntry>()?;
-    m.add_class::<PyLogIterator>()?;
-    m.add_function(wrap_pyfunction!(struct_log_iterator_bare, m)?)?;
-    m.add_function(wrap_pyfunction!(struct_log_iterator_unified, m)?)?;
-    Ok(())
-}
-
-fn value_to_py(value: &Value) -> PyObject {
-    match value {
-        Value::String(s) => Python::with_gil(|py| s.to_object(py)),
-        Value::U64(u) => Python::with_gil(|py| u.to_object(py)),
-        Value::I64(i) => Python::with_gil(|py| i.to_object(py)),
-        Value::F64(f) => Python::with_gil(|py| f.to_object(py)),
-        Value::Bool(b) => Python::with_gil(|py| b.to_object(py)),
-        Value::CuTime(t) => Python::with_gil(|py| t.0.to_object(py)),
-        Value::Bytes(b) => Python::with_gil(|py| b.to_object(py)),
-        Value::Char(c) => Python::with_gil(|py| c.to_object(py)),
-        Value::I8(i) => Python::with_gil(|py| i.to_object(py)),
-        Value::U8(u) => Python::with_gil(|py| u.to_object(py)),
-        Value::I16(i) => Python::with_gil(|py| i.to_object(py)),
-        Value::U16(u) => Python::with_gil(|py| u.to_object(py)),
-        Value::I32(i) => Python::with_gil(|py| i.to_object(py)),
-        Value::U32(u) => Python::with_gil(|py| u.to_object(py)),
-        Value::Map(m) => Python::with_gil(|py| {
-            let dict = PyDict::new_bound(py);
-            for (k, v) in m.iter() {
-                dict.set_item(value_to_py(k), value_to_py(v)).unwrap();
-            }
-            dict.to_object(py)
-        }),
-        Value::F32(f) => Python::with_gil(|py| f.to_object(py)),
-        Value::Option(o) => Python::with_gil(|py| {
-            if o.is_none() {
-                py.None()
-            } else {
-                o.clone().map(|v| value_to_py(&v)).unwrap()
-            }
-        }),
-        Value::Unit => Python::with_gil(|py| py.None()),
-        Value::Newtype(v) => value_to_py(v),
-        Value::Seq(s) => Python::with_gil(|py| {
-            let list = PyList::new_bound(py, s.iter().map(|v| value_to_py(v)));
-            list.to_object(py)
-        }),
+    fn value_to_py(value: &Value) -> PyObject {
+        match value {
+            Value::String(s) => Python::with_gil(|py| s.to_object(py)),
+            Value::U64(u) => Python::with_gil(|py| u.to_object(py)),
+            Value::I64(i) => Python::with_gil(|py| i.to_object(py)),
+            Value::F64(f) => Python::with_gil(|py| f.to_object(py)),
+            Value::Bool(b) => Python::with_gil(|py| b.to_object(py)),
+            Value::CuTime(t) => Python::with_gil(|py| t.0.to_object(py)),
+            Value::Bytes(b) => Python::with_gil(|py| b.to_object(py)),
+            Value::Char(c) => Python::with_gil(|py| c.to_object(py)),
+            Value::I8(i) => Python::with_gil(|py| i.to_object(py)),
+            Value::U8(u) => Python::with_gil(|py| u.to_object(py)),
+            Value::I16(i) => Python::with_gil(|py| i.to_object(py)),
+            Value::U16(u) => Python::with_gil(|py| u.to_object(py)),
+            Value::I32(i) => Python::with_gil(|py| i.to_object(py)),
+            Value::U32(u) => Python::with_gil(|py| u.to_object(py)),
+            Value::Map(m) => Python::with_gil(|py| {
+                let dict = PyDict::new_bound(py);
+                for (k, v) in m.iter() {
+                    dict.set_item(value_to_py(k), value_to_py(v)).unwrap();
+                }
+                dict.to_object(py)
+            }),
+            Value::F32(f) => Python::with_gil(|py| f.to_object(py)),
+            Value::Option(o) => Python::with_gil(|py| {
+                if o.is_none() {
+                    py.None()
+                } else {
+                    o.clone().map(|v| value_to_py(&v)).unwrap()
+                }
+            }),
+            Value::Unit => Python::with_gil(|py| py.None()),
+            Value::Newtype(v) => value_to_py(v),
+            Value::Seq(s) => Python::with_gil(|py| {
+                let list = PyList::new_bound(py, s.iter().map(|v| value_to_py(v)));
+                list.to_object(py)
+            }),
+        }
     }
 }
 
