@@ -12,15 +12,10 @@ members = [
     "cu29_soa_derive",
     "cu29_traits",
     "cu29_unifiedlog",
-    "drivers/cu_rp_gpio",
     "drivers/cu_vlp16",
-    "drivers/cu_wt901",
-    "drivers/cu_wt901_tester",
-    "drivers/cu_lewansoul",
-    "examples/cu_caterpillar",
     "examples/cu_config_gen",
     "examples/cu_standalone_structlog",
-    ]
+]
 resolver = "2"
 
 [workspace.package]
@@ -50,10 +45,6 @@ cu29-traits = { path = "cu29_traits", version = "0.2.2" }
 cu29-unifiedlog = { path = "cu29_unifiedlog", version = "0.2.2" }
 cu29-value = { path = "cu29_value", version = "0.2.2" }
 
-# Internal dependency for drivers and examples
-cu-wt901 = { path = "drivers/cu_wt901", version = "0.2.2" }
-cu-rp-gpio = { path = "drivers/cu_rp_gpio", version = "0.2.2" }
-
 # External serialization
 bincode = { version = "2.0.0-rc.3", features = ["derive"] }
 serde = { version = "1.0.204", features = ["derive"] }
@@ -62,7 +53,7 @@ serde_derive = "1.0.204"
 # External CLI
 clap = { version = "4.5.9", features = ["derive"] }
 
-# External proc macroS
+# External proc macros
 proc-macro2 = { version = "1.0.86" }
 quote = "1.0.36" # proc macros
 syn = { version = "2.0.71", features = ["full"] } # proc macros

@@ -658,6 +658,7 @@ impl Read for UnifiedLoggerIOReader {
 mod tests {
     use super::*;
     use bincode::decode_from_reader;
+    use libc::{sysconf, _SC_PAGESIZE};
     use std::io::BufReader;
     use std::path::PathBuf;
     use tempfile::TempDir;
@@ -699,8 +700,9 @@ mod tests {
             logger.add_section(UnifiedLogType::StructuredLogLine, 1024);
             logger.add_section(UnifiedLogType::CopperList, 2048);
             let used = logger.front_slab.used();
-            assert!(used < 4 * 4096); // ie. 3 headers, 1 page max per
-                                      // logger drops
+            assert!(used < 4 * unsafe { sysconf(_SC_PAGESIZE) as usize }); // ie. 3 headers, 1 page max per
+                                                                           // logger drops
+
             used
         };
 
