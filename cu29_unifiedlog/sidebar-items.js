@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["UnifiedLogger"],"fn":["stream_write"],"struct":["SectionHandle","SectionHeader","UnifiedLoggerBuilder","UnifiedLoggerIOReader","UnifiedLoggerRead","UnifiedLoggerWrite"]};
+window.SIDEBAR_ITEMS = {"enum":["AllocatedSection","UnifiedLogger"],"fn":["stream_write"],"struct":["SectionHandle","SectionHeader","UnifiedLoggerBuilder","UnifiedLoggerIOReader","UnifiedLoggerRead","UnifiedLoggerWrite"]};
