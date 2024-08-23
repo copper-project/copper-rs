@@ -11,7 +11,11 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
 
     steps:
       - uses: actions/checkout@v4
@@ -22,8 +26,12 @@ jobs:
           profile: minimal
       - name: Cargo fmt check
         run: cargo fmt --all -- --check
-      - name: Install dependencies
+      
+      # Install dependencies only on Linux
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libudev-dev libpcap-dev
+
       - name: Build
         run: cargo build
       - name: Run tests
@@ -40,3 +48,4 @@ jobs:
         run: |
           cd $RUNNER_TEMP/test_project
           cargo build --release
+
