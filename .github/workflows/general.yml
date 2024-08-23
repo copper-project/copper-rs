@@ -15,7 +15,7 @@ jobs:
 
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ ubuntu-latest, macos-latest ]
 
     steps:
       - uses: actions/checkout@v4
@@ -31,6 +31,16 @@ jobs:
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libudev-dev libpcap-dev
+
+      - name: Install dependencies (MacOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install python
+
+      - name: Set Python version for pyo3
+        if: runner.os == 'macOS'
+        run: |
+          export PYO3_PYTHON=$(which python3)
 
       - name: Build
         run: cargo build
