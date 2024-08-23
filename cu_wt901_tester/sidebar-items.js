@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["collect_metadata","main","tasks_instanciator"],"struct":["WT910TestSink","WT910Tester"],"type":["CuList","CuPayload","CuTasks"]};

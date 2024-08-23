@@ -1,1 +1,0 @@
-searchState.loadedDescShard("cu_lewansoul", 0, "This is a driver for the LewanSoul LX-16A, LX-225 etc.  …\nReturns the argument unchanged.\nReturns the argument unchanged.\nCalls <code>U::from(self)</code>.\nCalls <code>U::from(self)</code>.")

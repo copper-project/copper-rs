@@ -1,1 +1,0 @@
-searchState.loadedDescShard("cu_caterpillar_logreader", 0, "")

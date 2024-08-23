@@ -439,6 +439,18 @@
 <a href="#439" id="439">439</a>
 <a href="#440" id="440">440</a>
 <a href="#441" id="441">441</a>
+<a href="#442" id="442">442</a>
+<a href="#443" id="443">443</a>
+<a href="#444" id="444">444</a>
+<a href="#445" id="445">445</a>
+<a href="#446" id="446">446</a>
+<a href="#447" id="447">447</a>
+<a href="#448" id="448">448</a>
+<a href="#449" id="449">449</a>
+<a href="#450" id="450">450</a>
+<a href="#451" id="451">451</a>
+<a href="#452" id="452">452</a>
+<a href="#453" id="453">453</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::fmt::{Display, Formatter};
 <span class="kw">use </span>std::io::Read;
 <span class="kw">use </span>std::path::{Path, PathBuf};
@@ -452,13 +464,8 @@
 <span class="kw">use </span>cu29_traits::{CuError, CuResult, UnifiedLogType};
 
 <span class="kw">use </span>clap::{Parser, Subcommand, ValueEnum};
-<span class="kw">use </span>cu29_log::value::Value;
 <span class="kw">use </span>cu29_traits::CopperListPayload;
 <span class="kw">use </span>cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader};
-<span class="kw">use </span>pyo3::exceptions::PyIOError;
-<span class="kw">use </span>pyo3::prelude::<span class="kw-2">*</span>;
-<span class="kw">use </span>pyo3::types::PyDelta;
-<span class="kw">use </span>pyo3::types::{PyDict, PyList};
 
 <span class="attr">#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 </span><span class="kw">pub enum </span>ExportFormat {
@@ -599,167 +606,184 @@
     <span class="prelude-val">Ok</span>(())
 }
 
-<span class="attr">#[pyclass]
-</span><span class="kw">pub struct </span>PyLogIterator {
-    reader: Box&lt;<span class="kw">dyn </span>Read + Send&gt;,
-}
+<span class="comment">// only for not macos platforms
+</span><span class="attr">#[cfg(not(target_os = <span class="string">"macos"</span>))]
+</span><span class="kw">mod </span>python {
+    <span class="kw">use </span>bincode::config::standard;
+    <span class="kw">use </span>bincode::decode_from_std_read;
+    <span class="kw">use </span>bincode::error::DecodeError;
+    <span class="kw">use </span>cu29_intern_strs::read_interned_strings;
+    <span class="kw">use </span>cu29_log::value::Value;
+    <span class="kw">use </span>cu29_log::CuLogEntry;
+    <span class="kw">use </span>cu29_traits::UnifiedLogType;
+    <span class="kw">use </span>cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader};
+    <span class="kw">use </span>pyo3::exceptions::PyIOError;
+    <span class="kw">use </span>pyo3::prelude::<span class="kw-2">*</span>;
+    <span class="kw">use </span>pyo3::types::{PyDelta, PyDict, PyList};
+    <span class="kw">use </span>std::io::Read;
+    <span class="kw">use </span>std::path::Path;
 
-<span class="attr">#[pymethods]
-</span><span class="kw">impl </span>PyLogIterator {
-    <span class="kw">fn </span>__iter__(slf: PyRefMut&lt;<span class="self">Self</span>&gt;) -&gt; PyRefMut&lt;<span class="self">Self</span>&gt; {
-        slf
+    <span class="attr">#[pyclass]
+    </span><span class="kw">pub struct </span>PyLogIterator {
+        reader: Box&lt;<span class="kw">dyn </span>Read + Send&gt;,
     }
 
-    <span class="kw">fn </span>__next__(<span class="kw-2">mut </span>slf: PyRefMut&lt;<span class="self">Self</span>&gt;) -&gt; <span class="prelude-ty">Option</span>&lt;PyResult&lt;PyCuLogEntry&gt;&gt; {
-        <span class="kw">match </span>decode_from_std_read::&lt;CuLogEntry, <span class="kw">_</span>, <span class="kw">_</span>&gt;(<span class="kw-2">&amp;mut </span>slf.reader, standard()) {
-            <span class="prelude-val">Ok</span>(entry) =&gt; {
-                <span class="kw">if </span>entry.msg_index == <span class="number">0 </span>{
-                    <span class="prelude-val">None
-                </span>} <span class="kw">else </span>{
-                    <span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(PyCuLogEntry { inner: entry }))
+    <span class="attr">#[pymethods]
+    </span><span class="kw">impl </span>PyLogIterator {
+        <span class="kw">fn </span>__iter__(slf: PyRefMut&lt;<span class="self">Self</span>&gt;) -&gt; PyRefMut&lt;<span class="self">Self</span>&gt; {
+            slf
+        }
+
+        <span class="kw">fn </span>__next__(<span class="kw-2">mut </span>slf: PyRefMut&lt;<span class="self">Self</span>&gt;) -&gt; <span class="prelude-ty">Option</span>&lt;PyResult&lt;PyCuLogEntry&gt;&gt; {
+            <span class="kw">match </span>decode_from_std_read::&lt;CuLogEntry, <span class="kw">_</span>, <span class="kw">_</span>&gt;(<span class="kw-2">&amp;mut </span>slf.reader, standard()) {
+                <span class="prelude-val">Ok</span>(entry) =&gt; {
+                    <span class="kw">if </span>entry.msg_index == <span class="number">0 </span>{
+                        <span class="prelude-val">None
+                    </span>} <span class="kw">else </span>{
+                        <span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(PyCuLogEntry { inner: entry }))
+                    }
                 }
+                <span class="prelude-val">Err</span>(DecodeError::UnexpectedEnd { .. }) =&gt; <span class="prelude-val">None</span>,
+                <span class="prelude-val">Err</span>(DecodeError::Io { inner, .. })
+                    <span class="kw">if </span>inner.kind() == std::io::ErrorKind::UnexpectedEof =&gt;
+                {
+                    <span class="prelude-val">None
+                </span>}
+                <span class="prelude-val">Err</span>(e) =&gt; <span class="prelude-val">Some</span>(<span class="prelude-val">Err</span>(PyIOError::new_err(e.to_string()))),
             }
-            <span class="prelude-val">Err</span>(DecodeError::UnexpectedEnd { .. }) =&gt; <span class="prelude-val">None</span>,
-            <span class="prelude-val">Err</span>(DecodeError::Io { inner, .. })
-                <span class="kw">if </span>inner.kind() == std::io::ErrorKind::UnexpectedEof =&gt;
-            {
-                <span class="prelude-val">None
-            </span>}
-            <span class="prelude-val">Err</span>(e) =&gt; <span class="prelude-val">Some</span>(<span class="prelude-val">Err</span>(PyIOError::new_err(e.to_string()))),
         }
     }
-}
 
-<span class="doccomment">/// Creates an iterator of CuLogEntries from a bare binary structured log file (ie. not within a unified log).
-/// This is mainly used for using the structured logging out of the Copper framework.
-/// it returns a tuple with the iterator of log entries and the list of interned strings.
-</span><span class="attr">#[pyfunction]
-</span><span class="kw">pub fn </span>struct_log_iterator_bare(
-    bare_struct_src_path: <span class="kw-2">&amp;</span>str,
-    index_path: <span class="kw-2">&amp;</span>str,
-) -&gt; PyResult&lt;(PyLogIterator, Vec&lt;String&gt;)&gt; {
-    <span class="kw">let </span>file =
-        std::fs::File::open(bare_struct_src_path).map_err(|e| PyIOError::new_err(e.to_string()))<span class="question-mark">?</span>;
-    <span class="kw">let </span>all_strings = read_interned_strings(Path::new(index_path))
-        .map_err(|e| PyIOError::new_err(e.to_string()))<span class="question-mark">?</span>;
-    <span class="prelude-val">Ok</span>((
-        PyLogIterator {
-            reader: Box::new(file),
-        },
-        all_strings,
-    ))
-}
+    <span class="doccomment">/// Creates an iterator of CuLogEntries from a bare binary structured log file (ie. not within a unified log).
+    /// This is mainly used for using the structured logging out of the Copper framework.
+    /// it returns a tuple with the iterator of log entries and the list of interned strings.
+    </span><span class="attr">#[pyfunction]
+    </span><span class="kw">pub fn </span>struct_log_iterator_bare(
+        bare_struct_src_path: <span class="kw-2">&amp;</span>str,
+        index_path: <span class="kw-2">&amp;</span>str,
+    ) -&gt; PyResult&lt;(PyLogIterator, Vec&lt;String&gt;)&gt; {
+        <span class="kw">let </span>file = std::fs::File::open(bare_struct_src_path)
+            .map_err(|e| PyIOError::new_err(e.to_string()))<span class="question-mark">?</span>;
+        <span class="kw">let </span>all_strings = read_interned_strings(Path::new(index_path))
+            .map_err(|e| PyIOError::new_err(e.to_string()))<span class="question-mark">?</span>;
+        <span class="prelude-val">Ok</span>((
+            PyLogIterator {
+                reader: Box::new(file),
+            },
+            all_strings,
+        ))
+    }
+    <span class="doccomment">/// Creates an iterator of CuLogEntries from a unified log file.
+    /// This function allows you to easily use python to datamind Copper's structured text logs.
+    /// it returns a tuple with the iterator of log entries and the list of interned strings.
+    </span><span class="attr">#[pyfunction]
+    </span><span class="kw">pub fn </span>struct_log_iterator_unified(
+        unified_src_path: <span class="kw-2">&amp;</span>str,
+        index_path: <span class="kw-2">&amp;</span>str,
+    ) -&gt; PyResult&lt;(PyLogIterator, Vec&lt;String&gt;)&gt; {
+        <span class="kw">let </span>all_strings = read_interned_strings(Path::new(index_path))
+            .map_err(|e| PyIOError::new_err(e.to_string()))<span class="question-mark">?</span>;
 
-<span class="doccomment">/// Creates an iterator of CuLogEntries from a unified log file.
-/// This function allows you to easily use python to datamind Copper's structured text logs.
-/// it returns a tuple with the iterator of log entries and the list of interned strings.
-</span><span class="attr">#[pyfunction]
-</span><span class="kw">pub fn </span>struct_log_iterator_unified(
-    unified_src_path: <span class="kw-2">&amp;</span>str,
-    index_path: <span class="kw-2">&amp;</span>str,
-) -&gt; PyResult&lt;(PyLogIterator, Vec&lt;String&gt;)&gt; {
-    <span class="kw">let </span>all_strings = read_interned_strings(Path::new(index_path))
-        .map_err(|e| PyIOError::new_err(e.to_string()))<span class="question-mark">?</span>;
+        <span class="kw">let </span>UnifiedLogger::Read(dl) = UnifiedLoggerBuilder::new()
+            .file_path(<span class="kw-2">&amp;</span>Path::new(unified_src_path))
+            .build()
+            .expect(<span class="string">"Failed to create logger"</span>)
+        <span class="kw">else </span>{
+            <span class="macro">panic!</span>(<span class="string">"Failed to create logger"</span>);
+        };
 
-    <span class="kw">let </span>UnifiedLogger::Read(dl) = UnifiedLoggerBuilder::new()
-        .file_path(<span class="kw-2">&amp;</span>Path::new(unified_src_path))
-        .build()
-        .expect(<span class="string">"Failed to create logger"</span>)
-    <span class="kw">else </span>{
-        <span class="macro">panic!</span>(<span class="string">"Failed to create logger"</span>);
-    };
-
-    <span class="kw">let </span>reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::StructuredLogLine);
-    <span class="prelude-val">Ok</span>((
-        PyLogIterator {
-            reader: Box::new(reader),
-        },
-        all_strings,
-    ))
-}
-
-<span class="doccomment">/// This is a python wrapper for CuLogEntries.
-</span><span class="attr">#[pyclass]
-</span><span class="kw">pub struct </span>PyCuLogEntry {
-    <span class="kw">pub </span>inner: CuLogEntry,
-}
-
-<span class="attr">#[pymethods]
-</span><span class="kw">impl </span>PyCuLogEntry {
-    <span class="doccomment">/// Returns the timestamp of the log entry.
-    </span><span class="kw">pub fn </span>ts&lt;<span class="lifetime">'a</span>&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, py: Python&lt;<span class="lifetime">'a</span>&gt;) -&gt; Bound&lt;<span class="lifetime">'a</span>, PyDelta&gt; {
-        <span class="kw">let </span>nanoseconds = <span class="self">self</span>.inner.time.<span class="number">0</span>;
-
-        <span class="comment">// Convert nanoseconds to seconds and microseconds
-        </span><span class="kw">let </span>days = (nanoseconds / <span class="number">86_400_000_000_000</span>) <span class="kw">as </span>i32;
-        <span class="kw">let </span>seconds = (nanoseconds / <span class="number">1_000_000_000</span>) <span class="kw">as </span>i32;
-        <span class="kw">let </span>microseconds = ((nanoseconds % <span class="number">1_000_000_000</span>) / <span class="number">1_000</span>) <span class="kw">as </span>i32;
-
-        PyDelta::new_bound(py, days, seconds, microseconds, <span class="bool-val">false</span>).unwrap()
+        <span class="kw">let </span>reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::StructuredLogLine);
+        <span class="prelude-val">Ok</span>((
+            PyLogIterator {
+                reader: Box::new(reader),
+            },
+            all_strings,
+        ))
     }
 
-    <span class="doccomment">/// Returns the index of the message in the vector of interned strings.
-    </span><span class="kw">pub fn </span>msg_index(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u32 {
-        <span class="self">self</span>.inner.msg_index
+    <span class="doccomment">/// This is a python wrapper for CuLogEntries.
+    </span><span class="attr">#[pyclass]
+    </span><span class="kw">pub struct </span>PyCuLogEntry {
+        <span class="kw">pub </span>inner: CuLogEntry,
     }
 
-    <span class="doccomment">/// Returns the index of the parameter names in the vector of interned strings.
-    </span><span class="kw">pub fn </span>paramname_indexes(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;u32&gt; {
-        <span class="self">self</span>.inner.paramname_indexes.iter().map(|x| <span class="kw-2">*</span>x).collect()
+    <span class="attr">#[pymethods]
+    </span><span class="kw">impl </span>PyCuLogEntry {
+        <span class="doccomment">/// Returns the timestamp of the log entry.
+        </span><span class="kw">pub fn </span>ts&lt;<span class="lifetime">'a</span>&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, py: Python&lt;<span class="lifetime">'a</span>&gt;) -&gt; Bound&lt;<span class="lifetime">'a</span>, PyDelta&gt; {
+            <span class="kw">let </span>nanoseconds = <span class="self">self</span>.inner.time.<span class="number">0</span>;
+
+            <span class="comment">// Convert nanoseconds to seconds and microseconds
+            </span><span class="kw">let </span>days = (nanoseconds / <span class="number">86_400_000_000_000</span>) <span class="kw">as </span>i32;
+            <span class="kw">let </span>seconds = (nanoseconds / <span class="number">1_000_000_000</span>) <span class="kw">as </span>i32;
+            <span class="kw">let </span>microseconds = ((nanoseconds % <span class="number">1_000_000_000</span>) / <span class="number">1_000</span>) <span class="kw">as </span>i32;
+
+            PyDelta::new_bound(py, days, seconds, microseconds, <span class="bool-val">false</span>).unwrap()
+        }
+
+        <span class="doccomment">/// Returns the index of the message in the vector of interned strings.
+        </span><span class="kw">pub fn </span>msg_index(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u32 {
+            <span class="self">self</span>.inner.msg_index
+        }
+
+        <span class="doccomment">/// Returns the index of the parameter names in the vector of interned strings.
+        </span><span class="kw">pub fn </span>paramname_indexes(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;u32&gt; {
+            <span class="self">self</span>.inner.paramname_indexes.iter().map(|x| <span class="kw-2">*</span>x).collect()
+        }
+
+        <span class="doccomment">/// Returns the parameters of this log line
+        </span><span class="kw">pub fn </span>params(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;PyObject&gt; {
+            <span class="self">self</span>.inner.params.iter().map(|x| value_to_py(x)).collect()
+        }
     }
 
-    <span class="doccomment">/// Returns the parameters of this log line
-    </span><span class="kw">pub fn </span>params(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;PyObject&gt; {
-        <span class="self">self</span>.inner.params.iter().map(|x| value_to_py(x)).collect()
+    <span class="attr">#[pymodule]
+    </span><span class="kw">fn </span>cu29_export(m: <span class="kw-2">&amp;</span>Bound&lt;<span class="lifetime">'_</span>, PyModule&gt;) -&gt; PyResult&lt;()&gt; {
+        m.add_class::&lt;PyCuLogEntry&gt;()<span class="question-mark">?</span>;
+        m.add_class::&lt;PyLogIterator&gt;()<span class="question-mark">?</span>;
+        m.add_function(<span class="macro">wrap_pyfunction!</span>(struct_log_iterator_bare, m)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
+        m.add_function(<span class="macro">wrap_pyfunction!</span>(struct_log_iterator_unified, m)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
+        <span class="prelude-val">Ok</span>(())
     }
-}
 
-<span class="attr">#[pymodule]
-</span><span class="kw">fn </span>cu29_export(m: <span class="kw-2">&amp;</span>Bound&lt;<span class="lifetime">'_</span>, PyModule&gt;) -&gt; PyResult&lt;()&gt; {
-    m.add_class::&lt;PyCuLogEntry&gt;()<span class="question-mark">?</span>;
-    m.add_class::&lt;PyLogIterator&gt;()<span class="question-mark">?</span>;
-    m.add_function(<span class="macro">wrap_pyfunction!</span>(struct_log_iterator_bare, m)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
-    m.add_function(<span class="macro">wrap_pyfunction!</span>(struct_log_iterator_unified, m)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
-    <span class="prelude-val">Ok</span>(())
-}
-
-<span class="kw">fn </span>value_to_py(value: <span class="kw-2">&amp;</span>Value) -&gt; PyObject {
-    <span class="kw">match </span>value {
-        Value::String(s) =&gt; Python::with_gil(|py| s.to_object(py)),
-        Value::U64(u) =&gt; Python::with_gil(|py| u.to_object(py)),
-        Value::I64(i) =&gt; Python::with_gil(|py| i.to_object(py)),
-        Value::F64(f) =&gt; Python::with_gil(|py| f.to_object(py)),
-        Value::Bool(b) =&gt; Python::with_gil(|py| b.to_object(py)),
-        Value::CuTime(t) =&gt; Python::with_gil(|py| t.<span class="number">0</span>.to_object(py)),
-        Value::Bytes(b) =&gt; Python::with_gil(|py| b.to_object(py)),
-        Value::Char(c) =&gt; Python::with_gil(|py| c.to_object(py)),
-        Value::I8(i) =&gt; Python::with_gil(|py| i.to_object(py)),
-        Value::U8(u) =&gt; Python::with_gil(|py| u.to_object(py)),
-        Value::I16(i) =&gt; Python::with_gil(|py| i.to_object(py)),
-        Value::U16(u) =&gt; Python::with_gil(|py| u.to_object(py)),
-        Value::I32(i) =&gt; Python::with_gil(|py| i.to_object(py)),
-        Value::U32(u) =&gt; Python::with_gil(|py| u.to_object(py)),
-        Value::Map(m) =&gt; Python::with_gil(|py| {
-            <span class="kw">let </span>dict = PyDict::new_bound(py);
-            <span class="kw">for </span>(k, v) <span class="kw">in </span>m.iter() {
-                dict.set_item(value_to_py(k), value_to_py(v)).unwrap();
-            }
-            dict.to_object(py)
-        }),
-        Value::F32(f) =&gt; Python::with_gil(|py| f.to_object(py)),
-        Value::Option(o) =&gt; Python::with_gil(|py| {
-            <span class="kw">if </span>o.is_none() {
-                py.<span class="prelude-val">None</span>()
-            } <span class="kw">else </span>{
-                o.clone().map(|v| value_to_py(<span class="kw-2">&amp;</span>v)).unwrap()
-            }
-        }),
-        Value::Unit =&gt; Python::with_gil(|py| py.<span class="prelude-val">None</span>()),
-        Value::Newtype(v) =&gt; value_to_py(v),
-        Value::Seq(s) =&gt; Python::with_gil(|py| {
-            <span class="kw">let </span>list = PyList::new_bound(py, s.iter().map(|v| value_to_py(v)));
-            list.to_object(py)
-        }),
+    <span class="kw">fn </span>value_to_py(value: <span class="kw-2">&amp;</span>Value) -&gt; PyObject {
+        <span class="kw">match </span>value {
+            Value::String(s) =&gt; Python::with_gil(|py| s.to_object(py)),
+            Value::U64(u) =&gt; Python::with_gil(|py| u.to_object(py)),
+            Value::I64(i) =&gt; Python::with_gil(|py| i.to_object(py)),
+            Value::F64(f) =&gt; Python::with_gil(|py| f.to_object(py)),
+            Value::Bool(b) =&gt; Python::with_gil(|py| b.to_object(py)),
+            Value::CuTime(t) =&gt; Python::with_gil(|py| t.<span class="number">0</span>.to_object(py)),
+            Value::Bytes(b) =&gt; Python::with_gil(|py| b.to_object(py)),
+            Value::Char(c) =&gt; Python::with_gil(|py| c.to_object(py)),
+            Value::I8(i) =&gt; Python::with_gil(|py| i.to_object(py)),
+            Value::U8(u) =&gt; Python::with_gil(|py| u.to_object(py)),
+            Value::I16(i) =&gt; Python::with_gil(|py| i.to_object(py)),
+            Value::U16(u) =&gt; Python::with_gil(|py| u.to_object(py)),
+            Value::I32(i) =&gt; Python::with_gil(|py| i.to_object(py)),
+            Value::U32(u) =&gt; Python::with_gil(|py| u.to_object(py)),
+            Value::Map(m) =&gt; Python::with_gil(|py| {
+                <span class="kw">let </span>dict = PyDict::new_bound(py);
+                <span class="kw">for </span>(k, v) <span class="kw">in </span>m.iter() {
+                    dict.set_item(value_to_py(k), value_to_py(v)).unwrap();
+                }
+                dict.to_object(py)
+            }),
+            Value::F32(f) =&gt; Python::with_gil(|py| f.to_object(py)),
+            Value::Option(o) =&gt; Python::with_gil(|py| {
+                <span class="kw">if </span>o.is_none() {
+                    py.<span class="prelude-val">None</span>()
+                } <span class="kw">else </span>{
+                    o.clone().map(|v| value_to_py(<span class="kw-2">&amp;</span>v)).unwrap()
+                }
+            }),
+            Value::Unit =&gt; Python::with_gil(|py| py.<span class="prelude-val">None</span>()),
+            Value::Newtype(v) =&gt; value_to_py(v),
+            Value::Seq(s) =&gt; Python::with_gil(|py| {
+                <span class="kw">let </span>list = PyList::new_bound(py, s.iter().map(|v| value_to_py(v)));
+                list.to_object(py)
+            }),
+        }
     }
 }
 

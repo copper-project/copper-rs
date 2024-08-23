@@ -882,6 +882,8 @@
 <a href="#882" id="882">882</a>
 <a href="#883" id="883">883</a>
 <a href="#884" id="884">884</a>
+<a href="#885" id="885">885</a>
+<a href="#886" id="886">886</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>libc;
 
 <span class="kw">use </span>memmap2::{Mmap, MmapMut};
@@ -1542,6 +1544,7 @@
 </span><span class="kw">mod </span>tests {
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
     <span class="kw">use </span>bincode::decode_from_reader;
+    <span class="kw">use </span>libc::{sysconf, _SC_PAGESIZE};
     <span class="kw">use </span>std::io::BufReader;
     <span class="kw">use </span>std::path::PathBuf;
     <span class="kw">use </span>tempfile::TempDir;
@@ -1583,8 +1586,9 @@
             logger.add_section(UnifiedLogType::StructuredLogLine, <span class="number">1024</span>);
             logger.add_section(UnifiedLogType::CopperList, <span class="number">2048</span>);
             <span class="kw">let </span>used = logger.front_slab.used();
-            <span class="macro">assert!</span>(used &lt; <span class="number">4 </span>* <span class="number">4096</span>); <span class="comment">// ie. 3 headers, 1 page max per
-                                      // logger drops
+            <span class="macro">assert!</span>(used &lt; <span class="number">4 </span>* <span class="kw">unsafe </span>{ sysconf(_SC_PAGESIZE) <span class="kw">as </span>usize }); <span class="comment">// ie. 3 headers, 1 page max per
+                                                                           // logger drops
+
             </span>used
         };
 

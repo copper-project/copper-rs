@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["PREALLOCATED_STORAGE_SIZE"],"fn":["collect_metadata","main","tasks_instanciator"],"mod":["tasks"],"struct":["CaterpillarApplication"],"type":["CuList","CuPayload","CuTasks"]};
