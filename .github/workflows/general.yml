@@ -32,20 +32,6 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libudev-dev libpcap-dev
 
-      - name: Set up Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: '3.12'
-
-      - name: Set Python version for pyo3
-        run: echo "PYO3_PYTHON=$(which python3)" >> $GITHUB_ENV
-
-      - name: Add Python to Library Paths
-        run: |
-          echo "LIBRARY_PATH=$(python3-config --prefix)/lib:$LIBRARY_PATH" >> $GITHUB_ENV
-          echo "LD_LIBRARY_PATH=$(python3-config --prefix)/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
-          echo "DYLD_LIBRARY_PATH=$(python3-config --prefix)/lib:$DYLD_LIBRARY_PATH" >> $GITHUB_ENV
-
       - name: Build
         run: cargo build
       - name: Run tests
