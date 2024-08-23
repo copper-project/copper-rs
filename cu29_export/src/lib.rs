@@ -396,7 +396,10 @@ mod tests {
         }
         // Read back the log
         let UnifiedLogger::Read(logger) = UnifiedLoggerBuilder::new()
-            .file_path(&path)
+            .file_path(
+                &dir.path()
+                    .join("end_to_end_datalogger_and_structlog_test_0.copper"),
+            )
             .build()
             .expect("Failed to create logger")
         else {
