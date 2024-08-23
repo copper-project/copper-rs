@@ -13,10 +13,9 @@ members = [
     "cu29_traits",
     "cu29_unifiedlog",
     "drivers/cu_vlp16",
-    "examples/cu_caterpillar",
     "examples/cu_config_gen",
     "examples/cu_standalone_structlog",
-    ]
+]
 resolver = "2"
 
 [workspace.package]

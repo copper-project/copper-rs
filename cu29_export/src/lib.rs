@@ -11,7 +11,6 @@ use cu29_log::{rebuild_logline, CuLogEntry};
 use cu29_traits::{CuError, CuResult, UnifiedLogType};
 
 use clap::{Parser, Subcommand, ValueEnum};
-use cu29_log::value::Value;
 use cu29_traits::CopperListPayload;
 use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader};
 
