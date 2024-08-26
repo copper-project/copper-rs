@@ -229,7 +229,7 @@ struct SlabEntry {
 impl Drop for SlabEntry {
     fn drop(&mut self) {
         self.close();
-        if self.sections_in_flight.len() > 0 {
+        if !self.sections_in_flight.is_empty() {
             self.sections_in_flight.clear(); // This is the best we can do.
             eprintln!("Sections in flight in a slab while it is being dropped.");
         }
@@ -320,7 +320,9 @@ impl SlabEntry {
             unsafe { from_raw_parts_mut(user_buffer.as_mut_ptr(), user_buffer.len()) };
 
         self.current_global_position = end_of_section;
-        println!("Log Used {}MB", self.current_global_position / 1024 / 1024);
+
+        // TODO: This is for the alpha period. remove.
+        println!("Slab Used {}", self.current_global_position);
 
         AllocatedSection::Section(SectionHandle::create(section_header, handle_buffer))
     }
@@ -424,6 +426,10 @@ fn build_slab_path(base_file_path: &PathBuf, slab_index: usize) -> PathBuf {
 }
 
 fn make_slab_file(base_file_path: &PathBuf, slab_size: usize, slab_suffix: usize) -> File {
+    eprintln!(
+        "Creating a new slab file with size: {} suffix: {}",
+        slab_size, slab_suffix
+    );
     let file_path = build_slab_path(base_file_path, slab_suffix);
     let file = OpenOptions::new()
         .read(true)
@@ -437,9 +443,9 @@ fn make_slab_file(base_file_path: &PathBuf, slab_size: usize, slab_suffix: usize
 }
 
 impl UnifiedLoggerWrite {
-    fn make_new_mmfile(&mut self) -> File {
-        let file = make_slab_file(&self.base_file_path, self.slab_size, self.front_slab_suffix);
+    fn next_slab(&mut self) -> File {
         self.front_slab_suffix += 1;
+        let file = make_slab_file(&self.base_file_path, self.slab_size, self.front_slab_suffix);
         file
     }
 
@@ -484,7 +490,7 @@ impl UnifiedLoggerWrite {
         match maybe_section {
             AllocatedSection::NoMoreSpace => {
                 // move the front slab to the back slab.
-                let new_slab = SlabEntry::new(self.make_new_mmfile(), self.front_slab.page_size);
+                let new_slab = SlabEntry::new(self.next_slab(), self.front_slab.page_size);
                 self.back_slab = Some(mem::replace(&mut self.front_slab, new_slab));
                 match self
                     .front_slab
@@ -546,6 +552,15 @@ impl UnifiedLoggerRead {
         })
     }
 
+    fn next_slab(&mut self) -> io::Result<()> {
+        self.current_slab_index += 1;
+        let (file, mmap, prolog) = open_slab_index(&self.base_file_path, self.current_slab_index)?;
+        self.current_file = file;
+        self.current_mmap_buffer = mmap;
+        self.current_reading_position = prolog as usize;
+        Ok(())
+    }
+
     pub fn read_next_section_type(
         &mut self,
         datalogtype: UnifiedLogType,
@@ -577,7 +592,9 @@ impl UnifiedLoggerRead {
             self.current_reading_position += header.section_size as usize;
 
             if self.current_reading_position >= self.current_mmap_buffer.len() {
-                return Err("Corrupted Log, past end of file".into());
+                self.next_slab().map_err(|e| {
+                    CuError::new_with_cause("Failed to read next slab, is the log complete?", e)
+                })?;
             }
         }
     }
@@ -682,13 +699,21 @@ mod tests {
     use std::io::BufReader;
     use std::path::PathBuf;
     use tempfile::TempDir;
-    fn make_a_logger(tmp_dir: &TempDir) -> (Arc<Mutex<UnifiedLoggerWrite>>, PathBuf) {
+
+    const LARGE_SLAB: usize = 100 * 1024; // 100KB
+    const SMALL_SLAB: usize = 10 * 1024; // 10KB
+
+    fn make_a_logger(
+        tmp_dir: &TempDir,
+        slab_size: usize,
+    ) -> (Arc<Mutex<UnifiedLoggerWrite>>, PathBuf) {
         let file_path = tmp_dir.path().join("test.bin");
+        println!("Creating a logger at {:?}", file_path);
         let UnifiedLogger::Write(data_logger) = UnifiedLoggerBuilder::new()
             .write(true)
             .create(true)
             .file_base_name(&file_path)
-            .preallocated_size(100000)
+            .preallocated_size(slab_size)
             .build()
             .expect("Failed to create logger")
         else {
@@ -737,7 +762,7 @@ mod tests {
     #[test]
     fn test_one_section_self_cleaning() {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let (logger, _) = make_a_logger(&tmp_dir);
+        let (logger, _) = make_a_logger(&tmp_dir, LARGE_SLAB);
         {
             let _stream =
                 stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
@@ -760,7 +785,7 @@ mod tests {
     #[test]
     fn test_two_sections_self_cleaning_in_order() {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let (logger, _) = make_a_logger(&tmp_dir);
+        let (logger, _) = make_a_logger(&tmp_dir, LARGE_SLAB);
         let s1 = stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
         assert_eq!(
             logger.lock().unwrap().front_slab.sections_in_flight.len(),
@@ -788,7 +813,7 @@ mod tests {
     #[test]
     fn test_two_sections_self_cleaning_out_of_order() {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let (logger, _) = make_a_logger(&tmp_dir);
+        let (logger, _) = make_a_logger(&tmp_dir, LARGE_SLAB);
         let s1 = stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
         assert_eq!(
             logger.lock().unwrap().front_slab.sections_in_flight.len(),
@@ -816,7 +841,7 @@ mod tests {
     #[test]
     fn test_write_then_read_one_section() {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let (logger, f) = make_a_logger(&tmp_dir);
+        let (logger, f) = make_a_logger(&tmp_dir, LARGE_SLAB);
         {
             let mut stream = stream_write(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
             stream.log(&1u32).unwrap();
@@ -864,7 +889,7 @@ mod tests {
     #[test]
     fn test_copperlist_list_like_logging() {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let (logger, f) = make_a_logger(&tmp_dir);
+        let (logger, f) = make_a_logger(&tmp_dir, LARGE_SLAB);
         {
             let mut stream = stream_write(logger.clone(), UnifiedLogType::CopperList, 1024);
             let cl0 = CopperList {
@@ -898,5 +923,54 @@ mod tests {
         let cl1: CopperList<(u32, u32, u32)> = decode_from_reader(&mut reader, standard()).unwrap();
         assert_eq!(cl0.payload.1, 2);
         assert_eq!(cl1.payload.2, 6);
+    }
+
+    #[test]
+    fn test_multi_slab_end2end() {
+        let tmp_dir = TempDir::new().expect("could not create a tmp dir");
+        let (logger, f) = make_a_logger(&tmp_dir, SMALL_SLAB);
+        {
+            let mut stream = stream_write(logger.clone(), UnifiedLogType::CopperList, 1024);
+            let cl0 = CopperList {
+                state: CopperListStateMock::Free,
+                payload: (1u32, 2u32, 3u32),
+            };
+            for _ in 0..1000 {
+                stream.log(&cl0).unwrap();
+            }
+        }
+        drop(logger);
+
+        let UnifiedLogger::Read(mut dl) = UnifiedLoggerBuilder::new()
+            .file_base_name(&f)
+            .build()
+            .expect("Failed to build logger")
+        else {
+            panic!("Failed to build logger");
+        };
+        let mut total_readback = 0;
+        loop {
+            let section = dl.read_next_section_type(UnifiedLogType::CopperList);
+            if section.is_err() {
+                break;
+            }
+            let section = section.unwrap();
+            if section.is_none() {
+                break;
+            }
+            let section = section.unwrap();
+
+            let mut reader = BufReader::new(&section[..]);
+            loop {
+                let maybe_cl: Result<CopperList<(u32, u32, u32)>, _> =
+                    decode_from_reader(&mut reader, standard());
+                if maybe_cl.is_ok() {
+                    total_readback += 1;
+                } else {
+                    break;
+                }
+            }
+        }
+        assert_eq!(total_readback, 1000);
     }
 }
