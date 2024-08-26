@@ -13,9 +13,30 @@ members = [
     "cu29_traits",
     "cu29_unifiedlog",
     "drivers/cu_vlp16",
+    "drivers/cu_lewansoul",
+    "drivers/cu_wt901",
     "examples/cu_config_gen",
     "examples/cu_standalone_structlog",
+    "examples/cu_caterpillar"
+
 ]
+
+# put only the core crates here that are not platform specific
+default-members = [
+    "cu29",
+    "cu29_clock",
+    "cu29_derive",
+    "cu29_export",
+    "cu29_helpers",
+    "cu29_intern_strs",
+    "cu29_log",
+    "cu29_log_derive",
+    "cu29_log_runtime",
+    "cu29_soa_derive",
+    "cu29_traits",
+    "cu29_unifiedlog",
+]
+
 resolver = "2"
 
 [workspace.package]

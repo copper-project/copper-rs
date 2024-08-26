@@ -33,7 +33,14 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libudev-dev libpcap-dev
 
       - name: Build
-        run: cargo build
+        run: |
+          if [ "${{ runner.os }}" == "Linux" ]; then
+            # A lot of the non default crates are linux specific or robot target specific.
+            cargo build --workspace
+          else
+            cargo build
+          fi
+
       - name: Run tests
         run: cargo test
 
