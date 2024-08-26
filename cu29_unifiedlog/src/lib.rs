@@ -150,7 +150,7 @@ pub enum UnifiedLogger {
 
 /// Use this builder to create a new DataLogger.
 pub struct UnifiedLoggerBuilder {
-    file_path: Option<PathBuf>,
+    file_base_name: Option<PathBuf>,
     preallocated_size: Option<usize>,
     write: bool,
     create: bool,
@@ -159,15 +159,16 @@ pub struct UnifiedLoggerBuilder {
 impl UnifiedLoggerBuilder {
     pub fn new() -> Self {
         Self {
-            file_path: None,
+            file_base_name: None,
             preallocated_size: None,
             write: false,
             create: false, // This is the safest default
         }
     }
 
-    pub fn file_path(mut self, file_path: &Path) -> Self {
-        self.file_path = Some(file_path.to_path_buf());
+    /// If "something/toto.copper" is given, it will find or create "something/toto_0.copper",  "something/toto_1.copper" etc.
+    pub fn file_base_name(mut self, file_path: &Path) -> Self {
+        self.file_base_name = Some(file_path.to_path_buf());
         self
     }
 
@@ -191,48 +192,29 @@ impl UnifiedLoggerBuilder {
 
         if self.write && self.create {
             let ulw = UnifiedLoggerWrite::new(
-                &self.file_path.unwrap(),
+                &self.file_base_name.unwrap(),
                 self.preallocated_size.unwrap(),
                 page_size,
             );
 
             Ok(UnifiedLogger::Write(ulw))
         } else {
-            let file_path = self.file_path.ok_or_else(|| {
+            let file_path = self.file_base_name.ok_or_else(|| {
                 io::Error::new(io::ErrorKind::InvalidInput, "File path is required")
             })?;
-            let mut options = OpenOptions::new();
-            let options = options.read(true);
-            let file = options.open(file_path)?;
-            let mmap = unsafe { Mmap::map(&file) }?;
-            let main_header: MainHeader;
-            let _read: usize;
-            (main_header, _read) =
-                decode_from_slice(&mmap[..], standard()).expect("Failed to decode main header");
-            if main_header.magic != MAIN_MAGIC {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "Invalid magic number in main header",
-                ));
-            }
-            Ok(UnifiedLogger::Read(UnifiedLoggerRead {
-                file,
-                mmap_buffer: mmap,
-                reading_position: main_header.first_section_offset as usize,
-                page_size: main_header.page_size as usize,
-            }))
+            let ulr = UnifiedLoggerRead::new(&file_path)?;
+            Ok(UnifiedLogger::Read(ulr))
         }
     }
 }
 
 /// A read side of the datalogger.
 pub struct UnifiedLoggerRead {
-    #[allow(dead_code)]
-    file: File,
-    mmap_buffer: Mmap,
-    reading_position: usize,
-    #[allow(dead_code)]
-    page_size: usize,
+    base_file_path: PathBuf,
+    current_mmap_buffer: Mmap,
+    current_file: File,
+    current_slab_index: usize,
+    current_reading_position: usize,
 }
 
 struct SlabEntry {
@@ -430,19 +412,19 @@ pub struct UnifiedLoggerWrite {
     front_slab_suffix: usize,
 }
 
-fn build_file_path(file_path: &PathBuf, suffix: usize) -> PathBuf {
-    let mut file_path = file_path.clone();
+fn build_slab_path(base_file_path: &PathBuf, slab_index: usize) -> PathBuf {
+    let mut file_path = base_file_path.clone();
     let file_name = file_path.file_name().unwrap().to_str().unwrap();
     let mut file_name = file_name.split('.').collect::<Vec<&str>>();
     let extension = file_name.pop().unwrap();
     let file_name = file_name.join(".");
-    let file_name = format!("{}_{}.{}", file_name, suffix, extension);
+    let file_name = format!("{}_{}.{}", file_name, slab_index, extension);
     file_path.set_file_name(file_name);
     file_path
 }
 
 fn make_slab_file(base_file_path: &PathBuf, slab_size: usize, slab_suffix: usize) -> File {
-    let file_path = build_file_path(base_file_path, slab_suffix);
+    let file_path = build_slab_path(base_file_path, slab_suffix);
     let file = OpenOptions::new()
         .read(true)
         .write(true)
@@ -527,7 +509,43 @@ impl Drop for UnifiedLoggerWrite {
     }
 }
 
+fn open_slab_index(base_file_path: &PathBuf, slab_index: usize) -> io::Result<(File, Mmap, u16)> {
+    let mut options = OpenOptions::new();
+    let options = options.read(true);
+
+    let file_path = build_slab_path(base_file_path, slab_index);
+    let file = options.open(file_path)?;
+    let mmap = unsafe { Mmap::map(&file) }?;
+    let mut prolog = 0u16;
+    if slab_index == 0 {
+        let main_header: MainHeader;
+        let _read: usize;
+        (main_header, _read) =
+            decode_from_slice(&mmap[..], standard()).expect("Failed to decode main header");
+        if main_header.magic != MAIN_MAGIC {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Invalid magic number in main header",
+            ));
+        }
+        prolog = main_header.first_section_offset;
+    }
+    Ok((file, mmap, prolog))
+}
+
 impl UnifiedLoggerRead {
+    pub fn new(base_file_path: &PathBuf) -> io::Result<Self> {
+        let (file, mmap, prolog) = open_slab_index(base_file_path, 0)?;
+
+        Ok(Self {
+            base_file_path: base_file_path.clone(),
+            current_file: file,
+            current_mmap_buffer: mmap,
+            current_slab_index: 0,
+            current_reading_position: prolog as usize,
+        })
+    }
+
     pub fn read_next_section_type(
         &mut self,
         datalogtype: UnifiedLogType,
@@ -551,14 +569,14 @@ impl UnifiedLoggerRead {
             // Found a section of the requested type
             if header.entry_type == datalogtype {
                 let result = Some(self.read_section_content(&header)?);
-                self.reading_position += header.section_size as usize;
+                self.current_reading_position += header.section_size as usize;
                 return Ok(result);
             }
 
             // Keep reading until we find the requested type
-            self.reading_position += header.section_size as usize;
+            self.current_reading_position += header.section_size as usize;
 
-            if self.reading_position >= self.mmap_buffer.len() {
+            if self.current_reading_position >= self.current_mmap_buffer.len() {
                 return Err("Corrupted Log, past end of file".into());
             }
         }
@@ -582,9 +600,9 @@ impl UnifiedLoggerRead {
         // TODO: we could optimize by asking the buffer to fill
 
         let mut section = vec![0; header.filled_size as usize];
-        let start_of_data = self.reading_position + MAX_HEADER_SIZE;
+        let start_of_data = self.current_reading_position + MAX_HEADER_SIZE;
         section.copy_from_slice(
-            &self.mmap_buffer[start_of_data..start_of_data + header.filled_size as usize],
+            &self.current_mmap_buffer[start_of_data..start_of_data + header.filled_size as usize],
         );
 
         Ok(section)
@@ -592,9 +610,11 @@ impl UnifiedLoggerRead {
 
     fn read_section_header(&mut self) -> CuResult<SectionHeader> {
         let section_header: SectionHeader;
-        (section_header, _) =
-            decode_from_slice(&self.mmap_buffer[self.reading_position..], standard())
-                .expect("Failed to decode section header");
+        (section_header, _) = decode_from_slice(
+            &self.current_mmap_buffer[self.current_reading_position..],
+            standard(),
+        )
+        .expect("Failed to decode section header");
         if section_header.magic != SECTION_MAGIC {
             return Err("Invalid magic number in section header".into());
         }
@@ -662,12 +682,12 @@ mod tests {
     use std::io::BufReader;
     use std::path::PathBuf;
     use tempfile::TempDir;
-    fn make_a_logger(tmp_dir: &TempDir) -> (Arc<Mutex<UnifiedLoggerWrite>>, PathBuf, PathBuf) {
+    fn make_a_logger(tmp_dir: &TempDir) -> (Arc<Mutex<UnifiedLoggerWrite>>, PathBuf) {
         let file_path = tmp_dir.path().join("test.bin");
         let UnifiedLogger::Write(data_logger) = UnifiedLoggerBuilder::new()
             .write(true)
             .create(true)
-            .file_path(&file_path)
+            .file_base_name(&file_path)
             .preallocated_size(100000)
             .build()
             .expect("Failed to create logger")
@@ -675,11 +695,7 @@ mod tests {
             panic!("Failed to create logger")
         };
 
-        (
-            Arc::new(Mutex::new(data_logger)),
-            file_path,
-            tmp_dir.path().join("test_0.bin"),
-        )
+        (Arc::new(Mutex::new(data_logger)), file_path)
     }
 
     #[test]
@@ -690,7 +706,7 @@ mod tests {
             let UnifiedLogger::Write(mut logger) = UnifiedLoggerBuilder::new()
                 .write(true)
                 .create(true)
-                .file_path(&file_path)
+                .file_base_name(&file_path)
                 .preallocated_size(100000)
                 .build()
                 .expect("Failed to create logger")
@@ -721,7 +737,7 @@ mod tests {
     #[test]
     fn test_one_section_self_cleaning() {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let (logger, _, _) = make_a_logger(&tmp_dir);
+        let (logger, _) = make_a_logger(&tmp_dir);
         {
             let _stream =
                 stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
@@ -744,7 +760,7 @@ mod tests {
     #[test]
     fn test_two_sections_self_cleaning_in_order() {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let (logger, _, _) = make_a_logger(&tmp_dir);
+        let (logger, _) = make_a_logger(&tmp_dir);
         let s1 = stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
         assert_eq!(
             logger.lock().unwrap().front_slab.sections_in_flight.len(),
@@ -772,7 +788,7 @@ mod tests {
     #[test]
     fn test_two_sections_self_cleaning_out_of_order() {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let (logger, _, _) = make_a_logger(&tmp_dir);
+        let (logger, _) = make_a_logger(&tmp_dir);
         let s1 = stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
         assert_eq!(
             logger.lock().unwrap().front_slab.sections_in_flight.len(),
@@ -800,7 +816,7 @@ mod tests {
     #[test]
     fn test_write_then_read_one_section() {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let (logger, f, rb) = make_a_logger(&tmp_dir);
+        let (logger, f) = make_a_logger(&tmp_dir);
         {
             let mut stream = stream_write(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
             stream.log(&1u32).unwrap();
@@ -809,7 +825,7 @@ mod tests {
         }
         drop(logger);
         let UnifiedLogger::Read(mut dl) = UnifiedLoggerBuilder::new()
-            .file_path(&rb)
+            .file_base_name(&f)
             .build()
             .expect("Failed to build logger")
         else {
@@ -848,7 +864,7 @@ mod tests {
     #[test]
     fn test_copperlist_list_like_logging() {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
-        let (logger, f, rb) = make_a_logger(&tmp_dir);
+        let (logger, f) = make_a_logger(&tmp_dir);
         {
             let mut stream = stream_write(logger.clone(), UnifiedLogType::CopperList, 1024);
             let cl0 = CopperList {
@@ -865,7 +881,7 @@ mod tests {
         drop(logger);
 
         let UnifiedLogger::Read(mut dl) = UnifiedLoggerBuilder::new()
-            .file_path(&rb)
+            .file_base_name(&f)
             .build()
             .expect("Failed to build logger")
         else {

@@ -33,7 +33,9 @@ impl Display for ExportFormat {
 #[derive(Parser)]
 #[command(author, version, about)]
 pub struct LogReaderCli {
-    pub unifiedlog: PathBuf,
+    /// The base path is the name with no _0 _1 et the end.
+    /// for example for toto_0.copper, toto_1.copper ... the base name is toto.copper
+    pub unifiedlog_base: PathBuf,
 
     #[command(subcommand)]
     pub command: Command,
@@ -57,10 +59,10 @@ where
     P: CopperListPayload,
 {
     let args = LogReaderCli::parse();
-    let unifiedlog = args.unifiedlog;
+    let unifiedlog_base = args.unifiedlog_base;
 
     let UnifiedLogger::Read(dl) = UnifiedLoggerBuilder::new()
-        .file_path(&unifiedlog)
+        .file_base_name(&unifiedlog_base)
         .build()
         .expect("Failed to create logger")
     else {
@@ -232,7 +234,7 @@ mod python {
             .map_err(|e| PyIOError::new_err(e.to_string()))?;
 
         let UnifiedLogger::Read(dl) = UnifiedLoggerBuilder::new()
-            .file_path(&Path::new(unified_src_path))
+            .file_base_name(&Path::new(unified_src_path))
             .build()
             .expect("Failed to create logger")
         else {
@@ -385,7 +387,7 @@ mod tests {
             let UnifiedLogger::Write(logger) = UnifiedLoggerBuilder::new()
                 .write(true)
                 .create(true)
-                .file_path(&path)
+                .file_base_name(&path)
                 .preallocated_size(100000)
                 .build()
                 .expect("Failed to create logger")
@@ -408,9 +410,9 @@ mod tests {
         }
         // Read back the log
         let UnifiedLogger::Read(logger) = UnifiedLoggerBuilder::new()
-            .file_path(
+            .file_base_name(
                 &dir.path()
-                    .join("end_to_end_datalogger_and_structlog_test_0.copper"),
+                    .join("end_to_end_datalogger_and_structlog_test.copper"),
             )
             .build()
             .expect("Failed to create logger")
