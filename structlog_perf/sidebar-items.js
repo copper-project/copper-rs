@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["LOG_FILE"],"fn":["main"]};
