@@ -4,7 +4,6 @@ use memmap2::{Mmap, MmapMut};
 use std::fmt::{Debug, Formatter};
 use std::fs::{File, OpenOptions};
 use std::io::Read;
-use std::os::fd::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::slice::from_raw_parts_mut;
 use std::sync::{Arc, Mutex};
@@ -738,7 +737,7 @@ mod tests {
     use tempfile::TempDir;
 
     const LARGE_SLAB: usize = 100 * 1024; // 100KB
-    const SMALL_SLAB: usize = 10 * 1024; // 10KB
+    const SMALL_SLAB: usize = 16 * 2 * 1024; // 16KB is the page size on MacOS for example
 
     fn make_a_logger(
         tmp_dir: &TempDir,
@@ -1012,7 +1011,8 @@ mod tests {
                 state: CopperListStateMock::Free,
                 payload: (1u32, 2u32, 3u32),
             };
-            for _ in 0..1000 {
+            // large enough so we are sure to create a few slabs
+            for _ in 0..10000 {
                 stream.log(&cl0).unwrap();
             }
         }
@@ -1048,6 +1048,6 @@ mod tests {
                 }
             }
         }
-        assert_eq!(total_readback, 1000);
+        assert_eq!(total_readback, 10000);
     }
 }
