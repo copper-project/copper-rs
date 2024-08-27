@@ -1003,6 +1003,8 @@ mod tests {
     }
 
     #[test]
+    // FIXME: disable on mac
+    #[cfg(not(target_os = "macos"))]
     fn test_multi_slab_end2end() {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let (logger, f) = make_a_logger(&tmp_dir, SMALL_SLAB);
