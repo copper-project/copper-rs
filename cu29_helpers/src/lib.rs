@@ -17,22 +17,25 @@ pub struct CopperContext {
 /// This is a basic setup for a copper application to get you started.
 /// Duplicate and customize as needed when your needs grow.
 ///
+/// unifiedlogger_output_base_name: The base name of the log file. The logger will create a set of files based on this name
+///                                  for example if named "toto.copper" it will create toto_0.copper, toto_1.copper etc.
+///
 /// text_log: if true, the log will be printed to the console as a simple log.
 /// It is useful to debug an application in real-time but should be set to false in production
 /// as it is an order of magnitude slower than the default copper structured logging.
 /// It will create a LoggerRuntime that can be used as a robot clock source too.
 ///
-/// preallocated_storage_size: The size of the preallocated storage for the unified logger.
+/// slab_size: The logger will pre-allocate large files of those sizes. With the name of the given file _0, _1 etc.
 pub fn basic_copper_setup(
-    unifiedlogger_output_path: &Path,
-    preallocated_storage_size: Option<usize>,
+    unifiedlogger_output_base_name: &Path,
+    slab_size: Option<usize>,
     text_log: bool,
 ) -> CuResult<CopperContext> {
-    let preallocated_size = preallocated_storage_size.unwrap_or(1024 * 1024 * 10);
+    let preallocated_size = slab_size.unwrap_or(1024 * 1024 * 10);
     let UnifiedLogger::Write(logger) = UnifiedLoggerBuilder::new()
         .write(true)
         .create(true)
-        .file_path(unifiedlogger_output_path)
+        .file_base_name(unifiedlogger_output_base_name)
         .preallocated_size(preallocated_size)
         .build()
         .expect("Failed to create logger")
