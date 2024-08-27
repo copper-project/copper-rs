@@ -257,6 +257,10 @@ impl SlabEntry {
 
     /// Unsure the underlying mmap is flush to disk until the given position.
     fn flush_until(&mut self, until_position: usize) {
+        // This is tolerated under linux, but crashes on macos
+        if (self.flushed_until_offset == until_position) || (until_position == 0) {
+            return;
+        }
         self.mmap_buffer
             .flush_async_range(
                 self.flushed_until_offset,
