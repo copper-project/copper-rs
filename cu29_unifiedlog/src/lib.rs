@@ -4,6 +4,7 @@ use memmap2::{Mmap, MmapMut};
 use std::fmt::{Debug, Formatter};
 use std::fs::{File, OpenOptions};
 use std::io::Read;
+use std::os::fd::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::slice::from_raw_parts_mut;
 use std::sync::{Arc, Mutex};
@@ -100,8 +101,10 @@ impl<E: Encode> WriteStream<E> for MmapStream {
             Err(e) => match e {
                 EncodeError::UnexpectedEnd => {
                     let mut logger_guard = self.parent_logger.lock().unwrap();
+                    logger_guard.flush_section(&mut self.current_section);
                     self.current_section =
                         logger_guard.add_section(self.entry_type, self.minimum_allocation_amount);
+
                     let result = encode_into_slice(
                         obj,
                         self.current_section.get_user_buffer(),
@@ -128,7 +131,7 @@ impl<E: Encode> WriteStream<E> for MmapStream {
 impl Drop for MmapStream {
     fn drop(&mut self) {
         let mut logger_guard = self.parent_logger.lock().unwrap();
-        logger_guard.unlock_section(&mut self.current_section);
+        logger_guard.flush_section(&mut self.current_section);
         mem::take(&mut self.current_section);
     }
 }
@@ -221,17 +224,16 @@ struct SlabEntry {
     file: File,
     mmap_buffer: MmapMut,
     current_global_position: usize,
-    sections_in_flight: Vec<usize>,
-    flushed_until: usize,
+    sections_offsets_in_flight: Vec<usize>,
+    flushed_until_offset: usize,
     page_size: usize,
 }
 
 impl Drop for SlabEntry {
     fn drop(&mut self) {
         self.close();
-        if !self.sections_in_flight.is_empty() {
-            self.sections_in_flight.clear(); // This is the best we can do.
-            eprintln!("Sections in flight in a slab while it is being dropped.");
+        if !self.sections_offsets_in_flight.is_empty() {
+            eprintln!("Error: Slab not full flushed.");
         }
     }
 }
@@ -248,30 +250,48 @@ impl SlabEntry {
             file,
             mmap_buffer,
             current_global_position: 0,
-            sections_in_flight: Vec::with_capacity(16),
-            flushed_until: 0,
+            sections_offsets_in_flight: Vec::with_capacity(16),
+            flushed_until_offset: 0,
             page_size,
         }
     }
 
-    fn flush_until(&mut self, position: usize) {
+    /// Unsure the underlying mmap is flush to disk until the given position.
+    fn flush_until(&mut self, until_position: usize) {
         self.mmap_buffer
-            .flush_async_range(self.flushed_until, position)
+            .flush_async_range(
+                self.flushed_until_offset,
+                until_position - self.flushed_until_offset,
+            )
             .expect("Failed to flush memory map");
-        self.flushed_until = position;
+        self.flushed_until_offset = until_position;
     }
 
-    fn unlock_section(&mut self, section: &mut SectionHandle) {
-        let base = self.mmap_buffer.as_mut_ptr() as usize;
-        let section_buffer_addr = section.buffer.as_mut_ptr() as usize;
-        self.sections_in_flight
+    fn is_it_my_section(&self, section: &SectionHandle) -> bool {
+        (section.buffer.as_ptr() >= self.mmap_buffer.as_ptr())
+            && (section.buffer.as_ptr() as usize)
+                < (self.mmap_buffer.as_ptr() as usize + self.mmap_buffer.len())
+    }
+
+    fn flush_section(&mut self, section: &SectionHandle) {
+        if section.buffer.as_ptr() < self.mmap_buffer.as_ptr()
+            || section.buffer.as_ptr() as usize
+                > self.mmap_buffer.as_ptr() as usize + self.mmap_buffer.len()
+        {
+            panic!("Invalid section buffer, not in the slab");
+        }
+
+        let base = self.mmap_buffer.as_ptr() as usize;
+        let section_buffer_addr = section.buffer.as_ptr() as usize;
+        self.sections_offsets_in_flight
             .retain(|&x| x != section_buffer_addr - base);
-        if self.sections_in_flight.is_empty() {
+
+        if self.sections_offsets_in_flight.is_empty() {
             self.flush_until(self.current_global_position);
             return;
         }
-        if self.flushed_until < self.sections_in_flight[0] {
-            self.flush_until(self.sections_in_flight[0]);
+        if self.flushed_until_offset < self.sections_offsets_in_flight[0] {
+            self.flush_until(self.sections_offsets_in_flight[0]);
         }
     }
 
@@ -311,7 +331,8 @@ impl SlabEntry {
         assert!(nb_bytes < self.page_size);
 
         // save the position to keep track for in flight sections
-        self.sections_in_flight.push(self.current_global_position);
+        self.sections_offsets_in_flight
+            .push(self.current_global_position);
         let end_of_section = self.current_global_position + requested_section_size;
         let user_buffer = &mut self.mmap_buffer[self.current_global_position..end_of_section];
 
@@ -320,9 +341,6 @@ impl SlabEntry {
             unsafe { from_raw_parts_mut(user_buffer.as_mut_ptr(), user_buffer.len()) };
 
         self.current_global_position = end_of_section;
-
-        // TODO: This is for the alpha period. remove.
-        println!("Slab Used {}", self.current_global_position);
 
         AllocatedSection::Section(SectionHandle::create(section_header, handle_buffer))
     }
@@ -405,7 +423,7 @@ pub struct UnifiedLoggerWrite {
     /// the front slab is the current active slab for any new section.
     front_slab: SlabEntry,
     /// the back slab is the previous slab that is being flushed.
-    back_slab: Option<SlabEntry>,
+    back_slabs: Vec<SlabEntry>,
     /// base file path to create the backing files from.
     base_file_path: PathBuf,
     /// allocation size for the backing files.
@@ -426,10 +444,6 @@ fn build_slab_path(base_file_path: &PathBuf, slab_index: usize) -> PathBuf {
 }
 
 fn make_slab_file(base_file_path: &PathBuf, slab_size: usize, slab_suffix: usize) -> File {
-    eprintln!(
-        "Creating a new slab file with size: {} suffix: {}",
-        slab_size, slab_suffix
-    );
     let file_path = build_slab_path(base_file_path, slab_suffix);
     let file = OpenOptions::new()
         .read(true)
@@ -466,15 +480,32 @@ impl UnifiedLoggerWrite {
 
         Self {
             front_slab,
-            back_slab: None,
+            back_slabs: Vec::new(),
             base_file_path: base_file_path.clone(),
             slab_size,
             front_slab_suffix: 0,
         }
     }
 
-    fn unlock_section(&mut self, section: &mut SectionHandle) {
-        self.front_slab.unlock_section(section);
+    pub fn flush_section(&mut self, section: &mut SectionHandle) {
+        for slab in self.back_slabs.iter_mut() {
+            if slab.is_it_my_section(section) {
+                slab.flush_section(section);
+                return;
+            }
+        }
+        self.front_slab.flush_section(section);
+    }
+
+    fn garbage_collect_backslabs(&mut self) {
+        self.back_slabs.retain_mut(|slab| {
+            if slab.sections_offsets_in_flight.is_empty() {
+                slab.close();
+                false
+            } else {
+                true
+            }
+        });
     }
 
     /// The returned slice is section_size or greater.
@@ -483,6 +514,8 @@ impl UnifiedLoggerWrite {
         entry_type: UnifiedLogType,
         requested_section_size: usize,
     ) -> SectionHandle {
+        self.garbage_collect_backslabs(); // Take the opportunity to keep up and close stale back slabs.
+
         let maybe_section = self
             .front_slab
             .add_section(entry_type, requested_section_size);
@@ -491,7 +524,9 @@ impl UnifiedLoggerWrite {
             AllocatedSection::NoMoreSpace => {
                 // move the front slab to the back slab.
                 let new_slab = SlabEntry::new(self.next_slab(), self.front_slab.page_size);
-                self.back_slab = Some(mem::replace(&mut self.front_slab, new_slab));
+                // keep the slab until all its sections has been flushed.
+                self.back_slabs
+                    .push(mem::replace(&mut self.front_slab, new_slab));
                 match self
                     .front_slab
                     .add_section(entry_type, requested_section_size)
@@ -510,7 +545,9 @@ impl UnifiedLoggerWrite {
 impl Drop for UnifiedLoggerWrite {
     fn drop(&mut self) {
         let section = self.add_section(UnifiedLogType::LastEntry, 80); // TODO: determine that exactly
+        self.front_slab.flush_section(&section);
         drop(section);
+        self.garbage_collect_backslabs();
         self.front_slab.close();
     }
 }
@@ -567,6 +604,12 @@ impl UnifiedLoggerRead {
     ) -> CuResult<Option<Vec<u8>>> {
         // TODO: eventually implement a 0 copy of this too.
         loop {
+            if self.current_reading_position >= self.current_mmap_buffer.len() {
+                self.next_slab().map_err(|e| {
+                    CuError::new_with_cause("Failed to read next slab, is the log complete?", e)
+                })?;
+            }
+
             let header_result = self.read_section_header();
             if let Err(error) = header_result {
                 return Err(CuError::new_with_cause(
@@ -590,12 +633,6 @@ impl UnifiedLoggerRead {
 
             // Keep reading until we find the requested type
             self.current_reading_position += header.section_size as usize;
-
-            if self.current_reading_position >= self.current_mmap_buffer.len() {
-                self.next_slab().map_err(|e| {
-                    CuError::new_with_cause("Failed to read next slab, is the log complete?", e)
-                })?;
-            }
         }
     }
 
@@ -767,17 +804,27 @@ mod tests {
             let _stream =
                 stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
             assert_eq!(
-                logger.lock().unwrap().front_slab.sections_in_flight.len(),
+                logger
+                    .lock()
+                    .unwrap()
+                    .front_slab
+                    .sections_offsets_in_flight
+                    .len(),
                 1
             );
         }
         assert_eq!(
-            logger.lock().unwrap().front_slab.sections_in_flight.len(),
+            logger
+                .lock()
+                .unwrap()
+                .front_slab
+                .sections_offsets_in_flight
+                .len(),
             0
         );
         let logger = logger.lock().unwrap();
         assert_eq!(
-            logger.front_slab.flushed_until,
+            logger.front_slab.flushed_until_offset,
             logger.front_slab.current_global_position
         );
     }
@@ -788,24 +835,39 @@ mod tests {
         let (logger, _) = make_a_logger(&tmp_dir, LARGE_SLAB);
         let s1 = stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
         assert_eq!(
-            logger.lock().unwrap().front_slab.sections_in_flight.len(),
+            logger
+                .lock()
+                .unwrap()
+                .front_slab
+                .sections_offsets_in_flight
+                .len(),
             1
         );
         let s2 = stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
         assert_eq!(
-            logger.lock().unwrap().front_slab.sections_in_flight.len(),
+            logger
+                .lock()
+                .unwrap()
+                .front_slab
+                .sections_offsets_in_flight
+                .len(),
             2
         );
         drop(s2);
         assert_eq!(
-            logger.lock().unwrap().front_slab.sections_in_flight.len(),
+            logger
+                .lock()
+                .unwrap()
+                .front_slab
+                .sections_offsets_in_flight
+                .len(),
             1
         );
         drop(s1);
         let lg = logger.lock().unwrap();
-        assert_eq!(lg.front_slab.sections_in_flight.len(), 0);
+        assert_eq!(lg.front_slab.sections_offsets_in_flight.len(), 0);
         assert_eq!(
-            lg.front_slab.flushed_until,
+            lg.front_slab.flushed_until_offset,
             lg.front_slab.current_global_position
         );
     }
@@ -816,24 +878,39 @@ mod tests {
         let (logger, _) = make_a_logger(&tmp_dir, LARGE_SLAB);
         let s1 = stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
         assert_eq!(
-            logger.lock().unwrap().front_slab.sections_in_flight.len(),
+            logger
+                .lock()
+                .unwrap()
+                .front_slab
+                .sections_offsets_in_flight
+                .len(),
             1
         );
         let s2 = stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
         assert_eq!(
-            logger.lock().unwrap().front_slab.sections_in_flight.len(),
+            logger
+                .lock()
+                .unwrap()
+                .front_slab
+                .sections_offsets_in_flight
+                .len(),
             2
         );
         drop(s1);
         assert_eq!(
-            logger.lock().unwrap().front_slab.sections_in_flight.len(),
+            logger
+                .lock()
+                .unwrap()
+                .front_slab
+                .sections_offsets_in_flight
+                .len(),
             1
         );
         drop(s2);
         let lg = logger.lock().unwrap();
-        assert_eq!(lg.front_slab.sections_in_flight.len(), 0);
+        assert_eq!(lg.front_slab.sections_offsets_in_flight.len(), 0);
         assert_eq!(
-            lg.front_slab.flushed_until,
+            lg.front_slab.flushed_until_offset,
             lg.front_slab.current_global_position
         );
     }
