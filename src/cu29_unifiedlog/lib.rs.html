@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cu29_unifiedlog/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-492a78a4a87dcc01.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_unifiedlog" data-themes="" data-resource-suffix="" data-rustdoc-version="1.82.0-nightly (c6db1ca3c 2024-08-25)" data-channel="nightly" data-search-js="search-acd2e111c9cb27e3.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../../static.files/src-script-e66d777a5a92e9b2.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-cb0df477c2d67d00.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-3b12f09e550e0385.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cu29_unifiedlog/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-492a78a4a87dcc01.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_unifiedlog" data-themes="" data-resource-suffix="" data-rustdoc-version="1.82.0-nightly (515395af0 2024-08-26)" data-channel="nightly" data-search-js="search-acd2e111c9cb27e3.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../../static.files/src-script-e66d777a5a92e9b2.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-cb0df477c2d67d00.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-3b12f09e550e0385.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
 <a href="#4" id="4">4</a>
@@ -884,6 +884,177 @@
 <a href="#884" id="884">884</a>
 <a href="#885" id="885">885</a>
 <a href="#886" id="886">886</a>
+<a href="#887" id="887">887</a>
+<a href="#888" id="888">888</a>
+<a href="#889" id="889">889</a>
+<a href="#890" id="890">890</a>
+<a href="#891" id="891">891</a>
+<a href="#892" id="892">892</a>
+<a href="#893" id="893">893</a>
+<a href="#894" id="894">894</a>
+<a href="#895" id="895">895</a>
+<a href="#896" id="896">896</a>
+<a href="#897" id="897">897</a>
+<a href="#898" id="898">898</a>
+<a href="#899" id="899">899</a>
+<a href="#900" id="900">900</a>
+<a href="#901" id="901">901</a>
+<a href="#902" id="902">902</a>
+<a href="#903" id="903">903</a>
+<a href="#904" id="904">904</a>
+<a href="#905" id="905">905</a>
+<a href="#906" id="906">906</a>
+<a href="#907" id="907">907</a>
+<a href="#908" id="908">908</a>
+<a href="#909" id="909">909</a>
+<a href="#910" id="910">910</a>
+<a href="#911" id="911">911</a>
+<a href="#912" id="912">912</a>
+<a href="#913" id="913">913</a>
+<a href="#914" id="914">914</a>
+<a href="#915" id="915">915</a>
+<a href="#916" id="916">916</a>
+<a href="#917" id="917">917</a>
+<a href="#918" id="918">918</a>
+<a href="#919" id="919">919</a>
+<a href="#920" id="920">920</a>
+<a href="#921" id="921">921</a>
+<a href="#922" id="922">922</a>
+<a href="#923" id="923">923</a>
+<a href="#924" id="924">924</a>
+<a href="#925" id="925">925</a>
+<a href="#926" id="926">926</a>
+<a href="#927" id="927">927</a>
+<a href="#928" id="928">928</a>
+<a href="#929" id="929">929</a>
+<a href="#930" id="930">930</a>
+<a href="#931" id="931">931</a>
+<a href="#932" id="932">932</a>
+<a href="#933" id="933">933</a>
+<a href="#934" id="934">934</a>
+<a href="#935" id="935">935</a>
+<a href="#936" id="936">936</a>
+<a href="#937" id="937">937</a>
+<a href="#938" id="938">938</a>
+<a href="#939" id="939">939</a>
+<a href="#940" id="940">940</a>
+<a href="#941" id="941">941</a>
+<a href="#942" id="942">942</a>
+<a href="#943" id="943">943</a>
+<a href="#944" id="944">944</a>
+<a href="#945" id="945">945</a>
+<a href="#946" id="946">946</a>
+<a href="#947" id="947">947</a>
+<a href="#948" id="948">948</a>
+<a href="#949" id="949">949</a>
+<a href="#950" id="950">950</a>
+<a href="#951" id="951">951</a>
+<a href="#952" id="952">952</a>
+<a href="#953" id="953">953</a>
+<a href="#954" id="954">954</a>
+<a href="#955" id="955">955</a>
+<a href="#956" id="956">956</a>
+<a href="#957" id="957">957</a>
+<a href="#958" id="958">958</a>
+<a href="#959" id="959">959</a>
+<a href="#960" id="960">960</a>
+<a href="#961" id="961">961</a>
+<a href="#962" id="962">962</a>
+<a href="#963" id="963">963</a>
+<a href="#964" id="964">964</a>
+<a href="#965" id="965">965</a>
+<a href="#966" id="966">966</a>
+<a href="#967" id="967">967</a>
+<a href="#968" id="968">968</a>
+<a href="#969" id="969">969</a>
+<a href="#970" id="970">970</a>
+<a href="#971" id="971">971</a>
+<a href="#972" id="972">972</a>
+<a href="#973" id="973">973</a>
+<a href="#974" id="974">974</a>
+<a href="#975" id="975">975</a>
+<a href="#976" id="976">976</a>
+<a href="#977" id="977">977</a>
+<a href="#978" id="978">978</a>
+<a href="#979" id="979">979</a>
+<a href="#980" id="980">980</a>
+<a href="#981" id="981">981</a>
+<a href="#982" id="982">982</a>
+<a href="#983" id="983">983</a>
+<a href="#984" id="984">984</a>
+<a href="#985" id="985">985</a>
+<a href="#986" id="986">986</a>
+<a href="#987" id="987">987</a>
+<a href="#988" id="988">988</a>
+<a href="#989" id="989">989</a>
+<a href="#990" id="990">990</a>
+<a href="#991" id="991">991</a>
+<a href="#992" id="992">992</a>
+<a href="#993" id="993">993</a>
+<a href="#994" id="994">994</a>
+<a href="#995" id="995">995</a>
+<a href="#996" id="996">996</a>
+<a href="#997" id="997">997</a>
+<a href="#998" id="998">998</a>
+<a href="#999" id="999">999</a>
+<a href="#1000" id="1000">1000</a>
+<a href="#1001" id="1001">1001</a>
+<a href="#1002" id="1002">1002</a>
+<a href="#1003" id="1003">1003</a>
+<a href="#1004" id="1004">1004</a>
+<a href="#1005" id="1005">1005</a>
+<a href="#1006" id="1006">1006</a>
+<a href="#1007" id="1007">1007</a>
+<a href="#1008" id="1008">1008</a>
+<a href="#1009" id="1009">1009</a>
+<a href="#1010" id="1010">1010</a>
+<a href="#1011" id="1011">1011</a>
+<a href="#1012" id="1012">1012</a>
+<a href="#1013" id="1013">1013</a>
+<a href="#1014" id="1014">1014</a>
+<a href="#1015" id="1015">1015</a>
+<a href="#1016" id="1016">1016</a>
+<a href="#1017" id="1017">1017</a>
+<a href="#1018" id="1018">1018</a>
+<a href="#1019" id="1019">1019</a>
+<a href="#1020" id="1020">1020</a>
+<a href="#1021" id="1021">1021</a>
+<a href="#1022" id="1022">1022</a>
+<a href="#1023" id="1023">1023</a>
+<a href="#1024" id="1024">1024</a>
+<a href="#1025" id="1025">1025</a>
+<a href="#1026" id="1026">1026</a>
+<a href="#1027" id="1027">1027</a>
+<a href="#1028" id="1028">1028</a>
+<a href="#1029" id="1029">1029</a>
+<a href="#1030" id="1030">1030</a>
+<a href="#1031" id="1031">1031</a>
+<a href="#1032" id="1032">1032</a>
+<a href="#1033" id="1033">1033</a>
+<a href="#1034" id="1034">1034</a>
+<a href="#1035" id="1035">1035</a>
+<a href="#1036" id="1036">1036</a>
+<a href="#1037" id="1037">1037</a>
+<a href="#1038" id="1038">1038</a>
+<a href="#1039" id="1039">1039</a>
+<a href="#1040" id="1040">1040</a>
+<a href="#1041" id="1041">1041</a>
+<a href="#1042" id="1042">1042</a>
+<a href="#1043" id="1043">1043</a>
+<a href="#1044" id="1044">1044</a>
+<a href="#1045" id="1045">1045</a>
+<a href="#1046" id="1046">1046</a>
+<a href="#1047" id="1047">1047</a>
+<a href="#1048" id="1048">1048</a>
+<a href="#1049" id="1049">1049</a>
+<a href="#1050" id="1050">1050</a>
+<a href="#1051" id="1051">1051</a>
+<a href="#1052" id="1052">1052</a>
+<a href="#1053" id="1053">1053</a>
+<a href="#1054" id="1054">1054</a>
+<a href="#1055" id="1055">1055</a>
+<a href="#1056" id="1056">1056</a>
+<a href="#1057" id="1057">1057</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>libc;
 
 <span class="kw">use </span>memmap2::{Mmap, MmapMut};
@@ -986,8 +1157,10 @@
             <span class="prelude-val">Err</span>(e) =&gt; <span class="kw">match </span>e {
                 EncodeError::UnexpectedEnd =&gt; {
                     <span class="kw">let </span><span class="kw-2">mut </span>logger_guard = <span class="self">self</span>.parent_logger.lock().unwrap();
+                    logger_guard.flush_section(<span class="kw-2">&amp;mut </span><span class="self">self</span>.current_section);
                     <span class="self">self</span>.current_section =
                         logger_guard.add_section(<span class="self">self</span>.entry_type, <span class="self">self</span>.minimum_allocation_amount);
+
                     <span class="kw">let </span>result = encode_into_slice(
                         obj,
                         <span class="self">self</span>.current_section.get_user_buffer(),
@@ -1014,7 +1187,7 @@
 <span class="kw">impl </span>Drop <span class="kw">for </span>MmapStream {
     <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
         <span class="kw">let </span><span class="kw-2">mut </span>logger_guard = <span class="self">self</span>.parent_logger.lock().unwrap();
-        logger_guard.unlock_section(<span class="kw-2">&amp;mut </span><span class="self">self</span>.current_section);
+        logger_guard.flush_section(<span class="kw-2">&amp;mut </span><span class="self">self</span>.current_section);
         mem::take(<span class="kw-2">&amp;mut </span><span class="self">self</span>.current_section);
     }
 }
@@ -1036,7 +1209,7 @@
 
 <span class="doccomment">/// Use this builder to create a new DataLogger.
 </span><span class="kw">pub struct </span>UnifiedLoggerBuilder {
-    file_path: <span class="prelude-ty">Option</span>&lt;PathBuf&gt;,
+    file_base_name: <span class="prelude-ty">Option</span>&lt;PathBuf&gt;,
     preallocated_size: <span class="prelude-ty">Option</span>&lt;usize&gt;,
     write: bool,
     create: bool,
@@ -1045,15 +1218,16 @@
 <span class="kw">impl </span>UnifiedLoggerBuilder {
     <span class="kw">pub fn </span>new() -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{
-            file_path: <span class="prelude-val">None</span>,
+            file_base_name: <span class="prelude-val">None</span>,
             preallocated_size: <span class="prelude-val">None</span>,
             write: <span class="bool-val">false</span>,
             create: <span class="bool-val">false</span>, <span class="comment">// This is the safest default
         </span>}
     }
 
-    <span class="kw">pub fn </span>file_path(<span class="kw-2">mut </span><span class="self">self</span>, file_path: <span class="kw-2">&amp;</span>Path) -&gt; <span class="self">Self </span>{
-        <span class="self">self</span>.file_path = <span class="prelude-val">Some</span>(file_path.to_path_buf());
+    <span class="doccomment">/// If "something/toto.copper" is given, it will find or create "something/toto_0.copper",  "something/toto_1.copper" etc.
+    </span><span class="kw">pub fn </span>file_base_name(<span class="kw-2">mut </span><span class="self">self</span>, file_path: <span class="kw-2">&amp;</span>Path) -&gt; <span class="self">Self </span>{
+        <span class="self">self</span>.file_base_name = <span class="prelude-val">Some</span>(file_path.to_path_buf());
         <span class="self">self
     </span>}
 
@@ -1077,65 +1251,45 @@
 
         <span class="kw">if </span><span class="self">self</span>.write &amp;&amp; <span class="self">self</span>.create {
             <span class="kw">let </span>ulw = UnifiedLoggerWrite::new(
-                <span class="kw-2">&amp;</span><span class="self">self</span>.file_path.unwrap(),
+                <span class="kw-2">&amp;</span><span class="self">self</span>.file_base_name.unwrap(),
                 <span class="self">self</span>.preallocated_size.unwrap(),
                 page_size,
             );
 
             <span class="prelude-val">Ok</span>(UnifiedLogger::Write(ulw))
         } <span class="kw">else </span>{
-            <span class="kw">let </span>file_path = <span class="self">self</span>.file_path.ok_or_else(|| {
+            <span class="kw">let </span>file_path = <span class="self">self</span>.file_base_name.ok_or_else(|| {
                 io::Error::new(io::ErrorKind::InvalidInput, <span class="string">"File path is required"</span>)
             })<span class="question-mark">?</span>;
-            <span class="kw">let </span><span class="kw-2">mut </span>options = OpenOptions::new();
-            <span class="kw">let </span>options = options.read(<span class="bool-val">true</span>);
-            <span class="kw">let </span>file = options.open(file_path)<span class="question-mark">?</span>;
-            <span class="kw">let </span>mmap = <span class="kw">unsafe </span>{ Mmap::map(<span class="kw-2">&amp;</span>file) }<span class="question-mark">?</span>;
-            <span class="kw">let </span>main_header: MainHeader;
-            <span class="kw">let </span>_read: usize;
-            (main_header, _read) =
-                decode_from_slice(<span class="kw-2">&amp;</span>mmap[..], standard()).expect(<span class="string">"Failed to decode main header"</span>);
-            <span class="kw">if </span>main_header.magic != MAIN_MAGIC {
-                <span class="kw">return </span><span class="prelude-val">Err</span>(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    <span class="string">"Invalid magic number in main header"</span>,
-                ));
-            }
-            <span class="prelude-val">Ok</span>(UnifiedLogger::Read(UnifiedLoggerRead {
-                file,
-                mmap_buffer: mmap,
-                reading_position: main_header.first_section_offset <span class="kw">as </span>usize,
-                page_size: main_header.page_size <span class="kw">as </span>usize,
-            }))
+            <span class="kw">let </span>ulr = UnifiedLoggerRead::new(<span class="kw-2">&amp;</span>file_path)<span class="question-mark">?</span>;
+            <span class="prelude-val">Ok</span>(UnifiedLogger::Read(ulr))
         }
     }
 }
 
 <span class="doccomment">/// A read side of the datalogger.
 </span><span class="kw">pub struct </span>UnifiedLoggerRead {
-    <span class="attr">#[allow(dead_code)]
-    </span>file: File,
-    mmap_buffer: Mmap,
-    reading_position: usize,
-    <span class="attr">#[allow(dead_code)]
-    </span>page_size: usize,
+    base_file_path: PathBuf,
+    current_mmap_buffer: Mmap,
+    current_file: File,
+    current_slab_index: usize,
+    current_reading_position: usize,
 }
 
 <span class="kw">struct </span>SlabEntry {
     file: File,
     mmap_buffer: MmapMut,
     current_global_position: usize,
-    sections_in_flight: Vec&lt;usize&gt;,
-    flushed_until: usize,
+    sections_offsets_in_flight: Vec&lt;usize&gt;,
+    flushed_until_offset: usize,
     page_size: usize,
 }
 
 <span class="kw">impl </span>Drop <span class="kw">for </span>SlabEntry {
     <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
         <span class="self">self</span>.close();
-        <span class="kw">if </span><span class="self">self</span>.sections_in_flight.len() &gt; <span class="number">0 </span>{
-            <span class="self">self</span>.sections_in_flight.clear(); <span class="comment">// This is the best we can do.
-            </span><span class="macro">eprintln!</span>(<span class="string">"Sections in flight in a slab while it is being dropped."</span>);
+        <span class="kw">if </span>!<span class="self">self</span>.sections_offsets_in_flight.is_empty() {
+            <span class="macro">eprintln!</span>(<span class="string">"Error: Slab not full flushed."</span>);
         }
     }
 }
@@ -1152,30 +1306,52 @@
             file,
             mmap_buffer,
             current_global_position: <span class="number">0</span>,
-            sections_in_flight: Vec::with_capacity(<span class="number">16</span>),
-            flushed_until: <span class="number">0</span>,
+            sections_offsets_in_flight: Vec::with_capacity(<span class="number">16</span>),
+            flushed_until_offset: <span class="number">0</span>,
             page_size,
         }
     }
 
-    <span class="kw">fn </span>flush_until(<span class="kw-2">&amp;mut </span><span class="self">self</span>, position: usize) {
+    <span class="doccomment">/// Unsure the underlying mmap is flush to disk until the given position.
+    </span><span class="kw">fn </span>flush_until(<span class="kw-2">&amp;mut </span><span class="self">self</span>, until_position: usize) {
+        <span class="comment">// This is tolerated under linux, but crashes on macos
+        </span><span class="kw">if </span>(<span class="self">self</span>.flushed_until_offset == until_position) || (until_position == <span class="number">0</span>) {
+            <span class="kw">return</span>;
+        }
         <span class="self">self</span>.mmap_buffer
-            .flush_async_range(<span class="self">self</span>.flushed_until, position)
+            .flush_async_range(
+                <span class="self">self</span>.flushed_until_offset,
+                until_position - <span class="self">self</span>.flushed_until_offset,
+            )
             .expect(<span class="string">"Failed to flush memory map"</span>);
-        <span class="self">self</span>.flushed_until = position;
+        <span class="self">self</span>.flushed_until_offset = until_position;
     }
 
-    <span class="kw">fn </span>unlock_section(<span class="kw-2">&amp;mut </span><span class="self">self</span>, section: <span class="kw-2">&amp;mut </span>SectionHandle) {
-        <span class="kw">let </span>base = <span class="self">self</span>.mmap_buffer.as_mut_ptr() <span class="kw">as </span>usize;
-        <span class="kw">let </span>section_buffer_addr = section.buffer.as_mut_ptr() <span class="kw">as </span>usize;
-        <span class="self">self</span>.sections_in_flight
+    <span class="kw">fn </span>is_it_my_section(<span class="kw-2">&amp;</span><span class="self">self</span>, section: <span class="kw-2">&amp;</span>SectionHandle) -&gt; bool {
+        (section.buffer.as_ptr() &gt;= <span class="self">self</span>.mmap_buffer.as_ptr())
+            &amp;&amp; (section.buffer.as_ptr() <span class="kw">as </span>usize)
+                &lt; (<span class="self">self</span>.mmap_buffer.as_ptr() <span class="kw">as </span>usize + <span class="self">self</span>.mmap_buffer.len())
+    }
+
+    <span class="kw">fn </span>flush_section(<span class="kw-2">&amp;mut </span><span class="self">self</span>, section: <span class="kw-2">&amp;</span>SectionHandle) {
+        <span class="kw">if </span>section.buffer.as_ptr() &lt; <span class="self">self</span>.mmap_buffer.as_ptr()
+            || section.buffer.as_ptr() <span class="kw">as </span>usize
+                &gt; <span class="self">self</span>.mmap_buffer.as_ptr() <span class="kw">as </span>usize + <span class="self">self</span>.mmap_buffer.len()
+        {
+            <span class="macro">panic!</span>(<span class="string">"Invalid section buffer, not in the slab"</span>);
+        }
+
+        <span class="kw">let </span>base = <span class="self">self</span>.mmap_buffer.as_ptr() <span class="kw">as </span>usize;
+        <span class="kw">let </span>section_buffer_addr = section.buffer.as_ptr() <span class="kw">as </span>usize;
+        <span class="self">self</span>.sections_offsets_in_flight
             .retain(|<span class="kw-2">&amp;</span>x| x != section_buffer_addr - base);
-        <span class="kw">if </span><span class="self">self</span>.sections_in_flight.is_empty() {
+
+        <span class="kw">if </span><span class="self">self</span>.sections_offsets_in_flight.is_empty() {
             <span class="self">self</span>.flush_until(<span class="self">self</span>.current_global_position);
             <span class="kw">return</span>;
         }
-        <span class="kw">if </span><span class="self">self</span>.flushed_until &lt; <span class="self">self</span>.sections_in_flight[<span class="number">0</span>] {
-            <span class="self">self</span>.flush_until(<span class="self">self</span>.sections_in_flight[<span class="number">0</span>]);
+        <span class="kw">if </span><span class="self">self</span>.flushed_until_offset &lt; <span class="self">self</span>.sections_offsets_in_flight[<span class="number">0</span>] {
+            <span class="self">self</span>.flush_until(<span class="self">self</span>.sections_offsets_in_flight[<span class="number">0</span>]);
         }
     }
 
@@ -1215,7 +1391,8 @@
         <span class="macro">assert!</span>(nb_bytes &lt; <span class="self">self</span>.page_size);
 
         <span class="comment">// save the position to keep track for in flight sections
-        </span><span class="self">self</span>.sections_in_flight.push(<span class="self">self</span>.current_global_position);
+        </span><span class="self">self</span>.sections_offsets_in_flight
+            .push(<span class="self">self</span>.current_global_position);
         <span class="kw">let </span>end_of_section = <span class="self">self</span>.current_global_position + requested_section_size;
         <span class="kw">let </span>user_buffer = <span class="kw-2">&amp;mut </span><span class="self">self</span>.mmap_buffer[<span class="self">self</span>.current_global_position..end_of_section];
 
@@ -1224,7 +1401,6 @@
             <span class="kw">unsafe </span>{ from_raw_parts_mut(user_buffer.as_mut_ptr(), user_buffer.len()) };
 
         <span class="self">self</span>.current_global_position = end_of_section;
-        <span class="macro">println!</span>(<span class="string">"Log Used {}MB"</span>, <span class="self">self</span>.current_global_position / <span class="number">1024 </span>/ <span class="number">1024</span>);
 
         AllocatedSection::Section(SectionHandle::create(section_header, handle_buffer))
     }
@@ -1307,7 +1483,7 @@
     <span class="doccomment">/// the front slab is the current active slab for any new section.
     </span>front_slab: SlabEntry,
     <span class="doccomment">/// the back slab is the previous slab that is being flushed.
-    </span>back_slab: <span class="prelude-ty">Option</span>&lt;SlabEntry&gt;,
+    </span>back_slabs: Vec&lt;SlabEntry&gt;,
     <span class="doccomment">/// base file path to create the backing files from.
     </span>base_file_path: PathBuf,
     <span class="doccomment">/// allocation size for the backing files.
@@ -1316,19 +1492,19 @@
     </span>front_slab_suffix: usize,
 }
 
-<span class="kw">fn </span>build_file_path(file_path: <span class="kw-2">&amp;</span>PathBuf, suffix: usize) -&gt; PathBuf {
-    <span class="kw">let </span><span class="kw-2">mut </span>file_path = file_path.clone();
+<span class="kw">fn </span>build_slab_path(base_file_path: <span class="kw-2">&amp;</span>PathBuf, slab_index: usize) -&gt; PathBuf {
+    <span class="kw">let </span><span class="kw-2">mut </span>file_path = base_file_path.clone();
     <span class="kw">let </span>file_name = file_path.file_name().unwrap().to_str().unwrap();
     <span class="kw">let </span><span class="kw-2">mut </span>file_name = file_name.split(<span class="string">'.'</span>).collect::&lt;Vec&lt;<span class="kw-2">&amp;</span>str&gt;&gt;();
     <span class="kw">let </span>extension = file_name.pop().unwrap();
     <span class="kw">let </span>file_name = file_name.join(<span class="string">"."</span>);
-    <span class="kw">let </span>file_name = <span class="macro">format!</span>(<span class="string">"{}_{}.{}"</span>, file_name, suffix, extension);
+    <span class="kw">let </span>file_name = <span class="macro">format!</span>(<span class="string">"{}_{}.{}"</span>, file_name, slab_index, extension);
     file_path.set_file_name(file_name);
     file_path
 }
 
 <span class="kw">fn </span>make_slab_file(base_file_path: <span class="kw-2">&amp;</span>PathBuf, slab_size: usize, slab_suffix: usize) -&gt; File {
-    <span class="kw">let </span>file_path = build_file_path(base_file_path, slab_suffix);
+    <span class="kw">let </span>file_path = build_slab_path(base_file_path, slab_suffix);
     <span class="kw">let </span>file = OpenOptions::new()
         .read(<span class="bool-val">true</span>)
         .write(<span class="bool-val">true</span>)
@@ -1341,9 +1517,9 @@
 }
 
 <span class="kw">impl </span>UnifiedLoggerWrite {
-    <span class="kw">fn </span>make_new_mmfile(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; File {
-        <span class="kw">let </span>file = make_slab_file(<span class="kw-2">&amp;</span><span class="self">self</span>.base_file_path, <span class="self">self</span>.slab_size, <span class="self">self</span>.front_slab_suffix);
+    <span class="kw">fn </span>next_slab(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; File {
         <span class="self">self</span>.front_slab_suffix += <span class="number">1</span>;
+        <span class="kw">let </span>file = make_slab_file(<span class="kw-2">&amp;</span><span class="self">self</span>.base_file_path, <span class="self">self</span>.slab_size, <span class="self">self</span>.front_slab_suffix);
         file
     }
 
@@ -1364,15 +1540,32 @@
 
         </span><span class="self">Self </span>{
             front_slab,
-            back_slab: <span class="prelude-val">None</span>,
+            back_slabs: Vec::new(),
             base_file_path: base_file_path.clone(),
             slab_size,
             front_slab_suffix: <span class="number">0</span>,
         }
     }
 
-    <span class="kw">fn </span>unlock_section(<span class="kw-2">&amp;mut </span><span class="self">self</span>, section: <span class="kw-2">&amp;mut </span>SectionHandle) {
-        <span class="self">self</span>.front_slab.unlock_section(section);
+    <span class="kw">pub fn </span>flush_section(<span class="kw-2">&amp;mut </span><span class="self">self</span>, section: <span class="kw-2">&amp;mut </span>SectionHandle) {
+        <span class="kw">for </span>slab <span class="kw">in </span><span class="self">self</span>.back_slabs.iter_mut() {
+            <span class="kw">if </span>slab.is_it_my_section(section) {
+                slab.flush_section(section);
+                <span class="kw">return</span>;
+            }
+        }
+        <span class="self">self</span>.front_slab.flush_section(section);
+    }
+
+    <span class="kw">fn </span>garbage_collect_backslabs(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+        <span class="self">self</span>.back_slabs.retain_mut(|slab| {
+            <span class="kw">if </span>slab.sections_offsets_in_flight.is_empty() {
+                slab.close();
+                <span class="bool-val">false
+            </span>} <span class="kw">else </span>{
+                <span class="bool-val">true
+            </span>}
+        });
     }
 
     <span class="doccomment">/// The returned slice is section_size or greater.
@@ -1381,15 +1574,19 @@
         entry_type: UnifiedLogType,
         requested_section_size: usize,
     ) -&gt; SectionHandle {
-        <span class="kw">let </span>maybe_section = <span class="self">self
+        <span class="self">self</span>.garbage_collect_backslabs(); <span class="comment">// Take the opportunity to keep up and close stale back slabs.
+
+        </span><span class="kw">let </span>maybe_section = <span class="self">self
             </span>.front_slab
             .add_section(entry_type, requested_section_size);
 
         <span class="kw">match </span>maybe_section {
             AllocatedSection::NoMoreSpace =&gt; {
                 <span class="comment">// move the front slab to the back slab.
-                </span><span class="kw">let </span>new_slab = SlabEntry::new(<span class="self">self</span>.make_new_mmfile(), <span class="self">self</span>.front_slab.page_size);
-                <span class="self">self</span>.back_slab = <span class="prelude-val">Some</span>(mem::replace(<span class="kw-2">&amp;mut </span><span class="self">self</span>.front_slab, new_slab));
+                </span><span class="kw">let </span>new_slab = SlabEntry::new(<span class="self">self</span>.next_slab(), <span class="self">self</span>.front_slab.page_size);
+                <span class="comment">// keep the slab until all its sections has been flushed.
+                </span><span class="self">self</span>.back_slabs
+                    .push(mem::replace(<span class="kw-2">&amp;mut </span><span class="self">self</span>.front_slab, new_slab));
                 <span class="kw">match </span><span class="self">self
                     </span>.front_slab
                     .add_section(entry_type, requested_section_size)
@@ -1408,18 +1605,71 @@
 <span class="kw">impl </span>Drop <span class="kw">for </span>UnifiedLoggerWrite {
     <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
         <span class="kw">let </span>section = <span class="self">self</span>.add_section(UnifiedLogType::LastEntry, <span class="number">80</span>); <span class="comment">// TODO: determine that exactly
-        </span>drop(section);
+        </span><span class="self">self</span>.front_slab.flush_section(<span class="kw-2">&amp;</span>section);
+        drop(section);
+        <span class="self">self</span>.garbage_collect_backslabs();
         <span class="self">self</span>.front_slab.close();
     }
 }
 
+<span class="kw">fn </span>open_slab_index(base_file_path: <span class="kw-2">&amp;</span>PathBuf, slab_index: usize) -&gt; io::Result&lt;(File, Mmap, u16)&gt; {
+    <span class="kw">let </span><span class="kw-2">mut </span>options = OpenOptions::new();
+    <span class="kw">let </span>options = options.read(<span class="bool-val">true</span>);
+
+    <span class="kw">let </span>file_path = build_slab_path(base_file_path, slab_index);
+    <span class="kw">let </span>file = options.open(file_path)<span class="question-mark">?</span>;
+    <span class="kw">let </span>mmap = <span class="kw">unsafe </span>{ Mmap::map(<span class="kw-2">&amp;</span>file) }<span class="question-mark">?</span>;
+    <span class="kw">let </span><span class="kw-2">mut </span>prolog = <span class="number">0u16</span>;
+    <span class="kw">if </span>slab_index == <span class="number">0 </span>{
+        <span class="kw">let </span>main_header: MainHeader;
+        <span class="kw">let </span>_read: usize;
+        (main_header, _read) =
+            decode_from_slice(<span class="kw-2">&amp;</span>mmap[..], standard()).expect(<span class="string">"Failed to decode main header"</span>);
+        <span class="kw">if </span>main_header.magic != MAIN_MAGIC {
+            <span class="kw">return </span><span class="prelude-val">Err</span>(io::Error::new(
+                io::ErrorKind::InvalidData,
+                <span class="string">"Invalid magic number in main header"</span>,
+            ));
+        }
+        prolog = main_header.first_section_offset;
+    }
+    <span class="prelude-val">Ok</span>((file, mmap, prolog))
+}
+
 <span class="kw">impl </span>UnifiedLoggerRead {
+    <span class="kw">pub fn </span>new(base_file_path: <span class="kw-2">&amp;</span>PathBuf) -&gt; io::Result&lt;<span class="self">Self</span>&gt; {
+        <span class="kw">let </span>(file, mmap, prolog) = open_slab_index(base_file_path, <span class="number">0</span>)<span class="question-mark">?</span>;
+
+        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
+            base_file_path: base_file_path.clone(),
+            current_file: file,
+            current_mmap_buffer: mmap,
+            current_slab_index: <span class="number">0</span>,
+            current_reading_position: prolog <span class="kw">as </span>usize,
+        })
+    }
+
+    <span class="kw">fn </span>next_slab(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; io::Result&lt;()&gt; {
+        <span class="self">self</span>.current_slab_index += <span class="number">1</span>;
+        <span class="kw">let </span>(file, mmap, prolog) = open_slab_index(<span class="kw-2">&amp;</span><span class="self">self</span>.base_file_path, <span class="self">self</span>.current_slab_index)<span class="question-mark">?</span>;
+        <span class="self">self</span>.current_file = file;
+        <span class="self">self</span>.current_mmap_buffer = mmap;
+        <span class="self">self</span>.current_reading_position = prolog <span class="kw">as </span>usize;
+        <span class="prelude-val">Ok</span>(())
+    }
+
     <span class="kw">pub fn </span>read_next_section_type(
         <span class="kw-2">&amp;mut </span><span class="self">self</span>,
         datalogtype: UnifiedLogType,
     ) -&gt; CuResult&lt;<span class="prelude-ty">Option</span>&lt;Vec&lt;u8&gt;&gt;&gt; {
         <span class="comment">// TODO: eventually implement a 0 copy of this too.
         </span><span class="kw">loop </span>{
+            <span class="kw">if </span><span class="self">self</span>.current_reading_position &gt;= <span class="self">self</span>.current_mmap_buffer.len() {
+                <span class="self">self</span>.next_slab().map_err(|e| {
+                    CuError::new_with_cause(<span class="string">"Failed to read next slab, is the log complete?"</span>, e)
+                })<span class="question-mark">?</span>;
+            }
+
             <span class="kw">let </span>header_result = <span class="self">self</span>.read_section_header();
             <span class="kw">if let </span><span class="prelude-val">Err</span>(error) = header_result {
                 <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::new_with_cause(
@@ -1437,16 +1687,12 @@
             <span class="comment">// Found a section of the requested type
             </span><span class="kw">if </span>header.entry_type == datalogtype {
                 <span class="kw">let </span>result = <span class="prelude-val">Some</span>(<span class="self">self</span>.read_section_content(<span class="kw-2">&amp;</span>header)<span class="question-mark">?</span>);
-                <span class="self">self</span>.reading_position += header.section_size <span class="kw">as </span>usize;
+                <span class="self">self</span>.current_reading_position += header.section_size <span class="kw">as </span>usize;
                 <span class="kw">return </span><span class="prelude-val">Ok</span>(result);
             }
 
             <span class="comment">// Keep reading until we find the requested type
-            </span><span class="self">self</span>.reading_position += header.section_size <span class="kw">as </span>usize;
-
-            <span class="kw">if </span><span class="self">self</span>.reading_position &gt;= <span class="self">self</span>.mmap_buffer.len() {
-                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Corrupted Log, past end of file"</span>.into());
-            }
+            </span><span class="self">self</span>.current_reading_position += header.section_size <span class="kw">as </span>usize;
         }
     }
 
@@ -1468,9 +1714,9 @@
         <span class="comment">// TODO: we could optimize by asking the buffer to fill
 
         </span><span class="kw">let </span><span class="kw-2">mut </span>section = <span class="macro">vec!</span>[<span class="number">0</span>; header.filled_size <span class="kw">as </span>usize];
-        <span class="kw">let </span>start_of_data = <span class="self">self</span>.reading_position + MAX_HEADER_SIZE;
+        <span class="kw">let </span>start_of_data = <span class="self">self</span>.current_reading_position + MAX_HEADER_SIZE;
         section.copy_from_slice(
-            <span class="kw-2">&amp;</span><span class="self">self</span>.mmap_buffer[start_of_data..start_of_data + header.filled_size <span class="kw">as </span>usize],
+            <span class="kw-2">&amp;</span><span class="self">self</span>.current_mmap_buffer[start_of_data..start_of_data + header.filled_size <span class="kw">as </span>usize],
         );
 
         <span class="prelude-val">Ok</span>(section)
@@ -1478,9 +1724,11 @@
 
     <span class="kw">fn </span>read_section_header(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; CuResult&lt;SectionHeader&gt; {
         <span class="kw">let </span>section_header: SectionHeader;
-        (section_header, <span class="kw">_</span>) =
-            decode_from_slice(<span class="kw-2">&amp;</span><span class="self">self</span>.mmap_buffer[<span class="self">self</span>.reading_position..], standard())
-                .expect(<span class="string">"Failed to decode section header"</span>);
+        (section_header, <span class="kw">_</span>) = decode_from_slice(
+            <span class="kw-2">&amp;</span><span class="self">self</span>.current_mmap_buffer[<span class="self">self</span>.current_reading_position..],
+            standard(),
+        )
+        .expect(<span class="string">"Failed to decode section header"</span>);
         <span class="kw">if </span>section_header.magic != SECTION_MAGIC {
             <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="string">"Invalid magic number in section header"</span>.into());
         }
@@ -1548,24 +1796,28 @@
     <span class="kw">use </span>std::io::BufReader;
     <span class="kw">use </span>std::path::PathBuf;
     <span class="kw">use </span>tempfile::TempDir;
-    <span class="kw">fn </span>make_a_logger(tmp_dir: <span class="kw-2">&amp;</span>TempDir) -&gt; (Arc&lt;Mutex&lt;UnifiedLoggerWrite&gt;&gt;, PathBuf, PathBuf) {
+
+    <span class="kw">const </span>LARGE_SLAB: usize = <span class="number">100 </span>* <span class="number">1024</span>; <span class="comment">// 100KB
+    </span><span class="kw">const </span>SMALL_SLAB: usize = <span class="number">16 </span>* <span class="number">2 </span>* <span class="number">1024</span>; <span class="comment">// 16KB is the page size on MacOS for example
+
+    </span><span class="kw">fn </span>make_a_logger(
+        tmp_dir: <span class="kw-2">&amp;</span>TempDir,
+        slab_size: usize,
+    ) -&gt; (Arc&lt;Mutex&lt;UnifiedLoggerWrite&gt;&gt;, PathBuf) {
         <span class="kw">let </span>file_path = tmp_dir.path().join(<span class="string">"test.bin"</span>);
+        <span class="macro">println!</span>(<span class="string">"Creating a logger at {:?}"</span>, file_path);
         <span class="kw">let </span>UnifiedLogger::Write(data_logger) = UnifiedLoggerBuilder::new()
             .write(<span class="bool-val">true</span>)
             .create(<span class="bool-val">true</span>)
-            .file_path(<span class="kw-2">&amp;</span>file_path)
-            .preallocated_size(<span class="number">100000</span>)
+            .file_base_name(<span class="kw-2">&amp;</span>file_path)
+            .preallocated_size(slab_size)
             .build()
             .expect(<span class="string">"Failed to create logger"</span>)
         <span class="kw">else </span>{
             <span class="macro">panic!</span>(<span class="string">"Failed to create logger"</span>)
         };
 
-        (
-            Arc::new(Mutex::new(data_logger)),
-            file_path,
-            tmp_dir.path().join(<span class="string">"test_0.bin"</span>),
-        )
+        (Arc::new(Mutex::new(data_logger)), file_path)
     }
 
     <span class="attr">#[test]
@@ -1576,7 +1828,7 @@
             <span class="kw">let </span>UnifiedLogger::Write(<span class="kw-2">mut </span>logger) = UnifiedLoggerBuilder::new()
                 .write(<span class="bool-val">true</span>)
                 .create(<span class="bool-val">true</span>)
-                .file_path(<span class="kw-2">&amp;</span>file_path)
+                .file_base_name(<span class="kw-2">&amp;</span>file_path)
                 .preallocated_size(<span class="number">100000</span>)
                 .build()
                 .expect(<span class="string">"Failed to create logger"</span>)
@@ -1607,22 +1859,32 @@
     <span class="attr">#[test]
     </span><span class="kw">fn </span>test_one_section_self_cleaning() {
         <span class="kw">let </span>tmp_dir = TempDir::new().expect(<span class="string">"could not create a tmp dir"</span>);
-        <span class="kw">let </span>(logger, <span class="kw">_</span>, <span class="kw">_</span>) = make_a_logger(<span class="kw-2">&amp;</span>tmp_dir);
+        <span class="kw">let </span>(logger, <span class="kw">_</span>) = make_a_logger(<span class="kw-2">&amp;</span>tmp_dir, LARGE_SLAB);
         {
             <span class="kw">let </span>_stream =
                 stream_write::&lt;()&gt;(logger.clone(), UnifiedLogType::StructuredLogLine, <span class="number">1024</span>);
             <span class="macro">assert_eq!</span>(
-                logger.lock().unwrap().front_slab.sections_in_flight.len(),
+                logger
+                    .lock()
+                    .unwrap()
+                    .front_slab
+                    .sections_offsets_in_flight
+                    .len(),
                 <span class="number">1
             </span>);
         }
         <span class="macro">assert_eq!</span>(
-            logger.lock().unwrap().front_slab.sections_in_flight.len(),
+            logger
+                .lock()
+                .unwrap()
+                .front_slab
+                .sections_offsets_in_flight
+                .len(),
             <span class="number">0
         </span>);
         <span class="kw">let </span>logger = logger.lock().unwrap();
         <span class="macro">assert_eq!</span>(
-            logger.front_slab.flushed_until,
+            logger.front_slab.flushed_until_offset,
             logger.front_slab.current_global_position
         );
     }
@@ -1630,27 +1892,42 @@
     <span class="attr">#[test]
     </span><span class="kw">fn </span>test_two_sections_self_cleaning_in_order() {
         <span class="kw">let </span>tmp_dir = TempDir::new().expect(<span class="string">"could not create a tmp dir"</span>);
-        <span class="kw">let </span>(logger, <span class="kw">_</span>, <span class="kw">_</span>) = make_a_logger(<span class="kw-2">&amp;</span>tmp_dir);
+        <span class="kw">let </span>(logger, <span class="kw">_</span>) = make_a_logger(<span class="kw-2">&amp;</span>tmp_dir, LARGE_SLAB);
         <span class="kw">let </span>s1 = stream_write::&lt;()&gt;(logger.clone(), UnifiedLogType::StructuredLogLine, <span class="number">1024</span>);
         <span class="macro">assert_eq!</span>(
-            logger.lock().unwrap().front_slab.sections_in_flight.len(),
+            logger
+                .lock()
+                .unwrap()
+                .front_slab
+                .sections_offsets_in_flight
+                .len(),
             <span class="number">1
         </span>);
         <span class="kw">let </span>s2 = stream_write::&lt;()&gt;(logger.clone(), UnifiedLogType::StructuredLogLine, <span class="number">1024</span>);
         <span class="macro">assert_eq!</span>(
-            logger.lock().unwrap().front_slab.sections_in_flight.len(),
+            logger
+                .lock()
+                .unwrap()
+                .front_slab
+                .sections_offsets_in_flight
+                .len(),
             <span class="number">2
         </span>);
         drop(s2);
         <span class="macro">assert_eq!</span>(
-            logger.lock().unwrap().front_slab.sections_in_flight.len(),
+            logger
+                .lock()
+                .unwrap()
+                .front_slab
+                .sections_offsets_in_flight
+                .len(),
             <span class="number">1
         </span>);
         drop(s1);
         <span class="kw">let </span>lg = logger.lock().unwrap();
-        <span class="macro">assert_eq!</span>(lg.front_slab.sections_in_flight.len(), <span class="number">0</span>);
+        <span class="macro">assert_eq!</span>(lg.front_slab.sections_offsets_in_flight.len(), <span class="number">0</span>);
         <span class="macro">assert_eq!</span>(
-            lg.front_slab.flushed_until,
+            lg.front_slab.flushed_until_offset,
             lg.front_slab.current_global_position
         );
     }
@@ -1658,27 +1935,42 @@
     <span class="attr">#[test]
     </span><span class="kw">fn </span>test_two_sections_self_cleaning_out_of_order() {
         <span class="kw">let </span>tmp_dir = TempDir::new().expect(<span class="string">"could not create a tmp dir"</span>);
-        <span class="kw">let </span>(logger, <span class="kw">_</span>, <span class="kw">_</span>) = make_a_logger(<span class="kw-2">&amp;</span>tmp_dir);
+        <span class="kw">let </span>(logger, <span class="kw">_</span>) = make_a_logger(<span class="kw-2">&amp;</span>tmp_dir, LARGE_SLAB);
         <span class="kw">let </span>s1 = stream_write::&lt;()&gt;(logger.clone(), UnifiedLogType::StructuredLogLine, <span class="number">1024</span>);
         <span class="macro">assert_eq!</span>(
-            logger.lock().unwrap().front_slab.sections_in_flight.len(),
+            logger
+                .lock()
+                .unwrap()
+                .front_slab
+                .sections_offsets_in_flight
+                .len(),
             <span class="number">1
         </span>);
         <span class="kw">let </span>s2 = stream_write::&lt;()&gt;(logger.clone(), UnifiedLogType::StructuredLogLine, <span class="number">1024</span>);
         <span class="macro">assert_eq!</span>(
-            logger.lock().unwrap().front_slab.sections_in_flight.len(),
+            logger
+                .lock()
+                .unwrap()
+                .front_slab
+                .sections_offsets_in_flight
+                .len(),
             <span class="number">2
         </span>);
         drop(s1);
         <span class="macro">assert_eq!</span>(
-            logger.lock().unwrap().front_slab.sections_in_flight.len(),
+            logger
+                .lock()
+                .unwrap()
+                .front_slab
+                .sections_offsets_in_flight
+                .len(),
             <span class="number">1
         </span>);
         drop(s2);
         <span class="kw">let </span>lg = logger.lock().unwrap();
-        <span class="macro">assert_eq!</span>(lg.front_slab.sections_in_flight.len(), <span class="number">0</span>);
+        <span class="macro">assert_eq!</span>(lg.front_slab.sections_offsets_in_flight.len(), <span class="number">0</span>);
         <span class="macro">assert_eq!</span>(
-            lg.front_slab.flushed_until,
+            lg.front_slab.flushed_until_offset,
             lg.front_slab.current_global_position
         );
     }
@@ -1686,7 +1978,7 @@
     <span class="attr">#[test]
     </span><span class="kw">fn </span>test_write_then_read_one_section() {
         <span class="kw">let </span>tmp_dir = TempDir::new().expect(<span class="string">"could not create a tmp dir"</span>);
-        <span class="kw">let </span>(logger, f, rb) = make_a_logger(<span class="kw-2">&amp;</span>tmp_dir);
+        <span class="kw">let </span>(logger, f) = make_a_logger(<span class="kw-2">&amp;</span>tmp_dir, LARGE_SLAB);
         {
             <span class="kw">let </span><span class="kw-2">mut </span>stream = stream_write(logger.clone(), UnifiedLogType::StructuredLogLine, <span class="number">1024</span>);
             stream.log(<span class="kw-2">&amp;</span><span class="number">1u32</span>).unwrap();
@@ -1695,7 +1987,7 @@
         }
         drop(logger);
         <span class="kw">let </span>UnifiedLogger::Read(<span class="kw-2">mut </span>dl) = UnifiedLoggerBuilder::new()
-            .file_path(<span class="kw-2">&amp;</span>rb)
+            .file_base_name(<span class="kw-2">&amp;</span>f)
             .build()
             .expect(<span class="string">"Failed to build logger"</span>)
         <span class="kw">else </span>{
@@ -1734,7 +2026,7 @@
     <span class="attr">#[test]
     </span><span class="kw">fn </span>test_copperlist_list_like_logging() {
         <span class="kw">let </span>tmp_dir = TempDir::new().expect(<span class="string">"could not create a tmp dir"</span>);
-        <span class="kw">let </span>(logger, f, rb) = make_a_logger(<span class="kw-2">&amp;</span>tmp_dir);
+        <span class="kw">let </span>(logger, f) = make_a_logger(<span class="kw-2">&amp;</span>tmp_dir, LARGE_SLAB);
         {
             <span class="kw">let </span><span class="kw-2">mut </span>stream = stream_write(logger.clone(), UnifiedLogType::CopperList, <span class="number">1024</span>);
             <span class="kw">let </span>cl0 = CopperList {
@@ -1751,7 +2043,7 @@
         drop(logger);
 
         <span class="kw">let </span>UnifiedLogger::Read(<span class="kw-2">mut </span>dl) = UnifiedLoggerBuilder::new()
-            .file_path(<span class="kw-2">&amp;</span>rb)
+            .file_base_name(<span class="kw-2">&amp;</span>f)
             .build()
             .expect(<span class="string">"Failed to build logger"</span>)
         <span class="kw">else </span>{
@@ -1768,6 +2060,56 @@
         <span class="kw">let </span>cl1: CopperList&lt;(u32, u32, u32)&gt; = decode_from_reader(<span class="kw-2">&amp;mut </span>reader, standard()).unwrap();
         <span class="macro">assert_eq!</span>(cl0.payload.<span class="number">1</span>, <span class="number">2</span>);
         <span class="macro">assert_eq!</span>(cl1.payload.<span class="number">2</span>, <span class="number">6</span>);
+    }
+
+    <span class="attr">#[test]
+    </span><span class="kw">fn </span>test_multi_slab_end2end() {
+        <span class="kw">let </span>tmp_dir = TempDir::new().expect(<span class="string">"could not create a tmp dir"</span>);
+        <span class="kw">let </span>(logger, f) = make_a_logger(<span class="kw-2">&amp;</span>tmp_dir, SMALL_SLAB);
+        {
+            <span class="kw">let </span><span class="kw-2">mut </span>stream = stream_write(logger.clone(), UnifiedLogType::CopperList, <span class="number">1024</span>);
+            <span class="kw">let </span>cl0 = CopperList {
+                state: CopperListStateMock::Free,
+                payload: (<span class="number">1u32</span>, <span class="number">2u32</span>, <span class="number">3u32</span>),
+            };
+            <span class="comment">// large enough so we are sure to create a few slabs
+            </span><span class="kw">for _ in </span><span class="number">0</span>..<span class="number">10000 </span>{
+                stream.log(<span class="kw-2">&amp;</span>cl0).unwrap();
+            }
+        }
+        drop(logger);
+
+        <span class="kw">let </span>UnifiedLogger::Read(<span class="kw-2">mut </span>dl) = UnifiedLoggerBuilder::new()
+            .file_base_name(<span class="kw-2">&amp;</span>f)
+            .build()
+            .expect(<span class="string">"Failed to build logger"</span>)
+        <span class="kw">else </span>{
+            <span class="macro">panic!</span>(<span class="string">"Failed to build logger"</span>);
+        };
+        <span class="kw">let </span><span class="kw-2">mut </span>total_readback = <span class="number">0</span>;
+        <span class="kw">loop </span>{
+            <span class="kw">let </span>section = dl.read_next_section_type(UnifiedLogType::CopperList);
+            <span class="kw">if </span>section.is_err() {
+                <span class="kw">break</span>;
+            }
+            <span class="kw">let </span>section = section.unwrap();
+            <span class="kw">if </span>section.is_none() {
+                <span class="kw">break</span>;
+            }
+            <span class="kw">let </span>section = section.unwrap();
+
+            <span class="kw">let </span><span class="kw-2">mut </span>reader = BufReader::new(<span class="kw-2">&amp;</span>section[..]);
+            <span class="kw">loop </span>{
+                <span class="kw">let </span>maybe_cl: <span class="prelude-ty">Result</span>&lt;CopperList&lt;(u32, u32, u32)&gt;, <span class="kw">_</span>&gt; =
+                    decode_from_reader(<span class="kw-2">&amp;mut </span>reader, standard());
+                <span class="kw">if </span>maybe_cl.is_ok() {
+                    total_readback += <span class="number">1</span>;
+                } <span class="kw">else </span>{
+                    <span class="kw">break</span>;
+                }
+            }
+        }
+        <span class="macro">assert_eq!</span>(total_readback, <span class="number">10000</span>);
     }
 }
 </code></pre></div></section></main></body></html>

@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cu29_helpers/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-492a78a4a87dcc01.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_helpers" data-themes="" data-resource-suffix="" data-rustdoc-version="1.82.0-nightly (c6db1ca3c 2024-08-25)" data-channel="nightly" data-search-js="search-acd2e111c9cb27e3.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../../static.files/src-script-e66d777a5a92e9b2.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-cb0df477c2d67d00.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-3b12f09e550e0385.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cu29_helpers/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-492a78a4a87dcc01.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_helpers" data-themes="" data-resource-suffix="" data-rustdoc-version="1.82.0-nightly (515395af0 2024-08-26)" data-channel="nightly" data-search-js="search-acd2e111c9cb27e3.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../../static.files/src-script-e66d777a5a92e9b2.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-cb0df477c2d67d00.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-3b12f09e550e0385.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
 <a href="#4" id="4">4</a>
@@ -77,6 +77,9 @@
 <a href="#77" id="77">77</a>
 <a href="#78" id="78">78</a>
 <a href="#79" id="79">79</a>
+<a href="#80" id="80">80</a>
+<a href="#81" id="81">81</a>
+<a href="#82" id="82">82</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>cu29_clock::RobotClock;
 <span class="kw">use </span>cu29_log::default_log_index_dir;
 <span class="kw">use </span>cu29_log_runtime::{ExtraTextLogger, LoggerRuntime};
@@ -96,22 +99,25 @@
 <span class="doccomment">/// This is a basic setup for a copper application to get you started.
 /// Duplicate and customize as needed when your needs grow.
 ///
+/// unifiedlogger_output_base_name: The base name of the log file. The logger will create a set of files based on this name
+///                                  for example if named "toto.copper" it will create toto_0.copper, toto_1.copper etc.
+///
 /// text_log: if true, the log will be printed to the console as a simple log.
 /// It is useful to debug an application in real-time but should be set to false in production
 /// as it is an order of magnitude slower than the default copper structured logging.
 /// It will create a LoggerRuntime that can be used as a robot clock source too.
 ///
-/// preallocated_storage_size: The size of the preallocated storage for the unified logger.
+/// slab_size: The logger will pre-allocate large files of those sizes. With the name of the given file _0, _1 etc.
 </span><span class="kw">pub fn </span>basic_copper_setup(
-    unifiedlogger_output_path: <span class="kw-2">&amp;</span>Path,
-    preallocated_storage_size: <span class="prelude-ty">Option</span>&lt;usize&gt;,
+    unifiedlogger_output_base_name: <span class="kw-2">&amp;</span>Path,
+    slab_size: <span class="prelude-ty">Option</span>&lt;usize&gt;,
     text_log: bool,
 ) -&gt; CuResult&lt;CopperContext&gt; {
-    <span class="kw">let </span>preallocated_size = preallocated_storage_size.unwrap_or(<span class="number">1024 </span>* <span class="number">1024 </span>* <span class="number">10</span>);
+    <span class="kw">let </span>preallocated_size = slab_size.unwrap_or(<span class="number">1024 </span>* <span class="number">1024 </span>* <span class="number">10</span>);
     <span class="kw">let </span>UnifiedLogger::Write(logger) = UnifiedLoggerBuilder::new()
         .write(<span class="bool-val">true</span>)
         .create(<span class="bool-val">true</span>)
-        .file_path(unifiedlogger_output_path)
+        .file_base_name(unifiedlogger_output_base_name)
         .preallocated_size(preallocated_size)
         .build()
         .expect(<span class="string">"Failed to create logger"</span>)
