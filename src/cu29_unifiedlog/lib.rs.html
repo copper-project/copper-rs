@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cu29_unifiedlog/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-492a78a4a87dcc01.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_unifiedlog" data-themes="" data-resource-suffix="" data-rustdoc-version="1.82.0-nightly (515395af0 2024-08-26)" data-channel="nightly" data-search-js="search-acd2e111c9cb27e3.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../../static.files/src-script-e66d777a5a92e9b2.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-cb0df477c2d67d00.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-3b12f09e550e0385.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cu29_unifiedlog/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-492a78a4a87dcc01.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_unifiedlog" data-themes="" data-resource-suffix="" data-rustdoc-version="1.82.0-nightly (1f12b9b0f 2024-08-27)" data-channel="nightly" data-search-js="search-acd2e111c9cb27e3.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../static.files/storage-118b08c4c78b968e.js"></script><script defer src="../../static.files/src-script-e66d777a5a92e9b2.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-cb0df477c2d67d00.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-3b12f09e550e0385.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers"><a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
 <a href="#4" id="4">4</a>
@@ -1188,7 +1188,6 @@
     <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
         <span class="kw">let </span><span class="kw-2">mut </span>logger_guard = <span class="self">self</span>.parent_logger.lock().unwrap();
         logger_guard.flush_section(<span class="kw-2">&amp;mut </span><span class="self">self</span>.current_section);
-        mem::take(<span class="kw-2">&amp;mut </span><span class="self">self</span>.current_section);
     }
 }
 
@@ -1333,13 +1332,18 @@
                 &lt; (<span class="self">self</span>.mmap_buffer.as_ptr() <span class="kw">as </span>usize + <span class="self">self</span>.mmap_buffer.len())
     }
 
-    <span class="kw">fn </span>flush_section(<span class="kw-2">&amp;mut </span><span class="self">self</span>, section: <span class="kw-2">&amp;</span>SectionHandle) {
+    <span class="doccomment">/// Flush the section to disk.
+    /// the flushing is permament and the section is considered closed.
+    </span><span class="kw">fn </span>flush_section(<span class="kw-2">&amp;mut </span><span class="self">self</span>, section: <span class="kw-2">&amp;mut </span>SectionHandle) {
         <span class="kw">if </span>section.buffer.as_ptr() &lt; <span class="self">self</span>.mmap_buffer.as_ptr()
             || section.buffer.as_ptr() <span class="kw">as </span>usize
                 &gt; <span class="self">self</span>.mmap_buffer.as_ptr() <span class="kw">as </span>usize + <span class="self">self</span>.mmap_buffer.len()
         {
             <span class="macro">panic!</span>(<span class="string">"Invalid section buffer, not in the slab"</span>);
         }
+
+        <span class="comment">// Be sure that the header reflects the actual size of the section.
+        </span>section.update_header();
 
         <span class="kw">let </span>base = <span class="self">self</span>.mmap_buffer.as_ptr() <span class="kw">as </span>usize;
         <span class="kw">let </span>section_buffer_addr = section.buffer.as_ptr() <span class="kw">as </span>usize;
@@ -1462,15 +1466,12 @@
     <span class="kw">pub fn </span>get_user_buffer(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span>[u8] {
         <span class="kw-2">&amp;mut </span><span class="self">self</span>.buffer[MAX_HEADER_SIZE + <span class="self">self</span>.used <span class="kw">as </span>usize..]
     }
-}
 
-<span class="kw">impl </span>Drop <span class="kw">for </span>SectionHandle {
-    <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+    <span class="kw">pub fn </span>update_header(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
         <span class="comment">// no need to do anything if we never used the section.
         </span><span class="kw">if </span><span class="self">self</span>.section_header.entry_type == UnifiedLogType::Empty || <span class="self">self</span>.used == <span class="number">0 </span>{
             <span class="kw">return</span>;
         }
-
         <span class="self">self</span>.section_header.filled_size = <span class="self">self</span>.used;
 
         <span class="kw">let </span>_sz = encode_into_slice(<span class="kw-2">&amp;</span><span class="self">self</span>.section_header, <span class="kw-2">&amp;mut </span><span class="self">self</span>.buffer, standard())
@@ -1604,9 +1605,8 @@
 
 <span class="kw">impl </span>Drop <span class="kw">for </span>UnifiedLoggerWrite {
     <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-        <span class="kw">let </span>section = <span class="self">self</span>.add_section(UnifiedLogType::LastEntry, <span class="number">80</span>); <span class="comment">// TODO: determine that exactly
-        </span><span class="self">self</span>.front_slab.flush_section(<span class="kw-2">&amp;</span>section);
-        drop(section);
+        <span class="kw">let </span><span class="kw-2">mut </span>section = <span class="self">self</span>.add_section(UnifiedLogType::LastEntry, <span class="number">80</span>); <span class="comment">// TODO: determine that exactly
+        </span><span class="self">self</span>.front_slab.flush_section(<span class="kw-2">&amp;mut </span>section);
         <span class="self">self</span>.garbage_collect_backslabs();
         <span class="self">self</span>.front_slab.close();
     }
