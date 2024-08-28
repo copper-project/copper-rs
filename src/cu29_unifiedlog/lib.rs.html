@@ -1055,6 +1055,7 @@
 <a href="#1055" id="1055">1055</a>
 <a href="#1056" id="1056">1056</a>
 <a href="#1057" id="1057">1057</a>
+<a href="#1058" id="1058">1058</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>libc;
 
 <span class="kw">use </span>memmap2::{Mmap, MmapMut};
@@ -1474,9 +1475,10 @@
         }
         <span class="self">self</span>.section_header.filled_size = <span class="self">self</span>.used;
 
-        <span class="kw">let </span>_sz = encode_into_slice(<span class="kw-2">&amp;</span><span class="self">self</span>.section_header, <span class="kw-2">&amp;mut </span><span class="self">self</span>.buffer, standard())
-            .expect(<span class="string">"Failed to encode section header"</span>);
-    }
+        <span class="comment">// FIX ME: This was flushed before and cannot be written back to.
+        // let _sz = encode_into_slice(&amp;self.section_header, &amp;mut self.buffer, standard())
+        //     .expect("Failed to encode section header");
+    </span>}
 }
 
 <span class="doccomment">/// A write side of the datalogger.

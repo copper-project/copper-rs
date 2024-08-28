@@ -5,16 +5,19 @@
 <img src="https://img.shields.io/badge/Rust-1.80+-orange.svg" alt="" />
 <a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License" /></a>
 <a href="https://app.gitter.im/#/room/#copper:gitter.im"><img src="https://img.shields.io/gitter/room/copper-project/copper-rs" alt="Gitter" /></a></p>
-<p>Copper is a user-friendly robotics framework designed for creating fast and reliable robots. Copper is to robots what a game engine is to games.</p>
+<p>Copper is a user-friendly robotics framework designed for creating fast and reliable robots. Copper is to robots what a
+game engine is to games.</p>
 <ul>
 <li>
 <p>Easy: Copper offers a high-level configuration system and a natural Rust-first API.</p>
 </li>
 <li>
-<p>Fast: Copper uses Rust’s zero-cost abstractions and a data-oriented approach to achieve sub-microsecond latency on commodity hardware, avoiding heap allocation during execution.</p>
+<p>Fast: Copper uses Rust’s zero-cost abstractions and a data-oriented approach to achieve sub-microsecond latency on
+commodity hardware, avoiding heap allocation during execution.</p>
 </li>
 <li>
-<p>Reliable: Copper leverages Rust’s ownership, type system, and concurrency model to minimize bugs and ensure thread safety.</p>
+<p>Reliable: Copper leverages Rust’s ownership, type system, and concurrency model to minimize bugs and ensure thread
+safety.</p>
 </li>
 <li>
 <p>Product Oriented: Copper aims to avoid late-stage infra integration issues by generating a very predictable runtime.</p>
@@ -22,27 +25,35 @@
 </ul>
 <blockquote>
 <p>[!NOTE]
-Copper is still in <strong>early development / alpha stage</strong>, and the APIs are subject to change. We are looking for contributors to help us build the best robotics framework possible. If you are interested, please join us on <a href="https://gitter.im/copper-project/copper-rs">Gitter</a> or open an issue.</p>
+Copper is still in <strong>early development / alpha stage</strong>, and the APIs are subject to change. We are looking for
+contributors to help us build the best robotics framework possible. If you are interested, please join us
+on <a href="https://gitter.im/copper-project/copper-rs">Gitter</a> or open an issue.</p>
 </blockquote>
 <h4 id="technical-overview"><a class="doc-anchor" href="#technical-overview">§</a>Technical Overview</h4>
 <p>Copper is a data-oriented runtime with these key components:</p>
 <ul>
 <li>
-<p><strong>Task Graph</strong>: <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/graph.png?raw=true" alt="graph"/> Described in <a href="https://github.com/ron-rs/ron">RON</a>, this configures the system’s topology, specifying which tasks communicate and setting types for nodes and messages.</p>
+<p>**Task Graph
+**: <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/graph.png?raw=true" alt="graph"/>
+Described in <a href="https://github.com/ron-rs/ron">RON</a>, this configures the system’s topology, specifying which tasks
+communicate and setting types for nodes and messages.</p>
 </li>
 <li>
-<p><strong>Runtime Generator</strong>: This component decides on an execution plan based on the graph’s metadata. It preallocates a “Copper List” to maximize sequential memory access during execution.</p>
+<p><strong>Runtime Generator</strong>: This component decides on an execution plan based on the graph’s metadata. It preallocates a “
+Copper List“ to maximize sequential memory access during execution.</p>
 </li>
 <li>
 <p><strong>Zero-Copy Data Logging</strong>: Records all messages between tasks without copying data, ensuring efficient logging.</p>
 </li>
 <li>
-<p><strong>Fast Structured Logging</strong>: Interns and indexes logging strings at compile time, avoiding runtime string construction and ensuring high-speed textual logging.</p>
+<p><strong>Fast Structured Logging</strong>: Interns and indexes logging strings at compile time, avoiding runtime string construction
+and ensuring high-speed textual logging.</p>
 </li>
 </ul>
 <h4 id="what-features-are-already-implemented"><a class="doc-anchor" href="#what-features-are-already-implemented">§</a>What features are already implemented?</h4>
 <ol>
-<li><strong>Basic task lifecycle interface</strong>: Should be relatively stable for you to start contributing new algorithms, sensors, and actuators.</li>
+<li><strong>Basic task lifecycle interface</strong>: Should be relatively stable for you to start contributing new algorithms,
+sensors, and actuators.</li>
 <li><strong>Runtime generation</strong>: Works but is very simple; this is just a BFS type of execution.</li>
 <li><strong>Log reader &amp; structured log reader</strong>: Can export data, currently in Rust debug format.</li>
 <li><strong>Simple/minimal drivers included</strong>: These are more to show you how to implement your own:</li>
@@ -58,21 +69,29 @@ Copper is still in <strong>early development / alpha stage</strong>, and the API
 <p>Here are some of the features we plan to implement next (in ~order of priority):</p>
 <ul>
 <li><input disabled="" type="checkbox"/>
-<strong>Deterministic log replay</strong>: As the runtime is generated in a deterministic fashion, we need to add hooks to inject messages into an existing runtime.</li>
+<strong>Batching</strong>: add a feature to batch messages for high frequency sources to reduce the number of Copper Lists.</li>
 <li><input disabled="" type="checkbox"/>
-<strong>Parallel Copper Lists</strong>: Today Copper is monothreaded; this should enable concurrent Copper Lists to be executed at the same time with no contention.</li>
+<strong>Merging/Aligning</strong>: Add a feature to merge messages from multiple sources as an input to a task.</li>
 <li><input disabled="" type="checkbox"/>
-<strong>Bunching</strong>: as various sensors can vary a lot in output frequencies, we need to be able to bunch messages together with a dropping/algorithmic policy (mean max etc…). Today this can be achieved on the user side but it is painful.</li>
+<strong>Deterministic log replay</strong>: As the runtime is generated in a deterministic fashion, we need to add hooks to
+inject messages into an existing runtime.</li>
+<li><input disabled="" type="checkbox"/>
+<strong>Parallel Copper Lists</strong>: Today Copper is monothreaded; this should enable concurrent Copper Lists to be executed
+at the same time with no contention.</li>
 <li><input disabled="" type="checkbox"/>
 <strong>Monitoring</strong>: We need a parallel system that can listen to monitoring messages and act accordingly.</li>
 <li><input disabled="" type="checkbox"/>
-<strong>Distributed Copper</strong>: Currently, we can only create one process. We need proper RPC filtering copper lists per subsystem.</li>
+<strong>Distributed Copper</strong>: Currently, we can only create one process. We need proper RPC filtering copper lists per
+subsystem.</li>
 <li><input disabled="" type="checkbox"/>
-<strong>ROS interfacing</strong>: Build a pair of sink and source to connect to existing ROS systems, helping users migrate their infra bit by bit.</li>
+<strong>ROS interfacing</strong>: Build a pair of sink and source to connect to existing ROS systems, helping users migrate
+their infra bit by bit.</li>
 <li><input disabled="" type="checkbox"/>
-<strong>Modular Configuration</strong>: As robots built with Copper gain complexity, users will need to build “variations” of their robots without duplicating their entire RON file.</li>
+<strong>Modular Configuration</strong>: As robots built with Copper gain complexity, users will need to build “variations” of
+their robots without duplicating their entire RON file.</li>
 <li><input disabled="" type="checkbox"/>
-<strong>“PGO”-like scheduling</strong>: Pass previous log runs to the runtime generator to allow it to make better scheduling decisions.</li>
+<strong>“PGO”-like scheduling</strong>: Pass previous log runs to the runtime generator to allow it to make better scheduling
+decisions.</li>
 </ul>
 <p>So we are only at the beginning, but so much cool stuff is coming up!</p>
 <h4 id="kickstarting-a-copper-project-for-the-impatients"><a class="doc-anchor" href="#kickstarting-a-copper-project-for-the-impatients">§</a>Kickstarting a copper project for the impatients</h4>
@@ -183,7 +202,8 @@ cargo cunew [path_where_you_want_your_project_created]
     <span class="macro">debug!</span>(<span class="string">"End of program: {}."</span>, clock.now());
 }
 </code></pre></div>
-<p>But this is a very minimal example for a task, please see <a href="doc/lifecycle.md">lifecycle</a> for a more complete explanation of a task lifecycle.</p>
+<p>But this is a very minimal example for a task, please see <a href="doc/lifecycle.md">lifecycle</a> for a more complete explanation
+of a task lifecycle.</p>
 <h3 id="deployment-of-the-application"><a class="doc-anchor" href="#deployment-of-the-application">§</a>Deployment of the application</h3>
 <p>Check out the <a href="doc/deploy.md">deployment</a> page for more information.</p>
 <h3 id="how-is-it-better-or-different-from-ros"><a class="doc-anchor" href="#how-is-it-better-or-different-from-ros">§</a>How is it better or different from ROS?</h3><h4 id="performance"><a class="doc-anchor" href="#performance">§</a>Performance</h4>
@@ -191,12 +211,16 @@ cargo cunew [path_where_you_want_your_project_created]
 <div class="example-wrap"><pre class="language-bash"><code>examples/cu_caterpillar
 examples/ros_caterpillar
 </code></pre></div>
-<p>You can them out either just logging on a desktop or with GPIOs on a RPi and you should see a couple order of magnitude difference in performance.</p>
-<p>Copper has been design for performance first. Unlike a game engine we use a data oriented approach to minimize latency and maximize throughput.</p>
+<p>You can them out either just logging on a desktop or with GPIOs on a RPi and you should see a couple order of magnitude
+difference in performance.</p>
+<p>Copper has been design for performance first. Unlike a game engine we use a data oriented approach to minimize latency
+and maximize throughput.</p>
 <h4 id="safety"><a class="doc-anchor" href="#safety">§</a>Safety</h4>
-<p>As Copper is written in Rust, it is memory safe and thread safe by design. It is also designed to be easy to use and to avoid common pitfalls.</p>
-<p>As we progress on this project we plan on implementing more and more early warning to help you avoid “the death by a thousand cuts” that can happen in a complex system.</p>
-</div></details><h2 id="reexports" class="section-header">Re-exports<a href="#reexports" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name" id="reexport.read_configuration"><code>pub use config::<a class="fn" href="config/fn.read_configuration.html" title="fn cu29::config::read_configuration">read_configuration</a>;</code></div></li><li><div class="item-name" id="reexport.clock"><code>pub use cu29_clock as clock;</code></div></li></ul><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="mod" href="config/index.html" title="mod cu29::config">config</a></div><div class="desc docblock-short">This module defines the configuration of the copper runtime.
+<p>As Copper is written in Rust, it is memory safe and thread safe by design. It is also designed to be easy to use and to
+avoid common pitfalls.</p>
+<p>As we progress on this project we plan on implementing more and more early warning to help you avoid “the death by a
+thousand cuts” that can happen in a complex system.</p>
+</div></details><h2 id="reexports" class="section-header">Re-exports<a href="#reexports" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name" id="reexport.read_configuration"><code>pub use config::<a class="fn" href="config/fn.read_configuration.html" title="fn cu29::config::read_configuration">read_configuration</a>;</code></div></li><li><div class="item-name" id="reexport.clock"><code>pub use <a class="mod" href="../cu29_clock/index.html" title="mod cu29_clock">cu29_clock</a> as clock;</code></div></li></ul><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="mod" href="config/index.html" title="mod cu29::config">config</a></div><div class="desc docblock-short">This module defines the configuration of the copper runtime.
 The configuration is a directed graph where nodes are tasks and edges are connections between tasks.
 The configuration is serialized in the RON format.
 The configuration is used to generate the runtime code at compile time.</div></li><li><div class="item-name"><a class="mod" href="copperlist/index.html" title="mod cu29::copperlist">copperlist</a></div><div class="desc docblock-short">CopperList is the main data structure used by Copper to communicate between tasks.
