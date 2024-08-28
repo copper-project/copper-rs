@@ -131,7 +131,6 @@ impl Drop for MmapStream {
     fn drop(&mut self) {
         let mut logger_guard = self.parent_logger.lock().unwrap();
         logger_guard.flush_section(&mut self.current_section);
-        mem::take(&mut self.current_section);
     }
 }
 
@@ -276,13 +275,18 @@ impl SlabEntry {
                 < (self.mmap_buffer.as_ptr() as usize + self.mmap_buffer.len())
     }
 
-    fn flush_section(&mut self, section: &SectionHandle) {
+    /// Flush the section to disk.
+    /// the flushing is permament and the section is considered closed.
+    fn flush_section(&mut self, section: &mut SectionHandle) {
         if section.buffer.as_ptr() < self.mmap_buffer.as_ptr()
             || section.buffer.as_ptr() as usize
                 > self.mmap_buffer.as_ptr() as usize + self.mmap_buffer.len()
         {
             panic!("Invalid section buffer, not in the slab");
         }
+
+        // Be sure that the header reflects the actual size of the section.
+        section.update_header();
 
         let base = self.mmap_buffer.as_ptr() as usize;
         let section_buffer_addr = section.buffer.as_ptr() as usize;
@@ -405,15 +409,12 @@ impl SectionHandle {
     pub fn get_user_buffer(&mut self) -> &mut [u8] {
         &mut self.buffer[MAX_HEADER_SIZE + self.used as usize..]
     }
-}
 
-impl Drop for SectionHandle {
-    fn drop(&mut self) {
+    pub fn update_header(&mut self) {
         // no need to do anything if we never used the section.
         if self.section_header.entry_type == UnifiedLogType::Empty || self.used == 0 {
             return;
         }
-
         self.section_header.filled_size = self.used;
 
         let _sz = encode_into_slice(&self.section_header, &mut self.buffer, standard())
@@ -547,9 +548,8 @@ impl UnifiedLoggerWrite {
 
 impl Drop for UnifiedLoggerWrite {
     fn drop(&mut self) {
-        let section = self.add_section(UnifiedLogType::LastEntry, 80); // TODO: determine that exactly
-        self.front_slab.flush_section(&section);
-        drop(section);
+        let mut section = self.add_section(UnifiedLogType::LastEntry, 80); // TODO: determine that exactly
+        self.front_slab.flush_section(&mut section);
         self.garbage_collect_backslabs();
         self.front_slab.close();
     }
