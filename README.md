@@ -1,6 +1,7 @@
 <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/static/cu29.png?raw=true" alt="logo"/>
 
 #
+
 # Copper
 
 [![copper](https://github.com/gbin/copper-project/actions/workflows/general.yml/badge.svg)](https://github.com/gbin/copper-project/actions/workflows/general.yml)
@@ -9,47 +10,55 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Gitter](https://img.shields.io/gitter/room/copper-project/copper-rs)](https://app.gitter.im/#/room/#copper:gitter.im)
 
-
-Copper is a user-friendly robotics framework designed for creating fast and reliable robots. Copper is to robots what a game engine is to games.
+Copper is a user-friendly robotics framework designed for creating fast and reliable robots. Copper is to robots what a
+game engine is to games.
 
 * Easy: Copper offers a high-level configuration system and a natural Rust-first API.
 
-* Fast: Copper uses Rust's zero-cost abstractions and a data-oriented approach to achieve sub-microsecond latency on commodity hardware, avoiding heap allocation during execution.
+* Fast: Copper uses Rust's zero-cost abstractions and a data-oriented approach to achieve sub-microsecond latency on
+  commodity hardware, avoiding heap allocation during execution.
 
-* Reliable: Copper leverages Rust's ownership, type system, and concurrency model to minimize bugs and ensure thread safety.
+* Reliable: Copper leverages Rust's ownership, type system, and concurrency model to minimize bugs and ensure thread
+  safety.
 
 * Product Oriented: Copper aims to avoid late-stage infra integration issues by generating a very predictable runtime.
 
 > [!NOTE]
-> Copper is still in **early development / alpha stage**, and the APIs are subject to change. We are looking for contributors to help us build the best robotics framework possible. If you are interested, please join us on [Gitter](https://gitter.im/copper-project/copper-rs) or open an issue.
+> Copper is still in **early development / alpha stage**, and the APIs are subject to change. We are looking for
+> contributors to help us build the best robotics framework possible. If you are interested, please join us
+> on [Gitter](https://gitter.im/copper-project/copper-rs) or open an issue.
 
 ### Technical Overview
 
 Copper is a data-oriented runtime with these key components:
 
+* **Task Graph
+  **: <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/graph.png?raw=true" alt="graph"/>
+  Described in [RON](https://github.com/ron-rs/ron), this configures the system's topology, specifying which tasks
+  communicate and setting types for nodes and messages.
 
-  
-* **Task Graph**: <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/graph.png?raw=true" alt="graph"/> Described in [RON](https://github.com/ron-rs/ron), this configures the system's topology, specifying which tasks communicate and setting types for nodes and messages.
-
-* **Runtime Generator**: This component decides on an execution plan based on the graph's metadata. It preallocates a "Copper List" to maximize sequential memory access during execution.
+* **Runtime Generator**: This component decides on an execution plan based on the graph's metadata. It preallocates a "
+  Copper List" to maximize sequential memory access during execution.
 
 * **Zero-Copy Data Logging**: Records all messages between tasks without copying data, ensuring efficient logging.
 
-* **Fast Structured Logging**: Interns and indexes logging strings at compile time, avoiding runtime string construction and ensuring high-speed textual logging.
+* **Fast Structured Logging**: Interns and indexes logging strings at compile time, avoiding runtime string construction
+  and ensuring high-speed textual logging.
 
 ### What features are already implemented?
 
-1. **Basic task lifecycle interface**: Should be relatively stable for you to start contributing new algorithms, sensors, and actuators.
+1. **Basic task lifecycle interface**: Should be relatively stable for you to start contributing new algorithms,
+   sensors, and actuators.
 2. **Runtime generation**: Works but is very simple; this is just a BFS type of execution.
 3. **Log reader & structured log reader**: Can export data, currently in Rust debug format.
 4. **Simple/minimal drivers included**: These are more to show you how to implement your own:
 
-| **Category** | **Type**  |                                          | **Description**                                                      | **Crate Name**   |
-|--------------|-----------|---------------------------------------------------|----------------------------------------------------------------------|------------------|
-| Sensors      | Lidar     | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/vlp16.jpg?raw=true" alt="vlp16"/>    | [Velodyne/Ouster VLP16](drivers/cu_vlp16)                             | cu_vlp16         |
-|              | IMU       | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/wt901.jpg?raw=true" alt="wt901"/>    | [WitMotion WT901](drivers/cu_wt901)                                   | cu_wt901         |
-| Actuators    | GPIO      | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/rp.jpg?raw=true" alt="rp"/>          | [Raspberry Pi](drivers/cu_rp_gpio)                                    | cu_rp_gpio       |
-|              | Servo     | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/lewansoul.jpg?raw=true" alt="lewansoul"/> | [Lewansoul Servo Bus (LX-16A, etc.)](drivers/cu_lewansoul)            | cu_lewansoul     |
+| **Category** | **Type** |                                                                                                                                           | **Description**                                            | **Crate Name** |
+|--------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------|----------------|
+| Sensors      | Lidar    | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/vlp16.jpg?raw=true" alt="vlp16"/>         | [Velodyne/Ouster VLP16](drivers/cu_vlp16)                  | cu_vlp16       |
+|              | IMU      | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/wt901.jpg?raw=true" alt="wt901"/>         | [WitMotion WT901](drivers/cu_wt901)                        | cu_wt901       |
+| Actuators    | GPIO     | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/rp.jpg?raw=true" alt="rp"/>               | [Raspberry Pi](drivers/cu_rp_gpio)                         | cu_rp_gpio     |
+|              | Servo    | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/lewansoul.jpg?raw=true" alt="lewansoul"/> | [Lewansoul Servo Bus (LX-16A, etc.)](drivers/cu_lewansoul) | cu_lewansoul   |
 
 ### What features are missing? What do we plan to implement next?
 
@@ -57,17 +66,24 @@ A lot! If any of these items pique your interest and you would like to contribut
 
 Here are some of the features we plan to implement next (in ~order of priority):
 
-- [ ] **Deterministic log replay**: As the runtime is generated in a deterministic fashion, we need to add hooks to inject messages into an existing runtime.
-- [ ] **Parallel Copper Lists**: Today Copper is monothreaded; this should enable concurrent Copper Lists to be executed at the same time with no contention.
-- [ ] **Bunching**: as various sensors can vary a lot in output frequencies, we need to be able to bunch messages together with a dropping/algorithmic policy (mean max etc...). Today this can be achieved on the user side but it is painful.
+- [ ] **Batching**: add a feature to batch messages for high frequency sources to reduce the number of Copper Lists.
+- [ ] **Merging/Aligning**: Add a feature to merge messages from multiple sources as an input to a task.
+- [ ] **Deterministic log replay**: As the runtime is generated in a deterministic fashion, we need to add hooks to
+  inject messages into an existing runtime.
+- [ ] **Parallel Copper Lists**: Today Copper is monothreaded; this should enable concurrent Copper Lists to be executed
+  at the same time with no contention.
 - [ ] **Monitoring**: We need a parallel system that can listen to monitoring messages and act accordingly.
-- [ ] **Distributed Copper**: Currently, we can only create one process. We need proper RPC filtering copper lists per subsystem.
-- [ ] **ROS interfacing**: Build a pair of sink and source to connect to existing ROS systems, helping users migrate their infra bit by bit.
-- [ ] **Modular Configuration**: As robots built with Copper gain complexity, users will need to build "variations" of their robots without duplicating their entire RON file.
-- [ ] **"PGO"-like scheduling**: Pass previous log runs to the runtime generator to allow it to make better scheduling decisions.
+- [ ] **Distributed Copper**: Currently, we can only create one process. We need proper RPC filtering copper lists per
+  subsystem.
+- [ ] **ROS interfacing**: Build a pair of sink and source to connect to existing ROS systems, helping users migrate
+  their infra bit by bit.
+- [ ] **Modular Configuration**: As robots built with Copper gain complexity, users will need to build "variations" of
+  their robots without duplicating their entire RON file.
+- [ ] **"PGO"-like scheduling**: Pass previous log runs to the runtime generator to allow it to make better scheduling
+  decisions.
 
 So we are only at the beginning, but so much cool stuff is coming up!
- 
+
 ### Kickstarting a copper project for the impatients
 
 You can generate a project from a template present in the repo.
@@ -188,28 +204,34 @@ fn main() {
 
 ```
 
-But this is a very minimal example for a task, please see [lifecycle](doc/lifecycle.md) for a more complete explanation of a task lifecycle.
+But this is a very minimal example for a task, please see [lifecycle](doc/lifecycle.md) for a more complete explanation
+of a task lifecycle.
 
 ## Deployment of the application
 
 Check out the [deployment](doc/deploy.md) page for more information.
-
 
 ## How is it better or different from ROS?
 
 ### Performance
 
 In the example directory, we have 2 equivalent applications. One written in C++ for ROS and a port in Rust with Copper.
+
 ```bash
 examples/cu_caterpillar
 examples/ros_caterpillar
 ```
-You can them out either just logging on a desktop or with GPIOs on a RPi and you should see a couple order of magnitude difference in performance.
 
-Copper has been design for performance first. Unlike a game engine we use a data oriented approach to minimize latency and maximize throughput.
+You can them out either just logging on a desktop or with GPIOs on a RPi and you should see a couple order of magnitude
+difference in performance.
+
+Copper has been design for performance first. Unlike a game engine we use a data oriented approach to minimize latency
+and maximize throughput.
 
 ### Safety
 
-As Copper is written in Rust, it is memory safe and thread safe by design. It is also designed to be easy to use and to avoid common pitfalls.
+As Copper is written in Rust, it is memory safe and thread safe by design. It is also designed to be easy to use and to
+avoid common pitfalls.
 
-As we progress on this project we plan on implementing more and more early warning to help you avoid "the death by a thousand cuts" that can happen in a complex system.
+As we progress on this project we plan on implementing more and more early warning to help you avoid "the death by a
+thousand cuts" that can happen in a complex system.
