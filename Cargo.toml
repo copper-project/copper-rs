@@ -12,6 +12,7 @@ members = [
     "cu29_soa_derive",
     "cu29_traits",
     "cu29_unifiedlog",
+    "drivers/cu_ads7883",
     "drivers/cu_vlp16",
     "drivers/cu_lewansoul",
     "drivers/cu_wt901",
