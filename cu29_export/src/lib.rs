@@ -400,10 +400,10 @@ mod tests {
 
             let mut entry = CuLogEntry::new(4); // this is a "Just a String {}" log line
             entry.add_param(0, Value::String("Parameter for the log line".into()));
-            log(entry).expect("Failed to log");
+            log(&mut entry).expect("Failed to log");
             let mut entry = CuLogEntry::new(2); // this is a "Just a String {}" log line
             entry.add_param(0, Value::String("Parameter for the log line".into()));
-            log(entry).expect("Failed to log");
+            log(&mut entry).expect("Failed to log");
 
             // everything is dropped here
             drop(rt);

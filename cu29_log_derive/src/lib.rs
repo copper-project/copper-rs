@@ -1,11 +1,12 @@
-mod index;
-
 extern crate proc_macro;
+mod index;
 
 use crate::index::intern_string;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse::Parser;
+#[cfg(debug_assertions)]
+use syn::spanned::Spanned;
 use syn::Token;
 use syn::{Expr, ExprAssign, ExprLit, Lit};
 
@@ -81,8 +82,29 @@ pub fn debug(input: TokenStream) -> TokenStream {
             log_entry.add_param(#index, param);
         }
     });
+
+    #[cfg(not(debug_assertions))]
+    let log_stmt = quote! {
+        let r = cu29_log_runtime::log(&mut log_entry);
+    };
+
+    #[cfg(debug_assertions)]
+    let log_stmt = {
+        let keys: Vec<_> = named_params
+            .iter()
+            .map(|(name, _)| {
+                let name_str = quote!(#name).to_string(); // Convert the expression to a token stream, then to a string
+                let lit_str = syn::LitStr::new(&name_str, name.span()); // Create a string literal with the original span
+                quote!(#lit_str)
+            })
+            .collect();
+        quote! {
+            let r = cu29_log_runtime::log_debug_mode(&mut log_entry, #_msg, &[#(#keys),*]);
+        }
+    };
+
     let postfix = quote! {
-        let r = cu29_log_runtime::log(log_entry);
+        #log_stmt
         if let Err(e) = r {
             eprintln!("Warning: Failed to log: {}", e);
             let backtrace = std::backtrace::Backtrace::capture();

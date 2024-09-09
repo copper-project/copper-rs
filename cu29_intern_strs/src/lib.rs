@@ -16,7 +16,7 @@ pub fn read_interned_strings(index: &Path) -> CuResult<Vec<String>> {
 
     let index_to_string = env
         .open_single("index_to_string", StoreOptions::default())
-        .expect("Failed to open index_to_string store");
+        .map_err(|e| CuError::new_with_cause("Could not open the index_to_string store", e))?;
     let db_reader = env.read().unwrap();
     let ri = index_to_string.iter_start(&db_reader);
     let mut i = ri.expect("Failed to start iterator");
