@@ -1,3 +1,6 @@
+#[cfg(test)]
+#[macro_use]
+extern crate approx;
 use bincode::de::BorrowDecoder;
 use bincode::de::Decoder;
 use bincode::enc::Encoder;
@@ -9,16 +12,13 @@ pub use quanta::Instant;
 use quanta::{Clock, Mock};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
+use std::ops::Div;
 use std::sync::Arc;
 use std::time::Duration;
 
-#[cfg(test)]
-#[macro_use]
-extern crate approx;
-
 /// For Robot times, the underlying type is a u64 representing nanoseconds.
 /// It is always positive to simplify the reasoning on the user side.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
 pub struct CuDuration(pub u64);
 
 /// bridge the API with standard Durations.
@@ -59,6 +59,18 @@ impl Add for CuDuration {
 
     fn add(self, rhs: Self) -> Self::Output {
         CuDuration(self.0 + rhs.0)
+    }
+}
+
+// a way to divide a duration by a scalar.
+// useful to compute averages for example.
+impl<T> Div<T> for CuDuration
+where
+    T: Into<u64>,
+{
+    type Output = Self;
+    fn div(self, rhs: T) -> Self {
+        CuDuration(self.0 / rhs.into())
     }
 }
 
