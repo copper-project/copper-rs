@@ -1,9 +1,10 @@
 use cu29_clock::RobotClock;
-use cu29_log::default_log_index_dir;
-use cu29_log_runtime::{ExtraTextLogger, LoggerRuntime};
+use cu29_log_runtime::LoggerRuntime;
 use cu29_traits::{CuResult, UnifiedLogType};
 use cu29_unifiedlog::{stream_write, UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerWrite};
-use simplelog::{ColorChoice, Config, LevelFilter, TermLogger, TerminalMode};
+use simplelog::TermLogger;
+#[cfg(debug_assertions)]
+use simplelog::{ColorChoice, Config, LevelFilter, TerminalMode};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -29,7 +30,7 @@ pub struct CopperContext {
 pub fn basic_copper_setup(
     unifiedlogger_output_base_name: &Path,
     slab_size: Option<usize>,
-    text_log: bool,
+    _text_log: bool,
 ) -> CuResult<CopperContext> {
     let preallocated_size = slab_size.unwrap_or(1024 * 1024 * 10);
     let UnifiedLogger::Write(logger) = UnifiedLoggerBuilder::new()
@@ -50,27 +51,20 @@ pub fn basic_copper_setup(
     );
 
     #[cfg(debug_assertions)]
-    let extra = if text_log {
+    let extra: Option<TermLogger> = if _text_log {
         let slow_text_logger = TermLogger::new(
             LevelFilter::Debug,
             Config::default(),
             TerminalMode::Mixed,
             ColorChoice::Auto,
         );
-
-        // This is the path to the index file that was created at build time.
-        // depending if we build with debug pick it from debug or release:
-        let log_index_path = default_log_index_dir();
-
-        let extra_text_logger: ExtraTextLogger =
-            ExtraTextLogger::new(log_index_path, slow_text_logger);
-        Some(extra_text_logger)
+        Some(*slow_text_logger)
     } else {
         None
     };
 
     #[cfg(not(debug_assertions))]
-    let extra = None;
+    let extra: Option<TermLogger> = None;
 
     let clock = RobotClock::default();
     let structured_logging = LoggerRuntime::init(clock.clone(), structured_stream, extra);
