@@ -454,7 +454,7 @@
 <span class="attr">#[proc_macro]
 </span><span class="kw">pub fn </span>gen_culist_payload(config_path_lit: TokenStream) -&gt; TokenStream {
     <span class="kw">let </span>config = <span class="macro">parse_macro_input!</span>(config_path_lit <span class="kw">as </span>LitStr).value();
-    <span class="macro">println!</span>(<span class="string">"[gen culist payload with {:?}]"</span>, config);
+    <span class="macro">eprintln!</span>(<span class="string">"[gen culist payload with {:?}]"</span>, config);
     <span class="kw">let </span>cuconfig = read_config(<span class="kw-2">&amp;</span>config);
     <span class="kw">let </span>runtime_plan: CuExecutionLoop =
         compute_runtime_plan(<span class="kw-2">&amp;</span>cuconfig).expect(<span class="string">"Could not compute runtime plan"</span>);
@@ -468,7 +468,7 @@
 /// This will add a "runtime" field to your struct and implement the "new" and "run" methods.
 </span><span class="attr">#[proc_macro_attribute]
 </span><span class="kw">pub fn </span>copper_runtime(args: TokenStream, input: TokenStream) -&gt; TokenStream {
-    <span class="macro">println!</span>(<span class="string">"[entry]"</span>);
+    <span class="macro">eprintln!</span>(<span class="string">"[entry]"</span>);
     <span class="kw">let </span><span class="kw-2">mut </span>item_struct = <span class="macro">parse_macro_input!</span>(input <span class="kw">as </span>ItemStruct);
 
     <span class="kw">let </span><span class="kw-2">mut </span>config_file: <span class="prelude-ty">Option</span>&lt;LitStr&gt; = <span class="prelude-val">None</span>;
@@ -481,28 +481,28 @@
         }
     });
 
-    <span class="macro">println!</span>(<span class="string">"[parse]"</span>);
+    <span class="macro">eprintln!</span>(<span class="string">"[parse]"</span>);
     <span class="macro">parse_macro_input!</span>(args with attribute_config_parser);
     <span class="kw">let </span>config_file = config_file
         .expect(<span class="string">"Expected config file attribute like #[CopperRuntime(config = \"path\")]"</span>)
         .value();
     <span class="kw">let </span>copper_config = read_config(<span class="kw-2">&amp;</span>config_file);
 
-    <span class="macro">println!</span>(<span class="string">"[runtime plan]"</span>);
+    <span class="macro">eprintln!</span>(<span class="string">"[runtime plan]"</span>);
     <span class="kw">let </span>runtime_plan: CuExecutionLoop =
         compute_runtime_plan(<span class="kw-2">&amp;</span>copper_config).expect(<span class="string">"Could not compute runtime plan"</span>);
 
-    <span class="macro">println!</span>(<span class="string">"[extract tasks types]"</span>);
+    <span class="macro">eprintln!</span>(<span class="string">"[extract tasks types]"</span>);
     <span class="kw">let </span>(all_tasks_types_names, all_tasks_types) = extract_tasks_types(<span class="kw-2">&amp;</span>copper_config);
 
-    <span class="macro">println!</span>(<span class="string">"[build task tuples]"</span>);
+    <span class="macro">eprintln!</span>(<span class="string">"[build task tuples]"</span>);
     <span class="comment">// Build the tuple of all those types
     // note the extraneous , at the end is to make the tuple work even if this is only one element
     </span><span class="kw">let </span>task_types_tuple: TypeTuple = <span class="macro">parse_quote!</span> {
         (#(#all_tasks_types),<span class="kw-2">*</span>,)
     };
 
-    <span class="macro">println!</span>(<span class="string">"[build runtime field]"</span>);
+    <span class="macro">eprintln!</span>(<span class="string">"[build runtime field]"</span>);
     <span class="comment">// add that to a new field
     </span><span class="kw">let </span>runtime_field: Field = <span class="macro">parse_quote!</span> {
         copper_runtime: _CuRuntime&lt;CuTasks, CuPayload, #DEFAULT_CLNB&gt;
@@ -510,7 +510,7 @@
 
     <span class="kw">let </span>name = <span class="kw-2">&amp;</span>item_struct.ident;
 
-    <span class="macro">println!</span>(<span class="string">"[match struct anonymity]"</span>);
+    <span class="macro">eprintln!</span>(<span class="string">"[match struct anonymity]"</span>);
     <span class="kw">match </span><span class="kw-2">&amp;mut </span>item_struct.fields {
         Named(fields_named) =&gt; {
             fields_named.named.push(runtime_field);
@@ -521,7 +521,7 @@
         <span class="kw">_ </span>=&gt; (),
     };
 
-    <span class="macro">println!</span>(<span class="string">"[gen instances]"</span>);
+    <span class="macro">eprintln!</span>(<span class="string">"[gen instances]"</span>);
     <span class="comment">// Generate the code to create instances of the nodes
     // It maps the types to their index
     </span><span class="kw">let </span>(task_instances_init_code,
@@ -574,7 +574,7 @@
         .map(|unit| {
             <span class="kw">match </span>unit {
                 CuExecutionUnit::Step(step) =&gt; {
-                    <span class="macro">println!</span>(
+                    <span class="macro">eprintln!</span>(
                         <span class="string">"{} -&gt; {} as {:?}. Input={:?}, Output={:?}"</span>,
                         step.node.get_id(),
                         step.node.get_type(),
@@ -652,13 +652,13 @@
             }
         }).collect();
 
-    <span class="macro">println!</span>(<span class="string">"[extract msg types]"</span>);
+    <span class="macro">eprintln!</span>(<span class="string">"[extract msg types]"</span>);
     <span class="kw">let </span>all_msgs_types_in_culist_order: Vec&lt;Type&gt; = extract_msg_types(<span class="kw-2">&amp;</span>runtime_plan);
 
-    <span class="macro">println!</span>(<span class="string">"[build the copper payload]"</span>);
+    <span class="macro">eprintln!</span>(<span class="string">"[build the copper payload]"</span>);
     <span class="kw">let </span>msgs_types_tuple: TypeTuple = build_culist_payload(<span class="kw-2">&amp;</span>all_msgs_types_in_culist_order);
 
-    <span class="macro">println!</span>(<span class="string">"[build the collect metadata function]"</span>);
+    <span class="macro">eprintln!</span>(<span class="string">"[build the collect metadata function]"</span>);
     <span class="kw">let </span>culist_size = all_msgs_types_in_culist_order.len();
     <span class="kw">let </span>culist_indices = (<span class="number">0</span>..(culist_size <span class="kw">as </span>u32)).map(int2index);
     <span class="kw">let </span>collect_metadata_function = <span class="macro">quote!</span> {
@@ -667,7 +667,7 @@
         }
     };
 
-    <span class="macro">println!</span>(<span class="string">"[build the run method]"</span>);
+    <span class="macro">eprintln!</span>(<span class="string">"[build the run method]"</span>);
     <span class="kw">let </span>run_method = <span class="macro">quote!</span> {
 
         <span class="kw">pub fn </span>start_all_tasks(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; _CuResult&lt;()&gt; {
@@ -720,7 +720,7 @@
         }
     };
 
-    <span class="macro">println!</span>(<span class="string">"[build result]"</span>);
+    <span class="macro">eprintln!</span>(<span class="string">"[build result]"</span>);
     <span class="comment">// Convert the modified struct back into a TokenStream
     </span><span class="kw">let </span>result = <span class="macro">quote!</span> {
         <span class="comment">// import everything with an _ to avoid clashes with the user's code
@@ -786,9 +786,9 @@
     <span class="comment">// Print and format the generated code using rustfmt
     // println!("Generated tokens: {}", tokens);
     </span><span class="kw">let </span>formatted_code = rustfmt_generated_code(tokens.to_string());
-    <span class="macro">println!</span>(<span class="string">"\n     ===    Gen. Runtime ===\n"</span>);
-    <span class="macro">println!</span>(<span class="string">"{}"</span>, highlight_rust_code(formatted_code));
-    <span class="macro">println!</span>(<span class="string">"\n     === === === === === ===\n"</span>);
+    <span class="macro">eprintln!</span>(<span class="string">"\n     ===    Gen. Runtime ===\n"</span>);
+    <span class="macro">eprintln!</span>(<span class="string">"{}"</span>, highlight_rust_code(formatted_code));
+    <span class="macro">eprintln!</span>(<span class="string">"\n     === === === === === ===\n"</span>);
 
     tokens
 }

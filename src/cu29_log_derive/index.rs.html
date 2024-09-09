@@ -124,7 +124,7 @@
 
 <span class="macro">macro_rules!</span> build_log {
     ($(<span class="macro-nonterminal">$arg</span>:tt)<span class="kw-2">*</span>) =&gt; {
-        <span class="macro">println!</span>(<span class="string">"{} {}"</span>, COLORED_PREFIX_BUILD_LOG, <span class="macro">format!</span>($(<span class="macro-nonterminal">$arg</span>)<span class="kw-2">*</span>));
+        <span class="macro">eprintln!</span>(<span class="string">"{} {}"</span>, COLORED_PREFIX_BUILD_LOG, <span class="macro">format!</span>($(<span class="macro-nonterminal">$arg</span>)<span class="kw-2">*</span>));
     };
 }
 
