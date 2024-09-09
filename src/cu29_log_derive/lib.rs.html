@@ -101,14 +101,37 @@
 <a href="#100" id="100">100</a>
 <a href="#101" id="101">101</a>
 <a href="#102" id="102">102</a>
-<a href="#103" id="103">103</a></pre></div><pre class="rust"><code><span class="kw">mod </span>index;
-
-<span class="kw">extern crate </span>proc_macro;
+<a href="#103" id="103">103</a>
+<a href="#104" id="104">104</a>
+<a href="#105" id="105">105</a>
+<a href="#106" id="106">106</a>
+<a href="#107" id="107">107</a>
+<a href="#108" id="108">108</a>
+<a href="#109" id="109">109</a>
+<a href="#110" id="110">110</a>
+<a href="#111" id="111">111</a>
+<a href="#112" id="112">112</a>
+<a href="#113" id="113">113</a>
+<a href="#114" id="114">114</a>
+<a href="#115" id="115">115</a>
+<a href="#116" id="116">116</a>
+<a href="#117" id="117">117</a>
+<a href="#118" id="118">118</a>
+<a href="#119" id="119">119</a>
+<a href="#120" id="120">120</a>
+<a href="#121" id="121">121</a>
+<a href="#122" id="122">122</a>
+<a href="#123" id="123">123</a>
+<a href="#124" id="124">124</a>
+<a href="#125" id="125">125</a></pre></div><pre class="rust"><code><span class="kw">extern crate </span>proc_macro;
+<span class="kw">mod </span>index;
 
 <span class="kw">use </span><span class="kw">crate</span>::index::intern_string;
 <span class="kw">use </span>proc_macro::TokenStream;
 <span class="kw">use </span>quote::quote;
 <span class="kw">use </span>syn::parse::Parser;
+<span class="attr">#[cfg(debug_assertions)]
+</span><span class="kw">use </span>syn::spanned::Spanned;
 <span class="kw">use </span>syn::Token;
 <span class="kw">use </span>syn::{Expr, ExprAssign, ExprLit, Lit};
 
@@ -184,8 +207,29 @@
             log_entry.add_param(#index, param);
         }
     });
+
+    <span class="attr">#[cfg(not(debug_assertions))]
+    </span><span class="kw">let </span>log_stmt = <span class="macro">quote!</span> {
+        <span class="kw">let </span>r = cu29_log_runtime::log(<span class="kw-2">&amp;mut </span>log_entry);
+    };
+
+    <span class="attr">#[cfg(debug_assertions)]
+    </span><span class="kw">let </span>log_stmt = {
+        <span class="kw">let </span>keys: Vec&lt;<span class="kw">_</span>&gt; = named_params
+            .iter()
+            .map(|(name, <span class="kw">_</span>)| {
+                <span class="kw">let </span>name_str = <span class="macro">quote!</span>(#name).to_string(); <span class="comment">// Convert the expression to a token stream, then to a string
+                </span><span class="kw">let </span>lit_str = syn::LitStr::new(<span class="kw-2">&amp;</span>name_str, name.span()); <span class="comment">// Create a string literal with the original span
+                </span><span class="macro">quote!</span>(#lit_str)
+            })
+            .collect();
+        <span class="macro">quote!</span> {
+            <span class="kw">let </span>r = cu29_log_runtime::log_debug_mode(<span class="kw-2">&amp;mut </span>log_entry, #_msg, <span class="kw-2">&amp;</span>[#(#keys),<span class="kw-2">*</span>]);
+        }
+    };
+
     <span class="kw">let </span>postfix = <span class="macro">quote!</span> {
-        <span class="kw">let </span>r = cu29_log_runtime::log(log_entry);
+        #log_stmt
         <span class="kw">if let </span><span class="prelude-val">Err</span>(e) = r {
             <span class="macro">eprintln!</span>(<span class="string">"Warning: Failed to log: {}"</span>, e);
             <span class="kw">let </span>backtrace = std::backtrace::Backtrace::capture();

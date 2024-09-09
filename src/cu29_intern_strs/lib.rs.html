@@ -52,7 +52,7 @@
 
     <span class="kw">let </span>index_to_string = env
         .open_single(<span class="string">"index_to_string"</span>, StoreOptions::default())
-        .expect(<span class="string">"Failed to open index_to_string store"</span>);
+        .map_err(|e| CuError::new_with_cause(<span class="string">"Could not open the index_to_string store"</span>, e))<span class="question-mark">?</span>;
     <span class="kw">let </span>db_reader = env.read().unwrap();
     <span class="kw">let </span>ri = index_to_string.iter_start(<span class="kw-2">&amp;</span>db_reader);
     <span class="kw">let </span><span class="kw-2">mut </span>i = ri.expect(<span class="string">"Failed to start iterator"</span>);

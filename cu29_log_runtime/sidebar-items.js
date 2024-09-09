@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["log"],"struct":["ExtraTextLogger","LoggerRuntime","OwningIoWriter","SimpleFileWriter"]};
+window.SIDEBAR_ITEMS = {"fn":["log","log_debug_mode"],"struct":["LoggerRuntime","NullLog","OwningIoWriter","SimpleFileWriter"]};

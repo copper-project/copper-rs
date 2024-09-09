@@ -167,7 +167,24 @@
 <a href="#166" id="166">166</a>
 <a href="#167" id="167">167</a>
 <a href="#168" id="168">168</a>
-<a href="#169" id="169">169</a></pre></div><pre class="rust"><code><span class="kw">use </span>bincode::{Decode, Encode};
+<a href="#169" id="169">169</a>
+<a href="#170" id="170">170</a>
+<a href="#171" id="171">171</a>
+<a href="#172" id="172">172</a>
+<a href="#173" id="173">173</a>
+<a href="#174" id="174">174</a>
+<a href="#175" id="175">175</a>
+<a href="#176" id="176">176</a>
+<a href="#177" id="177">177</a>
+<a href="#178" id="178">178</a>
+<a href="#179" id="179">179</a>
+<a href="#180" id="180">180</a>
+<a href="#181" id="181">181</a>
+<a href="#182" id="182">182</a>
+<a href="#183" id="183">183</a>
+<a href="#184" id="184">184</a>
+<a href="#185" id="185">185</a>
+<a href="#186" id="186">186</a></pre></div><pre class="rust"><code><span class="kw">use </span>bincode::{Decode, Encode};
 <span class="kw">use </span>cu29_clock::CuTime;
 <span class="kw">use </span>cu29_traits::{CuError, CuResult};
 <span class="kw">pub use </span>cu29_value <span class="kw">as </span>value;
@@ -284,39 +301,56 @@
     }
 }
 
+<span class="doccomment">/// Text log line formatter.
+</span><span class="attr">#[inline]
+</span><span class="kw">pub fn </span>format_logline(
+    time: CuTime,
+    format_str: <span class="kw-2">&amp;</span>str,
+    params: <span class="kw-2">&amp;</span>[String],
+    named_params: <span class="kw-2">&amp;</span>HashMap&lt;String, String&gt;,
+) -&gt; CuResult&lt;String&gt; {
+    <span class="kw">let </span><span class="kw-2">mut </span>format_str = format_str.to_string();
+
+    <span class="kw">for </span>param <span class="kw">in </span>params.iter() {
+        format_str = format_str.replacen(<span class="string">"{}"</span>, <span class="kw-2">&amp;</span>param, <span class="number">1</span>);
+    }
+
+    <span class="kw">if </span>named_params.is_empty() {
+        <span class="kw">return </span><span class="prelude-val">Ok</span>(format_str);
+    }
+
+    <span class="kw">let </span>logline = strfmt(<span class="kw-2">&amp;</span>format_str, <span class="kw-2">&amp;</span>named_params).map_err(|e| {
+        CuError::new_with_cause(
+            <span class="macro">format!</span>(
+                <span class="string">"Failed to format log line: {:?} with variables [{:?}]"</span>,
+                format_str, named_params
+            )
+            .as_str(),
+            e,
+        )
+    })<span class="question-mark">?</span>;
+    <span class="prelude-val">Ok</span>(<span class="macro">format!</span>(<span class="string">"{}: {}"</span>, time, logline))
+}
+
 <span class="doccomment">/// Rebuild a log line from the interned strings and the CuLogEntry.
 /// This basically translates the world of copper logs to text logs.
 </span><span class="kw">pub fn </span>rebuild_logline(all_interned_strings: <span class="kw-2">&amp;</span>Vec&lt;String&gt;, entry: <span class="kw-2">&amp;</span>CuLogEntry) -&gt; CuResult&lt;String&gt; {
-    <span class="kw">let </span><span class="kw-2">mut </span>format_string = all_interned_strings[entry.msg_index <span class="kw">as </span>usize].clone();
-    <span class="kw">let </span><span class="kw-2">mut </span>vars = HashMap::new();
+    <span class="kw">let </span>format_string = <span class="kw-2">&amp;</span>all_interned_strings[entry.msg_index <span class="kw">as </span>usize];
+    <span class="kw">let </span><span class="kw-2">mut </span>anon_params: Vec&lt;String&gt; = Vec::new();
+    <span class="kw">let </span><span class="kw-2">mut </span>named_params = HashMap::new();
 
     <span class="kw">for </span>(i, param) <span class="kw">in </span>entry.params.iter().enumerate() {
         <span class="kw">let </span>param_as_string = <span class="macro">format!</span>(<span class="string">"{}"</span>, param);
         <span class="kw">if </span>entry.paramname_indexes[i] == <span class="number">0 </span>{
             <span class="comment">// Anonymous parameter
-            </span>format_string = format_string.replacen(<span class="string">"{}"</span>, <span class="kw-2">&amp;</span>param_as_string, <span class="number">1</span>);
+            </span>anon_params.push(param_as_string);
         } <span class="kw">else </span>{
             <span class="comment">// Named parameter
             </span><span class="kw">let </span>name = all_interned_strings[entry.paramname_indexes[i] <span class="kw">as </span>usize].clone();
-            vars.insert(name, param_as_string);
+            named_params.insert(name, param_as_string);
         }
     }
-
-    <span class="kw">if </span>vars.is_empty() {
-        <span class="kw">return </span><span class="prelude-val">Ok</span>(format_string);
-    }
-
-    <span class="comment">// Use strfmt to replace named parameters
-    </span>strfmt(<span class="kw-2">&amp;</span>format_string, <span class="kw-2">&amp;</span>vars).map_err(|e| {
-        CuError::new_with_cause(
-            <span class="macro">format!</span>(
-                <span class="string">"Failed to format log line: {:?} with variables [{:?}]"</span>,
-                format_string, vars
-            )
-            .as_str(),
-            e,
-        )
-    })
+    format_logline(entry.time, format_string, <span class="kw-2">&amp;</span>anon_params, <span class="kw-2">&amp;</span>named_params)
 }
 
 <span class="kw">fn </span>parent_n_times(path: <span class="kw-2">&amp;</span>Path, n: usize) -&gt; <span class="prelude-ty">Option</span>&lt;PathBuf&gt; {
@@ -329,7 +363,7 @@
 
 <span class="doccomment">/// Convenience function to returns the default path for the log index directory.
 </span><span class="kw">pub fn </span>default_log_index_dir() -&gt; PathBuf {
-    <span class="kw">let </span>outdir = std::env::var(<span class="string">"LOG_INDEX_DIR"</span>).expect(<span class="string">"no LOGIN_INDEX_DIR system variable set, be sure build.rs sets it, see cu29_log/build.rs for example."</span>);
+    <span class="kw">let </span>outdir = std::env::var(<span class="string">"LOG_INDEX_DIR"</span>).expect(<span class="string">"no LOG_INDEX_DIR system variable set, be sure build.rs sets it, see cu29_log/build.rs for example."</span>);
     <span class="kw">let </span>outdir_path = Path::new(<span class="kw-2">&amp;</span>outdir);
     <span class="kw">let </span>target_dir = parent_n_times(<span class="kw-2">&amp;</span>outdir_path, <span class="number">3</span>)
         .unwrap()

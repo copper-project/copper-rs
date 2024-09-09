@@ -801,8 +801,8 @@
 
     <span class="kw">use </span>cu29_clock::RobotClock;
     <span class="kw">use </span>cu29_log::value::Value;
-    <span class="kw">use </span>cu29_log_runtime::log;
     <span class="kw">use </span>cu29_log_runtime::LoggerRuntime;
+    <span class="kw">use </span>cu29_log_runtime::{log, NullLog};
     <span class="kw">use </span>cu29_traits::UnifiedLogType;
     <span class="kw">use </span>cu29_unifiedlog::{
         stream_write, UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader,
@@ -851,14 +851,14 @@
             };
             <span class="kw">let </span>data_logger = Arc::new(Mutex::new(logger));
             <span class="kw">let </span>stream = stream_write(data_logger.clone(), UnifiedLogType::StructuredLogLine, <span class="number">1024</span>);
-            <span class="kw">let </span>rt = LoggerRuntime::init(RobotClock::default(), stream, <span class="prelude-val">None</span>);
+            <span class="kw">let </span>rt = LoggerRuntime::init(RobotClock::default(), stream, <span class="prelude-val">None</span>::&lt;NullLog&gt;);
 
             <span class="kw">let </span><span class="kw-2">mut </span>entry = CuLogEntry::new(<span class="number">4</span>); <span class="comment">// this is a "Just a String {}" log line
             </span>entry.add_param(<span class="number">0</span>, Value::String(<span class="string">"Parameter for the log line"</span>.into()));
-            log(entry).expect(<span class="string">"Failed to log"</span>);
+            log(<span class="kw-2">&amp;mut </span>entry).expect(<span class="string">"Failed to log"</span>);
             <span class="kw">let </span><span class="kw-2">mut </span>entry = CuLogEntry::new(<span class="number">2</span>); <span class="comment">// this is a "Just a String {}" log line
             </span>entry.add_param(<span class="number">0</span>, Value::String(<span class="string">"Parameter for the log line"</span>.into()));
-            log(entry).expect(<span class="string">"Failed to log"</span>);
+            log(<span class="kw-2">&amp;mut </span>entry).expect(<span class="string">"Failed to log"</span>);
 
             <span class="comment">// everything is dropped here
             </span>drop(rt);

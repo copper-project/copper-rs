@@ -74,18 +74,13 @@
 <a href="#73" id="73">73</a>
 <a href="#74" id="74">74</a>
 <a href="#75" id="75">75</a>
-<a href="#76" id="76">76</a>
-<a href="#77" id="77">77</a>
-<a href="#78" id="78">78</a>
-<a href="#79" id="79">79</a>
-<a href="#80" id="80">80</a>
-<a href="#81" id="81">81</a>
-<a href="#82" id="82">82</a></pre></div><pre class="rust"><code><span class="kw">use </span>cu29_clock::RobotClock;
-<span class="kw">use </span>cu29_log::default_log_index_dir;
-<span class="kw">use </span>cu29_log_runtime::{ExtraTextLogger, LoggerRuntime};
+<a href="#76" id="76">76</a></pre></div><pre class="rust"><code><span class="kw">use </span>cu29_clock::RobotClock;
+<span class="kw">use </span>cu29_log_runtime::LoggerRuntime;
 <span class="kw">use </span>cu29_traits::{CuResult, UnifiedLogType};
 <span class="kw">use </span>cu29_unifiedlog::{stream_write, UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerWrite};
-<span class="kw">use </span>simplelog::{ColorChoice, Config, LevelFilter, TermLogger, TerminalMode};
+<span class="kw">use </span>simplelog::TermLogger;
+<span class="attr">#[cfg(debug_assertions)]
+</span><span class="kw">use </span>simplelog::{ColorChoice, Config, LevelFilter, TerminalMode};
 <span class="kw">use </span>std::path::Path;
 <span class="kw">use </span>std::sync::{Arc, Mutex};
 
@@ -111,7 +106,7 @@
 </span><span class="kw">pub fn </span>basic_copper_setup(
     unifiedlogger_output_base_name: <span class="kw-2">&amp;</span>Path,
     slab_size: <span class="prelude-ty">Option</span>&lt;usize&gt;,
-    text_log: bool,
+    _text_log: bool,
 ) -&gt; CuResult&lt;CopperContext&gt; {
     <span class="kw">let </span>preallocated_size = slab_size.unwrap_or(<span class="number">1024 </span>* <span class="number">1024 </span>* <span class="number">10</span>);
     <span class="kw">let </span>UnifiedLogger::Write(logger) = UnifiedLoggerBuilder::new()
@@ -132,27 +127,20 @@
     );
 
     <span class="attr">#[cfg(debug_assertions)]
-    </span><span class="kw">let </span>extra = <span class="kw">if </span>text_log {
+    </span><span class="kw">let </span>extra: <span class="prelude-ty">Option</span>&lt;TermLogger&gt; = <span class="kw">if </span>_text_log {
         <span class="kw">let </span>slow_text_logger = TermLogger::new(
             LevelFilter::Debug,
             Config::default(),
             TerminalMode::Mixed,
             ColorChoice::Auto,
         );
-
-        <span class="comment">// This is the path to the index file that was created at build time.
-        // depending if we build with debug pick it from debug or release:
-        </span><span class="kw">let </span>log_index_path = default_log_index_dir();
-
-        <span class="kw">let </span>extra_text_logger: ExtraTextLogger =
-            ExtraTextLogger::new(log_index_path, slow_text_logger);
-        <span class="prelude-val">Some</span>(extra_text_logger)
+        <span class="prelude-val">Some</span>(<span class="kw-2">*</span>slow_text_logger)
     } <span class="kw">else </span>{
         <span class="prelude-val">None
     </span>};
 
     <span class="attr">#[cfg(not(debug_assertions))]
-    </span><span class="kw">let </span>extra = <span class="prelude-val">None</span>;
+    </span><span class="kw">let </span>extra: <span class="prelude-ty">Option</span>&lt;TermLogger&gt; = <span class="prelude-val">None</span>;
 
     <span class="kw">let </span>clock = RobotClock::default();
     <span class="kw">let </span>structured_logging = LoggerRuntime::init(clock.clone(), structured_stream, extra);
