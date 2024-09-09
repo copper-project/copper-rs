@@ -6,7 +6,7 @@ use cu29::{CuError, CuResult};
 use serde::{Deserialize, Serialize};
 use spidev::{SpiModeFlags, Spidev, SpidevOptions, SpidevTransfer};
 use std::io;
-trash on purpose
+
 pub struct ADS7883 {
     spi: Spidev,
 }
