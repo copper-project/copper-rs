@@ -14,7 +14,7 @@ const COLORED_PREFIX_BUILD_LOG: &str = "\x1b[32mCLog:\x1b[0m";
 
 macro_rules! build_log {
     ($($arg:tt)*) => {
-        println!("{} {}", COLORED_PREFIX_BUILD_LOG, format!($($arg)*));
+        eprintln!("{} {}", COLORED_PREFIX_BUILD_LOG, format!($($arg)*));
     };
 }
 
