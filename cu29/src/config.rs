@@ -75,6 +75,18 @@ impl From<i32> for Value {
     }
 }
 
+impl From<u32> for Value {
+    fn from(value: u32) -> Self {
+        Value(RonValue::Number((value as u64).into()))
+    }
+}
+
+impl From<u16> for Value {
+    fn from(value: u16) -> Self {
+        Value(RonValue::Number((value as u64).into()))
+    }
+}
+
 impl From<u8> for Value {
     fn from(value: u8) -> Self {
         Value(RonValue::Number((value as u64).into()))
@@ -92,6 +104,20 @@ impl From<Value> for u8 {
         if let RonValue::Number(num) = value.0 {
             if let Some(i) = num.as_i64() {
                 i as u8
+            } else {
+                panic!("Expected an integer value")
+            }
+        } else {
+            panic!("Expected a Number variant")
+        }
+    }
+}
+
+impl From<Value> for u32 {
+    fn from(value: Value) -> Self {
+        if let RonValue::Number(num) = value.0 {
+            if let Some(i) = num.as_i64() {
+                i as u32
             } else {
                 panic!("Expected an integer value")
             }
