@@ -27,7 +27,7 @@ fn int2index(i: u32) -> syn::Index {
 #[proc_macro]
 pub fn gen_culist_payload(config_path_lit: TokenStream) -> TokenStream {
     let config = parse_macro_input!(config_path_lit as LitStr).value();
-    println!("[gen culist payload with {:?}]", config);
+    eprintln!("[gen culist payload with {:?}]", config);
     let cuconfig = read_config(&config);
     let runtime_plan: CuExecutionLoop =
         compute_runtime_plan(&cuconfig).expect("Could not compute runtime plan");
@@ -41,7 +41,7 @@ pub fn gen_culist_payload(config_path_lit: TokenStream) -> TokenStream {
 /// This will add a "runtime" field to your struct and implement the "new" and "run" methods.
 #[proc_macro_attribute]
 pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
-    println!("[entry]");
+    eprintln!("[entry]");
     let mut item_struct = parse_macro_input!(input as ItemStruct);
 
     let mut config_file: Option<LitStr> = None;
@@ -54,28 +54,28 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     });
 
-    println!("[parse]");
+    eprintln!("[parse]");
     parse_macro_input!(args with attribute_config_parser);
     let config_file = config_file
         .expect("Expected config file attribute like #[CopperRuntime(config = \"path\")]")
         .value();
     let copper_config = read_config(&config_file);
 
-    println!("[runtime plan]");
+    eprintln!("[runtime plan]");
     let runtime_plan: CuExecutionLoop =
         compute_runtime_plan(&copper_config).expect("Could not compute runtime plan");
 
-    println!("[extract tasks types]");
+    eprintln!("[extract tasks types]");
     let (all_tasks_types_names, all_tasks_types) = extract_tasks_types(&copper_config);
 
-    println!("[build task tuples]");
+    eprintln!("[build task tuples]");
     // Build the tuple of all those types
     // note the extraneous , at the end is to make the tuple work even if this is only one element
     let task_types_tuple: TypeTuple = parse_quote! {
         (#(#all_tasks_types),*,)
     };
 
-    println!("[build runtime field]");
+    eprintln!("[build runtime field]");
     // add that to a new field
     let runtime_field: Field = parse_quote! {
         copper_runtime: _CuRuntime<CuTasks, CuPayload, #DEFAULT_CLNB>
@@ -83,7 +83,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let name = &item_struct.ident;
 
-    println!("[match struct anonymity]");
+    eprintln!("[match struct anonymity]");
     match &mut item_struct.fields {
         Named(fields_named) => {
             fields_named.named.push(runtime_field);
@@ -94,7 +94,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         _ => (),
     };
 
-    println!("[gen instances]");
+    eprintln!("[gen instances]");
     // Generate the code to create instances of the nodes
     // It maps the types to their index
     let (task_instances_init_code,
@@ -147,7 +147,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         .map(|unit| {
             match unit {
                 CuExecutionUnit::Step(step) => {
-                    println!(
+                    eprintln!(
                         "{} -> {} as {:?}. Input={:?}, Output={:?}",
                         step.node.get_id(),
                         step.node.get_type(),
@@ -225,13 +225,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         }).collect();
 
-    println!("[extract msg types]");
+    eprintln!("[extract msg types]");
     let all_msgs_types_in_culist_order: Vec<Type> = extract_msg_types(&runtime_plan);
 
-    println!("[build the copper payload]");
+    eprintln!("[build the copper payload]");
     let msgs_types_tuple: TypeTuple = build_culist_payload(&all_msgs_types_in_culist_order);
 
-    println!("[build the collect metadata function]");
+    eprintln!("[build the collect metadata function]");
     let culist_size = all_msgs_types_in_culist_order.len();
     let culist_indices = (0..(culist_size as u32)).map(int2index);
     let collect_metadata_function = quote! {
@@ -240,7 +240,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     };
 
-    println!("[build the run method]");
+    eprintln!("[build the run method]");
     let run_method = quote! {
 
         pub fn start_all_tasks(&mut self) -> _CuResult<()> {
@@ -293,7 +293,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     };
 
-    println!("[build result]");
+    eprintln!("[build result]");
     // Convert the modified struct back into a TokenStream
     let result = quote! {
         // import everything with an _ to avoid clashes with the user's code
@@ -359,9 +359,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     // Print and format the generated code using rustfmt
     // println!("Generated tokens: {}", tokens);
     let formatted_code = rustfmt_generated_code(tokens.to_string());
-    println!("\n     ===    Gen. Runtime ===\n");
-    println!("{}", highlight_rust_code(formatted_code));
-    println!("\n     === === === === === ===\n");
+    eprintln!("\n     ===    Gen. Runtime ===\n");
+    eprintln!("{}", highlight_rust_code(formatted_code));
+    eprintln!("\n     === === === === === ===\n");
 
     tokens
 }
