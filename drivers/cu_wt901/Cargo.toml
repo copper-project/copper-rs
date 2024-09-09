@@ -26,3 +26,9 @@ embedded-hal = "1"
 linux-embedded-hal = "0.4.0"
 i2cdev = "0.6.1"
 uom = { workspace = true }
+
+[dev-dependencies]
+cu29-derive = { workspace = true }
+cu29-unifiedlog = { workspace = true }
+cu29-traits = { workspace = true }
+cu29-helpers = { workspace = true }

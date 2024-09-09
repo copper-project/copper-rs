@@ -32,7 +32,7 @@ impl CuSinkTask for WT910TestSink {
     }
 }
 
-#[copper_runtime(config = "copperconfig.ron")]
+#[copper_runtime(config = "tests/copperconfig.ron")]
 struct WT910Tester {}
 
 fn main() {
