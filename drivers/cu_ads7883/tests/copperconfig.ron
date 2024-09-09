@@ -1,0 +1,15 @@
+(
+    tasks: [
+        (
+            id: "src",
+            type: "cu_ads7883::ADS7883",
+        ),
+        (
+            id: "tester",
+            type: "cu_ads7883::test_support::ADS78883TestSink",
+        ),
+     ],
+    cnx: [
+        (src: "src",  dst: "tester",   msg: "cu_ads7883::ADSReadingMsg"),
+    ],
+)

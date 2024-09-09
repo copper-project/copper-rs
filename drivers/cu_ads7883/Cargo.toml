@@ -1,0 +1,27 @@
+[package]
+name = "cu_ads7883"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+cu29 = { workspace = true }
+cu29-log = { workspace = true }
+cu29-log-runtime = { workspace = true }
+cu29-log-derive = { workspace = true }
+bincode = { workspace = true }
+spidev = "0.6.0"
+serde = { workspace = true }
+
+[dev-dependencies]
+cu29-derive = { workspace = true }
+cu29-unifiedlog = { workspace = true }
+cu29-traits = { workspace = true }
+cu29-helpers = { workspace = true }
+
+
