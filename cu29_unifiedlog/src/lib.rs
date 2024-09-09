@@ -288,6 +288,9 @@ impl SlabEntry {
         // Be sure that the header reflects the actual size of the section.
         section.update_header();
 
+        let _sz = encode_into_slice(&section.section_header, &mut section.buffer, standard())
+            .expect("Failed to encode section header");
+
         let base = self.mmap_buffer.as_ptr() as usize;
         let section_buffer_addr = section.buffer.as_ptr() as usize;
         self.sections_offsets_in_flight
@@ -656,7 +659,9 @@ impl UnifiedLoggerRead {
     /// Reads the section content from the section header pos.
     fn read_section_content(&mut self, header: &SectionHeader) -> CuResult<Vec<u8>> {
         // TODO: we could optimize by asking the buffer to fill
-
+        if header.filled_size == 0 {
+            eprintln!("Warning: read an empty section");
+        }
         let mut section = vec![0; header.filled_size as usize];
         let start_of_data = self.current_reading_position + MAX_HEADER_SIZE;
         section.copy_from_slice(
