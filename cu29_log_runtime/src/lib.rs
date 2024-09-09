@@ -4,24 +4,37 @@ use bincode::enc::Encode;
 use bincode::enc::{Encoder, EncoderImpl};
 use bincode::error::EncodeError;
 use cu29_clock::RobotClock;
-#[cfg(debug_assertions)]
-use cu29_intern_strs::read_interned_strings;
 use cu29_log::CuLogEntry;
 use cu29_traits::{CuResult, WriteStream};
+use log::Log;
+
 #[cfg(debug_assertions)]
-use log::{Log, Record};
+use cu29_log::format_logline;
+#[cfg(debug_assertions)]
+use log::Record;
+#[cfg(debug_assertions)]
+use std::collections::HashMap;
+
 use std::fmt::{Debug, Formatter};
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
-#[cfg(debug_assertions)]
-use std::sync::Arc;
 use std::sync::{Mutex, OnceLock};
 
 static WRITER: OnceLock<(Mutex<Box<dyn WriteStream<CuLogEntry>>>, RobotClock)> = OnceLock::new();
 
 #[cfg(debug_assertions)]
-static EXTRA_TEXT_LOGGER: OnceLock<Option<ExtraTextLogger>> = OnceLock::new();
+static EXTRA_TEXT_LOGGER: OnceLock<Option<Box<dyn Log>>> = OnceLock::new();
+
+pub struct NullLog {}
+impl Log for NullLog {
+    fn enabled(&self, _metadata: &log::Metadata) -> bool {
+        false
+    }
+
+    fn log(&self, _record: &log::Record) {}
+    fn flush(&self) {}
+}
 
 /// The lifetime of this struct is the lifetime of the logger.
 pub struct LoggerRuntime {}
@@ -32,7 +45,7 @@ impl LoggerRuntime {
     pub fn init(
         clock: RobotClock,
         destination: impl WriteStream<CuLogEntry> + 'static,
-        #[allow(unused_variables)] extra_text_logger: Option<ExtraTextLogger>,
+        #[allow(unused_variables)] extra_text_logger: Option<impl Log + 'static>,
     ) -> Self {
         let runtime = LoggerRuntime {};
 
@@ -47,9 +60,8 @@ impl LoggerRuntime {
                 .unwrap();
         }
         #[cfg(debug_assertions)]
-        if let Some(logger) = extra_text_logger {
-            let _ = EXTRA_TEXT_LOGGER.set(Some(logger));
-        }
+        let _ =
+            EXTRA_TEXT_LOGGER.set(extra_text_logger.map(|logger| Box::new(logger) as Box<dyn Log>));
 
         runtime
     }
@@ -75,30 +87,10 @@ impl Drop for LoggerRuntime {
     }
 }
 
-/// This is to basically be able to see the logs in text format in real time.
-/// This will only be active for debug builds.
-pub struct ExtraTextLogger {
-    // We reload the entire index in memory.
-    #[cfg(debug_assertions)]
-    all_strings: Vec<String>,
-    #[cfg(debug_assertions)]
-    inner: Arc<dyn Log>,
-}
-#[cfg(debug_assertions)]
-impl ExtraTextLogger {
-    pub fn new(path_to_index: PathBuf, logger: Box<dyn Log>) -> Self {
-        let all_strings = read_interned_strings(&path_to_index).unwrap();
-        ExtraTextLogger {
-            all_strings,
-            inner: Arc::new(logger),
-        }
-    }
-}
-
 /// Function called from generated code to log data.
 /// It moves entry by design, it will be absorbed in the queue.
 #[inline(always)]
-pub fn log(mut entry: CuLogEntry) -> CuResult<()> {
+pub fn log(entry: &mut CuLogEntry) -> CuResult<()> {
     let d = WRITER.get().map(|(writer, clock)| (writer, clock));
     if d.is_none() {
         return Err("Logger not initialized.".into());
@@ -113,35 +105,51 @@ pub fn log(mut entry: CuLogEntry) -> CuResult<()> {
     {
         // This scope is important :).
         // if we have not passed a text logger in debug mode, it is ok just move along.
-        let guarded_logger = EXTRA_TEXT_LOGGER.get();
-        if guarded_logger.is_none() {
-            return Ok(());
-        }
-        if let Some(logger) = guarded_logger.unwrap() {
-            let stringified = cu29_log::rebuild_logline(&logger.all_strings, &entry);
-            match stringified {
-                Ok(s) => {
-                    let s = format!("[{}] {}", entry.time, s);
-                    logger.inner.log(
-                        &Record::builder()
-                            // TODO: forward this info in the CuLogEntry
-                            .level(log::Level::Debug)
-                            // .target("copper")
-                            //.module_path_static(Some("cu29_log"))
-                            //.file_static(Some("cu29_log"))
-                            //.line(Some(0))
-                            .args(format_args!("{}", s))
-                            .build(),
-                    ); // DO NOT TRY to split off this statement.
-                       // format_args! has to be in the same statement per structure and scoping.
-                }
-                Err(e) => {
-                    eprintln!("Failed to rebuild log line: {}", e);
-                }
-            }
-        }
     }
 
+    Ok(())
+}
+
+/// This version of log is only compiled in debug mode
+/// This allows a normal logging framework to be bridged.
+#[cfg(debug_assertions)]
+pub fn log_debug_mode(
+    entry: &mut CuLogEntry,
+    format_str: &str, // this is the missing info at runtime.
+    param_names: &[&str],
+) -> CuResult<()> {
+    log(entry)?;
+
+    let guarded_logger = EXTRA_TEXT_LOGGER.get();
+    if guarded_logger.is_none() {
+        return Ok(());
+    }
+    if let Some(logger) = guarded_logger.unwrap() {
+        let fstr = format_str.to_string();
+        // transform the slice into a hashmap
+        let params: Vec<String> = entry.params.iter().map(|v| v.to_string()).collect();
+        let named_params: Vec<(&str, String)> = param_names
+            .iter()
+            .zip(params.iter())
+            .map(|(name, value)| (*name, value.clone()))
+            .collect();
+        // build hashmap of string, string from named_paramgs
+        let named_params: HashMap<String, String> = named_params
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.clone()))
+            .collect();
+        let logline = format_logline(entry.time, &fstr, params.as_slice(), &named_params)?;
+        logger.log(
+            &Record::builder()
+                .args(format_args!("{}", logline))
+                .level(log::Level::Info)
+                .target("cu29_log")
+                .module_path_static(Some("cu29_log"))
+                .file_static(Some("cu29_log"))
+                .line(Some(0))
+                .build(),
+        );
+    }
     Ok(())
 }
 
