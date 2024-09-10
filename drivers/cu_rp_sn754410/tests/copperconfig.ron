@@ -1,0 +1,15 @@
+(
+    tasks: [
+        (
+            id: "src",
+            type: "cu_rp_sn754410::test_support::SN754410TestSrc",
+        ),
+        (
+            id: "pwm",
+            type: "cu_rp_sn754410::SN754410",
+        ),
+     ],
+    cnx: [
+        (src: "src",  dst: "pwm",   msg: "cu_rp_sn754410::MotorMsg"),
+    ],
+)
