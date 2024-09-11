@@ -1,5 +1,6 @@
 [package]
 name = "cu_standalone_structlog"
+dependencies = "Example of using structlog in a standalone application"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
