@@ -51,14 +51,16 @@ Copper is a data-oriented runtime with these key components:
    sensors, and actuators.
 2. **Runtime generation**: Works but is very simple; this is just a BFS type of execution.
 3. **Log reader & structured log reader**: Can export data, currently in Rust debug format.
-4. **Simple/minimal drivers included**: These are more to show you how to implement your own:
+4. **Simple/minimal drivers included**: Those are good examples if you want to write your own!
 
-| **Category** | **Type** |                                                                                                                                           | **Description**                                            | **Crate Name** |
-|--------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------|----------------|
-| Sensors      | Lidar    | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/vlp16.jpg?raw=true" alt="vlp16"/>         | [Velodyne/Ouster VLP16](drivers/cu_vlp16)                  | cu_vlp16       |
-|              | IMU      | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/wt901.jpg?raw=true" alt="wt901"/>         | [WitMotion WT901](drivers/cu_wt901)                        | cu_wt901       |
-| Actuators    | GPIO     | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/rp.jpg?raw=true" alt="rp"/>               | [Raspberry Pi](drivers/cu_rp_gpio)                         | cu_rp_gpio     |
-|              | Servo    | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/lewansoul.jpg?raw=true" alt="lewansoul"/> | [Lewansoul Servo Bus (LX-16A, etc.)](drivers/cu_lewansoul) | cu_lewansoul   |
+| **Category** | **Type**        |                                                                                                                                                                 | **Description**                                            | **Crate Name** |
+|--------------|-----------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------|----------------|
+| Sensors      | Lidar           | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/vlp16.jpg?raw=true" alt="vlp16"/>                               | [Velodyne/Ouster VLP16](drivers/cu_vlp16)                  | cu_vlp16       |
+|              | IMU             | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/wt901.jpg?raw=true" alt="wt901"/>                               | [WitMotion WT901](drivers/cu_wt901)                        | cu_wt901       |
+|              | ADC/Position    | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/drivers/cu_ads7883/doc/ads7883-scale.jpg?raw=true" alt="ads7883"/>  | [ADS 7883 3MPSPS SPI ADC](drivers/cu_ads7883)              | cu_ads7883     |
+| Actuators    | GPIO            | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/rp.jpg?raw=true" alt="rp"/>                                     | [Raspberry Pi](drivers/cu_rp_gpio)                         | cu_rp_gpio     |
+|              | Servo           | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/lewansoul.jpg?raw=true" alt="lewansoul"/>                       | [Lewansoul Servo Bus (LX-16A, etc.)](drivers/cu_lewansoul) | cu_lewansoul   |
+|              | DC Motor Driver | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/drivers/cu_rp_sn754410/doc/sn754410.jpeg?raw=true" alt="sn754410"/> | [Half-H Driver for CD Motors](drivers/cu_rp_sn754410)      | cu_rp_sn754410 |
 
 ### What features are missing? What do we plan to implement next?
 
