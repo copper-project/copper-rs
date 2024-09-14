@@ -509,13 +509,38 @@ mod tests {
         assert_eq!(foo, CuTime::from(Duration::from_nanos(42)));
     }
     #[test]
-    fn cutime_value_encode_decode() {
-        let c = Value::CuTime(CuTime::from(Duration::from_nanos(42)));
-        let v = bincode::encode_to_vec(&c, standard()).expect("encode failed");
-        let (v2, s) = bincode::decode_from_slice::<Value, _>(v.as_slice(), standard())
-            .expect("decode failed");
-        assert_eq!(s, v.len());
-        assert_eq!(&v2, &c);
+    fn value_encode_decode() {
+        fn check_value(value: Value) {
+            let v = bincode::encode_to_vec(&value, standard()).expect("encode failed");
+            let (v2, s) = bincode::decode_from_slice::<Value, _>(v.as_slice(), standard())
+                .expect("decode failed");
+            assert_eq!(s, v.len());
+            assert_eq!(&v2, &value);
+        }
+
+        check_value(Value::Bool(true));
+        check_value(Value::U8(42));
+        check_value(Value::U16(42));
+        check_value(Value::U32(42));
+        check_value(Value::U64(42));
+        check_value(Value::I8(42));
+        check_value(Value::I16(42));
+        check_value(Value::I32(42));
+        check_value(Value::I64(42));
+        check_value(Value::F32(42.42));
+        check_value(Value::F64(42.42));
+        check_value(Value::Char('4'));
+        check_value(Value::String("42".into()));
+        check_value(Value::Unit);
+        check_value(Value::Option(Some(Box::new(Value::U32(42)))));
+        check_value(Value::Newtype(Box::new(Value::U32(42))));
+        check_value(Value::Seq(vec![Value::Bool(true), Value::U32(42)]));
+        check_value(Value::Map(BTreeMap::from([
+            (Value::Bool(true), Value::U32(42)),
+            (Value::String("42".into()), Value::I32(42)),
+        ])));
+        check_value(Value::Bytes(vec![0x4, 0x2]));
+        check_value(Value::CuTime(CuTime::from(Duration::from_nanos(42))));
     }
 
     #[test]
