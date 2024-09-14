@@ -408,7 +408,15 @@ fn extract_msg_types(runtime_plan: &CuExecutionLoop) -> Vec<Type> {
         .filter_map(|unit| match unit {
             CuExecutionUnit::Step(step) => {
                 if let Some(output_msg_type) = &step.output_msg_type {
-                    Some(parse_str::<Type>(output_msg_type.as_str()).unwrap())
+                    Some(
+                        parse_str::<Type>(output_msg_type.as_str()).expect(
+                            format!(
+                                "Could not transform {} into a message Rust type.",
+                                output_msg_type
+                            )
+                            .as_str(),
+                        ),
+                    )
                 } else {
                     None
                 }
