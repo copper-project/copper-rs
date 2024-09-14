@@ -1,0 +1,35 @@
+[package]
+name = "cu-rp-balancebot"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[package.metadata.cargo-machete]
+ignored = ["cu29-log", "cu29-log-runtime", "cu29-unifiedlog", "copper-traits"]  # proc macro
+
+[dependencies]
+cu29 = { workspace = true }
+cu29-traits = { workspace = true }
+cu29-derive = { workspace = true }
+cu29-helpers = { workspace = true }
+cu29-log = { workspace = true }
+cu29-log-runtime = { workspace = true }
+cu29-log-derive = { workspace = true }
+cu29-unifiedlog = { workspace = true }
+cu29-export = { workspace = true }
+bincode = { workspace = true }
+cu-rp-sn754410 = { path = "../../drivers/cu_rp_sn754410" }
+cu-ads7883 = { path = "../../drivers/cu_ads7883" }
+
+[[bin]]
+name = "balancebot"
+path = "src/main.rs"
+
+[[bin]]
+name = "balancebot-logreader"
+path = "src/logreader.rs"

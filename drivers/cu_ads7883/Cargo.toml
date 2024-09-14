@@ -1,5 +1,5 @@
 [package]
-name = "cu_ads7883"
+name = "cu-ads7883"
 description = "This is a driver for the TI ADS7883 for Copper."
 version.workspace = true
 authors.workspace = true
