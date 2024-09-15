@@ -2,12 +2,13 @@ use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
-use cu29::clock::RobotClock;
+use cu29::clock::{CuTime, RobotClock};
 use cu29::config::NodeInstanceConfig;
 use cu29::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle, Freezable};
 use cu29::{input_msg, CuResult};
 use serde::{Deserialize, Serialize};
 
+use cu29_log_derive::debug;
 use cu29_traits::CuError;
 use rppal::pwm::{Channel, Polarity, Pwm};
 
@@ -17,6 +18,7 @@ pub struct SN754410 {
     current_power: f32, // retain what was the last state so we don't bang the hardware at each iteration.
     pwm0: Pwm,
     pwm1: Pwm,
+    last_update: CuTime,
 }
 
 #[derive(Debug, Clone, Copy, Default, Encode, Decode, PartialEq, Serialize, Deserialize)]
@@ -25,6 +27,63 @@ pub struct MotorMsg {
 }
 
 impl MotorMsg {}
+
+impl SN754410 {
+    #[inline]
+    fn forward(&mut self, pwm: f64) -> CuResult<()> {
+        self.pwm0
+            .set_duty_cycle(pwm)
+            .map_err(|e| CuError::new_with_cause("Failed to set PWM0 duty cycle", e))?;
+        self.pwm1
+            .set_duty_cycle(0.0)
+            .map_err(|e| CuError::new_with_cause("Failed to set PWM1 duty cycle", e))?;
+        Ok(())
+    }
+
+    #[inline]
+    fn reverse(&mut self, pwm: f64) -> CuResult<()> {
+        self.pwm0
+            .set_duty_cycle(0.0)
+            .map_err(|e| CuError::new_with_cause("Failed to set PWM0 duty cycle", e))?;
+        self.pwm1
+            .set_duty_cycle(pwm)
+            .map_err(|e| CuError::new_with_cause("Failed to set PWM1 duty cycle", e))?;
+        Ok(())
+    }
+
+    #[inline]
+    fn stop(&mut self) -> CuResult<()> {
+        self.pwm0
+            .set_duty_cycle(0.0)
+            .map_err(|e| CuError::new_with_cause("Failed to set PWM0 duty cycle", e))?;
+        self.pwm1
+            .set_duty_cycle(0.0)
+            .map_err(|e| CuError::new_with_cause("Failed to set PWM1 duty cycle", e))?;
+        Ok(())
+    }
+
+    #[inline]
+    fn enable_pwms(&mut self) -> CuResult<()> {
+        self.pwm0
+            .enable()
+            .map_err(|e| CuError::new_with_cause("Failed to enable PWM0", e))?;
+        self.pwm1
+            .enable()
+            .map_err(|e| CuError::new_with_cause("Failed to enable PWM1", e))?;
+        Ok(())
+    }
+
+    #[inline]
+    fn disable_pwms(&mut self) -> CuResult<()> {
+        self.pwm0
+            .disable()
+            .map_err(|e| CuError::new_with_cause("Failed to disable PWM0", e))?;
+        self.pwm1
+            .disable()
+            .map_err(|e| CuError::new_with_cause("Failed to disable PWM1", e))?;
+        Ok(())
+    }
+}
 
 impl CuTaskLifecycle for SN754410 {
     fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self>
@@ -40,25 +99,16 @@ impl CuTaskLifecycle for SN754410 {
             current_power: 0.0f32,
             pwm0,
             pwm1,
+            last_update: CuTime::default(),
         })
     }
     fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
-        self.pwm0
-            .enable()
-            .map_err(|e| CuError::new_with_cause("Failed to enable PWM0", e))?;
-        self.pwm1
-            .enable()
-            .map_err(|e| CuError::new_with_cause("Failed to enable PWM1", e))?;
-        Ok(())
+        debug!("Enabling SN754410.");
+        self.enable_pwms()
     }
     fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
-        self.pwm0
-            .disable()
-            .map_err(|e| CuError::new_with_cause("Failed to disable PWM0", e))?;
-        self.pwm1
-            .disable()
-            .map_err(|e| CuError::new_with_cause("Failed to disable PWM1", e))?;
-        Ok(())
+        debug!("Disabling SN754410.");
+        self.disable_pwms()
     }
 }
 
@@ -81,27 +131,15 @@ impl<'cl> CuSinkTask<'cl> for SN754410 {
         if power != self.current_power {
             self.current_power = power;
             if self.current_power > 0.0 {
-                self.pwm1
-                    .set_duty_cycle(0.0)
-                    .map_err(|e| CuError::new_with_cause("Failed to set PWM1 duty cycle", e))?;
-                self.pwm0
-                    .set_duty_cycle(self.current_power.abs() as f64)
-                    .map_err(|e| CuError::new_with_cause("Failed to set PWM0 duty cycle", e))?;
+                self.forward(self.current_power as f64)?;
             } else if self.current_power < 0.0 {
-                self.pwm0
-                    .set_duty_cycle(0.0)
-                    .map_err(|e| CuError::new_with_cause("Failed to set PWM0 duty cycle", e))?;
-                self.pwm1
-                    .set_duty_cycle(self.current_power.abs() as f64)
-                    .map_err(|e| CuError::new_with_cause("Failed to set PWM1 duty cycle", e))?;
+                self.reverse(-self.current_power as f64)?;
             } else {
-                self.pwm0
-                    .set_duty_cycle(0.0)
-                    .map_err(|e| CuError::new_with_cause("Failed to set PWM0 duty cycle", e))?;
-                self.pwm1
-                    .set_duty_cycle(0.0)
-                    .map_err(|e| CuError::new_with_cause("Failed to set PWM1 duty cycle", e))?;
+                self.stop()?;
             }
+            self.last_update = clock.now();
+        } else {
+            debug!("Power is the same {}, skipping.", self.current_power);
         }
         Ok(())
     }

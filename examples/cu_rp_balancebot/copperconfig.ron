@@ -6,7 +6,14 @@
         ),
         (
             id: "pidctrl",
-            type: "tasks::PIDTask",
+            type: "pidtask::PIDTask",
+            config: {
+                "kp": 0.00593, // 1 / 168 ticks
+                // "ki": 0.1,
+                // "kd": 0.1,
+                "setpoint": 3175.33,
+                "cutoff": 170.0, // cut off if the measured value is outside of +/- 170 ticks around the setpoint
+            },
         ),
         (
             id: "motor",

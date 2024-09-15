@@ -8,6 +8,7 @@ keywords.workspace = true
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
+default-run = "balancebot"
 
 [package.metadata.cargo-machete]
 ignored = ["cu29-log", "cu29-log-runtime", "cu29-unifiedlog", "copper-traits"]  # proc macro
@@ -21,10 +22,17 @@ cu29-log = { workspace = true }
 cu29-log-runtime = { workspace = true }
 cu29-log-derive = { workspace = true }
 cu29-unifiedlog = { workspace = true }
-cu29-export = { workspace = true }
 bincode = { workspace = true }
 cu-rp-sn754410 = { path = "../../drivers/cu_rp_sn754410" }
 cu-ads7883 = { path = "../../drivers/cu_ads7883" }
+# Only include cu29-export when the "logreader" feature is enabled
+cu29-export = { workspace = true, optional = true }
+pid = "4.0.0"
+ctrlc = "*"
+
+[features]
+default = ["logreader"]
+logreader = ["cu29-export"]
 
 [[bin]]
 name = "balancebot"
@@ -33,3 +41,8 @@ path = "src/main.rs"
 [[bin]]
 name = "balancebot-logreader"
 path = "src/logreader.rs"
+required-features = ["logreader"]
+
+
+[target.'cfg(not(target_arch = "arm"))'.dependencies]
+cu29-export = { workspace = true, optional = true }
