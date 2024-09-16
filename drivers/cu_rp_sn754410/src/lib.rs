@@ -16,6 +16,7 @@ const PWM_FREQUENCY: f64 = 1000.0; // Frequency in Hz
 
 pub struct SN754410 {
     current_power: f32, // retain what was the last state so we don't bang the hardware at each iteration.
+    deadzone: f32,
     pwm0: Pwm,
     pwm1: Pwm,
     last_update: CuTime,
@@ -86,10 +87,11 @@ impl SN754410 {
 }
 
 impl CuTaskLifecycle for SN754410 {
-    fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self>
+    fn new(config: Option<&NodeInstanceConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {
+        let deadzone: f32 = config.and_then(|c| c.get::<f64>("deadzone")).unwrap_or(0.0) as f32;
         let pwm0 = Pwm::with_frequency(Channel::Pwm0, PWM_FREQUENCY, 0.0, Polarity::Normal, false)
             .map_err(|e| CuError::new_with_cause("Failed to create PWM0", e))?;
         let pwm1 = Pwm::with_frequency(Channel::Pwm1, PWM_FREQUENCY, 0.0, Polarity::Normal, false)
@@ -100,6 +102,7 @@ impl CuTaskLifecycle for SN754410 {
             pwm0,
             pwm1,
             last_update: CuTime::default(),
+            deadzone,
         })
     }
     fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
@@ -126,11 +129,23 @@ impl Freezable for SN754410 {
 impl<'cl> CuSinkTask<'cl> for SN754410 {
     type Input = input_msg!('cl, MotorMsg);
 
-    fn process(&mut self, _clock: &RobotClock, input: Self::Input) -> CuResult<()> {
+    fn process(&mut self, clock: &RobotClock, input: &mut CuMsg<Self::Input>) -> CuResult<()> {
         let power = input.payload().unwrap().power;
-        if power != self.current_power {
-            self.current_power = power;
-            if self.current_power > 0.0 {
+        let deadzone_compensated = if power != 0.0f32 {
+            // proportinally on the [deadzone, 1.0] range*/
+            let deadzone = self.deadzone;
+            if power > 0.0 {
+                deadzone + (1.0 - deadzone) * power
+            } else {
+                -deadzone + (1.0 + deadzone) * power
+            }
+        } else {
+            power
+        };
+
+        if deadzone_compensated != self.current_power {
+            self.current_power = deadzone_compensated;
+            if deadzone_compensated > 0.0 {
                 self.forward(self.current_power as f64)?;
             } else if self.current_power < 0.0 {
                 self.reverse(-self.current_power as f64)?;
@@ -139,7 +154,7 @@ impl<'cl> CuSinkTask<'cl> for SN754410 {
             }
             self.last_update = clock.now();
         } else {
-            debug!("Power is the same {}, skipping.", self.current_power);
+            debug!("Power is the same {}, skipping.", deadzone_compensated);
         }
         Ok(())
     }

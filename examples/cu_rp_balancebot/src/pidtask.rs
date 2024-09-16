@@ -49,7 +49,7 @@ impl CuTaskLifecycle for PIDTask {
                     pid.i(ki as f32, 1.0f32);
                 }
                 if let Some(kd) = config.get::<f64>("kd") {
-                    pid.d(kd as f32, 1.0f32);
+                    pid.d(kd as f32, 2.0f32);
                 }
                 Ok(Self {
                     pid,
@@ -82,21 +82,20 @@ impl CuTask for PIDTask {
         debug!("{}: PIDTask processing input: {}", clock.now(), input);
         let power = self.pid.next_control_output(input.analog_value as f32);
         debug!(
-            "PIDTask output: p:{} i:{} d:{} total:{}",
-            power.p, power.i, power.d, power.output
+            "PIDTask output: input: {} p:{} i:{} d:{} total:{}",
+            input.analog_value, power.p, power.i, power.d, power.output
         );
         match input.analog_value as f32 {
             value if value < self.setpoint - self.cutoff => {
-                debug!("Rod position too low, stopping motors");
+                debug!("********** Rod position too low, stopping motors");
                 output.payload.power = 0.0;
             }
             value if value > self.setpoint + self.cutoff => {
-                debug!("Rod position too high, stopping motors");
+                debug!("********** Rod position too high, stopping motors");
                 output.payload.power = 0.0;
             }
             _ => {
-                // output.payload.power = power.output;
-                output.payload.power = 0.0;
+                output.payload.power = power.output;
             }
         }
 

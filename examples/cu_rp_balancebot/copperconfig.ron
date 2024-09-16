@@ -8,16 +8,23 @@
             id: "pidctrl",
             type: "pidtask::PIDTask",
             config: {
-                "kp": 0.00593, // 1 / 168 ticks
-                // "ki": 0.1,
-                // "kd": 0.1,
-                "setpoint": 3175.33,
+                // 0.009, .00004 and .005 almost there just drifts.
+                // "kp": 0.024, // 1 / 168 ticks = .00593
+                //"ki": 0.00005,
+                //"kd": .025,
+                "kp": 0.026, // 1 / 168 ticks = .00593
+                "ki": 0.00005,
+                "kd": -1.0,
+                "setpoint": 3176.0,
                 "cutoff": 170.0, // cut off if the measured value is outside of +/- 170 ticks around the setpoint
             },
         ),
         (
             id: "motor",
             type: "cu_rp_sn754410::SN754410",
+            config: {
+                 "deadzone": 0.25, // this is the minimum value for the motor to move.
+            },
         ),
      ],
     cnx: [
