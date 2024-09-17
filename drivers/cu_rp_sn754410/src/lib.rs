@@ -76,9 +76,10 @@ impl Freezable for SN754410 {
 impl CuSinkTask for SN754410 {
     type Input = MotorMsg;
 
-    fn process(&mut self, _clock: &RobotClock, input: &mut CuMsg<Self::Input>) -> CuResult<()> {
-        if input.payload.power != self.current_power {
-            self.current_power = input.payload.power;
+    fn process(&mut self, _clock: &RobotClock, input: &CuMsg<Self::Input>) -> CuResult<()> {
+        let power = input.payload().unwrap().power;
+        if power != self.current_power {
+            self.current_power = power;
             if self.current_power > 0.0 {
                 self.pwm1
                     .set_duty_cycle(0.0)

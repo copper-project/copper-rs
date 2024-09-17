@@ -45,7 +45,7 @@ where
     T: CuMsgPayload,
 {
     /// This payload is the actual data exchanged between tasks.
-    pub payload: T,
+    payload: Option<T>,
 
     /// This metadata is the data that is common to all messages.
     pub metadata: CuMsgMetadata,
@@ -55,7 +55,7 @@ impl<T> CuMsg<T>
 where
     T: CuMsgPayload,
 {
-    pub fn new(payload: T) -> Self {
+    pub fn new(payload: Option<T>) -> Self {
         CuMsg {
             payload,
             metadata: CuMsgMetadata {
@@ -63,6 +63,17 @@ where
                 after_process: OptionCuTime::none(),
             },
         }
+    }
+    pub fn payload(&self) -> Option<&T> {
+        self.payload.as_ref()
+    }
+
+    pub fn set_payload(&mut self, payload: T) {
+        self.payload = Some(payload);
+    }
+
+    pub fn payload_mut(&mut self) -> &mut Option<T> {
+        &mut self.payload
     }
 }
 
@@ -154,6 +165,5 @@ pub trait CuSinkTask: CuTaskLifecycle {
     /// Process is the most critical execution of the task.
     /// The goal will be to produce the output message as soon as possible.
     /// Use preprocess to prepare the task to make this method as short as possible.
-    /// TODO: Still on the fence for this mutable input but sometimes you want to record one last thing before logging the message.
-    fn process(&mut self, clock: &RobotClock, input: &mut CuMsg<Self::Input>) -> CuResult<()>;
+    fn process(&mut self, clock: &RobotClock, input: &CuMsg<Self::Input>) -> CuResult<()>;
 }

@@ -139,16 +139,18 @@ impl CuSrcTask for Vlp16 {
             .unwrap()
             .unwrap();
         let i = 0;
+        let mut output = XYZSoa::<10000>::default();
+
         frame.firing_iter().for_each(|firing| {
             firing.point_iter().for_each(|point| {
                 let point = point.as_single().unwrap();
                 let x = point.measurement.xyz[0].as_meters() as f32;
                 let y = point.measurement.xyz[0].as_meters() as f32;
                 let z = point.measurement.xyz[0].as_meters() as f32;
-                let el = &mut new_msg.payload;
-                el.set(i, XYZ::new(x, y, z));
+                output.set(i, XYZ::new(x, y, z));
             });
         });
+        new_msg.set_payload(output);
         Ok(())
     }
 }
@@ -178,9 +180,9 @@ mod tests {
             let socket = UdpSocket::bind("0.0.0.0:2367").unwrap();
             socket.send_to(&data, "127.0.0.1:2368").unwrap();
             // process
-            let mut msg = CuMsg::new(XYZSoa::<10000>::default());
+            let mut msg = CuMsg::new(Some(XYZSoa::<10000>::default()));
             drv.process(&clk, &mut msg).unwrap();
-            assert_eq!(0.009406593f32, msg.payload.x[0].0.value);
+            assert_eq!(0.009406593f32, msg.payload().unwrap().x[0].0.value);
             break;
         }
         drv.stop(&clk).unwrap();

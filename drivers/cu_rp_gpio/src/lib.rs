@@ -94,16 +94,15 @@ impl CuTaskLifecycle for RPGpio {
 impl CuSinkTask for RPGpio {
     type Input = RPGpioMsg;
 
-    fn process(&mut self, clock: &clock::RobotClock, msg: &mut CuMsg<Self::Input>) -> CuResult<()> {
-        msg.payload.actuation = clock.now().into();
+    fn process(&mut self, clock: &clock::RobotClock, msg: &CuMsg<Self::Input>) -> CuResult<()> {
         #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
         self.pin.write(msg.payload.into());
         #[cfg(target_arch = "x86_64")]
         debug!(
             "Would write to pin {} the value {}. Creation to Actuation: {}",
             self.pin,
-            msg.payload.on,
-            msg.payload.actuation.unwrap() - msg.payload.creation.unwrap()
+            msg.payload().unwrap().on,
+            clock.now() - msg.payload().unwrap().creation.unwrap()
         );
 
         Ok(())

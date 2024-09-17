@@ -53,6 +53,7 @@ impl Registers {
 }
 
 use cu29_log_derive::debug;
+use cu29_traits::CuError;
 use serde::de::{Deserialize, Deserializer};
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 use uom::fmt::DisplayStyle::Abbreviation;
@@ -226,8 +227,11 @@ impl CuSrcTask for WT901 {
     type Output = PositionalReadings;
 
     fn process(&mut self, _clock: &RobotClock, new_msg: &mut CuMsg<Self::Output>) -> CuResult<()> {
-        self.bulk_position_read(&mut new_msg.payload)
-            .map_err(|e| format!("Error reading WT901: {:?}", e).into())
+        let mut pos = PositionalReadings::default();
+        self.bulk_position_read(&mut pos)
+            .map_err(|e| CuError::from(format!("Error reading WT901: {:?}", e)))?;
+        new_msg.set_payload(pos);
+        Ok(())
     }
 }
 

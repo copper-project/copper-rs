@@ -107,8 +107,11 @@ impl CuSrcTask for ADS7883 {
         })?;
         // hard to know exactly when the value was read.
         // Should be within a couple of microseconds with the ioctl opverhead.
-        new_msg.payload.tov = (clock.now() + bf) / 2u64;
-        new_msg.payload.analog_value = analog_value;
+        let output = ADSReadingMsg {
+            analog_value,
+            tov: (clock.now() + bf) / 2u64,
+        };
+        new_msg.set_payload(output);
         Ok(())
     }
 }
@@ -135,12 +138,8 @@ pub mod test_support {
     impl CuSinkTask for ADS78883TestSink {
         type Input = ADSReadingMsg;
 
-        fn process(
-            &mut self,
-            _clock: &RobotClock,
-            new_msg: &mut CuMsg<Self::Input>,
-        ) -> CuResult<()> {
-            debug!("Received: {}", &new_msg.payload);
+        fn process(&mut self, _clock: &RobotClock, new_msg: &CuMsg<Self::Input>) -> CuResult<()> {
+            debug!("Received: {}", &new_msg.payload());
             Ok(())
         }
     }
