@@ -208,5 +208,5 @@ pub trait CuSinkTask<'cl>: CuTaskLifecycle {
     /// Process is the most critical execution of the task.
     /// The goal will be to produce the output message as soon as possible.
     /// Use preprocess to prepare the task to make this method as short as possible.
-    fn process(&mut self, clock: &RobotClock, input: &CuMsg<Self::Input>) -> CuResult<()>;
+    fn process(&mut self, clock: &RobotClock, input: Self::Input) -> CuResult<()>;
 }
