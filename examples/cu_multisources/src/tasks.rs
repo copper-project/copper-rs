@@ -24,7 +24,7 @@ impl<'cl> CuSrcTask<'cl> for Src1Task {
 
     fn process(&mut self, _clock: &RobotClock, output: Self::Output) -> CuResult<()> {
         self.value += 1;
-        output.payload = self.value;
+        output.set_payload(self.value);
         Ok(())
     }
 }
@@ -46,7 +46,7 @@ impl<'cl> CuSrcTask<'cl> for Src2Task {
 
     fn process(&mut self, _clock: &RobotClock, output: Self::Output) -> CuResult<()> {
         self.value += 1.0;
-        output.payload = self.value;
+        output.set_payload(self.value);
         Ok(())
     }
 }
