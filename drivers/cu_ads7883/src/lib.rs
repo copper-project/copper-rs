@@ -97,8 +97,8 @@ fn read_adc(spi: &mut Spidev) -> io::Result<u16> {
     Ok(adc_value)
 }
 
-impl CuSrcTask for ADS7883 {
-    type Output = output_msg!(ADSReadingMsg);
+impl<'cl> CuSrcTask<'cl> for ADS7883 {
+    type Output = output_msg!('cl, ADSReadingMsg);
 
     fn process(&mut self, clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
         let bf = clock.now();
@@ -132,8 +132,8 @@ pub mod test_support {
         }
     }
 
-    impl CuSinkTask for ADS78883TestSink {
-        type Input = input_msg!(ADSReadingMsg);
+    impl<'cl> CuSinkTask<'cl> for ADS78883TestSink {
+        type Input = input_msg!('cl, ADSReadingMsg);
 
         fn process(&mut self, _clock: &RobotClock, new_msg: Self::Input) -> CuResult<()> {
             debug!("Received: {}", &new_msg.payload());

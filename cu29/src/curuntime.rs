@@ -272,7 +272,7 @@ mod tests {
         }
     }
 
-    impl CuSrcTask for TestSource {
+    impl CuSrcTask<'_> for TestSource {
         type Output = ();
         fn process(&mut self, _clock: &RobotClock, _empty_msg: Self::Output) -> CuResult<()> {
             Ok(())
@@ -292,7 +292,7 @@ mod tests {
         }
     }
 
-    impl CuSinkTask for TestSink {
+    impl CuSinkTask<'_> for TestSink {
         type Input = ();
 
         fn process(&mut self, _clock: &RobotClock, _input: Self::Input) -> CuResult<()> {

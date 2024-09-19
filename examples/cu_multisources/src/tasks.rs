@@ -19,8 +19,8 @@ impl CuTaskLifecycle for Src1Task {
     }
 }
 
-impl CuSrcTask for Src1Task {
-    type Output = output_msg!(i32);
+impl<'cl> CuSrcTask<'cl> for Src1Task {
+    type Output = output_msg!('cl, i32);
 
     fn process(&mut self, _clock: &RobotClock, output: Self::Output) -> CuResult<()> {
         self.value += 1;
@@ -41,8 +41,8 @@ impl CuTaskLifecycle for Src2Task {
     }
 }
 
-impl CuSrcTask for Src2Task {
-    type Output = output_msg!(f32);
+impl<'cl> CuSrcTask<'cl> for Src2Task {
+    type Output = output_msg!('cl, f32);
 
     fn process(&mut self, _clock: &RobotClock, output: Self::Output) -> CuResult<()> {
         self.value += 1.0;
@@ -61,8 +61,8 @@ impl CuTaskLifecycle for SinkTask {
     }
 }
 
-impl CuSinkTask for SinkTask {
-    type Input = input_msg!(i32, f32);
+impl<'cl> CuSinkTask<'cl> for SinkTask {
+    type Input = input_msg!('cl, i32, f32);
 
     fn process(&mut self, _clock: &RobotClock, input: Self::Input) -> CuResult<()> {
         let (i, f) = input;
