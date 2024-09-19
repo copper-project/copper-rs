@@ -252,8 +252,8 @@ impl Decode for ServoPositions {
     }
 }
 
-impl CuSinkTask for Lewansoul {
-    type Input = input_msg!(ServoPositions);
+impl<'cl> CuSinkTask<'cl> for Lewansoul {
+    type Input = input_msg!('cl, ServoPositions);
 
     fn process(&mut self, _clock: &RobotClock, _input: Self::Input) -> CuResult<()> {
         todo!()

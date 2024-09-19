@@ -122,8 +122,8 @@ impl XYZ {
     }
 }
 
-impl CuSrcTask for Vlp16 {
-    type Output = output_msg!(XYZSoa<10000>);
+impl<'cl> CuSrcTask<'cl> for Vlp16 {
+    type Output = output_msg!('cl, XYZSoa<10000>);
 
     fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
         let socket = self.socket.as_ref().unwrap();

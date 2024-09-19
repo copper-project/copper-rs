@@ -73,8 +73,8 @@ impl Freezable for SN754410 {
     }
 }
 
-impl CuSinkTask for SN754410 {
-    type Input = input_msg!(MotorMsg);
+impl<'cl> CuSinkTask<'cl> for SN754410 {
+    type Input = input_msg!('cl, MotorMsg);
 
     fn process(&mut self, _clock: &RobotClock, input: Self::Input) -> CuResult<()> {
         let power = input.payload().unwrap().power;
@@ -124,8 +124,8 @@ pub mod test_support {
         }
     }
 
-    impl CuSrcTask for SN754410TestSrc {
-        type Output = output_msg!(MotorMsg);
+    impl<'cl> CuSrcTask<'cl> for SN754410TestSrc {
+        type Output = output_msg!('cl, MotorMsg);
 
         fn process(&mut self, _clock: &RobotClock, _new_msg: Self::Output) -> CuResult<()> {
             todo!()

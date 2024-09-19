@@ -223,8 +223,8 @@ impl CuTaskLifecycle for WT901 {
     }
 }
 
-impl CuSrcTask for WT901 {
-    type Output = output_msg!(PositionalReadings);
+impl<'cl> CuSrcTask<'cl> for WT901 {
+    type Output = output_msg!('cl, PositionalReadings);
 
     fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
         let mut pos = PositionalReadings::default();
