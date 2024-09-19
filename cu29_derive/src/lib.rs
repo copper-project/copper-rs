@@ -174,6 +174,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 step.culist_output_index
                                     .expect("Src task should have an output message index."),
                             );
+                            // let output_msg_type = parse_str::<Type>(step.output_msg_type.clone().unwrap().as_str()).unwrap();
                             quote! {
                                 {
                                     #comment_tokens
@@ -192,7 +193,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             quote! {
                                 {
                                     #comment_tokens
-                                    let cumsg_input = &mut payload.#input_culist_index;
+                                    let cumsg_input = &payload.#input_culist_index;
                                     #task_instance.process(&self.copper_runtime.clock, cumsg_input)?;
                                 }
                             }
@@ -206,10 +207,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 step.culist_output_index
                                     .expect("Regular task should have an output message index."),
                             );
+                            // let output_msg_type = parse_str::<Type>(step.output_msg_type.clone().unwrap().as_str()).unwrap();
                             quote! {
                                 {
                                     #comment_tokens
-                                    let cumsg_input = &mut payload.#input_culist_index;
+                                    let cumsg_input = &payload.#input_culist_index;
                                     let cumsg_output = &mut payload.#output_culist_index;
                                     cumsg_output.metadata.before_process = self.copper_runtime.clock.now().into();
                                     #task_instance.process(&self.copper_runtime.clock, cumsg_input, cumsg_output)?;

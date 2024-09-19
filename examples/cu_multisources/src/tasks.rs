@@ -4,6 +4,7 @@ use cu29::cutask::{CuSinkTask, CuTaskLifecycle};
 use cu29::cutask::{CuSrcTask, Freezable};
 
 use cu29::cutask::CuMsg;
+use cu29::{input_msg, output_msg};
 use cu29_traits::CuResult;
 
 struct Src1Task {
@@ -19,9 +20,9 @@ impl CuTaskLifecycle for Src1Task {
 }
 
 impl CuSrcTask for Src1Task {
-    type Output = i32;
+    type Output = output_msg!(i32);
 
-    fn process(&mut self, _clock: &RobotClock, output: &mut CuMsg<Self::Output>) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, output: Self::Output) -> CuResult<()> {
         self.value += 1;
         output.payload = self.value;
         Ok(())
@@ -41,9 +42,9 @@ impl CuTaskLifecycle for Src2Task {
 }
 
 impl CuSrcTask for Src2Task {
-    type Output = f32;
+    type Output = output_msg!(f32);
 
-    fn process(&mut self, _clock: &RobotClock, output: &mut CuMsg<Self::Output>) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, output: Self::Output) -> CuResult<()> {
         self.value += 1.0;
         output.payload = self.value;
         Ok(())
@@ -61,10 +62,15 @@ impl CuTaskLifecycle for SinkTask {
 }
 
 impl CuSinkTask for SinkTask {
-    type Input = (i32, f32);
+    type Input = input_msg!(i32, f32);
 
-    fn process(&mut self, _clock: &RobotClock, input: &mut CuMsg<Self::Input>) -> CuResult<()> {
-        println!("DstTask received: {:?}", input.payload);
+    fn process(&mut self, _clock: &RobotClock, input: Self::Input) -> CuResult<()> {
+        let (i, f) = input;
+        println!(
+            "DstTask received: {}, {}",
+            i.payload().unwrap(),
+            f.payload().unwrap()
+        );
         Ok(())
     }
 }

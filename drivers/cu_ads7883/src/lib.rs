@@ -2,7 +2,7 @@ use bincode::{Decode, Encode};
 use cu29::clock::{CuTime, RobotClock};
 use cu29::config::NodeInstanceConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
-use cu29::{CuError, CuResult};
+use cu29::{output_msg, CuError, CuResult};
 use serde::{Deserialize, Serialize};
 use spidev::{SpiModeFlags, Spidev, SpidevOptions, SpidevTransfer};
 use std::io;
@@ -98,9 +98,9 @@ fn read_adc(spi: &mut Spidev) -> io::Result<u16> {
 }
 
 impl CuSrcTask for ADS7883 {
-    type Output = ADSReadingMsg;
+    type Output = output_msg!(ADSReadingMsg);
 
-    fn process(&mut self, clock: &RobotClock, new_msg: &mut CuMsg<Self::Output>) -> CuResult<()> {
+    fn process(&mut self, clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
         let bf = clock.now();
         let analog_value = read_adc(&mut self.spi).map_err(|e| {
             CuError::new_with_cause("Could not read the ADC value from the ADS7883", e)
@@ -117,12 +117,9 @@ impl CuSrcTask for ADS7883 {
 }
 
 pub mod test_support {
-    use super::ADSReadingMsg;
-    use cu29::clock::RobotClock;
-    use cu29::config::NodeInstanceConfig;
-    use cu29::cutask::CuMsg;
-    use cu29::cutask::{CuSinkTask, CuTaskLifecycle, Freezable};
-    use cu29::CuResult;
+    use super::*;
+    use cu29::cutask::CuSinkTask;
+    use cu29::input_msg;
     use cu29_log_derive::debug;
 
     pub struct ADS78883TestSink;
@@ -136,9 +133,9 @@ pub mod test_support {
     }
 
     impl CuSinkTask for ADS78883TestSink {
-        type Input = ADSReadingMsg;
+        type Input = input_msg!(ADSReadingMsg);
 
-        fn process(&mut self, _clock: &RobotClock, new_msg: &CuMsg<Self::Input>) -> CuResult<()> {
+        fn process(&mut self, _clock: &RobotClock, new_msg: Self::Input) -> CuResult<()> {
             debug!("Received: {}", &new_msg.payload());
             Ok(())
         }

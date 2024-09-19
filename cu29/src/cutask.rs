@@ -16,8 +16,51 @@ use std::fmt::{Display, Formatter};
 // Everything that is stateful in copper for zero copy constraints need to be restricted to this trait.
 pub trait CuMsgPayload: Default + Encode + Decode + Sized {}
 
+pub trait CuMsgPack<'cl> {}
+
 // Also anything that follows this contract can be a payload (blanket implementation)
-impl<T> CuMsgPayload for T where T: Default + Encode + Decode + Sized {}
+impl<T: Default + Encode + Decode + Sized> CuMsgPayload for T {}
+
+macro_rules! impl_cu_msg_pack {
+    ($(($($ty:ident),*)),*) => {
+        $(
+            impl<'cl, $($ty: CuMsgPayload + 'cl),*> CuMsgPack<'cl> for ( $( &'cl CuMsg<$ty>, )* ) {}
+        )*
+    };
+}
+
+impl<'cl, T: CuMsgPayload> CuMsgPack<'cl> for (&'cl CuMsg<T>,) {}
+impl<'cl, T: CuMsgPayload> CuMsgPack<'cl> for &'cl CuMsg<T> {}
+impl<'cl, T: CuMsgPayload> CuMsgPack<'cl> for (&'cl mut CuMsg<T>,) {}
+impl<'cl, T: CuMsgPayload> CuMsgPack<'cl> for &'cl mut CuMsg<T> {}
+impl<'cl> CuMsgPack<'cl> for () {}
+
+// Apply the macro to generate implementations for tuple sizes up to 5
+impl_cu_msg_pack! {
+    (T1, T2), (T1, T2, T3), (T1, T2, T3, T4), (T1, T2, T3, T4, T5) // TODO: continue if necessary
+}
+
+// A convience macro to get from a payload or a list of payloads to a proper CuMsg or CuMsgPack
+// declaration for your tasks used for input messages.
+#[macro_export]
+macro_rules! input_msg {
+    ($lifetime:lifetime, $ty:ty) => {
+        &$lifetime CuMsg<$ty>
+    };
+    ($lifetime:lifetime, $($ty:ty),*) => {
+        (
+            $( &$lifetime CuMsg<$ty>, )*
+        )
+    };
+}
+
+// A convience macro to get from a payload to a proper CuMsg used as output.
+#[macro_export]
+macro_rules! output_msg {
+    ($lifetime:lifetime, $ty:ty) => {
+        &$lifetime mut CuMsg<$ty>
+    };
+}
 
 /// CuMsgMetadata is a structure that contains metadata common to all CuMsgs.
 #[derive(Debug, Default, bincode::Encode, bincode::Decode)]
@@ -133,19 +176,19 @@ pub trait CuTaskLifecycle: Freezable {
 /// A Src Task is a task that only produces messages. For example drivers for sensors are Src Tasks.
 /// They are in push mode from the runtime.
 /// To set the frequency of the pulls and align them to any hw, see the runtime configuration.
-pub trait CuSrcTask: CuTaskLifecycle {
-    type Output: CuMsgPayload;
+pub trait CuSrcTask<'cl>: CuTaskLifecycle {
+    type Output: CuMsgPack<'cl>;
 
     /// Process is the most critical execution of the task.
     /// The goal will be to produce the output message as soon as possible.
     /// Use preprocess to prepare the task to make this method as short as possible.
-    fn process(&mut self, clock: &RobotClock, new_msg: &mut CuMsg<Self::Output>) -> CuResult<()>;
+    fn process(&mut self, clock: &RobotClock, new_msg: Self::Output) -> CuResult<()>;
 }
 
 /// This is the most generic Task of copper. It is a "transform" task deriving an output from an input.
-pub trait CuTask: CuTaskLifecycle {
-    type Input: CuMsgPayload;
-    type Output: CuMsgPayload;
+pub trait CuTask<'cl>: CuTaskLifecycle {
+    type Input: CuMsgPack<'cl>;
+    type Output: CuMsgPack<'cl>;
 
     /// Process is the most critical execution of the task.
     /// The goal will be to produce the output message as soon as possible.
@@ -153,14 +196,14 @@ pub trait CuTask: CuTaskLifecycle {
     fn process(
         &mut self,
         clock: &RobotClock,
-        input: &CuMsg<Self::Input>,
-        output: &mut CuMsg<Self::Output>,
+        input: Self::Input,
+        output: Self::Output,
     ) -> CuResult<()>;
 }
 
 /// A Sink Task is a task that only consumes messages. For example drivers for actuators are Sink Tasks.
-pub trait CuSinkTask: CuTaskLifecycle {
-    type Input: CuMsgPayload;
+pub trait CuSinkTask<'cl>: CuTaskLifecycle {
+    type Input: CuMsgPack<'cl>;
 
     /// Process is the most critical execution of the task.
     /// The goal will be to produce the output message as soon as possible.

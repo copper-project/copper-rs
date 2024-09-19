@@ -255,8 +255,8 @@ mod tests {
     use super::*;
     use crate::clock::RobotClock;
     use crate::config::Node;
-    use crate::cutask::{CuMsg, CuSrcTask, Freezable};
     use crate::cutask::{CuSinkTask, CuTaskLifecycle};
+    use crate::cutask::{CuSrcTask, Freezable};
     use bincode::Encode;
 
     pub struct TestSource {}
@@ -274,11 +274,7 @@ mod tests {
 
     impl CuSrcTask for TestSource {
         type Output = ();
-        fn process(
-            &mut self,
-            _clock: &RobotClock,
-            _empty_msg: &mut CuMsg<Self::Output>,
-        ) -> CuResult<()> {
+        fn process(&mut self, _clock: &RobotClock, _empty_msg: Self::Output) -> CuResult<()> {
             Ok(())
         }
     }
@@ -299,7 +295,7 @@ mod tests {
     impl CuSinkTask for TestSink {
         type Input = ();
 
-        fn process(&mut self, _clock: &RobotClock, _input: &CuMsg<Self::Input>) -> CuResult<()> {
+        fn process(&mut self, _clock: &RobotClock, _input: Self::Input) -> CuResult<()> {
             Ok(())
         }
     }

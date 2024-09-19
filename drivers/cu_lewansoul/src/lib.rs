@@ -5,7 +5,7 @@ use bincode::{Decode, Encode};
 use cu29::clock::RobotClock;
 use cu29::config::NodeInstanceConfig;
 use cu29::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle, Freezable};
-use cu29::{CuError, CuResult};
+use cu29::{input_msg, CuError, CuResult};
 use serialport::{DataBits, FlowControl, Parity, SerialPort, StopBits};
 use std::io::{self, Read, Write};
 use std::time::Duration;
@@ -253,9 +253,9 @@ impl Decode for ServoPositions {
 }
 
 impl CuSinkTask for Lewansoul {
-    type Input = ServoPositions;
+    type Input = input_msg!(ServoPositions);
 
-    fn process(&mut self, _clock: &RobotClock, _input: &CuMsg<Self::Input>) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, _input: Self::Input) -> CuResult<()> {
         todo!()
     }
 }

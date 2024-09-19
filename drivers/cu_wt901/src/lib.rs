@@ -5,7 +5,7 @@ use bincode::{Decode, Encode};
 use cu29::clock::RobotClock;
 use cu29::config::NodeInstanceConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
-use cu29::CuResult;
+use cu29::{output_msg, CuResult};
 use embedded_hal::i2c::I2c;
 use linux_embedded_hal::{I2CError, I2cdev};
 use std::fmt::Display;
@@ -224,9 +224,9 @@ impl CuTaskLifecycle for WT901 {
 }
 
 impl CuSrcTask for WT901 {
-    type Output = PositionalReadings;
+    type Output = output_msg!(PositionalReadings);
 
-    fn process(&mut self, _clock: &RobotClock, new_msg: &mut CuMsg<Self::Output>) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
         let mut pos = PositionalReadings::default();
         self.bulk_position_read(&mut pos)
             .map_err(|e| CuError::from(format!("Error reading WT901: {:?}", e)))?;

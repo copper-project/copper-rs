@@ -8,7 +8,7 @@ use bincode::{Decode, Encode};
 use cu29::clock::RobotClock;
 use cu29::config::NodeInstanceConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
-use cu29::CuResult;
+use cu29::{output_msg, CuResult};
 use cu29_soa_derive::soa;
 use std::net::UdpSocket;
 use std::ops::{Add, Sub};
@@ -123,9 +123,9 @@ impl XYZ {
 }
 
 impl CuSrcTask for Vlp16 {
-    type Output = XYZSoa<10000>;
+    type Output = output_msg!(XYZSoa<10000>);
 
-    fn process(&mut self, _clock: &RobotClock, new_msg: &mut CuMsg<Self::Output>) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
         let socket = self.socket.as_ref().unwrap();
         let mut packet = [0u8; 1206];
         let (read_size, _peer_addr) = socket.recv_from(&mut packet).unwrap();
