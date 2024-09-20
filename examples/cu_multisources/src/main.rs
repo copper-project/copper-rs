@@ -19,9 +19,8 @@ fn main() {
     debug!("Logger created at {}.", path = logger_path);
     let clock = copper_ctx.clock;
     debug!("Creating application... ");
-    let mut application =
-        MultiSourceApp::new(clock.clone(), copper_ctx.unified_logger.clone())
-            .expect("Failed to create runtime.");
+    let mut application = MultiSourceApp::new(clock.clone(), copper_ctx.unified_logger.clone())
+        .expect("Failed to create runtime.");
     debug!("Running... starting clock: {}.", clock.now());
 
     application.run().expect("Failed to run application.");
