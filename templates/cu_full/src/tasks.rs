@@ -2,18 +2,18 @@ use bincode::{Decode, Encode};
 
 use cu29::clock::RobotClock;
 use cu29::config::NodeInstanceConfig;
-use cu29::cutask::{CuMsg, CuSrcTask, CuSinkTask, CuTask, CuTaskLifecycle, Freezable};
+use cu29::cutask::{
+    input_msg, output_msg, CuMsg, CuSinkTask, CuSrcTask, CuTask, CuTaskLifecycle, Freezable,
+};
 use cu29::CuResult;
 
 use cu29_log_derive::debug;
 
-
 // Define a message type
 #[derive(Default, Debug, Clone, Encode, Decode)]
-pub struct MyMsg {
+pub struct MyPayload {
     value: i32,
 }
-
 
 // Defines a source (ie. driver)
 #[derive(Default)]
@@ -27,24 +27,20 @@ impl CuTaskLifecycle for MySource {
     where
         Self: Sized,
     {
-        Ok(Self { })
+        Ok(Self {})
     }
     // don't forget the other lifecycle methods if you need them: start, stop, preprocess, postprocess
 }
 
-impl CuSrcTask for MySource {
-    type Output = MyMsg;
+impl<'cl> CuSrcTask<'cl> for MySource {
+    type Output = output_msg!('cl, MyPayload);
 
-    fn process(&mut self, _clock: &RobotClock, output: &mut CuMsg<Self::Output>) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, output: Self::Output) -> CuResult<()> {
         // Generated a 42 message.
-        output.payload = MyMsg {
-            value: 42,
-        };
+        output.set_payload(MyPayload { value: 42 });
         Ok(())
     }
-
 }
-
 
 // Defines a processing task
 pub struct MyTask {
@@ -66,18 +62,18 @@ impl CuTaskLifecycle for MyTask {
     // don't forget the other lifecycle methods if you need them: start, stop, preprocess, postprocess
 }
 
-impl CuTask for MyTask {
-    type Input = MyMsg;
-    type Output = MyMsg;
+impl<'cl> CuTask<'cl> for MyTask {
+    type Input = input_msg!(MyPayload);
+    type Output = output_msg!(MyPayload);
 
     fn process(
         &mut self,
         _clock: &RobotClock,
-        input: &CuMsg<Self::Input>,
-        output: &mut CuMsg<Self::Output>,
+        input: Self::Input,
+        output: Self::Output,
     ) -> CuResult<()> {
-        debug!("Received message: {}", input.payload.value);
-        output.payload.value = 43;
+        debug!("Received message: {}", input.payload().value);
+        output.set_payload(MyPayload { value: 43 });
         Ok(()) // outputs another message for downstream
     }
 }
@@ -94,17 +90,16 @@ impl CuTaskLifecycle for MySink {
     where
         Self: Sized,
     {
-        Ok(Self { })
+        Ok(Self {})
     }
     // don't forget the other lifecycle methods if you need them: start, stop, preprocess, postprocess
 }
 
-impl CuSinkTask for MySink {
-    type Input = MyMsg;
+impl<'cl> CuSinkTask<'cl> for MySink {
+    type Input = input_msg!(MyPayload);
 
-    fn process(&mut self, _clock: &RobotClock, input: &mut CuMsg<Self::Input>) -> CuResult<()> {
-        debug!("Sink Received message: {}", input.payload.value);
+    fn process(&mut self, _clock: &RobotClock, input: Self::Input) -> CuResult<()> {
+        debug!("Sink Received message: {}", input.payload().value);
         Ok(())
     }
-
 }
