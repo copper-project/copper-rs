@@ -257,22 +257,12 @@ fn plan_tasks_tree_branch(
                     } else {
                         eprintln!(
                             "Parent node not in this branch, it will be picked up as a later pass."
-                        )
+                        );
                     }
                 }
             }
             CuTaskType::Regular => {
                 eprintln!("Visiting Regular node: {:?}", id);
-                output_msg_index_type = Some((
-                    next_culist_output_index,
-                    config
-                        .graph
-                        .edge_weight(EdgeIndex::new(config.get_src_edges(id)[0]))
-                        .unwrap()
-                        .msg
-                        .clone(),
-                ));
-                next_culist_output_index += 1;
 
                 let parents: Vec<NodeIndex> = config
                     .graph
@@ -291,9 +281,21 @@ fn plan_tasks_tree_branch(
                     } else {
                         eprintln!(
                             "Parent node not in this branch, it will be picked up as a later pass."
-                        )
+                        );
+                        // here do not add this node yet, wait for the other inputs to do it with all the inputs earliers in the copper list.
+                        return next_culist_output_index;
                     }
                 }
+                output_msg_index_type = Some((
+                    next_culist_output_index,
+                    config
+                        .graph
+                        .edge_weight(EdgeIndex::new(config.get_src_edges(id)[0]))
+                        .unwrap()
+                        .msg
+                        .clone(),
+                ));
+                next_culist_output_index += 1;
             }
         }
 

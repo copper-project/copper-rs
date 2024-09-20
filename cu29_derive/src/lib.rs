@@ -199,16 +199,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             }
                         }
                         CuTaskType::Regular => {
-                            // FIXME: this is a hack, we should have a list of inputs
-                            let (input_index, _) = step.input_msg_indices_types[0];
-                            let input_culist_index = int2sliceindex(input_index);
-
+                            let indices = step.input_msg_indices_types.iter().map(|(index, _)| int2sliceindex(*index));
                             if let Some((output_index, _)) = &step.output_msg_index_type {
                                 let output_culist_index = int2sliceindex(*output_index);
                                 quote! {
                                     {
                                     #comment_tokens
-                                    let cumsg_input = &payload.#input_culist_index;
+                                    let cumsg_input = (#(&payload.#indices),*);
                                     let cumsg_output = &mut payload.#output_culist_index;
                                     cumsg_output.metadata.before_process = self.copper_runtime.clock.now().into();
                                     #task_instance.process(&self.copper_runtime.clock, cumsg_input, cumsg_output)?;

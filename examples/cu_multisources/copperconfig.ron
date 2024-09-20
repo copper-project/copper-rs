@@ -9,13 +9,28 @@
             type: "tasks::Src2Task",
         ),
         (
-            id: "sink",
-            type: "tasks::SinkTask",
+            id: "std",
+            type: "tasks::StdTask"
+        ),
+        (
+            id: "sink1",
+            type: "tasks::SinkTask1",
+        ),
+        (
+            id: "sink2",
+            type: "tasks::SinkTask2",
         ),
      ],
     cnx: [
         // Make both src1 and src2 send to sink
-        (src: "src1", dst: "sink", msg: "i32"),
-        (src: "src2", dst: "sink", msg: "f32"),
+        (src: "src1", dst: "sink1", msg: "i32"),
+        (src: "src2", dst: "sink1", msg: "f32"),
+
+        // Make both src1 and src2 send to a std task
+        (src: "src1", dst: "std", msg: "i32"),
+        (src: "src2", dst: "std", msg: "f32"),
+
+        // Make std task send to sink2
+        (src: "std", dst: "sink2", msg: "(i32, f32)"),
     ],
 )

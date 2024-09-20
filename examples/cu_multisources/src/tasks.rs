@@ -1,6 +1,6 @@
 use cu29::clock::RobotClock;
 use cu29::config::NodeInstanceConfig;
-use cu29::cutask::{CuSinkTask, CuTaskLifecycle};
+use cu29::cutask::{CuSinkTask, CuTask, CuTaskLifecycle};
 use cu29::cutask::{CuSrcTask, Freezable};
 
 use cu29::cutask::CuMsg;
@@ -51,26 +51,72 @@ impl<'cl> CuSrcTask<'cl> for Src2Task {
     }
 }
 
-pub struct SinkTask {}
+pub struct SinkTask1 {}
 
-impl Freezable for SinkTask {}
+impl Freezable for SinkTask1 {}
 
-impl CuTaskLifecycle for SinkTask {
+impl CuTaskLifecycle for SinkTask1 {
     fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self> {
         Ok(Self {})
     }
 }
 
-impl<'cl> CuSinkTask<'cl> for SinkTask {
+impl<'cl> CuSinkTask<'cl> for SinkTask1 {
     type Input = input_msg!('cl, i32, f32);
 
     fn process(&mut self, _clock: &RobotClock, input: Self::Input) -> CuResult<()> {
         let (i, f) = input;
         println!(
-            "DstTask received: {}, {}",
+            "SinkTask1 received: {}, {}",
             i.payload().unwrap(),
             f.payload().unwrap()
         );
+        Ok(())
+    }
+}
+
+pub struct StdTask {}
+
+impl Freezable for StdTask {}
+
+impl CuTaskLifecycle for StdTask {
+    fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self> {
+        Ok(Self {})
+    }
+}
+
+impl<'cl> CuTask<'cl> for StdTask {
+    type Input = input_msg!('cl, i32, f32);
+    type Output = output_msg!('cl, (i32, f32));
+
+    fn process(
+        &mut self,
+        _clock: &RobotClock,
+        input: Self::Input,
+        output: Self::Output,
+    ) -> CuResult<()> {
+        let (i, f) = input;
+        let (i, f) = (i.payload().unwrap(), f.payload().unwrap());
+        output.set_payload((*i, *f));
+        Ok(())
+    }
+}
+
+pub struct SinkTask2 {}
+
+impl Freezable for SinkTask2 {}
+
+impl CuTaskLifecycle for SinkTask2 {
+    fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self> {
+        Ok(Self {})
+    }
+}
+
+impl<'cl> CuSinkTask<'cl> for SinkTask2 {
+    type Input = input_msg!('cl, (i32, f32));
+
+    fn process(&mut self, _clock: &RobotClock, input: Self::Input) -> CuResult<()> {
+        println!("SinkTask2 received: {:?}", input.payload().unwrap());
         Ok(())
     }
 }
