@@ -1,0 +1,21 @@
+(
+    tasks: [
+        (
+            id: "src1",
+            type: "tasks::Src1Task",
+        ),
+        (
+            id: "src2",
+            type: "tasks::Src2Task",
+        ),
+        (
+            id: "sink",
+            type: "tasks::SinkTask",
+        ),
+     ],
+    cnx: [
+        // Make both src1 and src2 send to sink
+        (src: "src1", dst: "sink", msg: "i32"),
+        (src: "src2", dst: "sink", msg: "f32"),
+    ],
+)

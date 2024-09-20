@@ -7,7 +7,7 @@ use cu29::cutask::CuMsg;
 use cu29::{input_msg, output_msg};
 use cu29_traits::CuResult;
 
-struct Src1Task {
+pub struct Src1Task {
     pub value: i32,
 }
 
@@ -29,7 +29,7 @@ impl<'cl> CuSrcTask<'cl> for Src1Task {
     }
 }
 
-struct Src2Task {
+pub struct Src2Task {
     pub value: f32,
 }
 
@@ -51,7 +51,7 @@ impl<'cl> CuSrcTask<'cl> for Src2Task {
     }
 }
 
-struct SinkTask {}
+pub struct SinkTask {}
 
 impl Freezable for SinkTask {}
 
