@@ -1,7 +1,7 @@
 use cu29::clock::RobotClock;
 use cu29::config::NodeInstanceConfig;
 use cu29::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle, Freezable};
-use cu29::CuResult;
+use cu29::{input_msg, CuResult};
 use cu29_derive::copper_runtime;
 use cu29_helpers::basic_copper_setup;
 use cu29_log_derive::debug;
@@ -24,10 +24,10 @@ impl CuTaskLifecycle for WT910TestSink {
 }
 
 impl CuSinkTask for WT910TestSink {
-    type Input = PositionalReadings;
+    type Input = input_msg!(PositionalReadings);
 
-    fn process(&mut self, _clock: &RobotClock, new_msg: &mut CuMsg<Self::Input>) -> CuResult<()> {
-        debug!("Received: {}", &new_msg.payload);
+    fn process(&mut self, _clock: &RobotClock, new_msg: Self::Input) -> CuResult<()> {
+        debug!("Received: {}", &new_msg.payload());
         Ok(())
     }
 }

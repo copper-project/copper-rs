@@ -19,6 +19,7 @@ cu29 = { workspace = true }
 cu29-log = { workspace = true }
 cu29-log-derive = { workspace = true }
 cu29-log-runtime = { workspace = true }
+cu29-traits = { workspace = true }
 bincode = { workspace = true }
 serde = { workspace = true }
 

@@ -5,7 +5,7 @@ use bincode::{Decode, Encode};
 use cu29::clock::RobotClock;
 use cu29::config::NodeInstanceConfig;
 use cu29::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle, Freezable};
-use cu29::CuResult;
+use cu29::{input_msg, CuResult};
 use serde::{Deserialize, Serialize};
 
 use cu29_traits::CuError;
@@ -73,12 +73,13 @@ impl Freezable for SN754410 {
     }
 }
 
-impl CuSinkTask for SN754410 {
-    type Input = MotorMsg;
+impl<'cl> CuSinkTask<'cl> for SN754410 {
+    type Input = input_msg!('cl, MotorMsg);
 
-    fn process(&mut self, _clock: &RobotClock, input: &mut CuMsg<Self::Input>) -> CuResult<()> {
-        if input.payload.power != self.current_power {
-            self.current_power = input.payload.power;
+    fn process(&mut self, _clock: &RobotClock, input: Self::Input) -> CuResult<()> {
+        let power = input.payload().unwrap().power;
+        if power != self.current_power {
+            self.current_power = power;
             if self.current_power > 0.0 {
                 self.pwm1
                     .set_duty_cycle(0.0)
@@ -111,7 +112,7 @@ pub mod test_support {
     use cu29::clock::RobotClock;
     use cu29::config::NodeInstanceConfig;
     use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
-    use cu29::CuResult;
+    use cu29::{output_msg, CuResult};
 
     pub struct SN754410TestSrc;
 
@@ -123,14 +124,10 @@ pub mod test_support {
         }
     }
 
-    impl CuSrcTask for SN754410TestSrc {
-        type Output = MotorMsg;
+    impl<'cl> CuSrcTask<'cl> for SN754410TestSrc {
+        type Output = output_msg!('cl, MotorMsg);
 
-        fn process(
-            &mut self,
-            _clock: &RobotClock,
-            _new_msg: &mut CuMsg<Self::Output>,
-        ) -> CuResult<()> {
+        fn process(&mut self, _clock: &RobotClock, _new_msg: Self::Output) -> CuResult<()> {
             todo!()
         }
     }

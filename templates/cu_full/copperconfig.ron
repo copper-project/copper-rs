@@ -16,7 +16,7 @@
      ],
     // Makes a connection from the source to the task and from the task to the sink.
     cnx: [
-        (src: "src",  dst: "t-0",   msg: "tasks::MyMsg"),
-        (src: "t-0",  dst: "sink",   msg: "tasks::MyMsg"),
+        (src: "src",  dst: "t-0",   msg: "tasks::MyPayload"),
+        (src: "t-0",  dst: "sink",   msg: "tasks::MyPayload"),
     ],
 )

@@ -1,8 +1,8 @@
 use bincode::{Decode, Encode};
-use cu29::clock;
 use cu29::config::NodeInstanceConfig;
 use cu29::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle, Freezable};
 use cu29::CuResult;
+use cu29::{clock, input_msg};
 use cu29_log_derive::debug;
 
 #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
@@ -29,20 +29,20 @@ pub struct RPGpio {
 }
 
 #[derive(Debug, Clone, Copy, Default, Encode, Decode, PartialEq)]
-pub struct RPGpioMsg {
+pub struct RPGpioPayload {
     pub on: bool,
     pub creation: clock::OptionCuTime,
     pub actuation: clock::OptionCuTime,
 }
 
-impl From<RPGpioMsg> for bool {
-    fn from(msg: RPGpioMsg) -> Self {
+impl From<RPGpioPayload> for bool {
+    fn from(msg: RPGpioPayload) -> Self {
         msg.on
     }
 }
 
-impl From<RPGpioMsg> for u8 {
-    fn from(msg: RPGpioMsg) -> Self {
+impl From<RPGpioPayload> for u8 {
+    fn from(msg: RPGpioPayload) -> Self {
         if msg.on {
             1
         } else {
@@ -52,8 +52,8 @@ impl From<RPGpioMsg> for u8 {
 }
 
 #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
-impl From<RPGpioMsg> for Level {
-    fn from(msg: RPGpioMsg) -> Self {
+impl From<RPGpioPayload> for Level {
+    fn from(msg: RPGpioPayload) -> Self {
         if msg.on {
             Level::Low
         } else {
@@ -91,19 +91,18 @@ impl CuTaskLifecycle for RPGpio {
     }
 }
 
-impl CuSinkTask for RPGpio {
-    type Input = RPGpioMsg;
+impl<'cl> CuSinkTask<'cl> for RPGpio {
+    type Input = input_msg!('cl, RPGpioPayload);
 
-    fn process(&mut self, clock: &clock::RobotClock, msg: &mut CuMsg<Self::Input>) -> CuResult<()> {
-        msg.payload.actuation = clock.now().into();
+    fn process(&mut self, clock: &clock::RobotClock, msg: Self::Input) -> CuResult<()> {
         #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
         self.pin.write(msg.payload.into());
         #[cfg(target_arch = "x86_64")]
         debug!(
             "Would write to pin {} the value {}. Creation to Actuation: {}",
             self.pin,
-            msg.payload.on,
-            msg.payload.actuation.unwrap() - msg.payload.creation.unwrap()
+            msg.payload().unwrap().on,
+            clock.now() - msg.payload().unwrap().creation.unwrap()
         );
 
         Ok(())
