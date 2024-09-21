@@ -23,11 +23,11 @@ pub struct SN754410 {
 }
 
 #[derive(Debug, Clone, Copy, Default, Encode, Decode, PartialEq, Serialize, Deserialize)]
-pub struct MotorMsg {
+pub struct MotorPayload {
     pub power: f32, // -1.0 to 1.0
 }
 
-impl MotorMsg {}
+impl MotorPayload {}
 
 impl SN754410 {
     #[inline]
@@ -127,7 +127,7 @@ impl Freezable for SN754410 {
 }
 
 impl<'cl> CuSinkTask<'cl> for SN754410 {
-    type Input = input_msg!('cl, MotorMsg);
+    type Input = input_msg!('cl, MotorPayload);
 
     fn process(&mut self, clock: &RobotClock, input: Self::Input) -> CuResult<()> {
         let power = input.payload().unwrap().power;
@@ -161,7 +161,7 @@ impl<'cl> CuSinkTask<'cl> for SN754410 {
 }
 
 pub mod test_support {
-    use crate::MotorMsg;
+    use crate::MotorPayload;
     use cu29::clock::RobotClock;
     use cu29::config::NodeInstanceConfig;
     use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
@@ -178,7 +178,7 @@ pub mod test_support {
     }
 
     impl<'cl> CuSrcTask<'cl> for SN754410TestSrc {
-        type Output = output_msg!('cl, MotorMsg);
+        type Output = output_msg!('cl, MotorPayload);
 
         fn process(&mut self, _clock: &RobotClock, _new_msg: Self::Output) -> CuResult<()> {
             todo!()

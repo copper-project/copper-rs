@@ -1,13 +1,12 @@
-use bincode::de::Decoder;
-use bincode::enc::Encoder;
 use cu29::clock::RobotClock;
 use cu29::config::NodeInstanceConfig;
-use cu29::cutask::{CuMsg, CuSrcTask, CuTask, CuTaskLifecycle, Freezable};
+use cu29::cutask::{CuMsg, CuTask, CuTaskLifecycle, Freezable};
 use cu29::{input_msg, output_msg, CuResult};
 use cu29_log_derive::debug;
 use cu29_traits::CuError;
-use cu_ads7883::ADSReadingMsg;
-use cu_rp_sn754410::MotorMsg;
+use cu_ads7883::ADSReadingPayload;
+use cu_rp_encoder::EncoderPayload;
+use cu_rp_sn754410::MotorPayload;
 use pid::Pid;
 
 pub struct PIDTask {
@@ -69,8 +68,8 @@ impl CuTaskLifecycle for PIDTask {
 }
 
 impl<'cl> CuTask<'cl> for PIDTask {
-    type Input = input_msg!('cl, ADSReadingMsg);
-    type Output = output_msg!('cl, MotorMsg);
+    type Input = input_msg!('cl, ADSReadingPayload, EncoderPayload);
+    type Output = output_msg!('cl, MotorPayload);
 
     fn process(
         &mut self,
@@ -78,24 +77,32 @@ impl<'cl> CuTask<'cl> for PIDTask {
         input: Self::Input,
         output: Self::Output,
     ) -> CuResult<()> {
-        let input = input.payload().unwrap();
-        debug!("{}: PIDTask processing input: {}", clock.now(), input);
-        let power = self.pid.next_control_output(input.analog_value as f32);
+        let (bal_pos, rail_pos) = input;
+        let bal_pos = bal_pos.payload().unwrap();
+        let rail_pos = rail_pos.payload().unwrap();
+
+        debug!(
+            "{}: PIDTask processing bal: {} rail:{}",
+            clock.now(),
+            bal_pos,
+            rail_pos
+        );
+        let power = self.pid.next_control_output(bal_pos.analog_value as f32);
         debug!(
             "PIDTask output: input: {} p:{} i:{} d:{} total:{}",
-            input.analog_value, power.p, power.i, power.d, power.output
+            bal_pos.analog_value, power.p, power.i, power.d, power.output
         );
-        match input.analog_value as f32 {
+        match bal_pos.analog_value as f32 {
             value if value < self.setpoint - self.cutoff => {
                 debug!("********** Rod position too low, stopping motors");
-                output.set_payload(MotorMsg { power: 0.0 });
+                output.set_payload(MotorPayload { power: 0.0 });
             }
             value if value > self.setpoint + self.cutoff => {
                 debug!("********** Rod position too high, stopping motors");
-                output.set_payload(MotorMsg { power: 0.0 });
+                output.set_payload(MotorPayload { power: 0.0 });
             }
             _ => {
-                output.set_payload(MotorMsg {
+                output.set_payload(MotorPayload {
                     power: power.output,
                 });
             }

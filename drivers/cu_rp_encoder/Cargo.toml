@@ -1,0 +1,26 @@
+[package]
+name = "cu-rp-encoder"
+description = "This is a driver for the Raspberry Pi to decode a directional encoder from GPIOs."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[package.metadata.cargo-machete]
+ignored = ["cu29-log", "cu29-log-runtime"]  # proc macro
+
+[dependencies]
+cu29 = { workspace = true }
+cu29-log = { workspace = true }
+cu29-log-runtime = { workspace = true }
+cu29-log-derive = { workspace = true }
+cu29-traits = { workspace = true }
+bincode = { workspace = true }
+
+rppal = "0.19.0"
+lazy_static = "1.5.0"
+serde = { version = "1.0.209", features = ["derive"] }

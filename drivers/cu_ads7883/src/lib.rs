@@ -111,7 +111,6 @@ impl<'cl> CuSrcTask<'cl> for ADS7883 {
         })?;
         // hard to know exactly when the value was read.
         // Should be within a couple of microseconds with the ioctl opverhead.
-
         let output = ADSReadingPayload { analog_value };
         new_msg.set_payload(output);
         new_msg.metadata.tov = ((clock.now() + bf) / 2u64).into();

@@ -10,6 +10,6 @@
         ),
      ],
     cnx: [
-        (src: "src",  dst: "pwm",   msg: "cu_rp_sn754410::MotorMsg"),
+        (src: "src",  dst: "pwm",   msg: "cu_rp_sn754410::MotorPayload"),
     ],
 )

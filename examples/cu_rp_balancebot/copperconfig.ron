@@ -1,8 +1,16 @@
 (
     tasks: [
         (
-            id: "pos",
+            id: "balpos",
             type: "cu_ads7883::ADS7883",
+        ),
+        (
+            id: "railpos",
+            type: "cu_rp_encoder::Encoder",
+            config: {
+                "clk_pin": 26,
+                "dat_pin": 20,
+            },
         ),
         (
             id: "pidctrl",
@@ -28,7 +36,9 @@
         ),
      ],
     cnx: [
-        (src: "pos",  dst: "pidctrl",   msg: "cu_ads7883::ADSReadingMsg"),
-        (src: "pidctrl", dst: "motor",   msg: "cu_rp_sn754410::MotorMsg"),
+        (src: "balpos",  dst: "pidctrl",   msg: "cu_ads7883::ADSReadingPayload"),
+        (src: "railpos",  dst: "pidctrl",   msg: "cu_rp_encoder::EncoderPayload"),
+        (src: "pidctrl", dst: "motor",   msg: "cu_rp_sn754410::MotorPayload"),
     ],
 )
+
