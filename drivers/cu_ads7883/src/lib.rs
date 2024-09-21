@@ -3,7 +3,6 @@ use cu29::clock::RobotClock;
 use cu29::config::NodeInstanceConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
 use cu29::{output_msg, CuError, CuResult};
-use cu29::{CuError, CuResult};
 use cu29_log_derive::debug;
 use serde::{Deserialize, Serialize};
 use spidev::{SpiModeFlags, Spidev, SpidevOptions, SpidevTransfer};

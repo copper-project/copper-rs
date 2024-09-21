@@ -3,7 +3,7 @@ use bincode::enc::Encoder;
 use cu29::clock::RobotClock;
 use cu29::config::NodeInstanceConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, CuTask, CuTaskLifecycle, Freezable};
-use cu29::CuResult;
+use cu29::{input_msg, output_msg, CuResult};
 use cu29_log_derive::debug;
 use cu29_traits::CuError;
 use cu_ads7883::ADSReadingMsg;
@@ -68,17 +68,17 @@ impl CuTaskLifecycle for PIDTask {
     }
 }
 
-impl CuTask for PIDTask {
-    type Input = ADSReadingMsg;
-    type Output = MotorMsg;
+impl<'cl> CuTask<'cl> for PIDTask {
+    type Input = input_msg!('cl, ADSReadingMsg);
+    type Output = output_msg!('cl, MotorMsg);
 
     fn process(
         &mut self,
         clock: &RobotClock,
-        input: &CuMsg<Self::Input>,
-        output: &mut CuMsg<Self::Output>,
+        input: Self::Input,
+        output: Self::Output,
     ) -> CuResult<()> {
-        let input = input.payload;
+        let input = input.payload().unwrap();
         debug!("{}: PIDTask processing input: {}", clock.now(), input);
         let power = self.pid.next_control_output(input.analog_value as f32);
         debug!(
@@ -88,14 +88,16 @@ impl CuTask for PIDTask {
         match input.analog_value as f32 {
             value if value < self.setpoint - self.cutoff => {
                 debug!("********** Rod position too low, stopping motors");
-                output.payload.power = 0.0;
+                output.set_payload(MotorMsg { power: 0.0 });
             }
             value if value > self.setpoint + self.cutoff => {
                 debug!("********** Rod position too high, stopping motors");
-                output.payload.power = 0.0;
+                output.set_payload(MotorMsg { power: 0.0 });
             }
             _ => {
-                output.payload.power = power.output;
+                output.set_payload(MotorMsg {
+                    power: power.output,
+                });
             }
         }
 

@@ -129,7 +129,7 @@ impl Freezable for SN754410 {
 impl<'cl> CuSinkTask<'cl> for SN754410 {
     type Input = input_msg!('cl, MotorMsg);
 
-    fn process(&mut self, clock: &RobotClock, input: &mut CuMsg<Self::Input>) -> CuResult<()> {
+    fn process(&mut self, clock: &RobotClock, input: Self::Input) -> CuResult<()> {
         let power = input.payload().unwrap().power;
         let deadzone_compensated = if power != 0.0f32 {
             // proportinally on the [deadzone, 1.0] range*/
