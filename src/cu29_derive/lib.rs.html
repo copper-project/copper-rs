@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cu29_derive/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-405f8b29f52305f8.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_derive" data-themes="" data-resource-suffix="" data-rustdoc-version="1.83.0-nightly (f79a912d9 2024-09-18)" data-channel="nightly" data-search-js="search-0cfde64e8ad3a7fe.js" data-settings-js="settings-7e3bb6c46e92e77c.js" ><script src="../../static.files/storage-29b1d5a9048d38fe.js"></script><script defer src="../../static.files/src-script-e66d777a5a92e9b2.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-14659ec02b58af51.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-40f72c9259523cb3.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cu29_derive/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-9d5ec5f3536319c6.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_derive" data-themes="" data-resource-suffix="" data-rustdoc-version="1.83.0-nightly (da889684c 2024-09-20)" data-channel="nightly" data-search-js="search-0cfde64e8ad3a7fe.js" data-settings-js="settings-7e3bb6c46e92e77c.js" ><script src="../../static.files/storage-29b1d5a9048d38fe.js"></script><script defer src="../../static.files/src-script-e66d777a5a92e9b2.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-59a36e46ca746814.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-40f72c9259523cb3.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
 <a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
@@ -432,8 +432,7 @@
 <a href="#431" id="431">431</a>
 <a href="#432" id="432">432</a>
 <a href="#433" id="433">433</a>
-<a href="#434" id="434">434</a>
-<a href="#435" id="435">435</a></pre></div><pre class="rust"><code><span class="kw">extern crate </span>proc_macro;
+<a href="#434" id="434">434</a></pre></div><pre class="rust"><code><span class="kw">extern crate </span>proc_macro;
 
 <span class="kw">use </span>proc_macro::TokenStream;
 
@@ -455,7 +454,7 @@
 </span><span class="kw">const </span>DEFAULT_CLNB: usize = <span class="number">10</span>;
 
 <span class="attr">#[inline]
-</span><span class="kw">fn </span>int2index(i: u32) -&gt; syn::Index {
+</span><span class="kw">fn </span>int2sliceindex(i: u32) -&gt; syn::Index {
     syn::Index::from(i <span class="kw">as </span>usize)
 }
 
@@ -499,9 +498,11 @@
     <span class="macro">eprintln!</span>(<span class="string">"[runtime plan]"</span>);
     <span class="kw">let </span>runtime_plan: CuExecutionLoop =
         compute_runtime_plan(<span class="kw-2">&amp;</span>copper_config).expect(<span class="string">"Could not compute runtime plan"</span>);
+    <span class="macro">eprintln!</span>(<span class="string">"{:?}"</span>, runtime_plan);
 
     <span class="macro">eprintln!</span>(<span class="string">"[extract tasks types]"</span>);
     <span class="kw">let </span>(all_tasks_types_names, all_tasks_types) = extract_tasks_types(<span class="kw-2">&amp;</span>copper_config);
+    <span class="macro">eprintln!</span>(<span class="string">"tasks types: {:?}"</span>, all_tasks_types_names);
 
     <span class="macro">eprintln!</span>(<span class="string">"[build task tuples]"</span>);
     <span class="comment">// Build the tuple of all those types
@@ -540,7 +541,7 @@
         .iter()
         .enumerate()
         .map(|(index, ty)| {
-            <span class="kw">let </span>node_index = int2index(index <span class="kw">as </span>u32);
+            <span class="kw">let </span>node_index = int2sliceindex(index <span class="kw">as </span>u32);
             <span class="kw">let </span>additional_error_info = <span class="macro">format!</span>(
                 <span class="string">"Failed to get create instance for {}, instance index {}."</span>,
                 all_tasks_types_names[index], index
@@ -587,69 +588,66 @@
                         step.node.get_id(),
                         step.node.get_type(),
                         step.task_type,
-                        step.input_msg_type,
-                        step.output_msg_type
+                        step.input_msg_indices_types,
+                        step.output_msg_index_type
                     );
 
-                    <span class="kw">let </span>node_index = int2index(step.node_id);
+                    <span class="kw">let </span>node_index = int2sliceindex(step.node_id);
                     <span class="kw">let </span>task_instance = <span class="macro">quote!</span> { <span class="self">self</span>.copper_runtime.task_instances.#node_index };
                     <span class="kw">let </span>comment_str = <span class="macro">format!</span>(
                         <span class="string">"/// {} ({:?}) I:{:?} O:{:?}"</span>,
                         step.node.get_id(),
                         step.task_type,
-                        step.input_msg_type,
-                        step.output_msg_type
+                        step.input_msg_indices_types,
+                        step.output_msg_index_type
                     );
                     <span class="kw">let </span>comment_tokens: proc_macro2::TokenStream = parse_str(<span class="kw-2">&amp;</span>comment_str).unwrap();
 
 
                     <span class="kw">let </span>process_call = <span class="kw">match </span>step.task_type {
                         CuTaskType::Source =&gt; {
-                            <span class="kw">let </span>output_culist_index = int2index(
-                                step.culist_output_index
-                                    .expect(<span class="string">"Src task should have an output message index."</span>),
-                            );
-                            <span class="macro">quote!</span> {
-                                {
-                                    #comment_tokens
-                                    <span class="kw">let </span>cumsg_output = <span class="kw-2">&amp;mut </span>payload.#output_culist_index;
-                                    cumsg_output.metadata.before_process = <span class="self">self</span>.copper_runtime.clock.now().into();
-                                    #task_instance.process(<span class="kw-2">&amp;</span><span class="self">self</span>.copper_runtime.clock, cumsg_output)<span class="question-mark">?</span>;
-                                    cumsg_output.metadata.after_process = <span class="self">self</span>.copper_runtime.clock.now().into();
+                            <span class="kw">if let </span><span class="prelude-val">Some</span>((index, <span class="kw">_</span>)) = <span class="kw-2">&amp;</span>step.output_msg_index_type {
+                                <span class="kw">let </span>output_culist_index = int2sliceindex(<span class="kw-2">*</span>index);
+                                <span class="macro">quote!</span> {
+                                    {
+                                        #comment_tokens
+                                        <span class="kw">let </span>cumsg_output = <span class="kw-2">&amp;mut </span>payload.#output_culist_index;
+                                        cumsg_output.metadata.before_process = <span class="self">self</span>.copper_runtime.clock.now().into();
+                                        #task_instance.process(<span class="kw-2">&amp;</span><span class="self">self</span>.copper_runtime.clock, cumsg_output)<span class="question-mark">?</span>;
+                                        cumsg_output.metadata.after_process = <span class="self">self</span>.copper_runtime.clock.now().into();
+                                    }
                                 }
+                            } <span class="kw">else </span>{
+                                <span class="macro">panic!</span>(<span class="string">"Source task should have an output message index."</span>);
                             }
                         }
                         CuTaskType::Sink =&gt; {
-                            <span class="kw">let </span>input_culist_index = int2index(
-                                step.culist_input_index
-                                    .expect(<span class="string">"Sink task should have an input message index."</span>),
-                            );
+                            <span class="comment">// collect the indices
+                            </span><span class="kw">let </span>indices = step.input_msg_indices_types.iter().map(|(index, <span class="kw">_</span>)| int2sliceindex(<span class="kw-2">*</span>index));
                             <span class="macro">quote!</span> {
                                 {
                                     #comment_tokens
-                                    <span class="kw">let </span>cumsg_input = <span class="kw-2">&amp;mut </span>payload.#input_culist_index;
+                                    <span class="kw">let </span>cumsg_input = (#(<span class="kw-2">&amp;</span>payload.#indices),<span class="kw-2">*</span>);
                                     #task_instance.process(<span class="kw-2">&amp;</span><span class="self">self</span>.copper_runtime.clock, cumsg_input)<span class="question-mark">?</span>;
                                 }
                             }
                         }
                         CuTaskType::Regular =&gt; {
-                            <span class="kw">let </span>input_culist_index = int2index(
-                                step.culist_input_index
-                                    .expect(<span class="string">"Regular task should have an input message index."</span>),
-                            );
-                            <span class="kw">let </span>output_culist_index = int2index(
-                                step.culist_output_index
-                                    .expect(<span class="string">"Regular task should have an output message index."</span>),
-                            );
-                            <span class="macro">quote!</span> {
-                                {
+                            <span class="kw">let </span>indices = step.input_msg_indices_types.iter().map(|(index, <span class="kw">_</span>)| int2sliceindex(<span class="kw-2">*</span>index));
+                            <span class="kw">if let </span><span class="prelude-val">Some</span>((output_index, <span class="kw">_</span>)) = <span class="kw-2">&amp;</span>step.output_msg_index_type {
+                                <span class="kw">let </span>output_culist_index = int2sliceindex(<span class="kw-2">*</span>output_index);
+                                <span class="macro">quote!</span> {
+                                    {
                                     #comment_tokens
-                                    <span class="kw">let </span>cumsg_input = <span class="kw-2">&amp;mut </span>payload.#input_culist_index;
+                                    <span class="kw">let </span>cumsg_input = (#(<span class="kw-2">&amp;</span>payload.#indices),<span class="kw-2">*</span>);
                                     <span class="kw">let </span>cumsg_output = <span class="kw-2">&amp;mut </span>payload.#output_culist_index;
                                     cumsg_output.metadata.before_process = <span class="self">self</span>.copper_runtime.clock.now().into();
                                     #task_instance.process(<span class="kw-2">&amp;</span><span class="self">self</span>.copper_runtime.clock, cumsg_input, cumsg_output)<span class="question-mark">?</span>;
                                     cumsg_output.metadata.after_process = <span class="self">self</span>.copper_runtime.clock.now().into();
+                                    }
                                 }
+                            } <span class="kw">else </span>{
+                                <span class="macro">panic!</span>(<span class="string">"Regular task should have an output message index."</span>);
                             }
                         }
                     };
@@ -668,7 +666,7 @@
 
     <span class="macro">eprintln!</span>(<span class="string">"[build the collect metadata function]"</span>);
     <span class="kw">let </span>culist_size = all_msgs_types_in_culist_order.len();
-    <span class="kw">let </span>culist_indices = (<span class="number">0</span>..(culist_size <span class="kw">as </span>u32)).map(int2index);
+    <span class="kw">let </span>culist_indices = (<span class="number">0</span>..(culist_size <span class="kw">as </span>u32)).map(int2sliceindex);
     <span class="kw">let </span>collect_metadata_function = <span class="macro">quote!</span> {
         <span class="kw">pub fn </span>collect_metadata&lt;<span class="lifetime">'a</span>&gt;(culist: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>CuList) -&gt; [<span class="kw-2">&amp;</span><span class="lifetime">'a </span>_CuMsgMetadata; #culist_size] {
             [#( <span class="kw-2">&amp;</span>culist.payload.#culist_indices.metadata, )<span class="kw-2">*</span>]
@@ -842,7 +840,7 @@
         .iter()
         .filter_map(|unit| <span class="kw">match </span>unit {
             CuExecutionUnit::Step(step) =&gt; {
-                <span class="kw">if let </span><span class="prelude-val">Some</span>(output_msg_type) = <span class="kw-2">&amp;</span>step.output_msg_type {
+                <span class="kw">if let </span><span class="prelude-val">Some</span>((<span class="kw">_</span>, output_msg_type)) = <span class="kw-2">&amp;</span>step.output_msg_index_type {
                     <span class="prelude-val">Some</span>(
                         parse_str::&lt;Type&gt;(output_msg_type.as_str()).expect(
                             <span class="macro">format!</span>(

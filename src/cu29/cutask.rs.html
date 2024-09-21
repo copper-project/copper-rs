@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cu29/src/cutask.rs`."><title>cutask.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-405f8b29f52305f8.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29" data-themes="" data-resource-suffix="" data-rustdoc-version="1.83.0-nightly (f79a912d9 2024-09-18)" data-channel="nightly" data-search-js="search-0cfde64e8ad3a7fe.js" data-settings-js="settings-7e3bb6c46e92e77c.js" ><script src="../../static.files/storage-29b1d5a9048d38fe.js"></script><script defer src="../../static.files/src-script-e66d777a5a92e9b2.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-14659ec02b58af51.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-40f72c9259523cb3.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cu29/src/cutask.rs`."><title>cutask.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-9d5ec5f3536319c6.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29" data-themes="" data-resource-suffix="" data-rustdoc-version="1.83.0-nightly (da889684c 2024-09-20)" data-channel="nightly" data-search-js="search-0cfde64e8ad3a7fe.js" data-settings-js="settings-7e3bb6c46e92e77c.js" ><script src="../../static.files/storage-29b1d5a9048d38fe.js"></script><script defer src="../../static.files/src-script-e66d777a5a92e9b2.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-59a36e46ca746814.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-40f72c9259523cb3.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
 <a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
@@ -157,7 +157,63 @@
 <a href="#156" id="156">156</a>
 <a href="#157" id="157">157</a>
 <a href="#158" id="158">158</a>
-<a href="#159" id="159">159</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module contains all the main definition of the traits you need to implement
+<a href="#159" id="159">159</a>
+<a href="#160" id="160">160</a>
+<a href="#161" id="161">161</a>
+<a href="#162" id="162">162</a>
+<a href="#163" id="163">163</a>
+<a href="#164" id="164">164</a>
+<a href="#165" id="165">165</a>
+<a href="#166" id="166">166</a>
+<a href="#167" id="167">167</a>
+<a href="#168" id="168">168</a>
+<a href="#169" id="169">169</a>
+<a href="#170" id="170">170</a>
+<a href="#171" id="171">171</a>
+<a href="#172" id="172">172</a>
+<a href="#173" id="173">173</a>
+<a href="#174" id="174">174</a>
+<a href="#175" id="175">175</a>
+<a href="#176" id="176">176</a>
+<a href="#177" id="177">177</a>
+<a href="#178" id="178">178</a>
+<a href="#179" id="179">179</a>
+<a href="#180" id="180">180</a>
+<a href="#181" id="181">181</a>
+<a href="#182" id="182">182</a>
+<a href="#183" id="183">183</a>
+<a href="#184" id="184">184</a>
+<a href="#185" id="185">185</a>
+<a href="#186" id="186">186</a>
+<a href="#187" id="187">187</a>
+<a href="#188" id="188">188</a>
+<a href="#189" id="189">189</a>
+<a href="#190" id="190">190</a>
+<a href="#191" id="191">191</a>
+<a href="#192" id="192">192</a>
+<a href="#193" id="193">193</a>
+<a href="#194" id="194">194</a>
+<a href="#195" id="195">195</a>
+<a href="#196" id="196">196</a>
+<a href="#197" id="197">197</a>
+<a href="#198" id="198">198</a>
+<a href="#199" id="199">199</a>
+<a href="#200" id="200">200</a>
+<a href="#201" id="201">201</a>
+<a href="#202" id="202">202</a>
+<a href="#203" id="203">203</a>
+<a href="#204" id="204">204</a>
+<a href="#205" id="205">205</a>
+<a href="#206" id="206">206</a>
+<a href="#207" id="207">207</a>
+<a href="#208" id="208">208</a>
+<a href="#209" id="209">209</a>
+<a href="#210" id="210">210</a>
+<a href="#211" id="211">211</a>
+<a href="#212" id="212">212</a>
+<a href="#213" id="213">213</a>
+<a href="#214" id="214">214</a>
+<a href="#215" id="215">215</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module contains all the main definition of the traits you need to implement
 //! or interact with to create a Copper task.
 
 </span><span class="kw">use </span><span class="kw">crate</span>::clock::OptionCuTime;
@@ -175,8 +231,51 @@
 <span class="comment">// Everything that is stateful in copper for zero copy constraints need to be restricted to this trait.
 </span><span class="kw">pub trait </span>CuMsgPayload: Default + Encode + Decode + Sized {}
 
+<span class="kw">pub trait </span>CuMsgPack&lt;<span class="lifetime">'cl</span>&gt; {}
+
 <span class="comment">// Also anything that follows this contract can be a payload (blanket implementation)
-</span><span class="kw">impl</span>&lt;T&gt; CuMsgPayload <span class="kw">for </span>T <span class="kw">where </span>T: Default + Encode + Decode + Sized {}
+</span><span class="kw">impl</span>&lt;T: Default + Encode + Decode + Sized&gt; CuMsgPayload <span class="kw">for </span>T {}
+
+<span class="macro">macro_rules!</span> impl_cu_msg_pack {
+    ($(($(<span class="macro-nonterminal">$ty</span>:ident),<span class="kw-2">*</span>)),<span class="kw-2">*</span>) =&gt; {
+        $(
+            <span class="kw">impl</span>&lt;<span class="lifetime">'cl</span>, $(<span class="macro-nonterminal">$ty</span>: CuMsgPayload + <span class="lifetime">'cl</span>),<span class="kw-2">*</span>&gt; CuMsgPack&lt;<span class="lifetime">'cl</span>&gt; <span class="kw">for </span>( $( <span class="kw-2">&amp;</span><span class="lifetime">'cl </span>CuMsg&lt;<span class="macro-nonterminal">$ty</span>&gt;, )* ) {}
+        )*
+    };
+}
+
+<span class="kw">impl</span>&lt;<span class="lifetime">'cl</span>, T: CuMsgPayload&gt; CuMsgPack&lt;<span class="lifetime">'cl</span>&gt; <span class="kw">for </span>(<span class="kw-2">&amp;</span><span class="lifetime">'cl </span>CuMsg&lt;T&gt;,) {}
+<span class="kw">impl</span>&lt;<span class="lifetime">'cl</span>, T: CuMsgPayload&gt; CuMsgPack&lt;<span class="lifetime">'cl</span>&gt; <span class="kw">for </span><span class="kw-2">&amp;</span><span class="lifetime">'cl </span>CuMsg&lt;T&gt; {}
+<span class="kw">impl</span>&lt;<span class="lifetime">'cl</span>, T: CuMsgPayload&gt; CuMsgPack&lt;<span class="lifetime">'cl</span>&gt; <span class="kw">for </span>(<span class="kw-2">&amp;</span><span class="lifetime">'cl </span><span class="kw-2">mut </span>CuMsg&lt;T&gt;,) {}
+<span class="kw">impl</span>&lt;<span class="lifetime">'cl</span>, T: CuMsgPayload&gt; CuMsgPack&lt;<span class="lifetime">'cl</span>&gt; <span class="kw">for </span><span class="kw-2">&amp;</span><span class="lifetime">'cl </span><span class="kw-2">mut </span>CuMsg&lt;T&gt; {}
+<span class="kw">impl</span>&lt;<span class="lifetime">'cl</span>&gt; CuMsgPack&lt;<span class="lifetime">'cl</span>&gt; <span class="kw">for </span>() {}
+
+<span class="comment">// Apply the macro to generate implementations for tuple sizes up to 5
+</span><span class="macro">impl_cu_msg_pack!</span> {
+    (T1, T2), (T1, T2, T3), (T1, T2, T3, T4), (T1, T2, T3, T4, T5) <span class="comment">// TODO: continue if necessary
+</span>}
+
+<span class="comment">// A convience macro to get from a payload or a list of payloads to a proper CuMsg or CuMsgPack
+// declaration for your tasks used for input messages.
+</span><span class="attr">#[macro_export]
+</span><span class="macro">macro_rules!</span> input_msg {
+    (<span class="macro-nonterminal">$lifetime</span>:lifetime, <span class="macro-nonterminal">$ty</span>:ty) =&gt; {
+        <span class="kw-2">&amp;</span><span class="macro-nonterminal">$lifetime </span>CuMsg&lt;<span class="macro-nonterminal">$ty</span>&gt;
+    };
+    (<span class="macro-nonterminal">$lifetime</span>:lifetime, $(<span class="macro-nonterminal">$ty</span>:ty),<span class="kw-2">*</span>) =&gt; {
+        (
+            $( <span class="kw-2">&amp;</span><span class="macro-nonterminal">$lifetime </span>CuMsg&lt;<span class="macro-nonterminal">$ty</span>&gt;, )*
+        )
+    };
+}
+
+<span class="comment">// A convience macro to get from a payload to a proper CuMsg used as output.
+</span><span class="attr">#[macro_export]
+</span><span class="macro">macro_rules!</span> output_msg {
+    (<span class="macro-nonterminal">$lifetime</span>:lifetime, <span class="macro-nonterminal">$ty</span>:ty) =&gt; {
+        <span class="kw-2">&amp;</span><span class="macro-nonterminal">$lifetime </span><span class="kw-2">mut </span>CuMsg&lt;<span class="macro-nonterminal">$ty</span>&gt;
+    };
+}
 
 <span class="doccomment">/// CuMsgMetadata is a structure that contains metadata common to all CuMsgs.
 </span><span class="attr">#[derive(Debug, Default, bincode::Encode, bincode::Decode)]
@@ -185,6 +284,8 @@
     </span><span class="kw">pub </span>before_process: OptionCuTime,
     <span class="doccomment">/// The time after the process method is called.
     </span><span class="kw">pub </span>after_process: OptionCuTime,
+    <span class="doccomment">/// The time of validity of the message.
+    </span><span class="kw">pub </span>tov: OptionCuTime,
 }
 
 <span class="kw">impl </span>Display <span class="kw">for </span>CuMsgMetadata {
@@ -204,7 +305,7 @@
     </span>T: CuMsgPayload,
 {
     <span class="doccomment">/// This payload is the actual data exchanged between tasks.
-    </span><span class="kw">pub </span>payload: T,
+    </span>payload: <span class="prelude-ty">Option</span>&lt;T&gt;,
 
     <span class="doccomment">/// This metadata is the data that is common to all messages.
     </span><span class="kw">pub </span>metadata: CuMsgMetadata,
@@ -214,14 +315,26 @@
 <span class="kw">where
     </span>T: CuMsgPayload,
 {
-    <span class="kw">pub fn </span>new(payload: T) -&gt; <span class="self">Self </span>{
+    <span class="kw">pub fn </span>new(payload: <span class="prelude-ty">Option</span>&lt;T&gt;) -&gt; <span class="self">Self </span>{
         CuMsg {
             payload,
             metadata: CuMsgMetadata {
                 before_process: OptionCuTime::none(),
                 after_process: OptionCuTime::none(),
+                tov: OptionCuTime::none(),
             },
         }
+    }
+    <span class="kw">pub fn </span>payload(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>T&gt; {
+        <span class="self">self</span>.payload.as_ref()
+    }
+
+    <span class="kw">pub fn </span>set_payload(<span class="kw-2">&amp;mut </span><span class="self">self</span>, payload: T) {
+        <span class="self">self</span>.payload = <span class="prelude-val">Some</span>(payload);
+    }
+
+    <span class="kw">pub fn </span>payload_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span><span class="prelude-ty">Option</span>&lt;T&gt; {
+        <span class="kw-2">&amp;mut </span><span class="self">self</span>.payload
     }
 }
 
@@ -281,19 +394,19 @@
 <span class="doccomment">/// A Src Task is a task that only produces messages. For example drivers for sensors are Src Tasks.
 /// They are in push mode from the runtime.
 /// To set the frequency of the pulls and align them to any hw, see the runtime configuration.
-</span><span class="kw">pub trait </span>CuSrcTask: CuTaskLifecycle {
-    <span class="kw">type </span>Output: CuMsgPayload;
+</span><span class="kw">pub trait </span>CuSrcTask&lt;<span class="lifetime">'cl</span>&gt;: CuTaskLifecycle {
+    <span class="kw">type </span>Output: CuMsgPack&lt;<span class="lifetime">'cl</span>&gt;;
 
     <span class="doccomment">/// Process is the most critical execution of the task.
     /// The goal will be to produce the output message as soon as possible.
     /// Use preprocess to prepare the task to make this method as short as possible.
-    </span><span class="kw">fn </span>process(<span class="kw-2">&amp;mut </span><span class="self">self</span>, clock: <span class="kw-2">&amp;</span>RobotClock, new_msg: <span class="kw-2">&amp;mut </span>CuMsg&lt;<span class="self">Self</span>::Output&gt;) -&gt; CuResult&lt;()&gt;;
+    </span><span class="kw">fn </span>process(<span class="kw-2">&amp;mut </span><span class="self">self</span>, clock: <span class="kw-2">&amp;</span>RobotClock, new_msg: <span class="self">Self</span>::Output) -&gt; CuResult&lt;()&gt;;
 }
 
 <span class="doccomment">/// This is the most generic Task of copper. It is a "transform" task deriving an output from an input.
-</span><span class="kw">pub trait </span>CuTask: CuTaskLifecycle {
-    <span class="kw">type </span>Input: CuMsgPayload;
-    <span class="kw">type </span>Output: CuMsgPayload;
+</span><span class="kw">pub trait </span>CuTask&lt;<span class="lifetime">'cl</span>&gt;: CuTaskLifecycle {
+    <span class="kw">type </span>Input: CuMsgPack&lt;<span class="lifetime">'cl</span>&gt;;
+    <span class="kw">type </span>Output: CuMsgPack&lt;<span class="lifetime">'cl</span>&gt;;
 
     <span class="doccomment">/// Process is the most critical execution of the task.
     /// The goal will be to produce the output message as soon as possible.
@@ -301,19 +414,18 @@
     </span><span class="kw">fn </span>process(
         <span class="kw-2">&amp;mut </span><span class="self">self</span>,
         clock: <span class="kw-2">&amp;</span>RobotClock,
-        input: <span class="kw-2">&amp;</span>CuMsg&lt;<span class="self">Self</span>::Input&gt;,
-        output: <span class="kw-2">&amp;mut </span>CuMsg&lt;<span class="self">Self</span>::Output&gt;,
+        input: <span class="self">Self</span>::Input,
+        output: <span class="self">Self</span>::Output,
     ) -&gt; CuResult&lt;()&gt;;
 }
 
 <span class="doccomment">/// A Sink Task is a task that only consumes messages. For example drivers for actuators are Sink Tasks.
-</span><span class="kw">pub trait </span>CuSinkTask: CuTaskLifecycle {
-    <span class="kw">type </span>Input: CuMsgPayload;
+</span><span class="kw">pub trait </span>CuSinkTask&lt;<span class="lifetime">'cl</span>&gt;: CuTaskLifecycle {
+    <span class="kw">type </span>Input: CuMsgPack&lt;<span class="lifetime">'cl</span>&gt;;
 
     <span class="doccomment">/// Process is the most critical execution of the task.
     /// The goal will be to produce the output message as soon as possible.
     /// Use preprocess to prepare the task to make this method as short as possible.
-    /// TODO: Still on the fence for this mutable input but sometimes you want to record one last thing before logging the message.
-    </span><span class="kw">fn </span>process(<span class="kw-2">&amp;mut </span><span class="self">self</span>, clock: <span class="kw-2">&amp;</span>RobotClock, input: <span class="kw-2">&amp;mut </span>CuMsg&lt;<span class="self">Self</span>::Input&gt;) -&gt; CuResult&lt;()&gt;;
+    </span><span class="kw">fn </span>process(<span class="kw-2">&amp;mut </span><span class="self">self</span>, clock: <span class="kw-2">&amp;</span>RobotClock, input: <span class="self">Self</span>::Input) -&gt; CuResult&lt;()&gt;;
 }
 </code></pre></div></section></main></body></html>
