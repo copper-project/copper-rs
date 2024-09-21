@@ -7,19 +7,20 @@ use cu29::cutask::CuMsg;
 use cu29::{input_msg, output_msg};
 use cu29_traits::CuResult;
 
-pub struct Src1Task {
+/// A source task that generates an integer at each cycle.
+pub struct IntegerSrcTask {
     pub value: i32,
 }
 
-impl Freezable for Src1Task {}
+impl Freezable for IntegerSrcTask {}
 
-impl CuTaskLifecycle for Src1Task {
+impl CuTaskLifecycle for IntegerSrcTask {
     fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self> {
         Ok(Self { value: 42 })
     }
 }
 
-impl<'cl> CuSrcTask<'cl> for Src1Task {
+impl<'cl> CuSrcTask<'cl> for IntegerSrcTask {
     type Output = output_msg!('cl, i32);
 
     fn process(&mut self, _clock: &RobotClock, output: Self::Output) -> CuResult<()> {
@@ -29,19 +30,20 @@ impl<'cl> CuSrcTask<'cl> for Src1Task {
     }
 }
 
-pub struct Src2Task {
+/// Example Source that produces a float at each cycle.
+pub struct FloatSrcTask {
     pub value: f32,
 }
 
-impl Freezable for Src2Task {}
+impl Freezable for FloatSrcTask {}
 
-impl CuTaskLifecycle for Src2Task {
+impl CuTaskLifecycle for FloatSrcTask {
     fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self> {
         Ok(Self { value: 24.0 })
     }
 }
 
-impl<'cl> CuSrcTask<'cl> for Src2Task {
+impl<'cl> CuSrcTask<'cl> for FloatSrcTask {
     type Output = output_msg!('cl, f32);
 
     fn process(&mut self, _clock: &RobotClock, output: Self::Output) -> CuResult<()> {
@@ -51,17 +53,19 @@ impl<'cl> CuSrcTask<'cl> for Src2Task {
     }
 }
 
-pub struct SinkTask1 {}
+/// Example Sink that receives an integer and a float from the 2 sources (IntegerSrcTask and FloatSrcTask).
+pub struct MergingSinkTask {}
 
-impl Freezable for SinkTask1 {}
+impl Freezable for MergingSinkTask {}
 
-impl CuTaskLifecycle for SinkTask1 {
+impl CuTaskLifecycle for MergingSinkTask {
     fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self> {
         Ok(Self {})
     }
 }
 
-impl<'cl> CuSinkTask<'cl> for SinkTask1 {
+impl<'cl> CuSinkTask<'cl> for MergingSinkTask {
+    /// The input is an i32 from the IntegerSrcTask and a f32 from the FloatSrcTask.
     type Input = input_msg!('cl, i32, f32);
 
     fn process(&mut self, _clock: &RobotClock, input: Self::Input) -> CuResult<()> {
@@ -75,18 +79,22 @@ impl<'cl> CuSinkTask<'cl> for SinkTask1 {
     }
 }
 
-pub struct StdTask {}
+/// Example Task that merges the integer and float messages into a tuple message.
+pub struct MergerTask {}
 
-impl Freezable for StdTask {}
+impl Freezable for MergerTask {}
 
-impl CuTaskLifecycle for StdTask {
+impl CuTaskLifecycle for MergerTask {
     fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self> {
         Ok(Self {})
     }
 }
 
-impl<'cl> CuTask<'cl> for StdTask {
+impl<'cl> CuTask<'cl> for MergerTask {
+    /// The input is an i32 from the IntegerSrcTask and a f32 from the FloatSrcTask.
     type Input = input_msg!('cl, i32, f32);
+
+    /// The output is a tuple of i32 and f32.
     type Output = output_msg!('cl, (i32, f32));
 
     fn process(
@@ -95,24 +103,26 @@ impl<'cl> CuTask<'cl> for StdTask {
         input: Self::Input,
         output: Self::Output,
     ) -> CuResult<()> {
-        let (i, f) = input;
+        // Put the types explicitly here show the actual underlying type of Self::Input
+        let (i, f): (&CuMsg<i32>, &CuMsg<f32>) = input;
         let (i, f) = (i.payload().unwrap(), f.payload().unwrap());
-        output.set_payload((*i, *f));
+        output.set_payload((*i, *f)); // output is a &mut CuMsg<(i32, f32)>
         Ok(())
     }
 }
 
-pub struct SinkTask2 {}
+/// Sink to close off the pipeline correctly fed from the merger task.
+pub struct MergedSinkTask {}
 
-impl Freezable for SinkTask2 {}
+impl Freezable for MergedSinkTask {}
 
-impl CuTaskLifecycle for SinkTask2 {
+impl CuTaskLifecycle for MergedSinkTask {
     fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self> {
         Ok(Self {})
     }
 }
 
-impl<'cl> CuSinkTask<'cl> for SinkTask2 {
+impl<'cl> CuSinkTask<'cl> for MergedSinkTask {
     type Input = input_msg!('cl, (i32, f32));
 
     fn process(&mut self, _clock: &RobotClock, input: Self::Input) -> CuResult<()> {

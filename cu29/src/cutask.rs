@@ -69,6 +69,8 @@ pub struct CuMsgMetadata {
     pub before_process: OptionCuTime,
     /// The time after the process method is called.
     pub after_process: OptionCuTime,
+    /// The time of validity of the message.
+    pub tov: OptionCuTime,
 }
 
 impl Display for CuMsgMetadata {
@@ -104,6 +106,7 @@ where
             metadata: CuMsgMetadata {
                 before_process: OptionCuTime::none(),
                 after_process: OptionCuTime::none(),
+                tov: OptionCuTime::none(),
             },
         }
     }

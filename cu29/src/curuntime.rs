@@ -226,7 +226,6 @@ fn plan_tasks_tree_branch(
 
         match task_type {
             CuTaskType::Source => {
-                eprintln!("Visiting Source node: {:?}", id);
                 output_msg_index_type = Some((
                     next_culist_output_index,
                     config
@@ -239,7 +238,6 @@ fn plan_tasks_tree_branch(
                 next_culist_output_index += 1;
             }
             CuTaskType::Sink => {
-                eprintln!("Visiting Sink node: {:?}", id);
                 let parents: Vec<NodeIndex> = config
                     .graph
                     .neighbors_directed(id.into(), Incoming)
@@ -248,22 +246,15 @@ fn plan_tasks_tree_branch(
                 for parent in parents {
                     let index_type =
                         find_output_index_type_from_nodeid(parent.index() as NodeId, &plan);
-                    eprintln!(
-                        "Found parent node: {:?} with index {:?}",
-                        parent, index_type
-                    );
                     if let Some(index_type) = index_type {
                         input_msg_indices_types.push(index_type);
                     } else {
-                        eprintln!(
-                            "Parent node not in this branch, it will be picked up as a later pass."
-                        );
+                        // here do not add this node yet, wait for the other inputs to do it with all the inputs earliers in the copper list.
+                        return next_culist_output_index;
                     }
                 }
             }
             CuTaskType::Regular => {
-                eprintln!("Visiting Regular node: {:?}", id);
-
                 let parents: Vec<NodeIndex> = config
                     .graph
                     .neighbors_directed(id.into(), Incoming)
@@ -272,16 +263,9 @@ fn plan_tasks_tree_branch(
                 for parent in parents {
                     let index_type =
                         find_output_index_type_from_nodeid(parent.index() as NodeId, &plan);
-                    eprintln!(
-                        "Found parent node: {:?} with index {:?}",
-                        parent, index_type
-                    );
                     if let Some(index_type) = index_type {
                         input_msg_indices_types.push(index_type);
                     } else {
-                        eprintln!(
-                            "Parent node not in this branch, it will be picked up as a later pass."
-                        );
                         // here do not add this node yet, wait for the other inputs to do it with all the inputs earliers in the copper list.
                         return next_culist_output_index;
                     }
@@ -343,11 +327,9 @@ pub fn compute_runtime_plan(config: &CuConfig) -> CuResult<CuExecutionLoop> {
         .filter(|node_id| {
             let id = node_id.index() as NodeId;
             let task_type = find_task_type_for_id(&config.graph, id);
-            eprintln!("Node: {:?} is a {:?}", node_id, task_type);
             task_type == CuTaskType::Source
         })
         .collect::<Vec<NodeIndex>>();
-    eprintln!("Nodes to visit: {:?}", nodes_to_visit);
 
     let mut next_culist_output_index = 0u32;
     let mut plan: Vec<CuExecutionUnit> = Vec::new();

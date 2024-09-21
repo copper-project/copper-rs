@@ -63,8 +63,8 @@ impl CuTaskLifecycle for MyTask {
 }
 
 impl<'cl> CuTask<'cl> for MyTask {
-    type Input = input_msg!(MyPayload);
-    type Output = output_msg!(MyPayload);
+    type Input = input_msg!('cl, MyPayload);
+    type Output = output_msg!('cl, MyPayload);
 
     fn process(
         &mut self,
@@ -72,7 +72,7 @@ impl<'cl> CuTask<'cl> for MyTask {
         input: Self::Input,
         output: Self::Output,
     ) -> CuResult<()> {
-        debug!("Received message: {}", input.payload().value);
+        debug!("Received message: {}", input.payload().unwrap().value);
         output.set_payload(MyPayload { value: 43 });
         Ok(()) // outputs another message for downstream
     }
@@ -96,10 +96,10 @@ impl CuTaskLifecycle for MySink {
 }
 
 impl<'cl> CuSinkTask<'cl> for MySink {
-    type Input = input_msg!(MyPayload);
+    type Input = input_msg!('cl, MyPayload);
 
     fn process(&mut self, _clock: &RobotClock, input: Self::Input) -> CuResult<()> {
-        debug!("Sink Received message: {}", input.payload().value);
+        debug!("Sink Received message: {}", input.payload().unwrap().value);
         Ok(())
     }
 }

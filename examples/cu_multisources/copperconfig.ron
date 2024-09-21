@@ -1,36 +1,36 @@
 (
     tasks: [
         (
-            id: "src1",
-            type: "tasks::Src1Task",
+            id: "i",
+            type: "tasks::IntegerSrcTask",
         ),
         (
-            id: "src2",
-            type: "tasks::Src2Task",
+            id: "f",
+            type: "tasks::FloatSrcTask",
         ),
         (
-            id: "std",
-            type: "tasks::StdTask"
+            id: "merger",
+            type: "tasks::MergerTask"
         ),
         (
-            id: "sink1",
-            type: "tasks::SinkTask1",
+            id: "merger_sink",
+            type: "tasks::MergingSinkTask",
         ),
         (
-            id: "sink2",
-            type: "tasks::SinkTask2",
+            id: "merged_sink",
+            type: "tasks::MergedSinkTask",
         ),
      ],
     cnx: [
-        // Make both src1 and src2 send to sink
-        (src: "src1", dst: "sink1", msg: "i32"),
-        (src: "src2", dst: "sink1", msg: "f32"),
+        // Make both the int and float sources send to the merging sink
+        (src: "i", dst: "merger_sink", msg: "i32"),
+        (src: "f", dst: "merger_sink", msg: "f32"),
 
-        // Make both src1 and src2 send to a std task
-        (src: "src1", dst: "std", msg: "i32"),
-        (src: "src2", dst: "std", msg: "f32"),
+        // Make both the int and float sources send to the merging tasks
+        (src: "i", dst: "merger", msg: "i32"),
+        (src: "f", dst: "merger", msg: "f32"),
 
-        // Make std task send to sink2
-        (src: "std", dst: "sink2", msg: "(i32, f32)"),
+        // Complete the graph from the merger to the merged sink
+        (src: "merger", dst: "merged_sink", msg: "(i32, f32)"),
     ],
 )
