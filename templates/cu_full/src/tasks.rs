@@ -3,8 +3,9 @@ use bincode::{Decode, Encode};
 use cu29::clock::RobotClock;
 use cu29::config::NodeInstanceConfig;
 use cu29::cutask::{
-    input_msg, output_msg, CuMsg, CuSinkTask, CuSrcTask, CuTask, CuTaskLifecycle, Freezable,
+    CuMsg, CuSinkTask, CuSrcTask, CuTask, CuTaskLifecycle, Freezable,
 };
+use cu29::{input_msg, output_msg};
 use cu29::CuResult;
 
 use cu29_log_derive::debug;
