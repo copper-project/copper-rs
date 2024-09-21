@@ -3,7 +3,7 @@
 //!
 
 use crate::clock::{ClockProvider, RobotClock};
-use crate::config::{CuConfig, NodeId};
+use crate::config::{Cnx, CuConfig, NodeId};
 use crate::config::{Node, NodeInstanceConfig};
 use crate::copperlist::{CopperList, CopperListState, CuListsManager};
 use crate::CuResult;
@@ -11,6 +11,8 @@ use cu29_log_derive::debug;
 use cu29_traits::CopperListPayload;
 use cu29_traits::WriteStream;
 use petgraph::prelude::*;
+use petgraph::visit::NodeRef;
+use std::fmt::Debug;
 
 /// This is the main structure that will be injected as a member of the Application struct.
 /// CT is the tuple of all the tasks in order of execution.
@@ -103,6 +105,7 @@ pub enum CuTaskType {
 }
 
 /// This structure represents a step in the execution plan.
+
 pub struct CuExecutionStep {
     /// NodeId: node id of the task to execute
     pub node_id: NodeId,
@@ -110,14 +113,30 @@ pub struct CuExecutionStep {
     pub node: Node,
     /// CuTaskType: type of the task
     pub task_type: CuTaskType,
-    /// `Option<String>`: input message type
-    pub input_msg_type: Option<String>,
-    /// u32: index in the culist of the input message
-    pub culist_input_index: Option<u32>,
-    /// `Option<String>`: output message type
-    pub output_msg_type: Option<String>,
-    /// u32: index in the culist of the output message
-    pub culist_output_index: Option<u32>,
+
+    /// the indices in the copper list of the input messages and their types
+    pub input_msg_indices_types: Vec<(u32, String)>,
+
+    /// the index in the copper list of the output message and its type
+    pub output_msg_index_type: Option<(u32, String)>,
+}
+
+impl Debug for CuExecutionStep {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(format!("   CuExecutionStep: {}\n", self.node_id).as_str())?;
+        f.write_str(format!("       task_type: {:?}\n", self.task_type).as_str())?;
+        f.write_str(
+            format!(
+                "       input_msg_types: {:?}\n",
+                self.input_msg_indices_types
+            )
+            .as_str(),
+        )?;
+        f.write_str(
+            format!("       output_msg_type: {:?}\n", self.output_msg_index_type).as_str(),
+        )?;
+        Ok(())
+    }
 }
 
 /// This structure represents a loop in the execution plan.
@@ -129,23 +148,46 @@ pub struct CuExecutionLoop {
     pub loop_count: Option<u32>,
 }
 
+impl Debug for CuExecutionLoop {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("CuExecutionLoop:\n")?;
+        for step in &self.steps {
+            match step {
+                CuExecutionUnit::Step(step) => {
+                    step.fmt(f)?;
+                }
+                CuExecutionUnit::Loop(l) => {
+                    l.fmt(f)?;
+                }
+            }
+        }
+
+        f.write_str(format!("   count: {:?}", self.loop_count).as_str())?;
+        Ok(())
+    }
+}
+
 /// This structure represents a step in the execution plan.
+#[derive(Debug)]
 pub enum CuExecutionUnit {
     Step(CuExecutionStep),
     Loop(CuExecutionLoop),
 }
 
-fn find_output_index_from_nodeid(node_id: NodeId, steps: &Vec<CuExecutionUnit>) -> Option<u32> {
+fn find_output_index_type_from_nodeid(
+    node_id: NodeId,
+    steps: &Vec<CuExecutionUnit>,
+) -> Option<(u32, String)> {
     for step in steps {
         match step {
             CuExecutionUnit::Loop(loop_unit) => {
-                if let Some(index) = find_output_index_from_nodeid(node_id, &loop_unit.steps) {
+                if let Some(index) = find_output_index_type_from_nodeid(node_id, &loop_unit.steps) {
                     return Some(index);
                 }
             }
             CuExecutionUnit::Step(step) => {
                 if step.node_id == node_id {
-                    return step.culist_output_index;
+                    return step.output_msg_index_type.clone();
                 }
             }
         }
@@ -153,98 +195,156 @@ fn find_output_index_from_nodeid(node_id: NodeId, steps: &Vec<CuExecutionUnit>) 
     None
 }
 
-/// This is the main heuristics to compute an execution plan at compilation time.
-/// TODO: Make that heuristic plugable.
-pub fn compute_runtime_plan(config: &CuConfig) -> CuResult<CuExecutionLoop> {
-    let mut next_culist_output_index = 0u32;
+fn find_task_type_for_id(graph: &StableDiGraph<Node, Cnx, NodeId>, node_id: NodeId) -> CuTaskType {
+    if graph.neighbors_directed(node_id.into(), Incoming).count() == 0 {
+        CuTaskType::Source
+    } else if graph.neighbors_directed(node_id.into(), Outgoing).count() == 0 {
+        CuTaskType::Sink
+    } else {
+        CuTaskType::Regular
+    }
+}
 
+/// Explores a subbranch and build the partial plan out of it.
+fn plan_tasks_tree_branch(
+    config: &CuConfig,
+    mut next_culist_output_index: u32,
+    starting_point: NodeId,
+    plan: &mut Vec<CuExecutionUnit>,
+) -> u32 {
     // prob not exactly what we want but to get us started
-    let mut visitor = Bfs::new(&config.graph, 0.into());
-
-    let mut result: Vec<CuExecutionUnit> = Vec::new();
+    let mut visitor = Bfs::new(&config.graph, starting_point.into());
 
     while let Some(node) = visitor.next(&config.graph) {
         let id = node.index() as NodeId;
         let node = config.get_node(id).unwrap();
-        let mut input_msg_type: Option<String> = None;
-        let mut output_msg_type: Option<String> = None;
 
-        let mut culist_input_index: Option<u32> = None;
-        let mut culist_output_index: Option<u32> = None;
+        let mut input_msg_indices_types: Vec<(u32, String)> = Vec::new();
+        let mut output_msg_index_type: Option<(u32, String)> = None;
 
-        // if a node has no parent it means it is a source
-        let task_type = if config.graph.neighbors_directed(id.into(), Incoming).count() == 0 {
-            output_msg_type = Some(
-                config
+        let task_type = find_task_type_for_id(&config.graph, id);
+
+        match task_type {
+            CuTaskType::Source => {
+                output_msg_index_type = Some((
+                    next_culist_output_index,
+                    config
+                        .graph
+                        .edge_weight(EdgeIndex::new(config.get_src_edges(id)[0]))
+                        .unwrap()
+                        .msg
+                        .clone(),
+                ));
+                next_culist_output_index += 1;
+            }
+            CuTaskType::Sink => {
+                let parents: Vec<NodeIndex> = config
                     .graph
-                    .edge_weight(EdgeIndex::new(config.get_src_edges(id)[0]))
-                    .unwrap()
-                    .msg
-                    .clone(),
-            );
-            culist_output_index = Some(next_culist_output_index);
-            next_culist_output_index += 1;
-            CuTaskType::Source
-        } else if config.graph.neighbors_directed(id.into(), Outgoing).count() == 0 {
-            // this is a Sink.
-            input_msg_type = Some(
-                config
+                    .neighbors_directed(id.into(), Incoming)
+                    .collect();
+
+                for parent in parents {
+                    let index_type =
+                        find_output_index_type_from_nodeid(parent.index() as NodeId, &plan);
+                    if let Some(index_type) = index_type {
+                        input_msg_indices_types.push(index_type);
+                    } else {
+                        // here do not add this node yet, wait for the other inputs to do it with all the inputs earliers in the copper list.
+                        return next_culist_output_index;
+                    }
+                }
+            }
+            CuTaskType::Regular => {
+                let parents: Vec<NodeIndex> = config
                     .graph
-                    .edge_weight(EdgeIndex::new(config.get_dst_edges(id)[0]))
-                    .unwrap()
-                    .msg
-                    .clone(),
-            );
-            // get the node from where the message is coming from
-            let parent = config
-                .graph
-                .neighbors_directed(id.into(), Incoming)
-                .next()
-                .unwrap();
-            // Find the source of the incoming message
-            culist_input_index = find_output_index_from_nodeid(parent.index() as NodeId, &result);
-            CuTaskType::Sink
+                    .neighbors_directed(id.into(), Incoming)
+                    .collect();
+
+                for parent in parents {
+                    let index_type =
+                        find_output_index_type_from_nodeid(parent.index() as NodeId, &plan);
+                    if let Some(index_type) = index_type {
+                        input_msg_indices_types.push(index_type);
+                    } else {
+                        // here do not add this node yet, wait for the other inputs to do it with all the inputs earliers in the copper list.
+                        return next_culist_output_index;
+                    }
+                }
+                output_msg_index_type = Some((
+                    next_culist_output_index,
+                    config
+                        .graph
+                        .edge_weight(EdgeIndex::new(config.get_src_edges(id)[0]))
+                        .unwrap()
+                        .msg
+                        .clone(),
+                ));
+                next_culist_output_index += 1;
+            }
+        }
+
+        // Sort the input messages by index
+        // It means that the tuple presented as input to the merging task
+        // depends on the order of *declaration* in the node section of the config file.
+        input_msg_indices_types.sort_by(|a, b| a.0.cmp(&b.0));
+
+        // Try to see if we did not already add this node to the plan
+        if let Some(pos) = plan.iter().position(|step| {
+            if let CuExecutionUnit::Step(ref s) = step {
+                s.node_id == id
+            } else {
+                false
+            }
+        }) {
+            // modify the existing step and put it back in the plan as the current step as it needs this subsequent output.
+            let mut step = plan.remove(pos);
+            if let CuExecutionUnit::Step(ref mut s) = step {
+                s.input_msg_indices_types = input_msg_indices_types;
+            }
+            plan.push(step);
         } else {
-            output_msg_type = Some(
-                config
-                    .graph
-                    .edge_weight(EdgeIndex::new(config.get_src_edges(id)[0]))
-                    .unwrap()
-                    .msg
-                    .clone(),
-            );
-            culist_output_index = Some(next_culist_output_index);
-            next_culist_output_index += 1;
-            input_msg_type = Some(
-                config
-                    .graph
-                    .edge_weight(EdgeIndex::new(config.get_dst_edges(id)[0]))
-                    .unwrap()
-                    .msg
-                    .clone(),
-            );
-            // get the node from where the message is coming from
-            let parent = config
-                .graph
-                .neighbors_directed(id.into(), Incoming)
-                .next()
-                .unwrap();
-            culist_input_index = find_output_index_from_nodeid(parent.index() as NodeId, &result);
-            CuTaskType::Regular
-        };
-        let step = CuExecutionStep {
-            node_id: id,
-            node: node.clone(),
-            task_type,
-            input_msg_type,
-            culist_input_index,
-            output_msg_type,
-            culist_output_index,
-        };
-        result.push(CuExecutionUnit::Step(step));
+            // ok this is just a new step
+            let step = CuExecutionStep {
+                node_id: id,
+                node: node.clone(),
+                task_type,
+                input_msg_indices_types,
+                output_msg_index_type,
+            };
+            plan.push(CuExecutionUnit::Step(step));
+        }
     }
+    next_culist_output_index
+}
+
+/// This is the main heuristics to compute an execution plan at compilation time.
+/// TODO: Make that heuristic plugable.
+pub fn compute_runtime_plan(config: &CuConfig) -> CuResult<CuExecutionLoop> {
+    // find all the sources.
+    let nodes_to_visit = config
+        .graph
+        .node_indices()
+        .filter(|node_id| {
+            let id = node_id.index() as NodeId;
+            let task_type = find_task_type_for_id(&config.graph, id);
+            task_type == CuTaskType::Source
+        })
+        .collect::<Vec<NodeIndex>>();
+
+    let mut next_culist_output_index = 0u32;
+    let mut plan: Vec<CuExecutionUnit> = Vec::new();
+
+    for node_index in &nodes_to_visit {
+        next_culist_output_index = plan_tasks_tree_branch(
+            config,
+            next_culist_output_index,
+            node_index.index() as NodeId,
+            &mut plan,
+        );
+    }
+
     Ok(CuExecutionLoop {
-        steps: result,
+        steps: plan,
         loop_count: None, // if in not unit testing, the main loop is infinite
     })
 }
@@ -255,8 +355,8 @@ mod tests {
     use super::*;
     use crate::clock::RobotClock;
     use crate::config::Node;
-    use crate::cutask::{CuMsg, CuSrcTask, Freezable};
     use crate::cutask::{CuSinkTask, CuTaskLifecycle};
+    use crate::cutask::{CuSrcTask, Freezable};
     use bincode::Encode;
 
     pub struct TestSource {}
@@ -272,13 +372,9 @@ mod tests {
         }
     }
 
-    impl CuSrcTask for TestSource {
+    impl CuSrcTask<'_> for TestSource {
         type Output = ();
-        fn process(
-            &mut self,
-            _clock: &RobotClock,
-            _empty_msg: &mut CuMsg<Self::Output>,
-        ) -> CuResult<()> {
+        fn process(&mut self, _clock: &RobotClock, _empty_msg: Self::Output) -> CuResult<()> {
             Ok(())
         }
     }
@@ -296,14 +392,10 @@ mod tests {
         }
     }
 
-    impl CuSinkTask for TestSink {
+    impl CuSinkTask<'_> for TestSink {
         type Input = ();
 
-        fn process(
-            &mut self,
-            _clock: &RobotClock,
-            _input: &mut CuMsg<Self::Input>,
-        ) -> CuResult<()> {
+        fn process(&mut self, _clock: &RobotClock, _input: Self::Input) -> CuResult<()> {
             Ok(())
         }
     }

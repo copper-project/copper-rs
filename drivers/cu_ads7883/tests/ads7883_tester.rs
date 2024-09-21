@@ -27,8 +27,8 @@ impl CuTaskLifecycle for ADS78883TestSink {
 impl CuSinkTask for ADS78883TestSink {
     type Input = ADSReadingMsg;
 
-    fn process(&mut self, _clock: &RobotClock, new_msg: &mut CuMsg<Self::Input>) -> CuResult<()> {
-        debug!("Received: {}", &new_msg.payload);
+    fn process(&mut self, _clock: &RobotClock, new_msg: &CuMsg<Self::Input>) -> CuResult<()> {
+        debug!("Received: {}", &new_msg.payload());
         Ok(())
     }
 }

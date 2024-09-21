@@ -5,8 +5,8 @@ use bincode::{Decode, Encode};
 use cu29::clock::{OptionCuTime, RobotClock};
 use cu29::config::NodeInstanceConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, CuTask, CuTaskLifecycle, Freezable};
-use cu29::CuResult;
-use cu_rp_gpio::RPGpioMsg;
+use cu29::{input_msg, output_msg, CuResult};
+use cu_rp_gpio::RPGpioPayload;
 
 #[derive(Default)]
 pub struct CaterpillarSource {
@@ -33,17 +33,17 @@ impl CuTaskLifecycle for CaterpillarSource {
     }
 }
 
-impl CuSrcTask for CaterpillarSource {
-    type Output = RPGpioMsg;
+impl<'cl> CuSrcTask<'cl> for CaterpillarSource {
+    type Output = output_msg!('cl, RPGpioPayload);
 
-    fn process(&mut self, clock: &RobotClock, output: &mut CuMsg<Self::Output>) -> CuResult<()> {
+    fn process(&mut self, clock: &RobotClock, output: Self::Output) -> CuResult<()> {
         // forward the state to the next task
         self.state = !self.state;
-        output.payload = RPGpioMsg {
+        output.set_payload(RPGpioPayload {
             on: self.state,
             creation: clock.now().into(),
             actuation: OptionCuTime::none(),
-        };
+        });
         Ok(())
     }
 }
@@ -61,18 +61,18 @@ impl CuTaskLifecycle for CaterpillarTask {
     }
 }
 
-impl CuTask for CaterpillarTask {
-    type Input = RPGpioMsg;
-    type Output = RPGpioMsg;
+impl<'cl> CuTask<'cl> for CaterpillarTask {
+    type Input = input_msg!('cl, RPGpioPayload);
+    type Output = output_msg!('cl, RPGpioPayload);
 
     fn process(
         &mut self,
         _clock: &RobotClock,
-        input: &CuMsg<Self::Input>,
-        output: &mut CuMsg<Self::Output>,
+        input: Self::Input,
+        output: Self::Output,
     ) -> CuResult<()> {
         // forward the state to the next task
-        output.payload = input.payload;
+        output.set_payload(*input.payload().unwrap());
         Ok(())
     }
 }

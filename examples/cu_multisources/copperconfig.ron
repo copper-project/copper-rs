@@ -1,0 +1,36 @@
+(
+    tasks: [
+        (
+            id: "i",
+            type: "tasks::IntegerSrcTask",
+        ),
+        (
+            id: "f",
+            type: "tasks::FloatSrcTask",
+        ),
+        (
+            id: "merger",
+            type: "tasks::MergerTask"
+        ),
+        (
+            id: "merger_sink",
+            type: "tasks::MergingSinkTask",
+        ),
+        (
+            id: "merged_sink",
+            type: "tasks::MergedSinkTask",
+        ),
+     ],
+    cnx: [
+        // Make both the int and float sources send to the merging sink
+        (src: "i", dst: "merger_sink", msg: "i32"),
+        (src: "f", dst: "merger_sink", msg: "f32"),
+
+        // Make both the int and float sources send to the merging tasks
+        (src: "i", dst: "merger", msg: "i32"),
+        (src: "f", dst: "merger", msg: "f32"),
+
+        // Complete the graph from the merger to the merged sink
+        (src: "merger", dst: "merged_sink", msg: "(i32, f32)"),
+    ],
+)

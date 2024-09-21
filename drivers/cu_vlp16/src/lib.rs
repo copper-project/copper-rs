@@ -8,7 +8,7 @@ use bincode::{Decode, Encode};
 use cu29::clock::RobotClock;
 use cu29::config::NodeInstanceConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
-use cu29::CuResult;
+use cu29::{output_msg, CuResult};
 use cu29_soa_derive::soa;
 use std::net::UdpSocket;
 use std::ops::{Add, Sub};
@@ -122,10 +122,10 @@ impl XYZ {
     }
 }
 
-impl CuSrcTask for Vlp16 {
-    type Output = XYZSoa<10000>;
+impl<'cl> CuSrcTask<'cl> for Vlp16 {
+    type Output = output_msg!('cl, XYZSoa<10000>);
 
-    fn process(&mut self, _clock: &RobotClock, new_msg: &mut CuMsg<Self::Output>) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
         let socket = self.socket.as_ref().unwrap();
         let mut packet = [0u8; 1206];
         let (read_size, _peer_addr) = socket.recv_from(&mut packet).unwrap();
@@ -139,16 +139,18 @@ impl CuSrcTask for Vlp16 {
             .unwrap()
             .unwrap();
         let i = 0;
+        let mut output = XYZSoa::<10000>::default();
+
         frame.firing_iter().for_each(|firing| {
             firing.point_iter().for_each(|point| {
                 let point = point.as_single().unwrap();
                 let x = point.measurement.xyz[0].as_meters() as f32;
                 let y = point.measurement.xyz[0].as_meters() as f32;
                 let z = point.measurement.xyz[0].as_meters() as f32;
-                let el = &mut new_msg.payload;
-                el.set(i, XYZ::new(x, y, z));
+                output.set(i, XYZ::new(x, y, z));
             });
         });
+        new_msg.set_payload(output);
         Ok(())
     }
 }
@@ -178,9 +180,9 @@ mod tests {
             let socket = UdpSocket::bind("0.0.0.0:2367").unwrap();
             socket.send_to(&data, "127.0.0.1:2368").unwrap();
             // process
-            let mut msg = CuMsg::new(XYZSoa::<10000>::default());
+            let mut msg = CuMsg::new(Some(XYZSoa::<10000>::default()));
             drv.process(&clk, &mut msg).unwrap();
-            assert_eq!(0.009406593f32, msg.payload.x[0].0.value);
+            assert_eq!(0.009406593f32, msg.payload().unwrap().x[0].0.value);
             break;
         }
         drv.stop(&clk).unwrap();
