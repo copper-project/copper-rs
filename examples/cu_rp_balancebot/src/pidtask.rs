@@ -1,4 +1,4 @@
-use cu29::clock::RobotClock;
+use cu29::clock::{CuDuration, OptionCuTime, RobotClock};
 use cu29::config::NodeInstanceConfig;
 use cu29::cutask::{CuMsg, CuTask, CuTaskLifecycle, Freezable};
 use cu29::{input_msg, output_msg, CuResult};
@@ -7,12 +7,95 @@ use cu29_traits::CuError;
 use cu_ads7883::ADSReadingPayload;
 use cu_rp_encoder::EncoderPayload;
 use cu_rp_sn754410::MotorPayload;
-use pid::Pid;
+
+struct PIDControlOutput {
+    pub p: f32,
+    pub i: f32,
+    pub d: f32,
+    pub output: f32,
+}
+
+struct PIDController {
+    kp: f32,
+    ki: f32,
+    kd: f32,
+    setpoint: f32,
+    integral: f32,
+    last_error: f32,
+    p_limit: f32,
+    i_limit: f32,
+    d_limit: f32,
+    output_limit: f32,
+}
+
+impl PIDController {
+    fn new(
+        kp: f32,
+        ki: f32,
+        kd: f32,
+        setpoint: f32,
+        p_limit: f32,
+        i_limit: f32,
+        d_limit: f32,
+        output_limit: f32,
+    ) -> Self {
+        PIDController {
+            kp,
+            ki,
+            kd,
+            setpoint,
+            integral: 0.0,
+            last_error: 0.0,
+            p_limit,
+            i_limit,
+            d_limit,
+            output_limit,
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.integral = 0.0f32;
+        self.last_error = 0.0f32;
+    }
+
+    pub fn init_measurement(&mut self, measurement: f32) {
+        self.last_error = self.setpoint - measurement;
+    }
+
+    pub fn next_control_output(&mut self, measurement: f32, dt: CuDuration) -> PIDControlOutput {
+        let error = self.setpoint - measurement;
+        let dt = dt.0 as f32 / 1_000_000f32; // the unit is kind of arbitrary.
+        debug!("DT: {}", dt);
+
+        // Proportional term
+        let p_unbounded = self.kp * error;
+        let p = p_unbounded.clamp(-self.p_limit, self.p_limit);
+
+        // Integral term (accumulated over time)
+        self.integral += error * dt;
+        let i_unbounded = self.ki * self.integral;
+        let i = i_unbounded.clamp(-self.i_limit, self.i_limit);
+
+        // Derivative term (rate of change)
+        let derivative = (error - self.last_error) / dt;
+        let d_unbounded = self.kd * derivative;
+        let d = d_unbounded.clamp(-self.d_limit, self.d_limit);
+
+        // Update last error for next calculation
+        self.last_error = error;
+
+        // Final output: sum of P, I, D with output limit
+        let output_unbounded = p + i + d;
+        let output = output_unbounded.clamp(-self.output_limit, self.output_limit);
+
+        PIDControlOutput { p, i, d, output }
+    }
+}
 
 pub struct PIDTask {
-    pid: Pid<f32>,
-    setpoint: f32,
+    pid: PIDController,
     cutoff: f32,
+    last_tov: OptionCuTime,
 }
 
 impl Freezable for PIDTask {}
@@ -34,35 +117,58 @@ impl CuTaskLifecycle for PIDTask {
                     .ok_or_else(|| "'cutoff' not found in config")?
                     as f32;
 
-                let mut pid: Pid<f32> = Pid::new(setpoint, 1.0f32);
-
                 // p is mandatory
-                let kp: f64 = config.get("kp").ok_or_else(|| {
-                    "'kp' not found in config, you need at least a proportional term"
-                })?;
+                let kp = if let Some(kp) = config.get::<f64>("kp") {
+                    Ok(kp as f32)
+                } else {
+                    Err(CuError::from(
+                        "'kp' not found in the config. We need at least 'kp' to make the PID algorithm work.",
+                    ))
+                }?;
 
-                pid.p(kp as f32, 1.0f32);
+                let p_limit = 1.0f32;
 
                 // i and d are optional
-                if let Some(ki) = config.get::<f64>("ki") {
-                    pid.i(ki as f32, 1.0f32);
-                }
-                if let Some(kd) = config.get::<f64>("kd") {
-                    pid.d(kd as f32, 2.0f32);
-                }
+                let ki = if let Some(ki) = config.get::<f64>("ki") {
+                    ki as f32
+                } else {
+                    0.0f32
+                };
+                let i_limit = 1.0f32;
+
+                let kd = if let Some(kd) = config.get::<f64>("kd") {
+                    kd as f32
+                } else {
+                    0.0f32
+                };
+                let d_limit = 2.0f32;
+
+                let output_limit = 1.0f32;
+
+                let pid: PIDController = PIDController::new(
+                    kp,
+                    ki,
+                    kd,
+                    setpoint,
+                    p_limit,
+                    i_limit,
+                    d_limit,
+                    output_limit,
+                );
+
                 Ok(Self {
                     pid,
-                    setpoint,
                     cutoff,
+                    last_tov: None.into(),
                 })
             }
             None => Err(CuError::from("PIDTask needs a config.")),
         }
     }
 
-    fn start(&mut self, clock: &RobotClock) -> CuResult<()> {
-        debug!("PIDTask started at {}", clock.now());
-        self.pid.reset_integral_term();
+    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        self.pid.reset();
+        self.last_tov = None.into();
         Ok(())
     }
 }
@@ -80,24 +186,34 @@ impl<'cl> CuTask<'cl> for PIDTask {
         let (bal_pos, rail_pos) = input;
         let bal_pos = bal_pos.payload().unwrap();
         let rail_pos = rail_pos.payload().unwrap();
+        let tov = bal_pos.tov;
+        if self.last_tov.is_none() {
+            self.last_tov = Some(tov).into();
+            self.pid.init_measurement(bal_pos.analog_value as f32);
+            return Ok(());
+        }
 
         debug!(
-            "{}: PIDTask processing bal: {} rail:{}",
+            "{} / {}: PIDTask processing bal: {} rail:{}",
             clock.now(),
+            tov,
             bal_pos,
             rail_pos
         );
-        let power = self.pid.next_control_output(bal_pos.analog_value as f32);
+        let dt = bal_pos.tov - self.last_tov.unwrap();
+        let power = self
+            .pid
+            .next_control_output(bal_pos.analog_value as f32, dt);
         debug!(
             "PIDTask output: input: {} p:{} i:{} d:{} total:{}",
             bal_pos.analog_value, power.p, power.i, power.d, power.output
         );
         match bal_pos.analog_value as f32 {
-            value if value < self.setpoint - self.cutoff => {
+            value if value < self.pid.setpoint - self.cutoff => {
                 debug!("********** Rod position too low, stopping motors");
                 output.set_payload(MotorPayload { power: 0.0 });
             }
-            value if value > self.setpoint + self.cutoff => {
+            value if value > self.pid.setpoint + self.cutoff => {
                 debug!("********** Rod position too high, stopping motors");
                 output.set_payload(MotorPayload { power: 0.0 });
             }

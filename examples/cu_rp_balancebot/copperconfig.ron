@@ -21,8 +21,8 @@
                 //"ki": 0.00005,
                 //"kd": .025,
                 "kp": 0.026, // 1 / 168 ticks = .00593
-                "ki": 0.00005,
-                "kd": -1.0,
+                // "ki": 0.00005,
+                // "kd": -1.0,
                 "setpoint": 3176.0,
                 "cutoff": 170.0, // cut off if the measured value is outside of +/- 170 ticks around the setpoint
             },

@@ -130,32 +130,37 @@ impl<'cl> CuSinkTask<'cl> for SN754410 {
     type Input = input_msg!('cl, MotorPayload);
 
     fn process(&mut self, clock: &RobotClock, input: Self::Input) -> CuResult<()> {
-        let power = input.payload().unwrap().power;
-        let deadzone_compensated = if power != 0.0f32 {
-            // proportinally on the [deadzone, 1.0] range*/
-            let deadzone = self.deadzone;
-            if power > 0.0 {
-                deadzone + (1.0 - deadzone) * power
+        if let Some(power) = input.payload() {
+            let deadzone_compensated = if power.power != 0.0f32 {
+                // proportinally on the [deadzone, 1.0] range
+                let deadzone = self.deadzone;
+                if power.power > 0.0 {
+                    deadzone + (1.0 - deadzone) * power.power
+                } else {
+                    -deadzone + (1.0 + deadzone) * power.power
+                }
             } else {
-                -deadzone + (1.0 + deadzone) * power
-            }
-        } else {
-            power
-        };
+                power.power
+            };
 
-        if deadzone_compensated != self.current_power {
-            self.current_power = deadzone_compensated;
-            if deadzone_compensated > 0.0 {
-                self.forward(self.current_power as f64)?;
-            } else if self.current_power < 0.0 {
-                self.reverse(-self.current_power as f64)?;
+            if deadzone_compensated != self.current_power {
+                self.current_power = deadzone_compensated;
+                if deadzone_compensated > 0.0 {
+                    self.forward(self.current_power as f64)?;
+                } else if self.current_power < 0.0 {
+                    self.reverse(-self.current_power as f64)?;
+                } else {
+                    self.stop()?;
+                }
+                self.last_update = clock.now();
             } else {
-                self.stop()?;
+                debug!("Power is the same {}, skipping.", deadzone_compensated);
             }
-            self.last_update = clock.now();
         } else {
-            debug!("Power is the same {}, skipping.", deadzone_compensated);
+            debug!("No payload in the message, stopping for safety.");
+            self.stop()?;
         }
+
         Ok(())
     }
 }
