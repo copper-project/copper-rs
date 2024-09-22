@@ -14,7 +14,7 @@ const SLAB_SIZE: Option<usize> = Some(100 * 1024 * 1024 * 1);
 
 fn main() {
     static STOP_FLAG: AtomicBool = AtomicBool::new(false);
-    let logger_path = "caterpillar.copper";
+    let logger_path = "logs/balance.copper";
     let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), SLAB_SIZE, true)
         .expect("Failed to setup logger.");
     debug!("Logger created at {}.", path = logger_path);

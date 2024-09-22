@@ -126,35 +126,16 @@ impl CuTaskLifecycle for PIDTask {
                     ))
                 }?;
 
-                let p_limit = 1.0f32;
-
-                // i and d are optional
-                let ki = if let Some(ki) = config.get::<f64>("ki") {
-                    ki as f32
-                } else {
-                    0.0f32
-                };
-                let i_limit = 1.0f32;
-
-                let kd = if let Some(kd) = config.get::<f64>("kd") {
-                    kd as f32
-                } else {
-                    0.0f32
-                };
-                let d_limit = 2.0f32;
+                let pl = getcfg(config, "pl", 2.0f32);
+                let ki = getcfg(config, "ki", 0.0f32);
+                let il = getcfg(config, "il", 1.0f32);
+                let kd = getcfg(config, "kd", 0.0f32);
+                let dl = getcfg(config, "dl", 2.0f32);
 
                 let output_limit = 1.0f32;
 
-                let pid: PIDController = PIDController::new(
-                    kp,
-                    ki,
-                    kd,
-                    setpoint,
-                    p_limit,
-                    i_limit,
-                    d_limit,
-                    output_limit,
-                );
+                let pid: PIDController =
+                    PIDController::new(kp, ki, kd, setpoint, pl, il, dl, output_limit);
 
                 Ok(Self {
                     pid,
@@ -170,6 +151,15 @@ impl CuTaskLifecycle for PIDTask {
         self.pid.reset();
         self.last_tov = None.into();
         Ok(())
+    }
+}
+
+// Small helper befause we do this again and again
+fn getcfg(config: &NodeInstanceConfig, key: &str, default: f32) -> f32 {
+    if let Some(kd) = config.get::<f64>(key) {
+        kd as f32
+    } else {
+        default
     }
 }
 
