@@ -11,7 +11,6 @@ use cu29_log_derive::debug;
 use cu29_traits::CopperListPayload;
 use cu29_traits::WriteStream;
 use petgraph::prelude::*;
-use petgraph::visit::NodeRef;
 use std::fmt::Debug;
 
 /// This is the main structure that will be injected as a member of the Application struct.
