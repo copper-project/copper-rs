@@ -93,7 +93,8 @@ impl PIDController {
 }
 
 pub struct PIDTask {
-    pid: PIDController,
+    pid_balance: PIDController,
+    pid_position: PIDController,
     cutoff: f32,
     last_tov: OptionCuTime,
 }
@@ -132,13 +133,34 @@ impl CuTaskLifecycle for PIDTask {
                 let kd = getcfg(config, "kd", 0.0f32);
                 let dl = getcfg(config, "dl", 2.0f32);
 
+                // Get rail PID parameters
+                let setpoint_rail: f32 = getcfg(config, "setpoint_rail", 0.0f32);
+                let kp_rail = getcfg(config, "kp_rail", 0.0f32);
+                let pl_rail = getcfg(config, "pl_rail", 1.0f32);
+                let ki_rail = getcfg(config, "ki_rail", 0.0f32);
+                let il_rail = getcfg(config, "il_rail", 1.0f32);
+                let kd_rail = getcfg(config, "kd_rail", 0.0f32);
+                let dl_rail = getcfg(config, "dl_rail", 1.0f32);
+
                 let output_limit = 1.0f32;
 
-                let pid: PIDController =
+                let pid_balance: PIDController =
                     PIDController::new(kp, ki, kd, setpoint, pl, il, dl, output_limit);
 
+                let pid_position: PIDController = PIDController::new(
+                    kp_rail,
+                    ki_rail,
+                    kd_rail,
+                    setpoint_rail,
+                    pl_rail,
+                    il_rail,
+                    dl_rail,
+                    output_limit,
+                );
+
                 Ok(Self {
-                    pid,
+                    pid_balance,
+                    pid_position,
                     cutoff,
                     last_tov: None.into(),
                 })
@@ -148,7 +170,8 @@ impl CuTaskLifecycle for PIDTask {
     }
 
     fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
-        self.pid.reset();
+        self.pid_balance.reset();
+        self.pid_position.reset();
         self.last_tov = None.into();
         Ok(())
     }
@@ -179,7 +202,9 @@ impl<'cl> CuTask<'cl> for PIDTask {
         let tov = bal_pos.tov;
         if self.last_tov.is_none() {
             self.last_tov = Some(tov).into();
-            self.pid.init_measurement(bal_pos.analog_value as f32);
+            self.pid_balance
+                .init_measurement(bal_pos.analog_value as f32);
+            self.pid_position.init_measurement(rail_pos.ticks as f32);
             return Ok(());
         }
 
@@ -191,25 +216,43 @@ impl<'cl> CuTask<'cl> for PIDTask {
             rail_pos
         );
         let dt = bal_pos.tov - self.last_tov.unwrap();
-        let power = self
-            .pid
+        let power_balance = self
+            .pid_balance
             .next_control_output(bal_pos.analog_value as f32, dt);
         debug!(
-            "PIDTask output: input: {} p:{} i:{} d:{} total:{}",
-            bal_pos.analog_value, power.p, power.i, power.d, power.output
+            "Balance output: input: {} p:{} i:{} d:{} total:{}",
+            bal_pos.analog_value,
+            power_balance.p,
+            power_balance.i,
+            power_balance.d,
+            power_balance.output
         );
+        let power_position = self
+            .pid_position
+            .next_control_output(rail_pos.ticks as f32, dt);
+        debug!(
+            "Position output: input: {} p:{} i:{} d:{} total:{}",
+            rail_pos.ticks,
+            power_position.p,
+            power_position.i,
+            power_position.d,
+            power_position.output
+        );
+
+        // FIXME: integrate the rail PID controller
+
         match bal_pos.analog_value as f32 {
-            value if value < self.pid.setpoint - self.cutoff => {
+            value if value < self.pid_balance.setpoint - self.cutoff => {
                 debug!("********** Rod position too low, stopping motors");
                 output.set_payload(MotorPayload { power: 0.0 });
             }
-            value if value > self.pid.setpoint + self.cutoff => {
+            value if value > self.pid_balance.setpoint + self.cutoff => {
                 debug!("********** Rod position too high, stopping motors");
                 output.set_payload(MotorPayload { power: 0.0 });
             }
             _ => {
                 output.set_payload(MotorPayload {
-                    power: power.output,
+                    power: power_balance.output,
                 });
             }
         }

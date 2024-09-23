@@ -19,7 +19,7 @@ lazy_static! {
 
 #[derive(Default, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct EncoderPayload {
-    ticks: i32,
+    pub ticks: i32,
 }
 
 pub struct Encoder {
