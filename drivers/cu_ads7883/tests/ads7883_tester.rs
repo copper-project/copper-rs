@@ -1,11 +1,11 @@
 use cu29::clock::RobotClock;
 use cu29::config::NodeInstanceConfig;
 use cu29::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle, Freezable};
-use cu29::CuResult;
+use cu29::{input_msg, CuResult};
 use cu29_derive::copper_runtime;
 use cu29_helpers::basic_copper_setup;
 use cu29_log_derive::debug;
-use cu_ads7883::ADSReadingMsg;
+use cu_ads7883::ADSReadingPayload;
 use std::path::PathBuf;
 
 #[copper_runtime(config = "tests/copperconfig.ron")]
@@ -24,10 +24,10 @@ impl CuTaskLifecycle for ADS78883TestSink {
     }
 }
 
-impl CuSinkTask for ADS78883TestSink {
-    type Input = ADSReadingMsg;
+impl<'cl> CuSinkTask<'cl> for ADS78883TestSink {
+    type Input = input_msg!('cl, ADSReadingPayload);
 
-    fn process(&mut self, _clock: &RobotClock, new_msg: &CuMsg<Self::Input>) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, new_msg: Self::Input) -> CuResult<()> {
         debug!("Received: {}", &new_msg.payload());
         Ok(())
     }

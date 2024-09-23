@@ -1,5 +1,5 @@
 use bincode::{Decode, Encode};
-use cu29::clock::{CuTime, RobotClock};
+use cu29::clock::RobotClock;
 use cu29::config::NodeInstanceConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
 use cu29::{output_msg, CuError, CuResult};
@@ -29,20 +29,19 @@ fn open_spi(dev_device: Option<&str>, max_speed_hz: Option<u32>) -> io::Result<S
 }
 
 #[derive(Debug, Clone, Copy, Default, Encode, Decode, PartialEq, Serialize, Deserialize)]
-pub struct ADCReadingMsg<T>
+pub struct ADCReadingPayload<T>
 where
     T: Into<u128> + Copy, // Trick to say all unsigned integers.
 {
     pub analog_value: T,
-    pub tov: CuTime,
 }
 
 /// This is the type of message that the ADS7883 driver will send.
-pub type ADSReadingMsg = ADCReadingMsg<u16>;
+pub type ADSReadingPayload = ADCReadingPayload<u16>;
 
 // Some convience function.
-impl From<ADSReadingMsg> for u16 {
-    fn from(msg: ADSReadingMsg) -> Self {
+impl From<ADSReadingPayload> for u16 {
+    fn from(msg: ADSReadingPayload) -> Self {
         msg.analog_value
     }
 }
@@ -98,7 +97,7 @@ fn read_adc(spi: &mut Spidev) -> io::Result<u16> {
 }
 
 impl<'cl> CuSrcTask<'cl> for ADS7883 {
-    type Output = output_msg!('cl, ADSReadingMsg);
+    type Output = output_msg!('cl, ADSReadingPayload);
 
     fn process(&mut self, clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
         let bf = clock.now();
@@ -107,11 +106,10 @@ impl<'cl> CuSrcTask<'cl> for ADS7883 {
         })?;
         // hard to know exactly when the value was read.
         // Should be within a couple of microseconds with the ioctl opverhead.
-        let output = ADSReadingMsg {
-            analog_value,
-            tov: (clock.now() + bf) / 2u64,
-        };
+
+        let output = ADSReadingPayload { analog_value };
         new_msg.set_payload(output);
+        new_msg.metadata.tov = ((clock.now() + bf) / 2u64).into();
         Ok(())
     }
 }
@@ -133,7 +131,7 @@ pub mod test_support {
     }
 
     impl<'cl> CuSinkTask<'cl> for ADS78883TestSink {
-        type Input = input_msg!('cl, ADSReadingMsg);
+        type Input = input_msg!('cl, ADSReadingPayload);
 
         fn process(&mut self, _clock: &RobotClock, new_msg: Self::Input) -> CuResult<()> {
             debug!("Received: {}", &new_msg.payload());

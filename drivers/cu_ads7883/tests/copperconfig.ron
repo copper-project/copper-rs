@@ -10,6 +10,6 @@
         ),
      ],
     cnx: [
-        (src: "src",  dst: "tester",   msg: "cu_ads7883::ADSReadingMsg"),
+        (src: "src",  dst: "tester",   msg: "cu_ads7883::ADSReadingPayload"),
     ],
 )

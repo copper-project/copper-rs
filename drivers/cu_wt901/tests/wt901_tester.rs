@@ -23,8 +23,8 @@ impl CuTaskLifecycle for WT910TestSink {
     }
 }
 
-impl CuSinkTask for WT910TestSink {
-    type Input = input_msg!(PositionalReadings);
+impl<'cl> CuSinkTask<'cl> for WT910TestSink {
+    type Input = input_msg!('cl, PositionalReadings);
 
     fn process(&mut self, _clock: &RobotClock, new_msg: Self::Input) -> CuResult<()> {
         debug!("Received: {}", &new_msg.payload());
