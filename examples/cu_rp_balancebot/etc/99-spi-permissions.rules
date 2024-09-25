@@ -1,0 +1,1 @@
+SUBSYSTEM=="spidev", GROUP="wheel", MODE="0660"

@@ -458,7 +458,7 @@ fn make_slab_file(base_file_path: &PathBuf, slab_size: usize, slab_suffix: usize
         .write(true)
         .create(true)
         .open(&file_path)
-        .expect("Failed to open file");
+        .expect(format!("Failed to open file: {}", file_path.display()).as_str());
     file.set_len(slab_size as u64)
         .expect("Failed to set file length");
     file

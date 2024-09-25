@@ -16,10 +16,12 @@ members = [
     "drivers/cu_vlp16",
     "drivers/cu_lewansoul",
     "drivers/cu_wt901",
+    "drivers/cu_rp_encoder",
     "drivers/cu_rp_sn754410",
     "examples/cu_config_gen",
     "examples/cu_standalone_structlog",
     "examples/cu_caterpillar",
+    "examples/cu_rp_balancebot",
     "examples/cu_multisources"]
 
 # put only the core crates here that are not platform specific
