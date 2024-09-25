@@ -1,6 +1,6 @@
 [package]
-name = "cu-rp-sn754410"
-description = "Rust library for controlling the SN754410 motor driver on the Raspberry Pi for Copper"
+name = "cu-rp-encoder"
+description = "This is a driver for the Raspberry Pi to decode a directional encoder from GPIOs."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -10,6 +10,9 @@ categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
+[package.metadata.cargo-machete]
+ignored = ["cu29-log", "cu29-log-runtime"]  # proc macro
+
 [dependencies]
 cu29 = { workspace = true }
 cu29-log = { workspace = true }
@@ -17,12 +20,7 @@ cu29-log-runtime = { workspace = true }
 cu29-log-derive = { workspace = true }
 cu29-traits = { workspace = true }
 bincode = { workspace = true }
-serde = { workspace = true }
+
 rppal = "0.19.0"
-
-[dev-dependencies]
-cu29-derive = { workspace = true }
-cu29-unifiedlog = { workspace = true }
-cu29-helpers = { workspace = true }
-
-
+lazy_static = "1.5.0"
+serde = { version = "1.0.209", features = ["derive"] }

@@ -105,10 +105,10 @@ impl From<Value> for u8 {
             if let Some(i) = num.as_i64() {
                 i as u8
             } else {
-                panic!("Expected an integer value")
+                panic!("Expected an integer value but got {:?}", value)
             }
         } else {
-            panic!("Expected a Number variant")
+            panic!("Expected a Number variant but got {:?}", value)
         }
     }
 }
@@ -119,10 +119,10 @@ impl From<Value> for u32 {
             if let Some(i) = num.as_i64() {
                 i as u32
             } else {
-                panic!("Expected an integer value")
+                panic!("Expected an integer value but got {:?}", value)
             }
         } else {
-            panic!("Expected a Number variant")
+            panic!("Expected a Number variant but got {:?}", value)
         }
     }
 }
@@ -133,10 +133,10 @@ impl From<Value> for i32 {
             if let Some(i) = num.as_i64() {
                 i as i32
             } else {
-                panic!("Expected an integer value")
+                panic!("Expected an integer value but got {:?}", value)
             }
         } else {
-            panic!("Expected a Number variant")
+            panic!("Expected a Number variant but got {:?}", value)
         }
     }
 }
@@ -147,10 +147,10 @@ impl From<Value> for f64 {
             if let Some(f) = num.as_f64() {
                 f
             } else {
-                panic!("Expected a float value")
+                panic!("Expected a float value but got {:?}", value)
             }
         } else {
-            panic!("Expected a Number variant")
+            panic!("Expected a Number variant but got {:?}", value)
         }
     }
 }

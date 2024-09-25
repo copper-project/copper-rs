@@ -1,0 +1,1 @@
+SUBSYSTEM=="pwm", RUN+="/usr/local/bin/set_pwm_permissions.sh"

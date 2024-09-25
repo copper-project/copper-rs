@@ -3,13 +3,17 @@ use cu29::clock::RobotClock;
 use cu29::config::NodeInstanceConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
 use cu29::{output_msg, CuError, CuResult};
+use cu29_log_derive::debug;
 use serde::{Deserialize, Serialize};
 use spidev::{SpiModeFlags, Spidev, SpidevOptions, SpidevTransfer};
 use std::io;
 
 pub struct ADS7883 {
     spi: Spidev,
+    integrated_value: u64,
 }
+
+const INTEGRATION_FACTOR: u64 = 8;
 
 /// This opens a SPI device at the given path.
 /// The path is usually something like "/dev/spidev0.0" (the default)
@@ -59,15 +63,30 @@ impl CuTaskLifecycle for ADS7883 {
                 let spi = open_spi(maybe_spidev, maybe_max_speed_hz).map_err(|e| {
                     CuError::new_with_cause("Could not open the ADS7883 SPI device", e)
                 })?;
-                Ok(ADS7883 { spi })
+                Ok(ADS7883 {
+                    spi,
+                    integrated_value: 0,
+                })
             }
             None => {
                 let spi = open_spi(None, None).map_err(|e| {
                     CuError::new_with_cause("Could not open the ADS7883 SPI device (Note: no config specified for the node so it took the default config)", e)
                 })?;
-                Ok(ADS7883 { spi })
+                Ok(ADS7883 {
+                    spi,
+                    integrated_value: 0,
+                })
             }
         }
+    }
+    fn start(&mut self, clock: &RobotClock) -> CuResult<()> {
+        debug!("ADS7883 started at {}", clock.now());
+        // initialize the integrated value.
+        self.integrated_value = read_adc(&mut self.spi).map_err(|e| {
+            CuError::new_with_cause("Could not read the ADC value from the ADS7883", e)
+        })? as u64;
+        self.integrated_value = self.integrated_value * INTEGRATION_FACTOR;
+        Ok(())
     }
 }
 
@@ -106,8 +125,17 @@ impl<'cl> CuSrcTask<'cl> for ADS7883 {
         })?;
         // hard to know exactly when the value was read.
         // Should be within a couple of microseconds with the ioctl opverhead.
-
         let output = ADSReadingPayload { analog_value };
+        let af = clock.now();
+        new_msg.metadata.tov = Some((af + bf) / 2u64).into();
+
+        self.integrated_value = ((self.integrated_value + analog_value as u64)
+            * INTEGRATION_FACTOR)
+            / (INTEGRATION_FACTOR + 1);
+
+        let output = ADSReadingPayload {
+            analog_value: (self.integrated_value / INTEGRATION_FACTOR) as u16,
+        };
         new_msg.set_payload(output);
         new_msg.metadata.tov = ((clock.now() + bf) / 2u64).into();
         Ok(())

@@ -1,0 +1,47 @@
+(
+    tasks: [
+        (
+            id: "balpos",
+            type: "cu_ads7883::ADS7883",
+        ),
+        (
+            id: "railpos",
+            type: "cu_rp_encoder::Encoder",
+            config: {
+                "clk_pin": 26,
+                "dat_pin": 20,
+            },
+        ),
+        (
+            id: "pidctrl",
+            type: "pidtask::PIDTask",
+            config: {
+                // PID on the balance position
+                "kp": 0.03, // 0.02 1 / 168 ticks = .00593
+                "kd": 0.03,
+                // "ki": 0.00005,
+                "setpoint": 3176.0,
+                "cutoff": 170.0, // cut off if the measured value is outside of +/- 170 ticks around the setpoint
+
+                // Second PID on the rail position
+                "kp_rail": 0.0005, // .002 1/1000 ticks? (ie an extreme of the rail position)
+                "kd_rail": 0.002,
+                //"ki_rail": 0.000001,
+                // "setpoint_rail": 0.0,
+            },
+        ),
+        (
+            id: "motor",
+            type: "cu_rp_sn754410::SN754410",
+            config: {
+                 "deadzone": 0.3, // this is the minimum value for the motor to move.
+            },
+        ),
+     ],
+    cnx: [
+        (src: "balpos",  dst: "pidctrl",   msg: "cu_ads7883::ADSReadingPayload"),
+        (src: "railpos",  dst: "pidctrl",   msg: "cu_rp_encoder::EncoderPayload"),
+        (src: "pidctrl", dst: "motor",   msg: "cu_rp_sn754410::MotorPayload"),
+    ],
+)
+
