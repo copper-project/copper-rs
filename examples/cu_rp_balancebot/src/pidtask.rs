@@ -1,4 +1,4 @@
-use cu29::clock::{CuDuration, OptionCuTime, RobotClock};
+use cu29::clock::{CuDuration, CuTime, RobotClock};
 use cu29::config::NodeInstanceConfig;
 use cu29::cutask::{CuMsg, CuTask, CuTaskLifecycle, Freezable};
 use cu29::{input_msg, output_msg, CuResult};
@@ -96,7 +96,14 @@ pub struct PIDTask {
     pid_balance: PIDController,
     pid_position: PIDController,
     cutoff: f32,
-    last_tov: OptionCuTime,
+    // retain the last measurement to be able to only act on the change
+    first_run: bool,
+    last_tov_bal: CuTime,
+    last_tov_pos: CuTime,
+    last_bal: u16,
+    last_pos: i32,
+    current_power_bal: f32,
+    current_power_pos: f32,
 }
 
 impl Freezable for PIDTask {}
@@ -162,7 +169,13 @@ impl CuTaskLifecycle for PIDTask {
                     pid_balance,
                     pid_position,
                     cutoff,
-                    last_tov: None.into(),
+                    first_run: true,
+                    last_tov_bal: CuTime::default(),
+                    last_tov_pos: CuTime::default(),
+                    last_bal: 0,
+                    last_pos: 0,
+                    current_power_bal: 0.0,
+                    current_power_pos: 0.0,
                 })
             }
             None => Err(CuError::from("PIDTask needs a config.")),
@@ -172,7 +185,7 @@ impl CuTaskLifecycle for PIDTask {
     fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
         self.pid_balance.reset();
         self.pid_position.reset();
-        self.last_tov = None.into();
+        self.first_run = true;
         Ok(())
     }
 }
@@ -197,51 +210,70 @@ impl<'cl> CuTask<'cl> for PIDTask {
         output: Self::Output,
     ) -> CuResult<()> {
         let (bal_pos, rail_pos) = input;
-        let bal_pos = bal_pos.payload().unwrap();
-        let rail_pos = rail_pos.payload().unwrap();
-        let tov = bal_pos.tov;
-        if self.last_tov.is_none() {
-            self.last_tov = Some(tov).into();
-            self.pid_balance
-                .init_measurement(bal_pos.analog_value as f32);
-            self.pid_position.init_measurement(rail_pos.ticks as f32);
+        let bal_tov = bal_pos.metadata.tov.unwrap();
+        let rail_tov = rail_pos.metadata.tov.unwrap();
+        let bal_pos = bal_pos.payload().unwrap().analog_value;
+        let rail_pos = rail_pos.payload().unwrap().ticks;
+        if self.first_run {
+            self.first_run = false;
+            self.last_tov_bal = bal_tov;
+            self.last_tov_pos = rail_tov;
+            self.last_bal = bal_pos;
+            self.last_pos = rail_pos;
+            self.pid_balance.init_measurement(self.last_bal as f32);
+            self.pid_position.init_measurement(self.last_pos as f32);
             return Ok(());
         }
 
-        debug!(
-            "{} / {}: PIDTask processing bal: {} rail:{}",
-            clock.now(),
-            tov,
-            bal_pos,
-            rail_pos
-        );
-        let dt = bal_pos.tov - self.last_tov.unwrap();
-        let power_balance = self
-            .pid_balance
-            .next_control_output(bal_pos.analog_value as f32, dt);
-        debug!(
-            "Balance output: input: {} p:{} i:{} d:{} total:{}",
-            bal_pos.analog_value,
-            power_balance.p,
-            power_balance.i,
-            power_balance.d,
+        let power_bal = if bal_pos != self.last_bal {
+            debug!(
+                "{} / {}: PIDTask processing bal: {} rail:{}",
+                clock.now(),
+                bal_tov,
+                bal_pos,
+                rail_pos
+            );
+            let bal_dt = bal_tov - self.last_tov_bal;
+            let power_balance = self.pid_balance.next_control_output(bal_pos as f32, bal_dt);
+            debug!(
+                "Balance output: input: {} p:{} i:{} d:{} total:{}",
+                bal_pos, power_balance.p, power_balance.i, power_balance.d, power_balance.output
+            );
+
+            self.last_bal = bal_pos;
+            self.last_tov_bal = bal_tov;
+            self.current_power_bal = power_balance.output;
             power_balance.output
-        );
-        let power_position = self
-            .pid_position
-            .next_control_output(rail_pos.ticks as f32, dt);
-        debug!(
-            "Position output: input: {} p:{} i:{} d:{} total:{}",
-            rail_pos.ticks,
-            power_position.p,
-            power_position.i,
-            power_position.d,
+        } else {
+            self.current_power_bal
+        };
+
+        let power_pos = if rail_pos != self.last_pos {
+            let rail_dt = rail_tov - self.last_tov_pos;
+            let power_position = self
+                .pid_position
+                .next_control_output(rail_pos as f32, rail_dt);
+            debug!(
+                "Position output: input: {} p:{} i:{} d:{} total:{}",
+                rail_pos,
+                power_position.p,
+                power_position.i,
+                power_position.d,
+                power_position.output
+            );
+
+            self.last_pos = rail_pos;
+            self.last_tov_pos = rail_tov;
+            self.current_power_pos = power_position.output;
             power_position.output
-        );
+        } else {
+            self.current_power_pos
+        };
 
-        // FIXME: integrate the rail PID controller
+        let mut composite_output = power_bal - power_pos;
+        composite_output = composite_output.clamp(-1.0, 1.0);
 
-        match bal_pos.analog_value as f32 {
+        match bal_pos as f32 {
             value if value < self.pid_balance.setpoint - self.cutoff => {
                 debug!("********** Rod position too low, stopping motors");
                 output.set_payload(MotorPayload { power: 0.0 });
@@ -252,7 +284,7 @@ impl<'cl> CuTask<'cl> for PIDTask {
             }
             _ => {
                 output.set_payload(MotorPayload {
-                    power: power_balance.output,
+                    power: composite_output,
                 });
             }
         }

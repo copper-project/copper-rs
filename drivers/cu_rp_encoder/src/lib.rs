@@ -5,13 +5,12 @@ use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
 use cu29::output_msg;
 use cu29::{CuError, CuResult};
 use lazy_static::lazy_static;
-use rppal::gpio::{Gpio, InputPin};
+use rppal::gpio::{Gpio, InputPin, Level};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
-use std::time::Duration;
 
 lazy_static! {
     static ref GPIO: Gpio = Gpio::new().expect("Could not create GPIO bindings");
@@ -67,22 +66,25 @@ impl CuTaskLifecycle for Encoder {
             .map_err(|e| CuError::new_with_cause("Could not get pin", e))?
             .into_input();
 
-        let mut last_clk_state = true;
-        let handle: JoinHandle<()> = thread::spawn(move || loop {
-            if clk_pin.is_high() {
-                if !last_clk_state {
-                    if dat_pin.is_low() {
-                        ticks_count.fetch_add(1, Ordering::SeqCst);
-                    } else {
-                        ticks_count.fetch_sub(1, Ordering::SeqCst);
+        let handle: JoinHandle<()> = thread::spawn(move || {
+            let mut last_clk_state = Level::High;
+            loop {
+                match clk_pin.read() {
+                    Level::High => {
+                        if last_clk_state == Level::Low {
+                            if dat_pin.read() == Level::Low {
+                                ticks_count.fetch_add(1, Ordering::SeqCst);
+                            } else {
+                                ticks_count.fetch_sub(1, Ordering::SeqCst);
+                            }
+                            last_clk_state = Level::High;
+                        }
                     }
-                    last_clk_state = true;
-                } else {
-                    last_clk_state = false;
+                    Level::Low => {
+                        last_clk_state = Level::Low;
+                    }
                 }
             }
-
-            thread::sleep(Duration::from_millis(1));
         });
 
         self.thread_handle = Some(handle);

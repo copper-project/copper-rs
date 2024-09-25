@@ -16,12 +16,18 @@
             id: "pidctrl",
             type: "pidtask::PIDTask",
             config: {
-                //"kp": 0.026, // 1 / 168 ticks = .00593
-                "kp": 0.02, // 1 / 168 ticks = .00593
-                "kd": 50.0,
+                // PID on the balance position
+                "kp": 0.03, // 0.02 1 / 168 ticks = .00593
+                "kd": 0.03,
                 // "ki": 0.00005,
                 "setpoint": 3176.0,
                 "cutoff": 170.0, // cut off if the measured value is outside of +/- 170 ticks around the setpoint
+
+                // Second PID on the rail position
+                "kp_rail": 0.0005, // .002 1/1000 ticks? (ie an extreme of the rail position)
+                "kd_rail": 0.002,
+                //"ki_rail": 0.000001,
+                // "setpoint_rail": 0.0,
             },
         ),
         (
