@@ -32,8 +32,7 @@ game engine is to games.
 
 Copper is a data-oriented runtime with these key components:
 
-* **Task Graph
-  **: <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/graph.png?raw=true" alt="graph"/>
+* **Task Graph**: <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/graph.png?raw=true" alt="graph"/>
   Described in [RON](https://github.com/ron-rs/ron), this configures the system's topology, specifying which tasks
   communicate and setting types for nodes and messages.
 
@@ -68,22 +67,24 @@ A lot! If any of these items pique your interest and you would like to contribut
 
 Here are some of the features we plan to implement next (in ~order of priority):
 
-- [ ] **Batching**: add a feature to batch messages for high frequency sources to reduce the number of Copper Lists.
-- [ ] **Merging/Aligning**: Add a feature to merge messages from multiple sources as an input to a task.
-- [ ] **Deterministic log replay**: As the runtime is generated in a deterministic fashion, we need to add hooks to
+To Reach Beta:
+
+- [x] **Merging**: Add a feature to merge messages from multiple sources as an input to a task.
+- [ ] **Monitoring**: We need a parallel system that can listen to monitoring messages and act accordingly.
+- [ ] **Batching/Aligning**: add a feature to batch messages for high frequency sources to reduce the number of Copper Lists.
+- [ ] **Deterministic log replay + Sim**: As the runtime is generated in a deterministic fashion, we need to add hooks to
   inject messages into an existing runtime.
 - [ ] **Parallel Copper Lists**: Today Copper is monothreaded; this should enable concurrent Copper Lists to be executed
   at the same time with no contention.
-- [ ] **Monitoring**: We need a parallel system that can listen to monitoring messages and act accordingly.
-- [ ] **Distributed Copper**: Currently, we can only create one process. We need proper RPC filtering copper lists per
-  subsystem.
-- [ ] **ROS interfacing**: Build a pair of sink and source to connect to existing ROS systems, helping users migrate
+- [ ] **ROS/DDS interfacing**: Build a pair of sink and source to connect to existing ROS systems, helping users migrate
   their infra bit by bit.
+
+To Reach RC1:
+- [ ] **Extensible scheduling**: Enables a way to give hints to copper to schedule the workload
 - [ ] **Modular Configuration**: As robots built with Copper gain complexity, users will need to build "variations" of
   their robots without duplicating their entire RON file.
-- [ ] **"PGO"-like scheduling**: Pass previous log runs to the runtime generator to allow it to make better scheduling
-  decisions.
-
+- [ ] **Distributed Copper**: Currently, we can only create one process. We need proper RPC filtering copper lists per
+  subsystem.
 So we are only at the beginning, but so much cool stuff is coming up!
 
 ### Kickstarting a copper project for the impatients
