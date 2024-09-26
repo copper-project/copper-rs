@@ -3,7 +3,7 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29::clock::RobotClock;
-use cu29::config::NodeInstanceConfig;
+use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
 use cu29::{output_msg, CuResult};
 use embedded_hal::i2c::I2c;
@@ -210,7 +210,7 @@ impl Freezable for WT901 {
 }
 
 impl CuTaskLifecycle for WT901 {
-    fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {

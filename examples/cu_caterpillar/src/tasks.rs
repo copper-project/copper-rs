@@ -3,7 +3,7 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29::clock::{OptionCuTime, RobotClock};
-use cu29::config::NodeInstanceConfig;
+use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, CuTask, CuTaskLifecycle, Freezable};
 use cu29::{input_msg, output_msg, CuResult};
 use cu_rp_gpio::RPGpioPayload;
@@ -25,7 +25,7 @@ impl Freezable for CaterpillarSource {
 }
 
 impl CuTaskLifecycle for CaterpillarSource {
-    fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -53,7 +53,7 @@ pub struct CaterpillarTask {}
 impl Freezable for CaterpillarTask {}
 
 impl CuTaskLifecycle for CaterpillarTask {
-    fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {
