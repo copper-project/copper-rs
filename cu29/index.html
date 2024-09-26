@@ -155,18 +155,19 @@ cargo cunew [path_where_you_want_your_project_created]
 }
 
 <span class="comment">// We implement the CuSrcTask trait for our task as it is a source / driver (with no internal input from Copper itself).
-</span><span class="kw">impl </span>CuSrcTask <span class="kw">for </span>FlippingSource {
-    <span class="kw">type </span>Output = RPGpioMsg;
+</span><span class="kw">impl</span>&lt;<span class="lifetime">'cl</span>&gt; CuSrcTask&lt;<span class="lifetime">'cl</span>&gt; <span class="kw">for </span>FlippingSource {
+    <span class="kw">type </span>Output = <span class="macro">output_msg!</span>(<span class="lifetime">'cl</span>, RPGpioPayload);
 
     <span class="comment">// Process is called by the runtime at each cycle. It will give:
     // 1. the reference to a monotonic clock
     // 2. a mutable reference to the output message (so no need to allocate of copy anything)
     // 3. a CuResult to handle errors
-    </span><span class="kw">fn </span>process(<span class="kw-2">&amp;mut </span><span class="self">self</span>, clock: <span class="kw-2">&amp;</span>RobotClock, output: <span class="kw-2">&amp;mut </span>CuMsg&lt;<span class="self">Self</span>::Output&gt;) -&gt; CuResult&lt;()&gt; {
+    </span><span class="kw">fn </span>process(<span class="kw-2">&amp;mut </span><span class="self">self</span>, clock: <span class="kw-2">&amp;</span>RobotClock, output: <span class="self">Self</span>::Output) -&gt; CuResult&lt;()&gt; {
         <span class="self">self</span>.state = !<span class="self">self</span>.state;   <span class="comment">// Flip our internal state and send the message in our output.
-        </span>output.payload = RPGpioMsg {
+        </span>output.payload = RPGpioPayload {
             on: <span class="self">self</span>.state,
-            creation: clock.now().into(),
+            creation: <span class="prelude-val">Some</span>(clock.now()).into(),
+            actuation: <span class="prelude-val">Some</span>(clock.now()).into(),
         };
         <span class="prelude-val">Ok</span>(())
     }
