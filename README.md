@@ -156,18 +156,19 @@ impl CuTaskLifecycle for FlippingSource {
 }
 
 // We implement the CuSrcTask trait for our task as it is a source / driver (with no internal input from Copper itself).
-impl CuSrcTask for FlippingSource {
-    type Output = RPGpioMsg;
+impl<'cl> CuSrcTask<'cl> for FlippingSource {
+    type Output = output_msg!('cl, RPGpioPayload);
 
     // Process is called by the runtime at each cycle. It will give:
     // 1. the reference to a monotonic clock
     // 2. a mutable reference to the output message (so no need to allocate of copy anything)
     // 3. a CuResult to handle errors
-    fn process(&mut self, clock: &RobotClock, output: &mut CuMsg<Self::Output>) -> CuResult<()> {
+    fn process(&mut self, clock: &RobotClock, output: Self::Output) -> CuResult<()> {
         self.state = !self.state;   // Flip our internal state and send the message in our output.
-        output.payload = RPGpioMsg {
+        output.payload = RPGpioPayload {
             on: self.state,
-            creation: clock.now().into(),
+            creation: Some(clock.now()).into(),
+            actuation: Some(clock.now()).into(),
         };
         Ok(())
     }
