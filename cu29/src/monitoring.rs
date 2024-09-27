@@ -189,7 +189,7 @@ pub struct CuDurationStatistics {
 }
 
 impl CuDurationStatistics {
-    fn new(max: CuDuration) -> Self {
+    pub fn new(max: CuDuration) -> Self {
         CuDurationStatistics {
             bare: LiveStatistics::new_with_max(max.0),
             jitter: LiveStatistics::new_with_max(max.0),
@@ -198,62 +198,62 @@ impl CuDurationStatistics {
     }
 
     #[inline]
-    fn min(&self) -> CuDuration {
+    pub fn min(&self) -> CuDuration {
         CuDuration(self.bare.min())
     }
 
     #[inline]
-    fn max(&self) -> CuDuration {
+    pub fn max(&self) -> CuDuration {
         CuDuration(self.bare.max())
     }
 
     #[inline]
-    fn mean(&self) -> CuDuration {
+    pub fn mean(&self) -> CuDuration {
         CuDuration(self.bare.mean() as u64) // CuDuration is in ns, it is ok.
     }
 
     #[inline]
-    fn percentile(&self, percentile: f64) -> CuDuration {
+    pub fn percentile(&self, percentile: f64) -> CuDuration {
         CuDuration(self.bare.percentile(percentile))
     }
 
     #[inline]
-    fn stddev(&self) -> CuDuration {
+    pub fn stddev(&self) -> CuDuration {
         CuDuration(self.bare.stats.stdev() as u64)
     }
 
     #[inline]
-    fn len(&self) -> u64 {
+    pub fn len(&self) -> u64 {
         self.bare.len()
     }
 
     #[inline]
-    fn jitter_min(&self) -> CuDuration {
+    pub fn jitter_min(&self) -> CuDuration {
         CuDuration(self.jitter.min())
     }
 
     #[inline]
-    fn jitter_max(&self) -> CuDuration {
+    pub fn jitter_max(&self) -> CuDuration {
         CuDuration(self.jitter.max())
     }
 
     #[inline]
-    fn jitter_mean(&self) -> CuDuration {
+    pub fn jitter_mean(&self) -> CuDuration {
         CuDuration(self.jitter.mean() as u64)
     }
 
     #[inline]
-    fn jitter_stddev(&self) -> CuDuration {
+    pub fn jitter_stddev(&self) -> CuDuration {
         CuDuration(self.jitter.stats.stdev() as u64)
     }
 
     #[inline]
-    fn jitter_percentile(&self, percentile: f64) -> CuDuration {
+    pub fn jitter_percentile(&self, percentile: f64) -> CuDuration {
         CuDuration(self.jitter.percentile(percentile))
     }
 
     #[inline]
-    fn record(&mut self, value: CuDuration) {
+    pub fn record(&mut self, value: CuDuration) {
         if self.bare.len() == 0 {
             self.bare.stats.record(value.0).unwrap();
             self.last_value = value;
