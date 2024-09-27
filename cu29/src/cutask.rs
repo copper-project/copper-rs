@@ -10,6 +10,7 @@ use bincode::enc::Encode;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use cu29_clock::RobotClock;
+use serde_derive::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::{Display, Formatter};
 
@@ -63,7 +64,7 @@ macro_rules! output_msg {
 }
 
 /// CuMsgMetadata is a structure that contains metadata common to all CuMsgs.
-#[derive(Debug, Default, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Default, bincode::Encode, bincode::Decode, Serialize, Deserialize)]
 pub struct CuMsgMetadata {
     /// The time before the process method is called.
     pub before_process: OptionCuTime,

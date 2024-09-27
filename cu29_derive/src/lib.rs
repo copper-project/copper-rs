@@ -86,7 +86,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             .expect("Could not transform the monitor type name into a Rust type.");
         quote! { #monitor_type }
     } else {
-        quote! { cu29::monitoring::NoMonitor }
+        quote! { _NoMonitor }
     };
 
     eprintln!("[build runtime field]");
@@ -279,6 +279,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     let e2en: u64 = e2e.into();
                 } // drop(md);
 
+                self.copper_runtime.monitor.process_copperlist(&collect_metadata(&culist))?;
+
                 self.copper_runtime.end_of_processing(id);
 
            }// drop(culist); avoids a double mutable borrow
@@ -324,6 +326,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         use cu29::cutask::CuMsg as _CuMsg;
         use cu29::cutask::CuMsgMetadata as _CuMsgMetadata;
         use cu29::copperlist::CopperList as _CopperList;
+        use cu29::monitoring::NoMonitor as _NoMonitor;
         use cu29::clock::RobotClock as _RobotClock;
         use cu29::clock::OptionCuTime as _OptionCuTime;
         use cu29::clock::ClockProvider as _ClockProvider;

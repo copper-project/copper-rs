@@ -9,7 +9,7 @@ use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// The state of a task.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum CuTaskState {
     Start,
     Preprocess,
@@ -141,6 +141,7 @@ impl Drop for ScopedAllocCounter {
 
 use cu29_log_derive::debug;
 use hdrhistogram::Histogram;
+use serde_derive::{Deserialize, Serialize};
 
 /// Accumulative stat object that can give your some real time statistics.
 pub struct LiveStatistics {
