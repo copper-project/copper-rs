@@ -3,7 +3,7 @@
 
 use crate::config::ComponentConfig;
 use crate::cutask::CuMsgMetadata;
-use cu29_clock::RobotClock;
+use cu29_clock::{CuDuration, RobotClock};
 use cu29_traits::{CuError, CuResult};
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -120,5 +120,205 @@ impl Drop for ScopedAllocCounter {
         //     allocated = allocated,
         //     deallocated = deallocated,
         // );
+    }
+}
+
+use hdrhistogram::Histogram;
+
+/// Accumulative stat object that can give your some real time statistics.
+pub struct LiveStatistics {
+    stats: Histogram<u64>, // u64 is the Counter type.
+}
+
+impl LiveStatistics {
+    pub fn new() -> Self {
+        LiveStatistics {
+            stats: Histogram::<u64>::new(3).unwrap(),
+        }
+    }
+
+    pub fn new_with_max(max: u64) -> Self {
+        LiveStatistics {
+            stats: Histogram::<u64>::new_with_bounds(1, max, 3).unwrap(),
+        }
+    }
+
+    #[inline]
+    pub fn min(&self) -> u64 {
+        self.stats.min()
+    }
+
+    #[inline]
+    pub fn max(&self) -> u64 {
+        self.stats.max()
+    }
+
+    #[inline]
+    pub fn mean(&self) -> f64 {
+        self.stats.mean()
+    }
+
+    #[inline]
+    pub fn percentile(&self, percentile: f64) -> u64 {
+        self.stats.value_at_quantile(percentile)
+    }
+
+    /// Adds a value to the statistics.
+    #[inline]
+    pub fn record(&mut self, value: u64) {
+        self.stats.record(value).unwrap();
+    }
+
+    #[inline]
+    pub fn len(&self) -> u64 {
+        self.stats.len()
+    }
+
+    #[inline]
+    pub fn reset(&mut self) {
+        self.stats.reset();
+    }
+}
+
+/// A Specialized statistics object for CuDuration.
+/// It will also keep track of the jitter between the values.
+pub struct CuDurationStatistics {
+    bare: LiveStatistics,
+    jitter: LiveStatistics,
+    last_value: CuDuration,
+}
+
+impl CuDurationStatistics {
+    fn new(max: CuDuration) -> Self {
+        CuDurationStatistics {
+            bare: LiveStatistics::new_with_max(max.0),
+            jitter: LiveStatistics::new_with_max(max.0),
+            last_value: CuDuration::default(),
+        }
+    }
+
+    #[inline]
+    fn min(&self) -> CuDuration {
+        CuDuration(self.bare.min())
+    }
+
+    #[inline]
+    fn max(&self) -> CuDuration {
+        CuDuration(self.bare.max())
+    }
+
+    #[inline]
+    fn mean(&self) -> CuDuration {
+        CuDuration(self.bare.mean() as u64) // CuDuration is in ns, it is ok.
+    }
+
+    #[inline]
+    fn percentile(&self, percentile: f64) -> CuDuration {
+        CuDuration(self.bare.percentile(percentile))
+    }
+
+    #[inline]
+    fn stddev(&self) -> CuDuration {
+        CuDuration(self.bare.stats.stdev() as u64)
+    }
+
+    #[inline]
+    fn len(&self) -> u64 {
+        self.bare.len()
+    }
+
+    #[inline]
+    fn jitter_min(&self) -> CuDuration {
+        CuDuration(self.jitter.min())
+    }
+
+    #[inline]
+    fn jitter_max(&self) -> CuDuration {
+        CuDuration(self.jitter.max())
+    }
+
+    #[inline]
+    fn jitter_mean(&self) -> CuDuration {
+        CuDuration(self.jitter.mean() as u64)
+    }
+
+    #[inline]
+    fn jitter_stddev(&self) -> CuDuration {
+        CuDuration(self.jitter.stats.stdev() as u64)
+    }
+
+    #[inline]
+    fn jitter_percentile(&self, percentile: f64) -> CuDuration {
+        CuDuration(self.jitter.percentile(percentile))
+    }
+
+    #[inline]
+    fn record(&mut self, value: CuDuration) {
+        if self.bare.len() == 0 {
+            self.bare.stats.record(value.0).unwrap();
+            self.last_value = value;
+            return;
+        }
+        self.bare.stats.record(value.0).unwrap();
+        self.jitter
+            .stats
+            .record(value.0.abs_diff(self.last_value.0))
+            .unwrap();
+        self.last_value = value;
+    }
+
+    #[inline]
+    pub fn reset(&mut self) {
+        self.bare.reset();
+        self.jitter.reset();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_live_statistics() {
+        let mut stats = LiveStatistics::new();
+        stats.record(1);
+        stats.record(2);
+        stats.record(3);
+        stats.record(4);
+        stats.record(5);
+        assert_eq!(stats.min(), 1);
+        assert_eq!(stats.max(), 5);
+        assert_eq!(stats.mean(), 3.0);
+        assert_eq!(stats.percentile(0.5), 3);
+        assert_eq!(stats.percentile(0.90), 5);
+        assert_eq!(stats.percentile(0.99), 5);
+        assert_eq!(stats.len(), 5);
+        stats.reset();
+        assert_eq!(stats.len(), 0);
+    }
+
+    #[test]
+    fn test_duration_stats() {
+        let mut stats = CuDurationStatistics::new(CuDuration(100));
+        stats.record(CuDuration(100));
+        stats.record(CuDuration(200));
+        stats.record(CuDuration(500));
+        stats.record(CuDuration(400));
+        assert_eq!(stats.min(), CuDuration(100));
+        assert_eq!(stats.max(), CuDuration(500));
+        assert_eq!(stats.mean(), CuDuration(300));
+        assert_eq!(stats.percentile(0.5), CuDuration(200));
+        assert_eq!(stats.percentile(0.90), CuDuration(500));
+        assert_eq!(stats.percentile(0.99), CuDuration(500));
+        assert_eq!(stats.len(), 4);
+        assert_eq!(stats.jitter.len(), 3);
+        assert_eq!(stats.jitter_min(), CuDuration(100));
+        assert_eq!(stats.jitter_max(), CuDuration(300));
+        assert_eq!(stats.jitter_mean(), CuDuration((100 + 300 + 100) / 3));
+        assert_eq!(stats.jitter_percentile(0.5), CuDuration(100));
+        assert_eq!(stats.jitter_percentile(0.90), CuDuration(300));
+        assert_eq!(stats.jitter_percentile(0.99), CuDuration(300));
+        stats.reset();
+        assert_eq!(stats.len(), 0);
     }
 }
