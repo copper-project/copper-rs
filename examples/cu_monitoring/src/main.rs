@@ -116,7 +116,7 @@ impl CuMonitor for ExampleMonitor {
         Decision::ContinueWithNoOuput
     }
 
-    fn stop(&mut self) -> CuResult<()> {
+    fn stop(&mut self, _clock: &_RobotClock) -> CuResult<()> {
         println!("Stopped");
         Ok(())
     }

@@ -27,7 +27,7 @@ pub enum Decision {
 }
 
 /// Trait to implement a monitoring task.
-pub trait CuMonitor {
+pub trait CuMonitor: Sized {
     fn new(config: Option<&ComponentConfig>, taskids: &'static [&'static str]) -> CuResult<Self>
     where
         Self: Sized;
@@ -43,8 +43,24 @@ pub trait CuMonitor {
     fn process_error(&self, taskid: usize, step: CuTaskState, error: CuError) -> Decision;
 
     /// Callbacked when copper is stopping.
-    fn stop(&mut self) -> CuResult<()> {
+    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
         Ok(())
+    }
+}
+
+// A do nothing monitor if no monitor is provided.
+pub struct NoMonitor {}
+impl CuMonitor for NoMonitor {
+    fn new(_config: Option<&ComponentConfig>, _taskids: &'static [&'static str]) -> CuResult<Self> {
+        Ok(NoMonitor {})
+    }
+
+    fn process_copperlist(&self, _msgs: &[&CuMsgMetadata]) -> CuResult<()> {
+        Ok(())
+    }
+
+    fn process_error(&self, _taskid: usize, _step: CuTaskState, _error: CuError) -> Decision {
+        Decision::ContinueWithNoOuput
     }
 }
 

@@ -275,15 +275,25 @@ pub struct Cnx {
 pub struct CuConfig {
     // This is not what is directly serialized, see the custom serialization below.
     pub graph: StableDiGraph<Node, Cnx, NodeId>,
-    monitor: Option<Monitor>,
+    monitor: Option<MonitorConfig>,
 }
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
-pub struct Monitor {
+pub struct MonitorConfig {
     #[serde(rename = "type")]
-    pub type_: String,
+    type_: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub config: Option<ComponentConfig>,
+    config: Option<ComponentConfig>,
+}
+
+impl MonitorConfig {
+    pub fn get_type(&self) -> &str {
+        &self.type_
+    }
+
+    pub fn get_config(&self) -> Option<&ComponentConfig> {
+        self.config.as_ref()
+    }
 }
 
 /// The config is a list of tasks and their connections.
@@ -291,7 +301,7 @@ pub struct Monitor {
 struct CuConfigRepresentation {
     tasks: Vec<Node>,
     cnx: Vec<Cnx>,
-    monitor: Option<Monitor>,
+    monitor: Option<MonitorConfig>,
 }
 
 impl<'de> Deserialize<'de> for CuConfig {
@@ -544,6 +554,10 @@ impl CuConfig {
             .iter()
             .map(|node_config| node_config.get_instance_config())
             .collect()
+    }
+
+    pub fn get_monitor_config(&self) -> Option<&MonitorConfig> {
+        self.monitor.as_ref()
     }
 }
 

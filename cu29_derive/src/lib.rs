@@ -25,14 +25,16 @@ fn int2sliceindex(i: u32) -> syn::Index {
 }
 
 #[proc_macro]
-pub fn gen_culist_payload(config_path_lit: TokenStream) -> TokenStream {
+/// Generates the tuple inner of copper list from the config.
+/// gen_culist_tuple!("path/to/config.toml")
+pub fn gen_culist_tuple(config_path_lit: TokenStream) -> TokenStream {
     let config = parse_macro_input!(config_path_lit as LitStr).value();
-    eprintln!("[gen culist payload with {:?}]", config);
+    eprintln!("[gen culist tuple with {:?}]", config);
     let cuconfig = read_config(&config);
     let runtime_plan: CuExecutionLoop =
         compute_runtime_plan(&cuconfig).expect("Could not compute runtime plan");
     let all_msgs_types_in_culist_order = extract_msg_types(&runtime_plan);
-    build_culist_payload(&all_msgs_types_in_culist_order)
+    build_culist_tuple(&all_msgs_types_in_culist_order)
         .into_token_stream()
         .into()
 }
@@ -66,8 +68,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         compute_runtime_plan(&copper_config).expect("Could not compute runtime plan");
     eprintln!("{:?}", runtime_plan);
 
-    eprintln!("[extract tasks types]");
-    let (all_tasks_types_names, all_tasks_types) = extract_tasks_types(&copper_config);
+    eprintln!("[extract tasks ids & types]");
+    let (all_tasks_ids, all_tasks_types_names, all_tasks_types) =
+        extract_tasks_types(&copper_config);
     eprintln!("tasks types: {:?}", all_tasks_types_names);
 
     eprintln!("[build task tuples]");
@@ -77,10 +80,19 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         (#(#all_tasks_types),*,)
     };
 
+    eprintln!("[build monitor type]");
+    let monitor_type = if let Some(monitor_config) = copper_config.get_monitor_config() {
+        let monitor_type = parse_str::<Type>(monitor_config.get_type())
+            .expect("Could not transform the monitor type name into a Rust type.");
+        quote! { #monitor_type }
+    } else {
+        quote! { cu29::monitoring::NoMonitor }
+    };
+
     eprintln!("[build runtime field]");
     // add that to a new field
     let runtime_field: Field = parse_quote! {
-        copper_runtime: _CuRuntime<CuTasks, CuPayload, #DEFAULT_CLNB>
+        copper_runtime: _CuRuntime<CuTasks, CuPayload, #monitor_type, #DEFAULT_CLNB>
     };
 
     let name = &item_struct.ident;
@@ -118,26 +130,26 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 },
                 quote! {
                     {
-                        let task_instance = &mut self.copper_runtime.task_instances.#node_index;
-                        task_instance.start(&self.copper_runtime.clock)?;
+                        let task = &mut self.copper_runtime.tasks.#node_index;
+                        task.start(&self.copper_runtime.clock)?;
                     }
                 },
                 quote! {
                     {
-                        let task_instance = &mut self.copper_runtime.task_instances.#node_index;
-                        task_instance.stop(&self.copper_runtime.clock)?;
+                        let task = &mut self.copper_runtime.tasks.#node_index;
+                        task.stop(&self.copper_runtime.clock)?;
                     }
                 },
                 quote! {
                     {
-                        let task_instance = &mut self.copper_runtime.task_instances.#node_index;
-                        task_instance.preprocess(&self.copper_runtime.clock)?;
+                        let task = &mut self.copper_runtime.tasks.#node_index;
+                        task.preprocess(&self.copper_runtime.clock)?;
                     }
                 },
                 quote! {
                     {
-                        let task_instance = &mut self.copper_runtime.task_instances.#node_index;
-                        task_instance.postprocess(&self.copper_runtime.clock)?;
+                        let task = &mut self.copper_runtime.tasks.#node_index;
+                        task.postprocess(&self.copper_runtime.clock)?;
                     }
                 }
             )
@@ -159,7 +171,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     );
 
                     let node_index = int2sliceindex(step.node_id);
-                    let task_instance = quote! { self.copper_runtime.task_instances.#node_index };
+                    let task_instance = quote! { self.copper_runtime.tasks.#node_index };
                     let comment_str = format!(
                         "/// {} ({:?}) I:{:?} O:{:?}",
                         step.node.get_id(),
@@ -228,7 +240,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let all_msgs_types_in_culist_order: Vec<Type> = extract_msg_types(&runtime_plan);
 
     eprintln!("[build the copper payload]");
-    let msgs_types_tuple: TypeTuple = build_culist_payload(&all_msgs_types_in_culist_order);
+    let msgs_types_tuple: TypeTuple = build_culist_tuple(&all_msgs_types_in_culist_order);
 
     eprintln!("[build the collect metadata function]");
     let culist_size = all_msgs_types_in_culist_order.len();
@@ -243,6 +255,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let run_method = quote! {
 
         pub fn start_all_tasks(&mut self) -> _CuResult<()> {
+            self.copper_runtime.monitor.start(&self.copper_runtime.clock)?;
             #(#start_calls)*
             Ok(())
         }
@@ -260,10 +273,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 } // drop(payload);
 
                 {
+                    // End of CL monitoring
                     let md = collect_metadata(&culist);
                     let e2e = md.last().unwrap().after_process.unwrap() - md.first().unwrap().before_process.unwrap();
                     let e2en: u64 = e2e.into();
-                    debug!("End to end latency {}, mean latency per node: {}", e2e, e2en / (md.len() as u64));
                 } // drop(md);
 
                 self.copper_runtime.end_of_processing(id);
@@ -275,6 +288,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         pub fn stop_all_tasks(&mut self) -> _CuResult<()> {
             #(#stop_calls)*
+            self.copper_runtime.monitor.stop(&self.copper_runtime.clock)?;
             Ok(())
         }
 
@@ -298,6 +312,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         // import everything with an _ to avoid clashes with the user's code
         use cu29::config::CuConfig as _CuConfig;
         use cu29::config::ComponentConfig as _ComponentConfig;
+        use cu29::config::MonitorConfig as _MonitorConfig;
         use cu29::config::read_configuration as _read_configuration;
         use cu29::curuntime::CuRuntime as _CuRuntime;
         use cu29::CuResult as _CuResult;
@@ -325,11 +340,17 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         pub type CuPayload = #msgs_types_tuple;
         pub type CuList = _CopperList<CuPayload>;
 
+        const TASKS_IDS: &'static [&'static str] = &[#( #all_tasks_ids ),*];
+
         // This generates a way to get the metadata of every single message of a culist at low cost
         #collect_metadata_function
 
         fn tasks_instanciator(all_instances_configs: Vec<Option<&_ComponentConfig>>) -> _CuResult<CuTasks> {
             Ok(( #(#task_instances_init_code),*, ))
+        }
+
+        fn monitor_instanciator(monitor_config: Option<&_ComponentConfig>) -> #monitor_type {
+            #monitor_type::new(monitor_config, TASKS_IDS).expect("Failed to create the given monitor.")
         }
 
         pub #item_struct
@@ -346,7 +367,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 );
 
                 Ok(#name {
-                    copper_runtime: _CuRuntime::<CuTasks, CuPayload, #DEFAULT_CLNB>::new(clock, &config, tasks_instanciator, copperlist_stream)?
+                    copper_runtime: _CuRuntime::<CuTasks, CuPayload, #monitor_type, #DEFAULT_CLNB>::new(clock, &config, tasks_instanciator, monitor_instanciator, copperlist_stream)?
                 })
             }
 
@@ -379,9 +400,15 @@ fn read_config(config_file: &String) -> CuConfig {
     copper_config
 }
 
-/// Extract all the tasks types in their index order
-fn extract_tasks_types(copper_config: &CuConfig) -> (Vec<String>, Vec<Type>) {
+/// Extract all the tasks types in their index order and their ids.
+fn extract_tasks_types(copper_config: &CuConfig) -> (Vec<String>, Vec<String>, Vec<Type>) {
     let all_nodes = copper_config.get_all_nodes();
+
+    // Get all the tasks Ids
+    let all_tasks_ids: Vec<String> = all_nodes
+        .iter()
+        .map(|node_config| node_config.get_id().to_string())
+        .collect();
 
     // Collect all the type names used by our configs.
     let all_types_names: Vec<String> = all_nodes
@@ -397,7 +424,7 @@ fn extract_tasks_types(copper_config: &CuConfig) -> (Vec<String>, Vec<Type>) {
                 .expect(format!("Could not transform {} into a Task Rust type.", name).as_str())
         })
         .collect();
-    (all_types_names, all_types)
+    (all_tasks_ids, all_types_names, all_types)
 }
 
 fn extract_msg_types(runtime_plan: &CuExecutionLoop) -> Vec<Type> {
@@ -425,7 +452,8 @@ fn extract_msg_types(runtime_plan: &CuExecutionLoop) -> Vec<Type> {
         .collect()
 }
 
-fn build_culist_payload(all_msgs_types_in_culist_order: &Vec<Type>) -> TypeTuple {
+/// Builds the tuple of the CuList as a tuple off all the messages types.
+fn build_culist_tuple(all_msgs_types_in_culist_order: &Vec<Type>) -> TypeTuple {
     if all_msgs_types_in_culist_order.is_empty() {
         parse_quote! {()}
     } else {

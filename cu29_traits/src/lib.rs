@@ -75,8 +75,8 @@ pub enum UnifiedLogType {
     LastEntry,         // This is a special entry that is used to signal the end of the log.
 }
 
-/// A CopperListPayload needs to be encodable, decodable and fixed size in memory.
-pub trait CopperListPayload: bincode::Encode + bincode::Decode + Sized + Debug {}
+/// A CopperListTuple needs to be encodable, decodable and fixed size in memory.
+pub trait CopperListTuple: bincode::Encode + bincode::Decode + Sized + Debug {}
 
 // Also anything that follows this contract can be a payload (blanket implementation)
-impl<T> CopperListPayload for T where T: bincode::Encode + bincode::Decode + Debug + Sized {}
+impl<T> CopperListTuple for T where T: bincode::Encode + bincode::Decode + Debug + Sized {}
