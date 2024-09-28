@@ -14,10 +14,10 @@ repository.workspace = true
 [dependencies]
 cu29-traits = { workspace = true }
 bincode = { workspace = true }
-memmap2 = "0.9.4"
-libc = "0.2.155"
+memmap2 = "0.9.5"
+libc = "0.2.159"
 
 [dev-dependencies]
-tempfile = "3.10.1"
+tempfile = "3.13.0"
 
 
