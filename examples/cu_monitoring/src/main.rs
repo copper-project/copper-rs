@@ -113,12 +113,12 @@ impl CuMonitor for ExampleMonitor {
         Ok(())
     }
 
-    fn process_error(&self, taskid: usize, step: CuTaskState, error: CuError) -> Decision {
+    fn process_error(&self, taskid: usize, step: CuTaskState, error: &CuError) -> Decision {
         debug!(
             "Monitoring: Processing error task: {} step: {} error: {}",
             self.tasks[taskid], step, error
         );
-        Decision::ContinueWithNoOuput
+        Decision::Ignore
     }
 
     fn stop(&mut self, clock: &_RobotClock) -> CuResult<()> {

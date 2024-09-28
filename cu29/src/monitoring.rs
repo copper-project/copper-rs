@@ -21,9 +21,9 @@ pub enum CuTaskState {
 /// Monitor decision to be taken when a task errored out.
 #[derive(Debug)]
 pub enum Decision {
-    SkipCopperlist,
-    ContinueWithNoOuput,
-    Shutdown,
+    Abort,    // for a step (stop, start) or a copperlist, just stop trying to process it.
+    Ignore, // Ignore this error and try to continue, ie calling the other tasks steps, setting a None return value and continue a copperlist.
+    Shutdown, // This is a fatal error, shutdown the copper as cleanly as possible.
 }
 
 /// Trait to implement a monitoring task.
@@ -40,7 +40,7 @@ pub trait CuMonitor: Sized {
     fn process_copperlist(&self, msgs: &[&CuMsgMetadata]) -> CuResult<()>;
 
     /// Callbacked when a Task errored out. The runtime requires an immediate decision.
-    fn process_error(&self, taskid: usize, step: CuTaskState, error: CuError) -> Decision;
+    fn process_error(&self, taskid: usize, step: CuTaskState, error: &CuError) -> Decision;
 
     /// Callbacked when copper is stopping.
     fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
@@ -48,7 +48,8 @@ pub trait CuMonitor: Sized {
     }
 }
 
-// A do nothing monitor if no monitor is provided.
+/// A do nothing monitor if no monitor is provided.
+/// This is basically defining the default behavior of Copper in case of error.
 pub struct NoMonitor {}
 impl CuMonitor for NoMonitor {
     fn new(_config: Option<&ComponentConfig>, _taskids: &'static [&'static str]) -> CuResult<Self> {
@@ -56,11 +57,13 @@ impl CuMonitor for NoMonitor {
     }
 
     fn process_copperlist(&self, _msgs: &[&CuMsgMetadata]) -> CuResult<()> {
+        // By default, do nothing.
         Ok(())
     }
 
-    fn process_error(&self, _taskid: usize, _step: CuTaskState, _error: CuError) -> Decision {
-        Decision::ContinueWithNoOuput
+    fn process_error(&self, _taskid: usize, _step: CuTaskState, _error: &CuError) -> Decision {
+        // By default, just try to continue.
+        Decision::Ignore
     }
 }
 

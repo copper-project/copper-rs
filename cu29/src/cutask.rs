@@ -119,6 +119,10 @@ where
         self.payload = Some(payload);
     }
 
+    pub fn clear_payload(&mut self) {
+        self.payload = None;
+    }
+
     pub fn payload_mut(&mut self) -> &mut Option<T> {
         &mut self.payload
     }
