@@ -610,7 +610,8 @@
 <a href="#609" id="609">609</a>
 <a href="#610" id="610">610</a>
 <a href="#611" id="611">611</a>
-<a href="#612" id="612">612</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module defines the configuration of the copper runtime.
+<a href="#612" id="612">612</a>
+<a href="#613" id="613">613</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module defines the configuration of the copper runtime.
 //! The configuration is a directed graph where nodes are tasks and edges are connections between tasks.
 //! The configuration is serialized in the RON format.
 //! The configuration is used to generate the runtime code at compile time.
@@ -1061,6 +1062,7 @@
 
     <span class="doccomment">/// Adds an edge between two nodes/tasks in the configuration graph.
     /// msg_type is the type of message exchanged between the two nodes/tasks.
+    </span><span class="attr">#[allow(dead_code)]
     </span><span class="kw">pub fn </span>connect(<span class="kw-2">&amp;mut </span><span class="self">self</span>, source: NodeId, target: NodeId, msg_type: <span class="kw-2">&amp;</span>str) {
         <span class="self">self</span>.connect_ext(source, target, msg_type, <span class="prelude-val">None</span>, <span class="prelude-val">None</span>);
     }
