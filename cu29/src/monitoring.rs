@@ -123,6 +123,7 @@ impl Drop for ScopedAllocCounter {
     }
 }
 
+use cu29_log_derive::debug;
 use hdrhistogram::Histogram;
 
 /// Accumulative stat object that can give your some real time statistics.
@@ -131,7 +132,7 @@ pub struct LiveStatistics {
 }
 
 impl LiveStatistics {
-    pub fn new() -> Self {
+    pub fn new_unbounded() -> Self {
         LiveStatistics {
             stats: Histogram::<u64>::new(3).unwrap(),
         }
@@ -166,7 +167,10 @@ impl LiveStatistics {
     /// Adds a value to the statistics.
     #[inline]
     pub fn record(&mut self, value: u64) {
-        self.stats.record(value).unwrap();
+        let maybe_error = self.stats.record(value);
+        if let Err(e) = maybe_error {
+            debug!("stats.record errored out: {}", e.to_string());
+        }
     }
 
     #[inline]
@@ -280,7 +284,7 @@ mod tests {
 
     #[test]
     fn test_live_statistics() {
-        let mut stats = LiveStatistics::new();
+        let mut stats = LiveStatistics::new_unbounded();
         stats.record(1);
         stats.record(2);
         stats.record(3);
