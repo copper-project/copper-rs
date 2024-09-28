@@ -9,7 +9,7 @@ use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// The state of a task.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum CuTaskState {
     Start,
     Preprocess,
@@ -21,13 +21,13 @@ pub enum CuTaskState {
 /// Monitor decision to be taken when a task errored out.
 #[derive(Debug)]
 pub enum Decision {
-    SkipCopperlist,
-    ContinueWithNoOuput,
-    Shutdown,
+    Abort,    // for a step (stop, start) or a copperlist, just stop trying to process it.
+    Ignore, // Ignore this error and try to continue, ie calling the other tasks steps, setting a None return value and continue a copperlist.
+    Shutdown, // This is a fatal error, shutdown the copper as cleanly as possible.
 }
 
 /// Trait to implement a monitoring task.
-pub trait CuMonitor {
+pub trait CuMonitor: Sized {
     fn new(config: Option<&ComponentConfig>, taskids: &'static [&'static str]) -> CuResult<Self>
     where
         Self: Sized;
@@ -40,11 +40,30 @@ pub trait CuMonitor {
     fn process_copperlist(&self, msgs: &[&CuMsgMetadata]) -> CuResult<()>;
 
     /// Callbacked when a Task errored out. The runtime requires an immediate decision.
-    fn process_error(&self, taskid: usize, step: CuTaskState, error: CuError) -> Decision;
+    fn process_error(&self, taskid: usize, step: CuTaskState, error: &CuError) -> Decision;
 
     /// Callbacked when copper is stopping.
-    fn stop(&mut self) -> CuResult<()> {
+    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
         Ok(())
+    }
+}
+
+/// A do nothing monitor if no monitor is provided.
+/// This is basically defining the default behavior of Copper in case of error.
+pub struct NoMonitor {}
+impl CuMonitor for NoMonitor {
+    fn new(_config: Option<&ComponentConfig>, _taskids: &'static [&'static str]) -> CuResult<Self> {
+        Ok(NoMonitor {})
+    }
+
+    fn process_copperlist(&self, _msgs: &[&CuMsgMetadata]) -> CuResult<()> {
+        // By default, do nothing.
+        Ok(())
+    }
+
+    fn process_error(&self, _taskid: usize, _step: CuTaskState, _error: &CuError) -> Decision {
+        // By default, just try to continue.
+        Decision::Ignore
     }
 }
 
@@ -125,6 +144,7 @@ impl Drop for ScopedAllocCounter {
 
 use cu29_log_derive::debug;
 use hdrhistogram::Histogram;
+use serde_derive::{Deserialize, Serialize};
 
 /// Accumulative stat object that can give your some real time statistics.
 pub struct LiveStatistics {

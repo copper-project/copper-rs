@@ -6,9 +6,9 @@ use crate::clock::{ClockProvider, RobotClock};
 use crate::config::{Cnx, CuConfig, NodeId};
 use crate::config::{ComponentConfig, Node};
 use crate::copperlist::{CopperList, CopperListState, CuListsManager};
+use crate::monitoring::CuMonitor;
 use crate::CuResult;
-use cu29_log_derive::debug;
-use cu29_traits::CopperListPayload;
+use cu29_traits::CopperListTuple;
 use cu29_traits::WriteStream;
 use petgraph::prelude::*;
 use std::fmt::Debug;
@@ -16,9 +16,11 @@ use std::fmt::Debug;
 /// This is the main structure that will be injected as a member of the Application struct.
 /// CT is the tuple of all the tasks in order of execution.
 /// CL is the type of the copper list, representing the input/output messages for all the tasks.
-pub struct CuRuntime<CT, P: CopperListPayload, const NBCL: usize> {
+pub struct CuRuntime<CT, P: CopperListTuple, M: CuMonitor, const NBCL: usize> {
     /// The tuple of all the tasks in order of execution.
-    pub task_instances: CT,
+    pub tasks: CT,
+
+    pub monitor: M,
 
     /// Copper lists hold in order all the input/output messages for all the tasks.
     pub copper_lists_manager: CuListsManager<P, NBCL>,
@@ -31,17 +33,20 @@ pub struct CuRuntime<CT, P: CopperListPayload, const NBCL: usize> {
 }
 
 /// To be able to share the clock we make the runtime a clock provider.
-impl<CT, P: CopperListPayload, const NBCL: usize> ClockProvider for CuRuntime<CT, P, NBCL> {
+impl<CT, P: CopperListTuple, M: CuMonitor, const NBCL: usize> ClockProvider
+    for CuRuntime<CT, P, M, NBCL>
+{
     fn get_clock(&self) -> RobotClock {
         self.clock.clone()
     }
 }
 
-impl<CT, P: CopperListPayload + 'static, const NBCL: usize> CuRuntime<CT, P, NBCL> {
+impl<CT, P: CopperListTuple + 'static, M: CuMonitor, const NBCL: usize> CuRuntime<CT, P, M, NBCL> {
     pub fn new(
         clock: RobotClock,
         config: &CuConfig,
         tasks_instanciator: impl Fn(Vec<Option<&ComponentConfig>>) -> CuResult<CT>,
+        monitor_instanciator: impl Fn(Option<&ComponentConfig>) -> M,
         logger: impl WriteStream<CopperList<P>> + 'static,
     ) -> CuResult<Self> {
         let all_instances_configs: Vec<Option<&ComponentConfig>> = config
@@ -49,10 +54,17 @@ impl<CT, P: CopperListPayload + 'static, const NBCL: usize> CuRuntime<CT, P, NBC
             .iter()
             .map(|node_config| node_config.get_instance_config())
             .collect();
-        let task_instances = tasks_instanciator(all_instances_configs)?;
+        let tasks = tasks_instanciator(all_instances_configs)?;
+
+        let monitor = if let Some(monitor_section) = config.get_monitor_config() {
+            monitor_instanciator(monitor_section.get_config())
+        } else {
+            monitor_instanciator(None)
+        };
 
         let runtime = Self {
-            task_instances,
+            tasks,
+            monitor,
             copper_lists_manager: CuListsManager::new(), // placeholder
             clock,
             logger: Box::new(logger),
@@ -66,7 +78,6 @@ impl<CT, P: CopperListPayload + 'static, const NBCL: usize> CuRuntime<CT, P, NBC
     }
 
     pub fn end_of_processing(&mut self, culistid: u32) {
-        debug!("End of processing for CL #{}", culistid);
         let mut is_top = true;
         let mut nb_done = 0;
         self.copper_lists_manager.iter_mut().for_each(|cl| {
@@ -77,7 +88,6 @@ impl<CT, P: CopperListPayload + 'static, const NBCL: usize> CuRuntime<CT, P, NBC
             // serialize them all and Free them.
             if is_top && cl.get_state() == CopperListState::DoneProcessing {
                 cl.change_state(CopperListState::BeingSerialized);
-                debug!("Logging CL #{}", cl.id);
                 self.logger.log(&cl).unwrap();
                 cl.change_state(CopperListState::Free);
                 nb_done += 1;
@@ -86,8 +96,7 @@ impl<CT, P: CopperListPayload + 'static, const NBCL: usize> CuRuntime<CT, P, NBC
             }
         });
         for _ in 0..nb_done {
-            let cl = self.copper_lists_manager.pop();
-            debug!("Popped CL #{}", cl.unwrap().id);
+            let _ = self.copper_lists_manager.pop();
         }
     }
 }
@@ -356,6 +365,7 @@ mod tests {
     use crate::config::Node;
     use crate::cutask::{CuSinkTask, CuTaskLifecycle};
     use crate::cutask::{CuSrcTask, Freezable};
+    use crate::monitoring::NoMonitor;
     use bincode::Encode;
 
     pub struct TestSource {}
@@ -410,6 +420,10 @@ mod tests {
         ))
     }
 
+    fn monitor_instanciator(_config: Option<&ComponentConfig>) -> NoMonitor {
+        NoMonitor {}
+    }
+
     #[derive(Debug)]
     struct FakeWriter {}
 
@@ -425,10 +439,11 @@ mod tests {
         config.add_node(Node::new("a", "TestSource"));
         config.add_node(Node::new("b", "TestSink"));
         config.connect(0, 1, "()");
-        let runtime = CuRuntime::<Tasks, Msgs, 2>::new(
+        let runtime = CuRuntime::<Tasks, Msgs, NoMonitor, 2>::new(
             RobotClock::default(),
             &config,
             tasks_instanciator,
+            monitor_instanciator,
             FakeWriter {},
         );
         assert!(runtime.is_ok());
@@ -440,10 +455,11 @@ mod tests {
         config.add_node(Node::new("a", "TestSource"));
         config.add_node(Node::new("b", "TestSink"));
         config.connect(0, 1, "()");
-        let mut runtime = CuRuntime::<Tasks, Msgs, 2>::new(
+        let mut runtime = CuRuntime::<Tasks, Msgs, NoMonitor, 2>::new(
             RobotClock::default(),
             &config,
             tasks_instanciator,
+            monitor_instanciator,
             FakeWriter {},
         )
         .unwrap();

@@ -5,7 +5,7 @@ extern crate alloc;
 use bincode::{Decode, Encode};
 use std::fmt;
 
-use cu29_traits::CopperListPayload;
+use cu29_traits::CopperListTuple;
 use serde_derive::Serialize;
 use std::fmt::Display;
 use std::iter::{Chain, Rev};
@@ -44,13 +44,13 @@ impl Display for CopperListState {
 }
 
 #[derive(Debug, Encode, Decode)]
-pub struct CopperList<P: CopperListPayload> {
+pub struct CopperList<P: CopperListTuple> {
     pub id: u32,
     state: CopperListState,
     pub payload: P, // This is generated from the runtime.
 }
 
-impl<P: CopperListPayload> CopperList<P> {
+impl<P: CopperListTuple> CopperList<P> {
     // This is not the usual way to create a CopperList, this is just for testing.
     pub fn new(id: u32, payload: P) -> Self {
         CopperList {
@@ -72,14 +72,14 @@ impl<P: CopperListPayload> CopperList<P> {
 /// This structure maintains the entire memory needed by Copper for one loop for the inter tasks communication within a process.
 /// P or Payload is typically a Tuple of various types of messages that are exchanged between tasks.
 /// N is the maximum number of in flight Copper List the runtime can support.
-pub struct CuListsManager<P: CopperListPayload, const N: usize> {
+pub struct CuListsManager<P: CopperListTuple, const N: usize> {
     data: Box<[CopperList<P>; N]>,
     length: usize,
     insertion_index: usize,
     current_cl_id: u32,
 }
 
-impl<P: CopperListPayload + fmt::Debug, const N: usize> fmt::Debug for CuListsManager<P, N> {
+impl<P: CopperListTuple + fmt::Debug, const N: usize> fmt::Debug for CuListsManager<P, N> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("CuListsManager")
             .field("data", &self.data)
@@ -95,7 +95,7 @@ pub type IterMut<'a, T> = Chain<Rev<SliceIterMut<'a, T>>, Rev<SliceIterMut<'a, T
 pub type AscIter<'a, T> = Chain<SliceIter<'a, T>, SliceIter<'a, T>>;
 pub type AscIterMut<'a, T> = Chain<SliceIterMut<'a, T>, SliceIterMut<'a, T>>;
 
-impl<P: CopperListPayload, const N: usize> CuListsManager<P, N> {
+impl<P: CopperListTuple, const N: usize> CuListsManager<P, N> {
     pub fn new() -> Self {
         let data = unsafe {
             let layout = std::alloc::Layout::new::<[CopperList<P>; N]>();

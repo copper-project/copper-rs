@@ -11,7 +11,7 @@ use cu29_log::{rebuild_logline, CuLogEntry};
 use cu29_traits::{CuError, CuResult, UnifiedLogType};
 
 use clap::{Parser, Subcommand, ValueEnum};
-use cu29_traits::CopperListPayload;
+use cu29_traits::CopperListTuple;
 use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader};
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
@@ -56,7 +56,7 @@ pub enum Command {
 /// It depends on the specific type of the CopperList payload that is determined at compile time from the configuration.
 pub fn run_cli<P>() -> CuResult<()>
 where
-    P: CopperListPayload,
+    P: CopperListTuple,
 {
     let args = LogReaderCli::parse();
     let unifiedlog_base = args.unifiedlog_base;
@@ -89,7 +89,7 @@ where
 
 /// Extracts the copper lists from a binary representation.
 /// P is the Payload determined by the configuration of the application.
-pub fn copperlists_dump<P: CopperListPayload>(
+pub fn copperlists_dump<P: CopperListTuple>(
     mut src: impl Read,
 ) -> impl Iterator<Item = CopperList<P>> {
     std::iter::from_fn(move || {

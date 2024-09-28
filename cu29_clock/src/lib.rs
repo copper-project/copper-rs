@@ -117,7 +117,7 @@ impl Display for CuDuration {
 pub type CuTime = CuDuration;
 
 /// Homebrewed `Option<CuDuration>` to avoid using 128bits just to represent an Option.
-#[derive(Clone, Copy, Debug, PartialEq, Encode, Decode)]
+#[derive(Clone, Copy, Debug, PartialEq, Encode, Decode, Serialize, Deserialize)]
 pub struct OptionCuTime(CuTime);
 
 const NONE_VALUE: u64 = 0xFFFFFFFFFFFFFFFF;
