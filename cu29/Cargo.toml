@@ -33,8 +33,4 @@ cu29-clock = { workspace = true }
 clap = { workspace = true }
 uom = { workspace = true }
 tempfile = "3.10.1"
-stats-cli = "3.0.1"
 hdrhistogram = "7.5.4"
-
-[dev-dependencies]
-approx = "0.5.1"
