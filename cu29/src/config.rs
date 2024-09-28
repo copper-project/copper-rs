@@ -287,10 +287,12 @@ pub struct MonitorConfig {
 }
 
 impl MonitorConfig {
+    #[allow(dead_code)]
     pub fn get_type(&self) -> &str {
         &self.type_
     }
 
+    #[allow(dead_code)]
     pub fn get_config(&self) -> Option<&ComponentConfig> {
         self.config.as_ref()
     }
@@ -556,6 +558,7 @@ impl CuConfig {
             .collect()
     }
 
+    #[allow(dead_code)]
     pub fn get_monitor_config(&self) -> Option<&MonitorConfig> {
         self.monitor.as_ref()
     }
