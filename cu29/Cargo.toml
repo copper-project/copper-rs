@@ -31,4 +31,6 @@ cu29-log-derive = { workspace = true }
 cu29-log-runtime = { workspace = true }
 cu29-clock = { workspace = true }
 clap = { workspace = true }
+uom = { workspace = true }
 tempfile = "3.10.1"
+hdrhistogram = "7.5.4"
