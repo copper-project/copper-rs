@@ -450,6 +450,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         use cu29::cutask::CuMsg as _CuMsg;
         use cu29::cutask::CuMsgMetadata as _CuMsgMetadata;
         use cu29::copperlist::CopperList as _CopperList;
+        use cu29::monitoring::CuMonitor as _CuMonitor; // Trait import.
         use cu29::monitoring::NoMonitor as _NoMonitor;
         use cu29::clock::RobotClock as _RobotClock;
         use cu29::clock::OptionCuTime as _OptionCuTime;
