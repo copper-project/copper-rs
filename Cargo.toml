@@ -72,16 +72,16 @@ cu29-value = { path = "cu29_value", version = "0.2.2" }
 
 # External serialization
 bincode = { version = "2.0.0-rc.3", features = ["derive"] }
-serde = { version = "1.0.204", features = ["derive"] }
-serde_derive = "1.0.204"
+serde = { version = "1.0.210", features = ["derive"] }
+serde_derive = "1.0.210"
 
 # External CLI
-clap = { version = "4.5.9", features = ["derive"] }
+clap = { version = "4.5.18", features = ["derive"] }
 
 # External proc macros
 proc-macro2 = { version = "1.0.86" }
-quote = "1.0.36" # proc macros
-syn = { version = "2.0.71", features = ["full"] } # proc macros
+quote = "1.0.37" # proc macros
+syn = { version = "2.0.79", features = ["full"] } # proc macros
 
 # Unit of measure to be consistent across the project
 uom = { version = "0.36.0", features = ["serde"] }
