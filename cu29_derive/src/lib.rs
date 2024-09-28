@@ -132,19 +132,19 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     {
                         let task = &mut self.copper_runtime.tasks.#node_index;
                         if let Err(error) = task.start(&self.copper_runtime.clock) {
-                            let decision = self.copper_runtime.monitor.process_error(#index, CuTaskState::Start, &error);
+                            let decision = self.copper_runtime.monitor.process_error(#index, _CuTaskState::Start, &error);
                             match decision {
-                                Decision::Abort => {
+                                _Decision::Abort => {
                                     debug!("Start: ABORT decision from monitoring. Task '{}' errored out \
                                     during start. Aborting all the other starts.", TASKS_IDS[#index]);
                                     return Ok(());
 
                                 }
-                                Decision::Ignore => {
+                                _Decision::Ignore => {
                                     debug!("Start: IGNORE decision from monitoring. Task '{}' errored out \
                                     during start. The runtime will continue.", TASKS_IDS[#index]);
                                 }
-                                Decision::Shutdown => {
+                                _Decision::Shutdown => {
                                     debug!("Start: SHUTDOWN decision from monitoring. Task '{}' errored out \
                                     during start. The runtime cannot continue.", TASKS_IDS[#index]);
                                     return Err(_CuError::new_with_cause("Task errored out during start.", error));
@@ -157,19 +157,19 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     {
                         let task = &mut self.copper_runtime.tasks.#node_index;
                         if let Err(error) = task.stop(&self.copper_runtime.clock) {
-                            let decision = self.copper_runtime.monitor.process_error(#index, CuTaskState::Stop, &error);
+                            let decision = self.copper_runtime.monitor.process_error(#index, _CuTaskState::Stop, &error);
                             match decision {
-                                Decision::Abort => {
+                                _Decision::Abort => {
                                     debug!("Stop: ABORT decision from monitoring. Task '{}' errored out \
                                     during stop. Aborting all the other starts.", TASKS_IDS[#index]);
                                     return Ok(());
 
                                 }
-                                Decision::Ignore => {
+                                _Decision::Ignore => {
                                     debug!("Stop: IGNORE decision from monitoring. Task '{}' errored out \
                                     during stop. The runtime will continue.", TASKS_IDS[#index]);
                                 }
-                                Decision::Shutdown => {
+                                _Decision::Shutdown => {
                                     debug!("Stop: SHUTDOWN decision from monitoring. Task '{}' errored out \
                                     during stop. The runtime cannot continue.", TASKS_IDS[#index]);
                                     return Err(_CuError::new_with_cause("Task errored out during stop.", error));
@@ -182,19 +182,19 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     {
                         let task = &mut self.copper_runtime.tasks.#node_index;
                         if let Err(error) = task.preprocess(&self.copper_runtime.clock) {
-                            let decision = self.copper_runtime.monitor.process_error(#index, CuTaskState::Preprocess, &error);
+                            let decision = self.copper_runtime.monitor.process_error(#index, _CuTaskState::Preprocess, &error);
                             match decision {
-                                Decision::Abort => {
+                                _Decision::Abort => {
                                     debug!("Preprocess: ABORT decision from monitoring. Task '{}' errored out \
                                     during preprocess. Aborting all the other starts.", TASKS_IDS[#index]);
                                     return Ok(());
 
                                 }
-                                Decision::Ignore => {
+                                _Decision::Ignore => {
                                     debug!("Preprocess: IGNORE decision from monitoring. Task '{}' errored out \
                                     during preprocess. The runtime will continue.", TASKS_IDS[#index]);
                                 }
-                                Decision::Shutdown => {
+                                _Decision::Shutdown => {
                                     debug!("Preprocess: SHUTDOWN decision from monitoring. Task '{}' errored out \
                                     during preprocess. The runtime cannot continue.", TASKS_IDS[#index]);
                                     return Err(_CuError::new_with_cause("Task errored out during preprocess.", error));
@@ -207,19 +207,19 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     {
                         let task = &mut self.copper_runtime.tasks.#node_index;
                         if let Err(error) = task.postprocess(&self.copper_runtime.clock) {
-                            let decision = self.copper_runtime.monitor.process_error(#index, CuTaskState::Postprocess, &error);
+                            let decision = self.copper_runtime.monitor.process_error(#index, _CuTaskState::Postprocess, &error);
                             match decision {
-                                Decision::Abort => {
+                                _Decision::Abort => {
                                     debug!("Postprocess: ABORT decision from monitoring. Task '{}' errored out \
                                     during postprocess. Aborting all the other starts.", TASKS_IDS[#index]);
                                     return Ok(());
 
                                 }
-                                Decision::Ignore => {
+                                _Decision::Ignore => {
                                     debug!("Postprocess: IGNORE decision from monitoring. Task '{}' errored out \
                                     during postprocess. The runtime will continue.", TASKS_IDS[#index]);
                                 }
-                                Decision::Shutdown => {
+                                _Decision::Shutdown => {
                                     debug!("Postprocess: SHUTDOWN decision from monitoring. Task '{}' errored out \
                                     during postprocess. The runtime cannot continue.", TASKS_IDS[#index]);
                                     return Err(_CuError::new_with_cause("Task errored out during postprocess.", error));
@@ -271,9 +271,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         let maybe_error = #task_instance.process(&self.copper_runtime.clock, cumsg_output);
                                         cumsg_output.metadata.after_process = self.copper_runtime.clock.now().into();
                                         if let Err(error) = maybe_error {
-                                            let decision = self.copper_runtime.monitor.process_error(#tid, CuTaskState::Process, &error);
+                                            let decision = self.copper_runtime.monitor.process_error(#tid, _CuTaskState::Process, &error);
                                             match decision {
-                                                Decision::Abort => {
+                                                _Decision::Abort => {
                                                     debug!("Process: ABORT decision from monitoring. Task '{}' errored out \
                                                     during process. Skipping the processing of CL {}.", TASKS_IDS[#tid], id);
                                                     self.copper_runtime.monitor.process_copperlist(&collect_metadata(&culist))?;
@@ -281,12 +281,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                                     return Ok(()); // this returns early from the one iteration call.
 
                                                 }
-                                                Decision::Ignore => {
+                                                _Decision::Ignore => {
                                                     debug!("Process: IGNORE decision from monitoring. Task '{}' errored out \
                                                     during process. The runtime will continue with a forced empty message.", TASKS_IDS[#tid]);
                                                     cumsg_output.clear_payload();
                                                 }
-                                                Decision::Shutdown => {
+                                                _Decision::Shutdown => {
                                                     debug!("Process: SHUTDOWN decision from monitoring. Task '{}' errored out \
                                                     during process. The runtime cannot continue.", TASKS_IDS[#tid]);
                                                     return Err(_CuError::new_with_cause("Task errored out during process.", error));
@@ -325,9 +325,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         let maybe_error = #task_instance.process(&self.copper_runtime.clock, cumsg_input, cumsg_output);
                                         cumsg_output.metadata.after_process = self.copper_runtime.clock.now().into();
                                         if let Err(error) = maybe_error {
-                                            let decision = self.copper_runtime.monitor.process_error(#tid, CuTaskState::Process, &error);
+                                            let decision = self.copper_runtime.monitor.process_error(#tid, _CuTaskState::Process, &error);
                                             match decision {
-                                                Decision::Abort => {
+                                                _Decision::Abort => {
                                                     debug!("Process: ABORT decision from monitoring. Task '{}' errored out \
                                                     during process. Skipping the processing of CL {}.", TASKS_IDS[#tid], id);
                                                     self.copper_runtime.monitor.process_copperlist(&collect_metadata(&culist))?;
@@ -335,12 +335,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                                     return Ok(()); // this returns early from the one iteration call.
 
                                                 }
-                                                Decision::Ignore => {
+                                                _Decision::Ignore => {
                                                     debug!("Process: IGNORE decision from monitoring. Task '{}' errored out \
                                                     during process. The runtime will continue with a forced empty message.", TASKS_IDS[#tid]);
                                                     cumsg_output.clear_payload();
                                                 }
-                                                Decision::Shutdown => {
+                                                _Decision::Shutdown => {
                                                     debug!("Process: SHUTDOWN decision from monitoring. Task '{}' errored out \
                                                     during process. The runtime cannot continue.", TASKS_IDS[#tid]);
                                                     return Err(_CuError::new_with_cause("Task errored out during process.", error));
@@ -452,6 +452,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         use cu29::copperlist::CopperList as _CopperList;
         use cu29::monitoring::CuMonitor as _CuMonitor; // Trait import.
         use cu29::monitoring::NoMonitor as _NoMonitor;
+        use cu29::monitoring::CuTaskState as _CuTaskState;
+        use cu29::monitoring::Decision as _Decision;
         use cu29::clock::RobotClock as _RobotClock;
         use cu29::clock::OptionCuTime as _OptionCuTime;
         use cu29::clock::ClockProvider as _ClockProvider;
