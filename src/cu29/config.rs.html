@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cu29/src/config.rs`."><title>config.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-42fa08075bb476ff.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29" data-themes="" data-resource-suffix="" data-rustdoc-version="1.83.0-nightly (9e394f551 2024-09-25)" data-channel="nightly" data-search-js="search-e056c65ede92db13.js" data-settings-js="settings-805db61a62df4bd2.js" ><script src="../../static.files/storage-1d39b6787ed640ff.js"></script><script defer src="../../static.files/src-script-e66d777a5a92e9b2.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-54bc299d2a5e4e43.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-0111fcff984fae8f.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">cu29/</div>config.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cu29/src/config.rs`."><title>config.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-b778ab399e080a4b.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29" data-themes="" data-resource-suffix="" data-rustdoc-version="1.83.0-nightly (fa724e5d8 2024-09-27)" data-channel="nightly" data-search-js="search-e056c65ede92db13.js" data-settings-js="settings-805db61a62df4bd2.js" ><script src="../../static.files/storage-1d39b6787ed640ff.js"></script><script defer src="../../static.files/src-script-e66d777a5a92e9b2.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-54bc299d2a5e4e43.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-0111fcff984fae8f.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">cu29/</div>config.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
 <a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
@@ -579,7 +579,38 @@
 <a href="#578" id="578">578</a>
 <a href="#579" id="579">579</a>
 <a href="#580" id="580">580</a>
-<a href="#581" id="581">581</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module defines the configuration of the copper runtime.
+<a href="#581" id="581">581</a>
+<a href="#582" id="582">582</a>
+<a href="#583" id="583">583</a>
+<a href="#584" id="584">584</a>
+<a href="#585" id="585">585</a>
+<a href="#586" id="586">586</a>
+<a href="#587" id="587">587</a>
+<a href="#588" id="588">588</a>
+<a href="#589" id="589">589</a>
+<a href="#590" id="590">590</a>
+<a href="#591" id="591">591</a>
+<a href="#592" id="592">592</a>
+<a href="#593" id="593">593</a>
+<a href="#594" id="594">594</a>
+<a href="#595" id="595">595</a>
+<a href="#596" id="596">596</a>
+<a href="#597" id="597">597</a>
+<a href="#598" id="598">598</a>
+<a href="#599" id="599">599</a>
+<a href="#600" id="600">600</a>
+<a href="#601" id="601">601</a>
+<a href="#602" id="602">602</a>
+<a href="#603" id="603">603</a>
+<a href="#604" id="604">604</a>
+<a href="#605" id="605">605</a>
+<a href="#606" id="606">606</a>
+<a href="#607" id="607">607</a>
+<a href="#608" id="608">608</a>
+<a href="#609" id="609">609</a>
+<a href="#610" id="610">610</a>
+<a href="#611" id="611">611</a>
+<a href="#612" id="612">612</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module defines the configuration of the copper runtime.
 //! The configuration is a directed graph where nodes are tasks and edges are connections between tasks.
 //! The configuration is serialized in the RON format.
 //! The configuration is used to generate the runtime code at compile time.
@@ -600,13 +631,13 @@
 /// and the code generation.
 </span><span class="kw">pub type </span>NodeId = u32;
 
-<span class="doccomment">/// This is the configuration of a task instance.
+<span class="doccomment">/// This is the configuration of a component (like a task config or a monitoring config):w
 /// It is a map of key-value pairs.
 /// It is given to the new method of the task implementation.
 </span><span class="attr">#[derive(Serialize, Deserialize, Debug, Clone, Default)]
-</span><span class="kw">pub struct </span>NodeInstanceConfig(<span class="kw">pub </span>HashMap&lt;String, Value&gt;);
+</span><span class="kw">pub struct </span>ComponentConfig(<span class="kw">pub </span>HashMap&lt;String, Value&gt;);
 
-<span class="kw">impl </span>Display <span class="kw">for </span>NodeInstanceConfig {
+<span class="kw">impl </span>Display <span class="kw">for </span>ComponentConfig {
     <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
         <span class="kw">let </span><span class="kw-2">mut </span>first = <span class="bool-val">true</span>;
         <span class="macro">write!</span>(f, <span class="string">"{{"</span>)<span class="question-mark">?</span>;
@@ -622,10 +653,10 @@
 }
 
 <span class="comment">// forward map interface
-</span><span class="kw">impl </span>NodeInstanceConfig {
+</span><span class="kw">impl </span>ComponentConfig {
     <span class="attr">#[allow(dead_code)]
     </span><span class="kw">pub fn </span>new() -&gt; <span class="self">Self </span>{
-        NodeInstanceConfig(HashMap::new())
+        ComponentConfig(HashMap::new())
     }
 
     <span class="attr">#[allow(dead_code)]
@@ -647,7 +678,7 @@
 // )
 
 </span><span class="doccomment">/// Wrapper around the ron::Value to allow for custom serialization.
-</span><span class="attr">#[derive(Serialize, Deserialize, Debug, Clone)]
+</span><span class="attr">#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 </span><span class="kw">pub struct </span>Value(RonValue);
 
 <span class="kw">impl </span>From&lt;i32&gt; <span class="kw">for </span>Value {
@@ -775,7 +806,7 @@
     <span class="attr">#[serde(rename = <span class="string">"type"</span>, skip_serializing_if = <span class="string">"Option::is_none"</span>)]
     </span>type_: <span class="prelude-ty">Option</span>&lt;String&gt;,
     <span class="attr">#[serde(skip_serializing_if = <span class="string">"Option::is_none"</span>)]
-    </span>config: <span class="prelude-ty">Option</span>&lt;NodeInstanceConfig&gt;,
+    </span>config: <span class="prelude-ty">Option</span>&lt;ComponentConfig&gt;,
 }
 
 <span class="kw">impl </span>Node {
@@ -805,7 +836,7 @@
     }
 
     <span class="attr">#[allow(dead_code)]
-    </span><span class="kw">pub fn </span>get_instance_config(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>NodeInstanceConfig&gt; {
+    </span><span class="kw">pub fn </span>get_instance_config(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>ComponentConfig&gt; {
         <span class="self">self</span>.config.as_ref()
     }
 
@@ -819,7 +850,7 @@
     <span class="attr">#[allow(dead_code)]
     </span><span class="kw">pub fn </span>set_param&lt;T: Into&lt;Value&gt;&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, key: <span class="kw-2">&amp;</span>str, value: T) {
         <span class="kw">if </span><span class="self">self</span>.config.is_none() {
-            <span class="self">self</span>.config = <span class="prelude-val">Some</span>(NodeInstanceConfig(HashMap::new()));
+            <span class="self">self</span>.config = <span class="prelude-val">Some</span>(ComponentConfig(HashMap::new()));
         }
         <span class="self">self</span>.config
             .as_mut()
@@ -856,6 +887,15 @@
 </span><span class="kw">pub struct </span>CuConfig {
     <span class="comment">// This is not what is directly serialized, see the custom serialization below.
     </span><span class="kw">pub </span>graph: StableDiGraph&lt;Node, Cnx, NodeId&gt;,
+    monitor: <span class="prelude-ty">Option</span>&lt;Monitor&gt;,
+}
+
+<span class="attr">#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+</span><span class="kw">pub struct </span>Monitor {
+    <span class="attr">#[serde(rename = <span class="string">"type"</span>)]
+    </span><span class="kw">pub </span>type_: String,
+    <span class="attr">#[serde(skip_serializing_if = <span class="string">"Option::is_none"</span>)]
+    </span><span class="kw">pub </span>config: <span class="prelude-ty">Option</span>&lt;ComponentConfig&gt;,
 }
 
 <span class="doccomment">/// The config is a list of tasks and their connections.
@@ -863,6 +903,7 @@
 </span><span class="kw">struct </span>CuConfigRepresentation {
     tasks: Vec&lt;Node&gt;,
     cnx: Vec&lt;Cnx&gt;,
+    monitor: <span class="prelude-ty">Option</span>&lt;Monitor&gt;,
 }
 
 <span class="kw">impl</span>&lt;<span class="lifetime">'de</span>&gt; Deserialize&lt;<span class="lifetime">'de</span>&gt; <span class="kw">for </span>CuConfig {
@@ -898,7 +939,7 @@
                 c.store,
             );
         }
-
+        cuconfig.monitor = representation.monitor;
         <span class="prelude-val">Ok</span>(cuconfig)
     }
 }
@@ -921,7 +962,12 @@
             .map(|edge| <span class="self">self</span>.graph[edge].clone())
             .collect();
 
-        CuConfigRepresentation { tasks, cnx }.serialize(serializer)
+        CuConfigRepresentation {
+            tasks,
+            cnx,
+            monitor: <span class="self">self</span>.monitor.clone(),
+        }
+        .serialize(serializer)
     }
 }
 
@@ -929,6 +975,7 @@
     <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
         CuConfig {
             graph: StableDiGraph::new(),
+            monitor: <span class="prelude-val">None</span>,
         }
     }
 }
@@ -1103,7 +1150,7 @@
     }
 
     <span class="attr">#[allow(dead_code)]
-    </span><span class="kw">pub fn </span>get_all_instances_configs(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;<span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>NodeInstanceConfig&gt;&gt; {
+    </span><span class="kw">pub fn </span>get_all_instances_configs(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;<span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>ComponentConfig&gt;&gt; {
         <span class="self">self</span>.get_all_nodes()
             .iter()
             .map(|node_config| node_config.get_instance_config())
@@ -1158,6 +1205,21 @@
                 .unwrap(),
             <span class="number">1080
         </span>);
+    }
+
+    <span class="attr">#[test]
+    </span><span class="kw">fn </span>test_monitor() {
+        <span class="kw">let </span>txt = <span class="string">r#"( tasks: [], cnx: [], monitor: (type: "ExampleMonitor", ) ) "#</span>;
+        <span class="kw">let </span>config = CuConfig::deserialize_ron(txt);
+        <span class="macro">assert_eq!</span>(config.monitor.as_ref().unwrap().type_, <span class="string">"ExampleMonitor"</span>);
+
+        <span class="kw">let </span>txt =
+            <span class="string">r#"( tasks: [], cnx: [], monitor: (type: "ExampleMonitor", config: { "toto": 4, } )) "#</span>;
+        <span class="kw">let </span>config = CuConfig::deserialize_ron(txt);
+        <span class="macro">assert_eq!</span>(
+            config.monitor.as_ref().unwrap().config.as_ref().unwrap().<span class="number">0</span>[<span class="string">"toto"</span>],
+            <span class="number">4</span>.into()
+        );
     }
 }
 </code></pre></div></section></main></body></html>
