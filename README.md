@@ -70,7 +70,7 @@ Here are some of the features we plan to implement next (in ~order of priority):
 To Reach Beta:
 
 - [x] **Merging**: Add a feature to merge messages from multiple sources as an input to a task.
-- [ ] **Monitoring**: We need a parallel system that can listen to monitoring messages and act accordingly.
+- [x] **Monitoring**: We need a parallel system that can listen to monitoring messages and act accordingly.
 - [ ] **Batching/Aligning**: add a feature to batch messages for high frequency sources to reduce the number of Copper Lists.
 - [ ] **Deterministic log replay + Sim**: As the runtime is generated in a deterministic fashion, we need to add hooks to
   inject messages into an existing runtime.
