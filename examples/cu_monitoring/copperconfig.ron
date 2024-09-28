@@ -1,0 +1,21 @@
+(
+    tasks: [
+        (
+            id: "task0",
+            type: "tasks::ExampleSrc",
+        ),
+        (
+            id: "task1",
+            type: "tasks::ExampleTask",
+        ),
+        (
+            id: "task2",
+            type: "tasks::ExampleSink",
+        ),
+     ],
+    cnx: [
+        (src: "task0", dst: "task1", msg: "i32"),
+        (src: "task1", dst: "task2", msg: "i32"),
+    ],
+    monitor: (type: "ExampleMonitor")
+)

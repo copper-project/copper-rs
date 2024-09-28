@@ -4,7 +4,7 @@
 
 use crate::clock::{ClockProvider, RobotClock};
 use crate::config::{Cnx, CuConfig, NodeId};
-use crate::config::{Node, NodeInstanceConfig};
+use crate::config::{ComponentConfig, Node};
 use crate::copperlist::{CopperList, CopperListState, CuListsManager};
 use crate::CuResult;
 use cu29_log_derive::debug;
@@ -41,10 +41,10 @@ impl<CT, P: CopperListPayload + 'static, const NBCL: usize> CuRuntime<CT, P, NBC
     pub fn new(
         clock: RobotClock,
         config: &CuConfig,
-        tasks_instanciator: impl Fn(Vec<Option<&NodeInstanceConfig>>) -> CuResult<CT>,
+        tasks_instanciator: impl Fn(Vec<Option<&ComponentConfig>>) -> CuResult<CT>,
         logger: impl WriteStream<CopperList<P>> + 'static,
     ) -> CuResult<Self> {
-        let all_instances_configs: Vec<Option<&NodeInstanceConfig>> = config
+        let all_instances_configs: Vec<Option<&ComponentConfig>> = config
             .get_all_nodes()
             .iter()
             .map(|node_config| node_config.get_instance_config())
@@ -363,7 +363,7 @@ mod tests {
     impl Freezable for TestSource {}
 
     impl CuTaskLifecycle for TestSource {
-        fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self>
+        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
         where
             Self: Sized,
         {
@@ -383,7 +383,7 @@ mod tests {
     impl Freezable for TestSink {}
 
     impl CuTaskLifecycle for TestSink {
-        fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self>
+        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
         where
             Self: Sized,
         {
@@ -403,9 +403,7 @@ mod tests {
     type Tasks = (TestSource, TestSink);
     type Msgs = ((),);
 
-    fn tasks_instanciator(
-        all_instances_configs: Vec<Option<&NodeInstanceConfig>>,
-    ) -> CuResult<Tasks> {
+    fn tasks_instanciator(all_instances_configs: Vec<Option<&ComponentConfig>>) -> CuResult<Tasks> {
         Ok((
             TestSource::new(all_instances_configs[0])?,
             TestSink::new(all_instances_configs[1])?,

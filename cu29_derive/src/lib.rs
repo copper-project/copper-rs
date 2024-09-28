@@ -297,7 +297,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let result = quote! {
         // import everything with an _ to avoid clashes with the user's code
         use cu29::config::CuConfig as _CuConfig;
-        use cu29::config::NodeInstanceConfig as _NodeInstanceConfig;
+        use cu29::config::ComponentConfig as _ComponentConfig;
         use cu29::config::read_configuration as _read_configuration;
         use cu29::curuntime::CuRuntime as _CuRuntime;
         use cu29::CuResult as _CuResult;
@@ -328,7 +328,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         // This generates a way to get the metadata of every single message of a culist at low cost
         #collect_metadata_function
 
-        fn tasks_instanciator(all_instances_configs: Vec<Option<&_NodeInstanceConfig>>) -> _CuResult<CuTasks> {
+        fn tasks_instanciator(all_instances_configs: Vec<Option<&_ComponentConfig>>) -> _CuResult<CuTasks> {
             Ok(( #(#task_instances_init_code),*, ))
         }
 

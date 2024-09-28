@@ -1,5 +1,5 @@
 use cu29::clock::{CuDuration, CuTime, RobotClock};
-use cu29::config::NodeInstanceConfig;
+use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuTask, CuTaskLifecycle, Freezable};
 use cu29::{input_msg, output_msg, CuResult};
 use cu29_log_derive::debug;
@@ -109,7 +109,7 @@ pub struct PIDTask {
 impl Freezable for PIDTask {}
 
 impl CuTaskLifecycle for PIDTask {
-    fn new(config: Option<&NodeInstanceConfig>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -191,7 +191,7 @@ impl CuTaskLifecycle for PIDTask {
 }
 
 // Small helper befause we do this again and again
-fn getcfg(config: &NodeInstanceConfig, key: &str, default: f32) -> f32 {
+fn getcfg(config: &ComponentConfig, key: &str, default: f32) -> f32 {
     if let Some(kd) = config.get::<f64>(key) {
         kd as f32
     } else {

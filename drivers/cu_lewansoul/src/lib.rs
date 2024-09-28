@@ -3,7 +3,7 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29::clock::RobotClock;
-use cu29::config::NodeInstanceConfig;
+use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle, Freezable};
 use cu29::{input_msg, CuError, CuResult};
 use serialport::{DataBits, FlowControl, Parity, SerialPort, StopBits};
@@ -188,12 +188,11 @@ impl Freezable for Lewansoul {
 }
 
 impl CuTaskLifecycle for Lewansoul {
-    fn new(config: Option<&NodeInstanceConfig>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {
-        let config =
-            config.ok_or("RPGpio needs a config, None was passed as NodeInstanceConfig")?;
+        let config = config.ok_or("RPGpio needs a config, None was passed as ComponentConfig")?;
         let kv = &config.0;
 
         let serial_dev: String = kv
@@ -267,7 +266,7 @@ mod tests {
     #[test]
     #[ignore]
     fn end2end_2_servos() {
-        let mut config = NodeInstanceConfig::default();
+        let mut config = ComponentConfig::default();
         config
             .0
             .insert("serial_dev".to_string(), "/dev/ttyACM0".to_string().into());

@@ -1,5 +1,5 @@
 use bincode::{Decode, Encode};
-use cu29::config::NodeInstanceConfig;
+use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle, Freezable};
 use cu29::CuResult;
 use cu29::{clock, input_msg};
@@ -67,12 +67,11 @@ impl Freezable for RPGpio {
 }
 
 impl CuTaskLifecycle for RPGpio {
-    fn new(config: Option<&NodeInstanceConfig>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {
-        let config =
-            config.ok_or("RPGpio needs a config, None was passed as NodeInstanceConfig")?;
+        let config = config.ok_or("RPGpio needs a config, None was passed as ComponentConfig")?;
 
         let pin_nb: u8 = (*config.0.get("pin").expect(
             "RPGpio expects a pin config value pointing to output pin you want to address",

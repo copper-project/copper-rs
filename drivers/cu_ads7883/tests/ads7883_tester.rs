@@ -1,5 +1,5 @@
 use cu29::clock::RobotClock;
-use cu29::config::NodeInstanceConfig;
+use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle, Freezable};
 use cu29::{input_msg, CuResult};
 use cu29_derive::copper_runtime;
@@ -16,7 +16,7 @@ pub struct ADS78883TestSink {}
 impl Freezable for ADS78883TestSink {}
 
 impl CuTaskLifecycle for ADS78883TestSink {
-    fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {

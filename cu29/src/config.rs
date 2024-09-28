@@ -19,13 +19,13 @@ use std::fs::read_to_string;
 /// and the code generation.
 pub type NodeId = u32;
 
-/// This is the configuration of a task instance.
+/// This is the configuration of a component (like a task config or a monitoring config):w
 /// It is a map of key-value pairs.
 /// It is given to the new method of the task implementation.
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
-pub struct NodeInstanceConfig(pub HashMap<String, Value>);
+pub struct ComponentConfig(pub HashMap<String, Value>);
 
-impl Display for NodeInstanceConfig {
+impl Display for ComponentConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut first = true;
         write!(f, "{{")?;
@@ -41,10 +41,10 @@ impl Display for NodeInstanceConfig {
 }
 
 // forward map interface
-impl NodeInstanceConfig {
+impl ComponentConfig {
     #[allow(dead_code)]
     pub fn new() -> Self {
-        NodeInstanceConfig(HashMap::new())
+        ComponentConfig(HashMap::new())
     }
 
     #[allow(dead_code)]
@@ -66,7 +66,7 @@ impl NodeInstanceConfig {
 // )
 
 /// Wrapper around the ron::Value to allow for custom serialization.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Value(RonValue);
 
 impl From<i32> for Value {
@@ -194,7 +194,7 @@ pub struct Node {
     #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
     type_: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    config: Option<NodeInstanceConfig>,
+    config: Option<ComponentConfig>,
 }
 
 impl Node {
@@ -224,7 +224,7 @@ impl Node {
     }
 
     #[allow(dead_code)]
-    pub fn get_instance_config(&self) -> Option<&NodeInstanceConfig> {
+    pub fn get_instance_config(&self) -> Option<&ComponentConfig> {
         self.config.as_ref()
     }
 
@@ -238,7 +238,7 @@ impl Node {
     #[allow(dead_code)]
     pub fn set_param<T: Into<Value>>(&mut self, key: &str, value: T) {
         if self.config.is_none() {
-            self.config = Some(NodeInstanceConfig(HashMap::new()));
+            self.config = Some(ComponentConfig(HashMap::new()));
         }
         self.config
             .as_mut()
@@ -275,6 +275,15 @@ pub struct Cnx {
 pub struct CuConfig {
     // This is not what is directly serialized, see the custom serialization below.
     pub graph: StableDiGraph<Node, Cnx, NodeId>,
+    monitor: Option<Monitor>,
+}
+
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+pub struct Monitor {
+    #[serde(rename = "type")]
+    pub type_: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub config: Option<ComponentConfig>,
 }
 
 /// The config is a list of tasks and their connections.
@@ -282,6 +291,7 @@ pub struct CuConfig {
 struct CuConfigRepresentation {
     tasks: Vec<Node>,
     cnx: Vec<Cnx>,
+    monitor: Option<Monitor>,
 }
 
 impl<'de> Deserialize<'de> for CuConfig {
@@ -317,7 +327,7 @@ impl<'de> Deserialize<'de> for CuConfig {
                 c.store,
             );
         }
-
+        cuconfig.monitor = representation.monitor;
         Ok(cuconfig)
     }
 }
@@ -340,7 +350,12 @@ impl Serialize for CuConfig {
             .map(|edge| self.graph[edge].clone())
             .collect();
 
-        CuConfigRepresentation { tasks, cnx }.serialize(serializer)
+        CuConfigRepresentation {
+            tasks,
+            cnx,
+            monitor: self.monitor.clone(),
+        }
+        .serialize(serializer)
     }
 }
 
@@ -348,6 +363,7 @@ impl Default for CuConfig {
     fn default() -> Self {
         CuConfig {
             graph: StableDiGraph::new(),
+            monitor: None,
         }
     }
 }
@@ -522,7 +538,7 @@ impl CuConfig {
     }
 
     #[allow(dead_code)]
-    pub fn get_all_instances_configs(&self) -> Vec<Option<&NodeInstanceConfig>> {
+    pub fn get_all_instances_configs(&self) -> Vec<Option<&ComponentConfig>> {
         self.get_all_nodes()
             .iter()
             .map(|node_config| node_config.get_instance_config())
@@ -576,6 +592,21 @@ mod tests {
                 .get_param::<i32>("resolution-height")
                 .unwrap(),
             1080
+        );
+    }
+
+    #[test]
+    fn test_monitor() {
+        let txt = r#"( tasks: [], cnx: [], monitor: (type: "ExampleMonitor", ) ) "#;
+        let config = CuConfig::deserialize_ron(txt);
+        assert_eq!(config.monitor.as_ref().unwrap().type_, "ExampleMonitor");
+
+        let txt =
+            r#"( tasks: [], cnx: [], monitor: (type: "ExampleMonitor", config: { "toto": 4, } )) "#;
+        let config = CuConfig::deserialize_ron(txt);
+        assert_eq!(
+            config.monitor.as_ref().unwrap().config.as_ref().unwrap().0["toto"],
+            4.into()
         );
     }
 }
