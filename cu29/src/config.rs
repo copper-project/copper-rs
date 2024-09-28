@@ -449,6 +449,7 @@ impl CuConfig {
 
     /// Adds an edge between two nodes/tasks in the configuration graph.
     /// msg_type is the type of message exchanged between the two nodes/tasks.
+    #[allow(dead_code)]
     pub fn connect(&mut self, source: NodeId, target: NodeId, msg_type: &str) {
         self.connect_ext(source, target, msg_type, None, None);
     }
