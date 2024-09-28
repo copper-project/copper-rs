@@ -1,1 +1,1 @@
-searchState.loadedDescShard("cu29_derive", 0, "Adds #[copper_runtime(config = “path”)] to your …")
+searchState.loadedDescShard("cu29_derive", 0, "Adds #[copper_runtime(config = “path”)] to your …\nGenerates the tuple inner of copper list from the config. …")

@@ -326,7 +326,27 @@
 <a href="#325" id="325">325</a>
 <a href="#326" id="326">326</a>
 <a href="#327" id="327">327</a>
-<a href="#328" id="328">328</a></pre></div><pre class="rust"><code><span class="doccomment">//! Some basic internal monitoring tooling Copper uses to monitor itself and the tasks it is running.
+<a href="#328" id="328">328</a>
+<a href="#329" id="329">329</a>
+<a href="#330" id="330">330</a>
+<a href="#331" id="331">331</a>
+<a href="#332" id="332">332</a>
+<a href="#333" id="333">333</a>
+<a href="#334" id="334">334</a>
+<a href="#335" id="335">335</a>
+<a href="#336" id="336">336</a>
+<a href="#337" id="337">337</a>
+<a href="#338" id="338">338</a>
+<a href="#339" id="339">339</a>
+<a href="#340" id="340">340</a>
+<a href="#341" id="341">341</a>
+<a href="#342" id="342">342</a>
+<a href="#343" id="343">343</a>
+<a href="#344" id="344">344</a>
+<a href="#345" id="345">345</a>
+<a href="#346" id="346">346</a>
+<a href="#347" id="347">347</a>
+<a href="#348" id="348">348</a></pre></div><pre class="rust"><code><span class="doccomment">//! Some basic internal monitoring tooling Copper uses to monitor itself and the tasks it is running.
 //!
 
 </span><span class="kw">use </span><span class="kw">crate</span>::config::ComponentConfig;
@@ -337,7 +357,7 @@
 <span class="kw">use </span>std::sync::atomic::{AtomicUsize, Ordering};
 
 <span class="doccomment">/// The state of a task.
-</span><span class="attr">#[derive(Debug)]
+</span><span class="attr">#[derive(Debug, Serialize, Deserialize)]
 </span><span class="kw">pub enum </span>CuTaskState {
     Start,
     Preprocess,
@@ -349,13 +369,13 @@
 <span class="doccomment">/// Monitor decision to be taken when a task errored out.
 </span><span class="attr">#[derive(Debug)]
 </span><span class="kw">pub enum </span>Decision {
-    SkipCopperlist,
-    ContinueWithNoOuput,
-    Shutdown,
-}
+    Abort,    <span class="comment">// for a step (stop, start) or a copperlist, just stop trying to process it.
+    </span>Ignore, <span class="comment">// Ignore this error and try to continue, ie calling the other tasks steps, setting a None return value and continue a copperlist.
+    </span>Shutdown, <span class="comment">// This is a fatal error, shutdown the copper as cleanly as possible.
+</span>}
 
 <span class="doccomment">/// Trait to implement a monitoring task.
-</span><span class="kw">pub trait </span>CuMonitor {
+</span><span class="kw">pub trait </span>CuMonitor: Sized {
     <span class="kw">fn </span>new(config: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>ComponentConfig&gt;, taskids: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>[<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str]) -&gt; CuResult&lt;<span class="self">Self</span>&gt;
     <span class="kw">where
         </span><span class="self">Self</span>: Sized;
@@ -368,11 +388,30 @@
     </span><span class="kw">fn </span>process_copperlist(<span class="kw-2">&amp;</span><span class="self">self</span>, msgs: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>CuMsgMetadata]) -&gt; CuResult&lt;()&gt;;
 
     <span class="doccomment">/// Callbacked when a Task errored out. The runtime requires an immediate decision.
-    </span><span class="kw">fn </span>process_error(<span class="kw-2">&amp;</span><span class="self">self</span>, taskid: usize, step: CuTaskState, error: CuError) -&gt; Decision;
+    </span><span class="kw">fn </span>process_error(<span class="kw-2">&amp;</span><span class="self">self</span>, taskid: usize, step: CuTaskState, error: <span class="kw-2">&amp;</span>CuError) -&gt; Decision;
 
     <span class="doccomment">/// Callbacked when copper is stopping.
-    </span><span class="kw">fn </span>stop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; CuResult&lt;()&gt; {
+    </span><span class="kw">fn </span>stop(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _clock: <span class="kw-2">&amp;</span>RobotClock) -&gt; CuResult&lt;()&gt; {
         <span class="prelude-val">Ok</span>(())
+    }
+}
+
+<span class="doccomment">/// A do nothing monitor if no monitor is provided.
+/// This is basically defining the default behavior of Copper in case of error.
+</span><span class="kw">pub struct </span>NoMonitor {}
+<span class="kw">impl </span>CuMonitor <span class="kw">for </span>NoMonitor {
+    <span class="kw">fn </span>new(_config: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>ComponentConfig&gt;, _taskids: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>[<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str]) -&gt; CuResult&lt;<span class="self">Self</span>&gt; {
+        <span class="prelude-val">Ok</span>(NoMonitor {})
+    }
+
+    <span class="kw">fn </span>process_copperlist(<span class="kw-2">&amp;</span><span class="self">self</span>, _msgs: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>CuMsgMetadata]) -&gt; CuResult&lt;()&gt; {
+        <span class="comment">// By default, do nothing.
+        </span><span class="prelude-val">Ok</span>(())
+    }
+
+    <span class="kw">fn </span>process_error(<span class="kw-2">&amp;</span><span class="self">self</span>, _taskid: usize, _step: CuTaskState, _error: <span class="kw-2">&amp;</span>CuError) -&gt; Decision {
+        <span class="comment">// By default, just try to continue.
+        </span>Decision::Ignore
     }
 }
 
@@ -453,6 +492,7 @@
 
 <span class="kw">use </span>cu29_log_derive::debug;
 <span class="kw">use </span>hdrhistogram::Histogram;
+<span class="kw">use </span>serde_derive::{Deserialize, Serialize};
 
 <span class="doccomment">/// Accumulative stat object that can give your some real time statistics.
 </span><span class="kw">pub struct </span>LiveStatistics {

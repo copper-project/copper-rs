@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["read_configuration"],"struct":["Cnx","ComponentConfig","CuConfig","Monitor","Node","Value"],"type":["NodeId"]};
+window.SIDEBAR_ITEMS = {"fn":["read_configuration"],"struct":["Cnx","ComponentConfig","CuConfig","MonitorConfig","Node","Value"],"type":["NodeId"]};

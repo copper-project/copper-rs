@@ -466,7 +466,7 @@
 <span class="kw">use </span>cu29_traits::{CuError, CuResult, UnifiedLogType};
 
 <span class="kw">use </span>clap::{Parser, Subcommand, ValueEnum};
-<span class="kw">use </span>cu29_traits::CopperListPayload;
+<span class="kw">use </span>cu29_traits::CopperListTuple;
 <span class="kw">use </span>cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader};
 
 <span class="attr">#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
@@ -511,7 +511,7 @@
 /// It depends on the specific type of the CopperList payload that is determined at compile time from the configuration.
 </span><span class="kw">pub fn </span>run_cli&lt;P&gt;() -&gt; CuResult&lt;()&gt;
 <span class="kw">where
-    </span>P: CopperListPayload,
+    </span>P: CopperListTuple,
 {
     <span class="kw">let </span>args = LogReaderCli::parse();
     <span class="kw">let </span>unifiedlog_base = args.unifiedlog_base;
@@ -544,7 +544,7 @@
 
 <span class="doccomment">/// Extracts the copper lists from a binary representation.
 /// P is the Payload determined by the configuration of the application.
-</span><span class="kw">pub fn </span>copperlists_dump&lt;P: CopperListPayload&gt;(
+</span><span class="kw">pub fn </span>copperlists_dump&lt;P: CopperListTuple&gt;(
     <span class="kw-2">mut </span>src: <span class="kw">impl </span>Read,
 ) -&gt; <span class="kw">impl </span>Iterator&lt;Item = CopperList&lt;P&gt;&gt; {
     std::iter::from_fn(<span class="kw">move </span>|| {

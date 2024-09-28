@@ -417,7 +417,7 @@
 <span class="kw">use </span>bincode::{Decode, Encode};
 <span class="kw">use </span>std::fmt;
 
-<span class="kw">use </span>cu29_traits::CopperListPayload;
+<span class="kw">use </span>cu29_traits::CopperListTuple;
 <span class="kw">use </span>serde_derive::Serialize;
 <span class="kw">use </span>std::fmt::Display;
 <span class="kw">use </span>std::iter::{Chain, Rev};
@@ -456,13 +456,13 @@
 }
 
 <span class="attr">#[derive(Debug, Encode, Decode)]
-</span><span class="kw">pub struct </span>CopperList&lt;P: CopperListPayload&gt; {
+</span><span class="kw">pub struct </span>CopperList&lt;P: CopperListTuple&gt; {
     <span class="kw">pub </span>id: u32,
     state: CopperListState,
     <span class="kw">pub </span>payload: P, <span class="comment">// This is generated from the runtime.
 </span>}
 
-<span class="kw">impl</span>&lt;P: CopperListPayload&gt; CopperList&lt;P&gt; {
+<span class="kw">impl</span>&lt;P: CopperListTuple&gt; CopperList&lt;P&gt; {
     <span class="comment">// This is not the usual way to create a CopperList, this is just for testing.
     </span><span class="kw">pub fn </span>new(id: u32, payload: P) -&gt; <span class="self">Self </span>{
         CopperList {
@@ -484,14 +484,14 @@
 <span class="doccomment">/// This structure maintains the entire memory needed by Copper for one loop for the inter tasks communication within a process.
 /// P or Payload is typically a Tuple of various types of messages that are exchanged between tasks.
 /// N is the maximum number of in flight Copper List the runtime can support.
-</span><span class="kw">pub struct </span>CuListsManager&lt;P: CopperListPayload, <span class="kw">const </span>N: usize&gt; {
+</span><span class="kw">pub struct </span>CuListsManager&lt;P: CopperListTuple, <span class="kw">const </span>N: usize&gt; {
     data: Box&lt;[CopperList&lt;P&gt;; N]&gt;,
     length: usize,
     insertion_index: usize,
     current_cl_id: u32,
 }
 
-<span class="kw">impl</span>&lt;P: CopperListPayload + fmt::Debug, <span class="kw">const </span>N: usize&gt; fmt::Debug <span class="kw">for </span>CuListsManager&lt;P, N&gt; {
+<span class="kw">impl</span>&lt;P: CopperListTuple + fmt::Debug, <span class="kw">const </span>N: usize&gt; fmt::Debug <span class="kw">for </span>CuListsManager&lt;P, N&gt; {
     <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
         f.debug_struct(<span class="string">"CuListsManager"</span>)
             .field(<span class="string">"data"</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.data)
@@ -507,7 +507,7 @@
 <span class="kw">pub type </span>AscIter&lt;<span class="lifetime">'a</span>, T&gt; = Chain&lt;SliceIter&lt;<span class="lifetime">'a</span>, T&gt;, SliceIter&lt;<span class="lifetime">'a</span>, T&gt;&gt;;
 <span class="kw">pub type </span>AscIterMut&lt;<span class="lifetime">'a</span>, T&gt; = Chain&lt;SliceIterMut&lt;<span class="lifetime">'a</span>, T&gt;, SliceIterMut&lt;<span class="lifetime">'a</span>, T&gt;&gt;;
 
-<span class="kw">impl</span>&lt;P: CopperListPayload, <span class="kw">const </span>N: usize&gt; CuListsManager&lt;P, N&gt; {
+<span class="kw">impl</span>&lt;P: CopperListTuple, <span class="kw">const </span>N: usize&gt; CuListsManager&lt;P, N&gt; {
     <span class="kw">pub fn </span>new() -&gt; <span class="self">Self </span>{
         <span class="kw">let </span>data = <span class="kw">unsafe </span>{
             <span class="kw">let </span>layout = std::alloc::Layout::new::&lt;[CopperList&lt;P&gt;; N]&gt;();

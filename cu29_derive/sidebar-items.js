@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"attr":["copper_runtime"],"macro":["gen_culist_payload"]};
+window.SIDEBAR_ITEMS = {"attr":["copper_runtime"],"macro":["gen_culist_tuple"]};

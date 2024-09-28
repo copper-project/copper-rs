@@ -507,7 +507,23 @@
 <a href="#506" id="506">506</a>
 <a href="#507" id="507">507</a>
 <a href="#508" id="508">508</a>
-<a href="#509" id="509">509</a></pre></div><pre class="rust"><code><span class="doccomment">//! CuRuntime is the heart of what copper is running on the robot.
+<a href="#509" id="509">509</a>
+<a href="#510" id="510">510</a>
+<a href="#511" id="511">511</a>
+<a href="#512" id="512">512</a>
+<a href="#513" id="513">513</a>
+<a href="#514" id="514">514</a>
+<a href="#515" id="515">515</a>
+<a href="#516" id="516">516</a>
+<a href="#517" id="517">517</a>
+<a href="#518" id="518">518</a>
+<a href="#519" id="519">519</a>
+<a href="#520" id="520">520</a>
+<a href="#521" id="521">521</a>
+<a href="#522" id="522">522</a>
+<a href="#523" id="523">523</a>
+<a href="#524" id="524">524</a>
+<a href="#525" id="525">525</a></pre></div><pre class="rust"><code><span class="doccomment">//! CuRuntime is the heart of what copper is running on the robot.
 //! It is exposed to the user via the `copper_runtime` macro injecting it as a field in their application struct.
 //!
 
@@ -515,9 +531,9 @@
 <span class="kw">use </span><span class="kw">crate</span>::config::{Cnx, CuConfig, NodeId};
 <span class="kw">use </span><span class="kw">crate</span>::config::{ComponentConfig, Node};
 <span class="kw">use </span><span class="kw">crate</span>::copperlist::{CopperList, CopperListState, CuListsManager};
+<span class="kw">use </span><span class="kw">crate</span>::monitoring::CuMonitor;
 <span class="kw">use </span><span class="kw">crate</span>::CuResult;
-<span class="kw">use </span>cu29_log_derive::debug;
-<span class="kw">use </span>cu29_traits::CopperListPayload;
+<span class="kw">use </span>cu29_traits::CopperListTuple;
 <span class="kw">use </span>cu29_traits::WriteStream;
 <span class="kw">use </span>petgraph::prelude::<span class="kw-2">*</span>;
 <span class="kw">use </span>std::fmt::Debug;
@@ -525,9 +541,11 @@
 <span class="doccomment">/// This is the main structure that will be injected as a member of the Application struct.
 /// CT is the tuple of all the tasks in order of execution.
 /// CL is the type of the copper list, representing the input/output messages for all the tasks.
-</span><span class="kw">pub struct </span>CuRuntime&lt;CT, P: CopperListPayload, <span class="kw">const </span>NBCL: usize&gt; {
+</span><span class="kw">pub struct </span>CuRuntime&lt;CT, P: CopperListTuple, M: CuMonitor, <span class="kw">const </span>NBCL: usize&gt; {
     <span class="doccomment">/// The tuple of all the tasks in order of execution.
-    </span><span class="kw">pub </span>task_instances: CT,
+    </span><span class="kw">pub </span>tasks: CT,
+
+    <span class="kw">pub </span>monitor: M,
 
     <span class="doccomment">/// Copper lists hold in order all the input/output messages for all the tasks.
     </span><span class="kw">pub </span>copper_lists_manager: CuListsManager&lt;P, NBCL&gt;,
@@ -540,17 +558,20 @@
 }
 
 <span class="doccomment">/// To be able to share the clock we make the runtime a clock provider.
-</span><span class="kw">impl</span>&lt;CT, P: CopperListPayload, <span class="kw">const </span>NBCL: usize&gt; ClockProvider <span class="kw">for </span>CuRuntime&lt;CT, P, NBCL&gt; {
+</span><span class="kw">impl</span>&lt;CT, P: CopperListTuple, M: CuMonitor, <span class="kw">const </span>NBCL: usize&gt; ClockProvider
+    <span class="kw">for </span>CuRuntime&lt;CT, P, M, NBCL&gt;
+{
     <span class="kw">fn </span>get_clock(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; RobotClock {
         <span class="self">self</span>.clock.clone()
     }
 }
 
-<span class="kw">impl</span>&lt;CT, P: CopperListPayload + <span class="lifetime">'static</span>, <span class="kw">const </span>NBCL: usize&gt; CuRuntime&lt;CT, P, NBCL&gt; {
+<span class="kw">impl</span>&lt;CT, P: CopperListTuple + <span class="lifetime">'static</span>, M: CuMonitor, <span class="kw">const </span>NBCL: usize&gt; CuRuntime&lt;CT, P, M, NBCL&gt; {
     <span class="kw">pub fn </span>new(
         clock: RobotClock,
         config: <span class="kw-2">&amp;</span>CuConfig,
         tasks_instanciator: <span class="kw">impl </span>Fn(Vec&lt;<span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>ComponentConfig&gt;&gt;) -&gt; CuResult&lt;CT&gt;,
+        monitor_instanciator: <span class="kw">impl </span>Fn(<span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>ComponentConfig&gt;) -&gt; M,
         logger: <span class="kw">impl </span>WriteStream&lt;CopperList&lt;P&gt;&gt; + <span class="lifetime">'static</span>,
     ) -&gt; CuResult&lt;<span class="self">Self</span>&gt; {
         <span class="kw">let </span>all_instances_configs: Vec&lt;<span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>ComponentConfig&gt;&gt; = config
@@ -558,10 +579,17 @@
             .iter()
             .map(|node_config| node_config.get_instance_config())
             .collect();
-        <span class="kw">let </span>task_instances = tasks_instanciator(all_instances_configs)<span class="question-mark">?</span>;
+        <span class="kw">let </span>tasks = tasks_instanciator(all_instances_configs)<span class="question-mark">?</span>;
+
+        <span class="kw">let </span>monitor = <span class="kw">if let </span><span class="prelude-val">Some</span>(monitor_section) = config.get_monitor_config() {
+            monitor_instanciator(monitor_section.get_config())
+        } <span class="kw">else </span>{
+            monitor_instanciator(<span class="prelude-val">None</span>)
+        };
 
         <span class="kw">let </span>runtime = <span class="self">Self </span>{
-            task_instances,
+            tasks,
+            monitor,
             copper_lists_manager: CuListsManager::new(), <span class="comment">// placeholder
             </span>clock,
             logger: Box::new(logger),
@@ -575,7 +603,6 @@
     }
 
     <span class="kw">pub fn </span>end_of_processing(<span class="kw-2">&amp;mut </span><span class="self">self</span>, culistid: u32) {
-        <span class="macro">debug!</span>(<span class="string">"End of processing for CL #{}"</span>, culistid);
         <span class="kw">let </span><span class="kw-2">mut </span>is_top = <span class="bool-val">true</span>;
         <span class="kw">let </span><span class="kw-2">mut </span>nb_done = <span class="number">0</span>;
         <span class="self">self</span>.copper_lists_manager.iter_mut().for_each(|cl| {
@@ -586,7 +613,6 @@
             // serialize them all and Free them.
             </span><span class="kw">if </span>is_top &amp;&amp; cl.get_state() == CopperListState::DoneProcessing {
                 cl.change_state(CopperListState::BeingSerialized);
-                <span class="macro">debug!</span>(<span class="string">"Logging CL #{}"</span>, cl.id);
                 <span class="self">self</span>.logger.log(<span class="kw-2">&amp;</span>cl).unwrap();
                 cl.change_state(CopperListState::Free);
                 nb_done += <span class="number">1</span>;
@@ -595,8 +621,7 @@
             }
         });
         <span class="kw">for _ in </span><span class="number">0</span>..nb_done {
-            <span class="kw">let </span>cl = <span class="self">self</span>.copper_lists_manager.pop();
-            <span class="macro">debug!</span>(<span class="string">"Popped CL #{}"</span>, cl.unwrap().id);
+            <span class="kw">let _ </span>= <span class="self">self</span>.copper_lists_manager.pop();
         }
     }
 }
@@ -865,6 +890,7 @@
     <span class="kw">use </span><span class="kw">crate</span>::config::Node;
     <span class="kw">use </span><span class="kw">crate</span>::cutask::{CuSinkTask, CuTaskLifecycle};
     <span class="kw">use </span><span class="kw">crate</span>::cutask::{CuSrcTask, Freezable};
+    <span class="kw">use </span><span class="kw">crate</span>::monitoring::NoMonitor;
     <span class="kw">use </span>bincode::Encode;
 
     <span class="kw">pub struct </span>TestSource {}
@@ -919,6 +945,10 @@
         ))
     }
 
+    <span class="kw">fn </span>monitor_instanciator(_config: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>ComponentConfig&gt;) -&gt; NoMonitor {
+        NoMonitor {}
+    }
+
     <span class="attr">#[derive(Debug)]
     </span><span class="kw">struct </span>FakeWriter {}
 
@@ -934,10 +964,11 @@
         config.add_node(Node::new(<span class="string">"a"</span>, <span class="string">"TestSource"</span>));
         config.add_node(Node::new(<span class="string">"b"</span>, <span class="string">"TestSink"</span>));
         config.connect(<span class="number">0</span>, <span class="number">1</span>, <span class="string">"()"</span>);
-        <span class="kw">let </span>runtime = CuRuntime::&lt;Tasks, Msgs, <span class="number">2</span>&gt;::new(
+        <span class="kw">let </span>runtime = CuRuntime::&lt;Tasks, Msgs, NoMonitor, <span class="number">2</span>&gt;::new(
             RobotClock::default(),
             <span class="kw-2">&amp;</span>config,
             tasks_instanciator,
+            monitor_instanciator,
             FakeWriter {},
         );
         <span class="macro">assert!</span>(runtime.is_ok());
@@ -949,10 +980,11 @@
         config.add_node(Node::new(<span class="string">"a"</span>, <span class="string">"TestSource"</span>));
         config.add_node(Node::new(<span class="string">"b"</span>, <span class="string">"TestSink"</span>));
         config.connect(<span class="number">0</span>, <span class="number">1</span>, <span class="string">"()"</span>);
-        <span class="kw">let </span><span class="kw-2">mut </span>runtime = CuRuntime::&lt;Tasks, Msgs, <span class="number">2</span>&gt;::new(
+        <span class="kw">let </span><span class="kw-2">mut </span>runtime = CuRuntime::&lt;Tasks, Msgs, NoMonitor, <span class="number">2</span>&gt;::new(
             RobotClock::default(),
             <span class="kw-2">&amp;</span>config,
             tasks_instanciator,
+            monitor_instanciator,
             FakeWriter {},
         )
         .unwrap();
