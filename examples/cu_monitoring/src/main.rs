@@ -2,8 +2,10 @@ use cu29::config::ComponentConfig;
 use cu29::cutask::CuMsgMetadata;
 use cu29::monitoring::{CuMonitor, CuTaskState, Decision};
 use cu29_derive::copper_runtime;
+use cu29_helpers::basic_copper_setup;
 use cu29_log_derive::debug;
 use cu29_traits::{CuError, CuResult};
+use std::path::PathBuf;
 
 pub mod tasks {
     use cu29::clock::RobotClock;
@@ -93,35 +95,57 @@ struct App {}
 
 impl CuMonitor for ExampleMonitor {
     fn new(_config: Option<&ComponentConfig>, taskids: &'static [&str]) -> CuResult<Self> {
+        debug!("Monitoring: created: {}", taskids);
         Ok(ExampleMonitor { tasks: taskids })
     }
 
-    fn start(&mut self, _clock: &_RobotClock) -> CuResult<()> {
+    fn start(&mut self, clock: &_RobotClock) -> CuResult<()> {
+        debug!("Monitoring: started: {}", clock.now());
         Ok(())
     }
 
     fn process_copperlist(&self, msgs: &[&CuMsgMetadata]) -> CuResult<()> {
+        debug!("Monitoring: Processing copperlist...");
         for t in msgs.iter().enumerate() {
             let (taskid, metadata) = t;
-            println!("Task: {} -> {}", taskid, metadata);
+            debug!("Task: {} -> {}", taskid, metadata);
         }
         Ok(())
     }
 
-    fn process_error(&self, taskid: usize, step: CuTaskState, error: CuError) -> Decision {
-        println!(
-            "Task: {} step: {:?} error: {}",
+    fn process_error(&self, taskid: usize, step: CuTaskState, error: &CuError) -> Decision {
+        debug!(
+            "Monitoring: Processing error task: {} step: {} error: {}",
             self.tasks[taskid], step, error
         );
-        Decision::ContinueWithNoOuput
+        Decision::Ignore
     }
 
-    fn stop(&mut self) -> CuResult<()> {
-        println!("Stopped");
+    fn stop(&mut self, clock: &_RobotClock) -> CuResult<()> {
+        debug!("Monitoring: stopped: {}", clock.now());
         Ok(())
     }
 }
 
+const SLAB_SIZE: Option<usize> = Some(1024 * 1024 * 1);
 fn main() {
-    println!("Hello, world!");
+    let logger_path = "monitor.copper";
+    let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), SLAB_SIZE, true)
+        .expect("Failed to setup logger.");
+    debug!("Logger created at {}.", path = logger_path);
+    let clock = copper_ctx.clock;
+    debug!("Creating application... ");
+    let mut application = App::new(clock.clone(), copper_ctx.unified_logger.clone())
+        .expect("Failed to create runtime.");
+    debug!("Running... starting clock: {}.", clock.now());
+    application
+        .start_all_tasks()
+        .expect("Failed to start application.");
+    application
+        .run_one_iteration()
+        .expect("Failed to run application.");
+    application
+        .stop_all_tasks()
+        .expect("Failed to stop application.");
+    debug!("End of program: {}.", clock.now());
 }
