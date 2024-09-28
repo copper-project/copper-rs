@@ -147,7 +147,7 @@ pub struct FlippingSource {
 // to maximize your opportunity to not use resources outside of the critical execution path: for example start, stop, 
 // pre_process, post_process etc...
 impl CuTaskLifecycle for FlippingSource {
-    fn new(_config: Option<&copper::config::NodeInstanceConfig>) -> CuResult<Self>
+    fn new(_config: Option<&copper::config::ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {

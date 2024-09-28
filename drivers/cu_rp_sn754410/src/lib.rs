@@ -3,7 +3,7 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29::clock::{CuTime, RobotClock};
-use cu29::config::NodeInstanceConfig;
+use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle, Freezable};
 use cu29::{input_msg, CuResult};
 use serde::{Deserialize, Serialize};
@@ -87,7 +87,7 @@ impl SN754410 {
 }
 
 impl CuTaskLifecycle for SN754410 {
-    fn new(config: Option<&NodeInstanceConfig>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -168,7 +168,7 @@ impl<'cl> CuSinkTask<'cl> for SN754410 {
 pub mod test_support {
     use crate::MotorPayload;
     use cu29::clock::RobotClock;
-    use cu29::config::NodeInstanceConfig;
+    use cu29::config::ComponentConfig;
     use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
     use cu29::{output_msg, CuResult};
 
@@ -177,7 +177,7 @@ pub mod test_support {
     impl Freezable for SN754410TestSrc {}
 
     impl CuTaskLifecycle for SN754410TestSrc {
-        fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self> {
+        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
             Ok(Self {})
         }
     }

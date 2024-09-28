@@ -2,7 +2,7 @@
 //! or interact with to create a Copper task.
 
 use crate::clock::OptionCuTime;
-use crate::config::NodeInstanceConfig;
+use crate::config::ComponentConfig;
 use crate::CuResult;
 use bincode::de::Decode;
 use bincode::de::Decoder;
@@ -146,7 +146,7 @@ pub trait Freezable {
 /// It defines the lifecycle of a task.
 /// It provides a default empty implementation as all those execution steps are optional.
 pub trait CuTaskLifecycle: Freezable {
-    fn new(config: Option<&NodeInstanceConfig>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized;
 

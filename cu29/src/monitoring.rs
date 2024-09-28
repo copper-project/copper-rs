@@ -1,8 +1,52 @@
 //! Some basic internal monitoring tooling Copper uses to monitor itself and the tasks it is running.
 //!
 
+use crate::config::ComponentConfig;
+use crate::cutask::CuMsgMetadata;
+use cu29_clock::RobotClock;
+use cu29_traits::{CuError, CuResult};
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
+
+/// The state of a task.
+#[derive(Debug)]
+pub enum CuTaskState {
+    Start,
+    Preprocess,
+    Process,
+    Postprocess,
+    Stop,
+}
+
+/// Monitor decision to be taken when a task errored out.
+#[derive(Debug)]
+pub enum Decision {
+    SkipCopperlist,
+    ContinueWithNoOuput,
+    Shutdown,
+}
+
+/// Trait to implement a monitoring task.
+pub trait CuMonitor {
+    fn new(config: Option<&ComponentConfig>, taskids: &'static [&'static str]) -> CuResult<Self>
+    where
+        Self: Sized;
+
+    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        Ok(())
+    }
+
+    /// Callback that will be trigger at the end of every copperlist (before, on or after the serialization).
+    fn process_copperlist(&self, msgs: &[&CuMsgMetadata]) -> CuResult<()>;
+
+    /// Callbacked when a Task errored out. The runtime requires an immediate decision.
+    fn process_error(&self, taskid: usize, step: CuTaskState, error: CuError) -> Decision;
+
+    /// Callbacked when copper is stopping.
+    fn stop(&mut self) -> CuResult<()> {
+        Ok(())
+    }
+}
 
 #[global_allocator]
 pub static GLOBAL: CountingAllocator = CountingAllocator::new();

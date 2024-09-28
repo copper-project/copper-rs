@@ -1,12 +1,10 @@
 use bincode::{Decode, Encode};
 
 use cu29::clock::RobotClock;
-use cu29::config::NodeInstanceConfig;
-use cu29::cutask::{
-    CuMsg, CuSinkTask, CuSrcTask, CuTask, CuTaskLifecycle, Freezable,
-};
-use cu29::{input_msg, output_msg};
+use cu29::config::ComponentConfig;
+use cu29::cutask::{CuMsg, CuSinkTask, CuSrcTask, CuTask, CuTaskLifecycle, Freezable};
 use cu29::CuResult;
+use cu29::{input_msg, output_msg};
 
 use cu29_log_derive::debug;
 
@@ -24,7 +22,7 @@ pub struct MySource {}
 impl Freezable for MySource {}
 
 impl CuTaskLifecycle for MySource {
-    fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -52,7 +50,7 @@ pub struct MyTask {
 impl Freezable for MyTask {}
 
 impl CuTaskLifecycle for MyTask {
-    fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -87,7 +85,7 @@ pub struct MySink {}
 impl Freezable for MySink {}
 
 impl CuTaskLifecycle for MySink {
-    fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {

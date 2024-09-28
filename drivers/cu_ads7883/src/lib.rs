@@ -1,6 +1,6 @@
 use bincode::{Decode, Encode};
 use cu29::clock::RobotClock;
-use cu29::config::NodeInstanceConfig;
+use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
 use cu29::{output_msg, CuError, CuResult};
 use cu29_log_derive::debug;
@@ -51,7 +51,7 @@ impl From<ADSReadingPayload> for u16 {
 }
 
 impl CuTaskLifecycle for ADS7883 {
-    fn new(config: Option<&NodeInstanceConfig>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -153,7 +153,7 @@ pub mod test_support {
     impl Freezable for ADS78883TestSink {}
 
     impl CuTaskLifecycle for ADS78883TestSink {
-        fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self> {
+        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
             Ok(Self {})
         }
     }

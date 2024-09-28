@@ -1,5 +1,5 @@
 use cu29::clock::RobotClock;
-use cu29::config::NodeInstanceConfig;
+use cu29::config::ComponentConfig;
 use cu29::cutask::{CuSinkTask, CuTask, CuTaskLifecycle};
 use cu29::cutask::{CuSrcTask, Freezable};
 
@@ -15,7 +15,7 @@ pub struct IntegerSrcTask {
 impl Freezable for IntegerSrcTask {}
 
 impl CuTaskLifecycle for IntegerSrcTask {
-    fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self> {
+    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
         Ok(Self { value: 42 })
     }
 }
@@ -38,7 +38,7 @@ pub struct FloatSrcTask {
 impl Freezable for FloatSrcTask {}
 
 impl CuTaskLifecycle for FloatSrcTask {
-    fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self> {
+    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
         Ok(Self { value: 24.0 })
     }
 }
@@ -59,7 +59,7 @@ pub struct MergingSinkTask {}
 impl Freezable for MergingSinkTask {}
 
 impl CuTaskLifecycle for MergingSinkTask {
-    fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self> {
+    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
         Ok(Self {})
     }
 }
@@ -85,7 +85,7 @@ pub struct MergerTask {}
 impl Freezable for MergerTask {}
 
 impl CuTaskLifecycle for MergerTask {
-    fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self> {
+    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
         Ok(Self {})
     }
 }
@@ -117,7 +117,7 @@ pub struct MergedSinkTask {}
 impl Freezable for MergedSinkTask {}
 
 impl CuTaskLifecycle for MergedSinkTask {
-    fn new(_config: Option<&NodeInstanceConfig>) -> CuResult<Self> {
+    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
         Ok(Self {})
     }
 }

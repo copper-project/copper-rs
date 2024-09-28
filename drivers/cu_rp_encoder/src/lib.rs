@@ -1,6 +1,6 @@
 use bincode::{Decode, Encode};
 use cu29::clock::RobotClock;
-use cu29::config::NodeInstanceConfig;
+use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
 use cu29::output_msg;
 use cu29::{CuError, CuResult};
@@ -33,7 +33,7 @@ impl Freezable for Encoder {
 }
 
 impl CuTaskLifecycle for Encoder {
-    fn new(config: Option<&NodeInstanceConfig>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {

@@ -6,7 +6,7 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29::clock::RobotClock;
-use cu29::config::NodeInstanceConfig;
+use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
 use cu29::{output_msg, CuResult};
 use cu29_soa_derive::soa;
@@ -31,11 +31,11 @@ pub struct Vlp16 {
 impl Freezable for Vlp16 {}
 
 impl CuTaskLifecycle for Vlp16 {
-    fn new(config: Option<&NodeInstanceConfig>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {
-        let config: &NodeInstanceConfig = config.expect("Vlp16 requires a config");
+        let config: &ComponentConfig = config.expect("Vlp16 requires a config");
         let listen_addr: String = config
             .get("listen_addr")
             .unwrap_or("0.0.0.0:2368".to_string());
@@ -165,7 +165,7 @@ mod tests {
     #[test]
     fn vlp16_end_2_end_test() {
         let clk = RobotClock::new();
-        let cfg = NodeInstanceConfig::new();
+        let cfg = ComponentConfig::new();
         let mut drv = Vlp16::new(Some(&cfg)).unwrap();
         let file_in = File::open("test/VLP_16_Single.pcap").expect("Error opening file");
         let mut pcap_reader = PcapReader::new(file_in).unwrap();
