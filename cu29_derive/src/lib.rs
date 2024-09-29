@@ -5,7 +5,9 @@ use proc_macro::TokenStream;
 use quote::{quote, ToTokens};
 use syn::meta::parser;
 use syn::Fields::{Named, Unnamed};
-use syn::{parse_macro_input, parse_quote, parse_str, Field, ItemStruct, LitStr, Type, TypeTuple};
+use syn::{
+    parse_macro_input, parse_quote, parse_str, Field, ItemImpl, ItemStruct, LitStr, Type, TypeTuple,
+};
 
 use cu29::config::read_configuration;
 use cu29::config::CuConfig;
@@ -92,7 +94,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     eprintln!("[build runtime field]");
     // add that to a new field
     let runtime_field: Field = parse_quote! {
-        copper_runtime: _CuRuntime<CuTasks, CuPayload, #monitor_type, #DEFAULT_CLNB>
+        copper_runtime: _CuRuntime<CuTasks, CuMsgs, #monitor_type, #DEFAULT_CLNB>
     };
 
     let name = &item_struct.ident;
@@ -266,7 +268,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 quote! {
                                     {
                                         #comment_tokens
-                                        let cumsg_output = &mut payload.#output_culist_index;
+                                        let cumsg_output = &mut msgs.#output_culist_index;
                                         cumsg_output.metadata.before_process = self.copper_runtime.clock.now().into();
                                         let maybe_error = #task_instance.process(&self.copper_runtime.clock, cumsg_output);
                                         cumsg_output.metadata.after_process = self.copper_runtime.clock.now().into();
@@ -302,14 +304,47 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         CuTaskType::Sink => {
                             // collect the indices
                             let indices = step.input_msg_indices_types.iter().map(|(index, _)| int2sliceindex(*index));
-                            quote! {
-                                {
-                                    #comment_tokens
-                                    let cumsg_input = (#(&payload.#indices),*);
-                                    #task_instance.process(&self.copper_runtime.clock, cumsg_input)?;
-                                    // FIXME: here we really need a "virtual" output message to be able to monitor the task.
+                            if let Some((output_index, _)) = &step.output_msg_index_type {
+                                let output_culist_index = int2sliceindex(*output_index);
+                                let tid = output_culist_index.index as usize;
+                                quote! {
+                                    {
+                                        #comment_tokens
+                                        let cumsg_input = (#(&msgs.#indices),*);
+                                        // This is the virtual output for the sink
+                                        let cumsg_output = &mut msgs.#output_culist_index;
+                                        cumsg_output.metadata.before_process = self.copper_runtime.clock.now().into();
+                                        let maybe_error = #task_instance.process(&self.copper_runtime.clock, cumsg_input);
+                                        cumsg_output.metadata.after_process = self.copper_runtime.clock.now().into();
+                                        if let Err(error) = maybe_error {
+                                            let decision = self.copper_runtime.monitor.process_error(#tid, _CuTaskState::Process, &error);
+                                            match decision {
+                                                _Decision::Abort => {
+                                                    debug!("Process: ABORT decision from monitoring. Task '{}' errored out \
+                                                    during process. Skipping the processing of CL {}.", TASKS_IDS[#tid], id);
+                                                    self.copper_runtime.monitor.process_copperlist(&collect_metadata(&culist))?;
+                                                    self.copper_runtime.end_of_processing(id);
+                                                    return Ok(()); // this returns early from the one iteration call.
+
+                                                }
+                                                _Decision::Ignore => {
+                                                    debug!("Process: IGNORE decision from monitoring. Task '{}' errored out \
+                                                    during process. The runtime will continue with a forced empty message.", TASKS_IDS[#tid]);
+                                                    cumsg_output.clear_payload();
+                                                }
+                                                _Decision::Shutdown => {
+                                                    debug!("Process: SHUTDOWN decision from monitoring. Task '{}' errored out \
+                                                    during process. The runtime cannot continue.", TASKS_IDS[#tid]);
+                                                    return Err(_CuError::new_with_cause("Task errored out during process.", error));
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
+                            } else {
+                                panic!("Sink tasks should have a virtual output message index.");
                             }
+
                         }
                         CuTaskType::Regular => {
                             let indices = step.input_msg_indices_types.iter().map(|(index, _)| int2sliceindex(*index));
@@ -319,8 +354,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 quote! {
                                     {
                                         #comment_tokens
-                                        let cumsg_input = (#(&payload.#indices),*);
-                                        let cumsg_output = &mut payload.#output_culist_index;
+                                        let cumsg_input = (#(&msgs.#indices),*);
+                                        let cumsg_output = &mut msgs.#output_culist_index;
                                         cumsg_output.metadata.before_process = self.copper_runtime.clock.now().into();
                                         let maybe_error = #task_instance.process(&self.copper_runtime.clock, cumsg_input, cumsg_output);
                                         cumsg_output.metadata.after_process = self.copper_runtime.clock.now().into();
@@ -364,15 +399,22 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     eprintln!("[extract msg types]");
     let all_msgs_types_in_culist_order: Vec<Type> = extract_msg_types(&runtime_plan);
 
-    eprintln!("[build the copper payload]");
+    eprintln!("[build the copperlist tuple]");
     let msgs_types_tuple: TypeTuple = build_culist_tuple(&all_msgs_types_in_culist_order);
+
+    eprintln!("[build the copperlist tuple bincode support]");
+    let msgs_types_tuple_encode = build_culist_tuple_encode(&all_msgs_types_in_culist_order);
+    let msgs_types_tuple_decode = build_culist_tuple_decode(&all_msgs_types_in_culist_order);
+
+    eprintln!("[build the copperlist tuple debug support]");
+    let msgs_types_tuple_debug = build_culist_tuple_debug(&all_msgs_types_in_culist_order);
 
     eprintln!("[build the collect metadata function]");
     let culist_size = all_msgs_types_in_culist_order.len();
     let culist_indices = (0..(culist_size as u32)).map(int2sliceindex);
     let collect_metadata_function = quote! {
         pub fn collect_metadata<'a>(culist: &'a CuList) -> [&'a _CuMsgMetadata; #culist_size] {
-            [#( &culist.payload.#culist_indices.metadata, )*]
+            [#( &culist.msgs.0.#culist_indices.metadata, )*]
         }
     };
 
@@ -393,9 +435,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let id = culist.id;
                 culist.change_state(cu29::copperlist::CopperListState::Processing);
                 {
-                    let payload = &mut culist.payload;
+                    let msgs = &mut culist.msgs.0;
                     #(#runtime_plan_code)*
-                } // drop(payload);
+                } // drop(msgs);
 
                 {
                     // End of CL monitoring
@@ -459,21 +501,34 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         use cu29::clock::ClockProvider as _ClockProvider;
         use std::sync::Arc as _Arc;
         use std::sync::Mutex as _Mutex;
+        use bincode::Encode as _Encode;
+        use bincode::enc::Encoder as _Encoder;
+        use bincode::error::EncodeError as _EncodeError;
+        use bincode::Decode as _Decode;
+        use bincode::de::Decoder as _Decoder;
+        use bincode::error::DecodeError as _DecodeError;
         use cu29_unifiedlog::stream_write as _stream_write;
         use cu29_unifiedlog::UnifiedLoggerWrite as _UnifiedLoggerWrite;
         use cu29_traits::UnifiedLogType as _UnifiedLogType;
 
         // This is the heart of everything.
         // CuTasks is the list of all the tasks types.
-        // CuList is a CopperList with the list of all the messages types as payload.
+        // CuList is a CopperList with the list of all the messages types as msgs.
         pub type CuTasks = #task_types_tuple;
-        pub type CuPayload = #msgs_types_tuple;
-        pub type CuList = _CopperList<CuPayload>;
+        pub struct CuMsgs(#msgs_types_tuple);
+        pub type CuList = _CopperList<CuMsgs>;
 
         const TASKS_IDS: &'static [&'static str] = &[#( #all_tasks_ids ),*];
 
         // This generates a way to get the metadata of every single message of a culist at low cost
         #collect_metadata_function
+
+        // Adds the bincode support for the copper list tuple
+        #msgs_types_tuple_encode
+        #msgs_types_tuple_decode
+
+        // Adds the debug support
+        #msgs_types_tuple_debug
 
         fn tasks_instanciator(all_instances_configs: Vec<Option<&_ComponentConfig>>) -> _CuResult<CuTasks> {
             Ok(( #(#task_instances_init_code),*, ))
@@ -497,7 +552,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 );
 
                 Ok(#name {
-                    copper_runtime: _CuRuntime::<CuTasks, CuPayload, #monitor_type, #DEFAULT_CLNB>::new(clock, &config, tasks_instanciator, monitor_instanciator, copperlist_stream)?
+                    copper_runtime: _CuRuntime::<CuTasks, CuMsgs, #monitor_type, #DEFAULT_CLNB>::new(clock, &config, tasks_instanciator, monitor_instanciator, copperlist_stream)?
                 })
             }
 
@@ -588,5 +643,75 @@ fn build_culist_tuple(all_msgs_types_in_culist_order: &Vec<Type>) -> TypeTuple {
         parse_quote! {()}
     } else {
         parse_quote! { (#(_CuMsg<#all_msgs_types_in_culist_order>),*,)}
+    }
+}
+
+/// This is the bincode encoding part of the CuMsgs
+fn build_culist_tuple_encode(all_msgs_types_in_culist_order: &Vec<Type>) -> ItemImpl {
+    let indices: Vec<usize> = (0..all_msgs_types_in_culist_order.len()).collect();
+
+    // Generate the `self.#i.encode(encoder)?` for each tuple index, including `()` types
+    let encode_fields: Vec<_> = indices
+        .iter()
+        .map(|i| {
+            let idx = syn::Index::from(*i);
+            quote! { self.0.#idx.encode(encoder)?; }
+        })
+        .collect();
+
+    parse_quote! {
+        impl _Encode for CuMsgs {
+            fn encode<E: _Encoder>(&self, encoder: &mut E) -> Result<(), _EncodeError> {
+                #(#encode_fields)*
+                Ok(())
+            }
+        }
+    }
+}
+
+/// This is the bincode decoding part of the CuMsgs
+fn build_culist_tuple_decode(all_msgs_types_in_culist_order: &Vec<Type>) -> ItemImpl {
+    let indices: Vec<usize> = (0..all_msgs_types_in_culist_order.len()).collect();
+
+    // Generate the `_CuMsg::<T>::decode(decoder)?` for each tuple index
+    let decode_fields: Vec<_> = indices
+        .iter()
+        .map(|i| {
+            let t = &all_msgs_types_in_culist_order[*i];
+            let idx = syn::Index::from(*i);
+            quote! { _CuMsg::<#t>::decode(decoder)? }
+        })
+        .collect();
+
+    parse_quote! {
+        impl _Decode for CuMsgs {
+            fn decode<D: _Decoder>(decoder: &mut D) -> Result<Self, _DecodeError> {
+                Ok(CuMsgs ((
+                    #(#decode_fields),*
+                )))
+            }
+        }
+    }
+}
+
+fn build_culist_tuple_debug(all_msgs_types_in_culist_order: &Vec<Type>) -> ItemImpl {
+    let indices: Vec<usize> = (0..all_msgs_types_in_culist_order.len()).collect();
+
+    let debug_fields: Vec<_> = indices
+        .iter()
+        .map(|i| {
+            let idx = syn::Index::from(*i);
+            quote! { .field(&self.0.#idx) }
+        })
+        .collect();
+
+    parse_quote! {
+        impl std::fmt::Debug for CuMsgs {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.debug_tuple("CuMsgs")
+                    #(#debug_fields)*
+                    .finish()
+            }
+        }
     }
 }

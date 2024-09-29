@@ -228,7 +228,7 @@ fn plan_tasks_tree_branch(
         let node = config.get_node(id).unwrap();
 
         let mut input_msg_indices_types: Vec<(u32, String)> = Vec::new();
-        let mut output_msg_index_type: Option<(u32, String)> = None;
+        let output_msg_index_type: Option<(u32, String)>;
 
         let task_type = find_task_type_for_id(&config.graph, id);
 
@@ -261,6 +261,12 @@ fn plan_tasks_tree_branch(
                         return next_culist_output_index;
                     }
                 }
+                // Here we create an artificial "end node" for this sink to record the metadata associated with it.
+                output_msg_index_type = Some((
+                    next_culist_output_index,
+                    "()".to_string(), // empty type
+                ));
+                next_culist_output_index += 1;
             }
             CuTaskType::Regular => {
                 let parents: Vec<NodeIndex> = config
