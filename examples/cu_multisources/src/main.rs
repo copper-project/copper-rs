@@ -10,7 +10,7 @@ use std::time::Duration;
 #[copper_runtime(config = "copperconfig.ron")]
 struct MultiSourceApp {}
 
-const SLAB_SIZE: Option<usize> = Some(1024 * 1024 * 1);
+const SLAB_SIZE: Option<usize> = Some(1024 * 1024);
 
 fn main() {
     let logger_path = "/tmp/caterpillar.copper";

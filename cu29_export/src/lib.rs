@@ -97,18 +97,18 @@ pub fn copperlists_dump<P: CopperListTuple>(
         match entry {
             Ok(entry) => Some(entry),
             Err(e) => match e {
-                DecodeError::UnexpectedEnd { .. } => return None,
+                DecodeError::UnexpectedEnd { .. } => None,
                 DecodeError::Io { inner, additional } => {
                     if inner.kind() == std::io::ErrorKind::UnexpectedEof {
-                        return None;
+                        None
                     } else {
                         println!("Error {:?} additional:{}", inner, additional);
-                        return None;
+                        None
                     }
                 }
                 _ => {
                     println!("Error {:?}", e);
-                    return None;
+                    None
                 }
             },
         }
@@ -234,7 +234,7 @@ mod python {
             .map_err(|e| PyIOError::new_err(e.to_string()))?;
 
         let UnifiedLogger::Read(dl) = UnifiedLoggerBuilder::new()
-            .file_base_name(&Path::new(unified_src_path))
+            .file_base_name(Path::new(unified_src_path))
             .build()
             .expect("Failed to create logger")
         else {
@@ -277,12 +277,12 @@ mod python {
 
         /// Returns the index of the parameter names in the vector of interned strings.
         pub fn paramname_indexes(&self) -> Vec<u32> {
-            self.inner.paramname_indexes.iter().map(|x| *x).collect()
+            self.inner.paramname_indexes.iter().copied().collect()
         }
 
         /// Returns the parameters of this log line
         pub fn params(&self) -> Vec<PyObject> {
-            self.inner.params.iter().map(|x| value_to_py(x)).collect()
+            self.inner.params.iter().map(value_to_py).collect()
         }
     }
 
@@ -329,7 +329,7 @@ mod python {
             Value::Unit => Python::with_gil(|py| py.None()),
             Value::Newtype(v) => value_to_py(v),
             Value::Seq(s) => Python::with_gil(|py| {
-                let list = PyList::new_bound(py, s.iter().map(|v| value_to_py(v)));
+                let list = PyList::new_bound(py, s.iter().map(value_to_py));
                 list.to_object(py)
             }),
         }
@@ -362,7 +362,7 @@ mod tests {
         let mut copy_options = CopyOptions::new();
         copy_options.copy_inside = true;
 
-        copy("test/cu29_log_index", &temp_path, &copy_options).unwrap();
+        copy("test/cu29_log_index", temp_path, &copy_options).unwrap();
         temp_path.join("cu29_log_index")
     }
 

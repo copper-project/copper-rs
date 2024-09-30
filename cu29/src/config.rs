@@ -412,9 +412,7 @@ impl CuConfig {
 
     #[allow(dead_code)]
     pub fn get_edge_weight(&self, index: usize) -> Option<Cnx> {
-        self.graph
-            .edge_weight(EdgeIndex::new(index))
-            .map(|s| s.clone())
+        self.graph.edge_weight(EdgeIndex::new(index)).cloned()
     }
 
     /// Convenience method to get all nodes in the configuration graph.
@@ -488,7 +486,7 @@ impl CuConfig {
 
     /// Render the configuration graph in the dot format.
     pub fn render(&self, output: &mut dyn std::io::Write) {
-        write!(output, "digraph G {{\n").unwrap();
+        writeln!(output, "digraph G {{").unwrap();
 
         for index in self.graph.node_indices() {
             let node = &self.graph[index];

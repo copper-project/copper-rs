@@ -95,6 +95,12 @@ pub type IterMut<'a, T> = Chain<Rev<SliceIterMut<'a, T>>, Rev<SliceIterMut<'a, T
 pub type AscIter<'a, T> = Chain<SliceIter<'a, T>, SliceIter<'a, T>>;
 pub type AscIterMut<'a, T> = Chain<SliceIterMut<'a, T>, SliceIterMut<'a, T>>;
 
+impl<P: CopperListTuple, const N: usize> Default for CuListsManager<P, N> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<P: CopperListTuple, const N: usize> CuListsManager<P, N> {
     pub fn new() -> Self {
         let data = unsafe {

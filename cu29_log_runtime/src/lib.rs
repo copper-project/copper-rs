@@ -97,7 +97,7 @@ pub fn log(entry: &mut CuLogEntry) -> CuResult<()> {
     }
     let (writer, clock) = d.unwrap();
     entry.time = clock.now();
-    if let Err(err) = writer.lock().unwrap().log(&entry) {
+    if let Err(err) = writer.lock().unwrap().log(entry) {
         eprintln!("Failed to log data: {}", err);
     }
     // This is only for debug builds with standard textual logging implemented.

@@ -76,6 +76,12 @@ pub struct CountingAllocator {
     deallocated: AtomicUsize,
 }
 
+impl Default for CountingAllocator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CountingAllocator {
     pub const fn new() -> Self {
         CountingAllocator {
@@ -117,6 +123,12 @@ unsafe impl GlobalAlloc for CountingAllocator {
 pub struct ScopedAllocCounter {
     bf_allocated: usize,
     bf_deallocated: usize,
+}
+
+impl Default for ScopedAllocCounter {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ScopedAllocCounter {

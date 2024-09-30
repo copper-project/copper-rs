@@ -1,5 +1,6 @@
 [package]
 name = "cu-rp-balancebot"
+description = "This is a full robot example for the Copper project. It runs on the Raspberry Pi with the balance bot hat to balance a rod."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
