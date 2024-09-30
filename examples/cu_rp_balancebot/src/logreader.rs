@@ -2,17 +2,17 @@ use bincode::config::standard;
 use bincode::decode_from_std_read;
 use bincode::error::DecodeError;
 use cu29::cutask::CuMsg as _CuMsg;
-use cu29_derive::gen_culist_tuple;
+use cu29_derive::gen_cumsgs;
 use cu29_intern_strs::read_interned_strings;
 use cu29_log::CuLogEntry;
 use cu29_traits::UnifiedLogType;
 use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerIOReader};
 use std::path::Path;
 
-type CuListPayload = gen_culist_tuple!("copperconfig.ron");
+gen_cumsgs!("copperconfig.ron");
 
 fn main() {
-    // run_cli::<CuListPayload>().expect("Failed to run the export CLI");
+    // run_cli::<CuMsgs>().expect("Failed to run the export CLI");
 
     // extract PID values
     let UnifiedLogger::Read(dl) = UnifiedLoggerBuilder::new()

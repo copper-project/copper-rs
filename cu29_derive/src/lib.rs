@@ -2,7 +2,7 @@ extern crate proc_macro;
 
 use proc_macro::TokenStream;
 
-use quote::{quote, ToTokens};
+use quote::quote;
 use syn::meta::parser;
 use syn::Fields::{Named, Unnamed};
 use syn::{
@@ -27,18 +27,70 @@ fn int2sliceindex(i: u32) -> syn::Index {
 }
 
 #[proc_macro]
-/// Generates the tuple inner of copper list from the config.
-/// gen_culist_tuple!("path/to/config.toml")
-pub fn gen_culist_tuple(config_path_lit: TokenStream) -> TokenStream {
+/// Generates the CopperList content type from a config.
+/// gen_cumsgs!("path/to/config.toml")
+/// It will creates a new type called CuMsgs you can pass to the log reader for decoding:
+///
+pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
     let config = parse_macro_input!(config_path_lit as LitStr).value();
-    eprintln!("[gen culist tuple with {:?}]", config);
+    eprintln!("[gen culist support with {:?}]", config);
     let cuconfig = read_config(&config);
     let runtime_plan: CuExecutionLoop =
         compute_runtime_plan(&cuconfig).expect("Could not compute runtime plan");
+    let support = gen_culist_support(&runtime_plan);
+
+    let with_uses = quote! {
+        use bincode::Encode as _Encode;
+        use bincode::enc::Encoder as _Encoder;
+        use bincode::error::EncodeError as _EncodeError;
+        use bincode::Decode as _Decode;
+        use bincode::de::Decoder as _Decoder;
+        use bincode::error::DecodeError as _DecodeError;
+        use cu29::copperlist::CopperList as _CopperList;
+        use cu29::cutask::CuMsgMetadata as _CuMsgMetadata;
+        #support
+    };
+    with_uses.into()
+}
+
+/// Build the inner support of the copper list.
+fn gen_culist_support(runtime_plan: &CuExecutionLoop) -> proc_macro2::TokenStream {
+    eprintln!("[Extract msgs types]");
     let all_msgs_types_in_culist_order = extract_msg_types(&runtime_plan);
-    build_culist_tuple(&all_msgs_types_in_culist_order)
-        .into_token_stream()
-        .into()
+
+    let culist_size = all_msgs_types_in_culist_order.len();
+    let culist_indices = (0..(culist_size as u32)).map(int2sliceindex);
+
+    eprintln!("[build the copperlist tuple]");
+    let msgs_types_tuple: TypeTuple = build_culist_tuple(&all_msgs_types_in_culist_order);
+
+    eprintln!("[build the copperlist tuple bincode support]");
+    let msgs_types_tuple_encode = build_culist_tuple_encode(&all_msgs_types_in_culist_order);
+    let msgs_types_tuple_decode = build_culist_tuple_decode(&all_msgs_types_in_culist_order);
+
+    eprintln!("[build the copperlist tuple debug support]");
+    let msgs_types_tuple_debug = build_culist_tuple_debug(&all_msgs_types_in_culist_order);
+
+    let collect_metadata_function = quote! {
+        pub fn collect_metadata<'a>(culist: &'a CuList) -> [&'a _CuMsgMetadata; #culist_size] {
+            [#( &culist.msgs.0.#culist_indices.metadata, )*]
+        }
+    };
+
+    // This generates a way to get the metadata of every single message of a culist at low cost
+    quote! {
+        #collect_metadata_function
+
+        pub struct CuMsgs(#msgs_types_tuple);
+        pub type CuList = _CopperList<CuMsgs>;
+
+        // Adds the bincode support for the copper list tuple
+        #msgs_types_tuple_encode
+        #msgs_types_tuple_decode
+
+        // Adds the debug support
+        #msgs_types_tuple_debug
+    }
 }
 
 /// Adds #[copper_runtime(config = "path")] to your application struct to generate the runtime.
@@ -396,27 +448,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         }).collect();
 
-    eprintln!("[extract msg types]");
-    let all_msgs_types_in_culist_order: Vec<Type> = extract_msg_types(&runtime_plan);
-
-    eprintln!("[build the copperlist tuple]");
-    let msgs_types_tuple: TypeTuple = build_culist_tuple(&all_msgs_types_in_culist_order);
-
-    eprintln!("[build the copperlist tuple bincode support]");
-    let msgs_types_tuple_encode = build_culist_tuple_encode(&all_msgs_types_in_culist_order);
-    let msgs_types_tuple_decode = build_culist_tuple_decode(&all_msgs_types_in_culist_order);
-
-    eprintln!("[build the copperlist tuple debug support]");
-    let msgs_types_tuple_debug = build_culist_tuple_debug(&all_msgs_types_in_culist_order);
-
-    eprintln!("[build the collect metadata function]");
-    let culist_size = all_msgs_types_in_culist_order.len();
-    let culist_indices = (0..(culist_size as u32)).map(int2sliceindex);
-    let collect_metadata_function = quote! {
-        pub fn collect_metadata<'a>(culist: &'a CuList) -> [&'a _CuMsgMetadata; #culist_size] {
-            [#( &culist.msgs.0.#culist_indices.metadata, )*]
-        }
-    };
+    eprintln!("[build the copperlist support]");
+    let culist_support: proc_macro2::TokenStream = gen_culist_support(&runtime_plan);
 
     eprintln!("[build the run method]");
     let run_method = quote! {
@@ -515,20 +548,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         // CuTasks is the list of all the tasks types.
         // CuList is a CopperList with the list of all the messages types as msgs.
         pub type CuTasks = #task_types_tuple;
-        pub struct CuMsgs(#msgs_types_tuple);
-        pub type CuList = _CopperList<CuMsgs>;
 
         const TASKS_IDS: &'static [&'static str] = &[#( #all_tasks_ids ),*];
 
-        // This generates a way to get the metadata of every single message of a culist at low cost
-        #collect_metadata_function
+        #culist_support
 
-        // Adds the bincode support for the copper list tuple
-        #msgs_types_tuple_encode
-        #msgs_types_tuple_decode
-
-        // Adds the debug support
-        #msgs_types_tuple_debug
 
         fn tasks_instanciator(all_instances_configs: Vec<Option<&_ComponentConfig>>) -> _CuResult<CuTasks> {
             Ok(( #(#task_instances_init_code),*, ))
@@ -678,7 +702,6 @@ fn build_culist_tuple_decode(all_msgs_types_in_culist_order: &Vec<Type>) -> Item
         .iter()
         .map(|i| {
             let t = &all_msgs_types_in_culist_order[*i];
-            let idx = syn::Index::from(*i);
             quote! { _CuMsg::<#t>::decode(decoder)? }
         })
         .collect();
