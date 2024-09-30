@@ -1,4 +1,3 @@
-use libc;
 
 use memmap2::{Mmap, MmapMut};
 use std::fmt::{Debug, Formatter};
@@ -157,6 +156,12 @@ pub struct UnifiedLoggerBuilder {
     create: bool,
 }
 
+impl Default for UnifiedLoggerBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UnifiedLoggerBuilder {
     pub fn new() -> Self {
         Self {
@@ -288,7 +293,7 @@ impl SlabEntry {
         // Be sure that the header reflects the actual size of the section.
         section.update_header();
 
-        let _sz = encode_into_slice(&section.section_header, &mut section.buffer, standard())
+        let _sz = encode_into_slice(&section.section_header, section.buffer, standard())
             .expect("Failed to encode section header");
 
         let base = self.mmap_buffer.as_ptr() as usize;
@@ -370,6 +375,7 @@ impl SlabEntry {
 
 /// A SectionHandle is a handle to a section in the datalogger.
 /// It allows to track the lifecycle of a section of the datalogger.
+#[derive(Default)]
 pub struct SectionHandle {
     section_header: SectionHeader,
     buffer: &'static mut [u8], // This includes the encoded header for end of section patching.
@@ -377,15 +383,6 @@ pub struct SectionHandle {
 }
 
 // This is for a placeholder to unsure an orderly cleanup as we dodge the borrow checker.
-impl Default for SectionHandle {
-    fn default() -> Self {
-        Self {
-            section_header: SectionHeader::default(),
-            buffer: &mut [],
-            used: 0,
-        }
-    }
-}
 
 impl SectionHandle {
     // The buffer is considered static as it is a dedicated piece for the section.
@@ -458,7 +455,7 @@ fn make_slab_file(base_file_path: &PathBuf, slab_size: usize, slab_suffix: usize
         .write(true)
         .create(true)
         .open(&file_path)
-        .expect(format!("Failed to open file: {}", file_path.display()).as_str());
+        .unwrap_or_else(|_| panic!("Failed to open file: {}", file_path.display()));
     file.set_len(slab_size as u64)
         .expect("Failed to set file length");
     file
@@ -467,8 +464,8 @@ fn make_slab_file(base_file_path: &PathBuf, slab_size: usize, slab_suffix: usize
 impl UnifiedLoggerWrite {
     fn next_slab(&mut self) -> File {
         self.front_slab_suffix += 1;
-        let file = make_slab_file(&self.base_file_path, self.slab_size, self.front_slab_suffix);
-        file
+        
+        make_slab_file(&self.base_file_path, self.slab_size, self.front_slab_suffix)
     }
 
     fn new(base_file_path: &PathBuf, slab_size: usize, page_size: usize) -> Self {
@@ -712,7 +709,7 @@ impl UnifiedLoggerIOReader {
                 Ok(true)
             }
             Ok(None) => Ok(false), // No more sections of this type
-            Err(e) => return Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
+            Err(e) => Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
         }
     }
 }

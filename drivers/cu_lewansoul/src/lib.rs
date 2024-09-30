@@ -246,7 +246,7 @@ impl Encode for ServoPositions {
 impl Decode for ServoPositions {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let angles: [f32; 8] = Decode::decode(decoder)?;
-        let positions: [Angle; 8] = angles.map(|deg| Angle::new::<radian>(deg));
+        let positions: [Angle; 8] = angles.map(Angle::new::<radian>);
         Ok(ServoPositions { positions })
     }
 }

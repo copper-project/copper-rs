@@ -148,13 +148,13 @@ impl PartialEq for Value {
             (&Value::F32(v0), &Value::F32(v1)) if OrderedFloat(v0) == OrderedFloat(v1) => true,
             (&Value::F64(v0), &Value::F64(v1)) if OrderedFloat(v0) == OrderedFloat(v1) => true,
             (&Value::Char(v0), &Value::Char(v1)) if v0 == v1 => true,
-            (&Value::String(ref v0), &Value::String(ref v1)) if v0 == v1 => true,
+            (Value::String(v0), Value::String(v1)) if v0 == v1 => true,
             (&Value::Unit, &Value::Unit) => true,
-            (&Value::Option(ref v0), &Value::Option(ref v1)) if v0 == v1 => true,
-            (&Value::Newtype(ref v0), &Value::Newtype(ref v1)) if v0 == v1 => true,
-            (&Value::Seq(ref v0), &Value::Seq(ref v1)) if v0 == v1 => true,
-            (&Value::Map(ref v0), &Value::Map(ref v1)) if v0 == v1 => true,
-            (&Value::Bytes(ref v0), &Value::Bytes(ref v1)) if v0 == v1 => true,
+            (Value::Option(v0), Value::Option(v1)) if v0 == v1 => true,
+            (Value::Newtype(v0), Value::Newtype(v1)) if v0 == v1 => true,
+            (Value::Seq(v0), Value::Seq(v1)) if v0 == v1 => true,
+            (Value::Map(v0), Value::Map(v1)) if v0 == v1 => true,
+            (Value::Bytes(v0), Value::Bytes(v1)) if v0 == v1 => true,
             (&Value::CuTime(v0), &Value::CuTime(v1)) if v0 == v1 => true,
             _ => false,
         }
@@ -164,27 +164,27 @@ impl PartialEq for Value {
 impl Ord for Value {
     fn cmp(&self, rhs: &Self) -> Ordering {
         match (self, rhs) {
-            (&Value::Bool(v0), &Value::Bool(ref v1)) => v0.cmp(v1),
-            (&Value::U8(v0), &Value::U8(ref v1)) => v0.cmp(v1),
-            (&Value::U16(v0), &Value::U16(ref v1)) => v0.cmp(v1),
-            (&Value::U32(v0), &Value::U32(ref v1)) => v0.cmp(v1),
-            (&Value::U64(v0), &Value::U64(ref v1)) => v0.cmp(v1),
-            (&Value::I8(v0), &Value::I8(ref v1)) => v0.cmp(v1),
-            (&Value::I16(v0), &Value::I16(ref v1)) => v0.cmp(v1),
-            (&Value::I32(v0), &Value::I32(ref v1)) => v0.cmp(v1),
-            (&Value::I64(v0), &Value::I64(ref v1)) => v0.cmp(v1),
+            (&Value::Bool(v0), Value::Bool(v1)) => v0.cmp(v1),
+            (&Value::U8(v0), Value::U8(v1)) => v0.cmp(v1),
+            (&Value::U16(v0), Value::U16(v1)) => v0.cmp(v1),
+            (&Value::U32(v0), Value::U32(v1)) => v0.cmp(v1),
+            (&Value::U64(v0), Value::U64(v1)) => v0.cmp(v1),
+            (&Value::I8(v0), Value::I8(v1)) => v0.cmp(v1),
+            (&Value::I16(v0), Value::I16(v1)) => v0.cmp(v1),
+            (&Value::I32(v0), Value::I32(v1)) => v0.cmp(v1),
+            (&Value::I64(v0), Value::I64(v1)) => v0.cmp(v1),
             (&Value::F32(v0), &Value::F32(v1)) => OrderedFloat(v0).cmp(&OrderedFloat(v1)),
             (&Value::F64(v0), &Value::F64(v1)) => OrderedFloat(v0).cmp(&OrderedFloat(v1)),
-            (&Value::Char(v0), &Value::Char(ref v1)) => v0.cmp(v1),
-            (&Value::String(ref v0), &Value::String(ref v1)) => v0.cmp(v1),
+            (&Value::Char(v0), Value::Char(v1)) => v0.cmp(v1),
+            (Value::String(v0), Value::String(v1)) => v0.cmp(v1),
             (&Value::Unit, &Value::Unit) => Ordering::Equal,
-            (&Value::Option(ref v0), &Value::Option(ref v1)) => v0.cmp(v1),
-            (&Value::Newtype(ref v0), &Value::Newtype(ref v1)) => v0.cmp(v1),
-            (&Value::Seq(ref v0), &Value::Seq(ref v1)) => v0.cmp(v1),
-            (&Value::Map(ref v0), &Value::Map(ref v1)) => v0.cmp(v1),
-            (&Value::Bytes(ref v0), &Value::Bytes(ref v1)) => v0.cmp(v1),
+            (Value::Option(v0), Value::Option(v1)) => v0.cmp(v1),
+            (Value::Newtype(v0), Value::Newtype(v1)) => v0.cmp(v1),
+            (Value::Seq(v0), Value::Seq(v1)) => v0.cmp(v1),
+            (Value::Map(v0), Value::Map(v1)) => v0.cmp(v1),
+            (Value::Bytes(v0), Value::Bytes(v1)) => v0.cmp(v1),
             (&Value::CuTime(v0), &Value::CuTime(v1)) => v0.cmp(&v1),
-            (ref v0, ref v1) => v0.discriminant().cmp(&v1.discriminant()),
+            (v0, v1) => v0.discriminant().cmp(&v1.discriminant()),
         }
     }
 }
@@ -546,7 +546,7 @@ mod tests {
     #[test]
     fn test_cutime_tovalue() {
         let c = CuTime::from(Duration::from_nanos(42));
-        let v = to_value(&c).expect("to_value failed");
+        let v = to_value(c).expect("to_value failed");
         assert_eq!(v, Value::CuTime(c));
     }
 }

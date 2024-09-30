@@ -22,11 +22,11 @@ pub fn read_interned_strings(index: &Path) -> CuResult<Vec<String>> {
     let mut i = ri.expect("Failed to start iterator");
     while let Some(Ok(v)) = i.next() {
         let (k, v) = v;
-        let index = LittleEndian::read_u32(&k) as usize;
+        let index = LittleEndian::read_u32(k) as usize;
 
         if let rkv::Value::Str(s) = v {
-            if all_strings.len() <= index as usize {
-                all_strings.resize(index as usize + 1, String::new());
+            if all_strings.len() <= index {
+                all_strings.resize(index + 1, String::new());
             }
 
             all_strings[index] = s.to_string();

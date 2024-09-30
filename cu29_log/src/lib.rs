@@ -126,14 +126,14 @@ pub fn format_logline(
     let mut format_str = format_str.to_string();
 
     for param in params.iter() {
-        format_str = format_str.replacen("{}", &param, 1);
+        format_str = format_str.replacen("{}", param, 1);
     }
 
     if named_params.is_empty() {
         return Ok(format_str);
     }
 
-    let logline = strfmt(&format_str, &named_params).map_err(|e| {
+    let logline = strfmt(&format_str, named_params).map_err(|e| {
         CuError::new_with_cause(
             format!(
                 "Failed to format log line: {:?} with variables [{:?}]",
@@ -179,8 +179,8 @@ fn parent_n_times(path: &Path, n: usize) -> Option<PathBuf> {
 pub fn default_log_index_dir() -> PathBuf {
     let outdir = std::env::var("LOG_INDEX_DIR").expect("no LOG_INDEX_DIR system variable set, be sure build.rs sets it, see cu29_log/build.rs for example.");
     let outdir_path = Path::new(&outdir);
-    let target_dir = parent_n_times(&outdir_path, 3)
+    
+    parent_n_times(outdir_path, 3)
         .unwrap()
-        .join(INDEX_DIR_NAME);
-    target_dir
+        .join(INDEX_DIR_NAME)
 }

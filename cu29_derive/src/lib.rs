@@ -13,7 +13,6 @@ use cu29::config::read_configuration;
 use cu29::config::CuConfig;
 use cu29::curuntime::{compute_runtime_plan, CuExecutionLoop, CuExecutionUnit, CuTaskType};
 use format::{highlight_rust_code, rustfmt_generated_code};
-use itertools;
 
 mod format;
 mod utils;
@@ -55,7 +54,7 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
 /// Build the inner support of the copper list.
 fn gen_culist_support(runtime_plan: &CuExecutionLoop) -> proc_macro2::TokenStream {
     eprintln!("[Extract msgs types]");
-    let all_msgs_types_in_culist_order = extract_msg_types(&runtime_plan);
+    let all_msgs_types_in_culist_order = extract_msg_types(runtime_plan);
 
     let culist_size = all_msgs_types_in_culist_order.len();
     let culist_indices = (0..(culist_size as u32)).map(int2sliceindex);
@@ -596,16 +595,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
 fn read_config(config_file: &String) -> CuConfig {
     let mut config_full_path = utils::caller_crate_root();
-    config_full_path.push(&config_file);
+    config_full_path.push(config_file);
     let filename = config_full_path
         .as_os_str()
         .to_str()
         .expect("Could not interpret the config file name");
-    let copper_config = read_configuration(filename).expect(&format!(
-        "Failed to read configuration file: {:?}",
-        &config_full_path
-    ));
-    copper_config
+    
+    read_configuration(filename).unwrap_or_else(|_| panic!("Failed to read configuration file: {:?}",
+        &config_full_path))
 }
 
 /// Extract all the tasks types in their index order and their ids.
@@ -629,7 +626,7 @@ fn extract_tasks_types(copper_config: &CuConfig) -> (Vec<String>, Vec<String>, V
         .iter()
         .map(|name| {
             parse_str(name)
-                .expect(format!("Could not transform {} into a Task Rust type.", name).as_str())
+                .unwrap_or_else(|_| panic!("Could not transform {} into a Task Rust type.", name))
         })
         .collect();
     (all_tasks_ids, all_types_names, all_types)
@@ -643,13 +640,8 @@ fn extract_msg_types(runtime_plan: &CuExecutionLoop) -> Vec<Type> {
             CuExecutionUnit::Step(step) => {
                 if let Some((_, output_msg_type)) = &step.output_msg_index_type {
                     Some(
-                        parse_str::<Type>(output_msg_type.as_str()).expect(
-                            format!(
-                                "Could not transform {} into a message Rust type.",
-                                output_msg_type
-                            )
-                            .as_str(),
-                        ),
+                        parse_str::<Type>(output_msg_type.as_str()).unwrap_or_else(|_| panic!("Could not transform {} into a message Rust type.",
+                                output_msg_type)),
                     )
                 } else {
                     None

@@ -88,7 +88,7 @@ impl<CT, P: CopperListTuple + 'static, M: CuMonitor, const NBCL: usize> CuRuntim
             // serialize them all and Free them.
             if is_top && cl.get_state() == CopperListState::DoneProcessing {
                 cl.change_state(CopperListState::BeingSerialized);
-                self.logger.log(&cl).unwrap();
+                self.logger.log(cl).unwrap();
                 cl.change_state(CopperListState::Free);
                 nb_done += 1;
             } else {
@@ -253,7 +253,7 @@ fn plan_tasks_tree_branch(
 
                 for parent in parents {
                     let index_type =
-                        find_output_index_type_from_nodeid(parent.index() as NodeId, &plan);
+                        find_output_index_type_from_nodeid(parent.index() as NodeId, plan);
                     if let Some(index_type) = index_type {
                         input_msg_indices_types.push(index_type);
                     } else {
@@ -276,7 +276,7 @@ fn plan_tasks_tree_branch(
 
                 for parent in parents {
                     let index_type =
-                        find_output_index_type_from_nodeid(parent.index() as NodeId, &plan);
+                        find_output_index_type_from_nodeid(parent.index() as NodeId, plan);
                     if let Some(index_type) = index_type {
                         input_msg_indices_types.push(index_type);
                     } else {

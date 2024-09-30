@@ -13,7 +13,7 @@ pub struct CuError {
 impl Display for CuError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let context_str = match &self.cause {
-            Some(c) => format!("{}", c),
+            Some(c) => c.to_string(),
             None => "None".to_string(),
         };
         write!(f, "{}\n   context:{}", self.message, context_str)?;
