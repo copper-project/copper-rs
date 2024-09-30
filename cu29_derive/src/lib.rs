@@ -26,11 +26,10 @@ fn int2sliceindex(i: u32) -> syn::Index {
     syn::Index::from(i as usize)
 }
 
-#[proc_macro]
 /// Generates the CopperList content type from a config.
 /// gen_cumsgs!("path/to/config.toml")
-/// It will creates a new type called CuMsgs you can pass to the log reader for decoding:
-///
+/// It will create a new type called CuMsgs you can pass to the log reader for decoding:
+#[proc_macro]
 pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
     let config = parse_macro_input!(config_path_lit as LitStr).value();
     eprintln!("[gen culist support with {:?}]", config);
