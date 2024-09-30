@@ -44,7 +44,7 @@ default-members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.2.3"
+version = "0.3.0"
 authors = ["Guillaume Binet <gbin@gootz.net>"]
 edition = "2021"
 license = "Apache-2.0"
@@ -56,19 +56,19 @@ repository = "https://github.com/copper-project/copper-rs"
 [workspace.dependencies]
 
 # Copper Core
-cu29 = { path = "cu29", version = "0.2.2" }
-cu29-clock = { path = "cu29_clock", version = "0.2.2" }
-cu29-derive = { path = "cu29_derive", version = "0.2.2" }
-cu29-export = { path = "cu29_export", version = "0.2.2" }
-cu29-helpers = { path = "cu29_helpers", version = "0.2.2" }
-cu29-intern-strs = { path = "cu29_intern_strs", version = "0.2.2" }
-cu29-log = { path = "cu29_log", version = "0.2.2" }
-cu29-log-derive = { path = "cu29_log_derive", version = "0.2.2" }
-cu29-log-runtime = { path = "cu29_log_runtime", version = "0.2.2" }
-cu29-soa-derive = { path = "cu29_soa_derive", version = "0.2.2" }
-cu29-traits = { path = "cu29_traits", version = "0.2.2" }
-cu29-unifiedlog = { path = "cu29_unifiedlog", version = "0.2.2" }
-cu29-value = { path = "cu29_value", version = "0.2.2" }
+cu29 = { path = "cu29", version = "0.3.0" }
+cu29-clock = { path = "cu29_clock", version = "0.3.0" }
+cu29-derive = { path = "cu29_derive", version = "0.3.0" }
+cu29-export = { path = "cu29_export", version = "0.3.0" }
+cu29-helpers = { path = "cu29_helpers", version = "0.3.0" }
+cu29-intern-strs = { path = "cu29_intern_strs", version = "0.3.0" }
+cu29-log = { path = "cu29_log", version = "0.3.0" }
+cu29-log-derive = { path = "cu29_log_derive", version = "0.3.0" }
+cu29-log-runtime = { path = "cu29_log_runtime", version = "0.3.0" }
+cu29-soa-derive = { path = "cu29_soa_derive", version = "0.3.0" }
+cu29-traits = { path = "cu29_traits", version = "0.3.0" }
+cu29-unifiedlog = { path = "cu29_unifiedlog", version = "0.3.0" }
+cu29-value = { path = "cu29_value", version = "0.3.0" }
 
 # External serialization
 bincode = { version = "2.0.0-rc.3", features = ["derive"] }
