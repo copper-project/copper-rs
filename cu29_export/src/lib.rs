@@ -447,9 +447,9 @@ mod tests {
         let reader = Cursor::new(data);
 
         let mut iter = copperlists_dump::<MyCuPayload>(reader);
-        assert_eq!(iter.next().unwrap().payload, (1, 2, 3.0));
-        assert_eq!(iter.next().unwrap().payload, (2, 3, 4.0));
-        assert_eq!(iter.next().unwrap().payload, (3, 4, 5.0));
-        assert_eq!(iter.next().unwrap().payload, (4, 5, 6.0));
+        assert_eq!(iter.next().unwrap().msgs, (1, 2, 3.0));
+        assert_eq!(iter.next().unwrap().msgs, (2, 3, 4.0));
+        assert_eq!(iter.next().unwrap().msgs, (3, 4, 5.0));
+        assert_eq!(iter.next().unwrap().msgs, (4, 5, 6.0));
     }
 }
