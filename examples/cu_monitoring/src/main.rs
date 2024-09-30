@@ -126,7 +126,6 @@ impl CuMonitor for ExampleMonitor {
         Ok(())
     }
 }
-
 const SLAB_SIZE: Option<usize> = Some(1024 * 1024 * 1);
 fn main() {
     let logger_path = "monitor.copper";
