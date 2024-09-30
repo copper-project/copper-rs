@@ -1,4 +1,3 @@
-
 use memmap2::{Mmap, MmapMut};
 use std::fmt::{Debug, Formatter};
 use std::fs::{File, OpenOptions};
@@ -464,7 +463,7 @@ fn make_slab_file(base_file_path: &PathBuf, slab_size: usize, slab_suffix: usize
 impl UnifiedLoggerWrite {
     fn next_slab(&mut self) -> File {
         self.front_slab_suffix += 1;
-        
+
         make_slab_file(&self.base_file_path, self.slab_size, self.front_slab_suffix)
     }
 

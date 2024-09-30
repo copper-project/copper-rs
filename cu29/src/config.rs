@@ -412,8 +412,7 @@ impl CuConfig {
 
     #[allow(dead_code)]
     pub fn get_edge_weight(&self, index: usize) -> Option<Cnx> {
-        self.graph
-            .edge_weight(EdgeIndex::new(index)).cloned()
+        self.graph.edge_weight(EdgeIndex::new(index)).cloned()
     }
 
     /// Convenience method to get all nodes in the configuration graph.

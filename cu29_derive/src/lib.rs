@@ -600,9 +600,9 @@ fn read_config(config_file: &String) -> CuConfig {
         .as_os_str()
         .to_str()
         .expect("Could not interpret the config file name");
-    
-    read_configuration(filename).unwrap_or_else(|_| panic!("Failed to read configuration file: {:?}",
-        &config_full_path))
+
+    read_configuration(filename)
+        .unwrap_or_else(|_| panic!("Failed to read configuration file: {:?}", &config_full_path))
 }
 
 /// Extract all the tasks types in their index order and their ids.
@@ -640,8 +640,12 @@ fn extract_msg_types(runtime_plan: &CuExecutionLoop) -> Vec<Type> {
             CuExecutionUnit::Step(step) => {
                 if let Some((_, output_msg_type)) = &step.output_msg_index_type {
                     Some(
-                        parse_str::<Type>(output_msg_type.as_str()).unwrap_or_else(|_| panic!("Could not transform {} into a message Rust type.",
-                                output_msg_type)),
+                        parse_str::<Type>(output_msg_type.as_str()).unwrap_or_else(|_| {
+                            panic!(
+                                "Could not transform {} into a message Rust type.",
+                                output_msg_type
+                            )
+                        }),
                     )
                 } else {
                     None

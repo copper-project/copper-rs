@@ -179,8 +179,6 @@ fn parent_n_times(path: &Path, n: usize) -> Option<PathBuf> {
 pub fn default_log_index_dir() -> PathBuf {
     let outdir = std::env::var("LOG_INDEX_DIR").expect("no LOG_INDEX_DIR system variable set, be sure build.rs sets it, see cu29_log/build.rs for example.");
     let outdir_path = Path::new(&outdir);
-    
-    parent_n_times(outdir_path, 3)
-        .unwrap()
-        .join(INDEX_DIR_NAME)
+
+    parent_n_times(outdir_path, 3).unwrap().join(INDEX_DIR_NAME)
 }
