@@ -178,7 +178,7 @@ mod tests {
             let data = &pkt.data[0x2a..];
             // send udp packet to 2368
             let socket = UdpSocket::bind("0.0.0.0:2367").unwrap();
-            socket.send_to(&data, "127.0.0.1:2368").unwrap();
+            socket.send_to(data, "127.0.0.1:2368").unwrap();
             // process
             let mut msg = CuMsg::new(Some(XYZSoa::<10000>::default()));
             drv.process(&clk, &mut msg).unwrap();

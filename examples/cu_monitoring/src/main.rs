@@ -126,7 +126,7 @@ impl CuMonitor for ExampleMonitor {
         Ok(())
     }
 }
-const SLAB_SIZE: Option<usize> = Some(1024 * 1024 * 1);
+const SLAB_SIZE: Option<usize> = Some(1024 * 1024);
 fn main() {
     let logger_path = "monitor.copper";
     let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), SLAB_SIZE, true)

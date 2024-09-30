@@ -118,11 +118,11 @@ impl CuTaskLifecycle for PIDTask {
                 debug!("PIDTask config: {:?}", config);
                 let setpoint: f32 = config
                     .get::<f64>("setpoint")
-                    .ok_or_else(|| "'setpoint' not found in config")?
+                    .ok_or("'setpoint' not found in config")?
                     as f32;
                 let cutoff: f32 = config
                     .get::<f64>("cutoff")
-                    .ok_or_else(|| "'cutoff' not found in config")?
+                    .ok_or("'cutoff' not found in config")?
                     as f32;
 
                 // p is mandatory
