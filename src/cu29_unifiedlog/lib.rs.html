@@ -1057,13 +1057,7 @@
 <a href="#1056" id="1056">1056</a>
 <a href="#1057" id="1057">1057</a>
 <a href="#1058" id="1058">1058</a>
-<a href="#1059" id="1059">1059</a>
-<a href="#1060" id="1060">1060</a>
-<a href="#1061" id="1061">1061</a>
-<a href="#1062" id="1062">1062</a>
-<a href="#1063" id="1063">1063</a></pre></div><pre class="rust"><code><span class="kw">use </span>libc;
-
-<span class="kw">use </span>memmap2::{Mmap, MmapMut};
+<a href="#1059" id="1059">1059</a></pre></div><pre class="rust"><code><span class="kw">use </span>memmap2::{Mmap, MmapMut};
 <span class="kw">use </span>std::fmt::{Debug, Formatter};
 <span class="kw">use </span>std::fs::{File, OpenOptions};
 <span class="kw">use </span>std::io::Read;
@@ -1220,6 +1214,12 @@
     create: bool,
 }
 
+<span class="kw">impl </span>Default <span class="kw">for </span>UnifiedLoggerBuilder {
+    <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
+        <span class="self">Self</span>::new()
+    }
+}
+
 <span class="kw">impl </span>UnifiedLoggerBuilder {
     <span class="kw">pub fn </span>new() -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{
@@ -1351,7 +1351,7 @@
         <span class="comment">// Be sure that the header reflects the actual size of the section.
         </span>section.update_header();
 
-        <span class="kw">let </span>_sz = encode_into_slice(<span class="kw-2">&amp;</span>section.section_header, <span class="kw-2">&amp;mut </span>section.buffer, standard())
+        <span class="kw">let </span>_sz = encode_into_slice(<span class="kw-2">&amp;</span>section.section_header, section.buffer, standard())
             .expect(<span class="string">"Failed to encode section header"</span>);
 
         <span class="kw">let </span>base = <span class="self">self</span>.mmap_buffer.as_ptr() <span class="kw">as </span>usize;
@@ -1433,6 +1433,7 @@
 
 <span class="doccomment">/// A SectionHandle is a handle to a section in the datalogger.
 /// It allows to track the lifecycle of a section of the datalogger.
+</span><span class="attr">#[derive(Default)]
 </span><span class="kw">pub struct </span>SectionHandle {
     section_header: SectionHeader,
     buffer: <span class="kw-2">&amp;</span><span class="lifetime">'static </span><span class="kw-2">mut </span>[u8], <span class="comment">// This includes the encoded header for end of section patching.
@@ -1440,17 +1441,8 @@
 </span>}
 
 <span class="comment">// This is for a placeholder to unsure an orderly cleanup as we dodge the borrow checker.
-</span><span class="kw">impl </span>Default <span class="kw">for </span>SectionHandle {
-    <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
-        <span class="self">Self </span>{
-            section_header: SectionHeader::default(),
-            buffer: <span class="kw-2">&amp;mut </span>[],
-            used: <span class="number">0</span>,
-        }
-    }
-}
 
-<span class="kw">impl </span>SectionHandle {
+</span><span class="kw">impl </span>SectionHandle {
     <span class="comment">// The buffer is considered static as it is a dedicated piece for the section.
     </span><span class="kw">pub fn </span>create(section_header: SectionHeader, buffer: <span class="kw-2">&amp;</span><span class="lifetime">'static </span><span class="kw-2">mut </span>[u8]) -&gt; <span class="self">Self </span>{
         <span class="comment">// here we assume with are passed a valid section.
@@ -1521,7 +1513,7 @@
         .write(<span class="bool-val">true</span>)
         .create(<span class="bool-val">true</span>)
         .open(<span class="kw-2">&amp;</span>file_path)
-        .expect(<span class="macro">format!</span>(<span class="string">"Failed to open file: {}"</span>, file_path.display()).as_str());
+        .unwrap_or_else(|<span class="kw">_</span>| <span class="macro">panic!</span>(<span class="string">"Failed to open file: {}"</span>, file_path.display()));
     file.set_len(slab_size <span class="kw">as </span>u64)
         .expect(<span class="string">"Failed to set file length"</span>);
     file
@@ -1530,8 +1522,8 @@
 <span class="kw">impl </span>UnifiedLoggerWrite {
     <span class="kw">fn </span>next_slab(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; File {
         <span class="self">self</span>.front_slab_suffix += <span class="number">1</span>;
-        <span class="kw">let </span>file = make_slab_file(<span class="kw-2">&amp;</span><span class="self">self</span>.base_file_path, <span class="self">self</span>.slab_size, <span class="self">self</span>.front_slab_suffix);
-        file
+
+        make_slab_file(<span class="kw-2">&amp;</span><span class="self">self</span>.base_file_path, <span class="self">self</span>.slab_size, <span class="self">self</span>.front_slab_suffix)
     }
 
     <span class="kw">fn </span>new(base_file_path: <span class="kw-2">&amp;</span>PathBuf, slab_size: usize, page_size: usize) -&gt; <span class="self">Self </span>{
@@ -1775,7 +1767,7 @@
                 <span class="prelude-val">Ok</span>(<span class="bool-val">true</span>)
             }
             <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>) =&gt; <span class="prelude-val">Ok</span>(<span class="bool-val">false</span>), <span class="comment">// No more sections of this type
-            </span><span class="prelude-val">Err</span>(e) =&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(io::Error::new(io::ErrorKind::Other, e.to_string())),
+            </span><span class="prelude-val">Err</span>(e) =&gt; <span class="prelude-val">Err</span>(io::Error::new(io::ErrorKind::Other, e.to_string())),
         }
     }
 }

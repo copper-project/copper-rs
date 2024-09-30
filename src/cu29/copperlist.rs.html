@@ -410,7 +410,13 @@
 <a href="#409" id="409">409</a>
 <a href="#410" id="410">410</a>
 <a href="#411" id="411">411</a>
-<a href="#412" id="412">412</a></pre></div><pre class="rust"><code><span class="doccomment">//! CopperList is the main data structure used by Copper to communicate between tasks.
+<a href="#412" id="412">412</a>
+<a href="#413" id="413">413</a>
+<a href="#414" id="414">414</a>
+<a href="#415" id="415">415</a>
+<a href="#416" id="416">416</a>
+<a href="#417" id="417">417</a>
+<a href="#418" id="418">418</a></pre></div><pre class="rust"><code><span class="doccomment">//! CopperList is the main data structure used by Copper to communicate between tasks.
 //! It is a queue that can be used to store preallocated messages between tasks in memory order.
 </span><span class="kw">extern crate </span>alloc;
 
@@ -506,6 +512,12 @@
 <span class="kw">pub type </span>IterMut&lt;<span class="lifetime">'a</span>, T&gt; = Chain&lt;Rev&lt;SliceIterMut&lt;<span class="lifetime">'a</span>, T&gt;&gt;, Rev&lt;SliceIterMut&lt;<span class="lifetime">'a</span>, T&gt;&gt;&gt;;
 <span class="kw">pub type </span>AscIter&lt;<span class="lifetime">'a</span>, T&gt; = Chain&lt;SliceIter&lt;<span class="lifetime">'a</span>, T&gt;, SliceIter&lt;<span class="lifetime">'a</span>, T&gt;&gt;;
 <span class="kw">pub type </span>AscIterMut&lt;<span class="lifetime">'a</span>, T&gt; = Chain&lt;SliceIterMut&lt;<span class="lifetime">'a</span>, T&gt;, SliceIterMut&lt;<span class="lifetime">'a</span>, T&gt;&gt;;
+
+<span class="kw">impl</span>&lt;P: CopperListTuple, <span class="kw">const </span>N: usize&gt; Default <span class="kw">for </span>CuListsManager&lt;P, N&gt; {
+    <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
+        <span class="self">Self</span>::new()
+    }
+}
 
 <span class="kw">impl</span>&lt;P: CopperListTuple, <span class="kw">const </span>N: usize&gt; CuListsManager&lt;P, N&gt; {
     <span class="kw">pub fn </span>new() -&gt; <span class="self">Self </span>{

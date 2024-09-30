@@ -58,11 +58,11 @@
     <span class="kw">let </span><span class="kw-2">mut </span>i = ri.expect(<span class="string">"Failed to start iterator"</span>);
     <span class="kw">while let </span><span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(v)) = i.next() {
         <span class="kw">let </span>(k, v) = v;
-        <span class="kw">let </span>index = LittleEndian::read_u32(<span class="kw-2">&amp;</span>k) <span class="kw">as </span>usize;
+        <span class="kw">let </span>index = LittleEndian::read_u32(k) <span class="kw">as </span>usize;
 
         <span class="kw">if let </span>rkv::Value::Str(s) = v {
-            <span class="kw">if </span>all_strings.len() &lt;= index <span class="kw">as </span>usize {
-                all_strings.resize(index <span class="kw">as </span>usize + <span class="number">1</span>, String::new());
+            <span class="kw">if </span>all_strings.len() &lt;= index {
+                all_strings.resize(index + <span class="number">1</span>, String::new());
             }
 
             all_strings[index] = s.to_string();

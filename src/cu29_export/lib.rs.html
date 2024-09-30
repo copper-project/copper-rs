@@ -552,19 +552,19 @@
         <span class="kw">match </span>entry {
             <span class="prelude-val">Ok</span>(entry) =&gt; <span class="prelude-val">Some</span>(entry),
             <span class="prelude-val">Err</span>(e) =&gt; <span class="kw">match </span>e {
-                DecodeError::UnexpectedEnd { .. } =&gt; <span class="kw">return </span><span class="prelude-val">None</span>,
+                DecodeError::UnexpectedEnd { .. } =&gt; <span class="prelude-val">None</span>,
                 DecodeError::Io { inner, additional } =&gt; {
                     <span class="kw">if </span>inner.kind() == std::io::ErrorKind::UnexpectedEof {
-                        <span class="kw">return </span><span class="prelude-val">None</span>;
-                    } <span class="kw">else </span>{
+                        <span class="prelude-val">None
+                    </span>} <span class="kw">else </span>{
                         <span class="macro">println!</span>(<span class="string">"Error {:?} additional:{}"</span>, inner, additional);
-                        <span class="kw">return </span><span class="prelude-val">None</span>;
-                    }
+                        <span class="prelude-val">None
+                    </span>}
                 }
                 <span class="kw">_ </span>=&gt; {
                     <span class="macro">println!</span>(<span class="string">"Error {:?}"</span>, e);
-                    <span class="kw">return </span><span class="prelude-val">None</span>;
-                }
+                    <span class="prelude-val">None
+                </span>}
             },
         }
     })
@@ -689,7 +689,7 @@
             .map_err(|e| PyIOError::new_err(e.to_string()))<span class="question-mark">?</span>;
 
         <span class="kw">let </span>UnifiedLogger::Read(dl) = UnifiedLoggerBuilder::new()
-            .file_base_name(<span class="kw-2">&amp;</span>Path::new(unified_src_path))
+            .file_base_name(Path::new(unified_src_path))
             .build()
             .expect(<span class="string">"Failed to create logger"</span>)
         <span class="kw">else </span>{
@@ -732,12 +732,12 @@
 
         <span class="doccomment">/// Returns the index of the parameter names in the vector of interned strings.
         </span><span class="kw">pub fn </span>paramname_indexes(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;u32&gt; {
-            <span class="self">self</span>.inner.paramname_indexes.iter().map(|x| <span class="kw-2">*</span>x).collect()
+            <span class="self">self</span>.inner.paramname_indexes.iter().copied().collect()
         }
 
         <span class="doccomment">/// Returns the parameters of this log line
         </span><span class="kw">pub fn </span>params(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;PyObject&gt; {
-            <span class="self">self</span>.inner.params.iter().map(|x| value_to_py(x)).collect()
+            <span class="self">self</span>.inner.params.iter().map(value_to_py).collect()
         }
     }
 
@@ -784,7 +784,7 @@
             Value::Unit =&gt; Python::with_gil(|py| py.<span class="prelude-val">None</span>()),
             Value::Newtype(v) =&gt; value_to_py(v),
             Value::Seq(s) =&gt; Python::with_gil(|py| {
-                <span class="kw">let </span>list = PyList::new_bound(py, s.iter().map(|v| value_to_py(v)));
+                <span class="kw">let </span>list = PyList::new_bound(py, s.iter().map(value_to_py));
                 list.to_object(py)
             }),
         }
@@ -817,7 +817,7 @@
         <span class="kw">let </span><span class="kw-2">mut </span>copy_options = CopyOptions::new();
         copy_options.copy_inside = <span class="bool-val">true</span>;
 
-        copy(<span class="string">"test/cu29_log_index"</span>, <span class="kw-2">&amp;</span>temp_path, <span class="kw-2">&amp;</span>copy_options).unwrap();
+        copy(<span class="string">"test/cu29_log_index"</span>, temp_path, <span class="kw-2">&amp;</span>copy_options).unwrap();
         temp_path.join(<span class="string">"cu29_log_index"</span>)
     }
 

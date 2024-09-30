@@ -733,11 +733,7 @@
 <a href="#732" id="732">732</a>
 <a href="#733" id="733">733</a>
 <a href="#734" id="734">734</a>
-<a href="#735" id="735">735</a>
-<a href="#736" id="736">736</a>
-<a href="#737" id="737">737</a>
-<a href="#738" id="738">738</a>
-<a href="#739" id="739">739</a></pre></div><pre class="rust"><code><span class="kw">extern crate </span>proc_macro;
+<a href="#735" id="735">735</a></pre></div><pre class="rust"><code><span class="kw">extern crate </span>proc_macro;
 
 <span class="kw">use </span>proc_macro::TokenStream;
 
@@ -752,7 +748,6 @@
 <span class="kw">use </span>cu29::config::CuConfig;
 <span class="kw">use </span>cu29::curuntime::{compute_runtime_plan, CuExecutionLoop, CuExecutionUnit, CuTaskType};
 <span class="kw">use </span>format::{highlight_rust_code, rustfmt_generated_code};
-<span class="kw">use </span>itertools;
 
 <span class="kw">mod </span>format;
 <span class="kw">mod </span>utils;
@@ -794,7 +789,7 @@
 <span class="doccomment">/// Build the inner support of the copper list.
 </span><span class="kw">fn </span>gen_culist_support(runtime_plan: <span class="kw-2">&amp;</span>CuExecutionLoop) -&gt; proc_macro2::TokenStream {
     <span class="macro">eprintln!</span>(<span class="string">"[Extract msgs types]"</span>);
-    <span class="kw">let </span>all_msgs_types_in_culist_order = extract_msg_types(<span class="kw-2">&amp;</span>runtime_plan);
+    <span class="kw">let </span>all_msgs_types_in_culist_order = extract_msg_types(runtime_plan);
 
     <span class="kw">let </span>culist_size = all_msgs_types_in_culist_order.len();
     <span class="kw">let </span>culist_indices = (<span class="number">0</span>..(culist_size <span class="kw">as </span>u32)).map(int2sliceindex);
@@ -1335,16 +1330,14 @@
 
 <span class="kw">fn </span>read_config(config_file: <span class="kw-2">&amp;</span>String) -&gt; CuConfig {
     <span class="kw">let </span><span class="kw-2">mut </span>config_full_path = utils::caller_crate_root();
-    config_full_path.push(<span class="kw-2">&amp;</span>config_file);
+    config_full_path.push(config_file);
     <span class="kw">let </span>filename = config_full_path
         .as_os_str()
         .to_str()
         .expect(<span class="string">"Could not interpret the config file name"</span>);
-    <span class="kw">let </span>copper_config = read_configuration(filename).expect(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
-        <span class="string">"Failed to read configuration file: {:?}"</span>,
-        <span class="kw-2">&amp;</span>config_full_path
-    ));
-    copper_config
+
+    read_configuration(filename)
+        .unwrap_or_else(|<span class="kw">_</span>| <span class="macro">panic!</span>(<span class="string">"Failed to read configuration file: {:?}"</span>, <span class="kw-2">&amp;</span>config_full_path))
 }
 
 <span class="doccomment">/// Extract all the tasks types in their index order and their ids.
@@ -1368,7 +1361,7 @@
         .iter()
         .map(|name| {
             parse_str(name)
-                .expect(<span class="macro">format!</span>(<span class="string">"Could not transform {} into a Task Rust type."</span>, name).as_str())
+                .unwrap_or_else(|<span class="kw">_</span>| <span class="macro">panic!</span>(<span class="string">"Could not transform {} into a Task Rust type."</span>, name))
         })
         .collect();
     (all_tasks_ids, all_types_names, all_types)
@@ -1382,13 +1375,12 @@
             CuExecutionUnit::Step(step) =&gt; {
                 <span class="kw">if let </span><span class="prelude-val">Some</span>((<span class="kw">_</span>, output_msg_type)) = <span class="kw-2">&amp;</span>step.output_msg_index_type {
                     <span class="prelude-val">Some</span>(
-                        parse_str::&lt;Type&gt;(output_msg_type.as_str()).expect(
-                            <span class="macro">format!</span>(
+                        parse_str::&lt;Type&gt;(output_msg_type.as_str()).unwrap_or_else(|<span class="kw">_</span>| {
+                            <span class="macro">panic!</span>(
                                 <span class="string">"Could not transform {} into a message Rust type."</span>,
                                 output_msg_type
                             )
-                            .as_str(),
-                        ),
+                        }),
                     )
                 } <span class="kw">else </span>{
                     <span class="prelude-val">None

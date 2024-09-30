@@ -619,7 +619,7 @@
             // serialize them all and Free them.
             </span><span class="kw">if </span>is_top &amp;&amp; cl.get_state() == CopperListState::DoneProcessing {
                 cl.change_state(CopperListState::BeingSerialized);
-                <span class="self">self</span>.logger.log(<span class="kw-2">&amp;</span>cl).unwrap();
+                <span class="self">self</span>.logger.log(cl).unwrap();
                 cl.change_state(CopperListState::Free);
                 nb_done += <span class="number">1</span>;
             } <span class="kw">else </span>{
@@ -784,7 +784,7 @@
 
                 <span class="kw">for </span>parent <span class="kw">in </span>parents {
                     <span class="kw">let </span>index_type =
-                        find_output_index_type_from_nodeid(parent.index() <span class="kw">as </span>NodeId, <span class="kw-2">&amp;</span>plan);
+                        find_output_index_type_from_nodeid(parent.index() <span class="kw">as </span>NodeId, plan);
                     <span class="kw">if let </span><span class="prelude-val">Some</span>(index_type) = index_type {
                         input_msg_indices_types.push(index_type);
                     } <span class="kw">else </span>{
@@ -807,7 +807,7 @@
 
                 <span class="kw">for </span>parent <span class="kw">in </span>parents {
                     <span class="kw">let </span>index_type =
-                        find_output_index_type_from_nodeid(parent.index() <span class="kw">as </span>NodeId, <span class="kw-2">&amp;</span>plan);
+                        find_output_index_type_from_nodeid(parent.index() <span class="kw">as </span>NodeId, plan);
                     <span class="kw">if let </span><span class="prelude-val">Some</span>(index_type) = index_type {
                         input_msg_indices_types.push(index_type);
                     } <span class="kw">else </span>{

@@ -182,9 +182,7 @@
 <a href="#181" id="181">181</a>
 <a href="#182" id="182">182</a>
 <a href="#183" id="183">183</a>
-<a href="#184" id="184">184</a>
-<a href="#185" id="185">185</a>
-<a href="#186" id="186">186</a></pre></div><pre class="rust"><code><span class="kw">use </span>bincode::{Decode, Encode};
+<a href="#184" id="184">184</a></pre></div><pre class="rust"><code><span class="kw">use </span>bincode::{Decode, Encode};
 <span class="kw">use </span>cu29_clock::CuTime;
 <span class="kw">use </span>cu29_traits::{CuError, CuResult};
 <span class="kw">pub use </span>cu29_value <span class="kw">as </span>value;
@@ -312,14 +310,14 @@
     <span class="kw">let </span><span class="kw-2">mut </span>format_str = format_str.to_string();
 
     <span class="kw">for </span>param <span class="kw">in </span>params.iter() {
-        format_str = format_str.replacen(<span class="string">"{}"</span>, <span class="kw-2">&amp;</span>param, <span class="number">1</span>);
+        format_str = format_str.replacen(<span class="string">"{}"</span>, param, <span class="number">1</span>);
     }
 
     <span class="kw">if </span>named_params.is_empty() {
         <span class="kw">return </span><span class="prelude-val">Ok</span>(format_str);
     }
 
-    <span class="kw">let </span>logline = strfmt(<span class="kw-2">&amp;</span>format_str, <span class="kw-2">&amp;</span>named_params).map_err(|e| {
+    <span class="kw">let </span>logline = strfmt(<span class="kw-2">&amp;</span>format_str, named_params).map_err(|e| {
         CuError::new_with_cause(
             <span class="macro">format!</span>(
                 <span class="string">"Failed to format log line: {:?} with variables [{:?}]"</span>,
@@ -365,9 +363,7 @@
 </span><span class="kw">pub fn </span>default_log_index_dir() -&gt; PathBuf {
     <span class="kw">let </span>outdir = std::env::var(<span class="string">"LOG_INDEX_DIR"</span>).expect(<span class="string">"no LOG_INDEX_DIR system variable set, be sure build.rs sets it, see cu29_log/build.rs for example."</span>);
     <span class="kw">let </span>outdir_path = Path::new(<span class="kw-2">&amp;</span>outdir);
-    <span class="kw">let </span>target_dir = parent_n_times(<span class="kw-2">&amp;</span>outdir_path, <span class="number">3</span>)
-        .unwrap()
-        .join(INDEX_DIR_NAME);
-    target_dir
+
+    parent_n_times(outdir_path, <span class="number">3</span>).unwrap().join(INDEX_DIR_NAME)
 }
 </code></pre></div></section></main></body></html>
