@@ -159,6 +159,7 @@ use hdrhistogram::Histogram;
 use serde_derive::{Deserialize, Serialize};
 
 /// Accumulative stat object that can give your some real time statistics.
+#[derive(Debug, Clone)]
 pub struct LiveStatistics {
     stats: Histogram<u64>, // u64 is the Counter type.
 }
@@ -218,6 +219,7 @@ impl LiveStatistics {
 
 /// A Specialized statistics object for CuDuration.
 /// It will also keep track of the jitter between the values.
+#[derive(Debug, Clone)]
 pub struct CuDurationStatistics {
     bare: LiveStatistics,
     jitter: LiveStatistics,

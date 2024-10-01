@@ -271,7 +271,7 @@ pub struct Cnx {
 
 /// CuConfig is the programmatic representation of the configuration graph.
 /// It is a directed graph where nodes are tasks and edges are connections between tasks.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CuConfig {
     // This is not what is directly serialized, see the custom serialization below.
     pub graph: StableDiGraph<Node, Cnx, NodeId>,

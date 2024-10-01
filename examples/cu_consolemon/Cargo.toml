@@ -11,7 +11,7 @@ repository.workspace = true
 
 [dependencies]
 cu29 = { workspace = true }
-ratatui = "0.28.2-alpha.4"
+ratatui = "0.28.1"
 pfetch-logo-parser = "0.1.1"
 pfetch-extractor = "0.2.3"
 pfetch = "*"
@@ -21,4 +21,5 @@ glob = "0.3.1"
 which = "6.0.2"
 libmacchina = "7.3.1"
 os-release = "0.1.0"
-
+nix = "0.23.2"
+ansi-to-tui = "6.0.0"

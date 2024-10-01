@@ -13,9 +13,6 @@ struct CaterpillarApplication {}
 const SLAB_SIZE: Option<usize> = Some(1024 * 1024);
 
 fn main() {
-    println!("{}", cu_consolemon::sysinfo::pfetch_info());
-    return;
-
     let logger_path = "/tmp/caterpillar.copper";
     let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), SLAB_SIZE, false)
         .expect("Failed to setup logger.");
