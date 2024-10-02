@@ -26,6 +26,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::{io, thread};
 
+#[derive(PartialEq)]
 enum Screen {
     Neofetch,
     Dag,
@@ -52,6 +53,13 @@ impl TaskStats {
             self.stats[i].record(after - before);
         }
         self.end2end.record(compute_end_to_end_latency(msgs));
+    }
+
+    fn reset(&mut self) {
+        for s in &mut self.stats {
+            s.reset();
+        }
+        self.end2end.reset();
     }
 }
 
@@ -263,6 +271,11 @@ impl UI {
                         KeyCode::Char('1') => self.active_screen = Screen::Neofetch,
                         KeyCode::Char('2') => self.active_screen = Screen::Dag,
                         KeyCode::Char('3') => self.active_screen = Screen::Latency,
+                        KeyCode::Char('r') => {
+                            if self.active_screen == Screen::Latency {
+                                self.task_stats.lock().unwrap().reset()
+                            }
+                        }
                         KeyCode::Char('q') => {
                             // Basically triggers the clean ctrlc logic of copper.
                             signal::kill(

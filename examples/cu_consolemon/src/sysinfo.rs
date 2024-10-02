@@ -1,9 +1,8 @@
-// src/pfetch.rs
-
 use libmacchina::{
     traits::GeneralReadout as _, traits::KernelReadout as _, traits::MemoryReadout as _,
     traits::PackageReadout as _, GeneralReadout, KernelReadout, MemoryReadout, PackageReadout,
 };
+
 use pfetch_logo_parser::{Color, Logo, LogoPart};
 use std::{env, fmt::Display, str::FromStr};
 
@@ -221,12 +220,5 @@ fn pfetch(info: Vec<(Color, String, String)>, logo: Logo, logo_enabled: bool) ->
         )
     }
 
-    // if colors are disabled, remove them from string
-    // if dotenvy::var("PF_COLOR").unwrap_or_default() == "0" {
-    //     pfetch_str = pfetch_str
-    //         .split("\x1b[")
-    //         .map(|chunk| chunk.chars().skip(3).collect::<String>())
-    //         .collect();
-    // }
     pfetch_str
 }
