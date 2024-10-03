@@ -551,7 +551,7 @@ impl CuMonitor for CuConsoleMon {
             read_configuration(config_file.as_str()).expect("Could not read configuration");
         let task_stats = Arc::new(Mutex::new(TaskStats::new(
             taskids.len(),
-            CuDuration::from(Duration::from_secs(1)),
+            CuDuration::from(Duration::from_secs(5)),
         )));
 
         Ok(Self {

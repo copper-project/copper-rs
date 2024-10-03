@@ -226,19 +226,19 @@ impl<'cl> CuTask<'cl> for PIDTask {
         }
 
         let power_bal = if bal_pos != self.last_bal {
-            debug!(
-                "{} / {}: PIDTask processing bal: {} rail:{}",
-                clock.now(),
-                bal_tov,
-                bal_pos,
-                rail_pos
-            );
+            // debug!(
+            //     "{} / {}: PIDTask processing bal: {} rail:{}",
+            //     clock.now(),
+            //     bal_tov,
+            //     bal_pos,
+            //     rail_pos
+            // );
             let bal_dt = bal_tov - self.last_tov_bal;
             let power_balance = self.pid_balance.next_control_output(bal_pos as f32, bal_dt);
-            debug!(
-                "Balance output: input: {} p:{} i:{} d:{} total:{}",
-                bal_pos, power_balance.p, power_balance.i, power_balance.d, power_balance.output
-            );
+            // debug!(
+            //     "Balance output: input: {} p:{} i:{} d:{} total:{}",
+            //     bal_pos, power_balance.p, power_balance.i, power_balance.d, power_balance.output
+            // );
 
             self.last_bal = bal_pos;
             self.last_tov_bal = bal_tov;
@@ -253,14 +253,14 @@ impl<'cl> CuTask<'cl> for PIDTask {
             let power_position = self
                 .pid_position
                 .next_control_output(rail_pos as f32, rail_dt);
-            debug!(
-                "Position output: input: {} p:{} i:{} d:{} total:{}",
-                rail_pos,
-                power_position.p,
-                power_position.i,
-                power_position.d,
-                power_position.output
-            );
+            // debug!(
+            //     "Position output: input: {} p:{} i:{} d:{} total:{}",
+            //     rail_pos,
+            //     power_position.p,
+            //     power_position.i,
+            //     power_position.d,
+            //     power_position.output
+            // );
 
             self.last_pos = rail_pos;
             self.last_tov_pos = rail_tov;
@@ -275,11 +275,11 @@ impl<'cl> CuTask<'cl> for PIDTask {
 
         match bal_pos as f32 {
             value if value < self.pid_balance.setpoint - self.cutoff => {
-                debug!("********** Rod position too low, stopping motors");
+                // debug!("********** Rod position too low, stopping motors");
                 output.set_payload(MotorPayload { power: 0.0 });
             }
             value if value > self.pid_balance.setpoint + self.cutoff => {
-                debug!("********** Rod position too high, stopping motors");
+                // debug!("********** Rod position too high, stopping motors");
                 output.set_payload(MotorPayload { power: 0.0 });
             }
             _ => {

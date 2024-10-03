@@ -1,16 +1,19 @@
 use bincode::{Decode, Encode};
-use cu29::clock::RobotClock;
+use cu29::clock::{CuDuration, RobotClock};
 use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
 use cu29::output_msg;
 use cu29::{CuError, CuResult};
 use lazy_static::lazy_static;
-use rppal::gpio::{Gpio, InputPin, Level};
+use rppal::gpio::{Gpio, InputPin, Level, Trigger};
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicI32, Ordering};
-use std::sync::Arc;
-use std::thread;
-use std::thread::JoinHandle;
+use std::sync::{Arc, Mutex};
+
+struct InterruptData {
+    dat_pin: InputPin,
+    ticks: i32,
+    tov: CuDuration,
+}
 
 lazy_static! {
     static ref GPIO: Gpio = Gpio::new().expect("Could not create GPIO bindings");
@@ -22,10 +25,8 @@ pub struct EncoderPayload {
 }
 
 pub struct Encoder {
-    clk_pin: u8, // signals a tick
-    dat_pin: u8, // gives the direction of the tick
-    ticks_count: Arc<AtomicI32>,
-    thread_handle: Option<JoinHandle<()>>,
+    clk_pin: InputPin,
+    data_from_interrupts: Arc<Mutex<InterruptData>>,
 }
 
 impl Freezable for Encoder {
@@ -46,48 +47,49 @@ impl CuTaskLifecycle for Encoder {
         let dat_pin_nb_value = config.get("dat_pin").ok_or("Encoder needs a dat_pin")?;
         let dat_pin: u8 = dat_pin_nb_value.clone().into();
 
+        let mut clk_pin: InputPin = GPIO
+            .get(clk_pin)
+            .map_err(|e| CuError::new_with_cause("Could not get pin", e))?
+            .into_input();
+
+        let dat_pin = GPIO
+            .get(dat_pin)
+            .map_err(|e| CuError::new_with_cause("Could not get pin", e))?
+            .into_input();
+
         Ok(Self {
             clk_pin,
-            dat_pin,
-            ticks_count: Arc::new(AtomicI32::new(0)),
-            thread_handle: None,
+            data_from_interrupts: Arc::new(Mutex::new(InterruptData {
+                dat_pin,
+                ticks: 0,
+                tov: CuDuration::default(),
+            })),
         })
     }
 
-    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
-        let ticks_count = self.ticks_count.clone();
+    fn start(&mut self, clock: &RobotClock) -> CuResult<()> {
+        let clock = clock.clone();
+        let idata = Arc::clone(&self.data_from_interrupts);
 
-        let clk_pin: InputPin = GPIO
-            .get(self.clk_pin)
-            .map_err(|e| CuError::new_with_cause("Could not get pin", e))?
-            .into_input();
-        let dat_pin: InputPin = GPIO
-            .get(self.dat_pin)
-            .map_err(|e| CuError::new_with_cause("Could not get pin", e))?
-            .into_input();
-
-        let handle: JoinHandle<()> = thread::spawn(move || {
-            let mut last_clk_state = Level::High;
-            loop {
-                match clk_pin.read() {
-                    Level::High => {
-                        if last_clk_state == Level::Low {
-                            if dat_pin.read() == Level::Low {
-                                ticks_count.fetch_add(1, Ordering::SeqCst);
-                            } else {
-                                ticks_count.fetch_sub(1, Ordering::SeqCst);
-                            }
-                            last_clk_state = Level::High;
-                        }
-                    }
-                    Level::Low => {
-                        last_clk_state = Level::Low;
-                    }
+        self.clk_pin
+            .set_async_interrupt(Trigger::FallingEdge, None, move |_| {
+                let mut idata = idata.lock().unwrap();
+                if idata.dat_pin.read() == Level::Low {
+                    idata.ticks += 1;
+                } else {
+                    idata.ticks -= 1;
                 }
-            }
-        });
+                idata.tov = clock.now();
+            })
+            .map_err(|e| CuError::new_with_cause("Failed to set async interrupt", e))?;
 
-        self.thread_handle = Some(handle);
+        Ok(())
+    }
+
+    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        self.clk_pin
+            .clear_async_interrupt()
+            .map_err(|e| CuError::new_with_cause("Failed to reset async interrupt", e))?;
         Ok(())
     }
 }
@@ -95,10 +97,10 @@ impl CuTaskLifecycle for Encoder {
 impl<'cl> CuSrcTask<'cl> for Encoder {
     type Output = output_msg!('cl, EncoderPayload);
 
-    fn process(&mut self, clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
-        new_msg.metadata.tov = Some(clock.now()).into();
-        let ticks = self.ticks_count.load(Ordering::SeqCst);
-        new_msg.set_payload(EncoderPayload { ticks });
+    fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
+        let idata = self.data_from_interrupts.lock().unwrap();
+        new_msg.metadata.tov = idata.tov.into();
+        new_msg.set_payload(EncoderPayload { ticks: idata.ticks });
         Ok(())
     }
 }
