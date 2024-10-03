@@ -136,7 +136,7 @@ impl Widget for GraphWrapper<'_> {
 const NODE_WIDTH: u16 = 26;
 const NODE_WIDTH_CONTENT: u16 = NODE_WIDTH - 2;
 
-const NODE_HEIGHT: u16 = 3;
+const NODE_HEIGHT: u16 = 5;
 const NODE_HEIGHT_CONTENT: u16 = NODE_HEIGHT - 2;
 
 impl StatefulWidget for NodesScrollableWidget<'_> {
