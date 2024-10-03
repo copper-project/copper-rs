@@ -95,8 +95,6 @@ pub fn pfetch_info() -> String {
 
     let os = pfetch::os(&GeneralReadout::new()).unwrap_or_default();
 
-    let logo_name = os.clone();
-
     let all_infos = [
         PfetchInfo::Os,
         PfetchInfo::Host,
@@ -108,10 +106,9 @@ pub fn pfetch_info() -> String {
         PfetchInfo::Editor,
         PfetchInfo::Wm,
         PfetchInfo::De,
-        PfetchInfo::Palette,
     ];
 
-    let mut logo = pfetch::logo(&os);
+    let logo = pfetch::logo(&os);
     let gathered_pfetch_info: Vec<(Color, String, String)> = all_infos
         .iter()
         .filter_map(|info| match info {
@@ -119,7 +116,6 @@ pub fn pfetch_info() -> String {
             _ => get_info(&info, &readouts).map(|info_str| match info {
                 PfetchInfo::Title => (logo.secondary_color, info_str, "".to_string()),
                 PfetchInfo::BlankLine => (logo.primary_color, "".to_string(), "".to_string()),
-                PfetchInfo::Palette => (logo.primary_color, info_str, "".to_string()),
                 _ => (logo.primary_color, info.to_string(), info_str),
             }),
         })
