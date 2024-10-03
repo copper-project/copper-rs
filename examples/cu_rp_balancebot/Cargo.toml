@@ -28,6 +28,7 @@ bincode = { workspace = true }
 cu-ads7883 = { path = "../../drivers/cu_ads7883" }
 cu-rp-sn754410 = { path = "../../drivers/cu_rp_sn754410" }
 cu-rp-encoder = { path = "../../drivers/cu_rp_encoder" }
+cu-consolemon = { path = "../cu_consolemon" }
 # Only include cu29-export when the "logreader" feature is enabled
 cu29-export = { workspace = true, optional = true }
 pid = "4.0.0"

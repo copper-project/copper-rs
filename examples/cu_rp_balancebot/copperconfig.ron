@@ -43,5 +43,9 @@
         (src: "railpos",  dst: "pidctrl",   msg: "cu_rp_encoder::EncoderPayload"),
         (src: "pidctrl", dst: "motor",   msg: "cu_rp_sn754410::MotorPayload"),
     ],
+    monitor: (
+        type: "cu_consolemon::CuConsoleMon",
+        config: {"file": "copperconfig.ron"},
+    )
 )
 
