@@ -99,6 +99,16 @@ impl From<f64> for Value {
     }
 }
 
+impl From<Value> for bool {
+    fn from(value: Value) -> Self {
+        if let RonValue::Bool(v) = value.0 {
+            v
+        } else {
+            panic!("Expected a Boolean variant but got {:?}", value)
+        }
+    }
+}
+
 impl From<Value> for u8 {
     fn from(value: Value) -> Self {
         if let RonValue::Number(num) = value.0 {
@@ -330,7 +340,7 @@ impl<'de> Deserialize<'de> for CuConfig {
                 .graph
                 .node_indices()
                 .find(|i| cuconfig.graph[*i].id == c.dst)
-                .expect("Destination node not found");
+                .expect(format!("Destination {} node not found", c.dst).as_str());
             cuconfig.connect_ext(
                 src.index() as NodeId,
                 dst.index() as NodeId,
