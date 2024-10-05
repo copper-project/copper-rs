@@ -17,6 +17,7 @@ const PWM_FREQUENCY: f64 = 1000.0; // Frequency in Hz
 pub struct SN754410 {
     current_power: f32, // retain what was the last state so we don't bang the hardware at each iteration.
     deadzone: f32,
+    dryrun: bool,
     pwm0: Pwm,
     pwm1: Pwm,
     last_update: CuTime,
@@ -91,7 +92,14 @@ impl CuTaskLifecycle for SN754410 {
     where
         Self: Sized,
     {
-        let deadzone: f32 = config.and_then(|c| c.get::<f64>("deadzone")).unwrap_or(0.0) as f32;
+        let (deadzone, dryrun) = match config {
+            Some(config) => (
+                config.get::<f64>("deadzone").unwrap_or(0.0) as f32,
+                config.get::<bool>("dryrun").unwrap_or(false),
+            ),
+            None => (0.0, false),
+        };
+
         let pwm0 = Pwm::with_frequency(Channel::Pwm0, PWM_FREQUENCY, 0.0, Polarity::Normal, false)
             .map_err(|e| CuError::new_with_cause("Failed to create PWM0", e))?;
         let pwm1 = Pwm::with_frequency(Channel::Pwm1, PWM_FREQUENCY, 0.0, Polarity::Normal, false)
@@ -103,6 +111,7 @@ impl CuTaskLifecycle for SN754410 {
             pwm1,
             last_update: CuTime::default(),
             deadzone,
+            dryrun,
         })
     }
     fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
@@ -131,6 +140,14 @@ impl<'cl> CuSinkTask<'cl> for SN754410 {
 
     fn process(&mut self, clock: &RobotClock, input: Self::Input) -> CuResult<()> {
         if let Some(power) = input.payload() {
+            if self.dryrun {
+                debug!(
+                    "In Dryrun mode ignore any command: power would have been {}.",
+                    power.power
+                );
+                self.stop()?;
+                return Ok(());
+            }
             let deadzone_compensated = if power.power != 0.0f32 {
                 // proportinally on the [deadzone, 1.0] range
                 let deadzone = self.deadzone;
@@ -159,8 +176,8 @@ impl<'cl> CuSinkTask<'cl> for SN754410 {
         } else {
             debug!("No payload in the message, stopping for safety.");
             self.stop()?;
+            return Err("Safety Mode.".into());
         }
-
         Ok(())
     }
 }
