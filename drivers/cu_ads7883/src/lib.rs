@@ -50,6 +50,12 @@ impl From<ADSReadingPayload> for u16 {
     }
 }
 
+impl From<&ADCReadingPayload<u16>> for f32 {
+    fn from(payload: &ADCReadingPayload<u16>) -> f32 {
+        payload.analog_value as f32
+    }
+}
+
 impl CuTaskLifecycle for ADS7883 {
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -125,7 +131,6 @@ impl<'cl> CuSrcTask<'cl> for ADS7883 {
         })?;
         // hard to know exactly when the value was read.
         // Should be within a couple of microseconds with the ioctl opverhead.
-        let output = ADSReadingPayload { analog_value };
         let af = clock.now();
         new_msg.metadata.tov = Some((af + bf) / 2u64).into();
 

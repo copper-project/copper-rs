@@ -24,6 +24,13 @@ pub struct EncoderPayload {
     pub ticks: i32,
 }
 
+/// That allows the interfacing with the GenericPID
+impl From<&EncoderPayload> for f32 {
+    fn from(payload: &EncoderPayload) -> f32 {
+        payload.ticks as f32
+    }
+}
+
 pub struct Encoder {
     clk_pin: InputPin,
     data_from_interrupts: Arc<Mutex<InterruptData>>,
@@ -47,7 +54,7 @@ impl CuTaskLifecycle for Encoder {
         let dat_pin_nb_value = config.get("dat_pin").ok_or("Encoder needs a dat_pin")?;
         let dat_pin: u8 = dat_pin_nb_value.clone().into();
 
-        let mut clk_pin: InputPin = GPIO
+        let clk_pin: InputPin = GPIO
             .get(clk_pin)
             .map_err(|e| CuError::new_with_cause("Could not get pin", e))?
             .into_input();
