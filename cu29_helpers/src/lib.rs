@@ -47,7 +47,7 @@ pub fn basic_copper_setup(
     let structured_stream = stream_write(
         unified_logger.clone(),
         UnifiedLogType::StructuredLogLine,
-        4096,
+        4096 * 10,
     );
 
     #[cfg(debug_assertions)]
