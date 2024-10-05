@@ -24,6 +24,8 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Text};
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, StatefulWidget, Table};
 use ratatui::{Frame, Terminal};
+use std::error::Error;
+use std::fmt::{Display, Formatter};
 use std::io::stdout;
 use std::marker::PhantomData;
 use std::process;
@@ -74,18 +76,66 @@ fn compute_end_to_end_latency(msgs: &[&CuMsgMetadata]) -> CuDuration {
     msgs.last().unwrap().after_process.unwrap() - msgs.first().unwrap().before_process.unwrap()
 }
 
+// This is kind of terrible.
+#[derive(Copy, Clone)]
+enum NodeType {
+    Unknown,
+    Source,
+    Sink,
+    Task,
+}
+
+impl Display for NodeType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unknown => write!(f, "?"),
+            Self::Source => write!(f, "⏩"),
+            Self::Task => write!(f, "⚡"),
+            Self::Sink => write!(f, "🏁"),
+        }
+    }
+}
+
+impl NodeType {
+    fn add_incoming(self) -> NodeType {
+        match self {
+            Self::Unknown => Self::Sink,
+            Self::Source => Self::Task,
+            Self::Sink => Self::Sink,
+            Self::Task => Self::Task,
+        }
+    }
+
+    fn add_outgoing(self) -> NodeType {
+        match self {
+            Self::Unknown => Self::Source,
+            Self::Source => Self::Source,
+            Self::Sink => Self::Task,
+            Self::Task => Self::Task,
+        }
+    }
+}
+
 struct NodesScrollableWidgetState {
     config_nodes: Vec<Node>,
+    node_types: Vec<NodeType>,
     connections: Vec<Connection>,
-    nodes_scrollable_state: ScrollViewState,
     errors: Arc<Mutex<Vec<Option<CuError>>>>,
+    nodes_scrollable_state: ScrollViewState,
+    task_ids: &'static [&'static str],
 }
 
 impl NodesScrollableWidgetState {
-    fn new(config: &CuConfig, errors: Arc<Mutex<Vec<Option<CuError>>>>) -> Self {
+    fn new(
+        config: &CuConfig,
+        task_ids: &'static [&'static str],
+        errors: Arc<Mutex<Vec<Option<CuError>>>>,
+    ) -> Self {
         let mut config_nodes: Vec<Node> = Vec::new();
+        let mut node_types: Vec<NodeType> = Vec::new();
         for node in config.get_all_nodes() {
             config_nodes.push(node.clone());
+            node_types.push(NodeType::Unknown);
         }
         let mut connections: Vec<Connection> = Vec::with_capacity(config.graph.edge_count());
 
@@ -96,12 +146,13 @@ impl NodesScrollableWidgetState {
                 if let Some((src_index, dst_index)) =
                     config.graph.edge_endpoints((*edge_id as u32).into())
                 {
+                    let (src_index, dst_index) = (src_index.index(), dst_index.index());
                     connections.push(Connection::new(
-                        src_index.index(),
-                        0, // There is only one output per task today
-                        dst_index.index(),
-                        dst_port,
+                        src_index, 0, // There is only one output per task today
+                        dst_index, dst_port,
                     ));
+                    node_types[dst_index] = node_types[dst_index].add_incoming(); // 🤮
+                    node_types[src_index] = node_types[src_index].add_outgoing();
                 } else {
                     panic!("Can't find back srcs for {}", dst_node.get_id());
                 }
@@ -109,9 +160,11 @@ impl NodesScrollableWidgetState {
         }
         NodesScrollableWidgetState {
             config_nodes,
+            node_types,
             connections,
             nodes_scrollable_state: ScrollViewState::default(),
             errors,
+            task_ids,
         }
     }
 }
@@ -133,7 +186,7 @@ impl Widget for GraphWrapper<'_> {
     }
 }
 
-const NODE_WIDTH: u16 = 26;
+const NODE_WIDTH: u16 = 29;
 const NODE_WIDTH_CONTENT: u16 = NODE_WIDTH - 2;
 
 const NODE_HEIGHT: u16 = 5;
@@ -157,7 +210,7 @@ impl StatefulWidget for NodesScrollableWidget<'_> {
             })
             .collect();
 
-        let content_size = Size::new(300, 100);
+        let content_size = Size::new(200, 100);
         let mut scroll_view = ScrollView::new(content_size);
         let mut graph = NodeGraph::new(
             node_layouts,
@@ -167,18 +220,33 @@ impl StatefulWidget for NodesScrollableWidget<'_> {
         );
         graph.calculate();
         let zones = graph.split(scroll_view.area());
-        for (idx, ea_zone) in zones.into_iter().enumerate() {
-            let s = state.config_nodes[idx].get_type();
-            let paragraph = Paragraph::new(format!(
-                " {} ",
-                &s[s.len().saturating_sub(NODE_WIDTH_CONTENT as usize - 2)..]
-            ));
-            let paragraph = if state.errors.lock().unwrap()[idx].is_some() {
-                paragraph.red()
-            } else {
-                paragraph.green()
-            };
-            scroll_view.render_widget(paragraph, ea_zone);
+
+        {
+            let mut errors = state.errors.lock().unwrap();
+            for (idx, ea_zone) in zones.into_iter().enumerate() {
+                let s = state.config_nodes[idx].get_type();
+                let error = &mut errors[idx];
+                let maybe_error = if let Some(error) = error {
+                    format!("❌ {}", error.to_string())
+                } else {
+                    "✓".to_string()
+                };
+
+                let txt = format!(
+                    " {}\n {}\n {}",
+                    state.node_types[idx],
+                    &s[s.len().saturating_sub(NODE_WIDTH_CONTENT as usize - 2)..],
+                    maybe_error,
+                );
+                let paragraph = Paragraph::new(txt);
+                let paragraph = if error.is_some() {
+                    paragraph.red()
+                } else {
+                    paragraph.green()
+                };
+                *error = None; // reset if it was displayed
+                scroll_view.render_widget(paragraph, ea_zone);
+            }
         }
 
         scroll_view.render_widget(
@@ -219,7 +287,7 @@ impl UI {
     ) -> UI {
         init_error_hooks();
         let nodes_scrollable_widget_state =
-            NodesScrollableWidgetState::new(&config, error_states.clone());
+            NodesScrollableWidgetState::new(&config, task_ids, error_states.clone());
         Self {
             task_ids,
             active_screen: Screen::Neofetch,
@@ -528,9 +596,18 @@ impl CuMonitor for CuConsoleMon {
         Ok(())
     }
 
-    fn process_error(&self, taskid: usize, _step: CuTaskState, error: &CuError) -> Decision {
+    fn process_error(&self, taskid: usize, step: CuTaskState, error: &CuError) -> Decision {
+        if taskid == 0 {
+            panic!("Task ID error with {:?}", error);
+        }
         self.error_states.lock().unwrap()[taskid] = Some(error.clone());
-        Decision::Ignore
+        match step {
+            CuTaskState::Start => Decision::Shutdown,
+            CuTaskState::Preprocess => Decision::Abort,
+            CuTaskState::Process => Decision::Ignore,
+            CuTaskState::Postprocess => Decision::Ignore,
+            CuTaskState::Stop => Decision::Shutdown,
+        }
     }
 
     fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
