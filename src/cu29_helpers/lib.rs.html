@@ -123,7 +123,7 @@
     <span class="kw">let </span>structured_stream = stream_write(
         unified_logger.clone(),
         UnifiedLogType::StructuredLogLine,
-        <span class="number">4096</span>,
+        <span class="number">4096 </span>* <span class="number">10</span>,
     );
 
     <span class="attr">#[cfg(debug_assertions)]

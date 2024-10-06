@@ -732,8 +732,7 @@
 <a href="#731" id="731">731</a>
 <a href="#732" id="732">732</a>
 <a href="#733" id="733">733</a>
-<a href="#734" id="734">734</a>
-<a href="#735" id="735">735</a></pre></div><pre class="rust"><code><span class="kw">extern crate </span>proc_macro;
+<a href="#734" id="734">734</a></pre></div><pre class="rust"><code><span class="kw">extern crate </span>proc_macro;
 
 <span class="kw">use </span>proc_macro::TokenStream;
 
@@ -906,7 +905,7 @@
         .iter()
         .enumerate()
         .map(|(index, ty)| {
-            <span class="kw">let </span>node_index = int2sliceindex(index <span class="kw">as </span>u32);
+            <span class="kw">let </span>task_index = int2sliceindex(index <span class="kw">as </span>u32);
             <span class="kw">let </span>additional_error_info = <span class="macro">format!</span>(
                 <span class="string">"Failed to get create instance for {}, instance index {}."</span>,
                 all_tasks_types_names[index], index
@@ -917,7 +916,7 @@
                 </span>},
                 <span class="macro">quote!</span> {
                     {
-                        <span class="kw">let </span>task = <span class="kw-2">&amp;mut </span><span class="self">self</span>.copper_runtime.tasks.#node_index;
+                        <span class="kw">let </span>task = <span class="kw-2">&amp;mut </span><span class="self">self</span>.copper_runtime.tasks.#task_index;
                         <span class="kw">if let </span><span class="prelude-val">Err</span>(error) = task.start(<span class="kw-2">&amp;</span><span class="self">self</span>.copper_runtime.clock) {
                             <span class="kw">let </span>decision = <span class="self">self</span>.copper_runtime.monitor.process_error(#index, _CuTaskState::Start, <span class="kw-2">&amp;</span>error);
                             <span class="kw">match </span>decision {
@@ -942,7 +941,7 @@
                 },
                 <span class="macro">quote!</span> {
                     {
-                        <span class="kw">let </span>task = <span class="kw-2">&amp;mut </span><span class="self">self</span>.copper_runtime.tasks.#node_index;
+                        <span class="kw">let </span>task = <span class="kw-2">&amp;mut </span><span class="self">self</span>.copper_runtime.tasks.#task_index;
                         <span class="kw">if let </span><span class="prelude-val">Err</span>(error) = task.stop(<span class="kw-2">&amp;</span><span class="self">self</span>.copper_runtime.clock) {
                             <span class="kw">let </span>decision = <span class="self">self</span>.copper_runtime.monitor.process_error(#index, _CuTaskState::Stop, <span class="kw-2">&amp;</span>error);
                             <span class="kw">match </span>decision {
@@ -967,7 +966,7 @@
                 },
                 <span class="macro">quote!</span> {
                     {
-                        <span class="kw">let </span>task = <span class="kw-2">&amp;mut </span><span class="self">self</span>.copper_runtime.tasks.#node_index;
+                        <span class="kw">let </span>task = <span class="kw-2">&amp;mut </span><span class="self">self</span>.copper_runtime.tasks.#task_index;
                         <span class="kw">if let </span><span class="prelude-val">Err</span>(error) = task.preprocess(<span class="kw-2">&amp;</span><span class="self">self</span>.copper_runtime.clock) {
                             <span class="kw">let </span>decision = <span class="self">self</span>.copper_runtime.monitor.process_error(#index, _CuTaskState::Preprocess, <span class="kw-2">&amp;</span>error);
                             <span class="kw">match </span>decision {
@@ -992,7 +991,7 @@
                 },
                 <span class="macro">quote!</span> {
                     {
-                        <span class="kw">let </span>task = <span class="kw-2">&amp;mut </span><span class="self">self</span>.copper_runtime.tasks.#node_index;
+                        <span class="kw">let </span>task = <span class="kw-2">&amp;mut </span><span class="self">self</span>.copper_runtime.tasks.#task_index;
                         <span class="kw">if let </span><span class="prelude-val">Err</span>(error) = task.postprocess(<span class="kw-2">&amp;</span><span class="self">self</span>.copper_runtime.clock) {
                             <span class="kw">let </span>decision = <span class="self">self</span>.copper_runtime.monitor.process_error(#index, _CuTaskState::Postprocess, <span class="kw-2">&amp;</span>error);
                             <span class="kw">match </span>decision {
@@ -1025,10 +1024,11 @@
             <span class="kw">match </span>unit {
                 CuExecutionUnit::Step(step) =&gt; {
                     <span class="macro">eprintln!</span>(
-                        <span class="string">"{} -&gt; {} as {:?}. Input={:?}, Output={:?}"</span>,
+                        <span class="string">"{} -&gt; {} as {:?}. task_id: {} Input={:?}, Output={:?}"</span>,
                         step.node.get_id(),
                         step.node.get_type(),
                         step.task_type,
+                        step.node_id,
                         step.input_msg_indices_types,
                         step.output_msg_index_type
                     );
@@ -1036,20 +1036,20 @@
                     <span class="kw">let </span>node_index = int2sliceindex(step.node_id);
                     <span class="kw">let </span>task_instance = <span class="macro">quote!</span> { <span class="self">self</span>.copper_runtime.tasks.#node_index };
                     <span class="kw">let </span>comment_str = <span class="macro">format!</span>(
-                        <span class="string">"/// {} ({:?}) I:{:?} O:{:?}"</span>,
+                        <span class="string">"/// {} ({:?}) Id:{} I:{:?} O:{:?}"</span>,
                         step.node.get_id(),
                         step.task_type,
+                        step.node_id,
                         step.input_msg_indices_types,
                         step.output_msg_index_type
                     );
                     <span class="kw">let </span>comment_tokens: proc_macro2::TokenStream = parse_str(<span class="kw-2">&amp;</span>comment_str).unwrap();
-
+                    <span class="kw">let </span>tid = step.node_id <span class="kw">as </span>usize;
 
                     <span class="kw">let </span>process_call = <span class="kw">match </span>step.task_type {
                         CuTaskType::Source =&gt; {
                             <span class="kw">if let </span><span class="prelude-val">Some</span>((index, <span class="kw">_</span>)) = <span class="kw-2">&amp;</span>step.output_msg_index_type {
                                 <span class="kw">let </span>output_culist_index = int2sliceindex(<span class="kw-2">*</span>index);
-                                <span class="kw">let </span>tid = output_culist_index.index <span class="kw">as </span>usize;
                                 <span class="macro">quote!</span> {
                                     {
                                         #comment_tokens
@@ -1091,7 +1091,6 @@
                             </span><span class="kw">let </span>indices = step.input_msg_indices_types.iter().map(|(index, <span class="kw">_</span>)| int2sliceindex(<span class="kw-2">*</span>index));
                             <span class="kw">if let </span><span class="prelude-val">Some</span>((output_index, <span class="kw">_</span>)) = <span class="kw-2">&amp;</span>step.output_msg_index_type {
                                 <span class="kw">let </span>output_culist_index = int2sliceindex(<span class="kw-2">*</span>output_index);
-                                <span class="kw">let </span>tid = output_culist_index.index <span class="kw">as </span>usize;
                                 <span class="macro">quote!</span> {
                                     {
                                         #comment_tokens
@@ -1135,7 +1134,6 @@
                             <span class="kw">let </span>indices = step.input_msg_indices_types.iter().map(|(index, <span class="kw">_</span>)| int2sliceindex(<span class="kw-2">*</span>index));
                             <span class="kw">if let </span><span class="prelude-val">Some</span>((output_index, <span class="kw">_</span>)) = <span class="kw-2">&amp;</span>step.output_msg_index_type {
                                 <span class="kw">let </span>output_culist_index = int2sliceindex(<span class="kw-2">*</span>output_index);
-                                <span class="kw">let </span>tid = output_culist_index.index <span class="kw">as </span>usize;
                                 <span class="macro">quote!</span> {
                                     {
                                         #comment_tokens

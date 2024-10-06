@@ -86,7 +86,7 @@
 <span class="kw">use </span>std::fmt::{Debug, Display, Formatter};
 
 <span class="doccomment">/// Common copper Error type.
-</span><span class="attr">#[derive(Debug, Serialize, Deserialize)]
+</span><span class="attr">#[derive(Debug, Clone, Serialize, Deserialize)]
 </span><span class="kw">pub struct </span>CuError {
     message: String,
     cause: <span class="prelude-ty">Option</span>&lt;String&gt;,
