@@ -4,7 +4,7 @@ use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 
 /// Common copper Error type.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CuError {
     message: String,
     cause: Option<String>,

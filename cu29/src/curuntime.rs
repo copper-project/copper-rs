@@ -131,11 +131,12 @@ pub struct CuExecutionStep {
 
 impl Debug for CuExecutionStep {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(format!("   CuExecutionStep: {}\n", self.node_id).as_str())?;
-        f.write_str(format!("       task_type: {:?}\n", self.task_type).as_str())?;
+        f.write_str(format!("   CuExecutionStep: Node Id: {}\n", self.node_id).as_str())?;
+        f.write_str(format!("                  task_type: {:?}\n", self.node.get_type()).as_str())?;
+        f.write_str(format!("                       task: {:?}\n", self.task_type).as_str())?;
         f.write_str(
             format!(
-                "       input_msg_types: {:?}\n",
+                "              input_msg_types: {:?}\n",
                 self.input_msg_indices_types
             )
             .as_str(),

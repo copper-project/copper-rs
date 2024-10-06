@@ -99,6 +99,16 @@ impl From<f64> for Value {
     }
 }
 
+impl From<Value> for bool {
+    fn from(value: Value) -> Self {
+        if let RonValue::Bool(v) = value.0 {
+            v
+        } else {
+            panic!("Expected a Boolean variant but got {:?}", value)
+        }
+    }
+}
+
 impl From<Value> for u8 {
     fn from(value: Value) -> Self {
         if let RonValue::Number(num) = value.0 {
@@ -271,7 +281,7 @@ pub struct Cnx {
 
 /// CuConfig is the programmatic representation of the configuration graph.
 /// It is a directed graph where nodes are tasks and edges are connections between tasks.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CuConfig {
     // This is not what is directly serialized, see the custom serialization below.
     pub graph: StableDiGraph<Node, Cnx, NodeId>,
@@ -330,7 +340,7 @@ impl<'de> Deserialize<'de> for CuConfig {
                 .graph
                 .node_indices()
                 .find(|i| cuconfig.graph[*i].id == c.dst)
-                .expect("Destination node not found");
+                .expect(format!("Destination {} node not found", c.dst).as_str());
             cuconfig.connect_ext(
                 src.index() as NodeId,
                 dst.index() as NodeId,

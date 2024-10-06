@@ -1,0 +1,29 @@
+[package]
+name = "cu-consolemon"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+cu29 = { workspace = true }
+ratatui = "0.28.1"
+pfetch-logo-parser = "0.1.1"
+pfetch-extractor = "0.2.3"
+pfetch = "*"
+globset = "0.4.10"
+dotenvy = "0.15.6"
+glob = "0.3.1"
+which = "6.0.2"
+libmacchina = "7.3.1"
+os-release = "0.1.0"
+nix = "0.23.2"
+ansi-to-tui = "6.0.0"
+tui-nodes = "0.7.0"
+tui-widgets = "0.3.0"
+color-eyre = "0.6.3"
+lipsum = "0.9.1"
