@@ -551,7 +551,6 @@ impl Drop for UnifiedLoggerWrite {
         let mut section = self.add_section(UnifiedLogType::LastEntry, 80); // TODO: determine that exactly
         self.front_slab.flush_section(&mut section);
         self.garbage_collect_backslabs();
-        self.front_slab.close();
     }
 }
 
