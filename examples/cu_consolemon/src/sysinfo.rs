@@ -61,6 +61,17 @@ pub struct Readouts {
     pub kernel_readout: KernelReadout,
 }
 
+impl Default for Readouts {
+    fn default() -> Self {
+        Readouts {
+            general_readout: GeneralReadout::new(),
+            package_readout: PackageReadout::new(),
+            memory_readout: MemoryReadout::new(),
+            kernel_readout: KernelReadout::new(),
+        }
+    }
+}
+
 pub fn get_info(info: &PfetchInfo, readouts: &Readouts) -> Option<String> {
     match info {
         PfetchInfo::Ascii => None,
@@ -76,22 +87,17 @@ pub fn get_info(info: &PfetchInfo, readouts: &Readouts) -> Option<String> {
         PfetchInfo::Cpu => pfetch::cpu(&readouts.general_readout),
         PfetchInfo::Memory => pfetch::memory(&readouts.memory_readout),
         PfetchInfo::Shell => pfetch::shell(&readouts.general_readout),
-        PfetchInfo::Editor => Some(env::var("EDITOR").unwrap_or_else(|_| "nvim".to_string())),
+        PfetchInfo::Editor => Some(env::var("EDITOR").unwrap_or_else(|_| "nvim".into())),
         PfetchInfo::Wm => pfetch::wm(&readouts.general_readout),
         PfetchInfo::De => pfetch::de(&readouts.general_readout),
-        PfetchInfo::Palette => Some("Color Palette".to_string()), // Simplified palette display
-        PfetchInfo::BlankLine => Some("".to_string()),
+        PfetchInfo::Palette => Some("Color Palette".into()), // Simplified palette display
+        PfetchInfo::BlankLine => Some("".into()),
     }
 }
 
 // Function to render the gathered info along with ASCII logo
 pub fn pfetch_info() -> String {
-    let readouts = Readouts {
-        general_readout: GeneralReadout::new(),
-        package_readout: PackageReadout::new(),
-        memory_readout: MemoryReadout::new(),
-        kernel_readout: KernelReadout::new(),
-    };
+    let readouts = Readouts::default();
 
     let os = pfetch::os(&GeneralReadout::new()).unwrap_or_default();
 
@@ -114,8 +120,8 @@ pub fn pfetch_info() -> String {
         .filter_map(|info| match info {
             PfetchInfo::Os => Some((logo.primary_color, info.to_string(), os.clone())),
             _ => get_info(&info, &readouts).map(|info_str| match info {
-                PfetchInfo::Title => (logo.secondary_color, info_str, "".to_string()),
-                PfetchInfo::BlankLine => (logo.primary_color, "".to_string(), "".to_string()),
+                PfetchInfo::Title => (logo.secondary_color, info_str, "".into()),
+                PfetchInfo::BlankLine => (logo.primary_color, "".into(), "".into()),
                 _ => (logo.primary_color, info.to_string(), info_str),
             }),
         })
@@ -131,7 +137,7 @@ fn pfetch(info: Vec<(Color, String, String)>, logo: Logo, logo_enabled: bool) ->
             .map(|LogoPart { content, .. }| content.as_ref())
             .collect::<String>()
     } else {
-        "".to_string()
+        "".into()
     };
     let color_enabled = dotenvy::var("PF_COLOR").unwrap_or_default() != "0";
     let logo = if color_enabled {
@@ -191,13 +197,13 @@ fn pfetch(info: Vec<(Color, String, String)>, logo: Logo, logo_enabled: bool) ->
                 logo_width - raw_logo_lines.get(l).map_or(0, |line| line.chars().count())
                     + if logo_enabled { padding2 } else { 0 }
             ),
-            color = if color_enabled {info.get(l).map_or("".to_owned(), |line| line.0.to_string())} else {"".to_string()},
+            color = if color_enabled {info.get(l).map_or("".to_owned(), |line| line.0.to_string())} else {"".into()},
             info1 = info.get(l).map_or("", |line| &line.1),
             nobold = if color_enabled {"\x1b[0m"} else {""},
-            separator = info.get(l).map_or("".to_string(), |line|
+            separator = info.get(l).map_or("".into(), |line|
                 if ! &line.2.is_empty() {
                     dotenvy::var("PF_SEP").unwrap_or_default()
-                } else { "".to_string() }
+                } else { "".into() }
             ),
             padding3 = " ".repeat(
                 info1_width.saturating_sub(info.get(l).map_or(0, |(_, line, _)| line.len()))
@@ -207,11 +213,11 @@ fn pfetch(info: Vec<(Color, String, String)>, logo: Logo, logo_enabled: bool) ->
                 Ok(newcolor) => {
                     match Color::from_str(&newcolor) {
                         Ok(newcolor) => format!("{newcolor}"),
-                        Err(_) => "".to_string(),
+                        Err(_) => "".into(),
                     }
                 },
-                Err(_) => "".to_string()
-            }} else {"".to_string()},
+                Err(_) => "".into()
+            }} else {"".into()},
             info2 = info.get(l).map_or("", |line| &line.2)
         )
     }
