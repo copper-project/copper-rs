@@ -33,7 +33,7 @@ cu-consolemon = { path = "../cu_consolemon" }
 cu29-export = { workspace = true, optional = true }
 pid = "4.0.0"
 ctrlc = "3.4.5"
-ssh2 = "0.9.4"
+# ssh2 = "0.9.4"
 
 [features]
 default = ["logreader"]

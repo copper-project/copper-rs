@@ -22,7 +22,6 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Text};
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, StatefulWidget, Table};
 use ratatui::{Frame, Terminal};
-use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::stdout;
 use std::marker::PhantomData;
@@ -120,13 +119,11 @@ struct NodesScrollableWidgetState {
     connections: Vec<Connection>,
     errors: Arc<Mutex<Vec<Option<CuError>>>>,
     nodes_scrollable_state: ScrollViewState,
-    task_ids: &'static [&'static str],
 }
 
 impl NodesScrollableWidgetState {
     fn new(
         config: &CuConfig,
-        task_ids: &'static [&'static str],
         errors: Arc<Mutex<Vec<Option<CuError>>>>,
     ) -> Self {
         let mut config_nodes: Vec<Node> = Vec::new();
@@ -162,7 +159,6 @@ impl NodesScrollableWidgetState {
             connections,
             nodes_scrollable_state: ScrollViewState::default(),
             errors,
-            task_ids,
         }
     }
 }
@@ -286,7 +282,7 @@ impl UI {
     ) -> UI {
         init_error_hooks();
         let nodes_scrollable_widget_state =
-            NodesScrollableWidgetState::new(&config, task_ids, error_states.clone());
+            NodesScrollableWidgetState::new(&config, error_states.clone());
         Self {
             task_ids,
             active_screen: Screen::Neofetch,

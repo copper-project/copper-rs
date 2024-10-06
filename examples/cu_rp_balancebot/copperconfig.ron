@@ -49,7 +49,7 @@
             type: "cu_rp_sn754410::SN754410",
             config: {
                  "deadzone": 0.3, // this is the minimum value for the motor to move.
-                 "dryrun": true,
+                 "dryrun": false,
             },
         ),
      ],
