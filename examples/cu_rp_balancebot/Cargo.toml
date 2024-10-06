@@ -25,14 +25,15 @@ cu29-log-derive = { workspace = true }
 cu29-intern-strs = { workspace = true }
 cu29-unifiedlog = { workspace = true }
 bincode = { workspace = true }
-cu-ads7883 = { path = "../../drivers/cu_ads7883" }
+cu-ads7883-new = { path = "../../drivers/cu_ads7883" }
 cu-rp-sn754410 = { path = "../../drivers/cu_rp_sn754410" }
 cu-rp-encoder = { path = "../../drivers/cu_rp_encoder" }
+cu-consolemon = { path = "../cu_consolemon" }
 # Only include cu29-export when the "logreader" feature is enabled
 cu29-export = { workspace = true, optional = true }
 pid = "4.0.0"
 ctrlc = "3.4.5"
-ssh2 = "0.9.4"
+# ssh2 = "0.9.4"
 
 [features]
 default = ["logreader"]

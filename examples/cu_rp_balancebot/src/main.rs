@@ -1,4 +1,4 @@
-pub mod pidtask;
+pub mod tasks;
 
 use cu29_derive::copper_runtime;
 use cu29_helpers::basic_copper_setup;
@@ -9,12 +9,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 #[copper_runtime(config = "copperconfig.ron")]
 struct BalanceBot {}
 
-const SLAB_SIZE: Option<usize> = Some(100 * 1024 * 1024);
+const SLAB_SIZE: Option<usize> = Some(1 * 1024 * 1024 * 1024); // preallocate a lot.
 
 fn main() {
     static STOP_FLAG: AtomicBool = AtomicBool::new(false);
     let logger_path = "logs/balance.copper";
-    let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), SLAB_SIZE, true)
+    let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), SLAB_SIZE, false)
         .expect("Failed to setup logger.");
     debug!("Logger created at {}.", path = logger_path);
     let clock = copper_ctx.clock;
