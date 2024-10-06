@@ -1,3 +1,5 @@
+pub mod tasks;
+
 use bincode::config::standard;
 use bincode::decode_from_std_read;
 use bincode::error::DecodeError;
