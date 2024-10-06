@@ -2,7 +2,7 @@
     tasks: [
         (
             id: "balpos",
-            type: "cu_ads7883::ADS7883",
+            type: "cu_ads7883_new::ADS7883",
 
         ),
 
@@ -54,7 +54,7 @@
         ),
      ],
     cnx: [
-        (src: "balpos",  dst: "balpos_pid",   msg: "cu_ads7883::ADSReadingPayload"),
+        (src: "balpos",  dst: "balpos_pid",   msg: "cu_ads7883_new::ADSReadingPayload"),
         (src: "railpos",  dst: "railpos_pid",   msg: "cu_rp_encoder::EncoderPayload"),
         (src: "balpos_pid", dst: "merge_pids", msg:"tasks::PIDControlOutput"),
         (src: "railpos_pid", dst: "merge_pids", msg:"tasks::PIDControlOutput"),

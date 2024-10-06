@@ -5,7 +5,7 @@ use cu29::cutask::{CuMsg, CuMsgPayload, CuTask, CuTaskLifecycle, Freezable};
 use cu29::{input_msg, output_msg, CuResult};
 use cu29_log_derive::debug;
 use cu29_traits::CuError;
-use cu_ads7883::ADSReadingPayload;
+use cu_ads7883_new::ADSReadingPayload;
 use cu_rp_encoder::EncoderPayload;
 use cu_rp_sn754410::MotorPayload;
 use std::marker::PhantomData;

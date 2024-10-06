@@ -25,7 +25,7 @@ cu29-log-derive = { workspace = true }
 cu29-intern-strs = { workspace = true }
 cu29-unifiedlog = { workspace = true }
 bincode = { workspace = true }
-cu-ads7883 = { path = "../../drivers/cu_ads7883" }
+cu-ads7883-new = { path = "../../drivers/cu_ads7883" }
 cu-rp-sn754410 = { path = "../../drivers/cu_rp_sn754410" }
 cu-rp-encoder = { path = "../../drivers/cu_rp_encoder" }
 cu-consolemon = { path = "../cu_consolemon" }
