@@ -96,7 +96,6 @@ impl Drop for LoggerRuntime {
         if let Some((mutex, _clock)) = WRITER.get() {
             if let Ok(mut writer_guard) = mutex.lock() {
                 // Replace the current WriteStream with a DummyWriteStream
-                println!("Replacing WriteStream with DummyWriteStream");
                 *writer_guard = Box::new(DummyWriteStream);
             }
         }
