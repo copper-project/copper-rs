@@ -21,6 +21,15 @@ use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
+#[derive(Debug)]
+struct DummyWriteStream;
+
+impl WriteStream<CuLogEntry> for DummyWriteStream {
+    fn log(&mut self, obj: &CuLogEntry) -> CuResult<()> {
+        eprintln!("Pending logs got cut: {:?}", obj);
+        Ok(())
+    }
+}
 static WRITER: OnceLock<(Mutex<Box<dyn WriteStream<CuLogEntry>>>, RobotClock)> = OnceLock::new();
 
 #[cfg(debug_assertions)]
@@ -84,6 +93,12 @@ impl LoggerRuntime {
 impl Drop for LoggerRuntime {
     fn drop(&mut self) {
         self.flush();
+        if let Some((mutex, _clock)) = WRITER.get() {
+            if let Ok(mut writer_guard) = mutex.lock() {
+                // Replace the current WriteStream with a DummyWriteStream
+                *writer_guard = Box::new(DummyWriteStream);
+            }
+        }
     }
 }
 
