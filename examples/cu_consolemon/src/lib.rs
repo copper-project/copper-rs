@@ -122,10 +122,7 @@ struct NodesScrollableWidgetState {
 }
 
 impl NodesScrollableWidgetState {
-    fn new(
-        config: &CuConfig,
-        errors: Arc<Mutex<Vec<Option<CuError>>>>,
-    ) -> Self {
+    fn new(config: &CuConfig, errors: Arc<Mutex<Vec<Option<CuError>>>>) -> Self {
         let mut config_nodes: Vec<Node> = Vec::new();
         let mut node_types: Vec<NodeType> = Vec::new();
         for node in config.get_all_nodes() {
