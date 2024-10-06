@@ -7,8 +7,6 @@ use cu29::config::{ComponentConfig, CuConfig, Node};
 use cu29::cutask::CuMsgMetadata;
 use cu29::monitoring::{CuDurationStatistics, CuMonitor, CuTaskState, Decision};
 use cu29::{read_configuration, CuError, CuResult};
-use nix::sys::signal;
-use nix::sys::signal::Signal;
 use ratatui::backend::CrosstermBackend;
 use ratatui::buffer::Buffer;
 use ratatui::crossterm::event::{DisableMouseCapture, EnableMouseCapture, Event, KeyCode};
@@ -28,7 +26,7 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::stdout;
 use std::marker::PhantomData;
-use std::process;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::{io, thread};
@@ -268,6 +266,7 @@ pub struct CuConsoleMon {
     taskids: &'static [&'static str],
     task_stats: Arc<Mutex<TaskStats>>,
     error_states: Arc<Mutex<Vec<Option<CuError>>>>,
+    quitting: Arc<AtomicBool>,
 }
 
 struct UI {
@@ -520,18 +519,16 @@ impl UI {
                             }
                         }
                         KeyCode::Char('q') => {
-                            // Basically triggers the clean ctrlc logic of copper.
-                            signal::kill(
-                                nix::unistd::Pid::from_raw(process::id() as i32),
-                                Signal::SIGINT,
-                            )
-                            .expect("Error sending SIGINT");
+                            break;
                         }
                         _ => {}
                     }
                 }
             }
         }
+        restore_terminal();
+        println!("Terminal restored.");
+        Ok(())
     }
 }
 
@@ -562,16 +559,17 @@ impl CuMonitor for CuConsoleMon {
             taskids,
             task_stats,
             error_states: Arc::new(Mutex::new(vec![None; taskids.len()])),
+            quitting: Arc::new(AtomicBool::new(false)),
         })
     }
 
     fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
         enable_raw_mode()
             .map_err(|e| CuError::new_with_cause("Could not enable console raw mode", e))?;
-        execute!(io::stdout(), EnterAlternateScreen, EnableMouseCapture)
+        execute!(stdout(), EnterAlternateScreen, EnableMouseCapture)
             .map_err(|e| CuError::new_with_cause("Could not execute crossterm", e))?;
 
-        let backend = CrosstermBackend::new(io::stdout());
+        let backend = CrosstermBackend::new(stdout());
         let mut terminal = Terminal::new(backend)
             .map_err(|e| CuError::new_with_cause("Failed to initialize terminal backend", e))?;
 
@@ -580,11 +578,13 @@ impl CuMonitor for CuConsoleMon {
 
         let task_stats_ui = self.task_stats.clone();
         let error_states = self.error_states.clone();
+        let quitting = self.quitting.clone();
 
         // Start the main UI loop
         thread::spawn(move || {
             let mut ui = UI::new(config_dup, taskids, task_stats_ui, error_states);
             ui.run_app(&mut terminal).expect("Failed to run app");
+            quitting.store(true, Ordering::SeqCst);
         });
 
         Ok(())
@@ -593,6 +593,9 @@ impl CuMonitor for CuConsoleMon {
     fn process_copperlist(&self, msgs: &[&CuMsgMetadata]) -> CuResult<()> {
         let mut task_stats = self.task_stats.lock().unwrap();
         task_stats.update(msgs);
+        if self.quitting.load(Ordering::SeqCst) {
+            return Err("Exiting...".into());
+        }
         Ok(())
     }
 
