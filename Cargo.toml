@@ -23,7 +23,8 @@ members = [
     "examples/cu_caterpillar",
     "examples/cu_rp_balancebot",
     "examples/cu_multisources", 
-    "examples/cu_monitoring"]
+    "examples/cu_monitoring", 
+    "examples/cu_consolemon"]
 
 # put only the core crates here that are not platform specific
 default-members = [

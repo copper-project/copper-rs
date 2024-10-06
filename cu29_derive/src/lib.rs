@@ -171,7 +171,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         .iter()
         .enumerate()
         .map(|(index, ty)| {
-            let node_index = int2sliceindex(index as u32);
+            let task_index = int2sliceindex(index as u32);
             let additional_error_info = format!(
                 "Failed to get create instance for {}, instance index {}.",
                 all_tasks_types_names[index], index
@@ -182,7 +182,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 },
                 quote! {
                     {
-                        let task = &mut self.copper_runtime.tasks.#node_index;
+                        let task = &mut self.copper_runtime.tasks.#task_index;
                         if let Err(error) = task.start(&self.copper_runtime.clock) {
                             let decision = self.copper_runtime.monitor.process_error(#index, _CuTaskState::Start, &error);
                             match decision {
@@ -207,7 +207,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 },
                 quote! {
                     {
-                        let task = &mut self.copper_runtime.tasks.#node_index;
+                        let task = &mut self.copper_runtime.tasks.#task_index;
                         if let Err(error) = task.stop(&self.copper_runtime.clock) {
                             let decision = self.copper_runtime.monitor.process_error(#index, _CuTaskState::Stop, &error);
                             match decision {
@@ -232,7 +232,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 },
                 quote! {
                     {
-                        let task = &mut self.copper_runtime.tasks.#node_index;
+                        let task = &mut self.copper_runtime.tasks.#task_index;
                         if let Err(error) = task.preprocess(&self.copper_runtime.clock) {
                             let decision = self.copper_runtime.monitor.process_error(#index, _CuTaskState::Preprocess, &error);
                             match decision {
@@ -257,7 +257,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 },
                 quote! {
                     {
-                        let task = &mut self.copper_runtime.tasks.#node_index;
+                        let task = &mut self.copper_runtime.tasks.#task_index;
                         if let Err(error) = task.postprocess(&self.copper_runtime.clock) {
                             let decision = self.copper_runtime.monitor.process_error(#index, _CuTaskState::Postprocess, &error);
                             match decision {
@@ -290,10 +290,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             match unit {
                 CuExecutionUnit::Step(step) => {
                     eprintln!(
-                        "{} -> {} as {:?}. Input={:?}, Output={:?}",
+                        "{} -> {} as {:?}. task_id: {} Input={:?}, Output={:?}",
                         step.node.get_id(),
                         step.node.get_type(),
                         step.task_type,
+                        step.node_id,
                         step.input_msg_indices_types,
                         step.output_msg_index_type
                     );
@@ -301,20 +302,20 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     let node_index = int2sliceindex(step.node_id);
                     let task_instance = quote! { self.copper_runtime.tasks.#node_index };
                     let comment_str = format!(
-                        "/// {} ({:?}) I:{:?} O:{:?}",
+                        "/// {} ({:?}) Id:{} I:{:?} O:{:?}",
                         step.node.get_id(),
                         step.task_type,
+                        step.node_id,
                         step.input_msg_indices_types,
                         step.output_msg_index_type
                     );
                     let comment_tokens: proc_macro2::TokenStream = parse_str(&comment_str).unwrap();
-
+                    let tid = step.node_id as usize;
 
                     let process_call = match step.task_type {
                         CuTaskType::Source => {
                             if let Some((index, _)) = &step.output_msg_index_type {
                                 let output_culist_index = int2sliceindex(*index);
-                                let tid = output_culist_index.index as usize;
                                 quote! {
                                     {
                                         #comment_tokens
@@ -356,7 +357,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             let indices = step.input_msg_indices_types.iter().map(|(index, _)| int2sliceindex(*index));
                             if let Some((output_index, _)) = &step.output_msg_index_type {
                                 let output_culist_index = int2sliceindex(*output_index);
-                                let tid = output_culist_index.index as usize;
                                 quote! {
                                     {
                                         #comment_tokens
@@ -400,7 +400,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             let indices = step.input_msg_indices_types.iter().map(|(index, _)| int2sliceindex(*index));
                             if let Some((output_index, _)) = &step.output_msg_index_type {
                                 let output_culist_index = int2sliceindex(*output_index);
-                                let tid = output_culist_index.index as usize;
                                 quote! {
                                     {
                                         #comment_tokens
