@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cu29_derive/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-6d8951b3ccd3cbca.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_derive" data-themes="" data-resource-suffix="" data-rustdoc-version="1.83.0-nightly (9096f4faf 2024-10-05)" data-channel="nightly" data-search-js="search-e056c65ede92db13.js" data-settings-js="settings-805db61a62df4bd2.js" ><script src="../../static.files/storage-1d39b6787ed640ff.js"></script><script defer src="../../static.files/src-script-e66d777a5a92e9b2.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-f070b9041d14864c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-0111fcff984fae8f.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">cu29_derive/</div>lib.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cu29_derive/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../static.files/rustdoc-6d8951b3ccd3cbca.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_derive" data-themes="" data-resource-suffix="" data-rustdoc-version="1.83.0-nightly (55a22d2a6 2024-10-06)" data-channel="nightly" data-search-js="search-e056c65ede92db13.js" data-settings-js="settings-805db61a62df4bd2.js" ><script src="../../static.files/storage-1d39b6787ed640ff.js"></script><script defer src="../../static.files/src-script-e66d777a5a92e9b2.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-f070b9041d14864c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-0111fcff984fae8f.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">cu29_derive/</div>lib.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
 <a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
@@ -732,7 +732,31 @@
 <a href="#731" id="731">731</a>
 <a href="#732" id="732">732</a>
 <a href="#733" id="733">733</a>
-<a href="#734" id="734">734</a></pre></div><pre class="rust"><code><span class="kw">extern crate </span>proc_macro;
+<a href="#734" id="734">734</a>
+<a href="#735" id="735">735</a>
+<a href="#736" id="736">736</a>
+<a href="#737" id="737">737</a>
+<a href="#738" id="738">738</a>
+<a href="#739" id="739">739</a>
+<a href="#740" id="740">740</a>
+<a href="#741" id="741">741</a>
+<a href="#742" id="742">742</a>
+<a href="#743" id="743">743</a>
+<a href="#744" id="744">744</a>
+<a href="#745" id="745">745</a>
+<a href="#746" id="746">746</a>
+<a href="#747" id="747">747</a>
+<a href="#748" id="748">748</a>
+<a href="#749" id="749">749</a>
+<a href="#750" id="750">750</a>
+<a href="#751" id="751">751</a>
+<a href="#752" id="752">752</a>
+<a href="#753" id="753">753</a>
+<a href="#754" id="754">754</a>
+<a href="#755" id="755">755</a>
+<a href="#756" id="756">756</a>
+<a href="#757" id="757">757</a>
+<a href="#758" id="758">758</a></pre></div><pre class="rust"><code><span class="kw">extern crate </span>proc_macro;
 
 <span class="kw">use </span>proc_macro::TokenStream;
 
@@ -769,7 +793,19 @@
     <span class="kw">let </span>cuconfig = read_config(<span class="kw-2">&amp;</span>config);
     <span class="kw">let </span>runtime_plan: CuExecutionLoop =
         compute_runtime_plan(<span class="kw-2">&amp;</span>cuconfig).expect(<span class="string">"Could not compute runtime plan"</span>);
-    <span class="kw">let </span>support = gen_culist_support(<span class="kw-2">&amp;</span>runtime_plan);
+
+    <span class="comment">// All accesses are linear on the culist but the id of the tasks is random (determined by the Ron declaration order).
+    // This records the task ids in call order.
+    </span><span class="kw">let </span>taskid_order: Vec&lt;usize&gt; = runtime_plan
+        .steps
+        .iter()
+        .filter_map(|unit| <span class="kw">match </span>unit {
+            CuExecutionUnit::Step(step) =&gt; <span class="prelude-val">Some</span>(step.node_id <span class="kw">as </span>usize),
+            <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
+        })
+        .collect();
+
+    <span class="kw">let </span>support = gen_culist_support(<span class="kw-2">&amp;</span>runtime_plan, <span class="kw-2">&amp;</span>taskid_order);
 
     <span class="kw">let </span>with_uses = <span class="macro">quote!</span> {
         <span class="kw">use </span>bincode::Encode <span class="kw">as </span>_Encode;
@@ -786,12 +822,18 @@
 }
 
 <span class="doccomment">/// Build the inner support of the copper list.
-</span><span class="kw">fn </span>gen_culist_support(runtime_plan: <span class="kw-2">&amp;</span>CuExecutionLoop) -&gt; proc_macro2::TokenStream {
+</span><span class="kw">fn </span>gen_culist_support(
+    runtime_plan: <span class="kw-2">&amp;</span>CuExecutionLoop,
+    taskid_call_order: <span class="kw-2">&amp;</span>Vec&lt;usize&gt;,
+) -&gt; proc_macro2::TokenStream {
     <span class="macro">eprintln!</span>(<span class="string">"[Extract msgs types]"</span>);
     <span class="kw">let </span>all_msgs_types_in_culist_order = extract_msg_types(runtime_plan);
 
     <span class="kw">let </span>culist_size = all_msgs_types_in_culist_order.len();
-    <span class="kw">let </span>culist_indices = (<span class="number">0</span>..(culist_size <span class="kw">as </span>u32)).map(int2sliceindex);
+    <span class="kw">let </span>task_indices: Vec&lt;<span class="kw">_</span>&gt; = taskid_call_order
+        .iter()
+        .map(|i| syn::Index::from(<span class="kw-2">*</span>i))
+        .collect();
 
     <span class="macro">eprintln!</span>(<span class="string">"[build the copperlist tuple]"</span>);
     <span class="kw">let </span>msgs_types_tuple: TypeTuple = build_culist_tuple(<span class="kw-2">&amp;</span>all_msgs_types_in_culist_order);
@@ -805,7 +847,7 @@
 
     <span class="kw">let </span>collect_metadata_function = <span class="macro">quote!</span> {
         <span class="kw">pub fn </span>collect_metadata&lt;<span class="lifetime">'a</span>&gt;(culist: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>CuList) -&gt; [<span class="kw-2">&amp;</span><span class="lifetime">'a </span>_CuMsgMetadata; #culist_size] {
-            [#( <span class="kw-2">&amp;</span>culist.msgs.<span class="number">0.</span>#culist_indices.metadata, )<span class="kw-2">*</span>]
+            [#( <span class="kw-2">&amp;</span>culist.msgs.<span class="number">0.</span>#task_indices.metadata, )<span class="kw-2">*</span>]
         }
     };
 
@@ -1018,6 +1060,10 @@
         })
     );
 
+    <span class="comment">// All accesses are linear on the culist but the id of the tasks is random (determined by the Ron declaration order).
+    // This records the task ids in call order.
+    </span><span class="kw">let </span><span class="kw-2">mut </span>taskid_call_order: Vec&lt;usize&gt; = Vec::new();
+
     <span class="kw">let </span>runtime_plan_code: Vec&lt;proc_macro2::TokenStream&gt; = runtime_plan.steps
         .iter()
         .map(|unit| {
@@ -1045,6 +1091,7 @@
                     );
                     <span class="kw">let </span>comment_tokens: proc_macro2::TokenStream = parse_str(<span class="kw-2">&amp;</span>comment_str).unwrap();
                     <span class="kw">let </span>tid = step.node_id <span class="kw">as </span>usize;
+                    taskid_call_order.push(tid);
 
                     <span class="kw">let </span>process_call = <span class="kw">match </span>step.task_type {
                         CuTaskType::Source =&gt; {
@@ -1128,7 +1175,6 @@
                             } <span class="kw">else </span>{
                                 <span class="macro">panic!</span>(<span class="string">"Sink tasks should have a virtual output message index."</span>);
                             }
-
                         }
                         CuTaskType::Regular =&gt; {
                             <span class="kw">let </span>indices = step.input_msg_indices_types.iter().map(|(index, <span class="kw">_</span>)| int2sliceindex(<span class="kw-2">*</span>index));
@@ -1178,9 +1224,11 @@
                 CuExecutionUnit::Loop(<span class="kw">_</span>) =&gt; <span class="macro">todo!</span>(<span class="string">"Needs to be implemented"</span>),
             }
         }).collect();
+    <span class="macro">eprintln!</span>(<span class="string">"[Culist access order:  {:?}]"</span>, taskid_call_order);
 
     <span class="macro">eprintln!</span>(<span class="string">"[build the copperlist support]"</span>);
-    <span class="kw">let </span>culist_support: proc_macro2::TokenStream = gen_culist_support(<span class="kw-2">&amp;</span>runtime_plan);
+    <span class="kw">let </span>culist_support: proc_macro2::TokenStream =
+        gen_culist_support(<span class="kw-2">&amp;</span>runtime_plan, <span class="kw-2">&amp;</span>taskid_call_order);
 
     <span class="macro">eprintln!</span>(<span class="string">"[build the run method]"</span>);
     <span class="kw">let </span>run_method = <span class="macro">quote!</span> {
