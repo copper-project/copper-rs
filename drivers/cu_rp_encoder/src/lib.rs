@@ -82,9 +82,9 @@ impl CuTaskLifecycle for Encoder {
             .set_async_interrupt(Trigger::FallingEdge, None, move |_| {
                 let mut idata = idata.lock().unwrap();
                 if idata.dat_pin.read() == Level::Low {
-                    idata.ticks += 1;
-                } else {
                     idata.ticks -= 1;
+                } else {
+                    idata.ticks += 1;
                 }
                 idata.tov = clock.now();
             })
@@ -104,9 +104,10 @@ impl CuTaskLifecycle for Encoder {
 impl<'cl> CuSrcTask<'cl> for Encoder {
     type Output = output_msg!('cl, EncoderPayload);
 
-    fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
+    fn process(&mut self, clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
         let idata = self.data_from_interrupts.lock().unwrap();
-        new_msg.metadata.tov = idata.tov.into();
+        new_msg.metadata.tov = Some(clock.now()).into();
+        new_msg.metadata.set_status(idata.ticks);
         new_msg.set_payload(EncoderPayload { ticks: idata.ticks });
         Ok(())
     }

@@ -231,8 +231,8 @@ where
                     );
                 }
                 output.metadata.set_status(format!(
-                    "{:.2}: {:.2} {:.2} {:.2} {:.2}",
-                    measure, &state.p, &state.i, &state.d, &state.output
+                    "{:>5.2} {:>5.2} {:>5.2} {:>5.2}",
+                    &state.output, &state.p, &state.i, &state.d
                 ));
                 output.set_payload(state);
             }
@@ -280,6 +280,10 @@ impl<'cl> CuTask<'cl> for PIDMerger {
         output.set_payload(MotorPayload {
             power: composite_output,
         });
+        output
+            .metadata
+            .set_status(format!("Comp:{:.2}", composite_output));
+
         Ok(())
     }
 }
