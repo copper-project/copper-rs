@@ -230,7 +230,10 @@ where
                         format!("{} < {} (cutoff)", measure, self.setpoint - self.cutoff).into(),
                     );
                 }
-
+                output.metadata.set_status(format!(
+                    "{:.2}: {:.2} {:.2} {:.2} {:.2}",
+                    measure, &state.p, &state.i, &state.d, &state.output
+                ));
                 output.set_payload(state);
             }
             None => output.clear_payload(),
