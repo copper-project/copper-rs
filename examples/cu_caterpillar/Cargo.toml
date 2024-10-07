@@ -36,6 +36,7 @@ cu29-unifiedlog = { workspace = true }
 cu29-export = { workspace = true }
 bincode = { workspace = true }
 cu-consolemon = { path = "../cu_consolemon" }
+compact_str = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 cu-rp-gpio = { path = "../../drivers/cu_rp_gpio", version = "0.3.0" }

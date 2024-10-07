@@ -44,6 +44,7 @@ impl<'cl> CuSrcTask<'cl> for CaterpillarSource {
             creation: clock.now().into(),
             actuation: OptionCuTime::none(),
         });
+        output.metadata.set_status(self.state);
         Ok(())
     }
 }
@@ -72,7 +73,9 @@ impl<'cl> CuTask<'cl> for CaterpillarTask {
         output: Self::Output,
     ) -> CuResult<()> {
         // forward the state to the next task
-        output.set_payload(*input.payload().unwrap());
+        let incoming = *input.payload().unwrap();
+        output.set_payload(incoming);
+        output.metadata.set_status(incoming.on);
         Ok(())
     }
 }

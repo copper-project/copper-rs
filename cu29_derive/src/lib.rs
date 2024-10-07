@@ -35,7 +35,19 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
     let cuconfig = read_config(&config);
     let runtime_plan: CuExecutionLoop =
         compute_runtime_plan(&cuconfig).expect("Could not compute runtime plan");
-    let support = gen_culist_support(&runtime_plan);
+
+    // All accesses are linear on the culist but the id of the tasks is random (determined by the Ron declaration order).
+    // This records the task ids in call order.
+    let taskid_order: Vec<usize> = runtime_plan
+        .steps
+        .iter()
+        .filter_map(|unit| match unit {
+            CuExecutionUnit::Step(step) => Some(step.node_id as usize),
+            _ => None,
+        })
+        .collect();
+
+    let support = gen_culist_support(&runtime_plan, &taskid_order);
 
     let with_uses = quote! {
         use bincode::Encode as _Encode;
@@ -52,12 +64,18 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
 }
 
 /// Build the inner support of the copper list.
-fn gen_culist_support(runtime_plan: &CuExecutionLoop) -> proc_macro2::TokenStream {
+fn gen_culist_support(
+    runtime_plan: &CuExecutionLoop,
+    taskid_call_order: &Vec<usize>,
+) -> proc_macro2::TokenStream {
     eprintln!("[Extract msgs types]");
     let all_msgs_types_in_culist_order = extract_msg_types(runtime_plan);
 
     let culist_size = all_msgs_types_in_culist_order.len();
-    let culist_indices = (0..(culist_size as u32)).map(int2sliceindex);
+    let task_indices: Vec<_> = taskid_call_order
+        .iter()
+        .map(|i| syn::Index::from(*i))
+        .collect();
 
     eprintln!("[build the copperlist tuple]");
     let msgs_types_tuple: TypeTuple = build_culist_tuple(&all_msgs_types_in_culist_order);
@@ -71,7 +89,7 @@ fn gen_culist_support(runtime_plan: &CuExecutionLoop) -> proc_macro2::TokenStrea
 
     let collect_metadata_function = quote! {
         pub fn collect_metadata<'a>(culist: &'a CuList) -> [&'a _CuMsgMetadata; #culist_size] {
-            [#( &culist.msgs.0.#culist_indices.metadata, )*]
+            [#( &culist.msgs.0.#task_indices.metadata, )*]
         }
     };
 
@@ -284,6 +302,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         })
     );
 
+    // All accesses are linear on the culist but the id of the tasks is random (determined by the Ron declaration order).
+    // This records the task ids in call order.
+    let mut taskid_call_order: Vec<usize> = Vec::new();
+
     let runtime_plan_code: Vec<proc_macro2::TokenStream> = runtime_plan.steps
         .iter()
         .map(|unit| {
@@ -311,6 +333,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     );
                     let comment_tokens: proc_macro2::TokenStream = parse_str(&comment_str).unwrap();
                     let tid = step.node_id as usize;
+                    taskid_call_order.push(tid);
 
                     let process_call = match step.task_type {
                         CuTaskType::Source => {
@@ -394,7 +417,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             } else {
                                 panic!("Sink tasks should have a virtual output message index.");
                             }
-
                         }
                         CuTaskType::Regular => {
                             let indices = step.input_msg_indices_types.iter().map(|(index, _)| int2sliceindex(*index));
@@ -444,9 +466,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 CuExecutionUnit::Loop(_) => todo!("Needs to be implemented"),
             }
         }).collect();
+    eprintln!("[Culist access order:  {:?}]", taskid_call_order);
 
     eprintln!("[build the copperlist support]");
-    let culist_support: proc_macro2::TokenStream = gen_culist_support(&runtime_plan);
+    let culist_support: proc_macro2::TokenStream =
+        gen_culist_support(&runtime_plan, &taskid_call_order);
 
     eprintln!("[build the run method]");
     let run_method = quote! {

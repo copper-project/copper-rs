@@ -22,8 +22,8 @@ members = [
     "examples/cu_standalone_structlog",
     "examples/cu_caterpillar",
     "examples/cu_rp_balancebot",
-    "examples/cu_multisources", 
-    "examples/cu_monitoring", 
+    "examples/cu_multisources",
+    "examples/cu_monitoring",
     "examples/cu_consolemon"]
 
 # put only the core crates here that are not platform specific
@@ -86,6 +86,9 @@ syn = { version = "2.0.79", features = ["full"] } # proc macros
 
 # Unit of measure to be consistent across the project
 uom = { version = "0.36.0", features = ["serde"] }
+
+# Compact strings supporT
+compact_str = { version = "0.8.0", features = ["serde"] }
 
 [profile.release]
 lto = true
