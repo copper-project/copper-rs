@@ -138,11 +138,13 @@ impl<'cl> CuSrcTask<'cl> for ADS7883 {
             * INTEGRATION_FACTOR)
             / (INTEGRATION_FACTOR + 1);
 
+        let result = (self.integrated_value / INTEGRATION_FACTOR) as u16;
         let output = ADSReadingPayload {
-            analog_value: (self.integrated_value / INTEGRATION_FACTOR) as u16,
+            analog_value: result,
         };
         new_msg.set_payload(output);
         new_msg.metadata.tov = ((clock.now() + bf) / 2u64).into();
+        new_msg.metadata.set_status(result);
         Ok(())
     }
 }

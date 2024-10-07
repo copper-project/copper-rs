@@ -2,6 +2,7 @@ pub mod sysinfo;
 
 use ansi_to_tui::IntoText;
 use color_eyre::config::HookBuilder;
+use compact_str::{CompactString, ToCompactString};
 use cu29::clock::{CuDuration, RobotClock};
 use cu29::config::{ComponentConfig, CuConfig, Node};
 use cu29::cutask::CuMsgMetadata;
@@ -113,16 +114,23 @@ impl NodeType {
     }
 }
 
+#[derive(Default, Clone)]
+struct TaskStatus {
+    is_error: bool,
+    status_txt: CompactString,
+    error: CompactString,
+}
+
 struct NodesScrollableWidgetState {
     config_nodes: Vec<Node>,
     node_types: Vec<NodeType>,
     connections: Vec<Connection>,
-    errors: Arc<Mutex<Vec<Option<CuError>>>>,
+    statuses: Arc<Mutex<Vec<TaskStatus>>>,
     nodes_scrollable_state: ScrollViewState,
 }
 
 impl NodesScrollableWidgetState {
-    fn new(config: &CuConfig, errors: Arc<Mutex<Vec<Option<CuError>>>>) -> Self {
+    fn new(config: &CuConfig, errors: Arc<Mutex<Vec<TaskStatus>>>) -> Self {
         let mut config_nodes: Vec<Node> = Vec::new();
         let mut node_types: Vec<NodeType> = Vec::new();
         for node in config.get_all_nodes() {
@@ -155,7 +163,7 @@ impl NodesScrollableWidgetState {
             node_types,
             connections,
             nodes_scrollable_state: ScrollViewState::default(),
-            errors,
+            statuses: errors,
         }
     }
 }
@@ -213,29 +221,29 @@ impl StatefulWidget for NodesScrollableWidget<'_> {
         let zones = graph.split(scroll_view.area());
 
         {
-            let mut errors = state.errors.lock().unwrap();
+            let mut statuses = state.statuses.lock().unwrap();
             for (idx, ea_zone) in zones.into_iter().enumerate() {
                 let s = state.config_nodes[idx].get_type();
-                let error = &mut errors[idx];
-                let maybe_error = if let Some(error) = error {
-                    format!("❌ {}", error.to_string())
+                let status = &mut statuses[idx];
+                let status_line = if status.is_error {
+                    format!("❌ {}", status.error)
                 } else {
-                    "✓".to_string()
+                    format!("✓ {}", status.status_txt)
                 };
 
                 let txt = format!(
                     " {}\n {}\n {}",
                     state.node_types[idx],
                     &s[s.len().saturating_sub(NODE_WIDTH_CONTENT as usize - 2)..],
-                    maybe_error,
+                    status_line,
                 );
                 let paragraph = Paragraph::new(txt);
-                let paragraph = if error.is_some() {
+                let paragraph = if status.is_error {
                     paragraph.red()
                 } else {
                     paragraph.green()
                 };
-                *error = None; // reset if it was displayed
+                status.is_error = false; // reset if it was displayed
                 scroll_view.render_widget(paragraph, ea_zone);
             }
         }
@@ -258,7 +266,7 @@ pub struct CuConsoleMon {
     config: CuConfig,
     taskids: &'static [&'static str],
     task_stats: Arc<Mutex<TaskStats>>,
-    error_states: Arc<Mutex<Vec<Option<CuError>>>>,
+    task_statuses: Arc<Mutex<Vec<TaskStatus>>>,
     quitting: Arc<AtomicBool>,
 }
 
@@ -275,11 +283,11 @@ impl UI {
         config: CuConfig,
         task_ids: &'static [&'static str],
         task_stats: Arc<Mutex<TaskStats>>,
-        error_states: Arc<Mutex<Vec<Option<CuError>>>>,
+        task_statuses: Arc<Mutex<Vec<TaskStatus>>>,
     ) -> UI {
         init_error_hooks();
         let nodes_scrollable_widget_state =
-            NodesScrollableWidgetState::new(&config, error_states.clone());
+            NodesScrollableWidgetState::new(&config, task_statuses.clone());
         Self {
             task_ids,
             active_screen: Screen::Neofetch,
@@ -551,7 +559,7 @@ impl CuMonitor for CuConsoleMon {
             config,
             taskids,
             task_stats,
-            error_states: Arc::new(Mutex::new(vec![None; taskids.len()])),
+            task_statuses: Arc::new(Mutex::new(vec![TaskStatus::default(); taskids.len()])),
             quitting: Arc::new(AtomicBool::new(false)),
         })
     }
@@ -570,7 +578,7 @@ impl CuMonitor for CuConsoleMon {
         let taskids = self.taskids;
 
         let task_stats_ui = self.task_stats.clone();
-        let error_states = self.error_states.clone();
+        let error_states = self.task_statuses.clone();
         let quitting = self.quitting.clone();
 
         // Start the main UI loop
@@ -584,8 +592,20 @@ impl CuMonitor for CuConsoleMon {
     }
 
     fn process_copperlist(&self, msgs: &[&CuMsgMetadata]) -> CuResult<()> {
-        let mut task_stats = self.task_stats.lock().unwrap();
-        task_stats.update(msgs);
+        {
+            let mut task_stats = self.task_stats.lock().unwrap();
+            task_stats.update(msgs);
+        }
+        {
+            let mut task_statuses = self.task_statuses.lock().unwrap();
+            for (i, msg) in msgs.iter().enumerate() {
+                task_statuses[i].status_txt = msg.status_txt.0.clone();
+                if task_statuses[i].status_txt.as_bytes()[0] == 0 {
+                    task_statuses[i].status_txt = "".to_compact_string();
+                }
+            }
+        }
+
         if self.quitting.load(Ordering::SeqCst) {
             return Err("Exiting...".into());
         }
@@ -596,7 +616,9 @@ impl CuMonitor for CuConsoleMon {
         if taskid == 0 {
             panic!("Task ID error with {:?}", error);
         }
-        self.error_states.lock().unwrap()[taskid] = Some(error.clone());
+        let status = &mut self.task_statuses.lock().unwrap()[taskid];
+        status.is_error = true;
+        status.error = error.to_compact_string();
         match step {
             CuTaskState::Start => Decision::Shutdown,
             CuTaskState::Preprocess => Decision::Abort,

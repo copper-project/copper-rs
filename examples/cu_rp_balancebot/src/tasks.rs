@@ -230,7 +230,10 @@ where
                         format!("{} < {} (cutoff)", measure, self.setpoint - self.cutoff).into(),
                     );
                 }
-
+                output.metadata.set_status(format!(
+                    "{:>5.2} {:>5.2} {:>5.2} {:>5.2}",
+                    &state.output, &state.p, &state.i, &state.d
+                ));
                 output.set_payload(state);
             }
             None => output.clear_payload(),
@@ -277,6 +280,10 @@ impl<'cl> CuTask<'cl> for PIDMerger {
         output.set_payload(MotorPayload {
             power: composite_output,
         });
+        output
+            .metadata
+            .set_status(format!("Comp:{:.2}", composite_output));
+
         Ok(())
     }
 }

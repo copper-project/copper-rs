@@ -4,11 +4,13 @@
 use crate::clock::OptionCuTime;
 use crate::config::ComponentConfig;
 use crate::CuResult;
-use bincode::de::Decode;
 use bincode::de::Decoder;
+use bincode::de::{BorrowDecoder, Decode};
 use bincode::enc::Encode;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
+use bincode::BorrowDecode;
+use compact_str::{CompactString, ToCompactString};
 use cu29_clock::RobotClock;
 use serde_derive::{Deserialize, Serialize};
 use std::fmt;
@@ -63,8 +65,36 @@ macro_rules! output_msg {
     };
 }
 
+// MAX_SIZE from their repr module is not accessible so we need to copy paste their definition for 24
+// which is the maximum size for inline allocation (no heap)
+const COMPACT_STRING_CAPACITY: usize = size_of::<String>();
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct CuCompactString(pub CompactString);
+
+impl Encode for CuCompactString {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        Encode::encode(&self.0.as_bytes(), encoder)?;
+        Ok(())
+    }
+}
+
+impl Decode for CuCompactString {
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let bytes: [u8; COMPACT_STRING_CAPACITY] = Decode::decode(decoder)?;
+        let cstr = CompactString::from_utf8(bytes).map_err(|e| DecodeError::Utf8 { inner: e })?;
+        Ok(CuCompactString(cstr))
+    }
+}
+
+impl<'de> BorrowDecode<'de> for CuCompactString {
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        CuCompactString::decode(decoder)
+    }
+}
+
 /// CuMsgMetadata is a structure that contains metadata common to all CuMsgs.
-#[derive(Debug, Default, bincode::Encode, bincode::Decode, Serialize, Deserialize)]
+#[derive(Debug, bincode::Encode, bincode::Decode, Serialize, Deserialize)]
 pub struct CuMsgMetadata {
     /// The time before the process method is called.
     pub before_process: OptionCuTime,
@@ -72,6 +102,15 @@ pub struct CuMsgMetadata {
     pub after_process: OptionCuTime,
     /// The time of validity of the message.
     pub tov: OptionCuTime,
+    /// A small string for real time feedback purposes.
+    /// This is usefull for to display on the field when the tasks are operating correctly.
+    pub status_txt: CuCompactString,
+}
+
+impl CuMsgMetadata {
+    pub fn set_status(&mut self, status: impl ToCompactString) {
+        self.status_txt = CuCompactString(status.to_compact_string());
+    }
 }
 
 impl Display for CuMsgMetadata {
@@ -97,6 +136,17 @@ where
     pub metadata: CuMsgMetadata,
 }
 
+impl Default for CuMsgMetadata {
+    fn default() -> Self {
+        CuMsgMetadata {
+            before_process: OptionCuTime::none(),
+            after_process: OptionCuTime::none(),
+            tov: OptionCuTime::none(),
+            status_txt: CuCompactString(CompactString::with_capacity(COMPACT_STRING_CAPACITY)),
+        }
+    }
+}
+
 impl<T> CuMsg<T>
 where
     T: CuMsgPayload,
@@ -104,11 +154,7 @@ where
     pub fn new(payload: Option<T>) -> Self {
         CuMsg {
             payload,
-            metadata: CuMsgMetadata {
-                before_process: OptionCuTime::none(),
-                after_process: OptionCuTime::none(),
-                tov: OptionCuTime::none(),
-            },
+            metadata: CuMsgMetadata::default(),
         }
     }
     pub fn payload(&self) -> Option<&T> {

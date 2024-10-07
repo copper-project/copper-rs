@@ -23,14 +23,15 @@ path = "src/rendercfg.rs"
 bincode = { workspace = true }
 serde = { workspace = true }
 serde_derive = { workspace = true }
-petgraph = { version = "0.6.5", features = ["serde", "serde-1", "serde_derive"] }
-ron = "0.8.1"
+compact_str = { workspace = true }
 cu29-traits = { workspace = true }
 cu29-log = { workspace = true }
 cu29-log-derive = { workspace = true }
 cu29-log-runtime = { workspace = true }
 cu29-clock = { workspace = true }
+ron = "0.8.1"
 clap = { workspace = true }
 uom = { workspace = true }
 tempfile = "3.13.0"
 hdrhistogram = "7.5.4"
+petgraph = { version = "0.6.5", features = ["serde", "serde-1", "serde_derive"] }
