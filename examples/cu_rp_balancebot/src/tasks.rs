@@ -29,6 +29,9 @@ struct PIDController {
     i_limit: f32,
     d_limit: f32,
     output_limit: f32,
+    elapsed: CuDuration,
+    sampling: CuDuration,
+    last_output: PIDControlOutput,
 }
 
 impl PIDController {
@@ -41,6 +44,7 @@ impl PIDController {
         i_limit: f32,
         d_limit: f32,
         output_limit: f32,
+        sampling: CuDuration, // to avoid oversampling and get a bunch of zeros.
     ) -> Self {
         PIDController {
             kp,
@@ -53,6 +57,9 @@ impl PIDController {
             i_limit,
             d_limit,
             output_limit,
+            elapsed: CuDuration::default(),
+            sampling,
+            last_output: PIDControlOutput::default(),
         }
     }
 
@@ -63,12 +70,19 @@ impl PIDController {
 
     pub fn init_measurement(&mut self, measurement: f32) {
         self.last_error = self.setpoint - measurement;
+        self.elapsed = self.sampling; // force the computation on the first next_control_output
     }
 
     pub fn next_control_output(&mut self, measurement: f32, dt: CuDuration) -> PIDControlOutput {
+        self.elapsed += dt;
+
+        if self.elapsed < self.sampling {
+            // if we bang too fast the PID controller, just keep on giving the same answer
+            return self.last_output.clone();
+        }
+
         let error = self.setpoint - measurement;
-        let dt = dt.0 as f32 / 1_000_000f32; // the unit is kind of arbitrary.
-        debug!("DT: {}", dt);
+        let dt = self.elapsed.0 as f32 / 1_000_000f32; // the unit is kind of arbitrary.
 
         // Proportional term
         let p_unbounded = self.kp * error;
@@ -91,7 +105,11 @@ impl PIDController {
         let output_unbounded = p + i + d;
         let output = output_unbounded.clamp(-self.output_limit, self.output_limit);
 
-        PIDControlOutput { p, i, d, output }
+        let output = PIDControlOutput { p, i, d, output };
+
+        self.last_output = output.clone();
+        self.elapsed = CuDuration::default();
+        output
     }
 }
 
@@ -143,6 +161,12 @@ where
                 let d_limit = getcfg(config, "dl", 2.0f32);
                 let output_limit = getcfg(config, "ol", 1.0f32);
 
+                let sampling = if let Some(value) = config.get::<u32>("sampling_ms") {
+                    CuDuration::from(value as u64 * 1_000_000u64)
+                } else {
+                    CuDuration::default()
+                };
+
                 let pid: PIDController = PIDController::new(
                     kp,
                     ki,
@@ -152,6 +176,7 @@ where
                     i_limit,
                     d_limit,
                     output_limit,
+                    sampling,
                 );
 
                 Ok(Self {
