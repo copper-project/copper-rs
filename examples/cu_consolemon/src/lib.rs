@@ -613,12 +613,11 @@ impl CuMonitor for CuConsoleMon {
     }
 
     fn process_error(&self, taskid: usize, step: CuTaskState, error: &CuError) -> Decision {
-        if taskid == 0 {
-            panic!("Task ID error with {:?}", error);
+        {
+            let status = &mut self.task_statuses.lock().unwrap()[taskid];
+            status.is_error = true;
+            status.error = error.to_compact_string();
         }
-        let status = &mut self.task_statuses.lock().unwrap()[taskid];
-        status.is_error = true;
-        status.error = error.to_compact_string();
         match step {
             CuTaskState::Start => Decision::Shutdown,
             CuTaskState::Preprocess => Decision::Abort,
