@@ -342,7 +342,13 @@
 <a href="#341" id="341">341</a>
 <a href="#342" id="342">342</a>
 <a href="#343" id="343">343</a>
-<a href="#344" id="344">344</a></pre></div><pre class="rust"><code><span class="attr">#[cfg(test)]
+<a href="#344" id="344">344</a>
+<a href="#345" id="345">345</a>
+<a href="#346" id="346">346</a>
+<a href="#347" id="347">347</a>
+<a href="#348" id="348">348</a>
+<a href="#349" id="349">349</a>
+<a href="#350" id="350">350</a></pre></div><pre class="rust"><code><span class="attr">#[cfg(test)]
 #[macro_use]
 </span><span class="kw">extern crate </span>approx;
 <span class="kw">use </span>bincode::de::BorrowDecoder;
@@ -356,7 +362,7 @@
 <span class="kw">use </span>quanta::{Clock, Mock};
 <span class="kw">use </span>serde::{Deserialize, Serialize};
 <span class="kw">use </span>std::fmt::{Display, Formatter};
-<span class="kw">use </span>std::ops::Div;
+<span class="kw">use </span>std::ops::{AddAssign, Div};
 <span class="kw">use </span>std::sync::Arc;
 <span class="kw">use </span>std::time::Duration;
 
@@ -404,6 +410,12 @@
     <span class="kw">fn </span>add(<span class="self">self</span>, rhs: <span class="self">Self</span>) -&gt; <span class="self">Self</span>::Output {
         CuDuration(<span class="self">self</span>.<span class="number">0 </span>+ rhs.<span class="number">0</span>)
     }
+}
+
+<span class="kw">impl </span>AddAssign <span class="kw">for </span>CuDuration {
+    <span class="kw">fn </span>add_assign(<span class="kw-2">&amp;mut </span><span class="self">self</span>, rhs: <span class="self">Self</span>) {
+        <span class="self">self</span>.<span class="number">0 </span>+= rhs.<span class="number">0
+    </span>}
 }
 
 <span class="comment">// a way to divide a duration by a scalar.
