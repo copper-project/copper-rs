@@ -12,7 +12,7 @@ pub use quanta::Instant;
 use quanta::{Clock, Mock};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
-use std::ops::{AddAssign, Div};
+use std::ops::{AddAssign, Div, Mul};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -77,6 +77,47 @@ where
     type Output = Self;
     fn div(self, rhs: T) -> Self {
         CuDuration(self.0 / rhs.into())
+    }
+}
+//
+// a way to multiply a duration by a scalar.
+// useful to compute offsets for example.
+// CuDuration * scalar
+impl<T> Mul<T> for CuDuration
+where
+    T: Into<u64>,
+{
+    type Output = CuDuration;
+
+    fn mul(self, rhs: T) -> CuDuration {
+        CuDuration(self.0 * rhs.into())
+    }
+}
+
+// u64 * CuDuration
+impl Mul<CuDuration> for u64 {
+    type Output = CuDuration;
+
+    fn mul(self, rhs: CuDuration) -> CuDuration {
+        CuDuration(self * rhs.0)
+    }
+}
+
+// u32 * CuDuration
+impl Mul<CuDuration> for u32 {
+    type Output = CuDuration;
+
+    fn mul(self, rhs: CuDuration) -> CuDuration {
+        CuDuration(self as u64 * rhs.0)
+    }
+}
+
+// i32 * CuDuration
+impl Mul<CuDuration> for i32 {
+    type Output = CuDuration;
+
+    fn mul(self, rhs: CuDuration) -> CuDuration {
+        CuDuration(self as u64 * rhs.0)
     }
 }
 
