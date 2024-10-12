@@ -35,8 +35,8 @@ cu29-log-derive = { workspace = true }
 cu29-unifiedlog = { workspace = true }
 cu29-export = { workspace = true }
 bincode = { workspace = true }
-cu-consolemon = { path = "../../components/monitors/cu_consolemon" }
+cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.3.1"}
 compact_str = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-cu-rp-gpio = { path = "../../components/sinks/cu_rp_gpio", version = "0.3.0" }
+cu-rp-gpio = { path = "../../components/sinks/cu_rp_gpio", version = "0.3.1" }
