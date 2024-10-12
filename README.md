@@ -32,8 +32,8 @@ game engine is to games.
 
 Copper is a data-oriented runtime with these key components:
 
-* **Task Graph
-  **: <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/graph.png?raw=true" alt="graph"/>
+* **Task Graph**:
+  <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/graph.png?raw=true" alt="graph"/>
   Described in [RON](https://github.com/ron-rs/ron), this configures the system's topology, specifying which tasks
   communicate and setting types for nodes and messages.
 
