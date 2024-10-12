@@ -19,8 +19,8 @@
             id: "balpos_pid",
             type: "tasks::BalPID",
             config: {
-                "kp": 0.03, // 0.02 1 / 168 ticks = .00593
-                 "kd": 0.03,
+                "kp": 0.015, // 0.02 1 / 168 ticks = .00593
+                 "kd": 0.01,
                  // "ki": 0.00005,
                  "setpoint": 3176.0,
                  "cutoff": 170.0, // cut off if the measured value is outside of +/- 170 ticks around the setpoint
@@ -32,10 +32,11 @@
             type: "tasks::PosPID",
             config: {
                 "kp": 0.0005, // 0.02 1 / 168 ticks = .00593
-                 "kd": 0.002,
+                 "kd": 0.5,
                  // "ki": 0.000001,
                  "setpoint": 0.0,
                  "cutoff": 1000.0, // cut off if the it is about to hit the side of the rail
+                 "sampling_ms": 100,
             },
         ),
 
