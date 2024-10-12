@@ -348,7 +348,48 @@
 <a href="#347" id="347">347</a>
 <a href="#348" id="348">348</a>
 <a href="#349" id="349">349</a>
-<a href="#350" id="350">350</a></pre></div><pre class="rust"><code><span class="attr">#[cfg(test)]
+<a href="#350" id="350">350</a>
+<a href="#351" id="351">351</a>
+<a href="#352" id="352">352</a>
+<a href="#353" id="353">353</a>
+<a href="#354" id="354">354</a>
+<a href="#355" id="355">355</a>
+<a href="#356" id="356">356</a>
+<a href="#357" id="357">357</a>
+<a href="#358" id="358">358</a>
+<a href="#359" id="359">359</a>
+<a href="#360" id="360">360</a>
+<a href="#361" id="361">361</a>
+<a href="#362" id="362">362</a>
+<a href="#363" id="363">363</a>
+<a href="#364" id="364">364</a>
+<a href="#365" id="365">365</a>
+<a href="#366" id="366">366</a>
+<a href="#367" id="367">367</a>
+<a href="#368" id="368">368</a>
+<a href="#369" id="369">369</a>
+<a href="#370" id="370">370</a>
+<a href="#371" id="371">371</a>
+<a href="#372" id="372">372</a>
+<a href="#373" id="373">373</a>
+<a href="#374" id="374">374</a>
+<a href="#375" id="375">375</a>
+<a href="#376" id="376">376</a>
+<a href="#377" id="377">377</a>
+<a href="#378" id="378">378</a>
+<a href="#379" id="379">379</a>
+<a href="#380" id="380">380</a>
+<a href="#381" id="381">381</a>
+<a href="#382" id="382">382</a>
+<a href="#383" id="383">383</a>
+<a href="#384" id="384">384</a>
+<a href="#385" id="385">385</a>
+<a href="#386" id="386">386</a>
+<a href="#387" id="387">387</a>
+<a href="#388" id="388">388</a>
+<a href="#389" id="389">389</a>
+<a href="#390" id="390">390</a>
+<a href="#391" id="391">391</a></pre></div><pre class="rust"><code><span class="attr">#[cfg(test)]
 #[macro_use]
 </span><span class="kw">extern crate </span>approx;
 <span class="kw">use </span>bincode::de::BorrowDecoder;
@@ -362,7 +403,7 @@
 <span class="kw">use </span>quanta::{Clock, Mock};
 <span class="kw">use </span>serde::{Deserialize, Serialize};
 <span class="kw">use </span>std::fmt::{Display, Formatter};
-<span class="kw">use </span>std::ops::{AddAssign, Div};
+<span class="kw">use </span>std::ops::{AddAssign, Div, Mul};
 <span class="kw">use </span>std::sync::Arc;
 <span class="kw">use </span>std::time::Duration;
 
@@ -427,6 +468,47 @@
     <span class="kw">type </span>Output = <span class="self">Self</span>;
     <span class="kw">fn </span>div(<span class="self">self</span>, rhs: T) -&gt; <span class="self">Self </span>{
         CuDuration(<span class="self">self</span>.<span class="number">0 </span>/ rhs.into())
+    }
+}
+<span class="comment">//
+// a way to multiply a duration by a scalar.
+// useful to compute offsets for example.
+// CuDuration * scalar
+</span><span class="kw">impl</span>&lt;T&gt; Mul&lt;T&gt; <span class="kw">for </span>CuDuration
+<span class="kw">where
+    </span>T: Into&lt;u64&gt;,
+{
+    <span class="kw">type </span>Output = CuDuration;
+
+    <span class="kw">fn </span>mul(<span class="self">self</span>, rhs: T) -&gt; CuDuration {
+        CuDuration(<span class="self">self</span>.<span class="number">0 </span>* rhs.into())
+    }
+}
+
+<span class="comment">// u64 * CuDuration
+</span><span class="kw">impl </span>Mul&lt;CuDuration&gt; <span class="kw">for </span>u64 {
+    <span class="kw">type </span>Output = CuDuration;
+
+    <span class="kw">fn </span>mul(<span class="self">self</span>, rhs: CuDuration) -&gt; CuDuration {
+        CuDuration(<span class="self">self </span>* rhs.<span class="number">0</span>)
+    }
+}
+
+<span class="comment">// u32 * CuDuration
+</span><span class="kw">impl </span>Mul&lt;CuDuration&gt; <span class="kw">for </span>u32 {
+    <span class="kw">type </span>Output = CuDuration;
+
+    <span class="kw">fn </span>mul(<span class="self">self</span>, rhs: CuDuration) -&gt; CuDuration {
+        CuDuration(<span class="self">self </span><span class="kw">as </span>u64 * rhs.<span class="number">0</span>)
+    }
+}
+
+<span class="comment">// i32 * CuDuration
+</span><span class="kw">impl </span>Mul&lt;CuDuration&gt; <span class="kw">for </span>i32 {
+    <span class="kw">type </span>Output = CuDuration;
+
+    <span class="kw">fn </span>mul(<span class="self">self</span>, rhs: CuDuration) -&gt; CuDuration {
+        CuDuration(<span class="self">self </span><span class="kw">as </span>u64 * rhs.<span class="number">0</span>)
     }
 }
 
