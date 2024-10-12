@@ -1,5 +1,6 @@
 [package]
 name = "cu-pid"
+description = "A PID controller for the Copper project."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
