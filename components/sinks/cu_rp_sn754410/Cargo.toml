@@ -1,5 +1,5 @@
 [package]
-name = "cu-rp-sn754410"
+name = "cu-rp-sn754410-new"
 description = "Rust library for controlling the SN754410 motor driver on the Raspberry Pi for Copper"
 version.workspace = true
 authors.workspace = true

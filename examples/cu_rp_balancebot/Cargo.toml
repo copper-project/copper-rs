@@ -27,7 +27,7 @@ cu29-unifiedlog = { workspace = true }
 compact_str = { workspace = true }
 bincode = { workspace = true }
 cu-ads7883-new = { path = "../../components/sources/cu_ads7883" }
-cu-rp-sn754410 = { path = "../../components/sinks/cu_rp_sn754410" }
+cu-rp-sn754410-new = { path = "../../components/sinks/cu_rp_sn754410" }
 cu-rp-encoder = { path = "../../components/sources/cu_rp_encoder" }
 cu-consolemon = { path = "../../components/monitors/cu_consolemon" }
 cu-pid = { path = "../../components/tasks/cu_pid" }
