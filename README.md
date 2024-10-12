@@ -32,7 +32,8 @@ game engine is to games.
 
 Copper is a data-oriented runtime with these key components:
 
-* **Task Graph**: <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/graph.png?raw=true" alt="graph"/>
+* **Task Graph
+  **: <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/graph.png?raw=true" alt="graph"/>
   Described in [RON](https://github.com/ron-rs/ron), this configures the system's topology, specifying which tasks
   communicate and setting types for nodes and messages.
 
@@ -50,29 +51,32 @@ Copper is a data-oriented runtime with these key components:
    sensors, and actuators.
 2. **Runtime generation**: Works but is very simple; this is just a BFS type of execution.
 3. **Log reader & structured log reader**: Can export data, currently in Rust debug format.
-4. **Simple/minimal drivers included**: Those are good examples if you want to write your own!
+4. **Components**: Those are also good examples if you want to write your own!
 
-| **Category** | **Type**        |                                                                                                                                                                 | **Description**                                            | **Crate Name** |
-|--------------|-----------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------|----------------|
-| Sensors      | Lidar           | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/vlp16.jpg?raw=true" alt="vlp16"/>                               | [Velodyne/Ouster VLP16](drivers/cu_vlp16)                  | cu_vlp16       |
-|              | IMU             | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/wt901.jpg?raw=true" alt="wt901"/>                               | [WitMotion WT901](drivers/cu_wt901)                        | cu_wt901       |
-|              | ADC/Position    | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/drivers/cu_ads7883/doc/ads7883-scale.jpg?raw=true" alt="ads7883"/>  | [ADS 7883 3MPSPS SPI ADC](drivers/cu_ads7883)              | cu_ads7883     |
-| Actuators    | GPIO            | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/rp.jpg?raw=true" alt="rp"/>                                     | [Raspberry Pi](drivers/cu_rp_gpio)                         | cu_rp_gpio     |
-|              | Servo           | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/lewansoul.jpg?raw=true" alt="lewansoul"/>                       | [Lewansoul Servo Bus (LX-16A, etc.)](drivers/cu_lewansoul) | cu_lewansoul   |
-|              | DC Motor Driver | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/drivers/cu_rp_sn754410/doc/sn754410.jpeg?raw=true" alt="sn754410"/> | [Half-H Driver for CD Motors](drivers/cu_rp_sn754410)      | cu_rp_sn754410 |
+| **Category** | **Type**        |                                                                                                                                                                            | **Description**                                                       | **Crate Name** |
+|--------------|-----------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------|----------------|
+| Sensors      | Lidar           | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_vlp16/doc/vlp16.jpg?raw=true" alt="vlp16"/>              | [Velodyne/Ouster VLP16](components/sources/cu_vlp16)                  | cu-vlp16       |
+|              | IMU             | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_wt901/doc/wt901.jpg?raw=true" alt="wt901"/>              | [WitMotion WT901](components/sources/cu_wt901)                        | cu-wt901       |
+|              | ADC/Position    | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_ads7883/doc/ads7883-scale.jpg?raw=true" alt="ads7883"/>  | [ADS 7883 3MPSPS SPI ADC](components/sources/cu_ads7883)              | cu-ads7883     |
+|              | Encoder         | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_rp_encoder/doc/encoder.jpg?raw=true" alt="ads7883"/>     | [Generic Directional Wheel encoder](components/sources/cu_rp_encoder) | cu-rp-encoder  |
+| Actuators    | GPIO            | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sinks/cu_rp_gpio/doc/rp.jpg?raw=true" alt="gpio"/>                  | [Raspberry Pi](components/sinks/cu_rp_gpio)                           | cu-rp-gpio     |
+|              | Servo           | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sinks/cu_lewansoul/doc/lewansoul.jpg?raw=true" alt="lewansoul"/>    | [Lewansoul Servo Bus (LX-16A, etc.)](components/sinks/cu_lewansoul)   | cu-lewansoul   |
+|              | DC Motor Driver | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sinks/cu_rp_sn754410/doc/sn754410.jpeg?raw=true" alt="sn754410"/>   | [Half-H Driver for CD Motors](components/sinks/cu_rp_sn754410)        | cu-rp-sn754410 |
+| Monitors     | TUI Monitor     | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/monitors/cu_consolemon/doc/screenshot.png?raw=true" alt="monitor"/> | [Console based monitor](components/monitors/cu_consolemon)            | cu-consolemon  |
 
 ### What features are missing? What do we plan to implement next?
 
-A lot! If any of these items pique your interest and you would like to contribute, feel free to reach out!
-
-Here are some of the features we plan to implement next (in ~order of priority):
+Here are some of the features we plan to implement next (in ~order of priority), if you are interested in contributing
+on any of those, please let us know!:
 
 To Reach Beta:
 
 - [x] **Merging**: Add a feature to merge messages from multiple sources as an input to a task.
 - [x] **Monitoring**: We need a parallel system that can listen to monitoring messages and act accordingly.
-- [ ] **Batching/Aligning**: add a feature to batch messages for high frequency sources to reduce the number of Copper Lists.
-- [ ] **Deterministic log replay + Sim**: As the runtime is generated in a deterministic fashion, we need to add hooks to
+- [ ] **Batching/Aligning**: add a feature to batch messages for high frequency sources to reduce the number of Copper
+  Lists.
+- [ ] **Deterministic log replay + Sim**: As the runtime is generated in a deterministic fashion, we need to add hooks
+  to
   inject messages into an existing runtime.
 - [ ] **Parallel Copper Lists**: Today Copper is monothreaded; this should enable concurrent Copper Lists to be executed
   at the same time with no contention.
@@ -80,12 +84,13 @@ To Reach Beta:
   their infra bit by bit.
 
 To Reach RC1:
+
 - [ ] **Extensible scheduling**: Enables a way to give hints to copper to schedule the workload
 - [ ] **Modular Configuration**: As robots built with Copper gain complexity, users will need to build "variations" of
   their robots without duplicating their entire RON file.
 - [ ] **Distributed Copper**: Currently, we can only create one process. We need proper RPC filtering copper lists per
   subsystem.
-So we are only at the beginning, but so much cool stuff is coming up!
+  So we are only at the beginning, but so much cool stuff is coming up!
 
 ### Kickstarting a copper project for the impatients
 
