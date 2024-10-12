@@ -13,20 +13,23 @@
 Copper is a user-friendly robotics framework designed for creating fast and reliable robots. Copper is to robots what a
 game engine is to games.
 
-* Easy: Copper offers a high-level configuration system and a natural Rust-first API.
+* **Easy**: Copper offers a high-level configuration system and a natural Rust-first API.
 
-* Fast: Copper uses Rust's zero-cost abstractions and a data-oriented approach to achieve sub-microsecond latency on
+* **Fast**: Copper uses Rust's zero-cost abstractions and a data-oriented approach to achieve sub-microsecond latency on
   commodity hardware, avoiding heap allocation during execution.
 
-* Reliable: Copper leverages Rust's ownership, type system, and concurrency model to minimize bugs and ensure thread
+* **Reliable**: Copper leverages Rust's ownership, type system, and concurrency model to minimize bugs and ensure thread
   safety.
 
-* Product Oriented: Copper aims to avoid late-stage infra integration issues by generating a very predictable runtime.
+* **Product Oriented**: Copper aims to avoid late-stage infra integration issues by generating a very predictable
+  runtime.
 
 > [!NOTE]
 > Copper is still in **early development / alpha stage**, and the APIs are subject to change. We are looking for
 > contributors to help us build the best robotics framework possible. If you are interested, please join us
 > on [Gitter](https://gitter.im/copper-project/copper-rs) or open an issue.
+
+Copper has been tested on: Linux (x86_64, armv7, aarch64 & riskv64) and MacOS (arm64).
 
 ### Technical Overview
 
