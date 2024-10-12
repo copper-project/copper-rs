@@ -33,7 +33,8 @@ on <a href="https://gitter.im/copper-project/copper-rs">Gitter</a> or open an is
 <p>Copper is a data-oriented runtime with these key components:</p>
 <ul>
 <li>
-<p><strong>Task Graph</strong>: <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/graph.png?raw=true" alt="graph"/>
+<p>**Task Graph
+**: <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/graph.png?raw=true" alt="graph"/>
 Described in <a href="https://github.com/ron-rs/ron">RON</a>, this configures the system’s topology, specifying which tasks
 communicate and setting types for nodes and messages.</p>
 </li>
@@ -55,19 +56,21 @@ and ensuring high-speed textual logging.</p>
 sensors, and actuators.</li>
 <li><strong>Runtime generation</strong>: Works but is very simple; this is just a BFS type of execution.</li>
 <li><strong>Log reader &amp; structured log reader</strong>: Can export data, currently in Rust debug format.</li>
-<li><strong>Simple/minimal drivers included</strong>: Those are good examples if you want to write your own!</li>
+<li><strong>Components</strong>: Those are also good examples if you want to write your own!</li>
 </ol>
 <div><table><thead><tr><th><strong>Category</strong></th><th><strong>Type</strong></th><th></th><th><strong>Description</strong></th><th><strong>Crate Name</strong></th></tr></thead><tbody>
-<tr><td>Sensors</td><td>Lidar</td><td><img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/vlp16.jpg?raw=true" alt="vlp16"/></td><td><a href="drivers/cu_vlp16">Velodyne/Ouster VLP16</a></td><td>cu_vlp16</td></tr>
-<tr><td></td><td>IMU</td><td><img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/wt901.jpg?raw=true" alt="wt901"/></td><td><a href="drivers/cu_wt901">WitMotion WT901</a></td><td>cu_wt901</td></tr>
-<tr><td></td><td>ADC/Position</td><td><img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/drivers/cu_ads7883/doc/ads7883-scale.jpg?raw=true" alt="ads7883"/></td><td><a href="drivers/cu_ads7883">ADS 7883 3MPSPS SPI ADC</a></td><td>cu_ads7883</td></tr>
-<tr><td>Actuators</td><td>GPIO</td><td><img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/rp.jpg?raw=true" alt="rp"/></td><td><a href="drivers/cu_rp_gpio">Raspberry Pi</a></td><td>cu_rp_gpio</td></tr>
-<tr><td></td><td>Servo</td><td><img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/lewansoul.jpg?raw=true" alt="lewansoul"/></td><td><a href="drivers/cu_lewansoul">Lewansoul Servo Bus (LX-16A, etc.)</a></td><td>cu_lewansoul</td></tr>
-<tr><td></td><td>DC Motor Driver</td><td><img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/drivers/cu_rp_sn754410/doc/sn754410.jpeg?raw=true" alt="sn754410"/></td><td><a href="drivers/cu_rp_sn754410">Half-H Driver for CD Motors</a></td><td>cu_rp_sn754410</td></tr>
+<tr><td>Sensors</td><td>Lidar</td><td><img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_vlp16/doc/vlp16.jpg?raw=true" alt="vlp16"/></td><td><a href="components/sources/cu_vlp16">Velodyne/Ouster VLP16</a></td><td>cu-vlp16</td></tr>
+<tr><td></td><td>IMU</td><td><img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_wt901/doc/wt901.jpg?raw=true" alt="wt901"/></td><td><a href="components/sources/cu_wt901">WitMotion WT901</a></td><td>cu-wt901</td></tr>
+<tr><td></td><td>ADC/Position</td><td><img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_ads7883/doc/ads7883-scale.jpg?raw=true" alt="ads7883"/></td><td><a href="components/sources/cu_ads7883">ADS 7883 3MPSPS SPI ADC</a></td><td>cu-ads7883</td></tr>
+<tr><td></td><td>Encoder</td><td><img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_rp_encoder/doc/encoder.jpg?raw=true" alt="ads7883"/></td><td><a href="components/sources/cu_rp_encoder">Generic Directional Wheel encoder</a></td><td>cu-rp-encoder</td></tr>
+<tr><td>Actuators</td><td>GPIO</td><td><img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sinks/cu_rp_gpio/doc/rp.jpg?raw=true" alt="gpio"/></td><td><a href="components/sinks/cu_rp_gpio">Raspberry Pi</a></td><td>cu-rp-gpio</td></tr>
+<tr><td></td><td>Servo</td><td><img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sinks/cu_lewansoul/doc/lewansoul.jpg?raw=true" alt="lewansoul"/></td><td><a href="components/sinks/cu_lewansoul">Lewansoul Servo Bus (LX-16A, etc.)</a></td><td>cu-lewansoul</td></tr>
+<tr><td></td><td>DC Motor Driver</td><td><img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sinks/cu_rp_sn754410/doc/sn754410.jpeg?raw=true" alt="sn754410"/></td><td><a href="components/sinks/cu_rp_sn754410">Half-H Driver for CD Motors</a></td><td>cu-rp-sn754410</td></tr>
+<tr><td>Monitors</td><td>TUI Monitor</td><td><img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/monitors/cu_consolemon/doc/screenshot.png?raw=true" alt="monitor"/></td><td><a href="components/monitors/cu_consolemon">Console based monitor</a></td><td>cu-consolemon</td></tr>
 </tbody></table>
 </div><h4 id="what-features-are-missing-what-do-we-plan-to-implement-next"><a class="doc-anchor" href="#what-features-are-missing-what-do-we-plan-to-implement-next">§</a>What features are missing? What do we plan to implement next?</h4>
-<p>A lot! If any of these items pique your interest and you would like to contribute, feel free to reach out!</p>
-<p>Here are some of the features we plan to implement next (in ~order of priority):</p>
+<p>Here are some of the features we plan to implement next (in ~order of priority), if you are interested in contributing
+on any of those, please let us know!:</p>
 <p>To Reach Beta:</p>
 <ul>
 <li><input disabled="" type="checkbox" checked=""/>
@@ -75,9 +78,11 @@ sensors, and actuators.</li>
 <li><input disabled="" type="checkbox" checked=""/>
 <strong>Monitoring</strong>: We need a parallel system that can listen to monitoring messages and act accordingly.</li>
 <li><input disabled="" type="checkbox"/>
-<strong>Batching/Aligning</strong>: add a feature to batch messages for high frequency sources to reduce the number of Copper Lists.</li>
+<strong>Batching/Aligning</strong>: add a feature to batch messages for high frequency sources to reduce the number of Copper
+Lists.</li>
 <li><input disabled="" type="checkbox"/>
-<strong>Deterministic log replay + Sim</strong>: As the runtime is generated in a deterministic fashion, we need to add hooks to
+<strong>Deterministic log replay + Sim</strong>: As the runtime is generated in a deterministic fashion, we need to add hooks
+to
 inject messages into an existing runtime.</li>
 <li><input disabled="" type="checkbox"/>
 <strong>Parallel Copper Lists</strong>: Today Copper is monothreaded; this should enable concurrent Copper Lists to be executed
