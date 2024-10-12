@@ -30,6 +30,8 @@ cu-ads7883-new = { path = "../../components/sources/cu_ads7883" }
 cu-rp-sn754410 = { path = "../../components/sinks/cu_rp_sn754410" }
 cu-rp-encoder = { path = "../../components/sources/cu_rp_encoder" }
 cu-consolemon = { path = "../../components/monitors/cu_consolemon" }
+cu-pid = { path = "../../components/tasks/cu_pid" }
+
 # Only include cu29-export when the "logreader" feature is enabled
 cu29-export = { workspace = true, optional = true }
 pid = "4.0.0"
