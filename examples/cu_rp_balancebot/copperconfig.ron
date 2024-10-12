@@ -47,7 +47,7 @@
 
         (
             id: "motor",
-            type: "cu_rp_sn754410::SN754410",
+            type: "cu_rp_sn754410_new::SN754410",
             config: {
                  "deadzone": 0.3, // this is the minimum value for the motor to move.
                  "dryrun": false,
@@ -59,7 +59,7 @@
         (src: "railpos",  dst: "railpos_pid",   msg: "cu_rp_encoder::EncoderPayload"),
         (src: "balpos_pid", dst: "merge_pids", msg:"cu_pid::PIDControlOutput"),
         (src: "railpos_pid", dst: "merge_pids", msg:"cu_pid::PIDControlOutput"),
-        (src: "merge_pids", dst: "motor", msg:"cu_rp_sn754410::MotorPayload"),
+        (src: "merge_pids", dst: "motor", msg:"cu_rp_sn754410_new::MotorPayload"),
     ],
     monitor: (
         type: "cu_consolemon::CuConsoleMon",

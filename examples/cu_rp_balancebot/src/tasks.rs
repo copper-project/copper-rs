@@ -6,7 +6,7 @@ use cu29_traits::CuError;
 use cu_ads7883_new::ADSReadingPayload;
 use cu_pid::{GenericPIDTask, PIDControlOutput};
 use cu_rp_encoder::EncoderPayload;
-use cu_rp_sn754410::MotorPayload;
+use cu_rp_sn754410_new::MotorPayload;
 
 pub type BalPID = GenericPIDTask<ADSReadingPayload>;
 pub type PosPID = GenericPIDTask<EncoderPayload>;
