@@ -1,0 +1,10 @@
+[package]
+name = "cu-sim-balancebot"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+"bevy" = "*"
+"bevy_mod_picking" = { version = "*", features = ["backend_avian"] }
+"avian3d" = "*"
+"bevy_render" = "*"
