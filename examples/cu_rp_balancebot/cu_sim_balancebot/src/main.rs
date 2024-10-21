@@ -1,10 +1,14 @@
 use avian3d::prelude::*;
+use bevy::core_pipeline::fxaa::Fxaa;
+use bevy::core_pipeline::Skybox;
 use bevy::input::{
     keyboard::KeyCode,
     mouse::{MouseButton, MouseMotion, MouseWheel},
 };
 use bevy::math::DVec3;
-use bevy::pbr::ShadowFilteringMethod;
+use bevy::pbr::{
+    DefaultOpaqueRendererMethod, ScreenSpaceReflectionsBundle, ScreenSpaceReflectionsSettings,
+};
 use bevy::prelude::*;
 use bevy_mod_picking::prelude::*;
 use std::f64::consts::PI;
@@ -46,14 +50,20 @@ enum SimulationState {
 
 fn main() {
     App::new()
+        .insert_resource(Msaa::Off)
+        .insert_resource(DefaultOpaqueRendererMethod::deferred())
         .add_plugins((
             DefaultPlugins,
             DefaultPickingPlugins,
-            // mm scale
             PhysicsPlugins::default().with_length_unit(1000.0),
             // PhysicsDebugPlugin::default(),
             // EditorPlugin::default(),
+            // WireframePlugin,
         ))
+        // .insert_resource(WireframeConfig {
+        //    global: true,
+        //    default_color: Color::srgb(0.0, 1.0, 0.0),
+        // })
         .insert_resource(SimulationState::Paused)
         .insert_resource(CameraControl {
             rotate_sensitivity: 0.05,
@@ -79,15 +89,15 @@ fn chessboard_setup(
     // Chessboard Plane
     let black_material = materials.add(StandardMaterial {
         base_color: Color::BLACK,
-        reflectance: 0.3,
-        perceptual_roughness: 0.8,
+        reflectance: 0.6,
+        perceptual_roughness: 0.2,
         ..default()
     });
 
     let white_material = materials.add(StandardMaterial {
         base_color: Color::WHITE,
-        reflectance: 0.3,
-        perceptual_roughness: 0.8,
+        reflectance: 0.6,
+        perceptual_roughness: 0.2,
         ..default()
     });
 
@@ -105,16 +115,71 @@ fn chessboard_setup(
             },));
         }
     }
+    // A perfect mirror behind the scene to test reflections
+    // commands.spawn((PbrBundle {
+    //     mesh: meshes.add(
+    //         Plane3d::new(Vec3::Z, Vec2::splat(0.5))
+    //             .mesh()
+    //             .size(2.0, 2.0),
+    //     ),
+    //     material: materials.add(StandardMaterial {
+    //         base_color: Color::WHITE,
+    //         metallic: 1.0,
+    //         reflectance: 1.0,
+    //         perceptual_roughness: 0.0,
+    //         ..default()
+    //     }),
+    //     transform: Transform::from_xyz(0.0, 0.0, -1.0),
+    //     ..default()
+    // },));
 }
 
 #[derive(Component)]
 struct Cart;
 
+// Setup our scene
 fn setup(
     mut commands: Commands,
+    asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
+    // Load the skybox
+    let skybox_handle = asset_server.load("skybox.ktx2");
+
+    // Spawn the camera
+    commands.spawn((
+        Camera3dBundle {
+            transform: Transform::from_xyz(-1.0, 0.1, 1.5).looking_at(Vec3::ZERO, Vec3::Y),
+            camera: Camera {
+                hdr: true,
+                ..default()
+            },
+            ..default()
+        },
+        Skybox {
+            image: skybox_handle.clone(),
+            brightness: 1000.0,
+        },
+        EnvironmentMapLight {
+            diffuse_map: asset_server.load("diffuse_map.ktx2"),
+            specular_map: skybox_handle.clone(),
+            intensity: 900.0,
+        },
+        ScreenSpaceReflectionsBundle {
+            settings: ScreenSpaceReflectionsSettings {
+                perceptual_roughness_threshold: 0.85, // Customize as needed
+                thickness: 0.01,
+                linear_steps: 128,
+                linear_march_exponent: 2.0,
+                bisection_steps: 8,
+                use_secant: true,
+            },
+            ..default()
+        },
+        Fxaa::default(),
+    ));
+
     chessboard_setup(&mut commands, &mut meshes, &mut materials);
 
     let rail_entity = commands
@@ -125,7 +190,12 @@ fn setup(
                     RAIL_HEIGHT as f32,
                     RAIL_DEPTH as f32,
                 )),
-                material: materials.add(Color::srgb(0.5, 0.0, 1.0)),
+                material: materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.8, 0.8, 0.8),
+                    metallic: 0.9,
+                    perceptual_roughness: 0.3,
+                    ..default()
+                }),
                 transform: Transform::from_xyz(0.0, RAIL_HEIGHT as f32 / 2.0, 0.0), // Lower the starting height
                 ..default()
             },
@@ -134,6 +204,7 @@ fn setup(
                                // CollisionLayers::new(0b01, 0b01),
         ))
         .id();
+
     // Spawn the cart (Dynamic, constrained to move along the rail)
     let cart_entity = commands
         .spawn((
@@ -143,7 +214,12 @@ fn setup(
                     CART_HEIGHT as f32,
                     CART_DEPTH as f32,
                 )),
-                material: materials.add(Color::srgb(1.0, 0.3, 0.0)),
+                material: materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.3, 0.3, 0.3),
+                    metallic: 0.9,
+                    perceptual_roughness: 0.5,
+                    ..default()
+                }),
                 transform: Transform::from_xyz(
                     0.0,
                     RAIL_HEIGHT as f32 + CART_HEIGHT as f32 / 2.0 + MARGIN as f32,
@@ -184,10 +260,9 @@ fn setup(
                 mesh: meshes.add(Cylinder::new(ROD_WIDTH as f32 / 2.0, ROD_HEIGHT as f32)),
                 // material: materials.add(Color::srgb(0.0, 1.0, 0.0)),
                 material: materials.add(StandardMaterial {
-                    base_color: Color::rgb(0.8, 0.8, 0.8), // A light gray color typical for metals
-                    metallic: 1.0,                         // Fully metallic
-                    perceptual_roughness: 0.1,             // Low roughness to make it shiny
-                    reflectance: 0.7, // Moderate reflectance for a polished look
+                    base_color: Color::WHITE,
+                    metallic: 0.8,
+                    perceptual_roughness: 0.1,
                     ..default()
                 }),
                 transform: Transform::from_xyz(
@@ -211,33 +286,6 @@ fn setup(
             }),
         ))
         .id();
-
-    // let rod_marker = commands.spawn((
-    //     PbrBundle {
-    //         mesh: meshes.add(Mesh::from(Sphere { radius: ROD_WIDTH as f32/ 3.0, ..default() })),
-    //         material: materials.add(Color::srgb(1.0, 0.0, 0.0)),
-    //         transform: Transform::from_xyz(0.0, -ROD_HEIGHT as f32 / 2.0, 0.0), // Position the marker at the rod's joint location
-    //         ..default()
-    //     },
-    // )).id();
-    // commands.entity(rod_entity).push_children(&[rod_marker]);
-
-    let cart_marker = commands
-        .spawn((PbrBundle {
-            mesh: meshes.add(Mesh::from(Sphere {
-                radius: ROD_WIDTH as f32 / 2.0,
-                ..default()
-            })),
-            material: materials.add(Color::srgb(0.0, 0.0, 1.0)),
-            transform: Transform::from_xyz(
-                0.0,
-                0.00,
-                CART_DEPTH as f32 / 2.0 + ROD_DEPTH as f32 / 2.0 + AXIS_LENGTH as f32,
-            ), // Position the marker at the rod's joint location
-            ..default()
-        },))
-        .id();
-    commands.entity(cart_entity).push_children(&[cart_marker]);
 
     commands.spawn(
         RevoluteJoint::new(cart_entity, rod_entity)
@@ -263,13 +311,11 @@ fn setup(
         ..default()
     });
 
-    commands.spawn((
-        Camera3dBundle {
-            transform: Transform::from_xyz(-1.0, 0.1, 1.5).looking_at(Vec3::ZERO, Vec3::Y),
-            ..default()
-        },
-        ShadowFilteringMethod::Gaussian,
-    ));
+    // This should have effect on skybox too
+    commands.insert_resource(AmbientLight {
+        color: Color::srgb_u8(210, 220, 240),
+        brightness: 1.0,
+    });
 }
 
 fn camera_control_system(

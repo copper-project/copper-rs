@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = { version = "*", default-features = false, features = ["wayland", "bevy_render", "bevy_core_pipeline", "bevy_pbr", "bevy_scene", "bevy_sprite", "tonemapping_luts", "bevy_ui"] }
+bevy = { version = "0.14.2", default-features = false, features = ["wayland", "bevy_render", "bevy_core_pipeline", "bevy_pbr", "bevy_scene", "bevy_sprite", "tonemapping_luts", "bevy_ui", "exr", "hdr", "dds", "ktx2"] }
 bevy_mod_picking = { git = "https://github.com/copper-project/bevy_mod_picking_f64", features = ["backend_avian"] }
-avian3d = { version = "*", default-features = false, features = ["bevy_scene", "collider-from-mesh", "debug-plugin", "parallel", "f64", "parry-f64"] }
+avian3d = { version = "0.1.2", default-features = false, features = ["bevy_scene", "collider-from-mesh", "debug-plugin", "parallel", "f64", "parry-f64"] }
 parry3d = { version = "*", optional = true }
 
 #avian3d = { version="0.1", default-features=false, features = ["bevy_scene", "collider-from-mesh", "debug-plugin", "parallel", "f64", "parry-f64"]}
