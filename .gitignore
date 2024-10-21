@@ -3,6 +3,8 @@
 /Cargo.lock
 /cu29_export.so
 
+*.copper
+
 # ROS stuff
 /examples/ros_caterpillar/build
 /examples/ros_caterpillar/log
