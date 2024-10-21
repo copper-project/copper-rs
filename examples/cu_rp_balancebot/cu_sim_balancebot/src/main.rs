@@ -3,8 +3,33 @@ use bevy::input::{
     keyboard::KeyCode,
     mouse::{MouseButton, MouseMotion, MouseWheel},
 };
+use bevy::math::DVec3;
+use bevy::pbr::ShadowFilteringMethod;
 use bevy::prelude::*;
 use bevy_mod_picking::prelude::*;
+use std::f64::consts::PI;
+
+const RAIL_WIDTH: f64 = 1.00; // 55cm
+const RAIL_HEIGHT: f64 = 0.02;
+const RAIL_DEPTH: f64 = 0.06;
+
+const CART_WIDTH: f64 = RAIL_DEPTH;
+const CART_HEIGHT: f64 = CART_WIDTH / 5.0;
+const CART_DEPTH: f64 = RAIL_DEPTH;
+
+const ROD_WIDTH: f64 = 0.007; // 7mm
+const ROD_HEIGHT: f64 = 0.50; // 50cm
+const ROD_DEPTH: f64 = ROD_WIDTH;
+
+const MARGIN: f64 = 0.001; // 1mm of slack
+
+const AXIS_LENGTH: f64 = 0.02;
+
+const STEEL_DENSITY: f64 = 7800.0; // kg/m^3
+
+const ROD_VOLUME: f64 = ROD_WIDTH * ROD_HEIGHT * ROD_DEPTH;
+
+const ROD_MASS: f64 = ROD_VOLUME * STEEL_DENSITY;
 
 #[derive(Resource)]
 struct CameraControl {
@@ -22,132 +47,210 @@ enum SimulationState {
 fn main() {
     App::new()
         .add_plugins((
-            DefaultPlugins.set(low_latency_window_plugin()),
-            DefaultPickingPlugins.build().disable::<RaycastBackend>(),
-            PhysicsPlugins::default(),
-            PhysicsDebugPlugin::default(),
+            DefaultPlugins,
+            DefaultPickingPlugins,
+            // mm scale
+            PhysicsPlugins::default().with_length_unit(1000.0),
+            // PhysicsDebugPlugin::default(),
+            // EditorPlugin::default(),
         ))
-        .insert_resource(DebugPickingMode::Normal)
         .insert_resource(SimulationState::Paused)
-        .insert_resource(AvianBackendSettings {
-            require_markers: true,
-        })
         .insert_resource(CameraControl {
-            rotate_sensitivity: 0.005,
+            rotate_sensitivity: 0.05,
             zoom_sensitivity: 3.5,
             move_sensitivity: 0.01,
         })
-        .insert_resource(Gravity(Vec3::new(0.0, -9.81, 0.0)))
+        .insert_resource(Gravity::default())
         .insert_resource(Time::<Physics>::default())
         .add_systems(Startup, setup)
         .add_systems(Update, toggle_simulation_state)
         .add_systems(Update, camera_control_system)
         .add_systems(Update, update_physics)
+        .add_systems(Update, apply_sinusoidal_force)
         .run();
 }
 
-// fn setup(
-//     mut commands: Commands,
-//     mut meshes: ResMut<Assets<Mesh>>,
-//     mut materials: ResMut<Assets<StandardMaterial>>,
-// ) {
-//     commands.spawn((
-//         PbrBundle {
-//             mesh: meshes.add(bevy_render::mesh::PlaneMeshBuilder::from_length(5.0)),
-//             material: materials.add(Color::WHITE),
-//             ..default()
-//         },
-//         Collider::cuboid(5.0, 0.01, 5.0),
-//         RigidBody::Static,
-//         PickableBundle::default(),
-//         AvianPickable,
-//     ));
-//     commands.spawn((
-//         PbrBundle {
-//             mesh: meshes.add(Cuboid::default()),
-//             material: materials.add(Color::WHITE),
-//             transform: Transform::from_xyz(0.0, 1.5, 0.0),
-//             ..default()
-//         },
-//         Collider::cuboid(1.0, 1.0, 1.0),
-//         RigidBody::Dynamic,
-//         PickableBundle::default(),
-//         AvianPickable,
-//     ));
-//     commands.spawn(PointLightBundle {
-//         point_light: PointLight {
-//             shadows_enabled: true,
-//             ..default()
-//         },
-//         transform: Transform::from_xyz(4.0, 8.0, 4.0),
-//         ..default()
-//     });
-//     commands.spawn((
-//         Camera3dBundle {
-//             transform: Transform::from_xyz(-2.0, 2.5, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
-//             ..default()
-//         },
-//         AvianPickable,
-//     ));
-// }
+fn chessboard_setup(
+    mut commands: &mut Commands,
+    mut meshes: &mut ResMut<Assets<Mesh>>,
+    mut materials: &mut ResMut<Assets<StandardMaterial>>,
+) {
+    let plane_mesh = meshes.add(Plane3d::default().mesh().size(2.0, 2.0));
+    // Chessboard Plane
+    let black_material = materials.add(StandardMaterial {
+        base_color: Color::BLACK,
+        reflectance: 0.3,
+        perceptual_roughness: 0.8,
+        ..default()
+    });
+
+    let white_material = materials.add(StandardMaterial {
+        base_color: Color::WHITE,
+        reflectance: 0.3,
+        perceptual_roughness: 0.8,
+        ..default()
+    });
+
+    for x in -3..4 {
+        for z in -3..4 {
+            commands.spawn((PbrBundle {
+                mesh: plane_mesh.clone(),
+                material: if (x + z) % 2 == 0 {
+                    black_material.clone()
+                } else {
+                    white_material.clone()
+                },
+                transform: Transform::from_xyz(x as f32 * 2.0, -1.0, z as f32 * 2.0),
+                ..default()
+            },));
+        }
+    }
+}
+
+#[derive(Component)]
+struct Cart;
 
 fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
+    chessboard_setup(&mut commands, &mut meshes, &mut materials);
+
     let rail_entity = commands
         .spawn((
             PbrBundle {
-                mesh: meshes.add(Cuboid::new(10.0, 0.2, 0.5)),
-                material: materials.add(Color::WHITE),
-                transform: Transform::from_xyz(0.0, 0.1, 0.0), // Lower the starting height
+                mesh: meshes.add(Cuboid::new(
+                    RAIL_WIDTH as f32,
+                    RAIL_HEIGHT as f32,
+                    RAIL_DEPTH as f32,
+                )),
+                material: materials.add(Color::srgb(0.5, 0.0, 1.0)),
+                transform: Transform::from_xyz(0.0, RAIL_HEIGHT as f32 / 2.0, 0.0), // Lower the starting height
                 ..default()
             },
-            Collider::cuboid(10.0, 0.2, 0.5), // Thin, long rail
-            RigidBody::Static,                // The rail doesn't move
+            Collider::cuboid(RAIL_WIDTH, RAIL_HEIGHT, RAIL_DEPTH),
+            RigidBody::Static, // The rail doesn't move
+                               // CollisionLayers::new(0b01, 0b01),
         ))
         .id();
     // Spawn the cart (Dynamic, constrained to move along the rail)
     let cart_entity = commands
         .spawn((
             PbrBundle {
-                mesh: meshes.add(Cuboid::new(0.5, 0.2, 0.5)),
-                material: materials.add(Color::srgb(0.0, 0.0, 1.0)),
-                transform: Transform::from_xyz(0.0, 0.3, 0.0), // Lower the starting height
+                mesh: meshes.add(Cuboid::new(
+                    CART_WIDTH as f32,
+                    CART_HEIGHT as f32,
+                    CART_DEPTH as f32,
+                )),
+                material: materials.add(Color::srgb(1.0, 0.3, 0.0)),
+                transform: Transform::from_xyz(
+                    0.0,
+                    RAIL_HEIGHT as f32 + CART_HEIGHT as f32 / 2.0 + MARGIN as f32,
+                    0.0,
+                ), // Lower the starting height
                 ..default()
             },
-            Collider::cuboid(0.5, 0.2, 0.5), // Shorter height for the cart
+            PickableBundle::default(),
+            ExternalForce::default(),
+            Cart,
+            // ExternalForce::new(DVec3::new(0.001, -0.0, 0.0)),
+            Collider::cuboid(CART_WIDTH, CART_HEIGHT, CART_DEPTH),
             RigidBody::Dynamic,
+            On::<Pointer<Drag>>::target_component_mut::<Transform>(|drag, transform| {
+                transform.translation.x += drag.delta.x / 500.0; // Only translate along the X-axis
+            }),
         ))
         .id();
 
     commands.spawn(
         PrismaticJoint::new(rail_entity, cart_entity)
-            .with_free_axis(Vec3::X)
-            .with_local_anchor_1(Vec3::new(0.0, 0.2, 0.0)) // Rail top
-            .with_local_anchor_2(Vec3::new(0.0, 0.0, 0.0)), // cart bottom
+            .with_free_axis(DVec3::X) // Allow movement along the X-axis
+            .with_compliance(1e-9)
+            .with_linear_velocity_damping(10.0)
+            .with_angular_velocity_damping(10.0)
+            .with_limits(-RAIL_WIDTH / 2.0, RAIL_WIDTH / 2.0)
+            .with_local_anchor_1(DVec3::new(
+                0.0,
+                RAIL_HEIGHT / 2.0 + CART_HEIGHT / 2.0 + MARGIN,
+                0.0,
+            )) // Rail top edge
+            .with_local_anchor_2(DVec3::new(0.0, 0.0, 0.0)),
     );
 
     let rod_entity = commands
         .spawn((
             PbrBundle {
-                mesh: meshes.add(Cuboid::new(0.1, 5.0, 0.1)),
-                material: materials.add(Color::srgb(0.0, 1.0, 0.0)),
-                transform: Transform::from_xyz(0.0, 2.8, 0.3), // Start higher than the cart
+                mesh: meshes.add(Cylinder::new(ROD_WIDTH as f32 / 2.0, ROD_HEIGHT as f32)),
+                // material: materials.add(Color::srgb(0.0, 1.0, 0.0)),
+                material: materials.add(StandardMaterial {
+                    base_color: Color::rgb(0.8, 0.8, 0.8), // A light gray color typical for metals
+                    metallic: 1.0,                         // Fully metallic
+                    perceptual_roughness: 0.1,             // Low roughness to make it shiny
+                    reflectance: 0.7, // Moderate reflectance for a polished look
+                    ..default()
+                }),
+                transform: Transform::from_xyz(
+                    0.0,
+                    ROD_HEIGHT as f32 / 2.0
+                        + RAIL_HEIGHT as f32
+                        + CART_HEIGHT as f32 / 2.0
+                        + MARGIN as f32,
+                    CART_DEPTH as f32 / 2.0 + ROD_DEPTH as f32 / 2.0 + AXIS_LENGTH as f32,
+                ), // Start higher than the cart
                 ..default()
             },
-            Collider::cuboid(0.1, 5.0, 0.1), // A thin rod for the pendulum
-            RigidBody::Dynamic,              // The rod can move
+            PickableBundle::default(),
+            Collider::cuboid(ROD_WIDTH, ROD_HEIGHT, ROD_DEPTH),
+            RigidBody::Dynamic,
+            // Mass::new(ROD_MASS),
+            On::<Pointer<Drag>>::target_component_mut::<Transform>(|drag, transform| {
+                let pivot_world = transform.translation
+                    + transform.rotation * Vec3::new(0.0, -ROD_HEIGHT as f32 / 2.0, 0.0);
+                transform.rotate_around(pivot_world, Quat::from_rotation_z(drag.delta.x / 50.0));
+            }),
         ))
         .id();
 
-    // Create a revolute joint to connect the rod to the cart and allow swinging
+    // let rod_marker = commands.spawn((
+    //     PbrBundle {
+    //         mesh: meshes.add(Mesh::from(Sphere { radius: ROD_WIDTH as f32/ 3.0, ..default() })),
+    //         material: materials.add(Color::srgb(1.0, 0.0, 0.0)),
+    //         transform: Transform::from_xyz(0.0, -ROD_HEIGHT as f32 / 2.0, 0.0), // Position the marker at the rod's joint location
+    //         ..default()
+    //     },
+    // )).id();
+    // commands.entity(rod_entity).push_children(&[rod_marker]);
+
+    let cart_marker = commands
+        .spawn((PbrBundle {
+            mesh: meshes.add(Mesh::from(Sphere {
+                radius: ROD_WIDTH as f32 / 2.0,
+                ..default()
+            })),
+            material: materials.add(Color::srgb(0.0, 0.0, 1.0)),
+            transform: Transform::from_xyz(
+                0.0,
+                0.00,
+                CART_DEPTH as f32 / 2.0 + ROD_DEPTH as f32 / 2.0 + AXIS_LENGTH as f32,
+            ), // Position the marker at the rod's joint location
+            ..default()
+        },))
+        .id();
+    commands.entity(cart_entity).push_children(&[cart_marker]);
+
     commands.spawn(
         RevoluteJoint::new(cart_entity, rod_entity)
-            .with_aligned_axis(Vec3::Z) // Align the axis of rotation along the Z-axis
-            .with_local_anchor_1(Vec3::new(0.0, 0.00, 0.25)) // Anchor on the cart (center top)
-            .with_local_anchor_2(Vec3::new(0.0, -2.5, -0.06)), // Anchor on the rod (bottom)
+            .with_compliance(1e-16)
+            .with_linear_velocity_damping(10.0)
+            .with_angular_velocity_damping(10.0)
+            .with_aligned_axis(DVec3::Z) // Align the axis of rotation along the Z-axis
+            .with_local_anchor_1(DVec3::new(
+                0.0,
+                0.00,
+                CART_DEPTH / 2.0 + ROD_DEPTH / 2.0 + AXIS_LENGTH,
+            )) // aim at the center of the rod at the bottom
+            .with_local_anchor_2(DVec3::new(0.0, -ROD_HEIGHT / 2.0, 0.0)), // Anchor on the rod (bottom)
     );
 
     // Light
@@ -156,16 +259,19 @@ fn setup(
             shadows_enabled: true,
             ..default()
         },
-        transform: Transform::from_xyz(4.0, 8.0, 4.0),
+        transform: Transform::from_xyz(2.0, 4.0, 2.0),
         ..default()
     });
 
-    // Camera
-    commands.spawn((Camera3dBundle {
-        transform: Transform::from_xyz(-5.0, 2.5, 10.0).looking_at(Vec3::ZERO, Vec3::Y),
-        ..default()
-    },));
+    commands.spawn((
+        Camera3dBundle {
+            transform: Transform::from_xyz(-1.0, 0.1, 1.5).looking_at(Vec3::ZERO, Vec3::Y),
+            ..default()
+        },
+        ShadowFilteringMethod::Gaussian,
+    ));
 }
+
 fn camera_control_system(
     keys: Res<ButtonInput<KeyCode>>,
     mut scroll_evr: EventReader<MouseWheel>,
@@ -248,10 +354,11 @@ fn toggle_simulation_state(
     keyboard_input: Res<ButtonInput<KeyCode>>,
 ) {
     if keyboard_input.just_pressed(KeyCode::Space) {
-        // Toggle between Running and Paused
         if *state == SimulationState::Running {
+            println!("Pausing simulation");
             *state = SimulationState::Paused;
         } else {
+            println!("Resuming simulation");
             *state = SimulationState::Running;
         }
     }
@@ -263,4 +370,24 @@ fn update_physics(state: Res<SimulationState>, mut time: ResMut<Time<Physics>>) 
         return;
     }
     time.unpause();
+}
+
+fn apply_sinusoidal_force(
+    time: Res<Time<Physics>>,
+    state: Res<SimulationState>,
+    mut cart_query: Query<&mut Transform, With<Cart>>, // Query entities with ExternalForce and Cart
+) {
+    if *state == SimulationState::Running {
+        let current_time = time.elapsed_seconds_f64();
+        let frequency = 0.2; // Frequency of the oscillation
+        let amplitude = 0.3; // Amplitude of the position oscillation
+
+        // Calculate the sinusoidal offset
+        let offset = amplitude * (2.0 * PI * frequency * current_time).sin();
+
+        // Apply the offset to the cart's position
+        for mut transform in cart_query.iter_mut() {
+            transform.translation.x = offset as f32;
+        }
+    }
 }

@@ -9,7 +9,7 @@ keywords.workspace = true
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
-default-run = "balancebot"
+Default-run = "balancebot"
 
 [package.metadata.cargo-machete]
 ignored = ["cu29-log", "cu29-log-runtime", "cu29-unifiedlog", "copper-traits"]  # proc macro
@@ -54,3 +54,5 @@ required-features = ["logreader"]
 
 [target.'cfg(not(target_arch = "arm"))'.dependencies]
 cu29-export = { workspace = true, optional = true }
+
+
