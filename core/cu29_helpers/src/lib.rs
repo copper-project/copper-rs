@@ -27,10 +27,13 @@ pub struct CopperContext {
 /// It will create a LoggerRuntime that can be used as a robot clock source too.
 ///
 /// slab_size: The logger will pre-allocate large files of those sizes. With the name of the given file _0, _1 etc.
+/// clock: if you let it to None it will create a default clock otherwise you can provide your own, for example a simulation clock.
+///        with let (clock , mock) = RobotClock::mock();
 pub fn basic_copper_setup(
     unifiedlogger_output_base_name: &Path,
     slab_size: Option<usize>,
     _text_log: bool,
+    clock: Option<RobotClock>,
 ) -> CuResult<CopperContext> {
     let preallocated_size = slab_size.unwrap_or(1024 * 1024 * 10);
     let UnifiedLogger::Write(logger) = UnifiedLoggerBuilder::new()
@@ -66,7 +69,7 @@ pub fn basic_copper_setup(
     #[cfg(not(debug_assertions))]
     let extra: Option<TermLogger> = None;
 
-    let clock = RobotClock::default();
+    let clock = clock.unwrap_or_else(|| RobotClock::default());
     let structured_logging = LoggerRuntime::init(clock.clone(), structured_stream, extra);
     Ok(CopperContext {
         unified_logger: unified_logger.clone(),

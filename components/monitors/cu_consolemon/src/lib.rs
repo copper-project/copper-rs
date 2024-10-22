@@ -133,7 +133,7 @@ impl NodesScrollableWidgetState {
     fn new(config: &CuConfig, errors: Arc<Mutex<Vec<TaskStatus>>>) -> Self {
         let mut config_nodes: Vec<Node> = Vec::new();
         let mut node_types: Vec<NodeType> = Vec::new();
-        for node in config.get_all_nodes() {
+        for (_, node) in config.get_all_nodes() {
             config_nodes.push(node.clone());
             node_types.push(NodeType::Unknown);
         }

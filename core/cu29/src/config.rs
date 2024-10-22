@@ -4,6 +4,7 @@
 //! The configuration is used to generate the runtime code at compile time.
 
 use crate::{CuError, CuResult};
+use petgraph::adj::NodeIndex;
 use petgraph::stable_graph::{EdgeIndex, StableDiGraph};
 use petgraph::visit::EdgeRef;
 use ron::extensions::Extensions;
@@ -404,6 +405,48 @@ impl CuConfig {
         self.graph.node_weight(node_id.into())
     }
 
+    /// this is more like infer from the connections of this node.
+    pub fn get_node_output_msg_type(&self, node_id: &str) -> Option<String> {
+        self.graph.node_indices().find_map(|node_index| {
+            if let Some(node) = self.get_node(node_index.index() as u32) {
+                if node.id != node_id {
+                    return None;
+                }
+                let edges = self.get_src_edges(node_index.index() as u32);
+                if edges.len() == 0 {
+                    panic!("A CuSrcTask is configured with no task connected to it.")
+                }
+                let cnx = self
+                    .graph
+                    .edge_weight(EdgeIndex::new(edges[0]))
+                    .expect("Found an cnx id but could not retrieve it back");
+                return Some(cnx.msg.clone());
+            }
+            None
+        })
+    }
+
+    /// this is more like infer from the connections of this node.
+    pub fn get_node_input_msg_type(&self, node_id: &str) -> Option<String> {
+        self.graph.node_indices().find_map(|node_index| {
+            if let Some(node) = self.get_node(node_index.index() as u32) {
+                if node.id != node_id {
+                    return None;
+                }
+                let edges = self.get_dst_edges(node_index.index() as u32);
+                if edges.len() == 0 {
+                    panic!("A CuSinkTask is configured with no task connected to it.")
+                }
+                let cnx = self
+                    .graph
+                    .edge_weight(EdgeIndex::new(edges[0]))
+                    .expect("Found an cnx id but could not retrieve it back");
+                return Some(cnx.msg.clone());
+            }
+            None
+        })
+    }
+
     /// Get the list of edges that are connected to the given node as a source.
     pub fn get_src_edges(&self, node_id: NodeId) -> Vec<usize> {
         self.graph
@@ -426,11 +469,10 @@ impl CuConfig {
     }
 
     /// Convenience method to get all nodes in the configuration graph.
-    #[allow(dead_code)]
-    pub fn get_all_nodes(&self) -> Vec<&Node> {
+    pub fn get_all_nodes(&self) -> Vec<(NodeIndex, &Node)> {
         self.graph
             .node_indices()
-            .map(|node| &self.graph[node])
+            .map(|index| (index.index() as u32, &self.graph[index]))
             .collect()
     }
 
@@ -562,7 +604,7 @@ impl CuConfig {
     pub fn get_all_instances_configs(&self) -> Vec<Option<&ComponentConfig>> {
         self.get_all_nodes()
             .iter()
-            .map(|node_config| node_config.get_instance_config())
+            .map(|(_, node)| node.get_instance_config())
             .collect()
     }
 
