@@ -48,11 +48,18 @@ enum SimulationState {
     Paused,
 }
 
+#[derive(Component)]
+pub struct Cart;
+
+#[derive(Component)]
+pub struct Rod;
+
 pub fn build_world(app: &mut App) -> &mut App {
     app.insert_resource(Msaa::Off)
         .insert_resource(DefaultOpaqueRendererMethod::deferred())
         .add_plugins((
-            DefaultPlugins,
+            // DefaultPlugins,
+            DefaultPlugins.build().disable::<bevy::log::LogPlugin>(),
             DefaultPickingPlugins,
             PhysicsPlugins::default().with_length_unit(1000.0),
             // PhysicsDebugPlugin::default(),
@@ -63,7 +70,7 @@ pub fn build_world(app: &mut App) -> &mut App {
         //    global: true,
         //    default_color: Color::srgb(0.0, 1.0, 0.0),
         // })
-        .insert_resource(SimulationState::Paused)
+        .insert_resource(SimulationState::Running)
         .insert_resource(CameraControl {
             rotate_sensitivity: 0.05,
             zoom_sensitivity: 3.5,
@@ -75,7 +82,6 @@ pub fn build_world(app: &mut App) -> &mut App {
         .add_systems(Update, toggle_simulation_state)
         .add_systems(Update, camera_control_system)
         .add_systems(Update, update_physics)
-        .add_systems(Update, apply_sinusoidal_force)
 }
 
 fn chessboard_setup(
@@ -131,9 +137,6 @@ fn chessboard_setup(
     //     ..default()
     // },));
 }
-
-#[derive(Component)]
-struct Cart;
 
 // Setup our scene
 fn setup(
@@ -276,6 +279,7 @@ fn setup(
             PickableBundle::default(),
             Collider::cuboid(ROD_WIDTH, ROD_HEIGHT, ROD_DEPTH),
             RigidBody::Dynamic,
+            Rod,
             // Mass::new(ROD_MASS),
             On::<Pointer<Drag>>::target_component_mut::<Transform>(|drag, transform| {
                 let pivot_world = transform.translation
