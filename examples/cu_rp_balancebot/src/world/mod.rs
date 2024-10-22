@@ -48,9 +48,8 @@ enum SimulationState {
     Paused,
 }
 
-fn main() {
-    App::new()
-        .insert_resource(Msaa::Off)
+pub fn build_world(app: &mut App) -> &mut App {
+    app.insert_resource(Msaa::Off)
         .insert_resource(DefaultOpaqueRendererMethod::deferred())
         .add_plugins((
             DefaultPlugins,
@@ -77,7 +76,6 @@ fn main() {
         .add_systems(Update, camera_control_system)
         .add_systems(Update, update_physics)
         .add_systems(Update, apply_sinusoidal_force)
-        .run();
 }
 
 fn chessboard_setup(
