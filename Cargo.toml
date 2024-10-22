@@ -24,7 +24,6 @@ members = [
     "examples/cu_standalone_structlog",
     "examples/cu_caterpillar",
     "examples/cu_rp_balancebot",
-    "examples/cu_rp_balancebot/cu_sim_balancebot",
     "examples/cu_multisources",
     "examples/cu_monitoring",
 ]
