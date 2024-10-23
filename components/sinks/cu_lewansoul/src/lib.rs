@@ -4,7 +4,7 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
-use cu29::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle, Freezable};
+use cu29::cutask::{CuMsg, CuMsgPayload, CuSinkTask, CuTaskLifecycle, Freezable};
 use cu29::{input_msg, CuError, CuResult};
 use serialport::{DataBits, FlowControl, Parity, SerialPort, StopBits};
 use std::io::{self, Read, Write};
@@ -231,28 +231,30 @@ impl CuTaskLifecycle for Lewansoul {
     }
 }
 
-#[derive(Debug, Default)]
-pub struct ServoPositions {
+#[derive(Debug, Clone, Default)]
+pub struct ServoPositionsPayload {
     pub positions: [Angle; MAX_SERVOS],
 }
 
-impl Encode for ServoPositions {
+impl CuMsgPayload for ServoPositionsPayload {}
+
+impl Encode for ServoPositionsPayload {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         let angles: [f32; MAX_SERVOS] = self.positions.map(|a| a.value);
         angles.encode(encoder)
     }
 }
 
-impl Decode for ServoPositions {
+impl Decode for ServoPositionsPayload {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let angles: [f32; 8] = Decode::decode(decoder)?;
         let positions: [Angle; 8] = angles.map(Angle::new::<radian>);
-        Ok(ServoPositions { positions })
+        Ok(ServoPositionsPayload { positions })
     }
 }
 
 impl<'cl> CuSinkTask<'cl> for Lewansoul {
-    type Input = input_msg!('cl, ServoPositions);
+    type Input = input_msg!('cl, ServoPositionsPayload);
 
     fn process(&mut self, _clock: &RobotClock, _input: Self::Input) -> CuResult<()> {
         todo!()

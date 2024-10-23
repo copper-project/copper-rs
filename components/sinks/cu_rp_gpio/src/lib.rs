@@ -1,6 +1,6 @@
 use bincode::{Decode, Encode};
 use cu29::config::ComponentConfig;
-use cu29::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle, Freezable};
+use cu29::cutask::{CuMsg, CuMsgPayload, CuSinkTask, CuTaskLifecycle, Freezable};
 use cu29::CuResult;
 use cu29::{clock, input_msg};
 use cu29_log_derive::debug;
@@ -34,6 +34,8 @@ pub struct RPGpioPayload {
     pub creation: clock::OptionCuTime,
     pub actuation: clock::OptionCuTime,
 }
+
+impl CuMsgPayload for RPGpioPayload {}
 
 impl From<RPGpioPayload> for bool {
     fn from(msg: RPGpioPayload) -> Self {

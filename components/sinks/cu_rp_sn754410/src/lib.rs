@@ -4,7 +4,7 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29::clock::{CuTime, RobotClock};
 use cu29::config::ComponentConfig;
-use cu29::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle, Freezable};
+use cu29::cutask::{CuMsg, CuMsgPayload, CuSinkTask, CuTaskLifecycle, Freezable};
 use cu29::{input_msg, CuResult};
 use serde::{Deserialize, Serialize};
 
@@ -28,7 +28,7 @@ pub struct MotorPayload {
     pub power: f32, // -1.0 to 1.0
 }
 
-impl MotorPayload {}
+impl CuMsgPayload for MotorPayload {}
 
 impl SN754410 {
     #[inline]

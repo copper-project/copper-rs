@@ -7,7 +7,7 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
-use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
+use cu29::cutask::{CuMsg, CuMsgPayload, CuSrcTask, CuTaskLifecycle, Freezable};
 use cu29::{output_msg, CuResult};
 use cu29_soa_derive::soa;
 use std::net::UdpSocket;
@@ -104,15 +104,18 @@ impl Sub for LidarLength {
     }
 }
 
+/// This is pprovisional awaiting for the standardized lidar point structure.
 #[soa]
-#[derive(Default, PartialEq, Debug)]
-pub struct XYZ {
+#[derive(Default, Clone, Encode, Decode, PartialEq, Debug)]
+pub struct ProvisionalLidarPayload {
     x: LidarLength,
     y: LidarLength,
     z: LidarLength,
 }
 
-impl XYZ {
+impl CuMsgPayload for ProvisionalLidarPayload {}
+
+impl ProvisionalLidarPayload {
     pub fn new(x: f32, y: f32, z: f32) -> Self {
         Self {
             x: LidarLength(Length::new::<meter>(x)),
@@ -147,7 +150,7 @@ impl<'cl> CuSrcTask<'cl> for Vlp16 {
                 let x = point.measurement.xyz[0].as_meters() as f32;
                 let y = point.measurement.xyz[0].as_meters() as f32;
                 let z = point.measurement.xyz[0].as_meters() as f32;
-                output.set(i, XYZ::new(x, y, z));
+                output.set(i, ProvisionalLidarPayload::new(x, y, z));
             });
         });
         new_msg.set_payload(output);

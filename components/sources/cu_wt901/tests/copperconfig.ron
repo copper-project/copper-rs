@@ -9,6 +9,6 @@
         ),
      ],
     cnx: [
-        (src: "src",  dst: "tester",   msg: "cu_wt901::PositionalReadings"),
+        (src: "src",  dst: "tester",   msg: "cu_wt901::PositionalReadingsPayload"),
     ],
 )
