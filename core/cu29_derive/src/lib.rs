@@ -140,7 +140,7 @@ fn gen_sim_support(
                 let no_output = parse_str::<Type>("_CuMsg<()>").unwrap();
                 let output = output.as_ref().unwrap_or(&no_output);
                 quote! {
-                    #enum_ident(cu29::cutask::CuTaskCallbackState<'cl, (#(&'cl #inputs),*), &'cl mut #output>)
+                    #enum_ident(cu29::simulation::CuTaskCallbackState<'cl, (#(&'cl #inputs),*), &'cl mut #output>)
                 }
             }
             CuExecutionUnit::Loop(_) => {
@@ -228,7 +228,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     format!("CuSrcTask {} should have an outgoing connection with a valid output msg type",
                     task_id).as_str(),
                 );
-                let sim_task_name = format!("cu29::cutask::CuSimSrcTask<{}>", msg_type);
+                let sim_task_name = format!("cu29::simulation::CuSimSrcTask<{}>", msg_type);
                 parse_str(sim_task_name.as_str()).expect(format!("Could not build the placeholder for simulation: {}", sim_task_name).as_str())
             }
             CuTaskType::Regular => stype.clone(),
@@ -239,7 +239,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         format!("CuSinkTask {} should have an incoming connection with a valid input msg type",
                                 task_id).as_str(),
                     );
-                let sim_task_name = format!("cu29::cutask::CuSimSinkTask<{}>", msg_type);
+                let sim_task_name = format!("cu29::simulation::CuSimSinkTask<{}>", msg_type);
                 parse_str(sim_task_name.as_str()).expect(format!("Could not build the placeholder for simulation: {}", sim_task_name).as_str())
             },
         })
