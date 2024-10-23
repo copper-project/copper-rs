@@ -4,7 +4,7 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
-use cu29::cutask::{CuMsg, CuMsgPayload, CuSinkTask, CuTaskLifecycle, Freezable};
+use cu29::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle, Freezable};
 use cu29::{input_msg, CuError, CuResult};
 use serialport::{DataBits, FlowControl, Parity, SerialPort, StopBits};
 use std::io::{self, Read, Write};
@@ -235,8 +235,6 @@ impl CuTaskLifecycle for Lewansoul {
 pub struct ServoPositionsPayload {
     pub positions: [Angle; MAX_SERVOS],
 }
-
-impl CuMsgPayload for ServoPositionsPayload {}
 
 impl Encode for ServoPositionsPayload {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {

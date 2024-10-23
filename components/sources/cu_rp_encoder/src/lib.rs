@@ -1,7 +1,7 @@
 use bincode::{Decode, Encode};
 use cu29::clock::{CuDuration, RobotClock};
 use cu29::config::ComponentConfig;
-use cu29::cutask::{CuMsg, CuMsgPayload, CuSrcTask, CuTaskLifecycle, Freezable};
+use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
 use cu29::output_msg;
 use cu29::{CuError, CuResult};
 use lazy_static::lazy_static;
@@ -23,9 +23,6 @@ lazy_static! {
 pub struct EncoderPayload {
     pub ticks: i32,
 }
-
-// Not mandatory but ensure it can be used as a CuMsgPayload
-impl CuMsgPayload for EncoderPayload {}
 
 /// That allows the interfacing with the GenericPID
 impl From<&EncoderPayload> for f32 {

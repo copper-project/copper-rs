@@ -1,7 +1,7 @@
 use bincode::{Decode, Encode};
 use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
-use cu29::cutask::{CuMsg, CuMsgPayload, CuSrcTask, CuTaskLifecycle, Freezable};
+use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
 use cu29::{output_msg, CuError, CuResult};
 use cu29_log_derive::debug;
 use serde::{Deserialize, Serialize};
@@ -39,8 +39,6 @@ where
 {
     pub analog_value: T,
 }
-
-impl CuMsgPayload for ADSReadingPayload {}
 
 /// This is the type of message that the ADS7883 driver will send.
 pub type ADSReadingPayload = ADCReadingPayload<u16>;

@@ -7,7 +7,7 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
-use cu29::cutask::{CuMsg, CuMsgPayload, CuSrcTask, CuTaskLifecycle, Freezable};
+use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
 use cu29::{output_msg, CuResult};
 use cu29_soa_derive::soa;
 use std::net::UdpSocket;
@@ -112,8 +112,6 @@ pub struct ProvisionalLidarPayload {
     y: LidarLength,
     z: LidarLength,
 }
-
-impl CuMsgPayload for ProvisionalLidarPayload {}
 
 impl ProvisionalLidarPayload {
     pub fn new(x: f32, y: f32, z: f32) -> Self {

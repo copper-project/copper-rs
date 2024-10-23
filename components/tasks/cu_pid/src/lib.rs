@@ -4,8 +4,8 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29::clock::{CuDuration, CuTime, RobotClock};
 use cu29::config::ComponentConfig;
-use cu29::cutask::CuMsg;
-use cu29::cutask::{CuMsgPayload, CuTask, CuTaskLifecycle, Freezable};
+use cu29::cutask::{CuMsg, CuMsgPayload};
+use cu29::cutask::{CuTask, CuTaskLifecycle, Freezable};
 use cu29::{input_msg, output_msg, CuResult};
 use cu29_log_derive::debug;
 use cu29_traits::CuError;
@@ -23,8 +23,6 @@ pub struct PIDControlOutputPayload {
     /// Final output
     pub output: f32,
 }
-
-impl CuMsgPayload for PIDControlOutputPayload {}
 
 /// This is the underlying standard PID controller.
 pub struct PIDController {
