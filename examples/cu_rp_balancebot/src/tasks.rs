@@ -4,7 +4,7 @@ use cu29::cutask::{CuMsg, CuTask, CuTaskLifecycle, Freezable};
 use cu29::{input_msg, output_msg, CuResult};
 use cu29_traits::CuError;
 use cu_ads7883_new::ADSReadingPayload;
-use cu_pid::{GenericPIDTask, PIDControlOutput};
+use cu_pid::{GenericPIDTask, PIDControlOutputPayload};
 use cu_rp_encoder::EncoderPayload;
 use cu_rp_sn754410_new::MotorPayload;
 
@@ -25,7 +25,7 @@ impl CuTaskLifecycle for PIDMerger {
 impl Freezable for PIDMerger {}
 
 impl<'cl> CuTask<'cl> for PIDMerger {
-    type Input = input_msg!('cl, PIDControlOutput, PIDControlOutput);
+    type Input = input_msg!('cl, PIDControlOutputPayload, PIDControlOutputPayload);
     type Output = output_msg!('cl, MotorPayload);
 
     fn process(

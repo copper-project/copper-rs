@@ -28,8 +28,6 @@ pub struct MotorPayload {
     pub power: f32, // -1.0 to 1.0
 }
 
-impl MotorPayload {}
-
 impl SN754410 {
     #[inline]
     fn forward(&mut self, pwm: f64) -> CuResult<()> {

@@ -5,7 +5,7 @@ use cu29::{input_msg, CuResult};
 use cu29_derive::copper_runtime;
 use cu29_helpers::basic_copper_setup;
 use cu29_log_derive::debug;
-use cu_wt901::PositionalReadings;
+use cu_wt901::PositionalReadingsPayload;
 use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::Duration;
@@ -24,7 +24,7 @@ impl CuTaskLifecycle for WT910TestSink {
 }
 
 impl<'cl> CuSinkTask<'cl> for WT910TestSink {
-    type Input = input_msg!('cl, PositionalReadings);
+    type Input = input_msg!('cl, PositionalReadingsPayload);
 
     fn process(&mut self, _clock: &RobotClock, new_msg: Self::Input) -> CuResult<()> {
         debug!("Received: {}", &new_msg.payload());

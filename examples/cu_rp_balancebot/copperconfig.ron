@@ -57,8 +57,8 @@
     cnx: [
         (src: "balpos",  dst: "balpos_pid",   msg: "cu_ads7883_new::ADSReadingPayload"),
         (src: "railpos",  dst: "railpos_pid",   msg: "cu_rp_encoder::EncoderPayload"),
-        (src: "balpos_pid", dst: "merge_pids", msg:"cu_pid::PIDControlOutput"),
-        (src: "railpos_pid", dst: "merge_pids", msg:"cu_pid::PIDControlOutput"),
+        (src: "balpos_pid", dst: "merge_pids", msg:"cu_pid::PIDControlOutputPayload"),
+        (src: "railpos_pid", dst: "merge_pids", msg:"cu_pid::PIDControlOutputPayload"),
         (src: "merge_pids", dst: "motor", msg:"cu_rp_sn754410_new::MotorPayload"),
     ],
     monitor: (
