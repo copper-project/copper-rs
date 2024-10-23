@@ -406,6 +406,7 @@ impl CuConfig {
     }
 
     /// this is more like infer from the connections of this node.
+    #[allow(dead_code)] // Used in proc macro
     pub fn get_node_output_msg_type(&self, node_id: &str) -> Option<String> {
         self.graph.node_indices().find_map(|node_index| {
             if let Some(node) = self.get_node(node_index.index() as u32) {
@@ -427,6 +428,7 @@ impl CuConfig {
     }
 
     /// this is more like infer from the connections of this node.
+    #[allow(dead_code)] // Used in proc macro
     pub fn get_node_input_msg_type(&self, node_id: &str) -> Option<String> {
         self.graph.node_indices().find_map(|node_index| {
             if let Some(node) = self.get_node(node_index.index() as u32) {

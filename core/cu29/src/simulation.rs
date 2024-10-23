@@ -7,13 +7,14 @@ use cu29_clock::RobotClock;
 use cu29_traits::CuResult;
 use std::marker::PhantomData;
 
-/// Use for simulation callbacks.
+/// This is the state that will be passed to the simulation support to hook
+/// into the lifecycle of the tasks.
 pub enum CuTaskCallbackState<'cl, I, O>
 where
     I: CuMsgPack<'cl>,
     O: CuMsgPack<'cl>,
 {
-    New,
+    New(Option<ComponentConfig>),
     Start,
     Preprocess,
     Process(I, O),
@@ -25,14 +26,17 @@ where
 /// This is the answer the simulator can give to control the simulation flow.
 #[derive(PartialEq)]
 pub enum SimOverride {
+    /// The callback took care of the logic on the simulation side and the actual
+    /// implementation needs to be skipped.
     ExecutedBySim,
+    /// The actual implementation needs to be executed.
     ExecuteByRuntime,
 }
 
 /// This is a placeholder task for a source task for the simulations.
 /// It basically does nothing in place of a real driver so it won't try to initialize any hardware.
 pub struct CuSimSrcTask<T> {
-    config: Option<ComponentConfig>,
+    pub config: Option<ComponentConfig>,
     boo: PhantomData<T>,
 }
 
@@ -61,7 +65,7 @@ impl<'cl, T: CuMsgPayload + 'cl> CuSrcTask<'cl> for CuSimSrcTask<T> {
 /// This is a placeholder task for a sink task for the simulations.
 /// It basically does nothing in place of a real driver so it won't try to initialize any hardware.
 pub struct CuSimSinkTask<T> {
-    config: Option<ComponentConfig>,
+    pub config: Option<ComponentConfig>,
     boo: PhantomData<T>,
 }
 
