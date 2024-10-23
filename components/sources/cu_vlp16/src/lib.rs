@@ -1,10 +1,10 @@
 use velodyne_lidar::Packet;
 use velodyne_lidar::{Config, Config16};
 
-use bincode::de::Decoder;
+use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
-use bincode::{Decode, Encode};
+use bincode::{BorrowDecode, Decode, Encode};
 use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
@@ -88,6 +88,13 @@ impl Decode for LidarLength {
     }
 }
 
+impl<'de> BorrowDecode<'de> for LidarLength {
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, _DecodeError> {
+        let value: f32 = Decode::decode(decoder)?;
+        Ok(LidarLength(Length::new::<meter>(value)))
+    }
+}
+
 impl Add for LidarLength {
     type Output = Self;
 
@@ -124,7 +131,7 @@ impl ProvisionalLidarPayload {
 }
 
 impl<'cl> CuSrcTask<'cl> for Vlp16 {
-    type Output = output_msg!('cl, XYZSoa<10000>);
+    type Output = output_msg!('cl, ProvisionalLidarPayloadSoa<10000>);
 
     fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
         let socket = self.socket.as_ref().unwrap();
@@ -140,7 +147,7 @@ impl<'cl> CuSrcTask<'cl> for Vlp16 {
             .unwrap()
             .unwrap();
         let i = 0;
-        let mut output = XYZSoa::<10000>::default();
+        let mut output = ProvisionalLidarPayloadSoa::<10000>::default();
 
         frame.firing_iter().for_each(|firing| {
             firing.point_iter().for_each(|point| {
@@ -181,7 +188,7 @@ mod tests {
             let socket = UdpSocket::bind("0.0.0.0:2367").unwrap();
             socket.send_to(data, "127.0.0.1:2368").unwrap();
             // process
-            let mut msg = CuMsg::new(Some(XYZSoa::<10000>::default()));
+            let mut msg = CuMsg::new(Some(ProvisionalLidarPayloadSoa::<10000>::default()));
             drv.process(&clk, &mut msg).unwrap();
             assert_eq!(0.009406593f32, msg.payload().unwrap().x[0].0.value);
             break;
