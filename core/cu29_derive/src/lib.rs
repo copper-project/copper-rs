@@ -537,7 +537,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                      }
                                 } else {
                                     quote! {
-                                        true  // in normal mode always execute the steps in the runtime.
+                                        let  doit = true;  // in normal mode always execute the steps in the runtime.
                                    }
                                 };
 
@@ -598,7 +598,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                      }
                                 } else {
                                     quote! {
-                                        true  // in normal mode always execute the steps in the runtime.
+                                        let doit = true;  // in normal mode always execute the steps in the runtime.
                                    }
                                 };
                                 quote! {
@@ -653,7 +653,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                      }
                                 } else {
                                     quote! {
-                                        true  // in normal mode always execute the steps in the runtime.
+                                        let doit = true;  // in normal mode always execute the steps in the runtime.
                                    }
                                 };
                                 quote! {
