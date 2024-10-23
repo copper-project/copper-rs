@@ -10,7 +10,7 @@ use syn::{
     TypeTuple,
 };
 
-use convert_case::{Case, Casing};
+use crate::utils::config_id_to_enum;
 use cu29::config::read_configuration;
 use cu29::config::CuConfig;
 use cu29::curuntime::{compute_runtime_plan, CuExecutionLoop, CuExecutionUnit, CuTaskType};
@@ -112,21 +112,14 @@ fn gen_culist_support(
     }
 }
 
-fn task_id_to_enum_entry(id: &str) -> String {
-    id.to_case(Case::Pascal)
-}
-
-fn gen_sim_support(
-    runtime_plan: &CuExecutionLoop,
-    taskid_call_order: &Vec<usize>,
-) -> proc_macro2::TokenStream {
+fn gen_sim_support(runtime_plan: &CuExecutionLoop) -> proc_macro2::TokenStream {
     eprintln!("[Sim: Build SimEnum]");
     let plan_enum: Vec<proc_macro2::TokenStream> = runtime_plan
         .steps
         .iter()
         .map(|unit| match unit {
             CuExecutionUnit::Step(step) => {
-                let enum_entry_name = task_id_to_enum_entry(step.node.get_id().as_str());
+                let enum_entry_name = config_id_to_enum(step.node.get_id().as_str());
                 let enum_ident = Ident::new(&enum_entry_name, proc_macro2::Span::call_site());
                 let inputs: Vec<Type> = step
                     .input_msg_indices_types
@@ -136,7 +129,7 @@ fn gen_sim_support(
                 let output: Option<Type> = step
                     .output_msg_index_type
                     .as_ref()
-                    .map(|(i, t)| parse_str::<Type>(format!("_CuMsg<{}>", t).as_str()).unwrap());
+                    .map(|(_, t)| parse_str::<Type>(format!("_CuMsg<{}>", t).as_str()).unwrap());
                 let no_output = parse_str::<Type>("_CuMsg<()>").unwrap();
                 let output = output.as_ref().unwrap_or(&no_output);
                 quote! {
@@ -316,7 +309,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         .enumerate()
         .map(|(index, ty)| {
             let task_index = int2sliceindex(index as u32);
-            let task_enum_name = task_id_to_enum_entry(&all_tasks_ids[index]);
+            let task_enum_name = config_id_to_enum(&all_tasks_ids[index]);
             let enum_name = Ident::new(&task_enum_name, proc_macro2::Span::call_site());
             let additional_error_info = format!(
                 "Failed to get create instance for {}, instance index {}.",
@@ -520,7 +513,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     let tid = step.node_id as usize;
                     taskid_call_order.push(tid);
 
-                    let task_enum_name = task_id_to_enum_entry(&all_tasks_ids[tid]);
+                    let task_enum_name = config_id_to_enum(&all_tasks_ids[tid]);
                     let enum_name = Ident::new(&task_enum_name, proc_macro2::Span::call_site());
 
                     let process_call = match step.task_type {
@@ -708,7 +701,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         gen_culist_support(&runtime_plan, &taskid_call_order);
 
     eprintln!("[build the sim support]");
-    let sim_support: proc_macro2::TokenStream = gen_sim_support(&runtime_plan, &taskid_call_order);
+    let sim_support: proc_macro2::TokenStream = gen_sim_support(&runtime_plan);
 
     let (run_one_iteration, start_all_tasks, stop_all_tasks, run) = if sim_mode {
         (
