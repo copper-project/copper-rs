@@ -782,8 +782,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         }
 
         #start_all_tasks {
-            #(#stop_calls)*
-            self.copper_runtime.monitor.stop(&self.copper_runtime.clock)?;
+            #(#start_calls)*
+            self.copper_runtime.monitor.start(&self.copper_runtime.clock)?;
             Ok(())
         }
 
