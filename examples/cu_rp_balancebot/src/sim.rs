@@ -6,7 +6,7 @@ use avian3d::math::Vector;
 use avian3d::prelude::{ExternalForce, Physics};
 use bevy::prelude::*;
 use cu29::clock::{RobotClock, RobotClockMock};
-use cu29::cutask::{CuTaskCallbackState, SimOverride};
+use cu29::simulation::{CuTaskCallbackState, SimOverride};
 use cu29_derive::copper_runtime;
 use cu29_helpers::{basic_copper_setup, CopperContext};
 use cu29_log_derive::debug;
