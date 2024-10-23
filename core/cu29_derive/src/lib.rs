@@ -324,7 +324,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         quote!{
                             // Ask the sim if this task should be executed or overridden by the sim.
                             let ovr = sim_callback(SimStep::#enum_name(cu29::simulation::CuTaskCallbackState::Start));
-                            let doit = ovr == cu29::cutask::SimOverride::ExecuteByRuntime;
+                            let doit = ovr == cu29::simulation::SimOverride::ExecuteByRuntime;
                         }
                     } else {
                         quote!{
@@ -364,7 +364,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         quote!{
                             // Ask the sim if this task should be executed or overridden by the sim.
                             let ovr = sim_callback(SimStep::#enum_name(cu29::simulation::CuTaskCallbackState::Stop));
-                            let doit = ovr == cu29::cutask::SimOverride::ExecuteByRuntime;
+                            let doit = ovr == cu29::simulation::SimOverride::ExecuteByRuntime;
                         }
                     } else {
                         quote!{
@@ -403,7 +403,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         quote!{
                             // Ask the sim if this task should be executed or overridden by the sim.
                             let ovr = sim_callback(SimStep::#enum_name(cu29::simulation::CuTaskCallbackState::Preprocess));
-                            let doit = ovr == cu29::cutask::SimOverride::ExecuteByRuntime;
+                            let doit = ovr == cu29::simulation::SimOverride::ExecuteByRuntime;
                         }
                     } else {
                         quote!{
@@ -442,7 +442,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         quote!{
                             // Ask the sim if this task should be executed or overridden by the sim.
                             let ovr = sim_callback(SimStep::#enum_name(cu29::simulation::CuTaskCallbackState::Postprocess));
-                            let doit = ovr == cu29::cutask::SimOverride::ExecuteByRuntime;
+                            let doit = ovr == cu29::simulation::SimOverride::ExecuteByRuntime;
                         }
                     } else {
                         quote!{
@@ -525,7 +525,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     quote! {
                                         let doit = {
                                             let ovr = sim_callback(SimStep::#enum_name(cu29::simulation::CuTaskCallbackState::Process((), cumsg_output)));
-                                            ovr == cu29::cutask::SimOverride::ExecuteByRuntime
+                                            ovr == cu29::simulation::SimOverride::ExecuteByRuntime
                                         };
                                      }
                                 } else {
@@ -586,7 +586,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     quote! {
                                         let doit = {
                                             let ovr = sim_callback(SimStep::#enum_name(cu29::simulation::CuTaskCallbackState::Process(cumsg_input, cumsg_output)));
-                                            ovr == cu29::cutask::SimOverride::ExecuteByRuntime
+                                            ovr == cu29::simulation::SimOverride::ExecuteByRuntime
                                         };
                                      }
                                 } else {
@@ -641,7 +641,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     quote! {
                                         let doit = {
                                             let ovr = sim_callback(SimStep::#enum_name(cu29::simulation::CuTaskCallbackState::Process(cumsg_input, cumsg_output)));
-                                            ovr == cu29::cutask::SimOverride::ExecuteByRuntime
+                                            ovr == cu29::simulation::SimOverride::ExecuteByRuntime
                                         };
                                      }
                                 } else {
@@ -707,19 +707,19 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         (
             quote! {
                 pub fn run_one_iteration<F>(&mut self, sim_callback: &mut F) -> _CuResult<()>
-                where F: FnMut(SimStep) -> cu29::cutask::SimOverride,
+                where F: FnMut(SimStep) -> cu29::simulation::SimOverride,
             },
             quote! {
                 pub fn start_all_tasks<F>(&mut self, sim_callback: &mut F) -> _CuResult<()>
-                where F: FnMut(SimStep) -> cu29::cutask::SimOverride,
+                where F: FnMut(SimStep) -> cu29::simulation::SimOverride,
             },
             quote! {
                 pub fn stop_all_tasks<F>(&mut self, sim_callback: &mut F) -> _CuResult<()>
-                where F: FnMut(SimStep) -> cu29::cutask::SimOverride,
+                where F: FnMut(SimStep) -> cu29::simulation::SimOverride,
             },
             quote! {
                 pub fn run<F>(&mut self, sim_callback: &mut F) -> _CuResult<()>
-                where F: FnMut(SimStep) -> cu29::cutask::SimOverride,
+                where F: FnMut(SimStep) -> cu29::simulation::SimOverride,
             },
         )
     } else {
