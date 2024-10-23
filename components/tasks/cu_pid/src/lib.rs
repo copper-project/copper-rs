@@ -4,8 +4,8 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29::clock::{CuDuration, CuTime, RobotClock};
 use cu29::config::ComponentConfig;
-use cu29::cutask::CuMsg;
-use cu29::cutask::{CuMsgPayload, CuTask, CuTaskLifecycle, Freezable};
+use cu29::cutask::{CuMsg, CuMsgPayload};
+use cu29::cutask::{CuTask, CuTaskLifecycle, Freezable};
 use cu29::{input_msg, output_msg, CuResult};
 use cu29_log_derive::debug;
 use cu29_traits::CuError;
@@ -13,7 +13,7 @@ use std::marker::PhantomData;
 
 /// Output of the PID controller.
 #[derive(Debug, Default, Clone, Encode, Decode)]
-pub struct PIDControlOutput {
+pub struct PIDControlOutputPayload {
     /// Proportional term
     pub p: f32,
     /// Integral term
@@ -40,7 +40,7 @@ pub struct PIDController {
     integral: f32,
     last_error: f32,
     elapsed: CuDuration,
-    last_output: PIDControlOutput,
+    last_output: PIDControlOutputPayload,
 }
 
 impl PIDController {
@@ -68,7 +68,7 @@ impl PIDController {
             output_limit,
             elapsed: CuDuration::default(),
             sampling,
-            last_output: PIDControlOutput::default(),
+            last_output: PIDControlOutputPayload::default(),
         }
     }
 
@@ -82,7 +82,11 @@ impl PIDController {
         self.elapsed = self.sampling; // force the computation on the first next_control_output
     }
 
-    pub fn next_control_output(&mut self, measurement: f32, dt: CuDuration) -> PIDControlOutput {
+    pub fn next_control_output(
+        &mut self,
+        measurement: f32,
+        dt: CuDuration,
+    ) -> PIDControlOutputPayload {
         self.elapsed += dt;
 
         if self.elapsed < self.sampling {
@@ -114,7 +118,7 @@ impl PIDController {
         let output_unbounded = p + i + d;
         let output = output_unbounded.clamp(-self.output_limit, self.output_limit);
 
-        let output = PIDControlOutput { p, i, d, output };
+        let output = PIDControlOutputPayload { p, i, d, output };
 
         self.last_output = output.clone();
         self.elapsed = CuDuration::default();
@@ -215,7 +219,7 @@ where
     I: CuMsgPayload + 'cl,
 {
     type Input = input_msg!('cl, I);
-    type Output = output_msg!('cl, PIDControlOutput);
+    type Output = output_msg!('cl, PIDControlOutputPayload);
 
     fn process(
         &mut self,

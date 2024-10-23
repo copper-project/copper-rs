@@ -62,8 +62,8 @@ pub struct WT901 {
     i2c: Box<dyn I2c<Error = I2CError>>,
 }
 
-#[derive(Default, Debug)]
-pub struct PositionalReadings {
+#[derive(Default, Clone, Debug)]
+pub struct PositionalReadingsPayload {
     acc_x: Acceleration,
     acc_y: Acceleration,
     acc_z: Acceleration,
@@ -78,7 +78,7 @@ pub struct PositionalReadings {
     yaw: Angle,
 }
 
-impl Display for PositionalReadings {
+impl Display for PositionalReadingsPayload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let acc_style = Acceleration::format_args(standard_gravity, Abbreviation);
         let angv_style = AngularVelocity::format_args(degree_per_second, Abbreviation);
@@ -96,7 +96,7 @@ impl Display for PositionalReadings {
     }
 }
 
-impl Serialize for PositionalReadings {
+impl Serialize for PositionalReadingsPayload {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut s = serializer.serialize_struct("PositionalReadings", 12)?;
         s.serialize_field("acc_x", &self.acc_x.value)?;
@@ -115,10 +115,10 @@ impl Serialize for PositionalReadings {
     }
 }
 
-impl<'de> Deserialize<'de> for PositionalReadings {
+impl<'de> Deserialize<'de> for PositionalReadingsPayload {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let values = <[f32; 12]>::deserialize(deserializer)?;
-        Ok(PositionalReadings {
+        Ok(PositionalReadingsPayload {
             acc_x: Acceleration::new::<standard_gravity>(values[0]),
             acc_y: Acceleration::new::<standard_gravity>(values[1]),
             acc_z: Acceleration::new::<standard_gravity>(values[2]),
@@ -135,7 +135,7 @@ impl<'de> Deserialize<'de> for PositionalReadings {
     }
 }
 
-impl Encode for PositionalReadings {
+impl Encode for PositionalReadingsPayload {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         // Encode in natural SI units
         self.acc_x.value.encode(encoder)?;
@@ -154,9 +154,9 @@ impl Encode for PositionalReadings {
     }
 }
 
-impl Decode for PositionalReadings {
+impl Decode for PositionalReadingsPayload {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        Ok(PositionalReadings {
+        Ok(PositionalReadingsPayload {
             // Decode back from the natural SI units
             acc_x: Acceleration::new::<meter_per_second_squared>(f32::decode(decoder)?),
             acc_y: Acceleration::new::<meter_per_second_squared>(f32::decode(decoder)?),
@@ -180,7 +180,7 @@ const REGISTER_SPAN_SIZE: usize = ((Registers::Yaw as u8 - Registers::AccX as u8
 impl WT901 {
     fn bulk_position_read(
         &mut self,
-        pr: &mut PositionalReadings,
+        pr: &mut PositionalReadingsPayload,
     ) -> Result<(), i2cdev::linux::LinuxI2CError> {
         debug!("Trying to read i2c");
         let mut buf = [0u8; REGISTER_SPAN_SIZE];
@@ -224,10 +224,10 @@ impl CuTaskLifecycle for WT901 {
 }
 
 impl<'cl> CuSrcTask<'cl> for WT901 {
-    type Output = output_msg!('cl, PositionalReadings);
+    type Output = output_msg!('cl, PositionalReadingsPayload);
 
     fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
-        let mut pos = PositionalReadings::default();
+        let mut pos = PositionalReadingsPayload::default();
         self.bulk_position_read(&mut pos)
             .map_err(|e| CuError::from(format!("Error reading WT901: {:?}", e)))?;
         new_msg.set_payload(pos);
