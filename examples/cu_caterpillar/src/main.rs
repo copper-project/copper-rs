@@ -12,7 +12,7 @@ const SLAB_SIZE: Option<usize> = Some(100 * 1024 * 1024);
 
 fn main() {
     let logger_path = "/tmp/caterpillar.copper";
-    let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), SLAB_SIZE, false)
+    let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), SLAB_SIZE, false, None)
         .expect("Failed to setup logger.");
     println!("Logger created at {path}.", path = logger_path);
     let clock = copper_ctx.clock.clone();
