@@ -37,7 +37,7 @@ struct WT910Tester {}
 
 fn main() {
     let logger_path = "/tmp/caterpillar.copper";
-    let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), None, true)
+    let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), None, true, None)
         .expect("Failed to setup logger.");
     debug!("Logger created at {}.", logger_path);
     let clock = copper_ctx.clock;
