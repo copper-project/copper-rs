@@ -216,8 +216,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let (all_tasks_ids, all_tasks_cutype, all_tasks_types_names, all_tasks_types) =
         extract_tasks_types(&copper_config);
 
-    eprintln!("Normal tasks types: {:?}", all_tasks_types);
-
     let all_sim_tasks_types: Vec<Type> = all_tasks_ids
         .iter()
         .zip(&all_tasks_cutype)
@@ -246,8 +244,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             },
         })
         .collect();
-
-    eprintln!("Sim tasks types: {:?}", all_sim_tasks_types);
 
     eprintln!("[build task tuples]");
     // Build the tuple of all those types
@@ -295,7 +291,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             panic!("This struct is a unit struct, it should have named or unnamed fields. use struct Something {{}} and not struct Something;")
         }
     };
-    eprintln!("fields: {:?}", item_struct.fields);
 
     eprintln!("[gen instances]");
 
