@@ -756,7 +756,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let sim_callback_on_new = if sim_mode {
         Some(quote! {
-            let all_instances_configs: Vec<Option<&ComponentConfig>> = config
+            let all_instances_configs: Vec<Option<&_ComponentConfig>> = config
                 .get_all_nodes()
                 .iter()
                 .map(|(_, node)| node.get_instance_config())
