@@ -296,7 +296,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         quote! {
         <#ty>::new(all_instances_configs[#index]).map_err(|e| e.add_cause(#additional_error_info))?
         }
-    });
+    }).collect::<Vec<_>>();
 
     // Generate the code to create instances of the nodes
     // It maps the types to their index
@@ -745,6 +745,28 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         None
     };
 
+    let sim_callback_on_new_calls = all_tasks_ids.iter().enumerate().map(|(i, id)| {
+        let enum_name = config_id_to_enum(&id);
+        let enum_ident = Ident::new(&enum_name, proc_macro2::Span::call_site());
+        quote! {
+            // the answer is ignored, we have to instantiate the tasks anyway.
+            sim_callback(SimStep::#enum_ident(cu29::simulation::CuTaskCallbackState::New(all_instances_configs[#i])));
+        }
+    });
+
+    let sim_callback_on_new = if sim_mode {
+        Some(quote! {
+            let all_instances_configs: Vec<Option<&ComponentConfig>> = config
+                .get_all_nodes()
+                .iter()
+                .map(|(_, node)| node.get_instance_config())
+                .collect();
+            #(#sim_callback_on_new_calls)*
+        })
+    } else {
+        None
+    };
+
     eprintln!("[build the run method]");
     let run_method = quote! {
 
@@ -815,7 +837,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let runtime_impl = quote! {
         impl #name {
 
-            pub fn new(clock:_RobotClock, unified_logger: _Arc<_Mutex<_UnifiedLoggerWrite>>) -> _CuResult<Self> {
+            pub fn new(clock:_RobotClock, unified_logger: _Arc<_Mutex<_UnifiedLoggerWrite>>, #sim_callback_arg) -> _CuResult<Self> {
                 let config = _read_configuration(#config_file)?;
 
                 let copperlist_stream = _stream_write::<CuList>(
@@ -824,7 +846,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     60 * 1024, // FIXME: make this a config
                 );
 
-                Ok(#name {
+                let runtime = Ok(#name {
                     copper_runtime: _CuRuntime::<#tasks_type, CuMsgs, #monitor_type, #DEFAULT_CLNB>::new(
                         clock,
                         &config,
@@ -832,7 +854,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         monitor_instanciator,
                         copperlist_stream
                     )?,
-                })
+                });
+
+                #sim_callback_on_new
+
+                runtime
             }
 
             #run_method
