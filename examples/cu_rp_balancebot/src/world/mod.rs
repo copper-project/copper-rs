@@ -11,7 +11,6 @@ use bevy::pbr::{
 };
 use bevy::prelude::*;
 use bevy_mod_picking::prelude::*;
-use std::f64::consts::PI;
 
 const RAIL_WIDTH: f64 = 1.00; // 55cm
 const RAIL_HEIGHT: f64 = 0.02;
@@ -58,8 +57,7 @@ pub fn build_world(app: &mut App) -> &mut App {
     app.insert_resource(Msaa::Off)
         .insert_resource(DefaultOpaqueRendererMethod::deferred())
         .add_plugins((
-            // DefaultPlugins,
-            DefaultPlugins.build().disable::<bevy::log::LogPlugin>(),
+            DefaultPlugins.build().disable::<bevy::log::LogPlugin>(), // to be able to use the TUI
             DefaultPickingPlugins,
             PhysicsPlugins::default().with_length_unit(1000.0),
             // PhysicsDebugPlugin::default(),
@@ -119,23 +117,6 @@ fn chessboard_setup(
             },));
         }
     }
-    // A perfect mirror behind the scene to test reflections
-    // commands.spawn((PbrBundle {
-    //     mesh: meshes.add(
-    //         Plane3d::new(Vec3::Z, Vec2::splat(0.5))
-    //             .mesh()
-    //             .size(2.0, 2.0),
-    //     ),
-    //     material: materials.add(StandardMaterial {
-    //         base_color: Color::WHITE,
-    //         metallic: 1.0,
-    //         reflectance: 1.0,
-    //         perceptual_roughness: 0.0,
-    //         ..default()
-    //     }),
-    //     transform: Transform::from_xyz(0.0, 0.0, -1.0),
-    //     ..default()
-    // },));
 }
 
 // Setup our scene
@@ -231,7 +212,6 @@ fn setup(
             PickableBundle::default(),
             ExternalForce::default(),
             Cart,
-            // ExternalForce::new(DVec3::new(0.001, -0.0, 0.0)),
             Collider::cuboid(CART_WIDTH, CART_HEIGHT, CART_DEPTH),
             RigidBody::Dynamic,
             On::<Pointer<Drag>>::target_component_mut::<Transform>(|drag, transform| {
@@ -320,6 +300,7 @@ fn setup(
     });
 }
 
+/// Winged some type of orbital camera to explore around the robot.
 fn camera_control_system(
     keys: Res<ButtonInput<KeyCode>>,
     mut scroll_evr: EventReader<MouseWheel>,
@@ -397,45 +378,25 @@ fn camera_control_system(
     camera_transform.translation += forward + strafe + vertical;
 }
 
+// Space to start / stop the simulation
 fn toggle_simulation_state(
     mut state: ResMut<SimulationState>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
 ) {
     if keyboard_input.just_pressed(KeyCode::Space) {
         if *state == SimulationState::Running {
-            println!("Pausing simulation");
             *state = SimulationState::Paused;
         } else {
-            println!("Resuming simulation");
             *state = SimulationState::Running;
         }
     }
 }
 
+// Pause / Unpause the physics time.
 fn update_physics(state: Res<SimulationState>, mut time: ResMut<Time<Physics>>) {
     if *state == SimulationState::Paused {
         time.pause();
         return;
     }
     time.unpause();
-}
-
-fn apply_sinusoidal_force(
-    time: Res<Time<Physics>>,
-    state: Res<SimulationState>,
-    mut cart_query: Query<&mut Transform, With<Cart>>, // Query entities with ExternalForce and Cart
-) {
-    if *state == SimulationState::Running {
-        let current_time = time.elapsed_seconds_f64();
-        let frequency = 0.2; // Frequency of the oscillation
-        let amplitude = 0.3; // Amplitude of the position oscillation
-
-        // Calculate the sinusoidal offset
-        let offset = amplitude * (2.0 * PI * frequency * current_time).sin();
-
-        // Apply the offset to the cart's position
-        for mut transform in cart_query.iter_mut() {
-            transform.translation.x = offset as f32;
-        }
-    }
 }
