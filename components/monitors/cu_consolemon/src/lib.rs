@@ -584,9 +584,9 @@ impl CuMonitor for CuConsoleMon {
             // nukes stderr into orbit as anything in the stack can corrupt the terminal
             let dev_null = File::open("/dev/null").expect("Could not get /dev/null");
             let dev_null_fd = dev_null.as_raw_fd();
-            let original_stderr_fd = unsafe { dup(2) };
+            let original_stderr_fd = unsafe { dup(libc::STDERR_FILENO) };
             unsafe {
-                dup2(dev_null_fd, 2);
+                dup2(dev_null_fd, libc::STDERR_FILENO);
             }
             let mut terminal =
                 Terminal::new(backend).expect("Failed to initialize terminal backend");
@@ -595,7 +595,7 @@ impl CuMonitor for CuConsoleMon {
             quitting.store(true, Ordering::SeqCst);
             // restoring the terminal
             unsafe {
-                dup2(original_stderr_fd, 2);
+                dup2(original_stderr_fd, libc::STDERR_FILENO);
                 close(original_stderr_fd);
             }
 
@@ -670,12 +670,9 @@ fn init_error_hooks() {
 }
 
 fn setup_terminal() {
-    enable_raw_mode()
-        .map_err(|e| CuError::new_with_cause("Could not enable console raw mode", e))
-        .expect("Could not enter raw mode: check terminal compatibility.");
+    enable_raw_mode().expect("Could not enter raw mode: check terminal compatibility.");
     execute!(stdout(), EnterAlternateScreen, EnableMouseCapture)
-        .map_err(|e| CuError::new_with_cause("Could not execute crossterm", e))
-        .expect("Could not enter alternateScreen: check teminal compatibilitY.");
+        .expect("Could not enter alternateScreen: check terminal compatibility.");
 }
 
 fn restore_terminal() {
