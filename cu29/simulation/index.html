@@ -31,7 +31,7 @@ the task. For source tasks, <code>I</code> is <code>CuMsg&lt;()&gt;</code>, and 
 <h4 id="example-usage-callback"><a class="doc-anchor" href="#example-usage-callback">§</a>Example Usage: Callback</h4>
 <p>You can combine the expressiveness of the enum matching to intercept and override the task lifecycle for the simulation.</p>
 
-<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">let </span><span class="kw-2">mut </span>sim_callback = <span class="kw">move </span>|step: SimStep&lt;<span class="lifetime">'_</span>&gt;| -&gt; SimOverride {
+<div class="example-wrap ignore"><a href="#" class="tooltip" title="This example is not tested">ⓘ</a><pre class="rust rust-example-rendered"><code><span class="kw">let </span><span class="kw-2">mut </span>sim_callback = <span class="kw">move </span>|step: SimStep&lt;<span class="lifetime">'_</span>&gt;| -&gt; SimOverride {
     <span class="kw">match </span>step {
         <span class="comment">// Handle the creation of source tasks, potentially adapting the simulation based on configuration
         </span>SimStep::SourceTask(CuTaskCallbackState::New(<span class="prelude-val">Some</span>(config))) =&gt; {
