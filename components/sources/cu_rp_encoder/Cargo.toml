@@ -11,7 +11,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [package.metadata.cargo-machete]
-ignored = ["cu29-log", "cu29-log-runtime"]  # proc macro
+ignored = ["cu29-log", "cu29-log-runtime"]
 
 [dependencies]
 cu29 = { workspace = true }
@@ -20,7 +20,15 @@ cu29-log-runtime = { workspace = true }
 cu29-log-derive = { workspace = true }
 cu29-traits = { workspace = true }
 bincode = { workspace = true }
-
-rppal = "0.19.0"
 lazy_static = "1.5.0"
 serde = { version = "1.0.210", features = ["derive"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+rppal = { version = "0.19.0", features = ["hal"] }
+
+[features]
+default = []
+mock = []
+
+[target.'cfg(not(target_os = "linux"))'.features]
+default = ["mock"]

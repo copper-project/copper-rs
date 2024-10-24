@@ -1,22 +1,38 @@
+#[cfg(feature = "mock")]
+mod mock;
+
 use bincode::{Decode, Encode};
 use cu29::clock::{CuDuration, RobotClock};
 use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
 use cu29::output_msg;
-use cu29::{CuError, CuResult};
-use lazy_static::lazy_static;
-use rppal::gpio::{Gpio, InputPin, Level, Trigger};
+use cu29::CuResult;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 
+#[allow(unused_imports)]
+use cu29_traits::CuError;
+
+#[cfg(feature = "mock")]
+use mock::{get_pin, InputPin};
+#[cfg(not(feature = "mock"))]
+use rppal::gpio::{Gpio, InputPin, Level, Trigger};
+
+#[allow(dead_code)]
 struct InterruptData {
     dat_pin: InputPin,
     ticks: i32,
     tov: CuDuration,
 }
 
-lazy_static! {
-    static ref GPIO: Gpio = Gpio::new().expect("Could not create GPIO bindings");
+#[cfg(not(feature = "mock"))]
+fn get_pin(pin_nb: u8) -> CuResult<InputPin> {
+    // Gpio manages a singleton behind the scene.
+    Ok(Gpio::new()
+        .expect("Could not create GPIO bindings")
+        .get(pin_nb)
+        .map_err(|e| CuError::new_with_cause("Could not get pin", e))?
+        .into_input())
 }
 
 #[derive(Default, Clone, Debug, Encode, Decode, Serialize, Deserialize)]
@@ -31,6 +47,7 @@ impl From<&EncoderPayload> for f32 {
     }
 }
 
+#[allow(dead_code)]
 pub struct Encoder {
     clk_pin: InputPin,
     data_from_interrupts: Arc<Mutex<InterruptData>>,
@@ -54,15 +71,8 @@ impl CuTaskLifecycle for Encoder {
         let dat_pin_nb_value = config.get("dat_pin").ok_or("Encoder needs a dat_pin")?;
         let dat_pin: u8 = dat_pin_nb_value.clone().into();
 
-        let clk_pin: InputPin = GPIO
-            .get(clk_pin)
-            .map_err(|e| CuError::new_with_cause("Could not get pin", e))?
-            .into_input();
-
-        let dat_pin = GPIO
-            .get(dat_pin)
-            .map_err(|e| CuError::new_with_cause("Could not get pin", e))?
-            .into_input();
+        let clk_pin: InputPin = get_pin(clk_pin)?;
+        let dat_pin: InputPin = get_pin(dat_pin)?;
 
         Ok(Self {
             clk_pin,
@@ -74,10 +84,11 @@ impl CuTaskLifecycle for Encoder {
         })
     }
 
+    #[allow(unused_variables)]
     fn start(&mut self, clock: &RobotClock) -> CuResult<()> {
         let clock = clock.clone();
         let idata = Arc::clone(&self.data_from_interrupts);
-
+        #[cfg(not(feature = "mock"))]
         self.clk_pin
             .set_async_interrupt(Trigger::FallingEdge, None, move |_| {
                 let mut idata = idata.lock().unwrap();
@@ -89,11 +100,11 @@ impl CuTaskLifecycle for Encoder {
                 idata.tov = clock.now();
             })
             .map_err(|e| CuError::new_with_cause("Failed to set async interrupt", e))?;
-
         Ok(())
     }
 
     fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        #[cfg(not(feature = "mock"))]
         self.clk_pin
             .clear_async_interrupt()
             .map_err(|e| CuError::new_with_cause("Failed to reset async interrupt", e))?;
