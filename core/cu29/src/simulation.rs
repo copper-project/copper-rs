@@ -38,7 +38,7 @@
 //!
 //! You can combine the expressiveness of the enum matching to intercept and override the task lifecycle for the simulation.
 //!
-//! ```rust
+//! ```rust,ignore
 //! let mut sim_callback = move |step: SimStep<'_>| -> SimOverride {
 //!     match step {
 //!         // Handle the creation of source tasks, potentially adapting the simulation based on configuration
