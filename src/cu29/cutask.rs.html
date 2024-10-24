@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29/src/cutask.rs`."><title>cutask.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-a5dc3bae.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29" data-themes="" data-resource-suffix="" data-rustdoc-version="1.84.0-nightly (86d69c705 2024-10-22)" data-channel="nightly" data-search-js="search-c5a66128.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">cu29/</div>cutask.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29/src/cutask.rs`."><title>cutask.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-a5dc3bae.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29" data-themes="" data-resource-suffix="" data-rustdoc-version="1.84.0-nightly (4f2f477fd 2024-10-23)" data-channel="nightly" data-search-js="search-c5a66128.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">cu29/</div>cutask.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
 <a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
@@ -283,12 +283,12 @@
 <span class="kw">use </span>std::fmt::{Display, Formatter};
 
 <span class="comment">// Everything that is stateful in copper for zero copy constraints need to be restricted to this trait.
-</span><span class="kw">pub trait </span>CuMsgPayload: Default + Encode + Decode + Sized {}
+</span><span class="kw">pub trait </span>CuMsgPayload: Default + Clone + Encode + Decode + Sized {}
 
 <span class="kw">pub trait </span>CuMsgPack&lt;<span class="lifetime">'cl</span>&gt; {}
 
 <span class="comment">// Also anything that follows this contract can be a payload (blanket implementation)
-</span><span class="kw">impl</span>&lt;T: Default + Encode + Decode + Sized&gt; CuMsgPayload <span class="kw">for </span>T {}
+</span><span class="kw">impl</span>&lt;T: Default + Clone + Encode + Decode + Sized&gt; CuMsgPayload <span class="kw">for </span>T {}
 
 <span class="macro">macro_rules!</span> impl_cu_msg_pack {
     ($(($(<span class="macro-nonterminal">$ty</span>:ident),<span class="kw-2">*</span>)),<span class="kw-2">*</span>) =&gt; {
@@ -335,7 +335,7 @@
 // which is the maximum size for inline allocation (no heap)
 </span><span class="kw">const </span>COMPACT_STRING_CAPACITY: usize = size_of::&lt;String&gt;();
 
-<span class="attr">#[derive(Debug, Default, Serialize, Deserialize)]
+<span class="attr">#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 </span><span class="kw">pub struct </span>CuCompactString(<span class="kw">pub </span>CompactString);
 
 <span class="kw">impl </span>Encode <span class="kw">for </span>CuCompactString {
@@ -360,7 +360,7 @@
 }
 
 <span class="doccomment">/// CuMsgMetadata is a structure that contains metadata common to all CuMsgs.
-</span><span class="attr">#[derive(Debug, bincode::Encode, bincode::Decode, Serialize, Deserialize)]
+</span><span class="attr">#[derive(Debug, Clone, bincode::Encode, bincode::Decode, Serialize, Deserialize)]
 </span><span class="kw">pub struct </span>CuMsgMetadata {
     <span class="doccomment">/// The time before the process method is called.
     </span><span class="kw">pub </span>before_process: OptionCuTime,
@@ -390,7 +390,7 @@
 }
 
 <span class="doccomment">/// CuMsg is the envelope holding the msg payload and the metadata between tasks.
-</span><span class="attr">#[derive(Debug, bincode::Encode, bincode::Decode)]
+</span><span class="attr">#[derive(Debug, Clone, bincode::Encode, bincode::Decode)]
 </span><span class="kw">pub struct </span>CuMsg&lt;T&gt;
 <span class="kw">where
     </span>T: CuMsgPayload,

@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29/src/config.rs`."><title>config.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-a5dc3bae.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29" data-themes="" data-resource-suffix="" data-rustdoc-version="1.84.0-nightly (86d69c705 2024-10-22)" data-channel="nightly" data-search-js="search-c5a66128.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">cu29/</div>config.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29/src/config.rs`."><title>config.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-a5dc3bae.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29" data-themes="" data-resource-suffix="" data-rustdoc-version="1.84.0-nightly (4f2f477fd 2024-10-23)" data-channel="nightly" data-search-js="search-c5a66128.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">cu29/</div>config.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
 <a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
@@ -636,12 +636,57 @@
 <a href="#635" id="635">635</a>
 <a href="#636" id="636">636</a>
 <a href="#637" id="637">637</a>
-<a href="#638" id="638">638</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module defines the configuration of the copper runtime.
+<a href="#638" id="638">638</a>
+<a href="#639" id="639">639</a>
+<a href="#640" id="640">640</a>
+<a href="#641" id="641">641</a>
+<a href="#642" id="642">642</a>
+<a href="#643" id="643">643</a>
+<a href="#644" id="644">644</a>
+<a href="#645" id="645">645</a>
+<a href="#646" id="646">646</a>
+<a href="#647" id="647">647</a>
+<a href="#648" id="648">648</a>
+<a href="#649" id="649">649</a>
+<a href="#650" id="650">650</a>
+<a href="#651" id="651">651</a>
+<a href="#652" id="652">652</a>
+<a href="#653" id="653">653</a>
+<a href="#654" id="654">654</a>
+<a href="#655" id="655">655</a>
+<a href="#656" id="656">656</a>
+<a href="#657" id="657">657</a>
+<a href="#658" id="658">658</a>
+<a href="#659" id="659">659</a>
+<a href="#660" id="660">660</a>
+<a href="#661" id="661">661</a>
+<a href="#662" id="662">662</a>
+<a href="#663" id="663">663</a>
+<a href="#664" id="664">664</a>
+<a href="#665" id="665">665</a>
+<a href="#666" id="666">666</a>
+<a href="#667" id="667">667</a>
+<a href="#668" id="668">668</a>
+<a href="#669" id="669">669</a>
+<a href="#670" id="670">670</a>
+<a href="#671" id="671">671</a>
+<a href="#672" id="672">672</a>
+<a href="#673" id="673">673</a>
+<a href="#674" id="674">674</a>
+<a href="#675" id="675">675</a>
+<a href="#676" id="676">676</a>
+<a href="#677" id="677">677</a>
+<a href="#678" id="678">678</a>
+<a href="#679" id="679">679</a>
+<a href="#680" id="680">680</a>
+<a href="#681" id="681">681</a>
+<a href="#682" id="682">682</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module defines the configuration of the copper runtime.
 //! The configuration is a directed graph where nodes are tasks and edges are connections between tasks.
 //! The configuration is serialized in the RON format.
 //! The configuration is used to generate the runtime code at compile time.
 
 </span><span class="kw">use crate</span>::{CuError, CuResult};
+<span class="kw">use </span>petgraph::adj::NodeIndex;
 <span class="kw">use </span>petgraph::stable_graph::{EdgeIndex, StableDiGraph};
 <span class="kw">use </span>petgraph::visit::EdgeRef;
 <span class="kw">use </span>ron::extensions::Extensions;
@@ -1042,6 +1087,50 @@
         <span class="self">self</span>.graph.node_weight(node_id.into())
     }
 
+    <span class="doccomment">/// this is more like infer from the connections of this node.
+    </span><span class="attr">#[allow(dead_code)] </span><span class="comment">// Used in proc macro
+    </span><span class="kw">pub fn </span>get_node_output_msg_type(<span class="kw-2">&amp;</span><span class="self">self</span>, node_id: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;String&gt; {
+        <span class="self">self</span>.graph.node_indices().find_map(|node_index| {
+            <span class="kw">if let </span><span class="prelude-val">Some</span>(node) = <span class="self">self</span>.get_node(node_index.index() <span class="kw">as </span>u32) {
+                <span class="kw">if </span>node.id != node_id {
+                    <span class="kw">return </span><span class="prelude-val">None</span>;
+                }
+                <span class="kw">let </span>edges = <span class="self">self</span>.get_src_edges(node_index.index() <span class="kw">as </span>u32);
+                <span class="kw">if </span>edges.len() == <span class="number">0 </span>{
+                    <span class="macro">panic!</span>(<span class="string">"A CuSrcTask is configured with no task connected to it."</span>)
+                }
+                <span class="kw">let </span>cnx = <span class="self">self
+                    </span>.graph
+                    .edge_weight(EdgeIndex::new(edges[<span class="number">0</span>]))
+                    .expect(<span class="string">"Found an cnx id but could not retrieve it back"</span>);
+                <span class="kw">return </span><span class="prelude-val">Some</span>(cnx.msg.clone());
+            }
+            <span class="prelude-val">None
+        </span>})
+    }
+
+    <span class="doccomment">/// this is more like infer from the connections of this node.
+    </span><span class="attr">#[allow(dead_code)] </span><span class="comment">// Used in proc macro
+    </span><span class="kw">pub fn </span>get_node_input_msg_type(<span class="kw-2">&amp;</span><span class="self">self</span>, node_id: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;String&gt; {
+        <span class="self">self</span>.graph.node_indices().find_map(|node_index| {
+            <span class="kw">if let </span><span class="prelude-val">Some</span>(node) = <span class="self">self</span>.get_node(node_index.index() <span class="kw">as </span>u32) {
+                <span class="kw">if </span>node.id != node_id {
+                    <span class="kw">return </span><span class="prelude-val">None</span>;
+                }
+                <span class="kw">let </span>edges = <span class="self">self</span>.get_dst_edges(node_index.index() <span class="kw">as </span>u32);
+                <span class="kw">if </span>edges.len() == <span class="number">0 </span>{
+                    <span class="macro">panic!</span>(<span class="string">"A CuSinkTask is configured with no task connected to it."</span>)
+                }
+                <span class="kw">let </span>cnx = <span class="self">self
+                    </span>.graph
+                    .edge_weight(EdgeIndex::new(edges[<span class="number">0</span>]))
+                    .expect(<span class="string">"Found an cnx id but could not retrieve it back"</span>);
+                <span class="kw">return </span><span class="prelude-val">Some</span>(cnx.msg.clone());
+            }
+            <span class="prelude-val">None
+        </span>})
+    }
+
     <span class="doccomment">/// Get the list of edges that are connected to the given node as a source.
     </span><span class="kw">pub fn </span>get_src_edges(<span class="kw-2">&amp;</span><span class="self">self</span>, node_id: NodeId) -&gt; Vec&lt;usize&gt; {
         <span class="self">self</span>.graph
@@ -1064,11 +1153,10 @@
     }
 
     <span class="doccomment">/// Convenience method to get all nodes in the configuration graph.
-    </span><span class="attr">#[allow(dead_code)]
-    </span><span class="kw">pub fn </span>get_all_nodes(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;<span class="kw-2">&amp;</span>Node&gt; {
+    </span><span class="kw">pub fn </span>get_all_nodes(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;(NodeIndex, <span class="kw-2">&amp;</span>Node)&gt; {
         <span class="self">self</span>.graph
             .node_indices()
-            .map(|node| <span class="kw-2">&amp;</span><span class="self">self</span>.graph[node])
+            .map(|index| (index.index() <span class="kw">as </span>u32, <span class="kw-2">&amp;</span><span class="self">self</span>.graph[index]))
             .collect()
     }
 
@@ -1200,7 +1288,7 @@
     </span><span class="kw">pub fn </span>get_all_instances_configs(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;<span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>ComponentConfig&gt;&gt; {
         <span class="self">self</span>.get_all_nodes()
             .iter()
-            .map(|node_config| node_config.get_instance_config())
+            .map(|(<span class="kw">_</span>, node)| node.get_instance_config())
             .collect()
     }
 

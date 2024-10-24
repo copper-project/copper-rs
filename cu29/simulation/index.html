@@ -1,0 +1,102 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="`cu29::simulation` Module"><title>cu29::simulation - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-a5dc3bae.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29" data-themes="" data-resource-suffix="" data-rustdoc-version="1.84.0-nightly (4f2f477fd 2024-10-23)" data-channel="nightly" data-search-js="search-c5a66128.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../cu29/index.html">cu29</a><span class="version">0.3.1</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module simulation</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#cu29simulation-module" title="`cu29::simulation` Module"><code>cu29::simulation</code> Module</a><ul><li><a href="#overview" title="Overview">Overview</a></li><li><a href="#hooking-simulation-events" title="Hooking Simulation Events">Hooking Simulation Events</a></li><li><a href="#task-simulation-with-cusimsrctask-and-cusimsinktask" title="Task Simulation with `CuSimSrcTask` and `CuSimSinkTask`">Task Simulation with <code>CuSimSrcTask</code> and <code>CuSimSinkTask</code></a></li><li><a href="#controlling-simulation-flow-simoverride-enum" title="Controlling Simulation Flow: `SimOverride` Enum">Controlling Simulation Flow: <code>SimOverride</code> Enum</a></li></ul></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li></ul></section><div id="rustdoc-modnav"><h2 class="in-crate"><a href="../index.html">In crate cu29</a></h2></div></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><span class="rustdoc-breadcrumbs"><a href="../index.html">cu29</a></span><h1>Module <span>simulation</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/cu29/simulation.rs.html#1-205">source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="cu29simulation-module"><a class="doc-anchor" href="#cu29simulation-module">§</a><code>cu29::simulation</code> Module</h2>
+<p>The <code>cu29::simulation</code> module provides an interface to simulate tasks in Copper-based systems.
+It offers structures, traits, and enums that enable hooking into the lifecycle of tasks, adapting
+their behavior, and integrating them with simulated hardware environments.</p>
+<h3 id="overview"><a class="doc-anchor" href="#overview">§</a>Overview</h3>
+<p>This module is specifically designed to manage the lifecycle of tasks during simulation, allowing
+users to override specific simulation steps and simulate sensor data or hardware interaction using
+placeholders for real drivers. It includes the following components:</p>
+<ul>
+<li><strong><code>CuTaskCallbackState</code></strong>: Represents the lifecycle states of tasks during simulation.</li>
+<li><strong><code>SimOverride</code></strong>: Defines how the simulator should handle specific task callbacks, either
+executing the logic in the simulator or deferring to the real implementation.</li>
+</ul>
+<h3 id="hooking-simulation-events"><a class="doc-anchor" href="#hooking-simulation-events">§</a>Hooking Simulation Events</h3>
+<p>You can control and simulate task behavior using a callback mechanism. A task in the Copper framework
+has a lifecycle, and for each stage of the lifecycle, a corresponding callback state is passed to
+the simulation. This allows you to inject custom logic for each task stage.</p>
+<h4 id="cutaskcallbackstate-enum"><a class="doc-anchor" href="#cutaskcallbackstate-enum">§</a><code>CuTaskCallbackState</code> Enum</h4>
+<p>The <code>CuTaskCallbackState</code> enum represents different stages in the lifecycle of a Copper task during a simulation:</p>
+<ul>
+<li><strong><code>New(Option&lt;ComponentConfig&gt;)</code></strong>: Triggered when a task is created. Use this state to adapt the simulation
+to a specific component configuration if needed.</li>
+<li><strong><code>Start</code></strong>: Triggered when a task starts. This state allows you to initialize or set up any necessary data
+before the task processes any input.</li>
+<li><strong><code>Preprocess</code></strong>: Called before the main processing step. Useful for preparing or validating data.</li>
+<li><strong><code>Process(I, O)</code></strong>: The core processing state, where you can handle the input (<code>I</code>) and output (<code>O</code>) of
+the task. For source tasks, <code>I</code> is <code>CuMsg&lt;()&gt;</code>, and for sink tasks, <code>O</code> is <code>CuMsg&lt;()&gt;</code>.</li>
+<li><strong><code>Postprocess</code></strong>: Called after the main processing step. Allows for cleanup or final adjustments.</li>
+<li><strong><code>Stop</code></strong>: Triggered when a task is stopped. Use this to finalize any data or state before task termination.</li>
+</ul>
+<h4 id="example-usage-callback"><a class="doc-anchor" href="#example-usage-callback">§</a>Example Usage: Callback</h4>
+<p>You can combine the expressiveness of the enum matching to intercept and override the task lifecycle for the simulation.</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">let </span><span class="kw-2">mut </span>sim_callback = <span class="kw">move </span>|step: SimStep&lt;<span class="lifetime">'_</span>&gt;| -&gt; SimOverride {
+    <span class="kw">match </span>step {
+        <span class="comment">// Handle the creation of source tasks, potentially adapting the simulation based on configuration
+        </span>SimStep::SourceTask(CuTaskCallbackState::New(<span class="prelude-val">Some</span>(config))) =&gt; {
+            <span class="macro">println!</span>(<span class="string">"Creating Source Task with configuration: {:?}"</span>, config);
+            <span class="comment">// You can adapt the simulation using the configuration here
+            </span>SimOverride::ExecuteByRuntime
+        }
+        SimStep::SourceTask(CuTaskCallbackState::New(<span class="prelude-val">None</span>)) =&gt; {
+            <span class="macro">println!</span>(<span class="string">"Creating Source Task without configuration."</span>);
+            SimOverride::ExecuteByRuntime
+        }
+        <span class="comment">// Handle the processing step for sink tasks, simulating the response
+        </span>SimStep::SinkTask(CuTaskCallbackState::Process(input, output)) =&gt; {
+            <span class="macro">println!</span>(<span class="string">"Processing Sink Task..."</span>);
+            <span class="macro">println!</span>(<span class="string">"Received input: {:?}"</span>, input);
+
+            <span class="comment">// Simulate a response by setting the output payload
+            </span>output.set_payload(your_simulated_response());
+            <span class="macro">println!</span>(<span class="string">"Set simulated output for Sink Task."</span>);
+
+            SimOverride::ExecutedBySim
+        }
+        <span class="comment">// Generic handling for other phases like Start, Preprocess, Postprocess, or Stop
+        </span>SimStep::SourceTask(CuTaskCallbackState::Start)
+        | SimStep::SinkTask(CuTaskCallbackState::Start) =&gt; {
+            <span class="macro">println!</span>(<span class="string">"Task started."</span>);
+            SimOverride::ExecuteByRuntime
+        }
+        SimStep::SourceTask(CuTaskCallbackState::Stop)
+        | SimStep::SinkTask(CuTaskCallbackState::Stop) =&gt; {
+            <span class="macro">println!</span>(<span class="string">"Task stopped."</span>);
+            SimOverride::ExecuteByRuntime
+        }
+        <span class="comment">// Default fallback for any unhandled cases
+        </span><span class="kw">_ </span>=&gt; {
+            <span class="macro">println!</span>(<span class="string">"Unhandled simulation step: {:?}"</span>, step);
+            SimOverride::ExecuteByRuntime
+        }
+    }
+};</code></pre></div>
+<p>In this example, <code>example_callback</code> is a function that matches against the current step in the simulation and
+determines if the simulation should handle it (<code>SimOverride::ExecutedBySim</code>) or defer to the runtime’s real
+implementation (<code>SimOverride::ExecuteByRuntime</code>).</p>
+<h3 id="task-simulation-with-cusimsrctask-and-cusimsinktask"><a class="doc-anchor" href="#task-simulation-with-cusimsrctask-and-cusimsinktask">§</a>Task Simulation with <code>CuSimSrcTask</code> and <code>CuSimSinkTask</code></h3>
+<p>The module provides placeholder tasks for source and sink tasks, which do not interact with real hardware but
+instead simulate the presence of it.</p>
+<ul>
+<li>
+<p><strong><code>CuSimSrcTask&lt;T&gt;</code></strong>: A placeholder for a source task that simulates a sensor or data acquisition hardware.
+This task provides the ability to simulate incoming data without requiring actual hardware initialization.</p>
+</li>
+<li>
+<p><strong><code>CuSimSinkTask&lt;T&gt;</code></strong>: A placeholder for a sink task that simulates sending data to hardware. It serves as a
+mock for hardware actuators or output devices during simulations.</p>
+</li>
+</ul>
+<h3 id="controlling-simulation-flow-simoverride-enum"><a class="doc-anchor" href="#controlling-simulation-flow-simoverride-enum">§</a>Controlling Simulation Flow: <code>SimOverride</code> Enum</h3>
+<p>The <code>SimOverride</code> enum is used to control how the simulator should proceed at each step. This allows
+for fine-grained control of task behavior in the simulation context:</p>
+<ul>
+<li><strong><code>ExecutedBySim</code></strong>: Indicates that the simulator has handled the task logic, and the real implementation
+should be skipped.</li>
+<li><strong><code>ExecuteByRuntime</code></strong>: Indicates that the real implementation should proceed as normal.</li>
+</ul>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="struct" href="struct.CuSimSinkTask.html" title="struct cu29::simulation::CuSimSinkTask">CuSim<wbr>Sink<wbr>Task</a></div><div class="desc docblock-short">This is a placeholder task for a sink task for the simulations.
+It basically does nothing in place of a real driver so it won’t try to initialize any hardware.</div></li><li><div class="item-name"><a class="struct" href="struct.CuSimSrcTask.html" title="struct cu29::simulation::CuSimSrcTask">CuSim<wbr>SrcTask</a></div><div class="desc docblock-short">This is a placeholder task for a source task for the simulations.
+It basically does nothing in place of a real driver so it won’t try to initialize any hardware.</div></li></ul><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="enum" href="enum.CuTaskCallbackState.html" title="enum cu29::simulation::CuTaskCallbackState">CuTask<wbr>Callback<wbr>State</a></div><div class="desc docblock-short">This is the state that will be passed to the simulation support to hook
+into the lifecycle of the tasks.</div></li><li><div class="item-name"><a class="enum" href="enum.SimOverride.html" title="enum cu29::simulation::SimOverride">SimOverride</a></div><div class="desc docblock-short">This is the answer the simulator can give to control the simulation flow.</div></li></ul></section></div></main></body></html>
