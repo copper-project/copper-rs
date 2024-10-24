@@ -37,6 +37,11 @@ struct Copper {
 // see the more complete example below for the runtime part.
 fn default_callback(step: SimStep) -> SimOverride {
     match step {
+        SimStep::Balpos(CuTaskCallbackState::New(config)) => {
+            println!("Balpos source created with config: {:?}", config);
+            panic!("Balpos source not implemented in simulation.");
+            SimOverride::ExecuteByRuntime
+        }
         // Don't let the real task execute process and override with our logic.
         SimStep::Balpos(_) => SimOverride::ExecutedBySim,
         SimStep::Railpos(_) => SimOverride::ExecutedBySim,
@@ -63,8 +68,12 @@ fn setup_copper(mut commands: Commands) {
         path = logger_path
     );
 
-    let mut copper_app = BalanceBotSim::new(robot_clock.clone(), copper_ctx.unified_logger.clone())
-        .expect("Failed to create runtime.");
+    let mut copper_app = BalanceBotSim::new(
+        robot_clock.clone(),
+        copper_ctx.unified_logger.clone(),
+        &mut default_callback,
+    )
+    .expect("Failed to create runtime.");
     copper_app
         .start_all_tasks(&mut default_callback)
         .expect("Failed to start all tasks.");
