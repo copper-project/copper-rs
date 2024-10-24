@@ -578,12 +578,8 @@ impl CuMonitor for CuConsoleMon {
         // Start the main UI loop
         thread::spawn(move || {
             let backend = CrosstermBackend::new(stdout());
-            enable_raw_mode()
-                .map_err(|e| CuError::new_with_cause("Could not enable console raw mode", e))
-                .expect("Could not enter raw mode: check terminal compatibility.");
-            execute!(stdout(), EnterAlternateScreen, EnableMouseCapture)
-                .map_err(|e| CuError::new_with_cause("Could not execute crossterm", e))
-                .expect("Could not enter alternateScreen: check teminal compatibilitY.");
+
+            setup_terminal();
 
             // nukes stderr into orbit as anything in the stack can corrupt the terminal
             let dev_null = File::open("/dev/null").expect("Could not get /dev/null");
@@ -592,7 +588,6 @@ impl CuMonitor for CuConsoleMon {
             unsafe {
                 dup2(dev_null_fd, 2);
             }
-
             let mut terminal =
                 Terminal::new(backend).expect("Failed to initialize terminal backend");
             let mut ui = UI::new(config_dup, taskids, task_stats_ui, error_states);
@@ -603,10 +598,8 @@ impl CuMonitor for CuConsoleMon {
                 dup2(original_stderr_fd, 2);
                 close(original_stderr_fd);
             }
-            stdout()
-                .execute(LeaveAlternateScreen)
-                .expect("Could not leave alternate screen");
-            disable_raw_mode().expect("Could not restore the terminal.");
+
+            restore_terminal();
         });
 
         Ok(())
@@ -649,14 +642,7 @@ impl CuMonitor for CuConsoleMon {
     }
 
     fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
-        disable_raw_mode()
-            .map_err(|e| CuError::new_with_cause("Could not disable console raw mode", e))?;
-        execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture).map_err(|e| {
-            CuError::new_with_cause(
-                "Could not leave alternate screen or disable mouse capture",
-                e,
-            )
-        })?;
+        restore_terminal();
 
         self.task_stats
             .lock()
@@ -683,37 +669,17 @@ fn init_error_hooks() {
     }));
 }
 
-fn restore_terminal() {
-    stdout().execute(LeaveAlternateScreen).unwrap();
-    disable_raw_mode().unwrap();
+fn setup_terminal() {
+    enable_raw_mode()
+        .map_err(|e| CuError::new_with_cause("Could not enable console raw mode", e))
+        .expect("Could not enter raw mode: check terminal compatibility.");
+    execute!(stdout(), EnterAlternateScreen, EnableMouseCapture)
+        .map_err(|e| CuError::new_with_cause("Could not execute crossterm", e))
+        .expect("Could not enter alternateScreen: check teminal compatibilitY.");
 }
 
-/// small tool to isolate a thread output
-pub fn with_redirected_output<F>(f: F) -> io::Result<()>
-where
-    F: FnOnce() -> (),
-{
-    let dev_null = File::open("/dev/null")?;
-    let dev_null_fd = dev_null.as_raw_fd();
-
-    // Save original stdout and stderr file descriptors
-    let original_stdout_fd = unsafe { dup(1) };
-    let original_stderr_fd = unsafe { dup(2) };
-
-    // Redirect stdout and stderr to /dev/null
-    unsafe {
-        dup2(dev_null_fd, 1);
-        dup2(dev_null_fd, 2);
-    }
-
-    f();
-
-    unsafe {
-        dup2(original_stdout_fd, 1);
-        dup2(original_stderr_fd, 2);
-        close(original_stdout_fd);
-        close(original_stderr_fd);
-    }
-
-    Ok(())
+fn restore_terminal() {
+    execute!(stdout(), LeaveAlternateScreen, DisableMouseCapture)
+        .expect("Could not leave alternate screen");
+    disable_raw_mode().expect("Could not restore the terminal.");
 }
