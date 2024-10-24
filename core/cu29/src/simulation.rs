@@ -14,12 +14,24 @@ where
     I: CuMsgPack<'cl>,
     O: CuMsgPack<'cl>,
 {
+    /// Callbacked when a task is created.
+    /// It gives you the opportunity to adapt the sim to the given config.
     New(Option<ComponentConfig>),
+    /// Callbacked when a task is started.
     Start,
+    /// Callbacked when a task is getting called on pre-process.
     Preprocess,
+    /// Callbacked when a task is getting called on process.
+    /// I and O are the input and output messages of the task.
+    /// if this is a source task, I will be CuMsg<()>
+    /// if this is a sink task, O will be CuMsg<()>
     Process(I, O),
+    /// Callbacked when a task is getting called on post-process.
     Postprocess,
+    /// Callbacked when a task is stopped.
     Stop,
+    // We don't hold the lifetime for the copper list backing the message so we need to
+    // hold a phantom reference to it.
     _Phantom(PhantomData<&'cl ()>),
 }
 
