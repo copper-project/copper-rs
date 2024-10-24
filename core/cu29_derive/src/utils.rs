@@ -1,5 +1,22 @@
+use convert_case::{Case, Casing};
 use std::path::PathBuf;
 use walkdir::WalkDir;
+
+/// Small tool to create a valid enum entry from an identifier.
+pub(crate) fn config_id_to_enum(id: &str) -> String {
+    let mut candidate = id
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '_' })
+        .collect::<String>();
+
+    candidate = candidate.to_case(Case::Pascal);
+
+    if candidate.chars().next().map_or(false, |c| c.is_digit(10)) {
+        candidate.insert_str(0, "_");
+    }
+
+    candidate
+}
 
 // Lifted this HORROR but it works.
 pub fn caller_crate_root() -> PathBuf {
@@ -36,4 +53,54 @@ pub fn caller_crate_root() -> PathBuf {
         }
     }
     current_dir
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::utils::config_id_to_enum;
+
+    fn is_valid_rust_identifier(input: &str) -> bool {
+        if input.is_empty() {
+            return false;
+        }
+
+        // Check if the first character is valid
+        let mut chars = input.chars();
+        if let Some(first) = chars.next() {
+            if !first.is_alphabetic() && first != '_' {
+                return false;
+            }
+        }
+
+        // Check the rest of the characters
+        if !chars.all(|c| c.is_alphanumeric() || c == '_') {
+            return false;
+        }
+
+        // Check if it's a Rust keyword (can use a set of known keywords)
+        let keywords = [
+            "as", "break", "const", "continue", "crate", "else", "enum", "extern", "false", "fn",
+            "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub", "ref",
+            "return", "self", "Self", "static", "struct", "super", "trait", "true", "type",
+            "unsafe", "use", "where", "while",
+        ];
+
+        !keywords.contains(&input)
+    }
+
+    #[test]
+    fn test_identifier_to_enum() {
+        let test_cases = ["toto", "#id", "!!something", "hey?", "é", "t"];
+
+        test_cases.iter().for_each(|input| {
+            let after = config_id_to_enum(input);
+            println!("{:?}", after);
+            assert!(
+                is_valid_rust_identifier(after.as_str()),
+                "bf {} af {}",
+                input,
+                after
+            );
+        })
+    }
 }

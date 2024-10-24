@@ -6,13 +6,16 @@ use quote::quote;
 use syn::meta::parser;
 use syn::Fields::{Named, Unnamed};
 use syn::{
-    parse_macro_input, parse_quote, parse_str, Field, ItemImpl, ItemStruct, LitStr, Type, TypeTuple,
+    parse_macro_input, parse_quote, parse_str, Field, Fields, ItemImpl, ItemStruct, LitStr, Type,
+    TypeTuple,
 };
 
+use crate::utils::config_id_to_enum;
 use cu29::config::read_configuration;
 use cu29::config::CuConfig;
 use cu29::curuntime::{compute_runtime_plan, CuExecutionLoop, CuExecutionUnit, CuTaskType};
 use format::{highlight_rust_code, rustfmt_generated_code};
+use proc_macro2::Ident;
 
 mod format;
 mod utils;
@@ -109,28 +112,83 @@ fn gen_culist_support(
     }
 }
 
-/// Adds #[copper_runtime(config = "path")] to your application struct to generate the runtime.
+fn gen_sim_support(runtime_plan: &CuExecutionLoop) -> proc_macro2::TokenStream {
+    eprintln!("[Sim: Build SimEnum]");
+    let plan_enum: Vec<proc_macro2::TokenStream> = runtime_plan
+        .steps
+        .iter()
+        .map(|unit| match unit {
+            CuExecutionUnit::Step(step) => {
+                let enum_entry_name = config_id_to_enum(step.node.get_id().as_str());
+                let enum_ident = Ident::new(&enum_entry_name, proc_macro2::Span::call_site());
+                let inputs: Vec<Type> = step
+                    .input_msg_indices_types
+                    .iter()
+                    .map(|(_, t)| parse_str::<Type>(format!("_CuMsg<{}>", t).as_str()).unwrap())
+                    .collect();
+                let output: Option<Type> = step
+                    .output_msg_index_type
+                    .as_ref()
+                    .map(|(_, t)| parse_str::<Type>(format!("_CuMsg<{}>", t).as_str()).unwrap());
+                let no_output = parse_str::<Type>("_CuMsg<()>").unwrap();
+                let output = output.as_ref().unwrap_or(&no_output);
+                quote! {
+                    #enum_ident(cu29::simulation::CuTaskCallbackState<'cl, (#(&'cl #inputs),*), &'cl mut #output>)
+                }
+            }
+            CuExecutionUnit::Loop(_) => {
+                todo!("Needs to be implemented")
+            }
+        })
+        .collect();
+    quote! {
+        pub enum SimStep<'cl> {
+            #(#plan_enum),*
+        }
+    }
+}
+
+/// Adds #[copper_runtime(config = "path", sim_mode = false/true)] to your application struct to generate the runtime.
+/// if sim_mode is ommited, it is set to false.
 /// This will add a "runtime" field to your struct and implement the "new" and "run" methods.
 #[proc_macro_attribute]
 pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     eprintln!("[entry]");
     let mut item_struct = parse_macro_input!(input as ItemStruct);
-
     let mut config_file: Option<LitStr> = None;
+    let mut sim_mode = false;
+
+    // Custom parser for the attribute arguments
     let attribute_config_parser = parser(|meta| {
         if meta.path.is_ident("config") {
             config_file = Some(meta.value()?.parse()?);
             Ok(())
+        } else if meta.path.is_ident("sim_mode") {
+            // Check if `sim_mode` has an explicit value (true/false)
+            if meta.input.peek(syn::Token![=]) {
+                meta.input.parse::<syn::Token![=]>()?;
+                let value: syn::LitBool = meta.input.parse()?;
+                sim_mode = value.value();
+                Ok(())
+            } else {
+                // If no value is provided, default to true
+                sim_mode = true;
+                Ok(())
+            }
         } else {
             Err(meta.error("unsupported property"))
         }
     });
 
     eprintln!("[parse]");
+    // Parse the provided args with the custom parser
     parse_macro_input!(args with attribute_config_parser);
+
+    // Check if the config file was provided
     let config_file = config_file
         .expect("Expected config file attribute like #[CopperRuntime(config = \"path\")]")
         .value();
+
     let copper_config = read_config(&config_file);
 
     eprintln!("[runtime plan]");
@@ -139,15 +197,47 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     eprintln!("{:?}", runtime_plan);
 
     eprintln!("[extract tasks ids & types]");
-    let (all_tasks_ids, all_tasks_types_names, all_tasks_types) =
+    let (all_tasks_ids, all_tasks_cutype, all_tasks_types_names, all_tasks_types) =
         extract_tasks_types(&copper_config);
-    eprintln!("tasks types: {:?}", all_tasks_types_names);
+
+    let all_sim_tasks_types: Vec<Type> = all_tasks_ids
+        .iter()
+        .zip(&all_tasks_cutype)
+        .zip(&all_tasks_types)
+        .map(|((task_id, cutype), stype)| match cutype {
+            CuTaskType::Source => {
+                let msg_type = copper_config
+                    .get_node_output_msg_type(task_id.as_str())
+                    .expect(
+                    format!("CuSrcTask {} should have an outgoing connection with a valid output msg type",
+                    task_id).as_str(),
+                );
+                let sim_task_name = format!("cu29::simulation::CuSimSrcTask<{}>", msg_type);
+                parse_str(sim_task_name.as_str()).expect(format!("Could not build the placeholder for simulation: {}", sim_task_name).as_str())
+            }
+            CuTaskType::Regular => stype.clone(),
+            CuTaskType::Sink => {
+                let msg_type = copper_config
+                    .get_node_input_msg_type(task_id.as_str())
+                    .expect(
+                        format!("CuSinkTask {} should have an incoming connection with a valid input msg type",
+                                task_id).as_str(),
+                    );
+                let sim_task_name = format!("cu29::simulation::CuSimSinkTask<{}>", msg_type);
+                parse_str(sim_task_name.as_str()).expect(format!("Could not build the placeholder for simulation: {}", sim_task_name).as_str())
+            },
+        })
+        .collect();
 
     eprintln!("[build task tuples]");
     // Build the tuple of all those types
     // note the extraneous , at the end is to make the tuple work even if this is only one element
     let task_types_tuple: TypeTuple = parse_quote! {
         (#(#all_tasks_types),*,)
+    };
+
+    let task_types_tuple_sim: TypeTuple = parse_quote! {
+        (#(#all_sim_tasks_types),*,)
     };
 
     eprintln!("[build monitor type]");
@@ -161,8 +251,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
     eprintln!("[build runtime field]");
     // add that to a new field
-    let runtime_field: Field = parse_quote! {
-        copper_runtime: _CuRuntime<CuTasks, CuMsgs, #monitor_type, #DEFAULT_CLNB>
+    let runtime_field: Field = if sim_mode {
+        parse_quote! {
+            copper_runtime: _CuRuntime<CuSimTasks, CuMsgs, #monitor_type, #DEFAULT_CLNB>
+        }
+    } else {
+        parse_quote! {
+            copper_runtime: _CuRuntime<CuTasks, CuMsgs, #monitor_type, #DEFAULT_CLNB>
+        }
     };
 
     let name = &item_struct.ident;
@@ -175,10 +271,24 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         Unnamed(fields_unnamed) => {
             fields_unnamed.unnamed.push(runtime_field);
         }
-        _ => (),
+        Fields::Unit => {
+            panic!("This struct is a unit struct, it should have named or unnamed fields. use struct Something {{}} and not struct Something;")
+        }
     };
 
     eprintln!("[gen instances]");
+
+    let task_sim_instances_init_code = all_sim_tasks_types.iter().enumerate().map(|(index, ty)| {
+        let additional_error_info = format!(
+            "Failed to get create instance for {}, instance index {}.",
+            all_tasks_types_names[index], index
+        );
+
+        quote! {
+        <#ty>::new(all_instances_configs[#index]).map_err(|e| e.add_cause(#additional_error_info))?
+        }
+    }).collect::<Vec<_>>();
+
     // Generate the code to create instances of the nodes
     // It maps the types to their index
     let (task_instances_init_code,
@@ -190,6 +300,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         .enumerate()
         .map(|(index, ty)| {
             let task_index = int2sliceindex(index as u32);
+            let task_enum_name = config_id_to_enum(&all_tasks_ids[index]);
+            let enum_name = Ident::new(&task_enum_name, proc_macro2::Span::call_site());
             let additional_error_info = format!(
                 "Failed to get create instance for {}, instance index {}.",
                 all_tasks_types_names[index], index
@@ -198,101 +310,158 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 quote! {
                     #ty::new(all_instances_configs[#index]).map_err(|e| e.add_cause(#additional_error_info))?
                 },
-                quote! {
-                    {
-                        let task = &mut self.copper_runtime.tasks.#task_index;
-                        if let Err(error) = task.start(&self.copper_runtime.clock) {
-                            let decision = self.copper_runtime.monitor.process_error(#index, _CuTaskState::Start, &error);
-                            match decision {
-                                _Decision::Abort => {
-                                    debug!("Start: ABORT decision from monitoring. Task '{}' errored out \
-                                    during start. Aborting all the other starts.", TASKS_IDS[#index]);
-                                    return Ok(());
+                {
+                    let call_sim_callback = if sim_mode {
+                        quote!{
+                            // Ask the sim if this task should be executed or overridden by the sim.
+                            let ovr = sim_callback(SimStep::#enum_name(cu29::simulation::CuTaskCallbackState::Start));
+                            let doit = ovr == cu29::simulation::SimOverride::ExecuteByRuntime;
+                        }
+                    } else {
+                        quote!{
+                            let doit = true;  // in normal mode always execute the steps in the runtime.
+                        }
+                    };
 
-                                }
-                                _Decision::Ignore => {
-                                    debug!("Start: IGNORE decision from monitoring. Task '{}' errored out \
-                                    during start. The runtime will continue.", TASKS_IDS[#index]);
-                                }
-                                _Decision::Shutdown => {
-                                    debug!("Start: SHUTDOWN decision from monitoring. Task '{}' errored out \
-                                    during start. The runtime cannot continue.", TASKS_IDS[#index]);
-                                    return Err(_CuError::new_with_cause("Task errored out during start.", error));
+                    quote! {
+                        #call_sim_callback
+                        if doit {
+                            let task = &mut self.copper_runtime.tasks.#task_index;
+                            if let Err(error) = task.start(&self.copper_runtime.clock) {
+                                let decision = self.copper_runtime.monitor.process_error(#index, _CuTaskState::Start, &error);
+                                match decision {
+                                    _Decision::Abort => {
+                                        debug!("Start: ABORT decision from monitoring. Task '{}' errored out \
+                                        during start. Aborting all the other starts.", TASKS_IDS[#index]);
+                                        return Ok(());
+
+                                    }
+                                    _Decision::Ignore => {
+                                        debug!("Start: IGNORE decision from monitoring. Task '{}' errored out \
+                                        during start. The runtime will continue.", TASKS_IDS[#index]);
+                                    }
+                                    _Decision::Shutdown => {
+                                        debug!("Start: SHUTDOWN decision from monitoring. Task '{}' errored out \
+                                        during start. The runtime cannot continue.", TASKS_IDS[#index]);
+                                        return Err(_CuError::new_with_cause("Task errored out during start.", error));
+                                    }
                                 }
                             }
                         }
                     }
                 },
-                quote! {
-                    {
-                        let task = &mut self.copper_runtime.tasks.#task_index;
-                        if let Err(error) = task.stop(&self.copper_runtime.clock) {
-                            let decision = self.copper_runtime.monitor.process_error(#index, _CuTaskState::Stop, &error);
-                            match decision {
-                                _Decision::Abort => {
-                                    debug!("Stop: ABORT decision from monitoring. Task '{}' errored out \
+                {
+                    let call_sim_callback = if sim_mode {
+                        quote!{
+                            // Ask the sim if this task should be executed or overridden by the sim.
+                            let ovr = sim_callback(SimStep::#enum_name(cu29::simulation::CuTaskCallbackState::Stop));
+                            let doit = ovr == cu29::simulation::SimOverride::ExecuteByRuntime;
+                        }
+                    } else {
+                        quote!{
+                            let doit = true;  // in normal mode always execute the steps in the runtime.
+                        }
+                    };
+                    quote! {
+                        #call_sim_callback
+                        if doit {
+                            let task = &mut self.copper_runtime.tasks.#task_index;
+                            if let Err(error) = task.stop(&self.copper_runtime.clock) {
+                                let decision = self.copper_runtime.monitor.process_error(#index, _CuTaskState::Stop, &error);
+                                match decision {
+                                    _Decision::Abort => {
+                                        debug!("Stop: ABORT decision from monitoring. Task '{}' errored out \
                                     during stop. Aborting all the other starts.", TASKS_IDS[#index]);
-                                    return Ok(());
+                                        return Ok(());
 
-                                }
-                                _Decision::Ignore => {
-                                    debug!("Stop: IGNORE decision from monitoring. Task '{}' errored out \
+                                    }
+                                    _Decision::Ignore => {
+                                        debug!("Stop: IGNORE decision from monitoring. Task '{}' errored out \
                                     during stop. The runtime will continue.", TASKS_IDS[#index]);
-                                }
-                                _Decision::Shutdown => {
-                                    debug!("Stop: SHUTDOWN decision from monitoring. Task '{}' errored out \
+                                    }
+                                    _Decision::Shutdown => {
+                                        debug!("Stop: SHUTDOWN decision from monitoring. Task '{}' errored out \
                                     during stop. The runtime cannot continue.", TASKS_IDS[#index]);
-                                    return Err(_CuError::new_with_cause("Task errored out during stop.", error));
+                                        return Err(_CuError::new_with_cause("Task errored out during stop.", error));
+                                    }
                                 }
                             }
                         }
                     }
                 },
-                quote! {
-                    {
-                        let task = &mut self.copper_runtime.tasks.#task_index;
-                        if let Err(error) = task.preprocess(&self.copper_runtime.clock) {
-                            let decision = self.copper_runtime.monitor.process_error(#index, _CuTaskState::Preprocess, &error);
-                            match decision {
-                                _Decision::Abort => {
-                                    debug!("Preprocess: ABORT decision from monitoring. Task '{}' errored out \
-                                    during preprocess. Aborting all the other starts.", TASKS_IDS[#index]);
-                                    return Ok(());
+                {
+                    let call_sim_callback = if sim_mode {
+                        quote!{
+                            // Ask the sim if this task should be executed or overridden by the sim.
+                            let ovr = sim_callback(SimStep::#enum_name(cu29::simulation::CuTaskCallbackState::Preprocess));
+                            let doit = ovr == cu29::simulation::SimOverride::ExecuteByRuntime;
+                        }
+                    } else {
+                        quote!{
+                            let doit = true;  // in normal mode always execute the steps in the runtime.
+                        }
+                    };
+                    quote! {
+                        #call_sim_callback
+                        if doit {
+                            let task = &mut self.copper_runtime.tasks.#task_index;
+                            if let Err(error) = task.preprocess(&self.copper_runtime.clock) {
+                                let decision = self.copper_runtime.monitor.process_error(#index, _CuTaskState::Preprocess, &error);
+                                match decision {
+                                    _Decision::Abort => {
+                                        debug!("Preprocess: ABORT decision from monitoring. Task '{}' errored out \
+                                        during preprocess. Aborting all the other starts.", TASKS_IDS[#index]);
+                                        return Ok(());
 
-                                }
-                                _Decision::Ignore => {
-                                    debug!("Preprocess: IGNORE decision from monitoring. Task '{}' errored out \
-                                    during preprocess. The runtime will continue.", TASKS_IDS[#index]);
-                                }
-                                _Decision::Shutdown => {
-                                    debug!("Preprocess: SHUTDOWN decision from monitoring. Task '{}' errored out \
-                                    during preprocess. The runtime cannot continue.", TASKS_IDS[#index]);
-                                    return Err(_CuError::new_with_cause("Task errored out during preprocess.", error));
+                                    }
+                                    _Decision::Ignore => {
+                                        debug!("Preprocess: IGNORE decision from monitoring. Task '{}' errored out \
+                                        during preprocess. The runtime will continue.", TASKS_IDS[#index]);
+                                    }
+                                    _Decision::Shutdown => {
+                                        debug!("Preprocess: SHUTDOWN decision from monitoring. Task '{}' errored out \
+                                        during preprocess. The runtime cannot continue.", TASKS_IDS[#index]);
+                                        return Err(_CuError::new_with_cause("Task errored out during preprocess.", error));
+                                    }
                                 }
                             }
                         }
                     }
                 },
-                quote! {
-                    {
-                        let task = &mut self.copper_runtime.tasks.#task_index;
-                        if let Err(error) = task.postprocess(&self.copper_runtime.clock) {
-                            let decision = self.copper_runtime.monitor.process_error(#index, _CuTaskState::Postprocess, &error);
-                            match decision {
-                                _Decision::Abort => {
-                                    debug!("Postprocess: ABORT decision from monitoring. Task '{}' errored out \
-                                    during postprocess. Aborting all the other starts.", TASKS_IDS[#index]);
-                                    return Ok(());
+                {
+                    let call_sim_callback = if sim_mode {
+                        quote!{
+                            // Ask the sim if this task should be executed or overridden by the sim.
+                            let ovr = sim_callback(SimStep::#enum_name(cu29::simulation::CuTaskCallbackState::Postprocess));
+                            let doit = ovr == cu29::simulation::SimOverride::ExecuteByRuntime;
+                        }
+                    } else {
+                        quote!{
+                            let doit = true;  // in normal mode always execute the steps in the runtime.
+                        }
+                    };
+                    quote! {
+                        #call_sim_callback
+                        if doit {
+                            let task = &mut self.copper_runtime.tasks.#task_index;
+                            if let Err(error) = task.postprocess(&self.copper_runtime.clock) {
+                                let decision = self.copper_runtime.monitor.process_error(#index, _CuTaskState::Postprocess, &error);
+                                match decision {
+                                    _Decision::Abort => {
+                                        debug!("Postprocess: ABORT decision from monitoring. Task '{}' errored out \
+                                        during postprocess. Aborting all the other starts.", TASKS_IDS[#index]);
+                                        return Ok(());
 
-                                }
-                                _Decision::Ignore => {
-                                    debug!("Postprocess: IGNORE decision from monitoring. Task '{}' errored out \
-                                    during postprocess. The runtime will continue.", TASKS_IDS[#index]);
-                                }
-                                _Decision::Shutdown => {
-                                    debug!("Postprocess: SHUTDOWN decision from monitoring. Task '{}' errored out \
-                                    during postprocess. The runtime cannot continue.", TASKS_IDS[#index]);
-                                    return Err(_CuError::new_with_cause("Task errored out during postprocess.", error));
+                                    }
+                                    _Decision::Ignore => {
+                                        debug!("Postprocess: IGNORE decision from monitoring. Task '{}' errored out \
+                                        during postprocess. The runtime will continue.", TASKS_IDS[#index]);
+                                    }
+                                    _Decision::Shutdown => {
+                                        debug!("Postprocess: SHUTDOWN decision from monitoring. Task '{}' errored out \
+                                        during postprocess. The runtime cannot continue.", TASKS_IDS[#index]);
+                                        return Err(_CuError::new_with_cause("Task errored out during postprocess.", error));
+                                    }
                                 }
                             }
                         }
@@ -335,37 +504,61 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     let tid = step.node_id as usize;
                     taskid_call_order.push(tid);
 
+                    let task_enum_name = config_id_to_enum(&all_tasks_ids[tid]);
+                    let enum_name = Ident::new(&task_enum_name, proc_macro2::Span::call_site());
+
                     let process_call = match step.task_type {
                         CuTaskType::Source => {
                             if let Some((index, _)) = &step.output_msg_index_type {
+
                                 let output_culist_index = int2sliceindex(*index);
+                                let call_sim_callback = if sim_mode {
+                                    quote! {
+                                        let doit = {
+                                            let ovr = sim_callback(SimStep::#enum_name(cu29::simulation::CuTaskCallbackState::Process((), cumsg_output)));
+                                            ovr == cu29::simulation::SimOverride::ExecuteByRuntime
+                                        };
+                                     }
+                                } else {
+                                    quote! {
+                                        let  doit = true;  // in normal mode always execute the steps in the runtime.
+                                   }
+                                };
+
                                 quote! {
                                     {
                                         #comment_tokens
-                                        let cumsg_output = &mut msgs.#output_culist_index;
-                                        cumsg_output.metadata.before_process = self.copper_runtime.clock.now().into();
-                                        let maybe_error = #task_instance.process(&self.copper_runtime.clock, cumsg_output);
-                                        cumsg_output.metadata.after_process = self.copper_runtime.clock.now().into();
-                                        if let Err(error) = maybe_error {
-                                            let decision = self.copper_runtime.monitor.process_error(#tid, _CuTaskState::Process, &error);
-                                            match decision {
-                                                _Decision::Abort => {
-                                                    debug!("Process: ABORT decision from monitoring. Task '{}' errored out \
-                                                    during process. Skipping the processing of CL {}.", TASKS_IDS[#tid], id);
-                                                    self.copper_runtime.monitor.process_copperlist(&collect_metadata(&culist))?;
-                                                    self.copper_runtime.end_of_processing(id);
-                                                    return Ok(()); // this returns early from the one iteration call.
+                                        {
+                                            let cumsg_output = &mut msgs.#output_culist_index;
+                                            #call_sim_callback
+                                            cumsg_output.metadata.before_process = self.copper_runtime.clock.now().into();
+                                            let maybe_error = if doit {
+                                                #task_instance.process(&self.copper_runtime.clock, cumsg_output)
+                                            } else {
+                                                Ok(())
+                                            };
+                                            cumsg_output.metadata.after_process = self.copper_runtime.clock.now().into();
+                                            if let Err(error) = maybe_error {
+                                                let decision = self.copper_runtime.monitor.process_error(#tid, _CuTaskState::Process, &error);
+                                                match decision {
+                                                    _Decision::Abort => {
+                                                        debug!("Process: ABORT decision from monitoring. Task '{}' errored out \
+                                                        during process. Skipping the processing of CL {}.", TASKS_IDS[#tid], id);
+                                                        self.copper_runtime.monitor.process_copperlist(&collect_metadata(&culist))?;
+                                                        self.copper_runtime.end_of_processing(id);
+                                                        return Ok(()); // this returns early from the one iteration call.
 
-                                                }
-                                                _Decision::Ignore => {
-                                                    debug!("Process: IGNORE decision from monitoring. Task '{}' errored out \
-                                                    during process. The runtime will continue with a forced empty message.", TASKS_IDS[#tid]);
-                                                    cumsg_output.clear_payload();
-                                                }
-                                                _Decision::Shutdown => {
-                                                    debug!("Process: SHUTDOWN decision from monitoring. Task '{}' errored out \
-                                                    during process. The runtime cannot continue.", TASKS_IDS[#tid]);
-                                                    return Err(_CuError::new_with_cause("Task errored out during process.", error));
+                                                    }
+                                                    _Decision::Ignore => {
+                                                        debug!("Process: IGNORE decision from monitoring. Task '{}' errored out \
+                                                        during process. The runtime will continue with a forced empty message.", TASKS_IDS[#tid]);
+                                                        cumsg_output.clear_payload();
+                                                    }
+                                                    _Decision::Shutdown => {
+                                                        debug!("Process: SHUTDOWN decision from monitoring. Task '{}' errored out \
+                                                        during process. The runtime cannot continue.", TASKS_IDS[#tid]);
+                                                        return Err(_CuError::new_with_cause("Task errored out during process.", error));
+                                                    }
                                                 }
                                             }
                                         }
@@ -380,14 +573,27 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             let indices = step.input_msg_indices_types.iter().map(|(index, _)| int2sliceindex(*index));
                             if let Some((output_index, _)) = &step.output_msg_index_type {
                                 let output_culist_index = int2sliceindex(*output_index);
+                                let call_sim_callback = if sim_mode {
+                                    quote! {
+                                        let doit = {
+                                            let ovr = sim_callback(SimStep::#enum_name(cu29::simulation::CuTaskCallbackState::Process(cumsg_input, cumsg_output)));
+                                            ovr == cu29::simulation::SimOverride::ExecuteByRuntime
+                                        };
+                                     }
+                                } else {
+                                    quote! {
+                                        let doit = true;  // in normal mode always execute the steps in the runtime.
+                                   }
+                                };
                                 quote! {
                                     {
                                         #comment_tokens
                                         let cumsg_input = (#(&msgs.#indices),*);
                                         // This is the virtual output for the sink
                                         let cumsg_output = &mut msgs.#output_culist_index;
+                                        #call_sim_callback
                                         cumsg_output.metadata.before_process = self.copper_runtime.clock.now().into();
-                                        let maybe_error = #task_instance.process(&self.copper_runtime.clock, cumsg_input);
+                                        let maybe_error = if doit {#task_instance.process(&self.copper_runtime.clock, cumsg_input)} else {Ok(())};
                                         cumsg_output.metadata.after_process = self.copper_runtime.clock.now().into();
                                         if let Err(error) = maybe_error {
                                             let decision = self.copper_runtime.monitor.process_error(#tid, _CuTaskState::Process, &error);
@@ -422,13 +628,26 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             let indices = step.input_msg_indices_types.iter().map(|(index, _)| int2sliceindex(*index));
                             if let Some((output_index, _)) = &step.output_msg_index_type {
                                 let output_culist_index = int2sliceindex(*output_index);
+                                let call_sim_callback = if sim_mode {
+                                    quote! {
+                                        let doit = {
+                                            let ovr = sim_callback(SimStep::#enum_name(cu29::simulation::CuTaskCallbackState::Process(cumsg_input, cumsg_output)));
+                                            ovr == cu29::simulation::SimOverride::ExecuteByRuntime
+                                        };
+                                     }
+                                } else {
+                                    quote! {
+                                        let doit = true;  // in normal mode always execute the steps in the runtime.
+                                   }
+                                };
                                 quote! {
                                     {
                                         #comment_tokens
                                         let cumsg_input = (#(&msgs.#indices),*);
                                         let cumsg_output = &mut msgs.#output_culist_index;
+                                        #call_sim_callback
                                         cumsg_output.metadata.before_process = self.copper_runtime.clock.now().into();
-                                        let maybe_error = #task_instance.process(&self.copper_runtime.clock, cumsg_input, cumsg_output);
+                                        let maybe_error = if doit {#task_instance.process(&self.copper_runtime.clock, cumsg_input, cumsg_output)} else {Ok(())};
                                         cumsg_output.metadata.after_process = self.copper_runtime.clock.now().into();
                                         if let Err(error) = maybe_error {
                                             let decision = self.copper_runtime.monitor.process_error(#tid, _CuTaskState::Process, &error);
@@ -472,20 +691,87 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let culist_support: proc_macro2::TokenStream =
         gen_culist_support(&runtime_plan, &taskid_call_order);
 
+    eprintln!("[build the sim support]");
+    let sim_support: proc_macro2::TokenStream = gen_sim_support(&runtime_plan);
+
+    let (new, run_one_iteration, start_all_tasks, stop_all_tasks, run) = if sim_mode {
+        (
+            quote! {
+                pub fn new<F>(clock:_RobotClock, unified_logger: _Arc<_Mutex<_UnifiedLoggerWrite>>, sim_callback: &mut F) -> _CuResult<Self>
+                where F: FnMut(SimStep) -> cu29::simulation::SimOverride,
+            },
+            quote! {
+                pub fn run_one_iteration<F>(&mut self, sim_callback: &mut F) -> _CuResult<()>
+                where F: FnMut(SimStep) -> cu29::simulation::SimOverride,
+            },
+            quote! {
+                pub fn start_all_tasks<F>(&mut self, sim_callback: &mut F) -> _CuResult<()>
+                where F: FnMut(SimStep) -> cu29::simulation::SimOverride,
+            },
+            quote! {
+                pub fn stop_all_tasks<F>(&mut self, sim_callback: &mut F) -> _CuResult<()>
+                where F: FnMut(SimStep) -> cu29::simulation::SimOverride,
+            },
+            quote! {
+                pub fn run<F>(&mut self, sim_callback: &mut F) -> _CuResult<()>
+                where F: FnMut(SimStep) -> cu29::simulation::SimOverride,
+            },
+        )
+    } else {
+        (
+            quote! {
+                pub fn new(clock:_RobotClock, unified_logger: _Arc<_Mutex<_UnifiedLoggerWrite>>) -> _CuResult<Self>
+            },
+            quote! {
+                pub fn run_one_iteration(&mut self) -> _CuResult<()>
+            },
+            quote! {
+                pub fn start_all_tasks(&mut self) -> _CuResult<()>
+            },
+            quote! {
+                pub fn stop_all_tasks(&mut self) -> _CuResult<()>
+            },
+            quote! {
+                pub fn run(&mut self) -> _CuResult<()>
+            },
+        )
+    };
+
+    let sim_callback_arg = if sim_mode {
+        Some(quote!(sim_callback))
+    } else {
+        None
+    };
+
+    let sim_callback_on_new_calls = all_tasks_ids.iter().enumerate().map(|(i, id)| {
+        let enum_name = config_id_to_enum(&id);
+        let enum_ident = Ident::new(&enum_name, proc_macro2::Span::call_site());
+        quote! {
+            // the answer is ignored, we have to instantiate the tasks anyway.
+            sim_callback(SimStep::#enum_ident(cu29::simulation::CuTaskCallbackState::New(all_instances_configs[#i].cloned())));
+        }
+    });
+
+    let sim_callback_on_new = if sim_mode {
+        Some(quote! {
+            let all_instances_configs: Vec<Option<&_ComponentConfig>> = config
+                .get_all_nodes()
+                .iter()
+                .map(|(_, node)| node.get_instance_config())
+                .collect();
+            #(#sim_callback_on_new_calls)*
+        })
+    } else {
+        None
+    };
+
     eprintln!("[build the run method]");
     let run_method = quote! {
 
-        pub fn start_all_tasks(&mut self) -> _CuResult<()> {
-            self.copper_runtime.monitor.start(&self.copper_runtime.clock)?;
-            #(#start_calls)*
-            Ok(())
-        }
-
-        #[inline]
-        pub fn run_one_iteration(&mut self) -> _CuResult<()> {
+        #run_one_iteration {
             #(#preprocess_calls)*
             {
-                let mut culist = &mut self.copper_runtime.copper_lists_manager.create().expect("Ran out of space for copper lists"); // FIXME: error handling.
+                let mut culist: &mut _ = &mut self.copper_runtime.copper_lists_manager.create().expect("Ran out of space for copper lists"); // FIXME: error handling.
                 let id = culist.id;
                 culist.change_state(cu29::copperlist::CopperListState::Processing);
                 {
@@ -508,23 +794,72 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
            Ok(())
         }
 
-        pub fn stop_all_tasks(&mut self) -> _CuResult<()> {
+        #start_all_tasks {
+            #(#start_calls)*
+            self.copper_runtime.monitor.start(&self.copper_runtime.clock)?;
+            Ok(())
+        }
+
+        #stop_all_tasks {
             #(#stop_calls)*
             self.copper_runtime.monitor.stop(&self.copper_runtime.clock)?;
             Ok(())
         }
 
-        pub fn run(&mut self) -> _CuResult<()> {
-            self.start_all_tasks()?;
+        #run {
+            self.start_all_tasks(#sim_callback_arg)?;
             let error = loop {
-                let error = self.run_one_iteration();
+                let error = self.run_one_iteration(#sim_callback_arg);
                 if error.is_err() {
                     break error;
                 }
             };
             debug!("A task errored out: {}", &error);
-            self.stop_all_tasks()?;
+            self.stop_all_tasks(#sim_callback_arg)?;
             error
+        }
+    };
+
+    let tasks_type = if sim_mode {
+        quote!(CuSimTasks)
+    } else {
+        quote!(CuTasks)
+    };
+
+    let tasks_instanciator = if sim_mode {
+        quote!(tasks_instanciator_sim)
+    } else {
+        quote!(tasks_instanciator)
+    };
+
+    let runtime_impl = quote! {
+        impl #name {
+
+            #new {
+                let config = _read_configuration(#config_file)?;
+
+                let copperlist_stream = _stream_write::<CuList>(
+                    unified_logger.clone(),
+                    _UnifiedLogType::CopperList,
+                    60 * 1024, // FIXME: make this a config
+                );
+
+                let runtime = Ok(#name {
+                    copper_runtime: _CuRuntime::<#tasks_type, CuMsgs, #monitor_type, #DEFAULT_CLNB>::new(
+                        clock,
+                        &config,
+                        #tasks_instanciator,
+                        monitor_instanciator,
+                        copperlist_stream
+                    )?,
+                });
+
+                #sim_callback_on_new
+
+                runtime
+            }
+
+            #run_method
         }
     };
 
@@ -570,13 +905,21 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         // CuList is a CopperList with the list of all the messages types as msgs.
         pub type CuTasks = #task_types_tuple;
 
+        // This is the variation with stubs for the sources and sinks in simulation mode.
+        pub type CuSimTasks = #task_types_tuple_sim;
+
         const TASKS_IDS: &'static [&'static str] = &[#( #all_tasks_ids ),*];
 
         #culist_support
 
+        #sim_support
 
         fn tasks_instanciator(all_instances_configs: Vec<Option<&_ComponentConfig>>) -> _CuResult<CuTasks> {
             Ok(( #(#task_instances_init_code),*, ))
+        }
+
+        fn tasks_instanciator_sim(all_instances_configs: Vec<Option<&_ComponentConfig>>) -> _CuResult<CuSimTasks> {
+            Ok(( #(#task_sim_instances_init_code),*, ))
         }
 
         fn monitor_instanciator(monitor_config: Option<&_ComponentConfig>) -> #monitor_type {
@@ -585,24 +928,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         pub #item_struct
 
-        impl #name {
+        #runtime_impl
 
-            pub fn new(clock:_RobotClock, unified_logger: _Arc<_Mutex<_UnifiedLoggerWrite>>) -> _CuResult<Self> {
-                let config = _read_configuration(#config_file)?;
-
-                let copperlist_stream = _stream_write::<CuList>(
-                    unified_logger.clone(),
-                    _UnifiedLogType::CopperList,
-                    60 * 1024, // FIXME: make this a config
-                );
-
-                Ok(#name {
-                    copper_runtime: _CuRuntime::<CuTasks, CuMsgs, #monitor_type, #DEFAULT_CLNB>::new(clock, &config, tasks_instanciator, monitor_instanciator, copperlist_stream)?
-                })
-            }
-
-            #run_method
-        }
     };
     let tokens: TokenStream = result.into();
 
@@ -629,19 +956,26 @@ fn read_config(config_file: &String) -> CuConfig {
 }
 
 /// Extract all the tasks types in their index order and their ids.
-fn extract_tasks_types(copper_config: &CuConfig) -> (Vec<String>, Vec<String>, Vec<Type>) {
-    let all_nodes = copper_config.get_all_nodes();
+fn extract_tasks_types(
+    copper_config: &CuConfig,
+) -> (Vec<String>, Vec<CuTaskType>, Vec<String>, Vec<Type>) {
+    let all_id_nodes = copper_config.get_all_nodes();
 
     // Get all the tasks Ids
-    let all_tasks_ids: Vec<String> = all_nodes
+    let all_tasks_ids: Vec<String> = all_id_nodes
         .iter()
-        .map(|node_config| node_config.get_id().to_string())
+        .map(|(_, node)| node.get_id().to_string())
+        .collect();
+
+    let all_task_cutype: Vec<CuTaskType> = all_id_nodes
+        .iter()
+        .map(|(id, _)| cu29::curuntime::find_task_type_for_id(&copper_config.graph, (*id).into()))
         .collect();
 
     // Collect all the type names used by our configs.
-    let all_types_names: Vec<String> = all_nodes
+    let all_types_names: Vec<String> = all_id_nodes
         .iter()
-        .map(|node_config| node_config.get_type().to_string())
+        .map(|(_, node)| node.get_type().to_string())
         .collect();
 
     // Transform them as Rust types
@@ -652,7 +986,7 @@ fn extract_tasks_types(copper_config: &CuConfig) -> (Vec<String>, Vec<String>, V
                 .unwrap_or_else(|_| panic!("Could not transform {} into a Task Rust type.", name))
         })
         .collect();
-    (all_tasks_ids, all_types_names, all_types)
+    (all_tasks_ids, all_task_cutype, all_types_names, all_types)
 }
 
 fn extract_msg_types(runtime_plan: &CuExecutionLoop) -> Vec<Type> {

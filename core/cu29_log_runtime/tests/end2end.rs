@@ -8,7 +8,7 @@ fn log_derive_end2end() {
     let tmp_dir = TempDir::new("teststructlog").expect("Failed to create temp dir");
     let log_path = tmp_dir.path().join("teststructlog.copper");
 
-    let _ = basic_copper_setup(&log_path, None, true).expect("Failed to setup logger.");
+    let _ = basic_copper_setup(&log_path, None, true, None).expect("Failed to setup logger.");
     debug!("Logger created at {}.", log_path);
 
     #[derive(Serialize)]

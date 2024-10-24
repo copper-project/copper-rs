@@ -17,12 +17,12 @@ use std::fmt;
 use std::fmt::{Display, Formatter};
 
 // Everything that is stateful in copper for zero copy constraints need to be restricted to this trait.
-pub trait CuMsgPayload: Default + Encode + Decode + Sized {}
+pub trait CuMsgPayload: Default + Clone + Encode + Decode + Sized {}
 
 pub trait CuMsgPack<'cl> {}
 
 // Also anything that follows this contract can be a payload (blanket implementation)
-impl<T: Default + Encode + Decode + Sized> CuMsgPayload for T {}
+impl<T: Default + Clone + Encode + Decode + Sized> CuMsgPayload for T {}
 
 macro_rules! impl_cu_msg_pack {
     ($(($($ty:ident),*)),*) => {
@@ -69,7 +69,7 @@ macro_rules! output_msg {
 // which is the maximum size for inline allocation (no heap)
 const COMPACT_STRING_CAPACITY: usize = size_of::<String>();
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CuCompactString(pub CompactString);
 
 impl Encode for CuCompactString {
@@ -94,7 +94,7 @@ impl<'de> BorrowDecode<'de> for CuCompactString {
 }
 
 /// CuMsgMetadata is a structure that contains metadata common to all CuMsgs.
-#[derive(Debug, bincode::Encode, bincode::Decode, Serialize, Deserialize)]
+#[derive(Debug, Clone, bincode::Encode, bincode::Decode, Serialize, Deserialize)]
 pub struct CuMsgMetadata {
     /// The time before the process method is called.
     pub before_process: OptionCuTime,
@@ -124,7 +124,7 @@ impl Display for CuMsgMetadata {
 }
 
 /// CuMsg is the envelope holding the msg payload and the metadata between tasks.
-#[derive(Debug, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, bincode::Encode, bincode::Decode)]
 pub struct CuMsg<T>
 where
     T: CuMsgPayload,

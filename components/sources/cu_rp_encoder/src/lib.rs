@@ -19,7 +19,7 @@ lazy_static! {
     static ref GPIO: Gpio = Gpio::new().expect("Could not create GPIO bindings");
 }
 
-#[derive(Default, Debug, Encode, Decode, Serialize, Deserialize)]
+#[derive(Default, Clone, Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct EncoderPayload {
     pub ticks: i32,
 }

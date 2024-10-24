@@ -52,7 +52,7 @@ impl<CT, P: CopperListTuple + 'static, M: CuMonitor, const NBCL: usize> CuRuntim
         let all_instances_configs: Vec<Option<&ComponentConfig>> = config
             .get_all_nodes()
             .iter()
-            .map(|node_config| node_config.get_instance_config())
+            .map(|(_, node)| node.get_instance_config())
             .collect();
         let tasks = tasks_instanciator(all_instances_configs)?;
 
@@ -204,7 +204,10 @@ fn find_output_index_type_from_nodeid(
     None
 }
 
-fn find_task_type_for_id(graph: &StableDiGraph<Node, Cnx, NodeId>, node_id: NodeId) -> CuTaskType {
+pub fn find_task_type_for_id(
+    graph: &StableDiGraph<Node, Cnx, NodeId>,
+    node_id: NodeId,
+) -> CuTaskType {
     if graph.neighbors_directed(node_id.into(), Incoming).count() == 0 {
         CuTaskType::Source
     } else if graph.neighbors_directed(node_id.into(), Outgoing).count() == 0 {
