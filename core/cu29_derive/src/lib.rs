@@ -189,15 +189,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         .expect("Expected config file attribute like #[CopperRuntime(config = \"path\")]")
         .value();
 
-    // Only insert the lifetime if sim mode is enabled
-    // if sim_mode {
-    //     let cl_lifetime = Lifetime::new("'cl", item_struct.struct_token.span);
-    //     item_struct
-    //         .generics
-    //         .params
-    //         .insert(0, GenericParam::Lifetime(LifetimeParam::new(cl_lifetime)));
-    // }
-
     let copper_config = read_config(&config_file);
 
     eprintln!("[runtime plan]");
@@ -703,8 +694,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     eprintln!("[build the sim support]");
     let sim_support: proc_macro2::TokenStream = gen_sim_support(&runtime_plan);
 
-    let (run_one_iteration, start_all_tasks, stop_all_tasks, run) = if sim_mode {
+    let (new, run_one_iteration, start_all_tasks, stop_all_tasks, run) = if sim_mode {
         (
+            quote! {
+                pub fn new<F>(clock:_RobotClock, unified_logger: _Arc<_Mutex<_UnifiedLoggerWrite>>, sim_callback: &mut F) -> _CuResult<Self>
+                where F: FnMut(SimStep) -> cu29::simulation::SimOverride,
+            },
             quote! {
                 pub fn run_one_iteration<F>(&mut self, sim_callback: &mut F) -> _CuResult<()>
                 where F: FnMut(SimStep) -> cu29::simulation::SimOverride,
@@ -724,6 +719,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         )
     } else {
         (
+            quote! {
+                pub fn new(clock:_RobotClock, unified_logger: _Arc<_Mutex<_UnifiedLoggerWrite>>) -> _CuResult<Self>
+            },
             quote! {
                 pub fn run_one_iteration(&mut self) -> _CuResult<()>
             },
@@ -750,7 +748,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let enum_ident = Ident::new(&enum_name, proc_macro2::Span::call_site());
         quote! {
             // the answer is ignored, we have to instantiate the tasks anyway.
-            sim_callback(SimStep::#enum_ident(cu29::simulation::CuTaskCallbackState::New(all_instances_configs[#i])));
+            sim_callback(SimStep::#enum_ident(cu29::simulation::CuTaskCallbackState::New(all_instances_configs[#i].cloned())));
         }
     });
 
@@ -837,7 +835,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let runtime_impl = quote! {
         impl #name {
 
-            pub fn new(clock:_RobotClock, unified_logger: _Arc<_Mutex<_UnifiedLoggerWrite>>, #sim_callback_arg) -> _CuResult<Self> {
+            #new {
                 let config = _read_configuration(#config_file)?;
 
                 let copperlist_stream = _stream_write::<CuList>(
