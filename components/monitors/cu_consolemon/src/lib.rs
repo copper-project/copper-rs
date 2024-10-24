@@ -8,6 +8,7 @@ use cu29::config::{ComponentConfig, CuConfig, Node};
 use cu29::cutask::CuMsgMetadata;
 use cu29::monitoring::{CuDurationStatistics, CuMonitor, CuTaskState, Decision};
 use cu29::{read_configuration, CuError, CuResult};
+use libc::{close, dup, dup2};
 use ratatui::backend::CrosstermBackend;
 use ratatui::buffer::Buffer;
 use ratatui::crossterm::event::{DisableMouseCapture, EnableMouseCapture, Event, KeyCode};
@@ -24,8 +25,10 @@ use ratatui::text::{Line, Text};
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, StatefulWidget, Table};
 use ratatui::{Frame, Terminal};
 use std::fmt::{Display, Formatter};
+use std::fs::File;
 use std::io::stdout;
 use std::marker::PhantomData;
+use std::os::fd::AsRawFd;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -529,8 +532,6 @@ impl UI {
                 }
             }
         }
-        restore_terminal();
-        println!("Terminal restored.");
         Ok(())
     }
 }
@@ -567,15 +568,6 @@ impl CuMonitor for CuConsoleMon {
     }
 
     fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
-        enable_raw_mode()
-            .map_err(|e| CuError::new_with_cause("Could not enable console raw mode", e))?;
-        execute!(stdout(), EnterAlternateScreen, EnableMouseCapture)
-            .map_err(|e| CuError::new_with_cause("Could not execute crossterm", e))?;
-
-        let backend = CrosstermBackend::new(stdout());
-        let mut terminal = Terminal::new(backend)
-            .map_err(|e| CuError::new_with_cause("Failed to initialize terminal backend", e))?;
-
         let config_dup = self.config.clone();
         let taskids = self.taskids;
 
@@ -585,9 +577,29 @@ impl CuMonitor for CuConsoleMon {
 
         // Start the main UI loop
         thread::spawn(move || {
+            let backend = CrosstermBackend::new(stdout());
+
+            setup_terminal();
+
+            // nukes stderr into orbit as anything in the stack can corrupt the terminal
+            let dev_null = File::open("/dev/null").expect("Could not get /dev/null");
+            let dev_null_fd = dev_null.as_raw_fd();
+            let original_stderr_fd = unsafe { dup(libc::STDERR_FILENO) };
+            unsafe {
+                dup2(dev_null_fd, libc::STDERR_FILENO);
+            }
+            let mut terminal =
+                Terminal::new(backend).expect("Failed to initialize terminal backend");
             let mut ui = UI::new(config_dup, taskids, task_stats_ui, error_states);
             ui.run_app(&mut terminal).expect("Failed to run app");
             quitting.store(true, Ordering::SeqCst);
+            // restoring the terminal
+            unsafe {
+                dup2(original_stderr_fd, libc::STDERR_FILENO);
+                close(original_stderr_fd);
+            }
+
+            restore_terminal();
         });
 
         Ok(())
@@ -630,14 +642,7 @@ impl CuMonitor for CuConsoleMon {
     }
 
     fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
-        disable_raw_mode()
-            .map_err(|e| CuError::new_with_cause("Could not disable console raw mode", e))?;
-        execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture).map_err(|e| {
-            CuError::new_with_cause(
-                "Could not leave alternate screen or disable mouse capture",
-                e,
-            )
-        })?;
+        restore_terminal();
 
         self.task_stats
             .lock()
@@ -664,7 +669,14 @@ fn init_error_hooks() {
     }));
 }
 
+fn setup_terminal() {
+    enable_raw_mode().expect("Could not enter raw mode: check terminal compatibility.");
+    execute!(stdout(), EnterAlternateScreen, EnableMouseCapture)
+        .expect("Could not enter alternateScreen: check terminal compatibility.");
+}
+
 fn restore_terminal() {
-    disable_raw_mode().unwrap();
-    stdout().execute(LeaveAlternateScreen).unwrap();
+    execute!(stdout(), LeaveAlternateScreen, DisableMouseCapture)
+        .expect("Could not leave alternate screen");
+    disable_raw_mode().expect("Could not restore the terminal.");
 }
