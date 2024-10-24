@@ -28,10 +28,13 @@ const MARGIN: f64 = 0.001; // 1mm of slack
 
 const AXIS_LENGTH: f64 = 0.02;
 
+#[allow(dead_code)]
 const STEEL_DENSITY: f64 = 7800.0; // kg/m^3
 
+#[allow(dead_code)]
 const ROD_VOLUME: f64 = ROD_WIDTH * ROD_HEIGHT * ROD_DEPTH;
 
+#[allow(dead_code)]
 const ROD_MASS: f64 = ROD_VOLUME * STEEL_DENSITY;
 
 #[derive(Resource)]
@@ -83,9 +86,9 @@ pub fn build_world(app: &mut App) -> &mut App {
 }
 
 fn chessboard_setup(
-    mut commands: &mut Commands,
-    mut meshes: &mut ResMut<Assets<Mesh>>,
-    mut materials: &mut ResMut<Assets<StandardMaterial>>,
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
 ) {
     let plane_mesh = meshes.add(Plane3d::default().mesh().size(2.0, 2.0));
     // Chessboard Plane

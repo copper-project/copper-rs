@@ -27,7 +27,7 @@ struct CopperMockClock {
 // Encapsulate the Copper runtime as a Bevy resource
 #[derive(Resource)]
 struct Copper {
-    copper_ctx: CopperContext,
+    _copper_ctx: CopperContext,
     copper_app: BalanceBotSim,
 }
 
@@ -76,7 +76,7 @@ fn setup_copper(mut commands: Commands) {
     // save all this in resources so we can grab them later during the simulation.
     commands.insert_resource(CopperMockClock { clock: mock });
     commands.insert_resource(Copper {
-        copper_ctx,
+        _copper_ctx: copper_ctx,
         copper_app,
     });
 }
@@ -89,7 +89,7 @@ fn run_copper_callback(
         Query<&Transform, With<Rod>>,
     )>,
     physics_time: Res<Time<Physics>>,
-    mut robot_clock: ResMut<CopperMockClock>,
+    robot_clock: ResMut<CopperMockClock>,
     mut copper_ctx: ResMut<Copper>,
 ) {
     // Sync the copper clock to the simulated physics clock.
