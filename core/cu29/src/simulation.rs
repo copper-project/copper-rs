@@ -48,19 +48,15 @@ pub enum SimOverride {
 /// This is a placeholder task for a source task for the simulations.
 /// It basically does nothing in place of a real driver so it won't try to initialize any hardware.
 pub struct CuSimSrcTask<T> {
-    pub config: Option<ComponentConfig>,
     boo: PhantomData<T>,
 }
 
 impl<T> CuTaskLifecycle for CuSimSrcTask<T> {
-    fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {
-        Ok(Self {
-            config: config.and_then(|c: &ComponentConfig| Some(c.clone())),
-            boo: PhantomData,
-        })
+        Ok(Self { boo: PhantomData })
     }
 }
 
@@ -77,19 +73,15 @@ impl<'cl, T: CuMsgPayload + 'cl> CuSrcTask<'cl> for CuSimSrcTask<T> {
 /// This is a placeholder task for a sink task for the simulations.
 /// It basically does nothing in place of a real driver so it won't try to initialize any hardware.
 pub struct CuSimSinkTask<T> {
-    pub config: Option<ComponentConfig>,
     boo: PhantomData<T>,
 }
 
 impl<T> CuTaskLifecycle for CuSimSinkTask<T> {
-    fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {
-        Ok(Self {
-            config: config.and_then(|c: &ComponentConfig| Some(c.clone())),
-            boo: PhantomData,
-        })
+        Ok(Self { boo: PhantomData })
     }
 }
 impl<T> Freezable for CuSimSinkTask<T> {}
