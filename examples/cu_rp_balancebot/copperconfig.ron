@@ -22,7 +22,8 @@
                 "kp": 0.015, // 0.02 1 / 168 ticks = .00593
                  "kd": 0.01,
                  // "ki": 0.00005,
-                 "setpoint": 3176.0,
+                 // "setpoint": 3176.0,
+                 "setpoint": 3072.0, // the perfect sim
                  "cutoff": 170.0, // cut off if the measured value is outside of +/- 170 ticks around the setpoint
             },
         ),

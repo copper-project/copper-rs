@@ -1,14 +1,13 @@
 /target
 /.idea
-/Cargo.lock
 /cu29_export.so
 
 *.copper
+Cargo.lock
 
 # ROS stuff
 /examples/ros_caterpillar/build
 /examples/ros_caterpillar/log
 /examples/ros_caterpillar/install
 /examples/cu_rp_balancebot/cu29_log_index
-
 

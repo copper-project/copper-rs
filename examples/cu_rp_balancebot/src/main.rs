@@ -9,7 +9,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 #[copper_runtime(config = "copperconfig.ron")]
 struct BalanceBot {}
 
-const SLAB_SIZE: Option<usize> = Some(1 * 1024 * 1024 * 1024); // preallocate a lot.
+// preallocate a lot.
+const SLAB_SIZE: Option<usize> = Some(1 * 1024 * 1024 * 1024);
 
 fn main() {
     static STOP_FLAG: AtomicBool = AtomicBool::new(false);
