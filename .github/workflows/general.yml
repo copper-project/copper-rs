@@ -34,12 +34,8 @@ jobs:
 
       - name: Build
         run: |
-          if [ "${{ runner.os }}" == "Linux" ]; then
-            # A lot of the non default crates are linux specific or robot target specific.
-            cargo build --workspace
-          else
-            cargo build
-          fi
+          # For sim even robot/linux specific crate needs to at least compile.
+          cargo build --workspace
 
       - name: Run tests
         run: cargo test
