@@ -3,16 +3,18 @@ use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle, Freezable};
 use cu29::CuResult;
 use cu29::{clock, input_msg};
+
+#[cfg(feature = "mock")]
 use cu29_log_derive::debug;
 
-#[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
+#[cfg(not(feature = "mock"))]
 use {
-    copper::CuError,
+    cu29::CuError,
     lazy_static::lazy_static,
     rppal::gpio::{Gpio, Level, OutputPin},
 };
 
-#[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
+#[cfg(not(feature = "mock"))]
 lazy_static! {
     static ref GPIO: Gpio = Gpio::new().expect("Could not create GPIO bindings");
 }
@@ -22,9 +24,9 @@ lazy_static! {
 /// Gpio uses BCM pin numbering. For example: BCM GPIO 23 is tied to physical pin 16.
 #[derive(Encode, Decode)]
 pub struct RPGpio {
-    #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
+    #[cfg(not(feature = "mock"))]
     pin: OutputPin,
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(feature = "mock")]
     pin: u8,
 }
 
@@ -51,7 +53,7 @@ impl From<RPGpioPayload> for u8 {
     }
 }
 
-#[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
+#[cfg(not(feature = "mock"))]
 impl From<RPGpioPayload> for Level {
     fn from(msg: RPGpioPayload) -> Self {
         if msg.on {
@@ -79,12 +81,12 @@ impl CuTaskLifecycle for RPGpio {
         .clone()
         .into();
 
-        #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
+        #[cfg(not(feature = "mock"))]
         let pin = GPIO
             .get(pin_nb)
             .map_err(|e| CuError::new_with_cause("Could not get pin", e))?
             .into_output();
-        #[cfg(target_arch = "x86_64")]
+        #[cfg(feature = "mock")]
         let pin = pin_nb;
         Ok(Self { pin })
     }
@@ -94,9 +96,10 @@ impl<'cl> CuSinkTask<'cl> for RPGpio {
     type Input = input_msg!('cl, RPGpioPayload);
 
     fn process(&mut self, clock: &clock::RobotClock, msg: Self::Input) -> CuResult<()> {
-        #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
-        self.pin.write(msg.payload.into());
-        #[cfg(target_arch = "x86_64")]
+        #[cfg(not(feature = "mock"))]
+        self.pin.write(msg.payload().into());
+
+        #[cfg(feature = "mock")]
         debug!(
             "Would write to pin {} the value {}. Creation to Actuation: {}",
             self.pin,

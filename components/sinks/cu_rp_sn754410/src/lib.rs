@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 
 use cu29_log_derive::debug;
 use cu29_traits::CuError;
+
+#[cfg(not(feature = "mock"))]
 use rppal::pwm::{Channel, Polarity, Pwm};
 
 const PWM_FREQUENCY: f64 = 1000.0; // Frequency in Hz
@@ -18,7 +20,9 @@ pub struct SN754410 {
     current_power: f32, // retain what was the last state so we don't bang the hardware at each iteration.
     deadzone: f32,
     dryrun: bool,
+    #[cfg(not(feature = "mock"))]
     pwm0: Pwm,
+    #[cfg(not(feature = "mock"))]
     pwm1: Pwm,
     last_update: CuTime,
 }
@@ -98,14 +102,19 @@ impl CuTaskLifecycle for SN754410 {
             None => (0.0, false),
         };
 
-        let pwm0 = Pwm::with_frequency(Channel::Pwm0, PWM_FREQUENCY, 0.0, Polarity::Normal, false)
-            .map_err(|e| CuError::new_with_cause("Failed to create PWM0", e))?;
-        let pwm1 = Pwm::with_frequency(Channel::Pwm1, PWM_FREQUENCY, 0.0, Polarity::Normal, false)
-            .map_err(|e| CuError::new_with_cause("Failed to create PWM0", e))?;
+        #[cfg(not(feature = "mock"))]
+        let (pwm0, pwm1) = (
+            Pwm::with_frequency(Channel::Pwm0, PWM_FREQUENCY, 0.0, Polarity::Normal, false)
+                .map_err(|e| CuError::new_with_cause("Failed to create PWM0", e))?,
+            Pwm::with_frequency(Channel::Pwm1, PWM_FREQUENCY, 0.0, Polarity::Normal, false)
+                .map_err(|e| CuError::new_with_cause("Failed to create PWM0", e))?,
+        );
 
         Ok(Self {
             current_power: 0.0f32,
+            #[cfg(not(feature = "mock"))]
             pwm0,
+            #[cfg(not(feature = "mock"))]
             pwm1,
             last_update: CuTime::default(),
             deadzone,

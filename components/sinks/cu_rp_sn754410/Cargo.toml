@@ -18,11 +18,19 @@ cu29-log-derive = { workspace = true }
 cu29-traits = { workspace = true }
 bincode = { workspace = true }
 serde = { workspace = true }
-rppal = "0.19.0"
 
 [dev-dependencies]
 cu29-derive = { workspace = true }
 cu29-unifiedlog = { workspace = true }
 cu29-helpers = { workspace = true }
 
+[target.'cfg(not(feature = "mock"))'.dependencies]
+rppal = { version = "0.19.0", features = ["hal"] }
 
+# to avoid platforms like macos to compile the rppal dependency
+[target.'cfg(not(target_os = "linux"))'.features]
+default = ["mock"]
+
+[features]
+default = []
+mock = []
