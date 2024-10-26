@@ -9,20 +9,23 @@ use cu29::{input_msg, CuResult};
 use serde::{Deserialize, Serialize};
 
 use cu29_log_derive::debug;
+
+#[cfg(hardware)]
 use cu29_traits::CuError;
 
-#[cfg(not(feature = "mock"))]
+#[cfg(hardware)]
 use rppal::pwm::{Channel, Polarity, Pwm};
 
+#[cfg(hardware)]
 const PWM_FREQUENCY: f64 = 1000.0; // Frequency in Hz
 
 pub struct SN754410 {
     current_power: f32, // retain what was the last state so we don't bang the hardware at each iteration.
     deadzone: f32,
     dryrun: bool,
-    #[cfg(not(feature = "mock"))]
+    #[cfg(hardware)]
     pwm0: Pwm,
-    #[cfg(not(feature = "mock"))]
+    #[cfg(hardware)]
     pwm1: Pwm,
     last_update: CuTime,
 }
@@ -32,6 +35,7 @@ pub struct MotorPayload {
     pub power: f32, // -1.0 to 1.0
 }
 
+#[cfg(hardware)]
 impl SN754410 {
     #[inline]
     fn forward(&mut self, pwm: f64) -> CuResult<()> {
@@ -89,6 +93,39 @@ impl SN754410 {
     }
 }
 
+#[cfg(mock)]
+impl SN754410 {
+    #[inline]
+    fn forward(&mut self, pwm: f64) -> CuResult<()> {
+        debug!("Forwarding with power {}", pwm);
+        Ok(())
+    }
+
+    #[inline]
+    fn reverse(&mut self, pwm: f64) -> CuResult<()> {
+        debug!("Reversing with power {}", pwm);
+        Ok(())
+    }
+
+    #[inline]
+    fn stop(&mut self) -> CuResult<()> {
+        debug!("Stopping.");
+        Ok(())
+    }
+
+    #[inline]
+    fn enable_pwms(&mut self) -> CuResult<()> {
+        debug!("Enabling.");
+        Ok(())
+    }
+
+    #[inline]
+    fn disable_pwms(&mut self) -> CuResult<()> {
+        debug!("Disabling.");
+        Ok(())
+    }
+}
+
 impl CuTaskLifecycle for SN754410 {
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -102,7 +139,7 @@ impl CuTaskLifecycle for SN754410 {
             None => (0.0, false),
         };
 
-        #[cfg(not(feature = "mock"))]
+        #[cfg(hardware)]
         let (pwm0, pwm1) = (
             Pwm::with_frequency(Channel::Pwm0, PWM_FREQUENCY, 0.0, Polarity::Normal, false)
                 .map_err(|e| CuError::new_with_cause("Failed to create PWM0", e))?,
@@ -112,9 +149,9 @@ impl CuTaskLifecycle for SN754410 {
 
         Ok(Self {
             current_power: 0.0f32,
-            #[cfg(not(feature = "mock"))]
+            #[cfg(hardware)]
             pwm0,
-            #[cfg(not(feature = "mock"))]
+            #[cfg(hardware)]
             pwm1,
             last_update: CuTime::default(),
             deadzone,

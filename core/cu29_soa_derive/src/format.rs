@@ -7,6 +7,7 @@ use syntect::parsing::SyntaxSet;
 use syntect::util::{as_24_bit_terminal_escaped, LinesWithEndings};
 
 /// A utility method to ease up the debugging of the macro generated code by formatting it with rustfmt.
+#[allow(dead_code)]
 pub(crate) fn rustfmt_generated_code(code: String) -> String {
     let mut rustfmt = Command::new("rustfmt")
         .arg("--emit")
@@ -27,6 +28,7 @@ pub(crate) fn rustfmt_generated_code(code: String) -> String {
     String::from_utf8(output.stdout).expect("Output was not valid UTF-8")
 }
 
+#[allow(dead_code)]
 fn create_black_theme() -> Theme {
     let mut theme = ThemeSet::load_defaults().themes["base16-ocean.dark"].clone();
     theme.settings.background = Some(Color {
@@ -39,6 +41,7 @@ fn create_black_theme() -> Theme {
 }
 
 /// A utility method to ease up the debugging of the macro generated code by highlighting it.
+#[allow(dead_code)]
 pub(crate) fn highlight_rust_code(code: String) -> String {
     let ps = SyntaxSet::load_defaults_newlines();
     let syntax = ps.find_syntax_by_extension("rs").unwrap();

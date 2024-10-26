@@ -14,6 +14,8 @@ use crate::utils::config_id_to_enum;
 use cu29::config::read_configuration;
 use cu29::config::CuConfig;
 use cu29::curuntime::{compute_runtime_plan, CuExecutionLoop, CuExecutionUnit, CuTaskType};
+
+#[cfg(feature = "macro_debug")]
 use format::{highlight_rust_code, rustfmt_generated_code};
 use proc_macro2::Ident;
 
@@ -34,6 +36,7 @@ fn int2sliceindex(i: u32) -> syn::Index {
 #[proc_macro]
 pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
     let config = parse_macro_input!(config_path_lit as LitStr).value();
+    #[cfg(feature = "macro_debug")]
     eprintln!("[gen culist support with {:?}]", config);
     let cuconfig = read_config(&config);
     let runtime_plan: CuExecutionLoop =
@@ -71,6 +74,7 @@ fn gen_culist_support(
     runtime_plan: &CuExecutionLoop,
     taskid_call_order: &Vec<usize>,
 ) -> proc_macro2::TokenStream {
+    #[cfg(feature = "macro_debug")]
     eprintln!("[Extract msgs types]");
     let all_msgs_types_in_culist_order = extract_msg_types(runtime_plan);
 
@@ -80,13 +84,16 @@ fn gen_culist_support(
         .map(|i| syn::Index::from(*i))
         .collect();
 
+    #[cfg(feature = "macro_debug")]
     eprintln!("[build the copperlist tuple]");
     let msgs_types_tuple: TypeTuple = build_culist_tuple(&all_msgs_types_in_culist_order);
 
+    #[cfg(feature = "macro_debug")]
     eprintln!("[build the copperlist tuple bincode support]");
     let msgs_types_tuple_encode = build_culist_tuple_encode(&all_msgs_types_in_culist_order);
     let msgs_types_tuple_decode = build_culist_tuple_decode(&all_msgs_types_in_culist_order);
 
+    #[cfg(feature = "macro_debug")]
     eprintln!("[build the copperlist tuple debug support]");
     let msgs_types_tuple_debug = build_culist_tuple_debug(&all_msgs_types_in_culist_order);
 
@@ -113,6 +120,7 @@ fn gen_culist_support(
 }
 
 fn gen_sim_support(runtime_plan: &CuExecutionLoop) -> proc_macro2::TokenStream {
+    #[cfg(feature = "macro_debug")]
     eprintln!("[Sim: Build SimEnum]");
     let plan_enum: Vec<proc_macro2::TokenStream> = runtime_plan
         .steps
@@ -153,6 +161,7 @@ fn gen_sim_support(runtime_plan: &CuExecutionLoop) -> proc_macro2::TokenStream {
 /// This will add a "runtime" field to your struct and implement the "new" and "run" methods.
 #[proc_macro_attribute]
 pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
+    #[cfg(feature = "macro_debug")]
     eprintln!("[entry]");
     let mut item_struct = parse_macro_input!(input as ItemStruct);
     let mut config_file: Option<LitStr> = None;
@@ -180,6 +189,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     });
 
+    #[cfg(feature = "macro_debug")]
     eprintln!("[parse]");
     // Parse the provided args with the custom parser
     parse_macro_input!(args with attribute_config_parser);
@@ -191,11 +201,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let copper_config = read_config(&config_file);
 
+    #[cfg(feature = "macro_debug")]
     eprintln!("[runtime plan]");
     let runtime_plan: CuExecutionLoop =
         compute_runtime_plan(&copper_config).expect("Could not compute runtime plan");
+    #[cfg(feature = "macro_debug")]
     eprintln!("{:?}", runtime_plan);
 
+    #[cfg(feature = "macro_debug")]
     eprintln!("[extract tasks ids & types]");
     let (all_tasks_ids, all_tasks_cutype, all_tasks_types_names, all_tasks_types) =
         extract_tasks_types(&copper_config);
@@ -229,6 +242,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         })
         .collect();
 
+    #[cfg(feature = "macro_debug")]
     eprintln!("[build task tuples]");
     // Build the tuple of all those types
     // note the extraneous , at the end is to make the tuple work even if this is only one element
@@ -240,6 +254,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         (#(#all_sim_tasks_types),*,)
     };
 
+    #[cfg(feature = "macro_debug")]
     eprintln!("[build monitor type]");
     let monitor_type = if let Some(monitor_config) = copper_config.get_monitor_config() {
         let monitor_type = parse_str::<Type>(monitor_config.get_type())
@@ -249,6 +264,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         quote! { _NoMonitor }
     };
 
+    #[cfg(feature = "macro_debug")]
     eprintln!("[build runtime field]");
     // add that to a new field
     let runtime_field: Field = if sim_mode {
@@ -263,6 +279,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let name = &item_struct.ident;
 
+    #[cfg(feature = "macro_debug")]
     eprintln!("[match struct anonymity]");
     match &mut item_struct.fields {
         Named(fields_named) => {
@@ -276,6 +293,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     };
 
+    #[cfg(feature = "macro_debug")]
     eprintln!("[gen instances]");
 
     let task_sim_instances_init_code = all_sim_tasks_types.iter().enumerate().map(|(index, ty)| {
@@ -480,6 +498,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         .map(|unit| {
             match unit {
                 CuExecutionUnit::Step(step) => {
+                    #[cfg(feature = "macro_debug")]
                     eprintln!(
                         "{} -> {} as {:?}. task_id: {} Input={:?}, Output={:?}",
                         step.node.get_id(),
@@ -685,12 +704,15 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 CuExecutionUnit::Loop(_) => todo!("Needs to be implemented"),
             }
         }).collect();
+    #[cfg(feature = "macro_debug")]
     eprintln!("[Culist access order:  {:?}]", taskid_call_order);
 
+    #[cfg(feature = "macro_debug")]
     eprintln!("[build the copperlist support]");
     let culist_support: proc_macro2::TokenStream =
         gen_culist_support(&runtime_plan, &taskid_call_order);
 
+    #[cfg(feature = "macro_debug")]
     eprintln!("[build the sim support]");
     let sim_support: proc_macro2::TokenStream = gen_sim_support(&runtime_plan);
 
@@ -765,6 +787,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         None
     };
 
+    #[cfg(feature = "macro_debug")]
     eprintln!("[build the run method]");
     let run_method = quote! {
 
@@ -863,6 +886,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     };
 
+    #[cfg(feature = "macro_debug")]
     eprintln!("[build result]");
     // Convert the modified struct back into a TokenStream
     let result = quote! {
@@ -934,11 +958,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let tokens: TokenStream = result.into();
 
     // Print and format the generated code using rustfmt
-    // println!("Generated tokens: {}", tokens);
-    let formatted_code = rustfmt_generated_code(tokens.to_string());
-    eprintln!("\n     ===    Gen. Runtime ===\n");
-    eprintln!("{}", highlight_rust_code(formatted_code));
-    eprintln!("\n     === === === === === ===\n");
+    #[cfg(feature = "macro_debug")]
+    {
+        let formatted_code = rustfmt_generated_code(tokens.to_string());
+        eprintln!("\n     ===    Gen. Runtime ===\n");
+        eprintln!("{}", highlight_rust_code(formatted_code));
+        eprintln!("\n     === === === === === ===\n");
+    }
 
     tokens
 }

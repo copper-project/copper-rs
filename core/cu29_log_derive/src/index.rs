@@ -10,8 +10,10 @@ type SStore = SingleStore<LmdbDatabase>;
 type MStore = MultiStore<LmdbDatabase>;
 type IndexType = u32;
 
+#[cfg(feature = "macro_debug")]
 const COLORED_PREFIX_BUILD_LOG: &str = "\x1b[32mCLog:\x1b[0m";
 
+#[cfg(feature = "macro_debug")]
 macro_rules! build_log {
     ($($arg:tt)*) => {
         eprintln!("{} {}", COLORED_PREFIX_BUILD_LOG, format!($($arg)*));
@@ -28,14 +30,17 @@ lazy_static! {
             fs::create_dir_all(&target_dir).unwrap();
         }
 
-        build_log!(
-            "=================================================================================="
-        );
-        build_log!("Interned strings are stored in: {:?}", target_dir);
-        build_log!("   [r] is reused index and [n] is new index.");
-        build_log!(
-            "=================================================================================="
-        );
+        #[cfg(feature = "macro_debug")]
+        {
+            build_log!(
+                "=================================================================================="
+            );
+            build_log!("Interned strings are stored in: {:?}", target_dir);
+            build_log!("   [r] is reused index and [n] is new index.");
+            build_log!(
+                "=================================================================================="
+            );
+        }
         let env = Rkv::new::<Lmdb>(&target_dir).unwrap();
         Mutex::new(env)
     };
@@ -69,7 +74,10 @@ pub fn intern_string(s: &str) -> Option<IndexType> {
             let reader = env.read().unwrap();
             // check if log_string is already in the string_to_index store
             if let Ok(Some(Value::U64(index))) = string_to_index.get(&reader, s) {
-                build_log!("#{:0>3} [r] -> {}.", index, s);
+                #[cfg(feature = "macro_debug")]
+                {
+                    build_log!("#{:0>3} [r] -> {}.", index, s);
+                }
                 return Some(index as IndexType);
             };
         }
@@ -85,7 +93,10 @@ pub fn intern_string(s: &str) -> Option<IndexType> {
         writer.commit().unwrap();
         Some(next_index)
     };
-    build_log!("#{:0>3} [n] -> {}.", index.unwrap(), s);
+    #[cfg(feature = "macro_debug")]
+    {
+        build_log!("#{:0>3} [n] -> {}.", index.unwrap(), s);
+    }
     index
 }
 

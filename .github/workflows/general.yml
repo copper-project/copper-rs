@@ -32,10 +32,14 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libudev-dev libpcap-dev
 
-      - name: Build
+      - name: Build vanilla
         run: |
           # For sim even robot/linux specific crate needs to at least compile.
-          cargo build --workspace
+          cargo build --workspace --features macro_debug
+
+      - name: Build with mocks
+        run: |
+          cargo build --workspace --features mock
 
       - name: Run tests
         run: cargo test

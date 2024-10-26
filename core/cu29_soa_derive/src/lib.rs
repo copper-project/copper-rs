@@ -1,4 +1,5 @@
 mod format;
+#[cfg(feature = "macro_debug")]
 use format::{highlight_rust_code, rustfmt_generated_code};
 use proc_macro::TokenStream;
 use quote::{format_ident, quote, ToTokens};
@@ -268,9 +269,12 @@ pub fn soa(_attr: TokenStream, item: TokenStream) -> TokenStream {
     };
     let tokens: TokenStream = expanded.into();
 
-    let formatted_code = rustfmt_generated_code(tokens.to_string());
-    println!("\n     ===    Gen. SOA     ===\n");
-    println!("{}", highlight_rust_code(formatted_code));
-    println!("\n     === === === === === ===\n");
+    #[cfg(feature = "macro_debug")]
+    {
+        let formatted_code = rustfmt_generated_code(tokens.to_string());
+        println!("\n     ===    Gen. SOA     ===\n");
+        println!("{}", highlight_rust_code(formatted_code));
+        println!("\n     === === === === === ===\n");
+    }
     tokens
 }

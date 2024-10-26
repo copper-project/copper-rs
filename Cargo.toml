@@ -13,6 +13,7 @@ members = [
     "core/cu29_traits",
     "core/cu29_unifiedlog",
     "components/monitors/cu_consolemon",
+    "components/sinks/cu_rp_gpio",
     "components/sinks/cu_rp_sn754410",
     "components/sinks/cu_lewansoul",
     "components/sources/cu_ads7883",
