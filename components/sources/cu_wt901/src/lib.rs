@@ -186,10 +186,7 @@ const REGISTER_SPAN_SIZE: usize = ((Registers::Yaw as u8 - Registers::AccX as u8
 
 #[allow(unused)]
 impl WT901 {
-    fn bulk_position_read(
-        &mut self,
-        pr: &mut PositionalReadingsPayload,
-    ) -> Result<(), i2cdev::linux::LinuxI2CError> {
+    fn bulk_position_read(&mut self, pr: &mut PositionalReadingsPayload) -> Result<(), CuError> {
         debug!("Trying to read i2c");
 
         #[cfg(hardware)]
@@ -240,8 +237,7 @@ impl<'cl> CuSrcTask<'cl> for WT901 {
 
     fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
         let mut pos = PositionalReadingsPayload::default();
-        self.bulk_position_read(&mut pos)
-            .map_err(|e| CuError::from(format!("Error reading WT901: {:?}", e)))?;
+        self.bulk_position_read(&mut pos)?;
         new_msg.set_payload(pos);
         Ok(())
     }
