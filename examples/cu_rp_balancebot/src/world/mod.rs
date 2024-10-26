@@ -10,6 +10,7 @@ use bevy::pbr::{
     DefaultOpaqueRendererMethod, ScreenSpaceReflectionsBundle, ScreenSpaceReflectionsSettings,
 };
 use bevy::prelude::*;
+use bevy::render::render_resource::ShaderType;
 use bevy_mod_picking::prelude::*;
 
 const RAIL_WIDTH: f64 = 1.00; // 55cm
@@ -60,17 +61,11 @@ pub fn build_world(app: &mut App) -> &mut App {
     app.insert_resource(Msaa::Off)
         .insert_resource(DefaultOpaqueRendererMethod::deferred())
         .add_plugins((
-            DefaultPlugins.build().disable::<bevy::log::LogPlugin>(), // to be able to use the TUI
+            DefaultPlugins, // to be able to use the TUI
             DefaultPickingPlugins,
             PhysicsPlugins::default().with_length_unit(1000.0),
-            // PhysicsDebugPlugin::default(),
             // EditorPlugin::default(),
-            // WireframePlugin,
         ))
-        // .insert_resource(WireframeConfig {
-        //    global: true,
-        //    default_color: Color::srgb(0.0, 1.0, 0.0),
-        // })
         .insert_resource(SimulationState::Running)
         .insert_resource(CameraControl {
             rotate_sensitivity: 0.05,
@@ -122,11 +117,11 @@ fn chessboard_setup(
     }
 }
 
-// Setup our scene
 fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
+    gltf_assets: Res<Assets<Gltf>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     // Load the skybox
@@ -169,21 +164,21 @@ fn setup(
 
     let rail_entity = commands
         .spawn((
-            PbrBundle {
-                mesh: meshes.add(Cuboid::new(
-                    RAIL_WIDTH as f32,
-                    RAIL_HEIGHT as f32,
-                    RAIL_DEPTH as f32,
-                )),
-                material: materials.add(StandardMaterial {
-                    base_color: Color::srgb(0.8, 0.8, 0.8),
-                    metallic: 0.9,
-                    perceptual_roughness: 0.3,
-                    ..default()
-                }),
-                transform: Transform::from_xyz(0.0, RAIL_HEIGHT as f32 / 2.0, 0.0), // Lower the starting height
-                ..default()
-            },
+            // PbrBundle {
+            //     mesh: meshes.add(Cuboid::new(
+            //         RAIL_WIDTH as f32,
+            //         RAIL_HEIGHT as f32,
+            //         RAIL_DEPTH as f32,
+            //     )),
+            //     material: materials.add(StandardMaterial {
+            //         base_color: Color::srgb(0.8, 0.8, 0.8),
+            //         metallic: 0.9,
+            //         perceptual_roughness: 0.3,
+            //         ..default()
+            //     }),
+            //     transform: Transform::from_xyz(0.0, RAIL_HEIGHT as f32 / 2.0, 0.0), // Lower the starting height
+            //     ..default()
+            // },
             Collider::cuboid(RAIL_WIDTH, RAIL_HEIGHT, RAIL_DEPTH),
             RigidBody::Static, // The rail doesn't move
                                // CollisionLayers::new(0b01, 0b01),
@@ -301,6 +296,11 @@ fn setup(
         color: Color::srgb_u8(210, 220, 240),
         brightness: 1.0,
     });
+
+    commands.spawn(SceneBundle {
+        scene: asset_server.load(GltfAssetLabel::Scene(0).from_asset("balancebot.glb")),
+        ..default()
+    });
 }
 
 /// Winged some type of orbital camera to explore around the robot.
@@ -328,7 +328,7 @@ fn camera_control_system(
     }
 
     // Rotate camera around the focal point with right mouse button + drag
-    if mouse_button_input.pressed(MouseButton::Right) {
+    if mouse_button_input.pressed(MouseButton::Middle) {
         for ev in mouse_motion.read() {
             let yaw = Quat::from_rotation_y(-ev.delta.x * control.rotate_sensitivity);
             let pitch = Quat::from_rotation_x(-ev.delta.y * control.rotate_sensitivity);
