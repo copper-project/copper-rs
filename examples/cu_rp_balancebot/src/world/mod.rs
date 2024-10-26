@@ -59,13 +59,12 @@ pub struct Rod;
 
 pub fn build_world(app: &mut App) -> &mut App {
     app.insert_resource(Msaa::Off)
-        .insert_resource(DefaultOpaqueRendererMethod::deferred())
         .add_plugins((
-            DefaultPlugins, // to be able to use the TUI
             DefaultPickingPlugins,
             PhysicsPlugins::default().with_length_unit(1000.0),
             // EditorPlugin::default(),
         ))
+        .insert_resource(DefaultOpaqueRendererMethod::deferred())
         .insert_resource(SimulationState::Running)
         .insert_resource(CameraControl {
             rotate_sensitivity: 0.05,
@@ -125,7 +124,7 @@ fn setup(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     // Load the skybox
-    let skybox_handle = asset_server.load("skybox.ktx2");
+    let skybox_handle = asset_server.load("embedded://balancebot_sim/assets/skybox.ktx2");
 
     // Spawn the camera
     commands.spawn((
@@ -142,7 +141,7 @@ fn setup(
             brightness: 1000.0,
         },
         EnvironmentMapLight {
-            diffuse_map: asset_server.load("diffuse_map.ktx2"),
+            diffuse_map: asset_server.load("embedded://balancebot_sim/assets/diffuse_map.ktx2"),
             specular_map: skybox_handle.clone(),
             intensity: 900.0,
         },
@@ -298,7 +297,9 @@ fn setup(
     });
 
     commands.spawn(SceneBundle {
-        scene: asset_server.load(GltfAssetLabel::Scene(0).from_asset("balancebot.glb")),
+        scene: asset_server.load(
+            GltfAssetLabel::Scene(0).from_asset("embedded://balancebot_sim/assets/balancebot.glb"),
+        ),
         ..default()
     });
 }
