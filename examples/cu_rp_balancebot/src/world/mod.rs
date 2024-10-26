@@ -124,7 +124,7 @@ fn setup(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     // Load the skybox
-    let skybox_handle = asset_server.load("embedded://balancebot_sim/assets/skybox.ktx2");
+    let skybox_handle = asset_server.load("embedded://balancebot_sim/world/assets/skybox.ktx2");
 
     // Spawn the camera
     commands.spawn((
@@ -141,7 +141,8 @@ fn setup(
             brightness: 1000.0,
         },
         EnvironmentMapLight {
-            diffuse_map: asset_server.load("embedded://balancebot_sim/assets/diffuse_map.ktx2"),
+            diffuse_map: asset_server
+                .load("embedded://balancebot_sim/world/assets/diffuse_map.ktx2"),
             specular_map: skybox_handle.clone(),
             intensity: 900.0,
         },
@@ -298,7 +299,8 @@ fn setup(
 
     commands.spawn(SceneBundle {
         scene: asset_server.load(
-            GltfAssetLabel::Scene(0).from_asset("embedded://balancebot_sim/assets/balancebot.glb"),
+            GltfAssetLabel::Scene(0)
+                .from_asset("embedded://balancebot_sim/world/assets/balancebot.glb"),
         ),
         ..default()
     });

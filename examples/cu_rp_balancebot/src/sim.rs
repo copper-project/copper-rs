@@ -4,8 +4,7 @@ mod world;
 use crate::world::{Cart, Rod};
 use avian3d::math::Vector;
 use avian3d::prelude::{ExternalForce, Physics};
-use bevy::asset::io::embedded::EmbeddedAssetRegistry;
-use bevy::asset::{embedded_asset, embedded_path};
+use bevy::asset::embedded_asset;
 use bevy::prelude::*;
 use cu29::clock::{RobotClock, RobotClockMock};
 use cu29::simulation::{CuTaskCallbackState, SimOverride};
@@ -169,31 +168,15 @@ fn stop_copper_on_exit(mut exit_events: EventReader<AppExit>, mut copper_ctx: Re
 }
 
 fn main() {
-    // Get the CARGO_MANIFEST_DIR, which points to the current crate's directory
-    let manifest_dir_env = env::var("CARGO_MANIFEST_DIR");
-    match manifest_dir_env {
-        Ok(manifest_dir) => {
-            let bevy_base_dir = PathBuf::from(manifest_dir).join("src/");
-            env::set_var("BEVY_ASSET_ROOT", bevy_base_dir.to_str().unwrap());
-        }
-        _ => {}
-    }
-
     let mut world = App::new();
-    world.insert_resource(EmbeddedAssetRegistry::default());
+
+    // minimal setup to load the assets
     world.add_plugins(DefaultPlugins);
 
-    // let omit = "examples/cu_rp_balancebot/src";
-    let omit = "src";
-
-    embedded_asset!(world, omit, "assets/skybox.ktx2");
-    embedded_asset!(world, omit, "assets/diffuse_map.ktx2");
-    embedded_asset!(world, omit, "assets/balancebot.glb");
-
-    println!(
-        "Will land: {:?}",
-        embedded_path!(omit, "assets/skybox.ktx2")
-    );
+    // embed them in the executable. All this is super finicky.
+    embedded_asset!(world, "world/assets/skybox.ktx2");
+    embedded_asset!(world, "world/assets/diffuse_map.ktx2");
+    embedded_asset!(world, "world/assets/balancebot.glb");
 
     // setup everything that is simulation specific.
     let world = world::build_world(&mut world);
