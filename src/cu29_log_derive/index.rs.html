@@ -108,7 +108,18 @@
 <a href="#107" id="107">107</a>
 <a href="#108" id="108">108</a>
 <a href="#109" id="109">109</a>
-<a href="#110" id="110">110</a></pre></div><pre class="rust"><code><span class="kw">use </span>cu29_log::default_log_index_dir;
+<a href="#110" id="110">110</a>
+<a href="#111" id="111">111</a>
+<a href="#112" id="112">112</a>
+<a href="#113" id="113">113</a>
+<a href="#114" id="114">114</a>
+<a href="#115" id="115">115</a>
+<a href="#116" id="116">116</a>
+<a href="#117" id="117">117</a>
+<a href="#118" id="118">118</a>
+<a href="#119" id="119">119</a>
+<a href="#120" id="120">120</a>
+<a href="#121" id="121">121</a></pre></div><pre class="rust"><code><span class="kw">use </span>cu29_log::default_log_index_dir;
 <span class="kw">use </span>lazy_static::lazy_static;
 <span class="kw">use </span>rkv::backend::{Lmdb, LmdbDatabase};
 <span class="kw">use </span>rkv::backend::{LmdbEnvironment, LmdbRwTransaction};
@@ -120,9 +131,11 @@
 <span class="kw">type </span>MStore = MultiStore&lt;LmdbDatabase&gt;;
 <span class="kw">type </span>IndexType = u32;
 
-<span class="kw">const </span>COLORED_PREFIX_BUILD_LOG: <span class="kw-2">&amp;</span>str = <span class="string">"\x1b[32mCLog:\x1b[0m"</span>;
+<span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
+</span><span class="kw">const </span>COLORED_PREFIX_BUILD_LOG: <span class="kw-2">&amp;</span>str = <span class="string">"\x1b[32mCLog:\x1b[0m"</span>;
 
-<span class="macro">macro_rules!</span> build_log {
+<span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
+</span><span class="macro">macro_rules!</span> build_log {
     ($(<span class="macro-nonterminal">$arg</span>:tt)<span class="kw-2">*</span>) =&gt; {
         <span class="macro">eprintln!</span>(<span class="string">"{} {}"</span>, COLORED_PREFIX_BUILD_LOG, <span class="macro">format!</span>($(<span class="macro-nonterminal">$arg</span>)<span class="kw-2">*</span>));
     };
@@ -138,14 +151,17 @@
             fs::create_dir_all(<span class="kw-2">&amp;</span>target_dir).unwrap();
         }
 
-        <span class="macro">build_log!</span>(
-            <span class="string">"=================================================================================="
-        </span>);
-        <span class="macro">build_log!</span>(<span class="string">"Interned strings are stored in: {:?}"</span>, target_dir);
-        <span class="macro">build_log!</span>(<span class="string">"   [r] is reused index and [n] is new index."</span>);
-        <span class="macro">build_log!</span>(
-            <span class="string">"=================================================================================="
-        </span>);
+        <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
+        </span>{
+            <span class="macro">build_log!</span>(
+                <span class="string">"=================================================================================="
+            </span>);
+            <span class="macro">build_log!</span>(<span class="string">"Interned strings are stored in: {:?}"</span>, target_dir);
+            <span class="macro">build_log!</span>(<span class="string">"   [r] is reused index and [n] is new index."</span>);
+            <span class="macro">build_log!</span>(
+                <span class="string">"=================================================================================="
+            </span>);
+        }
         <span class="kw">let </span>env = Rkv::new::&lt;Lmdb&gt;(<span class="kw-2">&amp;</span>target_dir).unwrap();
         Mutex::new(env)
     };
@@ -179,7 +195,10 @@
             <span class="kw">let </span>reader = env.read().unwrap();
             <span class="comment">// check if log_string is already in the string_to_index store
             </span><span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(Value::U64(index))) = string_to_index.get(<span class="kw-2">&amp;</span>reader, s) {
-                <span class="macro">build_log!</span>(<span class="string">"#{:0&gt;3} [r] -&gt; {}."</span>, index, s);
+                <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
+                </span>{
+                    <span class="macro">build_log!</span>(<span class="string">"#{:0&gt;3} [r] -&gt; {}."</span>, index, s);
+                }
                 <span class="kw">return </span><span class="prelude-val">Some</span>(index <span class="kw">as </span>IndexType);
             };
         }
@@ -195,7 +214,10 @@
         writer.commit().unwrap();
         <span class="prelude-val">Some</span>(next_index)
     };
-    <span class="macro">build_log!</span>(<span class="string">"#{:0&gt;3} [n] -&gt; {}."</span>, index.unwrap(), s);
+    <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
+    </span>{
+        <span class="macro">build_log!</span>(<span class="string">"#{:0&gt;3} [n] -&gt; {}."</span>, index.unwrap(), s);
+    }
     index
 }
 

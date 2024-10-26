@@ -55,7 +55,10 @@
 <a href="#54" id="54">54</a>
 <a href="#55" id="55">55</a>
 <a href="#56" id="56">56</a>
-<a href="#57" id="57">57</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::io::Write;
+<a href="#57" id="57">57</a>
+<a href="#58" id="58">58</a>
+<a href="#59" id="59">59</a>
+<a href="#60" id="60">60</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::io::Write;
 <span class="kw">use </span>std::process::Command;
 
 <span class="kw">use </span>syntect::easy::HighlightLines;
@@ -64,6 +67,7 @@
 <span class="kw">use </span>syntect::util::{as_24_bit_terminal_escaped, LinesWithEndings};
 
 <span class="doccomment">/// A utility method to ease up the debugging of the macro generated code by formatting it with rustfmt.
+</span><span class="attr">#[allow(dead_code)]
 </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>rustfmt_generated_code(code: String) -&gt; String {
     <span class="kw">let </span><span class="kw-2">mut </span>rustfmt = Command::new(<span class="string">"rustfmt"</span>)
         .arg(<span class="string">"--emit"</span>)
@@ -84,7 +88,8 @@
     String::from_utf8(output.stdout).expect(<span class="string">"Output was not valid UTF-8"</span>)
 }
 
-<span class="kw">fn </span>create_black_theme() -&gt; Theme {
+<span class="attr">#[allow(dead_code)]
+</span><span class="kw">fn </span>create_black_theme() -&gt; Theme {
     <span class="kw">let </span><span class="kw-2">mut </span>theme = ThemeSet::load_defaults().themes[<span class="string">"base16-ocean.dark"</span>].clone();
     theme.settings.background = <span class="prelude-val">Some</span>(Color {
         r: <span class="number">0</span>,
@@ -96,6 +101,7 @@
 }
 
 <span class="doccomment">/// A utility method to ease up the debugging of the macro generated code by highlighting it.
+</span><span class="attr">#[allow(dead_code)]
 </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>highlight_rust_code(code: String) -&gt; String {
     <span class="kw">let </span>ps = SyntaxSet::load_defaults_newlines();
     <span class="kw">let </span>syntax = ps.find_syntax_by_extension(<span class="string">"rs"</span>).unwrap();

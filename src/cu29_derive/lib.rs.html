@@ -1090,7 +1090,33 @@
 <a href="#1089" id="1089">1089</a>
 <a href="#1090" id="1090">1090</a>
 <a href="#1091" id="1091">1091</a>
-<a href="#1092" id="1092">1092</a></pre></div><pre class="rust"><code><span class="kw">extern crate </span>proc_macro;
+<a href="#1092" id="1092">1092</a>
+<a href="#1093" id="1093">1093</a>
+<a href="#1094" id="1094">1094</a>
+<a href="#1095" id="1095">1095</a>
+<a href="#1096" id="1096">1096</a>
+<a href="#1097" id="1097">1097</a>
+<a href="#1098" id="1098">1098</a>
+<a href="#1099" id="1099">1099</a>
+<a href="#1100" id="1100">1100</a>
+<a href="#1101" id="1101">1101</a>
+<a href="#1102" id="1102">1102</a>
+<a href="#1103" id="1103">1103</a>
+<a href="#1104" id="1104">1104</a>
+<a href="#1105" id="1105">1105</a>
+<a href="#1106" id="1106">1106</a>
+<a href="#1107" id="1107">1107</a>
+<a href="#1108" id="1108">1108</a>
+<a href="#1109" id="1109">1109</a>
+<a href="#1110" id="1110">1110</a>
+<a href="#1111" id="1111">1111</a>
+<a href="#1112" id="1112">1112</a>
+<a href="#1113" id="1113">1113</a>
+<a href="#1114" id="1114">1114</a>
+<a href="#1115" id="1115">1115</a>
+<a href="#1116" id="1116">1116</a>
+<a href="#1117" id="1117">1117</a>
+<a href="#1118" id="1118">1118</a></pre></div><pre class="rust"><code><span class="kw">extern crate </span>proc_macro;
 
 <span class="kw">use </span>proc_macro::TokenStream;
 
@@ -1106,7 +1132,9 @@
 <span class="kw">use </span>cu29::config::read_configuration;
 <span class="kw">use </span>cu29::config::CuConfig;
 <span class="kw">use </span>cu29::curuntime::{compute_runtime_plan, CuExecutionLoop, CuExecutionUnit, CuTaskType};
-<span class="kw">use </span>format::{highlight_rust_code, rustfmt_generated_code};
+
+<span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
+</span><span class="kw">use </span>format::{highlight_rust_code, rustfmt_generated_code};
 <span class="kw">use </span>proc_macro2::Ident;
 
 <span class="kw">mod </span>format;
@@ -1126,7 +1154,8 @@
 </span><span class="attr">#[proc_macro]
 </span><span class="kw">pub fn </span>gen_cumsgs(config_path_lit: TokenStream) -&gt; TokenStream {
     <span class="kw">let </span>config = <span class="macro">parse_macro_input!</span>(config_path_lit <span class="kw">as </span>LitStr).value();
-    <span class="macro">eprintln!</span>(<span class="string">"[gen culist support with {:?}]"</span>, config);
+    <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
+    </span><span class="macro">eprintln!</span>(<span class="string">"[gen culist support with {:?}]"</span>, config);
     <span class="kw">let </span>cuconfig = read_config(<span class="kw-2">&amp;</span>config);
     <span class="kw">let </span>runtime_plan: CuExecutionLoop =
         compute_runtime_plan(<span class="kw-2">&amp;</span>cuconfig).expect(<span class="string">"Could not compute runtime plan"</span>);
@@ -1163,7 +1192,8 @@
     runtime_plan: <span class="kw-2">&amp;</span>CuExecutionLoop,
     taskid_call_order: <span class="kw-2">&amp;</span>Vec&lt;usize&gt;,
 ) -&gt; proc_macro2::TokenStream {
-    <span class="macro">eprintln!</span>(<span class="string">"[Extract msgs types]"</span>);
+    <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
+    </span><span class="macro">eprintln!</span>(<span class="string">"[Extract msgs types]"</span>);
     <span class="kw">let </span>all_msgs_types_in_culist_order = extract_msg_types(runtime_plan);
 
     <span class="kw">let </span>culist_size = all_msgs_types_in_culist_order.len();
@@ -1172,14 +1202,17 @@
         .map(|i| syn::Index::from(<span class="kw-2">*</span>i))
         .collect();
 
-    <span class="macro">eprintln!</span>(<span class="string">"[build the copperlist tuple]"</span>);
+    <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
+    </span><span class="macro">eprintln!</span>(<span class="string">"[build the copperlist tuple]"</span>);
     <span class="kw">let </span>msgs_types_tuple: TypeTuple = build_culist_tuple(<span class="kw-2">&amp;</span>all_msgs_types_in_culist_order);
 
-    <span class="macro">eprintln!</span>(<span class="string">"[build the copperlist tuple bincode support]"</span>);
+    <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
+    </span><span class="macro">eprintln!</span>(<span class="string">"[build the copperlist tuple bincode support]"</span>);
     <span class="kw">let </span>msgs_types_tuple_encode = build_culist_tuple_encode(<span class="kw-2">&amp;</span>all_msgs_types_in_culist_order);
     <span class="kw">let </span>msgs_types_tuple_decode = build_culist_tuple_decode(<span class="kw-2">&amp;</span>all_msgs_types_in_culist_order);
 
-    <span class="macro">eprintln!</span>(<span class="string">"[build the copperlist tuple debug support]"</span>);
+    <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
+    </span><span class="macro">eprintln!</span>(<span class="string">"[build the copperlist tuple debug support]"</span>);
     <span class="kw">let </span>msgs_types_tuple_debug = build_culist_tuple_debug(<span class="kw-2">&amp;</span>all_msgs_types_in_culist_order);
 
     <span class="kw">let </span>collect_metadata_function = <span class="macro">quote!</span> {
@@ -1205,7 +1238,8 @@
 }
 
 <span class="kw">fn </span>gen_sim_support(runtime_plan: <span class="kw-2">&amp;</span>CuExecutionLoop) -&gt; proc_macro2::TokenStream {
-    <span class="macro">eprintln!</span>(<span class="string">"[Sim: Build SimEnum]"</span>);
+    <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
+    </span><span class="macro">eprintln!</span>(<span class="string">"[Sim: Build SimEnum]"</span>);
     <span class="kw">let </span>plan_enum: Vec&lt;proc_macro2::TokenStream&gt; = runtime_plan
         .steps
         .iter()
@@ -1245,7 +1279,8 @@
 /// This will add a "runtime" field to your struct and implement the "new" and "run" methods.
 </span><span class="attr">#[proc_macro_attribute]
 </span><span class="kw">pub fn </span>copper_runtime(args: TokenStream, input: TokenStream) -&gt; TokenStream {
-    <span class="macro">eprintln!</span>(<span class="string">"[entry]"</span>);
+    <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
+    </span><span class="macro">eprintln!</span>(<span class="string">"[entry]"</span>);
     <span class="kw">let </span><span class="kw-2">mut </span>item_struct = <span class="macro">parse_macro_input!</span>(input <span class="kw">as </span>ItemStruct);
     <span class="kw">let </span><span class="kw-2">mut </span>config_file: <span class="prelude-ty">Option</span>&lt;LitStr&gt; = <span class="prelude-val">None</span>;
     <span class="kw">let </span><span class="kw-2">mut </span>sim_mode = <span class="bool-val">false</span>;
@@ -1272,7 +1307,8 @@
         }
     });
 
-    <span class="macro">eprintln!</span>(<span class="string">"[parse]"</span>);
+    <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
+    </span><span class="macro">eprintln!</span>(<span class="string">"[parse]"</span>);
     <span class="comment">// Parse the provided args with the custom parser
     </span><span class="macro">parse_macro_input!</span>(args with attribute_config_parser);
 
@@ -1283,12 +1319,15 @@
 
     <span class="kw">let </span>copper_config = read_config(<span class="kw-2">&amp;</span>config_file);
 
-    <span class="macro">eprintln!</span>(<span class="string">"[runtime plan]"</span>);
+    <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
+    </span><span class="macro">eprintln!</span>(<span class="string">"[runtime plan]"</span>);
     <span class="kw">let </span>runtime_plan: CuExecutionLoop =
         compute_runtime_plan(<span class="kw-2">&amp;</span>copper_config).expect(<span class="string">"Could not compute runtime plan"</span>);
-    <span class="macro">eprintln!</span>(<span class="string">"{:?}"</span>, runtime_plan);
+    <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
+    </span><span class="macro">eprintln!</span>(<span class="string">"{:?}"</span>, runtime_plan);
 
-    <span class="macro">eprintln!</span>(<span class="string">"[extract tasks ids &amp; types]"</span>);
+    <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
+    </span><span class="macro">eprintln!</span>(<span class="string">"[extract tasks ids &amp; types]"</span>);
     <span class="kw">let </span>(all_tasks_ids, all_tasks_cutype, all_tasks_types_names, all_tasks_types) =
         extract_tasks_types(<span class="kw-2">&amp;</span>copper_config);
 
@@ -1321,7 +1360,8 @@
         })
         .collect();
 
-    <span class="macro">eprintln!</span>(<span class="string">"[build task tuples]"</span>);
+    <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
+    </span><span class="macro">eprintln!</span>(<span class="string">"[build task tuples]"</span>);
     <span class="comment">// Build the tuple of all those types
     // note the extraneous , at the end is to make the tuple work even if this is only one element
     </span><span class="kw">let </span>task_types_tuple: TypeTuple = <span class="macro">parse_quote!</span> {
@@ -1332,7 +1372,8 @@
         (#(#all_sim_tasks_types),<span class="kw-2">*</span>,)
     };
 
-    <span class="macro">eprintln!</span>(<span class="string">"[build monitor type]"</span>);
+    <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
+    </span><span class="macro">eprintln!</span>(<span class="string">"[build monitor type]"</span>);
     <span class="kw">let </span>monitor_type = <span class="kw">if let </span><span class="prelude-val">Some</span>(monitor_config) = copper_config.get_monitor_config() {
         <span class="kw">let </span>monitor_type = parse_str::&lt;Type&gt;(monitor_config.get_type())
             .expect(<span class="string">"Could not transform the monitor type name into a Rust type."</span>);
@@ -1341,7 +1382,8 @@
         <span class="macro">quote!</span> { _NoMonitor }
     };
 
-    <span class="macro">eprintln!</span>(<span class="string">"[build runtime field]"</span>);
+    <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
+    </span><span class="macro">eprintln!</span>(<span class="string">"[build runtime field]"</span>);
     <span class="comment">// add that to a new field
     </span><span class="kw">let </span>runtime_field: Field = <span class="kw">if </span>sim_mode {
         <span class="macro">parse_quote!</span> {
@@ -1355,7 +1397,8 @@
 
     <span class="kw">let </span>name = <span class="kw-2">&amp;</span>item_struct.ident;
 
-    <span class="macro">eprintln!</span>(<span class="string">"[match struct anonymity]"</span>);
+    <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
+    </span><span class="macro">eprintln!</span>(<span class="string">"[match struct anonymity]"</span>);
     <span class="kw">match </span><span class="kw-2">&amp;mut </span>item_struct.fields {
         Named(fields_named) =&gt; {
             fields_named.named.push(runtime_field);
@@ -1368,7 +1411,8 @@
         }
     };
 
-    <span class="macro">eprintln!</span>(<span class="string">"[gen instances]"</span>);
+    <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
+    </span><span class="macro">eprintln!</span>(<span class="string">"[gen instances]"</span>);
 
     <span class="kw">let </span>task_sim_instances_init_code = all_sim_tasks_types.iter().enumerate().map(|(index, ty)| {
         <span class="kw">let </span>additional_error_info = <span class="macro">format!</span>(
@@ -1572,7 +1616,8 @@
         .map(|unit| {
             <span class="kw">match </span>unit {
                 CuExecutionUnit::Step(step) =&gt; {
-                    <span class="macro">eprintln!</span>(
+                    <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
+                    </span><span class="macro">eprintln!</span>(
                         <span class="string">"{} -&gt; {} as {:?}. task_id: {} Input={:?}, Output={:?}"</span>,
                         step.node.get_id(),
                         step.node.get_type(),
@@ -1777,13 +1822,16 @@
                 CuExecutionUnit::Loop(<span class="kw">_</span>) =&gt; <span class="macro">todo!</span>(<span class="string">"Needs to be implemented"</span>),
             }
         }).collect();
-    <span class="macro">eprintln!</span>(<span class="string">"[Culist access order:  {:?}]"</span>, taskid_call_order);
+    <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
+    </span><span class="macro">eprintln!</span>(<span class="string">"[Culist access order:  {:?}]"</span>, taskid_call_order);
 
-    <span class="macro">eprintln!</span>(<span class="string">"[build the copperlist support]"</span>);
+    <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
+    </span><span class="macro">eprintln!</span>(<span class="string">"[build the copperlist support]"</span>);
     <span class="kw">let </span>culist_support: proc_macro2::TokenStream =
         gen_culist_support(<span class="kw-2">&amp;</span>runtime_plan, <span class="kw-2">&amp;</span>taskid_call_order);
 
-    <span class="macro">eprintln!</span>(<span class="string">"[build the sim support]"</span>);
+    <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
+    </span><span class="macro">eprintln!</span>(<span class="string">"[build the sim support]"</span>);
     <span class="kw">let </span>sim_support: proc_macro2::TokenStream = gen_sim_support(<span class="kw-2">&amp;</span>runtime_plan);
 
     <span class="kw">let </span>(new, run_one_iteration, start_all_tasks, stop_all_tasks, run) = <span class="kw">if </span>sim_mode {
@@ -1857,7 +1905,8 @@
         <span class="prelude-val">None
     </span>};
 
-    <span class="macro">eprintln!</span>(<span class="string">"[build the run method]"</span>);
+    <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
+    </span><span class="macro">eprintln!</span>(<span class="string">"[build the run method]"</span>);
     <span class="kw">let </span>run_method = <span class="macro">quote!</span> {
 
         #run_one_iteration {
@@ -1955,7 +2004,8 @@
         }
     };
 
-    <span class="macro">eprintln!</span>(<span class="string">"[build result]"</span>);
+    <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
+    </span><span class="macro">eprintln!</span>(<span class="string">"[build result]"</span>);
     <span class="comment">// Convert the modified struct back into a TokenStream
     </span><span class="kw">let </span>result = <span class="macro">quote!</span> {
         <span class="comment">// import everything with an _ to avoid clashes with the user's code
@@ -2026,11 +2076,13 @@
     <span class="kw">let </span>tokens: TokenStream = result.into();
 
     <span class="comment">// Print and format the generated code using rustfmt
-    // println!("Generated tokens: {}", tokens);
-    </span><span class="kw">let </span>formatted_code = rustfmt_generated_code(tokens.to_string());
-    <span class="macro">eprintln!</span>(<span class="string">"\n     ===    Gen. Runtime ===\n"</span>);
-    <span class="macro">eprintln!</span>(<span class="string">"{}"</span>, highlight_rust_code(formatted_code));
-    <span class="macro">eprintln!</span>(<span class="string">"\n     === === === === === ===\n"</span>);
+    </span><span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
+    </span>{
+        <span class="kw">let </span>formatted_code = rustfmt_generated_code(tokens.to_string());
+        <span class="macro">eprintln!</span>(<span class="string">"\n     ===    Gen. Runtime ===\n"</span>);
+        <span class="macro">eprintln!</span>(<span class="string">"{}"</span>, highlight_rust_code(formatted_code));
+        <span class="macro">eprintln!</span>(<span class="string">"\n     === === === === === ===\n"</span>);
+    }
 
     tokens
 }
