@@ -1,4 +1,4 @@
-#[cfg(feature = "mock")]
+#[cfg(mock)]
 mod mock;
 
 use bincode::{Decode, Encode};
@@ -13,9 +13,9 @@ use std::sync::{Arc, Mutex};
 #[allow(unused_imports)]
 use cu29_traits::CuError;
 
-#[cfg(feature = "mock")]
+#[cfg(mock)]
 use mock::{get_pin, InputPin};
-#[cfg(not(feature = "mock"))]
+#[cfg(hardware)]
 use rppal::gpio::{Gpio, InputPin, Level, Trigger};
 
 #[allow(dead_code)]
@@ -25,7 +25,7 @@ struct InterruptData {
     tov: CuDuration,
 }
 
-#[cfg(not(feature = "mock"))]
+#[cfg(hardware)]
 fn get_pin(pin_nb: u8) -> CuResult<InputPin> {
     // Gpio manages a singleton behind the scene.
     Ok(Gpio::new()
@@ -88,7 +88,7 @@ impl CuTaskLifecycle for Encoder {
     fn start(&mut self, clock: &RobotClock) -> CuResult<()> {
         let clock = clock.clone();
         let idata = Arc::clone(&self.data_from_interrupts);
-        #[cfg(not(feature = "mock"))]
+        #[cfg(hardware)]
         self.clk_pin
             .set_async_interrupt(Trigger::FallingEdge, None, move |_| {
                 let mut idata = idata.lock().unwrap();
@@ -104,7 +104,7 @@ impl CuTaskLifecycle for Encoder {
     }
 
     fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
-        #[cfg(not(feature = "mock"))]
+        #[cfg(hardware)]
         self.clk_pin
             .clear_async_interrupt()
             .map_err(|e| CuError::new_with_cause("Failed to reset async interrupt", e))?;

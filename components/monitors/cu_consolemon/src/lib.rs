@@ -15,7 +15,6 @@ use ratatui::crossterm::event::{DisableMouseCapture, EnableMouseCapture, Event, 
 use ratatui::crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
-use ratatui::crossterm::ExecutableCommand;
 use ratatui::crossterm::{event, execute};
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Size};
 use ratatui::prelude::{Backend, Rect};

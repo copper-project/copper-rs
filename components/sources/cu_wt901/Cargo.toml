@@ -22,10 +22,6 @@ cu29-log-runtime = { workspace = true }
 cu29-traits = { workspace = true }
 bincode = { workspace = true }
 serde = { workspace = true }
-
-embedded-hal = "1"
-linux-embedded-hal = "0.4.0"
-i2cdev = "0.6.1"
 uom = { workspace = true }
 
 [dev-dependencies]
@@ -33,3 +29,15 @@ cu29-derive = { workspace = true }
 cu29-unifiedlog = { workspace = true }
 cu29-traits = { workspace = true }
 cu29-helpers = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+embedded-hal = "1"
+linux-embedded-hal = "0.4.0"
+i2cdev = "0.6.1"
+
+[build-dependencies]
+cfg_aliases = "0.2.1"
+
+[features]
+default = []
+mock = []

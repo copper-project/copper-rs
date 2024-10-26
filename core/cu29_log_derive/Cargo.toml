@@ -23,3 +23,8 @@ quote = { workspace = true }
 rkv = { version = "0.19.0", features = ["lmdb"] }
 lazy_static = "1.5.0"
 
+[features]
+default = []
+# enables a more verbose build log showing the index generation.
+macro_debug = []
+

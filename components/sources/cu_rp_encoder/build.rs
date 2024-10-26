@@ -1,10 +1,11 @@
+use cfg_aliases::cfg_aliases;
 fn main() {
     println!(
         "cargo:rustc-env=LOG_INDEX_DIR={}",
         std::env::var("OUT_DIR").unwrap()
     );
-    // completely fail if the platform is macos
-    if cfg!(target_os = "macos") {
-        panic!("macos is not supported");
-    };
+    cfg_aliases! {
+        hardware: { all(target_os = "linux", not(feature = "mock")) },
+        mock: { any(not(target_os = "linux"), feature = "mock") },
+    }
 }

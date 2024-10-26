@@ -2,7 +2,7 @@ use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
-use cu29::clock::{OptionCuTime, RobotClock};
+use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, CuTask, CuTaskLifecycle, Freezable};
 use cu29::{input_msg, output_msg, CuResult};
@@ -36,14 +36,10 @@ impl CuTaskLifecycle for CaterpillarSource {
 impl<'cl> CuSrcTask<'cl> for CaterpillarSource {
     type Output = output_msg!('cl, RPGpioPayload);
 
-    fn process(&mut self, clock: &RobotClock, output: Self::Output) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, output: Self::Output) -> CuResult<()> {
         // forward the state to the next task
         self.state = !self.state;
-        output.set_payload(RPGpioPayload {
-            on: self.state,
-            creation: clock.now().into(),
-            actuation: OptionCuTime::none(),
-        });
+        output.set_payload(RPGpioPayload { on: self.state });
         output.metadata.set_status(self.state);
         Ok(())
     }

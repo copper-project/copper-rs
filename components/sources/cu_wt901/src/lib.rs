@@ -6,7 +6,9 @@ use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
 use cu29::{output_msg, CuResult};
+#[cfg(hardware)]
 use embedded_hal::i2c::I2c;
+#[cfg(hardware)]
 use linux_embedded_hal::{I2CError, I2cdev};
 use std::fmt::Display;
 use uom::si::acceleration::{meter_per_second_squared, standard_gravity};
@@ -20,8 +22,10 @@ use uom::si::magnetic_flux_density::{nanotesla, tesla};
 
 // FIXME: remove.
 const I2C_BUS: &str = "/dev/i2c-9";
+#[allow(unused)]
 const WT901_I2C_ADDRESS: u8 = 0x50;
 
+#[allow(unused)]
 #[repr(u8)]
 #[derive(Debug, Clone, Copy)]
 enum Registers {
@@ -47,6 +51,7 @@ enum Registers {
 }
 
 impl Registers {
+    #[allow(dead_code)]
     fn offset(&self) -> usize {
         ((*self as u8 - Registers::AccX as u8) * 2) as usize
     }
@@ -59,6 +64,7 @@ use serde::ser::{Serialize, SerializeStruct, Serializer};
 use uom::fmt::DisplayStyle::Abbreviation;
 
 pub struct WT901 {
+    #[cfg(hardware)]
     i2c: Box<dyn I2c<Error = I2CError>>,
 }
 
@@ -175,32 +181,33 @@ impl Decode for PositionalReadingsPayload {
 }
 
 // Number of registers to read in one go
+#[allow(unused)]
 const REGISTER_SPAN_SIZE: usize = ((Registers::Yaw as u8 - Registers::AccX as u8) * 2 + 2) as usize;
 
+#[allow(unused)]
 impl WT901 {
-    fn bulk_position_read(
-        &mut self,
-        pr: &mut PositionalReadingsPayload,
-    ) -> Result<(), i2cdev::linux::LinuxI2CError> {
+    fn bulk_position_read(&mut self, pr: &mut PositionalReadingsPayload) -> Result<(), CuError> {
         debug!("Trying to read i2c");
-        let mut buf = [0u8; REGISTER_SPAN_SIZE];
-        self.i2c
-            .write_read(WT901_I2C_ADDRESS, &[Registers::AccX as u8], &mut buf)
-            .expect("Error reading WT901");
 
-        pr.acc_x = convert_acc(get_vec_i16(&buf, Registers::AccX.offset()));
-        pr.acc_y = convert_acc(get_vec_i16(&buf, Registers::AccY.offset()));
-        pr.acc_z = convert_acc(get_vec_i16(&buf, Registers::AccZ.offset()));
-        pr.gyro_x = convert_ang_vel(get_vec_i16(&buf, Registers::GyroX.offset()));
-        pr.gyro_y = convert_ang_vel(get_vec_i16(&buf, Registers::GyroY.offset()));
-        pr.gyro_z = convert_ang_vel(get_vec_i16(&buf, Registers::GyroZ.offset()));
-        pr.mag_x = convert_mag(get_vec_i16(&buf, Registers::MagX.offset()));
-        pr.mag_y = convert_mag(get_vec_i16(&buf, Registers::MagY.offset()));
-        pr.mag_z = convert_mag(get_vec_i16(&buf, Registers::MagZ.offset()));
-        pr.roll = convert_angle(get_vec_i16(&buf, Registers::Roll.offset()));
-        pr.pitch = convert_angle(get_vec_i16(&buf, Registers::Pitch.offset()));
-        pr.yaw = convert_angle(get_vec_i16(&buf, Registers::Yaw.offset()));
-        println!("{}", pr);
+        #[cfg(hardware)]
+        {
+            let mut buf = [0u8; REGISTER_SPAN_SIZE];
+            self.i2c
+                .write_read(WT901_I2C_ADDRESS, &[Registers::AccX as u8], &mut buf)
+                .expect("Error reading WT901");
+            pr.acc_x = convert_acc(get_vec_i16(&buf, Registers::AccX.offset()));
+            pr.acc_y = convert_acc(get_vec_i16(&buf, Registers::AccY.offset()));
+            pr.acc_z = convert_acc(get_vec_i16(&buf, Registers::AccZ.offset()));
+            pr.gyro_x = convert_ang_vel(get_vec_i16(&buf, Registers::GyroX.offset()));
+            pr.gyro_y = convert_ang_vel(get_vec_i16(&buf, Registers::GyroY.offset()));
+            pr.gyro_z = convert_ang_vel(get_vec_i16(&buf, Registers::GyroZ.offset()));
+            pr.mag_x = convert_mag(get_vec_i16(&buf, Registers::MagX.offset()));
+            pr.mag_y = convert_mag(get_vec_i16(&buf, Registers::MagY.offset()));
+            pr.mag_z = convert_mag(get_vec_i16(&buf, Registers::MagZ.offset()));
+            pr.roll = convert_angle(get_vec_i16(&buf, Registers::Roll.offset()));
+            pr.pitch = convert_angle(get_vec_i16(&buf, Registers::Pitch.offset()));
+            pr.yaw = convert_angle(get_vec_i16(&buf, Registers::Yaw.offset()));
+        }
         Ok(())
     }
 }
@@ -215,9 +222,11 @@ impl CuTaskLifecycle for WT901 {
         Self: Sized,
     {
         debug!("Opening {}... ", I2C_BUS);
+        #[cfg(hardware)]
         let i2cdev = I2cdev::new(I2C_BUS).unwrap();
         debug!("{} opened.", I2C_BUS);
         Ok(WT901 {
+            #[cfg(hardware)]
             i2c: Box::new(i2cdev),
         })
     }
@@ -228,8 +237,7 @@ impl<'cl> CuSrcTask<'cl> for WT901 {
 
     fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
         let mut pos = PositionalReadingsPayload::default();
-        self.bulk_position_read(&mut pos)
-            .map_err(|e| CuError::from(format!("Error reading WT901: {:?}", e)))?;
+        self.bulk_position_read(&mut pos)?;
         new_msg.set_payload(pos);
         Ok(())
     }
@@ -244,28 +252,33 @@ fn get_vec_u16(buf: &[u8], offset: usize) -> u16 {
 
 /// Get a u16 value out of a u8 buffer
 #[inline]
+#[allow(dead_code)]
 fn get_vec_i16(buf: &[u8], offset: usize) -> i16 {
     i16::from_le_bytes([buf[offset], buf[offset + 1]])
 }
 
+#[allow(dead_code)]
 fn convert_acc(acc: i16) -> Acceleration {
     // the scale is from 0 to 16g
     let acc = acc as f32 / 32768.0 * 16.0;
     Acceleration::new::<standard_gravity>(acc)
 }
 
+#[allow(dead_code)]
 fn convert_ang_vel(angv: i16) -> AngularVelocity {
     // the scale is from 0 to 2000 deg/s
     let acc = (angv as f32 / 32768.0) * 2000.0;
     AngularVelocity::new::<degree_per_second>(acc)
 }
 
+#[allow(dead_code)]
 fn convert_mag(mag: i16) -> MagneticFluxDensity {
     // the resolution is 8.333nT/LSB
     let mag = (mag as f32 / 32768.0) * 8.333;
     MagneticFluxDensity::new::<nanotesla>(mag)
 }
 
+#[allow(dead_code)]
 fn convert_angle(angle: i16) -> Angle {
     let angle = angle as f32 / 32768.0 * 180.0;
     Angle::new::<degree>(angle)

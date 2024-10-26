@@ -29,3 +29,8 @@ convert_case = "0.6.0"
 cargo_metadata = "0.18.1"
 cu29-unifiedlog = { workspace = true }
 
+[features]
+default = []
+# enables a more verbose build log showing the code generation.
+macro_debug = []
+

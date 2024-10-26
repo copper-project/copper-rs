@@ -1,6 +1,6 @@
 [package]
 name = "cu-rp-gpio"
-description = "This is a driver for the Raspberry Pi GPIOs."
+description = "This is a simple driver example for the Raspberry Pi GPIOs for Copper."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -19,6 +19,15 @@ cu29-log = { workspace = true }
 cu29-log-runtime = { workspace = true }
 cu29-log-derive = { workspace = true }
 bincode = { workspace = true }
-
-rppal = "0.18.0"
+serde = { workspace = true }
 lazy_static = "1.5.0"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+rppal = { version = "0.19.0", features = ["hal"] }
+
+[build-dependencies]
+cfg_aliases = "0.2.1"
+
+[features]
+default = []
+mock = []
