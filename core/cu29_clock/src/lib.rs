@@ -262,6 +262,11 @@ impl RobotClockMock {
         self.0.value()
     }
 
+    /// A convenient way to get the current time from the mocking side.
+    pub fn now(&self) -> CuTime {
+        self.0.value().into()
+    }
+
     /// Sets the absolute value of the time.
     pub fn set_value(&self, value: u64) {
         let v = self.0.value();

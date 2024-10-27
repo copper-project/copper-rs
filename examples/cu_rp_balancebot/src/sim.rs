@@ -120,6 +120,7 @@ fn run_copper_callback(
                 // Convert the angle from radians to the actual adc value from the sensor
                 let analog_value = (angle_radians / (2.0 * std::f32::consts::PI) * 4096.0) as u16;
                 output.set_payload(ADSReadingPayload { analog_value });
+                output.metadata.tov = robot_clock.clock.now().into();
                 SimOverride::ExecutedBySim
             }
             SimStep::Balpos(_) => SimOverride::ExecutedBySim,
@@ -127,9 +128,9 @@ fn run_copper_callback(
                 // Here same thing for the rail encoder.
                 let bindings = query_set.p0();
                 let (cart_transform, _) = bindings.single();
-                let ticks = -(cart_transform.translation.x * 2000.0) as i32;
-                println!("Ticks: {}", ticks);
+                let ticks = (cart_transform.translation.x * 2000.0) as i32;
                 output.set_payload(EncoderPayload { ticks });
+                output.metadata.tov = robot_clock.clock.now().into();
                 SimOverride::ExecutedBySim
             }
             SimStep::Railpos(_) => SimOverride::ExecutedBySim,
@@ -144,7 +145,7 @@ fn run_copper_callback(
                         cart_force.apply_force(Vector::ZERO);
                         return SimOverride::ExecutedBySim;
                     }
-                    let force_magnitude = motor_actuation.power * 3.0; // 4_000.0;
+                    let force_magnitude = motor_actuation.power * 2.0; // 4_000.0;
                                                                        // let current_force = cart_force.force(); // Get existing force which includes gravity
                     let new_force = /*current_force */ Vector::new(force_magnitude as f64, 0.0, 0.0);
                     cart_force.apply_force(new_force);
