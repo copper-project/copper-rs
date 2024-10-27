@@ -45,9 +45,13 @@ avian3d = { version = "0.1.2", default-features = false, features = ["bevy_scene
 parry3d = { version = "*", optional = true }
 
 [features]
-default = ["logreader", "sim"]
+default = ["logreader", "sim", "sim-embed"]
+# generates an executable to read the logs
 logreader = ["cu29-export"]
+# dependencies to build to matrix for copper
 sim = ["bevy", "bevy_mod_picking", "avian3d", "parry3d"]
+# build the sim executable with the assets embedded to simplify the distribution
+sim-embed = []
 
 [[bin]]
 name = "balancebot"

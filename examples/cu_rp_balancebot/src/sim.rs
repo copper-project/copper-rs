@@ -13,7 +13,6 @@ use cu29_helpers::{basic_copper_setup, CopperContext};
 use cu29_log_derive::debug;
 use cu_ads7883_new::ADSReadingPayload;
 use cu_rp_encoder::EncoderPayload;
-use std::env;
 use std::path::PathBuf;
 
 // To enable sim, it is just your regular macro with sim_mode true
@@ -50,7 +49,7 @@ fn default_callback(step: SimStep) -> SimOverride {
 // a system callback from bevy to setup the copper part of the house.
 fn setup_copper(mut commands: Commands) {
     const LOG_SLAB_SIZE: Option<usize> = Some(1 * 1024 * 1024 * 1024);
-    let logger_path = "logs/balance.copper";
+    let logger_path = "balance.copper";
     // here we set up a mock clock so the simulation can take control of it.
     let (robot_clock, mock) = RobotClock::mock();
     let copper_ctx = basic_copper_setup(
@@ -94,6 +93,11 @@ fn run_copper_callback(
     robot_clock: ResMut<CopperMockClock>,
     mut copper_ctx: ResMut<Copper>,
 ) {
+    // Check if the Cart spawned; if not, return early.
+    if query_set.p0().is_empty() {
+        return;
+    }
+
     // Sync the copper clock to the simulated physics clock.
     robot_clock
         .clock
@@ -123,7 +127,8 @@ fn run_copper_callback(
                 // Here same thing for the rail encoder.
                 let bindings = query_set.p0();
                 let (cart_transform, _) = bindings.single();
-                let ticks = -(cart_transform.translation.x * 1000.0) as i32;
+                let ticks = -(cart_transform.translation.x * 2000.0) as i32;
+                println!("Ticks: {}", ticks);
                 output.set_payload(EncoderPayload { ticks });
                 SimOverride::ExecutedBySim
             }
@@ -139,8 +144,8 @@ fn run_copper_callback(
                         cart_force.apply_force(Vector::ZERO);
                         return SimOverride::ExecutedBySim;
                     }
-                    let force_magnitude = motor_actuation.power / 4_000.0;
-                    // let current_force = cart_force.force(); // Get existing force which includes gravity
+                    let force_magnitude = motor_actuation.power * 3.0; // 4_000.0;
+                                                                       // let current_force = cart_force.force(); // Get existing force which includes gravity
                     let new_force = /*current_force */ Vector::new(force_magnitude as f64, 0.0, 0.0);
                     cart_force.apply_force(new_force);
                 } else {
@@ -173,10 +178,20 @@ fn main() {
     // minimal setup to load the assets
     world.add_plugins(DefaultPlugins);
 
-    // embed them in the executable. All this is super finicky.
-    embedded_asset!(world, "world/assets/skybox.ktx2");
-    embedded_asset!(world, "world/assets/diffuse_map.ktx2");
-    embedded_asset!(world, "world/assets/balancebot.glb");
+    #[cfg(not(feature = "sim-embed"))]
+    world.add_plugins(DefaultPlugins.set(AssetPlugin {
+        file_path: "src/world/assets".to_string(),
+        ..Default::default()
+    }));
+
+    #[cfg(feature = "sim-embed")]
+    {
+        // embed them in the executable.
+        // All this is super finicky, try to move this at your own risk.
+        embedded_asset!(world, "world/assets/skybox.ktx2");
+        embedded_asset!(world, "world/assets/diffuse_map.ktx2");
+        embedded_asset!(world, "world/assets/balancebot.glb");
+    }
 
     // setup everything that is simulation specific.
     let world = world::build_world(&mut world);
