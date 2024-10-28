@@ -67,7 +67,7 @@ pub fn build_world(app: &mut App) -> &mut App {
             // EditorPlugin::default(),
         ))
         .insert_resource(DefaultOpaqueRendererMethod::deferred())
-        .insert_resource(SimulationState::Paused)
+        .insert_resource(SimulationState::Running)
         .insert_resource(CameraControl {
             rotate_sensitivity: 0.05,
             zoom_sensitivity: 3.5,
@@ -456,7 +456,6 @@ fn toggle_simulation_state(
         if *state == SimulationState::Running {
             *state = SimulationState::Paused;
         } else {
-            println!("Starting simulation");
             *state = SimulationState::Running;
         }
     }

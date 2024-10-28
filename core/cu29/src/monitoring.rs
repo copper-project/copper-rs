@@ -1,7 +1,7 @@
 //! Some basic internal monitoring tooling Copper uses to monitor itself and the tasks it is running.
 //!
 
-use crate::config::ComponentConfig;
+use crate::config::CuConfig;
 use crate::cutask::CuMsgMetadata;
 use cu29_clock::{CuDuration, RobotClock};
 use cu29_traits::{CuError, CuResult};
@@ -28,7 +28,7 @@ pub enum Decision {
 
 /// Trait to implement a monitoring task.
 pub trait CuMonitor: Sized {
-    fn new(config: Option<&ComponentConfig>, taskids: &'static [&'static str]) -> CuResult<Self>
+    fn new(config: &CuConfig, taskids: &'static [&'static str]) -> CuResult<Self>
     where
         Self: Sized;
 
@@ -52,7 +52,7 @@ pub trait CuMonitor: Sized {
 /// This is basically defining the default behavior of Copper in case of error.
 pub struct NoMonitor {}
 impl CuMonitor for NoMonitor {
-    fn new(_config: Option<&ComponentConfig>, _taskids: &'static [&'static str]) -> CuResult<Self> {
+    fn new(_config: &CuConfig, _taskids: &'static [&'static str]) -> CuResult<Self> {
         Ok(NoMonitor {})
     }
 
