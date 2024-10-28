@@ -93,5 +93,5 @@ uom = { version = "0.36.0", features = ["serde"] }
 # Compact strings supporT
 compact_str = { version = "0.8.0", features = ["serde"] }
 
-[profile.release]
-lto = true
+# [profile.release]
+# lto = true

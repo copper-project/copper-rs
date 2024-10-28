@@ -11,8 +11,9 @@ use bevy::pbr::{
 };
 use bevy::prelude::*;
 use bevy_mod_picking::prelude::*;
-use cached_path::{Cache, Options, ProgressBar};
-use std::path::PathBuf;
+use cached_path::{Cache, ProgressBar};
+use std::path::{Path, PathBuf};
+use std::{fs, io};
 
 pub const BALANCEBOT: &str = "balancebot.glb";
 pub const SKYBOX: &str = "skybox.ktx2";
@@ -118,14 +119,87 @@ fn chessboard_setup(
     }
 }
 
+fn create_symlink(src: &str, dst: &str) -> io::Result<()> {
+    let dst_path = Path::new(dst);
+
+    if dst_path.exists() {
+        fs::remove_file(dst_path)?;
+    }
+
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(src, dst)
+    }
+
+    #[cfg(windows)]
+    {
+        std::os::windows::fs::symlink_file(src, dst)
+    }
+}
+
 fn setup_scene(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // Load the skybox
-    let skybox_handle = asset_server.load(SKYBOX);
+    const BASE_ASSETS_URL: &str = "https://cdn.copper-robotics.com/";
+    // Precache where the user executes the binary
+    let cache = Cache::builder()
+        .progress_bar(Some(ProgressBar::Full))
+        .build()
+        .expect("Failed to create the file cache.");
+
+    let destination = cache
+        .cached_path("https://raw.githubusercontent.com/copper-project/copper-rs/refs/heads/master/examples/cu_rp_balancebot/copperconfig.ron").expect("Failed to download copperconfig.ron.");
+
+    let base_path = destination
+        .parent()
+        .expect("Failed to get parent cache path.");
+
+    copy_to_current_dir_if_not_exist(&destination)
+        .expect("Failed to copy copperconfig.ron to the current directory.");
+
+    let balance_bot_hashed = cache
+        .cached_path(format!("{}{}", BASE_ASSETS_URL, BALANCEBOT).as_str())
+        .expect("Failed to download and cache balancebot.glb.");
+    let balance_bot_path = base_path.join(BALANCEBOT);
+
+    create_symlink(
+        balance_bot_hashed.to_str().unwrap(),
+        balance_bot_path.to_str().unwrap(),
+    )
+    .expect("Failed to create symlink to balancebot.glb.");
+
+    let skybox_path_hashed = cache
+        .cached_path(format!("{}{}", BASE_ASSETS_URL, SKYBOX).as_str())
+        .expect("Failed download and cache skybox.ktx2.");
+
+    let skybox_path = base_path.join(SKYBOX);
+    create_symlink(
+        skybox_path_hashed.to_str().unwrap(),
+        skybox_path.to_str().unwrap(),
+    )
+    .expect("Failed to create symlink to skybox.ktx2.");
+
+    let diffuse_map_path_hashed = cache
+        .cached_path(format!("{}{}", BASE_ASSETS_URL, DIFFUSE_MAP).as_str())
+        .expect("Failed download and cache diffuse_map.");
+
+    let diffuse_map_path = base_path.join(DIFFUSE_MAP);
+    create_symlink(
+        diffuse_map_path_hashed.to_str().unwrap(),
+        diffuse_map_path.to_str().unwrap(),
+    )
+    .expect("Failed to create symlink to diffuse_map.ktx2.");
+
+    // Load the resources
+    let scene_handle = asset_server.load(
+        GltfAssetLabel::Scene(0).from_asset(format!("{}#scene0", balance_bot_path.display())),
+    );
+    let skybox_handle = asset_server.load(skybox_path);
+    let diffuse_map_handle = asset_server.load(diffuse_map_path);
+    let specular_map_handle = skybox_handle.clone(); // some quirk
 
     // Fiat Lux
     commands.insert_resource(AmbientLight {
@@ -135,7 +209,7 @@ fn setup_scene(
 
     // load the scene
     commands.spawn(SceneBundle {
-        scene: asset_server.load(GltfAssetLabel::Scene(0).from_asset(BALANCEBOT)),
+        scene: scene_handle,
         ..default()
     });
 
@@ -150,12 +224,12 @@ fn setup_scene(
             ..default()
         },
         Skybox {
-            image: skybox_handle.clone(),
+            image: skybox_handle,
             brightness: 1000.0,
         },
         EnvironmentMapLight {
-            diffuse_map: asset_server.load(DIFFUSE_MAP),
-            specular_map: skybox_handle.clone(),
+            diffuse_map: diffuse_map_handle,
+            specular_map: specular_map_handle,
             intensity: 900.0,
         },
         ScreenSpaceReflectionsBundle {
@@ -306,12 +380,12 @@ fn setup_entities(
 
 /// Winged some type of orbital camera to explore around the robot.
 fn camera_control_system(
+    control: Res<CameraControl>,
     keys: Res<ButtonInput<KeyCode>>,
     mut scroll_evr: EventReader<MouseWheel>,
     mut mouse_motion: EventReader<MouseMotion>,
     mut query: Query<&mut Transform, With<Camera>>,
     time: Res<Time>,
-    control: Res<CameraControl>,
     mouse_button_input: Res<ButtonInput<MouseButton>>,
 ) {
     let mut camera_transform = query.single_mut();
@@ -406,27 +480,15 @@ fn update_physics(state: Res<SimulationState>, mut time: ResMut<Time<Physics>>) 
     time.unpause();
 }
 
-pub(crate) fn precache_assets() {
-    const BASE_URL: &str = "https://raw.githubusercontent.com/copper-project/copper-rs/refs/heads/master/examples/cu_rp_balancebot/";
-    // Precache where the user executes the binary
-    let cache = Cache::builder()
-        .dir(PathBuf::from(std::env::current_dir().unwrap()))
-        .progress_bar(Some(ProgressBar::Full))
-        .build()
-        .expect("Failed to create the file cache.");
+fn copy_to_current_dir_if_not_exist(file_path: &PathBuf) -> io::Result<()> {
+    let current_dir = std::env::current_dir()?;
+    let file_name = file_path
+        .file_name()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Invalid file path"))?;
 
-    cache
-        .cached_path(format!("{}/copperconfig.ron", BASE_URL).as_str())
-        .expect("Failed to cache copperconfig.ron.");
-
-    let asset_dir = Options::default().subdir("assets");
-
-    for asset in &[BALANCEBOT, SKYBOX, DIFFUSE_MAP] {
-        cache
-            .cached_path_with_options(
-                format!("{}/assets/{}", BASE_URL, asset).as_str(),
-                &asset_dir,
-            )
-            .expect("Failed to cache balancebot.glb.");
+    let destination = current_dir.join(file_name);
+    if !destination.exists() {
+        fs::copy(&file_path, &destination)?;
     }
+    Ok(())
 }

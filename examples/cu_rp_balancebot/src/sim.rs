@@ -173,9 +173,6 @@ fn stop_copper_on_exit(mut exit_events: EventReader<AppExit>, mut copper_ctx: Re
 }
 
 fn main() {
-    // Download what we need before starting the simulation.
-    world::precache_assets();
-
     let mut world = App::new();
 
     // minimal setup to load the assets
