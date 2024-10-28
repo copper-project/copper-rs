@@ -76,10 +76,12 @@ pub fn build_world(app: &mut App) -> &mut App {
         .insert_resource(Gravity::default())
         .insert_resource(Time::<Physics>::default())
         .add_systems(Startup, setup_scene)
+        .add_systems(Startup, setup_ui)
         .add_systems(Update, setup_entities)
         .add_systems(Update, toggle_simulation_state)
         .add_systems(Update, camera_control_system)
         .add_systems(Update, update_physics)
+        .add_systems(Update, global_cart_drag_listener)
 }
 
 fn chessboard_setup(
@@ -241,6 +243,49 @@ fn setup_scene(
     chessboard_setup(&mut commands, &mut meshes, &mut materials);
 }
 
+fn setup_ui(mut commands: Commands) {
+    commands
+        .spawn((NodeBundle {
+            style: Style {
+                position_type: PositionType::Absolute,
+                bottom: Val::Px(5.0),
+                right: Val::Px(5.0),
+                padding: UiRect::new(Val::Px(15.0),Val::Px(15.0), Val::Px(10.0), Val::Px(10.0)),
+                column_gap: Val::Px(10.0),
+
+                flex_direction: FlexDirection::Row,
+                justify_content: JustifyContent::SpaceBetween,
+                border: UiRect::all(Val::Px(2.0)),
+                ..default()
+            },
+            background_color: Color::srgba(0.25, 0.41, 0.88, 0.7).into(),
+            border_color: Color::srgba(0.8, 0.8, 0.8, 0.7).into(),
+            border_radius: BorderRadius::all(Val::Px(10.0)),
+            ..default()
+        },))
+        .with_children(|parent| {
+            // Left column
+            parent.spawn(TextBundle::from_section(
+                "Space:\nNavigation:\nInteract:\nZoom:\nMove:",
+                TextStyle {
+                    font_size: 12.0,
+                    color: Color::srgb(1.0, 0.8, 0.2), // Golden color
+                    ..default()
+                },
+            ));
+
+            // Right column
+            parent.spawn(TextBundle::from_section(
+                "Start / Stop Sim\nMiddle Mouse Button + Drag\nClick + Drag\nScroll Wheel\nWASD / QE",
+                TextStyle {
+                    font_size: 12.0,
+                    color: Color::WHITE,
+                    ..default()
+                },
+            ));
+        });
+}
+
 // This needs to match an object / parent object name in the GLTF file (in blender this is the object name).
 const CART_GLTF_ASSET_NAME: &'static str = "Cart";
 
@@ -252,6 +297,28 @@ fn try_to_find_cart_entity(query: Query<(Entity, &Name), Without<Cart>>) -> Opti
         return Some(cart_entity);
     }
     None
+}
+
+// This is a global drag listener that will move the cart when dragged.
+// It is a bit of a hack, but it tries to find back the cart entity parent from any of the possible clickable children
+fn global_cart_drag_listener(
+    mut drag_events: EventReader<Pointer<Drag>>,
+    parents: Query<(&Parent, Option<&Cart>)>,
+    mut transforms: Query<&mut Transform, With<Cart>>,
+) {
+    for drag in drag_events.read() {
+        let mut entity = drag.target();
+        while let Ok((parent, maybe_cart)) = parents.get(entity) {
+            if maybe_cart.is_some() {
+                break;
+            }
+            entity = parent.get();
+        }
+
+        if let Ok(mut root_transform) = transforms.get_mut(entity) {
+            root_transform.translation.x += drag.delta.x / 500.0;
+        }
+    }
 }
 
 fn setup_entities(
@@ -283,9 +350,6 @@ fn setup_entities(
             .lock_rotation_x()
             .lock_rotation_y()
             .lock_rotation_z(),
-        On::<Pointer<Drag>>::target_component_mut::<Transform>(|drag, transform| {
-            transform.translation.x += drag.delta.x / 500.0; // Only translate along the X-axis
-        }),
     ));
 
     let rail_entity = commands
