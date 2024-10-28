@@ -38,7 +38,7 @@ ctrlc = "3.4.5"
 cu29-export = { workspace = true, optional = true }
 
 # Sim dependencies
-bevy = { version = "0.14.2", default-features = false, features = ["wayland", "bevy_render", "bevy_core_pipeline", "bevy_pbr", "bevy_scene", "bevy_sprite", "bevy_gltf", "tonemapping_luts", "bevy_ui", "ktx2", "jpeg"], optional = true }
+bevy = { version = "0.14.2", default-features = false, features = ["wayland", "bevy_render", "bevy_core_pipeline", "bevy_pbr", "bevy_scene", "bevy_sprite", "bevy_gltf", "tonemapping_luts", "bevy_ui", "ktx2", "jpeg", "png"], optional = true }
 bevy_mod_picking = { git = "https://github.com/copper-project/bevy_mod_picking_f64", features = ["backend_avian"], optional = true }
 bevy_editor_pls = "*"
 avian3d = { version = "0.1.2", default-features = false, features = ["bevy_scene", "collider-from-mesh", "debug-plugin", "parallel", "f64", "parry-f64"], optional = true }
