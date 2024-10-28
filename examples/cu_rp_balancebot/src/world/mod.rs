@@ -82,9 +82,10 @@ pub fn build_world(app: &mut App) -> &mut App {
         .add_systems(Update, camera_control_system)
         .add_systems(Update, update_physics)
         .add_systems(Update, global_cart_drag_listener)
+        .add_systems(PostUpdate, reset_sim)
 }
 
-fn chessboard_setup(
+fn ground_setup(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
@@ -240,17 +241,22 @@ fn setup_scene(
     ));
 
     // add a ground
-    chessboard_setup(&mut commands, &mut meshes, &mut materials);
+    ground_setup(&mut commands, &mut meshes, &mut materials);
 }
 
 fn setup_ui(mut commands: Commands) {
+    #[cfg(target_os = "macos")]
+    let instructions = "WASD / QE\nControl-Click + Drag\nClick + Drag\nScrolling\nSpace\nR";
+    #[cfg(not(target_os = "macos"))]
+    let instructions = "WASD / QE\nMiddle-Click + Drag\nClick + Drag\nScroll Wheel\nSpace\nR";
+
     commands
         .spawn((NodeBundle {
             style: Style {
                 position_type: PositionType::Absolute,
                 bottom: Val::Px(5.0),
                 right: Val::Px(5.0),
-                padding: UiRect::new(Val::Px(15.0),Val::Px(15.0), Val::Px(10.0), Val::Px(10.0)),
+                padding: UiRect::new(Val::Px(15.0), Val::Px(15.0), Val::Px(10.0), Val::Px(10.0)),
                 column_gap: Val::Px(10.0),
 
                 flex_direction: FlexDirection::Row,
@@ -266,7 +272,7 @@ fn setup_ui(mut commands: Commands) {
         .with_children(|parent| {
             // Left column
             parent.spawn(TextBundle::from_section(
-                "Space:\nNavigation:\nInteract:\nZoom:\nMove:",
+                "Move\nNavigation\nInteract\nZoom\nPause/Resume\nReset",
                 TextStyle {
                     font_size: 12.0,
                     color: Color::srgb(1.0, 0.8, 0.2), // Golden color
@@ -276,7 +282,7 @@ fn setup_ui(mut commands: Commands) {
 
             // Right column
             parent.spawn(TextBundle::from_section(
-                "Start / Stop Sim\nMiddle Mouse Button + Drag\nClick + Drag\nScroll Wheel\nWASD / QE",
+                instructions,
                 TextStyle {
                     font_size: 12.0,
                     color: Color::WHITE,
@@ -379,6 +385,8 @@ fn setup_entities(
 
     let rod_entity = commands
         .spawn((
+            Name::new("Rod"),
+            Rod,
             PbrBundle {
                 mesh: meshes.add(Cylinder::new(ROD_WIDTH as f32 / 2.0, ROD_HEIGHT as f32)),
                 // material: materials.add(Color::srgb(0.0, 1.0, 0.0)),
@@ -402,18 +410,17 @@ fn setup_entities(
                 .lock_translation_z()
                 .lock_rotation_y()
                 .lock_rotation_x(),
-            Rod,
             On::<Pointer<Drag>>::target_component_mut::<Transform>(|drag, transform| {
                 if drag.button != PointerButton::Primary {
                     return;
                 }
                 let pivot_world = transform.translation
                     + transform.rotation * Vec3::new(0.0, -ROD_HEIGHT as f32 / 2.0, 0.0);
-                transform.rotate_around(pivot_world, Quat::from_rotation_z(drag.delta.x / 50.0));
+                transform.rotate_around(pivot_world, Quat::from_rotation_z(-drag.delta.x / 50.0));
             }),
         ))
         .id();
-
+    println!("Rod entity created with ID: {:?}", rod_entity);
     commands.spawn(
         RevoluteJoint::new(cart_entity, rod_entity)
             .with_compliance(1e-16)
@@ -437,6 +444,30 @@ fn setup_entities(
         transform: Transform::from_xyz(2.0, 4.0, 2.0),
         ..default()
     });
+}
+
+fn reset_sim(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut query: Query<(
+        Option<&Rod>,
+        Option<&Cart>,
+        Option<&mut Transform>, // Ensure transform is mutable
+    )>,
+) {
+    if keys.just_pressed(KeyCode::KeyR) {
+        for (rod_component, cart_component, transform) in query.iter_mut() {
+            if let Some(mut transform) = transform {
+                if rod_component.is_some() {
+                    transform.translation.x = 0.0;
+                    transform.rotation = Quat::IDENTITY;
+                }
+
+                if cart_component.is_some() {
+                    transform.translation.x = 0.0;
+                }
+            }
+        }
+    }
 }
 
 /// Winged some type of orbital camera to explore around the robot.
@@ -480,8 +511,12 @@ fn camera_control_system(
         }
     }
 
-    // Pan camera with middle mouse button + drag
-    if mouse_button_input.pressed(MouseButton::Middle) {
+    #[cfg(target_os = "macos")]
+    let mouse_button = MouseButton::Right;
+    #[cfg(not(target_os = "macos"))]
+    let mouse_button = MouseButton::Middle;
+
+    if mouse_button_input.pressed(mouse_button) {
         for ev in mouse_motion.read() {
             let right = camera_transform.right();
             let up = camera_transform.up();
