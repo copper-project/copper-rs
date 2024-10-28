@@ -426,7 +426,7 @@ mod tests {
         ))
     }
 
-    fn monitor_instanciator(_config: Option<&ComponentConfig>) -> NoMonitor {
+    fn monitor_instanciator(_config: &CuConfig) -> NoMonitor {
         NoMonitor {}
     }
 
