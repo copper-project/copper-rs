@@ -5,6 +5,7 @@ use crate::world::{Cart, Rod};
 use avian3d::math::Vector;
 use avian3d::prelude::{ExternalForce, Physics};
 use bevy::prelude::*;
+use cached_path::{Cache, ProgressBar};
 use cu29::clock::{RobotClock, RobotClockMock};
 use cu29::simulation::{CuTaskCallbackState, SimOverride};
 use cu29_derive::copper_runtime;
@@ -13,6 +14,7 @@ use cu29_log_derive::debug;
 use cu_ads7883_new::ADSReadingPayload;
 use cu_rp_encoder::EncoderPayload;
 use std::path::PathBuf;
+use std::{fs, io};
 
 // To enable sim, it is just your regular macro with sim_mode true
 #[copper_runtime(config = "copperconfig.ron", sim_mode = true)]
@@ -172,7 +174,27 @@ fn stop_copper_on_exit(mut exit_events: EventReader<AppExit>, mut copper_ctx: Re
     }
 }
 
+fn copy_to_current_dir_if_not_exist(file_path: &PathBuf, name: &str) -> io::Result<()> {
+    let current_dir = std::env::current_dir()?;
+    let destination = current_dir.join(name);
+    if !destination.exists() {
+        fs::copy(&file_path, &destination)?;
+    }
+    Ok(())
+}
+
 fn main() {
+    let cache = Cache::builder()
+        .progress_bar(Some(ProgressBar::Full))
+        .build()
+        .expect("Failed to create the file cache.");
+
+    let destination = cache
+        .cached_path("https://raw.githubusercontent.com/copper-project/copper-rs/refs/heads/master/examples/cu_rp_balancebot/copperconfig.ron").expect("Failed to download copperconfig.ron.");
+
+    copy_to_current_dir_if_not_exist(&destination, "copperconfig.ron")
+        .expect("Failed to copy copperconfig.ron to the current directory.");
+
     let mut world = App::new();
 
     // minimal setup to load the assets

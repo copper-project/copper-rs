@@ -12,7 +12,7 @@ use bevy::pbr::{
 use bevy::prelude::*;
 use bevy_mod_picking::prelude::*;
 use cached_path::{Cache, ProgressBar};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::{fs, io};
 
 pub const BALANCEBOT: &str = "balancebot.glb";
@@ -137,33 +137,24 @@ fn create_symlink(src: &str, dst: &str) -> io::Result<()> {
     }
 }
 
+pub const BASE_ASSETS_URL: &str = "https://cdn.copper-robotics.com/";
+
 fn setup_scene(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    const BASE_ASSETS_URL: &str = "https://cdn.copper-robotics.com/";
     // Precache where the user executes the binary
     let cache = Cache::builder()
         .progress_bar(Some(ProgressBar::Full))
         .build()
         .expect("Failed to create the file cache.");
 
-    let destination = cache
-        .cached_path("https://raw.githubusercontent.com/copper-project/copper-rs/refs/heads/master/examples/cu_rp_balancebot/copperconfig.ron").expect("Failed to download copperconfig.ron.");
-
-    let base_path = destination
-        .parent()
-        .expect("Failed to get parent cache path.");
-
-    copy_to_current_dir_if_not_exist(&destination)
-        .expect("Failed to copy copperconfig.ron to the current directory.");
-
     let balance_bot_hashed = cache
         .cached_path(format!("{}{}", BASE_ASSETS_URL, BALANCEBOT).as_str())
         .expect("Failed to download and cache balancebot.glb.");
-    let balance_bot_path = base_path.join(BALANCEBOT);
+    let balance_bot_path = balance_bot_hashed.parent().unwrap().join(BALANCEBOT);
 
     create_symlink(
         balance_bot_hashed.to_str().unwrap(),
@@ -175,7 +166,7 @@ fn setup_scene(
         .cached_path(format!("{}{}", BASE_ASSETS_URL, SKYBOX).as_str())
         .expect("Failed download and cache skybox.ktx2.");
 
-    let skybox_path = base_path.join(SKYBOX);
+    let skybox_path = skybox_path_hashed.parent().unwrap().join(SKYBOX);
     create_symlink(
         skybox_path_hashed.to_str().unwrap(),
         skybox_path.to_str().unwrap(),
@@ -186,7 +177,7 @@ fn setup_scene(
         .cached_path(format!("{}{}", BASE_ASSETS_URL, DIFFUSE_MAP).as_str())
         .expect("Failed download and cache diffuse_map.");
 
-    let diffuse_map_path = base_path.join(DIFFUSE_MAP);
+    let diffuse_map_path = diffuse_map_path_hashed.parent().unwrap().join(DIFFUSE_MAP);
     create_symlink(
         diffuse_map_path_hashed.to_str().unwrap(),
         diffuse_map_path.to_str().unwrap(),
@@ -478,17 +469,4 @@ fn update_physics(state: Res<SimulationState>, mut time: ResMut<Time<Physics>>) 
         return;
     }
     time.unpause();
-}
-
-fn copy_to_current_dir_if_not_exist(file_path: &PathBuf) -> io::Result<()> {
-    let current_dir = std::env::current_dir()?;
-    let file_name = file_path
-        .file_name()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Invalid file path"))?;
-
-    let destination = current_dir.join(file_name);
-    if !destination.exists() {
-        fs::copy(&file_path, &destination)?;
-    }
-    Ok(())
 }
