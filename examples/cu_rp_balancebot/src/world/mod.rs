@@ -11,20 +11,13 @@ use bevy::pbr::{
 };
 use bevy::prelude::*;
 use bevy_mod_picking::prelude::*;
+use cached_path::{Cache, Options, ProgressBar};
+use std::path::PathBuf;
 
-#[cfg(feature = "sim-embed")]
-mod res {
-    pub const BALANCEBOT: &str = "embedded://balancebot_sim/world/assets/balancebot.glb";
-    pub const SKYBOX: &str = "embedded://balancebot_sim/world/assets/skybox.ktx2";
-    pub const DIFFUSE_MAP: &str = "embedded://balancebot_sim/world/assets/diffuse_map.ktx2";
-}
+pub const BALANCEBOT: &str = "balancebot.glb";
+pub const SKYBOX: &str = "skybox.ktx2";
+pub const DIFFUSE_MAP: &str = "diffuse_map.ktx2";
 
-#[cfg(not(feature = "sim-embed"))]
-mod res {
-    pub const BALANCEBOT: &str = "src/assets/balancebot.glb";
-    pub const SKYBOX: &str = "src/assets/skybox.ktx2";
-    pub const DIFFUSE_MAP: &str = "src/assets/diffuse_map.ktx2";
-}
 const TABLE_HEIGHT: f32 = 0.724;
 const RAIL_WIDTH: f64 = 0.55; // 55cm
 const RAIL_HEIGHT: f64 = 0.02;
@@ -132,7 +125,7 @@ fn setup_scene(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     // Load the skybox
-    let skybox_handle = asset_server.load(res::SKYBOX);
+    let skybox_handle = asset_server.load(SKYBOX);
 
     // Fiat Lux
     commands.insert_resource(AmbientLight {
@@ -142,7 +135,7 @@ fn setup_scene(
 
     // load the scene
     commands.spawn(SceneBundle {
-        scene: asset_server.load(GltfAssetLabel::Scene(0).from_asset(res::BALANCEBOT)),
+        scene: asset_server.load(GltfAssetLabel::Scene(0).from_asset(BALANCEBOT)),
         ..default()
     });
 
@@ -161,7 +154,7 @@ fn setup_scene(
             brightness: 1000.0,
         },
         EnvironmentMapLight {
-            diffuse_map: asset_server.load(res::DIFFUSE_MAP),
+            diffuse_map: asset_server.load(DIFFUSE_MAP),
             specular_map: skybox_handle.clone(),
             intensity: 900.0,
         },
@@ -411,4 +404,29 @@ fn update_physics(state: Res<SimulationState>, mut time: ResMut<Time<Physics>>) 
         return;
     }
     time.unpause();
+}
+
+pub(crate) fn precache_assets() {
+    const BASE_URL: &str = "https://raw.githubusercontent.com/copper-project/copper-rs/refs/heads/master/examples/cu_rp_balancebot/";
+    // Precache where the user executes the binary
+    let cache = Cache::builder()
+        .dir(PathBuf::from(std::env::current_dir().unwrap()))
+        .progress_bar(Some(ProgressBar::Full))
+        .build()
+        .expect("Failed to create the file cache.");
+
+    cache
+        .cached_path(format!("{}/copperconfig.ron", BASE_URL).as_str())
+        .expect("Failed to cache copperconfig.ron.");
+
+    let asset_dir = Options::default().subdir("assets");
+
+    for asset in &[BALANCEBOT, SKYBOX, DIFFUSE_MAP] {
+        cache
+            .cached_path_with_options(
+                format!("{}/assets/{}", BASE_URL, asset).as_str(),
+                &asset_dir,
+            )
+            .expect("Failed to cache balancebot.glb.");
+    }
 }

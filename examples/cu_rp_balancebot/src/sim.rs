@@ -4,7 +4,6 @@ mod world;
 use crate::world::{Cart, Rod};
 use avian3d::math::Vector;
 use avian3d::prelude::{ExternalForce, Physics};
-use bevy::asset::embedded_asset;
 use bevy::prelude::*;
 use cu29::clock::{RobotClock, RobotClockMock};
 use cu29::simulation::{CuTaskCallbackState, SimOverride};
@@ -174,25 +173,13 @@ fn stop_copper_on_exit(mut exit_events: EventReader<AppExit>, mut copper_ctx: Re
 }
 
 fn main() {
+    // Download what we need before starting the simulation.
+    world::precache_assets();
+
     let mut world = App::new();
 
     // minimal setup to load the assets
     world.add_plugins(DefaultPlugins);
-
-    #[cfg(not(feature = "sim-embed"))]
-    world.add_plugins(DefaultPlugins.set(AssetPlugin {
-        file_path: "src/world/assets".to_string(),
-        ..Default::default()
-    }));
-
-    #[cfg(feature = "sim-embed")]
-    {
-        // embed them in the executable.
-        // All this is super finicky, try to move this at your own risk.
-        embedded_asset!(world, "world/assets/skybox.ktx2");
-        embedded_asset!(world, "world/assets/diffuse_map.ktx2");
-        embedded_asset!(world, "world/assets/balancebot.glb");
-    }
 
     // setup everything that is simulation specific.
     let world = world::build_world(&mut world);
