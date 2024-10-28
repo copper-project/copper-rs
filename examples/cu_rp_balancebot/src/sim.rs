@@ -198,7 +198,13 @@ fn main() {
     let mut world = App::new();
 
     // minimal setup to load the assets
-    world.add_plugins(DefaultPlugins);
+    world.add_plugins(DefaultPlugins.set(WindowPlugin {
+        primary_window: Some(Window {
+            title: "Copper Simulator".into(),
+            ..default()
+        }),
+        ..default()
+    }));
 
     // setup everything that is simulation specific.
     let world = world::build_world(&mut world);

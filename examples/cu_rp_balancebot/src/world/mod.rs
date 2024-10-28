@@ -307,6 +307,9 @@ fn global_cart_drag_listener(
     mut transforms: Query<&mut Transform, With<Cart>>,
 ) {
     for drag in drag_events.read() {
+        if drag.button != PointerButton::Primary {
+            continue;
+        }
         let mut entity = drag.target();
         while let Ok((parent, maybe_cart)) = parents.get(entity) {
             if maybe_cart.is_some() {
@@ -401,6 +404,9 @@ fn setup_entities(
                 .lock_rotation_x(),
             Rod,
             On::<Pointer<Drag>>::target_component_mut::<Transform>(|drag, transform| {
+                if drag.button != PointerButton::Primary {
+                    return;
+                }
                 let pivot_world = transform.translation
                     + transform.rotation * Vec3::new(0.0, -ROD_HEIGHT as f32 / 2.0, 0.0);
                 transform.rotate_around(pivot_world, Quat::from_rotation_z(drag.delta.x / 50.0));
