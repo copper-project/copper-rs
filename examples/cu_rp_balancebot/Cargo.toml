@@ -38,15 +38,20 @@ ctrlc = "3.4.5"
 cu29-export = { workspace = true, optional = true }
 
 # Sim dependencies
-bevy = { version = "0.14.2", default-features = false, features = ["wayland", "bevy_render", "bevy_core_pipeline", "bevy_pbr", "bevy_scene", "bevy_sprite", "tonemapping_luts", "bevy_ui", "exr", "hdr", "dds", "ktx2"], optional = true }
+bevy = { version = "0.14.2", default-features = false, features = ["wayland", "bevy_render", "bevy_core_pipeline", "bevy_pbr", "bevy_scene", "bevy_sprite", "bevy_gltf", "tonemapping_luts", "bevy_ui", "ktx2", "jpeg"], optional = true }
 bevy_mod_picking = { git = "https://github.com/copper-project/bevy_mod_picking_f64", features = ["backend_avian"], optional = true }
+bevy_editor_pls = "*"
 avian3d = { version = "0.1.2", default-features = false, features = ["bevy_scene", "collider-from-mesh", "debug-plugin", "parallel", "f64", "parry-f64"], optional = true }
 parry3d = { version = "*", optional = true }
 
 [features]
-default = ["logreader", "sim"]
+default = ["logreader", "sim", "sim-embed"]
+# generates an executable to read the logs
 logreader = ["cu29-export"]
+# dependencies to build to matrix for copper
 sim = ["bevy", "bevy_mod_picking", "avian3d", "parry3d"]
+# build the sim executable with the assets embedded to simplify the distribution
+sim-embed = []
 
 [[bin]]
 name = "balancebot"
@@ -61,9 +66,3 @@ required-features = ["logreader"]
 name = "balancebot-sim"
 path = "src/sim.rs"
 required-features = ["sim"]
-
-
-[target.'cfg(not(target_arch = "arm"))'.dependencies]
-cu29-export = { workspace = true, optional = true }
-
-

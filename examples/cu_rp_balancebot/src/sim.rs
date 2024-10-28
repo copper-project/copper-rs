@@ -4,6 +4,7 @@ mod world;
 use crate::world::{Cart, Rod};
 use avian3d::math::Vector;
 use avian3d::prelude::{ExternalForce, Physics};
+use bevy::asset::embedded_asset;
 use bevy::prelude::*;
 use cu29::clock::{RobotClock, RobotClockMock};
 use cu29::simulation::{CuTaskCallbackState, SimOverride};
@@ -48,7 +49,7 @@ fn default_callback(step: SimStep) -> SimOverride {
 // a system callback from bevy to setup the copper part of the house.
 fn setup_copper(mut commands: Commands) {
     const LOG_SLAB_SIZE: Option<usize> = Some(1 * 1024 * 1024 * 1024);
-    let logger_path = "logs/balance.copper";
+    let logger_path = "balance.copper";
     // here we set up a mock clock so the simulation can take control of it.
     let (robot_clock, mock) = RobotClock::mock();
     let copper_ctx = basic_copper_setup(
@@ -92,6 +93,11 @@ fn run_copper_callback(
     robot_clock: ResMut<CopperMockClock>,
     mut copper_ctx: ResMut<Copper>,
 ) {
+    // Check if the Cart spawned; if not, return early.
+    if query_set.p0().is_empty() {
+        return;
+    }
+
     // Sync the copper clock to the simulated physics clock.
     robot_clock
         .clock
@@ -114,6 +120,7 @@ fn run_copper_callback(
                 // Convert the angle from radians to the actual adc value from the sensor
                 let analog_value = (angle_radians / (2.0 * std::f32::consts::PI) * 4096.0) as u16;
                 output.set_payload(ADSReadingPayload { analog_value });
+                output.metadata.tov = robot_clock.clock.now().into();
                 SimOverride::ExecutedBySim
             }
             SimStep::Balpos(_) => SimOverride::ExecutedBySim,
@@ -121,8 +128,9 @@ fn run_copper_callback(
                 // Here same thing for the rail encoder.
                 let bindings = query_set.p0();
                 let (cart_transform, _) = bindings.single();
-                let ticks = -(cart_transform.translation.x * 1000.0) as i32;
+                let ticks = (cart_transform.translation.x * 2000.0) as i32;
                 output.set_payload(EncoderPayload { ticks });
+                output.metadata.tov = robot_clock.clock.now().into();
                 SimOverride::ExecutedBySim
             }
             SimStep::Railpos(_) => SimOverride::ExecutedBySim,
@@ -137,8 +145,8 @@ fn run_copper_callback(
                         cart_force.apply_force(Vector::ZERO);
                         return SimOverride::ExecutedBySim;
                     }
-                    let force_magnitude = motor_actuation.power / 4_000.0;
-                    // let current_force = cart_force.force(); // Get existing force which includes gravity
+                    let force_magnitude = motor_actuation.power * 2.0; // 4_000.0;
+                                                                       // let current_force = cart_force.force(); // Get existing force which includes gravity
                     let new_force = /*current_force */ Vector::new(force_magnitude as f64, 0.0, 0.0);
                     cart_force.apply_force(new_force);
                 } else {
@@ -167,6 +175,24 @@ fn stop_copper_on_exit(mut exit_events: EventReader<AppExit>, mut copper_ctx: Re
 
 fn main() {
     let mut world = App::new();
+
+    // minimal setup to load the assets
+    world.add_plugins(DefaultPlugins);
+
+    #[cfg(not(feature = "sim-embed"))]
+    world.add_plugins(DefaultPlugins.set(AssetPlugin {
+        file_path: "src/world/assets".to_string(),
+        ..Default::default()
+    }));
+
+    #[cfg(feature = "sim-embed")]
+    {
+        // embed them in the executable.
+        // All this is super finicky, try to move this at your own risk.
+        embedded_asset!(world, "world/assets/skybox.ktx2");
+        embedded_asset!(world, "world/assets/diffuse_map.ktx2");
+        embedded_asset!(world, "world/assets/balancebot.glb");
+    }
 
     // setup everything that is simulation specific.
     let world = world::build_world(&mut world);

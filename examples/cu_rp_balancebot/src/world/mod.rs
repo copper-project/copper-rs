@@ -12,30 +12,39 @@ use bevy::pbr::{
 use bevy::prelude::*;
 use bevy_mod_picking::prelude::*;
 
-const RAIL_WIDTH: f64 = 1.00; // 55cm
+#[cfg(feature = "sim-embed")]
+mod res {
+    pub const BALANCEBOT: &str = "embedded://balancebot_sim/world/assets/balancebot.glb";
+    pub const SKYBOX: &str = "embedded://balancebot_sim/world/assets/skybox.ktx2";
+    pub const DIFFUSE_MAP: &str = "embedded://balancebot_sim/world/assets/diffuse_map.ktx2";
+}
+
+#[cfg(not(feature = "sim-embed"))]
+mod res {
+    pub const BALANCEBOT: &str = "src/assets/balancebot.glb";
+    pub const SKYBOX: &str = "src/assets/skybox.ktx2";
+    pub const DIFFUSE_MAP: &str = "src/assets/diffuse_map.ktx2";
+}
+const TABLE_HEIGHT: f32 = 0.724;
+const RAIL_WIDTH: f64 = 0.55; // 55cm
 const RAIL_HEIGHT: f64 = 0.02;
 const RAIL_DEPTH: f64 = 0.06;
 
-const CART_WIDTH: f64 = RAIL_DEPTH;
-const CART_HEIGHT: f64 = CART_WIDTH / 5.0;
+const CART_WIDTH: f64 = 0.040;
+const CART_HEIGHT: f64 = 0.045; // The mid rail is 1cm above the bottom rail, and the cart is 35mm tall.
 const CART_DEPTH: f64 = RAIL_DEPTH;
 
 const ROD_WIDTH: f64 = 0.007; // 7mm
 const ROD_HEIGHT: f64 = 0.50; // 50cm
 const ROD_DEPTH: f64 = ROD_WIDTH;
 
-const MARGIN: f64 = 0.001; // 1mm of slack
-
 const AXIS_LENGTH: f64 = 0.02;
 
-#[allow(dead_code)]
 const STEEL_DENSITY: f64 = 7800.0; // kg/m^3
+const ALUMINUM_DENSITY: f64 = 2700.0; // kg/m^3
 
 #[allow(dead_code)]
 const ROD_VOLUME: f64 = ROD_WIDTH * ROD_HEIGHT * ROD_DEPTH;
-
-#[allow(dead_code)]
-const ROD_MASS: f64 = ROD_VOLUME * STEEL_DENSITY;
 
 #[derive(Resource)]
 struct CameraControl {
@@ -58,20 +67,13 @@ pub struct Rod;
 
 pub fn build_world(app: &mut App) -> &mut App {
     app.insert_resource(Msaa::Off)
-        .insert_resource(DefaultOpaqueRendererMethod::deferred())
         .add_plugins((
-            DefaultPlugins.build().disable::<bevy::log::LogPlugin>(), // to be able to use the TUI
             DefaultPickingPlugins,
             PhysicsPlugins::default().with_length_unit(1000.0),
-            // PhysicsDebugPlugin::default(),
             // EditorPlugin::default(),
-            // WireframePlugin,
         ))
-        // .insert_resource(WireframeConfig {
-        //    global: true,
-        //    default_color: Color::srgb(0.0, 1.0, 0.0),
-        // })
-        .insert_resource(SimulationState::Running)
+        .insert_resource(DefaultOpaqueRendererMethod::deferred())
+        .insert_resource(SimulationState::Paused)
         .insert_resource(CameraControl {
             rotate_sensitivity: 0.05,
             zoom_sensitivity: 3.5,
@@ -79,7 +81,8 @@ pub fn build_world(app: &mut App) -> &mut App {
         })
         .insert_resource(Gravity::default())
         .insert_resource(Time::<Physics>::default())
-        .add_systems(Startup, setup)
+        .add_systems(Startup, setup_scene)
+        .add_systems(Update, setup_entities)
         .add_systems(Update, toggle_simulation_state)
         .add_systems(Update, camera_control_system)
         .add_systems(Update, update_physics)
@@ -94,15 +97,15 @@ fn chessboard_setup(
     // Chessboard Plane
     let black_material = materials.add(StandardMaterial {
         base_color: Color::BLACK,
-        reflectance: 0.6,
-        perceptual_roughness: 0.2,
+        reflectance: 0.4,
+        perceptual_roughness: 0.4,
         ..default()
     });
 
     let white_material = materials.add(StandardMaterial {
         base_color: Color::WHITE,
-        reflectance: 0.6,
-        perceptual_roughness: 0.2,
+        reflectance: 0.4,
+        perceptual_roughness: 0.4,
         ..default()
     });
 
@@ -115,22 +118,33 @@ fn chessboard_setup(
                 } else {
                     white_material.clone()
                 },
-                transform: Transform::from_xyz(x as f32 * 2.0, -1.0, z as f32 * 2.0),
+                transform: Transform::from_xyz(x as f32 * 2.0, -TABLE_HEIGHT, z as f32 * 2.0),
                 ..default()
             },));
         }
     }
 }
 
-// Setup our scene
-fn setup(
+fn setup_scene(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     // Load the skybox
-    let skybox_handle = asset_server.load("skybox.ktx2");
+    let skybox_handle = asset_server.load(res::SKYBOX);
+
+    // Fiat Lux
+    commands.insert_resource(AmbientLight {
+        color: Color::srgb_u8(210, 220, 240),
+        brightness: 1.0,
+    });
+
+    // load the scene
+    commands.spawn(SceneBundle {
+        scene: asset_server.load(GltfAssetLabel::Scene(0).from_asset(res::BALANCEBOT)),
+        ..default()
+    });
 
     // Spawn the camera
     commands.spawn((
@@ -147,7 +161,7 @@ fn setup(
             brightness: 1000.0,
         },
         EnvironmentMapLight {
-            diffuse_map: asset_server.load("diffuse_map.ktx2"),
+            diffuse_map: asset_server.load(res::DIFFUSE_MAP),
             specular_map: skybox_handle.clone(),
             intensity: 900.0,
         },
@@ -165,78 +179,78 @@ fn setup(
         Fxaa::default(),
     ));
 
+    // add a ground
     chessboard_setup(&mut commands, &mut meshes, &mut materials);
+}
+
+// This needs to match an object / parent object name in the GLTF file (in blender this is the object name).
+const CART_GLTF_ASSET_NAME: &'static str = "Cart";
+
+fn try_to_find_cart_entity(query: Query<(Entity, &Name), Without<Cart>>) -> Option<Entity> {
+    if let Some((cart_entity, _)) = query
+        .iter()
+        .find(|(_, name)| name.as_str() == CART_GLTF_ASSET_NAME)
+    {
+        return Some(cart_entity);
+    }
+    None
+}
+
+fn setup_entities(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    query: Query<(Entity, &Name), Without<Cart>>,
+) {
+    // The cart entity will be loaded from the GLTF file, we need to wait for it to be loaded
+    let cart_entity = match try_to_find_cart_entity(query) {
+        Some(entity) => entity,
+        None => return,
+    };
+
+    let cart_collider_model = Collider::cuboid(CART_WIDTH, CART_HEIGHT, CART_DEPTH);
+    let cart_mass_props =
+        MassPropertiesBundle::new_computed(&cart_collider_model, ALUMINUM_DENSITY); // It is a mix of emptiness and motor and steel.. overall some aluminum?
+
+    commands.entity(cart_entity).insert((
+        PickableBundle::default(),
+        ExternalForce::default(),
+        Cart,
+        cart_mass_props,
+        Dominance(5),
+        RigidBody::Dynamic,
+        LockedAxes::new()
+            .lock_translation_z()
+            .lock_translation_y()
+            .lock_rotation_x()
+            .lock_rotation_y()
+            .lock_rotation_z(),
+        On::<Pointer<Drag>>::target_component_mut::<Transform>(|drag, transform| {
+            transform.translation.x += drag.delta.x / 500.0; // Only translate along the X-axis
+        }),
+    ));
 
     let rail_entity = commands
         .spawn((
-            PbrBundle {
-                mesh: meshes.add(Cuboid::new(
-                    RAIL_WIDTH as f32,
-                    RAIL_HEIGHT as f32,
-                    RAIL_DEPTH as f32,
-                )),
-                material: materials.add(StandardMaterial {
-                    base_color: Color::srgb(0.8, 0.8, 0.8),
-                    metallic: 0.9,
-                    perceptual_roughness: 0.3,
-                    ..default()
-                }),
-                transform: Transform::from_xyz(0.0, RAIL_HEIGHT as f32 / 2.0, 0.0), // Lower the starting height
-                ..default()
-            },
-            Collider::cuboid(RAIL_WIDTH, RAIL_HEIGHT, RAIL_DEPTH),
             RigidBody::Static, // The rail doesn't move
                                // CollisionLayers::new(0b01, 0b01),
         ))
         .id();
 
-    // Spawn the cart (Dynamic, constrained to move along the rail)
-    let cart_entity = commands
-        .spawn((
-            PbrBundle {
-                mesh: meshes.add(Cuboid::new(
-                    CART_WIDTH as f32,
-                    CART_HEIGHT as f32,
-                    CART_DEPTH as f32,
-                )),
-                material: materials.add(StandardMaterial {
-                    base_color: Color::srgb(0.3, 0.3, 0.3),
-                    metallic: 0.9,
-                    perceptual_roughness: 0.5,
-                    ..default()
-                }),
-                transform: Transform::from_xyz(
-                    0.0,
-                    RAIL_HEIGHT as f32 + CART_HEIGHT as f32 / 2.0 + MARGIN as f32,
-                    0.0,
-                ), // Lower the starting height
-                ..default()
-            },
-            PickableBundle::default(),
-            ExternalForce::default(),
-            Cart,
-            Collider::cuboid(CART_WIDTH, CART_HEIGHT, CART_DEPTH),
-            RigidBody::Dynamic,
-            On::<Pointer<Drag>>::target_component_mut::<Transform>(|drag, transform| {
-                transform.translation.x += drag.delta.x / 500.0; // Only translate along the X-axis
-            }),
-        ))
-        .id();
-
+    // Connect the cart to the rail
     commands.spawn(
         PrismaticJoint::new(rail_entity, cart_entity)
             .with_free_axis(DVec3::X) // Allow movement along the X-axis
             .with_compliance(1e-9)
-            .with_linear_velocity_damping(10.0)
+            .with_linear_velocity_damping(100.0)
             .with_angular_velocity_damping(10.0)
             .with_limits(-RAIL_WIDTH / 2.0, RAIL_WIDTH / 2.0)
-            .with_local_anchor_1(DVec3::new(
-                0.0,
-                RAIL_HEIGHT / 2.0 + CART_HEIGHT / 2.0 + MARGIN,
-                0.0,
-            )) // Rail top edge
-            .with_local_anchor_2(DVec3::new(0.0, 0.0, 0.0)),
+            .with_local_anchor_1(DVec3::new(0.0, RAIL_HEIGHT / 2.0, 0.0)) // Rail top edge
+            .with_local_anchor_2(DVec3::new(0.0, -CART_HEIGHT / 2.0, 0.0)),
     );
+
+    let rod_collider_model = Collider::capsule(ROD_WIDTH / 2.0, ROD_HEIGHT);
+    let rod_mass_props = MassPropertiesBundle::new_computed(&rod_collider_model, STEEL_DENSITY); // overall some aluminum?
 
     let rod_entity = commands
         .spawn((
@@ -251,19 +265,19 @@ fn setup(
                 }),
                 transform: Transform::from_xyz(
                     0.0,
-                    ROD_HEIGHT as f32 / 2.0
-                        + RAIL_HEIGHT as f32
-                        + CART_HEIGHT as f32 / 2.0
-                        + MARGIN as f32,
+                    ROD_HEIGHT as f32 / 2.0 /*+ RAIL_HEIGHT as f32*/ + CART_HEIGHT as f32,
                     CART_DEPTH as f32 / 2.0 + ROD_DEPTH as f32 / 2.0 + AXIS_LENGTH as f32,
                 ), // Start higher than the cart
                 ..default()
             },
             PickableBundle::default(),
-            Collider::cuboid(ROD_WIDTH, ROD_HEIGHT, ROD_DEPTH),
+            rod_mass_props,
             RigidBody::Dynamic,
+            LockedAxes::new()
+                .lock_translation_z()
+                .lock_rotation_y()
+                .lock_rotation_x(),
             Rod,
-            // Mass::new(ROD_MASS),
             On::<Pointer<Drag>>::target_component_mut::<Transform>(|drag, transform| {
                 let pivot_world = transform.translation
                     + transform.rotation * Vec3::new(0.0, -ROD_HEIGHT as f32 / 2.0, 0.0);
@@ -280,7 +294,7 @@ fn setup(
             .with_aligned_axis(DVec3::Z) // Align the axis of rotation along the Z-axis
             .with_local_anchor_1(DVec3::new(
                 0.0,
-                0.00,
+                CART_HEIGHT / 2.0,
                 CART_DEPTH / 2.0 + ROD_DEPTH / 2.0 + AXIS_LENGTH,
             )) // aim at the center of the rod at the bottom
             .with_local_anchor_2(DVec3::new(0.0, -ROD_HEIGHT / 2.0, 0.0)), // Anchor on the rod (bottom)
@@ -294,12 +308,6 @@ fn setup(
         },
         transform: Transform::from_xyz(2.0, 4.0, 2.0),
         ..default()
-    });
-
-    // This should have effect on skybox too
-    commands.insert_resource(AmbientLight {
-        color: Color::srgb_u8(210, 220, 240),
-        brightness: 1.0,
     });
 }
 
@@ -328,7 +336,7 @@ fn camera_control_system(
     }
 
     // Rotate camera around the focal point with right mouse button + drag
-    if mouse_button_input.pressed(MouseButton::Right) {
+    if mouse_button_input.pressed(MouseButton::Middle) {
         for ev in mouse_motion.read() {
             let yaw = Quat::from_rotation_y(-ev.delta.x * control.rotate_sensitivity);
             let pitch = Quat::from_rotation_x(-ev.delta.y * control.rotate_sensitivity);
@@ -390,6 +398,7 @@ fn toggle_simulation_state(
         if *state == SimulationState::Running {
             *state = SimulationState::Paused;
         } else {
+            println!("Starting simulation");
             *state = SimulationState::Running;
         }
     }
