@@ -62,7 +62,7 @@ Here is Copper in action driving a simulation of the same robot with [Bevy](http
 in Rust)
 and [Avian3d](https://crates.io/crates/avian3d) (Physics Engine in Rust)
 
-To try out this demo locally! Just be sure you have Rust installed and the simply run:
+You have a mac or a linux? You can try out this demo locally! Just be sure you have Rust installed and the simply run:
 
 ```bash
 $ cargo install cu-rp-balancebot
