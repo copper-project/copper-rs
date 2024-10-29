@@ -51,7 +51,7 @@ Copper is a data-oriented runtime with these key components:
 
 ### Copper drives real robots...
 
-[![Copper in action](https://img.youtube.com/vi/HkdUZ7So3_Q/0.jpg)](https://www.youtube.com/watch?v=HkdUZ7So3_Q)
+[![Copper in action](https://img.youtube.com/vi/HkdUZ7So3_Q/maxresdefault.jpg)](https://www.youtube.com/watch?v=HkdUZ7So3_Q)
 
 ### ... but you can also use it in virtual environments
 
