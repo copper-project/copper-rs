@@ -30,6 +30,7 @@ game engine is to games.
 > on [Gitter](https://gitter.im/copper-project/copper-rs) or open an issue.
 
 Copper has been tested on: Linux (x86_64, armv7, aarch64 & riskv64) and MacOS (arm64).
+Testers would be welcomed on Windows and other platforms.
 
 ### Technical Overview
 
@@ -47,6 +48,25 @@ Copper is a data-oriented runtime with these key components:
 
 * **Fast Structured Logging**: Interns and indexes logging strings at compile time, avoiding runtime string construction
   and ensuring high-speed textual logging.
+
+### Copper drives real robots...
+
+[![Copper in action](https://img.youtube.com/vi/HkdUZ7So3_Q/0.jpg)](https://www.youtube.com/watch?v=HkdUZ7So3_Q)
+
+### ... but you can also use it in virtual environments
+
+Here is Copper in action driving a simulation of the same robot with [Bevy](https://crates.io/crates/bevy) (Game Engine
+in Rust)
+and [Avian3d](https://crates.io/crates/avian3d) (Physics Engine in Rust)
+
+To try out this demo locally! Just be sure you have Rust installed and the simply run:
+
+```bash
+cargo install cu-rp-balancebot
+balancebot-sim 
+```
+
+The source code for this demo is available in the [examples/cu_rp_balancebot](examples/cu_rp_balancebot) directory.
 
 ### What features are already implemented?
 
@@ -77,18 +97,17 @@ To Reach Beta:
 
 - [x] **Merging**: Add a feature to merge messages from multiple sources as an input to a task.
 - [x] **Monitoring**: We need a parallel system that can listen to monitoring messages and act accordingly.
+- [x] **Simulation**: Standardized set of interfaces to control Copper based codebases in simulation.
 - [ ] **Batching/Aligning**: add a feature to batch messages for high frequency sources to reduce the number of Copper
   Lists.
-- [ ] **Deterministic log replay + Sim**: As the runtime is generated in a deterministic fashion, we need to add hooks
-  to
-  inject messages into an existing runtime.
+- [ ] **Deterministic log replay**: The ability to inject logs and replay them deterministically.
+
+To Reach RC1:
+
 - [ ] **Parallel Copper Lists**: Today Copper is monothreaded; this should enable concurrent Copper Lists to be executed
   at the same time with no contention.
 - [ ] **ROS/DDS interfacing**: Build a pair of sink and source to connect to existing ROS systems, helping users migrate
   their infra bit by bit.
-
-To Reach RC1:
-
 - [ ] **Extensible scheduling**: Enables a way to give hints to copper to schedule the workload
 - [ ] **Modular Configuration**: As robots built with Copper gain complexity, users will need to build "variations" of
   their robots without duplicating their entire RON file.

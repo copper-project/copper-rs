@@ -1,5 +1,7 @@
 # Copper Driver for the ADS 7883 high speed SPI-based ADC
 
+See the crate [cu29](https://crates.io/crates/cu29) for more information about the Copper project.
+
 ## Overview
 
 The ADS7883 is a high-speed, 12-bit, sampling analog-to-digital converter (ADC) that operates
