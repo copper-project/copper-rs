@@ -134,7 +134,7 @@ fn run_copper_callback(
                 SimOverride::ExecutedBySim
             }
             SimStep::Railpos(_) => SimOverride::ExecutedBySim,
-            SimStep::Motor(CuTaskCallbackState::Process(input, _)) => {
+            SimStep::Motor(CuTaskCallbackState::Process(input, output)) => {
                 // And now when copper wants to use the motor
                 // we apply a force in the simulation.
                 let mut bindings = query_set.p0();
@@ -149,10 +149,14 @@ fn run_copper_callback(
                                                                        // let current_force = cart_force.force(); // Get existing force which includes gravity
                     let new_force = /*current_force */ Vector::new(force_magnitude as f64, 0.0, 0.0);
                     cart_force.apply_force(new_force);
+                    output
+                        .metadata
+                        .set_status(format!("Applied force: {}", force_magnitude));
+                    SimOverride::ExecutedBySim
                 } else {
                     cart_force.apply_force(Vector::ZERO);
+                    SimOverride::Errored("Safety Mode.".into())
                 }
-                SimOverride::ExecutedBySim
             }
             SimStep::Motor(_) => SimOverride::ExecutedBySim,
             _ => SimOverride::ExecuteByRuntime,
