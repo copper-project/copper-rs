@@ -56,10 +56,7 @@ Copper is a data-oriented runtime with these key components:
 ### ... but you can also use it in virtual environments
 
 
-
-https://github.com/user-attachments/assets/32116624-c238-41e8-a602-7b59f65d15d1
-
-
+[![Copper in virtual action](https://img.youtube.com/vi/kC6sGRZUxLE/maxresdefault.jpg)](https://youtu.be/kC6sGRZUxLE)
 
 Here is Copper in action driving a simulation of the same robot with [Bevy](https://crates.io/crates/bevy) (Game Engine
 in Rust)
