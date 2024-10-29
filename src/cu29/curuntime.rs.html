@@ -529,11 +529,7 @@
 <a href="#528" id="528">528</a>
 <a href="#529" id="529">529</a>
 <a href="#530" id="530">530</a>
-<a href="#531" id="531">531</a>
-<a href="#532" id="532">532</a>
-<a href="#533" id="533">533</a>
-<a href="#534" id="534">534</a>
-<a href="#535" id="535">535</a></pre></div><pre class="rust"><code><span class="doccomment">//! CuRuntime is the heart of what copper is running on the robot.
+<a href="#531" id="531">531</a></pre></div><pre class="rust"><code><span class="doccomment">//! CuRuntime is the heart of what copper is running on the robot.
 //! It is exposed to the user via the `copper_runtime` macro injecting it as a field in their application struct.
 //!
 
@@ -581,7 +577,7 @@
         clock: RobotClock,
         config: <span class="kw-2">&amp;</span>CuConfig,
         tasks_instanciator: <span class="kw">impl </span>Fn(Vec&lt;<span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>ComponentConfig&gt;&gt;) -&gt; CuResult&lt;CT&gt;,
-        monitor_instanciator: <span class="kw">impl </span>Fn(<span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>ComponentConfig&gt;) -&gt; M,
+        monitor_instanciator: <span class="kw">impl </span>Fn(<span class="kw-2">&amp;</span>CuConfig) -&gt; M,
         logger: <span class="kw">impl </span>WriteStream&lt;CopperList&lt;P&gt;&gt; + <span class="lifetime">'static</span>,
     ) -&gt; CuResult&lt;<span class="self">Self</span>&gt; {
         <span class="kw">let </span>all_instances_configs: Vec&lt;<span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>ComponentConfig&gt;&gt; = config
@@ -591,11 +587,7 @@
             .collect();
         <span class="kw">let </span>tasks = tasks_instanciator(all_instances_configs)<span class="question-mark">?</span>;
 
-        <span class="kw">let </span>monitor = <span class="kw">if let </span><span class="prelude-val">Some</span>(monitor_section) = config.get_monitor_config() {
-            monitor_instanciator(monitor_section.get_config())
-        } <span class="kw">else </span>{
-            monitor_instanciator(<span class="prelude-val">None</span>)
-        };
+        <span class="kw">let </span>monitor = monitor_instanciator(config);
 
         <span class="kw">let </span>runtime = <span class="self">Self </span>{
             tasks,
@@ -965,7 +957,7 @@
         ))
     }
 
-    <span class="kw">fn </span>monitor_instanciator(_config: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>ComponentConfig&gt;) -&gt; NoMonitor {
+    <span class="kw">fn </span>monitor_instanciator(_config: <span class="kw-2">&amp;</span>CuConfig) -&gt; NoMonitor {
         NoMonitor {}
     }
 

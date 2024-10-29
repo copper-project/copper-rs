@@ -680,7 +680,12 @@
 <a href="#679" id="679">679</a>
 <a href="#680" id="680">680</a>
 <a href="#681" id="681">681</a>
-<a href="#682" id="682">682</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module defines the configuration of the copper runtime.
+<a href="#682" id="682">682</a>
+<a href="#683" id="683">683</a>
+<a href="#684" id="684">684</a>
+<a href="#685" id="685">685</a>
+<a href="#686" id="686">686</a>
+<a href="#687" id="687">687</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module defines the configuration of the copper runtime.
 //! The configuration is a directed graph where nodes are tasks and edges are connections between tasks.
 //! The configuration is serialized in the RON format.
 //! The configuration is used to generate the runtime code at compile time.
@@ -1307,6 +1312,11 @@
         ))
         .add_cause(e.to_string().as_str())
     })<span class="question-mark">?</span>;
+    read_configuration_str(config_content)
+}
+
+<span class="doccomment">/// Read a copper configuration from a file.
+</span><span class="kw">pub fn </span>read_configuration_str(config_content: String) -&gt; CuResult&lt;CuConfig&gt; {
     <span class="prelude-val">Ok</span>(CuConfig::deserialize_ron(<span class="kw-2">&amp;</span>config_content))
 }
 

@@ -1116,11 +1116,31 @@
 <a href="#1115" id="1115">1115</a>
 <a href="#1116" id="1116">1116</a>
 <a href="#1117" id="1117">1117</a>
-<a href="#1118" id="1118">1118</a></pre></div><pre class="rust"><code><span class="kw">extern crate </span>proc_macro;
+<a href="#1118" id="1118">1118</a>
+<a href="#1119" id="1119">1119</a>
+<a href="#1120" id="1120">1120</a>
+<a href="#1121" id="1121">1121</a>
+<a href="#1122" id="1122">1122</a>
+<a href="#1123" id="1123">1123</a>
+<a href="#1124" id="1124">1124</a>
+<a href="#1125" id="1125">1125</a>
+<a href="#1126" id="1126">1126</a>
+<a href="#1127" id="1127">1127</a>
+<a href="#1128" id="1128">1128</a>
+<a href="#1129" id="1129">1129</a>
+<a href="#1130" id="1130">1130</a>
+<a href="#1131" id="1131">1131</a>
+<a href="#1132" id="1132">1132</a>
+<a href="#1133" id="1133">1133</a>
+<a href="#1134" id="1134">1134</a>
+<a href="#1135" id="1135">1135</a>
+<a href="#1136" id="1136">1136</a>
+<a href="#1137" id="1137">1137</a>
+<a href="#1138" id="1138">1138</a></pre></div><pre class="rust"><code><span class="kw">extern crate </span>proc_macro;
 
 <span class="kw">use </span>proc_macro::TokenStream;
-
 <span class="kw">use </span>quote::quote;
+<span class="kw">use </span>std::fs::read_to_string;
 <span class="kw">use </span>syn::meta::parser;
 <span class="kw">use </span>syn::Fields::{Named, Unnamed};
 <span class="kw">use </span>syn::{
@@ -1318,6 +1338,9 @@
         .value();
 
     <span class="kw">let </span>copper_config = read_config(<span class="kw-2">&amp;</span>config_file);
+    <span class="kw">let </span>copper_config_content = read_to_string(config_full_path(config_file.as_str())).expect(
+        <span class="string">"Could not read the config file (should not happen because we just succeeded just before)."</span>,
+    );
 
     <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
     </span><span class="macro">eprintln!</span>(<span class="string">"[runtime plan]"</span>);
@@ -1977,7 +2000,15 @@
         <span class="kw">impl </span>#name {
 
             #new {
-                <span class="kw">let </span>config = _read_configuration(#config_file)<span class="question-mark">?</span>;
+                <span class="kw">let </span>config_filename = #config_file;
+                <span class="kw">let </span>config = <span class="kw">if </span>std::path::Path::new(config_filename).exists() {
+                    <span class="macro">debug!</span>(<span class="string">"Reading configuration from file: {}"</span>, config_filename);
+                    _read_configuration(config_filename)<span class="question-mark">?
+                </span>} <span class="kw">else </span>{
+                    <span class="kw">let </span>original_config = <span class="self">Self</span>::get_original_config();
+                    <span class="macro">debug!</span>(<span class="string">"Reading configuration from the original configuration. {}"</span>, <span class="kw-2">&amp;</span>original_config);
+                    _read_configuration_str(original_config)<span class="question-mark">?
+                </span>};
 
                 <span class="kw">let </span>copperlist_stream = _stream_write::&lt;CuList&gt;(
                     unified_logger.clone(),
@@ -1991,13 +2022,16 @@
                         <span class="kw-2">&amp;</span>config,
                         #tasks_instanciator,
                         monitor_instanciator,
-                        copperlist_stream
-                    )<span class="question-mark">?</span>,
+                        copperlist_stream)<span class="question-mark">?</span>,
                 });
 
                 #sim_callback_on_new
 
                 runtime
+            }
+
+            <span class="kw">pub fn </span>get_original_config() -&gt; String {
+                #copper_config_content.to_string()
             }
 
             #run_method
@@ -2013,6 +2047,7 @@
         <span class="kw">use </span>cu29::config::ComponentConfig <span class="kw">as </span>_ComponentConfig;
         <span class="kw">use </span>cu29::config::MonitorConfig <span class="kw">as </span>_MonitorConfig;
         <span class="kw">use </span>cu29::config::read_configuration <span class="kw">as </span>_read_configuration;
+        <span class="kw">use </span>cu29::config::read_configuration_str <span class="kw">as </span>_read_configuration_str;
         <span class="kw">use </span>cu29::curuntime::CuRuntime <span class="kw">as </span>_CuRuntime;
         <span class="kw">use </span>cu29::CuResult <span class="kw">as </span>_CuResult;
         <span class="kw">use </span>cu29::CuError <span class="kw">as </span>_CuError;
@@ -2064,8 +2099,8 @@
             <span class="prelude-val">Ok</span>(( #(#task_sim_instances_init_code),<span class="kw-2">*</span>, ))
         }
 
-        <span class="kw">fn </span>monitor_instanciator(monitor_config: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>_ComponentConfig&gt;) -&gt; #monitor_type {
-            #monitor_type::new(monitor_config, TASKS_IDS).expect(<span class="string">"Failed to create the given monitor."</span>)
+        <span class="kw">fn </span>monitor_instanciator(config: <span class="kw-2">&amp;</span>_CuConfig) -&gt; #monitor_type {
+            #monitor_type::new(config, TASKS_IDS).expect(<span class="string">"Failed to create the given monitor."</span>)
         }
 
         <span class="kw">pub </span>#item_struct
@@ -2087,16 +2122,21 @@
     tokens
 }
 
-<span class="kw">fn </span>read_config(config_file: <span class="kw-2">&amp;</span>String) -&gt; CuConfig {
+<span class="kw">fn </span>read_config(config_file: <span class="kw-2">&amp;</span>str) -&gt; CuConfig {
+    <span class="kw">let </span>filename = config_full_path(config_file);
+
+    read_configuration(filename.as_str())
+        .unwrap_or_else(|<span class="kw">_</span>| <span class="macro">panic!</span>(<span class="string">"Failed to read configuration file: {}"</span>, filename))
+}
+
+<span class="kw">fn </span>config_full_path(config_file: <span class="kw-2">&amp;</span>str) -&gt; String {
     <span class="kw">let </span><span class="kw-2">mut </span>config_full_path = utils::caller_crate_root();
     config_full_path.push(config_file);
     <span class="kw">let </span>filename = config_full_path
         .as_os_str()
         .to_str()
         .expect(<span class="string">"Could not interpret the config file name"</span>);
-
-    read_configuration(filename)
-        .unwrap_or_else(|<span class="kw">_</span>| <span class="macro">panic!</span>(<span class="string">"Failed to read configuration file: {:?}"</span>, <span class="kw-2">&amp;</span>config_full_path))
+    filename.to_string()
 }
 
 <span class="doccomment">/// Extract all the tasks types in their index order and their ids.

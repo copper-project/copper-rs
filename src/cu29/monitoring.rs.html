@@ -363,7 +363,7 @@
 <a href="#362" id="362">362</a></pre></div><pre class="rust"><code><span class="doccomment">//! Some basic internal monitoring tooling Copper uses to monitor itself and the tasks it is running.
 //!
 
-</span><span class="kw">use </span><span class="kw">crate</span>::config::ComponentConfig;
+</span><span class="kw">use </span><span class="kw">crate</span>::config::CuConfig;
 <span class="kw">use </span><span class="kw">crate</span>::cutask::CuMsgMetadata;
 <span class="kw">use </span>cu29_clock::{CuDuration, RobotClock};
 <span class="kw">use </span>cu29_traits::{CuError, CuResult};
@@ -390,7 +390,7 @@
 
 <span class="doccomment">/// Trait to implement a monitoring task.
 </span><span class="kw">pub trait </span>CuMonitor: Sized {
-    <span class="kw">fn </span>new(config: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>ComponentConfig&gt;, taskids: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>[<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str]) -&gt; CuResult&lt;<span class="self">Self</span>&gt;
+    <span class="kw">fn </span>new(config: <span class="kw-2">&amp;</span>CuConfig, taskids: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>[<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str]) -&gt; CuResult&lt;<span class="self">Self</span>&gt;
     <span class="kw">where
         </span><span class="self">Self</span>: Sized;
 
@@ -414,7 +414,7 @@
 /// This is basically defining the default behavior of Copper in case of error.
 </span><span class="kw">pub struct </span>NoMonitor {}
 <span class="kw">impl </span>CuMonitor <span class="kw">for </span>NoMonitor {
-    <span class="kw">fn </span>new(_config: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>ComponentConfig&gt;, _taskids: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>[<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str]) -&gt; CuResult&lt;<span class="self">Self</span>&gt; {
+    <span class="kw">fn </span>new(_config: <span class="kw-2">&amp;</span>CuConfig, _taskids: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>[<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str]) -&gt; CuResult&lt;<span class="self">Self</span>&gt; {
         <span class="prelude-val">Ok</span>(NoMonitor {})
     }
 
