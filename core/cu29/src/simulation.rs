@@ -153,6 +153,8 @@ pub enum SimOverride {
     ExecutedBySim,
     /// The actual implementation needs to be executed.
     ExecuteByRuntime,
+    /// Emulated the behavior of an erroring task (same as return Err(..) in the normal tasks methods).
+    Errored(String),
 }
 
 /// This is a placeholder task for a source task for the simulations.
