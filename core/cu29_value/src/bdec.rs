@@ -31,10 +31,7 @@ impl Decode for Value {
             17 => Ok(Value::Map(BTreeMap::<Value, Value>::decode(decoder)?)),
             18 => Ok(Value::Bytes(Vec::<u8>::decode(decoder)?)),
             32 => Ok(Value::CuTime(CuTime::decode(decoder)?)),
-            r => {
-                println!("Unknown Value variant: {}", r);
-                Err(DecodeError::Other("Unknown Value variant"))
-            }
+            r => Err(DecodeError::Other("Unknown Value variant")),
         }
     }
 }

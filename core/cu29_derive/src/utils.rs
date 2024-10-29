@@ -94,7 +94,6 @@ mod tests {
 
         test_cases.iter().for_each(|input| {
             let after = config_id_to_enum(input);
-            println!("{:?}", after);
             assert!(
                 is_valid_rust_identifier(after.as_str()),
                 "bf {} af {}",

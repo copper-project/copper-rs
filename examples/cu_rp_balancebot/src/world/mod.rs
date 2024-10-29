@@ -420,7 +420,6 @@ fn setup_entities(
             }),
         ))
         .id();
-    println!("Rod entity created with ID: {:?}", rod_entity);
     commands.spawn(
         RevoluteJoint::new(cart_entity, rod_entity)
             .with_compliance(1e-16)

@@ -31,7 +31,6 @@ fn main() -> std::io::Result<()> {
         let mut cursor = Cursor::new(&mut content);
         config.render(&mut cursor);
     }
-    println!("{}", String::from_utf8(content.clone()).unwrap());
 
     // Generate SVG from DOT
     let mut child = Command::new("dot")
@@ -49,7 +48,6 @@ fn main() -> std::io::Result<()> {
     let output = child.wait_with_output().expect("Failed to read stdout");
 
     if !output.status.success() {
-        eprintln!("dot command failed with error: {:?}", output.status);
         std::process::exit(1);
     }
 
@@ -57,7 +55,6 @@ fn main() -> std::io::Result<()> {
     if args.open {
         // Create a temporary file to store the SVG
         let mut temp_file = Builder::new().suffix(".svg").tempfile()?;
-        println!("temp file: {:?}", temp_file.path());
         temp_file.write_all(graph_svg.as_slice())?;
 
         // Open the SVG in the default system viewer

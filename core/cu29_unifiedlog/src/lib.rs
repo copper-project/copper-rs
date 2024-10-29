@@ -749,7 +749,6 @@ mod tests {
         slab_size: usize,
     ) -> (Arc<Mutex<UnifiedLoggerWrite>>, PathBuf) {
         let file_path = tmp_dir.path().join("test.bin");
-        println!("Creating a logger at {:?}", file_path);
         let UnifiedLogger::Write(data_logger) = UnifiedLoggerBuilder::new()
             .write(true)
             .create(true)

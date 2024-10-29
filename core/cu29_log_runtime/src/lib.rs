@@ -271,7 +271,6 @@ mod tests {
             params: smallvec![Value::String("test".to_string())],
         };
         let encoded = bincode::encode_to_vec(&log_entry, standard()).unwrap();
-        println!("{:?}", encoded);
         let decoded_tuple: (CuLogEntry, usize) =
             bincode::decode_from_slice(&encoded, standard()).unwrap();
         assert_eq!(log_entry, decoded_tuple.0);

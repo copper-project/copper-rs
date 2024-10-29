@@ -12,7 +12,6 @@ mod tests {
     /// This is to check if with cargo install cargo-show-asm
     #[test]
     pub fn test_vectorization() {
-        println!("Testing vectorization");
         // make a randomly generated Xyz
         let x = rand::random::<f32>();
         let y = rand::random::<f32>();

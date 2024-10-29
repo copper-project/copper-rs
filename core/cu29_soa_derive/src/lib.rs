@@ -272,9 +272,9 @@ pub fn soa(_attr: TokenStream, item: TokenStream) -> TokenStream {
     #[cfg(feature = "macro_debug")]
     {
         let formatted_code = rustfmt_generated_code(tokens.to_string());
-        println!("\n     ===    Gen. SOA     ===\n");
-        println!("{}", highlight_rust_code(formatted_code));
-        println!("\n     === === === === === ===\n");
+        eprintln!("\n     ===    Gen. SOA     ===\n");
+        eprintln!("{}", highlight_rust_code(formatted_code));
+        eprintln!("\n     === === === === === ===\n");
     }
     tokens
 }

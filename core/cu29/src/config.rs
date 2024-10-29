@@ -645,7 +645,6 @@ mod tests {
         let n2 = config.add_node(Node::new("test2", "package::Plugin2"));
         config.connect(n1, n2, "msgpkg::MsgType");
         let serialized = config.serialize_ron();
-        println!("{}", serialized);
         let deserialized = CuConfig::deserialize_ron(&serialized);
         assert_eq!(config.graph.node_count(), deserialized.graph.node_count());
         assert_eq!(config.graph.edge_count(), deserialized.graph.edge_count());
@@ -658,7 +657,6 @@ mod tests {
         camera.set_param::<Value>("resolution-height", 1080.into());
         config.add_node(camera);
         let serialized = config.serialize_ron();
-        println!("{}", serialized);
         let deserialized = CuConfig::deserialize_ron(&serialized);
         assert_eq!(
             deserialized

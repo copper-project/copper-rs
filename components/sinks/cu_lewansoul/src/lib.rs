@@ -109,7 +109,6 @@ impl Lewansoul {
 
     #[allow(dead_code)]
     fn read_present_voltage(&mut self, id: u8) -> io::Result<f32> {
-        println!("[{}] Read voltage", id);
         self.send_packet(id, servo::SERVO_VIN_READ, &[])?;
         let response = self.read_response()?;
         Ok(u16::from_le_bytes([response.2[0], response.2[1]]) as f32 / 1000.0)
@@ -117,7 +116,6 @@ impl Lewansoul {
 
     #[allow(dead_code)]
     fn read_temperature(&mut self, id: u8) -> io::Result<u8> {
-        println!("[{}] Read temperature", id);
         self.send_packet(id, servo::SERVO_TEMP_READ, &[])?;
         let response = self.read_response()?;
         Ok(response.2[0])
@@ -125,7 +123,6 @@ impl Lewansoul {
 
     #[allow(dead_code)]
     fn read_angle_limits(&mut self, id: u8) -> io::Result<(f32, f32)> {
-        println!("[{}] Read angle limits", id);
         self.send_packet(id, servo::SERVO_ANGLE_LIMIT_READ, &[])?;
         let response = self.read_response()?;
         Ok((
@@ -171,12 +168,6 @@ impl Lewansoul {
                 .cloned(),
         );
         if checksum != *remaining.last().unwrap() {
-            println!("Response: {:02x?}{:02x?}", header, remaining);
-            println!(
-                "Checksum mismatch: {:02x?} != {:02x?}",
-                checksum,
-                *remaining.last().unwrap()
-            );
             return Err(io::Error::new(io::ErrorKind::Other, "Invalid checksum"));
         }
         Ok((id, command, remaining[..remaining.len() - 1].to_vec()))
@@ -276,9 +267,7 @@ mod tests {
 
         let mut lewansoul = Lewansoul::new(Some(&config)).unwrap();
         let position = lewansoul.read_current_position(1).unwrap();
-        println!("Position: {}", position);
 
         let angle_limits = lewansoul.read_angle_limits(1).unwrap();
-        println!("Angle limits: {:?}", angle_limits);
     }
 }

@@ -16,3 +16,4 @@ uom = { workspace = true }
 cu29 = { workspace = true }
 bincode = { workspace = true }
 serialport = "4.5.1"
+log = "0.4.22"

@@ -25,7 +25,6 @@ fn main() {
         .expect("Failed to create runtime.");
 
     ctrlc::set_handler(move || {
-        println!("Ctrl-C pressed. Stopping all tasks...");
         STOP_FLAG.store(true, Ordering::SeqCst);
     })
     .expect("Error setting Ctrl-C handler");
