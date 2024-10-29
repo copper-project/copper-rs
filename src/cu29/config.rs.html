@@ -683,9 +683,7 @@
 <a href="#682" id="682">682</a>
 <a href="#683" id="683">683</a>
 <a href="#684" id="684">684</a>
-<a href="#685" id="685">685</a>
-<a href="#686" id="686">686</a>
-<a href="#687" id="687">687</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module defines the configuration of the copper runtime.
+<a href="#685" id="685">685</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module defines the configuration of the copper runtime.
 //! The configuration is a directed graph where nodes are tasks and edges are connections between tasks.
 //! The configuration is serialized in the RON format.
 //! The configuration is used to generate the runtime code at compile time.
@@ -1332,7 +1330,6 @@
         <span class="kw">let </span>n2 = config.add_node(Node::new(<span class="string">"test2"</span>, <span class="string">"package::Plugin2"</span>));
         config.connect(n1, n2, <span class="string">"msgpkg::MsgType"</span>);
         <span class="kw">let </span>serialized = config.serialize_ron();
-        <span class="macro">println!</span>(<span class="string">"{}"</span>, serialized);
         <span class="kw">let </span>deserialized = CuConfig::deserialize_ron(<span class="kw-2">&amp;</span>serialized);
         <span class="macro">assert_eq!</span>(config.graph.node_count(), deserialized.graph.node_count());
         <span class="macro">assert_eq!</span>(config.graph.edge_count(), deserialized.graph.edge_count());
@@ -1345,7 +1342,6 @@
         camera.set_param::&lt;Value&gt;(<span class="string">"resolution-height"</span>, <span class="number">1080</span>.into());
         config.add_node(camera);
         <span class="kw">let </span>serialized = config.serialize_ron();
-        <span class="macro">println!</span>(<span class="string">"{}"</span>, serialized);
         <span class="kw">let </span>deserialized = CuConfig::deserialize_ron(<span class="kw-2">&amp;</span>serialized);
         <span class="macro">assert_eq!</span>(
             deserialized

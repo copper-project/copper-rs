@@ -276,8 +276,7 @@
 <a href="#275" id="275">275</a>
 <a href="#276" id="276">276</a>
 <a href="#277" id="277">277</a>
-<a href="#278" id="278">278</a>
-<a href="#279" id="279">279</a></pre></div><pre class="rust"><code><span class="kw">use </span>bincode::config::Configuration;
+<a href="#278" id="278">278</a></pre></div><pre class="rust"><code><span class="kw">use </span>bincode::config::Configuration;
 <span class="kw">use </span>bincode::enc::write::Writer;
 <span class="kw">use </span>bincode::enc::Encode;
 <span class="kw">use </span>bincode::enc::{Encoder, EncoderImpl};
@@ -550,7 +549,6 @@
             params: <span class="macro">smallvec!</span>[Value::String(<span class="string">"test"</span>.to_string())],
         };
         <span class="kw">let </span>encoded = bincode::encode_to_vec(<span class="kw-2">&amp;</span>log_entry, standard()).unwrap();
-        <span class="macro">println!</span>(<span class="string">"{:?}"</span>, encoded);
         <span class="kw">let </span>decoded_tuple: (CuLogEntry, usize) =
             bincode::decode_from_slice(<span class="kw-2">&amp;</span>encoded, standard()).unwrap();
         <span class="macro">assert_eq!</span>(log_entry, decoded_tuple.<span class="number">0</span>);

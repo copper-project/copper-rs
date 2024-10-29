@@ -552,9 +552,9 @@
     <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
     </span>{
         <span class="kw">let </span>formatted_code = rustfmt_generated_code(tokens.to_string());
-        <span class="macro">println!</span>(<span class="string">"\n     ===    Gen. SOA     ===\n"</span>);
-        <span class="macro">println!</span>(<span class="string">"{}"</span>, highlight_rust_code(formatted_code));
-        <span class="macro">println!</span>(<span class="string">"\n     === === === === === ===\n"</span>);
+        <span class="macro">eprintln!</span>(<span class="string">"\n     ===    Gen. SOA     ===\n"</span>);
+        <span class="macro">eprintln!</span>(<span class="string">"{}"</span>, highlight_rust_code(formatted_code));
+        <span class="macro">eprintln!</span>(<span class="string">"\n     === === === === === ===\n"</span>);
     }
     tokens
 }

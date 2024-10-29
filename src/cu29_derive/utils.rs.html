@@ -103,8 +103,7 @@
 <a href="#102" id="102">102</a>
 <a href="#103" id="103">103</a>
 <a href="#104" id="104">104</a>
-<a href="#105" id="105">105</a>
-<a href="#106" id="106">106</a></pre></div><pre class="rust"><code><span class="kw">use </span>convert_case::{Case, Casing};
+<a href="#105" id="105">105</a></pre></div><pre class="rust"><code><span class="kw">use </span>convert_case::{Case, Casing};
 <span class="kw">use </span>std::path::PathBuf;
 <span class="kw">use </span>walkdir::WalkDir;
 
@@ -200,7 +199,6 @@
 
         test_cases.iter().for_each(|input| {
             <span class="kw">let </span>after = config_id_to_enum(input);
-            <span class="macro">println!</span>(<span class="string">"{:?}"</span>, after);
             <span class="macro">assert!</span>(
                 is_valid_rust_identifier(after.as_str()),
                 <span class="string">"bf {} af {}"</span>,

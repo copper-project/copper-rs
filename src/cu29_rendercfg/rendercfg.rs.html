@@ -69,10 +69,7 @@
 <a href="#68" id="68">68</a>
 <a href="#69" id="69">69</a>
 <a href="#70" id="70">70</a>
-<a href="#71" id="71">71</a>
-<a href="#72" id="72">72</a>
-<a href="#73" id="73">73</a>
-<a href="#74" id="74">74</a></pre></div><pre class="rust"><code><span class="kw">mod </span>config;
+<a href="#71" id="71">71</a></pre></div><pre class="rust"><code><span class="kw">mod </span>config;
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>config::read_configuration;
 <span class="kw">pub use </span>cu29_traits::<span class="kw-2">*</span>;
@@ -105,7 +102,6 @@
         <span class="kw">let </span><span class="kw-2">mut </span>cursor = Cursor::new(<span class="kw-2">&amp;mut </span>content);
         config.render(<span class="kw-2">&amp;mut </span>cursor);
     }
-    <span class="macro">println!</span>(<span class="string">"{}"</span>, String::from_utf8(content.clone()).unwrap());
 
     <span class="comment">// Generate SVG from DOT
     </span><span class="kw">let </span><span class="kw-2">mut </span>child = Command::new(<span class="string">"dot"</span>)
@@ -123,7 +119,6 @@
     <span class="kw">let </span>output = child.wait_with_output().expect(<span class="string">"Failed to read stdout"</span>);
 
     <span class="kw">if </span>!output.status.success() {
-        <span class="macro">eprintln!</span>(<span class="string">"dot command failed with error: {:?}"</span>, output.status);
         std::process::exit(<span class="number">1</span>);
     }
 
@@ -131,7 +126,6 @@
     <span class="kw">if </span>args.open {
         <span class="comment">// Create a temporary file to store the SVG
         </span><span class="kw">let </span><span class="kw-2">mut </span>temp_file = Builder::new().suffix(<span class="string">".svg"</span>).tempfile()<span class="question-mark">?</span>;
-        <span class="macro">println!</span>(<span class="string">"temp file: {:?}"</span>, temp_file.path());
         temp_file.write_all(graph_svg.as_slice())<span class="question-mark">?</span>;
 
         <span class="comment">// Open the SVG in the default system viewer

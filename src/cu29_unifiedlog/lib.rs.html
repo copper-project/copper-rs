@@ -1055,8 +1055,7 @@
 <a href="#1054" id="1054">1054</a>
 <a href="#1055" id="1055">1055</a>
 <a href="#1056" id="1056">1056</a>
-<a href="#1057" id="1057">1057</a>
-<a href="#1058" id="1058">1058</a></pre></div><pre class="rust"><code><span class="kw">use </span>memmap2::{Mmap, MmapMut};
+<a href="#1057" id="1057">1057</a></pre></div><pre class="rust"><code><span class="kw">use </span>memmap2::{Mmap, MmapMut};
 <span class="kw">use </span>std::fmt::{Debug, Formatter};
 <span class="kw">use </span>std::fs::{File, OpenOptions};
 <span class="kw">use </span>std::io::Read;
@@ -1807,7 +1806,6 @@
         slab_size: usize,
     ) -&gt; (Arc&lt;Mutex&lt;UnifiedLoggerWrite&gt;&gt;, PathBuf) {
         <span class="kw">let </span>file_path = tmp_dir.path().join(<span class="string">"test.bin"</span>);
-        <span class="macro">println!</span>(<span class="string">"Creating a logger at {:?}"</span>, file_path);
         <span class="kw">let </span>UnifiedLogger::Write(data_logger) = UnifiedLoggerBuilder::new()
             .write(<span class="bool-val">true</span>)
             .create(<span class="bool-val">true</span>)
