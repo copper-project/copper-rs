@@ -5,7 +5,6 @@ use bevy::input::{
     keyboard::KeyCode,
     mouse::{MouseButton, MouseMotion, MouseWheel},
 };
-use bevy::math::DVec3;
 use bevy::pbr::{
     DefaultOpaqueRendererMethod, ScreenSpaceReflectionsBundle, ScreenSpaceReflectionsSettings,
 };
@@ -20,25 +19,25 @@ pub const SKYBOX: &str = "skybox.ktx2";
 pub const DIFFUSE_MAP: &str = "diffuse_map.ktx2";
 
 const TABLE_HEIGHT: f32 = 0.724;
-const RAIL_WIDTH: f64 = 0.55; // 55cm
-const RAIL_HEIGHT: f64 = 0.02;
-const RAIL_DEPTH: f64 = 0.06;
+const RAIL_WIDTH: f32 = 0.55; // 55cm
+const RAIL_HEIGHT: f32 = 0.02;
+const RAIL_DEPTH: f32 = 0.06;
 
-const CART_WIDTH: f64 = 0.040;
-const CART_HEIGHT: f64 = 0.045; // The mid rail is 1cm above the bottom rail, and the cart is 35mm tall.
-const CART_DEPTH: f64 = RAIL_DEPTH;
+const CART_WIDTH: f32 = 0.040;
+const CART_HEIGHT: f32 = 0.045; // The mid rail is 1cm above the bottom rail, and the cart is 35mm tall.
+const CART_DEPTH: f32 = RAIL_DEPTH;
 
-const ROD_WIDTH: f64 = 0.007; // 7mm
-const ROD_HEIGHT: f64 = 0.50; // 50cm
-const ROD_DEPTH: f64 = ROD_WIDTH;
+const ROD_WIDTH: f32 = 0.007; // 7mm
+const ROD_HEIGHT: f32 = 0.50; // 50cm
+const ROD_DEPTH: f32 = ROD_WIDTH;
 
-const AXIS_LENGTH: f64 = 0.02;
+const AXIS_LENGTH: f32 = 0.02;
 
-const STEEL_DENSITY: f64 = 7800.0; // kg/m^3
-const ALUMINUM_DENSITY: f64 = 2700.0; // kg/m^3
+const STEEL_DENSITY: f32 = 7800.0; // kg/m^3
+const ALUMINUM_DENSITY: f32 = 2700.0; // kg/m^3
 
 #[allow(dead_code)]
-const ROD_VOLUME: f64 = ROD_WIDTH * ROD_HEIGHT * ROD_DEPTH;
+const ROD_VOLUME: f32 = ROD_WIDTH * ROD_HEIGHT * ROD_DEPTH;
 
 #[derive(Resource)]
 struct CameraControl {
@@ -371,13 +370,13 @@ fn setup_entities(
     // Connect the cart to the rail
     commands.spawn(
         PrismaticJoint::new(rail_entity, cart_entity)
-            .with_free_axis(DVec3::X) // Allow movement along the X-axis
+            .with_free_axis(Vec3::X) // Allow movement along the X-axis
             .with_compliance(1e-9)
             .with_linear_velocity_damping(100.0)
             .with_angular_velocity_damping(10.0)
             .with_limits(-RAIL_WIDTH / 2.0, RAIL_WIDTH / 2.0)
-            .with_local_anchor_1(DVec3::new(0.0, RAIL_HEIGHT / 2.0, 0.0)) // Rail top edge
-            .with_local_anchor_2(DVec3::new(0.0, -CART_HEIGHT / 2.0, 0.0)),
+            .with_local_anchor_1(Vec3::new(0.0, RAIL_HEIGHT / 2.0, 0.0)) // Rail top edge
+            .with_local_anchor_2(Vec3::new(0.0, -CART_HEIGHT / 2.0, 0.0)),
     );
 
     let rod_collider_model = Collider::capsule(ROD_WIDTH / 2.0, ROD_HEIGHT);
@@ -425,13 +424,13 @@ fn setup_entities(
             .with_compliance(1e-16)
             .with_linear_velocity_damping(10.0)
             .with_angular_velocity_damping(10.0)
-            .with_aligned_axis(DVec3::Z) // Align the axis of rotation along the Z-axis
-            .with_local_anchor_1(DVec3::new(
+            .with_aligned_axis(Vec3::Z) // Align the axis of rotation along the Z-axis
+            .with_local_anchor_1(Vec3::new(
                 0.0,
                 CART_HEIGHT / 2.0,
                 CART_DEPTH / 2.0 + ROD_DEPTH / 2.0 + AXIS_LENGTH,
             )) // aim at the center of the rod at the bottom
-            .with_local_anchor_2(DVec3::new(0.0, -ROD_HEIGHT / 2.0, 0.0)), // Anchor on the rod (bottom)
+            .with_local_anchor_2(Vec3::new(0.0, -ROD_HEIGHT / 2.0, 0.0)), // Anchor on the rod (bottom)
     );
 
     // Light

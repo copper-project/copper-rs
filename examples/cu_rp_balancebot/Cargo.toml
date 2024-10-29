@@ -39,9 +39,9 @@ cu29-export = { workspace = true, optional = true }
 
 # Sim dependencies
 bevy = { version = "0.14.2", default-features = false, features = ["wayland", "default_font", "bevy_render", "bevy_core_pipeline", "bevy_pbr", "bevy_scene", "bevy_sprite", "bevy_gltf", "tonemapping_luts", "bevy_ui", "ktx2", "jpeg", "png"], optional = true }
-bevy_mod_picking_f64 = { version = "0.20.2", features = ["backend_avian"], optional = true }
+bevy_mod_picking = { version = "0.20.1", features = ["backend_avian"], optional = true }
 bevy_editor_pls = "0.10.0"
-avian3d = { version = "0.1.2", default-features = false, features = ["bevy_scene", "collider-from-mesh", "debug-plugin", "parallel", "f64", "parry-f64"], optional = true }
+avian3d = { version = "0.1.2", default-features = false, features = ["bevy_scene", "collider-from-mesh", "debug-plugin", "parallel"], optional = true }
 parry3d = { version = "0.17.1", optional = true }
 cached-path = { version = "0.6.1", optional = true }
 
@@ -50,7 +50,7 @@ default = ["logreader", "sim"]
 # generates an executable to read the logs
 logreader = ["cu29-export"]
 # dependencies to build to matrix for copper
-sim = ["bevy", "bevy_mod_picking_f64", "avian3d", "parry3d", "cached-path"]
+sim = ["bevy", "bevy_mod_picking", "avian3d", "parry3d", "cached-path"]
 
 [[bin]]
 name = "balancebot"
