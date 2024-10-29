@@ -31,7 +31,10 @@ impl Decode for Value {
             17 => Ok(Value::Map(BTreeMap::<Value, Value>::decode(decoder)?)),
             18 => Ok(Value::Bytes(Vec::<u8>::decode(decoder)?)),
             32 => Ok(Value::CuTime(CuTime::decode(decoder)?)),
-            r => Err(DecodeError::Other("Unknown Value variant")),
+            r => Err(DecodeError::OtherString(format!(
+                "Unknown Value variant: {}",
+                r
+            ))),
         }
     }
 }
@@ -60,7 +63,10 @@ impl<'de> BorrowDecode<'de> for Value {
             )?)),
             17 => Ok(Value::Option(Option::<Box<Value>>::borrow_decode(decoder)?)),
             18 => Ok(Value::Newtype(Box::<Value>::borrow_decode(decoder)?)),
-            _ => Err(DecodeError::Other("Unknown Value variant")),
+            r => Err(DecodeError::OtherString(format!(
+                "Unknown Value variant: {}",
+                r
+            ))),
         }
     }
 }
