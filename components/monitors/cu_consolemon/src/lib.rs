@@ -4,10 +4,10 @@ use ansi_to_tui::IntoText;
 use color_eyre::config::HookBuilder;
 use compact_str::{CompactString, ToCompactString};
 use cu29::clock::{CuDuration, RobotClock};
-use cu29::config::{ComponentConfig, CuConfig, Node};
+use cu29::config::{CuConfig, Node};
 use cu29::cutask::CuMsgMetadata;
 use cu29::monitoring::{CuDurationStatistics, CuMonitor, CuTaskState, Decision};
-use cu29::{read_configuration, CuError, CuResult};
+use cu29::{CuError, CuResult};
 use libc::{close, dup, dup2};
 use ratatui::backend::CrosstermBackend;
 use ratatui::buffer::Buffer;
@@ -536,29 +536,17 @@ impl UI {
 }
 
 impl CuMonitor for CuConsoleMon {
-    fn new(config: Option<&ComponentConfig>, taskids: &'static [&'static str]) -> CuResult<Self>
+    fn new(config: &CuConfig, taskids: &'static [&'static str]) -> CuResult<Self>
     where
         Self: Sized,
     {
-        let config_file: String = if let Some(config) = config {
-            config
-                .0
-                .get("file")
-                .expect("You need to passs the path to the copper config file to use")
-                .to_string()
-        } else {
-            panic!("You need to passs the path to the copper config file to use");
-        };
-
-        let config =
-            read_configuration(config_file.as_str()).expect("Could not read configuration");
         let task_stats = Arc::new(Mutex::new(TaskStats::new(
             taskids.len(),
             CuDuration::from(Duration::from_secs(5)),
         )));
 
         Ok(Self {
-            config,
+            config: config.clone(),
             taskids,
             task_stats,
             task_statuses: Arc::new(Mutex::new(vec![TaskStatus::default(); taskids.len()])),

@@ -1,4 +1,4 @@
-use cu29::config::ComponentConfig;
+use cu29::config::CuConfig;
 use cu29::cutask::CuMsgMetadata;
 use cu29::monitoring::{CuMonitor, CuTaskState, Decision};
 use cu29_derive::copper_runtime;
@@ -94,7 +94,7 @@ struct ExampleMonitor {
 struct App {}
 
 impl CuMonitor for ExampleMonitor {
-    fn new(_config: Option<&ComponentConfig>, taskids: &'static [&str]) -> CuResult<Self> {
+    fn new(_config: &CuConfig, taskids: &'static [&str]) -> CuResult<Self> {
         debug!("Monitoring: created: {}", taskids);
         Ok(ExampleMonitor { tasks: taskids })
     }

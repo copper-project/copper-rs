@@ -46,7 +46,7 @@ impl<CT, P: CopperListTuple + 'static, M: CuMonitor, const NBCL: usize> CuRuntim
         clock: RobotClock,
         config: &CuConfig,
         tasks_instanciator: impl Fn(Vec<Option<&ComponentConfig>>) -> CuResult<CT>,
-        monitor_instanciator: impl Fn(Option<&ComponentConfig>) -> M,
+        monitor_instanciator: impl Fn(&CuConfig) -> M,
         logger: impl WriteStream<CopperList<P>> + 'static,
     ) -> CuResult<Self> {
         let all_instances_configs: Vec<Option<&ComponentConfig>> = config
@@ -56,11 +56,7 @@ impl<CT, P: CopperListTuple + 'static, M: CuMonitor, const NBCL: usize> CuRuntim
             .collect();
         let tasks = tasks_instanciator(all_instances_configs)?;
 
-        let monitor = if let Some(monitor_section) = config.get_monitor_config() {
-            monitor_instanciator(monitor_section.get_config())
-        } else {
-            monitor_instanciator(None)
-        };
+        let monitor = monitor_instanciator(config);
 
         let runtime = Self {
             tasks,
@@ -430,7 +426,7 @@ mod tests {
         ))
     }
 
-    fn monitor_instanciator(_config: Option<&ComponentConfig>) -> NoMonitor {
+    fn monitor_instanciator(_config: &CuConfig) -> NoMonitor {
         NoMonitor {}
     }
 

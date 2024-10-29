@@ -1,8 +1,8 @@
 extern crate proc_macro;
 
 use proc_macro::TokenStream;
-
 use quote::quote;
+use std::fs::read_to_string;
 use syn::meta::parser;
 use syn::Fields::{Named, Unnamed};
 use syn::{
@@ -200,6 +200,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         .value();
 
     let copper_config = read_config(&config_file);
+    let copper_config_content = read_to_string(config_full_path(config_file.as_str())).expect(
+        "Could not read the config file (should not happen because we just succeeded just before).",
+    );
 
     #[cfg(feature = "macro_debug")]
     eprintln!("[runtime plan]");
@@ -859,7 +862,15 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         impl #name {
 
             #new {
-                let config = _read_configuration(#config_file)?;
+                let config_filename = #config_file;
+                let config = if std::path::Path::new(config_filename).exists() {
+                    debug!("Reading configuration from file: {}", config_filename);
+                    _read_configuration(config_filename)?
+                } else {
+                    let original_config = Self::get_original_config();
+                    debug!("Reading configuration from the original configuration. {}", &original_config);
+                    _read_configuration_str(original_config)?
+                };
 
                 let copperlist_stream = _stream_write::<CuList>(
                     unified_logger.clone(),
@@ -873,13 +884,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         &config,
                         #tasks_instanciator,
                         monitor_instanciator,
-                        copperlist_stream
-                    )?,
+                        copperlist_stream)?,
                 });
 
                 #sim_callback_on_new
 
                 runtime
+            }
+
+            pub fn get_original_config() -> String {
+                #copper_config_content.to_string()
             }
 
             #run_method
@@ -895,6 +909,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         use cu29::config::ComponentConfig as _ComponentConfig;
         use cu29::config::MonitorConfig as _MonitorConfig;
         use cu29::config::read_configuration as _read_configuration;
+        use cu29::config::read_configuration_str as _read_configuration_str;
         use cu29::curuntime::CuRuntime as _CuRuntime;
         use cu29::CuResult as _CuResult;
         use cu29::CuError as _CuError;
@@ -946,8 +961,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             Ok(( #(#task_sim_instances_init_code),*, ))
         }
 
-        fn monitor_instanciator(monitor_config: Option<&_ComponentConfig>) -> #monitor_type {
-            #monitor_type::new(monitor_config, TASKS_IDS).expect("Failed to create the given monitor.")
+        fn monitor_instanciator(config: &_CuConfig) -> #monitor_type {
+            #monitor_type::new(config, TASKS_IDS).expect("Failed to create the given monitor.")
         }
 
         pub #item_struct
@@ -969,16 +984,21 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     tokens
 }
 
-fn read_config(config_file: &String) -> CuConfig {
+fn read_config(config_file: &str) -> CuConfig {
+    let filename = config_full_path(config_file);
+
+    read_configuration(filename.as_str())
+        .unwrap_or_else(|_| panic!("Failed to read configuration file: {}", filename))
+}
+
+fn config_full_path(config_file: &str) -> String {
     let mut config_full_path = utils::caller_crate_root();
     config_full_path.push(config_file);
     let filename = config_full_path
         .as_os_str()
         .to_str()
         .expect("Could not interpret the config file name");
-
-    read_configuration(filename)
-        .unwrap_or_else(|_| panic!("Failed to read configuration file: {:?}", &config_full_path))
+    filename.to_string()
 }
 
 /// Extract all the tasks types in their index order and their ids.

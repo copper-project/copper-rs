@@ -625,6 +625,11 @@ pub fn read_configuration(config_filename: &str) -> CuResult<CuConfig> {
         ))
         .add_cause(e.to_string().as_str())
     })?;
+    read_configuration_str(config_content)
+}
+
+/// Read a copper configuration from a file.
+pub fn read_configuration_str(config_content: String) -> CuResult<CuConfig> {
     Ok(CuConfig::deserialize_ron(&config_content))
 }
 
