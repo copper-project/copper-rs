@@ -65,8 +65,8 @@ and [Avian3d](https://crates.io/crates/avian3d) (Physics Engine in Rust)
 To try out this demo locally! Just be sure you have Rust installed and the simply run:
 
 ```bash
-cargo install cu-rp-balancebot
-balancebot-sim 
+$ cargo install cu-rp-balancebot
+$ balancebot-sim 
 ```
 
 The source code for this demo is available in the [examples/cu_rp_balancebot](examples/cu_rp_balancebot) directory.
