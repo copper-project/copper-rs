@@ -1,6 +1,6 @@
 [package]
 name = "cu-consolemon"
-description = "A monitoring TUI for Copper."
+description = "A monitoring TUI for Copper. See the main Copper repository for more information."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

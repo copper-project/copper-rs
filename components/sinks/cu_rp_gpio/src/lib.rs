@@ -25,7 +25,7 @@ lazy_static! {
 /// Gpio uses BCM pin numbering. For example: BCM GPIO 23 is tied to physical pin 16.
 pub struct RPGpio {
     #[cfg(hardware)]
-    pin: OutputPintarace,
+    pin: OutputPin,
     #[cfg(mock)]
     pin: u8,
 }

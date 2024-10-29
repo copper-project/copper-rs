@@ -1,5 +1,7 @@
 # Copper Driver for the TI SN754410 Quadruple Half-H Driver
 
+See the crate [cu29](https://crates.io/crates/cu29) for more information about the Copper project.
+
 ## Overview
 
 The SN754410 is a quadruple half-H driver that can be used to drive motors, solenoids, and other inductive loads.
