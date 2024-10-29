@@ -1,6 +1,6 @@
 [package]
 name = "cu29-intern-strs"
-description = "This is loader for the intern strings logged at build time by Copper. It cannot be used independently from the copper project."
+description = "This is loader for the intern strings logged at build time by Copper. It can be used independently from the copper project."
 documentation = "https://docs.rs/cu29-intern-strs"
 version.workspace = true
 authors.workspace = true
