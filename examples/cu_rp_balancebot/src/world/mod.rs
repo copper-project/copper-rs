@@ -76,13 +76,16 @@ pub fn build_world(app: &mut App) -> &mut App {
         .insert_resource(Gravity::default())
         .insert_resource(Time::<Physics>::default())
         .add_systems(Startup, setup_scene)
+        .add_systems(Startup, setup_ui)
         .add_systems(Update, setup_entities)
         .add_systems(Update, toggle_simulation_state)
         .add_systems(Update, camera_control_system)
         .add_systems(Update, update_physics)
+        .add_systems(Update, global_cart_drag_listener)
+        .add_systems(PostUpdate, reset_sim)
 }
 
-fn chessboard_setup(
+fn ground_setup(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
@@ -238,7 +241,55 @@ fn setup_scene(
     ));
 
     // add a ground
-    chessboard_setup(&mut commands, &mut meshes, &mut materials);
+    ground_setup(&mut commands, &mut meshes, &mut materials);
+}
+
+fn setup_ui(mut commands: Commands) {
+    #[cfg(target_os = "macos")]
+    let instructions = "WASD / QE\nControl-Click + Drag\nClick + Drag\nScrolling\nSpace\nR";
+    #[cfg(not(target_os = "macos"))]
+    let instructions = "WASD / QE\nMiddle-Click + Drag\nClick + Drag\nScroll Wheel\nSpace\nR";
+
+    commands
+        .spawn((NodeBundle {
+            style: Style {
+                position_type: PositionType::Absolute,
+                bottom: Val::Px(5.0),
+                right: Val::Px(5.0),
+                padding: UiRect::new(Val::Px(15.0), Val::Px(15.0), Val::Px(10.0), Val::Px(10.0)),
+                column_gap: Val::Px(10.0),
+
+                flex_direction: FlexDirection::Row,
+                justify_content: JustifyContent::SpaceBetween,
+                border: UiRect::all(Val::Px(2.0)),
+                ..default()
+            },
+            background_color: Color::srgba(0.25, 0.41, 0.88, 0.7).into(),
+            border_color: Color::srgba(0.8, 0.8, 0.8, 0.7).into(),
+            border_radius: BorderRadius::all(Val::Px(10.0)),
+            ..default()
+        },))
+        .with_children(|parent| {
+            // Left column
+            parent.spawn(TextBundle::from_section(
+                "Move\nNavigation\nInteract\nZoom\nPause/Resume\nReset",
+                TextStyle {
+                    font_size: 12.0,
+                    color: Color::srgb(1.0, 0.8, 0.2), // Golden color
+                    ..default()
+                },
+            ));
+
+            // Right column
+            parent.spawn(TextBundle::from_section(
+                instructions,
+                TextStyle {
+                    font_size: 12.0,
+                    color: Color::WHITE,
+                    ..default()
+                },
+            ));
+        });
 }
 
 // This needs to match an object / parent object name in the GLTF file (in blender this is the object name).
@@ -252,6 +303,31 @@ fn try_to_find_cart_entity(query: Query<(Entity, &Name), Without<Cart>>) -> Opti
         return Some(cart_entity);
     }
     None
+}
+
+// This is a global drag listener that will move the cart when dragged.
+// It is a bit of a hack, but it tries to find back the cart entity parent from any of the possible clickable children
+fn global_cart_drag_listener(
+    mut drag_events: EventReader<Pointer<Drag>>,
+    parents: Query<(&Parent, Option<&Cart>)>,
+    mut transforms: Query<&mut Transform, With<Cart>>,
+) {
+    for drag in drag_events.read() {
+        if drag.button != PointerButton::Primary {
+            continue;
+        }
+        let mut entity = drag.target();
+        while let Ok((parent, maybe_cart)) = parents.get(entity) {
+            if maybe_cart.is_some() {
+                break;
+            }
+            entity = parent.get();
+        }
+
+        if let Ok(mut root_transform) = transforms.get_mut(entity) {
+            root_transform.translation.x += drag.delta.x / 500.0;
+        }
+    }
 }
 
 fn setup_entities(
@@ -283,9 +359,6 @@ fn setup_entities(
             .lock_rotation_x()
             .lock_rotation_y()
             .lock_rotation_z(),
-        On::<Pointer<Drag>>::target_component_mut::<Transform>(|drag, transform| {
-            transform.translation.x += drag.delta.x / 500.0; // Only translate along the X-axis
-        }),
     ));
 
     let rail_entity = commands
@@ -312,6 +385,8 @@ fn setup_entities(
 
     let rod_entity = commands
         .spawn((
+            Name::new("Rod"),
+            Rod,
             PbrBundle {
                 mesh: meshes.add(Cylinder::new(ROD_WIDTH as f32 / 2.0, ROD_HEIGHT as f32)),
                 // material: materials.add(Color::srgb(0.0, 1.0, 0.0)),
@@ -335,15 +410,17 @@ fn setup_entities(
                 .lock_translation_z()
                 .lock_rotation_y()
                 .lock_rotation_x(),
-            Rod,
             On::<Pointer<Drag>>::target_component_mut::<Transform>(|drag, transform| {
+                if drag.button != PointerButton::Primary {
+                    return;
+                }
                 let pivot_world = transform.translation
                     + transform.rotation * Vec3::new(0.0, -ROD_HEIGHT as f32 / 2.0, 0.0);
-                transform.rotate_around(pivot_world, Quat::from_rotation_z(drag.delta.x / 50.0));
+                transform.rotate_around(pivot_world, Quat::from_rotation_z(-drag.delta.x / 50.0));
             }),
         ))
         .id();
-
+    println!("Rod entity created with ID: {:?}", rod_entity);
     commands.spawn(
         RevoluteJoint::new(cart_entity, rod_entity)
             .with_compliance(1e-16)
@@ -367,6 +444,30 @@ fn setup_entities(
         transform: Transform::from_xyz(2.0, 4.0, 2.0),
         ..default()
     });
+}
+
+fn reset_sim(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut query: Query<(
+        Option<&Rod>,
+        Option<&Cart>,
+        Option<&mut Transform>, // Ensure transform is mutable
+    )>,
+) {
+    if keys.just_pressed(KeyCode::KeyR) {
+        for (rod_component, cart_component, transform) in query.iter_mut() {
+            if let Some(mut transform) = transform {
+                if rod_component.is_some() {
+                    transform.translation.x = 0.0;
+                    transform.rotation = Quat::IDENTITY;
+                }
+
+                if cart_component.is_some() {
+                    transform.translation.x = 0.0;
+                }
+            }
+        }
+    }
 }
 
 /// Winged some type of orbital camera to explore around the robot.
@@ -410,8 +511,12 @@ fn camera_control_system(
         }
     }
 
-    // Pan camera with middle mouse button + drag
-    if mouse_button_input.pressed(MouseButton::Middle) {
+    #[cfg(target_os = "macos")]
+    let mouse_button = MouseButton::Right;
+    #[cfg(not(target_os = "macos"))]
+    let mouse_button = MouseButton::Middle;
+
+    if mouse_button_input.pressed(mouse_button) {
         for ev in mouse_motion.read() {
             let right = camera_transform.right();
             let up = camera_transform.up();
