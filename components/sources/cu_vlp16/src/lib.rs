@@ -9,7 +9,7 @@ use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
 use cu29::{output_msg, CuResult};
-use cu29_soa_derive::soa;
+use cu29_soa_derive::Soa;
 use std::net::UdpSocket;
 use std::ops::{Add, Sub};
 use std::time::Duration;
@@ -89,7 +89,7 @@ impl Decode for LidarLength {
 }
 
 impl<'de> BorrowDecode<'de> for LidarLength {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, _DecodeError> {
+    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let value: f32 = Decode::decode(decoder)?;
         Ok(LidarLength(Length::new::<meter>(value)))
     }
@@ -112,8 +112,7 @@ impl Sub for LidarLength {
 }
 
 /// This is pprovisional awaiting for the standardized lidar point structure.
-#[soa]
-#[derive(Default, Clone, Encode, Decode, PartialEq, Debug)]
+#[derive(Default, Clone, Encode, Decode, PartialEq, Debug, Soa)]
 pub struct ProvisionalLidarPayload {
     x: LidarLength,
     y: LidarLength,
