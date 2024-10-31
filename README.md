@@ -10,7 +10,7 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Gitter](https://img.shields.io/gitter/room/copper-project/copper-rs)](https://app.gitter.im/#/room/#copper:gitter.im)
 
-Copper is a user-friendly robotics framework designed for creating fast and reliable robots. Copper is to robots what a
+Copper is a user-friendly runtime engine for creating fast and reliable robots. Copper is to robots what a
 game engine is to games.
 
 * **Easy**: Copper offers a high-level configuration system and a natural Rust-first API.
