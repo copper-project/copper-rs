@@ -53,9 +53,8 @@ Copper is a data-oriented runtime with these key components:
 
 [![Copper in virtual action](https://img.youtube.com/vi/kC6sGRZUxLE/maxresdefault.jpg)](https://youtu.be/kC6sGRZUxLE)
 
-Here is Copper in action driving a simulation of the same robot with [Bevy](https://crates.io/crates/bevy) (Game Engine
-in Rust)
-and [Avian3d](https://crates.io/crates/avian3d) (Physics Engine in Rust)
+Here is robot developed with Copper in action driving its digital twin in a simulation environment with [Bevy](https://crates.io/crates/bevy) (Game Engine
+in Rust) and [Avian3d](https://crates.io/crates/avian3d) (Physics Engine in Rust)
 
 You have a mac or a linux linux machine just run ...
 
