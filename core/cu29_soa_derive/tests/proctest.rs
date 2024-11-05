@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod tests {
-    use cu29_soa_derive::soa;
-    #[derive(Debug, Default, PartialEq)]
-    #[soa]
-    pub struct Xyz {
+    use bincode::{Decode, Encode};
+    use cu29_soa_derive::Soa;
+    #[derive(Debug, Clone, Default, PartialEq, Soa, Encode, Decode)]
+    pub(crate) struct Xyz {
         x: f32,
         y: f32,
         z: f32,
@@ -19,7 +19,7 @@ mod tests {
         let xyz = Xyz { x, y, z };
 
         let xyzsoa: XyzSoa<8> = XyzSoa::new(xyz);
-        assert_eq!(xyzsoa.x(), [x; 8]);
+        assert_eq!(xyzsoa.x(), &[x; 8]);
 
         let xs = xyzsoa.x();
         let ys = xyzsoa.y();
@@ -42,32 +42,6 @@ mod tests {
     fn test_oob() {
         let xyzsoa: XyzSoa<8> = XyzSoa::new(Xyz::default());
         xyzsoa.get(8);
-    }
-
-    #[test]
-    fn test_add_op() {
-        let x = rand::random::<f32>();
-        let y = rand::random::<f32>();
-        let z = rand::random::<f32>();
-        let xyz = Xyz { x, y, z };
-
-        let xyzsoa1: XyzSoa<8> = XyzSoa::new(xyz);
-        let xyzsoa2 = xyzsoa1.clone();
-        let sum = xyzsoa1 + xyzsoa2;
-        assert_eq!(sum.x(), [x * 2.0; 8]);
-    }
-
-    #[test]
-    fn test_sub_op() {
-        let x = rand::random::<f32>();
-        let y = rand::random::<f32>();
-        let z = rand::random::<f32>();
-        let xyz = Xyz { x, y, z };
-
-        let xyzsoa1: XyzSoa<8> = XyzSoa::new(xyz);
-        let xyzsoa2 = xyzsoa1.clone();
-        let sum = xyzsoa1 - xyzsoa2;
-        assert_eq!(sum.x(), [0.0; 8]);
     }
 
     #[test]
@@ -126,5 +100,18 @@ mod tests {
             (4.0_f32.powi(2) + 6.0_f32.powi(2) + 3.0_f32.powi(2)).sqrt()
         );
         assert_eq!(distances[2], 0.0);
+    }
+
+    #[derive(Debug, Clone, Default, PartialEq, Soa, Encode, Decode)]
+    pub struct Color {
+        r: f32,
+        g: f32,
+        b: f32,
+    }
+
+    #[derive(Debug, Default, PartialEq, Soa)]
+    pub struct Both {
+        xyz: Xyz,
+        color: Color,
     }
 }
