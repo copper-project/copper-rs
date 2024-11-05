@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29_soa_derive/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-590a400c.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_soa_derive" data-themes="" data-resource-suffix="" data-rustdoc-version="1.84.0-nightly (a0d98ff0e 2024-10-31)" data-channel="nightly" data-search-js="search-c5a66128.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">cu29_soa_derive/</div>lib.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29_soa_derive/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-590a400c.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_soa_derive" data-themes="" data-resource-suffix="" data-rustdoc-version="1.84.0-nightly (fbab78289 2024-11-04)" data-channel="nightly" data-search-js="search-c5a66128.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">cu29_soa_derive/</div>lib.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
 <a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
@@ -258,32 +258,12 @@
 <a href="#257" id="257">257</a>
 <a href="#258" id="258">258</a>
 <a href="#259" id="259">259</a>
-<a href="#260" id="260">260</a>
-<a href="#261" id="261">261</a>
-<a href="#262" id="262">262</a>
-<a href="#263" id="263">263</a>
-<a href="#264" id="264">264</a>
-<a href="#265" id="265">265</a>
-<a href="#266" id="266">266</a>
-<a href="#267" id="267">267</a>
-<a href="#268" id="268">268</a>
-<a href="#269" id="269">269</a>
-<a href="#270" id="270">270</a>
-<a href="#271" id="271">271</a>
-<a href="#272" id="272">272</a>
-<a href="#273" id="273">273</a>
-<a href="#274" id="274">274</a>
-<a href="#275" id="275">275</a>
-<a href="#276" id="276">276</a>
-<a href="#277" id="277">277</a>
-<a href="#278" id="278">278</a>
-<a href="#279" id="279">279</a>
-<a href="#280" id="280">280</a></pre></div><pre class="rust"><code><span class="kw">mod </span>format;
+<a href="#260" id="260">260</a></pre></div><pre class="rust"><code><span class="kw">mod </span>format;
 <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
 </span><span class="kw">use </span>format::{highlight_rust_code, rustfmt_generated_code};
 <span class="kw">use </span>proc_macro::TokenStream;
 <span class="kw">use </span>quote::{format_ident, quote, ToTokens};
-<span class="kw">use </span>syn::{parse_macro_input, Data, DeriveInput, Fields};
+<span class="kw">use </span>syn::{parse_macro_input, Data, DeriveInput, Fields, Type};
 
 <span class="doccomment">/// Build a fixed sized SoA (Structure of Arrays) from a struct.
 /// The outputted SoA will be suitable for in place storage in messages and should be
@@ -345,11 +325,17 @@
 ///    (a + 1, b + 1.0)
 /// });
 /// ```
-</span><span class="attr">#[proc_macro_attribute]
-</span><span class="kw">pub fn </span>soa(_attr: TokenStream, item: TokenStream) -&gt; TokenStream {
-    <span class="kw">let </span>input = <span class="macro">parse_macro_input!</span>(item <span class="kw">as </span>DeriveInput);
+</span><span class="attr">#[proc_macro_derive(Soa)]
+</span><span class="kw">pub fn </span>derive_soa(input: TokenStream) -&gt; TokenStream {
+    <span class="kw">use </span>syn::TypePath;
+
+    <span class="kw">let </span>input = <span class="macro">parse_macro_input!</span>(input <span class="kw">as </span>DeriveInput);
+    <span class="kw">let </span>visibility = <span class="kw-2">&amp;</span>input.vis;
 
     <span class="kw">let </span>name = <span class="kw-2">&amp;</span>input.ident;
+    <span class="kw">let </span>module_name = <span class="macro">format_ident!</span>(<span class="string">"{}_soa"</span>, name.to_string().to_lowercase());
+    <span class="kw">let </span>soa_struct_name = <span class="macro">format_ident!</span>(<span class="string">"{}Soa"</span>, name);
+
     <span class="kw">let </span>data = <span class="kw">match </span><span class="kw-2">&amp;</span>input.data {
         Data::Struct(data) =&gt; data,
         <span class="kw">_ </span>=&gt; <span class="macro">panic!</span>(<span class="string">"Only structs are supported"</span>),
@@ -364,189 +350,163 @@
     <span class="kw">let </span><span class="kw-2">mut </span>field_names_range = <span class="macro">vec!</span>[];
     <span class="kw">let </span><span class="kw-2">mut </span>field_names_range_mut = <span class="macro">vec!</span>[];
     <span class="kw">let </span><span class="kw-2">mut </span>field_types = <span class="macro">vec!</span>[];
-    <span class="kw">let </span><span class="kw-2">mut </span>unique_field_names = <span class="macro">vec!</span>[];
-    <span class="kw">let </span><span class="kw-2">mut </span>unique_field_types = <span class="macro">vec!</span>[];
+    <span class="kw">let </span><span class="kw-2">mut </span>unique_imports = <span class="macro">vec!</span>[];
+    <span class="kw">let </span><span class="kw-2">mut </span>unique_import_names = <span class="macro">vec!</span>[];
+
+    <span class="kw">fn </span>is_primitive(type_name: <span class="kw-2">&amp;</span>str) -&gt; bool {
+        <span class="macro">matches!</span>(
+            type_name,
+            <span class="string">"i8" </span>| <span class="string">"i16"
+                </span>| <span class="string">"i32"
+                </span>| <span class="string">"i64"
+                </span>| <span class="string">"i128"
+                </span>| <span class="string">"u8"
+                </span>| <span class="string">"u16"
+                </span>| <span class="string">"u32"
+                </span>| <span class="string">"u64"
+                </span>| <span class="string">"u128"
+                </span>| <span class="string">"f32"
+                </span>| <span class="string">"f64"
+                </span>| <span class="string">"bool"
+                </span>| <span class="string">"char"
+                </span>| <span class="string">"str"
+                </span>| <span class="string">"usize"
+                </span>| <span class="string">"isize"
+        </span>)
+    }
 
     <span class="kw">for </span>field <span class="kw">in </span>fields {
         <span class="kw">let </span>field_name = field.ident.as_ref().unwrap();
         <span class="kw">let </span>field_type = <span class="kw-2">&amp;</span>field.ty;
         field_names.push(field_name);
-        field_types.push(field_type);
-
-        <span class="comment">// find unique field types by name
-        </span><span class="kw">let </span>type_name = field_type.into_token_stream().to_string();
-        <span class="kw">if </span>!unique_field_names.contains(<span class="kw-2">&amp;</span>type_name) {
-            unique_field_names.push(type_name);
-            unique_field_types.push(field_type);
-        }
-
         field_names_mut.push(<span class="macro">format_ident!</span>(<span class="string">"{}_mut"</span>, field_name));
         field_names_range.push(<span class="macro">format_ident!</span>(<span class="string">"{}_range"</span>, field_name));
         field_names_range_mut.push(<span class="macro">format_ident!</span>(<span class="string">"{}_range_mut"</span>, field_name));
+        field_types.push(field_type);
+
+        <span class="kw">if let </span>Type::Path(TypePath { path, .. }) = field_type {
+            <span class="kw">let </span>type_name = path.segments.last().unwrap().ident.to_string();
+            <span class="kw">let </span>path_str = path.to_token_stream().to_string();
+
+            <span class="kw">if </span>!is_primitive(<span class="kw-2">&amp;</span>type_name) &amp;&amp; !unique_import_names.contains(<span class="kw-2">&amp;</span>path_str) {
+                unique_imports.push(path.clone());
+                unique_import_names.push(path_str);
+            }
+        }
     }
 
-    <span class="kw">let </span>soa_struct_name = <span class="macro">format_ident!</span>(<span class="string">"{}Soa"</span>, name);
-
     <span class="kw">let </span>expanded = <span class="macro">quote!</span> {
-        #input
+        #visibility <span class="kw">mod </span>#module_name {
+            <span class="kw">use </span>bincode::{Decode, Encode};
+            <span class="kw">use </span>bincode::enc::Encoder;
+            <span class="kw">use </span>bincode::de::Decoder;
+            <span class="kw">use </span>bincode::error::{DecodeError, EncodeError};
+            #( <span class="kw">use super</span>::#unique_imports; )*
+            <span class="kw">use </span>core::array::from_fn;
 
-        <span class="kw">use </span>bincode::Decode <span class="kw">as </span>_Decode;
-        <span class="kw">use </span>bincode::Encode <span class="kw">as </span>_Encode;
-
-        <span class="kw">use </span>bincode::enc::Encoder <span class="kw">as </span>_Encoder;
-        <span class="kw">use </span>bincode::de::Decoder <span class="kw">as </span>_Decoder;
-
-        <span class="kw">use </span>bincode::error::DecodeError <span class="kw">as </span>_DecodeError;
-        <span class="kw">use </span>bincode::error::EncodeError <span class="kw">as </span>_EncodeError;
-
-        <span class="attr">#[derive(Debug)]
-        </span><span class="kw">pub struct </span>#soa_struct_name&lt;<span class="kw">const </span>N: usize&gt; {
-            #(<span class="kw">pub </span>#field_names: [#field_types; N]),*
-        }
-
-        <span class="kw">impl</span>&lt;<span class="kw">const </span>N: usize&gt; #soa_struct_name&lt;N&gt; {
-            <span class="kw">pub fn </span>new(default: #name) -&gt; <span class="self">Self </span>{
-                <span class="self">Self </span>{
-                    #( #field_names: [default.#field_names; N] ),*
-                }
+            <span class="attr">#[derive(Debug)]
+            </span>#visibility <span class="kw">struct </span>#soa_struct_name&lt;<span class="kw">const </span>N: usize&gt; {
+                #(<span class="kw">pub </span>#field_names: [#field_types; N]),*
             }
 
-            <span class="kw">pub fn </span>set(<span class="kw-2">&amp;mut </span><span class="self">self</span>, index: usize, value: #name) {
-                <span class="macro">assert!</span>(index &lt; N, <span class="string">"Index out of bounds"</span>);
-                #( <span class="self">self</span>.#field_names[index] = value.#field_names; )*
-            }
-
-            <span class="kw">pub fn </span>get(<span class="kw-2">&amp;</span><span class="self">self</span>, index: usize) -&gt; #name {
-                <span class="macro">assert!</span>(index &lt; N, <span class="string">"Index out of bounds"</span>);
-                #name {
-                    #( #field_names: <span class="self">self</span>.#field_names[index], )*
-                }
-            }
-
-            <span class="kw">pub fn </span>apply&lt;F&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw-2">mut </span>f: F)
-            <span class="kw">where
-                </span>F: FnMut(#(#field_types),<span class="kw-2">*</span>) -&gt; (#(#field_types),<span class="kw-2">*</span>)
-            {
-                <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..N {
-                    <span class="kw">let </span>result = f(#(<span class="self">self</span>.#field_names[i]),<span class="kw-2">*</span>);
-                    <span class="kw">let </span>(#(#field_names),<span class="kw-2">*</span>) = result;
-                    #(
-                        <span class="self">self</span>.#field_names[i] = #field_names;
-                    )*
-                }
-            }
-
-            #(
-                <span class="kw">pub fn </span>#field_names(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[#field_types] {
-                    <span class="kw-2">&amp;</span><span class="self">self</span>.#field_names
+            <span class="kw">impl</span>&lt;<span class="kw">const </span>N: usize&gt; #soa_struct_name&lt;N&gt; {
+                <span class="kw">pub fn </span>new(default: <span class="kw">super</span>::#name) -&gt; <span class="self">Self </span>{
+                    <span class="self">Self </span>{
+                        #( #field_names: from_fn(|<span class="kw">_</span>| default.#field_names.clone()) ),*
+                    }
                 }
 
-                <span class="kw">pub fn </span>#field_names_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span>[#field_types] {
-                    <span class="kw-2">&amp;mut </span><span class="self">self</span>.#field_names
+                <span class="kw">pub fn </span>set(<span class="kw-2">&amp;mut </span><span class="self">self</span>, index: usize, value: <span class="kw">super</span>::#name) {
+                    <span class="macro">assert!</span>(index &lt; N, <span class="string">"Index out of bounds"</span>);
+                    #( <span class="self">self</span>.#field_names[index] = value.#field_names.clone(); )*
                 }
 
-                <span class="kw">pub fn </span>#field_names_range(<span class="kw-2">&amp;</span><span class="self">self</span>, range: std::ops::Range&lt;usize&gt;) -&gt; <span class="kw-2">&amp;</span>[#field_types] {
-                    <span class="kw-2">&amp;</span><span class="self">self</span>.#field_names[range]
+                <span class="kw">pub fn </span>get(<span class="kw-2">&amp;</span><span class="self">self</span>, index: usize) -&gt; <span class="kw">super</span>::#name {
+                    <span class="macro">assert!</span>(index &lt; N, <span class="string">"Index out of bounds"</span>);
+                    <span class="kw">super</span>::#name {
+                        #( #field_names: <span class="self">self</span>.#field_names[index].clone(), )*
+                    }
                 }
 
-                <span class="kw">pub fn </span>#field_names_range_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>, range: std::ops::Range&lt;usize&gt;) -&gt; <span class="kw-2">&amp;mut </span>[#field_types] {
-                    <span class="kw-2">&amp;mut </span><span class="self">self</span>.#field_names[range]
-                }
-            )*
-
-        }
-
-        <span class="kw">impl</span>&lt;<span class="kw">const </span>N: usize&gt; _Encode <span class="kw">for </span>#soa_struct_name&lt;N&gt;  {
-            <span class="kw">fn </span>encode&lt;E: _Encoder&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, encoder: <span class="kw-2">&amp;mut </span>E) -&gt; <span class="prelude-ty">Result</span>&lt;(), _EncodeError&gt; {
-            #(
-                <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..N {
-                    <span class="self">self</span>.#field_names[i].encode(encoder)<span class="question-mark">?</span>;
-                }
-            )*
-            <span class="prelude-val">Ok</span>(())
-            }
-        }
-
-        <span class="kw">impl</span>&lt;<span class="kw">const </span>N: usize&gt; _Decode <span class="kw">for </span>#soa_struct_name&lt;N&gt; {
-            <span class="kw">fn </span>decode&lt;D: _Decoder&gt;(decoder: <span class="kw-2">&amp;mut </span>D) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, _DecodeError&gt; {
-                <span class="kw">let </span><span class="kw-2">mut </span>result = <span class="self">Self</span>::default();
-                #(
+                <span class="kw">pub fn </span>apply&lt;F&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw-2">mut </span>f: F)
+                <span class="kw">where
+                    </span>F: FnMut(#(#field_types),<span class="kw-2">*</span>) -&gt; (#(#field_types),<span class="kw-2">*</span>)
+                {
                     <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..N {
-                        result.#field_names[i] = _Decode::decode(decoder)<span class="question-mark">?</span>;
+                        <span class="kw">let </span>result = f(#(<span class="self">self</span>.#field_names[i].clone()),<span class="kw-2">*</span>);
+                        <span class="kw">let </span>(#(#field_names),<span class="kw-2">*</span>) = result;
+                        #(
+                            <span class="self">self</span>.#field_names[i] = #field_names;
+                        )*
+                    }
+                }
+
+                #(
+                    <span class="kw">pub fn </span>#field_names(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[#field_types] {
+                        <span class="kw-2">&amp;</span><span class="self">self</span>.#field_names
+                    }
+
+                    <span class="kw">pub fn </span>#field_names_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span>[#field_types] {
+                        <span class="kw-2">&amp;mut </span><span class="self">self</span>.#field_names
+                    }
+
+                    <span class="kw">pub fn </span>#field_names_range(<span class="kw-2">&amp;</span><span class="self">self</span>, range: std::ops::Range&lt;usize&gt;) -&gt; <span class="kw-2">&amp;</span>[#field_types] {
+                        <span class="kw-2">&amp;</span><span class="self">self</span>.#field_names[range]
+                    }
+
+                    <span class="kw">pub fn </span>#field_names_range_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>, range: std::ops::Range&lt;usize&gt;) -&gt; <span class="kw-2">&amp;mut </span>[#field_types] {
+                        <span class="kw-2">&amp;mut </span><span class="self">self</span>.#field_names[range]
                     }
                 )*
-                <span class="prelude-val">Ok</span>(result)
             }
-        }
 
-        <span class="kw">impl</span>&lt;<span class="kw">const </span>N: usize&gt; Default <span class="kw">for </span>#soa_struct_name&lt;N&gt; {
-            <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
-                 <span class="self">Self </span>{
-                    #( #field_names: [#field_types::default(); N] ),*
-                 }
-            }
-        }
-
-        <span class="comment">// Implements a basic element by element add
-        </span><span class="kw">impl</span>&lt;<span class="kw">const </span>N: usize&gt; std::ops::Add <span class="kw">for </span>#soa_struct_name&lt;N&gt;
-        <span class="kw">where
-            </span>#(
-                #field_types: std::ops::Add&lt;Output = #field_types&gt; + Copy,
-            )*
-        {
-            <span class="kw">type </span>Output = <span class="self">Self</span>;
-
-            <span class="kw">fn </span>add(<span class="self">self</span>, other: <span class="self">Self</span>) -&gt; <span class="self">Self </span>{
-                <span class="self">Self </span>{
+            <span class="kw">impl</span>&lt;<span class="kw">const </span>N: usize&gt; Encode <span class="kw">for </span>#soa_struct_name&lt;N&gt; {
+                <span class="kw">fn </span>encode&lt;E: Encoder&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, encoder: <span class="kw-2">&amp;mut </span>E) -&gt; <span class="prelude-ty">Result</span>&lt;(), EncodeError&gt; {
                     #(
-                        #field_names: {
-                            <span class="kw">let </span><span class="kw-2">mut </span>result = [<span class="self">self</span>.#field_names[<span class="number">0</span>]; N];
-                            result.iter_mut().zip(<span class="self">self</span>.#field_names.iter().zip(other.#field_names.iter()))
-                                .for_each(|(res, (a, b))| <span class="kw-2">*</span>res = <span class="kw-2">*</span>a + <span class="kw-2">*</span>b);
-                            result
+                        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..N {
+                            <span class="self">self</span>.#field_names[i].encode(encoder)<span class="question-mark">?</span>;
                         }
-                    ),*
+                    )*
+                    <span class="prelude-val">Ok</span>(())
                 }
             }
-        }
 
-        <span class="comment">// Implements a basic element by element sub
-        </span><span class="kw">impl</span>&lt;<span class="kw">const </span>N: usize&gt; std::ops::Sub <span class="kw">for </span>#soa_struct_name&lt;N&gt;
-        <span class="kw">where
-            </span>#(
-                #field_types: std::ops::Sub&lt;Output = #field_types&gt; + Copy,
-            )*
-        {
-            <span class="kw">type </span>Output = <span class="self">Self</span>;
-
-            <span class="kw">fn </span>sub(<span class="self">self</span>, other: <span class="self">Self</span>) -&gt; <span class="self">Self </span>{
-                <span class="self">Self </span>{
+            <span class="kw">impl</span>&lt;<span class="kw">const </span>N: usize&gt; Decode <span class="kw">for </span>#soa_struct_name&lt;N&gt; {
+                <span class="kw">fn </span>decode&lt;D: Decoder&gt;(decoder: <span class="kw-2">&amp;mut </span>D) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, DecodeError&gt; {
+                    <span class="kw">let </span><span class="kw-2">mut </span>result = <span class="self">Self</span>::default();
                     #(
-                        #field_names: {
-                            <span class="kw">let </span><span class="kw-2">mut </span>result = [<span class="self">self</span>.#field_names[<span class="number">0</span>]; N];
-                            result.iter_mut().zip(<span class="self">self</span>.#field_names.iter().zip(other.#field_names.iter()))
-                                .for_each(|(res, (a, b))| <span class="kw-2">*</span>res = <span class="kw-2">*</span>a - <span class="kw-2">*</span>b);
-                            result
+                        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..N {
+                            result.#field_names[i] = Decode::decode(decoder)<span class="question-mark">?</span>;
                         }
-                    ),*
+                    )*
+                    <span class="prelude-val">Ok</span>(result)
+                }
+            }
+
+            <span class="kw">impl</span>&lt;<span class="kw">const </span>N: usize&gt; Default <span class="kw">for </span>#soa_struct_name&lt;N&gt; {
+                <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
+                    <span class="self">Self </span>{
+                        #( #field_names: from_fn(|<span class="kw">_</span>| #field_types::default()) ),*
+                    }
+                }
+            }
+
+            <span class="kw">impl</span>&lt;<span class="kw">const </span>N: usize&gt; Clone <span class="kw">for </span>#soa_struct_name&lt;N&gt;
+            <span class="kw">where
+                </span>#(
+                    #field_types: Clone,
+                )*
+            {
+                <span class="kw">fn </span>clone(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="self">Self </span>{
+                    <span class="self">Self </span>{
+                        #( #field_names: <span class="self">self</span>.#field_names.clone(), )*
+                    }
                 }
             }
         }
-
-
-        <span class="kw">impl</span>&lt;<span class="kw">const </span>N: usize&gt; Clone <span class="kw">for </span>#soa_struct_name&lt;N&gt;
-        <span class="kw">where
-            </span>#(
-                #field_types: Clone,
-            )*
-        {
-            <span class="kw">fn </span>clone(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="self">Self </span>{
-                <span class="self">Self </span>{
-                    #( #field_names: <span class="self">self</span>.#field_names.clone(), )*
-                }
-            }
-        }
+        #visibility <span class="kw">use </span>#module_name::#soa_struct_name;
     };
+
     <span class="kw">let </span>tokens: TokenStream = expanded.into();
 
     <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]

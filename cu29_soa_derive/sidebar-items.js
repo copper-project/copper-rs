@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"attr":["soa"]};
+window.SIDEBAR_ITEMS = {"derive":["Soa"]};
