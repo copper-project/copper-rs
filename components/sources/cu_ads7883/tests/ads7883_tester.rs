@@ -5,7 +5,7 @@ use cu29::{input_msg, CuResult};
 use cu29_derive::copper_runtime;
 use cu29_helpers::basic_copper_setup;
 use cu29_log_derive::debug;
-use cu_ads7883::ADSReadingPayload;
+use cu_ads7883_new::ADSReadingPayload;
 use std::path::PathBuf;
 
 #[copper_runtime(config = "tests/copperconfig.ron")]
