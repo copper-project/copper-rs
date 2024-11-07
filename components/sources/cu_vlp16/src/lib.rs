@@ -8,12 +8,12 @@ use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
 use cu29::{output_msg, CuResult};
+use cu_sensor_payloads::{LidarPayload, LidarPayloadSoa};
 use std::net::UdpSocket;
 use std::ops::{Add, Sub};
 use std::time::Duration;
 use velodyne_lidar::iter::try_packet_to_frame_xyz;
 use velodyne_lidar::types::frame_xyz::FrameXyz;
-
 // const MAX_UDP_PACKET_SIZE: usize = 65507;
 
 pub struct Vlp16 {
@@ -91,9 +91,9 @@ impl<'cl> CuSrcTask<'cl> for Vlp16 {
             firing.point_iter().for_each(|point| {
                 let point = point.as_single().unwrap();
                 let x = point.measurement.xyz[0].as_meters() as f32;
-                let y = point.measurement.xyz[0].as_meters() as f32;
-                let z = point.measurement.xyz[0].as_meters() as f32;
-                output.set(i, ProvisionalLidarPayload::new(x, y, z));
+                let y = point.measurement.xyz[1].as_meters() as f32;
+                let z = point.measurement.xyz[2].as_meters() as f32;
+                output.set(i, LidarPayload::new(x, y, z, 0.0));
             });
         });
         new_msg.set_payload(output);
@@ -119,17 +119,16 @@ mod tests {
         drv.start(&clk).unwrap();
 
         // Read test.pcap
-        while let Some(pkt) = pcap_reader.next_packet() {
+        if let Some(pkt) = pcap_reader.next_packet() {
             let pkt = pkt.unwrap();
             let data = &pkt.data[0x2a..];
             // send udp packet to 2368
             let socket = UdpSocket::bind("0.0.0.0:2367").unwrap();
             socket.send_to(data, "127.0.0.1:2368").unwrap();
             // process
-            let mut msg = CuMsg::new(Some(ProvisionalLidarPayloadSoa::<10000>::default()));
+            let mut msg = CuMsg::new(Some(LidarPayloadSoa::<10000>::default()));
             drv.process(&clk, &mut msg).unwrap();
-            assert_eq!(0.009406593f32, msg.payload().unwrap().x[0].0.value);
-            break;
+            assert_eq!(0.009406593f32, msg.payload().unwrap().x[0].value);
         }
         drv.stop(&clk).unwrap();
     }

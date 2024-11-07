@@ -10,7 +10,7 @@ use uom::si::length::meter;
 use uom::si::luminance::candela_per_square_meter;
 
 #[derive(Default, PartialEq, Debug, Copy, Clone, Add, Deref, Sub, From, Mul, Div)]
-struct LidarIntensity(Luminance);
+pub struct LidarIntensity(Luminance);
 
 /// Encode as f32 in candela per square meter
 impl Encode for LidarIntensity {
@@ -40,7 +40,7 @@ impl<'de> BorrowDecode<'de> for LidarIntensity {
 }
 
 #[derive(Default, PartialEq, Debug, Copy, Clone, Add, Deref, Sub, From, Mul, Div)]
-struct LidarLength(Length);
+pub struct LidarLength(Length);
 
 /// Encode it as a f32 in m
 impl Encode for LidarLength {
