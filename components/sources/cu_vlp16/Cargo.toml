@@ -20,6 +20,7 @@ cu29-log-runtime = { workspace = true }
 cu29-log-derive = { workspace = true }
 bincode = { workspace = true }
 cu29-soa-derive = { workspace = true }
+cu-sensor-payloads = { workspace = true }
 uom = { workspace = true }
 serde = { workspace = true }
 velodyne-lidar = { version = "0.2.0", features = ["full"] }
