@@ -7,6 +7,7 @@ mod tests {
         x: f32,
         y: f32,
         z: f32,
+        i: i32,
     }
 
     /// This is to check if with cargo install cargo-show-asm
@@ -16,7 +17,7 @@ mod tests {
         let x = rand::random::<f32>();
         let y = rand::random::<f32>();
         let z = rand::random::<f32>();
-        let xyz = Xyz { x, y, z };
+        let xyz = Xyz { x, y, z, i: 0 };
 
         let xyzsoa: XyzSoa<8> = XyzSoa::new(xyz);
         assert_eq!(xyzsoa.x(), &[x; 8]);
@@ -50,6 +51,7 @@ mod tests {
             x: 0.0,
             y: 0.0,
             z: 0.0,
+            i: 0,
         });
 
         // Set some example values
@@ -59,6 +61,7 @@ mod tests {
                 x: 1.0,
                 y: 2.0,
                 z: 2.0,
+                i: 0,
             },
         );
         soa.set(
@@ -67,6 +70,7 @@ mod tests {
                 x: 4.0,
                 y: 6.0,
                 z: 3.0,
+                i: 0,
             },
         );
         soa.set(
@@ -75,6 +79,7 @@ mod tests {
                 x: 0.0,
                 y: 0.0,
                 z: 0.0,
+                i: 0,
             },
         );
 
@@ -83,11 +88,11 @@ mod tests {
         let mut i = 0;
 
         // Apply the operation to compute the distance to the origin
-        soa.apply(|x, y, z| {
+        soa.apply(|x, y, z, intensity| {
             let distance = (x * x + y * y + z * z).sqrt();
             distances[i] = distance;
             i += 1;
-            (x, y, z)
+            (x, y, z, intensity)
         });
 
         // Check the results

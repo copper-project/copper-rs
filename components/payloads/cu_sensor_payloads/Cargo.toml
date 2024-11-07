@@ -1,0 +1,18 @@
+[package]
+name = "cu-sensor-payloads"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+bincode = { workspace = true }
+cu29-soa-derive = { workspace = true, features = ["macro_debug"] }
+uom = { workspace = true }
+serde = { workspace = true }
+derive_more = { workspace = true }
+

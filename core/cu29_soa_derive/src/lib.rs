@@ -172,11 +172,12 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                 where
                     F: FnMut(#(#field_types),*) -> (#(#field_types),*)
                 {
-                    for i in 0..N {
-                        let result = f(#(self.#field_names[i].clone()),*);
+                    // don't use something common like i here.
+                    for _idx in 0..N {
+                        let result = f(#(self.#field_names[_idx].clone()),*);
                         let (#(#field_names),*) = result;
                         #(
-                            self.#field_names[i] = #field_names;
+                            self.#field_names[_idx] = #field_names;
                         )*
                     }
                 }
@@ -203,8 +204,8 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
             impl<const N: usize> Encode for #soa_struct_name<N> {
                 fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
                     #(
-                        for i in 0..N {
-                            self.#field_names[i].encode(encoder)?;
+                        for _idx in 0..N {
+                            self.#field_names[_idx].encode(encoder)?;
                         }
                     )*
                     Ok(())
@@ -215,8 +216,8 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                 fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
                     let mut result = Self::default();
                     #(
-                        for i in 0..N {
-                            result.#field_names[i] = Decode::decode(decoder)?;
+                        for _idx in 0..N {
+                            result.#field_names[_idx] = Decode::decode(decoder)?;
                         }
                     )*
                     Ok(result)

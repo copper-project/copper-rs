@@ -3,18 +3,14 @@ use velodyne_lidar::{Config, Config16};
 
 use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
-use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
 use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
 use cu29::{output_msg, CuResult};
-use cu29_soa_derive::Soa;
 use std::net::UdpSocket;
 use std::ops::{Add, Sub};
 use std::time::Duration;
-use uom::si::f32::Length;
-use uom::si::length::meter;
 use velodyne_lidar::iter::try_packet_to_frame_xyz;
 use velodyne_lidar::types::frame_xyz::FrameXyz;
 
@@ -72,65 +68,8 @@ impl CuTaskLifecycle for Vlp16 {
     }
 }
 
-#[derive(Default, PartialEq, Debug, Copy, Clone)]
-struct LidarLength(Length);
-
-impl Encode for LidarLength {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        Encode::encode(&self.0.value, encoder)
-    }
-}
-
-impl Decode for LidarLength {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let value: f32 = Decode::decode(decoder)?;
-        Ok(LidarLength(Length::new::<meter>(value)))
-    }
-}
-
-impl<'de> BorrowDecode<'de> for LidarLength {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let value: f32 = Decode::decode(decoder)?;
-        Ok(LidarLength(Length::new::<meter>(value)))
-    }
-}
-
-impl Add for LidarLength {
-    type Output = Self;
-
-    fn add(self, other: Self) -> Self {
-        LidarLength(self.0 + other.0)
-    }
-}
-
-impl Sub for LidarLength {
-    type Output = Self;
-
-    fn sub(self, other: Self) -> Self {
-        LidarLength(self.0 - other.0)
-    }
-}
-
-/// This is pprovisional awaiting for the standardized lidar point structure.
-#[derive(Default, Clone, Encode, Decode, PartialEq, Debug, Soa)]
-pub struct ProvisionalLidarPayload {
-    x: LidarLength,
-    y: LidarLength,
-    z: LidarLength,
-}
-
-impl ProvisionalLidarPayload {
-    pub fn new(x: f32, y: f32, z: f32) -> Self {
-        Self {
-            x: LidarLength(Length::new::<meter>(x)),
-            y: LidarLength(Length::new::<meter>(y)),
-            z: LidarLength(Length::new::<meter>(z)),
-        }
-    }
-}
-
 impl<'cl> CuSrcTask<'cl> for Vlp16 {
-    type Output = output_msg!('cl, ProvisionalLidarPayloadSoa<10000>);
+    type Output = output_msg!('cl, LidarPayloadSoa<10000>);
 
     fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
         let socket = self.socket.as_ref().unwrap();
@@ -146,7 +85,7 @@ impl<'cl> CuSrcTask<'cl> for Vlp16 {
             .unwrap()
             .unwrap();
         let i = 0;
-        let mut output = ProvisionalLidarPayloadSoa::<10000>::default();
+        let mut output = LidarPayloadSoa::<10000>::default();
 
         frame.firing_iter().for_each(|firing| {
             firing.point_iter().for_each(|point| {

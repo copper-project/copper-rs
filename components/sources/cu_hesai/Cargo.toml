@@ -1,0 +1,12 @@
+[package]
+name = "cu-hesai"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+pcap = "*"
+bytemuck = { version = "1.18.0", features = ["derive"] }
+uom = { workspace = true }
+cu29-clock = { workspace = true }
+chrono = { version = "0.4.38" }
+

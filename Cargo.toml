@@ -13,10 +13,12 @@ members = [
     "core/cu29_traits",
     "core/cu29_unifiedlog",
     "components/monitors/cu_consolemon",
+    "components/payloads/cu_sensor_payloads",
     "components/sinks/cu_rp_gpio",
     "components/sinks/cu_rp_sn754410",
     "components/sinks/cu_lewansoul",
     "components/sources/cu_ads7883",
+    "components/sources/cu_hesai",
     "components/sources/cu_vlp16",
     "components/sources/cu_wt901",
     "components/sources/cu_rp_encoder",
@@ -74,6 +76,9 @@ cu29-traits = { path = "core/cu29_traits", version = "0.4.0" }
 cu29-unifiedlog = { path = "core/cu29_unifiedlog", version = "0.4.0" }
 cu29-value = { path = "core/cu29_value", version = "0.4.0" }
 
+# Payload definitions
+cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads", version = "0.4.0" }
+
 # External serialization
 bincode = { version = "2.0.0-rc.3", features = ["derive"] }
 serde = { version = "1.0.210", features = ["derive"] }
@@ -90,8 +95,11 @@ syn = { version = "2.0.79", features = ["full"] } # proc macros
 # Unit of measure to be consistent across the project
 uom = { version = "0.36.0", features = ["serde"] }
 
-# Compact strings supporT
+# Compact strings support
 compact_str = { version = "0.8.0", features = ["serde"] }
+
+# The derive patterns happens a lot across the codebase, this is a helper for that.
+derive_more = { version = "1", features = ["full"] }
 
 # [profile.release]
 # lto = true
