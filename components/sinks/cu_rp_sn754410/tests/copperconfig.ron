@@ -2,14 +2,14 @@
     tasks: [
         (
             id: "src",
-            type: "cu_rp_sn754410::test_support::SN754410TestSrc",
+            type: "cu_rp_sn754410_new::test_support::SN754410TestSrc",
         ),
         (
             id: "pwm",
-            type: "cu_rp_sn754410::SN754410",
+            type: "cu_rp_sn754410_new::SN754410",
         ),
      ],
     cnx: [
-        (src: "src",  dst: "pwm",   msg: "cu_rp_sn754410::MotorPayload"),
+        (src: "src",  dst: "pwm",   msg: "cu_rp_sn754410_new::MotorPayload"),
     ],
 )
