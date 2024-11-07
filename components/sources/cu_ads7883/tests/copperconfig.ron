@@ -2,14 +2,14 @@
     tasks: [
         (
             id: "src",
-            type: "cu_ads7883::ADS7883",
+            type: "cu_ads7883_new::ADS7883",
         ),
         (
             id: "tester",
-            type: "cu_ads7883::test_support::ADS78883TestSink",
+            type: "cu_ads7883_new::test_support::ADS78883TestSink",
         ),
      ],
     cnx: [
-        (src: "src",  dst: "tester",   msg: "cu_ads7883::ADSReadingPayload"),
+        (src: "src",  dst: "tester",   msg: "cu_ads7883_new::ADSReadingPayload"),
     ],
 )
