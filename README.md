@@ -8,7 +8,7 @@
 ![GitHub last commit](https://img.shields.io/github/last-commit/copper-project/copper-rs)
 ![](https://img.shields.io/badge/Rust-1.80+-orange.svg)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Gitter](https://img.shields.io/gitter/room/copper-project/copper-rs)](https://app.gitter.im/#/room/#copper:gitter.im)
+[![Discord](https://img.shields.io/discord/:1305916875741597826)](https://discord.com/channels/1305916875741597826/1305916880887873538)
 
 Copper is a user-friendly runtime engine for creating fast and reliable robots. Copper is to robots what a
 game engine is to games.
@@ -27,7 +27,7 @@ game engine is to games.
 > [!NOTE]
 > Copper is still in **early development / alpha stage**, and the APIs are subject to change. We are looking for
 > contributors to help us build the best robotics framework possible. If you are interested, please join us
-> on [Gitter](https://gitter.im/copper-project/copper-rs) or open an issue.
+> on [Discord](https://discord.com/channels/1305916875741597826/1305916880887873538) or open an issue.
 
 Copper has been tested on: Linux (x86_64, armv7, aarch64 & riskv64) and MacOS (arm64).
 Testers would be welcomed on Windows and other platforms.
