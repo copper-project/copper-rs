@@ -8,7 +8,8 @@
 ![GitHub last commit](https://img.shields.io/github/last-commit/copper-project/copper-rs)
 ![](https://img.shields.io/badge/Rust-1.80+-orange.svg)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Discord](https://img.shields.io/discord/1305916875741597826)](https://discord.gg/VkCG7Sb9Kw)
+[![Discord](https://img.shields.io/discord/1305916875741597826?logo=discord)](https://discord.gg/VkCG7Sb9Kw)
+
 
 Copper is a user-friendly runtime engine for creating fast and reliable robots. Copper is to robots what a
 game engine is to games.
