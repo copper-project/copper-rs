@@ -450,19 +450,28 @@ fn reset_sim(
         Option<&Rod>,
         Option<&Cart>,
         Option<&mut Transform>, // Ensure transform is mutable
+        Option<&mut ExternalForce>,
     )>,
 ) {
     if keys.just_pressed(KeyCode::KeyR) {
-        for (rod_component, cart_component, transform) in query.iter_mut() {
+        for (rod_component, cart_component, transform, ext_force) in query.iter_mut() {
             if let Some(mut transform) = transform {
                 if rod_component.is_some() {
-                    transform.translation.x = 0.0;
+                    transform.translation = Vec3::new(
+                        0.0,
+                        ROD_HEIGHT as f32 / 2.0 + CART_HEIGHT as f32,
+                        CART_DEPTH as f32 / 2.0 + ROD_DEPTH as f32 / 2.0 + AXIS_LENGTH as f32,
+                    );
+
                     transform.rotation = Quat::IDENTITY;
                 }
 
                 if cart_component.is_some() {
                     transform.translation.x = 0.0;
                 }
+            }
+            if let Some(mut ext_force) = ext_force {
+                ext_force.clear();
             }
         }
     }
