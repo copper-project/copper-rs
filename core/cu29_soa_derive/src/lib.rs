@@ -141,6 +141,7 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
             use bincode::enc::Encoder;
             use bincode::de::Decoder;
             use bincode::error::{DecodeError, EncodeError};
+            use std::ops::{Index, IndexMut};
             #( use super::#unique_imports; )*
             use core::array::from_fn;
 
@@ -244,6 +245,7 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                     }
                 }
             }
+
         }
         #visibility use #module_name::#soa_struct_name;
     };

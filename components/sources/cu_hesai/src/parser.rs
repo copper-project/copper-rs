@@ -397,10 +397,10 @@ pub type RefTime = (DateTime<Utc>, CuTime);
 #[repr(C, packed)]
 #[derive(Copy, Clone, Zeroable, Pod, Debug)]
 pub struct Packet {
-    pre_header: PreHeader,
-    header: Header,
-    blocks: [Block; 8],
-    tail: Tail,
+    pub pre_header: PreHeader,
+    pub header: Header,
+    pub blocks: [Block; 8],
+    pub tail: Tail,
 }
 
 const FIRING_OFFSET: CuDuration = CuDuration(5_632); // this is in ns
@@ -434,7 +434,7 @@ impl Packet {
     // │ Blocks 4&3  │ t₀ + 5.632 − 50 × 2                                    │
     // │ Blocks 2&1  │ t₀ + 5.632 − 50 × 3                                    │
     // └─────────────┴────────────────────────────────────────────────────────┘
-    fn block_ts(self, reftime: &RefTime) -> Result<[CuTime; 8], HesaiError> {
+    pub fn block_ts(self, reftime: &RefTime) -> Result<[CuTime; 8], HesaiError> {
         let t_zero = self.tail.tov(reftime)? + FIRING_OFFSET;
         let offsets = if self.header.is_dual_return() {
             DUAL_RETURN_OFFSETS
@@ -452,6 +452,25 @@ impl Packet {
             .try_for_each(|block| block.check_invariants())?;
         Ok(())
     }
+}
+
+pub fn parse_packet(data: &[u8]) -> Result<&Packet, HesaiError> {
+    if data[0] != 0xEE || data[1] != 0xFF {
+        return Err(HesaiError::InvalidPacket(format!(
+            "Not an Xt32 packet: {:2X}{:2X}",
+            data[0], data[1],
+        )));
+    }
+
+    if data.len() < size_of::<Packet>() {
+        return Err(HesaiError::InvalidPacket(format!(
+            "Packet too short: {}",
+            data.len()
+        )));
+    }
+    let packet: &Packet = bytemuck::from_bytes(data);
+    packet.check_invariants()?;
+    Ok(packet)
 }
 
 #[cfg(test)]
@@ -474,19 +493,7 @@ mod tests {
                 panic!("Packet too short: {}", packet.data.len());
             }
             let packet_data = &packet.data[udp_header_size..udp_header_size + size_of::<Packet>()];
-            if packet_data[0] != 0xEE || packet_data[1] != 0xFF {
-                panic!(
-                    "Not a Point Cloud packet: {:2X}{:2X}",
-                    packet_data[0], packet_data[1]
-                );
-            }
-            let packet: &Packet = bytemuck::from_bytes(&packet_data);
-
-            if packet.check_invariants().is_err() {
-                panic!("Malformed packet");
-            };
-
-            println!("Packet: {:?}", packet);
+            let packet = parse_packet(packet_data).unwrap();
 
             let rt: RefTime = (
                 packet.tail.utc_tov().unwrap(), // emulates a packet coming in recently
