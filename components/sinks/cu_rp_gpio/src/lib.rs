@@ -97,7 +97,7 @@ impl<'cl> CuSinkTask<'cl> for RPGpio {
 
         #[cfg(mock)]
         debug!(
-            "Would write to pin {} the value {:?}.",
+            "Would write to pin {} the value {}.",
             self.pin,
             msg.payload()
         );

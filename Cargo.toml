@@ -14,11 +14,13 @@ members = [
     "core/cu29_unifiedlog",
     "components/monitors/cu_consolemon",
     "components/payloads/cu_sensor_payloads",
+    "components/sinks/cu_iceoryx2_sink",
     "components/sinks/cu_rp_gpio",
     "components/sinks/cu_rp_sn754410",
     "components/sinks/cu_lewansoul",
     "components/sources/cu_ads7883",
     "components/sources/cu_hesai",
+    "components/sources/cu_iceoryx2_src",
     "components/sources/cu_vlp16",
     "components/sources/cu_wt901",
     "components/sources/cu_rp_encoder",
@@ -29,6 +31,7 @@ members = [
     "examples/cu_rp_balancebot",
     "examples/cu_multisources",
     "examples/cu_monitoring",
+    "examples/cu_iceoryx2",
 ]
 
 # put only the core crates here that are not platform specific

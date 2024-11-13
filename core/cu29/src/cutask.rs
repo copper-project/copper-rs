@@ -14,15 +14,15 @@ use compact_str::{CompactString, ToCompactString};
 use cu29_clock::RobotClock;
 use serde_derive::{Deserialize, Serialize};
 use std::fmt;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 
 // Everything that is stateful in copper for zero copy constraints need to be restricted to this trait.
-pub trait CuMsgPayload: Default + Clone + Encode + Decode + Sized {}
+pub trait CuMsgPayload: Default + Debug + Clone + Encode + Decode + Sized {}
 
 pub trait CuMsgPack<'cl> {}
 
 // Also anything that follows this contract can be a payload (blanket implementation)
-impl<T: Default + Clone + Encode + Decode + Sized> CuMsgPayload for T {}
+impl<T: Default + Debug + Clone + Encode + Decode + Sized> CuMsgPayload for T {}
 
 macro_rules! impl_cu_msg_pack {
     ($(($($ty:ident),*)),*) => {

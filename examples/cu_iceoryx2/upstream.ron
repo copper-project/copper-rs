@@ -1,0 +1,26 @@
+(
+    tasks: [
+        (
+            id: "src",
+            type: "cu_caterpillar::tasks::CaterpillarSource",
+        ),
+        (
+            id: "task",
+            type: "cu_caterpillar::tasks::CaterpillarTask",
+        ),
+        (
+            id: "sink",
+            type: "cu_iceoryx2::MyIceoryxSink",
+            config: {
+                "service": "Flippy",
+            },
+        ),
+     ],
+    cnx: [
+        (src: "src",  dst: "task",   msg: "cu_rp_gpio::RPGpioPayload"),
+        (src: "task", dst: "sink",   msg: "cu_rp_gpio::RPGpioPayload"),
+    ],
+    monitor: (
+                  type: "cu_consolemon::CuConsoleMon",
+             )
+)
