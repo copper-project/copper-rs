@@ -122,7 +122,7 @@ impl Hash for Value {
             Value::F64(v) => OrderedFloat(v).hash(hasher),
             Value::Char(v) => v.hash(hasher),
             Value::String(ref v) => v.hash(hasher),
-            Value::Unit => ().hash(hasher),
+            Value::Unit => 0_u8.hash(hasher),
             Value::Option(ref v) => v.hash(hasher),
             Value::Newtype(ref v) => v.hash(hasher),
             Value::Seq(ref v) => v.hash(hasher),
