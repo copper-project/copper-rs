@@ -332,7 +332,7 @@
 
 <span class="doccomment">/// Rebuild a log line from the interned strings and the CuLogEntry.
 /// This basically translates the world of copper logs to text logs.
-</span><span class="kw">pub fn </span>rebuild_logline(all_interned_strings: <span class="kw-2">&amp;</span>Vec&lt;String&gt;, entry: <span class="kw-2">&amp;</span>CuLogEntry) -&gt; CuResult&lt;String&gt; {
+</span><span class="kw">pub fn </span>rebuild_logline(all_interned_strings: <span class="kw-2">&amp;</span>[String], entry: <span class="kw-2">&amp;</span>CuLogEntry) -&gt; CuResult&lt;String&gt; {
     <span class="kw">let </span>format_string = <span class="kw-2">&amp;</span>all_interned_strings[entry.msg_index <span class="kw">as </span>usize];
     <span class="kw">let </span><span class="kw-2">mut </span>anon_params: Vec&lt;String&gt; = Vec::new();
     <span class="kw">let </span><span class="kw-2">mut </span>named_params = HashMap::new();
