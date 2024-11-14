@@ -2,6 +2,8 @@ use bytemuck::{Pod, Zeroable};
 use chrono::{DateTime, MappedLocalTime, TimeZone, Utc};
 use cu29_clock::{CuDuration, CuTime};
 use pcap::Capture;
+use std::error::Error;
+use std::fmt;
 use std::fmt::{Debug, Formatter};
 use std::mem::size_of;
 use uom::fmt::DisplayStyle::Abbreviation;
@@ -20,6 +22,17 @@ pub enum HesaiError {
     InvalidPacket(String),
     InvalidTimestamp(String),
 }
+
+impl fmt::Display for HesaiError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            HesaiError::InvalidPacket(msg) => write!(f, "Invalid packet: {}", msg),
+            HesaiError::InvalidTimestamp(msg) => write!(f, "Invalid timestamp: {}", msg),
+        }
+    }
+}
+
+impl Error for HesaiError {}
 
 // ╭──────────────────────────────────────────────────────────────────────────────╮
 // │                              Pre-Header (6 bytes)                            │
@@ -345,7 +358,6 @@ impl Tail {
         // This hesai API is terrible and based on UTC, here we give a function to convert it to a monotonic robot time.
         // UTC is corrected to match earth rotation so it is NOT suitable for robotic applications.
         let (ref_date, ref_cu_time) = reftime;
-
         let utc_tov = self.utc_tov()?;
 
         let elapsed = utc_tov
@@ -464,13 +476,32 @@ pub fn parse_packet(data: &[u8]) -> Result<&Packet, HesaiError> {
 
     if data.len() < size_of::<Packet>() {
         return Err(HesaiError::InvalidPacket(format!(
-            "Packet too short: {}",
-            data.len()
+            "Packet too short: {} < {}",
+            data.len(),
+            size_of::<Packet>()
+        )));
+    }
+    if data.len() > size_of::<Packet>() {
+        return Err(HesaiError::InvalidPacket(format!(
+            "Packet too long: {} > {}",
+            data.len(),
+            size_of::<Packet>()
         )));
     }
     let packet: &Packet = bytemuck::from_bytes(data);
     packet.check_invariants()?;
     Ok(packet)
+}
+
+/// Generate the default elevation calibration for the Xt32 Hesai sensor.
+/// The sensor has 32 channels, each with a different elevation angle.
+/// The elevation angles are in degrees and range from 15 to -16.
+pub fn generate_default_elevation_calibration() -> [Angle; 32] {
+    let mut elevations = [Angle::default(); 32];
+    elevations.iter_mut().enumerate().for_each(|(i, x)| {
+        *x = Angle::new::<degree>(15.0 - i as f32);
+    });
+    elevations
 }
 
 #[cfg(test)]
