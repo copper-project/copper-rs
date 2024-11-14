@@ -436,8 +436,8 @@ pub struct UnifiedLoggerWrite {
     front_slab_suffix: usize,
 }
 
-fn build_slab_path(base_file_path: &PathBuf, slab_index: usize) -> PathBuf {
-    let mut file_path = base_file_path.clone();
+fn build_slab_path(base_file_path: &Path, slab_index: usize) -> PathBuf {
+    let mut file_path = base_file_path.to_path_buf();
     let file_name = file_path.file_name().unwrap().to_str().unwrap();
     let mut file_name = file_name.split('.').collect::<Vec<&str>>();
     let extension = file_name.pop().unwrap();
@@ -447,12 +447,13 @@ fn build_slab_path(base_file_path: &PathBuf, slab_index: usize) -> PathBuf {
     file_path
 }
 
-fn make_slab_file(base_file_path: &PathBuf, slab_size: usize, slab_suffix: usize) -> File {
+fn make_slab_file(base_file_path: &Path, slab_size: usize, slab_suffix: usize) -> File {
     let file_path = build_slab_path(base_file_path, slab_suffix);
     let file = OpenOptions::new()
         .read(true)
         .write(true)
         .create(true)
+        .truncate(true)
         .open(&file_path)
         .unwrap_or_else(|_| panic!("Failed to open file: {}", file_path.display()));
     file.set_len(slab_size as u64)
@@ -467,7 +468,7 @@ impl UnifiedLoggerWrite {
         make_slab_file(&self.base_file_path, self.slab_size, self.front_slab_suffix)
     }
 
-    fn new(base_file_path: &PathBuf, slab_size: usize, page_size: usize) -> Self {
+    fn new(base_file_path: &Path, slab_size: usize, page_size: usize) -> Self {
         let file = make_slab_file(base_file_path, slab_size, 0);
         let mut front_slab = SlabEntry::new(file, page_size);
 
@@ -485,7 +486,7 @@ impl UnifiedLoggerWrite {
         Self {
             front_slab,
             back_slabs: Vec::new(),
-            base_file_path: base_file_path.clone(),
+            base_file_path: base_file_path.to_path_buf(),
             slab_size,
             front_slab_suffix: 0,
         }
@@ -554,7 +555,7 @@ impl Drop for UnifiedLoggerWrite {
     }
 }
 
-fn open_slab_index(base_file_path: &PathBuf, slab_index: usize) -> io::Result<(File, Mmap, u16)> {
+fn open_slab_index(base_file_path: &Path, slab_index: usize) -> io::Result<(File, Mmap, u16)> {
     let mut options = OpenOptions::new();
     let options = options.read(true);
 
@@ -579,11 +580,11 @@ fn open_slab_index(base_file_path: &PathBuf, slab_index: usize) -> io::Result<(F
 }
 
 impl UnifiedLoggerRead {
-    pub fn new(base_file_path: &PathBuf) -> io::Result<Self> {
+    pub fn new(base_file_path: &Path) -> io::Result<Self> {
         let (file, mmap, prolog) = open_slab_index(base_file_path, 0)?;
 
         Ok(Self {
-            base_file_path: base_file_path.clone(),
+            base_file_path: base_file_path.to_path_buf(),
             current_file: file,
             current_mmap_buffer: mmap,
             current_slab_index: 0,
