@@ -424,9 +424,9 @@
     }
 }
 
-<span class="kw">impl </span>Into&lt;Duration&gt; <span class="kw">for </span>CuDuration {
-    <span class="kw">fn </span>into(<span class="self">self</span>) -&gt; Duration {
-        Duration::from_nanos(<span class="self">self</span>.<span class="number">0</span>)
+<span class="kw">impl </span>From&lt;CuDuration&gt; <span class="kw">for </span>Duration {
+    <span class="kw">fn </span>from(val: CuDuration) -&gt; <span class="self">Self </span>{
+        Duration::from_nanos(val.<span class="number">0</span>)
     }
 }
 
@@ -436,9 +436,9 @@
     }
 }
 
-<span class="kw">impl </span>Into&lt;u64&gt; <span class="kw">for </span>CuDuration {
-    <span class="kw">fn </span>into(<span class="self">self</span>) -&gt; u64 {
-        <span class="self">self</span>.<span class="number">0
+<span class="kw">impl </span>From&lt;CuDuration&gt; <span class="kw">for </span>u64 {
+    <span class="kw">fn </span>from(val: CuDuration) -&gt; <span class="self">Self </span>{
+        val.<span class="number">0
     </span>}
 }
 
@@ -605,27 +605,27 @@
     <span class="attr">#[inline]
     </span><span class="kw">fn </span>from(duration: <span class="prelude-ty">Option</span>&lt;CuTime&gt;) -&gt; <span class="self">Self </span>{
         <span class="kw">match </span>duration {
-            <span class="prelude-val">Some</span>(duration) =&gt; OptionCuTime(duration.into()),
+            <span class="prelude-val">Some</span>(duration) =&gt; OptionCuTime(duration),
             <span class="prelude-val">None </span>=&gt; OptionCuTime(CuDuration(NONE_VALUE)),
         }
     }
 }
 
-<span class="kw">impl </span>Into&lt;<span class="prelude-ty">Option</span>&lt;CuTime&gt;&gt; <span class="kw">for </span>OptionCuTime {
+<span class="kw">impl </span>From&lt;OptionCuTime&gt; <span class="kw">for </span><span class="prelude-ty">Option</span>&lt;CuTime&gt; {
     <span class="attr">#[inline]
-    </span><span class="kw">fn </span>into(<span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;CuTime&gt; {
-        <span class="kw">if </span><span class="self">self</span>.<span class="number">0 </span>.<span class="number">0 </span>== NONE_VALUE {
+    </span><span class="kw">fn </span>from(val: OptionCuTime) -&gt; <span class="self">Self </span>{
+        <span class="kw">if </span>val.<span class="number">0 </span>.<span class="number">0 </span>== NONE_VALUE {
             <span class="prelude-val">None
         </span>} <span class="kw">else </span>{
-            <span class="prelude-val">Some</span>(<span class="self">self</span>.<span class="number">0</span>.into())
+            <span class="prelude-val">Some</span>(val.<span class="number">0</span>)
         }
     }
 }
 
-<span class="kw">impl </span>Into&lt;OptionCuTime&gt; <span class="kw">for </span>CuTime {
+<span class="kw">impl </span>From&lt;CuTime&gt; <span class="kw">for </span>OptionCuTime {
     <span class="attr">#[inline]
-    </span><span class="kw">fn </span>into(<span class="self">self</span>) -&gt; OptionCuTime {
-        <span class="prelude-val">Some</span>(<span class="self">self</span>).into()
+    </span><span class="kw">fn </span>from(val: CuTime) -&gt; <span class="self">Self </span>{
+        <span class="prelude-val">Some</span>(val).into()
     }
 }
 
