@@ -341,7 +341,7 @@ impl<'de> Deserialize<'de> for CuConfig {
                 .graph
                 .node_indices()
                 .find(|i| cuconfig.graph[*i].id == c.dst)
-                .expect(format!("Destination {} node not found", c.dst).as_str());
+                .unwrap_or_else(|| panic!("Destination {} node not found", c.dst));
             cuconfig.connect_ext(
                 src.index() as NodeId,
                 dst.index() as NodeId,
@@ -414,7 +414,7 @@ impl CuConfig {
                     return None;
                 }
                 let edges = self.get_src_edges(node_index.index() as u32);
-                if edges.len() == 0 {
+                if edges.is_empty() {
                     panic!("A CuSrcTask is configured with no task connected to it.")
                 }
                 let cnx = self
@@ -436,7 +436,7 @@ impl CuConfig {
                     return None;
                 }
                 let edges = self.get_dst_edges(node_index.index() as u32);
-                if edges.len() == 0 {
+                if edges.is_empty() {
                     panic!("A CuSinkTask is configured with no task connected to it.")
                 }
                 let cnx = self
