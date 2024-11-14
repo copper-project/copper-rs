@@ -72,7 +72,7 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
 /// Build the inner support of the copper list.
 fn gen_culist_support(
     runtime_plan: &CuExecutionLoop,
-    taskid_call_order: &Vec<usize>,
+    taskid_call_order: &[usize],
 ) -> proc_macro2::TokenStream {
     #[cfg(feature = "macro_debug")]
     eprintln!("[Extract msgs types]");
@@ -224,23 +224,17 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             CuTaskType::Source => {
                 let msg_type = copper_config
                     .get_node_output_msg_type(task_id.as_str())
-                    .expect(
-                        format!("CuSrcTask {} should have an outgoing connection with a valid output msg type",
-                                task_id).as_str(),
-                    );
+                    .unwrap_or_else(|| panic!("CuSrcTask {} should have an outgoing connection with a valid output msg type", task_id));
                 let sim_task_name = format!("cu29::simulation::CuSimSrcTask<{}>", msg_type);
-                parse_str(sim_task_name.as_str()).expect(format!("Could not build the placeholder for simulation: {}", sim_task_name).as_str())
+                parse_str(sim_task_name.as_str()).unwrap_or_else(|_| panic!("Could not build the placeholder for simulation: {}", sim_task_name))
             }
             CuTaskType::Regular => stype.clone(),
             CuTaskType::Sink => {
                 let msg_type = copper_config
                     .get_node_input_msg_type(task_id.as_str())
-                    .expect(
-                        format!("CuSinkTask {} should have an incoming connection with a valid input msg type",
-                                task_id).as_str(),
-                    );
+                    .unwrap_or_else(|| panic!("CuSinkTask {} should have an incoming connection with a valid input msg type", task_id));
                 let sim_task_name = format!("cu29::simulation::CuSimSinkTask<{}>", msg_type);
-                parse_str(sim_task_name.as_str()).expect(format!("Could not build the placeholder for simulation: {}", sim_task_name).as_str())
+                parse_str(sim_task_name.as_str()).unwrap_or_else(|_| panic!("Could not build the placeholder for simulation: {}", sim_task_name))
             }
         })
         .collect();
@@ -847,7 +841,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     };
 
     let sim_callback_on_new_calls = all_tasks_ids.iter().enumerate().map(|(i, id)| {
-        let enum_name = config_id_to_enum(&id);
+        let enum_name = config_id_to_enum(id);
         let enum_ident = Ident::new(&enum_name, proc_macro2::Span::call_site());
         quote! {
             // the answer is ignored, we have to instantiate the tasks anyway.
@@ -1093,7 +1087,7 @@ fn extract_tasks_types(
 
     let all_task_cutype: Vec<CuTaskType> = all_id_nodes
         .iter()
-        .map(|(id, _)| cu29::curuntime::find_task_type_for_id(&copper_config.graph, (*id).into()))
+        .map(|(id, _)| cu29::curuntime::find_task_type_for_id(&copper_config.graph, *id))
         .collect();
 
     // Collect all the type names used by our configs.
@@ -1138,7 +1132,7 @@ fn extract_msg_types(runtime_plan: &CuExecutionLoop) -> Vec<Type> {
 }
 
 /// Builds the tuple of the CuList as a tuple off all the messages types.
-fn build_culist_tuple(all_msgs_types_in_culist_order: &Vec<Type>) -> TypeTuple {
+fn build_culist_tuple(all_msgs_types_in_culist_order: &[Type]) -> TypeTuple {
     if all_msgs_types_in_culist_order.is_empty() {
         parse_quote! {()}
     } else {
@@ -1147,7 +1141,7 @@ fn build_culist_tuple(all_msgs_types_in_culist_order: &Vec<Type>) -> TypeTuple {
 }
 
 /// This is the bincode encoding part of the CuMsgs
-fn build_culist_tuple_encode(all_msgs_types_in_culist_order: &Vec<Type>) -> ItemImpl {
+fn build_culist_tuple_encode(all_msgs_types_in_culist_order: &[Type]) -> ItemImpl {
     let indices: Vec<usize> = (0..all_msgs_types_in_culist_order.len()).collect();
 
     // Generate the `self.#i.encode(encoder)?` for each tuple index, including `()` types
@@ -1170,7 +1164,7 @@ fn build_culist_tuple_encode(all_msgs_types_in_culist_order: &Vec<Type>) -> Item
 }
 
 /// This is the bincode decoding part of the CuMsgs
-fn build_culist_tuple_decode(all_msgs_types_in_culist_order: &Vec<Type>) -> ItemImpl {
+fn build_culist_tuple_decode(all_msgs_types_in_culist_order: &[Type]) -> ItemImpl {
     let indices: Vec<usize> = (0..all_msgs_types_in_culist_order.len()).collect();
 
     // Generate the `_CuMsg::<T>::decode(decoder)?` for each tuple index
@@ -1193,7 +1187,7 @@ fn build_culist_tuple_decode(all_msgs_types_in_culist_order: &Vec<Type>) -> Item
     }
 }
 
-fn build_culist_tuple_debug(all_msgs_types_in_culist_order: &Vec<Type>) -> ItemImpl {
+fn build_culist_tuple_debug(all_msgs_types_in_culist_order: &[Type]) -> ItemImpl {
     let indices: Vec<usize> = (0..all_msgs_types_in_culist_order.len()).collect();
 
     let debug_fields: Vec<_> = indices
