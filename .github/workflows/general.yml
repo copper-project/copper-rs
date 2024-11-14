@@ -44,6 +44,9 @@ jobs:
       - name: Run tests
         run: cargo test
 
+      - name: Run clippy
+        run: cargo clippy -- -W warnings
+
       # Integration Test for the 1 liner generation of a project.
       - name: Install cargo-generate
         run: cargo install cargo-generate
