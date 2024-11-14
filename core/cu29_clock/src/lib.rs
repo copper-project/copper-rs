@@ -28,9 +28,9 @@ impl From<Duration> for CuDuration {
     }
 }
 
-impl Into<Duration> for CuDuration {
-    fn into(self) -> Duration {
-        Duration::from_nanos(self.0)
+impl From<CuDuration> for Duration {
+    fn from(val: CuDuration) -> Self {
+        Duration::from_nanos(val.0)
     }
 }
 
@@ -40,9 +40,9 @@ impl From<u64> for CuDuration {
     }
 }
 
-impl Into<u64> for CuDuration {
-    fn into(self) -> u64 {
-        self.0
+impl From<CuDuration> for u64 {
+    fn from(val: CuDuration) -> Self {
+        val.0
     }
 }
 
@@ -209,27 +209,27 @@ impl From<Option<CuTime>> for OptionCuTime {
     #[inline]
     fn from(duration: Option<CuTime>) -> Self {
         match duration {
-            Some(duration) => OptionCuTime(duration.into()),
+            Some(duration) => OptionCuTime(duration),
             None => OptionCuTime(CuDuration(NONE_VALUE)),
         }
     }
 }
 
-impl Into<Option<CuTime>> for OptionCuTime {
+impl From<OptionCuTime> for Option<CuTime> {
     #[inline]
-    fn into(self) -> Option<CuTime> {
-        if self.0 .0 == NONE_VALUE {
+    fn from(val: OptionCuTime) -> Self {
+        if val.0 .0 == NONE_VALUE {
             None
         } else {
-            Some(self.0.into())
+            Some(val.0)
         }
     }
 }
 
-impl Into<OptionCuTime> for CuTime {
+impl From<CuTime> for OptionCuTime {
     #[inline]
-    fn into(self) -> OptionCuTime {
-        Some(self).into()
+    fn from(val: CuTime) -> Self {
+        Some(val).into()
     }
 }
 

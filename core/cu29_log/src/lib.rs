@@ -148,7 +148,7 @@ pub fn format_logline(
 
 /// Rebuild a log line from the interned strings and the CuLogEntry.
 /// This basically translates the world of copper logs to text logs.
-pub fn rebuild_logline(all_interned_strings: &Vec<String>, entry: &CuLogEntry) -> CuResult<String> {
+pub fn rebuild_logline(all_interned_strings: &[String], entry: &CuLogEntry) -> CuResult<String> {
     let format_string = &all_interned_strings[entry.msg_index as usize];
     let mut anon_params: Vec<String> = Vec::new();
     let mut named_params = HashMap::new();

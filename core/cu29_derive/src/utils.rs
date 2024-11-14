@@ -11,8 +11,12 @@ pub(crate) fn config_id_to_enum(id: &str) -> String {
 
     candidate = candidate.to_case(Case::Pascal);
 
-    if candidate.chars().next().map_or(false, |c| c.is_digit(10)) {
-        candidate.insert_str(0, "_");
+    if candidate
+        .chars()
+        .next()
+        .map_or(false, |c| c.is_ascii_digit())
+    {
+        candidate.insert(0, '_');
     }
 
     candidate
