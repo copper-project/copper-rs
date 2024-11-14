@@ -30,7 +30,10 @@ impl WriteStream<CuLogEntry> for DummyWriteStream {
         Ok(())
     }
 }
-static WRITER: OnceLock<(Mutex<Box<dyn WriteStream<CuLogEntry>>>, RobotClock)> = OnceLock::new();
+type LogWriter = Box<dyn WriteStream<CuLogEntry>>;
+type WriterPair = (Mutex<LogWriter>, RobotClock);
+
+static WRITER: OnceLock<WriterPair> = OnceLock::new();
 
 #[cfg(debug_assertions)]
 static EXTRA_TEXT_LOGGER: OnceLock<Option<Box<dyn Log>>> = OnceLock::new();
@@ -174,7 +177,7 @@ pub struct OwningIoWriter<W: Write> {
     bytes_written: usize,
 }
 
-impl<'a, W: Write> OwningIoWriter<W> {
+impl<W: Write> OwningIoWriter<W> {
     pub fn new(writer: W) -> Self {
         Self {
             writer: BufWriter::new(writer),
@@ -218,6 +221,7 @@ impl SimpleFileWriter {
     pub fn new(path: &PathBuf) -> CuResult<Self> {
         let file = std::fs::OpenOptions::new()
             .create(true)
+            .truncate(true)
             .write(true)
             .open(path)
             .map_err(|e| format!("Failed to open file: {:?}", e))?;
