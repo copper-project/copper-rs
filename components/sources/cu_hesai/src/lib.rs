@@ -1,3 +1,5 @@
+pub mod parser;
+
 use crate::parser::{generate_default_elevation_calibration, RefTime};
 use chrono::Utc;
 use cu29::config::ComponentConfig;
@@ -10,27 +12,13 @@ use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use std::io::ErrorKind;
 use std::io::Read;
 use std::net::SocketAddr;
-
-pub mod parser;
-
-const DEFAULT_ADDR: &str = "0.0.0.0:2368";
-
-use sysctl::Sysctl;
 use uom::si::f32::{Angle, Length};
 
-fn get_max_recv_buffer_size() -> Option<u32> {
-    let ctl = sysctl::Ctl::new("net.core.rmem_max").ok()?;
-    match ctl.value().ok()? {
-        sysctl::CtlValue::Int(value) => Some(value as u32),
-        sysctl::CtlValue::Uint(value) => Some(value),
-        sysctl::CtlValue::String(value) => value.parse::<u32>().ok(),
-        other => {
-            println!("Unexpected sysctl value type: {:?}", other);
-            None
-        }
-    }
-}
+/// By default, Hesai broadcasts on this address.
+const DEFAULT_ADDR: &str = "0.0.0.0:2368";
 
+/// Convert spherical coordinates to cartesian coordinates.
+/// With the physics-style spherical coordinate convention / right-handed coordinate system.
 fn spherical_to_cartesian(
     azimuth: Angle,
     elevation: Angle,
@@ -44,7 +32,6 @@ fn spherical_to_cartesian(
 
 struct Xt32 {
     socket: Socket,
-    addr: SocketAddr,
     reftime: RefTime,
     channel_elevations: [Angle; 32],
 }
@@ -76,7 +63,6 @@ impl CuTaskLifecycle for Xt32 {
         let rt: RefTime = (Utc::now(), RobotClock::new().now());
         Ok(Xt32 {
             socket,
-            addr,
             reftime: rt,
             channel_elevations: generate_default_elevation_calibration(), // TODO: make the config able to override that
         })
@@ -109,7 +95,7 @@ fn channel_time(t6: CuTime, i: u64) -> CuTime {
 impl<'cl> CuSrcTask<'cl> for Xt32 {
     type Output = output_msg!('cl, LidarCuMsgPayload);
 
-    fn process(&mut self, clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
         let payload = new_msg.payload_mut().insert(LidarCuMsgPayload::default());
         let mut buf = [0u8; 1500];
         match self.socket.read(&mut buf) {
@@ -122,7 +108,7 @@ impl<'cl> CuSrcTask<'cl> for Xt32 {
                     .block_ts(&self.reftime)
                     .map_err(|e| CuError::new_with_cause("Failed to get block timings", e))?[5]; // 0 == channel 1, 5 == channel 6
 
-                let is_dual = lidar_packet.header.is_dual_return();
+                // let is_dual = lidar_packet.header.is_dual_return(); TODO: add dual return support
                 for block in lidar_packet.blocks.iter() {
                     let azimuth = block.azimuth();
                     block.channels.iter().enumerate().for_each(|(i, c)| {
@@ -153,7 +139,7 @@ mod tests {
     use super::*;
     use chrono::DateTime;
     use cu29::cutask::CuMsg;
-    use pcap::{Capture, Packet};
+    use pcap::Capture;
     use std::net::UdpSocket;
     use std::path::Path;
     use std::thread::sleep;
@@ -222,11 +208,6 @@ mod tests {
                 .send_to(payload, &self.target_addr)
                 .expect("Failed to send packet");
             true
-        }
-
-        fn packet_timestamp(&self, packet: &Packet) -> Duration {
-            let ts = packet.header.ts;
-            Duration::new(ts.tv_sec as u64, ts.tv_usec as u32 * 1000)
         }
     }
 

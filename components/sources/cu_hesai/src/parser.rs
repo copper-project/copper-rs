@@ -1,7 +1,6 @@
 use bytemuck::{Pod, Zeroable};
 use chrono::{DateTime, MappedLocalTime, TimeZone, Utc};
 use cu29_clock::{CuDuration, CuTime};
-use pcap::Capture;
 use std::error::Error;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
@@ -508,6 +507,7 @@ pub fn generate_default_elevation_calibration() -> [Angle; 32] {
 mod tests {
     use super::*;
     use cu29_clock::RobotClock;
+    use pcap::Capture;
 
     #[test]
     fn test_packet() {
