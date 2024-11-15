@@ -2,7 +2,6 @@ use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
-use cu29::clock::CuDuration;
 use cu29_clock::CuTime;
 use cu29_soa_derive::Soa;
 use derive_more::{Add, Deref, Div, From, Mul, Sub};
