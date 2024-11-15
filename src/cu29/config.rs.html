@@ -1026,7 +1026,7 @@
                 .graph
                 .node_indices()
                 .find(|i| cuconfig.graph[<span class="kw-2">*</span>i].id == c.dst)
-                .expect(<span class="macro">format!</span>(<span class="string">"Destination {} node not found"</span>, c.dst).as_str());
+                .unwrap_or_else(|| <span class="macro">panic!</span>(<span class="string">"Destination {} node not found"</span>, c.dst));
             cuconfig.connect_ext(
                 src.index() <span class="kw">as </span>NodeId,
                 dst.index() <span class="kw">as </span>NodeId,
@@ -1099,7 +1099,7 @@
                     <span class="kw">return </span><span class="prelude-val">None</span>;
                 }
                 <span class="kw">let </span>edges = <span class="self">self</span>.get_src_edges(node_index.index() <span class="kw">as </span>u32);
-                <span class="kw">if </span>edges.len() == <span class="number">0 </span>{
+                <span class="kw">if </span>edges.is_empty() {
                     <span class="macro">panic!</span>(<span class="string">"A CuSrcTask is configured with no task connected to it."</span>)
                 }
                 <span class="kw">let </span>cnx = <span class="self">self
@@ -1121,7 +1121,7 @@
                     <span class="kw">return </span><span class="prelude-val">None</span>;
                 }
                 <span class="kw">let </span>edges = <span class="self">self</span>.get_dst_edges(node_index.index() <span class="kw">as </span>u32);
-                <span class="kw">if </span>edges.len() == <span class="number">0 </span>{
+                <span class="kw">if </span>edges.is_empty() {
                     <span class="macro">panic!</span>(<span class="string">"A CuSinkTask is configured with no task connected to it."</span>)
                 }
                 <span class="kw">let </span>cnx = <span class="self">self

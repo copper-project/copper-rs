@@ -148,7 +148,7 @@
     <span class="attr">#[cfg(not(debug_assertions))]
     </span><span class="kw">let </span>extra: <span class="prelude-ty">Option</span>&lt;TermLogger&gt; = <span class="prelude-val">None</span>;
 
-    <span class="kw">let </span>clock = clock.unwrap_or_else(|| RobotClock::default());
+    <span class="kw">let </span>clock = clock.unwrap_or_default();
     <span class="kw">let </span>structured_logging = LoggerRuntime::init(clock.clone(), structured_stream, extra);
     <span class="prelude-val">Ok</span>(CopperContext {
         unified_logger: unified_logger.clone(),
