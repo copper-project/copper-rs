@@ -1055,7 +1055,8 @@
 <a href="#1054" id="1054">1054</a>
 <a href="#1055" id="1055">1055</a>
 <a href="#1056" id="1056">1056</a>
-<a href="#1057" id="1057">1057</a></pre></div><pre class="rust"><code><span class="kw">use </span>memmap2::{Mmap, MmapMut};
+<a href="#1057" id="1057">1057</a>
+<a href="#1058" id="1058">1058</a></pre></div><pre class="rust"><code><span class="kw">use </span>memmap2::{Mmap, MmapMut};
 <span class="kw">use </span>std::fmt::{Debug, Formatter};
 <span class="kw">use </span>std::fs::{File, OpenOptions};
 <span class="kw">use </span>std::io::Read;
@@ -1493,8 +1494,8 @@
     </span>front_slab_suffix: usize,
 }
 
-<span class="kw">fn </span>build_slab_path(base_file_path: <span class="kw-2">&amp;</span>PathBuf, slab_index: usize) -&gt; PathBuf {
-    <span class="kw">let </span><span class="kw-2">mut </span>file_path = base_file_path.clone();
+<span class="kw">fn </span>build_slab_path(base_file_path: <span class="kw-2">&amp;</span>Path, slab_index: usize) -&gt; PathBuf {
+    <span class="kw">let </span><span class="kw-2">mut </span>file_path = base_file_path.to_path_buf();
     <span class="kw">let </span>file_name = file_path.file_name().unwrap().to_str().unwrap();
     <span class="kw">let </span><span class="kw-2">mut </span>file_name = file_name.split(<span class="string">'.'</span>).collect::&lt;Vec&lt;<span class="kw-2">&amp;</span>str&gt;&gt;();
     <span class="kw">let </span>extension = file_name.pop().unwrap();
@@ -1504,12 +1505,13 @@
     file_path
 }
 
-<span class="kw">fn </span>make_slab_file(base_file_path: <span class="kw-2">&amp;</span>PathBuf, slab_size: usize, slab_suffix: usize) -&gt; File {
+<span class="kw">fn </span>make_slab_file(base_file_path: <span class="kw-2">&amp;</span>Path, slab_size: usize, slab_suffix: usize) -&gt; File {
     <span class="kw">let </span>file_path = build_slab_path(base_file_path, slab_suffix);
     <span class="kw">let </span>file = OpenOptions::new()
         .read(<span class="bool-val">true</span>)
         .write(<span class="bool-val">true</span>)
         .create(<span class="bool-val">true</span>)
+        .truncate(<span class="bool-val">true</span>)
         .open(<span class="kw-2">&amp;</span>file_path)
         .unwrap_or_else(|<span class="kw">_</span>| <span class="macro">panic!</span>(<span class="string">"Failed to open file: {}"</span>, file_path.display()));
     file.set_len(slab_size <span class="kw">as </span>u64)
@@ -1524,7 +1526,7 @@
         make_slab_file(<span class="kw-2">&amp;</span><span class="self">self</span>.base_file_path, <span class="self">self</span>.slab_size, <span class="self">self</span>.front_slab_suffix)
     }
 
-    <span class="kw">fn </span>new(base_file_path: <span class="kw-2">&amp;</span>PathBuf, slab_size: usize, page_size: usize) -&gt; <span class="self">Self </span>{
+    <span class="kw">fn </span>new(base_file_path: <span class="kw-2">&amp;</span>Path, slab_size: usize, page_size: usize) -&gt; <span class="self">Self </span>{
         <span class="kw">let </span>file = make_slab_file(base_file_path, slab_size, <span class="number">0</span>);
         <span class="kw">let </span><span class="kw-2">mut </span>front_slab = SlabEntry::new(file, page_size);
 
@@ -1542,7 +1544,7 @@
         </span><span class="self">Self </span>{
             front_slab,
             back_slabs: Vec::new(),
-            base_file_path: base_file_path.clone(),
+            base_file_path: base_file_path.to_path_buf(),
             slab_size,
             front_slab_suffix: <span class="number">0</span>,
         }
@@ -1611,7 +1613,7 @@
     }
 }
 
-<span class="kw">fn </span>open_slab_index(base_file_path: <span class="kw-2">&amp;</span>PathBuf, slab_index: usize) -&gt; io::Result&lt;(File, Mmap, u16)&gt; {
+<span class="kw">fn </span>open_slab_index(base_file_path: <span class="kw-2">&amp;</span>Path, slab_index: usize) -&gt; io::Result&lt;(File, Mmap, u16)&gt; {
     <span class="kw">let </span><span class="kw-2">mut </span>options = OpenOptions::new();
     <span class="kw">let </span>options = options.read(<span class="bool-val">true</span>);
 
@@ -1636,11 +1638,11 @@
 }
 
 <span class="kw">impl </span>UnifiedLoggerRead {
-    <span class="kw">pub fn </span>new(base_file_path: <span class="kw-2">&amp;</span>PathBuf) -&gt; io::Result&lt;<span class="self">Self</span>&gt; {
+    <span class="kw">pub fn </span>new(base_file_path: <span class="kw-2">&amp;</span>Path) -&gt; io::Result&lt;<span class="self">Self</span>&gt; {
         <span class="kw">let </span>(file, mmap, prolog) = open_slab_index(base_file_path, <span class="number">0</span>)<span class="question-mark">?</span>;
 
         <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
-            base_file_path: base_file_path.clone(),
+            base_file_path: base_file_path.to_path_buf(),
             current_file: file,
             current_mmap_buffer: mmap,
             current_slab_index: <span class="number">0</span>,
