@@ -44,7 +44,7 @@ Copper is a data-oriented runtime with these key components:
 * **Fast Structured Logging**: Interns and indexes logging strings at compile time, avoiding runtime string construction
   and ensuring high-speed textual logging.
 
-### You don't have a real robot yet? Try it in a virtual environment!
+### You don't have a real robot yet? Try it in our minimalistic sim environment!
 
 [![Copper in virtual action](https://img.youtube.com/vi/kC6sGRZUxLE/maxresdefault.jpg)](https://youtu.be/kC6sGRZUxLE)
 
