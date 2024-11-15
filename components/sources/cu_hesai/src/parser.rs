@@ -1,7 +1,8 @@
 use bytemuck::{Pod, Zeroable};
 use chrono::{DateTime, MappedLocalTime, TimeZone, Utc};
 use cu29_clock::{CuDuration, CuTime};
-use pcap::Capture;
+use std::error::Error;
+use std::fmt;
 use std::fmt::{Debug, Formatter};
 use std::mem::size_of;
 use uom::fmt::DisplayStyle::Abbreviation;
@@ -20,6 +21,17 @@ pub enum HesaiError {
     InvalidPacket(String),
     InvalidTimestamp(String),
 }
+
+impl fmt::Display for HesaiError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            HesaiError::InvalidPacket(msg) => write!(f, "Invalid packet: {}", msg),
+            HesaiError::InvalidTimestamp(msg) => write!(f, "Invalid timestamp: {}", msg),
+        }
+    }
+}
+
+impl Error for HesaiError {}
 
 // ╭──────────────────────────────────────────────────────────────────────────────╮
 // │                              Pre-Header (6 bytes)                            │
@@ -345,7 +357,6 @@ impl Tail {
         // This hesai API is terrible and based on UTC, here we give a function to convert it to a monotonic robot time.
         // UTC is corrected to match earth rotation so it is NOT suitable for robotic applications.
         let (ref_date, ref_cu_time) = reftime;
-
         let utc_tov = self.utc_tov()?;
 
         let elapsed = utc_tov
@@ -397,10 +408,10 @@ pub type RefTime = (DateTime<Utc>, CuTime);
 #[repr(C, packed)]
 #[derive(Copy, Clone, Zeroable, Pod, Debug)]
 pub struct Packet {
-    pre_header: PreHeader,
-    header: Header,
-    blocks: [Block; 8],
-    tail: Tail,
+    pub pre_header: PreHeader,
+    pub header: Header,
+    pub blocks: [Block; 8],
+    pub tail: Tail,
 }
 
 const FIRING_OFFSET: CuDuration = CuDuration(5_632); // this is in ns
@@ -434,7 +445,7 @@ impl Packet {
     // │ Blocks 4&3  │ t₀ + 5.632 − 50 × 2                                    │
     // │ Blocks 2&1  │ t₀ + 5.632 − 50 × 3                                    │
     // └─────────────┴────────────────────────────────────────────────────────┘
-    fn block_ts(self, reftime: &RefTime) -> Result<[CuTime; 8], HesaiError> {
+    pub fn block_ts(self, reftime: &RefTime) -> Result<[CuTime; 8], HesaiError> {
         let t_zero = self.tail.tov(reftime)? + FIRING_OFFSET;
         let offsets = if self.header.is_dual_return() {
             DUAL_RETURN_OFFSETS
@@ -454,10 +465,49 @@ impl Packet {
     }
 }
 
+pub fn parse_packet(data: &[u8]) -> Result<&Packet, HesaiError> {
+    if data[0] != 0xEE || data[1] != 0xFF {
+        return Err(HesaiError::InvalidPacket(format!(
+            "Not an Xt32 packet: {:2X}{:2X}",
+            data[0], data[1],
+        )));
+    }
+
+    if data.len() < size_of::<Packet>() {
+        return Err(HesaiError::InvalidPacket(format!(
+            "Packet too short: {} < {}",
+            data.len(),
+            size_of::<Packet>()
+        )));
+    }
+    if data.len() > size_of::<Packet>() {
+        return Err(HesaiError::InvalidPacket(format!(
+            "Packet too long: {} > {}",
+            data.len(),
+            size_of::<Packet>()
+        )));
+    }
+    let packet: &Packet = bytemuck::from_bytes(data);
+    packet.check_invariants()?;
+    Ok(packet)
+}
+
+/// Generate the default elevation calibration for the Xt32 Hesai sensor.
+/// The sensor has 32 channels, each with a different elevation angle.
+/// The elevation angles are in degrees and range from 15 to -16.
+pub fn generate_default_elevation_calibration() -> [Angle; 32] {
+    let mut elevations = [Angle::default(); 32];
+    elevations.iter_mut().enumerate().for_each(|(i, x)| {
+        *x = Angle::new::<degree>(15.0 - i as f32);
+    });
+    elevations
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use cu29_clock::RobotClock;
+    use pcap::Capture;
 
     #[test]
     fn test_packet() {
@@ -474,19 +524,7 @@ mod tests {
                 panic!("Packet too short: {}", packet.data.len());
             }
             let packet_data = &packet.data[udp_header_size..udp_header_size + size_of::<Packet>()];
-            if packet_data[0] != 0xEE || packet_data[1] != 0xFF {
-                panic!(
-                    "Not a Point Cloud packet: {:2X}{:2X}",
-                    packet_data[0], packet_data[1]
-                );
-            }
-            let packet: &Packet = bytemuck::from_bytes(&packet_data);
-
-            if packet.check_invariants().is_err() {
-                panic!("Malformed packet");
-            };
-
-            println!("Packet: {:?}", packet);
+            let packet = parse_packet(packet_data).unwrap();
 
             let rt: RefTime = (
                 packet.tail.utc_tov().unwrap(), // emulates a packet coming in recently
