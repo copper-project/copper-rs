@@ -1,5 +1,6 @@
 [package]
 name = "cu-iceoryx2-src"
+description = "Copper source task for Iceoryx2. I allows Copper to receive messages from Iceoryx2."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -8,7 +9,6 @@ keywords.workspace = true
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
-description = "Copper source task for Iceoryx2."
 
 [dependencies]
 iceoryx2 = { version = "0.4.1" }
