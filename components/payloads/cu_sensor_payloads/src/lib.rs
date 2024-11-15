@@ -2,40 +2,36 @@ use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
+use cu29_clock::CuTime;
 use cu29_soa_derive::Soa;
 use derive_more::{Add, Deref, Div, From, Mul, Sub};
-use uom::si::f32::Length;
-use uom::si::f32::Luminance;
+use uom::si::f32::{Length, Ratio};
 use uom::si::length::meter;
-use uom::si::luminance::candela_per_square_meter;
+use uom::si::ratio::percent;
 
 #[derive(Default, PartialEq, Debug, Copy, Clone, Add, Deref, Sub, From, Mul, Div)]
-pub struct LidarIntensity(Luminance);
+pub struct Reflectivity(Ratio);
 
-/// Encode as f32 in candela per square meter
-impl Encode for LidarIntensity {
+/// Encode as f32
+impl Encode for Reflectivity {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         Encode::encode(&self.0.value, encoder)
     }
 }
 
-/// Decode as f32 in candela per square meter
-impl Decode for LidarIntensity {
+/// Decode as f32
+impl Decode for Reflectivity {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let value: f32 = Decode::decode(decoder)?;
-        Ok(LidarIntensity(Luminance::new::<candela_per_square_meter>(
-            value,
-        )))
+        Ok(Reflectivity(Ratio::new::<percent>(value)))
     }
 }
 
-/// Decode as f32 in candela per square meter for borrowed decoding
-impl<'de> BorrowDecode<'de> for LidarIntensity {
+/// Decode as f32
+impl<'de> BorrowDecode<'de> for Reflectivity {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let value: f32 = Decode::decode(decoder)?;
-        Ok(LidarIntensity(Luminance::new::<candela_per_square_meter>(
-            value,
-        )))
+        Ok(Reflectivity(Ratio::new::<percent>(value)))
     }
 }
 
@@ -67,19 +63,31 @@ impl<'de> BorrowDecode<'de> for LidarLength {
 
 #[derive(Default, Clone, Encode, Decode, PartialEq, Debug, Soa)]
 pub struct LidarPayload {
+    tov: CuTime,
     x: LidarLength,
     y: LidarLength,
     z: LidarLength,
-    i: LidarIntensity,
+    i: Reflectivity,
 }
 
 impl LidarPayload {
-    pub fn new(x: f32, y: f32, z: f32, i: f32) -> Self {
+    pub fn new(tov: CuTime, x: f32, y: f32, z: f32, i: f32) -> Self {
         Self {
+            tov,
             x: LidarLength(Length::new::<meter>(x)),
             y: LidarLength(Length::new::<meter>(y)),
             z: LidarLength(Length::new::<meter>(z)),
-            i: LidarIntensity(Luminance::new::<candela_per_square_meter>(i)),
+            i: Reflectivity(Ratio::new::<percent>(i)),
+        }
+    }
+
+    pub fn new_uom(tov: CuTime, x: Length, y: Length, z: Length, i: Ratio) -> Self {
+        Self {
+            tov,
+            x: LidarLength(x),
+            y: LidarLength(y),
+            z: LidarLength(z),
+            i: Reflectivity(i),
         }
     }
 }
@@ -87,10 +95,11 @@ impl LidarPayload {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cu29_clock::CuDuration;
 
     #[test]
     fn test_lidar_payload() {
-        let payload = LidarPayload::new(1.0, 2.0, 3.0, 0.0);
+        let payload = LidarPayload::new(CuDuration(1), 1.0, 2.0, 3.0, 0.0);
         assert_eq!(payload.x.0.value, 1.0);
         assert_eq!(payload.y.0.value, 2.0);
         assert_eq!(payload.z.0.value, 3.0);

@@ -1,20 +1,15 @@
 use velodyne_lidar::Packet;
 use velodyne_lidar::{Config, Config16};
 
-use bincode::de::{BorrowDecoder, Decoder};
-use bincode::enc::Encoder;
-use bincode::{BorrowDecode, Decode, Encode};
 use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
 use cu29::{output_msg, CuResult};
 use cu_sensor_payloads::{LidarPayload, LidarPayloadSoa};
 use std::net::UdpSocket;
-use std::ops::{Add, Sub};
 use std::time::Duration;
 use velodyne_lidar::iter::try_packet_to_frame_xyz;
 use velodyne_lidar::types::frame_xyz::FrameXyz;
-// const MAX_UDP_PACKET_SIZE: usize = 65507;
 
 pub struct Vlp16 {
     velo_config: Config,
@@ -84,16 +79,17 @@ impl<'cl> CuSrcTask<'cl> for Vlp16 {
             .next()
             .unwrap()
             .unwrap();
-        let i = 0;
         let mut output = LidarPayloadSoa::<10000>::default();
 
         frame.firing_iter().for_each(|firing| {
             firing.point_iter().for_each(|point| {
                 let point = point.as_single().unwrap();
+                let tov = point.time; // FIXME: Needs to sync the clocks here.
                 let x = point.measurement.xyz[0].as_meters() as f32;
                 let y = point.measurement.xyz[1].as_meters() as f32;
                 let z = point.measurement.xyz[2].as_meters() as f32;
-                output.set(i, LidarPayload::new(x, y, z, 0.0));
+                let intensity = point.measurement.intensity as f32 / 255.0f32;
+                output.push(LidarPayload::new(tov.into(), x, y, z, intensity));
             });
         });
         new_msg.set_payload(output);
