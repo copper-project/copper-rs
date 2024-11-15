@@ -69,7 +69,7 @@ pub fn basic_copper_setup(
     #[cfg(not(debug_assertions))]
     let extra: Option<TermLogger> = None;
 
-    let clock = clock.unwrap_or_else(|| RobotClock::default());
+    let clock = clock.unwrap_or_default();
     let structured_logging = LoggerRuntime::init(clock.clone(), structured_stream, extra);
     Ok(CopperContext {
         unified_logger: unified_logger.clone(),

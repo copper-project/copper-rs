@@ -212,6 +212,11 @@ impl LiveStatistics {
     }
 
     #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.stats.len() == 0
+    }
+
+    #[inline]
     pub fn reset(&mut self) {
         self.stats.reset();
     }
@@ -263,6 +268,11 @@ impl CuDurationStatistics {
     #[inline]
     pub fn len(&self) -> u64 {
         self.bare.len()
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.bare.len() == 0
     }
 
     #[inline]
