@@ -18,3 +18,11 @@ cu29-log = { workspace = true }
 cu29-log-runtime = { workspace = true }
 cu29-clock = { workspace = true }
 simplelog = "0.12.2"
+
+# this is for the integration tests
+[dev-dependencies]
+cu29-log-derive = { workspace = true }
+cu29-helpers = { workspace = true }
+serde = { workspace = true }
+tempdir = "0.3.7"
+smallvec = "1.13.2"
