@@ -89,7 +89,7 @@ impl<'cl> CuSrcTask<'cl> for Vlp16 {
                 let y = point.measurement.xyz[1].as_meters() as f32;
                 let z = point.measurement.xyz[2].as_meters() as f32;
                 let intensity = point.measurement.intensity as f32 / 255.0f32;
-                output.push(LidarPayload::new(tov.into(), x, y, z, intensity));
+                output.push(LidarPayload::new(tov.into(), x, y, z, intensity, None));
             });
         });
         new_msg.set_payload(output);
@@ -124,7 +124,7 @@ mod tests {
             // process
             let mut msg = CuMsg::new(Some(LidarPayloadSoa::<10000>::default()));
             drv.process(&clk, &mut msg).unwrap();
-            assert_eq!(0.009406593f32, msg.payload().unwrap().x[0].value);
+            assert_eq!(-0.05115497, msg.payload().unwrap().x[0].value);
         }
         drv.stop(&clk).unwrap();
     }

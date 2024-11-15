@@ -63,31 +63,41 @@ impl<'de> BorrowDecode<'de> for LidarLength {
 
 #[derive(Default, Clone, Encode, Decode, PartialEq, Debug, Soa)]
 pub struct LidarPayload {
-    tov: CuTime,
+    tov: CuTime, // Time of Validity
     x: LidarLength,
     y: LidarLength,
     z: LidarLength,
     i: Reflectivity,
+    return_order: u8, // 0 for first return, 1 for second return, etc.
 }
 
 impl LidarPayload {
-    pub fn new(tov: CuTime, x: f32, y: f32, z: f32, i: f32) -> Self {
+    pub fn new(tov: CuTime, x: f32, y: f32, z: f32, i: f32, return_order: Option<u8>) -> Self {
         Self {
             tov,
             x: LidarLength(Length::new::<meter>(x)),
             y: LidarLength(Length::new::<meter>(y)),
             z: LidarLength(Length::new::<meter>(z)),
             i: Reflectivity(Ratio::new::<percent>(i)),
+            return_order: return_order.unwrap_or(0),
         }
     }
 
-    pub fn new_uom(tov: CuTime, x: Length, y: Length, z: Length, i: Ratio) -> Self {
+    pub fn new_uom(
+        tov: CuTime,
+        x: Length,
+        y: Length,
+        z: Length,
+        i: Ratio,
+        return_order: Option<u8>,
+    ) -> Self {
         Self {
             tov,
             x: LidarLength(x),
             y: LidarLength(y),
             z: LidarLength(z),
             i: Reflectivity(i),
+            return_order: return_order.unwrap_or(0),
         }
     }
 }
@@ -99,7 +109,7 @@ mod tests {
 
     #[test]
     fn test_lidar_payload() {
-        let payload = LidarPayload::new(CuDuration(1), 1.0, 2.0, 3.0, 0.0);
+        let payload = LidarPayload::new(CuDuration(1), 1.0, 2.0, 3.0, 0.0, None);
         assert_eq!(payload.x.0.value, 1.0);
         assert_eq!(payload.y.0.value, 2.0);
         assert_eq!(payload.z.0.value, 3.0);
