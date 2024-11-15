@@ -24,12 +24,6 @@ safety.</p>
 runtime.</p>
 </li>
 </ul>
-<blockquote>
-<p>[!NOTE]
-Copper is still in <strong>early development / alpha stage</strong>, and the APIs are subject to change. We are looking for
-contributors to help us build the best robotics framework possible. If you are interested, please join us
-on <a href="https://discord.gg/VkCG7Sb9Kw">Discord</a> or open an issue.</p>
-</blockquote>
 <p>Copper has been tested on: Linux (x86_64, armv7, aarch64 &amp; riskv64) and MacOS (arm64).
 Testers would be welcomed on Windows and other platforms.</p>
 <h4 id="technical-overview"><a class="doc-anchor" href="#technical-overview">§</a>Technical Overview</h4>
@@ -55,7 +49,8 @@ and ensuring high-speed textual logging.</p>
 </ul>
 <h4 id="you-dont-have-a-real-robot-yet-try-it-in-a-virtual-environment"><a class="doc-anchor" href="#you-dont-have-a-real-robot-yet-try-it-in-a-virtual-environment">§</a>You don’t have a real robot yet? Try it in a virtual environment!</h4>
 <p><a href="https://youtu.be/kC6sGRZUxLE"><img src="https://img.youtube.com/vi/kC6sGRZUxLE/maxresdefault.jpg" alt="Copper in virtual action" /></a></p>
-<p>Here is robot developed with Copper in action driving its digital twin in a simulation environment with <a href="https://crates.io/crates/bevy">Bevy</a> (Game Engine
+<p>Here is robot developed with Copper in action driving its digital twin in a simulation environment
+with <a href="https://crates.io/crates/bevy">Bevy</a> (Game Engine
 in Rust) and <a href="https://crates.io/crates/avian3d">Avian3d</a> (Physics Engine in Rust)</p>
 <p>You have a mac or a linux linux machine just run …</p>
 <div class="example-wrap"><pre class="language-bash"><code>$ cargo install cu-rp-balancebot
@@ -72,6 +67,7 @@ sensors, and actuators.</li>
 </ol>
 <div><table><thead><tr><th><strong>Category</strong></th><th><strong>Type</strong></th><th></th><th><strong>Description</strong></th><th><strong>Crate Name</strong></th></tr></thead><tbody>
 <tr><td>Sensors</td><td>Lidar</td><td><img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_vlp16/doc/vlp16.jpg?raw=true" alt="vlp16"/></td><td><a href="components/sources/cu_vlp16">Velodyne/Ouster VLP16</a></td><td>cu-vlp16</td></tr>
+<tr><td></td><td>Lidar</td><td><img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_hesai/doc/XT32-16.png?raw=true" alt="xt32"/></td><td><a href="components/sources/cu_hesai">Hesai/XT32</a></td><td>cu-hesai</td></tr>
 <tr><td></td><td>IMU</td><td><img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_wt901/doc/wt901.jpg?raw=true" alt="wt901"/></td><td><a href="components/sources/cu_wt901">WitMotion WT901</a></td><td>cu-wt901</td></tr>
 <tr><td></td><td>ADC/Position</td><td><img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_ads7883/doc/ads7883-scale.jpg?raw=true" alt="ads7883"/></td><td><a href="components/sources/cu_ads7883">ADS 7883 3MPSPS SPI ADC</a></td><td>cu-ads7883</td></tr>
 <tr><td></td><td>Encoder</td><td><img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_rp_encoder/doc/encoder.jpg?raw=true" alt="ads7883"/></td><td><a href="components/sources/cu_rp_encoder">Generic Directional Wheel encoder</a></td><td>cu-rp-encoder</td></tr>
@@ -80,8 +76,15 @@ sensors, and actuators.</li>
 <tr><td></td><td>DC Motor Driver</td><td><img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sinks/cu_rp_sn754410/doc/sn754410.jpeg?raw=true" alt="sn754410"/></td><td><a href="components/sinks/cu_rp_sn754410">Half-H Driver for CD Motors</a></td><td>cu-rp-sn754410</td></tr>
 <tr><td>Monitors</td><td>TUI Monitor</td><td><img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/monitors/cu_consolemon/doc/tasks.png?raw=true" alt="monitor"/></td><td><a href="components/monitors/cu_consolemon">Console based monitor</a></td><td>cu-consolemon</td></tr>
 <tr><td>Algorithms</td><td>PID Controller</td><td></td><td><a href="components/tasks/cu_pid">PID Controller</a></td><td>cu-pid</td></tr>
+<tr><td>Middleware</td><td>Shared Mem IPC</td><td><img align="right" width="100" src="https://user-images.githubusercontent.com/8661268/114321508-64a6b000-9b1b-11eb-95ef-b84c91387cff.png"/></td><td><a href="components/sources/cu_iceoryx2_src">Iceoryx2 source</a> <BR> <a href="components/sinks/cu_iceoryx2_sink">Iceoryx2 sink</a></td><td>cu-iceoryx2-src <BR> cu-iceoryx2-sink</td></tr>
 </tbody></table>
 </div><h4 id="what-features-are-missing-what-do-we-plan-to-implement-next"><a class="doc-anchor" href="#what-features-are-missing-what-do-we-plan-to-implement-next">§</a>What features are missing? What do we plan to implement next?</h4>
+<blockquote>
+<p>[!NOTE]
+Copper is still in <strong>early development / alpha stage</strong>, and the APIs are subject to change. We are looking for
+contributors to help us build the best robotics framework possible. If you are interested, please join us
+on <a href="https://discord.gg/VkCG7Sb9Kw">Discord</a> or open an issue.</p>
+</blockquote>
 <p>Here are some of the features we plan to implement next (in ~order of priority), if you are interested in contributing
 on any of those, please let us know!:</p>
 <p>To Reach Beta:</p>
