@@ -118,7 +118,7 @@ impl<'cl> CuSrcTask<'cl> for Xt32 {
 
                         let (x, y, z) = spherical_to_cartesian(azimuth, elevation, d);
                         let t = channel_time(t6, i as u64);
-                        payload.push(LidarPayload::new_uom(t, x, y, z, r));
+                        payload.push(LidarPayload::new_uom(t, x, y, z, r, None));
                     });
                 }
                 new_msg.metadata.tov = payload.tov[0].into(); // take the oldest timestamp
