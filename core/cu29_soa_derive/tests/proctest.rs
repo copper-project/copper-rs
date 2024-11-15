@@ -55,33 +55,24 @@ mod tests {
         });
 
         // Set some example values
-        soa.set(
-            0,
-            Xyz {
-                x: 1.0,
-                y: 2.0,
-                z: 2.0,
-                i: 0,
-            },
-        );
-        soa.set(
-            1,
-            Xyz {
-                x: 4.0,
-                y: 6.0,
-                z: 3.0,
-                i: 0,
-            },
-        );
-        soa.set(
-            2,
-            Xyz {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-                i: 0,
-            },
-        );
+        soa.push(Xyz {
+            x: 1.0,
+            y: 2.0,
+            z: 2.0,
+            i: 0,
+        });
+        soa.push(Xyz {
+            x: 4.0,
+            y: 6.0,
+            z: 3.0,
+            i: 0,
+        });
+        soa.push(Xyz {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            i: 0,
+        });
 
         // Create a result array to store the distances
         let mut distances = [0.0; 3];
