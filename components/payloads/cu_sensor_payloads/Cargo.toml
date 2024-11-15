@@ -8,6 +8,7 @@ keywords.workspace = true
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
+description = "Those are standardized payloads for the Copper sensors. Feel free to contribute your own."
 
 [dependencies]
 bincode = { workspace = true }
