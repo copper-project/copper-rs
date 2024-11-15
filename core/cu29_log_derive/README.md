@@ -29,7 +29,7 @@ to configure your logger.
 
 You can extract and view your logs using either Rust or Python:
 
-- **Rust:** Refer to the [cu29_export](https://github.com/copper-project/copper-rs/tree/master/cu29_export) module.
+- **Rust:** Refer to the [cu29_export](https://github.com/copper-project/copper-rs/tree/master/core/cu29_export) module.
 - **Python:** Use the provided script
   in [readlog.py](https://github.com/copper-project/copper-rs/tree/master/examples/cu_standalone_structlog/readlog.py)
   for Python support.

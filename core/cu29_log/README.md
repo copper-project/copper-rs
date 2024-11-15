@@ -4,5 +4,5 @@ The `cu29_log` crate provides common onboard and offboard definitions to log str
 and retrieve them efficiently.
 
 For more information on how to leverage structured logging in your projects, check
-out [cu29_log_derive](https://github.com/copper-project/copper-rs/tree/master/cu29_log_derive).
+out [cu29_log_derive](https://github.com/copper-project/copper-rs/tree/master/core/cu29_log_derive).
 
