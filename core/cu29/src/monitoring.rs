@@ -302,7 +302,7 @@ impl CuDurationStatistics {
 
     #[inline]
     pub fn record(&mut self, value: CuDuration) {
-        if self.bare.len() == 0 {
+        if self.bare.is_empty() {
             self.bare.stats.record(value.0).unwrap();
             self.last_value = value;
             return;
