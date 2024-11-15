@@ -10,7 +10,6 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Discord](https://img.shields.io/discord/1305916875741597826?logo=discord)](https://discord.gg/VkCG7Sb9Kw)
 
-
 Copper is a user-friendly runtime engine for creating fast and reliable robots. Copper is to robots what a
 game engine is to games.
 
@@ -24,11 +23,6 @@ game engine is to games.
 
 * **Product Oriented**: Copper aims to avoid late-stage infra integration issues by generating a very predictable
   runtime.
-
-> [!NOTE]
-> Copper is still in **early development / alpha stage**, and the APIs are subject to change. We are looking for
-> contributors to help us build the best robotics framework possible. If you are interested, please join us
-> on [Discord](https://discord.gg/VkCG7Sb9Kw) or open an issue.
 
 Copper has been tested on: Linux (x86_64, armv7, aarch64 & riskv64) and MacOS (arm64).
 Testers would be welcomed on Windows and other platforms.
@@ -54,7 +48,8 @@ Copper is a data-oriented runtime with these key components:
 
 [![Copper in virtual action](https://img.youtube.com/vi/kC6sGRZUxLE/maxresdefault.jpg)](https://youtu.be/kC6sGRZUxLE)
 
-Here is robot developed with Copper in action driving its digital twin in a simulation environment with [Bevy](https://crates.io/crates/bevy) (Game Engine
+Here is robot developed with Copper in action driving its digital twin in a simulation environment
+with [Bevy](https://crates.io/crates/bevy) (Game Engine
 in Rust) and [Avian3d](https://crates.io/crates/avian3d) (Physics Engine in Rust)
 
 You have a mac or a linux linux machine just run ...
@@ -63,6 +58,7 @@ You have a mac or a linux linux machine just run ...
 $ cargo install cu-rp-balancebot
 $ balancebot-sim 
 ```
+
 ... to try it locally.
 
 The source code for this demo is available in the [examples/cu_rp_balancebot](examples/cu_rp_balancebot) directory.
@@ -75,19 +71,26 @@ The source code for this demo is available in the [examples/cu_rp_balancebot](ex
 3. **Log reader & structured log reader**: Can export data, currently in Rust debug format.
 4. **Components**: Those are also good examples if you want to write your own!
 
-| **Category** | **Type**        |                                                                                                                                                                           | **Description**                                                       | **Crate Name** |
-|--------------|-----------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------|----------------|
-| Sensors      | Lidar           | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_vlp16/doc/vlp16.jpg?raw=true" alt="vlp16"/>             | [Velodyne/Ouster VLP16](components/sources/cu_vlp16)                  | cu-vlp16       |
-|              | IMU             | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_wt901/doc/wt901.jpg?raw=true" alt="wt901"/>             | [WitMotion WT901](components/sources/cu_wt901)                        | cu-wt901       |
-|              | ADC/Position    | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_ads7883/doc/ads7883-scale.jpg?raw=true" alt="ads7883"/> | [ADS 7883 3MPSPS SPI ADC](components/sources/cu_ads7883)              | cu-ads7883     |
-|              | Encoder         | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_rp_encoder/doc/encoder.jpg?raw=true" alt="ads7883"/>    | [Generic Directional Wheel encoder](components/sources/cu_rp_encoder) | cu-rp-encoder  |
-| Actuators    | GPIO            | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sinks/cu_rp_gpio/doc/rp.jpg?raw=true" alt="gpio"/>                 | [Raspberry Pi](components/sinks/cu_rp_gpio)                           | cu-rp-gpio     |
-|              | Servo           | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sinks/cu_lewansoul/doc/lewansoul.jpg?raw=true" alt="lewansoul"/>   | [Lewansoul Servo Bus (LX-16A, etc.)](components/sinks/cu_lewansoul)   | cu-lewansoul   |
-|              | DC Motor Driver | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sinks/cu_rp_sn754410/doc/sn754410.jpeg?raw=true" alt="sn754410"/>  | [Half-H Driver for CD Motors](components/sinks/cu_rp_sn754410)        | cu-rp-sn754410 |
-| Monitors     | TUI Monitor     | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/monitors/cu_consolemon/doc/tasks.png?raw=true" alt="monitor"/>     | [Console based monitor](components/monitors/cu_consolemon)            | cu-consolemon  |
-| Algorithms   | PID Controller  |                                                                                                                                                                           | [PID Controller](components/tasks/cu_pid)                             | cu-pid         |
+| **Category** | **Type**        |                                                                                                                                                                           | **Description**                                                                                               | **Crate Name**                        |
+|--------------|-----------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------|---------------------------------------|
+| Sensors      | Lidar           | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_vlp16/doc/vlp16.jpg?raw=true" alt="vlp16"/>             | [Velodyne/Ouster VLP16](components/sources/cu_vlp16)                                                          | cu-vlp16                              |
+|              | Lidar           | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_hesai/doc/XT32-16.png?raw=true" alt="xt32"/>            | [Hesai/XT32](components/sources/cu_hesai)                                                                     | cu-hesai                              |
+|              | IMU             | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_wt901/doc/wt901.jpg?raw=true" alt="wt901"/>             | [WitMotion WT901](components/sources/cu_wt901)                                                                | cu-wt901                              |
+|              | ADC/Position    | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_ads7883/doc/ads7883-scale.jpg?raw=true" alt="ads7883"/> | [ADS 7883 3MPSPS SPI ADC](components/sources/cu_ads7883)                                                      | cu-ads7883                            |
+|              | Encoder         | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_rp_encoder/doc/encoder.jpg?raw=true" alt="ads7883"/>    | [Generic Directional Wheel encoder](components/sources/cu_rp_encoder)                                         | cu-rp-encoder                         |
+| Actuators    | GPIO            | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sinks/cu_rp_gpio/doc/rp.jpg?raw=true" alt="gpio"/>                 | [Raspberry Pi](components/sinks/cu_rp_gpio)                                                                   | cu-rp-gpio                            |
+|              | Servo           | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sinks/cu_lewansoul/doc/lewansoul.jpg?raw=true" alt="lewansoul"/>   | [Lewansoul Servo Bus (LX-16A, etc.)](components/sinks/cu_lewansoul)                                           | cu-lewansoul                          |
+|              | DC Motor Driver | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/sinks/cu_rp_sn754410/doc/sn754410.jpeg?raw=true" alt="sn754410"/>  | [Half-H Driver for CD Motors](components/sinks/cu_rp_sn754410)                                                | cu-rp-sn754410                        |
+| Monitors     | TUI Monitor     | <img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/components/monitors/cu_consolemon/doc/tasks.png?raw=true" alt="monitor"/>     | [Console based monitor](components/monitors/cu_consolemon)                                                    | cu-consolemon                         |
+| Algorithms   | PID Controller  |                                                                                                                                                                           | [PID Controller](components/tasks/cu_pid)                                                                     | cu-pid                                |
+| Middleware   | Shared Mem IPC  | <img align="right" width="100" src="https://user-images.githubusercontent.com/8661268/114321508-64a6b000-9b1b-11eb-95ef-b84c91387cff.png"/>                               | [Iceoryx2 source](components/sources/cu_iceoryx2_src) <BR> [Iceoryx2 sink](components/sinks/cu_iceoryx2_sink) | cu-iceoryx2-src <BR> cu-iceoryx2-sink |
 
 ### What features are missing? What do we plan to implement next?
+
+> [!NOTE]
+> Copper is still in **early development / alpha stage**, and the APIs are subject to change. We are looking for
+> contributors to help us build the best robotics framework possible. If you are interested, please join us
+> on [Discord](https://discord.gg/VkCG7Sb9Kw) or open an issue.
 
 Here are some of the features we plan to implement next (in ~order of priority), if you are interested in contributing
 on any of those, please let us know!:
