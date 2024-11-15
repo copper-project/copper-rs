@@ -141,28 +141,55 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
             use bincode::enc::Encoder;
             use bincode::de::Decoder;
             use bincode::error::{DecodeError, EncodeError};
+            use std::ops::{Index, IndexMut};
             #( use super::#unique_imports; )*
             use core::array::from_fn;
 
             #[derive(Debug)]
             #visibility struct #soa_struct_name<const N: usize> {
-                #(pub #field_names: [#field_types; N]),*
+                len: usize,
+                #(pub #field_names: [#field_types; N], )*
             }
 
             impl<const N: usize> #soa_struct_name<N> {
                 pub fn new(default: super::#name) -> Self {
                     Self {
-                        #( #field_names: from_fn(|_| default.#field_names.clone()) ),*
+                        #( #field_names: from_fn(|_| default.#field_names.clone()), )*
+                        len: 0,
+                    }
+                }
+
+                pub fn len(&self) -> usize {
+                    self.len
+                }
+
+                pub fn push(&mut self, value: super::#name) {
+                    if self.len < N {
+                        #( self.#field_names[self.len] = value.#field_names.clone(); )*
+                        self.len += 1;
+                    } else {
+                        panic!("Capacity exceeded")
+                    }
+                }
+
+                pub fn pop(&mut self) -> Option<super::#name> {
+                    if self.len == 0 {
+                        None
+                    } else {
+                        self.len -= 1;
+                        Some(super::#name {
+                            #( #field_names: self.#field_names[self.len].clone(), )*
+                        })
                     }
                 }
 
                 pub fn set(&mut self, index: usize, value: super::#name) {
-                    assert!(index < N, "Index out of bounds");
+                    assert!(index < self.len, "Index out of bounds");
                     #( self.#field_names[index] = value.#field_names.clone(); )*
                 }
 
                 pub fn get(&self, index: usize) -> super::#name {
-                    assert!(index < N, "Index out of bounds");
+                    assert!(index < self.len, "Index out of bounds");
                     super::#name {
                         #( #field_names: self.#field_names[index].clone(), )*
                     }
@@ -173,7 +200,7 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                     F: FnMut(#(#field_types),*) -> (#(#field_types),*)
                 {
                     // don't use something common like i here.
-                    for _idx in 0..N {
+                    for _idx in 0..self.len {
                         let result = f(#(self.#field_names[_idx].clone()),*);
                         let (#(#field_names),*) = result;
                         #(
@@ -203,11 +230,8 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
 
             impl<const N: usize> Encode for #soa_struct_name<N> {
                 fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-                    #(
-                        for _idx in 0..N {
-                            self.#field_names[_idx].encode(encoder)?;
-                        }
-                    )*
+                    self.len.encode(encoder)?;
+                    #( self.#field_names[..self.len].encode(encoder)?; )*
                     Ok(())
                 }
             }
@@ -215,8 +239,9 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
             impl<const N: usize> Decode for #soa_struct_name<N> {
                 fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
                     let mut result = Self::default();
+                    result.len = Decode::decode(decoder)?;
                     #(
-                        for _idx in 0..N {
+                        for _idx in 0..result.len {
                             result.#field_names[_idx] = Decode::decode(decoder)?;
                         }
                     )*
@@ -227,7 +252,8 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
             impl<const N: usize> Default for #soa_struct_name<N> {
                 fn default() -> Self {
                     Self {
-                        #( #field_names: from_fn(|_| #field_types::default()) ),*
+                        #( #field_names: from_fn(|_| #field_types::default()), )*
+                        len: 0,
                     }
                 }
             }
@@ -241,9 +267,11 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                 fn clone(&self) -> Self {
                     Self {
                         #( #field_names: self.#field_names.clone(), )*
+                        len: self.len,
                     }
                 }
             }
+
         }
         #visibility use #module_name::#soa_struct_name;
     };
