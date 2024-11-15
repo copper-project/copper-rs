@@ -3,6 +3,8 @@ use cu29_log_derive::debug;
 use serde::Serialize;
 use tempdir::TempDir;
 
+// Those should be in cu29_log_runtime but got moved here to avoid circular dependencies
+
 #[test]
 fn log_derive_end2end() {
     let tmp_dir = TempDir::new("teststructlog").expect("Failed to create temp dir");

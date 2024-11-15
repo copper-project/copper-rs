@@ -266,8 +266,8 @@ mod tests {
         config.0.insert("servo1".to_string(), 2.into());
 
         let mut lewansoul = Lewansoul::new(Some(&config)).unwrap();
-        let position = lewansoul.read_current_position(1).unwrap();
+        let _position = lewansoul.read_current_position(1).unwrap();
 
-        let angle_limits = lewansoul.read_angle_limits(1).unwrap();
+        let _angle_limits = lewansoul.read_angle_limits(1).unwrap();
     }
 }
