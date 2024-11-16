@@ -19,7 +19,7 @@ documentation = "https://docs.rs/cu29-value"
 bincode = { workspace = true }
 serde = { workspace = true }
 cu29-clock = { workspace = true }
-ordered-float = "4.3.0"
+ordered-float = "4.5.0"
 
 [dev-dependencies]
 serde_derive = { workspace = true }

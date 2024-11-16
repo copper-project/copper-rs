@@ -20,8 +20,8 @@ cu29-log-runtime = { workspace = true }
 cu29-log-derive = { workspace = true }
 cu29-traits = { workspace = true }
 bincode = { workspace = true }
+serde = { workspace = true }
 lazy_static = "1.5.0"
-serde = { version = "1.0.210", features = ["derive"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 rppal = { version = "0.19.0", features = ["hal"] }

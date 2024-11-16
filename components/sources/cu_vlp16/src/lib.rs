@@ -84,7 +84,7 @@ impl<'cl> CuSrcTask<'cl> for Vlp16 {
         frame.firing_iter().for_each(|firing| {
             firing.point_iter().for_each(|point| {
                 let point = point.as_single().unwrap();
-                let tov = point.time; // FIXME: Needs to sync the clocks here.
+                let tov = point.toh; // FIXME: Needs to sync the clocks here.
                 let x = point.measurement.xyz[0].as_meters() as f32;
                 let y = point.measurement.xyz[1].as_meters() as f32;
                 let z = point.measurement.xyz[2].as_meters() as f32;
