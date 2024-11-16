@@ -23,7 +23,7 @@ cu29-soa-derive = { workspace = true }
 cu-sensor-payloads = { workspace = true }
 uom = { workspace = true }
 serde = { workspace = true }
-velodyne-lidar = { version = "0.2.0", features = ["full"] }
+velodyne-lidar = { version = "0.3.0", features = ["full"] }
 
 [dev-dependencies]
 pcap-file = "2.0.0"

@@ -84,16 +84,16 @@ cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads", version 
 
 # External serialization
 bincode = { version = "2.0.0-rc.3", features = ["derive"] }
-serde = { version = "1.0.210", features = ["derive"] }
-serde_derive = "1.0.210"
+serde = { version = "1.0.215", features = ["derive"] }
+serde_derive = { version = "1.0.115", features = ["default"] }
 
 # External CLI
-clap = { version = "4.5.18", features = ["derive"] }
+clap = { version = "4.5.21", features = ["derive"] }
 
 # External proc macros
-proc-macro2 = { version = "1.0.86" }
+proc-macro2 = { version = "1.0.89" }
 quote = "1.0.37" # proc macros
-syn = { version = "2.0.79", features = ["full"] } # proc macros
+syn = { version = "2.0.85", features = ["full"] } # proc macros
 
 # Unit of measure to be consistent across the project
 uom = { version = "0.36.0", features = ["serde"] }
@@ -103,6 +103,9 @@ compact_str = { version = "0.8.0", features = ["serde"] }
 
 # The derive patterns happens a lot across the codebase, this is a helper for that.
 derive_more = { version = "1", features = ["full"] }
+
+# used across testing
+tempfile = "3.14.0"
 
 # [profile.release]
 # lto = true
