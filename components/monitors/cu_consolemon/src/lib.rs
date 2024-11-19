@@ -58,7 +58,10 @@ impl TaskStats {
 
     fn update(&mut self, msgs: &[&CuMsgMetadata]) {
         for (i, &msg) in msgs.iter().enumerate() {
-            let (before, after) = (msg.before_process.unwrap(), msg.after_process.unwrap());
+            let (before, after) = (
+                msg.process_time.start.unwrap(),
+                msg.process_time.end.unwrap(),
+            );
             self.stats[i].record(after - before);
         }
         self.end2end.record(compute_end_to_end_latency(msgs));
@@ -73,7 +76,8 @@ impl TaskStats {
 }
 
 fn compute_end_to_end_latency(msgs: &[&CuMsgMetadata]) -> CuDuration {
-    msgs.last().unwrap().after_process.unwrap() - msgs.first().unwrap().before_process.unwrap()
+    msgs.last().unwrap().process_time.end.unwrap()
+        - msgs.first().unwrap().process_time.start.unwrap()
 }
 
 // This is kind of terrible.

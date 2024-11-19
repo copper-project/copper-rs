@@ -233,6 +233,44 @@ impl From<CuTime> for OptionCuTime {
     }
 }
 
+/// Represents a time range.
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
+pub struct CuTimeRange {
+    pub start: CuTime,
+    pub end: CuTime,
+}
+
+/// Represents a time range with possible undefined start or end or both.
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
+pub struct PartialCuTimeRange {
+    pub start: OptionCuTime,
+    pub end: OptionCuTime,
+}
+
+impl Default for PartialCuTimeRange {
+    fn default() -> Self {
+        PartialCuTimeRange {
+            start: OptionCuTime::none(),
+            end: OptionCuTime::none(),
+        }
+    }
+}
+
+/// The time of validity of a message can be more than one time but can be a time range of Tovs.
+/// For example a sub scan for a lidar, a set of images etc... can have a range of validity.
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
+pub enum Tov {
+    None,
+    Time(CuTime),
+    Range(CuTimeRange),
+}
+
+impl Default for Tov {
+    fn default() -> Self {
+        Tov::None
+    }
+}
+
 /// A running Robot clock.
 /// The clock is a monotonic clock that starts at an arbitrary reference time.
 /// It is clone resilient, ie a clone will be the same clock, even when mocked.

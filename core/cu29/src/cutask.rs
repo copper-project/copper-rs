@@ -1,7 +1,6 @@
 //! This module contains all the main definition of the traits you need to implement
 //! or interact with to create a Copper task.
 
-use crate::clock::OptionCuTime;
 use crate::config::ComponentConfig;
 use crate::CuResult;
 use bincode::de::Decoder;
@@ -11,7 +10,7 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::BorrowDecode;
 use compact_str::{CompactString, ToCompactString};
-use cu29_clock::RobotClock;
+use cu29_clock::{PartialCuTimeRange, RobotClock, Tov};
 use serde_derive::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
@@ -96,12 +95,11 @@ impl<'de> BorrowDecode<'de> for CuCompactString {
 /// CuMsgMetadata is a structure that contains metadata common to all CuMsgs.
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode, Serialize, Deserialize)]
 pub struct CuMsgMetadata {
-    /// The time before the process method is called.
-    pub before_process: OptionCuTime,
-    /// The time after the process method is called.
-    pub after_process: OptionCuTime,
+    /// The time range used for the processing of this message
+    pub process_time: PartialCuTimeRange,
     /// The time of validity of the message.
-    pub tov: OptionCuTime,
+    /// It can be undefined (None), one measure point or a range of measures (TimeRange).
+    pub tov: Tov,
     /// A small string for real time feedback purposes.
     /// This is usefull for to display on the field when the tasks are operating correctly.
     pub status_txt: CuCompactString,
@@ -117,8 +115,8 @@ impl Display for CuMsgMetadata {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "before_process: {}, after_process: {}",
-            self.before_process, self.after_process
+            "process_time start: {}, process_time end: {}",
+            self.process_time.start, self.process_time.end
         )
     }
 }
@@ -139,9 +137,8 @@ where
 impl Default for CuMsgMetadata {
     fn default() -> Self {
         CuMsgMetadata {
-            before_process: OptionCuTime::none(),
-            after_process: OptionCuTime::none(),
-            tov: OptionCuTime::none(),
+            process_time: PartialCuTimeRange::default(),
+            tov: Tov::default(),
             status_txt: CuCompactString(CompactString::with_capacity(COMPACT_STRING_CAPACITY)),
         }
     }
