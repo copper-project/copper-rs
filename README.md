@@ -52,7 +52,7 @@ Here is robot developed with Copper in action driving its digital twin in a simu
 with [Bevy](https://crates.io/crates/bevy) (Game Engine
 in Rust) and [Avian3d](https://crates.io/crates/avian3d) (Physics Engine in Rust)
 
-You have a mac or a linux linux machine just run ...
+You have a mac or a linux machine (x86-64 or Arm) just run ...
 
 ```bash
 $ cargo install cu-rp-balancebot
