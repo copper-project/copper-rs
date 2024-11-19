@@ -6,7 +6,7 @@ use cu29::config::ComponentConfig;
 use cu29::cutask::CuMsg;
 use cu29::cutask::{CuSrcTask, CuTaskLifecycle, Freezable};
 use cu29::{output_msg, CuError, CuResult};
-use cu29_clock::{CuDuration, CuTime, RobotClock};
+use cu29_clock::{CuDuration, CuTime, CuTimeRange, RobotClock, Tov};
 use cu_sensor_payloads::{LidarPayload, LidarPayloadSoa};
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use std::io::ErrorKind;
@@ -121,7 +121,12 @@ impl<'cl> CuSrcTask<'cl> for Xt32 {
                         payload.push(LidarPayload::new_uom(t, x, y, z, r, None));
                     });
                 }
-                new_msg.metadata.tov = payload.tov[0].into(); // take the oldest timestamp
+
+                let tov_range = CuTimeRange {
+                    start: payload.tov[0],
+                    end: *payload.tov.last().unwrap(),
+                };
+                new_msg.metadata.tov = Tov::Range(tov_range); // take the oldest timestamp
             }
             Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
                 // Handle no data available (non-blocking behavior)

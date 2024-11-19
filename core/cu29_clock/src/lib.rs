@@ -271,6 +271,21 @@ impl Default for Tov {
     }
 }
 
+impl From<Option<CuDuration>> for Tov {
+    fn from(duration: Option<CuDuration>) -> Self {
+        match duration {
+            Some(duration) => Tov::Time(duration),
+            None => Tov::None,
+        }
+    }
+}
+
+impl From<CuDuration> for Tov {
+    fn from(duration: CuDuration) -> Self {
+        Tov::Time(duration)
+    }
+}
+
 /// A running Robot clock.
 /// The clock is a monotonic clock that starts at an arbitrary reference time.
 /// It is clone resilient, ie a clone will be the same clock, even when mocked.
