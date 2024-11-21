@@ -34,6 +34,7 @@ impl<'cl> CuSinkTask<'cl> for ADS78883TestSink {
 }
 
 #[test]
+#[ignore] // As this needs the real hardware to run.
 fn test_driver_with_hardware() {
     let logger_path = "/tmp/caterpillar.copper";
     let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), None, true, None)

@@ -42,7 +42,7 @@ jobs:
           cargo build --workspace --features mock
 
       - name: Run tests
-        run: cargo test
+        run: cargo test --workspace
 
       - name: Run clippy
         run: cargo clippy -- -W warnings
