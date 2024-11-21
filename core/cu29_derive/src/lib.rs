@@ -620,13 +620,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         {
                                             let cumsg_output = &mut msgs.#output_culist_index;
                                             #call_sim_callback
-                                            cumsg_output.metadata.before_process = self.copper_runtime.clock.now().into();
+                                            cumsg_output.metadata.process_time.start = self.copper_runtime.clock.now().into();
                                             let maybe_error = if doit {
                                                 #task_instance.process(&self.copper_runtime.clock, cumsg_output)
                                             } else {
                                                 Ok(())
                                             };
-                                            cumsg_output.metadata.after_process = self.copper_runtime.clock.now().into();
+                                            cumsg_output.metadata.process_time.end = self.copper_runtime.clock.now().into();
                                             if let Err(error) = maybe_error {
                                                 #monitoring_action
                                             }
@@ -693,9 +693,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         // This is the virtual output for the sink
                                         let cumsg_output = &mut msgs.#output_culist_index;
                                         #call_sim_callback
-                                        cumsg_output.metadata.before_process = self.copper_runtime.clock.now().into();
+                                        cumsg_output.metadata.process_time.start = self.copper_runtime.clock.now().into();
                                         let maybe_error = if doit {#task_instance.process(&self.copper_runtime.clock, cumsg_input)} else {Ok(())};
-                                        cumsg_output.metadata.after_process = self.copper_runtime.clock.now().into();
+                                        cumsg_output.metadata.process_time.end = self.copper_runtime.clock.now().into();
                                         if let Err(error) = maybe_error {
                                             #monitoring_action
                                         }
@@ -760,9 +760,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         let cumsg_input = (#(&msgs.#indices),*);
                                         let cumsg_output = &mut msgs.#output_culist_index;
                                         #call_sim_callback
-                                        cumsg_output.metadata.before_process = self.copper_runtime.clock.now().into();
+                                        cumsg_output.metadata.process_time.start = self.copper_runtime.clock.now().into();
                                         let maybe_error = if doit {#task_instance.process(&self.copper_runtime.clock, cumsg_input, cumsg_output)} else {Ok(())};
-                                        cumsg_output.metadata.after_process = self.copper_runtime.clock.now().into();
+                                        cumsg_output.metadata.process_time.end = self.copper_runtime.clock.now().into();
                                         if let Err(error) = maybe_error {
                                             #monitoring_action
                                         }
@@ -880,7 +880,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 {
                     // End of CL monitoring
                     let md = collect_metadata(&culist);
-                    let e2e = md.last().unwrap().after_process.unwrap() - md.first().unwrap().before_process.unwrap();
+                    let e2e = md.last().unwrap().process_time.end.unwrap() - md.first().unwrap().process_time.start.unwrap();
                     let e2en: u64 = e2e.into();
                 } // drop(md);
 

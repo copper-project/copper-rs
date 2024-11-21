@@ -2,7 +2,7 @@ use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
-use cu29::clock::{CuDuration, CuTime, RobotClock};
+use cu29::clock::{CuDuration, CuTime, RobotClock, Tov};
 use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuMsgPayload};
 use cu29::cutask::{CuTask, CuTaskLifecycle, Freezable};
@@ -229,7 +229,11 @@ where
     ) -> CuResult<()> {
         match input.payload() {
             Some(payload) => {
-                let tov = input.metadata.tov.unwrap();
+                let tov = match input.metadata.tov {
+                    Tov::Time(single) => single,
+                    _ => return Err("Unexpected variant for a TOV of PID".into()),
+                };
+
                 let measure: f32 = payload.into();
 
                 if self.first_run {

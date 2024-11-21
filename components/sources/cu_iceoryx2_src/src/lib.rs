@@ -102,7 +102,7 @@ where
                     .ok_or(CuError::from("Failed to get payload."))?
                     .clone(),
             );
-            new_msg.metadata.tov = icemsg.payload().metadata.tov;
+            new_msg.metadata.tov = icemsg.payload().metadata.tov.clone();
         } else {
             debug!("No message received");
         }

@@ -36,48 +36,52 @@ impl<'de> BorrowDecode<'de> for Reflectivity {
 }
 
 #[derive(Default, PartialEq, Debug, Copy, Clone, Add, Deref, Sub, From, Mul, Div)]
-pub struct LidarLength(Length);
+pub struct Distance(Length);
 
 /// Encode it as a f32 in m
-impl Encode for LidarLength {
+impl Encode for Distance {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         Encode::encode(&self.0.value, encoder)
     }
 }
 
 /// Decode it as a f32 in m
-impl Decode for LidarLength {
+impl Decode for Distance {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let value: f32 = Decode::decode(decoder)?;
-        Ok(LidarLength(Length::new::<meter>(value)))
+        Ok(Distance(Length::new::<meter>(value)))
     }
 }
 
 /// Decode it as a f32 in m
-impl<'de> BorrowDecode<'de> for LidarLength {
+impl<'de> BorrowDecode<'de> for Distance {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let value: f32 = Decode::decode(decoder)?;
-        Ok(LidarLength(Length::new::<meter>(value)))
+        Ok(Distance(Length::new::<meter>(value)))
     }
 }
 
+/// Standardized PointCloud.
+/// note: the derive(Soa) will generate a PointCloudSoa struct that will store the data in a SoA format.
+/// The Soa format is appropriate for early pipeline operations like changing their frame of reference.
+/// important: The ToV of the points are not assumed to be sorted.
 #[derive(Default, Clone, Encode, Decode, PartialEq, Debug, Soa)]
-pub struct LidarPayload {
-    tov: CuTime, // Time of Validity
-    x: LidarLength,
-    y: LidarLength,
-    z: LidarLength,
+pub struct PointCloud {
+    tov: CuTime, // Time of Validity, not sorted.
+    x: Distance,
+    y: Distance,
+    z: Distance,
     i: Reflectivity,
     return_order: u8, // 0 for first return, 1 for second return, etc.
 }
 
-impl LidarPayload {
+impl PointCloud {
     pub fn new(tov: CuTime, x: f32, y: f32, z: f32, i: f32, return_order: Option<u8>) -> Self {
         Self {
             tov,
-            x: LidarLength(Length::new::<meter>(x)),
-            y: LidarLength(Length::new::<meter>(y)),
-            z: LidarLength(Length::new::<meter>(z)),
+            x: Distance(Length::new::<meter>(x)),
+            y: Distance(Length::new::<meter>(y)),
+            z: Distance(Length::new::<meter>(z)),
             i: Reflectivity(Ratio::new::<percent>(i)),
             return_order: return_order.unwrap_or(0),
         }
@@ -93,9 +97,9 @@ impl LidarPayload {
     ) -> Self {
         Self {
             tov,
-            x: LidarLength(x),
-            y: LidarLength(y),
-            z: LidarLength(z),
+            x: Distance(x),
+            y: Distance(y),
+            z: Distance(z),
             i: Reflectivity(i),
             return_order: return_order.unwrap_or(0),
         }
@@ -108,8 +112,8 @@ mod tests {
     use cu29_clock::CuDuration;
 
     #[test]
-    fn test_lidar_payload() {
-        let payload = LidarPayload::new(CuDuration(1), 1.0, 2.0, 3.0, 0.0, None);
+    fn test_point_payload() {
+        let payload = PointCloud::new(CuDuration(1), 1.0, 2.0, 3.0, 0.0, None);
         assert_eq!(payload.x.0.value, 1.0);
         assert_eq!(payload.y.0.value, 2.0);
         assert_eq!(payload.z.0.value, 3.0);
@@ -117,8 +121,8 @@ mod tests {
 
     #[test]
     fn test_length_add_sub() {
-        let a = LidarLength(Length::new::<meter>(1.0));
-        let b = LidarLength(Length::new::<meter>(2.0));
+        let a = Distance(Length::new::<meter>(1.0));
+        let b = Distance(Length::new::<meter>(2.0));
         let c = a + b;
         assert_eq!(c.value, 3.0);
         let d = c - a;
@@ -127,7 +131,7 @@ mod tests {
 
     #[test]
     fn test_encoding_length() {
-        let a = LidarLength(Length::new::<meter>(1.0));
+        let a = Distance(Length::new::<meter>(1.0));
         let mut encoded = vec![0u8; 1024]; // Reserve a buffer with sufficient capacity
 
         let length =

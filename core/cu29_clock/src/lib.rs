@@ -11,6 +11,7 @@ use core::ops::{Add, Sub};
 pub use quanta::Instant;
 use quanta::{Clock, Mock};
 use serde::{Deserialize, Serialize};
+use std::convert::Into;
 use std::fmt::{Display, Formatter};
 use std::ops::{AddAssign, Div, Mul};
 use std::sync::Arc;
@@ -18,8 +19,15 @@ use std::time::Duration;
 
 /// For Robot times, the underlying type is a u64 representing nanoseconds.
 /// It is always positive to simplify the reasoning on the user side.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
 pub struct CuDuration(pub u64);
+
+impl CuDuration {
+    // Lowest value a CuDuration can have.
+    pub const MIN: CuDuration = CuDuration(0u64);
+    // Highest value a CuDuration can have reserving the max value for None.
+    pub const MAX: CuDuration = CuDuration(NONE_VALUE - 1);
+}
 
 /// bridge the API with standard Durations.
 impl From<Duration> for CuDuration {
@@ -164,7 +172,7 @@ impl Display for CuDuration {
 pub type CuTime = CuDuration;
 
 /// Homebrewed `Option<CuDuration>` to avoid using 128bits just to represent an Option.
-#[derive(Clone, Copy, Debug, PartialEq, Encode, Decode, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Encode, Decode, Serialize, Deserialize)]
 pub struct OptionCuTime(CuTime);
 
 const NONE_VALUE: u64 = 0xFFFFFFFFFFFFFFFF;
@@ -230,6 +238,70 @@ impl From<CuTime> for OptionCuTime {
     #[inline]
     fn from(val: CuTime) -> Self {
         Some(val).into()
+    }
+}
+
+/// Represents a time range.
+#[derive(Copy, Clone, Debug, Encode, Decode, Serialize, Deserialize)]
+pub struct CuTimeRange {
+    pub start: CuTime,
+    pub end: CuTime,
+}
+
+/// Builds a time range from a slice of CuTime.
+/// This is an O(n) operation.
+impl From<&[CuTime]> for CuTimeRange {
+    fn from(slice: &[CuTime]) -> Self {
+        CuTimeRange {
+            start: *slice.iter().min().expect("Empty slice"),
+            end: *slice.iter().max().expect("Empty slice"),
+        }
+    }
+}
+
+/// Represents a time range with possible undefined start or end or both.
+#[derive(Copy, Clone, Debug, Encode, Decode, Serialize, Deserialize)]
+pub struct PartialCuTimeRange {
+    pub start: OptionCuTime,
+    pub end: OptionCuTime,
+}
+
+impl Default for PartialCuTimeRange {
+    fn default() -> Self {
+        PartialCuTimeRange {
+            start: OptionCuTime::none(),
+            end: OptionCuTime::none(),
+        }
+    }
+}
+
+/// The time of validity of a message can be more than one time but can be a time range of Tovs.
+/// For example a sub scan for a lidar, a set of images etc... can have a range of validity.
+#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
+pub enum Tov {
+    None,
+    Time(CuTime),
+    Range(CuTimeRange),
+}
+
+impl Default for Tov {
+    fn default() -> Self {
+        Tov::None
+    }
+}
+
+impl From<Option<CuDuration>> for Tov {
+    fn from(duration: Option<CuDuration>) -> Self {
+        match duration {
+            Some(duration) => Tov::Time(duration),
+            None => Tov::None,
+        }
+    }
+}
+
+impl From<CuDuration> for Tov {
+    fn from(duration: CuDuration) -> Self {
+        Tov::Time(duration)
     }
 }
 
@@ -392,5 +464,12 @@ mod tests {
         assert_eq!(c.0, 30);
         let d = b - a;
         assert_eq!(d.0, 10);
+    }
+
+    #[test]
+    fn test_build_range_from_slice() {
+        let range = CuTimeRange::from(&[20.into(), 10.into(), 30.into()][..]);
+        assert_eq!(range.start, 10.into());
+        assert_eq!(range.end, 30.into());
     }
 }

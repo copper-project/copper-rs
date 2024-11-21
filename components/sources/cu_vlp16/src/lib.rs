@@ -5,7 +5,7 @@ use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
 use cu29::{output_msg, CuResult};
-use cu_sensor_payloads::{LidarPayload, LidarPayloadSoa};
+use cu_sensor_payloads::{PointCloud, PointCloudSoa};
 use std::net::UdpSocket;
 use std::time::Duration;
 use velodyne_lidar::iter::try_packet_to_frame_xyz;
@@ -64,7 +64,7 @@ impl CuTaskLifecycle for Vlp16 {
 }
 
 impl<'cl> CuSrcTask<'cl> for Vlp16 {
-    type Output = output_msg!('cl, LidarPayloadSoa<10000>);
+    type Output = output_msg!('cl, PointCloudSoa<10000>);
 
     fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
         let socket = self.socket.as_ref().unwrap();
@@ -79,7 +79,7 @@ impl<'cl> CuSrcTask<'cl> for Vlp16 {
             .next()
             .unwrap()
             .unwrap();
-        let mut output = LidarPayloadSoa::<10000>::default();
+        let mut output = PointCloudSoa::<10000>::default();
 
         frame.firing_iter().for_each(|firing| {
             firing.point_iter().for_each(|point| {
@@ -89,7 +89,7 @@ impl<'cl> CuSrcTask<'cl> for Vlp16 {
                 let y = point.measurement.xyz[1].as_meters() as f32;
                 let z = point.measurement.xyz[2].as_meters() as f32;
                 let intensity = point.measurement.intensity as f32 / 255.0f32;
-                output.push(LidarPayload::new(tov.into(), x, y, z, intensity, None));
+                output.push(PointCloud::new(tov.into(), x, y, z, intensity, None));
             });
         });
         new_msg.set_payload(output);
@@ -122,7 +122,7 @@ mod tests {
             let socket = UdpSocket::bind("0.0.0.0:2367").unwrap();
             socket.send_to(data, "127.0.0.1:2368").unwrap();
             // process
-            let mut msg = CuMsg::new(Some(LidarPayloadSoa::<10000>::default()));
+            let mut msg = CuMsg::new(Some(PointCloudSoa::<10000>::default()));
             drv.process(&clk, &mut msg).unwrap();
             assert_eq!(-0.05115497, msg.payload().unwrap().x[0].value);
         }
