@@ -61,9 +61,13 @@ impl<'de> BorrowDecode<'de> for LidarLength {
     }
 }
 
+/// Standardized PointCloud.
+/// note: the derive(Soa) will generate a PointCloudSoa struct that will store the data in a SoA format.
+/// The Soa format is appropriate for early pipeline operations like changing their frame of reference.
+/// important: The ToV of the points are not assumed to be sorted.
 #[derive(Default, Clone, Encode, Decode, PartialEq, Debug, Soa)]
-pub struct LidarPayload {
-    tov: CuTime, // Time of Validity
+pub struct PointCloud {
+    tov: CuTime, // Time of Validity, not sorted.
     x: LidarLength,
     y: LidarLength,
     z: LidarLength,
@@ -71,7 +75,7 @@ pub struct LidarPayload {
     return_order: u8, // 0 for first return, 1 for second return, etc.
 }
 
-impl LidarPayload {
+impl PointCloud {
     pub fn new(tov: CuTime, x: f32, y: f32, z: f32, i: f32, return_order: Option<u8>) -> Self {
         Self {
             tov,
@@ -109,7 +113,7 @@ mod tests {
 
     #[test]
     fn test_lidar_payload() {
-        let payload = LidarPayload::new(CuDuration(1), 1.0, 2.0, 3.0, 0.0, None);
+        let payload = PointCloud::new(CuDuration(1), 1.0, 2.0, 3.0, 0.0, None);
         assert_eq!(payload.x.0.value, 1.0);
         assert_eq!(payload.y.0.value, 2.0);
         assert_eq!(payload.z.0.value, 3.0);

@@ -231,7 +231,7 @@ where
             Some(payload) => {
                 let tov = match input.metadata.tov {
                     Tov::Time(single) => single,
-                    _ => panic!("Unexpected variant"),
+                    _ => return Err("Unexpected variant for a TOV of PID".into()),
                 };
 
                 let measure: f32 = payload.into();

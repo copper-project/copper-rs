@@ -7,7 +7,7 @@ use cu29::cutask::CuMsg;
 use cu29::cutask::{CuSrcTask, CuTaskLifecycle, Freezable};
 use cu29::{output_msg, CuError, CuResult};
 use cu29_clock::{CuDuration, CuTime, CuTimeRange, RobotClock, Tov};
-use cu_sensor_payloads::{LidarPayload, LidarPayloadSoa};
+use cu_sensor_payloads::{PointCloud, PointCloudSoa};
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use std::io::ErrorKind;
 use std::io::Read;
@@ -77,7 +77,7 @@ impl Freezable for Xt32 {}
 
 const MAX_POINTS: usize = 32 * 10;
 
-type LidarCuMsgPayload = LidarPayloadSoa<MAX_POINTS>;
+type LidarCuMsgPayload = PointCloudSoa<MAX_POINTS>;
 
 // In each round of firing, the firing sequence is from Channel 1 to Channel 32.
 // Assuming that the start time of Block 6 is t6, the laser firing time of Channel i is
@@ -108,6 +108,9 @@ impl<'cl> CuSrcTask<'cl> for Xt32 {
                     .block_ts(&self.reftime)
                     .map_err(|e| CuError::new_with_cause("Failed to get block timings", e))?[5]; // 0 == channel 1, 5 == channel 6
 
+                let mut min_tov = CuTime::MAX;
+                let mut max_tov = CuTime::MIN;
+
                 // let is_dual = lidar_packet.header.is_dual_return(); TODO: add dual return support
                 for block in lidar_packet.blocks.iter() {
                     let azimuth = block.azimuth();
@@ -118,13 +121,19 @@ impl<'cl> CuSrcTask<'cl> for Xt32 {
 
                         let (x, y, z) = spherical_to_cartesian(azimuth, elevation, d);
                         let t = channel_time(t6, i as u64);
-                        payload.push(LidarPayload::new_uom(t, x, y, z, r, None));
+                        // TODO: we can precompute that from the packet itself in one shot.
+                        if t < min_tov {
+                            min_tov = t;
+                        } else if t > max_tov {
+                            max_tov = t;
+                        }
+                        payload.push(PointCloud::new_uom(t, x, y, z, r, None));
                     });
                 }
 
                 let tov_range = CuTimeRange {
-                    start: payload.tov[0],
-                    end: *payload.tov.last().unwrap(),
+                    start: min_tov,
+                    end: max_tov,
                 };
                 new_msg.metadata.tov = Tov::Range(tov_range); // take the oldest timestamp
             }
