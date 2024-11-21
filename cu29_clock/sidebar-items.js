@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["CuDuration","Instant","OptionCuTime","RobotClock","RobotClockMock"],"trait":["ClockProvider"],"type":["CuTime"]};
+window.SIDEBAR_ITEMS = {"enum":["Tov"],"struct":["CuDuration","CuTimeRange","Instant","OptionCuTime","PartialCuTimeRange","RobotClock","RobotClockMock"],"trait":["ClockProvider"],"type":["CuTime"]};

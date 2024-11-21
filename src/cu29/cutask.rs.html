@@ -261,14 +261,10 @@
 <a href="#260" id="260">260</a>
 <a href="#261" id="261">261</a>
 <a href="#262" id="262">262</a>
-<a href="#263" id="263">263</a>
-<a href="#264" id="264">264</a>
-<a href="#265" id="265">265</a>
-<a href="#266" id="266">266</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module contains all the main definition of the traits you need to implement
+<a href="#263" id="263">263</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module contains all the main definition of the traits you need to implement
 //! or interact with to create a Copper task.
 
-</span><span class="kw">use </span><span class="kw">crate</span>::clock::OptionCuTime;
-<span class="kw">use </span><span class="kw">crate</span>::config::ComponentConfig;
+</span><span class="kw">use </span><span class="kw">crate</span>::config::ComponentConfig;
 <span class="kw">use </span><span class="kw">crate</span>::CuResult;
 <span class="kw">use </span>bincode::de::Decoder;
 <span class="kw">use </span>bincode::de::{BorrowDecoder, Decode};
@@ -277,7 +273,7 @@
 <span class="kw">use </span>bincode::error::{DecodeError, EncodeError};
 <span class="kw">use </span>bincode::BorrowDecode;
 <span class="kw">use </span>compact_str::{CompactString, ToCompactString};
-<span class="kw">use </span>cu29_clock::RobotClock;
+<span class="kw">use </span>cu29_clock::{PartialCuTimeRange, RobotClock, Tov};
 <span class="kw">use </span>serde_derive::{Deserialize, Serialize};
 <span class="kw">use </span>std::fmt;
 <span class="kw">use </span>std::fmt::{Debug, Display, Formatter};
@@ -362,12 +358,11 @@
 <span class="doccomment">/// CuMsgMetadata is a structure that contains metadata common to all CuMsgs.
 </span><span class="attr">#[derive(Debug, Clone, bincode::Encode, bincode::Decode, Serialize, Deserialize)]
 </span><span class="kw">pub struct </span>CuMsgMetadata {
-    <span class="doccomment">/// The time before the process method is called.
-    </span><span class="kw">pub </span>before_process: OptionCuTime,
-    <span class="doccomment">/// The time after the process method is called.
-    </span><span class="kw">pub </span>after_process: OptionCuTime,
+    <span class="doccomment">/// The time range used for the processing of this message
+    </span><span class="kw">pub </span>process_time: PartialCuTimeRange,
     <span class="doccomment">/// The time of validity of the message.
-    </span><span class="kw">pub </span>tov: OptionCuTime,
+    /// It can be undefined (None), one measure point or a range of measures (TimeRange).
+    </span><span class="kw">pub </span>tov: Tov,
     <span class="doccomment">/// A small string for real time feedback purposes.
     /// This is usefull for to display on the field when the tasks are operating correctly.
     </span><span class="kw">pub </span>status_txt: CuCompactString,
@@ -383,8 +378,8 @@
     <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
         <span class="macro">write!</span>(
             f,
-            <span class="string">"before_process: {}, after_process: {}"</span>,
-            <span class="self">self</span>.before_process, <span class="self">self</span>.after_process
+            <span class="string">"process_time start: {}, process_time end: {}"</span>,
+            <span class="self">self</span>.process_time.start, <span class="self">self</span>.process_time.end
         )
     }
 }
@@ -405,9 +400,8 @@
 <span class="kw">impl </span>Default <span class="kw">for </span>CuMsgMetadata {
     <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
         CuMsgMetadata {
-            before_process: OptionCuTime::none(),
-            after_process: OptionCuTime::none(),
-            tov: OptionCuTime::none(),
+            process_time: PartialCuTimeRange::default(),
+            tov: Tov::default(),
             status_txt: CuCompactString(CompactString::with_capacity(COMPACT_STRING_CAPACITY)),
         }
     }
