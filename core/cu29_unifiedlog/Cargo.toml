@@ -15,7 +15,8 @@ repository.workspace = true
 cu29-traits = { workspace = true }
 bincode = { workspace = true }
 memmap2 = "0.9.5"
-libc = "0.2.159"
+libc = "0.2.164"
+page_size = "0.6.0"
 
 [dev-dependencies]
 tempfile = { workspace = true }

@@ -193,7 +193,7 @@ impl UnifiedLoggerBuilder {
     }
 
     pub fn build(self) -> io::Result<UnifiedLogger> {
-        let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize };
+        let page_size = page_size::get();
 
         if self.write && self.create {
             let ulw = UnifiedLoggerWrite::new(
@@ -737,7 +737,6 @@ impl Read for UnifiedLoggerIOReader {
 mod tests {
     use super::*;
     use bincode::decode_from_reader;
-    use libc::{sysconf, _SC_PAGESIZE};
     use std::io::BufReader;
     use std::path::PathBuf;
     use tempfile::TempDir;
@@ -782,8 +781,8 @@ mod tests {
             logger.add_section(UnifiedLogType::StructuredLogLine, 1024);
             logger.add_section(UnifiedLogType::CopperList, 2048);
             let used = logger.front_slab.used();
-            assert!(used < 4 * unsafe { sysconf(_SC_PAGESIZE) as usize }); // ie. 3 headers, 1 page max per
-                                                                           // logger drops
+            assert!(used < 4 * page_size::get()); // ie. 3 headers, 1 page max per
+                                                  // logger drops
 
             used
         };
