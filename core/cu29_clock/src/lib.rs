@@ -27,6 +27,22 @@ impl CuDuration {
     pub const MIN: CuDuration = CuDuration(0u64);
     // Highest value a CuDuration can have reserving the max value for None.
     pub const MAX: CuDuration = CuDuration(NONE_VALUE - 1);
+
+    pub fn max(&self, p0: CuDuration) -> CuDuration {
+        if self.0 > p0.0 {
+            CuDuration(self.0)
+        } else {
+            p0
+        }
+    }
+
+    pub fn min(&self, p0: CuDuration) -> CuDuration {
+        if self.0 < p0.0 {
+            CuDuration(self.0)
+        } else {
+            p0
+        }
+    }
 }
 
 /// bridge the API with standard Durations.
@@ -242,7 +258,7 @@ impl From<CuTime> for OptionCuTime {
 }
 
 /// Represents a time range.
-#[derive(Copy, Clone, Debug, Encode, Decode, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Encode, Decode, Serialize, Deserialize, PartialEq)]
 pub struct CuTimeRange {
     pub start: CuTime,
     pub end: CuTime,
@@ -277,7 +293,7 @@ impl Default for PartialCuTimeRange {
 
 /// The time of validity of a message can be more than one time but can be a time range of Tovs.
 /// For example a sub scan for a lidar, a set of images etc... can have a range of validity.
-#[derive(Clone, Debug, Encode, Decode, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Encode, Decode, Serialize, Deserialize)]
 pub enum Tov {
     None,
     Time(CuTime),
