@@ -16,8 +16,10 @@ cu29-log = { workspace = true }
 cu29-log-runtime = { workspace = true }
 cu29-log-derive = { workspace = true }
 bincode = { workspace = true }
-spidev = "0.6.0"
 serde = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+spidev = "0.6.0"
 
 [dev-dependencies]
 cu29-derive = { workspace = true }
@@ -25,5 +27,11 @@ cu29-unifiedlog = { workspace = true }
 cu29-traits = { workspace = true }
 cu29-helpers = { workspace = true }
 
+[build-dependencies]
+cfg_aliases = "0.2.1"
+
+[features]
+default = []
+mock = []
 
 
