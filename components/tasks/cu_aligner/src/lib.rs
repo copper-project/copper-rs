@@ -102,9 +102,7 @@ macro_rules! alignment_buffers {
             pub fn update(
                 &mut self,
                 now: CuTime,
-            ) -> Vec<($(Option<&CuMsg<$payload>>,)*)> {
-                let mut aligned_data = Vec::new();
-
+            ) -> Option<($(impl Iterator<Item = &CuMsg<$payload>>),*)> {
                 let horizon_time = now - self.stale_data_horizon;
 
                 // purge all the stale data from the TimeboundCircularBuffers first
@@ -117,10 +115,17 @@ macro_rules! alignment_buffers {
                 ]
                 .iter()
                 .filter_map(|&time| time)
-                .min()
-                .unwrap_or(now);
+                .min();
 
-                aligned_data
+                // If there is no data in any of the buffers, return early
+                if most_recent_time.is_none() {
+                    return None;
+                }
+
+                let most_recent_time = most_recent_time.unwrap();
+
+                let time_to_get_complete_window = most_recent_time - self.target_alignment_window;
+                Some(($(self.$name.iter_window(time_to_get_complete_window, most_recent_time)),*))
             }
         }
     };
@@ -153,7 +158,81 @@ mod tests {
         msg1.metadata.tov = Tov::Time(Duration::from_secs(1).into());
         buffers.buffer1.inner.push_back(msg1.clone());
         buffers.buffer2.inner.push_back(msg1);
-        let aligned_data = buffers.update(Duration::from_secs(2).into());
-        assert_eq!(aligned_data.len(), 0);
+        // within the horizon
+        let _ = buffers.update(Duration::from_secs(2).into());
+        assert_eq!(buffers.buffer1.inner.len(), 1);
+        assert_eq!(buffers.buffer2.inner.len(), 1);
+        // outside the horizon
+        let _ = buffers.update(Duration::from_secs(5).into());
+        assert_eq!(buffers.buffer1.inner.len(), 0);
+        assert_eq!(buffers.buffer2.inner.len(), 0);
+    }
+
+    #[test]
+    fn empty_buffers_test() {
+        alignment_buffers!(
+            AlignmentBuffers,
+            buffer1: TimeboundCircularBuffer<10, CuMsg<u32>>,
+            buffer2: TimeboundCircularBuffer<12, CuMsg<u32>>
+        );
+
+        let mut buffers = AlignmentBuffers::new(
+            Duration::from_secs(2).into(), // 2-second alignment window
+            Duration::from_secs(5).into(), // 5-second stale data horizon
+        );
+
+        // Advance time to 10 seconds
+        let now = Duration::from_secs(10).into();
+        assert!(buffers.update(now).is_none());
+    }
+
+    #[test]
+    fn horizon_and_window_alignment_test() {
+        alignment_buffers!(
+            AlignmentBuffers,
+            buffer1: TimeboundCircularBuffer<10, CuMsg<u32>>,
+            buffer2: TimeboundCircularBuffer<12, CuMsg<u32>>
+        );
+
+        let mut buffers = AlignmentBuffers::new(
+            Duration::from_secs(2).into(), // 2-second alignment window
+            Duration::from_secs(5).into(), // 5-second stale data horizon
+        );
+
+        // Insert messages with timestamps
+        let mut msg1 = CuMsg::new(Some(1));
+        msg1.metadata.tov = Tov::Time(Duration::from_secs(1).into());
+        buffers.buffer1.inner.push_back(msg1.clone());
+        buffers.buffer2.inner.push_back(msg1);
+
+        let mut msg2 = CuMsg::new(Some(2));
+        msg2.metadata.tov = Tov::Time(Duration::from_secs(4).into());
+        buffers.buffer1.inner.push_back(msg2.clone());
+        buffers.buffer2.inner.push_back(msg2);
+
+        let mut msg3 = CuMsg::new(Some(3));
+        msg3.metadata.tov = Tov::Time(Duration::from_secs(6).into());
+        buffers.buffer1.inner.push_back(msg3.clone());
+        buffers.buffer2.inner.push_back(msg3);
+
+        // Advance time to 7 seconds; horizon is 7 - 5 = 2 seconds
+        let now = Duration::from_secs(7).into();
+        if let Some((iter1, iter2)) = buffers.update(now) {
+            let collected1: Vec<_> = iter1.collect();
+            let collected2: Vec<_> = iter2.collect();
+
+            // Verify only messages within the alignment window [5, 7] are returned
+            assert_eq!(collected1.len(), 1);
+            assert_eq!(collected2.len(), 1);
+
+            assert_eq!(collected1[0].payload(), Some(&3));
+            assert_eq!(collected2[0].payload(), Some(&3));
+        } else {
+            panic!("Expected aligned data, but got None");
+        }
+
+        // Ensure older messages outside the horizon [>2 seconds] are purged
+        assert_eq!(buffers.buffer1.inner.len(), 1);
+        assert_eq!(buffers.buffer2.inner.len(), 1);
     }
 }
