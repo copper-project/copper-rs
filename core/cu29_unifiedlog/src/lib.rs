@@ -2,6 +2,7 @@ use memmap2::{Mmap, MmapMut};
 use std::fmt::{Debug, Formatter};
 use std::fs::{File, OpenOptions};
 use std::io::Read;
+use std::mem::ManuallyDrop;
 use std::path::{Path, PathBuf};
 use std::slice::from_raw_parts_mut;
 use std::sync::{Arc, Mutex};
@@ -193,7 +194,7 @@ impl UnifiedLoggerBuilder {
     }
 
     pub fn build(self) -> io::Result<UnifiedLogger> {
-        let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize };
+        let page_size = page_size::get();
 
         if self.write && self.create {
             let ulw = UnifiedLoggerWrite::new(
@@ -224,7 +225,7 @@ pub struct UnifiedLoggerRead {
 
 struct SlabEntry {
     file: File,
-    mmap_buffer: MmapMut,
+    mmap_buffer: ManuallyDrop<MmapMut>,
     current_global_position: usize,
     sections_offsets_in_flight: Vec<usize>,
     flushed_until_offset: usize,
@@ -233,7 +234,12 @@ struct SlabEntry {
 
 impl Drop for SlabEntry {
     fn drop(&mut self) {
-        self.close();
+        self.flush_until(self.current_global_position);
+        unsafe { ManuallyDrop::drop(&mut self.mmap_buffer) };
+        self.file
+            .set_len(self.current_global_position as u64)
+            .expect("Failed to trim datalogger file");
+
         if !self.sections_offsets_in_flight.is_empty() {
             eprintln!("Error: Slab not full flushed.");
         }
@@ -247,7 +253,8 @@ pub enum AllocatedSection {
 
 impl SlabEntry {
     fn new(file: File, page_size: usize) -> Self {
-        let mmap_buffer = unsafe { MmapMut::map_mut(&file).expect("Failed to map file") };
+        let mmap_buffer =
+            ManuallyDrop::new(unsafe { MmapMut::map_mut(&file).expect("Failed to map file") });
         Self {
             file,
             mmap_buffer,
@@ -276,7 +283,7 @@ impl SlabEntry {
     fn is_it_my_section(&self, section: &SectionHandle) -> bool {
         (section.buffer.as_ptr() >= self.mmap_buffer.as_ptr())
             && (section.buffer.as_ptr() as usize)
-                < (self.mmap_buffer.as_ptr() as usize + self.mmap_buffer.len())
+                < (self.mmap_buffer.as_ref().as_ptr() as usize + self.mmap_buffer.as_ref().len())
     }
 
     /// Flush the section to disk.
@@ -357,13 +364,6 @@ impl SlabEntry {
         self.current_global_position = end_of_section;
 
         AllocatedSection::Section(SectionHandle::create(section_header, handle_buffer))
-    }
-
-    fn close(&mut self) {
-        self.flush_until(self.current_global_position);
-        self.file
-            .set_len(self.current_global_position as u64)
-            .expect("Failed to trim datalogger file");
     }
 
     #[cfg(test)]
@@ -505,7 +505,6 @@ impl UnifiedLoggerWrite {
     fn garbage_collect_backslabs(&mut self) {
         self.back_slabs.retain_mut(|slab| {
             if slab.sections_offsets_in_flight.is_empty() {
-                slab.close();
                 false
             } else {
                 true
@@ -737,7 +736,6 @@ impl Read for UnifiedLoggerIOReader {
 mod tests {
     use super::*;
     use bincode::decode_from_reader;
-    use libc::{sysconf, _SC_PAGESIZE};
     use std::io::BufReader;
     use std::path::PathBuf;
     use tempfile::TempDir;
@@ -782,8 +780,8 @@ mod tests {
             logger.add_section(UnifiedLogType::StructuredLogLine, 1024);
             logger.add_section(UnifiedLogType::CopperList, 2048);
             let used = logger.front_slab.used();
-            assert!(used < 4 * unsafe { sysconf(_SC_PAGESIZE) as usize }); // ie. 3 headers, 1 page max per
-                                                                           // logger drops
+            assert!(used < 4 * page_size::get()); // ie. 3 headers, 1 page max per
+                                                  // logger drops
 
             used
         };
