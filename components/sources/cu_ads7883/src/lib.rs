@@ -27,7 +27,7 @@ const INTEGRATION_FACTOR: u64 = 8;
 /// The max_speed_hz is the maximum speed of the SPI bus in Hz. The ADS7883 can handle up to 48MHz.
 /// i.e. 48_000_000 (the default)
 #[cfg(hardware)]
-fn open_spi(dev_device: Option<&str>, max_speed_hz: Option<u32>) -> io::Result<Spidev> {
+fn open_spi(dev_device: Option<&str>, max_speed_hz: Option<u32>) -> std::io::Result<Spidev> {
     let dev_device = dev_device.unwrap_or("/dev/spidev0.0");
     let max_speed_hz = max_speed_hz.unwrap_or(48_000_000);
     let mut spi = Spidev::open(dev_device)?;
