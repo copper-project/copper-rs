@@ -2,6 +2,7 @@ use memmap2::{Mmap, MmapMut};
 use std::fmt::{Debug, Formatter};
 use std::fs::{File, OpenOptions};
 use std::io::Read;
+use std::mem::ManuallyDrop;
 use std::path::{Path, PathBuf};
 use std::slice::from_raw_parts_mut;
 use std::sync::{Arc, Mutex};
@@ -224,7 +225,7 @@ pub struct UnifiedLoggerRead {
 
 struct SlabEntry {
     file: File,
-    mmap_buffer: Option<MmapMut>,
+    mmap_buffer: ManuallyDrop<MmapMut>,
     current_global_position: usize,
     sections_offsets_in_flight: Vec<usize>,
     flushed_until_offset: usize,
@@ -234,7 +235,7 @@ struct SlabEntry {
 impl Drop for SlabEntry {
     fn drop(&mut self) {
         self.flush_until(self.current_global_position);
-        self.mmap_buffer = None;
+        unsafe { ManuallyDrop::drop(&mut self.mmap_buffer) };
         self.file
             .set_len(self.current_global_position as u64)
             .expect("Failed to trim datalogger file");
@@ -252,7 +253,8 @@ pub enum AllocatedSection {
 
 impl SlabEntry {
     fn new(file: File, page_size: usize) -> Self {
-        let mmap_buffer = Some(unsafe { MmapMut::map_mut(&file).expect("Failed to map file") });
+        let mmap_buffer =
+            ManuallyDrop::new(unsafe { MmapMut::map_mut(&file).expect("Failed to map file") });
         Self {
             file,
             mmap_buffer,
@@ -270,8 +272,6 @@ impl SlabEntry {
             return;
         }
         self.mmap_buffer
-            .as_ref()
-            .unwrap()
             .flush_async_range(
                 self.flushed_until_offset,
                 until_position - self.flushed_until_offset,
@@ -281,19 +281,17 @@ impl SlabEntry {
     }
 
     fn is_it_my_section(&self, section: &SectionHandle) -> bool {
-        (section.buffer.as_ptr() >= self.mmap_buffer.as_ref().unwrap().as_ptr())
+        (section.buffer.as_ptr() >= self.mmap_buffer.as_ptr())
             && (section.buffer.as_ptr() as usize)
-                < (self.mmap_buffer.as_ref().unwrap().as_ptr() as usize
-                    + self.mmap_buffer.as_ref().unwrap().len())
+                < (self.mmap_buffer.as_ref().as_ptr() as usize + self.mmap_buffer.as_ref().len())
     }
 
     /// Flush the section to disk.
     /// the flushing is permament and the section is considered closed.
     fn flush_section(&mut self, section: &mut SectionHandle) {
-        if section.buffer.as_ptr() < self.mmap_buffer.as_ref().unwrap().as_ptr()
+        if section.buffer.as_ptr() < self.mmap_buffer.as_ptr()
             || section.buffer.as_ptr() as usize
-                > self.mmap_buffer.as_ref().unwrap().as_ptr() as usize
-                    + self.mmap_buffer.as_ref().unwrap().len()
+                > self.mmap_buffer.as_ptr() as usize + self.mmap_buffer.len()
         {
             panic!("Invalid section buffer, not in the slab");
         }
@@ -304,7 +302,7 @@ impl SlabEntry {
         let _sz = encode_into_slice(&section.section_header, section.buffer, standard())
             .expect("Failed to encode section header");
 
-        let base = self.mmap_buffer.as_ref().unwrap().as_ptr() as usize;
+        let base = self.mmap_buffer.as_ptr() as usize;
         let section_buffer_addr = section.buffer.as_ptr() as usize;
         self.sections_offsets_in_flight
             .retain(|&x| x != section_buffer_addr - base);
@@ -334,9 +332,7 @@ impl SlabEntry {
         let section_size = self.align_to_next_page(requested_section_size) as u32;
 
         // We need to have enough space to store the section in that slab
-        if self.current_global_position + section_size as usize
-            > self.mmap_buffer.as_ref().unwrap().len()
-        {
+        if self.current_global_position + section_size as usize > self.mmap_buffer.len() {
             return AllocatedSection::NoMoreSpace;
         }
 
@@ -349,7 +345,7 @@ impl SlabEntry {
 
         let nb_bytes = encode_into_slice(
             &section_header,
-            &mut self.mmap_buffer.as_mut().unwrap()[self.current_global_position..],
+            &mut self.mmap_buffer[self.current_global_position..],
             standard(),
         )
         .expect("Failed to encode section header");
@@ -359,8 +355,7 @@ impl SlabEntry {
         self.sections_offsets_in_flight
             .push(self.current_global_position);
         let end_of_section = self.current_global_position + requested_section_size;
-        let user_buffer =
-            &mut self.mmap_buffer.as_mut().unwrap()[self.current_global_position..end_of_section];
+        let user_buffer = &mut self.mmap_buffer[self.current_global_position..end_of_section];
 
         // here we have the guarantee for exclusive access to that memory for the lifetime of the handle, the borrow checker cannot understand that ever.
         let handle_buffer =
@@ -483,12 +478,8 @@ impl UnifiedLoggerWrite {
             first_section_offset: page_size as u16,
             page_size: page_size as u16,
         };
-        let nb_bytes = encode_into_slice(
-            &main_header,
-            &mut front_slab.mmap_buffer.as_mut().unwrap()[..],
-            standard(),
-        )
-        .expect("Failed to encode main header");
+        let nb_bytes = encode_into_slice(&main_header, &mut front_slab.mmap_buffer[..], standard())
+            .expect("Failed to encode main header");
         assert!(nb_bytes < page_size);
         front_slab.current_global_position = page_size; // align to the next page
 
