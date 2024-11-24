@@ -38,6 +38,8 @@ bincode = { workspace = true }
 cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.4.0" }
 compact_str = { workspace = true }
 cu-rp-gpio = { path = "../../components/sinks/cu_rp_gpio", version = "0.4.0" }
+tempfile = "3.14.0"
+
 
 [features]
 default = ["mock"]

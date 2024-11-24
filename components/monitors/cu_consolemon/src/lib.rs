@@ -8,7 +8,7 @@ use cu29::config::{CuConfig, Node};
 use cu29::cutask::CuMsgMetadata;
 use cu29::monitoring::{CuDurationStatistics, CuMonitor, CuTaskState, Decision};
 use cu29::{CuError, CuResult};
-use libc::{close, dup, dup2};
+use gag::Gag;
 use ratatui::backend::CrosstermBackend;
 use ratatui::buffer::Buffer;
 use ratatui::crossterm::event::{DisableMouseCapture, EnableMouseCapture, Event, KeyCode};
@@ -24,10 +24,8 @@ use ratatui::text::{Line, Text};
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, StatefulWidget, Table};
 use ratatui::{Frame, Terminal};
 use std::fmt::{Display, Formatter};
-use std::fs::File;
 use std::io::stdout;
 use std::marker::PhantomData;
-use std::os::fd::AsRawFd;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -573,23 +571,15 @@ impl CuMonitor for CuConsoleMon {
             setup_terminal();
 
             // nukes stderr into orbit as anything in the stack can corrupt the terminal
-            let dev_null = File::open("/dev/null").expect("Could not get /dev/null");
-            let dev_null_fd = dev_null.as_raw_fd();
-            let original_stderr_fd = unsafe { dup(libc::STDERR_FILENO) };
-            unsafe {
-                dup2(dev_null_fd, libc::STDERR_FILENO);
-            }
+            let print_gag = Gag::stderr().unwrap();
+
             let mut terminal =
                 Terminal::new(backend).expect("Failed to initialize terminal backend");
             let mut ui = UI::new(config_dup, taskids, task_stats_ui, error_states);
             ui.run_app(&mut terminal).expect("Failed to run app");
             quitting.store(true, Ordering::SeqCst);
             // restoring the terminal
-            unsafe {
-                dup2(original_stderr_fd, libc::STDERR_FILENO);
-                close(original_stderr_fd);
-            }
-
+            drop(print_gag);
             restore_terminal();
         });
 
