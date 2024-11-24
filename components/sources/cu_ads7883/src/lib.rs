@@ -1,3 +1,6 @@
+#[cfg(mock)]
+mod mock;
+
 use bincode::{Decode, Encode};
 use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
@@ -5,8 +8,12 @@ use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
 use cu29::{output_msg, CuError, CuResult};
 use cu29_log_derive::debug;
 use serde::{Deserialize, Serialize};
+
+#[cfg(hardware)]
 use spidev::{SpiModeFlags, Spidev, SpidevOptions, SpidevTransfer};
-use std::io;
+
+#[cfg(mock)]
+use mock::Spidev;
 
 pub struct ADS7883 {
     spi: Spidev,
@@ -19,7 +26,8 @@ const INTEGRATION_FACTOR: u64 = 8;
 /// The path is usually something like "/dev/spidev0.0" (the default)
 /// The max_speed_hz is the maximum speed of the SPI bus in Hz. The ADS7883 can handle up to 48MHz.
 /// i.e. 48_000_000 (the default)
-fn open_spi(dev_device: Option<&str>, max_speed_hz: Option<u32>) -> io::Result<Spidev> {
+#[cfg(hardware)]
+fn open_spi(dev_device: Option<&str>, max_speed_hz: Option<u32>) -> std::io::Result<Spidev> {
     let dev_device = dev_device.unwrap_or("/dev/spidev0.0");
     let max_speed_hz = max_speed_hz.unwrap_or(48_000_000);
     let mut spi = Spidev::open(dev_device)?;
@@ -62,22 +70,33 @@ impl CuTaskLifecycle for ADS7883 {
         Self: Sized,
     {
         match config {
+            #[allow(unused_variables)]
             Some(config) => {
-                let maybe_string = config.get::<String>("spi_dev");
-                let maybe_spidev = maybe_string.as_deref();
-                let maybe_max_speed_hz = config.get("max_speed_hz");
+                let maybe_string: Option<String> = config.get::<String>("spi_dev");
+                let maybe_spidev: Option<&str> = maybe_string.as_deref();
+                let maybe_max_speed_hz: Option<u32> = config.get("max_speed_hz");
+
+                #[cfg(hardware)]
                 let spi = open_spi(maybe_spidev, maybe_max_speed_hz).map_err(|e| {
                     CuError::new_with_cause("Could not open the ADS7883 SPI device", e)
                 })?;
+
+                #[cfg(mock)]
+                let spi = Spidev {};
+
                 Ok(ADS7883 {
                     spi,
                     integrated_value: 0,
                 })
             }
             None => {
+                #[cfg(hardware)]
                 let spi = open_spi(None, None).map_err(|e| {
                     CuError::new_with_cause("Could not open the ADS7883 SPI device (Note: no config specified for the node so it took the default config)", e)
                 })?;
+
+                #[cfg(mock)]
+                let spi = Spidev {};
                 Ok(ADS7883 {
                     spi,
                     integrated_value: 0,
@@ -103,7 +122,8 @@ impl Freezable for ADS7883 {} // This device is stateless.
 /// 0    -> 0v
 /// 4095 -> VDD
 #[inline]
-fn read_adc(spi: &mut Spidev) -> io::Result<u16> {
+#[cfg(hardware)]
+fn read_adc(spi: &mut Spidev) -> std::io::Result<u16> {
     let mut rx_buf = [0u8; 2];
 
     let mut transfer = SpidevTransfer::read(&mut rx_buf);
@@ -120,6 +140,9 @@ fn read_adc(spi: &mut Spidev) -> io::Result<u16> {
 
     Ok(adc_value)
 }
+
+#[cfg(mock)]
+use mock::read_adc;
 
 impl<'cl> CuSrcTask<'cl> for ADS7883 {
     type Output = output_msg!('cl, ADSReadingPayload);
