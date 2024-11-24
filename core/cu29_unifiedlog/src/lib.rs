@@ -233,7 +233,12 @@ struct SlabEntry {
 
 impl Drop for SlabEntry {
     fn drop(&mut self) {
-        self.close();
+        self.flush_until(self.current_global_position);
+        self.mmap_buffer = None;
+        self.file
+            .set_len(self.current_global_position as u64)
+            .expect("Failed to trim datalogger file");
+
         if !self.sections_offsets_in_flight.is_empty() {
             eprintln!("Error: Slab not full flushed.");
         }
@@ -364,14 +369,6 @@ impl SlabEntry {
         self.current_global_position = end_of_section;
 
         AllocatedSection::Section(SectionHandle::create(section_header, handle_buffer))
-    }
-
-    fn close(&mut self) {
-        self.flush_until(self.current_global_position);
-        self.mmap_buffer = None;
-        self.file
-            .set_len(self.current_global_position as u64)
-            .expect("Failed to trim datalogger file");
     }
 
     #[cfg(test)]
@@ -517,7 +514,6 @@ impl UnifiedLoggerWrite {
     fn garbage_collect_backslabs(&mut self) {
         self.back_slabs.retain_mut(|slab| {
             if slab.sections_offsets_in_flight.is_empty() {
-                slab.close();
                 false
             } else {
                 true
