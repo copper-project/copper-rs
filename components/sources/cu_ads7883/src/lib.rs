@@ -123,7 +123,7 @@ impl Freezable for ADS7883 {} // This device is stateless.
 /// 4095 -> VDD
 #[inline]
 #[cfg(hardware)]
-fn read_adc(spi: &mut Spidev) -> io::Result<u16> {
+fn read_adc(spi: &mut Spidev) -> std::io::Result<u16> {
     let mut rx_buf = [0u8; 2];
 
     let mut transfer = SpidevTransfer::read(&mut rx_buf);
