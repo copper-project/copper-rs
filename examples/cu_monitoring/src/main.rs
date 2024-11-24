@@ -128,8 +128,7 @@ impl CuMonitor for ExampleMonitor {
 }
 const SLAB_SIZE: Option<usize> = Some(1024 * 1024);
 fn main() {
-    let tmp_dir = tempfile::TempDir::new().expect("could not create a tmp dir");
-    let logger_path = tmp_dir.path().join("monitor.copper");
+    let logger_path = "monitor.copper";
 
     let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), SLAB_SIZE, true, None)
         .expect("Failed to setup logger.");
