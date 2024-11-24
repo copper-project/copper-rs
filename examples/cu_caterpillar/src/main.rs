@@ -11,7 +11,9 @@ struct CaterpillarApplication {}
 const SLAB_SIZE: Option<usize> = Some(100 * 1024 * 1024);
 
 fn main() {
-    let logger_path = "/tmp/caterpillar.copper";
+    let tmp_dir = tempfile::TempDir::new().expect("could not create a tmp dir");
+    let logger_path = tmp_dir.path().join("caterpillar.copper");
+
     let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), SLAB_SIZE, false, None)
         .expect("Failed to setup logger.");
     let clock = copper_ctx.clock.clone();

@@ -30,3 +30,4 @@ tui-widgets = "0.4"  # 0.4.0 brings ratatui 0.29
 color-eyre = "0.6"
 lipsum = "0.9"
 libc = "0.2"
+gag = "1.0.0"
