@@ -99,15 +99,18 @@ macro_rules! alignment_buffers {
                     $($name: TimeboundCircularBuffer::<$size, $payload>::new()),*
                 }
             }
+
+            /// Call this to be sure we discard the old/ non relevant data
+            pub fn purge(&mut self, now: CuTime) {
+                let horizon_time = now - self.stale_data_horizon;
+                // purge all the stale data from the TimeboundCircularBuffers first
+                $(self.$name.purge(horizon_time);)*
+            }
+
             pub fn update(
                 &mut self,
                 now: CuTime,
             ) -> Option<($(impl Iterator<Item = &CuMsg<$payload>>),*)> {
-                let horizon_time = now - self.stale_data_horizon;
-
-                // purge all the stale data from the TimeboundCircularBuffers first
-                $(self.$name.purge(horizon_time);)*
-
                 // Now find the min of the max of the last time for all buffers
                 // meaning the most recent time at which all buffers have data
                 let most_recent_time = [
@@ -148,7 +151,7 @@ mod tests {
     }
 
     #[test]
-    fn update_test() {
+    fn purge_test() {
         alignment_buffers!(AlignmentBuffers, buffer1: TimeboundCircularBuffer<10, CuMsg<u32>>, buffer2: TimeboundCircularBuffer<12, CuMsg<u32>>);
 
         let mut buffers =
@@ -159,11 +162,11 @@ mod tests {
         buffers.buffer1.inner.push_back(msg1.clone());
         buffers.buffer2.inner.push_back(msg1);
         // within the horizon
-        let _ = buffers.update(Duration::from_secs(2).into());
+        let _ = buffers.purge(Duration::from_secs(2).into());
         assert_eq!(buffers.buffer1.inner.len(), 1);
         assert_eq!(buffers.buffer2.inner.len(), 1);
         // outside the horizon
-        let _ = buffers.update(Duration::from_secs(5).into());
+        let _ = buffers.purge(Duration::from_secs(5).into());
         assert_eq!(buffers.buffer1.inner.len(), 0);
         assert_eq!(buffers.buffer2.inner.len(), 0);
     }
@@ -216,6 +219,8 @@ mod tests {
 
         // Advance time to 7 seconds; horizon is 7 - 5 = everything 2+ should stay
         let now = Duration::from_secs(7).into();
+        // Emulate a normal workflow here.
+        buffers.purge(now);
         if let Some((iter1, iter2)) = buffers.update(now) {
             let collected1: Vec<_> = iter1.collect();
             let collected2: Vec<_> = iter2.collect();
