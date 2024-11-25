@@ -109,9 +109,8 @@ macro_rules! alignment_buffers {
                 $(self.$name.purge(horizon_time);)*
             }
 
-            pub fn update(
+            pub fn get_latest_aligned_data(
                 &mut self,
-                now: cu29::clock::CuTime,
             ) -> Option<($(impl Iterator<Item = &crate::buffers::CuMsg<$payload>>),*)> {
                 // Now find the min of the max of the last time for all buffers
                 // meaning the most recent time at which all buffers have data
@@ -137,7 +136,7 @@ macro_rules! alignment_buffers {
 }
 #[cfg(test)]
 mod tests {
-    use cu29::clock::Tov;
+    use cu29::clock::{CuDuration, Tov};
     use cu29::cutask::CuMsg;
     use std::time::Duration;
 
@@ -186,8 +185,8 @@ mod tests {
         );
 
         // Advance time to 10 seconds
-        let now = Duration::from_secs(10).into();
-        assert!(buffers.update(now).is_none());
+        let now: CuDuration = Duration::from_secs(10).into();
+        assert!(buffers.get_latest_aligned_data().is_none());
     }
 
     #[test]
@@ -222,7 +221,7 @@ mod tests {
         let now = Duration::from_secs(7).into();
         // Emulate a normal workflow here.
         buffers.purge(now);
-        if let Some((iter1, iter2)) = buffers.update(now) {
+        if let Some((iter1, iter2)) = buffers.get_latest_aligned_data() {
             let collected1: Vec<_> = iter1.collect();
             let collected2: Vec<_> = iter2.collect();
 
