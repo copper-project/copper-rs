@@ -144,7 +144,7 @@ mod tests {
         let buffers =
             AlignmentBuffers::new(Duration::from_secs(1).into(), Duration::from_secs(2).into());
         assert_eq!(buffers.buffer1.inner.capacity(), 10);
-        assert_eq!(buffers.buffer2.inner.capacity(), 20);
+        assert_eq!(buffers.buffer2.inner.capacity(), 12);
     }
 
     #[test]
@@ -205,17 +205,16 @@ mod tests {
         buffers.buffer1.inner.push_back(msg1.clone());
         buffers.buffer2.inner.push_back(msg1);
 
-        let mut msg2 = CuMsg::new(Some(2));
-        msg2.metadata.tov = Tov::Time(Duration::from_secs(4).into());
-        buffers.buffer1.inner.push_back(msg2.clone());
+        let mut msg2 = CuMsg::new(Some(3));
+        msg2.metadata.tov = Tov::Time(Duration::from_secs(3).into());
         buffers.buffer2.inner.push_back(msg2);
 
-        let mut msg3 = CuMsg::new(Some(3));
-        msg3.metadata.tov = Tov::Time(Duration::from_secs(6).into());
+        let mut msg3 = CuMsg::new(Some(4));
+        msg3.metadata.tov = Tov::Time(Duration::from_secs(4).into());
         buffers.buffer1.inner.push_back(msg3.clone());
         buffers.buffer2.inner.push_back(msg3);
 
-        // Advance time to 7 seconds; horizon is 7 - 5 = 2 seconds
+        // Advance time to 7 seconds; horizon is 7 - 5 = everything 2+ should stay
         let now = Duration::from_secs(7).into();
         if let Some((iter1, iter2)) = buffers.update(now) {
             let collected1: Vec<_> = iter1.collect();
@@ -223,16 +222,17 @@ mod tests {
 
             // Verify only messages within the alignment window [5, 7] are returned
             assert_eq!(collected1.len(), 1);
-            assert_eq!(collected2.len(), 1);
+            assert_eq!(collected2.len(), 2);
 
-            assert_eq!(collected1[0].payload(), Some(&3));
+            assert_eq!(collected1[0].payload(), Some(&4));
             assert_eq!(collected2[0].payload(), Some(&3));
+            assert_eq!(collected2[1].payload(), Some(&4));
         } else {
             panic!("Expected aligned data, but got None");
         }
 
         // Ensure older messages outside the horizon [>2 seconds] are purged
         assert_eq!(buffers.buffer1.inner.len(), 1);
-        assert_eq!(buffers.buffer2.inner.len(), 1);
+        assert_eq!(buffers.buffer2.inner.len(), 2);
     }
 }
