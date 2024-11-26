@@ -4,7 +4,6 @@
 use arrayvec::ArrayVec;
 use bincode::{Decode, Encode};
 
-
 /// Copper friendly wrapper for a fixed size array.
 #[derive(Clone, Debug, Default)]
 pub struct CuArray<T, const N: usize> {
