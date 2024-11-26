@@ -4,6 +4,7 @@ pub mod buffers;
 
 /// Define a task that aligns incoming messages based on their timestamps
 /// See module doc for use.
+#[macro_export]
 macro_rules! define_task {
     ($name:ident, $($index:tt => { $mis:expr, $mos:expr, $p:ty }),+) => {
 
