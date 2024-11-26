@@ -11,6 +11,7 @@ where
     pub inner: CircularBuffer<S, CuMsg<P>>,
 }
 
+#[allow(dead_code)]
 fn extract_tov_time_left(tov: &Tov) -> Option<CuTime> {
     match tov {
         Tov::Time(time) => Some(*time),
@@ -83,8 +84,14 @@ where
                 ))
             })
     }
+
+    /// Push a message into the buffer.
+    pub fn push(&mut self, msg: CuMsg<P>) {
+        self.inner.push_back(msg);
+    }
 }
 
+#[macro_export]
 macro_rules! alignment_buffers {
     ($struct_name:ident, $($name:ident: TimeboundCircularBuffer<$size:expr, CuMsg<$payload:ty>>),*) => {
         struct $struct_name {
@@ -103,15 +110,18 @@ macro_rules! alignment_buffers {
             }
 
             /// Call this to be sure we discard the old/ non relevant data
+            #[allow(dead_code)]
             pub fn purge(&mut self, now: cu29::clock::CuTime) {
                 let horizon_time = now - self.stale_data_horizon;
                 // purge all the stale data from the TimeboundCircularBuffers first
                 $(self.$name.purge(horizon_time);)*
             }
 
+            /// Get the most recent set of aligned data from all the buffers matching the constraints set at construction.
+            #[allow(dead_code)]
             pub fn get_latest_aligned_data(
                 &mut self,
-            ) -> Option<($(impl Iterator<Item = &crate::buffers::CuMsg<$payload>>),*)> {
+            ) -> Option<($(impl Iterator<Item = &cu29::cutask::CuMsg<$payload>>),*)> {
                 // Now find the min of the max of the last time for all buffers
                 // meaning the most recent time at which all buffers have data
                 let most_recent_time = [
@@ -134,9 +144,12 @@ macro_rules! alignment_buffers {
         }
     };
 }
+
+pub use alignment_buffers;
+
 #[cfg(test)]
 mod tests {
-    use cu29::clock::{CuDuration, Tov};
+    use cu29::clock::Tov;
     use cu29::cutask::CuMsg;
     use std::time::Duration;
 
@@ -185,7 +198,6 @@ mod tests {
         );
 
         // Advance time to 10 seconds
-        let now: CuDuration = Duration::from_secs(10).into();
         assert!(buffers.get_latest_aligned_data().is_none());
     }
 
