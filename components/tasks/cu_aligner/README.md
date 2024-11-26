@@ -57,3 +57,12 @@ The type of the input will be a tuple of CuMsg (which is what the aligner expect
 `(CuMsg<f32>, CuMsg<MyPayload>)`.
 The type of the output will be a CuMsg of a tuple of CuArrays holding the aligned messages for each stream. From the
 example: `CuMsg<(CuArray<f32, 7>, CuArray<MyPayload, 5>)>`.
+
+### Performance consideration
+
+Copper by itself never buffers anything to avoid copies but for this aligner has to copy data until it can align it.
+It means you will have 1 copy from the input to the internal buffer and 1 copy from the internal buffer to the output.
+
+If your usecase is just to get the latest message from 2 sources, just connect your task to the upstream tasks
+but do not use this aligner. It is only useful if the time of arrival from the 2 upstream tasks are too far appart
+in terms of tov.
