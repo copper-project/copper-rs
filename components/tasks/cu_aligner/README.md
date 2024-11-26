@@ -39,14 +39,24 @@ The timings are taken from the CuMsg::metadata.tov field (time of validity).
 
 The task is generated entirely out of the `cu_aligner::define_task` macro:
 
-```rust
-// Defines a task that aligns two streams of messages, one with payloads f32, the other MyPayload (you can use any rust struct that to implement the traits for CuMsgPayload).
+```rust,ignore
 
+use cu_aligner::define_task;
+use cu29::input_msg;
+use cu29::output_msg;
+use cu29::cutask::Freezable;
+use cu29::cutask::CuTaskLifecycle;
+use cu29::config::ComponentConfig;
+use cu29::CuResult;
+use cu29::cutask::CuTask;
+use cu29::cutask::CuMsg;
+
+// Defines a task that aligns two streams of messages, one with payloads f32, the other MyPayload (you can use any rust struct that to implement the traits for CuMsgPayload).
 define_task!(MyAlignerTask, 
              0 => { 15, 7, f32 },  // 5 is the Maximum capacity in nb of messages the internal 
                                    // buffer structure can hold before they will me discarded, 
                                    // 12 is the Maximum size in nb of messages the output (aligned messages of this type) 
-             1 => { 20, 5, MyPayload }
+             1 => { 20, 5, u64 }   // or any CuMsgPayload
             // you can continue with 2 => etc...
             );
 

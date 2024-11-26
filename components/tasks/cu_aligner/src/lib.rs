@@ -86,6 +86,7 @@ macro_rules! define_task {
 
 #[cfg(test)]
 mod tests {
+    use super::define_task;
     use cu29::config::ComponentConfig;
     use cu29::cutask::CuMsg;
     use cu29::cutask::CuTask;
