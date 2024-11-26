@@ -1,2 +1,59 @@
-### Aligner to buffer and align data flow from different time horizons
+## Aligner to buffer and align data flow from different time horizons
 
+The goal of this Copper component is to align data from different sources.
+
+### Theory of operation:
+
+```plaintext
+        STREAM 1                STREAM 2
+           │                       │
+  Msg1_S1 ─╯                       │ (discarded)
+           │                       │
+═══════════╪═══════════════════════╪═══════════ TIME HORIZON ( present - stale_data_horizon_ms ) 
+           │                       │
+           │                       │
+           │              Msg1_S2 ─┤
+  Msg2_S1 ─┤                       │
+           │                       │
+  Msg3_S1 ─┤              Msg2_S2 ─┤
+           │                       │
+           │                       │
+           │                       │
+═══════════╪═══════════════════════╪═══════════ BEGINNING OF ALIGNMENT WINDOW ( t - alignment_window_ms )
+           │                       │
+           │              Msg3_S2 ─┤
+  Msg4_S1 ─┤                       │           <- This part will be in the output at each process call
+           │                       │
+  Msg5_S1 ─┤              Msg4_S2 ─┤
+           │                       │
+═══════════╪═══════════════════════╪═══════════ MOST RECENT ALIGNED MESSAGE ( t )
+           │                       │
+           │              Msg5_S2 ─┤
+           │                       │
+           │              Msg6_S2 ─┤ (not yet aligned)
+```
+
+The timings are taken from the CuMsg::metadata.tov field (time of validity).
+
+### Usage
+
+The task is generated entirely out of the `cu_aligner::define_task` macro:
+
+```rust
+// Defines a task that aligns two streams of messages, one with payloads f32, the other MyPayload (you can use any rust struct that to implement the traits for CuMsgPayload).
+
+define_task!(MyAlignerTask, 
+             0 => { 15, 7, f32 },  // 5 is the Maximum capacity in nb of messages the internal 
+                                   // buffer structure can hold before they will me discarded, 
+                                   // 12 is the Maximum size in nb of messages the output (aligned messages of this type) 
+             1 => { 20, 5, MyPayload }
+            // you can continue with 2 => etc...
+            );
+
+```
+
+You defined task will need to be connected with the matching tasks upstream in the Copper config file.
+The type of the input will be a tuple of CuMsg (which is what the aligner expects). From the example:
+`(CuMsg<f32>, CuMsg<MyPayload>)`.
+The type of the output will be a CuMsg of a tuple of CuArrays holding the aligned messages for each stream. From the
+example: `CuMsg<(CuArray<f32, 7>, CuArray<MyPayload, 5>)>`.
