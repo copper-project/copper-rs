@@ -122,7 +122,7 @@ impl Display for CuMsgMetadata {
 }
 
 /// CuMsg is the envelope holding the msg payload and the metadata between tasks.
-#[derive(Debug, Clone, bincode::Encode, bincode::Decode)]
+#[derive(Default, Debug, Clone, bincode::Encode, bincode::Decode)]
 pub struct CuMsg<T>
 where
     T: CuMsgPayload,
