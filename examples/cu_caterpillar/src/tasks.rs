@@ -4,7 +4,7 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
-use cu29::cutask::{CuMsg, CuSrcTask, CuTask, CuTaskLifecycle, Freezable};
+use cu29::cutask::{CuMsg, CuSrcTask, CuTask, Freezable};
 use cu29::{input_msg, output_msg, CuResult};
 use cu_rp_gpio::RPGpioPayload;
 
@@ -24,17 +24,15 @@ impl Freezable for CaterpillarSource {
     }
 }
 
-impl CuTaskLifecycle for CaterpillarSource {
+impl<'cl> CuSrcTask<'cl> for CaterpillarSource {
+    type Output = output_msg!('cl, RPGpioPayload);
+
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {
         Ok(Self { state: true })
     }
-}
-
-impl<'cl> CuSrcTask<'cl> for CaterpillarSource {
-    type Output = output_msg!('cl, RPGpioPayload);
 
     fn process(&mut self, _clock: &RobotClock, output: Self::Output) -> CuResult<()> {
         // forward the state to the next task
@@ -49,18 +47,16 @@ pub struct CaterpillarTask {}
 
 impl Freezable for CaterpillarTask {}
 
-impl CuTaskLifecycle for CaterpillarTask {
+impl<'cl> CuTask<'cl> for CaterpillarTask {
+    type Input = input_msg!('cl, RPGpioPayload);
+    type Output = output_msg!('cl, RPGpioPayload);
+
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {
         Ok(Self {})
     }
-}
-
-impl<'cl> CuTask<'cl> for CaterpillarTask {
-    type Input = input_msg!('cl, RPGpioPayload);
-    type Output = output_msg!('cl, RPGpioPayload);
 
     fn process(
         &mut self,

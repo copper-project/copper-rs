@@ -4,7 +4,7 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29::clock::{CuTime, RobotClock};
 use cu29::config::ComponentConfig;
-use cu29::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle, Freezable};
+use cu29::cutask::{CuMsg, CuSinkTask, Freezable};
 use cu29::{input_msg, CuResult};
 use serde::{Deserialize, Serialize};
 
@@ -126,7 +126,19 @@ impl SN754410 {
     }
 }
 
-impl CuTaskLifecycle for SN754410 {
+impl Freezable for SN754410 {
+    fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        Encode::encode(&self.current_power, encoder)
+    }
+
+    fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+        self.current_power = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
+
+impl<'cl> CuSinkTask<'cl> for SN754410 {
+    type Input = input_msg!('cl, MotorPayload);
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
@@ -162,26 +174,6 @@ impl CuTaskLifecycle for SN754410 {
         debug!("Enabling SN754410.");
         self.enable_pwms()
     }
-    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
-        debug!("Disabling SN754410.");
-        self.disable_pwms()
-    }
-}
-
-impl Freezable for SN754410 {
-    fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        Encode::encode(&self.current_power, encoder)
-    }
-
-    fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
-        self.current_power = Decode::decode(decoder)?;
-        Ok(())
-    }
-}
-
-impl<'cl> CuSinkTask<'cl> for SN754410 {
-    type Input = input_msg!('cl, MotorPayload);
-
     fn process(&mut self, clock: &RobotClock, input: Self::Input) -> CuResult<()> {
         if let Some(power) = input.payload() {
             if self.dryrun {
@@ -224,27 +216,30 @@ impl<'cl> CuSinkTask<'cl> for SN754410 {
         }
         Ok(())
     }
+
+    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        debug!("Disabling SN754410.");
+        self.disable_pwms()
+    }
 }
 
 pub mod test_support {
     use crate::MotorPayload;
     use cu29::clock::RobotClock;
     use cu29::config::ComponentConfig;
-    use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
+    use cu29::cutask::{CuMsg, CuSrcTask, Freezable};
     use cu29::{output_msg, CuResult};
 
     pub struct SN754410TestSrc;
 
     impl Freezable for SN754410TestSrc {}
 
-    impl CuTaskLifecycle for SN754410TestSrc {
+    impl<'cl> CuSrcTask<'cl> for SN754410TestSrc {
+        type Output = output_msg!('cl, MotorPayload);
+
         fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
             Ok(Self {})
         }
-    }
-
-    impl<'cl> CuSrcTask<'cl> for SN754410TestSrc {
-        type Output = output_msg!('cl, MotorPayload);
 
         fn process(&mut self, _clock: &RobotClock, _new_msg: Self::Output) -> CuResult<()> {
             todo!()

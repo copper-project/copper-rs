@@ -985,7 +985,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         use cu29::curuntime::CuRuntime as _CuRuntime;
         use cu29::CuResult as _CuResult;
         use cu29::CuError as _CuError;
-        use cu29::cutask::CuTaskLifecycle as _CuTaskLifecycle; // Needed for the instantiation of tasks
         use cu29::cutask::CuSrcTask as _CuSrcTask;
         use cu29::cutask::CuSinkTask as _CuSinkTask;
         use cu29::cutask::CuTask as _CuTask;

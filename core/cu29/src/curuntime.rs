@@ -369,7 +369,7 @@ mod tests {
     use super::*;
     use crate::clock::RobotClock;
     use crate::config::Node;
-    use crate::cutask::{CuSinkTask, CuTaskLifecycle};
+    use crate::cutask::CuSinkTask;
     use crate::cutask::{CuSrcTask, Freezable};
     use crate::monitoring::NoMonitor;
     use bincode::Encode;
@@ -378,17 +378,15 @@ mod tests {
 
     impl Freezable for TestSource {}
 
-    impl CuTaskLifecycle for TestSource {
+    impl CuSrcTask<'_> for TestSource {
+        type Output = ();
         fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
         where
             Self: Sized,
         {
             Ok(Self {})
         }
-    }
 
-    impl CuSrcTask<'_> for TestSource {
-        type Output = ();
         fn process(&mut self, _clock: &RobotClock, _empty_msg: Self::Output) -> CuResult<()> {
             Ok(())
         }
@@ -398,17 +396,15 @@ mod tests {
 
     impl Freezable for TestSink {}
 
-    impl CuTaskLifecycle for TestSink {
+    impl CuSinkTask<'_> for TestSink {
+        type Input = ();
+
         fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
         where
             Self: Sized,
         {
             Ok(Self {})
         }
-    }
-
-    impl CuSinkTask<'_> for TestSink {
-        type Input = ();
 
         fn process(&mut self, _clock: &RobotClock, _input: Self::Input) -> CuResult<()> {
             Ok(())

@@ -1,6 +1,6 @@
 use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
-use cu29::cutask::{CuSinkTask, CuTask, CuTaskLifecycle};
+use cu29::cutask::{CuSinkTask, CuTask};
 use cu29::cutask::{CuSrcTask, Freezable};
 
 use cu29::cutask::CuMsg;
@@ -14,14 +14,11 @@ pub struct IntegerSrcTask {
 
 impl Freezable for IntegerSrcTask {}
 
-impl CuTaskLifecycle for IntegerSrcTask {
+impl<'cl> CuSrcTask<'cl> for IntegerSrcTask {
+    type Output = output_msg!('cl, i32);
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
         Ok(Self { value: 42 })
     }
-}
-
-impl<'cl> CuSrcTask<'cl> for IntegerSrcTask {
-    type Output = output_msg!('cl, i32);
 
     fn process(&mut self, _clock: &RobotClock, output: Self::Output) -> CuResult<()> {
         self.value += 1;
@@ -37,14 +34,11 @@ pub struct FloatSrcTask {
 
 impl Freezable for FloatSrcTask {}
 
-impl CuTaskLifecycle for FloatSrcTask {
+impl<'cl> CuSrcTask<'cl> for FloatSrcTask {
+    type Output = output_msg!('cl, f32);
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
         Ok(Self { value: 24.0 })
     }
-}
-
-impl<'cl> CuSrcTask<'cl> for FloatSrcTask {
-    type Output = output_msg!('cl, f32);
 
     fn process(&mut self, _clock: &RobotClock, output: Self::Output) -> CuResult<()> {
         self.value += 1.0;
@@ -58,15 +52,13 @@ pub struct MergingSinkTask {}
 
 impl Freezable for MergingSinkTask {}
 
-impl CuTaskLifecycle for MergingSinkTask {
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
-        Ok(Self {})
-    }
-}
-
 impl<'cl> CuSinkTask<'cl> for MergingSinkTask {
     /// The input is an i32 from the IntegerSrcTask and a f32 from the FloatSrcTask.
     type Input = input_msg!('cl, i32, f32);
+
+    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+        Ok(Self {})
+    }
 
     fn process(&mut self, _clock: &RobotClock, input: Self::Input) -> CuResult<()> {
         let (i, f) = input;
@@ -84,18 +76,16 @@ pub struct MergerTask {}
 
 impl Freezable for MergerTask {}
 
-impl CuTaskLifecycle for MergerTask {
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
-        Ok(Self {})
-    }
-}
-
 impl<'cl> CuTask<'cl> for MergerTask {
     /// The input is an i32 from the IntegerSrcTask and a f32 from the FloatSrcTask.
     type Input = input_msg!('cl, i32, f32);
 
     /// The output is a tuple of i32 and f32.
     type Output = output_msg!('cl, (i32, f32));
+
+    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+        Ok(Self {})
+    }
 
     fn process(
         &mut self,
@@ -116,14 +106,12 @@ pub struct MergedSinkTask {}
 
 impl Freezable for MergedSinkTask {}
 
-impl CuTaskLifecycle for MergedSinkTask {
+impl<'cl> CuSinkTask<'cl> for MergedSinkTask {
+    type Input = input_msg!('cl, (i32, f32));
+
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
         Ok(Self {})
     }
-}
-
-impl<'cl> CuSinkTask<'cl> for MergedSinkTask {
-    type Input = input_msg!('cl, (i32, f32));
 
     fn process(&mut self, _clock: &RobotClock, input: Self::Input) -> CuResult<()> {
         println!("SinkTask2 received: {:?}", input.payload().unwrap());

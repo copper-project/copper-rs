@@ -4,7 +4,7 @@ use crate::parser::{generate_default_elevation_calibration, RefTime};
 use chrono::Utc;
 use cu29::config::ComponentConfig;
 use cu29::cutask::CuMsg;
-use cu29::cutask::{CuSrcTask, CuTaskLifecycle, Freezable};
+use cu29::cutask::{CuSrcTask, Freezable};
 use cu29::{output_msg, CuError, CuResult};
 use cu29_clock::{CuDuration, CuTime, CuTimeRange, RobotClock, Tov};
 use cu_sensor_payloads::{PointCloud, PointCloudSoa};
@@ -43,7 +43,28 @@ impl Xt32 {
     }
 }
 
-impl CuTaskLifecycle for Xt32 {
+impl Freezable for Xt32 {}
+
+const MAX_POINTS: usize = 32 * 10;
+
+type LidarCuMsgPayload = PointCloudSoa<MAX_POINTS>;
+
+// In each round of firing, the firing sequence is from Channel 1 to Channel 32.
+// Assuming that the start time of Block 6 is t6, the laser firing time of Channel i is
+// t6 + [1.512µs * (i-1) + 0.28µs ], i∈{1, 2, ..., 32}.
+// in copper resolution as 1ns
+// t6 + 1512ns * (i-1) + 280ns
+fn channel_time(t6: CuTime, i: u64) -> CuTime {
+    if i == 0 {
+        CuDuration(t6.0 - 1512 + 280) // this is an underflow, so we just subtract the value
+    } else {
+        CuDuration(t6.0 + 1512 * (i - 1) + 280)
+    }
+}
+
+impl<'cl> CuSrcTask<'cl> for Xt32 {
+    type Output = output_msg!('cl, LidarCuMsgPayload);
+
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
@@ -71,30 +92,6 @@ impl CuTaskLifecycle for Xt32 {
         self.sync(&robot_clock);
         Ok(())
     }
-}
-
-impl Freezable for Xt32 {}
-
-const MAX_POINTS: usize = 32 * 10;
-
-type LidarCuMsgPayload = PointCloudSoa<MAX_POINTS>;
-
-// In each round of firing, the firing sequence is from Channel 1 to Channel 32.
-// Assuming that the start time of Block 6 is t6, the laser firing time of Channel i is
-// t6 + [1.512µs * (i-1) + 0.28µs ], i∈{1, 2, ..., 32}.
-// in copper resolution as 1ns
-// t6 + 1512ns * (i-1) + 280ns
-fn channel_time(t6: CuTime, i: u64) -> CuTime {
-    if i == 0 {
-        CuDuration(t6.0 - 1512 + 280) // this is an underflow, so we just subtract the value
-    } else {
-        CuDuration(t6.0 + 1512 * (i - 1) + 280)
-    }
-}
-
-impl<'cl> CuSrcTask<'cl> for Xt32 {
-    type Output = output_msg!('cl, LidarCuMsgPayload);
-
     fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
         let payload = new_msg.payload_mut().insert(LidarCuMsgPayload::default());
         let mut buf = [0u8; 1500];

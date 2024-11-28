@@ -1,6 +1,6 @@
 use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
-use cu29::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle, Freezable};
+use cu29::cutask::{CuMsg, CuSinkTask, Freezable};
 use cu29::{input_msg, CuResult};
 use cu29_derive::copper_runtime;
 use cu29_helpers::basic_copper_setup;
@@ -15,17 +15,14 @@ pub struct ADS78883TestSink {}
 
 impl Freezable for ADS78883TestSink {}
 
-impl CuTaskLifecycle for ADS78883TestSink {
+impl<'cl> CuSinkTask<'cl> for ADS78883TestSink {
+    type Input = input_msg!('cl, ADSReadingPayload);
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {
         Ok(Self {})
     }
-}
-
-impl<'cl> CuSinkTask<'cl> for ADS78883TestSink {
-    type Input = input_msg!('cl, ADSReadingPayload);
 
     fn process(&mut self, _clock: &RobotClock, new_msg: Self::Input) -> CuResult<()> {
         debug!("Received: {}", &new_msg.payload());

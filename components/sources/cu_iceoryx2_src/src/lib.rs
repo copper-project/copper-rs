@@ -1,7 +1,7 @@
 use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
+use cu29::cutask::Freezable;
 use cu29::cutask::{CuMsg, CuMsgPayload, CuSrcTask};
-use cu29::cutask::{CuTaskLifecycle, Freezable};
 use cu29::output_msg;
 use cu29_log_derive::debug;
 use cu29_traits::{CuError, CuResult};
@@ -24,10 +24,12 @@ where
 
 impl<P> Freezable for IceoryxSrc<P> where P: CuMsgPayload {}
 
-impl<P> CuTaskLifecycle for IceoryxSrc<P>
+impl<'cl, P> CuSrcTask<'cl> for IceoryxSrc<P>
 where
-    P: CuMsgPayload,
+    P: CuMsgPayload + 'cl,
 {
+    type Output = output_msg!('cl, P);
+
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
@@ -72,19 +74,6 @@ where
         Ok(())
     }
 
-    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
-        self.service = None;
-        self.subscriber = None;
-        Ok(())
-    }
-}
-
-impl<'cl, P> CuSrcTask<'cl> for IceoryxSrc<P>
-where
-    P: CuMsgPayload + 'cl,
-{
-    type Output = output_msg!('cl, P);
-
     fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
         let sub = self
             .subscriber
@@ -107,6 +96,11 @@ where
             debug!("No message received");
         }
 
+        Ok(())
+    }
+    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        self.service = None;
+        self.subscriber = None;
         Ok(())
     }
 }

@@ -10,25 +10,23 @@ use std::path::PathBuf;
 pub mod tasks {
     use cu29::clock::RobotClock;
     use cu29::config::ComponentConfig;
-    use cu29::cutask::{CuMsg, CuSinkTask, CuSrcTask, CuTask, CuTaskLifecycle, Freezable};
+    use cu29::cutask::{CuMsg, CuSinkTask, CuSrcTask, CuTask, Freezable};
     use cu29::{input_msg, output_msg};
     use cu29_traits::CuResult;
 
     pub struct ExampleSrc {}
 
-    impl CuTaskLifecycle for ExampleSrc {
+    impl Freezable for ExampleSrc {}
+
+    impl<'cl> CuSrcTask<'cl> for ExampleSrc {
+        type Output = output_msg!('cl, i32);
+
         fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
         where
             Self: Sized,
         {
             Ok(Self {})
         }
-    }
-
-    impl Freezable for ExampleSrc {}
-
-    impl<'cl> CuSrcTask<'cl> for ExampleSrc {
-        type Output = output_msg!('cl, i32);
 
         fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
             new_msg.set_payload(42);
@@ -38,20 +36,18 @@ pub mod tasks {
 
     pub struct ExampleTask {}
 
-    impl CuTaskLifecycle for ExampleTask {
+    impl Freezable for ExampleTask {}
+
+    impl<'cl> CuTask<'cl> for ExampleTask {
+        type Input = input_msg!('cl, i32);
+        type Output = output_msg!('cl, i32);
+
         fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
         where
             Self: Sized,
         {
             Ok(Self {})
         }
-    }
-
-    impl Freezable for ExampleTask {}
-
-    impl<'cl> CuTask<'cl> for ExampleTask {
-        type Input = input_msg!('cl, i32);
-        type Output = output_msg!('cl, i32);
 
         fn process(
             &mut self,
@@ -66,19 +62,17 @@ pub mod tasks {
 
     pub struct ExampleSink {}
 
-    impl CuTaskLifecycle for ExampleSink {
+    impl Freezable for ExampleSink {}
+
+    impl<'cl> CuSinkTask<'cl> for ExampleSink {
+        type Input = input_msg!('cl, i32);
+
         fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
         where
             Self: Sized,
         {
             Ok(Self {})
         }
-    }
-
-    impl Freezable for ExampleSink {}
-
-    impl<'cl> CuSinkTask<'cl> for ExampleSink {
-        type Input = input_msg!('cl, i32);
 
         fn process(&mut self, _clock: &RobotClock, _input: Self::Input) -> CuResult<()> {
             Ok(())

@@ -109,9 +109,7 @@
 
 use crate::config::ComponentConfig;
 
-use crate::cutask::{
-    CuMsg, CuMsgPack, CuMsgPayload, CuSinkTask, CuSrcTask, CuTaskLifecycle, Freezable,
-};
+use crate::cutask::{CuMsg, CuMsgPack, CuMsgPayload, CuSinkTask, CuSrcTask, Freezable};
 use crate::{input_msg, output_msg};
 use cu29_clock::RobotClock;
 use cu29_traits::CuResult;
@@ -163,19 +161,17 @@ pub struct CuSimSrcTask<T> {
     boo: PhantomData<T>,
 }
 
-impl<T> CuTaskLifecycle for CuSimSrcTask<T> {
+impl<T> Freezable for CuSimSrcTask<T> {}
+
+impl<'cl, T: CuMsgPayload + 'cl> CuSrcTask<'cl> for CuSimSrcTask<T> {
+    type Output = output_msg!('cl, T);
+
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {
         Ok(Self { boo: PhantomData })
     }
-}
-
-impl<T> Freezable for CuSimSrcTask<T> {}
-
-impl<'cl, T: CuMsgPayload + 'cl> CuSrcTask<'cl> for CuSimSrcTask<T> {
-    type Output = output_msg!('cl, T);
 
     fn process(&mut self, _clock: &RobotClock, _new_msg: Self::Output) -> CuResult<()> {
         unimplemented!("A placeholder for sim was called for a source, you need answer SimOverride to ExecutedBySim for the Process step.")
@@ -188,18 +184,17 @@ pub struct CuSimSinkTask<T> {
     boo: PhantomData<T>,
 }
 
-impl<T> CuTaskLifecycle for CuSimSinkTask<T> {
+impl<'cl, T: CuMsgPayload + 'cl> Freezable for CuSimSinkTask<T> {}
+
+impl<'cl, T: CuMsgPayload + 'cl> CuSinkTask<'cl> for CuSimSinkTask<T> {
+    type Input = input_msg!('cl, T);
+
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {
         Ok(Self { boo: PhantomData })
     }
-}
-impl<T> Freezable for CuSimSinkTask<T> {}
-
-impl<'cl, T: CuMsgPayload + 'cl> CuSinkTask<'cl> for CuSimSinkTask<T> {
-    type Input = input_msg!('cl, T);
 
     fn process(&mut self, _clock: &RobotClock, _input: Self::Input) -> CuResult<()> {
         unimplemented!("A placeholder for sim was called for a sink, you need answer SimOverride to ExecutedBySim for the Process step.")

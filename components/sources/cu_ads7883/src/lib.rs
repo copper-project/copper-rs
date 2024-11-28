@@ -4,7 +4,7 @@ mod mock;
 use bincode::{Decode, Encode};
 use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
-use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
+use cu29::cutask::{CuMsg, CuSrcTask, Freezable};
 use cu29::{output_msg, CuError, CuResult};
 use cu29_log_derive::debug;
 use serde::{Deserialize, Serialize};
@@ -64,7 +64,38 @@ impl From<&ADCReadingPayload<u16>> for f32 {
     }
 }
 
-impl CuTaskLifecycle for ADS7883 {
+impl Freezable for ADS7883 {} // This device is stateless.
+
+/// Reads one sample from the ADC.
+/// The value is a 12-bit number. i.e. 0-4095
+/// 0    -> 0v
+/// 4095 -> VDD
+#[inline]
+#[cfg(hardware)]
+fn read_adc(spi: &mut Spidev) -> std::io::Result<u16> {
+    let mut rx_buf = [0u8; 2];
+
+    let mut transfer = SpidevTransfer::read(&mut rx_buf);
+    spi.transfer(&mut transfer)?;
+
+    // There are 2 bits of padding in the 12-bit ADC value
+    // from the datasheet:
+    //
+    // "The device outputs data while the
+    // conversion is in progress. The data word contains two leading zeros, followed by 12-bit data in MSB first format
+    // and padded by two lagging zeros."
+    //
+    let adc_value = ((rx_buf[0] as u16) << 8 | (rx_buf[1] as u16)) >> 2;
+
+    Ok(adc_value)
+}
+
+#[cfg(mock)]
+use mock::read_adc;
+
+impl<'cl> CuSrcTask<'cl> for ADS7883 {
+    type Output = output_msg!('cl, ADSReadingPayload);
+
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
@@ -113,40 +144,6 @@ impl CuTaskLifecycle for ADS7883 {
         self.integrated_value *= INTEGRATION_FACTOR;
         Ok(())
     }
-}
-
-impl Freezable for ADS7883 {} // This device is stateless.
-
-/// Reads one sample from the ADC.
-/// The value is a 12-bit number. i.e. 0-4095
-/// 0    -> 0v
-/// 4095 -> VDD
-#[inline]
-#[cfg(hardware)]
-fn read_adc(spi: &mut Spidev) -> std::io::Result<u16> {
-    let mut rx_buf = [0u8; 2];
-
-    let mut transfer = SpidevTransfer::read(&mut rx_buf);
-    spi.transfer(&mut transfer)?;
-
-    // There are 2 bits of padding in the 12-bit ADC value
-    // from the datasheet:
-    //
-    // "The device outputs data while the
-    // conversion is in progress. The data word contains two leading zeros, followed by 12-bit data in MSB first format
-    // and padded by two lagging zeros."
-    //
-    let adc_value = ((rx_buf[0] as u16) << 8 | (rx_buf[1] as u16)) >> 2;
-
-    Ok(adc_value)
-}
-
-#[cfg(mock)]
-use mock::read_adc;
-
-impl<'cl> CuSrcTask<'cl> for ADS7883 {
-    type Output = output_msg!('cl, ADSReadingPayload);
-
     fn process(&mut self, clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
         let bf = clock.now();
         let analog_value = read_adc(&mut self.spi).map_err(|e| {
@@ -182,14 +179,12 @@ pub mod test_support {
 
     impl Freezable for ADS78883TestSink {}
 
-    impl CuTaskLifecycle for ADS78883TestSink {
+    impl<'cl> CuSinkTask<'cl> for ADS78883TestSink {
+        type Input = input_msg!('cl, ADSReadingPayload);
+
         fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
             Ok(Self {})
         }
-    }
-
-    impl<'cl> CuSinkTask<'cl> for ADS78883TestSink {
-        type Input = input_msg!('cl, ADSReadingPayload);
 
         fn process(&mut self, _clock: &RobotClock, new_msg: Self::Input) -> CuResult<()> {
             debug!("Received: {}", &new_msg.payload());
