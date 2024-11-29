@@ -45,7 +45,6 @@ use cu_aligner::define_task;
 use cu29::input_msg;
 use cu29::output_msg;
 use cu29::cutask::Freezable;
-use cu29::cutask::CuTaskLifecycle;
 use cu29::config::ComponentConfig;
 use cu29::CuResult;
 use cu29::cutask::CuTask;

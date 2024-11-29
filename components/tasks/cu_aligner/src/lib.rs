@@ -23,7 +23,12 @@ macro_rules! define_task {
 
         impl Freezable for $name {}
 
-        impl CuTaskLifecycle for $name {
+        impl<'cl> CuTask<'cl> for $name {
+            type Input = input_msg!('cl, $($p),*);
+            type Output = output_msg!('cl, ($(
+                cu29::payload::CuArray<$p, { $mos }>
+            ),*));
+
             fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
             where
                 Self: Sized,
@@ -43,13 +48,6 @@ macro_rules! define_task {
                 self.aligner.purge(clock.now());
                 Ok(())
             }
-        }
-
-        impl<'cl> CuTask<'cl> for $name {
-            type Input = input_msg!('cl, $($p),*);
-            type Output = output_msg!('cl, ($(
-                cu29::payload::CuArray<$p, { $mos }>
-            ),*));
 
             fn process(
                 &mut self,
@@ -90,7 +88,6 @@ mod tests {
     use cu29::config::ComponentConfig;
     use cu29::cutask::CuMsg;
     use cu29::cutask::CuTask;
-    use cu29::cutask::CuTaskLifecycle;
     use cu29::cutask::Freezable;
     use cu29::input_msg;
     use cu29::output_msg;
