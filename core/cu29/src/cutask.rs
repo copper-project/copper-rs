@@ -196,12 +196,13 @@ pub trait Freezable {
 pub trait CuSrcTask<'cl>: Freezable {
     type Output: CuMsgPack<'cl>;
 
+    /// Here you need to initialize everything your task will need for the duration of its lifetime.
+    /// The config allows you to access the configuration of the task.
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized;
 
-    /// Start is called once for a long period of time.
-    /// Here you need to initialize everything your task will need for the duration of its lifetime.
+    /// Start is called between the creation of the task and the first call to pre/process.
     fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
         Ok(())
     }
@@ -220,12 +221,12 @@ pub trait CuSrcTask<'cl>: Freezable {
 
     /// This is a method called by the runtime after "process". It is best effort a chance for
     /// the task to update some state after process is out of the way.
-    /// It can be use for example to maintain statistics etc. that are not time critical for the robot.
+    /// It can be use for example to maintain statistics etc. that are not time-critical for the robot.
     fn postprocess(&mut self, _clock: &RobotClock) -> CuResult<()> {
         Ok(())
     }
 
-    /// Call at the end of the lifecycle of the task.
+    /// Called to stop the task. It signals that the *process method won't be called until start is called again.
     fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
         Ok(())
     }
@@ -236,12 +237,13 @@ pub trait CuTask<'cl>: Freezable {
     type Input: CuMsgPack<'cl>;
     type Output: CuMsgPack<'cl>;
 
+    /// Here you need to initialize everything your task will need for the duration of its lifetime.
+    /// The config allows you to access the configuration of the task.
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized;
 
-    /// Start is called once for a long period of time.
-    /// Here you need to initialize everything your task will need for the duration of its lifetime.
+    /// Start is called between the creation of the task and the first call to pre/process.
     fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
         Ok(())
     }
@@ -265,12 +267,12 @@ pub trait CuTask<'cl>: Freezable {
 
     /// This is a method called by the runtime after "process". It is best effort a chance for
     /// the task to update some state after process is out of the way.
-    /// It can be use for example to maintain statistics etc. that are not time critical for the robot.
+    /// It can be use for example to maintain statistics etc. that are not time-critical for the robot.
     fn postprocess(&mut self, _clock: &RobotClock) -> CuResult<()> {
         Ok(())
     }
 
-    /// Call at the end of the lifecycle of the task.
+    /// Called to stop the task. It signals that the *process method won't be called until start is called again.
     fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
         Ok(())
     }
@@ -280,12 +282,13 @@ pub trait CuTask<'cl>: Freezable {
 pub trait CuSinkTask<'cl>: Freezable {
     type Input: CuMsgPack<'cl>;
 
+    /// Here you need to initialize everything your task will need for the duration of its lifetime.
+    /// The config allows you to access the configuration of the task.
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized;
 
-    /// Start is called once for a long period of time.
-    /// Here you need to initialize everything your task will need for the duration of its lifetime.
+    /// Start is called between the creation of the task and the first call to pre/process.
     fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
         Ok(())
     }
@@ -304,12 +307,12 @@ pub trait CuSinkTask<'cl>: Freezable {
 
     /// This is a method called by the runtime after "process". It is best effort a chance for
     /// the task to update some state after process is out of the way.
-    /// It can be use for example to maintain statistics etc. that are not time critical for the robot.
+    /// It can be use for example to maintain statistics etc. that are not time-critical for the robot.
     fn postprocess(&mut self, _clock: &RobotClock) -> CuResult<()> {
         Ok(())
     }
 
-    /// Call at the end of the lifecycle of the task.
+    /// Called to stop the task. It signals that the *process method won't be called until start is called again.
     fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
         Ok(())
     }
