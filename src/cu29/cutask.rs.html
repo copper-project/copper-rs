@@ -317,7 +317,24 @@
 <a href="#316" id="316">316</a>
 <a href="#317" id="317">317</a>
 <a href="#318" id="318">318</a>
-<a href="#319" id="319">319</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module contains all the main definition of the traits you need to implement
+<a href="#319" id="319">319</a>
+<a href="#320" id="320">320</a>
+<a href="#321" id="321">321</a>
+<a href="#322" id="322">322</a>
+<a href="#323" id="323">323</a>
+<a href="#324" id="324">324</a>
+<a href="#325" id="325">325</a>
+<a href="#326" id="326">326</a>
+<a href="#327" id="327">327</a>
+<a href="#328" id="328">328</a>
+<a href="#329" id="329">329</a>
+<a href="#330" id="330">330</a>
+<a href="#331" id="331">331</a>
+<a href="#332" id="332">332</a>
+<a href="#333" id="333">333</a>
+<a href="#334" id="334">334</a>
+<a href="#335" id="335">335</a>
+<a href="#336" id="336">336</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module contains all the main definition of the traits you need to implement
 //! or interact with to create a Copper task.
 
 </span><span class="kw">use </span><span class="kw">crate</span>::config::ComponentConfig;
@@ -387,21 +404,22 @@
 // which is the maximum size for inline allocation (no heap)
 </span><span class="kw">const </span>COMPACT_STRING_CAPACITY: usize = size_of::&lt;String&gt;();
 
-<span class="attr">#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+<span class="attr">#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 </span><span class="kw">pub struct </span>CuCompactString(<span class="kw">pub </span>CompactString);
 
 <span class="kw">impl </span>Encode <span class="kw">for </span>CuCompactString {
     <span class="kw">fn </span>encode&lt;E: Encoder&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, encoder: <span class="kw-2">&amp;mut </span>E) -&gt; <span class="prelude-ty">Result</span>&lt;(), EncodeError&gt; {
-        Encode::encode(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0</span>.as_bytes(), encoder)<span class="question-mark">?</span>;
-        <span class="prelude-val">Ok</span>(())
+        <span class="kw">let </span>bytes = <span class="self">self</span>.<span class="number">0</span>.as_bytes();
+        bytes.encode(encoder)
     }
 }
 
 <span class="kw">impl </span>Decode <span class="kw">for </span>CuCompactString {
     <span class="kw">fn </span>decode&lt;D: Decoder&gt;(decoder: <span class="kw-2">&amp;mut </span>D) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, DecodeError&gt; {
-        <span class="kw">let </span>bytes: [u8; COMPACT_STRING_CAPACITY] = Decode::decode(decoder)<span class="question-mark">?</span>;
-        <span class="kw">let </span>cstr = CompactString::from_utf8(bytes).map_err(|e| DecodeError::Utf8 { inner: e })<span class="question-mark">?</span>;
-        <span class="prelude-val">Ok</span>(CuCompactString(cstr))
+        <span class="kw">let </span>bytes = &lt;Vec&lt;u8&gt; <span class="kw">as </span>Decode&gt;::decode(decoder)<span class="question-mark">?</span>; <span class="comment">// Decode into a byte buffer
+        </span><span class="kw">let </span>compact_string =
+            CompactString::from_utf8(bytes).map_err(|e| DecodeError::Utf8 { inner: e })<span class="question-mark">?</span>;
+        <span class="prelude-val">Ok</span>(CuCompactString(compact_string))
     }
 }
 
@@ -634,6 +652,22 @@
     <span class="doccomment">/// Called to stop the task. It signals that the *process method won't be called until start is called again.
     </span><span class="kw">fn </span>stop(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _clock: <span class="kw-2">&amp;</span>RobotClock) -&gt; CuResult&lt;()&gt; {
         <span class="prelude-val">Ok</span>(())
+    }
+}
+
+<span class="attr">#[cfg(test)]
+</span><span class="kw">mod </span>tests {
+    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+    <span class="kw">use </span>bincode::{config, decode_from_slice, encode_to_vec};
+
+    <span class="attr">#[test]
+    </span><span class="kw">fn </span>test_cucompactstr_encode_decode() {
+        <span class="kw">let </span>cstr = CuCompactString(CompactString::from(<span class="string">"hello"</span>));
+        <span class="kw">let </span>config = config::standard();
+        <span class="kw">let </span>encoded = encode_to_vec(<span class="kw-2">&amp;</span>cstr, config).expect(<span class="string">"Encoding failed"</span>);
+        <span class="kw">let </span>(decoded, <span class="kw">_</span>): (CuCompactString, usize) =
+            decode_from_slice(<span class="kw-2">&amp;</span>encoded, config).expect(<span class="string">"Decoding failed"</span>);
+        <span class="macro">assert_eq!</span>(cstr.<span class="number">0</span>, decoded.<span class="number">0</span>);
     }
 }
 </code></pre></div></section></main></body></html>
