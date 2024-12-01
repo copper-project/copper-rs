@@ -48,7 +48,7 @@ fn default_callback(step: SimStep) -> SimOverride {
 // a system callback from bevy to setup the copper part of the house.
 fn setup_copper(mut commands: Commands) {
     const LOG_SLAB_SIZE: Option<usize> = Some(1 * 1024 * 1024 * 1024);
-    let logger_path = "balance.copper";
+    let logger_path = "logs/balance.copper";
     // here we set up a mock clock so the simulation can take control of it.
     let (robot_clock, mock) = RobotClock::mock();
     let copper_ctx = basic_copper_setup(
