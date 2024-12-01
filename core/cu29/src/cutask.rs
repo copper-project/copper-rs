@@ -68,21 +68,22 @@ macro_rules! output_msg {
 // which is the maximum size for inline allocation (no heap)
 const COMPACT_STRING_CAPACITY: usize = size_of::<String>();
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CuCompactString(pub CompactString);
 
 impl Encode for CuCompactString {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        Encode::encode(&self.0.as_bytes(), encoder)?;
-        Ok(())
+        let bytes = self.0.as_bytes();
+        bytes.encode(encoder)
     }
 }
 
 impl Decode for CuCompactString {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let bytes: [u8; COMPACT_STRING_CAPACITY] = Decode::decode(decoder)?;
-        let cstr = CompactString::from_utf8(bytes).map_err(|e| DecodeError::Utf8 { inner: e })?;
-        Ok(CuCompactString(cstr))
+        let bytes = <Vec<u8> as Decode>::decode(decoder)?; // Decode into a byte buffer
+        let compact_string =
+            CompactString::from_utf8(bytes).map_err(|e| DecodeError::Utf8 { inner: e })?;
+        Ok(CuCompactString(compact_string))
     }
 }
 
@@ -315,5 +316,21 @@ pub trait CuSinkTask<'cl>: Freezable {
     /// Called to stop the task. It signals that the *process method won't be called until start is called again.
     fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bincode::{config, decode_from_slice, encode_to_vec};
+
+    #[test]
+    fn test_cucompactstr_encode_decode() {
+        let cstr = CuCompactString(CompactString::from("hello"));
+        let config = config::standard();
+        let encoded = encode_to_vec(&cstr, config).expect("Encoding failed");
+        let (decoded, _): (CuCompactString, usize) =
+            decode_from_slice(&encoded, config).expect("Decoding failed");
+        assert_eq!(cstr.0, decoded.0);
     }
 }
