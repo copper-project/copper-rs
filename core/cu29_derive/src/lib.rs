@@ -65,6 +65,7 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
             use bincode::error::DecodeError as _DecodeError;
             use cu29::copperlist::CopperList as _CopperList;
             use cu29::cutask::CuMsgMetadata as _CuMsgMetadata;
+            use cu29::cutask::CuMsg as _CuMsg;
             #support
         }
         use cumsgs::CuMsgs;
