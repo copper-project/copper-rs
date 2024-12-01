@@ -1,4 +1,4 @@
-use cu29::cutask::{CuSinkTask, CuTaskLifecycle};
+use cu29::cutask::CuSinkTask;
 use cu29_derive::copper_runtime;
 use cu29_helpers::basic_copper_setup;
 use cu29_log_derive::debug;

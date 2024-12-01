@@ -1,6 +1,6 @@
 use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
-use cu29::cutask::{CuMsg, CuTask, CuTaskLifecycle, Freezable};
+use cu29::cutask::{CuMsg, CuTask, Freezable};
 use cu29::{input_msg, output_msg, CuResult};
 use cu29_traits::CuError;
 use cu_ads7883_new::ADSReadingPayload;
@@ -13,20 +13,18 @@ pub type PosPID = GenericPIDTask<EncoderPayload>;
 
 pub struct PIDMerger {}
 
-impl CuTaskLifecycle for PIDMerger {
+impl Freezable for PIDMerger {}
+
+impl<'cl> CuTask<'cl> for PIDMerger {
+    type Input = input_msg!('cl, PIDControlOutputPayload, PIDControlOutputPayload);
+    type Output = output_msg!('cl, MotorPayload);
+
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {
         Ok(Self {})
     }
-}
-
-impl Freezable for PIDMerger {}
-
-impl<'cl> CuTask<'cl> for PIDMerger {
-    type Input = input_msg!('cl, PIDControlOutputPayload, PIDControlOutputPayload);
-    type Output = output_msg!('cl, MotorPayload);
 
     fn process(
         &mut self,

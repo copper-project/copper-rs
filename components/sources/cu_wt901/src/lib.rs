@@ -4,7 +4,7 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
-use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
+use cu29::cutask::{CuMsg, CuSrcTask, Freezable};
 use cu29::{output_msg, CuResult};
 #[cfg(hardware)]
 use embedded_hal::i2c::I2c;
@@ -216,7 +216,9 @@ impl Freezable for WT901 {
     // WT901 has no internal state, we can leave the default implementation.
 }
 
-impl CuTaskLifecycle for WT901 {
+impl<'cl> CuSrcTask<'cl> for WT901 {
+    type Output = output_msg!('cl, PositionalReadingsPayload);
+
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
@@ -230,10 +232,6 @@ impl CuTaskLifecycle for WT901 {
             i2c: Box::new(i2cdev),
         })
     }
-}
-
-impl<'cl> CuSrcTask<'cl> for WT901 {
-    type Output = output_msg!('cl, PositionalReadingsPayload);
 
     fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
         let mut pos = PositionalReadingsPayload::default();

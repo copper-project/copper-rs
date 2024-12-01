@@ -183,23 +183,26 @@ pub trait Freezable {
 
     /// This method is called by the framework when it wants to restore the task to a specific state.
     /// Here it is similar to Decode but the framework will give you a new instance of the task (the new method will be called)
-    ///
     #[allow(unused_variables)]
     fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
         Ok(())
     }
 }
 
-/// The CuTaskLifecycle trait is the base trait for all tasks in Copper.
-/// It defines the lifecycle of a task.
-/// It provides a default empty implementation as all those execution steps are optional.
-pub trait CuTaskLifecycle: Freezable {
-    fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
+/// A Src Task is a task that only produces messages. For example drivers for sensors are Src Tasks.
+/// They are in push mode from the runtime.
+/// To set the frequency of the pulls and align them to any hw, see the runtime configuration.
+/// Note: A source has the priviledge to have a clock passed to it vs a frozen clock.
+pub trait CuSrcTask<'cl>: Freezable {
+    type Output: CuMsgPack<'cl>;
+
+    /// Here you need to initialize everything your task will need for the duration of its lifetime.
+    /// The config allows you to access the configuration of the task.
+    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized;
 
-    /// Start is called once for a long period of time.
-    /// Here you need to initialize everything your task will need for the duration of its lifetime.
+    /// Start is called between the creation of the task and the first call to pre/process.
     fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
         Ok(())
     }
@@ -211,53 +214,106 @@ pub trait CuTaskLifecycle: Freezable {
         Ok(())
     }
 
+    /// Process is the most critical execution of the task.
+    /// The goal will be to produce the output message as soon as possible.
+    /// Use preprocess to prepare the task to make this method as short as possible.
+    fn process(&mut self, clock: &RobotClock, new_msg: Self::Output) -> CuResult<()>;
+
     /// This is a method called by the runtime after "process". It is best effort a chance for
     /// the task to update some state after process is out of the way.
-    /// It can be use for example to maintain statistics etc. that are not time critical for the robot.
+    /// It can be use for example to maintain statistics etc. that are not time-critical for the robot.
     fn postprocess(&mut self, _clock: &RobotClock) -> CuResult<()> {
         Ok(())
     }
 
-    /// Call at the end of the lifecycle of the task.
+    /// Called to stop the task. It signals that the *process method won't be called until start is called again.
     fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
         Ok(())
     }
 }
 
-/// A Src Task is a task that only produces messages. For example drivers for sensors are Src Tasks.
-/// They are in push mode from the runtime.
-/// To set the frequency of the pulls and align them to any hw, see the runtime configuration.
-pub trait CuSrcTask<'cl>: CuTaskLifecycle {
-    type Output: CuMsgPack<'cl>;
-
-    /// Process is the most critical execution of the task.
-    /// The goal will be to produce the output message as soon as possible.
-    /// Use preprocess to prepare the task to make this method as short as possible.
-    fn process(&mut self, clock: &RobotClock, new_msg: Self::Output) -> CuResult<()>;
-}
-
 /// This is the most generic Task of copper. It is a "transform" task deriving an output from an input.
-pub trait CuTask<'cl>: CuTaskLifecycle {
+pub trait CuTask<'cl>: Freezable {
     type Input: CuMsgPack<'cl>;
     type Output: CuMsgPack<'cl>;
+
+    /// Here you need to initialize everything your task will need for the duration of its lifetime.
+    /// The config allows you to access the configuration of the task.
+    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+    where
+        Self: Sized;
+
+    /// Start is called between the creation of the task and the first call to pre/process.
+    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        Ok(())
+    }
+
+    /// This is a method called by the runtime before "process". This is a kind of best effort,
+    /// as soon as possible call to give a chance for the task to do some work before to prepare
+    /// to make "process" as short as possible.
+    fn preprocess(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        Ok(())
+    }
 
     /// Process is the most critical execution of the task.
     /// The goal will be to produce the output message as soon as possible.
     /// Use preprocess to prepare the task to make this method as short as possible.
     fn process(
         &mut self,
-        clock: &RobotClock,
+        _clock: &RobotClock,
         input: Self::Input,
         output: Self::Output,
     ) -> CuResult<()>;
+
+    /// This is a method called by the runtime after "process". It is best effort a chance for
+    /// the task to update some state after process is out of the way.
+    /// It can be use for example to maintain statistics etc. that are not time-critical for the robot.
+    fn postprocess(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        Ok(())
+    }
+
+    /// Called to stop the task. It signals that the *process method won't be called until start is called again.
+    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        Ok(())
+    }
 }
 
 /// A Sink Task is a task that only consumes messages. For example drivers for actuators are Sink Tasks.
-pub trait CuSinkTask<'cl>: CuTaskLifecycle {
+pub trait CuSinkTask<'cl>: Freezable {
     type Input: CuMsgPack<'cl>;
+
+    /// Here you need to initialize everything your task will need for the duration of its lifetime.
+    /// The config allows you to access the configuration of the task.
+    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+    where
+        Self: Sized;
+
+    /// Start is called between the creation of the task and the first call to pre/process.
+    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        Ok(())
+    }
+
+    /// This is a method called by the runtime before "process". This is a kind of best effort,
+    /// as soon as possible call to give a chance for the task to do some work before to prepare
+    /// to make "process" as short as possible.
+    fn preprocess(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        Ok(())
+    }
 
     /// Process is the most critical execution of the task.
     /// The goal will be to produce the output message as soon as possible.
     /// Use preprocess to prepare the task to make this method as short as possible.
-    fn process(&mut self, clock: &RobotClock, input: Self::Input) -> CuResult<()>;
+    fn process(&mut self, _clock: &RobotClock, input: Self::Input) -> CuResult<()>;
+
+    /// This is a method called by the runtime after "process". It is best effort a chance for
+    /// the task to update some state after process is out of the way.
+    /// It can be use for example to maintain statistics etc. that are not time-critical for the robot.
+    fn postprocess(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        Ok(())
+    }
+
+    /// Called to stop the task. It signals that the *process method won't be called until start is called again.
+    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        Ok(())
+    }
 }

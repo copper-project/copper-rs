@@ -1,7 +1,7 @@
 use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuMsgPayload};
-use cu29::cutask::{CuSinkTask, CuTaskLifecycle, Freezable};
+use cu29::cutask::{CuSinkTask, Freezable};
 use cu29::input_msg;
 use cu29_log_derive::debug;
 use cu29_traits::{CuError, CuResult};
@@ -25,10 +25,12 @@ where
 
 impl<P> Freezable for IceoryxSink<P> where P: CuMsgPayload {}
 
-impl<P> CuTaskLifecycle for IceoryxSink<P>
+impl<'cl, P> CuSinkTask<'cl> for IceoryxSink<P>
 where
-    P: CuMsgPayload,
+    P: CuMsgPayload + 'cl,
 {
+    type Input = input_msg!('cl, P);
+
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
@@ -72,18 +74,6 @@ where
         Ok(())
     }
 
-    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
-        self.publisher = None;
-        Ok(())
-    }
-}
-
-impl<'cl, P> CuSinkTask<'cl> for IceoryxSink<P>
-where
-    P: CuMsgPayload + 'cl,
-{
-    type Input = input_msg!('cl, P);
-
     fn process(&mut self, _clock: &RobotClock, input: Self::Input) -> CuResult<()> {
         let publisher = self
             .publisher
@@ -99,6 +89,11 @@ where
         dst.send()
             .map_err(|e| CuError::new_with_cause("Failed to send message.", e))?;
 
+        Ok(())
+    }
+
+    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        self.publisher = None;
         Ok(())
     }
 }

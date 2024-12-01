@@ -3,7 +3,7 @@ use velodyne_lidar::{Config, Config16};
 
 use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
-use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
+use cu29::cutask::{CuMsg, CuSrcTask, Freezable};
 use cu29::{output_msg, CuResult};
 use cu_sensor_payloads::{PointCloud, PointCloudSoa};
 use std::net::UdpSocket;
@@ -21,7 +21,9 @@ pub struct Vlp16 {
 
 impl Freezable for Vlp16 {}
 
-impl CuTaskLifecycle for Vlp16 {
+impl<'cl> CuSrcTask<'cl> for Vlp16 {
+    type Output = output_msg!('cl, PointCloudSoa<10000>);
+
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
@@ -57,15 +59,6 @@ impl CuTaskLifecycle for Vlp16 {
         Ok(())
     }
 
-    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
-        self.socket = None;
-        Ok(())
-    }
-}
-
-impl<'cl> CuSrcTask<'cl> for Vlp16 {
-    type Output = output_msg!('cl, PointCloudSoa<10000>);
-
     fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
         let socket = self.socket.as_ref().unwrap();
         let mut packet = [0u8; 1206];
@@ -93,6 +86,10 @@ impl<'cl> CuSrcTask<'cl> for Vlp16 {
             });
         });
         new_msg.set_payload(output);
+        Ok(())
+    }
+    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        self.socket = None;
         Ok(())
     }
 }

@@ -5,7 +5,7 @@ use bincode::{Decode, Encode};
 use cu29::clock::{CuDuration, CuTime, RobotClock, Tov};
 use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuMsgPayload};
-use cu29::cutask::{CuTask, CuTaskLifecycle, Freezable};
+use cu29::cutask::{CuTask, Freezable};
 use cu29::{input_msg, output_msg, CuResult};
 use cu29_log_derive::debug;
 use cu29_traits::CuError;
@@ -139,10 +139,14 @@ where
     cutoff: f32,
 }
 
-impl<I> CuTaskLifecycle for GenericPIDTask<I>
+impl<'cl, I> CuTask<'cl> for GenericPIDTask<I>
 where
     f32: for<'a> From<&'a I>,
+    I: CuMsgPayload + 'cl,
 {
+    type Input = input_msg!('cl, I);
+    type Output = output_msg!('cl, PIDControlOutputPayload);
+
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
@@ -206,21 +210,6 @@ where
         }
     }
 
-    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
-        self.pid.reset();
-        self.first_run = true;
-        Ok(())
-    }
-}
-
-impl<'cl, I> CuTask<'cl> for GenericPIDTask<I>
-where
-    f32: for<'a> From<&'a I>,
-    I: CuMsgPayload + 'cl,
-{
-    type Input = input_msg!('cl, I);
-    type Output = output_msg!('cl, PIDControlOutputPayload);
-
     fn process(
         &mut self,
         _clock: &RobotClock,
@@ -267,6 +256,12 @@ where
             }
             None => output.clear_payload(),
         };
+        Ok(())
+    }
+
+    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        self.pid.reset();
+        self.first_run = true;
         Ok(())
     }
 }

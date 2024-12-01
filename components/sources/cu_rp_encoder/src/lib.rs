@@ -4,7 +4,7 @@ mod mock;
 use bincode::{Decode, Encode};
 use cu29::clock::{CuDuration, RobotClock};
 use cu29::config::ComponentConfig;
-use cu29::cutask::{CuMsg, CuSrcTask, CuTaskLifecycle, Freezable};
+use cu29::cutask::{CuMsg, CuSrcTask, Freezable};
 use cu29::output_msg;
 use cu29::CuResult;
 use serde::{Deserialize, Serialize};
@@ -57,7 +57,9 @@ impl Freezable for Encoder {
     // pin is derived from the config, so we keep the default implementation.
 }
 
-impl CuTaskLifecycle for Encoder {
+impl<'cl> CuSrcTask<'cl> for Encoder {
+    type Output = output_msg!('cl, EncoderPayload);
+
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
@@ -103,23 +105,18 @@ impl CuTaskLifecycle for Encoder {
         Ok(())
     }
 
-    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
-        #[cfg(hardware)]
-        self.clk_pin
-            .clear_async_interrupt()
-            .map_err(|e| CuError::new_with_cause("Failed to reset async interrupt", e))?;
-        Ok(())
-    }
-}
-
-impl<'cl> CuSrcTask<'cl> for Encoder {
-    type Output = output_msg!('cl, EncoderPayload);
-
     fn process(&mut self, clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
         let idata = self.data_from_interrupts.lock().unwrap();
         new_msg.metadata.tov = Some(clock.now()).into();
         new_msg.metadata.set_status(idata.ticks);
         new_msg.set_payload(EncoderPayload { ticks: idata.ticks });
+        Ok(())
+    }
+    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        #[cfg(hardware)]
+        self.clk_pin
+            .clear_async_interrupt()
+            .map_err(|e| CuError::new_with_cause("Failed to reset async interrupt", e))?;
         Ok(())
     }
 }

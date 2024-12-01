@@ -1,13 +1,14 @@
 use bincode::{Decode, Encode};
 use cu29::config::ComponentConfig;
-use cu29::cutask::{CuMsg, CuSinkTask, CuTaskLifecycle, Freezable};
+use cu29::cutask::{CuMsg, CuSinkTask, Freezable};
+use cu29::input_msg;
 use cu29::CuResult;
-use cu29::{clock, input_msg};
 use serde::{Deserialize, Serialize};
 
 #[cfg(mock)]
 use cu29_log_derive::debug;
 
+use cu29::clock::RobotClock;
 #[cfg(hardware)]
 use {
     cu29::CuError,
@@ -64,7 +65,9 @@ impl From<RPGpioPayload> for Level {
 
 impl Freezable for RPGpio {}
 
-impl CuTaskLifecycle for RPGpio {
+impl<'cl> CuSinkTask<'cl> for RPGpio {
+    type Input = input_msg!('cl, RPGpioPayload);
+
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
@@ -86,12 +89,8 @@ impl CuTaskLifecycle for RPGpio {
         let pin = pin_nb;
         Ok(Self { pin })
     }
-}
 
-impl<'cl> CuSinkTask<'cl> for RPGpio {
-    type Input = input_msg!('cl, RPGpioPayload);
-
-    fn process(&mut self, _clock: &clock::RobotClock, msg: Self::Input) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, msg: Self::Input) -> CuResult<()> {
         #[cfg(hardware)]
         self.pin.write((*msg.payload().unwrap()).into());
 
