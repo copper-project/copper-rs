@@ -56,15 +56,19 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
     let support = gen_culist_support(&runtime_plan, &taskid_order);
 
     let with_uses = quote! {
-        use bincode::Encode as _Encode;
-        use bincode::enc::Encoder as _Encoder;
-        use bincode::error::EncodeError as _EncodeError;
-        use bincode::Decode as _Decode;
-        use bincode::de::Decoder as _Decoder;
-        use bincode::error::DecodeError as _DecodeError;
-        use cu29::copperlist::CopperList as _CopperList;
-        use cu29::cutask::CuMsgMetadata as _CuMsgMetadata;
-        #support
+        mod cumsgs {
+            use bincode::Encode as _Encode;
+            use bincode::enc::Encoder as _Encoder;
+            use bincode::error::EncodeError as _EncodeError;
+            use bincode::Decode as _Decode;
+            use bincode::de::Decoder as _Decoder;
+            use bincode::error::DecodeError as _DecodeError;
+            use cu29::copperlist::CopperList as _CopperList;
+            use cu29::cutask::CuMsgMetadata as _CuMsgMetadata;
+            use cu29::cutask::CuMsg as _CuMsg;
+            #support
+        }
+        use cumsgs::CuMsgs;
     };
     with_uses.into()
 }
