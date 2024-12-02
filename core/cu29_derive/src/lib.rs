@@ -146,6 +146,14 @@ fn gen_culist_support(
 
         impl CuMsgs {
             #(#methods)*
+
+            fn get_tuple(&self) -> &#msgs_types_tuple {
+                &self.0
+            }
+
+            fn get_tuple_mut(&mut self) -> &mut #msgs_types_tuple {
+                &mut self.0
+            }
         }
 
         // Adds the bincode support for the copper list tuple

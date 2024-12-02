@@ -30,11 +30,18 @@ fn run_one_copperlist(
     copper_list: CopperList<CuMsgs>,
 ) {
     // Sync the copper clock to the simulated physics clock.
-    let msgs = &copper_list.msgs.0; // TODO: dewrap this.
+    let msgs = copper_list.msgs.get_tuple();
 
     // Simulate what the sim is doing here
     // TODO: set that at every step instead of just at the CL level like the sim.
-    robot_clock.set_value(msgs.0.metadata.process_time.start.unwrap().0);
+    robot_clock.set_value(
+        msgs.get_balpos_output()
+            .metadata
+            .process_time
+            .start
+            .unwrap()
+            .0,
+    );
 
     let mut sim_callback = move |step: SimStep<'_>| -> SimOverride {
         match step {
