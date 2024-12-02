@@ -140,7 +140,7 @@ mod tests {
         assert_eq!(crate::utils::config_id_to_struct_member("T"), "t");
         assert_eq!(
             crate::utils::config_id_to_struct_member("Test_Dunder"),
-            "testDunder"
+            "test_dunder"
         );
     }
 }
