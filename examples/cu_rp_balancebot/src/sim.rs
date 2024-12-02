@@ -5,6 +5,8 @@ use crate::world::{Cart, Rod};
 use avian3d::math::Vector;
 use avian3d::prelude::{ExternalForce, Physics};
 use bevy::prelude::*;
+use bevy::render::settings::{Backends, WgpuSettings};
+use bevy::render::RenderPlugin;
 use cu29::clock::{RobotClock, RobotClockMock};
 use cu29::simulation::{CuTaskCallbackState, SimOverride};
 use cu29_derive::copper_runtime;
@@ -48,7 +50,7 @@ fn default_callback(step: SimStep) -> SimOverride {
 // a system callback from bevy to setup the copper part of the house.
 fn setup_copper(mut commands: Commands) {
     const LOG_SLAB_SIZE: Option<usize> = Some(1 * 1024 * 1024 * 1024);
-    let logger_path = "balance.copper";
+    let logger_path = "logs/balance.copper";
     // here we set up a mock clock so the simulation can take control of it.
     let (robot_clock, mock) = RobotClock::mock();
     let copper_ctx = basic_copper_setup(
@@ -170,6 +172,7 @@ fn run_copper_callback(
 
 fn stop_copper_on_exit(mut exit_events: EventReader<AppExit>, mut copper_ctx: ResMut<Copper>) {
     for _ in exit_events.read() {
+        println!("Exitting copper");
         copper_ctx
             .copper_app
             .stop_all_tasks(&mut default_callback) // let the tasks clean themselves up
@@ -177,17 +180,37 @@ fn stop_copper_on_exit(mut exit_events: EventReader<AppExit>, mut copper_ctx: Re
     }
 }
 
+#[cfg(target_os = "linux")]
+const BACKEND: Option<Backends> = Some(Backends::VULKAN);
+
+#[cfg(target_os = "windows")]
+const BACKEND: Option<Backends> = Some(Backends::VULKAN);
+
+#[cfg(target_os = "macos")]
+const BACKEND: Option<Backends> = None; // Let wgpu pick Metal by default.
+
 fn main() {
     let mut world = App::new();
 
-    // minimal setup to load the assets
-    world.add_plugins(DefaultPlugins.set(WindowPlugin {
-        primary_window: Some(Window {
-            title: "Copper Simulator".into(),
+    let default_plugin = DefaultPlugins
+        .set(RenderPlugin {
+            render_creation: WgpuSettings {
+                backends: BACKEND, // Force Vulkan backend when we know it is good.
+                // This is to avoid some bugs when bevy tries out all the possible backends.
+                ..Default::default()
+            }
+            .into(),
+            ..Default::default()
+        })
+        .set(WindowPlugin {
+            primary_window: Some(Window {
+                title: "Copper Simulator".into(),
+                ..default()
+            }),
             ..default()
-        }),
-        ..default()
-    }));
+        });
+
+    world.add_plugins(default_plugin);
 
     // setup everything that is simulation specific.
     let world = world::build_world(&mut world);
