@@ -147,9 +147,8 @@ fn run_copper_callback(
                         cart_force.apply_force(Vector::ZERO);
                         return SimOverride::ExecutedBySim;
                     }
-                    let force_magnitude = motor_actuation.power * 2.0; // 4_000.0;
-                                                                       // let current_force = cart_force.force(); // Get existing force which includes gravity
-                    let new_force = /*current_force */ Vector::new(force_magnitude, 0.0, 0.0);
+                    let force_magnitude = motor_actuation.power * 2.0;
+                    let new_force = Vector::new(force_magnitude, 0.0, 0.0);
                     cart_force.apply_force(new_force);
                     output
                         .metadata

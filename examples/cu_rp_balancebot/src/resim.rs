@@ -30,8 +30,11 @@ fn run_one_copperlist(
     copper_list: CopperList<CuMsgs>,
 ) {
     // Sync the copper clock to the simulated physics clock.
-    robot_clock.set_value(0u64); // get it from the log
     let msgs = &copper_list.msgs.0; // TODO: dewrap this.
+
+    // Simulate what the sim is doing here
+    robot_clock.set_value(msgs.0.metadata.process_time.start.unwrap().0);
+
     let mut sim_callback = move |step: SimStep<'_>| -> SimOverride {
         match step {
             SimStep::Balpos(CuTaskCallbackState::Process(_, output)) => {
@@ -45,10 +48,18 @@ fn run_one_copperlist(
             }
             SimStep::Railpos(_) => SimOverride::ExecutedBySim,
             SimStep::Motor(CuTaskCallbackState::Process(input, output)) => {
-                // And now when copper wants to use the motor
-                // we apply a force in the simulation.
+                // Here the Sim change stuff in the message, just redo the same thing
+                // so we can only show possible differences from copper's execution itself.
                 let maybe_motor_actuation = input.payload();
-                // just log the behavior
+                if let Some(motor_actuation) = maybe_motor_actuation {
+                    if motor_actuation.power.is_nan() {
+                        return SimOverride::ExecutedBySim;
+                    }
+                    let force_magnitude = motor_actuation.power * 2.0;
+                    output
+                        .metadata
+                        .set_status(format!("Applied force: {}", force_magnitude));
+                }
                 SimOverride::ExecutedBySim
             }
             SimStep::Motor(_) => SimOverride::ExecutedBySim,
@@ -80,7 +91,7 @@ fn main() {
     .expect("Failed to setup logger.");
 
     let mut copper_app = BalanceBotReSim::new(
-        robot_clock.clone(),
+        robot_clock,
         copper_ctx.unified_logger.clone(),
         &mut default_callback,
     )
@@ -104,4 +115,7 @@ fn main() {
         println!("{:#?}", entry);
         run_one_copperlist(&mut copper_app, &mut robot_clock_mock, entry);
     }
+    copper_app
+        .stop_all_tasks(&mut default_callback)
+        .expect("Failed to start all tasks.");
 }
