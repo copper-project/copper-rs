@@ -81,12 +81,12 @@ cu29-unifiedlog = { path = "core/cu29_unifiedlog" }
 cu29-value = { path = "core/cu29_value" }
 
 # Payload definitions
-cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads" }
+cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads", version = "0.5.0" }
 
 # External serialization
 bincode = { version = "2.0.0-rc.3", features = ["derive"] }
 serde = { version = "1.0.215", features = ["derive"] }
-serde_derive = { version = "1.0.115", features = ["default"] }
+serde_derive = { version = "1.0.215", features = ["default"] }
 
 # External CLI
 clap = { version = "4.5.21", features = ["derive"] }
