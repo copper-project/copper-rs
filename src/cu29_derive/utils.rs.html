@@ -107,7 +107,44 @@
 <a href="#106" id="106">106</a>
 <a href="#107" id="107">107</a>
 <a href="#108" id="108">108</a>
-<a href="#109" id="109">109</a></pre></div><pre class="rust"><code><span class="kw">use </span>convert_case::{Case, Casing};
+<a href="#109" id="109">109</a>
+<a href="#110" id="110">110</a>
+<a href="#111" id="111">111</a>
+<a href="#112" id="112">112</a>
+<a href="#113" id="113">113</a>
+<a href="#114" id="114">114</a>
+<a href="#115" id="115">115</a>
+<a href="#116" id="116">116</a>
+<a href="#117" id="117">117</a>
+<a href="#118" id="118">118</a>
+<a href="#119" id="119">119</a>
+<a href="#120" id="120">120</a>
+<a href="#121" id="121">121</a>
+<a href="#122" id="122">122</a>
+<a href="#123" id="123">123</a>
+<a href="#124" id="124">124</a>
+<a href="#125" id="125">125</a>
+<a href="#126" id="126">126</a>
+<a href="#127" id="127">127</a>
+<a href="#128" id="128">128</a>
+<a href="#129" id="129">129</a>
+<a href="#130" id="130">130</a>
+<a href="#131" id="131">131</a>
+<a href="#132" id="132">132</a>
+<a href="#133" id="133">133</a>
+<a href="#134" id="134">134</a>
+<a href="#135" id="135">135</a>
+<a href="#136" id="136">136</a>
+<a href="#137" id="137">137</a>
+<a href="#138" id="138">138</a>
+<a href="#139" id="139">139</a>
+<a href="#140" id="140">140</a>
+<a href="#141" id="141">141</a>
+<a href="#142" id="142">142</a>
+<a href="#143" id="143">143</a>
+<a href="#144" id="144">144</a>
+<a href="#145" id="145">145</a>
+<a href="#146" id="146">146</a></pre></div><pre class="rust"><code><span class="kw">use </span>convert_case::{Case, Casing};
 <span class="kw">use </span>std::path::PathBuf;
 <span class="kw">use </span>walkdir::WalkDir;
 
@@ -119,6 +156,26 @@
         .collect::&lt;String&gt;();
 
     candidate = candidate.to_case(Case::Pascal);
+
+    <span class="kw">if </span>candidate
+        .chars()
+        .next()
+        .map_or(<span class="bool-val">false</span>, |c| c.is_ascii_digit())
+    {
+        candidate.insert(<span class="number">0</span>, <span class="string">'_'</span>);
+    }
+
+    candidate
+}
+
+<span class="doccomment">/// Same as config_id_to_enum but for a struct member name
+</span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>config_id_to_struct_member(id: <span class="kw-2">&amp;</span>str) -&gt; String {
+    <span class="kw">let </span><span class="kw-2">mut </span>candidate = id
+        .chars()
+        .map(|c| <span class="kw">if </span>c.is_alphanumeric() { c } <span class="kw">else </span>{ <span class="string">'_' </span>})
+        .collect::&lt;String&gt;();
+
+    candidate = candidate.to_case(Case::Snake);
 
     <span class="kw">if </span>candidate
         .chars()
@@ -214,6 +271,23 @@
                 after
             );
         })
+    }
+
+    <span class="attr">#[test]
+    </span><span class="kw">fn </span>test_identifier_to_struct_member() {
+        <span class="macro">assert_eq!</span>(<span class="kw">crate</span>::utils::config_id_to_struct_member(<span class="string">"toto"</span>), <span class="string">"toto"</span>);
+        <span class="macro">assert_eq!</span>(<span class="kw">crate</span>::utils::config_id_to_struct_member(<span class="string">"#id"</span>), <span class="string">"id"</span>);
+        <span class="macro">assert_eq!</span>(
+            <span class="kw">crate</span>::utils::config_id_to_struct_member(<span class="string">"!!something"</span>),
+            <span class="string">"something"
+        </span>);
+        <span class="macro">assert_eq!</span>(<span class="kw">crate</span>::utils::config_id_to_struct_member(<span class="string">"hey?"</span>), <span class="string">"hey"</span>);
+        <span class="macro">assert_eq!</span>(<span class="kw">crate</span>::utils::config_id_to_struct_member(<span class="string">"é"</span>), <span class="string">"é"</span>);
+        <span class="macro">assert_eq!</span>(<span class="kw">crate</span>::utils::config_id_to_struct_member(<span class="string">"T"</span>), <span class="string">"t"</span>);
+        <span class="macro">assert_eq!</span>(
+            <span class="kw">crate</span>::utils::config_id_to_struct_member(<span class="string">"Test_Dunder"</span>),
+            <span class="string">"test_dunder"
+        </span>);
     }
 }
 </code></pre></div></section></main></body></html>
