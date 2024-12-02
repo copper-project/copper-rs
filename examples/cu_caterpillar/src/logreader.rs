@@ -1,4 +1,3 @@
-use cu29::cutask::CuMsg as _CuMsg;
 use cu29_derive::gen_cumsgs;
 use cu29_export::run_cli;
 

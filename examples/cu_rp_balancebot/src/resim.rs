@@ -71,12 +71,6 @@ fn run_one_copperlist(
         .expect("Failed to run application.");
 }
 
-fn stop_copper_on_exit(copper_app: &mut BalanceBotReSim) {
-    copper_app
-        .stop_all_tasks(&mut default_callback) // let the tasks clean themselves up
-        .expect("Failed to stop all tasks.");
-}
-
 fn main() {
     // Create the Copper App in simulation mode.
     const LOG_SLAB_SIZE: Option<usize> = Some(1 * 1024 * 1024 * 1024);
