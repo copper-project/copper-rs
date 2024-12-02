@@ -18,7 +18,7 @@ ignored = ["cu29-log", "cu29-log-runtime", "cu29-unifiedlog", "copper-traits"]  
 # Core dependencies
 cu29 = { workspace = true }
 cu29-traits = { workspace = true }
-cu29-derive = { workspace = true }
+cu29-derive = { workspace = true } #, features = ["macro_debug"] }
 cu29-helpers = { workspace = true }
 cu29-log = { workspace = true }
 cu29-log-runtime = { workspace = true }

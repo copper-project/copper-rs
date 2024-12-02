@@ -30,20 +30,28 @@ fn run_one_copperlist(
     copper_list: CopperList<CuMsgs>,
 ) {
     // Sync the copper clock to the simulated physics clock.
-    let msgs = &copper_list.msgs.0; // TODO: dewrap this.
+    let msgs = &copper_list.msgs;
 
     // Simulate what the sim is doing here
-    robot_clock.set_value(msgs.0.metadata.process_time.start.unwrap().0);
+    // TODO: set that at every step instead of just at the CL level like the sim.
+    robot_clock.set_value(
+        msgs.get_balpos_output()
+            .metadata
+            .process_time
+            .start
+            .unwrap()
+            .0,
+    );
 
     let mut sim_callback = move |step: SimStep<'_>| -> SimOverride {
         match step {
             SimStep::Balpos(CuTaskCallbackState::Process(_, output)) => {
-                *output = msgs.0.clone(); // TODO: <- that is scheduling dependent.
+                *output = msgs.get_balpos_output().clone();
                 SimOverride::ExecutedBySim
             }
             SimStep::Balpos(_) => SimOverride::ExecutedBySim,
             SimStep::Railpos(CuTaskCallbackState::Process(_, output)) => {
-                *output = msgs.2.clone(); // TODO: <- that is scheduling dependent.
+                *output = msgs.get_railpos_output().clone();
                 SimOverride::ExecutedBySim
             }
             SimStep::Railpos(_) => SimOverride::ExecutedBySim,

@@ -22,6 +22,26 @@ pub(crate) fn config_id_to_enum(id: &str) -> String {
     candidate
 }
 
+/// Same as config_id_to_enum but for a struct member name
+pub(crate) fn config_id_to_struct_member(id: &str) -> String {
+    let mut candidate = id
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '_' })
+        .collect::<String>();
+
+    candidate = candidate.to_case(Case::Snake);
+
+    if candidate
+        .chars()
+        .next()
+        .map_or(false, |c| c.is_ascii_digit())
+    {
+        candidate.insert(0, '_');
+    }
+
+    candidate
+}
+
 // Lifted this HORROR but it works.
 pub fn caller_crate_root() -> PathBuf {
     let crate_name =
@@ -105,5 +125,22 @@ mod tests {
                 after
             );
         })
+    }
+
+    #[test]
+    fn test_identifier_to_struct_member() {
+        assert_eq!(crate::utils::config_id_to_struct_member("toto"), "toto");
+        assert_eq!(crate::utils::config_id_to_struct_member("#id"), "id");
+        assert_eq!(
+            crate::utils::config_id_to_struct_member("!!something"),
+            "something"
+        );
+        assert_eq!(crate::utils::config_id_to_struct_member("hey?"), "hey");
+        assert_eq!(crate::utils::config_id_to_struct_member("é"), "é");
+        assert_eq!(crate::utils::config_id_to_struct_member("T"), "t");
+        assert_eq!(
+            crate::utils::config_id_to_struct_member("Test_Dunder"),
+            "test_dunder"
+        );
     }
 }

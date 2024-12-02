@@ -1,7 +1,7 @@
 extern crate proc_macro;
 
 use proc_macro::TokenStream;
-use quote::quote;
+use quote::{format_ident, quote};
 use std::fs::read_to_string;
 use syn::meta::parser;
 use syn::Fields::{Named, Unnamed};
@@ -42,6 +42,13 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
     let runtime_plan: CuExecutionLoop =
         compute_runtime_plan(&cuconfig).expect("Could not compute runtime plan");
 
+    // Give a name compatible with a struct to match the task ids to their output in the CuMsgs tuple.
+    let all_tasks_member_ids: Vec<String> = cuconfig
+        .get_all_nodes()
+        .iter()
+        .map(|(_, node)| utils::config_id_to_struct_member(node.get_id().as_str()))
+        .collect();
+
     // All accesses are linear on the culist but the id of the tasks is random (determined by the Ron declaration order).
     // This records the task ids in call order.
     let taskid_order: Vec<usize> = runtime_plan
@@ -53,7 +60,16 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
         })
         .collect();
 
-    let support = gen_culist_support(&runtime_plan, &taskid_order);
+    #[cfg(feature = "macro_debug")]
+    eprintln!(
+        "[The CuMsgs matching tasks ids are {:?}]",
+        taskid_order
+            .iter()
+            .map(|i| all_tasks_member_ids[*i].clone())
+            .collect::<Vec<_>>()
+    );
+
+    let support = gen_culist_support(&runtime_plan, &taskid_order, &all_tasks_member_ids);
 
     let with_uses = quote! {
         mod cumsgs {
@@ -77,6 +93,7 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
 fn gen_culist_support(
     runtime_plan: &CuExecutionLoop,
     taskid_call_order: &[usize],
+    all_tasks_as_struct_member_name: &Vec<String>,
 ) -> proc_macro2::TokenStream {
     #[cfg(feature = "macro_debug")]
     eprintln!("[Extract msgs types]");
@@ -107,12 +124,37 @@ fn gen_culist_support(
         }
     };
 
+    let methods = itertools::multizip((all_tasks_as_struct_member_name, taskid_call_order)).map(
+        |(name, output_position)| {
+            let fn_name = format_ident!("get_{}_output", name);
+            let payload_type = all_msgs_types_in_culist_order[*output_position].clone();
+            let index = syn::Index::from(*output_position);
+            quote! {
+                pub fn #fn_name(&self) -> &_CuMsg<#payload_type> {
+                    &self.0.#index
+                }
+            }
+        },
+    );
+
     // This generates a way to get the metadata of every single message of a culist at low cost
     quote! {
         #collect_metadata_function
 
         pub struct CuMsgs(#msgs_types_tuple);
         pub type CuList = _CopperList<CuMsgs>;
+
+        impl CuMsgs {
+            #(#methods)*
+
+            fn get_tuple(&self) -> &#msgs_types_tuple {
+                &self.0
+            }
+
+            fn get_tuple_mut(&mut self) -> &mut #msgs_types_tuple {
+                &mut self.0
+            }
+        }
 
         // Adds the bincode support for the copper list tuple
         #msgs_types_tuple_encode
@@ -786,10 +828,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     #[cfg(feature = "macro_debug")]
     eprintln!("[Culist access order:  {:?}]", taskid_call_order);
 
+    // Give a name compatible with a struct to match the task ids to their output in the CuMsgs tuple.
+    let all_tasks_member_ids: Vec<String> = all_tasks_ids
+        .iter()
+        .map(|name| utils::config_id_to_struct_member(name.as_str()))
+        .collect();
+
     #[cfg(feature = "macro_debug")]
     eprintln!("[build the copperlist support]");
     let culist_support: proc_macro2::TokenStream =
-        gen_culist_support(&runtime_plan, &taskid_call_order);
+        gen_culist_support(&runtime_plan, &taskid_call_order, &all_tasks_member_ids);
 
     #[cfg(feature = "macro_debug")]
     eprintln!("[build the sim support]");
