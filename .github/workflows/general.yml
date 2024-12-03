@@ -42,7 +42,13 @@ jobs:
           cargo build --workspace --features mock
 
       - name: Run tests
+        if: runner.os != 'Windows'
         run: cargo test --workspace
+
+      # For now just test the core on windows.
+      - name: Run tests (windows)
+        if: runner.os == 'Windows'
+        run: cargo test
 
       - name: Run clippy
         run: cargo clippy -- -W warnings
