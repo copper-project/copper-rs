@@ -45,8 +45,8 @@ jobs:
           cargo build
 
       - name: Build with mocks
-        run: |
         if: runner.os != 'Windows'
+        run: |
           cargo build --workspace --features mock
 
       - name: Run tests
