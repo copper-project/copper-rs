@@ -234,7 +234,7 @@ examples/ros_caterpillar
 You can them out either just logging on a desktop or with GPIOs on a RPi and you should see a couple order of magnitude
 difference in performance.
 
-Copper has been design for performance first. Unlike a game engine we use a data oriented approach to minimize latency
+Copper has been design for performance first. Not unlike a game engine we use a data oriented approach to minimize latency
 and maximize throughput.
 
 ### Safety
