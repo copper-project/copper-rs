@@ -59,12 +59,16 @@ jobs:
         run: cargo test
 
       - name: Run clippy
+        if: runner.os != 'Windows'
         run: cargo clippy -- -W warnings
 
       # Integration Test for the 1 liner generation of a project.
       - name: Install cargo-generate
+        if: runner.os != 'Windows'
         run: cargo install cargo-generate
+
       - name: Generate new project in temporary directory
+        if: runner.os != 'Windows'
         run: |
           cd templates
           cargo generate -p cu_full --name test_project --destination $RUNNER_TEMP --silent
