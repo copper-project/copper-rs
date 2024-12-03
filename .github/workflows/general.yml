@@ -74,8 +74,8 @@ jobs:
           cargo generate -p cu_full --name test_project --destination $RUNNER_TEMP --silent
 
       - name: Compile generated project 
-        run: |
         if: runner.os == 'Linux'
+        run: |
           cd $RUNNER_TEMP/test_project
           cargo build --release
 
@@ -84,6 +84,7 @@ jobs:
         run: |
           cd templates
           cargo generate -p cu_full --name test_project --destination %RUNNER_TEMP% --silent
+
       - name: Compile generated project # only on linux as it grabs git master, remove after merge
         if: runner.os == 'Windows'
         run: |
