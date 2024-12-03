@@ -33,12 +33,20 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libudev-dev libpcap-dev
 
       - name: Build vanilla
+        if: runner.os != 'Windows'
         run: |
           # For sim even robot/linux specific crate needs to at least compile.
           cargo build --workspace --features macro_debug
 
+      # For now just test the core on windows.
+      - name: Build vanilla
+        if: runner.os == 'Windows'
+        run: |
+          cargo build
+
       - name: Build with mocks
         run: |
+        if: runner.os != 'Windows'
           cargo build --workspace --features mock
 
       - name: Run tests
