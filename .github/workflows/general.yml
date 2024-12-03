@@ -15,7 +15,7 @@ jobs:
 
     strategy:
       matrix:
-        os: [ ubuntu-latest, macos-14 ]  # macos tends to break more often.
+        os: [ ubuntu-latest, macos-latest, windows-latest ]  # macos tends to break more often.
     continue-on-error: false
     steps:
       - uses: actions/checkout@v4
@@ -33,24 +33,42 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libudev-dev libpcap-dev
 
       - name: Build vanilla
+        if: runner.os != 'Windows'
         run: |
           # For sim even robot/linux specific crate needs to at least compile.
           cargo build --workspace --features macro_debug
 
+      # For now just test the core on windows.
+      - name: Build vanilla
+        if: runner.os == 'Windows'
+        run: |
+          cargo build
+
       - name: Build with mocks
+        if: runner.os != 'Windows'
         run: |
           cargo build --workspace --features mock
 
       - name: Run tests
+        if: runner.os != 'Windows'
         run: cargo test --workspace
 
+      # For now just test the core on windows.
+      - name: Run tests (windows)
+        if: runner.os == 'Windows'
+        run: cargo test
+
       - name: Run clippy
+        if: runner.os != 'Windows'
         run: cargo clippy -- -W warnings
 
       # Integration Test for the 1 liner generation of a project.
       - name: Install cargo-generate
+        if: runner.os != 'Windows'
         run: cargo install cargo-generate
+
       - name: Generate new project in temporary directory
+        if: runner.os != 'Windows'
         run: |
           cd templates
           cargo generate -p cu_full --name test_project --destination $RUNNER_TEMP --silent
