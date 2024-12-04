@@ -56,6 +56,7 @@ You have a mac or a linux machine (x86-64 or Arm) just run ...
 
 ```bash
 $ cargo install cu-rp-balancebot
+$ mkdir logs
 $ balancebot-sim 
 ```
 
