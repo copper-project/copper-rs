@@ -18,5 +18,5 @@ cu29 = { workspace = true }
 cu-sensor-payloads = { workspace = true }
 velodyne-lidar = { version = "0.3.0", features = ["full"] }
 
-[dev-dependencies]
+[target.'cfg(not(target_os = "windows"))'.dev-dependencies]
 pcap-file = "2.0.0"
