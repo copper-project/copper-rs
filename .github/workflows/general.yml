@@ -43,9 +43,7 @@ jobs:
           Invoke-WebRequest -Uri https://npcap.com/dist/npcap-sdk-1.13.zip -OutFile npcap-sdk.zip
           Expand-Archive -Path npcap-sdk.zip -DestinationPath $env:USERPROFILE\npcap-sdk
           Remove-Item npcap-sdk.zip
-          Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
-          # winget install --id=DaiyuuNobori.Win10Pcap  -e
-          choco install winpcap -y
+          choco install winpcap -y -pre
 
       - name: Set Library and Include Paths (Windows)
         if: runner.os == 'Windows'
@@ -102,6 +100,5 @@ jobs:
         env:
           LIB: ${{env.LIB}}
         run: |
-          Get-ChildItem env:
           cd components\sources\cu_hesai
           cargo test
