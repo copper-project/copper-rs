@@ -18,10 +18,6 @@ ignored = ["simplelog"]  # Used from conditional compilation
 cu29-log = { workspace = true }
 cu29-traits = { workspace = true }
 cu29-clock = { workspace = true }
-cu29-intern-strs = { workspace = true }
-serde = { workspace = true }
 bincode = { workspace = true }
-once_cell = "1.19.0"
-simplelog = "0.12.2"
 smallvec = "1.13.2"
 log = "0.4.22"

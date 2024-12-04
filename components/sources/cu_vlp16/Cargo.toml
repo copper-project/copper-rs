@@ -15,16 +15,8 @@ ignored = ["cu29-log", "cu29-log-runtime", "cu29-soa-derive"]  # proc macro
 
 [dependencies]
 cu29 = { workspace = true }
-cu29-log = { workspace = true }
-cu29-log-runtime = { workspace = true }
-cu29-log-derive = { workspace = true }
-bincode = { workspace = true }
-cu29-soa-derive = { workspace = true }
 cu-sensor-payloads = { workspace = true }
-uom = { workspace = true }
-serde = { workspace = true }
 velodyne-lidar = { version = "0.3.0", features = ["full"] }
 
 [dev-dependencies]
 pcap-file = "2.0.0"
-pretty-hex = "0.4.1"

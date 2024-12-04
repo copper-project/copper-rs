@@ -12,4 +12,3 @@ repository.workspace = true
 
 [dependencies]
 cu29 = { workspace = true }
-uom = { workspace = true }

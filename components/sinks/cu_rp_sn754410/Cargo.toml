@@ -13,7 +13,7 @@ repository.workspace = true
 [dependencies]
 cu29 = { workspace = true }
 cu29-log = { workspace = true }
-cu29-log-runtime = { workspace = true }
+cu29-log-runtime = { workspace = true }  # needed
 cu29-log-derive = { workspace = true }
 cu29-traits = { workspace = true }
 bincode = { workspace = true }
@@ -21,11 +21,11 @@ serde = { workspace = true }
 
 [dev-dependencies]
 cu29-derive = { workspace = true }
-cu29-unifiedlog = { workspace = true }
+cu29-unifiedlog = { workspace = true }  # needed
 cu29-helpers = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-rppal = { version = "0.19.0", features = ["hal"] }
+rppal = { version = "0.20.0", features = ["hal"] }
 
 [build-dependencies]
 cfg_aliases = "0.2.1"

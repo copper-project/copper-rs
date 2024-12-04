@@ -21,16 +21,16 @@ cu29-traits = { workspace = true }
 cu29-derive = { workspace = true } #, features = ["macro_debug"] }
 cu29-helpers = { workspace = true }
 cu29-log = { workspace = true }
-cu29-log-runtime = { workspace = true }
+cu29-log-runtime = { workspace = true } # needed
 cu29-log-derive = { workspace = true }
 cu29-intern-strs = { workspace = true }
 cu29-unifiedlog = { workspace = true }
 compact_str = { workspace = true }
-bincode = { workspace = true }
+bincode = { workspace = true }  # needed
 cu-ads7883-new = { path = "../../components/sources/cu_ads7883" }
 cu-rp-sn754410-new = { path = "../../components/sinks/cu_rp_sn754410" }
 cu-rp-encoder = { path = "../../components/sources/cu_rp_encoder" }
-cu-consolemon = { path = "../../components/monitors/cu_consolemon" }
+cu-consolemon = { path = "../../components/monitors/cu_consolemon" } # needed
 cu-pid = { path = "../../components/tasks/cu_pid" }
 ctrlc = "3.4.5"
 
@@ -40,7 +40,6 @@ cu29-export = { workspace = true, optional = true }
 # Sim dependencies
 bevy = { version = "0.14.2", default-features = false, features = ["wayland", "default_font", "bevy_render", "bevy_core_pipeline", "bevy_pbr", "bevy_scene", "bevy_sprite", "bevy_gltf", "tonemapping_luts", "bevy_ui", "ktx2", "jpeg", "png"], optional = true }
 bevy_mod_picking = { version = "0.20.1", features = ["backend_avian"], optional = true }
-bevy_editor_pls = "0.10.0"
 avian3d = { version = "0.1.2", default-features = false, features = ["bevy_scene", "collider-from-mesh", "debug-plugin", "parallel"], optional = true }
 parry3d = { version = "0.17.1", optional = true }
 cached-path = { version = "0.6.1", optional = true }

@@ -26,18 +26,18 @@ path = "src/logreader.rs"
 
 [dependencies]
 cu29 = { workspace = true }
-cu29-traits = { workspace = true }
 cu29-derive = { workspace = true }
 cu29-helpers = { workspace = true }
+cu29-traits = { workspace = true } # needed
 cu29-log = { workspace = true }
-cu29-log-runtime = { workspace = true }
+cu29-log-runtime = { workspace = true } # needed
 cu29-log-derive = { workspace = true }
-cu29-unifiedlog = { workspace = true }
+cu29-unifiedlog = { workspace = true } # needed
 cu29-export = { workspace = true }
 bincode = { workspace = true }
-cu-consolemon = { path = "../../components/monitors/cu_consolemon"}
-compact_str = { workspace = true }
-cu-rp-gpio = { path = "../../components/sinks/cu_rp_gpio"}
+cu-consolemon = { path = "../../components/monitors/cu_consolemon" }  # needed
+compact_str = { workspace = true }  # needed
+cu-rp-gpio = { path = "../../components/sinks/cu_rp_gpio" }
 tempfile = "3.14.0"
 
 

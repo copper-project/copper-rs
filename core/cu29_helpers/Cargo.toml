@@ -25,4 +25,3 @@ cu29-log-derive = { workspace = true }
 cu29-helpers = { workspace = true }
 serde = { workspace = true }
 tempdir = "0.3.7"
-smallvec = "1.13.2"
