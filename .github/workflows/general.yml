@@ -24,13 +24,43 @@ jobs:
         with:
           toolchain: stable
           profile: minimal
+
+      # Fail cheaply and early if the code is not even formatted correctly.
       - name: Cargo fmt check
         run: cargo fmt --all -- --check
-      
+
+      ## System dependencies
+
       # Install dependencies only on Linux
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libudev-dev libpcap-dev
+
+      # Those are needed for the integration tests on Windows
+      - name: Download Npcap SDK (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Invoke-WebRequest -Uri https://npcap.com/dist/npcap-sdk-1.13.zip -OutFile npcap-sdk.zip
+          Expand-Archive -Path npcap-sdk.zip -DestinationPath $env:USERPROFILE\npcap-sdk
+          Remove-Item npcap-sdk.zip
+
+      - name: Set Library and Include Paths (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $npcapLibDir = "$env:USERPROFILE\npcap-sdk\Lib"
+          $npcapIncludeDir = "$env:USERPROFILE\npcap-sdk\Include"
+          [System.Environment]::SetEnvironmentVariable("LIB", "$npcapLibDir;"+$env:LIB, [System.EnvironmentVariableTarget]::Process)
+          [System.Environment]::SetEnvironmentVariable("INCLUDE", "$npcapIncludeDir;"+$env:INCLUDE, [System.EnvironmentVariableTarget]::Process)
+
+      ## End of system dependencies
+
+      ## Rust env
+      - name: Install cargo-generate
+        run: cargo install cargo-generate
+      ## End of rust env
+
+      - name: Run clippy
+        run: cargo clippy -- -W warnings
 
       - name: Build vanilla
         run: |
@@ -40,32 +70,10 @@ jobs:
         run: |
           cargo build --workspace --features mock
 
-      # Those are needed for the integration tests
-      - name: Install Npcap
-        if: runner.os == 'Windows'
-        run: |
-          $ErrorActionPreference = 'Stop'
-          Invoke-WebRequest -Uri https://nmap.org/npcap/dist/npcap-1.75.exe -OutFile npcap-installer.exe
-          Start-Process -FilePath npcap-installer.exe -ArgumentList "/S" -NoNewWindow -Wait
-          Remove-Item npcap-installer.exe
-
-      - name: Set Library Path
-        if: runner.os == 'Windows'
-        run: |
-          $npcapDir = "C:\Program Files\Npcap\Lib"
-          if (-Not (Test-Path $npcapDir)) { throw "Npcap library directory not found." }
-          [System.Environment]::SetEnvironmentVariable("LIB", "$npcapDir;"+$env:LIB, [System.EnvironmentVariableTarget]::Process)
-
       - name: Run tests
         run: cargo test --workspace
 
-      - name: Run clippy
-        run: cargo clippy -- -W warnings
-
       # Integration Test for the 1 liner generation of a project.
-      - name: Install cargo-generate
-        run: cargo install cargo-generate
-
       - name: Generate new project in temporary directory
         if: runner.os != 'Windows'
         run: |
@@ -89,4 +97,3 @@ jobs:
         run: |
           cd $env:RUNNER_TEMP/test_project
           cargo build --release
-
