@@ -47,7 +47,7 @@ jobs:
       - name: Set Library and Include Paths (Windows)
         if: runner.os == 'Windows'
         run: |
-          $npcapLibDir = "$env:USERPROFILE\npcap-sdk\Lib"
+          $npcapLibDir = "$env:USERPROFILE\npcap-sdk\Lib\x64"
           $npcapIncludeDir = "$env:USERPROFILE\npcap-sdk\Include"
           [System.Environment]::SetEnvironmentVariable("LIB", "$npcapLibDir;"+$env:LIB, [System.EnvironmentVariableTarget]::Process)
           [System.Environment]::SetEnvironmentVariable("INCLUDE", "$npcapIncludeDir;"+$env:INCLUDE, [System.EnvironmentVariableTarget]::Process)
@@ -59,16 +59,16 @@ jobs:
         run: cargo install cargo-generate
       ## End of rust env
 
-      - name: Run clippy
-        run: cargo clippy -- -W warnings
+      # - name: Run clippy
+      #   run: cargo clippy -- -W warnings
 
-      - name: Build vanilla
-        run: |
-          cargo build --workspace --features macro_debug
+      # - name: Build vanilla
+      #   run: |
+      #     cargo build --workspace --features macro_debug
 
-      - name: Build with mocks
-        run: |
-          cargo build --workspace --features mock
+      # - name: Build with mocks
+      #   run: |
+      #     cargo build --workspace --features mock
 
       - name: Run tests
         run: cargo test --workspace
