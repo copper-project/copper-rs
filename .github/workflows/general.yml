@@ -40,6 +40,22 @@ jobs:
         run: |
           cargo build --workspace --features mock
 
+      # Those are needed for the integration tests
+      - name: Install Npcap
+        if: runner.os == 'Windows'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Invoke-WebRequest -Uri https://nmap.org/npcap/dist/npcap-1.75.exe -OutFile npcap-installer.exe
+          Start-Process -FilePath npcap-installer.exe -ArgumentList "/S" -NoNewWindow -Wait
+          Remove-Item npcap-installer.exe
+
+      - name: Set Library Path
+        if: runner.os == 'Windows'
+        run: |
+          $npcapDir = "C:\Program Files\Npcap\Lib"
+          if (-Not (Test-Path $npcapDir)) { throw "Npcap library directory not found." }
+          [System.Environment]::SetEnvironmentVariable("LIB", "$npcapDir;"+$env:LIB, [System.EnvironmentVariableTarget]::Process)
+
       - name: Run tests
         run: cargo test --workspace
 
@@ -62,7 +78,7 @@ jobs:
           cd templates
           cargo generate -p cu_full --name test_project --destination $env:RUNNER_TEMP --silent
 
-      - name: Compile generated project 
+      - name: Compile generated project
         if: runner.os != 'Windows'
         run: |
           cd $RUNNER_TEMP/test_project
