@@ -43,15 +43,12 @@ jobs:
           Invoke-WebRequest -Uri https://npcap.com/dist/npcap-sdk-1.13.zip -OutFile npcap-sdk.zip
           Expand-Archive -Path npcap-sdk.zip -DestinationPath $env:USERPROFILE\npcap-sdk
           Remove-Item npcap-sdk.zip
+          winget install --id=DaiyuuNobori.Win10Pcap  -e
 
       - name: Set Library and Include Paths (Windows)
         if: runner.os == 'Windows'
         run: |
           $npcapLibDir = "$env:USERPROFILE\npcap-sdk\Lib\x64"
-          # $npcapIncludeDir = "$env:USERPROFILE\npcap-sdk\Include"
-          # [System.Environment]::SetEnvironmentVariable("GITHUB_ENV", "LIB=$npcapLibDir\n"+$env:GITHUB_ENV, [System.EnvironmentVariableTarget]::Process)
-          # [System.Environment]::SetEnvironmentVariable("INCLUDE", "$npcapIncludeDir;"+$env:INCLUDE, [System.EnvironmentVariableTarget]::Process)
-          # echo "LIB=$env:USERPROFILE\npcap-sdk\Lib\x64" >> $GITHUB_ENV
           Add-Content -Path $env:GITHUB_ENV -Value "LIB=$npcapLibDir"
 
       ## End of system dependencies
@@ -103,10 +100,6 @@ jobs:
         env:
           LIB: ${{env.LIB}}
         run: |
-          # $npcapLibDir = "$env:USERPROFILE\npcap-sdk\Lib\x64"
-          # $npcapIncludeDir = "$env:USERPROFILE\npcap-sdk\Include"
-          # [System.Environment]::SetEnvironmentVariable("LIB", "$npcapLibDir;"+$env:LIB, [System.EnvironmentVariableTarget]::Process)
-          # [System.Environment]::SetEnvironmentVariable("INCLUDE", "$npcapIncludeDir;"+$env:INCLUDE, [System.EnvironmentVariableTarget]::Process)
           Get-ChildItem env:
           cd components\sources\cu_hesai
           cargo test
