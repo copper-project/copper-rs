@@ -43,8 +43,8 @@ jobs:
           Invoke-WebRequest -Uri https://npcap.com/dist/npcap-sdk-1.13.zip -OutFile npcap-sdk.zip
           Expand-Archive -Path npcap-sdk.zip -DestinationPath $env:USERPROFILE\npcap-sdk
           Remove-Item npcap-sdk.zip
-          choco install npcap -y --pre
-
+          choco install wireshark
+          
       - name: Set Library and Include Paths (Windows)
         if: runner.os == 'Windows'
         run: |
