@@ -102,7 +102,7 @@ jobs:
       - name: Run tests
         if: runner.os == 'Windows'
         env:
-          LIB: $env:USERPROFILE\npcap-sdk\Lib\x64
+          LIB: ${{ env.USERPROFILE }}\npcap-sdk\Lib\x64
         run: |
           Get-ChildItem env:
           cd components\sources\cu_hesai
