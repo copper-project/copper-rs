@@ -19,6 +19,5 @@ chrono = { version = "0.4.38" }
 cu29 = { workspace = true }
 socket2 = { version = "0.5.8", features = ["all"] }
 
-[target.'cfg(not(target_os = "windows"))'.dev-dependencies]
+# [dev-dependencies]
 pcap = "2.2.0"
-
