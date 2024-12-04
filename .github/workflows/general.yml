@@ -101,9 +101,13 @@ jobs:
       
       - name: Run tests
         if: runner.os == 'Windows'
-        env:
-          LIB: ${{ env.USERPROFILE }}\npcap-sdk\Lib\x64
+        # env:
+        #   LIB: ${{ env.USERPROFILE }}\npcap-sdk\Lib\x64
         run: |
+          $npcapLibDir = "$env:USERPROFILE\npcap-sdk\Lib\x64"
+          $npcapIncludeDir = "$env:USERPROFILE\npcap-sdk\Include"
+          [System.Environment]::SetEnvironmentVariable("LIB", "$npcapLibDir;"+$env:LIB, [System.EnvironmentVariableTarget]::Process)
+          [System.Environment]::SetEnvironmentVariable("INCLUDE", "$npcapIncludeDir;"+$env:INCLUDE, [System.EnvironmentVariableTarget]::Process)
           Get-ChildItem env:
           cd components\sources\cu_hesai
           cargo test
