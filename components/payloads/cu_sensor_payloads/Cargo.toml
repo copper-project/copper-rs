@@ -16,6 +16,5 @@ cu29-soa-derive = { workspace = true }
 cu29-clock = { workspace = true }
 cu29 = { workspace = true }
 uom = { workspace = true }
-serde = { workspace = true }
 derive_more = { workspace = true }
 

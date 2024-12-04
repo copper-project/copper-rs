@@ -19,7 +19,7 @@ name = "standardlog_perf"
 path = "src/standardlog_perf.rs"
 
 [dependencies]
-cu29-traits = { workspace = true }
+cu29-traits = { workspace = true }  # needed
 cu29-log = { workspace = true }
 cu29-log-derive = { workspace = true }
 cu29-log-runtime = { workspace = true }

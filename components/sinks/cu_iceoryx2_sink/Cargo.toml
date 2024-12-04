@@ -12,14 +12,9 @@ description = "Copper sink task for Iceoryx2."
 
 [dependencies]
 iceoryx2 = { version = "0.4.1" }
-iceoryx2-bb-log = { version = "0.4.1" }
 cu29 = { workspace = true }
 cu29-traits = { workspace = true }
-cu29-derive = { workspace = true }
 cu29-log-derive = { workspace = true }
 cu29-log = { workspace = true }
-cu29-log-runtime = { workspace = true }
-cu29-helpers = { workspace = true }
-cu29-unifiedlog = { workspace = true }
-cu29-export = { workspace = true }
-bincode = { workspace = true }
+
+cu29-log-runtime = { workspace = true } # needed

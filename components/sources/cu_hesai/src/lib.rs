@@ -145,7 +145,7 @@ impl<'cl> CuSrcTask<'cl> for Xt32 {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "windows")))]
 mod tests {
     use super::*;
     use chrono::DateTime;

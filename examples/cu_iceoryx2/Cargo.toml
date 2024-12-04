@@ -21,11 +21,9 @@ cu29-log = { workspace = true }
 cu29-log-runtime = { workspace = true }
 cu29-helpers = { workspace = true }
 cu29-unifiedlog = { workspace = true }
-cu29-export = { workspace = true }
-bincode = { workspace = true }
-compact_str = { workspace = true }
-cu-consolemon = { path = "../../components/monitors/cu_consolemon" }
+bincode = { workspace = true }  # needed
+cu-consolemon = { path = "../../components/monitors/cu_consolemon" }  # needed
 cu-rp-gpio = { path = "../../components/sinks/cu_rp_gpio" }
-cu-caterpillar = { path = "../cu_caterpillar" }
+cu-caterpillar = { path = "../cu_caterpillar" }  # needed
 cu-iceoryx2-sink = { path = "../../components/sinks/cu_iceoryx2_sink" }
 cu-iceoryx2-src = { path = "../../components/sources/cu_iceoryx2_src" }

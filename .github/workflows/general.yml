@@ -24,43 +24,29 @@ jobs:
         with:
           toolchain: stable
           profile: minimal
+
+      # Fail cheaply and early if the code is not even formatted correctly.
       - name: Cargo fmt check
         run: cargo fmt --all -- --check
-      
+
       # Install dependencies only on Linux
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libudev-dev libpcap-dev
 
+      - name: Run clippy
+        run: cargo clippy -- -W warnings
+
       - name: Build vanilla
-        if: runner.os != 'Windows'
         run: |
-          # For sim even robot/linux specific crate needs to at least compile.
           cargo build --workspace --features macro_debug
 
-      # For now just test the core on windows.
-      - name: Build vanilla
-        if: runner.os == 'Windows'
-        run: |
-          cargo build
-
       - name: Build with mocks
-        if: runner.os != 'Windows'
         run: |
           cargo build --workspace --features mock
 
       - name: Run tests
-        if: runner.os != 'Windows'
         run: cargo test --workspace
-
-      # For now just test the core on windows.
-      - name: Run tests (windows)
-        if: runner.os == 'Windows'
-        run: cargo test
-
-      - name: Run clippy
-        if: runner.os != 'Windows'
-        run: cargo clippy -- -W warnings
 
       # Integration Test for the 1 liner generation of a project.
       - name: Install cargo-generate
@@ -78,7 +64,7 @@ jobs:
           cd templates
           cargo generate -p cu_full --name test_project --destination $env:RUNNER_TEMP --silent
 
-      - name: Compile generated project 
+      - name: Compile generated project
         if: runner.os != 'Windows'
         run: |
           cd $RUNNER_TEMP/test_project
@@ -89,4 +75,3 @@ jobs:
         run: |
           cd $env:RUNNER_TEMP/test_project
           cargo build --release
-
