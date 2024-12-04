@@ -47,11 +47,11 @@ jobs:
       - name: Set Library and Include Paths (Windows)
         if: runner.os == 'Windows'
         run: |
-          # $npcapLibDir = "$env:USERPROFILE\npcap-sdk\Lib\x64"
+          $npcapLibDir = "$env:USERPROFILE\npcap-sdk\Lib\x64"
           # $npcapIncludeDir = "$env:USERPROFILE\npcap-sdk\Include"
-          # [System.Environment]::SetEnvironmentVariable("LIB", "$npcapLibDir;"+$env:LIB, [System.EnvironmentVariableTarget]::Process)
+          [System.Environment]::SetEnvironmentVariable("GITHUB_ENV", "LIB=$npcapLibDir\n"+$env:GITHUB_ENV, [System.EnvironmentVariableTarget]::Process)
           # [System.Environment]::SetEnvironmentVariable("INCLUDE", "$npcapIncludeDir;"+$env:INCLUDE, [System.EnvironmentVariableTarget]::Process)
-          echo "LIB=$env:USERPROFILE\npcap-sdk\Lib\x64" >> $GITHUB_ENV
+          # echo "LIB=$env:USERPROFILE\npcap-sdk\Lib\x64" >> $GITHUB_ENV
 
       ## End of system dependencies
 
@@ -100,7 +100,7 @@ jobs:
       - name: Run tests
         if: runner.os == 'Windows'
         env:
-          LIB: ${{ env.LIB }}
+          LIB: ${{env.LIB}}
         run: |
           # $npcapLibDir = "$env:USERPROFILE\npcap-sdk\Lib\x64"
           # $npcapIncludeDir = "$env:USERPROFILE\npcap-sdk\Include"
