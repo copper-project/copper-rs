@@ -66,25 +66,25 @@ jobs:
       - name: Install cargo-generate
         run: cargo install cargo-generate
 
-      - name: Generate new project in temporary directory (Mac+L)
+      - name: Generate new project in temporary directory
         if: runner.os != 'Windows'
         run: |
           cd templates
           cargo generate -p cu_full --name test_project --destination $RUNNER_TEMP --silent
 
-      - name: Compile generated project 
-        if: runner.os == 'Linux'
-        run: |
-          cd $env:RUNNER_TEMP/test_project
-          cargo build --release
-
-      - name: Generate new project in temporary directory
+      - name: Generate new project in temporary directory (Windows)
         if: runner.os == 'Windows'
         run: |
           cd templates
           cargo generate -p cu_full --name test_project --destination $env:RUNNER_TEMP --silent
 
-      - name: Compile generated project # only on linux as it grabs git master, remove after merge
+      - name: Compile generated project 
+        if: runner.os != 'Windows'
+        run: |
+          cd $RUNNER_TEMP/test_project
+          cargo build --release
+
+      - name: Compile generated project (Windows)
         if: runner.os == 'Windows'
         run: |
           cd $env:RUNNER_TEMP/test_project
