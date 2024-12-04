@@ -49,9 +49,10 @@ jobs:
         run: |
           $npcapLibDir = "$env:USERPROFILE\npcap-sdk\Lib\x64"
           # $npcapIncludeDir = "$env:USERPROFILE\npcap-sdk\Include"
-          [System.Environment]::SetEnvironmentVariable("GITHUB_ENV", "LIB=$npcapLibDir\n"+$env:GITHUB_ENV, [System.EnvironmentVariableTarget]::Process)
+          # [System.Environment]::SetEnvironmentVariable("GITHUB_ENV", "LIB=$npcapLibDir\n"+$env:GITHUB_ENV, [System.EnvironmentVariableTarget]::Process)
           # [System.Environment]::SetEnvironmentVariable("INCLUDE", "$npcapIncludeDir;"+$env:INCLUDE, [System.EnvironmentVariableTarget]::Process)
           # echo "LIB=$env:USERPROFILE\npcap-sdk\Lib\x64" >> $GITHUB_ENV
+          Add-Content -Path $env:GITHUB_ENV -Value "LIB=$npcapLibDir"
 
       ## End of system dependencies
 
