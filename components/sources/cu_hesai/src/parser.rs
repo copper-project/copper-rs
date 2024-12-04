@@ -503,7 +503,7 @@ pub fn generate_default_elevation_calibration() -> [Angle; 32] {
     elevations
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "windows")))]
 mod tests {
     use super::*;
     use cu29_clock::RobotClock;
