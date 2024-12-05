@@ -43,8 +43,17 @@ jobs:
           Invoke-WebRequest -Uri https://npcap.com/dist/npcap-sdk-1.13.zip -OutFile npcap-sdk.zip
           Expand-Archive -Path npcap-sdk.zip -DestinationPath $env:USERPROFILE\npcap-sdk
           Remove-Item npcap-sdk.zip
-          choco install winget
-          winget-cli install --id DaiyuuNobori.Win10Pcap
+          # choco install winget
+          Add-AppxPackage -RegisterByFamilyName -MainPackage Microsoft.DesktopAppInstaller_8wekyb3d8bbwe
+          $progressPreference = 'silentlyContinue'
+          $latestWingetMsixBundleUri = $(Invoke-RestMethod https://api.github.com/repos/microsoft/winget-cli/releases/latest).assets.browser_download_url | Where-Object {$_.EndsWith(".msixbundle")}
+          $latestWingetMsixBundle = $latestWingetMsixBundleUri.Split("/")[-1]
+          Write-Information "Downloading winget to artifacts directory..."
+          Invoke-WebRequest -Uri $latestWingetMsixBundleUri -OutFile "./$latestWingetMsixBundle"
+          Invoke-WebRequest -Uri https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx -OutFile Microsoft.VCLibs.x64.14.00.Desktop.appx
+          Add-AppxPackage Microsoft.VCLibs.x64.14.00.Desktop.appx
+          Add-AppxPackage $latestWingetMsixBundle
+          winget install --id DaiyuuNobori.Win10Pcap
           
       - name: Set Library and Include Paths (Windows)
         if: runner.os == 'Windows'
