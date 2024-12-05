@@ -36,7 +36,7 @@ impl<'de> BorrowDecode<'de> for Reflectivity {
 }
 
 #[derive(Default, PartialEq, Debug, Copy, Clone, Add, Deref, Sub, From, Mul, Div)]
-pub struct Distance(Length);
+pub struct Distance(pub Length);
 
 /// Encode it as a f32 in m
 impl Encode for Distance {
@@ -67,12 +67,12 @@ impl<'de> BorrowDecode<'de> for Distance {
 /// important: The ToV of the points are not assumed to be sorted.
 #[derive(Default, Clone, Encode, Decode, PartialEq, Debug, Soa)]
 pub struct PointCloud {
-    tov: CuTime, // Time of Validity, not sorted.
-    x: Distance,
-    y: Distance,
-    z: Distance,
-    i: Reflectivity,
-    return_order: u8, // 0 for first return, 1 for second return, etc.
+    pub tov: CuTime, // Time of Validity, not sorted.
+    pub x: Distance,
+    pub y: Distance,
+    pub z: Distance,
+    pub i: Reflectivity,
+    pub return_order: u8, // 0 for first return, 1 for second return, etc.
 }
 
 impl PointCloud {
