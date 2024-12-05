@@ -1,4 +1,5 @@
 [workspace]
+
 members = [
     "core/cu29",
     "core/cu29_clock",
@@ -63,6 +64,9 @@ keywords = ["robotics", "middleware", "copper", "real-time"]
 categories = ["science::robotics"]
 homepage = "https://github.com/copper-project"
 repository = "https://github.com/copper-project/copper-rs"
+
+[workspace.metadata.workspaces]
+no_individual_tags = true
 
 [workspace.dependencies]
 
