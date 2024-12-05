@@ -3,7 +3,7 @@ mod tests {
     use bincode::{Decode, Encode};
     use cu29_soa_derive::Soa;
     #[derive(Debug, Clone, Default, PartialEq, Soa, Encode, Decode)]
-    pub(crate) struct Xyz {
+    pub struct Xyz {
         x: f32,
         y: f32,
         z: f32,
