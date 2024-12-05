@@ -5,6 +5,5 @@ This demonstrates how to use Copper to interface with rerun to visualize its sta
 To use it:
 ```
 $ cargo install rerun-cli
-$ rerun
-$ cargo run   # it will automagically show the point cloud in rerun with the default parameters.
+$ cargo run   # it will automagically start the cli and show the point cloud in rerun with the default parameters.
 ```

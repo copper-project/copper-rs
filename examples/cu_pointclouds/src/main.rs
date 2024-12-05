@@ -85,7 +85,7 @@ const SLAB_SIZE: Option<usize> = Some(100 * 1024 * 1024);
 struct PtCloudsApplication {}
 
 struct RerunPlyViz {
-    rec: Option<rerun::RecordingStream>,
+    rec: rerun::RecordingStream,
 }
 
 impl Freezable for RerunPlyViz {}
@@ -98,11 +98,9 @@ impl<'cl> CuSinkTask<'cl> for RerunPlyViz {
         Self: Sized,
     {
         Ok(Self {
-            rec: Some(
-                rerun::RecordingStreamBuilder::new("Ply Visualizer")
-                    .spawn()
-                    .unwrap(),
-            ),
+            rec: rerun::RecordingStreamBuilder::new("Ply Visualizer")
+                .spawn()
+                .map_err(|e| CuError::new_with_cause("Failed to spawn rerun stream", e))?,
         })
     }
 
@@ -115,10 +113,8 @@ impl<'cl> CuSinkTask<'cl> for RerunPlyViz {
             .collect();
 
         self.rec
-            .as_mut()
-            .unwrap()
             .log("points", &rerun::Points3D::new(points))
-            .expect("Failed to log points");
+            .map_err(|e| CuError::new_with_cause("Failed to log points", e))?;
 
         Ok(())
     }
