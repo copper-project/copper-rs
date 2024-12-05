@@ -30,7 +30,7 @@ fn spherical_to_cartesian(
     (x, y, z)
 }
 
-struct Xt32 {
+pub struct Xt32 {
     socket: Socket,
     reftime: RefTime,
     channel_elevations: [Angle; 32],
@@ -47,7 +47,7 @@ impl Freezable for Xt32 {}
 
 const MAX_POINTS: usize = 32 * 10;
 
-type LidarCuMsgPayload = PointCloudSoa<MAX_POINTS>;
+pub type LidarCuMsgPayload = PointCloudSoa<MAX_POINTS>;
 
 // In each round of firing, the firing sequence is from Channel 1 to Channel 32.
 // Assuming that the start time of Block 6 is t6, the laser firing time of Channel i is
