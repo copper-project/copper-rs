@@ -76,7 +76,7 @@ pub fn build_world(app: &mut App) -> &mut App {
         .insert_resource(Time::<Physics>::default())
         .add_systems(Startup, setup_scene)
         .add_systems(Startup, setup_ui)
-        .add_systems(Startup, setup_entities)
+        .add_systems(Update, setup_entities) // Wait for the cart entity to be loaded
         .add_systems(Update, toggle_simulation_state)
         .add_systems(Update, camera_control_system)
         .add_systems(Update, update_physics)
@@ -239,6 +239,9 @@ fn setup_scene(
         Fxaa::default(),
     ));
 
+    // add the delayed setup flag
+    commands.insert_resource(SetupCompleted(false));
+
     // add a ground
     ground_setup(&mut commands, &mut meshes, &mut materials);
 }
@@ -329,12 +332,20 @@ fn global_cart_drag_listener(
     }
 }
 
+#[derive(Resource)]
+struct SetupCompleted(bool);
+
 fn setup_entities(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     query: Query<(Entity, &Name), Without<Cart>>,
+    mut setup_completed: ResMut<SetupCompleted>,
 ) {
+    if setup_completed.0 {
+        return;
+    }
+
     // The cart entity will be loaded from the GLTF file, we need to wait for it to be loaded
     let cart_entity = match try_to_find_cart_entity(query) {
         Some(entity) => entity,
@@ -442,6 +453,8 @@ fn setup_entities(
         transform: Transform::from_xyz(2.0, 4.0, 2.0),
         ..default()
     });
+
+    setup_completed.0 = true; // Mark as completed
 }
 
 fn reset_sim(
