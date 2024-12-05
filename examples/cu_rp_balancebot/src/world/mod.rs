@@ -11,6 +11,8 @@ use bevy::pbr::{
 use bevy::prelude::*;
 use bevy_mod_picking::prelude::*;
 use cached_path::{Cache, ProgressBar};
+use iyes_perf_ui::entries::PerfUiCompleteBundle;
+use iyes_perf_ui::PerfUiPlugin;
 use std::path::Path;
 use std::{fs, io};
 
@@ -65,6 +67,10 @@ pub fn build_world(app: &mut App) -> &mut App {
             PhysicsPlugins::default().with_length_unit(1000.0),
             // EditorPlugin::default(),
         ))
+        // we want Bevy to measure these values for us:
+        .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin)
+        .add_plugins(bevy::diagnostic::EntityCountDiagnosticsPlugin)
+        .add_plugins(PerfUiPlugin)
         .insert_resource(DefaultOpaqueRendererMethod::deferred())
         .insert_resource(SimulationState::Running)
         .insert_resource(CameraControl {
@@ -292,6 +298,7 @@ fn setup_ui(mut commands: Commands) {
                 },
             ));
         });
+    commands.spawn(PerfUiCompleteBundle::default());
 }
 
 // This needs to match an object / parent object name in the GLTF file (in blender this is the object name).

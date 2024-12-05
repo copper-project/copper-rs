@@ -33,6 +33,7 @@ cu-rp-encoder = { path = "../../components/sources/cu_rp_encoder" }
 cu-consolemon = { path = "../../components/monitors/cu_consolemon" } # needed
 cu-pid = { path = "../../components/tasks/cu_pid" }
 ctrlc = "3.4.5"
+iyes_perf_ui = "0.3.0"
 
 # Log reader depencies
 cu29-export = { workspace = true, optional = true }

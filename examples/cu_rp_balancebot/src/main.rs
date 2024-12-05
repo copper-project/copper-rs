@@ -3,7 +3,8 @@ pub mod tasks;
 use cu29_derive::copper_runtime;
 use cu29_helpers::basic_copper_setup;
 use cu29_log_derive::debug;
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 #[copper_runtime(config = "copperconfig.ron")]
