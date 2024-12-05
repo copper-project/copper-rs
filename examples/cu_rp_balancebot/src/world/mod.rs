@@ -76,7 +76,7 @@ pub fn build_world(app: &mut App) -> &mut App {
         .insert_resource(Time::<Physics>::default())
         .add_systems(Startup, setup_scene)
         .add_systems(Startup, setup_ui)
-        .add_systems(Update, setup_entities)
+        .add_systems(Startup, setup_entities)
         .add_systems(Update, toggle_simulation_state)
         .add_systems(Update, camera_control_system)
         .add_systems(Update, update_physics)
