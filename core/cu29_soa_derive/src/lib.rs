@@ -135,6 +135,38 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
         }
     }
 
+    let soa_struct_name_iterator = format_ident!("{}Iterator", name);
+
+    let iterator = quote! {
+        pub struct #soa_struct_name_iterator<'a, const N: usize> {
+            soa_struct: &'a #soa_struct_name<N>,
+            current: usize,
+        }
+
+        impl<'a, const N: usize> #soa_struct_name_iterator<'a, N> {
+            pub fn new(soa_struct: &'a #soa_struct_name<N>) -> Self {
+                Self {
+                    soa_struct,
+                    current: 0,
+                }
+            }
+        }
+
+        impl<'a, const N: usize> Iterator for #soa_struct_name_iterator<'a, N> {
+            type Item = super::#name;
+
+            fn next(&mut self) -> Option<Self::Item> {
+                if self.current < self.soa_struct.len {
+                    let item = self.soa_struct.get(self.current); // Reuse `get` method
+                    self.current += 1;
+                    Some(item)
+                } else {
+                    None
+                }
+            }
+        }
+    };
+
     let expanded = quote! {
         #visibility mod #module_name {
             use bincode::{Decode, Encode};
@@ -209,6 +241,10 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                     }
                 }
 
+                pub fn iter(&self) -> #soa_struct_name_iterator<N> {
+                    #soa_struct_name_iterator::new(self)
+                }
+
                 #(
                     pub fn #field_names(&self) -> &[#field_types] {
                         &self.#field_names
@@ -271,6 +307,8 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                     }
                 }
             }
+
+            #iterator
 
         }
         #visibility use #module_name::#soa_struct_name;
