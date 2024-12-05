@@ -25,6 +25,4 @@ chrono = { version = "0.4.38" }
 tempfile = "3.14.0"
 cu-hesai = { path = "../../components/sources/cu_hesai" }
 rerun = "0.20.3"
-
-[target.'cfg(not(target_os = "windows"))'.dependencies]
 pcap = "2.2.0"
