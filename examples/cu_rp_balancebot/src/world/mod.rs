@@ -11,8 +11,13 @@ use bevy::pbr::{
 use bevy::prelude::*;
 use bevy_mod_picking::prelude::*;
 use cached_path::{Cache, ProgressBar};
-use iyes_perf_ui::entries::PerfUiCompleteBundle;
+
+#[cfg(feature = "perf-ui")]
 use iyes_perf_ui::PerfUiPlugin;
+
+#[cfg(feature = "perf-ui")]
+use iyes_perf_ui::entries::PerfUiCompleteBundle;
+
 use std::path::Path;
 use std::{fs, io};
 
@@ -61,7 +66,8 @@ pub struct Cart;
 pub struct Rod;
 
 pub fn build_world(app: &mut App) -> &mut App {
-    app.insert_resource(Msaa::Off)
+    let app = app
+        .insert_resource(Msaa::Off)
         .add_plugins((
             DefaultPickingPlugins,
             PhysicsPlugins::default().with_length_unit(1000.0),
@@ -70,7 +76,6 @@ pub fn build_world(app: &mut App) -> &mut App {
         // we want Bevy to measure these values for us:
         .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin)
         .add_plugins(bevy::diagnostic::EntityCountDiagnosticsPlugin)
-        .add_plugins(PerfUiPlugin)
         .insert_resource(DefaultOpaqueRendererMethod::deferred())
         .insert_resource(SimulationState::Running)
         .insert_resource(CameraControl {
@@ -87,7 +92,12 @@ pub fn build_world(app: &mut App) -> &mut App {
         .add_systems(Update, camera_control_system)
         .add_systems(Update, update_physics)
         .add_systems(Update, global_cart_drag_listener)
-        .add_systems(PostUpdate, reset_sim)
+        .add_systems(PostUpdate, reset_sim);
+
+    #[cfg(feature = "perf-ui")]
+    app.add_plugins(PerfUiPlugin);
+
+    app
 }
 
 fn ground_setup(
@@ -298,6 +308,7 @@ fn setup_ui(mut commands: Commands) {
                 },
             ));
         });
+    #[cfg(feature = "perf-ui")]
     commands.spawn(PerfUiCompleteBundle::default());
 }
 

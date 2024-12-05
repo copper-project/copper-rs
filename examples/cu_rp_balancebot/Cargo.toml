@@ -33,7 +33,6 @@ cu-rp-encoder = { path = "../../components/sources/cu_rp_encoder" }
 cu-consolemon = { path = "../../components/monitors/cu_consolemon" } # needed
 cu-pid = { path = "../../components/tasks/cu_pid" }
 ctrlc = "3.4.5"
-iyes_perf_ui = "0.3.0"
 
 # Log reader depencies
 cu29-export = { workspace = true, optional = true }
@@ -44,6 +43,7 @@ bevy_mod_picking = { version = "0.20.1", features = ["backend_avian"], optional 
 avian3d = { version = "0.1.2", default-features = false, features = ["bevy_scene", "collider-from-mesh", "debug-plugin", "parallel"], optional = true }
 parry3d = { version = "0.17.1", optional = true }
 cached-path = { version = "0.6.1", optional = true }
+iyes_perf_ui = { version = "0.3.0", optional = true }
 
 [features]
 default = ["logreader", "sim"]
@@ -51,6 +51,7 @@ default = ["logreader", "sim"]
 logreader = ["cu29-export"]
 # dependencies to build to matrix for copper
 sim = ["bevy", "bevy_mod_picking", "avian3d", "parry3d", "cached-path"]
+perf-ui = ["iyes_perf_ui"]
 
 [[bin]]
 name = "balancebot"
