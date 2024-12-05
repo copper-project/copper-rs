@@ -1,0 +1,30 @@
+[package]
+name = "cu_pointclouds"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+cu29 = { workspace = true }
+cu29-derive = { workspace = true }
+cu29-clock = { workspace = true }
+cu29-helpers = { workspace = true }
+cu29-traits = { workspace = true } # keep
+cu29-unifiedlog = { workspace = true } # keep
+cu29-log = { workspace = true }
+cu29-log-runtime = { workspace = true }  # needed
+cu29-log-derive = { workspace = true } # needed
+cu-sensor-payloads = { workspace = true }
+bincode = { workspace = true }  # keep
+chrono = { version = "0.4.38" }
+tempfile = "3.14.0"
+cu-hesai = { path = "../../components/sources/cu_hesai" }
+rerun = "0.20.3"
+
+[target.'cfg(not(target_os = "windows"))'.dependencies]
+pcap = "2.2.0"

@@ -32,7 +32,7 @@ members = [
     "examples/cu_rp_balancebot",
     "examples/cu_multisources",
     "examples/cu_monitoring",
-    "examples/cu_iceoryx2",
+    "examples/cu_iceoryx2", "examples/cu_pointclouds",
 ]
 
 # put only the core crates here that are not platform specific
