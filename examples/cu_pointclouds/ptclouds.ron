@@ -6,7 +6,7 @@
         ),
         (
             id: "rerun",
-            type: "RerunViz",
+            type: "RerunPlyViz",
         ),
      ],
     cnx: [

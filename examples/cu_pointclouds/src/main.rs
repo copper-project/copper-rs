@@ -84,36 +84,29 @@ const SLAB_SIZE: Option<usize> = Some(100 * 1024 * 1024);
 #[copper_runtime(config = "ptclouds.ron")]
 struct PtCloudsApplication {}
 
-struct RerunViz {
+struct RerunPlyViz {
     rec: Option<rerun::RecordingStream>,
 }
 
-impl Freezable for RerunViz {}
+impl Freezable for RerunPlyViz {}
 
-impl<'cl> CuSinkTask<'cl> for RerunViz {
+impl<'cl> CuSinkTask<'cl> for RerunPlyViz {
     type Input = input_msg!('cl, LidarCuMsgPayload);
 
     fn new(_config: Option<&ComponentConfig>) -> Result<Self, CuError>
     where
         Self: Sized,
     {
-        Ok(Self { rec: None })
-    }
-
-    fn start(&mut self, _clock: &RobotClock) -> Result<(), CuError> {
-        self.rec = Some(
-            rerun::RecordingStreamBuilder::new("Ply Visualizer")
-                .spawn()
-                .unwrap(),
-        );
-        Ok(())
+        Ok(Self {
+            rec: Some(
+                rerun::RecordingStreamBuilder::new("Ply Visualizer")
+                    .spawn()
+                    .unwrap(),
+            ),
+        })
     }
 
     fn process(&mut self, _clock: &RobotClock, input: Self::Input) -> _CuResult<()> {
-        println!(
-            "Received a point cloud with {} points",
-            input.payload().unwrap().len()
-        );
         let points: Vec<Position3D> = input
             .payload()
             .unwrap()
@@ -127,10 +120,6 @@ impl<'cl> CuSinkTask<'cl> for RerunViz {
             .log("points", &rerun::Points3D::new(points))
             .expect("Failed to log points");
 
-        Ok(())
-    }
-    fn stop(&mut self, _clock: &RobotClock) -> Result<(), CuError> {
-        self.rec = None;
         Ok(())
     }
 }
