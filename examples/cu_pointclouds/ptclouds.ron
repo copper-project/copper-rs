@@ -1,0 +1,18 @@
+(
+    tasks: [
+        (
+            id: "src",
+            type: "cu_hesai::Xt32",
+        ),
+        (
+            id: "rerun",
+            type: "RerunPlyViz",
+        ),
+     ],
+    cnx: [
+        (src: "src",  dst: "rerun",   msg: "cu_hesai::LidarCuMsgPayload"),
+    ],
+    // monitor: (
+    //               type: "cu_consolemon::CuConsoleMon",
+    //          )
+)
