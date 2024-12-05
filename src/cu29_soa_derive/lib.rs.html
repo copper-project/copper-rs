@@ -287,7 +287,45 @@
 <a href="#286" id="286">286</a>
 <a href="#287" id="287">287</a>
 <a href="#288" id="288">288</a>
-<a href="#289" id="289">289</a></pre></div><pre class="rust"><code><span class="kw">mod </span>format;
+<a href="#289" id="289">289</a>
+<a href="#290" id="290">290</a>
+<a href="#291" id="291">291</a>
+<a href="#292" id="292">292</a>
+<a href="#293" id="293">293</a>
+<a href="#294" id="294">294</a>
+<a href="#295" id="295">295</a>
+<a href="#296" id="296">296</a>
+<a href="#297" id="297">297</a>
+<a href="#298" id="298">298</a>
+<a href="#299" id="299">299</a>
+<a href="#300" id="300">300</a>
+<a href="#301" id="301">301</a>
+<a href="#302" id="302">302</a>
+<a href="#303" id="303">303</a>
+<a href="#304" id="304">304</a>
+<a href="#305" id="305">305</a>
+<a href="#306" id="306">306</a>
+<a href="#307" id="307">307</a>
+<a href="#308" id="308">308</a>
+<a href="#309" id="309">309</a>
+<a href="#310" id="310">310</a>
+<a href="#311" id="311">311</a>
+<a href="#312" id="312">312</a>
+<a href="#313" id="313">313</a>
+<a href="#314" id="314">314</a>
+<a href="#315" id="315">315</a>
+<a href="#316" id="316">316</a>
+<a href="#317" id="317">317</a>
+<a href="#318" id="318">318</a>
+<a href="#319" id="319">319</a>
+<a href="#320" id="320">320</a>
+<a href="#321" id="321">321</a>
+<a href="#322" id="322">322</a>
+<a href="#323" id="323">323</a>
+<a href="#324" id="324">324</a>
+<a href="#325" id="325">325</a>
+<a href="#326" id="326">326</a>
+<a href="#327" id="327">327</a></pre></div><pre class="rust"><code><span class="kw">mod </span>format;
 <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
 </span><span class="kw">use </span>format::{highlight_rust_code, rustfmt_generated_code};
 <span class="kw">use </span>proc_macro::TokenStream;
@@ -424,6 +462,38 @@
         }
     }
 
+    <span class="kw">let </span>soa_struct_name_iterator = <span class="macro">format_ident!</span>(<span class="string">"{}Iterator"</span>, name);
+
+    <span class="kw">let </span>iterator = <span class="macro">quote!</span> {
+        <span class="kw">pub struct </span>#soa_struct_name_iterator&lt;<span class="lifetime">'a</span>, <span class="kw">const </span>N: usize&gt; {
+            soa_struct: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>#soa_struct_name&lt;N&gt;,
+            current: usize,
+        }
+
+        <span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, <span class="kw">const </span>N: usize&gt; #soa_struct_name_iterator&lt;<span class="lifetime">'a</span>, N&gt; {
+            <span class="kw">pub fn </span>new(soa_struct: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>#soa_struct_name&lt;N&gt;) -&gt; <span class="self">Self </span>{
+                <span class="self">Self </span>{
+                    soa_struct,
+                    current: <span class="number">0</span>,
+                }
+            }
+        }
+
+        <span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, <span class="kw">const </span>N: usize&gt; Iterator <span class="kw">for </span>#soa_struct_name_iterator&lt;<span class="lifetime">'a</span>, N&gt; {
+            <span class="kw">type </span>Item = <span class="kw">super</span>::#name;
+
+            <span class="kw">fn </span>next(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>::Item&gt; {
+                <span class="kw">if </span><span class="self">self</span>.current &lt; <span class="self">self</span>.soa_struct.len {
+                    <span class="kw">let </span>item = <span class="self">self</span>.soa_struct.get(<span class="self">self</span>.current); <span class="comment">// Reuse `get` method
+                    </span><span class="self">self</span>.current += <span class="number">1</span>;
+                    <span class="prelude-val">Some</span>(item)
+                } <span class="kw">else </span>{
+                    <span class="prelude-val">None
+                </span>}
+            }
+        }
+    };
+
     <span class="kw">let </span>expanded = <span class="macro">quote!</span> {
         #visibility <span class="kw">mod </span>#module_name {
             <span class="kw">use </span>bincode::{Decode, Encode};
@@ -498,6 +568,10 @@
                     }
                 }
 
+                <span class="kw">pub fn </span>iter(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; #soa_struct_name_iterator&lt;N&gt; {
+                    #soa_struct_name_iterator::new(<span class="self">self</span>)
+                }
+
                 #(
                     <span class="kw">pub fn </span>#field_names(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[#field_types] {
                         <span class="kw-2">&amp;</span><span class="self">self</span>.#field_names
@@ -560,6 +634,8 @@
                     }
                 }
             }
+
+            #iterator
 
         }
         #visibility <span class="kw">use </span>#module_name::#soa_struct_name;
