@@ -1,5 +1,6 @@
 [package]
 name = "cu_pointclouds"
+description = "This is small sink example to display a Copper pointcloud in rerun"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -14,14 +15,12 @@ cu29 = { workspace = true }
 cu29-derive = { workspace = true }
 cu29-clock = { workspace = true }
 cu29-helpers = { workspace = true }
-cu29-traits = { workspace = true } # keep
-cu29-unifiedlog = { workspace = true } # keep
+cu29-traits = { workspace = true } # needed
+cu29-unifiedlog = { workspace = true } # needed
 cu29-log = { workspace = true }
 cu29-log-runtime = { workspace = true }  # needed
 cu29-log-derive = { workspace = true } # needed
-cu-sensor-payloads = { workspace = true }
-bincode = { workspace = true }  # keep
-chrono = { version = "0.4.38" }
+bincode = { workspace = true }  # needed
 tempfile = "3.14.0"
 cu-hesai = { path = "../../components/sources/cu_hesai" }
 rerun = "0.20.3"
