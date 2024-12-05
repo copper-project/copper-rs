@@ -11,6 +11,13 @@ use bevy::pbr::{
 use bevy::prelude::*;
 use bevy_mod_picking::prelude::*;
 use cached_path::{Cache, ProgressBar};
+
+#[cfg(feature = "perf-ui")]
+use iyes_perf_ui::PerfUiPlugin;
+
+#[cfg(feature = "perf-ui")]
+use iyes_perf_ui::entries::PerfUiCompleteBundle;
+
 use std::path::Path;
 use std::{fs, io};
 
@@ -59,12 +66,16 @@ pub struct Cart;
 pub struct Rod;
 
 pub fn build_world(app: &mut App) -> &mut App {
-    app.insert_resource(Msaa::Off)
+    let app = app
+        .insert_resource(Msaa::Off)
         .add_plugins((
             DefaultPickingPlugins,
             PhysicsPlugins::default().with_length_unit(1000.0),
             // EditorPlugin::default(),
         ))
+        // we want Bevy to measure these values for us:
+        .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin)
+        .add_plugins(bevy::diagnostic::EntityCountDiagnosticsPlugin)
         .insert_resource(DefaultOpaqueRendererMethod::deferred())
         .insert_resource(SimulationState::Running)
         .insert_resource(CameraControl {
@@ -76,12 +87,17 @@ pub fn build_world(app: &mut App) -> &mut App {
         .insert_resource(Time::<Physics>::default())
         .add_systems(Startup, setup_scene)
         .add_systems(Startup, setup_ui)
-        .add_systems(Startup, setup_entities)
+        .add_systems(Update, setup_entities) // Wait for the cart entity to be loaded
         .add_systems(Update, toggle_simulation_state)
         .add_systems(Update, camera_control_system)
         .add_systems(Update, update_physics)
         .add_systems(Update, global_cart_drag_listener)
-        .add_systems(PostUpdate, reset_sim)
+        .add_systems(PostUpdate, reset_sim);
+
+    #[cfg(feature = "perf-ui")]
+    app.add_plugins(PerfUiPlugin);
+
+    app
 }
 
 fn ground_setup(
@@ -239,6 +255,9 @@ fn setup_scene(
         Fxaa::default(),
     ));
 
+    // add the delayed setup flag
+    commands.insert_resource(SetupCompleted(false));
+
     // add a ground
     ground_setup(&mut commands, &mut meshes, &mut materials);
 }
@@ -289,6 +308,8 @@ fn setup_ui(mut commands: Commands) {
                 },
             ));
         });
+    #[cfg(feature = "perf-ui")]
+    commands.spawn(PerfUiCompleteBundle::default());
 }
 
 // This needs to match an object / parent object name in the GLTF file (in blender this is the object name).
@@ -329,12 +350,20 @@ fn global_cart_drag_listener(
     }
 }
 
+#[derive(Resource)]
+struct SetupCompleted(bool);
+
 fn setup_entities(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     query: Query<(Entity, &Name), Without<Cart>>,
+    mut setup_completed: ResMut<SetupCompleted>,
 ) {
+    if setup_completed.0 {
+        return;
+    }
+
     // The cart entity will be loaded from the GLTF file, we need to wait for it to be loaded
     let cart_entity = match try_to_find_cart_entity(query) {
         Some(entity) => entity,
@@ -442,6 +471,8 @@ fn setup_entities(
         transform: Transform::from_xyz(2.0, 4.0, 2.0),
         ..default()
     });
+
+    setup_completed.0 = true; // Mark as completed
 }
 
 fn reset_sim(
