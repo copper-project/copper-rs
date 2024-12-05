@@ -56,52 +56,46 @@ jobs:
 
       ## End of system dependencies
 
-      # - name: Install cargo-generate
-      #   run: cargo install cargo-generate
+      - name: Install cargo-generate
+        run: cargo install cargo-generate
 
-      # - name: Run clippy
-      #   run: cargo clippy -- -W warnings
+      - name: Run clippy
+        run: cargo clippy -- -W warnings
 
-      # - name: Build vanilla
-      #   run: |
-      #     cargo build --workspace --features macro_debug
+      - name: Build vanilla
+        run: |
+          cargo build --workspace --features macro_debug
 
-      # - name: Build with mocks
-      #   run: |
-      #     cargo build --workspace --features mock
+      - name: Build with mocks
+        run: |
+          cargo build --workspace --features mock
 
-      # - name: Run tests
-      #   run: cargo test --workspace
-        
-      # # Integration Test for the 1 liner generation of a project.
-      # - name: Generate new project in temporary directory
-      #   if: runner.os != 'Windows'
-      #   run: |
-      #     cd templates
-      #     cargo generate -p cu_full --name test_project --destination $RUNNER_TEMP --silent
-
-      # - name: Generate new project in temporary directory (Windows)
-      #   if: runner.os == 'Windows'
-      #   run: |
-      #     cd templates
-      #     cargo generate -p cu_full --name test_project --destination $env:RUNNER_TEMP --silent
-
-      # - name: Compile generated project
-      #   if: runner.os != 'Windows'
-      #   run: |
-      #     cd $RUNNER_TEMP/test_project
-      #     cargo build --release
-
-      # - name: Compile generated project (Windows)
-      #   if: runner.os == 'Windows'
-      #   run: |
-      #     cd $env:RUNNER_TEMP/test_project
-      #     cargo build --release
-      
       - name: Run tests
-        if: runner.os == 'Windows'
         env:
           LIB: ${{env.LIB}}
+        run: cargo test --workspace
+        
+      # Integration Test for the 1 liner generation of a project.
+      - name: Generate new project in temporary directory
+        if: runner.os != 'Windows'
         run: |
-          cd components\sources\cu_hesai
-          cargo test
+          cd templates
+          cargo generate -p cu_full --name test_project --destination $RUNNER_TEMP --silent
+
+      - name: Generate new project in temporary directory (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd templates
+          cargo generate -p cu_full --name test_project --destination $env:RUNNER_TEMP --silent
+
+      - name: Compile generated project
+        if: runner.os != 'Windows'
+        run: |
+          cd $RUNNER_TEMP/test_project
+          cargo build --release
+
+      - name: Compile generated project (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd $env:RUNNER_TEMP/test_project
+          cargo build --release
