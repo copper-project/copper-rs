@@ -17,11 +17,11 @@ ignored = ["cu29-log", "cu29-log-runtime", "cu29-soa-derive"]  # proc macro
 cu29 = { workspace = true }
 cu-sensor-payloads = { workspace = true }
 
-[target.'cfg(not(target_os = "windows"))'.dependencies]
+# [target.'cfg(not(target_os = "windows"))'.dependencies]
 velodyne-lidar = { version = "0.3.0", features = ["full"] }
 
-[target.'cfg(target_os = "windows")'.dependencies]
-velodyne-lidar = { version = "0.3.0" } # no pcap
+# [target.'cfg(target_os = "windows")'.dependencies]
+# velodyne-lidar = { version = "0.3.0" } # no pcap
 
-[target.'cfg(not(target_os = "windows"))'.dev-dependencies]
+# [target.'cfg(not(target_os = "windows"))'.dev-dependencies]
 pcap-file = "2.0.0"

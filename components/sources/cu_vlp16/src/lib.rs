@@ -94,7 +94,6 @@ impl<'cl> CuSrcTask<'cl> for Vlp16 {
     }
 }
 
-#[cfg(all(test, not(target_os = "windows")))]
 mod tests {
     use pcap_file::pcap::PcapReader;
     use std::fs::File;
