@@ -44,7 +44,7 @@ jobs:
           Expand-Archive -Path npcap-sdk.zip -DestinationPath $env:USERPROFILE\npcap-sdk
           Remove-Item npcap-sdk.zip
           choco install winget
-          winget install --id DaiyuuNobori.Win10Pcap
+          winget-cli install --id DaiyuuNobori.Win10Pcap
           
       - name: Set Library and Include Paths (Windows)
         if: runner.os == 'Windows'
