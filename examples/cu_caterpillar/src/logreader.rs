@@ -1,5 +1,5 @@
-use cu29_derive::gen_cumsgs;
 use cu29_export::run_cli;
+use cu29_prelude::gen_cumsgs;
 
 gen_cumsgs!("copperconfig.ron");
 

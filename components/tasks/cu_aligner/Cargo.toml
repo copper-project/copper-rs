@@ -1,5 +1,6 @@
 [package]
 name = "cu-aligner"
+description = "A Copper component to align messages in time."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
