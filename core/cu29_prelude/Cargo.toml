@@ -1,0 +1,27 @@
+[package]
+name = "cu29-prelude"
+description = "The prelude for Copper the SDK for robotics." 
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Going through everything that is in core/ and get the minimal set of dependencies
+cu29 = { workspace = true }
+# cu29_clock is no need for clock it is reexported as cu29::clock
+cu29-derive = { workspace = true }
+cu29-helpers = { workspace = true }
+# cu29_intern_strs is not needed, only imported by cu29_export
+cu29-log = { workspace = true }
+cu29-log-derive = { workspace = true }
+cu29-log-runtime = { workspace = true }
+# cu29-soa-derive is only needed in some occasions
+cu29-traits = { workspace = true }
+cu29-unifiedlog = { workspace = true }
+cu29-value = { workspace = true }
+bincode = { workspace = true }
