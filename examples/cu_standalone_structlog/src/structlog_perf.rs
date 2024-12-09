@@ -1,5 +1,5 @@
-use cu29_clock::{CuTime, RobotClock};
 use cu29::prelude::*;
+use cu29_clock::{CuTime, RobotClock};
 use std::path::PathBuf;
 
 const LOG_FILE: &str = "./logfile.bin";

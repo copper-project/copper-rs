@@ -1,5 +1,5 @@
-use cu29_helpers::basic_copper_setup;
 use cu29::prelude::*;
+use cu29_helpers::basic_copper_setup;
 use std::path::PathBuf;
 
 #[copper_runtime(config = "upstream.ron")]
