@@ -183,7 +183,7 @@ fn main() {
     let mut world = App::new();
 
     #[cfg(target_os = "macos")]
-    let render_plugin = RenderPlugin::default();
+    let render_plugin = RenderPlugin::default(); // This let macos pick their own backend.
 
     #[cfg(not(target_os = "macos"))]
     let render_plugin = RenderPlugin {
