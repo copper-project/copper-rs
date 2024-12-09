@@ -179,35 +179,30 @@ fn stop_copper_on_exit(mut exit_events: EventReader<AppExit>, mut copper_ctx: Re
     }
 }
 
-#[cfg(target_os = "linux")]
-const BACKEND: Option<Backends> = Some(Backends::VULKAN);
-
-#[cfg(target_os = "windows")]
-const BACKEND: Option<Backends> = Some(Backends::VULKAN);
-
-#[cfg(target_os = "macos")]
-const BACKEND: Option<Backends> = None; // Let wgpu pick Metal by default.
-
 fn main() {
     let mut world = App::new();
 
-    let default_plugin = DefaultPlugins
-        .set(RenderPlugin {
-            render_creation: WgpuSettings {
-                backends: BACKEND, // Force Vulkan backend when we know it is good.
-                // This is to avoid some bugs when bevy tries out all the possible backends.
-                ..Default::default()
-            }
-            .into(),
+    #[cfg(target_os = "macos")]
+    let render_plugin = RenderPlugin::default();
+
+    #[cfg(not(target_os = "macos"))]
+    let render_plugin = RenderPlugin {
+        render_creation: WgpuSettings {
+            backends: Some(Backends::VULKAN), // Force Vulkan backend when we know it is good.
+            // This is to avoid some bugs when bevy tries out all the possible backends.
             ..Default::default()
-        })
-        .set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "Copper Simulator".into(),
-                ..default()
-            }),
+        }
+        .into(),
+        ..Default::default()
+    };
+
+    let default_plugin = DefaultPlugins.set(render_plugin).set(WindowPlugin {
+        primary_window: Some(Window {
+            title: "Copper Simulator".into(),
             ..default()
-        });
+        }),
+        ..default()
+    });
 
     world.add_plugins(default_plugin);
 
