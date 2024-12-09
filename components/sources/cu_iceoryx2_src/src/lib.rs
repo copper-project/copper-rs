@@ -1,10 +1,4 @@
-use cu29::clock::RobotClock;
-use cu29::config::ComponentConfig;
-use cu29::cutask::Freezable;
-use cu29::cutask::{CuMsg, CuMsgPayload, CuSrcTask};
-use cu29::output_msg;
-use cu29_log_derive::debug;
-use cu29_traits::{CuError, CuResult};
+use cu29::prelude::*;
 use iceoryx2::node::NodeBuilder;
 use iceoryx2::port::subscriber::Subscriber;
 use iceoryx2::prelude::*;
@@ -17,7 +11,7 @@ where
     P: CuMsgPayload,
 {
     service_name: ServiceName,
-    node: Node<ipc::Service>,
+    node: iceoryx2::prelude::Node<ipc::Service>,
     service: Option<PortFactory<ipc::Service, CuMsg<P>, ()>>,
     subscriber: Option<Subscriber<ipc::Service, CuMsg<P>, ()>>,
 }
@@ -44,7 +38,7 @@ where
         let service_name = ServiceName::new(service_name.as_str())
             .map_err(|e| CuError::new_with_cause("Failed to create service name.", e))?;
 
-        let node: Node<ipc::Service> = NodeBuilder::new()
+        let node: iceoryx2::prelude::Node<ipc::Service> = NodeBuilder::new()
             .create::<ipc::Service>()
             .map_err(|e| CuError::new_with_cause("Failed to create node.", e))?;
 

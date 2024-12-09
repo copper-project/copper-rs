@@ -28,6 +28,7 @@ cu29-traits = { workspace = true }
 cu29-log = { workspace = true }
 cu29-log-derive = { workspace = true }
 cu29-log-runtime = { workspace = true }  # needed
+cu29-value = { workspace = true }
 cu29-clock = { workspace = true }
 clap = { workspace = true }
 tempfile = { workspace = true }

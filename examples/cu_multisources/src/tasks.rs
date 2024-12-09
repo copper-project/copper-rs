@@ -1,11 +1,4 @@
-use cu29::clock::RobotClock;
-use cu29::config::ComponentConfig;
-use cu29::cutask::{CuSinkTask, CuTask};
-use cu29::cutask::{CuSrcTask, Freezable};
-
-use cu29::cutask::CuMsg;
-use cu29::{input_msg, output_msg};
-use cu29_traits::CuResult;
+use cu29::prelude::*;
 
 /// A source task that generates an integer at each cycle.
 pub struct IntegerSrcTask {

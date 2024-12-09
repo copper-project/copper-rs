@@ -263,7 +263,7 @@ impl WriteStream<CuLogEntry> for SimpleFileWriter {
 mod tests {
     use crate::CuLogEntry;
     use bincode::config::standard;
-    use cu29_log::value::Value;
+    use cu29_value::Value;
     use smallvec::smallvec;
 
     #[test]

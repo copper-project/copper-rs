@@ -49,10 +49,6 @@ pub fn debug(input: TokenStream) -> TokenStream {
         panic!("The first parameter of the argument needs to be a string literal.");
     };
     let prefix = quote! {
-        use cu29_log::value::Value;
-        use cu29_log::value::to_value;
-        use cu29_log::CuLogEntry;
-        use cu29_log::ANONYMOUS;
         let mut log_entry = CuLogEntry::new(#index);
     };
 
@@ -85,7 +81,7 @@ pub fn debug(input: TokenStream) -> TokenStream {
 
     #[cfg(not(debug_assertions))]
     let log_stmt = quote! {
-        let r = cu29_log_runtime::log(&mut log_entry);
+        let r = log(&mut log_entry);
     };
 
     #[cfg(debug_assertions)]
@@ -99,7 +95,7 @@ pub fn debug(input: TokenStream) -> TokenStream {
             })
             .collect();
         quote! {
-            let r = cu29_log_runtime::log_debug_mode(&mut log_entry, #_msg, &[#(#keys),*]);
+            let r = log_debug_mode(&mut log_entry, #_msg, &[#(#keys),*]);
         }
     };
 

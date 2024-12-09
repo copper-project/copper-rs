@@ -14,7 +14,12 @@ repository.workspace = true
 [dependencies]
 cu29-runtime = { workspace = true }
 cu29-traits = { workspace = true }
+cu29-derive = { workspace = true }
 cu29-log = { workspace = true }
 cu29-log-derive = { workspace = true }
-cu29-log-runtime = { workspace = true }  # needed
+cu29-log-runtime = { workspace = true }
+cu29-unifiedlog = { workspace = true }
 cu29-clock = { workspace = true }
+cu29-value = { workspace = true }
+cu29-intern-strs = { workspace = true }
+bincode = { workspace = true }
