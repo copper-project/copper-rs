@@ -3,7 +3,7 @@
 //! The configuration is serialized in the RON format.
 //! The configuration is used to generate the runtime code at compile time.
 
-use crate::{CuError, CuResult};
+use cu29_traits::{CuError, CuResult};
 use petgraph::adj::NodeIndex;
 use petgraph::stable_graph::{EdgeIndex, StableDiGraph};
 use petgraph::visit::EdgeRef;

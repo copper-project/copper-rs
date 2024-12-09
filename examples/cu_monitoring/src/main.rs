@@ -1,18 +1,9 @@
-use cu29::config::CuConfig;
-use cu29::cutask::CuMsgMetadata;
-use cu29::monitoring::{CuMonitor, CuTaskState, Decision};
-use cu29_derive::copper_runtime;
+use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
-use cu29_log_derive::debug;
-use cu29_traits::{CuError, CuResult};
 use std::path::PathBuf;
 
 pub mod tasks {
-    use cu29::clock::RobotClock;
-    use cu29::config::ComponentConfig;
-    use cu29::cutask::{CuMsg, CuSinkTask, CuSrcTask, CuTask, Freezable};
-    use cu29::{input_msg, output_msg};
-    use cu29_traits::CuResult;
+    use cu29::prelude::*;
 
     pub struct ExampleSrc {}
 

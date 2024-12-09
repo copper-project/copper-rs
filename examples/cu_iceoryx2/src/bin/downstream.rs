@@ -1,6 +1,5 @@
-use cu29_derive::copper_runtime;
+use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
-use cu29_log_derive::debug;
 use iceoryx2_bb_log::{set_log_level, LogLevel};
 use std::path::PathBuf;
 

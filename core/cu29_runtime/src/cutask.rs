@@ -2,7 +2,6 @@
 //! or interact with to create a Copper task.
 
 use crate::config::ComponentConfig;
-use crate::CuResult;
 use bincode::de::Decoder;
 use bincode::de::{BorrowDecoder, Decode};
 use bincode::enc::Encode;
@@ -11,6 +10,7 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::BorrowDecode;
 use compact_str::{CompactString, ToCompactString};
 use cu29_clock::{PartialCuTimeRange, RobotClock, Tov};
+use cu29_traits::CuResult;
 use serde_derive::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};

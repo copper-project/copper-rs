@@ -1,14 +1,13 @@
 use bincode::{Decode, Encode};
 use cu29_clock::CuTime;
 use cu29_traits::{CuError, CuResult};
-pub use cu29_value as value;
+use cu29_value::Value;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use strfmt::strfmt;
-use value::Value;
 
 /// The name of the directory where the log index is stored.
 const INDEX_DIR_NAME: &str = "cu29_log_index";

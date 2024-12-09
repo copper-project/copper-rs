@@ -11,9 +11,11 @@ use syn::{
 };
 
 use crate::utils::config_id_to_enum;
-use cu29::config::read_configuration;
-use cu29::config::CuConfig;
-use cu29::curuntime::{compute_runtime_plan, CuExecutionLoop, CuExecutionUnit, CuTaskType};
+use cu29_runtime::config::read_configuration;
+use cu29_runtime::config::CuConfig;
+use cu29_runtime::curuntime::{
+    compute_runtime_plan, find_task_type_for_id, CuExecutionLoop, CuExecutionUnit, CuTaskType,
+};
 
 #[cfg(feature = "macro_debug")]
 use format::{highlight_rust_code, rustfmt_generated_code};
@@ -73,12 +75,12 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
 
     let with_uses = quote! {
         mod cumsgs {
-            use bincode::Encode as _Encode;
-            use bincode::enc::Encoder as _Encoder;
-            use bincode::error::EncodeError as _EncodeError;
-            use bincode::Decode as _Decode;
-            use bincode::de::Decoder as _Decoder;
-            use bincode::error::DecodeError as _DecodeError;
+            use cu29::bincode::Encode as _Encode;
+            use cu29::bincode::enc::Encoder as _Encoder;
+            use cu29::bincode::error::EncodeError as _EncodeError;
+            use cu29::bincode::Decode as _Decode;
+            use cu29::bincode::de::Decoder as _Decoder;
+            use cu29::bincode::error::DecodeError as _DecodeError;
             use cu29::copperlist::CopperList as _CopperList;
             use cu29::cutask::CuMsgMetadata as _CuMsgMetadata;
             use cu29::cutask::CuMsg as _CuMsg;
@@ -1029,6 +1031,15 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     // Convert the modified struct back into a TokenStream
     let result = quote! {
         // import everything with an _ to avoid clashes with the user's code
+        use cu29::bincode::Encode as _Encode;
+        use cu29::bincode::enc::Encoder as _Encoder;
+        use cu29::bincode::error::EncodeError as _EncodeError;
+        use cu29::bincode::Decode as _Decode;
+        use cu29::bincode::de::Decoder as _Decoder;
+        use cu29::bincode::error::DecodeError as _DecodeError;
+        use cu29::clock::RobotClock as _RobotClock;
+        use cu29::clock::OptionCuTime as _OptionCuTime;
+        use cu29::clock::ClockProvider as _ClockProvider;
         use cu29::config::CuConfig as _CuConfig;
         use cu29::config::ComponentConfig as _ComponentConfig;
         use cu29::config::MonitorConfig as _MonitorConfig;
@@ -1047,20 +1058,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         use cu29::monitoring::NoMonitor as _NoMonitor;
         use cu29::monitoring::CuTaskState as _CuTaskState;
         use cu29::monitoring::Decision as _Decision;
-        use cu29::clock::RobotClock as _RobotClock;
-        use cu29::clock::OptionCuTime as _OptionCuTime;
-        use cu29::clock::ClockProvider as _ClockProvider;
+        use cu29::prelude::stream_write as _stream_write;
+        use cu29::prelude::UnifiedLoggerWrite as _UnifiedLoggerWrite;
+        use cu29::prelude::UnifiedLogType as _UnifiedLogType;
         use std::sync::Arc as _Arc;
         use std::sync::Mutex as _Mutex;
-        use bincode::Encode as _Encode;
-        use bincode::enc::Encoder as _Encoder;
-        use bincode::error::EncodeError as _EncodeError;
-        use bincode::Decode as _Decode;
-        use bincode::de::Decoder as _Decoder;
-        use bincode::error::DecodeError as _DecodeError;
-        use cu29_unifiedlog::stream_write as _stream_write;
-        use cu29_unifiedlog::UnifiedLoggerWrite as _UnifiedLoggerWrite;
-        use cu29_traits::UnifiedLogType as _UnifiedLogType;
 
         // This is the heart of everything.
         // CuTasks is the list of all the tasks types.
@@ -1138,7 +1140,7 @@ fn extract_tasks_types(
 
     let all_task_cutype: Vec<CuTaskType> = all_id_nodes
         .iter()
-        .map(|(id, _)| cu29::curuntime::find_task_type_for_id(&copper_config.graph, *id))
+        .map(|(id, _)| find_task_type_for_id(&copper_config.graph, *id))
         .collect();
 
     // Collect all the type names used by our configs.

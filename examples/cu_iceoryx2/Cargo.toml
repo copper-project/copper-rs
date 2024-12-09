@@ -14,13 +14,7 @@ description = "Copper example to use Iceoryx2 as a middleware."
 iceoryx2 = { version = "0.4.1" }
 iceoryx2-bb-log = { version = "0.4.1" }
 cu29 = { workspace = true }
-cu29-traits = { workspace = true }
-cu29-derive = { workspace = true }
-cu29-log-derive = { workspace = true }
-cu29-log = { workspace = true }
-cu29-log-runtime = { workspace = true }
 cu29-helpers = { workspace = true }
-cu29-unifiedlog = { workspace = true }
 bincode = { workspace = true }  # needed
 cu-consolemon = { path = "../../components/monitors/cu_consolemon" , version = "0.5.1"}  # needed
 cu-rp-gpio = { path = "../../components/sinks/cu_rp_gpio" , version = "0.5.1"}

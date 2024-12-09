@@ -4,7 +4,19 @@
 use crate::config::CuConfig;
 use crate::cutask::CuMsgMetadata;
 use cu29_clock::{CuDuration, RobotClock};
+// Here we cannot use the cu29 prelude because it would create a cicular dep
+use cu29_log::CuLogEntry;
+use cu29_log::ANONYMOUS;
+
+#[allow(unused_imports)]
+use cu29_value::to_value;
+
+#[allow(unused_imports)]
+use cu29_log_runtime::log;
+#[allow(unused_imports)]
+use cu29_log_runtime::log_debug_mode;
 use cu29_traits::{CuError, CuResult};
+
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
 

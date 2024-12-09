@@ -19,10 +19,7 @@ name = "standardlog_perf"
 path = "src/standardlog_perf.rs"
 
 [dependencies]
-cu29-traits = { workspace = true }  # needed
-cu29-log = { workspace = true }
-cu29-log-derive = { workspace = true }
-cu29-log-runtime = { workspace = true }
+cu29 = { workspace = true }  # needed
 cu29-clock = { workspace = true }
 log = "0.4.22"
 simplelog = "0.12.2"

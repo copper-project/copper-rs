@@ -2,11 +2,7 @@
 mod mock;
 
 use bincode::{Decode, Encode};
-use cu29::clock::RobotClock;
-use cu29::config::ComponentConfig;
-use cu29::cutask::{CuMsg, CuSrcTask, Freezable};
-use cu29::{output_msg, CuError, CuResult};
-use cu29_log_derive::debug;
+use cu29::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[cfg(hardware)]
@@ -171,9 +167,6 @@ impl<'cl> CuSrcTask<'cl> for ADS7883 {
 
 pub mod test_support {
     use super::*;
-    use cu29::cutask::CuSinkTask;
-    use cu29::input_msg;
-    use cu29_log_derive::debug;
 
     pub struct ADS78883TestSink;
 

@@ -7,11 +7,10 @@ use avian3d::prelude::{ExternalForce, Physics};
 use bevy::prelude::*;
 use bevy::render::settings::{Backends, WgpuSettings};
 use bevy::render::RenderPlugin;
-use cu29::clock::{RobotClock, RobotClockMock};
-use cu29::simulation::{CuTaskCallbackState, SimOverride};
-use cu29_derive::copper_runtime;
+// disembiguation as there is also a bevy::prelude::debug
+use cu29::prelude::debug;
+use cu29::prelude::*;
 use cu29_helpers::{basic_copper_setup, CopperContext};
-use cu29_log_derive::debug;
 use cu_ads7883_new::ADSReadingPayload;
 use cu_rp_encoder::EncoderPayload;
 use std::path::PathBuf;

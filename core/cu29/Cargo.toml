@@ -1,6 +1,6 @@
 [package]
 name = "cu29"
-description = "Copper Runtime Core crate. Copper is an engine for robotics."
+description = "Copper Runtime prelude crate. Copper is a Rust engine for robotics."
 documentation = "https://docs.rs/cu29"
 version.workspace = true
 authors.workspace = true
@@ -11,28 +11,15 @@ categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
-
-[package.metadata.cargo-machete]
-ignored = ["cu29-log-runtime", "cu29-log"] # It is used from a proc macro
-
-[[bin]]
-name = "cu29-rendercfg"
-path = "src/rendercfg.rs"
-
 [dependencies]
-bincode = { workspace = true }
-serde = { workspace = true }
-serde_derive = { workspace = true }
-compact_str = { workspace = true }
+cu29-runtime = { workspace = true }
 cu29-traits = { workspace = true }
+cu29-derive = { workspace = true }
 cu29-log = { workspace = true }
 cu29-log-derive = { workspace = true }
-cu29-log-runtime = { workspace = true }  # needed
+cu29-log-runtime = { workspace = true }
+cu29-unifiedlog = { workspace = true }
 cu29-clock = { workspace = true }
-clap = { workspace = true }
-tempfile = { workspace = true }
-arrayvec = "0.7.6"
-
-ron = "0.8.1"
-hdrhistogram = "7.5.4"
-petgraph = { version = "0.6.5", features = ["serde", "serde-1", "serde_derive"] }
+cu29-value = { workspace = true }
+cu29-intern-strs = { workspace = true }
+bincode = { workspace = true }

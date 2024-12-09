@@ -12,16 +12,10 @@ repository.workspace = true
 
 [dependencies]
 cu29 = { workspace = true }
-cu29-log = { workspace = true }
-cu29-log-runtime = { workspace = true }  # needed
-cu29-log-derive = { workspace = true }
-cu29-traits = { workspace = true }
 bincode = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]
-cu29-derive = { workspace = true }
-cu29-unifiedlog = { workspace = true }  # needed
 cu29-helpers = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]

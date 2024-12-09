@@ -1,6 +1,6 @@
 pub mod tasks;
 
-use cu29_derive::gen_cumsgs;
+use cu29::prelude::*;
 use cu29_export::run_cli;
 
 gen_cumsgs!("copperconfig.ron");

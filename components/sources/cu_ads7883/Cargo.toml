@@ -12,9 +12,6 @@ repository.workspace = true
 
 [dependencies]
 cu29 = { workspace = true }
-cu29-log = { workspace = true }
-cu29-log-runtime = { workspace = true }  # needed
-cu29-log-derive = { workspace = true }
 bincode = { workspace = true }
 serde = { workspace = true }
 
@@ -22,9 +19,6 @@ serde = { workspace = true }
 spidev = "0.6.0"
 
 [dev-dependencies]
-cu29-derive = { workspace = true }
-cu29-unifiedlog = { workspace = true }  # needed
-cu29-traits = { workspace = true }  # needed
 cu29-helpers = { workspace = true }
 
 [build-dependencies]

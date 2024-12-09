@@ -1,10 +1,5 @@
 use cu29::clock::RobotClock;
-use cu29::config::ComponentConfig;
-use cu29::cutask::{CuMsg, CuMsgPayload};
-use cu29::cutask::{CuSinkTask, Freezable};
-use cu29::input_msg;
-use cu29_log_derive::debug;
-use cu29_traits::{CuError, CuResult};
+use cu29::prelude::*;
 use iceoryx2::node::NodeBuilder;
 use iceoryx2::port::publisher::Publisher;
 use iceoryx2::prelude::*;
@@ -18,7 +13,7 @@ where
     P: CuMsgPayload, // TODO: Maybe with something a little more generic we can be ROS2 compatible
 {
     service_name: ServiceName,
-    node: Node<ipc::Service>,
+    node: iceoryx2::prelude::Node<ipc::Service>,
     service: Option<PortFactory<ipc::Service, CuMsg<P>, ()>>,
     publisher: Option<Publisher<ipc::Service, CuMsg<P>, ()>>,
 }
@@ -44,7 +39,7 @@ where
 
         let service_name = ServiceName::new(service_name.as_str())
             .map_err(|e| CuError::new_with_cause("Failed to create service name.", e))?;
-        let node: Node<ipc::Service> = NodeBuilder::new()
+        let node: iceoryx2::prelude::Node<ipc::Service> = NodeBuilder::new()
             .create::<ipc::Service>()
             .map_err(|e| CuError::new_with_cause("Failed to create node.", e))?;
 

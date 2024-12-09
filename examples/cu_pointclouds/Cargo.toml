@@ -12,16 +12,8 @@ repository.workspace = true
 
 [dependencies]
 cu29 = { workspace = true }
-cu29-derive = { workspace = true }
-cu29-clock = { workspace = true }
 cu29-helpers = { workspace = true }
-cu29-traits = { workspace = true } # needed
-cu29-unifiedlog = { workspace = true } # needed
-cu29-log = { workspace = true }
-cu29-log-runtime = { workspace = true }  # needed
-cu29-log-derive = { workspace = true } # needed
-bincode = { workspace = true }  # needed
 tempfile = "3.14.0"
-cu-hesai = { path = "../../components/sources/cu_hesai" , version = "0.5.1"}
+cu-hesai = { path = "../../components/sources/cu_hesai", version = "0.5.1" }
 rerun = "0.20.3"
 pcap = "2.2.0"

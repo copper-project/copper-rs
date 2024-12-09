@@ -21,3 +21,6 @@ cu29-clock = { workspace = true }
 bincode = { workspace = true }
 smallvec = "1.13.2"
 log = "0.4.22"
+
+[dev-dependencies]
+cu29-value = { workspace = true }

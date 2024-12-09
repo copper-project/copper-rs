@@ -1,7 +1,5 @@
+use cu29::prelude::*;
 use cu29_clock::{CuTime, RobotClock};
-use cu29_log_derive::debug;
-use cu29_log_runtime::LoggerRuntime;
-use cu29_log_runtime::{NullLog, SimpleFileWriter};
 use std::path::PathBuf;
 
 const LOG_FILE: &str = "./logfile.bin";
