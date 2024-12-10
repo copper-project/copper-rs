@@ -13,8 +13,11 @@ use cu29_value::to_value;
 
 #[allow(unused_imports)]
 use cu29_log_runtime::log;
+
 #[allow(unused_imports)]
+#[cfg(debug_assertions)]
 use cu29_log_runtime::log_debug_mode;
+
 use cu29_traits::{CuError, CuResult};
 
 use std::alloc::{GlobalAlloc, Layout, System};
