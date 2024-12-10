@@ -76,26 +76,12 @@ jobs:
         run: cargo test --workspace
         
       # Integration Test for the 1 liner generation of a project.
-      - name: Generate new project in temporary directory
-        if: runner.os != 'Windows'
+      - name: Generate a test project from the repo template
         run: |
           cd templates
-          cargo generate -p cu_full --name test_project --destination $RUNNER_TEMP --silent
-
-      - name: Generate new project in temporary directory (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          cd templates
-          cargo generate -p cu_full --name test_project --destination $env:RUNNER_TEMP --silent
+          cargo generate -p cu_full --name test_project --destination . -d copper_source=local --silent
 
       - name: Compile generated project
-        if: runner.os != 'Windows'
         run: |
-          cd $RUNNER_TEMP/test_project
-          cargo build --release
-
-      - name: Compile generated project (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          cd $env:RUNNER_TEMP/test_project
+          cd templates/test_project
           cargo build --release

@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 default-run = "{{project-name|kebab_case}}"
 
+[workspace]
+
 # The main executable of your application
 [[bin]]
 name = "{{project-name|kebab_case}}"
@@ -15,14 +17,8 @@ name = "{{project-name|kebab_case}}-logreader"
 path = "src/logreader.rs"
 
 [dependencies]
-# FIXME: This is to be able to test pre-release.
-cu29 = { git = "https://github.com/copper-project/copper-rs.git" }
-cu29-traits = { git = "https://github.com/copper-project/copper-rs.git" }
-cu29-derive = { git = "https://github.com/copper-project/copper-rs.git" }
-cu29-helpers = { git = "https://github.com/copper-project/copper-rs.git" }
-cu29-log = { git = "https://github.com/copper-project/copper-rs.git" }
-cu29-log-runtime = { git = "https://github.com/copper-project/copper-rs.git" }
-cu29-log-derive = { git = "https://github.com/copper-project/copper-rs.git" }
-cu29-unifiedlog = { git = "https://github.com/copper-project/copper-rs.git" }
-cu29-export = { git = "https://github.com/copper-project/copper-rs.git" }
+cu29 = { {%if copper_source == "crates.io" %} version = "*" {%elsif copper_source == "git" %} git = "https://github.com/copper-project/copper-rs.git" {%elsif copper_source == "local" %}path = "../../core/cu29" {%endif %} }
 bincode = { version = "2.0.0-rc.3", features = ["derive"] }
+cu29-helpers = { {%if copper_source == "crates.io" %}version = "*" {%elsif copper_source == "git" %} git = "https://github.com/copper-project/copper-rs.git" {%elsif copper_source == "local" %}path = "../../core/cu29_helpers" {%endif %} }
+cu29-export = { {%if copper_source == "crates.io" %}version = "*" {%elsif copper_source == "git" %} git = "https://github.com/copper-project/copper-rs.git" {%elsif copper_source == "local" %}path = "../../core/cu29_export" {%endif %} }
+
