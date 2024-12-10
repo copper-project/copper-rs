@@ -382,7 +382,10 @@
 <a href="#381" id="381">381</a>
 <a href="#382" id="382">382</a>
 <a href="#383" id="383">383</a>
-<a href="#384" id="384">384</a></pre></div><pre class="rust"><code><span class="doccomment">//! Some basic internal monitoring tooling Copper uses to monitor itself and the tasks it is running.
+<a href="#384" id="384">384</a>
+<a href="#385" id="385">385</a>
+<a href="#386" id="386">386</a>
+<a href="#387" id="387">387</a></pre></div><pre class="rust"><code><span class="doccomment">//! Some basic internal monitoring tooling Copper uses to monitor itself and the tasks it is running.
 //!
 
 </span><span class="kw">use </span><span class="kw">crate</span>::config::CuConfig;
@@ -397,8 +400,11 @@
 
 <span class="attr">#[allow(unused_imports)]
 </span><span class="kw">use </span>cu29_log_runtime::log;
+
 <span class="attr">#[allow(unused_imports)]
+#[cfg(debug_assertions)]
 </span><span class="kw">use </span>cu29_log_runtime::log_debug_mode;
+
 <span class="kw">use </span>cu29_traits::{CuError, CuResult};
 
 <span class="kw">use </span>std::alloc::{GlobalAlloc, Layout, System};
