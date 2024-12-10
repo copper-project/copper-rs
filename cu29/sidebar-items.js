@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["UnifiedLogType"],"macro":["input_msg","output_msg"],"mod":["config","copperlist","curuntime","cutask","monitoring","payload","simulation"],"struct":["CuError"],"trait":["CopperListTuple","WriteStream"],"type":["CuResult"]};
+window.SIDEBAR_ITEMS = {"enum":["UnifiedLogType"],"fn":["read_configuration"],"macro":["input_msg","output_msg"],"mod":["config","copperlist","curuntime","cutask","monitoring","payload","prelude","simulation"],"struct":["CuError"],"trait":["CopperListTuple","WriteStream"],"type":["CuResult"]};

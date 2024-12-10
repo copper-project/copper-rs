@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"macro":["input_msg","output_msg"],"mod":["config","copperlist","curuntime","cutask","monitoring","payload","simulation"]};

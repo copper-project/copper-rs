@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29_derive/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_derive" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (4d669fb34 2024-12-08)" data-channel="nightly" data-search-js="search-92e6798f.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">cu29_derive/</div>lib.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29_derive/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_derive" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (a224f3807 2024-12-09)" data-channel="nightly" data-search-js="search-92e6798f.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">cu29_derive/</div>lib.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
 <a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
@@ -1259,7 +1259,9 @@
 <a href="#1258" id="1258">1258</a>
 <a href="#1259" id="1259">1259</a>
 <a href="#1260" id="1260">1260</a>
-<a href="#1261" id="1261">1261</a></pre></div><pre class="rust"><code><span class="kw">extern crate </span>proc_macro;
+<a href="#1261" id="1261">1261</a>
+<a href="#1262" id="1262">1262</a>
+<a href="#1263" id="1263">1263</a></pre></div><pre class="rust"><code><span class="kw">extern crate </span>proc_macro;
 
 <span class="kw">use </span>proc_macro::TokenStream;
 <span class="kw">use </span>quote::{format_ident, quote};
@@ -1272,9 +1274,11 @@
 };
 
 <span class="kw">use </span><span class="kw">crate</span>::utils::config_id_to_enum;
-<span class="kw">use </span>cu29::config::read_configuration;
-<span class="kw">use </span>cu29::config::CuConfig;
-<span class="kw">use </span>cu29::curuntime::{compute_runtime_plan, CuExecutionLoop, CuExecutionUnit, CuTaskType};
+<span class="kw">use </span>cu29_runtime::config::read_configuration;
+<span class="kw">use </span>cu29_runtime::config::CuConfig;
+<span class="kw">use </span>cu29_runtime::curuntime::{
+    compute_runtime_plan, find_task_type_for_id, CuExecutionLoop, CuExecutionUnit, CuTaskType,
+};
 
 <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
 </span><span class="kw">use </span>format::{highlight_rust_code, rustfmt_generated_code};
@@ -1334,12 +1338,12 @@
 
     <span class="kw">let </span>with_uses = <span class="macro">quote!</span> {
         <span class="kw">mod </span>cumsgs {
-            <span class="kw">use </span>bincode::Encode <span class="kw">as </span>_Encode;
-            <span class="kw">use </span>bincode::enc::Encoder <span class="kw">as </span>_Encoder;
-            <span class="kw">use </span>bincode::error::EncodeError <span class="kw">as </span>_EncodeError;
-            <span class="kw">use </span>bincode::Decode <span class="kw">as </span>_Decode;
-            <span class="kw">use </span>bincode::de::Decoder <span class="kw">as </span>_Decoder;
-            <span class="kw">use </span>bincode::error::DecodeError <span class="kw">as </span>_DecodeError;
+            <span class="kw">use </span>cu29::bincode::Encode <span class="kw">as </span>_Encode;
+            <span class="kw">use </span>cu29::bincode::enc::Encoder <span class="kw">as </span>_Encoder;
+            <span class="kw">use </span>cu29::bincode::error::EncodeError <span class="kw">as </span>_EncodeError;
+            <span class="kw">use </span>cu29::bincode::Decode <span class="kw">as </span>_Decode;
+            <span class="kw">use </span>cu29::bincode::de::Decoder <span class="kw">as </span>_Decoder;
+            <span class="kw">use </span>cu29::bincode::error::DecodeError <span class="kw">as </span>_DecodeError;
             <span class="kw">use </span>cu29::copperlist::CopperList <span class="kw">as </span>_CopperList;
             <span class="kw">use </span>cu29::cutask::CuMsgMetadata <span class="kw">as </span>_CuMsgMetadata;
             <span class="kw">use </span>cu29::cutask::CuMsg <span class="kw">as </span>_CuMsg;
@@ -2290,7 +2294,16 @@
     <span class="comment">// Convert the modified struct back into a TokenStream
     </span><span class="kw">let </span>result = <span class="macro">quote!</span> {
         <span class="comment">// import everything with an _ to avoid clashes with the user's code
-        </span><span class="kw">use </span>cu29::config::CuConfig <span class="kw">as </span>_CuConfig;
+        </span><span class="kw">use </span>cu29::bincode::Encode <span class="kw">as </span>_Encode;
+        <span class="kw">use </span>cu29::bincode::enc::Encoder <span class="kw">as </span>_Encoder;
+        <span class="kw">use </span>cu29::bincode::error::EncodeError <span class="kw">as </span>_EncodeError;
+        <span class="kw">use </span>cu29::bincode::Decode <span class="kw">as </span>_Decode;
+        <span class="kw">use </span>cu29::bincode::de::Decoder <span class="kw">as </span>_Decoder;
+        <span class="kw">use </span>cu29::bincode::error::DecodeError <span class="kw">as </span>_DecodeError;
+        <span class="kw">use </span>cu29::clock::RobotClock <span class="kw">as </span>_RobotClock;
+        <span class="kw">use </span>cu29::clock::OptionCuTime <span class="kw">as </span>_OptionCuTime;
+        <span class="kw">use </span>cu29::clock::ClockProvider <span class="kw">as </span>_ClockProvider;
+        <span class="kw">use </span>cu29::config::CuConfig <span class="kw">as </span>_CuConfig;
         <span class="kw">use </span>cu29::config::ComponentConfig <span class="kw">as </span>_ComponentConfig;
         <span class="kw">use </span>cu29::config::MonitorConfig <span class="kw">as </span>_MonitorConfig;
         <span class="kw">use </span>cu29::config::read_configuration <span class="kw">as </span>_read_configuration;
@@ -2308,20 +2321,11 @@
         </span><span class="kw">use </span>cu29::monitoring::NoMonitor <span class="kw">as </span>_NoMonitor;
         <span class="kw">use </span>cu29::monitoring::CuTaskState <span class="kw">as </span>_CuTaskState;
         <span class="kw">use </span>cu29::monitoring::Decision <span class="kw">as </span>_Decision;
-        <span class="kw">use </span>cu29::clock::RobotClock <span class="kw">as </span>_RobotClock;
-        <span class="kw">use </span>cu29::clock::OptionCuTime <span class="kw">as </span>_OptionCuTime;
-        <span class="kw">use </span>cu29::clock::ClockProvider <span class="kw">as </span>_ClockProvider;
+        <span class="kw">use </span>cu29::prelude::stream_write <span class="kw">as </span>_stream_write;
+        <span class="kw">use </span>cu29::prelude::UnifiedLoggerWrite <span class="kw">as </span>_UnifiedLoggerWrite;
+        <span class="kw">use </span>cu29::prelude::UnifiedLogType <span class="kw">as </span>_UnifiedLogType;
         <span class="kw">use </span>std::sync::Arc <span class="kw">as </span>_Arc;
         <span class="kw">use </span>std::sync::Mutex <span class="kw">as </span>_Mutex;
-        <span class="kw">use </span>bincode::Encode <span class="kw">as </span>_Encode;
-        <span class="kw">use </span>bincode::enc::Encoder <span class="kw">as </span>_Encoder;
-        <span class="kw">use </span>bincode::error::EncodeError <span class="kw">as </span>_EncodeError;
-        <span class="kw">use </span>bincode::Decode <span class="kw">as </span>_Decode;
-        <span class="kw">use </span>bincode::de::Decoder <span class="kw">as </span>_Decoder;
-        <span class="kw">use </span>bincode::error::DecodeError <span class="kw">as </span>_DecodeError;
-        <span class="kw">use </span>cu29_unifiedlog::stream_write <span class="kw">as </span>_stream_write;
-        <span class="kw">use </span>cu29_unifiedlog::UnifiedLoggerWrite <span class="kw">as </span>_UnifiedLoggerWrite;
-        <span class="kw">use </span>cu29_traits::UnifiedLogType <span class="kw">as </span>_UnifiedLogType;
 
         <span class="comment">// This is the heart of everything.
         // CuTasks is the list of all the tasks types.
@@ -2399,7 +2403,7 @@
 
     <span class="kw">let </span>all_task_cutype: Vec&lt;CuTaskType&gt; = all_id_nodes
         .iter()
-        .map(|(id, <span class="kw">_</span>)| cu29::curuntime::find_task_type_for_id(<span class="kw-2">&amp;</span>copper_config.graph, <span class="kw-2">*</span>id))
+        .map(|(id, <span class="kw">_</span>)| find_task_type_for_id(<span class="kw-2">&amp;</span>copper_config.graph, <span class="kw-2">*</span>id))
         .collect();
 
     <span class="comment">// Collect all the type names used by our configs.
