@@ -2,13 +2,13 @@
 //! It is exposed to the user via the `copper_runtime` macro injecting it as a field in their application struct.
 //!
 
-use crate::clock::{ClockProvider, RobotClock};
 use crate::config::{Cnx, CuConfig, NodeId};
 use crate::config::{ComponentConfig, Node};
 use crate::copperlist::{CopperList, CopperListState, CuListsManager};
 use crate::monitoring::CuMonitor;
-use crate::CuResult;
+use cu29_clock::{ClockProvider, RobotClock};
 use cu29_traits::CopperListTuple;
+use cu29_traits::CuResult;
 use cu29_traits::WriteStream;
 use petgraph::prelude::*;
 use std::fmt::Debug;
@@ -367,7 +367,6 @@ pub fn compute_runtime_plan(config: &CuConfig) -> CuResult<CuExecutionLoop> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::clock::RobotClock;
     use crate::config::Node;
     use crate::cutask::CuSinkTask;
     use crate::cutask::{CuSrcTask, Freezable};

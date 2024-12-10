@@ -1,8 +1,7 @@
 pub mod tasks;
 
-use cu29_derive::copper_runtime;
+use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
-use cu29_log_derive::debug;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};

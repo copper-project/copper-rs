@@ -2,10 +2,7 @@ use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
-use cu29::clock::RobotClock;
-use cu29::config::ComponentConfig;
-use cu29::cutask::{CuMsg, CuSrcTask, Freezable};
-use cu29::{output_msg, CuResult};
+use cu29::prelude::*;
 #[cfg(hardware)]
 use embedded_hal::i2c::I2c;
 #[cfg(hardware)]
