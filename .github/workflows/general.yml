@@ -83,5 +83,5 @@ jobs:
 
       - name: Compile generated project
         run: |
-          cd test_project
+          cd templates/test_project
           cargo build --release
