@@ -1,12 +1,5 @@
+use cu29::prelude::*;
 use bincode::{Decode, Encode};
-
-use cu29::clock::RobotClock;
-use cu29::config::ComponentConfig;
-use cu29::cutask::{CuMsg, CuSinkTask, CuSrcTask, CuTask, Freezable};
-use cu29::CuResult;
-use cu29::{input_msg, output_msg};
-
-use cu29_log_derive::debug;
 
 // Define a message type
 #[derive(Default, Debug, Clone, Encode, Decode)]

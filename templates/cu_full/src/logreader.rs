@@ -1,6 +1,6 @@
 pub mod tasks;
 
-use cu29_derive::gen_cumsgs;
+use cu29::prelude::*;
 use cu29_export::run_cli;
 
 // This will create the CuMsgs that is specific to your copper project.
