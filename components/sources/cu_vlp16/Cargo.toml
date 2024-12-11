@@ -17,4 +17,6 @@ ignored = ["cu29-log", "cu29-log-runtime", "cu29-soa-derive"]  # proc macro
 cu29 = { workspace = true }
 cu-sensor-payloads = { workspace = true }
 velodyne-lidar = { version = "0.3.0", features = ["full"] }
-pcap-file = "2.0.0"
+
+[dev-dependencies]
+cu-udpinject = { path = "../../testing/cu_udpinject" }

@@ -28,6 +28,7 @@ members = [
     "components/sources/cu_rp_encoder",
     "components/tasks/cu_aligner",
     "components/tasks/cu_pid",
+    "components/testing/cu_udpinject",
     "examples/cu_caterpillar",
     "examples/cu_config_gen",
     "examples/cu_iceoryx2",

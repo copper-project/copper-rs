@@ -94,30 +94,23 @@ impl<'cl> CuSrcTask<'cl> for Vlp16 {
     }
 }
 
+#[cfg(test)]
 mod tests {
-    use pcap_file::pcap::PcapReader;
-    use std::fs::File;
-
     use super::*;
+    use cu_udpinject::PcapStreamer;
 
     #[test]
     fn vlp16_end_2_end_test() {
         let clk = RobotClock::new();
         let cfg = ComponentConfig::new();
         let mut drv = Vlp16::new(Some(&cfg)).unwrap();
-        let file_in = File::open("test/VLP_16_Single.pcap").expect("Error opening file");
-        let mut pcap_reader = PcapReader::new(file_in).unwrap();
+
+        let mut streamer = PcapStreamer::new("test/VLP_16_Single.pcap", "127.0.0.1:2368");
 
         drv.start(&clk).unwrap();
 
         // Read test.pcap
-        if let Some(pkt) = pcap_reader.next_packet() {
-            let pkt = pkt.unwrap();
-            let data = &pkt.data[0x2a..];
-            // send udp packet to 2368
-            let socket = UdpSocket::bind("0.0.0.0:2367").unwrap();
-            socket.send_to(data, "127.0.0.1:2368").unwrap();
-            // process
+        if streamer.send_next::<1206>() {
             let mut msg = CuMsg::new(Some(PointCloudSoa::<10000>::default()));
             drv.process(&clk, &mut msg).unwrap();
             assert_eq!(-0.05115497, msg.payload().unwrap().x[0].value);
