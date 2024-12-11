@@ -503,7 +503,11 @@ pub fn generate_default_elevation_calibration() -> [Angle; 32] {
     elevations
 }
 
+#[cfg(test)]
 mod tests {
+    use crate::parser::{parse_packet, Packet, RefTime};
+    use cu29::prelude::RobotClock;
+
     #[test]
     fn test_packet() {
         // Taken from a real world packet
