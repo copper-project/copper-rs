@@ -164,7 +164,7 @@ mod python {
 
     #[pyclass]
     pub struct PyLogIterator {
-        reader: Box<dyn Read + Send>,
+        reader: Box<dyn Read + Send + Sync>,
     }
 
     #[pymethods]
@@ -257,7 +257,7 @@ mod python {
             let seconds = (nanoseconds / 1_000_000_000) as i32;
             let microseconds = ((nanoseconds % 1_000_000_000) / 1_000) as i32;
 
-            PyDelta::new_bound(py, days, seconds, microseconds, false).unwrap()
+            PyDelta::new(py, days, seconds, microseconds, false).unwrap()
         }
 
         /// Returns the index of the message in the vector of interned strings.
@@ -287,28 +287,28 @@ mod python {
 
     fn value_to_py(value: &cu29::prelude::Value) -> PyObject {
         match value {
-            Value::String(s) => Python::with_gil(|py| s.to_object(py)),
-            Value::U64(u) => Python::with_gil(|py| u.to_object(py)),
-            Value::I64(i) => Python::with_gil(|py| i.to_object(py)),
-            Value::F64(f) => Python::with_gil(|py| f.to_object(py)),
-            Value::Bool(b) => Python::with_gil(|py| b.to_object(py)),
-            Value::CuTime(t) => Python::with_gil(|py| t.0.to_object(py)),
-            Value::Bytes(b) => Python::with_gil(|py| b.to_object(py)),
-            Value::Char(c) => Python::with_gil(|py| c.to_object(py)),
-            Value::I8(i) => Python::with_gil(|py| i.to_object(py)),
-            Value::U8(u) => Python::with_gil(|py| u.to_object(py)),
-            Value::I16(i) => Python::with_gil(|py| i.to_object(py)),
-            Value::U16(u) => Python::with_gil(|py| u.to_object(py)),
-            Value::I32(i) => Python::with_gil(|py| i.to_object(py)),
-            Value::U32(u) => Python::with_gil(|py| u.to_object(py)),
+            Value::String(s) => Python::with_gil(|py| s.into_pyobject(py).unwrap().into()),
+            Value::U64(u) => Python::with_gil(|py| u.into_pyobject(py).unwrap().into()),
+            Value::I64(i) => Python::with_gil(|py| i.into_pyobject(py).unwrap().into()),
+            Value::F64(f) => Python::with_gil(|py| f.into_pyobject(py).unwrap().into()),
+            Value::Bool(b) => Python::with_gil(|py| b.into_pyobject(py).unwrap().to_owned().into()),
+            Value::CuTime(t) => Python::with_gil(|py| t.0.into_pyobject(py).unwrap().into()),
+            Value::Bytes(b) => Python::with_gil(|py| b.into_pyobject(py).unwrap().into()),
+            Value::Char(c) => Python::with_gil(|py| c.into_pyobject(py).unwrap().into()),
+            Value::I8(i) => Python::with_gil(|py| i.into_pyobject(py).unwrap().into()),
+            Value::U8(u) => Python::with_gil(|py| u.into_pyobject(py).unwrap().into()),
+            Value::I16(i) => Python::with_gil(|py| i.into_pyobject(py).unwrap().into()),
+            Value::U16(u) => Python::with_gil(|py| u.into_pyobject(py).unwrap().into()),
+            Value::I32(i) => Python::with_gil(|py| i.into_pyobject(py).unwrap().into()),
+            Value::U32(u) => Python::with_gil(|py| u.into_pyobject(py).unwrap().into()),
             Value::Map(m) => Python::with_gil(|py| {
-                let dict = PyDict::new_bound(py);
+                let dict = PyDict::new(py);
                 for (k, v) in m.iter() {
                     dict.set_item(value_to_py(k), value_to_py(v)).unwrap();
                 }
-                dict.to_object(py)
+                dict.into_pyobject(py).unwrap().into()
             }),
-            Value::F32(f) => Python::with_gil(|py| f.to_object(py)),
+            Value::F32(f) => Python::with_gil(|py| f.into_pyobject(py).unwrap().into()),
             Value::Option(o) => Python::with_gil(|py| {
                 if o.is_none() {
                     py.None()
@@ -319,8 +319,8 @@ mod python {
             Value::Unit => Python::with_gil(|py| py.None()),
             Value::Newtype(v) => value_to_py(v),
             Value::Seq(s) => Python::with_gil(|py| {
-                let list = PyList::new_bound(py, s.iter().map(value_to_py));
-                list.to_object(py)
+                let list = PyList::new(py, s.iter().map(value_to_py)).unwrap();
+                list.into_pyobject(py).unwrap().into()
             }),
         }
     }
