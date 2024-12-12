@@ -18,5 +18,5 @@ uom = { workspace = true }
 chrono = { version = "0.4.38" }
 socket2 = { version = "0.5.8", features = ["all"] }
 
-# [dev-dependencies]
-pcap = "2.2.0"
+[dev-dependencies]
+cu-udpinject = { path = "../../testing/cu_udpinject" }

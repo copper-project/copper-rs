@@ -95,7 +95,6 @@ impl<'cl> CuSrcTask<'cl> for Xt32 {
             Ok(size) => {
                 let lidar_packet = parser::parse_packet(&buf[..size])
                     .map_err(|e| CuError::new_with_cause("Failed to parse Hesai UDP packet", e))?;
-
                 // this is the reference point for the block timings
                 let t6 = lidar_packet
                     .block_ts(&self.reftime)
@@ -141,81 +140,12 @@ impl<'cl> CuSrcTask<'cl> for Xt32 {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
     use chrono::DateTime;
     use cu29::cutask::CuMsg;
-    use pcap::Capture;
-    use std::net::UdpSocket;
-    use std::path::Path;
-    use std::thread::sleep;
-    use std::time::{Duration, Instant};
-
-    /// Small helper to stream a pcap file over UDP
-    pub struct PcapStreamer {
-        capture: Capture<pcap::Offline>,
-        socket: UdpSocket,
-        target_addr: String,
-        last_packet_ts: Option<Duration>,
-        start_instant: Instant,
-    }
-
-    impl PcapStreamer {
-        pub fn new(file_path: impl AsRef<Path>, target_addr: impl Into<String>) -> Self {
-            let capture = Capture::from_file(file_path).expect("Failed to open pcap file");
-            let socket = UdpSocket::bind("0.0.0.0:0").expect("Failed to bind UDP socket");
-            Self {
-                capture,
-                socket,
-                target_addr: target_addr.into(),
-                last_packet_ts: None,
-                start_instant: Instant::now(),
-            }
-        }
-
-        pub fn send_next(&mut self) -> bool {
-            // Get the next packet and check for end of stream
-            let packet = match self.capture.next_packet() {
-                Ok(packet) => packet,
-                Err(_) => return false, // End of the stream
-            };
-
-            // Assume 42-byte header (Ethernet + IP + UDP) and an optional 4-byte FCS
-            let payload_offset = 42;
-            let fcs_size = 4;
-
-            // Check if there's an FCS and slice it off if present
-            let data_len = if packet.data.len() > payload_offset + fcs_size {
-                packet.data.len() - fcs_size
-            } else {
-                packet.data.len()
-            };
-
-            // Extract only the payload, excluding headers and trailing FCS if present
-            let payload = &packet.data[payload_offset..data_len];
-
-            // Extract the timestamp from the packet
-            let ts = packet.header.ts;
-            let packet_ts = Duration::new(ts.tv_sec as u64, ts.tv_usec as u32 * 1000);
-
-            if let Some(last_ts) = self.last_packet_ts {
-                // Sleep to match the delay between packets
-                let elapsed = self.start_instant.elapsed();
-                if packet_ts > last_ts {
-                    let wait_time = packet_ts - last_ts;
-                    if elapsed < wait_time {
-                        sleep(wait_time - elapsed);
-                    }
-                }
-            }
-            self.last_packet_ts = Some(packet_ts);
-
-            self.socket
-                .send_to(payload, &self.target_addr)
-                .expect("Failed to send packet");
-            true
-        }
-    }
+    use cu_udpinject::PcapStreamer;
 
     #[test]
     fn test_xt32() {
@@ -235,7 +165,8 @@ mod tests {
 
         xt32.reftime = (datetime, clock.now());
 
-        while streamer.send_next() {
+        // 1076 is the expected payload size for Hesai XT32
+        while streamer.send_next::<1076>() {
             let err = xt32.process(&clock, &mut new_msg);
             if let Err(e) = err {
                 println!("Error: {:?}", e);
