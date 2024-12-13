@@ -22,7 +22,14 @@ use format::{highlight_rust_code, rustfmt_generated_code};
 use proc_macro2::Ident;
 
 mod format;
+mod schema;
 mod utils;
+
+// this declaration cannot be moved to a submodule (this is a rust limitation)
+#[proc_macro_derive(Schema)]
+pub fn derive_schema(input: TokenStream) -> TokenStream {
+    schema::derive_schema(input)
+}
 
 // TODO: this needs to be determined when the runtime is sizing itself.
 const DEFAULT_CLNB: usize = 10;

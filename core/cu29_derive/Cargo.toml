@@ -27,6 +27,9 @@ convert_case = "0.6.0"
 [build-dependencies]
 cu29-unifiedlog = { workspace = true }  # needed
 
+[dev-dependencies]
+bincode = { workspace = true }
+
 [features]
 default = []
 # enables a more verbose build log showing the code generation.
