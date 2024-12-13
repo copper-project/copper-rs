@@ -1,5 +1,5 @@
 TODO: make that a proper document
-* use Machete to remote unused dependencies
+* use Machete to remove unused dependencies
     * cargo install cargo-machete
     * cargo machete --with-metadata
     * cargo machete fix
