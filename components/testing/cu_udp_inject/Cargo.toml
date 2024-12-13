@@ -1,0 +1,15 @@
+[package]
+name = "cu-udp-inject"
+description = "A simple UDP packet injector that takes a PCAP file and sends it to a remote host"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+pcap = "2.2.0"
+cu29-traits = { workspace = true }

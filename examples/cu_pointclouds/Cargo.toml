@@ -15,5 +15,5 @@ cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
 tempfile = "3.14.0"
 cu-hesai = { path = "../../components/sources/cu_hesai", version = "0.5.1" }
+cu-udp-inject = { path = "../../components/testing/cu_udp_inject" }
 rerun = "0.20.3"
-pcap = "2.2.0"
