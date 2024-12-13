@@ -19,4 +19,4 @@ cu-sensor-payloads = { workspace = true }
 velodyne-lidar = { version = "0.3.0", features = ["full"] }
 
 [dev-dependencies]
-cu-udpinject = { path = "../../testing/cu_udpinject" }
+cu-udp-inject = { path = "../../testing/cu_udp_inject" }

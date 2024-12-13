@@ -1,3 +1,4 @@
+use cu29_traits::CuResult;
 use pcap::Capture;
 use std::net::UdpSocket;
 use std::path::Path;
@@ -29,15 +30,18 @@ impl PcapStreamer {
     /// Send the next packet in the pcap file over UDP
     /// PS is the expected payload size to send in each packet
     /// Returns false if the end of the pcap file is reached
-    pub fn send_next<const PS: usize>(&mut self) -> bool {
+    pub fn send_next<const PS: usize>(&mut self) -> CuResult<bool> {
         // Get the next packet and check for end of stream
         let packet = match self.capture.next_packet() {
             Ok(packet) => packet,
-            Err(_) => return false, // End of the stream
+            Err(_) => return Ok(false), // End of the stream
         };
 
         // Assume 42-byte header (Ethernet + IP + UDP) and an optional 4-byte FCS
         let payload_offset = 42;
+        if packet.data.len() < payload_offset + PS {
+            return Err("Packet too short".into());
+        }
 
         // Extract only the payload, excluding headers and trailing FCS if present
         let payload = &packet.data[payload_offset..payload_offset + PS];
@@ -60,6 +64,6 @@ impl PcapStreamer {
         self.socket
             .send_to(payload, &self.target_addr)
             .expect("Failed to send packet");
-        true
+        Ok(true)
     }
 }

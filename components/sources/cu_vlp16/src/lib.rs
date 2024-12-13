@@ -1,5 +1,5 @@
-use velodyne_lidar::Packet;
 use velodyne_lidar::{Config, Config16};
+use velodyne_lidar::{DataPacket, Packet};
 
 use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
@@ -61,7 +61,7 @@ impl<'cl> CuSrcTask<'cl> for Vlp16 {
 
     fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
         let socket = self.socket.as_ref().unwrap();
-        let mut packet = [0u8; 1206];
+        let mut packet = [0u8; size_of::<DataPacket>()];
         let (read_size, _peer_addr) = socket.recv_from(&mut packet).unwrap();
         let packet = &packet[..read_size];
 
@@ -97,7 +97,7 @@ impl<'cl> CuSrcTask<'cl> for Vlp16 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cu_udpinject::PcapStreamer;
+    use cu_udp_inject::PcapStreamer;
 
     #[test]
     fn vlp16_end_2_end_test() {
@@ -109,8 +109,13 @@ mod tests {
 
         drv.start(&clk).unwrap();
 
+        const PACKET_SIZE: usize = size_of::<DataPacket>();
+
         // Read test.pcap
-        if streamer.send_next::<1206>() {
+        if streamer
+            .send_next::<PACKET_SIZE>()
+            .expect("Failed to send packet")
+        {
             let mut msg = CuMsg::new(Some(PointCloudSoa::<10000>::default()));
             drv.process(&clk, &mut msg).unwrap();
             assert_eq!(-0.05115497, msg.payload().unwrap().x[0].value);

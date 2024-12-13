@@ -1,7 +1,8 @@
 use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
+use cu_hesai::parser::Packet;
 use cu_hesai::LidarCuMsgPayload;
-use cu_udpinject::PcapStreamer;
+use cu_udp_inject::PcapStreamer;
 use rerun::Position3D;
 use std::path::PathBuf;
 
@@ -50,6 +51,7 @@ impl<'cl> CuSinkTask<'cl> for RerunPlyViz {
     }
 }
 fn main() {
+    const PACKET_SIZE: usize = size_of::<Packet>();
     let tmp_dir = tempfile::TempDir::new().expect("could not create a tmp dir");
     let logger_path = tmp_dir.path().join("ptclouds.copper");
     let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), SLAB_SIZE, false, None)
@@ -67,7 +69,10 @@ fn main() {
             "127.0.0.1:2368",
         );
 
-        while streamer.send_next::<1076>() {
+        while streamer
+            .send_next::<PACKET_SIZE>()
+            .expect("Failed to send packet")
+        {
             application.run_one_iteration().unwrap();
         }
     }

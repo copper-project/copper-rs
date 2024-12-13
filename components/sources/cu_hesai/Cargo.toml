@@ -19,4 +19,4 @@ chrono = { version = "0.4.38" }
 socket2 = { version = "0.5.8", features = ["all"] }
 
 [dev-dependencies]
-cu-udpinject = { path = "../../testing/cu_udpinject" }
+cu-udp-inject = { path = "../../testing/cu_udp_inject" }

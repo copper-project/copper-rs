@@ -143,9 +143,10 @@ impl<'cl> CuSrcTask<'cl> for Xt32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::parser::Packet;
     use chrono::DateTime;
     use cu29::cutask::CuMsg;
-    use cu_udpinject::PcapStreamer;
+    use cu_udp_inject::PcapStreamer;
 
     #[test]
     fn test_xt32() {
@@ -166,7 +167,11 @@ mod tests {
         xt32.reftime = (datetime, clock.now());
 
         // 1076 is the expected payload size for Hesai XT32
-        while streamer.send_next::<1076>() {
+        const PACKET_SIZE: usize = size_of::<Packet>();
+        while streamer
+            .send_next::<PACKET_SIZE>()
+            .expect("Failed to send next packet")
+        {
             let err = xt32.process(&clock, &mut new_msg);
             if let Err(e) = err {
                 println!("Error: {:?}", e);
