@@ -1001,7 +1001,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let copperlist_stream = _stream_write::<CuList>(
                     unified_logger.clone(),
                     _UnifiedLogType::CopperList,
-                    60 * 1024, // FIXME: make this a config
+                    std::mem::size_of::<CuList>() * 64, // FIXME: make this a config
+                    // the 2 sizes are not directly related as we encode the CuList but we can
+                    // assume the encoded size is close or lower than the non encoded one
+                    // This is to be sure we have the size of at least a Culist and some.
                 );
 
                 let runtime = Ok(#name {
