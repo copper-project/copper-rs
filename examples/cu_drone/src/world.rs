@@ -145,7 +145,7 @@ fn setup_scene(
         EnvironmentMapLight {
             diffuse_map: diffuse_map_handle,
             specular_map: specular_map_handle,
-            intensity: 90.0,
+            intensity: 600.0,
         },
         ScreenSpaceReflectionsBundle {
             settings: ScreenSpaceReflectionsSettings {

@@ -11,5 +11,8 @@ Cargo.lock
 /examples/ros_caterpillar/install
 /examples/cu_rp_balancebot/cu29_log_index
 
+# Temp local assets ignore
+/examples/cu_drone/assets
+
 # Test generation project
 /templates/test_project
