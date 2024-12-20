@@ -12,6 +12,12 @@ use uom::si::ratio::percent;
 #[derive(Default, PartialEq, Debug, Copy, Clone, Add, Deref, Sub, From, Mul, Div)]
 pub struct Reflectivity(Ratio);
 
+impl From<f32> for Reflectivity {
+    fn from(value: f32) -> Self {
+        Self(Ratio::new::<percent>(value))
+    }
+}
+
 /// Encode as f32
 impl Encode for Reflectivity {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
@@ -42,6 +48,12 @@ pub struct Distance(pub Length);
 impl Encode for Distance {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         Encode::encode(&self.0.value, encoder)
+    }
+}
+
+impl From<f32> for Distance {
+    fn from(value: f32) -> Self {
+        Self(Length::new::<meter>(value))
     }
 }
 
