@@ -1,0 +1,18 @@
+[package]
+name = "cu-sim-depthsense"
+description = "A bevy based plugin to simulate depth sense sensor for Copper"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+bevy = { version = "0.14.2", default-features = false, features = ["wayland", "bevy_asset", "bevy_render", "bevy_core_pipeline", "bevy_pbr", "bevy_gizmos", "bevy_winit", "x11", "tonemapping_luts"] }
+bevy_mod_raycast = "0.18.0"
+cu29 = { workspace = true }
+cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads" }
+uom = { workspace = true }
