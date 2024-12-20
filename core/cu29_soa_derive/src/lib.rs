@@ -179,7 +179,7 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
 
             #[derive(Debug)]
             #visibility struct #soa_struct_name<const N: usize> {
-                len: usize,
+                pub len: usize,
                 #(pub #field_names: [#field_types; N], )*
             }
 
