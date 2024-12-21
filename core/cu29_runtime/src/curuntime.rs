@@ -109,7 +109,6 @@ pub enum CuTaskType {
 }
 
 /// This structure represents a step in the execution plan.
-
 pub struct CuExecutionStep {
     /// NodeId: node id of the task to execute
     pub node_id: NodeId,
