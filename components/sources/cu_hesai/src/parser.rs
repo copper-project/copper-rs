@@ -337,7 +337,7 @@ impl Tail {
             self.date_time[5] as u32,
         ) {
             MappedLocalTime::None => {
-                return Err(HesaiError::InvalidTimestamp("No such local time".into()))
+                Err(HesaiError::InvalidTimestamp("No such local time".into()))
             }
             MappedLocalTime::Single(t) => {
                 Ok(t + chrono::Duration::microseconds(self.timestamp as i64))
