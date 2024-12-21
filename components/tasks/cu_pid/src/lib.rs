@@ -38,6 +38,7 @@ pub struct PIDController {
 }
 
 impl PIDController {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         kp: f32,
         ki: f32,
