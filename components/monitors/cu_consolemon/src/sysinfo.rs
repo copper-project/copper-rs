@@ -119,7 +119,7 @@ pub fn pfetch_info() -> String {
         .iter()
         .filter_map(|info| match info {
             PfetchInfo::Os => Some((logo.primary_color, info.to_string(), os.clone())),
-            _ => get_info(&info, &readouts).map(|info_str| match info {
+            _ => get_info(info, &readouts).map(|info_str| match info {
                 PfetchInfo::Title => (logo.secondary_color, info_str, "".into()),
                 PfetchInfo::BlankLine => (logo.primary_color, "".into(), "".into()),
                 _ => (logo.primary_color, info.to_string(), info_str),
