@@ -313,7 +313,7 @@ fn setup_ui(mut commands: Commands) {
 }
 
 // This needs to match an object / parent object name in the GLTF file (in blender this is the object name).
-const CART_GLTF_ASSET_NAME: &'static str = "Cart";
+const CART_GLTF_ASSET_NAME: &str = "Cart";
 
 fn try_to_find_cart_entity(query: Query<(Entity, &Name), Without<Cart>>) -> Option<Entity> {
     if let Some((cart_entity, _)) = query
@@ -416,7 +416,7 @@ fn setup_entities(
             Name::new("Rod"),
             Rod,
             PbrBundle {
-                mesh: meshes.add(Cylinder::new(ROD_WIDTH as f32 / 2.0, ROD_HEIGHT as f32)),
+                mesh: meshes.add(Cylinder::new(ROD_WIDTH / 2.0, ROD_HEIGHT)),
                 // material: materials.add(Color::srgb(0.0, 1.0, 0.0)),
                 material: materials.add(StandardMaterial {
                     base_color: Color::WHITE,
@@ -426,8 +426,8 @@ fn setup_entities(
                 }),
                 transform: Transform::from_xyz(
                     0.0,
-                    ROD_HEIGHT as f32 / 2.0 /*+ RAIL_HEIGHT as f32*/ + CART_HEIGHT as f32,
-                    CART_DEPTH as f32 / 2.0 + ROD_DEPTH as f32 / 2.0 + AXIS_LENGTH as f32,
+                    ROD_HEIGHT / 2.0 /*+ RAIL_HEIGHT as f32*/ + CART_HEIGHT,
+                    CART_DEPTH / 2.0 + ROD_DEPTH / 2.0 + AXIS_LENGTH,
                 ), // Start higher than the cart
                 ..default()
             },
@@ -443,7 +443,7 @@ fn setup_entities(
                     return;
                 }
                 let pivot_world = transform.translation
-                    + transform.rotation * Vec3::new(0.0, -ROD_HEIGHT as f32 / 2.0, 0.0);
+                    + transform.rotation * Vec3::new(0.0, -ROD_HEIGHT / 2.0, 0.0);
                 transform.rotate_around(pivot_world, Quat::from_rotation_z(-drag.delta.x / 50.0));
             }),
         ))
@@ -475,6 +475,7 @@ fn setup_entities(
     setup_completed.0 = true; // Mark as completed
 }
 
+#[allow(clippy::type_complexity)]
 fn reset_sim(
     keys: Res<ButtonInput<KeyCode>>,
     mut query: Query<(
@@ -490,8 +491,8 @@ fn reset_sim(
                 if rod_component.is_some() {
                     transform.translation = Vec3::new(
                         0.0,
-                        ROD_HEIGHT as f32 / 2.0 + CART_HEIGHT as f32,
-                        CART_DEPTH as f32 / 2.0 + ROD_DEPTH as f32 / 2.0 + AXIS_LENGTH as f32,
+                        ROD_HEIGHT / 2.0 + CART_HEIGHT,
+                        CART_DEPTH / 2.0 + ROD_DEPTH / 2.0 + AXIS_LENGTH,
                     );
 
                     transform.rotation = Quat::IDENTITY;

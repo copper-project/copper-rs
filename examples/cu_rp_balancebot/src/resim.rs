@@ -75,6 +75,7 @@ fn run_one_copperlist(
 
 fn main() {
     // Create the Copper App in simulation mode.
+    #[allow(clippy::identity_op)]
     const LOG_SLAB_SIZE: Option<usize> = Some(1 * 1024 * 1024 * 1024);
     let logger_path = "logs/balanceresim.copper";
     let (robot_clock, mut robot_clock_mock) = RobotClock::mock();

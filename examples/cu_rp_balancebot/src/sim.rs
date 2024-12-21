@@ -48,6 +48,7 @@ fn default_callback(step: SimStep) -> SimOverride {
 
 // a system callback from bevy to setup the copper part of the house.
 fn setup_copper(mut commands: Commands) {
+    #[allow(clippy::identity_op)]
     const LOG_SLAB_SIZE: Option<usize> = Some(1 * 1024 * 1024 * 1024);
     let logger_path = "logs/balance.copper";
     // here we set up a mock clock so the simulation can take control of it.
@@ -85,6 +86,7 @@ fn setup_copper(mut commands: Commands) {
 
 /// This is a bevy system to trigger the Copper application to run one iteration.
 /// We can query the state of the world from here and pass it to the Copper application.
+#[allow(clippy::type_complexity)]
 fn run_copper_callback(
     mut query_set: ParamSet<(
         Query<(&mut Transform, &mut ExternalForce), With<Cart>>,
