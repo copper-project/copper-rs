@@ -69,11 +69,11 @@ where
             textlog_dump(reader, &log_index)?;
         }
         Command::ExtractCopperlist { export_format } => {
-            println!("Extracting copperlists with format: {}", export_format);
+            println!("Extracting copperlists with format: {export_format}");
             let mut reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
             let iter = copperlists_dump::<P>(&mut reader);
             for entry in iter {
-                println!("{:#?}", entry);
+                println!("{entry:#?}");
             }
         }
     }
@@ -96,12 +96,12 @@ pub fn copperlists_dump<P: CopperListTuple>(
                     if inner.kind() == std::io::ErrorKind::UnexpectedEof {
                         None
                     } else {
-                        println!("Error {:?} additional:{}", inner, additional);
+                        println!("Error {inner:?} additional:{additional}");
                         None
                     }
                 }
                 _ => {
-                    println!("Error {:?}", e);
+                    println!("Error {e:?}");
                     None
                 }
             },
@@ -124,12 +124,12 @@ pub fn textlog_dump(mut src: impl Read, index: &Path) -> CuResult<()> {
                 if inner.kind() == std::io::ErrorKind::UnexpectedEof {
                     return Ok(());
                 } else {
-                    println!("Error {:?} additional:{}", inner, additional);
+                    println!("Error {inner:?} additional:{additional}");
                     return Err(CuError::new_with_cause("Error reading log", inner));
                 }
             }
             Err(e) => {
-                println!("Error {:?}", e);
+                println!("Error {e:?}");
                 return Err(CuError::new_with_cause("Error reading log", e));
             }
             Ok(entry) => {
@@ -139,7 +139,7 @@ pub fn textlog_dump(mut src: impl Read, index: &Path) -> CuResult<()> {
 
                 let result = rebuild_logline(&all_strings, &entry);
                 if result.is_err() {
-                    println!("Failed to rebuild log line: {:?}", result);
+                    println!("Failed to rebuild log line: {result:?}");
                     continue;
                 }
                 println!("{}: {}", entry.time, result.unwrap());

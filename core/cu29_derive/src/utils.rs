@@ -120,9 +120,7 @@ mod tests {
             let after = config_id_to_enum(input);
             assert!(
                 is_valid_rust_identifier(after.as_str()),
-                "bf {} af {}",
-                input,
-                after
+                "bf {input} af {after}"
             );
         })
     }

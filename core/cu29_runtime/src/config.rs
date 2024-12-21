@@ -34,7 +34,7 @@ impl Display for ComponentConfig {
             if !first {
                 write!(f, ", ")?;
             }
-            write!(f, "{}: {}", key, value)?;
+            write!(f, "{key}: {value}")?;
             first = false;
         }
         write!(f, "}}")
@@ -105,7 +105,7 @@ impl From<Value> for bool {
         if let RonValue::Bool(v) = value.0 {
             v
         } else {
-            panic!("Expected a Boolean variant but got {:?}", value)
+            panic!("Expected a Boolean variant but got {value:?}")
         }
     }
 }
@@ -116,10 +116,10 @@ impl From<Value> for u8 {
             if let Some(i) = num.as_i64() {
                 i as u8
             } else {
-                panic!("Expected an integer value but got {:?}", value)
+                panic!("Expected an integer value but got {value:?}")
             }
         } else {
-            panic!("Expected a Number variant but got {:?}", value)
+            panic!("Expected a Number variant but got {value:?}")
         }
     }
 }
@@ -130,10 +130,10 @@ impl From<Value> for u32 {
             if let Some(i) = num.as_i64() {
                 i as u32
             } else {
-                panic!("Expected an integer value but got {:?}", value)
+                panic!("Expected an integer value but got {value:?}")
             }
         } else {
-            panic!("Expected a Number variant but got {:?}", value)
+            panic!("Expected a Number variant but got {value:?}")
         }
     }
 }
@@ -144,10 +144,10 @@ impl From<Value> for i32 {
             if let Some(i) = num.as_i64() {
                 i as i32
             } else {
-                panic!("Expected an integer value but got {:?}", value)
+                panic!("Expected an integer value but got {value:?}")
             }
         } else {
-            panic!("Expected a Number variant but got {:?}", value)
+            panic!("Expected a Number variant but got {value:?}")
         }
     }
 }
@@ -158,10 +158,10 @@ impl From<Value> for f64 {
             if let Some(f) = num.as_f64() {
                 f
             } else {
-                panic!("Expected a float value but got {:?}", value)
+                panic!("Expected a float value but got {value:?}")
             }
         } else {
-            panic!("Expected a Number variant but got {:?}", value)
+            panic!("Expected a Number variant but got {value:?}")
         }
     }
 }
@@ -186,13 +186,13 @@ impl Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.0 {
             RonValue::Number(n) => write!(f, "{}", n.as_i64().unwrap()),
-            RonValue::String(s) => write!(f, "{}", s),
-            RonValue::Bool(b) => write!(f, "{}", b),
-            RonValue::Map(m) => write!(f, "{:?}", m),
-            RonValue::Char(c) => write!(f, "{:?}", c),
+            RonValue::String(s) => write!(f, "{s}"),
+            RonValue::Bool(b) => write!(f, "{b}"),
+            RonValue::Map(m) => write!(f, "{m:?}"),
+            RonValue::Char(c) => write!(f, "{c:?}"),
             RonValue::Unit => write!(f, "unit"),
-            RonValue::Option(o) => write!(f, "{:?}", o),
-            RonValue::Seq(s) => write!(f, "{:?}", s),
+            RonValue::Option(o) => write!(f, "{o:?}"),
+            RonValue::Seq(s) => write!(f, "{s:?}"),
         }
     }
 }
@@ -549,10 +549,10 @@ impl CuConfig {
                     let config_str = config
                         .0
                         .iter()
-                        .map(|(k, v)| format!("<B>{}</B> = {}<BR ALIGN=\"LEFT\"/>", k, v))
+                        .map(|(k, v)| format!("<B>{k}</B> = {v}<BR ALIGN=\"LEFT\"/>"))
                         .collect::<Vec<String>>()
                         .join("\n");
-                    format!("<BR/>____________<BR ALIGN=\"LEFT\"/>{}", config_str)
+                    format!("<BR/>____________<BR ALIGN=\"LEFT\"/>{config_str}")
                 }
                 None => String::new(),
             };

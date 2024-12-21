@@ -102,7 +102,7 @@ pub fn intern_string(s: &str) -> Option<IndexType> {
 
 #[allow(dead_code)]
 pub fn record_callsite(filename: &str, line_number: u32) -> Option<IndexType> {
-    intern_string(format!("{}:{}", filename, line_number).as_str())
+    intern_string(format!("{filename}:{line_number}").as_str())
 }
 
 const COUNTER_KEY: &str = "__counter__";
