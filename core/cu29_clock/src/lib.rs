@@ -13,7 +13,7 @@ use quanta::{Clock, Mock};
 use serde::{Deserialize, Serialize};
 use std::convert::Into;
 use std::fmt::{Display, Formatter};
-use std::ops::{AddAssign, Div, Mul};
+use std::ops::{AddAssign, Div, Mul, SubAssign};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -89,6 +89,12 @@ impl Add for CuDuration {
 impl AddAssign for CuDuration {
     fn add_assign(&mut self, rhs: Self) {
         self.0 += rhs.0
+    }
+}
+
+impl SubAssign for CuDuration {
+    fn sub_assign(&mut self, rhs: Self) {
+        self.0 -= rhs.0
     }
 }
 
