@@ -134,10 +134,8 @@ pub fn format_logline(
 
     let logline = strfmt(&format_str, named_params).map_err(|e| {
         CuError::new_with_cause(
-            format!(
-                "Failed to format log line: {format_str:?} with variables [{named_params:?}]"
-            )
-            .as_str(),
+            format!("Failed to format log line: {format_str:?} with variables [{named_params:?}]")
+                .as_str(),
             e,
         )
     })?;
