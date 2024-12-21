@@ -195,6 +195,10 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                     self.len
                 }
 
+                pub fn is_empty(&self) -> bool {
+                    self.len == 0
+                }
+
                 pub fn push(&mut self, value: super::#name) {
                     if self.len < N {
                         #( self.#field_names[self.len] = value.#field_names.clone(); )*
