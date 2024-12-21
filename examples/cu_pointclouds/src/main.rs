@@ -53,8 +53,8 @@ fn main() {
     const PACKET_SIZE: usize = size_of::<Packet>();
     let tmp_dir = tempfile::TempDir::new().expect("could not create a tmp dir");
     let logger_path = tmp_dir.path().join("ptclouds.copper");
-    let copper_ctx = basic_copper_setup(&logger_path, SLAB_SIZE, false, None)
-        .expect("Failed to setup copper.");
+    let copper_ctx =
+        basic_copper_setup(&logger_path, SLAB_SIZE, false, None).expect("Failed to setup copper.");
     let mut application =
         PtCloudsApplication::new(copper_ctx.clock.clone(), copper_ctx.unified_logger.clone())
             .expect("Failed to create application.");

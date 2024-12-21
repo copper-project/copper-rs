@@ -12,8 +12,8 @@ fn main() {
     let tmp_dir = tempfile::TempDir::new().expect("could not create a tmp dir");
     let logger_path = tmp_dir.path().join("caterpillar.copper");
 
-    let copper_ctx = basic_copper_setup(&logger_path, SLAB_SIZE, false, None)
-        .expect("Failed to setup logger.");
+    let copper_ctx =
+        basic_copper_setup(&logger_path, SLAB_SIZE, false, None).expect("Failed to setup logger.");
     let clock = copper_ctx.clock.clone();
     let ulclone = copper_ctx.unified_logger.clone();
     let mut application =
