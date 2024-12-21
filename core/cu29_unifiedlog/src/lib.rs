@@ -504,11 +504,7 @@ impl UnifiedLoggerWrite {
 
     fn garbage_collect_backslabs(&mut self) {
         self.back_slabs.retain_mut(|slab| {
-            if slab.sections_offsets_in_flight.is_empty() {
-                false
-            } else {
-                true
-            }
+            !slab.sections_offsets_in_flight.is_empty()
         });
     }
 
