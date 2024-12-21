@@ -2,7 +2,7 @@ use cu29_helpers::basic_copper_setup;
 use cu29_log::CuLogEntry;
 use cu29_log::ANONYMOUS;
 use cu29_log_derive::debug;
-use cu29_log_runtime::log_debug_mode;
+use cu29_log_runtime::log;
 use cu29_value::to_value;
 use serde::Serialize;
 use tempdir::TempDir;
