@@ -39,6 +39,7 @@ fn main() -> std::io::Result<()> {
         .stdout(Stdio::piped())
         .spawn()
         .expect("Failed to start dot process");
+    child.wait().expect("Failed to wait for dot process");
 
     {
         let stdin = child.stdin.as_mut().expect("Failed to open stdin");

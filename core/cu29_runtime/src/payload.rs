@@ -31,6 +31,10 @@ impl<T, const N: usize> CuArray<T, N> {
         self.inner.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.inner.len() == 0
+    }
+
     pub fn as_slice(&self) -> &[T] {
         &self.inner
     }
