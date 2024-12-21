@@ -9,7 +9,7 @@ macro_rules! define_task {
     ($name:ident, $($index:tt => { $mis:expr, $mos:expr, $p:ty }),+) => {
 
        paste::paste! {
-            crate::buffers::alignment_buffers!(
+            $crate::buffers::alignment_buffers!(
                 AlignmentBuffers,
                 $(
                     [<buffer $index>]: TimeboundCircularBuffer<$mis, CuMsg<$p>>

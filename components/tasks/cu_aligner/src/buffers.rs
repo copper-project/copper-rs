@@ -28,6 +28,15 @@ fn extract_tov_time_right(tov: &Tov) -> Option<CuTime> {
     }
 }
 
+impl<const S: usize, P> Default for TimeboundCircularBuffer<S, P>
+where
+    P: CuMsgPayload,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<const S: usize, P> TimeboundCircularBuffer<S, P>
 where
     P: CuMsgPayload,
@@ -97,7 +106,7 @@ macro_rules! alignment_buffers {
         struct $struct_name {
             target_alignment_window: cu29::clock::CuDuration, // size of the most recent data window to align
             stale_data_horizon: cu29::clock::CuDuration,  // time horizon for purging stale data
-            $(pub $name: crate::buffers::TimeboundCircularBuffer<$size, $payload>),*
+            $(pub $name: $crate::buffers::TimeboundCircularBuffer<$size, $payload>),*
         }
 
         impl $struct_name {
@@ -105,7 +114,7 @@ macro_rules! alignment_buffers {
                 Self {
                     target_alignment_window,
                     stale_data_horizon,
-                    $($name: crate::buffers::TimeboundCircularBuffer::<$size, $payload>::new()),*
+                    $($name: $crate::buffers::TimeboundCircularBuffer::<$size, $payload>::new()),*
                 }
             }
 
