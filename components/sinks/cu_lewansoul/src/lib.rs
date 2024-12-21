@@ -217,7 +217,7 @@ impl<'cl> CuSinkTask<'cl> for Lewansoul {
             .into();
 
         let mut ids = [0u8; 8];
-        for i in 0..8 {
+        for (i, id) in ids.iter_mut().enumerate() {
             let servo = kv.get(format!("servo{}", i).as_str());
             if servo.is_none() {
                 if i == 0 {
@@ -228,7 +228,7 @@ impl<'cl> CuSinkTask<'cl> for Lewansoul {
                 }
                 break;
             }
-            ids[i] = servo.unwrap().clone().into();
+            *id = servo.unwrap().clone().into();
         }
 
         let port = serialport::new(serial_dev.as_str(), SERIAL_SPEED)
