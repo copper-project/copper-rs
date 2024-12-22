@@ -1,0 +1,18 @@
+[package]
+name = "cu-lidar-fusion"
+description = "Fusion Lidar - Lidar for Copper"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+cu29 = { workspace = true }
+cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads" }
+
+[dev-dependencies]
+rerun = { workspace = true }

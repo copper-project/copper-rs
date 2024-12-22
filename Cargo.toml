@@ -27,6 +27,7 @@ members = [
     "components/sources/cu_wt901",
     "components/sources/cu_rp_encoder",
     "components/tasks/cu_aligner",
+    "components/tasks/cu_lidar_fusion",
     "components/tasks/cu_pid",
     "components/testing/cu_udp_inject",
     "examples/cu_caterpillar",
@@ -116,6 +117,9 @@ derive_more = { version = "1", features = ["full"] }
 
 # used across testing
 tempfile = "3.14.0"
+
+# 0.21 is crappy out at the time of writing with some other dependencies
+rerun = "0.20.3"
 
 # [profile.release]
 # lto = true
