@@ -59,11 +59,11 @@ jobs:
       # This is also relatively quick to do, so let's fail early. 
       - name: Run clippy in debug
         if: runner.os == 'Linux'
-        run: cargo clippy --workspace --all-targets -- -W warning
+        run: cargo clippy --workspace --all-targets -- --deny warnings
 
       - name: Run clippy in release
         if: runner.os == 'Linux'
-        run: cargo clippy --release --workspace --all-targets -- -W warning
+        run: cargo clippy --release --workspace --all-targets -- --deny warnings
 
       - name: Install cargo-generate
         run: cargo install cargo-generate
