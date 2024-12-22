@@ -4,8 +4,6 @@ version = "0.1.0"
 edition = "2021"
 default-run = "{{project-name|kebab_case}}"
 
-[workspace]
-
 # The main executable of your application
 [[bin]]
 name = "{{project-name|kebab_case}}"
