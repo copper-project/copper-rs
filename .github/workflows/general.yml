@@ -32,21 +32,12 @@ jobs:
       - name: Cargo fmt check
         run: cargo fmt --all -- --check
 
-      # This is also relatively quick to do, so let's fail early. 
-      - name: Run clippy in debug
-        if: runner.os == 'Linux'
-        run: cargo clippy --workspace --all-targets -- -W warning
-
-      - name: Run clippy in release
-        if: runner.os == 'Linux'
-        run: cargo clippy --release --workspace --all-targets -- -W warning
-
       ## System dependencies
-
       # Install dependencies only on Linux
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libudev-dev libpcap-dev
+        
 
       # Those are needed for the integration tests on Windows
       - name: Download Npcap SDK (Windows)
@@ -64,6 +55,15 @@ jobs:
           Add-Content -Path $env:GITHUB_ENV -Value "LIB=$npcapLibDir"
 
       ## End of system dependencies
+      
+      # This is also relatively quick to do, so let's fail early. 
+      - name: Run clippy in debug
+        if: runner.os == 'Linux'
+        run: cargo clippy --workspace --all-targets -- -W warning
+
+      - name: Run clippy in release
+        if: runner.os == 'Linux'
+        run: cargo clippy --release --workspace --all-targets -- -W warning
 
       - name: Install cargo-generate
         run: cargo install cargo-generate
