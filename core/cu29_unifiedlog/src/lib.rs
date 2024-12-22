@@ -503,13 +503,8 @@ impl UnifiedLoggerWrite {
     }
 
     fn garbage_collect_backslabs(&mut self) {
-        self.back_slabs.retain_mut(|slab| {
-            if slab.sections_offsets_in_flight.is_empty() {
-                false
-            } else {
-                true
-            }
-        });
+        self.back_slabs
+            .retain_mut(|slab| !slab.sections_offsets_in_flight.is_empty());
     }
 
     /// The returned slice is section_size or greater.
