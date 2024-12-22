@@ -124,6 +124,7 @@ impl<const N: usize> PointCloudSoa<N> {
         self.quicksort(0, N - 1);
     }
 
+    /// Implementation of the sort
     fn quicksort(&mut self, low: usize, high: usize) {
         if low < high {
             let pivot_index = self.partition(low, high);
@@ -134,6 +135,7 @@ impl<const N: usize> PointCloudSoa<N> {
         }
     }
 
+    /// Used by quicksort.
     fn partition(&mut self, low: usize, high: usize) -> usize {
         let pivot = self.tov[high];
         let mut i = low;
@@ -147,7 +149,8 @@ impl<const N: usize> PointCloudSoa<N> {
         i
     }
 
-    fn swap(&mut self, a: usize, b: usize) {
+    /// swap the elements at index a and b
+    pub fn swap(&mut self, a: usize, b: usize) {
         self.tov.swap(a, b);
         self.x.swap(a, b);
         self.y.swap(a, b);
