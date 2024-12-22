@@ -371,7 +371,7 @@
 <span class="kw">impl</span>&lt;<span class="lifetime">'cl</span>, T: CuMsgPayload&gt; CuMsgPack&lt;<span class="lifetime">'cl</span>&gt; <span class="kw">for </span><span class="kw-2">&amp;</span><span class="lifetime">'cl </span>CuMsg&lt;T&gt; {}
 <span class="kw">impl</span>&lt;<span class="lifetime">'cl</span>, T: CuMsgPayload&gt; CuMsgPack&lt;<span class="lifetime">'cl</span>&gt; <span class="kw">for </span>(<span class="kw-2">&amp;</span><span class="lifetime">'cl </span><span class="kw-2">mut </span>CuMsg&lt;T&gt;,) {}
 <span class="kw">impl</span>&lt;<span class="lifetime">'cl</span>, T: CuMsgPayload&gt; CuMsgPack&lt;<span class="lifetime">'cl</span>&gt; <span class="kw">for </span><span class="kw-2">&amp;</span><span class="lifetime">'cl </span><span class="kw-2">mut </span>CuMsg&lt;T&gt; {}
-<span class="kw">impl</span>&lt;<span class="lifetime">'cl</span>&gt; CuMsgPack&lt;<span class="lifetime">'cl</span>&gt; <span class="kw">for </span>() {}
+<span class="kw">impl </span>CuMsgPack&lt;<span class="lifetime">'_</span>&gt; <span class="kw">for </span>() {}
 
 <span class="comment">// Apply the macro to generate implementations for tuple sizes up to 5
 </span><span class="macro">impl_cu_msg_pack!</span> {

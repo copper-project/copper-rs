@@ -69,7 +69,8 @@
 <a href="#68" id="68">68</a>
 <a href="#69" id="69">69</a>
 <a href="#70" id="70">70</a>
-<a href="#71" id="71">71</a></pre></div><pre class="rust"><code><span class="kw">mod </span>config;
+<a href="#71" id="71">71</a>
+<a href="#72" id="72">72</a></pre></div><pre class="rust"><code><span class="kw">mod </span>config;
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>config::read_configuration;
 <span class="kw">pub use </span>cu29_traits::<span class="kw-2">*</span>;
@@ -110,6 +111,7 @@
         .stdout(Stdio::piped())
         .spawn()
         .expect(<span class="string">"Failed to start dot process"</span>);
+    child.wait().expect(<span class="string">"Failed to wait for dot process"</span>);
 
     {
         <span class="kw">let </span>stdin = child.stdin.as_mut().expect(<span class="string">"Failed to open stdin"</span>);
