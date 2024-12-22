@@ -26,7 +26,7 @@ struct DummyWriteStream;
 
 impl WriteStream<CuLogEntry> for DummyWriteStream {
     fn log(&mut self, obj: &CuLogEntry) -> CuResult<()> {
-        eprintln!("Pending logs got cut: {:?}", obj);
+        eprintln!("Pending logs got cut: {obj:?}");
         Ok(())
     }
 }
@@ -82,7 +82,7 @@ impl LoggerRuntime {
         if let Some((writer, _clock)) = WRITER.get() {
             if let Ok(mut writer) = writer.lock() {
                 if let Err(err) = writer.flush() {
-                    eprintln!("cu29_log: Failed to flush writer: {}", err);
+                    eprintln!("cu29_log: Failed to flush writer: {err}");
                 }
             } else {
                 eprintln!("cu29_log: Failed to lock writer.");
@@ -116,7 +116,7 @@ pub fn log(entry: &mut CuLogEntry) -> CuResult<()> {
     let (writer, clock) = d.unwrap();
     entry.time = clock.now();
     if let Err(err) = writer.lock().unwrap().log(entry) {
-        eprintln!("Failed to log data: {}", err);
+        eprintln!("Failed to log data: {err}");
     }
     // This is only for debug builds with standard textual logging implemented.
     #[cfg(debug_assertions)]
@@ -159,7 +159,7 @@ pub fn log_debug_mode(
         let logline = format_logline(entry.time, &fstr, params.as_slice(), &named_params)?;
         logger.log(
             &Record::builder()
-                .args(format_args!("{}", logline))
+                .args(format_args!("{logline}"))
                 .level(log::Level::Info)
                 .target("cu29_log")
                 .module_path_static(Some("cu29_log"))
@@ -224,7 +224,7 @@ impl SimpleFileWriter {
             .truncate(true)
             .write(true)
             .open(path)
-            .map_err(|e| format!("Failed to open file: {:?}", e))?;
+            .map_err(|e| format!("Failed to open file: {e:?}"))?;
 
         let writer = OwningIoWriter::new(file);
         let encoder = EncoderImpl::new(writer, bincode::config::standard());
@@ -246,7 +246,7 @@ impl WriteStream<CuLogEntry> for SimpleFileWriter {
     #[inline(always)]
     fn log(&mut self, obj: &CuLogEntry) -> CuResult<()> {
         obj.encode(&mut self.encoder)
-            .map_err(|e| format!("Failed to write to file: {:?}", e))?;
+            .map_err(|e| format!("Failed to write to file: {e:?}"))?;
         Ok(())
     }
 
@@ -254,7 +254,7 @@ impl WriteStream<CuLogEntry> for SimpleFileWriter {
         self.encoder
             .writer()
             .flush()
-            .map_err(|e| format!("Failed to flush file: {:?}", e))?;
+            .map_err(|e| format!("Failed to flush file: {e:?}"))?;
         Ok(())
     }
 }

@@ -442,7 +442,7 @@ fn build_slab_path(base_file_path: &Path, slab_index: usize) -> PathBuf {
     let mut file_name = file_name.split('.').collect::<Vec<&str>>();
     let extension = file_name.pop().unwrap();
     let file_name = file_name.join(".");
-    let file_name = format!("{}_{}.{}", file_name, slab_index, extension);
+    let file_name = format!("{file_name}_{slab_index}.{extension}");
     file_path.set_file_name(file_name);
     file_path
 }

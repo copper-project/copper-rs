@@ -134,15 +134,12 @@ pub fn format_logline(
 
     let logline = strfmt(&format_str, named_params).map_err(|e| {
         CuError::new_with_cause(
-            format!(
-                "Failed to format log line: {:?} with variables [{:?}]",
-                format_str, named_params
-            )
-            .as_str(),
+            format!("Failed to format log line: {format_str:?} with variables [{named_params:?}]")
+                .as_str(),
             e,
         )
     })?;
-    Ok(format!("{}: {}", time, logline))
+    Ok(format!("{time}: {logline}"))
 }
 
 /// Rebuild a log line from the interned strings and the CuLogEntry.
@@ -153,7 +150,7 @@ pub fn rebuild_logline(all_interned_strings: &[String], entry: &CuLogEntry) -> C
     let mut named_params = HashMap::new();
 
     for (i, param) in entry.params.iter().enumerate() {
-        let param_as_string = format!("{}", param);
+        let param_as_string = format!("{param}");
         if entry.paramname_indexes[i] == 0 {
             // Anonymous parameter
             anon_params.push(param_as_string);

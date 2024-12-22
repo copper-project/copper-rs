@@ -180,12 +180,12 @@ fn gen_sim_support(runtime_plan: &CuExecutionLoop) -> proc_macro2::TokenStream {
                 let inputs: Vec<Type> = step
                     .input_msg_indices_types
                     .iter()
-                    .map(|(_, t)| parse_str::<Type>(format!("_CuMsg<{}>", t).as_str()).unwrap())
+                    .map(|(_, t)| parse_str::<Type>(format!("_CuMsg<{t}>").as_str()).unwrap())
                     .collect();
                 let output: Option<Type> = step
                     .output_msg_index_type
                     .as_ref()
-                    .map(|(_, t)| parse_str::<Type>(format!("_CuMsg<{}>", t).as_str()).unwrap());
+                    .map(|(_, t)| parse_str::<Type>(format!("_CuMsg<{t}>").as_str()).unwrap());
                 let no_output = parse_str::<Type>("_CuMsg<()>").unwrap();
                 let output = output.as_ref().unwrap_or(&no_output);
                 quote! {
@@ -272,17 +272,17 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             CuTaskType::Source => {
                 let msg_type = copper_config
                     .get_node_output_msg_type(task_id.as_str())
-                    .unwrap_or_else(|| panic!("CuSrcTask {} should have an outgoing connection with a valid output msg type", task_id));
-                let sim_task_name = format!("cu29::simulation::CuSimSrcTask<{}>", msg_type);
-                parse_str(sim_task_name.as_str()).unwrap_or_else(|_| panic!("Could not build the placeholder for simulation: {}", sim_task_name))
+                    .unwrap_or_else(|| panic!("CuSrcTask {task_id} should have an outgoing connection with a valid output msg type"));
+                let sim_task_name = format!("cu29::simulation::CuSimSrcTask<{msg_type}>");
+                parse_str(sim_task_name.as_str()).unwrap_or_else(|_| panic!("Could not build the placeholder for simulation: {sim_task_name}"))
             }
             CuTaskType::Regular => stype.clone(),
             CuTaskType::Sink => {
                 let msg_type = copper_config
                     .get_node_input_msg_type(task_id.as_str())
-                    .unwrap_or_else(|| panic!("CuSinkTask {} should have an incoming connection with a valid input msg type", task_id));
-                let sim_task_name = format!("cu29::simulation::CuSimSinkTask<{}>", msg_type);
-                parse_str(sim_task_name.as_str()).unwrap_or_else(|_| panic!("Could not build the placeholder for simulation: {}", sim_task_name))
+                    .unwrap_or_else(|| panic!("CuSinkTask {task_id} should have an incoming connection with a valid input msg type"));
+                let sim_task_name = format!("cu29::simulation::CuSimSinkTask<{msg_type}>");
+                parse_str(sim_task_name.as_str()).unwrap_or_else(|_| panic!("Could not build the placeholder for simulation: {sim_task_name}"))
             }
         })
         .collect();
@@ -1116,7 +1116,7 @@ fn read_config(config_file: &str) -> CuConfig {
     let filename = config_full_path(config_file);
 
     read_configuration(filename.as_str())
-        .unwrap_or_else(|_| panic!("Failed to read configuration file: {}", filename))
+        .unwrap_or_else(|_| panic!("Failed to read configuration file: {filename}"))
 }
 
 fn config_full_path(config_file: &str) -> String {
@@ -1157,7 +1157,7 @@ fn extract_tasks_types(
         .iter()
         .map(|name| {
             parse_str(name)
-                .unwrap_or_else(|_| panic!("Could not transform {} into a Task Rust type.", name))
+                .unwrap_or_else(|_| panic!("Could not transform {name} into a Task Rust type."))
         })
         .collect();
     (all_tasks_ids, all_task_cutype, all_types_names, all_types)
@@ -1173,8 +1173,7 @@ fn extract_msg_types(runtime_plan: &CuExecutionLoop) -> Vec<Type> {
                     Some(
                         parse_str::<Type>(output_msg_type.as_str()).unwrap_or_else(|_| {
                             panic!(
-                                "Could not transform {} into a message Rust type.",
-                                output_msg_type
+                                "Could not transform {output_msg_type} into a message Rust type."
                             )
                         }),
                     )

@@ -75,8 +75,7 @@ where
         let len = u32::decode(decoder)? as usize;
         if len > N {
             return Err(bincode::error::DecodeError::OtherString(format!(
-                "Decoded length {} exceeds maximum capacity {}",
-                len, N
+                "Decoded length {len} exceeds maximum capacity {N}"
             )));
         }
 

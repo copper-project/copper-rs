@@ -179,7 +179,7 @@ impl Display for CuDuration {
         } else if nanos >= 1_000 {
             write!(f, "{:.3} µs", nanos as f64 / 1_000.0)
         } else {
-            write!(f, "{} ns", nanos)
+            write!(f, "{nanos} ns")
         }
     }
 }
