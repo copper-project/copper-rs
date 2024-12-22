@@ -118,6 +118,47 @@ impl PointCloud {
     }
 }
 
+impl<const N: usize> PointCloudSoa<N> {
+    /// Sort in place the point cloud so it can be ready for merge sorts for example
+    pub fn sort(&mut self) {
+        self.quicksort(0, N - 1);
+    }
+
+    /// Implementation of the sort
+    fn quicksort(&mut self, low: usize, high: usize) {
+        if low < high {
+            let pivot_index = self.partition(low, high);
+            if pivot_index > 0 {
+                self.quicksort(low, pivot_index - 1);
+            }
+            self.quicksort(pivot_index + 1, high);
+        }
+    }
+
+    /// Used by quicksort.
+    fn partition(&mut self, low: usize, high: usize) -> usize {
+        let pivot = self.tov[high];
+        let mut i = low;
+        for j in low..high {
+            if self.tov[j] <= pivot {
+                self.swap(i, j);
+                i += 1;
+            }
+        }
+        self.swap(i, high);
+        i
+    }
+
+    /// swap the elements at index a and b
+    pub fn swap(&mut self, a: usize, b: usize) {
+        self.tov.swap(a, b);
+        self.x.swap(a, b);
+        self.y.swap(a, b);
+        self.z.swap(a, b);
+        self.i.swap(a, b);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
