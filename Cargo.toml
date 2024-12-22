@@ -36,7 +36,7 @@ members = [
     "examples/cu_multisources",
     "examples/cu_pointclouds",
     "examples/cu_rp_balancebot",
-    "examples/cu_standalone_structlog"
+    "examples/cu_standalone_structlog",
 ]
 
 # put only the core crates here that are not platform specific
@@ -116,9 +116,6 @@ derive_more = { version = "1", features = ["full"] }
 
 # used across testing
 tempfile = "3.14.0"
-
-# used to data viz, as the time of writing 0.21 craps out in the forest of dependencies (wasm)
-rerun = "0.20.3"
 
 # [profile.release]
 # lto = true
