@@ -665,7 +665,7 @@
         } <span class="kw">else if </span>nanos &gt;= <span class="number">1_000 </span>{
             <span class="macro">write!</span>(f, <span class="string">"{:.3} µs"</span>, nanos <span class="kw">as </span>f64 / <span class="number">1_000.0</span>)
         } <span class="kw">else </span>{
-            <span class="macro">write!</span>(f, <span class="string">"{} ns"</span>, nanos)
+            <span class="macro">write!</span>(f, <span class="string">"{nanos} ns"</span>)
         }
     }
 }

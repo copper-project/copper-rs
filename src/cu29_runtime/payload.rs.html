@@ -88,8 +88,7 @@
 <a href="#87" id="87">87</a>
 <a href="#88" id="88">88</a>
 <a href="#89" id="89">89</a>
-<a href="#90" id="90">90</a>
-<a href="#91" id="91">91</a></pre></div><pre class="rust"><code><span class="doccomment">/// This module is a collection of Copper friendly data structures for message payloads.
+<a href="#90" id="90">90</a></pre></div><pre class="rust"><code><span class="doccomment">/// This module is a collection of Copper friendly data structures for message payloads.
 ///
 /// The constraint on the messages is that they can be part of a copper list, fixed sized and bincode serializable.
 </span><span class="kw">use </span>arrayvec::ArrayVec;
@@ -166,9 +165,8 @@
         </span><span class="kw">let </span>len = u32::decode(decoder)<span class="question-mark">? </span><span class="kw">as </span>usize;
         <span class="kw">if </span>len &gt; N {
             <span class="kw">return </span><span class="prelude-val">Err</span>(bincode::error::DecodeError::OtherString(<span class="macro">format!</span>(
-                <span class="string">"Decoded length {} exceeds maximum capacity {}"</span>,
-                len, N
-            )));
+                <span class="string">"Decoded length {len} exceeds maximum capacity {N}"
+            </span>)));
         }
 
         <span class="comment">// Decode elements into a new `ArrayVec`

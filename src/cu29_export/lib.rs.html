@@ -504,11 +504,11 @@
             textlog_dump(reader, <span class="kw-2">&amp;</span>log_index)<span class="question-mark">?</span>;
         }
         Command::ExtractCopperlist { export_format } =&gt; {
-            <span class="macro">println!</span>(<span class="string">"Extracting copperlists with format: {}"</span>, export_format);
+            <span class="macro">println!</span>(<span class="string">"Extracting copperlists with format: {export_format}"</span>);
             <span class="kw">let </span><span class="kw-2">mut </span>reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
             <span class="kw">let </span>iter = copperlists_dump::&lt;P&gt;(<span class="kw-2">&amp;mut </span>reader);
             <span class="kw">for </span>entry <span class="kw">in </span>iter {
-                <span class="macro">println!</span>(<span class="string">"{:#?}"</span>, entry);
+                <span class="macro">println!</span>(<span class="string">"{entry:#?}"</span>);
             }
         }
     }
@@ -531,12 +531,12 @@
                     <span class="kw">if </span>inner.kind() == std::io::ErrorKind::UnexpectedEof {
                         <span class="prelude-val">None
                     </span>} <span class="kw">else </span>{
-                        <span class="macro">println!</span>(<span class="string">"Error {:?} additional:{}"</span>, inner, additional);
+                        <span class="macro">println!</span>(<span class="string">"Error {inner:?} additional:{additional}"</span>);
                         <span class="prelude-val">None
                     </span>}
                 }
                 <span class="kw">_ </span>=&gt; {
-                    <span class="macro">println!</span>(<span class="string">"Error {:?}"</span>, e);
+                    <span class="macro">println!</span>(<span class="string">"Error {e:?}"</span>);
                     <span class="prelude-val">None
                 </span>}
             },
@@ -559,12 +559,12 @@
                 <span class="kw">if </span>inner.kind() == std::io::ErrorKind::UnexpectedEof {
                     <span class="kw">return </span><span class="prelude-val">Ok</span>(());
                 } <span class="kw">else </span>{
-                    <span class="macro">println!</span>(<span class="string">"Error {:?} additional:{}"</span>, inner, additional);
+                    <span class="macro">println!</span>(<span class="string">"Error {inner:?} additional:{additional}"</span>);
                     <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::new_with_cause(<span class="string">"Error reading log"</span>, inner));
                 }
             }
             <span class="prelude-val">Err</span>(e) =&gt; {
-                <span class="macro">println!</span>(<span class="string">"Error {:?}"</span>, e);
+                <span class="macro">println!</span>(<span class="string">"Error {e:?}"</span>);
                 <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::new_with_cause(<span class="string">"Error reading log"</span>, e));
             }
             <span class="prelude-val">Ok</span>(entry) =&gt; {
@@ -574,7 +574,7 @@
 
                 <span class="kw">let </span>result = rebuild_logline(<span class="kw-2">&amp;</span>all_strings, <span class="kw-2">&amp;</span>entry);
                 <span class="kw">if </span>result.is_err() {
-                    <span class="macro">println!</span>(<span class="string">"Failed to rebuild log line: {:?}"</span>, result);
+                    <span class="macro">println!</span>(<span class="string">"Failed to rebuild log line: {result:?}"</span>);
                     <span class="kw">continue</span>;
                 }
                 <span class="macro">println!</span>(<span class="string">"{}: {}"</span>, entry.time, result.unwrap());

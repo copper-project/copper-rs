@@ -178,10 +178,7 @@
 <a href="#177" id="177">177</a>
 <a href="#178" id="178">178</a>
 <a href="#179" id="179">179</a>
-<a href="#180" id="180">180</a>
-<a href="#181" id="181">181</a>
-<a href="#182" id="182">182</a>
-<a href="#183" id="183">183</a></pre></div><pre class="rust"><code><span class="kw">use </span>bincode::{Decode, Encode};
+<a href="#180" id="180">180</a></pre></div><pre class="rust"><code><span class="kw">use </span>bincode::{Decode, Encode};
 <span class="kw">use </span>cu29_clock::CuTime;
 <span class="kw">use </span>cu29_traits::{CuError, CuResult};
 <span class="kw">use </span>cu29_value::Value;
@@ -317,15 +314,12 @@
 
     <span class="kw">let </span>logline = strfmt(<span class="kw-2">&amp;</span>format_str, named_params).map_err(|e| {
         CuError::new_with_cause(
-            <span class="macro">format!</span>(
-                <span class="string">"Failed to format log line: {:?} with variables [{:?}]"</span>,
-                format_str, named_params
-            )
-            .as_str(),
+            <span class="macro">format!</span>(<span class="string">"Failed to format log line: {format_str:?} with variables [{named_params:?}]"</span>)
+                .as_str(),
             e,
         )
     })<span class="question-mark">?</span>;
-    <span class="prelude-val">Ok</span>(<span class="macro">format!</span>(<span class="string">"{}: {}"</span>, time, logline))
+    <span class="prelude-val">Ok</span>(<span class="macro">format!</span>(<span class="string">"{time}: {logline}"</span>))
 }
 
 <span class="doccomment">/// Rebuild a log line from the interned strings and the CuLogEntry.
@@ -336,7 +330,7 @@
     <span class="kw">let </span><span class="kw-2">mut </span>named_params = HashMap::new();
 
     <span class="kw">for </span>(i, param) <span class="kw">in </span>entry.params.iter().enumerate() {
-        <span class="kw">let </span>param_as_string = <span class="macro">format!</span>(<span class="string">"{}"</span>, param);
+        <span class="kw">let </span>param_as_string = <span class="macro">format!</span>(<span class="string">"{param}"</span>);
         <span class="kw">if </span>entry.paramname_indexes[i] == <span class="number">0 </span>{
             <span class="comment">// Anonymous parameter
             </span>anon_params.push(param_as_string);

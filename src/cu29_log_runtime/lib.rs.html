@@ -308,7 +308,7 @@
 
 <span class="kw">impl </span>WriteStream&lt;CuLogEntry&gt; <span class="kw">for </span>DummyWriteStream {
     <span class="kw">fn </span>log(<span class="kw-2">&amp;mut </span><span class="self">self</span>, obj: <span class="kw-2">&amp;</span>CuLogEntry) -&gt; CuResult&lt;()&gt; {
-        <span class="macro">eprintln!</span>(<span class="string">"Pending logs got cut: {:?}"</span>, obj);
+        <span class="macro">eprintln!</span>(<span class="string">"Pending logs got cut: {obj:?}"</span>);
         <span class="prelude-val">Ok</span>(())
     }
 }
@@ -364,7 +364,7 @@
         <span class="kw">if let </span><span class="prelude-val">Some</span>((writer, _clock)) = WRITER.get() {
             <span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>writer) = writer.lock() {
                 <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = writer.flush() {
-                    <span class="macro">eprintln!</span>(<span class="string">"cu29_log: Failed to flush writer: {}"</span>, err);
+                    <span class="macro">eprintln!</span>(<span class="string">"cu29_log: Failed to flush writer: {err}"</span>);
                 }
             } <span class="kw">else </span>{
                 <span class="macro">eprintln!</span>(<span class="string">"cu29_log: Failed to lock writer."</span>);
@@ -398,7 +398,7 @@
     <span class="kw">let </span>(writer, clock) = d.unwrap();
     entry.time = clock.now();
     <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = writer.lock().unwrap().log(entry) {
-        <span class="macro">eprintln!</span>(<span class="string">"Failed to log data: {}"</span>, err);
+        <span class="macro">eprintln!</span>(<span class="string">"Failed to log data: {err}"</span>);
     }
     <span class="comment">// This is only for debug builds with standard textual logging implemented.
     </span><span class="attr">#[cfg(debug_assertions)]
@@ -441,7 +441,7 @@
         <span class="kw">let </span>logline = format_logline(entry.time, <span class="kw-2">&amp;</span>fstr, params.as_slice(), <span class="kw-2">&amp;</span>named_params)<span class="question-mark">?</span>;
         logger.log(
             <span class="kw-2">&amp;</span>Record::builder()
-                .args(<span class="macro">format_args!</span>(<span class="string">"{}"</span>, logline))
+                .args(<span class="macro">format_args!</span>(<span class="string">"{logline}"</span>))
                 .level(log::Level::Info)
                 .target(<span class="string">"cu29_log"</span>)
                 .module_path_static(<span class="prelude-val">Some</span>(<span class="string">"cu29_log"</span>))
@@ -506,7 +506,7 @@
             .truncate(<span class="bool-val">true</span>)
             .write(<span class="bool-val">true</span>)
             .open(path)
-            .map_err(|e| <span class="macro">format!</span>(<span class="string">"Failed to open file: {:?}"</span>, e))<span class="question-mark">?</span>;
+            .map_err(|e| <span class="macro">format!</span>(<span class="string">"Failed to open file: {e:?}"</span>))<span class="question-mark">?</span>;
 
         <span class="kw">let </span>writer = OwningIoWriter::new(file);
         <span class="kw">let </span>encoder = EncoderImpl::new(writer, bincode::config::standard());
@@ -528,7 +528,7 @@
     <span class="attr">#[inline(always)]
     </span><span class="kw">fn </span>log(<span class="kw-2">&amp;mut </span><span class="self">self</span>, obj: <span class="kw-2">&amp;</span>CuLogEntry) -&gt; CuResult&lt;()&gt; {
         obj.encode(<span class="kw-2">&amp;mut </span><span class="self">self</span>.encoder)
-            .map_err(|e| <span class="macro">format!</span>(<span class="string">"Failed to write to file: {:?}"</span>, e))<span class="question-mark">?</span>;
+            .map_err(|e| <span class="macro">format!</span>(<span class="string">"Failed to write to file: {e:?}"</span>))<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
     }
 
@@ -536,7 +536,7 @@
         <span class="self">self</span>.encoder
             .writer()
             .flush()
-            .map_err(|e| <span class="macro">format!</span>(<span class="string">"Failed to flush file: {:?}"</span>, e))<span class="question-mark">?</span>;
+            .map_err(|e| <span class="macro">format!</span>(<span class="string">"Failed to flush file: {e:?}"</span>))<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
     }
 }

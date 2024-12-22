@@ -1263,8 +1263,7 @@
 <a href="#1262" id="1262">1262</a>
 <a href="#1263" id="1263">1263</a>
 <a href="#1264" id="1264">1264</a>
-<a href="#1265" id="1265">1265</a>
-<a href="#1266" id="1266">1266</a></pre></div><pre class="rust"><code><span class="kw">extern crate </span>proc_macro;
+<a href="#1265" id="1265">1265</a></pre></div><pre class="rust"><code><span class="kw">extern crate </span>proc_macro;
 
 <span class="kw">use </span>proc_macro::TokenStream;
 <span class="kw">use </span>quote::{format_ident, quote};
@@ -1446,12 +1445,12 @@
                 <span class="kw">let </span>inputs: Vec&lt;Type&gt; = step
                     .input_msg_indices_types
                     .iter()
-                    .map(|(<span class="kw">_</span>, t)| parse_str::&lt;Type&gt;(<span class="macro">format!</span>(<span class="string">"_CuMsg&lt;{}&gt;"</span>, t).as_str()).unwrap())
+                    .map(|(<span class="kw">_</span>, t)| parse_str::&lt;Type&gt;(<span class="macro">format!</span>(<span class="string">"_CuMsg&lt;{t}&gt;"</span>).as_str()).unwrap())
                     .collect();
                 <span class="kw">let </span>output: <span class="prelude-ty">Option</span>&lt;Type&gt; = step
                     .output_msg_index_type
                     .as_ref()
-                    .map(|(<span class="kw">_</span>, t)| parse_str::&lt;Type&gt;(<span class="macro">format!</span>(<span class="string">"_CuMsg&lt;{}&gt;"</span>, t).as_str()).unwrap());
+                    .map(|(<span class="kw">_</span>, t)| parse_str::&lt;Type&gt;(<span class="macro">format!</span>(<span class="string">"_CuMsg&lt;{t}&gt;"</span>).as_str()).unwrap());
                 <span class="kw">let </span>no_output = parse_str::&lt;Type&gt;(<span class="string">"_CuMsg&lt;()&gt;"</span>).unwrap();
                 <span class="kw">let </span>output = output.as_ref().unwrap_or(<span class="kw-2">&amp;</span>no_output);
                 <span class="macro">quote!</span> {
@@ -1538,17 +1537,17 @@
             CuTaskType::Source =&gt; {
                 <span class="kw">let </span>msg_type = copper_config
                     .get_node_output_msg_type(task_id.as_str())
-                    .unwrap_or_else(|| <span class="macro">panic!</span>(<span class="string">"CuSrcTask {} should have an outgoing connection with a valid output msg type"</span>, task_id));
-                <span class="kw">let </span>sim_task_name = <span class="macro">format!</span>(<span class="string">"cu29::simulation::CuSimSrcTask&lt;{}&gt;"</span>, msg_type);
-                parse_str(sim_task_name.as_str()).unwrap_or_else(|<span class="kw">_</span>| <span class="macro">panic!</span>(<span class="string">"Could not build the placeholder for simulation: {}"</span>, sim_task_name))
+                    .unwrap_or_else(|| <span class="macro">panic!</span>(<span class="string">"CuSrcTask {task_id} should have an outgoing connection with a valid output msg type"</span>));
+                <span class="kw">let </span>sim_task_name = <span class="macro">format!</span>(<span class="string">"cu29::simulation::CuSimSrcTask&lt;{msg_type}&gt;"</span>);
+                parse_str(sim_task_name.as_str()).unwrap_or_else(|<span class="kw">_</span>| <span class="macro">panic!</span>(<span class="string">"Could not build the placeholder for simulation: {sim_task_name}"</span>))
             }
             CuTaskType::Regular =&gt; stype.clone(),
             CuTaskType::Sink =&gt; {
                 <span class="kw">let </span>msg_type = copper_config
                     .get_node_input_msg_type(task_id.as_str())
-                    .unwrap_or_else(|| <span class="macro">panic!</span>(<span class="string">"CuSinkTask {} should have an incoming connection with a valid input msg type"</span>, task_id));
-                <span class="kw">let </span>sim_task_name = <span class="macro">format!</span>(<span class="string">"cu29::simulation::CuSimSinkTask&lt;{}&gt;"</span>, msg_type);
-                parse_str(sim_task_name.as_str()).unwrap_or_else(|<span class="kw">_</span>| <span class="macro">panic!</span>(<span class="string">"Could not build the placeholder for simulation: {}"</span>, sim_task_name))
+                    .unwrap_or_else(|| <span class="macro">panic!</span>(<span class="string">"CuSinkTask {task_id} should have an incoming connection with a valid input msg type"</span>));
+                <span class="kw">let </span>sim_task_name = <span class="macro">format!</span>(<span class="string">"cu29::simulation::CuSimSinkTask&lt;{msg_type}&gt;"</span>);
+                parse_str(sim_task_name.as_str()).unwrap_or_else(|<span class="kw">_</span>| <span class="macro">panic!</span>(<span class="string">"Could not build the placeholder for simulation: {sim_task_name}"</span>))
             }
         })
         .collect();
@@ -2382,7 +2381,7 @@
     <span class="kw">let </span>filename = config_full_path(config_file);
 
     read_configuration(filename.as_str())
-        .unwrap_or_else(|<span class="kw">_</span>| <span class="macro">panic!</span>(<span class="string">"Failed to read configuration file: {}"</span>, filename))
+        .unwrap_or_else(|<span class="kw">_</span>| <span class="macro">panic!</span>(<span class="string">"Failed to read configuration file: {filename}"</span>))
 }
 
 <span class="kw">fn </span>config_full_path(config_file: <span class="kw-2">&amp;</span>str) -&gt; String {
@@ -2423,7 +2422,7 @@
         .iter()
         .map(|name| {
             parse_str(name)
-                .unwrap_or_else(|<span class="kw">_</span>| <span class="macro">panic!</span>(<span class="string">"Could not transform {} into a Task Rust type."</span>, name))
+                .unwrap_or_else(|<span class="kw">_</span>| <span class="macro">panic!</span>(<span class="string">"Could not transform {name} into a Task Rust type."</span>))
         })
         .collect();
     (all_tasks_ids, all_task_cutype, all_types_names, all_types)
@@ -2439,9 +2438,8 @@
                     <span class="prelude-val">Some</span>(
                         parse_str::&lt;Type&gt;(output_msg_type.as_str()).unwrap_or_else(|<span class="kw">_</span>| {
                             <span class="macro">panic!</span>(
-                                <span class="string">"Could not transform {} into a message Rust type."</span>,
-                                output_msg_type
-                            )
+                                <span class="string">"Could not transform {output_msg_type} into a message Rust type."
+                            </span>)
                         }),
                     )
                 } <span class="kw">else </span>{

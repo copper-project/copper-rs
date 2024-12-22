@@ -1493,7 +1493,7 @@
     <span class="kw">let </span><span class="kw-2">mut </span>file_name = file_name.split(<span class="string">'.'</span>).collect::&lt;Vec&lt;<span class="kw-2">&amp;</span>str&gt;&gt;();
     <span class="kw">let </span>extension = file_name.pop().unwrap();
     <span class="kw">let </span>file_name = file_name.join(<span class="string">"."</span>);
-    <span class="kw">let </span>file_name = <span class="macro">format!</span>(<span class="string">"{}_{}.{}"</span>, file_name, slab_index, extension);
+    <span class="kw">let </span>file_name = <span class="macro">format!</span>(<span class="string">"{file_name}_{slab_index}.{extension}"</span>);
     file_path.set_file_name(file_name);
     file_path
 }
