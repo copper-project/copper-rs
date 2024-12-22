@@ -640,12 +640,12 @@ fn init_error_hooks() {
     let panic = panic.into_panic_hook();
     let error = error.into_eyre_hook();
     color_eyre::eyre::set_hook(Box::new(move |e| {
-        let _ = restore_terminal();
+        restore_terminal();
         error(e)
     }))
     .unwrap();
     std::panic::set_hook(Box::new(move |info| {
-        let _ = restore_terminal();
+        restore_terminal();
         panic(info)
     }));
 }
