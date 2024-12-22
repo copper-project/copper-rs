@@ -184,7 +184,7 @@ pub struct CuSimSinkTask<T> {
     boo: PhantomData<T>,
 }
 
-impl<'cl, T: CuMsgPayload + 'cl> Freezable for CuSimSinkTask<T> {}
+impl<T: CuMsgPayload> Freezable for CuSimSinkTask<T> {}
 
 impl<'cl, T: CuMsgPayload + 'cl> CuSinkTask<'cl> for CuSimSinkTask<T> {
     type Input = input_msg!('cl, T);

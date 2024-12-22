@@ -35,7 +35,7 @@ impl<'cl, T: CuMsgPayload> CuMsgPack<'cl> for (&'cl CuMsg<T>,) {}
 impl<'cl, T: CuMsgPayload> CuMsgPack<'cl> for &'cl CuMsg<T> {}
 impl<'cl, T: CuMsgPayload> CuMsgPack<'cl> for (&'cl mut CuMsg<T>,) {}
 impl<'cl, T: CuMsgPayload> CuMsgPack<'cl> for &'cl mut CuMsg<T> {}
-impl<'cl> CuMsgPack<'cl> for () {}
+impl CuMsgPack<'_> for () {}
 
 // Apply the macro to generate implementations for tuple sizes up to 5
 impl_cu_msg_pack! {
