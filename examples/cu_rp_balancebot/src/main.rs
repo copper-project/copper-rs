@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 struct BalanceBot {}
 
 // preallocate a lot.
+#[allow(clippy::identity_op)]
 const SLAB_SIZE: Option<usize> = Some(1 * 1024 * 1024 * 1024);
 
 fn main() {
