@@ -770,9 +770,9 @@
         <span class="macro">assert_eq!</span>(q.len(), <span class="number">3</span>);
 
         <span class="kw">let </span><span class="kw-2">mut </span>iter = q.iter();
-        <span class="macro">assert_eq!</span>(iter.next().unwrap().msgs, ());
-        <span class="macro">assert_eq!</span>(iter.next().unwrap().msgs, ());
-        <span class="macro">assert_eq!</span>(iter.next().unwrap().msgs, ());
+        iter.next().unwrap().msgs;
+        iter.next().unwrap().msgs;
+        iter.next().unwrap().msgs;
         <span class="macro">assert!</span>(iter.next().is_none());
     }
 
