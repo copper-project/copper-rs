@@ -59,8 +59,13 @@ jobs:
       - name: Install cargo-generate
         run: cargo install cargo-generate
 
-      - name: Run clippy
-        run: cargo clippy -- -W warnings
+      - name: Run clippy in debug
+        if: runner.os == 'Linux'
+        run: cargo clippy --workspace --all-targets -- -W warning
+
+      - name: Run clippy in release
+        if: runner.os == 'Linux'
+        run: cargo clippy --release --workspace --all-targets -- -W warning
 
       - name: Build vanilla
         run: |
