@@ -188,7 +188,7 @@ mod tests {
         let mut encoded = vec![0u8; 1024]; // Reserve a buffer with sufficient capacity
 
         let length =
-            bincode::encode_into_slice(&a, &mut encoded, bincode::config::standard()).unwrap();
+            bincode::encode_into_slice(a, &mut encoded, bincode::config::standard()).unwrap();
         assert_eq!(length, 4);
     }
 }

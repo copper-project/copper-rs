@@ -352,9 +352,9 @@ mod tests {
         assert_eq!(q.len(), 3);
 
         let mut iter = q.iter();
-        iter.next().unwrap().msgs;
-        iter.next().unwrap().msgs;
-        iter.next().unwrap().msgs;
+        iter.next().unwrap();
+        iter.next().unwrap();
+        iter.next().unwrap();
         assert!(iter.next().is_none());
     }
 

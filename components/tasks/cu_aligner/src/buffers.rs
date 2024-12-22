@@ -141,9 +141,7 @@ macro_rules! alignment_buffers {
                 .min();
 
                 // If there is no data in any of the buffers, return early
-                if most_recent_time.is_none() {
-                    return None;
-                }
+                most_recent_time?;
 
                 let most_recent_time = most_recent_time.unwrap();
 
@@ -184,11 +182,11 @@ mod tests {
         buffers.buffer1.inner.push_back(msg1.clone());
         buffers.buffer2.inner.push_back(msg1);
         // within the horizon
-        let _ = buffers.purge(Duration::from_secs(2).into());
+        buffers.purge(Duration::from_secs(2).into());
         assert_eq!(buffers.buffer1.inner.len(), 1);
         assert_eq!(buffers.buffer2.inner.len(), 1);
         // outside the horizon
-        let _ = buffers.purge(Duration::from_secs(5).into());
+        buffers.purge(Duration::from_secs(5).into());
         assert_eq!(buffers.buffer1.inner.len(), 0);
         assert_eq!(buffers.buffer2.inner.len(), 0);
     }
