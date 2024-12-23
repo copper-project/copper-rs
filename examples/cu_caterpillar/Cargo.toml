@@ -31,8 +31,9 @@ cu29-export = { workspace = true }
 bincode = { workspace = true }
 cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.5.1" }  # needed
 cu-rp-gpio = { path = "../../components/sinks/cu_rp_gpio", version = "0.5.1" }
+cu-sensor-payloads = { path = "../../components/payloads/cu_sensor_payloads", version = "0.5.1" }
 tempfile = "3.14.0"
-
+image = { version="0.25.5" }
 
 [features]
 default = ["mock"]

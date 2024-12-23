@@ -1,3 +1,6 @@
+use std::ops::DerefMut;
+
+use bincode::de::read::Reader;
 use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
@@ -5,6 +8,7 @@ use bincode::{BorrowDecode, Decode, Encode};
 use cu29_clock::CuTime;
 use cu29_soa_derive::Soa;
 use derive_more::{Add, Deref, Div, From, Mul, Sub};
+use image::{ColorType, DynamicImage, ImageBuffer};
 use uom::si::f32::{Length, Ratio};
 use uom::si::length::meter;
 use uom::si::ratio::percent;
@@ -103,6 +107,150 @@ impl PointCloud {
             i: Reflectivity(i),
             return_order: return_order.unwrap_or(0),
         }
+    }
+}
+
+fn color_type_to_num(color_type: ColorType) -> u16 {
+    match color_type {
+        ColorType::L8 => 0,
+        ColorType::La8 => 1,
+        ColorType::Rgb8 => 2,
+        ColorType::Rgba8 => 3,
+        ColorType::L16 => 4,
+        ColorType::La16 => 5,
+        ColorType::Rgb16 => 6,
+        ColorType::Rgba16 => 7,
+        ColorType::Rgb32F => 8,
+        ColorType::Rgba32F => 9,
+        _ => unreachable!("color_type: {:?} is unsupported", color_type),
+    }
+}
+fn color_type_from_num(num: u16) -> ColorType {
+    match num {
+        0 => ColorType::L8,
+        1 => ColorType::La8,
+        2 => ColorType::Rgb8,
+        3 => ColorType::Rgba8,
+        4 => ColorType::L16,
+        5 => ColorType::La16,
+        6 => ColorType::Rgb16,
+        7 => ColorType::Rgba16,
+        8 => ColorType::Rgb32F,
+        9 => ColorType::Rgba32F,
+        _ => unreachable!("color_id: {:?} is unsupported", num),
+    }
+}
+
+#[derive(Default, Clone, PartialEq, Debug)]
+pub struct CuImage(DynamicImage);
+
+impl Deref for CuImage {
+    type Target = DynamicImage;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for CuImage {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl CuImage {
+    pub fn new(img: DynamicImage) -> Self {
+        Self(img)
+    }
+}
+
+impl Encode for CuImage {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        // println!("enc w: {} h: {}", self.width(), self.height());
+        Encode::encode(&self.width(), encoder)?;
+        // println!("1");
+        Encode::encode(&self.height(), encoder)?;
+        // println!("2");
+        Encode::encode(&color_type_to_num(self.color()), encoder)?;
+        // println!("3");
+        Encode::encode(&self.as_bytes(), encoder)?;
+        // println!("4");
+        Ok(())
+    }
+}
+
+impl Decode for CuImage {
+    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let w: u32 = Decode::decode(decoder)?;
+        let h: u32 = Decode::decode(decoder)?;
+        let color_id: u16 = Decode::decode(decoder)?;
+        let color_type = color_type_from_num(color_id);
+        //TODO maybe without allocation?
+        let pixels_count = (w * h) as usize;
+        let image = match color_type {
+            ColorType::Rgb8 => {
+                let mut data: Vec<u8> = Vec::with_capacity(pixels_count);
+                let buf = data.as_mut_slice();
+                decoder.reader().read(buf)?;
+                ImageBuffer::from_raw(w, h, data).map(DynamicImage::ImageRgb8)
+            }
+            ColorType::Rgba8 => {
+                let mut data: Vec<u8> = Vec::with_capacity(pixels_count);
+                let buf = data.as_mut_slice();
+                decoder.reader().read(buf)?;
+                ImageBuffer::from_raw(w, h, data).map(DynamicImage::ImageRgba8)
+            }
+            ColorType::L8 => {
+                let mut data: Vec<u8> = Vec::with_capacity(pixels_count);
+                let buf = data.as_mut_slice();
+                decoder.reader().read(buf)?;
+                ImageBuffer::from_raw(w, h, data).map(DynamicImage::ImageLuma8)
+            }
+            ColorType::La8 => {
+                let mut data: Vec<u8> = Vec::with_capacity(pixels_count);
+                let buf = data.as_mut_slice();
+                decoder.reader().read(buf)?;
+                ImageBuffer::from_raw(w, h, data).map(DynamicImage::ImageLumaA8)
+            }
+            ColorType::Rgb16 => {
+                let mut data: Vec<u16> = Vec::with_capacity(pixels_count);
+                let buf = data.as_mut_slice();
+                decoder.reader().read(bytemuck::cast_slice_mut(buf))?;
+                ImageBuffer::from_raw(w, h, data).map(DynamicImage::ImageRgb16)
+            }
+            ColorType::Rgba16 => {
+                let mut data: Vec<u16> = Vec::with_capacity(pixels_count);
+                let buf = data.as_mut_slice();
+                decoder.reader().read(bytemuck::cast_slice_mut(buf))?;
+                ImageBuffer::from_raw(w, h, data).map(DynamicImage::ImageRgba16)
+            }
+            ColorType::Rgb32F => {
+                let mut data: Vec<f32> = Vec::with_capacity(pixels_count);
+                let buf = data.as_mut_slice();
+                decoder.reader().read(bytemuck::cast_slice_mut(buf))?;
+                ImageBuffer::from_raw(w, h, data).map(DynamicImage::ImageRgb32F)
+            }
+            ColorType::Rgba32F => {
+                let mut data: Vec<f32> = Vec::with_capacity(pixels_count);
+                let buf = data.as_mut_slice();
+                decoder.reader().read(bytemuck::cast_slice_mut(buf))?;
+                ImageBuffer::from_raw(w, h, data).map(DynamicImage::ImageRgba32F)
+            }
+            ColorType::L16 => {
+                let mut data: Vec<u16> = Vec::with_capacity(pixels_count);
+                let buf = data.as_mut_slice();
+                decoder.reader().read(bytemuck::cast_slice_mut(buf))?;
+                ImageBuffer::from_raw(w, h, data).map(DynamicImage::ImageLuma16)
+            }
+            ColorType::La16 => {
+                let mut data: Vec<u16> = Vec::with_capacity(pixels_count);
+                let buf = data.as_mut_slice();
+                decoder.reader().read(bytemuck::cast_slice_mut(buf))?;
+                ImageBuffer::from_raw(w, h, data).map(DynamicImage::ImageLumaA16)
+            }
+            _ => unimplemented!(),
+        };
+        Ok(CuImage(image.unwrap()))
     }
 }
 

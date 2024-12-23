@@ -38,7 +38,7 @@ pub struct SectionHeader {
     filled_size: u32,  // how much of the section is filled.
 }
 
-const MAX_HEADER_SIZE: usize = mem::size_of::<SectionHeader>() + 3usize; // 3 == additional worse case scenario for the 3 int variable encoding
+const MAX_HEADER_SIZE: usize = mem::size_of::<SectionHeader>() + 3usize; // 3 == additional worse case scenario for the 3 int variable enoding
 
 impl Default for SectionHeader {
     fn default() -> Self {
@@ -89,6 +89,7 @@ impl Debug for MmapStream {
 impl<E: Encode> WriteStream<E> for MmapStream {
     fn log(&mut self, obj: &E) -> CuResult<()> {
         let dst = self.current_section.get_user_buffer();
+        println!("slice len: {}", dst.len());
         let result = encode_into_slice(obj, dst, standard());
         match result {
             Ok(nb_bytes) => {
@@ -100,14 +101,29 @@ impl<E: Encode> WriteStream<E> for MmapStream {
                 EncodeError::UnexpectedEnd => {
                     let mut logger_guard = self.parent_logger.lock().unwrap();
                     logger_guard.flush_section(&mut self.current_section);
+                    // WARN problem here
+                    // self.current_section = logger_guard
+                    //     .add_section(self.entry_type, self.minimum_allocation_amount + 100000);
                     self.current_section =
                         logger_guard.add_section(self.entry_type, self.minimum_allocation_amount);
+                    println!(
+                        "minimum_allocation_amount: {}",
+                        self.minimum_allocation_amount
+                    );
 
+                    let dst = self.current_section.get_user_buffer();
+                    println!("slice2 len: {}", dst.len());
                     let result = encode_into_slice(
                         obj,
-                        self.current_section.get_user_buffer(),
+                        dst,
                         standard(),
                     )
+
+                    // let result = encode_into_slice(
+                    //     obj,
+                    //     self.current_section.get_user_buffer(),
+                    //     standard(),
+                    // )
                     .expect(
                         "Failed to encode object in a newly minted section. Unrecoverable failure.",
                     ); // If we fail just after creating a section, there is not much we can do, we need to bail.
@@ -116,6 +132,7 @@ impl<E: Encode> WriteStream<E> for MmapStream {
                     Ok(())
                 }
                 _ => {
+                    println!("e2");
                     let err =
                         <&str as Into<CuError>>::into("Unexpected error while encoding object.")
                             .add_cause(e.to_string().as_str());
@@ -139,6 +156,7 @@ pub fn stream_write<E: Encode>(
     entry_type: UnifiedLogType,
     minimum_allocation_amount: usize,
 ) -> impl WriteStream<E> {
+    println!("stream_write minimum_allocation_amount: {minimum_allocation_amount}");
     MmapStream::new(entry_type, logger.clone(), minimum_allocation_amount)
 }
 

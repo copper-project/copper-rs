@@ -1,6 +1,18 @@
 (
     tasks: [
         (
+            id: "img-src",
+            type: "tasks::CameraSource",
+        ),
+        (
+            id: "img-proc",
+            type: "tasks::ImageProc",
+        ),
+        (
+            id: "img-view",
+            type: "tasks::ImageView",
+        ),
+        (
             id: "src",
             type: "tasks::CaterpillarSource",
         ),
@@ -95,6 +107,8 @@
      ],
     cnx: [
         // Make a caterpillar by propagating messages from the source to the GPIOs
+        (src: "img-src",  dst: "img-proc",   msg: "cu_sensor_payloads::CuImage"),
+        (src: "img-proc",  dst: "img-view",   msg: "cu_sensor_payloads::CuImage"),
         (src: "src",  dst: "ct-0",   msg: "cu_rp_gpio::RPGpioPayload"),
         (src: "ct-0", dst: "ct-1",   msg: "cu_rp_gpio::RPGpioPayload"),
         (src: "ct-1", dst: "ct-2",   msg: "cu_rp_gpio::RPGpioPayload"),
@@ -113,8 +127,8 @@
         (src: "ct-6", dst: "gpio-6", msg: "cu_rp_gpio::RPGpioPayload"),
         (src: "ct-7", dst: "gpio-7", msg: "cu_rp_gpio::RPGpioPayload"),
     ],
-    monitor: (
-                 type: "cu_consolemon::CuConsoleMon",
-                 config: {"file": "copperconfig.ron"},
-             )
+    // monitor: (
+    //              type: "cu_consolemon::CuConsoleMon",
+    //              config: {"file": "copperconfig.ron"},
+    //          )
 )

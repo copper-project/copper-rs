@@ -193,6 +193,7 @@ const NODE_WIDTH: u16 = 29;
 const NODE_WIDTH_CONTENT: u16 = NODE_WIDTH - 2;
 
 const NODE_HEIGHT: u16 = 5;
+// const NODE_HEIGHT: u16 = 8;
 
 #[allow(dead_code)]
 const NODE_HEIGHT_CONTENT: u16 = NODE_HEIGHT - 2;

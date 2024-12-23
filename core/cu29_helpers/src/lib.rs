@@ -35,7 +35,7 @@ pub fn basic_copper_setup(
     _text_log: bool,
     clock: Option<RobotClock>,
 ) -> CuResult<CopperContext> {
-    let preallocated_size = slab_size.unwrap_or(1024 * 1024 * 10);
+    let preallocated_size = slab_size.unwrap_or(1024 * 1024 * 10 * 1000);
     let UnifiedLogger::Write(logger) = UnifiedLoggerBuilder::new()
         .write(true)
         .create(true)
@@ -50,7 +50,9 @@ pub fn basic_copper_setup(
     let structured_stream = stream_write(
         unified_logger.clone(),
         UnifiedLogType::StructuredLogLine,
-        4096 * 10,
+        // 4096 * 10,
+        4096 * 10 * 2000 + 500000,
+        // 71958,
     );
 
     #[cfg(debug_assertions)]
