@@ -52,9 +52,9 @@ use cu29::cutask::CuMsg;
 
 // Defines a task that aligns two streams of messages, one with payloads f32, the other MyPayload (you can use any rust struct that to implement the traits for CuMsgPayload).
 define_task!(MyAlignerTask, 
-             0 => { 15, 7, f32 },  // 5 is the Maximum capacity in nb of messages the internal 
+             0 => { 15, 7, f32 },  // 15 is the Maximum capacity in nb of messages the internal 
                                    // buffer structure can hold before they will me discarded, 
-                                   // 12 is the Maximum size in nb of messages the output (aligned messages of this type) 
+                                   // 7 is the Maximum size in nb of messages the output (aligned messages of this type) 
              1 => { 20, 5, u64 }   // or any CuMsgPayload
             // you can continue with 2 => etc...
             );
