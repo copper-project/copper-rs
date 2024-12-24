@@ -16,9 +16,10 @@ const SLAB_SIZE: Option<usize> = Some(1 * 1024 * 1024 * 1024);
 fn main() {
     static STOP_FLAG: AtomicBool = AtomicBool::new(false);
     let logger_path = "logs/balance.copper";
-
     if let Some(parent) = Path::new(logger_path).parent() {
-        fs::create_dir_all(parent).expect("Failed to create logs directory");
+        if !parent.exists() {
+            fs::create_dir_all(parent).expect("Failed to create logs directory");
+        }
     }
 
     let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), SLAB_SIZE, false, None)
