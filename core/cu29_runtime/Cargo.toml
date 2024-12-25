@@ -34,6 +34,7 @@ cu29-clock = { workspace = true }
 clap = { workspace = true }
 tempfile = { workspace = true }
 arrayvec = "0.7.6"
+page_size = "0.6.0"
 
 ron = "0.8.1"
 hdrhistogram = "7.5.4"
