@@ -845,48 +845,60 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     eprintln!("[build the sim support]");
     let sim_support: proc_macro2::TokenStream = gen_sim_support(&runtime_plan);
 
-    let (new, run_one_iteration, start_all_tasks, stop_all_tasks, run) = if sim_mode {
-        (
-            quote! {
-                pub fn new<F>(clock:_RobotClock, unified_logger: _Arc<_Mutex<_UnifiedLoggerWrite>>, sim_callback: &mut F) -> _CuResult<Self>
-                where F: FnMut(SimStep) -> cu29::simulation::SimOverride,
-            },
-            quote! {
-                pub fn run_one_iteration<F>(&mut self, sim_callback: &mut F) -> _CuResult<()>
-                where F: FnMut(SimStep) -> cu29::simulation::SimOverride,
-            },
-            quote! {
-                pub fn start_all_tasks<F>(&mut self, sim_callback: &mut F) -> _CuResult<()>
-                where F: FnMut(SimStep) -> cu29::simulation::SimOverride,
-            },
-            quote! {
-                pub fn stop_all_tasks<F>(&mut self, sim_callback: &mut F) -> _CuResult<()>
-                where F: FnMut(SimStep) -> cu29::simulation::SimOverride,
-            },
-            quote! {
-                pub fn run<F>(&mut self, sim_callback: &mut F) -> _CuResult<()>
-                where F: FnMut(SimStep) -> cu29::simulation::SimOverride,
-            },
-        )
-    } else {
-        (
-            quote! {
-                pub fn new(clock:_RobotClock, unified_logger: _Arc<_Mutex<_UnifiedLoggerWrite>>) -> _CuResult<Self>
-            },
-            quote! {
-                pub fn run_one_iteration(&mut self) -> _CuResult<()>
-            },
-            quote! {
-                pub fn start_all_tasks(&mut self) -> _CuResult<()>
-            },
-            quote! {
-                pub fn stop_all_tasks(&mut self) -> _CuResult<()>
-            },
-            quote! {
-                pub fn run(&mut self) -> _CuResult<()>
-            },
-        )
-    };
+    let (new, new_with_context, run_one_iteration, start_all_tasks, stop_all_tasks, run) =
+        if sim_mode {
+            (
+                quote! {
+                    pub fn new<F>(clock:_RobotClock, unified_logger: _Arc<_Mutex<_UnifiedLoggerWrite>>, sim_callback: &mut F) -> _CuResult<Self>
+                    where F: FnMut(SimStep) -> cu29::simulation::SimOverride,
+                },
+                quote! {
+                    pub fn new_with_context<F>(context: &_CopperContext, sim_callback: &mut F) -> _CuResult<Self>
+                    where F: FnMut(SimStep) -> cu29::simulation::SimOverride {
+                        Self::new(context.clock.clone(), context.unified_logger.clone(), sim_callback)
+                    }
+                },
+                quote! {
+                    pub fn run_one_iteration<F>(&mut self, sim_callback: &mut F) -> _CuResult<()>
+                    where F: FnMut(SimStep) -> cu29::simulation::SimOverride,
+                },
+                quote! {
+                    pub fn start_all_tasks<F>(&mut self, sim_callback: &mut F) -> _CuResult<()>
+                    where F: FnMut(SimStep) -> cu29::simulation::SimOverride,
+                },
+                quote! {
+                    pub fn stop_all_tasks<F>(&mut self, sim_callback: &mut F) -> _CuResult<()>
+                    where F: FnMut(SimStep) -> cu29::simulation::SimOverride,
+                },
+                quote! {
+                    pub fn run<F>(&mut self, sim_callback: &mut F) -> _CuResult<()>
+                    where F: FnMut(SimStep) -> cu29::simulation::SimOverride,
+                },
+            )
+        } else {
+            (
+                quote! {
+                    pub fn new(clock:_RobotClock, unified_logger: _Arc<_Mutex<_UnifiedLoggerWrite>>) -> _CuResult<Self>
+                },
+                quote! {
+                    pub fn new_with_context(context: &_CopperContext) -> _CuResult<Self> {
+                        Self::new(context.clock.clone(), context.unified_logger.clone())
+                    }
+                },
+                quote! {
+                    pub fn run_one_iteration(&mut self) -> _CuResult<()>
+                },
+                quote! {
+                    pub fn start_all_tasks(&mut self) -> _CuResult<()>
+                },
+                quote! {
+                    pub fn stop_all_tasks(&mut self) -> _CuResult<()>
+                },
+                quote! {
+                    pub fn run(&mut self) -> _CuResult<()>
+                },
+            )
+        };
 
     let sim_callback_arg = if sim_mode {
         Some(quote!(sim_callback))
@@ -1021,6 +1033,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 runtime
             }
 
+            #new_with_context
+
             pub fn get_original_config() -> String {
                 #copper_config_content.to_string()
             }
@@ -1049,6 +1063,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         use cu29::config::read_configuration as _read_configuration;
         use cu29::config::read_configuration_str as _read_configuration_str;
         use cu29::curuntime::CuRuntime as _CuRuntime;
+        use cu29::curuntime::CopperContext as _CopperContext;
         use cu29::CuResult as _CuResult;
         use cu29::CuError as _CuError;
         use cu29::cutask::CuSrcTask as _CuSrcTask;
