@@ -1,5 +1,6 @@
 use std::alloc::{alloc, dealloc, Layout};
 use std::cell::RefCell;
+use std::fmt::Debug;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
@@ -15,6 +16,7 @@ pub struct CuMemoryPool<const ES: usize> {
     inflight_counters: Box<[AtomicUsize]>,
 }
 
+#[derive(Debug)]
 pub struct AlignedBuffer {
     ptr: *mut u8,
     size: usize,
@@ -51,7 +53,6 @@ impl Drop for AlignedBuffer {
     }
 }
 
-#[derive(Debug)]
 pub struct CuBufferHandle<const ES: usize> {
     index: usize,
     pool: Weak<CuMemoryPool<ES>>,
@@ -146,6 +147,16 @@ impl<const ES: usize> Drop for CuBufferHandle<ES> {
             let remaining = pool.inflight_counters[self.index].fetch_sub(1, Ordering::SeqCst);
             println!("Remaining: {remaining}");
         }
+    }
+}
+impl<const ES: usize> Debug for CuBufferHandle<ES> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let pool = self.pool.upgrade().unwrap();
+        let buffers = pool.buffers.borrow();
+        f.debug_struct("CuBufferHandle")
+            .field("index", &self.index)
+            .field("buffer", &buffers[self.index])
+            .finish()
     }
 }
 

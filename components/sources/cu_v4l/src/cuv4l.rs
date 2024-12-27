@@ -28,7 +28,7 @@ impl<const BS: usize> CuV4LStream<BS> {
     }
 
     pub fn with_buffers(dev: &Device, buf_type: Type, buf_count: u32) -> io::Result<Self> {
-        let mut memory_pool = CuMemoryPool::new(buf_count + 1, page_size::get()); // +1 to be able to queue one last buffer before zapping the first
+        let memory_pool = CuMemoryPool::new(buf_count + 1, page_size::get()); // +1 to be able to queue one last buffer before zapping the first
         let mut arena = Vec::new();
         arena.resize(buf_count as usize, (Metadata::default(), None));
 

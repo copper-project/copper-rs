@@ -1,4 +1,5 @@
 use std::io::Write;
+use std::time::Duration;
 use v4l::video::Capture;
 mod cuv4l;
 
@@ -27,9 +28,11 @@ impl<'cl> CuSrcTask<'cl> for V4l {
     where
         Self: Sized,
     {
+        // FIXME: make this configurable
         let mut dev =
             Device::new(0).map_err(|e| CuError::new_with_cause("Failed to open camera", e))?;
 
+        // FIXME: make this configurable
         // List all formats supported by the device
         let formats = dev
             .enum_formats()
@@ -72,8 +75,9 @@ impl<'cl> CuSrcTask<'cl> for V4l {
             println!("BGR3 format not found.");
         }
 
-        let stream = CuV4LStream::with_buffers(&mut dev, Type::VideoCapture, 4)
+        let mut stream = CuV4LStream::with_buffers(&mut dev, Type::VideoCapture, 4)
             .map_err(|e| CuError::new_with_cause("could get formats", e))?;
+        stream.set_timeout(Duration::from_secs(1)); // FIXME: make this configurable
 
         Ok(Self { dev, stream })
     }
@@ -90,6 +94,10 @@ impl<'cl> CuSrcTask<'cl> for V4l {
             return Ok(());
         }
         if let Ok((handle, meta)) = tuple {
+            if meta.bytesused != 0 {
+                // timedout
+                new_msg.set_payload(handle.clone());
+            }
             return Ok(());
         }
         Ok(())
@@ -111,7 +119,15 @@ mod tests {
         let clock = RobotClock::new();
         v4l.start(&clock).unwrap();
         let mut msg = CuMsg::new(None);
-        let output = v4l.process(&clock, &mut msg);
+
+        for i in 0..10 {
+            let output = v4l.process(&clock, &mut msg);
+            if let Some(frame) = msg.payload() {
+                println!("Frame: {:?}", frame);
+            } else {
+                println!("----> No frame");
+            }
+        }
 
         v4l.stop(&clock).unwrap();
     }
