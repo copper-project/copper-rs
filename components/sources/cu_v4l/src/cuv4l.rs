@@ -17,7 +17,7 @@ pub struct CuV4LStream<const BS: usize> {
     buf_type: Type,
     // Arena matching the vl42 metadata and the Copper Buffers
     arena: Vec<(Metadata, Option<CuBufferHandle<BS>>)>,
-    arena_index: usize,
+    arena_last_freed_up_index: usize,
     timeout: Option<i32>,
     active: bool,
 }
@@ -36,7 +36,7 @@ impl<const BS: usize> CuV4LStream<BS> {
             handle: dev.handle(),
             memory_pool: Rc::new(memory_pool),
             arena,
-            arena_index: 0,
+            arena_last_freed_up_index: 0,
             buf_type,
             active: false,
             timeout: None,
@@ -147,10 +147,12 @@ impl<const BS: usize> Stream for CuV4LStream<BS> {
     fn start(&mut self) -> io::Result<()> {
         // Enqueue all buffers once on stream start
         // -1 to leave one buffer unqueued as temporary storage
-        for index in 0..self.arena.len() {
+        for index in 1..self.arena.len() {
             println!("Queueing buffer {}", index);
             self.queue(index)?;
         }
+
+        self.arena_last_freed_up_index = 0;
 
         unsafe {
             let mut typ = self.buf_type as u32;
@@ -240,15 +242,15 @@ impl<'a, const BS: usize> CaptureStream<'a> for CuV4LStream<BS> {
                 &mut v4l2_buf as *mut _ as *mut std::os::raw::c_void,
             )?;
         }
-        self.arena_index = v4l2_buf.index as usize;
-        println!("dequeue: dequeueing buffer {}", self.arena_index);
+        let index = v4l2_buf.index as usize;
+        println!("dequeue: dequeueing buffer {}", index);
         println!(" length {}", v4l2_buf.length);
         println!(" bytesused {}", v4l2_buf.bytesused);
         println!(" timestamp {:?}", v4l2_buf.timestamp);
         println!(" sequence {}", v4l2_buf.sequence);
         println!(" field {}", v4l2_buf.field);
 
-        self.arena[self.arena_index].0 = Metadata {
+        self.arena[index].0 = Metadata {
             bytesused: v4l2_buf.bytesused,
             flags: v4l2_buf.flags.into(),
             field: v4l2_buf.field,
@@ -256,23 +258,24 @@ impl<'a, const BS: usize> CaptureStream<'a> for CuV4LStream<BS> {
             sequence: v4l2_buf.sequence,
         };
 
-        Ok(self.arena_index)
+        Ok(index)
     }
 
     fn next(&'a mut self) -> io::Result<(&Self::Item, &Metadata)> {
         println!("next: active: {}", self.active);
-        let dequeued_index = if !self.active {
+        if !self.active {
             return Err(io::Error::new(
                 io::ErrorKind::Other,
                 "Stream is not active. Call start() first.",
             ));
         } else {
-            self.queue(self.arena_index)?;
+            self.queue(self.arena_last_freed_up_index)?;
         };
 
-        self.arena_index = self.dequeue()?;
-        let buffer = self.arena[self.arena_index].1.as_ref().unwrap();
-        let meta = &self.arena[self.arena_index].0;
+        let dequeued_index = self.dequeue()?;
+        let buffer = self.arena[dequeued_index].1.as_ref().unwrap();
+        let meta = &self.arena[dequeued_index].0;
+        self.arena_last_freed_up_index = dequeued_index;
         Ok((buffer, meta))
     }
 }
