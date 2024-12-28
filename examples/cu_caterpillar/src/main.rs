@@ -14,10 +14,10 @@ fn main() {
 
     let copper_ctx =
         basic_copper_setup(&logger_path, SLAB_SIZE, false, None).expect("Failed to setup logger.");
-    let clock = copper_ctx.clock.clone();
-    let ulclone = copper_ctx.unified_logger.clone();
-    let mut application =
-        CaterpillarApplication::new(clock.clone(), ulclone).expect("Failed to create application.");
+    let mut application = CaterpillarApplicationBuilder::new()
+        .with_context(&copper_ctx)
+        .build()
+        .expect("Failed to create application.");
 
     let outcome = application.run();
     match outcome {
