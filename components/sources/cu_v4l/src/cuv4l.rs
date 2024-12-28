@@ -23,6 +23,7 @@ pub struct CuV4LStream<const BS: usize> {
 }
 
 impl<const BS: usize> CuV4LStream<BS> {
+    #[allow(dead_code)]
     pub fn new(dev: &Device, buf_type: Type) -> io::Result<Self> {
         CuV4LStream::with_buffers(dev, buf_type, 4)
     }
@@ -46,6 +47,7 @@ impl<const BS: usize> CuV4LStream<BS> {
     }
 
     /// Returns the raw device handle
+    #[allow(dead_code)]
     pub fn handle(&self) -> Arc<Handle> {
         self.handle.clone()
     }
@@ -56,6 +58,7 @@ impl<const BS: usize> CuV4LStream<BS> {
     }
 
     /// Clears the timeout of the v4l file handle.
+    #[allow(dead_code)]
     pub fn clear_timeout(&mut self) {
         self.timeout = None;
     }
@@ -209,7 +212,6 @@ impl<'a, const BS: usize> CaptureStream<'a> for CuV4LStream<BS> {
             )
         };
         if result.is_err() {
-            let msg = format!("Failed to queue buffer: {:?}", result);
             println!("Error: {:?}", result);
         }
         self.arena[index] = (Metadata::default(), Some(buffer_handle));
@@ -261,7 +263,7 @@ impl<'a, const BS: usize> CaptureStream<'a> for CuV4LStream<BS> {
         Ok(index)
     }
 
-    fn next(&'a mut self) -> io::Result<(&Self::Item, &Metadata)> {
+    fn next(&mut self) -> io::Result<(&Self::Item, &Metadata)> {
         println!("next: active: {}", self.active);
         if !self.active {
             return Err(io::Error::new(

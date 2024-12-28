@@ -16,3 +16,6 @@ cu29 = { workspace = true }
 cu-sensor-payloads = { path = "../../../payloads/cu_sensor_payloads", workspace = true }
 libc = "0.2.168"
 page_size = "0.6.0"
+
+[dev-dependencies]
+rerun = { workspace = true }

@@ -60,12 +60,12 @@ pub struct CuBufferHandle<const ES: usize> {
 
 impl<const ES: usize> Encode for CuBufferHandle<ES> {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        self.buffer().encode(encoder)
+        self.as_slice().encode(encoder)
     }
 }
 
 impl<const ES: usize> Decode for CuBufferHandle<ES> {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+    fn decode<D: Decoder>(_decoder: &mut D) -> Result<Self, DecodeError> {
         // TODO: maybe implement a owned version of this
         Ok(Self {
             index: 0,
@@ -106,7 +106,7 @@ impl<const ES: usize> CuBufferHandle<ES> {
         }
     }
 
-    fn buffer(&self) -> &[u8] {
+    pub fn as_slice(&self) -> &[u8] {
         // as long as the pool is alive, the buffer is alive
         if let Some(pool) = self.pool.upgrade() {
             let buffers = pool.buffers.borrow();
@@ -117,7 +117,7 @@ impl<const ES: usize> CuBufferHandle<ES> {
         }
     }
 
-    fn buffer_mut(&mut self) -> &mut [u8] {
+    pub fn as_slice_mut(&mut self) -> &mut [u8] {
         if let Some(pool) = self.pool.upgrade() {
             let mut buffers = pool.buffers.borrow_mut();
             let buffer = buffers[self.index].as_mut_slice();
@@ -131,13 +131,13 @@ impl<const ES: usize> CuBufferHandle<ES> {
 impl<const ES: usize> Deref for CuBufferHandle<ES> {
     type Target = [u8];
     fn deref(&self) -> &Self::Target {
-        self.buffer()
+        self.as_slice()
     }
 }
 
 impl<const ES: usize> DerefMut for CuBufferHandle<ES> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.buffer_mut()
+        self.as_slice_mut()
     }
 }
 

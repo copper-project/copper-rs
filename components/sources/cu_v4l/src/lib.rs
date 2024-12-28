@@ -1,4 +1,3 @@
-use std::io::Write;
 use std::time::Duration;
 use v4l::video::Capture;
 mod cuv4l;
@@ -10,19 +9,19 @@ use v4l::io::traits::{CaptureStream, Stream};
 use v4l::prelude::*;
 use v4l::{Format, FourCC};
 
-const IMG_WIDTH: usize = 3840;
-const IMG_HEIGHT: usize = 720;
-const IMG_SIZE: usize = IMG_WIDTH * IMG_HEIGHT * 3;
+const IMG_WIDTH: usize = 2560;
+const IMG_HEIGHT: usize = 1440;
+const IMG_STRIDE: usize = 2560;
+const IMG_BUFFER_SIZE: usize = IMG_STRIDE * IMG_HEIGHT * 3;
 
 struct V4l {
-    dev: Device,
-    stream: CuV4LStream<IMG_SIZE>, // move that as a generic parameter
+    stream: CuV4LStream<IMG_BUFFER_SIZE>, // move that as a generic parameter
 }
 
 impl Freezable for V4l {}
 
 impl<'cl> CuSrcTask<'cl> for V4l {
-    type Output = output_msg!('cl, CuBufferHandle<IMG_SIZE>);
+    type Output = output_msg!('cl, CuBufferHandle<IMG_BUFFER_SIZE>);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -47,30 +46,15 @@ impl<'cl> CuSrcTask<'cl> for V4l {
             let resolutions = dev
                 .enum_framesizes(format.fourcc)
                 .map_err(|e| CuError::new_with_cause("Failed to enum frame sizes", e))?;
+            println!("Resolutions: {:?}", resolutions);
 
-            if let Some(frame_size) = resolutions.first() {
-                match frame_size.size {
-                    v4l::framesize::FrameSizeEnum::Discrete(v4l::framesize::Discrete {
-                        width,
-                        height,
-                    }) => {
-                        println!("Using resolution: {}x{}", width, height);
+            // Set the format with the chosen resolution
+            let fmt = Format::new(IMG_WIDTH as u32, IMG_HEIGHT as u32, bgr3_fourcc);
+            let actual_format = dev
+                .set_format(&fmt)
+                .map_err(|e| CuError::new_with_cause("Failed to set format", e))?;
 
-                        // Set the format with the chosen resolution
-                        let fmt = Format::new(width, height, bgr3_fourcc);
-                        let actual_format = dev
-                            .set_format(&fmt)
-                            .map_err(|e| CuError::new_with_cause("Failed to set format", e))?;
-
-                        println!("Format successfully set: {:?}", actual_format);
-                    }
-                    _ => {
-                        println!("Non-discrete frame sizes are not supported in this example.");
-                    }
-                }
-            } else {
-                println!("No resolutions found for BGR3 format.");
-            }
+            println!("Format successfully set: {:?}", actual_format);
         } else {
             println!("BGR3 format not found.");
         }
@@ -79,7 +63,7 @@ impl<'cl> CuSrcTask<'cl> for V4l {
             .map_err(|e| CuError::new_with_cause("could get formats", e))?;
         stream.set_timeout(Duration::from_secs(1)); // FIXME: make this configurable
 
-        Ok(Self { dev, stream })
+        Ok(Self { stream })
     }
 
     fn start(&mut self, _robot_clock: &RobotClock) -> CuResult<()> {
@@ -88,7 +72,7 @@ impl<'cl> CuSrcTask<'cl> for V4l {
             .map_err(|e| CuError::new_with_cause("could not start stream", e))
     }
 
-    fn process(&mut self, clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
         let tuple = self.stream.next();
         if tuple.is_err() {
             return Ok(());
@@ -113,17 +97,50 @@ impl<'cl> CuSrcTask<'cl> for V4l {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rerun::components::ImageBuffer;
+    use rerun::datatypes::{Blob, ImageFormat};
+    use rerun::external::re_types::ArrowBuffer;
+    use rerun::{ChannelDatatype, Image};
+    use rerun::{ColorModel, RecordingStreamBuilder};
+
     #[test]
     fn emulate_copper_backend() {
+        let rec = RecordingStreamBuilder::new("Camera Viz")
+            .spawn()
+            .map_err(|e| CuError::new_with_cause("Failed to spawn rerun stream", e))
+            .unwrap();
+
         let mut v4l = V4l::new(None).unwrap();
         let clock = RobotClock::new();
         v4l.start(&clock).unwrap();
         let mut msg = CuMsg::new(None);
-
-        for i in 0..10 {
-            let output = v4l.process(&clock, &mut msg);
+        let image_size_in_bytes = IMG_STRIDE * IMG_HEIGHT * 3;
+        let cm = ColorModel::BGR;
+        // Define the image format
+        let format = rerun::components::ImageFormat(ImageFormat {
+            width: IMG_WIDTH as u32,
+            height: IMG_HEIGHT as u32,
+            pixel_format: None,
+            color_model: Some(ColorModel::BGR),
+            channel_datatype: Some(ChannelDatatype::U8),
+        });
+        for _ in 0..1000 {
+            let _output = v4l.process(&clock, &mut msg);
             if let Some(frame) = msg.payload() {
                 println!("Frame: {:?}", frame);
+                let slice = frame.as_slice();
+                let mut flipped = Vec::with_capacity(slice.len());
+                for y in (0..IMG_HEIGHT).rev() {
+                    let start = y * IMG_STRIDE * 3;
+                    let end = start + IMG_STRIDE * 3;
+                    flipped.extend_from_slice(&slice[start..end]);
+                }
+                let arrow_buffer = ArrowBuffer::from(flipped);
+                let blob = Blob::from(arrow_buffer);
+                let rerun_img = ImageBuffer::from(blob);
+                let image = Image::new(rerun_img, format.clone());
+
+                rec.log("images", &image).unwrap();
             } else {
                 println!("----> No frame");
             }

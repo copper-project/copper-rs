@@ -118,5 +118,8 @@ derive_more = { version = "1", features = ["full"] }
 # used across testing
 tempfile = "3.14.0"
 
+# rerun
+rerun = "0.20" # 0.21 conflicts with other dependencies
+
 # [profile.release]
 # lto = true
