@@ -72,12 +72,11 @@ fn setup_copper(mut commands: Commands) {
         path = logger_path
     );
 
-    let mut copper_app = BalanceBotSim::new(
-        robot_clock.clone(),
-        copper_ctx.unified_logger.clone(),
-        &mut default_callback,
-    )
-    .expect("Failed to create runtime.");
+    let mut copper_app = BalanceBotSimBuilder::new()
+        .with_context(&copper_ctx)
+        .with_sim_callback(&mut default_callback)
+        .build()
+        .expect("Failed to create runtime.");
 
     copper_app
         .start_all_tasks(&mut default_callback)
