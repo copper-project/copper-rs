@@ -998,10 +998,18 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     _read_configuration_str(original_config)?
                 };
 
+                // For simple cases we can say the section is just a bunch of Copper Lists.
+                // But we can now have allocations outside of it so we can override it from the config.
+                let mut default_section_size = std::mem::size_of::<CuList>() * 64;
+                // Check if there is a logging configuration with section_size_mib
+                if let Some(section_size_mib) = config.logging.as_ref().and_then(|l| l.section_size_mib) {
+                    // Convert MiB to bytes
+                    default_section_size = section_size_mib as usize * 1024usize * 1024usize;
+                }
                 let copperlist_stream = _stream_write::<CuList>(
                     unified_logger.clone(),
                     _UnifiedLogType::CopperList,
-                    std::mem::size_of::<CuList>() * 64, // FIXME: make this a config
+                    default_section_size,
                     // the 2 sizes are not directly related as we encode the CuList but we can
                     // assume the encoded size is close or lower than the non encoded one
                     // This is to be sure we have the size of at least a Culist and some.

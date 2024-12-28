@@ -539,6 +539,14 @@ impl UnifiedLoggerWrite {
             AllocatedSection::Section(section) => section,
         }
     }
+
+    pub fn stats(&self) -> (usize, Vec<usize>, usize) {
+        (
+            self.front_slab.current_global_position,
+            self.front_slab.sections_offsets_in_flight.clone(),
+            self.back_slabs.len(),
+        )
+    }
 }
 
 impl Drop for UnifiedLoggerWrite {

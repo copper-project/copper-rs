@@ -286,7 +286,8 @@ pub struct Cnx {
 pub struct CuConfig {
     // This is not what is directly serialized, see the custom serialization below.
     pub graph: StableDiGraph<Node, Cnx, NodeId>,
-    monitor: Option<MonitorConfig>,
+    pub monitor: Option<MonitorConfig>,
+    pub logging: Option<LoggingConfig>,
 }
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
@@ -309,12 +310,21 @@ impl MonitorConfig {
     }
 }
 
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+pub struct LoggingConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slab_size_mib: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub section_size_mib: Option<u64>,
+}
+
 /// The config is a list of tasks and their connections.
 #[derive(Serialize, Deserialize, Default)]
 struct CuConfigRepresentation {
     tasks: Vec<Node>,
     cnx: Vec<Cnx>,
     monitor: Option<MonitorConfig>,
+    logging: Option<LoggingConfig>,
 }
 
 impl<'de> Deserialize<'de> for CuConfig {
@@ -351,6 +361,7 @@ impl<'de> Deserialize<'de> for CuConfig {
             );
         }
         cuconfig.monitor = representation.monitor;
+        cuconfig.logging = representation.logging;
         Ok(cuconfig)
     }
 }
@@ -377,6 +388,7 @@ impl Serialize for CuConfig {
             tasks,
             cnx,
             monitor: self.monitor.clone(),
+            logging: self.logging.clone(),
         }
         .serialize(serializer)
     }
@@ -387,6 +399,7 @@ impl Default for CuConfig {
         CuConfig {
             graph: StableDiGraph::new(),
             monitor: None,
+            logging: None,
         }
     }
 }
@@ -681,5 +694,17 @@ mod tests {
             config.monitor.as_ref().unwrap().config.as_ref().unwrap().0["toto"],
             4.into()
         );
+    }
+
+    #[test]
+    fn test_logging_parameters() {
+        let txt =
+            r#"( tasks: [], cnx: [], logging: ( slab_size_mib: 1024, section_size_mib: 100, ),) "#;
+
+        let config = CuConfig::deserialize_ron(txt);
+        assert!(config.logging.is_some());
+        let logging_config = config.logging.unwrap();
+        assert_eq!(logging_config.slab_size_mib.unwrap(), 1024);
+        assert_eq!(logging_config.section_size_mib.unwrap(), 100);
     }
 }
