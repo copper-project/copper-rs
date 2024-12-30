@@ -25,12 +25,15 @@ fn main() {
     let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), SLAB_SIZE, false, None)
         .expect("Failed to setup logger.");
     debug!("Logger created at {}.", path = logger_path);
-    let clock = copper_ctx.clock;
+
     debug!("Creating application... ");
 
-    let mut application = BalanceBot::new(clock.clone(), copper_ctx.unified_logger.clone())
+    let mut application = BalanceBotBuilder::new()
+        .with_context(&copper_ctx)
+        .build()
         .expect("Failed to create runtime.");
 
+    let clock = copper_ctx.clock;
     ctrlc::set_handler(move || {
         STOP_FLAG.store(true, Ordering::SeqCst);
     })

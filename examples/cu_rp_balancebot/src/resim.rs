@@ -87,12 +87,11 @@ fn main() {
     )
     .expect("Failed to setup logger.");
 
-    let mut copper_app = BalanceBotReSim::new(
-        robot_clock,
-        copper_ctx.unified_logger.clone(),
-        &mut default_callback,
-    )
-    .expect("Failed to create runtime.");
+    let mut copper_app = BalanceBotReSimBuilder::new()
+        .with_context(&copper_ctx)
+        .with_sim_callback(&mut default_callback)
+        .build()
+        .expect("Failed to create runtime.");
 
     copper_app
         .start_all_tasks(&mut default_callback)

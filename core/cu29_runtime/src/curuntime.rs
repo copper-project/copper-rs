@@ -7,11 +7,22 @@ use crate::config::{ComponentConfig, Node};
 use crate::copperlist::{CopperList, CopperListState, CuListsManager};
 use crate::monitoring::CuMonitor;
 use cu29_clock::{ClockProvider, RobotClock};
+use cu29_log_runtime::LoggerRuntime;
 use cu29_traits::CopperListTuple;
 use cu29_traits::CuResult;
 use cu29_traits::WriteStream;
+use cu29_unifiedlog::UnifiedLoggerWrite;
+use std::sync::{Arc, Mutex};
+
 use petgraph::prelude::*;
 use std::fmt::Debug;
+
+/// Just a simple struct to hold the various bits needed to run a Copper application.
+pub struct CopperContext {
+    pub unified_logger: Arc<Mutex<UnifiedLoggerWrite>>,
+    pub logger_runtime: LoggerRuntime,
+    pub clock: RobotClock,
+}
 
 /// This is the main structure that will be injected as a member of the Application struct.
 /// CT is the tuple of all the tasks in order of execution.

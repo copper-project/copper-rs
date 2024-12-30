@@ -1037,6 +1037,109 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     };
 
+    let builder_name = format_ident!("{}Builder", name);
+    let (
+        builder_struct,
+        builder_new,
+        builder_impl,
+        builder_sim_callback_method,
+        builder_build_sim_callback_arg,
+    ) = if sim_mode {
+        (
+            quote! {
+                pub struct #builder_name <'a, F> {
+                    clock: Option<_RobotClock>,
+                    unified_logger: Option<_Arc<_Mutex<_UnifiedLoggerWrite>>>,
+                    sim_callback: Option<&'a mut F>
+                }
+            },
+            quote! {
+                pub fn new() -> Self {
+                    Self {
+                        clock: None,
+                        unified_logger: None,
+                        sim_callback: None,
+                    }
+                }
+            },
+            quote! {
+                impl<'a, F> #builder_name <'a, F>
+                where
+                    F: FnMut(SimStep) -> cu29::simulation::SimOverride,
+            },
+            Some(quote! {
+                fn with_sim_callback(mut self, sim_callback: &'a mut F) -> Self
+                {
+                    self.sim_callback = Some(sim_callback);
+                    self
+                }
+            }),
+            Some(quote! {
+                self.sim_callback
+                    .ok_or(_CuError::from("Sim callback missing from builder"))?,
+            }),
+        )
+    } else {
+        (
+            quote! {
+                pub struct #builder_name {
+                    clock: Option<_RobotClock>,
+                    unified_logger: Option<_Arc<_Mutex<_UnifiedLoggerWrite>>>,
+                }
+            },
+            quote! {
+                pub fn new() -> Self {
+                    Self {
+                        clock: None,
+                        unified_logger: None,
+                    }
+                }
+            },
+            quote! {
+                impl #builder_name
+            },
+            None,
+            None,
+        )
+    };
+
+    let builder = quote! {
+        #builder_struct
+
+        #builder_impl
+        {
+            #builder_new
+
+            pub fn with_clock(mut self, clock: _RobotClock) -> Self {
+                self.clock = Some(clock);
+                self
+            }
+
+            pub fn with_unified_logger(mut self, unified_logger: _Arc<_Mutex<_UnifiedLoggerWrite>>) -> Self {
+                self.unified_logger = Some(unified_logger);
+                self
+            }
+
+            pub fn with_context(mut self, copper_ctx: &_CopperContext) -> Self {
+                self.clock = Some(copper_ctx.clock.clone());
+                self.unified_logger = Some(copper_ctx.unified_logger.clone());
+                self
+            }
+
+            #builder_sim_callback_method
+
+            pub fn build(self) -> _CuResult<#name> {
+                #name::new(
+                    self.clock
+                        .ok_or(_CuError::from("Clock missing from builder"))?,
+                    self.unified_logger
+                        .ok_or(_CuError::from("Unified logger missing from builder"))?,
+                    #builder_build_sim_callback_arg
+                )
+            }
+        }
+    };
+
     #[cfg(feature = "macro_debug")]
     eprintln!("[build result]");
     // Convert the modified struct back into a TokenStream
@@ -1057,6 +1160,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         use cu29::config::read_configuration as _read_configuration;
         use cu29::config::read_configuration_str as _read_configuration_str;
         use cu29::curuntime::CuRuntime as _CuRuntime;
+        use cu29::curuntime::CopperContext as _CopperContext;
         use cu29::CuResult as _CuResult;
         use cu29::CuError as _CuError;
         use cu29::cutask::CuSrcTask as _CuSrcTask;
@@ -1105,6 +1209,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         #runtime_impl
 
+        #builder
     };
     let tokens: TokenStream = result.into();
 

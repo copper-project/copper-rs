@@ -1,19 +1,13 @@
 use cu29_clock::RobotClock;
 use cu29_log_runtime::LoggerRuntime;
+use cu29_runtime::curuntime::CopperContext;
 use cu29_traits::{CuResult, UnifiedLogType};
-use cu29_unifiedlog::{stream_write, UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerWrite};
+use cu29_unifiedlog::{stream_write, UnifiedLogger, UnifiedLoggerBuilder};
 use simplelog::TermLogger;
 #[cfg(debug_assertions)]
 use simplelog::{ColorChoice, Config, LevelFilter, TerminalMode};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-
-/// Just a simple struct to hold the various bits needed to run a Copper application.
-pub struct CopperContext {
-    pub unified_logger: Arc<Mutex<UnifiedLoggerWrite>>,
-    pub logger_runtime: LoggerRuntime,
-    pub clock: RobotClock,
-}
 
 /// This is a basic setup for a copper application to get you started.
 /// Duplicate and customize as needed when your needs grow.
