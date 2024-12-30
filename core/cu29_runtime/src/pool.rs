@@ -11,7 +11,7 @@ use std::sync::atomic::Ordering;
 use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
-use bincode::{Decode, Encode};
+use bincode::{BorrowDecode, Decode, Encode};
 use cu29_log_derive::debug;
 use std::rc::{Rc, Weak};
 
@@ -70,13 +70,16 @@ impl Encode for CuBufferHandle {
 
 impl Decode for CuBufferHandle {
     fn decode<D: Decoder>(_decoder: &mut D) -> Result<Self, DecodeError> {
-        // TODO: maybe implement a owned version of this
-        Ok(Self {
-            index: 0,
-            pool: Weak::new(), // An already dead ref
-        })
+        todo!()
     }
 }
+
+impl BorrowDecode<'_> for CuBufferHandle {
+    fn borrow_decode<D: Decoder>(_decoder: &mut D) -> Result<Self, DecodeError> {
+        todo!()
+    }
+}
+
 impl Default for CuBufferHandle {
     fn default() -> Self {
         Self {
@@ -103,7 +106,7 @@ impl CuBufferHandle {
     fn new(index: usize, pool: &Rc<CuHostMemoryPool>) -> Self {
         Self {
             index,
-            pool: Rc::<CuHostMemoryPool>::downgrade(&pool),
+            pool: Rc::<CuHostMemoryPool>::downgrade(pool),
         }
     }
 
@@ -175,7 +178,7 @@ impl CuHostMemoryPool {
         for (index, counter) in self_rc.inflight_counters.iter().enumerate() {
             let prev = counter.fetch_add(1, Ordering::SeqCst);
             if prev == 0 {
-                return Some(CuBufferHandle::new(index, &self_rc));
+                return Some(CuBufferHandle::new(index, self_rc));
             } else {
                 counter.fetch_sub(1, Ordering::SeqCst);
             }
@@ -191,32 +194,26 @@ impl CuHostMemoryPool {
 mod tests {
     use super::*;
 
-    #[repr(align(4096))]
-    #[derive(Default, Clone)]
-    struct TestStruct {
-        value: u32,
-    }
-
     #[test]
     fn test_full_size_pool() {
-        let mut pool = CuHostMemoryPool::new(10, 10, 4096);
+        let pool = Rc::new(CuHostMemoryPool::new(10, 10, 4096));
         let mut handles = Vec::new();
         for i in 0..10 {
-            let mut handle = pool.allocate().unwrap();
-            handle.deref_mut()[0] = 10 - i;
+            let mut handle = CuHostMemoryPool::allocate(&pool).unwrap();
+            handle.as_slice_mut()[0] = 10 - i;
             handles.push(handle);
         }
-        assert!(pool.allocate().is_none());
+        assert!(CuHostMemoryPool::allocate(&pool).is_none());
         drop(handles);
     }
 
     #[test]
     fn test_pool_with_holes() {
-        let mut pool = CuHostMemoryPool::new(10, 10, 4096);
+        let pool = Rc::new(CuHostMemoryPool::new(10, 10, 4096));
         let mut handles = Vec::new();
         for i in 0..10 {
-            let mut handle = pool.allocate().unwrap();
-            handle.deref_mut()[0] = 10 - i;
+            let mut handle = CuHostMemoryPool::allocate(&pool).unwrap();
+            handle.as_slice_mut()[0] = 10 - i;
             if i % 2 == 0 {
                 drop(handle);
             } else {
@@ -224,18 +221,18 @@ mod tests {
             }
         }
         for i in 0..5 {
-            let mut handle = pool.allocate().unwrap();
-            handle.deref_mut()[0] = 10 - i;
+            let mut handle = CuHostMemoryPool::allocate(&pool).unwrap();
+            handle.as_slice_mut()[0] = 10 - i;
             handles.push(handle);
         }
-        assert!(pool.allocate().is_none());
+        assert!(CuHostMemoryPool::allocate(&pool).is_none());
         drop(handles);
     }
 
     #[test]
     fn test_alignment() {
-        let mut pool = CuHostMemoryPool::new(10, 10, 4096);
-        let handle = pool.allocate().unwrap();
-        assert_eq!(handle.as_ptr() as usize % 4096, 0);
+        let pool = Rc::new(CuHostMemoryPool::new(10, 10, 4096));
+        let handle = CuHostMemoryPool::allocate(&pool).unwrap();
+        assert_eq!(handle.as_slice().as_ptr() as usize % 4096, 0);
     }
 }

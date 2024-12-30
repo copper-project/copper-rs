@@ -17,5 +17,7 @@ cu29-clock = { workspace = true }
 cu29 = { workspace = true }
 uom = { workspace = true }
 derive_more = { workspace = true }
-image = "0.25.5"
+image = { version = "0.25.5", optional = true }
 
+[features]
+image = ["dep:image"]

@@ -1,56 +1,55 @@
 use bincode::{Decode, Encode};
-use std::ops::{Deref, DerefMut};
+use cu29::prelude::CuBufferHandle;
 
-#[repr(align(4096))]
-#[derive(Clone, Debug, Encode, Decode)]
-pub struct CuImageBuffer<const S: usize> {
-    pixels: Box<[u8]>,
+#[cfg(feature = "image")]
+use image::{ImageBuffer, Pixel};
+
+#[derive(Default, Debug, Encode, Decode, Clone, Copy)]
+pub struct CuImageBufferFormat {
+    pub width: u32,
+    pub height: u32,
+    pub stride: u32,
+    pub pixel_format: [u8; 4],
 }
 
-impl<const S: usize> Default for CuImageBuffer<S> {
-    fn default() -> Self {
-        let pixels = Box::new_uninit_slice(S);
-        Self {
-            pixels: unsafe { pixels.assume_init() },
+#[derive(Debug, Default, Clone, Decode, Encode)]
+pub struct CuImage {
+    pub seq: u64,
+    pub format: CuImageBufferFormat,
+    pub buffer_handle: CuBufferHandle,
+}
+
+impl CuImage {
+    pub fn new(format: CuImageBufferFormat, buffer_handle: CuBufferHandle) -> Self {
+        CuImage {
+            seq: 0,
+            format,
+            buffer_handle,
         }
     }
-}
 
-impl<const S: usize> Deref for CuImageBuffer<S> {
-    type Target = [u8];
-
-    fn deref(&self) -> &Self::Target {
-        &*self.pixels
+    pub fn as_slice(&self) -> &[u8] {
+        self.buffer_handle.as_slice()
     }
 }
 
-impl<const S: usize> DerefMut for CuImageBuffer<S> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut *self.pixels
+impl CuImage {
+    /// Builds an ImageBuffer from the image crate backed by the CuImage's pixel data.
+    #[cfg(feature = "image")]
+    pub fn as_image_buffer<P: Pixel>(&self) -> ImageBuffer<P, &[P::Subpixel]> {
+        let width = self.format.width;
+        let height = self.format.height;
+        let data = self.buffer_handle.as_slice();
+
+        assert_eq!(
+            width, self.format.stride,
+            "STRIDE must equal WIDTH for ImageBuffer compatibility."
+        );
+
+        let raw_pixels: &[P::Subpixel] =
+            unsafe { core::slice::from_raw_parts(data.as_ptr() as *const P::Subpixel, data.len()) };
+
+        ImageBuffer::from_raw(width, height, raw_pixels)
+            .expect("Failed to create ImageBuffer with CuImage's pixel data.")
     }
 }
-
-// impl<const WIDTH: usize, const HEIGHT: usize, const STRIDE: usize, P>
-//     CuImage<WIDTH, HEIGHT, STRIDE, P>
-// where
-//     P: Pixel + Default + 'static,
-//     P::Subpixel: Copy,
-// {
-//     /// Builds an ImageBuffer from the image crate backed by the CuImage's pixel data.
-//     pub fn as_image_buffer(&self) -> ImageBuffer<P, &[P::Subpixel]> {
-//         assert_eq!(
-//             STRIDE, WIDTH,
-//             "STRIDE must equal WIDTH for ImageBuffer compatibility."
-//         );
-//
-//         let raw_pixels: &[P::Subpixel] = unsafe {
-//             core::slice::from_raw_parts(
-//                 self.pixels.as_ptr() as *const P::Subpixel,
-//                 WIDTH * HEIGHT * P::CHANNEL_COUNT as usize,
-//             )
-//         };
-//
-//         ImageBuffer::from_raw(WIDTH as u32, HEIGHT as u32, raw_pixels)
-//             .expect("Failed to create ImageBuffer with CuImage's pixel data.")
-//     }
-// }

@@ -4,6 +4,7 @@ mod v4lstream;
 
 use crate::v4lstream::CuV4LStream;
 use cu29::prelude::*;
+use cu_sensor_payloads::{CuImage, CuImageBufferFormat};
 use nix::time::{clock_gettime, ClockId};
 use v4l::buffer::Type;
 use v4l::framesize::FrameSizeEnum;
@@ -11,21 +12,12 @@ use v4l::io::traits::{CaptureStream, Stream};
 use v4l::prelude::*;
 use v4l::video::capture::Parameters;
 use v4l::{Format, FourCC, Timestamp};
-struct CuImageFormat {
-    width: usize,
-    height: usize,
-    pixel_format: FourCC,
-}
-
-struct CuImage<const BS: usize> {
-    format: CuImageFormat,
-    data: CuBufferHandle,
-}
 
 // A Copper source task that reads frames from a V4L device.
 // BS is the image buffer size to be used. ie the maximum size of the image buffer.
 struct V4l {
     stream: CuV4LStream, // move that as a generic parameter
+    settled_format: CuImageBufferFormat,
     v4l_clock_time_offset_ns: i64,
 }
 
@@ -37,7 +29,7 @@ fn cutime_from_v4ltime(offset_ns: i64, v4l_time: Timestamp) -> CuTime {
 }
 
 impl<'cl> CuSrcTask<'cl> for V4l {
-    type Output = output_msg!('cl, CuBufferHandle);
+    type Output = output_msg!('cl, CuImage);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -54,28 +46,28 @@ impl<'cl> CuSrcTask<'cl> for V4l {
 
         if let Some(config) = _config {
             if let Some(device) = config.get::<u32>("device") {
-                v4l_device = device.try_into().expect("Invalid device number");
+                v4l_device = device as usize;
             }
             if let Some(width) = config.get::<u32>("width") {
-                req_width = Some(width.try_into().expect("Invalid width"));
+                req_width = Some(width);
             }
             if let Some(height) = config.get::<u32>("height") {
-                req_height = Some(height.try_into().expect("Invalid height"));
+                req_height = Some(height);
             }
             if let Some(fps) = config.get::<u32>("fps") {
-                req_fps = Some(fps.try_into().expect("Invalid fps"));
+                req_fps = Some(fps);
             }
             if let Some(fourcc) = config.get::<String>("fourcc") {
-                req_fourcc = Some(fourcc.try_into().expect("Invalid fourcc"));
+                req_fourcc = Some(fourcc);
             }
             if let Some(buffers) = config.get::<u32>("buffers") {
-                req_buffers = buffers.try_into().expect("Invalid buffers");
+                req_buffers = buffers;
             }
             if let Some(timeout) = config.get::<u32>("timeout_ms") {
-                req_timeout = Duration::from_millis(timeout.try_into().expect("Invalid timeout"));
+                req_timeout = Duration::from_millis(timeout as u64);
             }
         }
-        let mut dev = Device::new(v4l_device)
+        let dev = Device::new(v4l_device)
             .map_err(|e| CuError::new_with_cause("Failed to open camera", e))?;
 
         // List all formats supported by the device
@@ -152,7 +144,7 @@ impl<'cl> CuSrcTask<'cl> for V4l {
         );
 
         let mut stream = CuV4LStream::with_buffers(
-            &mut dev,
+            &dev,
             Type::VideoCapture,
             actual_fmt.size as usize,
             req_buffers,
@@ -161,8 +153,16 @@ impl<'cl> CuSrcTask<'cl> for V4l {
         debug!("V4L: Set timeout to {} ms", req_timeout.as_millis() as u64);
         stream.set_timeout(req_timeout);
 
+        let cuformat = CuImageBufferFormat {
+            width: actual_fmt.width,
+            height: actual_fmt.height,
+            stride: actual_fmt.stride,
+            pixel_format: actual_fmt.fourcc.repr,
+        };
+
         Ok(Self {
             stream,
+            settled_format: cuformat,
             v4l_clock_time_offset_ns: 0, // will be set at start
         })
     }
@@ -172,7 +172,7 @@ impl<'cl> CuSrcTask<'cl> for V4l {
         clock_gettime(ClockId::CLOCK_MONOTONIC)
             .map(|ts| {
                 self.v4l_clock_time_offset_ns =
-                    ts.tv_sec() as i64 * 1_000_000_000 + ts.tv_nsec() as i64 - rb_ns as i64
+                    ts.tv_sec() * 1_000_000_000 + ts.tv_nsec() - rb_ns as i64
             })
             .map_err(|e| CuError::new_with_cause("Failed to get the current time", e))?;
 
@@ -188,8 +188,8 @@ impl<'cl> CuSrcTask<'cl> for V4l {
             .map_err(|e| CuError::new_with_cause("could not get next frame from stream", e))?;
         if meta.bytesused != 0 {
             let cutime = cutime_from_v4ltime(self.v4l_clock_time_offset_ns, meta.timestamp);
-            let handle = handle.clone();
-            new_msg.set_payload(handle);
+            let image = CuImage::new(self.settled_format, handle.clone());
+            new_msg.set_payload(image);
             new_msg.metadata.tov = Tov::Time(cutime);
         } else {
             debug!("Empty frame received");
@@ -272,7 +272,7 @@ mod tests {
         for _ in 0..1000 {
             let _output = v4l.process(&clock, &mut msg);
             if let Some(frame) = msg.payload() {
-                debug!("Buffer index: {}", frame.index());
+                debug!("Buffer index: {}", frame.buffer_handle.index());
                 let slice = frame.as_slice();
                 let arrow_buffer = ArrowBuffer::from(slice);
                 let blob = Blob::from(arrow_buffer);

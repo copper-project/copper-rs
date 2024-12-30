@@ -115,6 +115,7 @@ impl CuV4LStream {
         Ok(v4l2_reqbufs.count)
     }
 
+    #[allow(dead_code)]
     pub fn release(&mut self) -> io::Result<()> {
         // free all buffers by requesting 0
         let mut v4l2_reqbufs = v4l2_requestbuffers {
@@ -188,7 +189,7 @@ impl Stream for CuV4LStream {
     }
 }
 
-impl<'a> CaptureStream<'a> for CuV4LStream {
+impl CaptureStream<'_> for CuV4LStream {
     fn queue(&mut self, index: usize) -> io::Result<()> {
         let buffer_handle = CuHostMemoryPool::allocate(&self.memory_pool).ok_or(io::Error::new(
             io::ErrorKind::Other,
