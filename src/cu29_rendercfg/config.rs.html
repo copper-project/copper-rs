@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29_runtime/src/config.rs`."><title>config.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_rendercfg" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (bdc6b3de4 2024-12-23)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">cu29_rendercfg/</div>config.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29_runtime/src/config.rs`."><title>config.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-46132b98.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_rendercfg" data-themes="" data-resource-suffix="" data-rustdoc-version="1.85.0-nightly (14ee63a3c 2024-12-29)" data-channel="nightly" data-search-js="search-036cda7a.js" data-settings-js="settings-0f613d39.js" ><script src="../../static.files/storage-59e33391.js"></script><script defer src="../../static.files/src-script-56102188.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5f194d8c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">cu29_rendercfg/</div>config.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
 <a href="#1" id="1">1</a>
 <a href="#2" id="2">2</a>
 <a href="#3" id="3">3</a>
@@ -683,7 +683,32 @@
 <a href="#682" id="682">682</a>
 <a href="#683" id="683">683</a>
 <a href="#684" id="684">684</a>
-<a href="#685" id="685">685</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module defines the configuration of the copper runtime.
+<a href="#685" id="685">685</a>
+<a href="#686" id="686">686</a>
+<a href="#687" id="687">687</a>
+<a href="#688" id="688">688</a>
+<a href="#689" id="689">689</a>
+<a href="#690" id="690">690</a>
+<a href="#691" id="691">691</a>
+<a href="#692" id="692">692</a>
+<a href="#693" id="693">693</a>
+<a href="#694" id="694">694</a>
+<a href="#695" id="695">695</a>
+<a href="#696" id="696">696</a>
+<a href="#697" id="697">697</a>
+<a href="#698" id="698">698</a>
+<a href="#699" id="699">699</a>
+<a href="#700" id="700">700</a>
+<a href="#701" id="701">701</a>
+<a href="#702" id="702">702</a>
+<a href="#703" id="703">703</a>
+<a href="#704" id="704">704</a>
+<a href="#705" id="705">705</a>
+<a href="#706" id="706">706</a>
+<a href="#707" id="707">707</a>
+<a href="#708" id="708">708</a>
+<a href="#709" id="709">709</a>
+<a href="#710" id="710">710</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module defines the configuration of the copper runtime.
 //! The configuration is a directed graph where nodes are tasks and edges are connections between tasks.
 //! The configuration is serialized in the RON format.
 //! The configuration is used to generate the runtime code at compile time.
@@ -971,7 +996,8 @@
 </span><span class="kw">pub struct </span>CuConfig {
     <span class="comment">// This is not what is directly serialized, see the custom serialization below.
     </span><span class="kw">pub </span>graph: StableDiGraph&lt;Node, Cnx, NodeId&gt;,
-    monitor: <span class="prelude-ty">Option</span>&lt;MonitorConfig&gt;,
+    <span class="kw">pub </span>monitor: <span class="prelude-ty">Option</span>&lt;MonitorConfig&gt;,
+    <span class="kw">pub </span>logging: <span class="prelude-ty">Option</span>&lt;LoggingConfig&gt;,
 }
 
 <span class="attr">#[derive(Serialize, Deserialize, Default, Debug, Clone)]
@@ -994,12 +1020,21 @@
     }
 }
 
+<span class="attr">#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+</span><span class="kw">pub struct </span>LoggingConfig {
+    <span class="attr">#[serde(skip_serializing_if = <span class="string">"Option::is_none"</span>)]
+    </span><span class="kw">pub </span>slab_size_mib: <span class="prelude-ty">Option</span>&lt;u64&gt;,
+    <span class="attr">#[serde(skip_serializing_if = <span class="string">"Option::is_none"</span>)]
+    </span><span class="kw">pub </span>section_size_mib: <span class="prelude-ty">Option</span>&lt;u64&gt;,
+}
+
 <span class="doccomment">/// The config is a list of tasks and their connections.
 </span><span class="attr">#[derive(Serialize, Deserialize, Default)]
 </span><span class="kw">struct </span>CuConfigRepresentation {
     tasks: Vec&lt;Node&gt;,
     cnx: Vec&lt;Cnx&gt;,
     monitor: <span class="prelude-ty">Option</span>&lt;MonitorConfig&gt;,
+    logging: <span class="prelude-ty">Option</span>&lt;LoggingConfig&gt;,
 }
 
 <span class="kw">impl</span>&lt;<span class="lifetime">'de</span>&gt; Deserialize&lt;<span class="lifetime">'de</span>&gt; <span class="kw">for </span>CuConfig {
@@ -1036,6 +1071,7 @@
             );
         }
         cuconfig.monitor = representation.monitor;
+        cuconfig.logging = representation.logging;
         <span class="prelude-val">Ok</span>(cuconfig)
     }
 }
@@ -1062,6 +1098,7 @@
             tasks,
             cnx,
             monitor: <span class="self">self</span>.monitor.clone(),
+            logging: <span class="self">self</span>.logging.clone(),
         }
         .serialize(serializer)
     }
@@ -1072,6 +1109,7 @@
         CuConfig {
             graph: StableDiGraph::new(),
             monitor: <span class="prelude-val">None</span>,
+            logging: <span class="prelude-val">None</span>,
         }
     }
 }
@@ -1366,6 +1404,18 @@
             config.monitor.as_ref().unwrap().config.as_ref().unwrap().<span class="number">0</span>[<span class="string">"toto"</span>],
             <span class="number">4</span>.into()
         );
+    }
+
+    <span class="attr">#[test]
+    </span><span class="kw">fn </span>test_logging_parameters() {
+        <span class="kw">let </span>txt =
+            <span class="string">r#"( tasks: [], cnx: [], logging: ( slab_size_mib: 1024, section_size_mib: 100, ),) "#</span>;
+
+        <span class="kw">let </span>config = CuConfig::deserialize_ron(txt);
+        <span class="macro">assert!</span>(config.logging.is_some());
+        <span class="kw">let </span>logging_config = config.logging.unwrap();
+        <span class="macro">assert_eq!</span>(logging_config.slab_size_mib.unwrap(), <span class="number">1024</span>);
+        <span class="macro">assert_eq!</span>(logging_config.section_size_mib.unwrap(), <span class="number">100</span>);
     }
 }
 </code></pre></div></section></main></body></html>
