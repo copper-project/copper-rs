@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["basic_copper_setup"],"struct":["CopperContext"]};
+window.SIDEBAR_ITEMS = {"fn":["basic_copper_setup"]};

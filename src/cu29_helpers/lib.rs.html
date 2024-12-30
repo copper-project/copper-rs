@@ -71,28 +71,16 @@
 <a href="#70" id="70">70</a>
 <a href="#71" id="71">71</a>
 <a href="#72" id="72">72</a>
-<a href="#73" id="73">73</a>
-<a href="#74" id="74">74</a>
-<a href="#75" id="75">75</a>
-<a href="#76" id="76">76</a>
-<a href="#77" id="77">77</a>
-<a href="#78" id="78">78</a>
-<a href="#79" id="79">79</a></pre></div><pre class="rust"><code><span class="kw">use </span>cu29_clock::RobotClock;
+<a href="#73" id="73">73</a></pre></div><pre class="rust"><code><span class="kw">use </span>cu29_clock::RobotClock;
 <span class="kw">use </span>cu29_log_runtime::LoggerRuntime;
+<span class="kw">use </span>cu29_runtime::curuntime::CopperContext;
 <span class="kw">use </span>cu29_traits::{CuResult, UnifiedLogType};
-<span class="kw">use </span>cu29_unifiedlog::{stream_write, UnifiedLogger, UnifiedLoggerBuilder, UnifiedLoggerWrite};
+<span class="kw">use </span>cu29_unifiedlog::{stream_write, UnifiedLogger, UnifiedLoggerBuilder};
 <span class="kw">use </span>simplelog::TermLogger;
 <span class="attr">#[cfg(debug_assertions)]
 </span><span class="kw">use </span>simplelog::{ColorChoice, Config, LevelFilter, TerminalMode};
 <span class="kw">use </span>std::path::Path;
 <span class="kw">use </span>std::sync::{Arc, Mutex};
-
-<span class="doccomment">/// Just a simple struct to hold the various bits needed to run a Copper application.
-</span><span class="kw">pub struct </span>CopperContext {
-    <span class="kw">pub </span>unified_logger: Arc&lt;Mutex&lt;UnifiedLoggerWrite&gt;&gt;,
-    <span class="kw">pub </span>logger_runtime: LoggerRuntime,
-    <span class="kw">pub </span>clock: RobotClock,
-}
 
 <span class="doccomment">/// This is a basic setup for a copper application to get you started.
 /// Duplicate and customize as needed when your needs grow.
