@@ -23,6 +23,7 @@ members = [
     "components/sources/cu_ads7883",
     "components/sources/cu_hesai",
     "components/sources/cu_iceoryx2_src",
+    "components/sources/cu_v4l",
     "components/sources/cu_vlp16",
     "components/sources/cu_wt901",
     "components/sources/cu_rp_encoder",
@@ -37,7 +38,7 @@ members = [
     "examples/cu_multisources",
     "examples/cu_pointclouds",
     "examples/cu_rp_balancebot",
-    "examples/cu_standalone_structlog", "components/sources/cu_v4l",
+    "examples/cu_standalone_structlog",
 ]
 
 # put only the core crates here that are not platform specific

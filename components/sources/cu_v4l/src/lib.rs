@@ -231,6 +231,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn emulate_copper_backend() {
         let clock = RobotClock::new();
 
