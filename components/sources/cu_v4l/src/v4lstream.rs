@@ -1,6 +1,5 @@
-use cu29::prelude::{CuBufferHandle, CuMemoryPool};
+use cu29::prelude::{CuBufferHandle, CuHostMemoryPool};
 use std::convert::TryInto;
-use std::ops::Deref;
 use std::rc::Rc;
 use std::time::Duration;
 use std::{io, mem, sync::Arc};
@@ -11,34 +10,40 @@ use v4l::memory::Memory;
 use v4l::v4l_sys::*;
 use v4l::{v4l2, Device};
 
-pub struct CuV4LStream<const BS: usize> {
-    handle: Arc<Handle>,
-    memory_pool: Rc<CuMemoryPool<BS>>,
-    buf_type: Type,
+// A specialized V4L stream that uses Copper Buffers for memory management.
+pub struct CuV4LStream {
+    v4l_handle: Arc<Handle>,
+    v4l_buf_type: Type,
+    memory_pool: Rc<CuHostMemoryPool>,
     // Arena matching the vl42 metadata and the Copper Buffers
-    arena: Vec<(Metadata, Option<CuBufferHandle<BS>>)>,
+    arena: Vec<(Metadata, Option<CuBufferHandle>)>,
     arena_last_freed_up_index: usize,
     timeout: Option<i32>,
     active: bool,
 }
 
-impl<const BS: usize> CuV4LStream<BS> {
+impl CuV4LStream {
     #[allow(dead_code)]
-    pub fn new(dev: &Device, buf_type: Type) -> io::Result<Self> {
-        CuV4LStream::with_buffers(dev, buf_type, 4)
+    pub fn new(dev: &Device, buf_size: usize, buf_type: Type) -> io::Result<Self> {
+        CuV4LStream::with_buffers(dev, buf_type, buf_size, 4)
     }
 
-    pub fn with_buffers(dev: &Device, buf_type: Type, buf_count: u32) -> io::Result<Self> {
-        let memory_pool = CuMemoryPool::new(buf_count + 1, page_size::get()); // +1 to be able to queue one last buffer before zapping the first
+    pub fn with_buffers(
+        dev: &Device,
+        buf_type: Type,
+        buf_size: usize,
+        buf_count: u32,
+    ) -> io::Result<Self> {
+        let memory_pool = CuHostMemoryPool::new(buf_size, buf_count + 1, page_size::get()); // +1 to be able to queue one last buffer before zapping the first
         let mut arena = Vec::new();
         arena.resize(buf_count as usize, (Metadata::default(), None));
 
         let mut result = CuV4LStream {
-            handle: dev.handle(),
+            v4l_handle: dev.handle(),
             memory_pool: Rc::new(memory_pool),
             arena,
             arena_last_freed_up_index: 0,
-            buf_type,
+            v4l_buf_type: buf_type,
             active: false,
             timeout: None,
         };
@@ -49,7 +54,7 @@ impl<const BS: usize> CuV4LStream<BS> {
     /// Returns the raw device handle
     #[allow(dead_code)]
     pub fn handle(&self) -> Arc<Handle> {
-        self.handle.clone()
+        self.v4l_handle.clone()
     }
 
     /// Sets a timeout of the v4l file handle.
@@ -65,7 +70,7 @@ impl<const BS: usize> CuV4LStream<BS> {
 
     fn buffer_desc(&self) -> v4l2_buffer {
         v4l2_buffer {
-            type_: self.buf_type as u32,
+            type_: self.v4l_buf_type as u32,
             memory: Memory::UserPtr as u32,
             ..unsafe { mem::zeroed() }
         }
@@ -75,7 +80,7 @@ impl<const BS: usize> CuV4LStream<BS> {
 
     fn requestbuffers_desc(&self) -> v4l2_requestbuffers {
         v4l2_requestbuffers {
-            type_: self.buf_type as u32,
+            type_: self.v4l_buf_type as u32,
             memory: Memory::UserPtr as u32,
             ..unsafe { mem::zeroed() }
         }
@@ -84,12 +89,12 @@ impl<const BS: usize> CuV4LStream<BS> {
     pub fn allocate_request_buffers(&mut self, count: u32) -> io::Result<u32> {
         // we need to get the maximum buffer size from the format first
         let mut v4l2_fmt = v4l2_format {
-            type_: self.buf_type as u32,
+            type_: self.v4l_buf_type as u32,
             ..unsafe { mem::zeroed() }
         };
         unsafe {
             v4l2::ioctl(
-                self.handle.fd(),
+                self.v4l_handle.fd(),
                 v4l2::vidioc::VIDIOC_G_FMT,
                 &mut v4l2_fmt as *mut _ as *mut std::os::raw::c_void,
             )?;
@@ -101,7 +106,7 @@ impl<const BS: usize> CuV4LStream<BS> {
         };
         unsafe {
             v4l2::ioctl(
-                self.handle.fd(),
+                self.v4l_handle.fd(),
                 v4l2::vidioc::VIDIOC_REQBUFS,
                 &mut v4l2_reqbufs as *mut _ as *mut std::os::raw::c_void,
             )?;
@@ -118,7 +123,7 @@ impl<const BS: usize> CuV4LStream<BS> {
         };
         unsafe {
             v4l2::ioctl(
-                self.handle.fd(),
+                self.v4l_handle.fd(),
                 v4l2::vidioc::VIDIOC_REQBUFS,
                 &mut v4l2_reqbufs as *mut _ as *mut std::os::raw::c_void,
             )
@@ -126,7 +131,7 @@ impl<const BS: usize> CuV4LStream<BS> {
     }
 }
 
-impl<const BS: usize> Drop for CuV4LStream<BS> {
+impl Drop for CuV4LStream {
     fn drop(&mut self) {
         if let Err(e) = self.stop() {
             if let Some(code) = e.raw_os_error() {
@@ -144,23 +149,22 @@ impl<const BS: usize> Drop for CuV4LStream<BS> {
     }
 }
 
-impl<const BS: usize> Stream for CuV4LStream<BS> {
-    type Item = CuBufferHandle<BS>;
+impl Stream for CuV4LStream {
+    type Item = CuBufferHandle;
 
     fn start(&mut self) -> io::Result<()> {
         // Enqueue all buffers once on stream start
         // -1 to leave one buffer unqueued as temporary storage
         for index in 1..self.arena.len() {
-            println!("Queueing buffer {}", index);
             self.queue(index)?;
         }
 
         self.arena_last_freed_up_index = 0;
 
         unsafe {
-            let mut typ = self.buf_type as u32;
+            let mut typ = self.v4l_buf_type as u32;
             v4l2::ioctl(
-                self.handle.fd(),
+                self.v4l_handle.fd(),
                 v4l2::vidioc::VIDIOC_STREAMON,
                 &mut typ as *mut _ as *mut std::os::raw::c_void,
             )?;
@@ -171,9 +175,9 @@ impl<const BS: usize> Stream for CuV4LStream<BS> {
 
     fn stop(&mut self) -> io::Result<()> {
         unsafe {
-            let mut typ = self.buf_type as u32;
+            let mut typ = self.v4l_buf_type as u32;
             v4l2::ioctl(
-                self.handle.fd(),
+                self.v4l_handle.fd(),
                 v4l2::vidioc::VIDIOC_STREAMOFF,
                 &mut typ as *mut _ as *mut std::os::raw::c_void,
             )?;
@@ -184,18 +188,14 @@ impl<const BS: usize> Stream for CuV4LStream<BS> {
     }
 }
 
-impl<'a, const BS: usize> CaptureStream<'a> for CuV4LStream<BS> {
+impl<'a> CaptureStream<'a> for CuV4LStream {
     fn queue(&mut self, index: usize) -> io::Result<()> {
-        println!("queue: queueing buffer {}", index);
+        let buffer_handle = CuHostMemoryPool::allocate(&self.memory_pool).ok_or(io::Error::new(
+            io::ErrorKind::Other,
+            "Failed to allocate buffer",
+        ))?;
 
-        let buffer_handle = CuMemoryPool::<BS>::allocate(&self.memory_pool).ok_or(
-            io::Error::new(io::ErrorKind::Other, "Failed to allocate buffer"),
-        )?;
-
-        let buf: &[u8] = buffer_handle.deref();
-        println!("queue: Buffer size: {}", buf.len());
-        println!("queue: Buffer ptr: {:?}", buf.as_ptr());
-
+        let buf: &[u8] = buffer_handle.as_slice();
         let mut v4l2_buf = v4l2_buffer {
             index: index as u32,
             m: v4l2_buffer__bindgen_ty_1 {
@@ -204,33 +204,25 @@ impl<'a, const BS: usize> CaptureStream<'a> for CuV4LStream<BS> {
             length: buf.len() as u32,
             ..self.buffer_desc()
         };
-        let result = unsafe {
+        unsafe {
             v4l2::ioctl(
-                self.handle.fd(),
+                self.v4l_handle.fd(),
                 v4l2::vidioc::VIDIOC_QBUF,
                 &mut v4l2_buf as *mut _ as *mut std::os::raw::c_void,
-            )
-        };
-        if result.is_err() {
-            println!("Error: {:?}", result);
+            )?;
         }
         self.arena[index] = (Metadata::default(), Some(buffer_handle));
-        println!(
-            "queue end ... : Buffer size: {}",
-            self.arena[index].1.as_ref().unwrap().len()
-        );
-        println!(
-            "queue end: Buffer ptr: {:?}",
-            self.arena[index].1.as_ref().unwrap().as_ptr()
-        );
-
         Ok(())
     }
 
     fn dequeue(&mut self) -> io::Result<usize> {
         let mut v4l2_buf = self.buffer_desc();
 
-        if self.handle.poll(libc::POLLIN, self.timeout.unwrap_or(-1))? == 0 {
+        if self
+            .v4l_handle
+            .poll(libc::POLLIN, self.timeout.unwrap_or(-1))?
+            == 0
+        {
             // This condition can only happen if there was a timeout.
             // A timeout is only possible if the `timeout` value is non-zero, meaning we should
             // propagate it to the caller.
@@ -239,18 +231,18 @@ impl<'a, const BS: usize> CaptureStream<'a> for CuV4LStream<BS> {
 
         unsafe {
             v4l2::ioctl(
-                self.handle.fd(),
+                self.v4l_handle.fd(),
                 v4l2::vidioc::VIDIOC_DQBUF,
                 &mut v4l2_buf as *mut _ as *mut std::os::raw::c_void,
             )?;
         }
         let index = v4l2_buf.index as usize;
-        println!("dequeue: dequeueing buffer {}", index);
-        println!(" length {}", v4l2_buf.length);
-        println!(" bytesused {}", v4l2_buf.bytesused);
-        println!(" timestamp {:?}", v4l2_buf.timestamp);
-        println!(" sequence {}", v4l2_buf.sequence);
-        println!(" field {}", v4l2_buf.field);
+        // println!("dequeue: dequeueing buffer {}", index);
+        // println!(" length {}", v4l2_buf.length);
+        // println!(" bytesused {}", v4l2_buf.bytesused);
+        // println!(" timestamp {:?}", v4l2_buf.timestamp);
+        // println!(" sequence {}", v4l2_buf.sequence);
+        // println!(" field {}", v4l2_buf.field);
 
         self.arena[index].0 = Metadata {
             bytesused: v4l2_buf.bytesused,
@@ -264,7 +256,6 @@ impl<'a, const BS: usize> CaptureStream<'a> for CuV4LStream<BS> {
     }
 
     fn next(&mut self) -> io::Result<(&Self::Item, &Metadata)> {
-        println!("next: active: {}", self.active);
         if !self.active {
             return Err(io::Error::new(
                 io::ErrorKind::Other,

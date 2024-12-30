@@ -1,88 +1,198 @@
 use std::time::Duration;
 use v4l::video::Capture;
-mod cuv4l;
+mod v4lstream;
 
-use crate::cuv4l::CuV4LStream;
+use crate::v4lstream::CuV4LStream;
 use cu29::prelude::*;
+use nix::time::{clock_gettime, ClockId};
 use v4l::buffer::Type;
+use v4l::framesize::FrameSizeEnum;
 use v4l::io::traits::{CaptureStream, Stream};
 use v4l::prelude::*;
-use v4l::{Format, FourCC};
+use v4l::video::capture::Parameters;
+use v4l::{Format, FourCC, Timestamp};
+struct CuImageFormat {
+    width: usize,
+    height: usize,
+    pixel_format: FourCC,
+}
 
-const IMG_WIDTH: usize = 2560;
-const IMG_HEIGHT: usize = 1440;
-const IMG_STRIDE: usize = 2560;
-const IMG_BUFFER_SIZE: usize = IMG_STRIDE * IMG_HEIGHT * 3;
+struct CuImage<const BS: usize> {
+    format: CuImageFormat,
+    data: CuBufferHandle,
+}
 
+// A Copper source task that reads frames from a V4L device.
+// BS is the image buffer size to be used. ie the maximum size of the image buffer.
 struct V4l {
-    stream: CuV4LStream<IMG_BUFFER_SIZE>, // move that as a generic parameter
+    stream: CuV4LStream, // move that as a generic parameter
+    v4l_clock_time_offset_ns: i64,
 }
 
 impl Freezable for V4l {}
 
+fn cutime_from_v4ltime(offset_ns: i64, v4l_time: Timestamp) -> CuTime {
+    let duration: Duration = v4l_time.into();
+    ((duration.as_nanos() as i64 + offset_ns) as u64).into()
+}
+
 impl<'cl> CuSrcTask<'cl> for V4l {
-    type Output = output_msg!('cl, CuBufferHandle<IMG_BUFFER_SIZE>);
+    type Output = output_msg!('cl, CuBufferHandle);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
     {
-        // FIXME: make this configurable
-        let mut dev =
-            Device::new(0).map_err(|e| CuError::new_with_cause("Failed to open camera", e))?;
+        // reasonable defaults
+        let mut v4l_device = 0usize;
+        let mut req_width: Option<u32> = None;
+        let mut req_height: Option<u32> = None;
+        let mut req_fps: Option<u32> = None;
+        let mut req_fourcc: Option<String> = None;
+        let mut req_buffers: u32 = 4;
+        let mut req_timeout: Duration = Duration::from_millis(500); // 500ms tolerance to get a frame
 
-        // FIXME: make this configurable
+        if let Some(config) = _config {
+            if let Some(device) = config.get::<u32>("device") {
+                v4l_device = device.try_into().expect("Invalid device number");
+            }
+            if let Some(width) = config.get::<u32>("width") {
+                req_width = Some(width.try_into().expect("Invalid width"));
+            }
+            if let Some(height) = config.get::<u32>("height") {
+                req_height = Some(height.try_into().expect("Invalid height"));
+            }
+            if let Some(fps) = config.get::<u32>("fps") {
+                req_fps = Some(fps.try_into().expect("Invalid fps"));
+            }
+            if let Some(fourcc) = config.get::<String>("fourcc") {
+                req_fourcc = Some(fourcc.try_into().expect("Invalid fourcc"));
+            }
+            if let Some(buffers) = config.get::<u32>("buffers") {
+                req_buffers = buffers.try_into().expect("Invalid buffers");
+            }
+            if let Some(timeout) = config.get::<u32>("timeout_ms") {
+                req_timeout = Duration::from_millis(timeout.try_into().expect("Invalid timeout"));
+            }
+        }
+        let mut dev = Device::new(v4l_device)
+            .map_err(|e| CuError::new_with_cause("Failed to open camera", e))?;
+
         // List all formats supported by the device
         let formats = dev
             .enum_formats()
             .map_err(|e| CuError::new_with_cause("Failed to enum formats", e))?;
 
-        // Find the first BGR3 format
-        let bgr3_fourcc: FourCC = FourCC::new(b"BGR3");
-        if let Some(format) = formats.iter().find(|f| f.fourcc == bgr3_fourcc) {
-            println!("Found BGR3 format: {:?}", format);
+        if formats.is_empty() {
+            return Err("The V4l device did not provide any video format.".into());
+        }
 
+        // Either use the 4CC or just pick one for the user
+        let fourcc: FourCC = if let Some(fourcc) = req_fourcc {
+            if fourcc.len() != 4 {
+                return Err("Invalid fourcc provided".into());
+            }
+            FourCC::new(fourcc.as_bytes()[0..4].try_into().unwrap())
+        } else {
+            debug!("No fourcc provided, just use the first one we can find.");
+            formats.first().unwrap().fourcc
+        };
+        debug!("V4L: Using fourcc: {}", fourcc.to_string());
+        let actual_fmt = if let Some(format) = formats.iter().find(|f| f.fourcc == fourcc) {
             // Enumerate resolutions for the BGR3 format
             let resolutions = dev
                 .enum_framesizes(format.fourcc)
                 .map_err(|e| CuError::new_with_cause("Failed to enum frame sizes", e))?;
-            println!("Resolutions: {:?}", resolutions);
+            let (width, height) =
+                if let (Some(req_width), Some(req_height)) = (req_width, req_height) {
+                    let mut frame_size: (u32, u32) = (0, 0);
+                    for frame in resolutions.iter() {
+                        let FrameSizeEnum::Discrete(size) = &frame.size else {
+                            todo!()
+                        };
+                        if size.width == req_width && size.height == req_height {
+                            frame_size = (size.width, size.height);
+                            break;
+                        }
+                    }
+                    frame_size
+                } else {
+                    // just pick the first available
+                    let fs = resolutions.first().unwrap();
+                    let FrameSizeEnum::Discrete(size) = &fs.size else {
+                        todo!()
+                    };
+                    (size.width, size.height)
+                };
+            debug!("V4L: Use resolution: {}x{}", width, height);
 
             // Set the format with the chosen resolution
-            let fmt = Format::new(IMG_WIDTH as u32, IMG_HEIGHT as u32, bgr3_fourcc);
-            let actual_format = dev
-                .set_format(&fmt)
+            let req_fmt = Format::new(width, height, fourcc);
+            let actual_fmt = dev
+                .set_format(&req_fmt)
                 .map_err(|e| CuError::new_with_cause("Failed to set format", e))?;
 
-            println!("Format successfully set: {:?}", actual_format);
+            if let Some(fps) = req_fps {
+                debug!("V4L: Set fps to {}", fps);
+                let new_params = Parameters::with_fps(fps);
+                dev.set_params(&new_params)
+                    .map_err(|e| CuError::new_with_cause("Failed to set params", e))?;
+            }
+            actual_fmt
         } else {
-            println!("BGR3 format not found.");
-        }
+            return Err(format!(
+                "The V4l device {} does not provide a format with the FourCC {}.",
+                v4l_device, fourcc
+            )
+            .into());
+        };
+        debug!(
+            "V4L: Init stream: device {} with {} buffers of size {} bytes",
+            v4l_device, req_buffers, actual_fmt.size
+        );
 
-        let mut stream = CuV4LStream::with_buffers(&mut dev, Type::VideoCapture, 4)
-            .map_err(|e| CuError::new_with_cause("could get formats", e))?;
-        stream.set_timeout(Duration::from_secs(1)); // FIXME: make this configurable
+        let mut stream = CuV4LStream::with_buffers(
+            &mut dev,
+            Type::VideoCapture,
+            actual_fmt.size as usize,
+            req_buffers,
+        )
+        .map_err(|e| CuError::new_with_cause("Could not create the V4lStream", e))?;
+        debug!("V4L: Set timeout to {} ms", req_timeout.as_millis() as u64);
+        stream.set_timeout(req_timeout);
 
-        Ok(Self { stream })
+        Ok(Self {
+            stream,
+            v4l_clock_time_offset_ns: 0, // will be set at start
+        })
     }
 
-    fn start(&mut self, _robot_clock: &RobotClock) -> CuResult<()> {
+    fn start(&mut self, robot_clock: &RobotClock) -> CuResult<()> {
+        let rb_ns = robot_clock.now().as_nanos();
+        clock_gettime(ClockId::CLOCK_MONOTONIC)
+            .map(|ts| {
+                self.v4l_clock_time_offset_ns =
+                    ts.tv_sec() as i64 * 1_000_000_000 + ts.tv_nsec() as i64 - rb_ns as i64
+            })
+            .map_err(|e| CuError::new_with_cause("Failed to get the current time", e))?;
+
         self.stream
             .start()
             .map_err(|e| CuError::new_with_cause("could not start stream", e))
     }
 
     fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
-        let tuple = self.stream.next();
-        if tuple.is_err() {
-            return Ok(());
-        }
-        if let Ok((handle, meta)) = tuple {
-            if meta.bytesused != 0 {
-                // timedout
-                new_msg.set_payload(handle.clone());
-            }
-            return Ok(());
+        let (handle, meta) = self
+            .stream
+            .next()
+            .map_err(|e| CuError::new_with_cause("could not get next frame from stream", e))?;
+        if meta.bytesused != 0 {
+            let cutime = cutime_from_v4ltime(self.v4l_clock_time_offset_ns, meta.timestamp);
+            let handle = handle.clone();
+            new_msg.set_payload(handle);
+            new_msg.metadata.tov = Tov::Time(cutime);
+        } else {
+            debug!("Empty frame received");
         }
         Ok(())
     }
@@ -100,49 +210,78 @@ mod tests {
     use rerun::components::ImageBuffer;
     use rerun::datatypes::{Blob, ImageFormat};
     use rerun::external::re_types::ArrowBuffer;
-    use rerun::{ChannelDatatype, Image};
-    use rerun::{ColorModel, RecordingStreamBuilder};
+    use rerun::RecordingStreamBuilder;
+    use rerun::{Image, PixelFormat};
+    use std::thread;
+
+    use simplelog::{ColorChoice, Config, LevelFilter, TermLogger, TerminalMode};
+
+    const IMG_WIDTH: usize = 3840;
+    const IMG_HEIGHT: usize = 2160;
+
+    #[derive(Debug)]
+    struct NullLog {}
+    impl WriteStream<CuLogEntry> for NullLog {
+        fn log(&mut self, _obj: &CuLogEntry) -> CuResult<()> {
+            Ok(())
+        }
+        fn flush(&mut self) -> CuResult<()> {
+            Ok(())
+        }
+    }
 
     #[test]
     fn emulate_copper_backend() {
+        let clock = RobotClock::new();
+
+        let term_logger = TermLogger::new(
+            LevelFilter::Debug,
+            Config::default(),
+            TerminalMode::Mixed,
+            ColorChoice::Auto,
+        );
+        let _logger = LoggerRuntime::init(clock.clone(), NullLog {}, Some(*term_logger));
+
         let rec = RecordingStreamBuilder::new("Camera Viz")
             .spawn()
             .map_err(|e| CuError::new_with_cause("Failed to spawn rerun stream", e))
             .unwrap();
 
-        let mut v4l = V4l::new(None).unwrap();
-        let clock = RobotClock::new();
+        let mut config = ComponentConfig::new();
+        config.set("device", 0);
+        config.set("width", IMG_WIDTH as u32);
+        config.set("height", IMG_HEIGHT as u32);
+        config.set("fps", 30);
+        config.set("fourcc", "NV12".to_string());
+        config.set("buffers", 4);
+        config.set("timeout_ms", 500);
+
+        let mut v4l = V4l::new(Some(&config)).unwrap();
         v4l.start(&clock).unwrap();
+
         let mut msg = CuMsg::new(None);
-        let image_size_in_bytes = IMG_STRIDE * IMG_HEIGHT * 3;
-        let cm = ColorModel::BGR;
         // Define the image format
         let format = rerun::components::ImageFormat(ImageFormat {
             width: IMG_WIDTH as u32,
             height: IMG_HEIGHT as u32,
-            pixel_format: None,
-            color_model: Some(ColorModel::BGR),
-            channel_datatype: Some(ChannelDatatype::U8),
+            pixel_format: Some(PixelFormat::NV12),
+            color_model: None,      // Some(ColorModel::BGR),
+            channel_datatype: None, // Some(ChannelDatatype::U8),
         });
         for _ in 0..1000 {
             let _output = v4l.process(&clock, &mut msg);
             if let Some(frame) = msg.payload() {
-                println!("Frame: {:?}", frame);
+                debug!("Buffer index: {}", frame.index());
                 let slice = frame.as_slice();
-                let mut flipped = Vec::with_capacity(slice.len());
-                for y in (0..IMG_HEIGHT).rev() {
-                    let start = y * IMG_STRIDE * 3;
-                    let end = start + IMG_STRIDE * 3;
-                    flipped.extend_from_slice(&slice[start..end]);
-                }
-                let arrow_buffer = ArrowBuffer::from(flipped);
+                let arrow_buffer = ArrowBuffer::from(slice);
                 let blob = Blob::from(arrow_buffer);
                 let rerun_img = ImageBuffer::from(blob);
                 let image = Image::new(rerun_img, format.clone());
 
                 rec.log("images", &image).unwrap();
             } else {
-                println!("----> No frame");
+                debug!("----> No frame");
+                thread::sleep(Duration::from_millis(300)); // don't burn through empty buffers at the beggining, what for the device to actually start
             }
         }
 

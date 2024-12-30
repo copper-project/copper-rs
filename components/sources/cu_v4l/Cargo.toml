@@ -13,9 +13,14 @@ repository.workspace = true
 [dependencies]
 v4l = "0.14.0"
 cu29 = { workspace = true }
+cu29-log-derive = { workspace = true }
+cu29-log-runtime = { workspace = true }
 cu-sensor-payloads = { path = "../../../payloads/cu_sensor_payloads", workspace = true }
 libc = "0.2.168"
 page_size = "0.6.0"
+nix = { version = "0.29.0", features = ["time"] }
 
 [dev-dependencies]
 rerun = { workspace = true }
+simplelog = "0.12.2"
+

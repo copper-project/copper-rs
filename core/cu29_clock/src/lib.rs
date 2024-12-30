@@ -43,6 +43,10 @@ impl CuDuration {
             p0
         }
     }
+
+    pub fn as_nanos(&self) -> u64 {
+        self.0
+    }
 }
 
 /// bridge the API with standard Durations.
