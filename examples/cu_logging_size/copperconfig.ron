@@ -1,0 +1,25 @@
+(
+    tasks: [
+        (
+            id: "task0",
+            type: "tasks::ExampleSrc",
+        ),
+        (
+            id: "task1",
+            type: "tasks::ExampleTask",
+        ),
+        (
+            id: "task2",
+            type: "tasks::ExampleSink",
+        ),
+     ],
+    cnx: [
+        (src: "task0", dst: "task1", msg: "i32"),
+        (src: "task1", dst: "task2", msg: "i32"),
+    ],
+
+    logging: (
+        slab_size_mib: 1024, // Preallocates 1GiB of memory map file at a time
+        section_size_mib: 100, // Preallocates 100MiB of memory map per section for the main logger.
+    ),
+)

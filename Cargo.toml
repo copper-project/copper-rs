@@ -32,6 +32,7 @@ members = [
     "examples/cu_caterpillar",
     "examples/cu_config_gen",
     "examples/cu_iceoryx2",
+    "examples/cu_logging_size",
     "examples/cu_monitoring",
     "examples/cu_multisources",
     "examples/cu_pointclouds",
