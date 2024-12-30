@@ -277,7 +277,7 @@ mod tests {
                 let arrow_buffer = ArrowBuffer::from(slice);
                 let blob = Blob::from(arrow_buffer);
                 let rerun_img = ImageBuffer::from(blob);
-                let image = Image::new(rerun_img, format.clone());
+                let image = Image::new(rerun_img, format);
 
                 rec.log("images", &image).unwrap();
             } else {
