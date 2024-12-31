@@ -1,0 +1,28 @@
+[package]
+name = "cu-v4l"
+description = "This is a source task that captures video from a V4L2 device."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+cu29 = { workspace = true }
+cu29-log-derive = { workspace = true }
+cu29-log-runtime = { workspace = true }
+cu-sensor-payloads = { path = "../../../payloads/cu_sensor_payloads", workspace = true }
+libc = "0.2.168"
+page_size = "0.6.0"
+nix = { version = "0.29.0", features = ["time"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+v4l = "0.14.0"
+
+[dev-dependencies]
+rerun = { workspace = true }
+simplelog = "0.12.2"
+
