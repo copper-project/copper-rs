@@ -369,44 +369,16 @@
 <a href="#368" id="368">368</a>
 <a href="#369" id="369">369</a>
 <a href="#370" id="370">370</a>
-<a href="#371" id="371">371</a>
-<a href="#372" id="372">372</a>
-<a href="#373" id="373">373</a>
-<a href="#374" id="374">374</a>
-<a href="#375" id="375">375</a>
-<a href="#376" id="376">376</a>
-<a href="#377" id="377">377</a>
-<a href="#378" id="378">378</a>
-<a href="#379" id="379">379</a>
-<a href="#380" id="380">380</a>
-<a href="#381" id="381">381</a>
-<a href="#382" id="382">382</a>
-<a href="#383" id="383">383</a>
-<a href="#384" id="384">384</a>
-<a href="#385" id="385">385</a>
-<a href="#386" id="386">386</a>
-<a href="#387" id="387">387</a></pre></div><pre class="rust"><code><span class="doccomment">//! Some basic internal monitoring tooling Copper uses to monitor itself and the tasks it is running.
+<a href="#371" id="371">371</a></pre></div><pre class="rust"><code><span class="doccomment">//! Some basic internal monitoring tooling Copper uses to monitor itself and the tasks it is running.
 //!
 
 </span><span class="kw">use </span><span class="kw">crate</span>::config::CuConfig;
 <span class="kw">use </span><span class="kw">crate</span>::cutask::CuMsgMetadata;
+<span class="kw">use </span><span class="kw">crate</span>::log::<span class="kw-2">*</span>;
 <span class="kw">use </span>cu29_clock::{CuDuration, RobotClock};
-<span class="comment">// Here we cannot use the cu29 prelude because it would create a cicular dep
-</span><span class="kw">use </span>cu29_log::CuLogEntry;
-<span class="kw">use </span>cu29_log::ANONYMOUS;
-
-<span class="attr">#[allow(unused_imports)]
-</span><span class="kw">use </span>cu29_value::to_value;
-
-<span class="attr">#[allow(unused_imports)]
-</span><span class="kw">use </span>cu29_log_runtime::log;
-
-<span class="attr">#[allow(unused_imports)]
-#[cfg(debug_assertions)]
-</span><span class="kw">use </span>cu29_log_runtime::log_debug_mode;
-
 <span class="kw">use </span>cu29_traits::{CuError, CuResult};
-
+<span class="kw">use </span>hdrhistogram::Histogram;
+<span class="kw">use </span>serde_derive::{Deserialize, Serialize};
 <span class="kw">use </span>std::alloc::{GlobalAlloc, Layout, System};
 <span class="kw">use </span>std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -555,10 +527,6 @@
         // );
     </span>}
 }
-
-<span class="kw">use </span>cu29_log_derive::debug;
-<span class="kw">use </span>hdrhistogram::Histogram;
-<span class="kw">use </span>serde_derive::{Deserialize, Serialize};
 
 <span class="doccomment">/// Accumulative stat object that can give your some real time statistics.
 </span><span class="attr">#[derive(Debug, Clone)]
