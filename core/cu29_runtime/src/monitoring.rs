@@ -3,23 +3,11 @@
 
 use crate::config::CuConfig;
 use crate::cutask::CuMsgMetadata;
+use crate::log::*;
 use cu29_clock::{CuDuration, RobotClock};
-// Here we cannot use the cu29 prelude because it would create a cicular dep
-use cu29_log::CuLogEntry;
-use cu29_log::ANONYMOUS;
-
-#[allow(unused_imports)]
-use cu29_value::to_value;
-
-#[allow(unused_imports)]
-use cu29_log_runtime::log;
-
-#[allow(unused_imports)]
-#[cfg(debug_assertions)]
-use cu29_log_runtime::log_debug_mode;
-
 use cu29_traits::{CuError, CuResult};
-
+use hdrhistogram::Histogram;
+use serde_derive::{Deserialize, Serialize};
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -168,10 +156,6 @@ impl Drop for ScopedAllocCounter {
         // );
     }
 }
-
-use cu29_log_derive::debug;
-use hdrhistogram::Histogram;
-use serde_derive::{Deserialize, Serialize};
 
 /// Accumulative stat object that can give your some real time statistics.
 #[derive(Debug, Clone)]

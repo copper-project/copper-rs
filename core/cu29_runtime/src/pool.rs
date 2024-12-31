@@ -1,7 +1,3 @@
-use cu29_log::CuLogEntry;
-use cu29_log::ANONYMOUS;
-use cu29_log_runtime::log_debug_mode;
-use cu29_value::to_value;
 use std::alloc::{alloc, dealloc, Layout};
 use std::cell::RefCell;
 use std::fmt::Debug;
@@ -12,8 +8,9 @@ use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
-use cu29_log_derive::debug;
 use std::rc::{Rc, Weak};
+
+use crate::log::*;
 
 pub struct CuHostMemoryPool {
     buffers: RefCell<Vec<AlignedBuffer>>,
