@@ -8,8 +8,6 @@ use cu29::{CuError, CuResult};
 use image::{ImageBuffer, Pixel};
 #[cfg(feature = "kornia")]
 use kornia::image::Image;
-#[cfg(feature = "kornia")]
-use kornia::image::ImageSize;
 
 #[derive(Default, Debug, Encode, Decode, Clone, Copy)]
 pub struct CuImageBufferFormat {
@@ -68,7 +66,7 @@ impl CuImage {
 
         assert_eq!(
             width, self.format.stride as usize,
-            "STRIDE must equal WIDTH for Kornia compatibility."
+            "stride must equal width for Kornia compatibility."
         );
 
         let size = width * height * C;
@@ -76,9 +74,8 @@ impl CuImage {
         let raw_pixels: &[T] = unsafe {
             core::slice::from_raw_parts(data.as_ptr() as *const T, data.len() / size_of::<T>())
         };
-        let img_size: ImageSize = ImageSize { height, width };
 
-        unsafe { Image::from_raw_parts(img_size, raw_pixels.as_ptr(), size) }
+        unsafe { Image::from_raw_parts([height, width].into(), raw_pixels.as_ptr(), size) }
             .map_err(|e| CuError::new_with_cause("Could not create a Kornia Image", e))
     }
 }
