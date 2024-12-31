@@ -1,8 +1,15 @@
 use bincode::{Decode, Encode};
 use cu29::prelude::CuBufferHandle;
 
+#[allow(unused_imports)]
+use cu29::{CuError, CuResult};
+
 #[cfg(feature = "image")]
 use image::{ImageBuffer, Pixel};
+#[cfg(feature = "kornia")]
+use kornia::image::Image;
+#[cfg(feature = "kornia")]
+use kornia::image::ImageSize;
 
 #[derive(Default, Debug, Encode, Decode, Clone, Copy)]
 pub struct CuImageBufferFormat {
@@ -36,7 +43,7 @@ impl CuImage {
 impl CuImage {
     /// Builds an ImageBuffer from the image crate backed by the CuImage's pixel data.
     #[cfg(feature = "image")]
-    pub fn as_image_buffer<P: Pixel>(&self) -> ImageBuffer<P, &[P::Subpixel]> {
+    pub fn as_image_buffer<P: Pixel>(&self) -> CuResult<ImageBuffer<P, &[P::Subpixel]>> {
         let width = self.format.width;
         let height = self.format.height;
         let data = self.buffer_handle.as_slice();
@@ -50,6 +57,28 @@ impl CuImage {
             unsafe { core::slice::from_raw_parts(data.as_ptr() as *const P::Subpixel, data.len()) };
 
         ImageBuffer::from_raw(width, height, raw_pixels)
-            .expect("Failed to create ImageBuffer with CuImage's pixel data.")
+            .ok_or("Could not create the image:: buffer".into())
+    }
+
+    #[cfg(feature = "kornia")]
+    pub fn as_kornia_image<T: Clone, const C: usize>(&self) -> CuResult<Image<T, C>> {
+        let width = self.format.width as usize;
+        let height = self.format.height as usize;
+        let data = self.buffer_handle.as_slice();
+
+        assert_eq!(
+            width, self.format.stride as usize,
+            "STRIDE must equal WIDTH for Kornia compatibility."
+        );
+
+        let size = width * height * C;
+
+        let raw_pixels: &[T] = unsafe {
+            core::slice::from_raw_parts(data.as_ptr() as *const T, data.len() / size_of::<T>())
+        };
+        let img_size: ImageSize = ImageSize { height, width };
+
+        unsafe { Image::from_raw_parts(img_size, raw_pixels.as_ptr(), size) }
+            .map_err(|e| CuError::new_with_cause("Could not create a Kornia Image", e))
     }
 }
