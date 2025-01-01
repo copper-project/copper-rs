@@ -18,7 +18,7 @@ cu29 = { workspace = true }
 uom = { workspace = true }
 derive_more = { workspace = true }
 image = { version = "0.25.5", optional = true }
-kornia = { git = "https://github.com/kornia/kornia-rs", branch = "tensor-from-slice", optional = true }
+kornia = { version = "0.1.8", optional = true }
 
 [features]
 image = ["dep:image"]
