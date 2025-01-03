@@ -14,9 +14,9 @@ use v4l::{v4l2, Device};
 pub struct CuV4LStream {
     v4l_handle: Arc<Handle>,
     v4l_buf_type: Type,
-    memory_pool: Rc<CuHostMemoryPool>,
+    memory_pool: Rc<CuHostMemoryPool<u8>>,
     // Arena matching the vl42 metadata and the Copper Buffers
-    arena: Vec<(Metadata, Option<CuBufferHandle>)>,
+    arena: Vec<(Metadata, Option<CuBufferHandle<u8>>)>,
     arena_last_freed_up_index: usize,
     timeout: Option<i32>,
     active: bool,
@@ -151,7 +151,7 @@ impl Drop for CuV4LStream {
 }
 
 impl Stream for CuV4LStream {
-    type Item = CuBufferHandle;
+    type Item = CuBufferHandle<u8>;
 
     fn start(&mut self) -> io::Result<()> {
         // Enqueue all buffers once on stream start
@@ -196,7 +196,7 @@ impl CaptureStream<'_> for CuV4LStream {
             "Failed to allocate buffer",
         ))?;
 
-        let buf: &[u8] = buffer_handle.as_slice();
+        let buf: &[u8] = buffer_handle.as_ref();
         let mut v4l2_buf = v4l2_buffer {
             index: index as u32,
             m: v4l2_buffer__bindgen_ty_1 {
