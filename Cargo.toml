@@ -120,7 +120,7 @@ derive_more = { version = "1", features = ["full"] }
 tempfile = "3.14.0"
 
 # rerun
-rerun = "0.20" # 0.21 conflicts with other dependencies
+rerun = "0.21.0"
 
 # [profile.release]
 # lto = true
