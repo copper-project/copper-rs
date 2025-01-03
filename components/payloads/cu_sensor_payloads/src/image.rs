@@ -21,11 +21,11 @@ pub struct CuImageBufferFormat {
 pub struct CuImage {
     pub seq: u64,
     pub format: CuImageBufferFormat,
-    pub buffer_handle: CuBufferHandle,
+    pub buffer_handle: CuBufferHandle<u8>,
 }
 
 impl CuImage {
-    pub fn new(format: CuImageBufferFormat, buffer_handle: CuBufferHandle) -> Self {
+    pub fn new(format: CuImageBufferFormat, buffer_handle: CuBufferHandle<u8>) -> Self {
         CuImage {
             seq: 0,
             format,
@@ -34,7 +34,7 @@ impl CuImage {
     }
 
     pub fn as_slice(&self) -> &[u8] {
-        self.buffer_handle.as_slice()
+        self.buffer_handle.as_ref()
     }
 }
 
