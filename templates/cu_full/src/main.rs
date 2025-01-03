@@ -16,12 +16,12 @@ fn main() {
     let copper_ctx =
         basic_copper_setup(&PathBuf::from(logger_path), PREALLOCATED_STORAGE_SIZE, true, None).expect("Failed to setup logger.");
     debug!("Logger created at {}.", logger_path);
-    let clock = copper_ctx.clock;
     debug!("Creating application... ");
     let mut application = {{project-name | upper_camel_case}}ApplicationBuilder::new()
             .with_context(&copper_ctx)
             .build()
             .expect("Failed to create application.");
+    let clock = copper_ctx.clock.clone();
     debug!("Running... starting clock: {}.", clock.now());
 
     application.run().expect("Failed to run application.");
