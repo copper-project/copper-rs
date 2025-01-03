@@ -848,7 +848,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let (new, run_one_iteration, start_all_tasks, stop_all_tasks, run) = if sim_mode {
         (
             quote! {
-                pub fn new<F>(clock:_RobotClock, unified_logger: _Arc<_Mutex<_UnifiedLoggerWrite>>, sim_callback: &mut F) -> _CuResult<Self>
+                pub fn new<F>(clock:_RobotClock, unified_logger: _Arc<_Mutex<_UnifiedLoggerWrite>>, config_override: Option<_CuConfig>, sim_callback: &mut F) -> _CuResult<Self>
                 where F: FnMut(SimStep) -> cu29::simulation::SimOverride,
             },
             quote! {
@@ -871,7 +871,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     } else {
         (
             quote! {
-                pub fn new(clock:_RobotClock, unified_logger: _Arc<_Mutex<_UnifiedLoggerWrite>>) -> _CuResult<Self>
+                pub fn new(clock:_RobotClock, unified_logger: _Arc<_Mutex<_UnifiedLoggerWrite>>, config_override: Option<_CuConfig>) -> _CuResult<Self>
             },
             quote! {
                 pub fn run_one_iteration(&mut self) -> _CuResult<()>
@@ -989,12 +989,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
             #new {
                 let config_filename = #config_file;
-                let config = if std::path::Path::new(config_filename).exists() {
-                    debug!("Reading configuration from file: {}", config_filename);
+                let config = if config_override.is_some() {
+                    let overriden_config = config_override.unwrap();
+                    debug!("CuConfig: Overriden programmatically: {}", &overriden_config.serialize_ron());
+                    overriden_config
+                } else if std::path::Path::new(config_filename).exists() {
+                    debug!("CuConfig: Reading configuration from file: {}", config_filename);
                     _read_configuration(config_filename)?
                 } else {
                     let original_config = Self::get_original_config();
-                    debug!("Reading configuration from the original configuration. {}", &original_config);
+                    debug!("CuConfig: Using the original configuration the project was compiled with: {}", &original_config);
                     _read_configuration_str(original_config)?
                 };
 
@@ -1050,6 +1054,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 pub struct #builder_name <'a, F> {
                     clock: Option<_RobotClock>,
                     unified_logger: Option<_Arc<_Mutex<_UnifiedLoggerWrite>>>,
+                    config_override: Option<_CuConfig>,
                     sim_callback: Option<&'a mut F>
                 }
             },
@@ -1058,6 +1063,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     Self {
                         clock: None,
                         unified_logger: None,
+                        config_override: None,
                         sim_callback: None,
                     }
                 }
@@ -1085,6 +1091,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 pub struct #builder_name {
                     clock: Option<_RobotClock>,
                     unified_logger: Option<_Arc<_Mutex<_UnifiedLoggerWrite>>>,
+                    config_override: Option<_CuConfig>,
                 }
             },
             quote! {
@@ -1092,6 +1099,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     Self {
                         clock: None,
                         unified_logger: None,
+                        config_override: None,
                     }
                 }
             },
@@ -1126,6 +1134,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 self
             }
 
+            pub fn with_config(mut self, config_override: _CuConfig) -> Self {
+                    self.config_override = Some(config_override);
+                    self
+            }
+
             #builder_sim_callback_method
 
             pub fn build(self) -> _CuResult<#name> {
@@ -1134,6 +1147,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         .ok_or(_CuError::from("Clock missing from builder"))?,
                     self.unified_logger
                         .ok_or(_CuError::from("Unified logger missing from builder"))?,
+                    self.config_override,
                     #builder_build_sim_callback_arg
                 )
             }

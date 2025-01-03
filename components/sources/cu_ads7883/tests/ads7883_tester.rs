@@ -34,8 +34,9 @@ fn test_driver_with_hardware() {
     debug!("Logger created at {}.", logger_path);
     let clock = copper_ctx.clock;
     debug!("Creating application... ");
-    let mut application = ADS78883Tester::new(clock.clone(), copper_ctx.unified_logger.clone())
-        .expect("Failed to create runtime.");
+    let mut application =
+        ADS78883Tester::new(clock.clone(), copper_ctx.unified_logger.clone(), None)
+            .expect("Failed to create runtime.");
     debug!("Running... starting clock: {}.", clock.now());
     for _ in 0..1000 {
         application

@@ -35,7 +35,7 @@ fn main() {
     debug!("Logger created at {}.", logger_path);
     let clock = copper_ctx.clock;
     debug!("Creating application... ");
-    let mut application = WT910Tester::new(clock.clone(), copper_ctx.unified_logger.clone())
+    let mut application = WT910Tester::new(clock.clone(), copper_ctx.unified_logger.clone(), None)
         .expect("Failed to create runtime.");
     debug!("Running... starting clock: {}.", clock.now());
     for _ in 0..1000 {

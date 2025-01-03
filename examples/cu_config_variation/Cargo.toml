@@ -1,0 +1,10 @@
+[package]
+name = "cu-config-variation"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cu29 = { workspace = true }
+cu29-helpers = { workspace = true }
+cu-caterpillar = { path = "../cu_caterpillar", version = "0.5.2" }
+cu-rp-gpio = { path = "../../components/sinks/cu_rp_gpio", version = "0.5.2" }
