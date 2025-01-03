@@ -18,9 +18,10 @@ fn main() {
     debug!("Logger created at {}.", logger_path);
     let clock = copper_ctx.clock;
     debug!("Creating application... ");
-    let mut application =
-        {{project-name | upper_camel_case}}Application::new(clock.clone(), copper_ctx.unified_logger.clone())
-            .expect("Failed to create runtime.");
+    let mut application = {{project-name | upper_camel_case}}Builder::new()
+            .with_context(&copper_ctx)
+            .build()
+            .expect("Failed to create application.");
     debug!("Running... starting clock: {}.", clock.now());
 
     application.run().expect("Failed to run application.");
