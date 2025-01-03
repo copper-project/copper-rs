@@ -418,6 +418,12 @@ impl CuConfig {
         self.graph.node_weight(node_id.into())
     }
 
+    /// Get the node with the given id mutably.
+    #[allow(dead_code)] // Used in proc macro
+    pub fn get_node_mut(&mut self, node_id: NodeId) -> Option<&mut Node> {
+        self.graph.node_weight_mut(node_id.into())
+    }
+
     /// this is more like infer from the connections of this node.
     #[allow(dead_code)] // Used in proc macro
     pub fn get_node_output_msg_type(&self, node_id: &str) -> Option<String> {
