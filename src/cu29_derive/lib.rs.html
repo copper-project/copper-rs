@@ -1376,7 +1376,21 @@
 <a href="#1375" id="1375">1375</a>
 <a href="#1376" id="1376">1376</a>
 <a href="#1377" id="1377">1377</a>
-<a href="#1378" id="1378">1378</a></pre></div><pre class="rust"><code><span class="kw">extern crate </span>proc_macro;
+<a href="#1378" id="1378">1378</a>
+<a href="#1379" id="1379">1379</a>
+<a href="#1380" id="1380">1380</a>
+<a href="#1381" id="1381">1381</a>
+<a href="#1382" id="1382">1382</a>
+<a href="#1383" id="1383">1383</a>
+<a href="#1384" id="1384">1384</a>
+<a href="#1385" id="1385">1385</a>
+<a href="#1386" id="1386">1386</a>
+<a href="#1387" id="1387">1387</a>
+<a href="#1388" id="1388">1388</a>
+<a href="#1389" id="1389">1389</a>
+<a href="#1390" id="1390">1390</a>
+<a href="#1391" id="1391">1391</a>
+<a href="#1392" id="1392">1392</a></pre></div><pre class="rust"><code><span class="kw">extern crate </span>proc_macro;
 
 <span class="kw">use </span>proc_macro::TokenStream;
 <span class="kw">use </span>quote::{format_ident, quote};
@@ -2226,7 +2240,7 @@
     <span class="kw">let </span>(new, run_one_iteration, start_all_tasks, stop_all_tasks, run) = <span class="kw">if </span>sim_mode {
         (
             <span class="macro">quote!</span> {
-                <span class="kw">pub fn </span>new&lt;F&gt;(clock:_RobotClock, unified_logger: _Arc&lt;_Mutex&lt;_UnifiedLoggerWrite&gt;&gt;, sim_callback: <span class="kw-2">&amp;mut </span>F) -&gt; _CuResult&lt;<span class="self">Self</span>&gt;
+                <span class="kw">pub fn </span>new&lt;F&gt;(clock:_RobotClock, unified_logger: _Arc&lt;_Mutex&lt;_UnifiedLoggerWrite&gt;&gt;, config_override: <span class="prelude-ty">Option</span>&lt;_CuConfig&gt;, sim_callback: <span class="kw-2">&amp;mut </span>F) -&gt; _CuResult&lt;<span class="self">Self</span>&gt;
                 <span class="kw">where </span>F: FnMut(SimStep) -&gt; cu29::simulation::SimOverride,
             },
             <span class="macro">quote!</span> {
@@ -2249,7 +2263,7 @@
     } <span class="kw">else </span>{
         (
             <span class="macro">quote!</span> {
-                <span class="kw">pub fn </span>new(clock:_RobotClock, unified_logger: _Arc&lt;_Mutex&lt;_UnifiedLoggerWrite&gt;&gt;) -&gt; _CuResult&lt;<span class="self">Self</span>&gt;
+                <span class="kw">pub fn </span>new(clock:_RobotClock, unified_logger: _Arc&lt;_Mutex&lt;_UnifiedLoggerWrite&gt;&gt;, config_override: <span class="prelude-ty">Option</span>&lt;_CuConfig&gt;) -&gt; _CuResult&lt;<span class="self">Self</span>&gt;
             },
             <span class="macro">quote!</span> {
                 <span class="kw">pub fn </span>run_one_iteration(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; _CuResult&lt;()&gt;
@@ -2367,12 +2381,16 @@
 
             #new {
                 <span class="kw">let </span>config_filename = #config_file;
-                <span class="kw">let </span>config = <span class="kw">if </span>std::path::Path::new(config_filename).exists() {
-                    <span class="macro">debug!</span>(<span class="string">"Reading configuration from file: {}"</span>, config_filename);
+                <span class="kw">let </span>config = <span class="kw">if </span>config_override.is_some() {
+                    <span class="kw">let </span>overriden_config = config_override.unwrap();
+                    <span class="macro">debug!</span>(<span class="string">"CuConfig: Overriden programmatically: {}"</span>, <span class="kw-2">&amp;</span>overriden_config.serialize_ron());
+                    overriden_config
+                } <span class="kw">else if </span>std::path::Path::new(config_filename).exists() {
+                    <span class="macro">debug!</span>(<span class="string">"CuConfig: Reading configuration from file: {}"</span>, config_filename);
                     _read_configuration(config_filename)<span class="question-mark">?
                 </span>} <span class="kw">else </span>{
                     <span class="kw">let </span>original_config = <span class="self">Self</span>::get_original_config();
-                    <span class="macro">debug!</span>(<span class="string">"Reading configuration from the original configuration. {}"</span>, <span class="kw-2">&amp;</span>original_config);
+                    <span class="macro">debug!</span>(<span class="string">"CuConfig: Using the original configuration the project was compiled with: {}"</span>, <span class="kw-2">&amp;</span>original_config);
                     _read_configuration_str(original_config)<span class="question-mark">?
                 </span>};
 
@@ -2428,6 +2446,7 @@
                 <span class="kw">pub struct </span>#builder_name &lt;<span class="lifetime">'a</span>, F&gt; {
                     clock: <span class="prelude-ty">Option</span>&lt;_RobotClock&gt;,
                     unified_logger: <span class="prelude-ty">Option</span>&lt;_Arc&lt;_Mutex&lt;_UnifiedLoggerWrite&gt;&gt;&gt;,
+                    config_override: <span class="prelude-ty">Option</span>&lt;_CuConfig&gt;,
                     sim_callback: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>F&gt;
                 }
             },
@@ -2436,6 +2455,7 @@
                     <span class="self">Self </span>{
                         clock: <span class="prelude-val">None</span>,
                         unified_logger: <span class="prelude-val">None</span>,
+                        config_override: <span class="prelude-val">None</span>,
                         sim_callback: <span class="prelude-val">None</span>,
                     }
                 }
@@ -2463,6 +2483,7 @@
                 <span class="kw">pub struct </span>#builder_name {
                     clock: <span class="prelude-ty">Option</span>&lt;_RobotClock&gt;,
                     unified_logger: <span class="prelude-ty">Option</span>&lt;_Arc&lt;_Mutex&lt;_UnifiedLoggerWrite&gt;&gt;&gt;,
+                    config_override: <span class="prelude-ty">Option</span>&lt;_CuConfig&gt;,
                 }
             },
             <span class="macro">quote!</span> {
@@ -2470,6 +2491,7 @@
                     <span class="self">Self </span>{
                         clock: <span class="prelude-val">None</span>,
                         unified_logger: <span class="prelude-val">None</span>,
+                        config_override: <span class="prelude-val">None</span>,
                     }
                 }
             },
@@ -2504,6 +2526,11 @@
                 <span class="self">self
             </span>}
 
+            <span class="kw">pub fn </span>with_config(<span class="kw-2">mut </span><span class="self">self</span>, config_override: _CuConfig) -&gt; <span class="self">Self </span>{
+                    <span class="self">self</span>.config_override = <span class="prelude-val">Some</span>(config_override);
+                    <span class="self">self
+            </span>}
+
             #builder_sim_callback_method
 
             <span class="kw">pub fn </span>build(<span class="self">self</span>) -&gt; _CuResult&lt;#name&gt; {
@@ -2512,6 +2539,7 @@
                         .ok_or(_CuError::from(<span class="string">"Clock missing from builder"</span>))<span class="question-mark">?</span>,
                     <span class="self">self</span>.unified_logger
                         .ok_or(_CuError::from(<span class="string">"Unified logger missing from builder"</span>))<span class="question-mark">?</span>,
+                    <span class="self">self</span>.config_override,
                     #builder_build_sim_callback_arg
                 )
             }
