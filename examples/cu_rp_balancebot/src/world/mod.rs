@@ -5,11 +5,8 @@ use bevy::input::{
     keyboard::KeyCode,
     mouse::{MouseButton, MouseMotion, MouseWheel},
 };
-use bevy::pbr::{
-    DefaultOpaqueRendererMethod, ScreenSpaceReflectionsBundle, ScreenSpaceReflectionsSettings,
-};
+use bevy::pbr::{DefaultOpaqueRendererMethod, ScreenSpaceReflections};
 use bevy::prelude::*;
-use bevy_mod_picking::prelude::*;
 use cached_path::{Cache, ProgressBar};
 
 #[cfg(feature = "perf-ui")]
@@ -67,11 +64,9 @@ pub struct Rod;
 
 pub fn build_world(app: &mut App) -> &mut App {
     let app = app
-        .insert_resource(Msaa::Off)
         .add_plugins((
-            DefaultPickingPlugins,
+            MeshPickingPlugin,
             PhysicsPlugins::default().with_length_unit(1000.0),
-            // EditorPlugin::default(),
         ))
         // we want Bevy to measure these values for us:
         .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin)
@@ -123,16 +118,15 @@ fn ground_setup(
 
     for x in -3..4 {
         for z in -3..4 {
-            commands.spawn((PbrBundle {
-                mesh: plane_mesh.clone(),
-                material: if (x + z) % 2 == 0 {
+            commands.spawn((
+                Mesh3d(plane_mesh.clone()),
+                MeshMaterial3d(if (x + z) % 2 == 0 {
                     black_material.clone()
                 } else {
                     white_material.clone()
-                },
-                transform: Transform::from_xyz(x as f32 * 2.0, -TABLE_HEIGHT, z as f32 * 2.0),
-                ..default()
-            },));
+                }),
+                Transform::from_xyz(x as f32 * 2.0, -TABLE_HEIGHT, z as f32 * 2.0),
+            ));
         }
     }
 }
@@ -217,42 +211,33 @@ fn setup_scene(
     });
 
     // load the scene
-    commands.spawn(SceneBundle {
-        scene: scene_handle,
-        ..default()
-    });
+    commands.spawn((SceneRoot(scene_handle),));
 
     // Spawn the camera
     commands.spawn((
-        Camera3dBundle {
-            transform: Transform::from_xyz(-1.0, 0.1, 1.5).looking_at(Vec3::ZERO, Vec3::Y),
-            camera: Camera {
-                hdr: true,
-                ..default()
-            },
-            ..default()
-        },
+        Camera3d::default(),
+        Msaa::Off,
         Skybox {
             image: skybox_handle,
             brightness: 1000.0,
+            ..default()
         },
         EnvironmentMapLight {
             diffuse_map: diffuse_map_handle,
             specular_map: specular_map_handle,
             intensity: 900.0,
-        },
-        ScreenSpaceReflectionsBundle {
-            settings: ScreenSpaceReflectionsSettings {
-                perceptual_roughness_threshold: 0.85, // Customize as needed
-                thickness: 0.01,
-                linear_steps: 128,
-                linear_march_exponent: 2.0,
-                bisection_steps: 8,
-                use_secant: true,
-            },
             ..default()
         },
+        ScreenSpaceReflections {
+            perceptual_roughness_threshold: 0.85, // Customize as needed
+            thickness: 0.01,
+            linear_steps: 128,
+            linear_march_exponent: 2.0,
+            bisection_steps: 8,
+            use_secant: true,
+        },
         Fxaa::default(),
+        Transform::from_xyz(-1.0, 0.1, 1.5).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 
     // add the delayed setup flag
@@ -269,8 +254,8 @@ fn setup_ui(mut commands: Commands) {
     let instructions = "WASD / QE\nMiddle-Click + Drag\nClick + Drag\nScroll Wheel\nSpace\nR";
 
     commands
-        .spawn((NodeBundle {
-            style: Style {
+        .spawn((
+            Node {
                 position_type: PositionType::Absolute,
                 bottom: Val::Px(5.0),
                 right: Val::Px(5.0),
@@ -282,30 +267,29 @@ fn setup_ui(mut commands: Commands) {
                 border: UiRect::all(Val::Px(2.0)),
                 ..default()
             },
-            background_color: Color::srgba(0.25, 0.41, 0.88, 0.7).into(),
-            border_color: Color::srgba(0.8, 0.8, 0.8, 0.7).into(),
-            border_radius: BorderRadius::all(Val::Px(10.0)),
-            ..default()
-        },))
+            BackgroundColor(Color::srgba(0.25, 0.41, 0.88, 0.7)),
+            BorderColor(Color::srgba(0.8, 0.8, 0.8, 0.7)),
+            BorderRadius::all(Val::Px(10.0)),
+        ))
         .with_children(|parent| {
             // Left column
-            parent.spawn(TextBundle::from_section(
-                "Move\nNavigation\nInteract\nZoom\nPause/Resume\nReset",
-                TextStyle {
+            parent.spawn((
+                Text::new("Move\nNavigation\nInteract\nZoom\nPause/Resume\nReset"),
+                TextFont {
                     font_size: 12.0,
-                    color: Color::srgb(1.0, 0.8, 0.2), // Golden color
                     ..default()
                 },
+                TextColor(Color::srgba(0.25, 0.25, 0.75, 1.0)), // Golden color
             ));
 
             // Right column
-            parent.spawn(TextBundle::from_section(
-                instructions,
-                TextStyle {
+            parent.spawn((
+                Text::new(instructions),
+                TextFont {
                     font_size: 12.0,
-                    color: Color::WHITE,
                     ..default()
                 },
+                TextColor(Color::WHITE),
             ));
         });
     #[cfg(feature = "perf-ui")]
@@ -336,7 +320,7 @@ fn global_cart_drag_listener(
         if drag.button != PointerButton::Primary {
             continue;
         }
-        let mut entity = drag.target();
+        let mut entity = drag.target;
         while let Ok((parent, maybe_cart)) = parents.get(entity) {
             if maybe_cart.is_some() {
                 break;
@@ -371,11 +355,9 @@ fn setup_entities(
     };
 
     let cart_collider_model = Collider::cuboid(CART_WIDTH, CART_HEIGHT, CART_DEPTH);
-    let cart_mass_props =
-        MassPropertiesBundle::new_computed(&cart_collider_model, ALUMINUM_DENSITY); // It is a mix of emptiness and motor and steel.. overall some aluminum?
+    let cart_mass_props = MassPropertiesBundle::from_shape(&cart_collider_model, ALUMINUM_DENSITY); // It is a mix of emptiness and motor and steel.. overall some aluminum?
 
     commands.entity(cart_entity).insert((
-        PickableBundle::default(),
         ExternalForce::default(),
         Cart,
         cart_mass_props,
@@ -409,44 +391,32 @@ fn setup_entities(
     );
 
     let rod_collider_model = Collider::capsule(ROD_WIDTH / 2.0, ROD_HEIGHT);
-    let rod_mass_props = MassPropertiesBundle::new_computed(&rod_collider_model, STEEL_DENSITY); // overall some aluminum?
+    let rod_mass_props = MassPropertiesBundle::from_shape(&rod_collider_model, STEEL_DENSITY); // overall some aluminum?
 
     let rod_entity = commands
         .spawn((
             Name::new("Rod"),
             Rod,
-            PbrBundle {
-                mesh: meshes.add(Cylinder::new(ROD_WIDTH / 2.0, ROD_HEIGHT)),
-                // material: materials.add(Color::srgb(0.0, 1.0, 0.0)),
-                material: materials.add(StandardMaterial {
-                    base_color: Color::WHITE,
-                    metallic: 0.8,
-                    perceptual_roughness: 0.1,
-                    ..default()
-                }),
-                transform: Transform::from_xyz(
-                    0.0,
-                    ROD_HEIGHT / 2.0 /*+ RAIL_HEIGHT as f32*/ + CART_HEIGHT,
-                    CART_DEPTH / 2.0 + ROD_DEPTH / 2.0 + AXIS_LENGTH,
-                ), // Start higher than the cart
+            Mesh3d(meshes.add(Cylinder::new(ROD_WIDTH / 2.0, ROD_HEIGHT))),
+            MeshMaterial3d(materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                metallic: 0.8,
+                perceptual_roughness: 0.1,
                 ..default()
-            },
-            PickableBundle::default(),
+            })),
+            Transform::from_xyz(
+                0.0,
+                ROD_HEIGHT / 2.0 /*+ RAIL_HEIGHT as f32*/ + CART_HEIGHT,
+                CART_DEPTH / 2.0 + ROD_DEPTH / 2.0 + AXIS_LENGTH,
+            ), // Start higher than the cart
             rod_mass_props,
             RigidBody::Dynamic,
             LockedAxes::new()
                 .lock_translation_z()
                 .lock_rotation_y()
                 .lock_rotation_x(),
-            On::<Pointer<Drag>>::target_component_mut::<Transform>(|drag, transform| {
-                if drag.button != PointerButton::Primary {
-                    return;
-                }
-                let pivot_world = transform.translation
-                    + transform.rotation * Vec3::new(0.0, -ROD_HEIGHT / 2.0, 0.0);
-                transform.rotate_around(pivot_world, Quat::from_rotation_z(-drag.delta.x / 50.0));
-            }),
         ))
+        .observe(on_drag_transform)
         .id();
     commands.spawn(
         RevoluteJoint::new(cart_entity, rod_entity)
@@ -463,16 +433,26 @@ fn setup_entities(
     );
 
     // Light
-    commands.spawn(PointLightBundle {
-        point_light: PointLight {
+    commands.spawn((
+        PointLight {
             shadows_enabled: true,
             ..default()
         },
-        transform: Transform::from_xyz(2.0, 4.0, 2.0),
-        ..default()
-    });
+        Transform::from_xyz(2.0, 4.0, 2.0),
+    ));
 
     setup_completed.0 = true; // Mark as completed
+}
+
+fn on_drag_transform(drag: Trigger<Pointer<Drag>>, mut transforms: Query<&mut Transform>) {
+    if drag.button != PointerButton::Primary {
+        return;
+    }
+    if let Ok(mut transform) = transforms.get_mut(drag.target) {
+        let pivot_world =
+            transform.translation + transform.rotation * Vec3::new(0.0, -ROD_HEIGHT / 2.0, 0.0);
+        transform.rotate_around(pivot_world, Quat::from_rotation_z(-drag.delta.x / 50.0));
+    }
 }
 
 #[allow(clippy::type_complexity)]
@@ -483,10 +463,20 @@ fn reset_sim(
         Option<&Cart>,
         Option<&mut Transform>, // Ensure transform is mutable
         Option<&mut ExternalForce>,
+        Option<&mut LinearVelocity>,
+        Option<&mut AngularVelocity>,
     )>,
 ) {
     if keys.just_pressed(KeyCode::KeyR) {
-        for (rod_component, cart_component, transform, ext_force) in query.iter_mut() {
+        for (
+            rod_component,
+            cart_component,
+            transform,
+            ext_force,
+            linear_velocity,
+            angular_velocity,
+        ) in query.iter_mut()
+        {
             if let Some(mut transform) = transform {
                 if rod_component.is_some() {
                     transform.translation = Vec3::new(
@@ -504,6 +494,12 @@ fn reset_sim(
             }
             if let Some(mut ext_force) = ext_force {
                 ext_force.clear();
+            }
+            if let Some(mut linear_velocity) = linear_velocity {
+                linear_velocity.0 = Vec3::ZERO;
+            }
+            if let Some(mut angular_velocity) = angular_velocity {
+                angular_velocity.0 = Vec3::ZERO;
             }
         }
     }
@@ -529,7 +525,7 @@ fn camera_control_system(
     // Zoom with scroll
     for ev in scroll_evr.read() {
         let forward = camera_transform.forward(); // Store forward vector in a variable
-        let zoom_amount = ev.y * control.zoom_sensitivity * time.delta_seconds();
+        let zoom_amount = ev.y * control.zoom_sensitivity * time.delta_secs();
         camera_transform.translation += forward * zoom_amount;
     }
 
@@ -606,7 +602,7 @@ fn toggle_simulation_state(
 }
 
 // Pause / Unpause the physics time.
-fn update_physics(state: Res<SimulationState>, mut time: ResMut<Time<Physics>>) {
+fn update_physics(state: Res<SimulationState>, mut time: ResMut<Time<Virtual>>) {
     if *state == SimulationState::Paused {
         time.pause();
         return;
