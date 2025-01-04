@@ -463,10 +463,20 @@ fn reset_sim(
         Option<&Cart>,
         Option<&mut Transform>, // Ensure transform is mutable
         Option<&mut ExternalForce>,
+        Option<&mut LinearVelocity>,
+        Option<&mut AngularVelocity>,
     )>,
 ) {
     if keys.just_pressed(KeyCode::KeyR) {
-        for (rod_component, cart_component, transform, ext_force) in query.iter_mut() {
+        for (
+            rod_component,
+            cart_component,
+            transform,
+            ext_force,
+            linear_velocity,
+            angular_velocity,
+        ) in query.iter_mut()
+        {
             if let Some(mut transform) = transform {
                 if rod_component.is_some() {
                     transform.translation = Vec3::new(
@@ -484,6 +494,12 @@ fn reset_sim(
             }
             if let Some(mut ext_force) = ext_force {
                 ext_force.clear();
+            }
+            if let Some(mut linear_velocity) = linear_velocity {
+                linear_velocity.0 = Vec3::ZERO;
+            }
+            if let Some(mut angular_velocity) = angular_velocity {
+                angular_velocity.0 = Vec3::ZERO;
             }
         }
     }
