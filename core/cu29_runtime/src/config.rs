@@ -316,6 +316,8 @@ pub struct LoggingConfig {
     pub slab_size_mib: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub section_size_mib: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disable_logging: Option<bool>
 }
 
 /// The config is a list of tasks and their connections.
@@ -705,12 +707,13 @@ mod tests {
     #[test]
     fn test_logging_parameters() {
         let txt =
-            r#"( tasks: [], cnx: [], logging: ( slab_size_mib: 1024, section_size_mib: 100, ),) "#;
+            r#"( tasks: [], cnx: [], logging: ( slab_size_mib: 1024, section_size_mib: 100, disable_logging: true ),) "#;
 
         let config = CuConfig::deserialize_ron(txt);
         assert!(config.logging.is_some());
         let logging_config = config.logging.unwrap();
         assert_eq!(logging_config.slab_size_mib.unwrap(), 1024);
         assert_eq!(logging_config.section_size_mib.unwrap(), 100);
+        assert_eq!(logging_config.disable_logging.unwrap(), true);
     }
 }

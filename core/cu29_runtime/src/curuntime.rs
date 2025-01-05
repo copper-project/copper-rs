@@ -40,7 +40,7 @@ pub struct CuRuntime<CT, P: CopperListTuple, M: CuMonitor, const NBCL: usize> {
     pub clock: RobotClock, // TODO: remove public at some point
 
     /// Logger
-    logger: Box<dyn WriteStream<CopperList<P>>>,
+    logger: Option<Box<dyn WriteStream<CopperList<P>>>>,
 }
 
 /// To be able to share the clock we make the runtime a clock provider.
@@ -69,12 +69,23 @@ impl<CT, P: CopperListTuple + 'static, M: CuMonitor, const NBCL: usize> CuRuntim
 
         let monitor = monitor_instanciator(config);
 
+        // Needed to declare type explicitly as `cargo check` was failing without it
+        let logger_: Option<Box<dyn WriteStream<CopperList<P>>>> = if let Some(logging_config) = &config.logging {
+            if logging_config.disable_logging.unwrap_or(false) {
+                None
+            } else {
+                Some(Box::new(logger))
+            }
+        } else {
+            Some(Box::new(logger))
+        };
+
         let runtime = Self {
             tasks,
             monitor,
             copper_lists_manager: CuListsManager::new(), // placeholder
             clock,
-            logger: Box::new(logger),
+            logger: logger_,
         };
 
         Ok(runtime)
@@ -95,7 +106,9 @@ impl<CT, P: CopperListTuple + 'static, M: CuMonitor, const NBCL: usize> CuRuntim
             // serialize them all and Free them.
             if is_top && cl.get_state() == CopperListState::DoneProcessing {
                 cl.change_state(CopperListState::BeingSerialized);
-                self.logger.log(cl).unwrap();
+                if let Some(logger) = &mut self.logger {
+                    logger.log(cl).unwrap();
+                }
                 cl.change_state(CopperListState::Free);
                 nb_done += 1;
             } else {

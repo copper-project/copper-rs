@@ -116,5 +116,8 @@
     monitor: (
                  type: "cu_consolemon::CuConsoleMon",
                  config: {"file": "copperconfig.ron"},
+             ),
+    logging: (
+                 disable_logging: true,
              )
 )
