@@ -5,7 +5,6 @@ use crate::world::{Cart, Rod};
 use avian3d::math::Vector;
 use avian3d::prelude::{ExternalForce, Physics};
 use bevy::prelude::*;
-use bevy::render::settings::{Backends, WgpuSettings};
 use bevy::render::RenderPlugin;
 // disembiguation as there is also a bevy::prelude::debug
 use cu29::prelude::debug;
@@ -194,8 +193,8 @@ fn main() {
 
     #[cfg(not(target_os = "macos"))]
     let render_plugin = RenderPlugin {
-        render_creation: WgpuSettings {
-            backends: Some(Backends::VULKAN), // Force Vulkan backend when we know it is good.
+        render_creation: bevy::render::settings::WgpuSettings {
+            backends: Some(bevy::render::settings::Backends::VULKAN), // Force Vulkan backend when we know it is good.
             // This is to avoid some bugs when bevy tries out all the possible backends.
             ..Default::default()
         }
