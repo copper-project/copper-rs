@@ -5,7 +5,6 @@ use crate::world::{Cart, Rod};
 use avian3d::math::Vector;
 use avian3d::prelude::{ExternalForce, Physics};
 use bevy::prelude::*;
-use bevy::render::settings::{Backends, WgpuSettings};
 use bevy::render::RenderPlugin;
 // disembiguation as there is also a bevy::prelude::debug
 use cu29::prelude::debug;
