@@ -193,8 +193,8 @@ fn main() {
 
     #[cfg(not(target_os = "macos"))]
     let render_plugin = RenderPlugin {
-        render_creation: WgpuSettings {
-            backends: Some(Backends::VULKAN), // Force Vulkan backend when we know it is good.
+        render_creation: bevy::render::settings::WgpuSettings {
+            backends: Some(bevy::render::settings::Backends::VULKAN), // Force Vulkan backend when we know it is good.
             // This is to avoid some bugs when bevy tries out all the possible backends.
             ..Default::default()
         }
