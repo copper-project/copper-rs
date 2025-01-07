@@ -6,12 +6,8 @@ use std::fmt;
 use std::fmt::{Debug, Formatter};
 use std::mem::size_of;
 use uom::si::f32::{Length, Ratio};
-use uom::si::length::millimeter;
 use uom::si::ratio::ratio;
-use uom::si::Unit;
-use uom::ConversionFactor;
-//Temporary
-use pcap::Capture;
+
 #[inline(always)]
 fn u16_endianess(val: u16) -> u16 {
     if cfg!(target_endian = "little") {

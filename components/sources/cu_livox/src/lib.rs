@@ -53,7 +53,7 @@ impl<'cl> CuSrcTask<'cl> for Tele15 {
         })
     }
     fn start(&mut self, robot_clock: &RobotClock) -> CuResult<()> {
-        self.sync(&robot_clock);
+        self.sync(robot_clock);
         Ok(())
     }
     fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
