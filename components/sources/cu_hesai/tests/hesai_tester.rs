@@ -69,8 +69,10 @@ struct HesaiTester {}
 
 #[test]
 fn main() {
-    let logger_path = "/tmp/hesai_tester.copper";
-    let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), None, true, None)
+    let tmp_dir = tempfile::TempDir::new().expect("could not create a tmp dir");
+    let logger_path = tmp_dir.path().join("hesai_tester.copper");
+
+    let copper_ctx = basic_copper_setup(&PathBuf::from(&logger_path), None, true, None)
         .expect("Failed to setup logger.");
     debug!("Logger created at {}.", logger_path);
 

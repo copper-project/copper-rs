@@ -17,6 +17,7 @@ bytemuck = { version = "1.20.0", features = ["derive"] }
 uom = { workspace = true }
 chrono = { version = "0.4.38", features = ["serde"] }
 socket2 = { version = "0.5.8", features = ["all"] }
+tempfile = {workspace = true}
 
 [dev-dependencies]
 cu-udp-inject = { path = "../../testing/cu_udp_inject" }
