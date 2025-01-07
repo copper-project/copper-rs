@@ -10,57 +10,62 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode, Encode};
 use cu29_traits::CuResult;
-use std::rc::{Rc, Weak};
-use std::sync::Arc;
+use std::sync::Weak;
+use std::sync::{Arc, Mutex};
 
-pub trait ElementType: Sized + Copy + Encode + Decode + Debug + ValidAsZeroBits {}
+#[cfg(not(feature = "cuda"))]
+pub trait ElementType: Sized + Copy + Encode + Decode + Debug {}
+
+#[cfg(not(feature = "cuda"))]
 impl<T> ElementType for T where T: Sized + Copy + Encode + Decode + Debug {}
+
+#[cfg(feature = "cuda")]
+pub use cuda::ElementType;
 
 /// A trait that represents a buffer that can be used as a host buffer.
 pub trait CuHostBuffer<E: ElementType>: AsRef<[E]> + AsMut<[E]> {}
 
-/// Marker trait for a device (e.g. GPU, NPU, other NUMA node).
-pub trait MemoryDevice {}
-
 /// A trait that represents a buffer that can be used as a device buffer (e.g. CUDA buffer, NPU or other NUMA node).
-pub trait CuDeviceBuffer<D: MemoryDevice, E: ElementType> {
+/// D is the device type, E is the element type, I is the inner buffer type and IM is the inner buffer mutable type.
+pub trait CuDeviceBuffer<D, E: ElementType, I> {
     fn len(&self) -> usize;
-    fn as_ptr(&self) -> *const E;
-    fn as_mut_ptr(&mut self) -> *mut E;
     fn get_device(&self) -> Arc<D>;
+    fn get_inner(&self) -> &I;
+    fn get_inner_mut(&mut self) -> &mut I;
 }
 
 /// A shared memory buffer between host and device is just a special case of a device buffer.
-pub trait CuSharedBuffer<D: MemoryDevice, E: ElementType>:
-    CuDeviceBuffer<D, E> + CuHostBuffer<E>
-{
-}
+pub trait CuSharedBuffer<D, E: ElementType, I>: CuDeviceBuffer<D, E, I> + CuHostBuffer<E> {}
 
 /// A pool of standard pre allocated host memory buffers.
 pub trait CuHostPool<E: ElementType> {
-    fn allocate(&self) -> Option<impl CuHostBuffer<E>>;
+    fn allocate(self_rc: &Arc<Mutex<Self>>) -> Option<impl CuHostBuffer<E>>;
 }
 
 /// A pool of pre allocated memory buffers on device (as in GPU, NPU, other NUMA node ...).
-pub trait CuDevicePool<D: MemoryDevice, E: ElementType> {
+pub trait CuDevicePool<D, E: ElementType, I> {
     /// Allocate a buffer from the device pool.
-    fn allocate(&self) -> Option<impl CuDeviceBuffer<D, E>>;
+    fn allocate(self_rc: &Arc<Mutex<Self>>) -> Option<impl CuDeviceBuffer<D, E, I>>;
 
     /// Copy the content of the source buffer to the destination buffer.
     /// dst can be allocated with self.allocate().
-    fn copy_to_device(&self, src: &mut impl CuHostBuffer<E>, dst: &mut impl CuDeviceBuffer<D, E>);
+    fn copy_to_device(
+        &self,
+        src: &mut impl CuHostBuffer<E>,
+        dst: &mut impl CuDeviceBuffer<D, E, I>,
+    ) -> CuResult<()>;
 
     /// Copy the content of the source buffer to host destination buffer.
     fn copy_to_host(
         &self,
-        src: &impl CuDeviceBuffer<D, E>,
+        src: &impl CuDeviceBuffer<D, E, I>,
         dst: &mut impl CuHostBuffer<E>,
     ) -> CuResult<()>;
 }
 
 /// A pool of pre allocated memory buffers that can be shared between host and device.
-pub trait CuSharedPool<D: MemoryDevice, E: ElementType> {
-    fn allocate(&self) -> Option<impl CuSharedBuffer<D, E>>;
+pub trait CuSharedPool<D, E: ElementType, I, IM> {
+    fn allocate(&self) -> Option<impl CuSharedBuffer<D, E, I>>;
 }
 
 /// A reusable pool of memory buffer locally accessible.
@@ -73,17 +78,23 @@ pub struct CuHostMemoryPool<E: ElementType> {
 mod cuda {
     use super::*;
     use cu29_traits::CuError;
-    use cudarc::driver::{CudaDevice, CudaSlice, CudaView};
-    use std::sync::Arc;
+    use cudarc::driver::{CudaDevice, CudaSlice, DeviceSlice};
+    use cudarc::driver::{DeviceRepr, ValidAsZeroBits};
+    use std::sync::{Arc, Mutex};
 
-    struct CuCudaDevice(CudaDevice);
-    impl MemoryDevice for CuCudaDevice {}
+    pub trait ElementType:
+        Sized + Copy + Encode + Decode + Debug + ValidAsZeroBits + DeviceRepr
+    {
+    }
+    impl<T> ElementType for T where
+        T: Sized + Copy + Encode + Decode + Debug + ValidAsZeroBits + DeviceRepr
+    {
+    }
 
     pub struct CuCudaPool<E: ElementType> {
         device: Arc<CudaDevice>,
-        inner: CudaSlice<E>,
-        counters: Box<[AtomicUsize]>,
-        _phantom: std::marker::PhantomData<E>,
+        inner: Box<[CudaSlice<E>]>,
+        counters: Box<[usize]>,
     }
 
     impl<E: ElementType> CuCudaPool<E> {
@@ -92,53 +103,49 @@ mod cuda {
             buffer_element_count: usize,
             buffer_count: u32,
         ) -> CuResult<Self> {
-            let inner = device
-                .alloc_zeros(size_of::<E>() * buffer_element_count * buffer_count as usize)
-                .map_err(|e| {
-                    CuError::new_with_cause("Could not allocate the CUDA memory pool", e)
-                })?;
+            let mut inner: Vec<CudaSlice<E>> = Vec::with_capacity(buffer_count as usize);
+
+            for _ in 0..buffer_count {
+                let buffer = device
+                    .alloc_zeros(size_of::<E>() * buffer_element_count * buffer_count as usize)
+                    .map_err(|e| {
+                        CuError::new_with_cause("Could not allocate the CUDA memory pool", e)
+                    })?;
+                inner.push(buffer);
+            }
+
             let counters = (0..buffer_count)
-                .map(|_| AtomicUsize::new(0))
+                .map(|_| 0usize)
                 .collect::<Vec<_>>()
                 .into_boxed_slice();
 
             Ok(Self {
                 device,
-                inner,
+                inner: inner.into_boxed_slice(),
                 counters,
-                _phantom: std::marker::PhantomData,
             })
         }
     }
 
-    pub struct CuCudaBufferHandle<'a, E> {
-        og_slice: &'a CudaSlice<E>,
-        view: CudaView<'a, E>,
+    pub struct CuCudaBufferHandle<E: ElementType> {
+        pool: Arc<Mutex<CuCudaPool<E>>>,
         index: usize,
     }
 
-    impl<'a, E: ElementType> CuCudaBufferHandle<'a, E> {
-        pub fn new(og_slice: &'a CudaSlice<E>, view: CudaView<'a, E>, index: usize) -> Self {
-            Self {
-                og_slice,
-                view,
-                index,
-            }
+    impl<'a, E: ElementType> CuCudaBufferHandle<E> {
+        pub fn new(pool: Arc<Mutex<CuCudaPool<E>>>, index: usize) -> Self {
+            Self { pool, index }
         }
     }
 
-    impl<E: ElementType> CuDevicePool<CuCudaDevice, E> for CuCudaPool<E> {
-        fn allocate(&self) -> Option<impl CuDeviceBuffer<CuCudaDevice, E>> {
-            for (index, counter) in self.counters.iter().enumerate() {
-                let prev = counter.fetch_add(1, Ordering::SeqCst);
-                if prev == 0 {
-                    let left = size_of::<E>() * index;
-                    let right = size_of::<E>() * (index + 1);
-                    let subslice = self.inner.slice(left..right);
-
-                    return Some(CuCudaBufferHandle::new(&self.inner, subslice, index));
-                } else {
-                    counter.fetch_sub(1, Ordering::SeqCst);
+    impl<E: ElementType> CuDevicePool<CudaDevice, E, CudaSlice<E>> for CuCudaPool<E> {
+        fn allocate(
+            self_rc: &Arc<Mutex<Self>>,
+        ) -> Option<impl CuDeviceBuffer<CudaDevice, E, CudaSlice<E>>> {
+            let selfm = self_rc.lock().unwrap();
+            for (index, counter) in selfm.counters.iter().enumerate() {
+                if *counter == 0usize {
+                    return Some(CuCudaBufferHandle::new(self_rc.clone(), index));
                 }
             }
             None
@@ -147,35 +154,43 @@ mod cuda {
         fn copy_to_device(
             &self,
             src: &mut impl CuHostBuffer<E>,
-            dst: &mut impl CuDeviceBuffer<CuCudaDevice, E>,
-        ) {
-            todo!()
+            dst: &mut impl CuDeviceBuffer<CudaDevice, E, CudaSlice<E>>,
+        ) -> CuResult<()> {
+            self.device
+                .htod_sync_copy_into(src.as_ref(), dst.get_inner_mut())
+                .map_err(|e| CuError::new_with_cause("Failed to copy to host", e))
         }
 
         fn copy_to_host(
             &self,
-            src: &impl CuDeviceBuffer<CuCudaDevice, E>,
+            src: &impl CuDeviceBuffer<CudaDevice, E, CudaSlice<E>>,
             dst: &mut impl CuHostBuffer<E>,
         ) -> CuResult<()> {
-            todo!()
+            self.device
+                .dtoh_sync_copy_into(&src.get_inner().slice(..), dst.as_mut())
+                .map_err(|e| CuError::new_with_cause("Failed to copy to host", e))
         }
     }
 
-    impl<'a, D: MemoryDevice, E: ElementType> CuDeviceBuffer<D, E> for CuCudaBufferHandle<'a, E> {
+    impl<'a, E: ElementType> CuDeviceBuffer<CudaDevice, E, CudaSlice<E>> for CuCudaBufferHandle<E> {
         fn len(&self) -> usize {
-            self.view.len()
+            let pool = self.pool.lock().unwrap();
+            pool.inner[self.index].len()
         }
 
-        fn as_ptr(&self) -> *const E {
-            self.view.as_ptr()
+        fn get_device(&self) -> Arc<CudaDevice> {
+            let pool = self.pool.lock().unwrap();
+            pool.device.clone()
         }
 
-        fn as_mut_ptr(&mut self) -> *mut E {
-            self.view.as_mut_ptr()
+        fn get_inner(&self) -> &CudaSlice<E> {
+            let pool = self.pool.lock().unwrap();
+            &pool.inner[self.index]
         }
 
-        fn get_device(&self) -> Arc<D> {
-            &self.og_slice.device().clone()
+        fn get_inner_mut(&mut self) -> &mut CudaSlice<E> {
+            let mut pool = self.pool.lock().unwrap();
+            &mut pool.inner[self.index]
         }
     }
 }
@@ -273,6 +288,8 @@ impl<T: ElementType> Encode for CuBufferHandle<T> {
     }
 }
 
+impl<T: ElementType> CuHostBuffer<T> for CuBufferHandle<T> {}
+
 impl<T: ElementType> Decode for CuBufferHandle<T> {
     fn decode<D: Decoder>(_decoder: &mut D) -> Result<Self, DecodeError> {
         panic!("Cannot decode a CuBufferHandle directly, use OrphanCuBufferHandle instead");
@@ -308,10 +325,10 @@ impl<E: ElementType> Clone for CuBufferHandle<E> {
 }
 
 impl<E: ElementType> CuBufferHandle<E> {
-    fn new(index: usize, pool: &Rc<CuHostMemoryPool<E>>) -> Self {
+    fn new(index: usize, pool: &Arc<CuHostMemoryPool<E>>) -> Self {
         Self {
             index,
-            pool: Rc::<CuHostMemoryPool<E>>::downgrade(pool),
+            pool: Arc::<CuHostMemoryPool<E>>::downgrade(pool),
         }
     }
 
@@ -383,7 +400,13 @@ impl<E: ElementType> CuHostMemoryPool<E> {
         }
     }
 
-    pub fn allocate(self_rc: &Rc<Self>) -> Option<CuBufferHandle<E>> {
+    pub fn size(&self) -> usize {
+        self.buffers.borrow().len()
+    }
+}
+
+impl<E: ElementType> CuHostPool<E> for CuHostMemoryPool<E> {
+    fn allocate(self_rc: &Arc<Mutex<Self>>) -> Option<impl CuHostBuffer<E>> {
         for (index, counter) in self_rc.inflight_counters.iter().enumerate() {
             let prev = counter.fetch_add(1, Ordering::SeqCst);
             if prev == 0 {
@@ -394,9 +417,6 @@ impl<E: ElementType> CuHostMemoryPool<E> {
         }
         None
     }
-    pub fn size(&self) -> usize {
-        self.buffers.borrow().len()
-    }
 }
 
 #[cfg(test)]
@@ -405,7 +425,7 @@ mod tests {
 
     #[test]
     fn test_full_size_pool() {
-        let pool = Rc::new(CuHostMemoryPool::new(10, 10, 4096));
+        let pool = Arc::new(CuHostMemoryPool::new(10, 10, 4096));
         let mut handles = Vec::new();
         for i in 0..10 {
             let mut handle = CuHostMemoryPool::allocate(&pool).unwrap();
@@ -418,7 +438,7 @@ mod tests {
 
     #[test]
     fn test_pool_with_holes() {
-        let pool = Rc::new(CuHostMemoryPool::new(10, 10, 4096));
+        let pool = Arc::new(CuHostMemoryPool::new(10, 10, 4096));
         let mut handles = Vec::new();
         for i in 0..10 {
             let mut handle = CuHostMemoryPool::allocate(&pool).unwrap();
@@ -440,20 +460,24 @@ mod tests {
 
     #[test]
     fn test_alignment() {
-        let pool = Rc::new(CuHostMemoryPool::new(10, 10, 4096));
+        let pool = Arc::new(CuHostMemoryPool::new(10, 10, 4096));
         let handle = CuHostMemoryPool::allocate(&pool).unwrap();
         assert_eq!(handle.as_ref().as_ptr() as *const u8 as usize % 4096, 0);
     }
 
     #[test]
-    fn test_cuda_buffers() {
+    #[cfg(feature = "cuda")]
+    fn test_cuda_buffers_transfers() {
+        let host_pool = Arc::new(CuHostMemoryPool::new(10, 10, 4096));
+        let mut host_buffer = CuHostMemoryPool::allocate(&host_pool).unwrap();
+        host_buffer.as_mut()[0] = 42u8;
+
         let device = cudarc::driver::CudaDevice::new(0).unwrap();
-        let pool = CuCudaPool::<u8>::new(device.clone(), 10, 10).unwrap();
-        let mut handle = pool.allocate().unwrap();
-        handle.as_mut()[0] = 10;
-        drop(handle);
-        let mut handle = pool.allocate().unwrap();
-        handle.as_mut()[0] = 20;
-        drop(handle);
+        let device_pool = Arc::new(CuCudaPool::<u8>::new(device.clone(), 10, 10).unwrap());
+
+        let mut device_buffer = CuCudaPool::allocate(&device_pool).unwrap();
+        device_pool
+            .copy_to_device(&mut host_buffer, &mut device_buffer)
+            .unwrap();
     }
 }
