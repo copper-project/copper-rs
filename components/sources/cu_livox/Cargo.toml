@@ -1,0 +1,27 @@
+[package]
+name = "cu-livox"
+description = "Copper driver for Livox Tele15. Note: the actual parsing is usable outside of Copper if you need a Livox Tele15 driver for another project."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+cu29 = { workspace = true }
+cu-sensor-payloads = { workspace = true }
+bytemuck = { version = "1.19.0", features = ["derive"] }
+uom = { workspace = true }
+chrono = { version = "0.4.38", features = ["serde"] }
+socket2 = { version = "0.5.7", features = ["all"] }
+#temporary
+pcap = "2.2.0"
+
+[dev-dependencies]
+cu-udp-inject = { path = "../../testing/cu_udp_inject" }
+cu29-derive = { workspace = true }
+cu29-helpers = { workspace = true }
+

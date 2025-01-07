@@ -1,0 +1,14 @@
+(
+    tasks: [
+        (
+            id: "src",
+            type: "cu_livox::Tele15",
+        ),
+        (   id: "tester",
+            type: "LivoxTestSink"
+        ),
+     ],
+    cnx: [
+        (src: "src",  dst: "tester",  msg: "cu_livox::LidarCuMsgPayload"),
+    ],
+)
