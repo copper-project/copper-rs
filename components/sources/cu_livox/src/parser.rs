@@ -312,7 +312,7 @@ mod tests {
     use crate::parser::{parse_frame, LidarFrame, RefTime};
     use chrono::prelude::*;
     use cu29::prelude::RobotClock;
-    use pcap::Capture;
+
     #[test]
     fn test_tele15_packet() {
         let (robot_clock, mock) = RobotClock::mock();
