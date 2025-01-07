@@ -224,7 +224,7 @@ impl Channel {
         Length::new::<millimeter>(u16_endianess(self.distance) as f32 * 4.0) // unharcode 4mm if we port this to another sensor.
     }
     pub fn reflectivity(&self) -> Ratio {
-        Ratio::new::<ratio>(self.reflectivity as f32  / 255.0)
+        Ratio::new::<ratio>(self.reflectivity as f32 / 255.0)
     }
     pub fn check_invariants(&self) -> Result<(), HesaiError> {
         // TODO: determine the valid range for distance
