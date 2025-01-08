@@ -70,15 +70,16 @@ impl<CT, P: CopperListTuple + 'static, M: CuMonitor, const NBCL: usize> CuRuntim
         let monitor = monitor_instanciator(config);
 
         // Needed to declare type explicitly as `cargo check` was failing without it
-        let logger_: Option<Box<dyn WriteStream<CopperList<P>>>> = if let Some(logging_config) = &config.logging {
-            if logging_config.disable_logging.unwrap_or(false) {
-                None
+        let logger_: Option<Box<dyn WriteStream<CopperList<P>>>> =
+            if let Some(logging_config) = &config.logging {
+                if logging_config.enable_task_logging {
+                    Some(Box::new(logger))
+                } else {
+                    None
+                }
             } else {
                 Some(Box::new(logger))
-            }
-        } else {
-            Some(Box::new(logger))
-        };
+            };
 
         let runtime = Self {
             tasks,
