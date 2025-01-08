@@ -718,7 +718,7 @@ mod tests {
         let logging_config = config.logging.unwrap();
         assert_eq!(logging_config.slab_size_mib.unwrap(), 1024);
         assert_eq!(logging_config.section_size_mib.unwrap(), 100);
-        assert_eq!(logging_config.enable_task_logging, false);
+        assert!(!logging_config.enable_task_logging);
 
         // Test with `enable_task_logging` not provided
         let txt =
@@ -728,6 +728,6 @@ mod tests {
         let logging_config = config.logging.unwrap();
         assert_eq!(logging_config.slab_size_mib.unwrap(), 1024);
         assert_eq!(logging_config.section_size_mib.unwrap(), 100);
-        assert_eq!(logging_config.enable_task_logging, true);
+        assert!(logging_config.enable_task_logging);
     }
 }
