@@ -106,8 +106,8 @@ impl<CT, P: CopperListTuple + 'static, M: CuMonitor, const NBCL: usize> CuRuntim
             // if we have a series of copper lists that are done processing at the top of the circular buffer
             // serialize them all and Free them.
             if is_top && cl.get_state() == CopperListState::DoneProcessing {
-                cl.change_state(CopperListState::BeingSerialized);
                 if let Some(logger) = &mut self.logger {
+                    cl.change_state(CopperListState::BeingSerialized);
                     logger.log(cl).unwrap();
                 }
                 cl.change_state(CopperListState::Free);
