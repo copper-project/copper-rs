@@ -427,7 +427,7 @@ mod tests {
         let packet = parse_frame(&packet_data).unwrap();
 
         let datetime = Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap();
-        let rt: RefTime = (datetime, robot_clock.now());
+        let _rt: RefTime = (datetime, robot_clock.now());
         let timestamp = packet.header.timestamp;
         println!("Tov: {}", timestamp);
     }
