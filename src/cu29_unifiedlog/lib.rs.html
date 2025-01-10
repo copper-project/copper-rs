@@ -1346,7 +1346,7 @@
     }
 
     <span class="doccomment">/// Flush the section to disk.
-    /// the flushing is permament and the section is considered closed.
+    /// the flushing is permanent and the section is considered closed.
     </span><span class="kw">fn </span>flush_section(<span class="kw-2">&amp;mut </span><span class="self">self</span>, section: <span class="kw-2">&amp;mut </span>SectionHandle) {
         <span class="kw">if </span>section.buffer.as_ptr() &lt; <span class="self">self</span>.mmap_buffer.as_ptr()
             || section.buffer.as_ptr() <span class="kw">as </span>usize
@@ -1742,7 +1742,7 @@
     }
 }
 
-<span class="doccomment">/// This a convience wrapper around the UnifiedLoggerRead to implement the Read trait.
+<span class="doccomment">/// This a convenience wrapper around the UnifiedLoggerRead to implement the Read trait.
 </span><span class="kw">pub struct </span>UnifiedLoggerIOReader {
     logger: UnifiedLoggerRead,
     log_type: UnifiedLogType,

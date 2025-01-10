@@ -906,7 +906,7 @@
 }
 
 <span class="doccomment">/// This is the main heuristics to compute an execution plan at compilation time.
-/// TODO: Make that heuristic plugable.
+/// TODO: Make that heuristic pluggable.
 </span><span class="kw">pub fn </span>compute_runtime_plan(config: <span class="kw-2">&amp;</span>CuConfig) -&gt; CuResult&lt;CuExecutionLoop&gt; {
     <span class="comment">// find all the sources.
     </span><span class="kw">let </span>nodes_to_visit = config
@@ -1009,7 +1009,7 @@
     }
 
     <span class="attr">#[test]
-    </span><span class="kw">fn </span>test_runtime_instanciation() {
+    </span><span class="kw">fn </span>test_runtime_instantiation() {
         <span class="kw">let </span><span class="kw-2">mut </span>config = CuConfig::default();
         config.add_node(Node::new(<span class="string">"a"</span>, <span class="string">"TestSource"</span>));
         config.add_node(Node::new(<span class="string">"b"</span>, <span class="string">"TestSink"</span>));

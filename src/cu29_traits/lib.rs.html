@@ -151,7 +151,7 @@
 <span class="doccomment">/// Defines the types of what can be logged in the unified logger.
 </span><span class="attr">#[derive(dEncode, dDecode, Copy, Clone, Debug, PartialEq)]
 </span><span class="kw">pub enum </span>UnifiedLogType {
-    Empty,             <span class="comment">// Dummmy default used as a debug marker
+    Empty,             <span class="comment">// Dummy default used as a debug marker
     </span>StructuredLogLine, <span class="comment">// This is for the structured logs (ie. debug! etc..)
     </span>CopperList,        <span class="comment">// This is the actual data log storing activities between tasks.
     </span>LastEntry,         <span class="comment">// This is a special entry that is used to signal the end of the log.

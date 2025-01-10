@@ -1597,7 +1597,7 @@
 }
 
 <span class="doccomment">/// Adds #[copper_runtime(config = "path", sim_mode = false/true)] to your application struct to generate the runtime.
-/// if sim_mode is ommited, it is set to false.
+/// if sim_mode is omitted, it is set to false.
 /// This will add a "runtime" field to your struct and implement the "new" and "run" methods.
 </span><span class="attr">#[proc_macro_attribute]
 </span><span class="kw">pub fn </span>copper_runtime(args: TokenStream, input: TokenStream) -&gt; TokenStream {
@@ -2382,9 +2382,9 @@
             #new {
                 <span class="kw">let </span>config_filename = #config_file;
                 <span class="kw">let </span>config = <span class="kw">if </span>config_override.is_some() {
-                    <span class="kw">let </span>overriden_config = config_override.unwrap();
-                    <span class="macro">debug!</span>(<span class="string">"CuConfig: Overriden programmatically: {}"</span>, <span class="kw-2">&amp;</span>overriden_config.serialize_ron());
-                    overriden_config
+                    <span class="kw">let </span>overridden_config = config_override.unwrap();
+                    <span class="macro">debug!</span>(<span class="string">"CuConfig: Overridden programmatically: {}"</span>, <span class="kw-2">&amp;</span>overridden_config.serialize_ron());
+                    overridden_config
                 } <span class="kw">else if </span>std::path::Path::new(config_filename).exists() {
                     <span class="macro">debug!</span>(<span class="string">"CuConfig: Reading configuration from file: {}"</span>, config_filename);
                     _read_configuration(config_filename)<span class="question-mark">?

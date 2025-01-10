@@ -378,7 +378,7 @@
     (T1, T2), (T1, T2, T3), (T1, T2, T3, T4), (T1, T2, T3, T4, T5) <span class="comment">// TODO: continue if necessary
 </span>}
 
-<span class="comment">// A convience macro to get from a payload or a list of payloads to a proper CuMsg or CuMsgPack
+<span class="comment">// A convenience macro to get from a payload or a list of payloads to a proper CuMsg or CuMsgPack
 // declaration for your tasks used for input messages.
 </span><span class="attr">#[macro_export]
 </span><span class="macro">macro_rules!</span> input_msg {
@@ -392,7 +392,7 @@
     };
 }
 
-<span class="comment">// A convience macro to get from a payload to a proper CuMsg used as output.
+<span class="comment">// A convenience macro to get from a payload to a proper CuMsg used as output.
 </span><span class="attr">#[macro_export]
 </span><span class="macro">macro_rules!</span> output_msg {
     (<span class="macro-nonterminal">$lifetime</span>:lifetime, <span class="macro-nonterminal">$ty</span>:ty) =&gt; {
@@ -438,7 +438,7 @@
     /// It can be undefined (None), one measure point or a range of measures (TimeRange).
     </span><span class="kw">pub </span>tov: Tov,
     <span class="doccomment">/// A small string for real time feedback purposes.
-    /// This is usefull for to display on the field when the tasks are operating correctly.
+    /// This is useful for to display on the field when the tasks are operating correctly.
     </span><span class="kw">pub </span>status_txt: CuCompactString,
 }
 
@@ -509,7 +509,7 @@
 }
 
 <span class="doccomment">/// The internal state of a task needs to be serializable
-/// so the framework can take a snapshop of the task graph.
+/// so the framework can take a snapshot of the task graph.
 </span><span class="kw">pub trait </span>Freezable {
     <span class="doccomment">/// This method is called by the framework when it wants to save the task state.
     /// The default implementation is to encode nothing (stateless).
@@ -529,7 +529,7 @@
 <span class="doccomment">/// A Src Task is a task that only produces messages. For example drivers for sensors are Src Tasks.
 /// They are in push mode from the runtime.
 /// To set the frequency of the pulls and align them to any hw, see the runtime configuration.
-/// Note: A source has the priviledge to have a clock passed to it vs a frozen clock.
+/// Note: A source has the privilege to have a clock passed to it vs a frozen clock.
 </span><span class="kw">pub trait </span>CuSrcTask&lt;<span class="lifetime">'cl</span>&gt;: Freezable {
     <span class="kw">type </span>Output: CuMsgPack&lt;<span class="lifetime">'cl</span>&gt;;
 
