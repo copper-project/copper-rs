@@ -37,7 +37,7 @@ And in you copperconfig.ron:
 
 The monitor has 3 screens:
 
-- **SysInfo**: A quick sustem information screen (CPU, Memory, Distrib ...)
+- **SysInfo**: A quick system information screen (CPU, Memory, Distrib ...)
 - **DAG**: A Directed Acyclic Graph of the tasks with their real time error status and short string info.
 - **Latencies**: A list of the tasks with their real time latencies & assorted statistics (Jitter, Min, Max, Avg).
 

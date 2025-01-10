@@ -214,14 +214,14 @@ impl Debug for Block {
 #[repr(C, packed)]
 #[derive(Copy, Clone, Zeroable, Pod)]
 pub struct Channel {
-    distance: u16,    // !! raw endianess
+    distance: u16,    // !! raw endianness
     reflectivity: u8, // Reflectivity in percentage
     reserved: u8,     // Reserved byte
 }
 
 impl Channel {
     pub fn distance(&self) -> Length {
-        Length::new::<millimeter>(u16_endianess(self.distance) as f32 * 4.0) // unharcode 4mm if we port this to another sensor.
+        Length::new::<millimeter>(u16_endianness(self.distance) as f32 * 4.0) // unharcode 4mm if we port this to another sensor.
     }
     pub fn reflectivity(&self) -> Ratio {
         Ratio::new::<ratio>(self.reflectivity as f32 / 255.0)
@@ -270,7 +270,7 @@ impl Debug for Channel {
 pub struct Tail {
     reserved: [u8; 10],
     return_mode: u8,
-    motor_speed: u16, // !! raw endianess, use u16_endianess to convert
+    motor_speed: u16, // !! raw endianness, use u16_endianness to convert
 
     // ╭─────────────────────────────────────────────╮
     // │ The absolute UTC time of this data packet,  │
@@ -309,7 +309,7 @@ enum ReturnMode {
 
 impl Tail {
     fn motor_speed(&self) -> AngularVelocity {
-        AngularVelocity::new::<revolution_per_minute>(u16_endianess(self.motor_speed) as f32)
+        AngularVelocity::new::<revolution_per_minute>(u16_endianness(self.motor_speed) as f32)
     }
 
     fn return_mode(&self) -> Result<ReturnMode, HesaiError> {
@@ -382,7 +382,7 @@ impl Debug for Tail {
 }
 
 #[inline(always)]
-fn u16_endianess(val: u16) -> u16 {
+fn u16_endianness(val: u16) -> u16 {
     if cfg!(target_endian = "little") {
         val
     } else {
@@ -392,7 +392,7 @@ fn u16_endianess(val: u16) -> u16 {
 
 #[allow(dead_code)]
 #[inline(always)]
-fn u32_endianess(val: u32) -> u32 {
+fn u32_endianness(val: u32) -> u32 {
     if cfg!(target_endian = "little") {
         val
     } else {

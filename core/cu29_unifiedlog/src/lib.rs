@@ -287,7 +287,7 @@ impl SlabEntry {
     }
 
     /// Flush the section to disk.
-    /// the flushing is permament and the section is considered closed.
+    /// the flushing is permanent and the section is considered closed.
     fn flush_section(&mut self, section: &mut SectionHandle) {
         if section.buffer.as_ptr() < self.mmap_buffer.as_ptr()
             || section.buffer.as_ptr() as usize
@@ -683,7 +683,7 @@ impl UnifiedLoggerRead {
     }
 }
 
-/// This a convience wrapper around the UnifiedLoggerRead to implement the Read trait.
+/// This a convenience wrapper around the UnifiedLoggerRead to implement the Read trait.
 pub struct UnifiedLoggerIOReader {
     logger: UnifiedLoggerRead,
     log_type: UnifiedLogType,

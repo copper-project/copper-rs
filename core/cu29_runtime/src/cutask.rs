@@ -42,7 +42,7 @@ impl_cu_msg_pack! {
     (T1, T2), (T1, T2, T3), (T1, T2, T3, T4), (T1, T2, T3, T4, T5) // TODO: continue if necessary
 }
 
-// A convience macro to get from a payload or a list of payloads to a proper CuMsg or CuMsgPack
+// A convenience macro to get from a payload or a list of payloads to a proper CuMsg or CuMsgPack
 // declaration for your tasks used for input messages.
 #[macro_export]
 macro_rules! input_msg {
@@ -56,7 +56,7 @@ macro_rules! input_msg {
     };
 }
 
-// A convience macro to get from a payload to a proper CuMsg used as output.
+// A convenience macro to get from a payload to a proper CuMsg used as output.
 #[macro_export]
 macro_rules! output_msg {
     ($lifetime:lifetime, $ty:ty) => {
@@ -102,7 +102,7 @@ pub struct CuMsgMetadata {
     /// It can be undefined (None), one measure point or a range of measures (TimeRange).
     pub tov: Tov,
     /// A small string for real time feedback purposes.
-    /// This is usefull for to display on the field when the tasks are operating correctly.
+    /// This is useful for to display on the field when the tasks are operating correctly.
     pub status_txt: CuCompactString,
 }
 
@@ -173,7 +173,7 @@ where
 }
 
 /// The internal state of a task needs to be serializable
-/// so the framework can take a snapshop of the task graph.
+/// so the framework can take a snapshot of the task graph.
 pub trait Freezable {
     /// This method is called by the framework when it wants to save the task state.
     /// The default implementation is to encode nothing (stateless).
@@ -193,7 +193,7 @@ pub trait Freezable {
 /// A Src Task is a task that only produces messages. For example drivers for sensors are Src Tasks.
 /// They are in push mode from the runtime.
 /// To set the frequency of the pulls and align them to any hw, see the runtime configuration.
-/// Note: A source has the priviledge to have a clock passed to it vs a frozen clock.
+/// Note: A source has the privilege to have a clock passed to it vs a frozen clock.
 pub trait CuSrcTask<'cl>: Freezable {
     type Output: CuMsgPack<'cl>;
 

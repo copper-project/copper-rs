@@ -268,7 +268,7 @@ pub struct Cnx {
     // Destination node id.
     dst: String,
 
-    /// Message type exchanged betwee src and dst.
+    /// Message type exchanged between src and dst.
     pub msg: String,
 
     /// Tells Copper to batch messages before sending the buffer to the next node.
@@ -410,7 +410,7 @@ impl Default for CuConfig {
     }
 }
 
-/// The implementation has a lot of conveinence methods to manipulate
+/// The implementation has a lot of convenience methods to manipulate
 /// the configuration to give some flexibility into programmatically creating the configuration.
 impl CuConfig {
     /// Add a new node to the configuration graph.

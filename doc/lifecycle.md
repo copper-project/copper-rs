@@ -11,5 +11,5 @@ The framework is designed to give as many chances as possible for the tasks to d
 
 In the critical loop, no allocation should occur, messages are pre-allocated and reused.
 
-Note on freeze / thow: A task internal state can be serialized to give the opportunity for the framework to "snapshot" the system, it would be at a low rate (ie. ~ a second). 
+Note on freeze / thaw: A task internal state can be serialized to give the opportunity for the framework to "snapshot" the system, it would be at a low rate (ie. ~ a second). 
 You can think of it a little bit as a "key frame" in a video. It is useful at replay to be able to jump into a state without having to replay all the previous messages.

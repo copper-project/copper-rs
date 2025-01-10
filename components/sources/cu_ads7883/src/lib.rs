@@ -47,7 +47,7 @@ where
 /// This is the type of message that the ADS7883 driver will send.
 pub type ADSReadingPayload = ADCReadingPayload<u16>;
 
-// Some convience function.
+// Some convenience function.
 impl From<ADSReadingPayload> for u16 {
     fn from(msg: ADSReadingPayload) -> Self {
         msg.analog_value
