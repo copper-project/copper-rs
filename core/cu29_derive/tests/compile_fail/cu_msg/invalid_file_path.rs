@@ -1,5 +1,5 @@
-use cu29_derive::gen_cumsg;
+use cu29_derive::gen_cumsgs;
 
-gen_cumsg!("invalid/path/to/config.ron");
+gen_cumsgs!("invalid/path/to/config.ron");
 
 fn main() {}

@@ -54,8 +54,9 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
     }
     #[cfg(feature = "macro_debug")]
     eprintln!("[gen culist support with {:?}]", config);
-    let Ok(cuconfig) = read_config(&config) else {
-        return return_error(format!("Failed to read the configuration file: {}", config));
+    let cuconfig = match read_config(&config) {
+        Ok(cuconfig) => cuconfig,
+        Err(e) => return return_error(e.to_string()),
     };
     let runtime_plan: CuExecutionLoop = match compute_runtime_plan(&cuconfig) {
         Ok(plan) => plan,
@@ -271,11 +272,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     };
 
-    let Ok(copper_config) = read_config(&config_file) else {
+    if !std::path::Path::new(&config_full_path(&config_file)).exists() {
         return return_error(format!(
-            "Failed to read the configuration file: {}",
+            "The configuration file `{}` does not exist. Please provide a valid path.",
             config_file
         ));
+    }
+
+    let copper_config = match read_config(&config_file) {
+        Ok(cuconfig) => cuconfig,
+        Err(e) => return return_error(e.to_string()),
     };
     let copper_config_content = match read_to_string(config_full_path(config_file.as_str())) {
         Ok(ok) => ok,
