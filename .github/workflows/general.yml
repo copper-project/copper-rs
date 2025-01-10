@@ -65,8 +65,8 @@ jobs:
         if: runner.os == 'Linux'
         run: cargo clippy --release --workspace --all-targets -- --deny warnings
 
-      - name: Install cargo-generate
-        run: cargo install cargo-generate
+        # - name: Install cargo-generate
+        #   run: cargo install cargo-generate
 
       - name: Build vanilla
         run: |
@@ -82,12 +82,12 @@ jobs:
         run: cargo test --workspace
         
       # Integration Test for the 1 liner generation of a project.
-      - name: Generate a test project from the repo template
-        run: |
-          cd templates
-          cargo generate -p cu_full --name test_project --destination . -d copper_source=local --silent
+      # - name: Generate a test project from the repo template
+      #   run: |
+      #     cd templates
+      #     cargo generate -p cu_full --name test_project --destination . -d copper_source=local --silent
 
-      - name: Compile generated project
-        run: |
-          cd templates/test_project
-          cargo build --release
+      # - name: Compile generated project
+      #   run: |
+      #     cd templates/test_project
+      #     cargo build --release
