@@ -24,21 +24,8 @@ jobs:
         with:
           toolchain: stable
           profile: minimal
-      - name: Cache Cargo registry
-        uses: actions/cache@v3
-        with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-registry-
-
-      - name: Cache Cargo build
-        uses: actions/cache@v3
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-build-
+      - name: Setup rust-cache
+        uses: Swatinem/rust-cache@v2
       - name: Install winget
         if: runner.os == 'Windows'
         uses: Cyberboss/install-winget@v1
