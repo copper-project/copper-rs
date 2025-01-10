@@ -13,7 +13,7 @@ use cached_path::{Cache, ProgressBar};
 use iyes_perf_ui::PerfUiPlugin;
 
 #[cfg(feature = "perf-ui")]
-use iyes_perf_ui::entries::PerfUiCompleteBundle;
+use iyes_perf_ui::prelude::PerfUiAllEntries;
 
 use std::path::Path;
 use std::{fs, io};
@@ -293,7 +293,7 @@ fn setup_ui(mut commands: Commands) {
             ));
         });
     #[cfg(feature = "perf-ui")]
-    commands.spawn(PerfUiCompleteBundle::default());
+    commands.spawn(PerfUiAllEntries::default());
 }
 
 // This needs to match an object / parent object name in the GLTF file (in blender this is the object name).
