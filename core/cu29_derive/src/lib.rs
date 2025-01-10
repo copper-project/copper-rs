@@ -205,7 +205,7 @@ fn gen_sim_support(runtime_plan: &CuExecutionLoop) -> proc_macro2::TokenStream {
 }
 
 /// Adds #[copper_runtime(config = "path", sim_mode = false/true)] to your application struct to generate the runtime.
-/// if sim_mode is ommited, it is set to false.
+/// if sim_mode is omitted, it is set to false.
 /// This will add a "runtime" field to your struct and implement the "new" and "run" methods.
 #[proc_macro_attribute]
 pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
@@ -990,9 +990,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             #new {
                 let config_filename = #config_file;
                 let config = if config_override.is_some() {
-                    let overriden_config = config_override.unwrap();
-                    debug!("CuConfig: Overriden programmatically: {}", &overriden_config.serialize_ron());
-                    overriden_config
+                    let overridden_config = config_override.unwrap();
+                    debug!("CuConfig: Overridden programmatically: {}", &overridden_config.serialize_ron());
+                    overridden_config
                 } else if std::path::Path::new(config_filename).exists() {
                     debug!("CuConfig: Reading configuration from file: {}", config_filename);
                     _read_configuration(config_filename)?

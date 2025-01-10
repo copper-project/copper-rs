@@ -9,7 +9,7 @@ use uom::si::f32::{Length, Ratio};
 use uom::si::ratio::ratio;
 
 #[inline(always)]
-fn u16_endianess(val: u16) -> u16 {
+fn u16_endianness(val: u16) -> u16 {
     if cfg!(target_endian = "little") {
         val
     } else {
@@ -18,7 +18,7 @@ fn u16_endianess(val: u16) -> u16 {
 }
 
 #[inline(always)]
-fn u32_endianess(val: u32) -> u32 {
+fn u32_endianness(val: u32) -> u32 {
     if cfg!(target_endian = "little") {
         val
     } else {
@@ -27,7 +27,7 @@ fn u32_endianess(val: u32) -> u32 {
 }
 
 #[inline(always)]
-fn i32_endianess(val: i32) -> i32 {
+fn i32_endianness(val: i32) -> i32 {
     if cfg!(target_endian = "little") {
         val
     } else {
@@ -36,7 +36,7 @@ fn i32_endianess(val: i32) -> i32 {
 }
 
 #[inline(always)]
-fn u64_endianess(val: u64) -> u64 {
+fn u64_endianness(val: u64) -> u64 {
     if cfg!(target_endian = "little") {
         val
     } else {
@@ -70,7 +70,7 @@ impl Debug for CommandHeader {
         f.write_fmt(format_args!("Magic: {:2X}{:2X}", self.sof, self.version))?;
         f.write_fmt(format_args!(
             "Frame: length {}, cmd_type{:2X}",
-            u16_endianess(self.length),
+            u16_endianness(self.length),
             self.cmd_type
         ))
     }
@@ -158,17 +158,17 @@ impl Debug for crate::parser::LidarHeader {
         ))?;
         f.write_fmt(format_args!(
             "Status: {}, ts_type{:2X}, data_type{:2X}, timestamp{}",
-            u32_endianess(self.status_code),
+            u32_endianness(self.status_code),
             self.timestamp_type,
             self.data_type,
-            u64_endianess(self.timestamp)
+            u64_endianness(self.timestamp)
         ))
     }
 }
 
 impl LidarHeader {
     pub fn timestamp(&self) -> CuDuration {
-        CuDuration(u64_endianess(self.timestamp))
+        CuDuration(u64_endianness(self.timestamp))
     }
 }
 
@@ -184,13 +184,13 @@ pub struct PointType2 {
 
 impl PointType2 {
     pub fn x(&self) -> Length {
-        Length::new::<uom::si::length::millimeter>(i32_endianess(self.x) as f32)
+        Length::new::<uom::si::length::millimeter>(i32_endianness(self.x) as f32)
     }
     pub fn y(&self) -> Length {
-        Length::new::<uom::si::length::millimeter>(i32_endianess(self.y) as f32)
+        Length::new::<uom::si::length::millimeter>(i32_endianness(self.y) as f32)
     }
     pub fn z(&self) -> Length {
-        Length::new::<uom::si::length::millimeter>(i32_endianess(self.z) as f32)
+        Length::new::<uom::si::length::millimeter>(i32_endianness(self.z) as f32)
     }
     pub fn reflectivity(&self) -> Ratio {
         Ratio::new::<ratio>(self.reflectivity as f32 / 255.0)
@@ -205,9 +205,9 @@ impl Debug for crate::parser::PointType2 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!(
             "Point: ({}, {}, {}) reflectivity {:2X} tag  {:2X}",
-            i32_endianess(self.x),
-            i32_endianess(self.y),
-            i32_endianess(self.z),
+            i32_endianness(self.x),
+            i32_endianness(self.y),
+            i32_endianness(self.z),
             self.reflectivity,
             self.tag
         ))

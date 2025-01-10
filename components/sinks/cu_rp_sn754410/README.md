@@ -12,7 +12,7 @@ The driver is capable of driving two motors in both directions using the 2 PWMs 
 
 ## Compatibility
 
-OS: Linux on Rapsberry Pi.
+OS: Linux on Raspberry Pi.
 
 hardware: [Texas Instrument SN754410](https://www.ti.com/lit/gpn/SN754410)
 
