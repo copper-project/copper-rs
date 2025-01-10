@@ -24,6 +24,8 @@ jobs:
         with:
           toolchain: stable
           profile: minimal
+      - name: Setup rust-cache
+        uses: Swatinem/rust-cache@v2
       - name: Install winget
         if: runner.os == 'Windows'
         uses: Cyberboss/install-winget@v1
