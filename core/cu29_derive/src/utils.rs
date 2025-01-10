@@ -11,11 +11,7 @@ pub(crate) fn config_id_to_enum(id: &str) -> String {
 
     candidate = candidate.to_case(Case::Pascal);
 
-    if candidate
-        .chars()
-        .next()
-        .map_or(false, |c| c.is_ascii_digit())
-    {
+    if candidate.chars().next().is_some_and(|c| c.is_ascii_digit()) {
         candidate.insert(0, '_');
     }
 
@@ -31,11 +27,7 @@ pub(crate) fn config_id_to_struct_member(id: &str) -> String {
 
     candidate = candidate.to_case(Case::Snake);
 
-    if candidate
-        .chars()
-        .next()
-        .map_or(false, |c| c.is_ascii_digit())
-    {
+    if candidate.chars().next().is_some_and(|c| c.is_ascii_digit()) {
         candidate.insert(0, '_');
     }
 
