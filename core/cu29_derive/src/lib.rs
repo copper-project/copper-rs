@@ -1421,3 +1421,13 @@ fn build_culist_tuple_debug(all_msgs_types_in_culist_order: &[Type]) -> ItemImpl
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    // See tests/compile_file directory for more information
+    #[test]
+    fn test_compile_fail() {
+        let t = trybuild::TestCases::new();
+        t.compile_fail("tests/compile_fail/*/*.rs");
+    }
+}

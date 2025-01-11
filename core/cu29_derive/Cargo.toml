@@ -28,6 +28,10 @@ convert_case = "0.6.0"
 [build-dependencies]
 cu29-unifiedlog = { workspace = true }  # needed
 
+[dev-dependencies]
+trybuild = "1.0"
+cu29 = { workspace = true } # needed for compile_fail tests
+
 [features]
 default = []
 # enables a more verbose build log showing the code generation.

@@ -1,0 +1,7 @@
+error: proc macro panicked
+ --> tests/compile_fail/cu_msg/invalid_config_file.rs:3:1
+  |
+3 | gen_cumsgs!("config/invalid_config.ron");
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: message: Syntax Error in config: Expected opening `[` at position 2:12

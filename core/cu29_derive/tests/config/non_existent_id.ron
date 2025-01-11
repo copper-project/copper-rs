@@ -1,0 +1,15 @@
+(
+    tasks: [
+        (
+            id: "src",
+            type: "FlippingSource",
+        ),
+        (
+            id: "gpio",
+            type: "FlippingSourceTwo",
+        ),
+    ],
+     cnx: [
+        (src: "unknown_src",  dst: "gpio",   msg: "MyMsg"),
+    ],
+)
