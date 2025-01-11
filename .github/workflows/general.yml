@@ -11,7 +11,7 @@ env:
 
 jobs:
   build-debug-release:
-    name: Build Debug / release
+    name: Build
 
     runs-on: ${{ matrix.os }}
 
@@ -58,8 +58,18 @@ jobs:
           $npcapLibDir = "$env:USERPROFILE\npcap-sdk\Lib\x64"
           Add-Content -Path $env:GITHUB_ENV -Value "LIB=$npcapLibDir"
 
-      - name: Set Release Flag
+      - name: Set Release Flag (Linux / MacOS)
+        if: runner.os != 'Windows'
         run: echo "RELEASE_FLAG=$([[ '${{ matrix.mode }}' == 'release' ]] && echo '--release' || echo '')" >> $GITHUB_ENV
+
+      - name: Set Release Flag (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          if ("%matrix_mode%" == "release") (
+            echo RELEASE_FLAG=--release >> %GITHUB_ENV%
+          ) else (
+            echo RELEASE_FLAG= >> %GITHUB_ENV%
+          )
 
       # Run clippy and build in debug / release
       - name: Run clippy in debug / release
@@ -75,7 +85,7 @@ jobs:
         run: cargo +stable build $RELEASE_FLAG --workspace --all-targets --all-features}
 
   test-debug-release:
-    name: Test Debug / Rlease
+    name: Test
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -120,8 +130,18 @@ jobs:
       - name: Install latest nextest
         uses: taiki-e/install-action@nextest
 
-      - name: Set Release Flag
+      - name: Set Release Flag (Linux / MacOS)
+        if: runner.os != 'Windows'
         run: echo "RELEASE_FLAG=$([[ '${{ matrix.mode }}' == 'release' ]] && echo '--release' || echo '')" >> $GITHUB_ENV
+
+      - name: Set Release Flag (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          if ("%matrix_mode%" == "release") (
+            echo RELEASE_FLAG=--release >> %GITHUB_ENV%
+          ) else (
+            echo RELEASE_FLAG= >> %GITHUB_ENV%
+          )
 
       # Run test in debug / release
       - name: Run test in debug / release
