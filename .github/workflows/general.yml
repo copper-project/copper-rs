@@ -10,8 +10,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-debug:
-    name: Build Debug
+  setup:
+    name: Set Up Environment
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -56,162 +56,50 @@ jobs:
           $npcapLibDir = "$env:USERPROFILE\npcap-sdk\Lib\x64"
           Add-Content -Path $env:GITHUB_ENV -Value "LIB=$npcapLibDir"
 
-      # Run debug builds and tests
-      - name: Run clippy in debug
-        run: cargo +stable clippy --workspace --all-targets -- --deny warnings
-      - name: Run clippy in debug with mock and macro_debug
-        run: cargo +stable clippy --workspace --all-targets --features mock,macro_debug -- --deny warnings
-      - name: Run clippy in debug with perf-ui, image and kornia
-        run: cargo +stable clippy --workspace --all-targets --features perf-ui,image,kornia -- --deny warnings
-      - name: Run doctests
+  build-debug-release:
+    name: Build Debug / release
+    needs: setup
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        mode: [debug, release]
+
+    steps:
+      # Run clippy and build in debug / release
+      - name: Run clippy in debug / release
+        run: cargo +stable clippy $${ '--release' if matrix.mode == 'release' else '' } --workspace --all-targets -- --deny warnings
+      - name: Run clippy in debug / release with mock and macro_debug
+        run: cargo +stable clippy $${ '--release' if matrix.mode == 'release' else '' } --workspace --all-targets --features mock,macro_debug -- --deny warnings
+      - name: Run clippy in debug /release with perf-ui, image and kornia
+        run: cargo +stable clippy $${ '--release' if matrix.mode == 'release' else '' } --workspace --all-targets --features perf-ui,image,kornia -- --deny warnings
+      - name: Run doctests in debug
+        if: runner.mode == 'debug'
         run: cargo +stable test --doc --workspace
-      - name: Run build in debug
-        run: cargo +stable build --release --workspace --all-targets --all-features
+      - name: Run build in debug / release
+        run: cargo +stable build $${ '--release' if matrix.mode == 'release' else '' } --workspace --all-targets --all-features}
 
-  build-release:
-    name: Build Release
+  test-debug-release:
+    name: Test Debug / Rlease
+    needs: setup
     runs-on: ${{ matrix.os }}
 
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        mode: [debug, release]
 
     steps:
-      - uses: actions/checkout@v4
-      - name: Set up Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-      - name: Setup rust-cache
-        uses: Swatinem/rust-cache@v2
-      - name: Install winget
-        if: runner.os == 'Windows'
-        uses: Cyberboss/install-winget@v1
-
-      ## System dependencies
-      - name: Install dependencies (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libudev-dev libpcap-dev
-      - name: Download Npcap SDK (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          Invoke-WebRequest -Uri https://npcap.com/dist/npcap-sdk-1.13.zip -OutFile npcap-sdk.zip
-          Expand-Archive -Path npcap-sdk.zip -DestinationPath $env:USERPROFILE\npcap-sdk
-          Remove-Item npcap-sdk.zip
-          winget install --id DaiyuuNobori.Win10Pcap --disable-interactivity --accept-source-agreements --accept-package-agreements
-      - name: Set Library and Include Paths (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          $npcapLibDir = "$env:USERPROFILE\npcap-sdk\Lib\x64"
-          Add-Content -Path $env:GITHUB_ENV -Value "LIB=$npcapLibDir"
-
-      # Run release builds and tests
-      - name: Run clippy in release
-        run: cargo +stable clippy --release --workspace --all-targets -- --deny warnings
-      - name: Run clippy in debug with mock and macro_debug
-        run: cargo +stable clippy --release --workspace --all-targets --features mock,macro_debug -- --deny warnings
-      - name: Run clippy in debug with perf-ui, image and kornia
-        run: cargo +stable clippy --release --workspace --all-targets --features perf-ui,image,kornia -- --deny warnings
-      - name: Run build in release
-        run: cargo +stable build --release --workspace --all-targets --all-features
-
-  test-debug:
-    name: Test Debug
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-      - name: Setup rust-cache
-        uses: Swatinem/rust-cache@v2
       - name: Install latest nextest
         uses: taiki-e/install-action@nextest
-      - name: Install winget
-        if: runner.os == 'Windows'
-        uses: Cyberboss/install-winget@v1
 
-      ## System dependencies
-      - name: Install dependencies (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libudev-dev libpcap-dev
-      - name: Download Npcap SDK (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          Invoke-WebRequest -Uri https://npcap.com/dist/npcap-sdk-1.13.zip -OutFile npcap-sdk.zip
-          Expand-Archive -Path npcap-sdk.zip -DestinationPath $env:USERPROFILE\npcap-sdk
-          Remove-Item npcap-sdk.zip
-          winget install --id DaiyuuNobori.Win10Pcap --disable-interactivity --accept-source-agreements --accept-package-agreements
-      - name: Set Library and Include Paths (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          $npcapLibDir = "$env:USERPROFILE\npcap-sdk\Lib\x64"
-          Add-Content -Path $env:GITHUB_ENV -Value "LIB=$npcapLibDir"
-
-      # Run test
-      - name: Run test in debug
-        run: cargo +stable nextest run --all-targets --workspace
-      - name: Run test in debug with mock and macro_debug
-        run: cargo +stable nextest run --all-targets --workspace --features mock,macro_debug
-      - name: Run test in debug with perf-ui, image and kornia
-        run: cargo +stable nextest run --all-targets --workspace --features perf-ui,image,kornia
-      - name: Run test in debug with all features
-        run: cargo +stable nextest run --all-targets --workspace --all-features
-
-  test-release:
-    name: Test Release
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-      - name: Setup rust-cache
-        uses: Swatinem/rust-cache@v2
-      - name: Install latest nextest
-        uses: taiki-e/install-action@nextest
-      - name: Install winget
-        if: runner.os == 'Windows'
-        uses: Cyberboss/install-winget@v1
-
-      ## System dependencies
-      - name: Install dependencies (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libudev-dev libpcap-dev
-      - name: Download Npcap SDK (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          Invoke-WebRequest -Uri https://npcap.com/dist/npcap-sdk-1.13.zip -OutFile npcap-sdk.zip
-          Expand-Archive -Path npcap-sdk.zip -DestinationPath $env:USERPROFILE\npcap-sdk
-          Remove-Item npcap-sdk.zip
-          winget install --id DaiyuuNobori.Win10Pcap --disable-interactivity --accept-source-agreements --accept-package-agreements
-      - name: Set Library and Include Paths (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          $npcapLibDir = "$env:USERPROFILE\npcap-sdk\Lib\x64"
-          Add-Content -Path $env:GITHUB_ENV -Value "LIB=$npcapLibDir"
-
-      # Run test
-      - name: Run test in debug
-        run: cargo +stable nextest run --release --all-targets --workspace
-      - name: Run test in debug with mock and macro_debug
-        run: cargo +stable nextest run --release --all-targets --workspace --features mock,macro_debug
-      - name: Run test in debug with perf-ui, image and kornia
-        run: cargo +stable nextest run --release --all-targets --workspace --features perf-ui,image,kornia
-      - name: Run test in debug with all features
-        run: cargo +stable nextest run --release --all-targets --workspace --all-features
+      # Run test in debug / release
+      - name: Run test in debug / release
+        run: cargo +stable nextest run $${ '--release' if matrix.mode == 'release' else '' } --all-targets --workspace
+      - name: Run test in debug / release with mock and macro_debug
+        run: cargo +stable nextest run $${ '--release' if matrix.mode == 'release' else '' } --all-targets --workspace --features mock,macro_debug
+      - name: Run test in debug / release with perf-ui, image and kornia
+        run: cargo +stable nextest run $${ '--release' if matrix.mode == 'release' else '' } --all-targets --workspace --features perf-ui,image,kornia
+      - name: Run test in debug / release with all features
+        run: cargo +stable nextest run $${ '--release' if matrix.mode == 'release' else '' } --all-targets --workspace --all-features
