@@ -65,7 +65,7 @@ jobs:
       - name: Set Release Flag (Windows)
         if: runner.os == 'Windows'
         run: |
-          if ("%matrix_mode%" == "release") (
+          if "%matrix_mode%" == "release" (
             echo RELEASE_FLAG=--release >> %GITHUB_ENV%
           ) else (
             echo RELEASE_FLAG= >> %GITHUB_ENV%
@@ -137,7 +137,7 @@ jobs:
       - name: Set Release Flag (Windows)
         if: runner.os == 'Windows'
         run: |
-          if ("%matrix_mode%" == "release") (
+          if "%matrix_mode%" == "release" (
             echo RELEASE_FLAG=--release >> %GITHUB_ENV%
           ) else (
             echo RELEASE_FLAG= >> %GITHUB_ENV%
