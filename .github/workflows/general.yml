@@ -10,8 +10,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-debug-release:
-    name: Build
+  Unit-Tests:
+    name: Unit Tests
 
     runs-on: ${{ matrix.os }}
 
@@ -30,12 +30,13 @@ jobs:
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ runner.os }}-${{ matrix.mode }}-${{ github.ref_name}}
+          key: ${{ matrix.mode }}
+      - name: Install latest nextest
+        uses: taiki-e/install-action@nextest
       - name: Install winget
         if: runner.os == 'Windows'
         uses: Cyberboss/install-winget@v1
 
-      # Fail cheaply and early if the code is not even formatted correctly.
       - name: Cargo fmt check
         run: cargo +stable fmt --all -- --check
 
@@ -45,14 +46,11 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libudev-dev libpcap-dev
 
-      # Those are needed for the integration tests on Windows
+      # Install dependencies only on Windows
       - name: Download Npcap SDK (Windows)
         if: runner.os == 'Windows'
         run: |
-          Invoke-WebRequest -Uri https://npcap.com/dist/npcap-sdk-1.13.zip -OutFile npcap-sdk.zip
-          Expand-Archive -Path npcap-sdk.zip -DestinationPath $env:USERPROFILE\npcap-sdk
-          Remove-Item npcap-sdk.zip
-          winget install --id DaiyuuNobori.Win10Pcap --disable-interactivity --accept-source-agreements --accept-package-agreements
+          winget install DaiyuuNobori.Win10Pcap --accept-source-agreements --accept-package-agreements
 
       - name: Set Library and Include Paths (Windows)
         if: runner.os == 'Windows'
@@ -69,99 +67,41 @@ jobs:
         run: |
           Add-Content -Path $env:GITHUB_ENV -Value "RELEASE_FLAG=--release"
 
-      # Run clippy and build in debug / release
-      - name: Run clippy in debug / release
+      # Run Clippy and build
+      - name: Run clippy on ${{ matrix.os }} with ${{matrix.mode}}
         run: cargo +stable clippy $RELEASE_FLAG --workspace --all-targets -- --deny warnings
-      - name: Run clippy in debug / release with mock and macro_debug
-        run: cargo +stable clippy $RELEASE_FLAG --workspace --all-targets --features mock,macro_debug -- --deny warnings
-      - name: Run clippy in debug /release with perf-ui, image and kornia
-        run: cargo +stable clippy $RELEASE_FLAG --workspace --all-targets --features perf-ui,image,kornia -- --deny warnings
-      - name: Run doctests in debug
-        if: matrix.mode == 'debug'
-        run: cargo +stable test --doc --workspace
-      - name: Run build in debug / release
+      - name: Run clippy with all features on ${{ matrix.os }} with ${{matrix.mode}}
+        run: cargo +stable clippy $RELEASE_FLAG --workspace --all-targets --all-features -- --deny warnings
+
+      - name: Run build with all features on ${{ matrix.os }} with ${{matrix.mode}}
         run: cargo +stable build $RELEASE_FLAG --workspace --all-targets --all-features
 
-  test-debug-release:
-    name: Test
-    runs-on: ${{ matrix.os }}
+      - name: Run doctests on ${{ matrix.os }} with debug
+        if: matrix.mode == 'debug'
+        run: cargo +stable test --doc --workspace
 
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        mode: [debug, release]
-
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-      - name: Setup rust-cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ runner.os }}-${{ matrix.mode }}-${{ github.ref_name}}
-      - name: Install winget
-        if: runner.os == 'Windows'
-        uses: Cyberboss/install-winget@v1
-
-      ## System dependencies
-      # Install dependencies only on Linux
-      - name: Install dependencies (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libudev-dev libpcap-dev
-
-      # Those are needed for the integration tests on Windows
-      - name: Download Npcap SDK (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          Invoke-WebRequest -Uri https://npcap.com/dist/npcap-sdk-1.13.zip -OutFile npcap-sdk.zip
-          Expand-Archive -Path npcap-sdk.zip -DestinationPath $env:USERPROFILE\npcap-sdk
-          Remove-Item npcap-sdk.zip
-          winget install --id DaiyuuNobori.Win10Pcap --disable-interactivity --accept-source-agreements --accept-package-agreements
-
-      - name: Set Library and Include Paths (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          $npcapLibDir = "$env:USERPROFILE\npcap-sdk\Lib\x64"
-          Add-Content -Path $env:GITHUB_ENV -Value "LIB=$npcapLibDir"
-
-      - name: Install latest nextest
-        uses: taiki-e/install-action@nextest
-
-      - name: Set Release Flag (Linux / MacOS)
-        if: runner.os != 'Windows'
-        run: echo "RELEASE_FLAG=$([[ '${{ matrix.mode }}' == 'release' ]] && echo '--release' || echo '')" >> $GITHUB_ENV
-
-      - name: Set Release Flag (Windows)
-        if: runner.os == 'Windows' && matrix.mode == 'release'
-        run: |
-          Add-Content -Path $env:GITHUB_ENV -Value "RELEASE_FLAG=--release"
-
-      # Run test in debug / release
-      - name: Run test in debug / release
+      # Run Unit Tests
+      - name: Run Unit Tests on ${{ matrix.os }} with ${{matrix.mode}}
         run: cargo +stable nextest run $RELEASE_FLAG --all-targets --workspace
-      - name: Run test in debug / release with mock and macro_debug
-        run: cargo +stable nextest run $RELEASE_FLAG --all-targets --workspace --features mock,macro_debug
-      - name: Run test in debug / release with perf-ui, image and kornia
-        run: cargo +stable nextest run $RELEASE_FLAG --all-targets --workspace --features perf-ui,image,kornia
-      - name: Run test in debug / release with all features
+      - name: Run Unit Tests with all features on ${{ matrix.os }} with ${{matrix.mode}}
         run: cargo +stable nextest run $RELEASE_FLAG --all-targets --workspace --all-features
 
-      - name: Install cargo-generate
+      # Run Project Generation Tests
+      - name: Install cargo-generate on ${{ matrix.os }} with debug
+        if: matrix.mode == 'debug'
         run: cargo +stable install cargo-generate
 
-      - name: Generate new project
+      - name: Generate new project on ${{ matrix.os }} with debug
+        if: matrix.mode == 'debug'
         run: |
           cd templates
           cargo +stable generate -p cu_full --name test_project --destination . -d copper_source=local --silent
 
-      - name: Build generated project
+      - name: Build generated project on ${{ matrix.os }} with debug
+        if: matrix.mode == 'debug'
         run: |
           cd templates/test_project
-          cargo +stable build $RELEASE_FLAG
-
+          cargo +stable build
   typos:
     name: Typos Check
     runs-on: ubuntu-latest
