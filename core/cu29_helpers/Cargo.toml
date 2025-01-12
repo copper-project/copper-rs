@@ -26,4 +26,4 @@ cu29-log-derive = { workspace = true }
 cu29-helpers = { workspace = true }
 cu29-value = { workspace = true }
 serde = { workspace = true }
-tempdir = "0.3.7"
+tempfile = { workspace = true }
