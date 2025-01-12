@@ -78,7 +78,7 @@ jobs:
         if: matrix.mode == 'debug'
         run: cargo +stable test --doc --workspace
       - name: Run build in debug / release
-        run: cargo +stable build $RELEASE_FLAG --workspace --all-targets --all-features}
+        run: cargo +stable build $RELEASE_FLAG --workspace --all-targets --all-features
 
   test-debug-release:
     name: Test
@@ -144,3 +144,16 @@ jobs:
         run: cargo +stable nextest run $RELEASE_FLAG --all-targets --workspace --features perf-ui,image,kornia
       - name: Run test in debug / release with all features
         run: cargo +stable nextest run $RELEASE_FLAG --all-targets --workspace --all-features
+
+      - name: Install cargo-generate
+        run: cargo +stable install cargo-generate
+
+      - name: Generate new project
+        run: |
+          cd templates
+          cargo +stable generate -p cu_full --name test_project --destination . -d copper_source=local --silent
+
+      - name: Build generated project
+        run: |
+          cd templates/test_project
+          cargo +stable build $RELEASE_FLAG
