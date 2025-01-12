@@ -1,0 +1,16 @@
+(
+    tasks: [
+      (
+                id: "l",
+                type: "cu_hesai::Xt32",
+      ),
+      (
+                id: "a",
+                type: "tasks::Sink",
+      ),
+     ],
+    cnx: [
+        (src: "l", dst: "a", msg: "cu_sim_depthsense::VirtPointCloud"),
+    ],
+)
+

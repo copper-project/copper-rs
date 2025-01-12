@@ -1,0 +1,23 @@
+[package]
+name = "cu-drone"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+cu29 = { workspace = true }
+cu29-helpers = { workspace = true }
+cu-hesai = { path = "../../components/sources/cu_hesai" }
+cu-sensor-payloads = { path = "../../components/payloads/cu_sensor_payloads" }
+cu-sim-depthsense = { path = "../../components/testing/cu_sim_depthsense" }
+bevy_mod_raycast = "0.18.0"
+bevy = { version = "0.14.2", default-features = false, features = ["bevy_ui", "bevy_sprite", "bevy_scene", "default_font", "wayland", "bevy_asset", "bevy_render", "bevy_gltf", "bevy_core_pipeline", "bevy_pbr", "bevy_gizmos", "bevy_winit", "x11", "tonemapping_luts", "ktx2", "jpeg", "png"] }
+avian3d = { version = "0.1.2", default-features = false, features = ["bevy_scene", "collider-from-mesh", "debug-plugin", "parallel", "f32"] }
+parry3d = { version = "0.17.1" }
+iyes_perf_ui = { version = "0.3.0" }
+fbx = "*"
