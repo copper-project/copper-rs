@@ -145,10 +145,10 @@ impl ScopedAllocCounter {
     /// Returns the total number of bytes allocated in the current scope
     /// since the creation of this `ScopedAllocCounter`.
     ///
-    /// # Example 
+    /// # Example
     /// ```
     /// use cu29_runtime::monitoring::ScopedAllocCounter;
-    /// 
+    ///
     /// let counter = ScopedAllocCounter::new();
     /// let _vec = vec![0u8; 1024];
     /// println!("Bytes allocated: {}", counter.get_allocated());
@@ -163,7 +163,7 @@ impl ScopedAllocCounter {
     /// # Example
     /// ```
     /// use cu29_runtime::monitoring::ScopedAllocCounter;
-    /// 
+    ///
     /// let counter = ScopedAllocCounter::new();
     /// let _vec = vec![0u8; 1024];
     /// drop(_vec);
