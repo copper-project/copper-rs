@@ -1,0 +1,7 @@
+error: proc macro panicked
+ --> tests/compile_fail/cu_msg/non_existent_id.rs:7:1
+  |
+7 | gen_cumsgs!("config/non_existent_id.ron");
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: message: Source node not found

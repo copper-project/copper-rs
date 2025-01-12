@@ -16,10 +16,11 @@ use cu29_runtime::config::CuConfig;
 use cu29_runtime::curuntime::{
     compute_runtime_plan, find_task_type_for_id, CuExecutionLoop, CuExecutionUnit, CuTaskType,
 };
+use cu29_traits::CuResult;
 
 #[cfg(feature = "macro_debug")]
 use format::{highlight_rust_code, rustfmt_generated_code};
-use proc_macro2::Ident;
+use proc_macro2::{Ident, Span};
 
 mod format;
 mod utils;
@@ -32,17 +33,34 @@ fn int2sliceindex(i: u32) -> syn::Index {
     syn::Index::from(i as usize)
 }
 
+#[inline(always)]
+fn return_error(msg: String) -> TokenStream {
+    syn::Error::new(Span::call_site(), msg)
+        .to_compile_error()
+        .into()
+}
+
 /// Generates the CopperList content type from a config.
 /// gen_cumsgs!("path/to/config.toml")
 /// It will create a new type called CuMsgs you can pass to the log reader for decoding:
 #[proc_macro]
 pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
     let config = parse_macro_input!(config_path_lit as LitStr).value();
+    if !std::path::Path::new(&config_full_path(&config)).exists() {
+        return return_error(format!(
+            "The configuration file `{}` does not exist. Please provide a valid path.",
+            config
+        ));
+    }
     #[cfg(feature = "macro_debug")]
     eprintln!("[gen culist support with {:?}]", config);
-    let cuconfig = read_config(&config);
-    let runtime_plan: CuExecutionLoop =
-        compute_runtime_plan(&cuconfig).expect("Could not compute runtime plan");
+    let Ok(cuconfig) = read_config(&config) else {
+        return return_error(format!("Failed to read the configuration file: {}", config));
+    };
+    let runtime_plan: CuExecutionLoop = match compute_runtime_plan(&cuconfig) {
+        Ok(plan) => plan,
+        Err(e) => return return_error(format!("Could not compute runtime plan: {}", e)),
+    };
 
     // Give a name compatible with a struct to match the task ids to their output in the CuMsgs tuple.
     let all_tasks_member_ids: Vec<String> = cuconfig
@@ -243,19 +261,33 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     parse_macro_input!(args with attribute_config_parser);
 
     // Check if the config file was provided
-    let config_file = config_file
-        .expect("Expected config file attribute like #[CopperRuntime(config = \"path\")]")
-        .value();
+    let config_file = match config_file {
+        Some(file) => file.value(),
+        None => {
+            return return_error(
+                "Expected config file attribute like #[CopperRuntime(config = \"path\")]"
+                    .to_string(),
+            )
+        }
+    };
 
-    let copper_config = read_config(&config_file);
-    let copper_config_content = read_to_string(config_full_path(config_file.as_str())).expect(
-        "Could not read the config file (should not happen because we just succeeded just before).",
-    );
+    let Ok(copper_config) = read_config(&config_file) else {
+        return return_error(format!(
+            "Failed to read the configuration file: {}",
+            config_file
+        ));
+    };
+    let copper_config_content = match read_to_string(config_full_path(config_file.as_str())) {
+        Ok(ok) => ok,
+        Err(e) => return return_error(format!("Could not read the config file (should not happen because we just succeeded just before). {}", e))
+    };
 
     #[cfg(feature = "macro_debug")]
     eprintln!("[runtime plan]");
-    let runtime_plan: CuExecutionLoop =
-        compute_runtime_plan(&copper_config).expect("Could not compute runtime plan");
+    let runtime_plan: CuExecutionLoop = match compute_runtime_plan(&copper_config) {
+        Ok(plan) => plan,
+        Err(e) => return return_error(format!("Could not compute runtime plan: {}", e)),
+    };
     #[cfg(feature = "macro_debug")]
     eprintln!("{:?}", runtime_plan);
 
@@ -1239,11 +1271,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     tokens
 }
 
-fn read_config(config_file: &str) -> CuConfig {
+fn read_config(config_file: &str) -> CuResult<CuConfig> {
     let filename = config_full_path(config_file);
 
     read_configuration(filename.as_str())
-        .unwrap_or_else(|_| panic!("Failed to read configuration file: {filename}"))
 }
 
 fn config_full_path(config_file: &str) -> String {
@@ -1388,5 +1419,15 @@ fn build_culist_tuple_debug(all_msgs_types_in_culist_order: &[Type]) -> ItemImpl
                     .finish()
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // See tests/compile_file directory for more information
+    #[test]
+    fn test_compile_fail() {
+        let t = trybuild::TestCases::new();
+        t.compile_fail("tests/compile_fail/*/*.rs");
     }
 }
