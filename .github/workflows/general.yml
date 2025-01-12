@@ -37,7 +37,7 @@ jobs:
         if: runner.os == 'Windows'
         uses: Cyberboss/install-winget@v1
 
-      - name: Cargo fmt check
+      - name: Check formatting
         run: cargo +stable fmt --all -- --check
 
       ## System dependencies
@@ -55,49 +55,48 @@ jobs:
       - name: Set Library and Include Paths (Windows)
         if: runner.os == 'Windows'
         run: |
-          $npcapLibDir = "$env:USERPROFILE\npcap-sdk\Lib\x64"
-          Add-Content -Path $env:GITHUB_ENV -Value "LIB=$npcapLibDir"
+          Add-Content -Path $env:GITHUB_ENV -Value "LIB=$env:ProgramFiles (x86)\Win10Pcap\x64"
 
-      - name: Set Release Flag (Linux / MacOS)
+      - name: Set build mode (Linux / MacOS)
         if: runner.os != 'Windows'
         run: echo "RELEASE_FLAG=$([[ '${{ matrix.mode }}' == 'release' ]] && echo '--release' || echo '')" >> $GITHUB_ENV
 
-      - name: Set Release Flag (Windows)
+      - name: Set build mode (Windows)
         if: runner.os == 'Windows' && matrix.mode == 'release'
         run: |
           Add-Content -Path $env:GITHUB_ENV -Value "RELEASE_FLAG=--release"
 
       # Run Clippy and build
-      - name: Run clippy on ${{ matrix.os }} with ${{matrix.mode}}
+      - name: Run clippy on (${{ matrix.os }} | ${{matrix.mode}})
         run: cargo +stable clippy $RELEASE_FLAG --workspace --all-targets -- --deny warnings
-      - name: Run clippy with all features on ${{ matrix.os }} with ${{matrix.mode}}
+      - name: Run clippy with all features on (${{ matrix.os }} | ${{matrix.mode}})
         run: cargo +stable clippy $RELEASE_FLAG --workspace --all-targets --all-features -- --deny warnings
 
-      - name: Run build with all features on ${{ matrix.os }} with ${{matrix.mode}}
+      - name: Run build with all features on $(${{ matrix.os }} | ${{matrix.mode}})
         run: cargo +stable build $RELEASE_FLAG --workspace --all-targets --all-features
 
-      - name: Run doctests on ${{ matrix.os }} with debug
+      - name: Run doctests on (${{ matrix.os }} | debug)
         if: matrix.mode == 'debug'
         run: cargo +stable test --doc --workspace
 
       # Run Unit Tests
-      - name: Run Unit Tests on ${{ matrix.os }} with ${{matrix.mode}}
+      - name: Run Unit Tests on (${{ matrix.os }} | ${{matrix.mode}})
         run: cargo +stable nextest run $RELEASE_FLAG --all-targets --workspace
-      - name: Run Unit Tests with all features on ${{ matrix.os }} with ${{matrix.mode}}
+      - name: Run Unit Tests with all features on (${{ matrix.os }} | ${{matrix.mode}})
         run: cargo +stable nextest run $RELEASE_FLAG --all-targets --workspace --all-features
 
       # Run Project Generation Tests
-      - name: Install cargo-generate on ${{ matrix.os }} with debug
+      - name: Install cargo-generate on (${{ matrix.os }} | debug)
         if: matrix.mode == 'debug'
         run: cargo +stable install cargo-generate
 
-      - name: Generate new project on ${{ matrix.os }} with debug
+      - name: Generate new project on (${{ matrix.os }} | debug)
         if: matrix.mode == 'debug'
         run: |
           cd templates
           cargo +stable generate -p cu_full --name test_project --destination . -d copper_source=local --silent
 
-      - name: Build generated project on ${{ matrix.os }} with debug
+      - name: Build generated project on (${{ matrix.os }} | debug)
         if: matrix.mode == 'debug'
         run: |
           cd templates/test_project
