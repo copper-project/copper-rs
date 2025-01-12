@@ -63,13 +63,9 @@ jobs:
         run: echo "RELEASE_FLAG=$([[ '${{ matrix.mode }}' == 'release' ]] && echo '--release' || echo '')" >> $GITHUB_ENV
 
       - name: Set Release Flag (Windows)
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && matrix.mode == 'release'
         run: |
-          if "%matrix_mode%" == "release" (
-            echo RELEASE_FLAG=--release >> %GITHUB_ENV%
-          ) else (
-            echo RELEASE_FLAG= >> %GITHUB_ENV%
-          )
+          Add-Content -Path $env:GITHUB_ENV -Value "RELEASE_FLAG=--release"
 
       # Run clippy and build in debug / release
       - name: Run clippy in debug / release
