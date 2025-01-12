@@ -2,21 +2,23 @@ name: "CI/CD"
 
 on:
   push:
-    branches: [ "master" ]
+    branches: ["master"]
   pull_request:
-    branches: [ "master" ]
+    branches: ["master"]
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-debug:
-    name: Build Debug
+  build-debug-release:
+    name: Build
+
     runs-on: ${{ matrix.os }}
 
     strategy:
       matrix:
-        os: [ ubuntu-latest, macos-latest, windows-latest ]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        mode: [debug, release]
 
     steps:
       - uses: actions/checkout@v4
@@ -33,7 +35,7 @@ jobs:
 
       # Fail cheaply and early if the code is not even formatted correctly.
       - name: Cargo fmt check
-        run: cargo fmt --all -- --check
+        run: cargo +stable fmt --all -- --check
 
       ## System dependencies
       # Install dependencies only on Linux
@@ -49,28 +51,43 @@ jobs:
           Expand-Archive -Path npcap-sdk.zip -DestinationPath $env:USERPROFILE\npcap-sdk
           Remove-Item npcap-sdk.zip
           winget install --id DaiyuuNobori.Win10Pcap --disable-interactivity --accept-source-agreements --accept-package-agreements
-          
+
       - name: Set Library and Include Paths (Windows)
         if: runner.os == 'Windows'
         run: |
           $npcapLibDir = "$env:USERPROFILE\npcap-sdk\Lib\x64"
           Add-Content -Path $env:GITHUB_ENV -Value "LIB=$npcapLibDir"
 
-      # Run debug builds and tests
-      - name: Run clippy in debug
-        run: cargo clippy --workspace --all-targets -- --deny warnings
-      - name: Build in debug
-        run: cargo build --workspace --features macro_debug
-      - name: Run tests
-        run: cargo test --workspace
+      - name: Set Release Flag (Linux / MacOS)
+        if: runner.os != 'Windows'
+        run: echo "RELEASE_FLAG=$([[ '${{ matrix.mode }}' == 'release' ]] && echo '--release' || echo '')" >> $GITHUB_ENV
 
-  build-release:
-    name: Build Release
+      - name: Set Release Flag (Windows)
+        if: runner.os == 'Windows' && matrix.mode == 'release'
+        run: |
+          Add-Content -Path $env:GITHUB_ENV -Value "RELEASE_FLAG=--release"
+
+      # Run clippy and build in debug / release
+      - name: Run clippy in debug / release
+        run: cargo +stable clippy $RELEASE_FLAG --workspace --all-targets -- --deny warnings
+      - name: Run clippy in debug / release with mock and macro_debug
+        run: cargo +stable clippy $RELEASE_FLAG --workspace --all-targets --features mock,macro_debug -- --deny warnings
+      - name: Run clippy in debug /release with perf-ui, image and kornia
+        run: cargo +stable clippy $RELEASE_FLAG --workspace --all-targets --features perf-ui,image,kornia -- --deny warnings
+      - name: Run doctests in debug
+        if: matrix.mode == 'debug'
+        run: cargo +stable test --doc --workspace
+      - name: Run build in debug / release
+        run: cargo +stable build $RELEASE_FLAG --workspace --all-targets --all-features
+
+  test-debug-release:
+    name: Test
     runs-on: ${{ matrix.os }}
 
     strategy:
       matrix:
-        os: [ ubuntu-latest, macos-latest, windows-latest ]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        mode: [debug, release]
 
     steps:
       - uses: actions/checkout@v4
@@ -85,14 +102,13 @@ jobs:
         if: runner.os == 'Windows'
         uses: Cyberboss/install-winget@v1
 
-      # Fail cheaply and early if the code is not even formatted correctly.
-      - name: Cargo fmt check
-        run: cargo fmt --all -- --check
-
       ## System dependencies
+      # Install dependencies only on Linux
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libudev-dev libpcap-dev
+
+      # Those are needed for the integration tests on Windows
       - name: Download Npcap SDK (Windows)
         if: runner.os == 'Windows'
         run: |
@@ -100,14 +116,53 @@ jobs:
           Expand-Archive -Path npcap-sdk.zip -DestinationPath $env:USERPROFILE\npcap-sdk
           Remove-Item npcap-sdk.zip
           winget install --id DaiyuuNobori.Win10Pcap --disable-interactivity --accept-source-agreements --accept-package-agreements
+
       - name: Set Library and Include Paths (Windows)
         if: runner.os == 'Windows'
         run: |
           $npcapLibDir = "$env:USERPROFILE\npcap-sdk\Lib\x64"
           Add-Content -Path $env:GITHUB_ENV -Value "LIB=$npcapLibDir"
 
-      # Run release builds and tests
-      - name: Run clippy in release
-        run: cargo clippy --release --workspace --all-targets -- --deny warnings
-      - name: Build in release
-        run: cargo build --release --workspace --features macro_debug
+      - name: Install latest nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Set Release Flag (Linux / MacOS)
+        if: runner.os != 'Windows'
+        run: echo "RELEASE_FLAG=$([[ '${{ matrix.mode }}' == 'release' ]] && echo '--release' || echo '')" >> $GITHUB_ENV
+
+      - name: Set Release Flag (Windows)
+        if: runner.os == 'Windows' && matrix.mode == 'release'
+        run: |
+          Add-Content -Path $env:GITHUB_ENV -Value "RELEASE_FLAG=--release"
+
+      # Run test in debug / release
+      - name: Run test in debug / release
+        run: cargo +stable nextest run $RELEASE_FLAG --all-targets --workspace
+      - name: Run test in debug / release with mock and macro_debug
+        run: cargo +stable nextest run $RELEASE_FLAG --all-targets --workspace --features mock,macro_debug
+      - name: Run test in debug / release with perf-ui, image and kornia
+        run: cargo +stable nextest run $RELEASE_FLAG --all-targets --workspace --features perf-ui,image,kornia
+      - name: Run test in debug / release with all features
+        run: cargo +stable nextest run $RELEASE_FLAG --all-targets --workspace --all-features
+
+      - name: Install cargo-generate
+        run: cargo +stable install cargo-generate
+
+      - name: Generate new project
+        run: |
+          cd templates
+          cargo +stable generate -p cu_full --name test_project --destination . -d copper_source=local --silent
+
+      - name: Build generated project
+        run: |
+          cd templates/test_project
+          cargo +stable build $RELEASE_FLAG
+
+  typos:
+    name: Typos Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: crate-ci/typos@master
+        with:
+          config: ./.config/_typos.toml
