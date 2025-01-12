@@ -30,7 +30,7 @@ jobs:
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ runner.os }}-${{ matrix.mode }}
+          key: ${{ runner.os }}-${{ matrix.mode }}-${{ github.ref_name}}
       - name: Install winget
         if: runner.os == 'Windows'
         uses: Cyberboss/install-winget@v1
@@ -101,7 +101,7 @@ jobs:
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ runner.os }}-${{ matrix.mode }}
+          key: ${{ runner.os }}-${{ matrix.mode }}-${{ github.ref_name}}
       - name: Install winget
         if: runner.os == 'Windows'
         uses: Cyberboss/install-winget@v1
