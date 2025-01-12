@@ -731,7 +731,19 @@
 <a href="#730" id="730">730</a>
 <a href="#731" id="731">731</a>
 <a href="#732" id="732">732</a>
-<a href="#733" id="733">733</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module defines the configuration of the copper runtime.
+<a href="#733" id="733">733</a>
+<a href="#734" id="734">734</a>
+<a href="#735" id="735">735</a>
+<a href="#736" id="736">736</a>
+<a href="#737" id="737">737</a>
+<a href="#738" id="738">738</a>
+<a href="#739" id="739">739</a>
+<a href="#740" id="740">740</a>
+<a href="#741" id="741">741</a>
+<a href="#742" id="742">742</a>
+<a href="#743" id="743">743</a>
+<a href="#744" id="744">744</a>
+<a href="#745" id="745">745</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module defines the configuration of the copper runtime.
 //! The configuration is a directed graph where nodes are tasks and edges are connections between tasks.
 //! The configuration is serialized in the RON format.
 //! The configuration is used to generate the runtime code at compile time.
@@ -1072,8 +1084,8 @@
     <span class="kw">where
         </span>D: Deserializer&lt;<span class="lifetime">'de</span>&gt;,
     {
-        <span class="kw">let </span>representation = CuConfigRepresentation::deserialize(deserializer)
-            .expect(<span class="string">"Failed to deserialize config"</span>);
+        <span class="kw">let </span>representation =
+            CuConfigRepresentation::deserialize(deserializer).map_err(serde::de::Error::custom)<span class="question-mark">?</span>;
 
         <span class="kw">let </span><span class="kw-2">mut </span>cuconfig = CuConfig::default();
         <span class="kw">for </span>task <span class="kw">in </span>representation.tasks {
@@ -1291,9 +1303,13 @@
     }
 
     <span class="kw">pub fn </span>deserialize_ron(ron: <span class="kw-2">&amp;</span>str) -&gt; <span class="self">Self </span>{
-        <span class="self">Self</span>::get_options()
-            .from_str(ron)
-            .expect(<span class="string">"Syntax Error in config"</span>)
+        <span class="kw">match </span><span class="self">Self</span>::get_options().from_str(ron) {
+            <span class="prelude-val">Ok</span>(ron) =&gt; ron,
+            <span class="prelude-val">Err</span>(e) =&gt; <span class="macro">panic!</span>(
+                <span class="string">"Syntax Error in config: {} at position {}"</span>,
+                e.code, e.position
+            ),
+        }
     }
 
     <span class="doccomment">/// Render the configuration graph in the dot format.
@@ -1424,6 +1440,14 @@
                 .unwrap(),
             <span class="number">1080
         </span>);
+    }
+
+    <span class="attr">#[test]
+    #[should_panic(expected = <span class="string">"Syntax Error in config: Expected opening `[` at position 1:10"</span>)]
+    </span><span class="kw">fn </span>test_deserialization_error() {
+        <span class="comment">// Task needs to be an array, but provided tuple wrongfully
+        </span><span class="kw">let </span>txt = <span class="string">r#"( tasks: (), cnx: [], monitor: (type: "ExampleMonitor", ) ) "#</span>;
+        CuConfig::deserialize_ron(txt);
     }
 
     <span class="attr">#[test]

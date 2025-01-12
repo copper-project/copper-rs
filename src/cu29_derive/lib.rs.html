@@ -1390,7 +1390,48 @@
 <a href="#1389" id="1389">1389</a>
 <a href="#1390" id="1390">1390</a>
 <a href="#1391" id="1391">1391</a>
-<a href="#1392" id="1392">1392</a></pre></div><pre class="rust"><code><span class="kw">extern crate </span>proc_macro;
+<a href="#1392" id="1392">1392</a>
+<a href="#1393" id="1393">1393</a>
+<a href="#1394" id="1394">1394</a>
+<a href="#1395" id="1395">1395</a>
+<a href="#1396" id="1396">1396</a>
+<a href="#1397" id="1397">1397</a>
+<a href="#1398" id="1398">1398</a>
+<a href="#1399" id="1399">1399</a>
+<a href="#1400" id="1400">1400</a>
+<a href="#1401" id="1401">1401</a>
+<a href="#1402" id="1402">1402</a>
+<a href="#1403" id="1403">1403</a>
+<a href="#1404" id="1404">1404</a>
+<a href="#1405" id="1405">1405</a>
+<a href="#1406" id="1406">1406</a>
+<a href="#1407" id="1407">1407</a>
+<a href="#1408" id="1408">1408</a>
+<a href="#1409" id="1409">1409</a>
+<a href="#1410" id="1410">1410</a>
+<a href="#1411" id="1411">1411</a>
+<a href="#1412" id="1412">1412</a>
+<a href="#1413" id="1413">1413</a>
+<a href="#1414" id="1414">1414</a>
+<a href="#1415" id="1415">1415</a>
+<a href="#1416" id="1416">1416</a>
+<a href="#1417" id="1417">1417</a>
+<a href="#1418" id="1418">1418</a>
+<a href="#1419" id="1419">1419</a>
+<a href="#1420" id="1420">1420</a>
+<a href="#1421" id="1421">1421</a>
+<a href="#1422" id="1422">1422</a>
+<a href="#1423" id="1423">1423</a>
+<a href="#1424" id="1424">1424</a>
+<a href="#1425" id="1425">1425</a>
+<a href="#1426" id="1426">1426</a>
+<a href="#1427" id="1427">1427</a>
+<a href="#1428" id="1428">1428</a>
+<a href="#1429" id="1429">1429</a>
+<a href="#1430" id="1430">1430</a>
+<a href="#1431" id="1431">1431</a>
+<a href="#1432" id="1432">1432</a>
+<a href="#1433" id="1433">1433</a></pre></div><pre class="rust"><code><span class="kw">extern crate </span>proc_macro;
 
 <span class="kw">use </span>proc_macro::TokenStream;
 <span class="kw">use </span>quote::{format_ident, quote};
@@ -1408,10 +1449,11 @@
 <span class="kw">use </span>cu29_runtime::curuntime::{
     compute_runtime_plan, find_task_type_for_id, CuExecutionLoop, CuExecutionUnit, CuTaskType,
 };
+<span class="kw">use </span>cu29_traits::CuResult;
 
 <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
 </span><span class="kw">use </span>format::{highlight_rust_code, rustfmt_generated_code};
-<span class="kw">use </span>proc_macro2::Ident;
+<span class="kw">use </span>proc_macro2::{Ident, Span};
 
 <span class="kw">mod </span>format;
 <span class="kw">mod </span>utils;
@@ -1424,17 +1466,34 @@
     syn::Index::from(i <span class="kw">as </span>usize)
 }
 
+<span class="attr">#[inline(always)]
+</span><span class="kw">fn </span>return_error(msg: String) -&gt; TokenStream {
+    syn::Error::new(Span::call_site(), msg)
+        .to_compile_error()
+        .into()
+}
+
 <span class="doccomment">/// Generates the CopperList content type from a config.
 /// gen_cumsgs!("path/to/config.toml")
 /// It will create a new type called CuMsgs you can pass to the log reader for decoding:
 </span><span class="attr">#[proc_macro]
 </span><span class="kw">pub fn </span>gen_cumsgs(config_path_lit: TokenStream) -&gt; TokenStream {
     <span class="kw">let </span>config = <span class="macro">parse_macro_input!</span>(config_path_lit <span class="kw">as </span>LitStr).value();
+    <span class="kw">if </span>!std::path::Path::new(<span class="kw-2">&amp;</span>config_full_path(<span class="kw-2">&amp;</span>config)).exists() {
+        <span class="kw">return </span>return_error(<span class="macro">format!</span>(
+            <span class="string">"The configuration file `{}` does not exist. Please provide a valid path."</span>,
+            config
+        ));
+    }
     <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
     </span><span class="macro">eprintln!</span>(<span class="string">"[gen culist support with {:?}]"</span>, config);
-    <span class="kw">let </span>cuconfig = read_config(<span class="kw-2">&amp;</span>config);
-    <span class="kw">let </span>runtime_plan: CuExecutionLoop =
-        compute_runtime_plan(<span class="kw-2">&amp;</span>cuconfig).expect(<span class="string">"Could not compute runtime plan"</span>);
+    <span class="kw">let </span><span class="prelude-val">Ok</span>(cuconfig) = read_config(<span class="kw-2">&amp;</span>config) <span class="kw">else </span>{
+        <span class="kw">return </span>return_error(<span class="macro">format!</span>(<span class="string">"Failed to read the configuration file: {}"</span>, config));
+    };
+    <span class="kw">let </span>runtime_plan: CuExecutionLoop = <span class="kw">match </span>compute_runtime_plan(<span class="kw-2">&amp;</span>cuconfig) {
+        <span class="prelude-val">Ok</span>(plan) =&gt; plan,
+        <span class="prelude-val">Err</span>(e) =&gt; <span class="kw">return </span>return_error(<span class="macro">format!</span>(<span class="string">"Could not compute runtime plan: {}"</span>, e)),
+    };
 
     <span class="comment">// Give a name compatible with a struct to match the task ids to their output in the CuMsgs tuple.
     </span><span class="kw">let </span>all_tasks_member_ids: Vec&lt;String&gt; = cuconfig
@@ -1635,19 +1694,33 @@
     </span><span class="macro">parse_macro_input!</span>(args with attribute_config_parser);
 
     <span class="comment">// Check if the config file was provided
-    </span><span class="kw">let </span>config_file = config_file
-        .expect(<span class="string">"Expected config file attribute like #[CopperRuntime(config = \"path\")]"</span>)
-        .value();
+    </span><span class="kw">let </span>config_file = <span class="kw">match </span>config_file {
+        <span class="prelude-val">Some</span>(file) =&gt; file.value(),
+        <span class="prelude-val">None </span>=&gt; {
+            <span class="kw">return </span>return_error(
+                <span class="string">"Expected config file attribute like #[CopperRuntime(config = \"path\")]"
+                    </span>.to_string(),
+            )
+        }
+    };
 
-    <span class="kw">let </span>copper_config = read_config(<span class="kw-2">&amp;</span>config_file);
-    <span class="kw">let </span>copper_config_content = read_to_string(config_full_path(config_file.as_str())).expect(
-        <span class="string">"Could not read the config file (should not happen because we just succeeded just before)."</span>,
-    );
+    <span class="kw">let </span><span class="prelude-val">Ok</span>(copper_config) = read_config(<span class="kw-2">&amp;</span>config_file) <span class="kw">else </span>{
+        <span class="kw">return </span>return_error(<span class="macro">format!</span>(
+            <span class="string">"Failed to read the configuration file: {}"</span>,
+            config_file
+        ));
+    };
+    <span class="kw">let </span>copper_config_content = <span class="kw">match </span>read_to_string(config_full_path(config_file.as_str())) {
+        <span class="prelude-val">Ok</span>(ok) =&gt; ok,
+        <span class="prelude-val">Err</span>(e) =&gt; <span class="kw">return </span>return_error(<span class="macro">format!</span>(<span class="string">"Could not read the config file (should not happen because we just succeeded just before). {}"</span>, e))
+    };
 
     <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
     </span><span class="macro">eprintln!</span>(<span class="string">"[runtime plan]"</span>);
-    <span class="kw">let </span>runtime_plan: CuExecutionLoop =
-        compute_runtime_plan(<span class="kw-2">&amp;</span>copper_config).expect(<span class="string">"Could not compute runtime plan"</span>);
+    <span class="kw">let </span>runtime_plan: CuExecutionLoop = <span class="kw">match </span>compute_runtime_plan(<span class="kw-2">&amp;</span>copper_config) {
+        <span class="prelude-val">Ok</span>(plan) =&gt; plan,
+        <span class="prelude-val">Err</span>(e) =&gt; <span class="kw">return </span>return_error(<span class="macro">format!</span>(<span class="string">"Could not compute runtime plan: {}"</span>, e)),
+    };
     <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
     </span><span class="macro">eprintln!</span>(<span class="string">"{:?}"</span>, runtime_plan);
 
@@ -2631,11 +2704,10 @@
     tokens
 }
 
-<span class="kw">fn </span>read_config(config_file: <span class="kw-2">&amp;</span>str) -&gt; CuConfig {
+<span class="kw">fn </span>read_config(config_file: <span class="kw-2">&amp;</span>str) -&gt; CuResult&lt;CuConfig&gt; {
     <span class="kw">let </span>filename = config_full_path(config_file);
 
     read_configuration(filename.as_str())
-        .unwrap_or_else(|<span class="kw">_</span>| <span class="macro">panic!</span>(<span class="string">"Failed to read configuration file: {filename}"</span>))
 }
 
 <span class="kw">fn </span>config_full_path(config_file: <span class="kw-2">&amp;</span>str) -&gt; String {
@@ -2780,6 +2852,16 @@
                     .finish()
             }
         }
+    }
+}
+
+<span class="attr">#[cfg(test)]
+</span><span class="kw">mod </span>tests {
+    <span class="comment">// See tests/compile_file directory for more information
+    </span><span class="attr">#[test]
+    </span><span class="kw">fn </span>test_compile_fail() {
+        <span class="kw">let </span>t = trybuild::TestCases::new();
+        t.compile_fail(<span class="string">"tests/compile_fail/*/*.rs"</span>);
     }
 }
 </code></pre></div></section></main></body></html>
