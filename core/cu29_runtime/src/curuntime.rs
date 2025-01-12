@@ -356,7 +356,7 @@ fn plan_tasks_tree_branch(
 }
 
 /// This is the main heuristics to compute an execution plan at compilation time.
-/// TODO: Make that heuristic plugable.
+/// TODO: Make that heuristic pluggable.
 pub fn compute_runtime_plan(config: &CuConfig) -> CuResult<CuExecutionLoop> {
     // find all the sources.
     let nodes_to_visit = config
@@ -459,7 +459,7 @@ mod tests {
     }
 
     #[test]
-    fn test_runtime_instanciation() {
+    fn test_runtime_instantiation() {
         let mut config = CuConfig::default();
         config.add_node(Node::new("a", "TestSource"));
         config.add_node(Node::new("b", "TestSink"));

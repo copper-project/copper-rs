@@ -177,7 +177,7 @@ fn run_copper_callback(
 
 fn stop_copper_on_exit(mut exit_events: EventReader<AppExit>, mut copper_ctx: ResMut<Copper>) {
     for _ in exit_events.read() {
-        println!("Exitting copper");
+        println!("Exiting copper");
         copper_ctx
             .copper_app
             .stop_all_tasks(&mut default_callback) // let the tasks clean themselves up

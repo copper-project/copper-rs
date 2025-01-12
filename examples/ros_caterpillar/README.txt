@@ -1,4 +1,4 @@
-This a ROS2 comparision for the caterpillar example.
+This a ROS2 comparison for the caterpillar example.
 
 Tried: humble, impossible to compile because of SIP, tried git, impossible to compile.
 

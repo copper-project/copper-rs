@@ -468,7 +468,7 @@ mod tests {
     }
 
     #[test]
-    fn longuest_duration() {
+    fn longest_duration() {
         let maxcu = CuDuration(u64::MAX);
         let maxd: Duration = maxcu.into();
         assert_eq!(maxd.as_nanos(), u64::MAX as u128);

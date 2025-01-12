@@ -33,7 +33,7 @@ bevy = { version = "0.15.1", default-features = false, features = ["x11", "wayla
 avian3d = { version = "0.2.0", default-features = false, features = ["bevy_scene", "collider-from-mesh", "debug-plugin", "parallel", "f32", "3d", "parry-f32"], optional = true }
 parry3d = { version = "0.17.4", optional = true }
 cached-path = { version = "0.6.1", optional = true }
-iyes_perf_ui = { version = "0.3.0", optional = true }
+iyes_perf_ui = { git = "https://github.com/makeecat/iyes_perf_ui", version = "0.4.0", optional = true }
 
 [features]
 default = ["logreader", "sim"]

@@ -25,7 +25,7 @@ use syn::{Expr, ExprAssign, ExprLit, Lit};
 /// debug!("a = {}, b = {}", my_value = a, b); // named and unnamed parameters
 /// ```
 ///
-/// You can retreive this data using the log_reader generated with your project and giving it the
+/// You can retrieve this data using the log_reader generated with your project and giving it the
 /// unified .copper log file and the string index file generated at compile time.
 ///
 /// Note: In debug mode, the log will also be printed to the console. (ie slooow).

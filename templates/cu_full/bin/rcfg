@@ -1,3 +1,3 @@
 #!/bin/bash
-# A shorcut to build the dot file of the execution DAG.
+# A shortcut to build the dot file of the execution DAG.
 copper-rendercfg copperconfig.ron --open

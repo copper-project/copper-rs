@@ -1,0 +1,5 @@
+error: expected string literal
+ --> tests/compile_fail/cu_msg/invalid_attribute.rs:5:13
+  |
+5 | gen_cumsgs!(CONFIG_FILE);
+  |             ^^^^^^^^^^^

@@ -13,7 +13,7 @@ use cached_path::{Cache, ProgressBar};
 use iyes_perf_ui::PerfUiPlugin;
 
 #[cfg(feature = "perf-ui")]
-use iyes_perf_ui::entries::PerfUiCompleteBundle;
+use iyes_perf_ui::prelude::PerfUiAllEntries;
 
 use std::path::Path;
 use std::{fs, io};
@@ -293,7 +293,7 @@ fn setup_ui(mut commands: Commands) {
             ));
         });
     #[cfg(feature = "perf-ui")]
-    commands.spawn(PerfUiCompleteBundle::default());
+    commands.spawn(PerfUiAllEntries::default());
 }
 
 // This needs to match an object / parent object name in the GLTF file (in blender this is the object name).
@@ -315,6 +315,7 @@ fn global_cart_drag_listener(
     mut drag_events: EventReader<Pointer<Drag>>,
     parents: Query<(&Parent, Option<&Cart>)>,
     mut transforms: Query<&mut Transform, With<Cart>>,
+    camera_query: Query<&Transform, (With<Camera>, Without<Cart>)>, // Add Without<Cart> to prevent conflicts
 ) {
     for drag in drag_events.read() {
         if drag.button != PointerButton::Primary {
@@ -329,7 +330,10 @@ fn global_cart_drag_listener(
         }
 
         if let Ok(mut root_transform) = transforms.get_mut(entity) {
-            root_transform.translation.x += drag.delta.x / 500.0;
+            let direction_multiplier = camera_query.iter().next().map_or(1.0, |camera_transform| {
+                -camera_transform.forward().z.signum()
+            });
+            root_transform.translation.x += direction_multiplier * drag.delta.x / 500.0;
         }
     }
 }

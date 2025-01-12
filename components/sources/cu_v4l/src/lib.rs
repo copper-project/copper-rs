@@ -320,7 +320,7 @@ mod linux_impl {
                     rec.log("images", &image).unwrap();
                 } else {
                     debug!("----> No frame");
-                    thread::sleep(Duration::from_millis(300)); // don't burn through empty buffers at the beggining, what for the device to actually start
+                    thread::sleep(Duration::from_millis(300)); // don't burn through empty buffers at the beginning, what for the device to actually start
                 }
             }
 

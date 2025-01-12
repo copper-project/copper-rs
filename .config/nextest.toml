@@ -1,0 +1,13 @@
+# https://nexte.st/docs/configuration/test-groups/?h=group
+[test-groups]
+# resource-limited = { max-threads = 4 }
+serial-integration = { max-threads = 1 }
+
+# [[profile.default.overrides]]
+# filter = 'test(resource_limited::)'
+# test-group = 'resource-limited'
+
+[[profile.default.overrides]]
+filter = 'package(cu-vlp16) + package(cu-hesai) + package(cu-livox)'
+#platform = 'cfg(unix)'
+test-group = 'serial-integration'

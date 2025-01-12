@@ -1,0 +1,8 @@
+error[E0432]: unresolved import `cu29_derive::gen_cumsg`
+ --> tests/compile_fail/cu_msg/invalid_file_path.rs:1:5
+  |
+1 | use cu29_derive::gen_cumsg;
+  |     ^^^^^^^^^^^^^---------
+  |     |            |
+  |     |            help: a similar name exists in the module: `gen_cumsgs`
+  |     no `gen_cumsg` in the root

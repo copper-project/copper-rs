@@ -268,7 +268,7 @@ pub struct Cnx {
     // Destination node id.
     dst: String,
 
-    /// Message type exchanged betwee src and dst.
+    /// Message type exchanged between src and dst.
     pub msg: String,
 
     /// Tells Copper to batch messages before sending the buffer to the next node.
@@ -339,8 +339,8 @@ impl<'de> Deserialize<'de> for CuConfig {
     where
         D: Deserializer<'de>,
     {
-        let representation = CuConfigRepresentation::deserialize(deserializer)
-            .expect("Failed to deserialize config");
+        let representation =
+            CuConfigRepresentation::deserialize(deserializer).map_err(serde::de::Error::custom)?;
 
         let mut cuconfig = CuConfig::default();
         for task in representation.tasks {
@@ -410,7 +410,7 @@ impl Default for CuConfig {
     }
 }
 
-/// The implementation has a lot of conveinence methods to manipulate
+/// The implementation has a lot of convenience methods to manipulate
 /// the configuration to give some flexibility into programmatically creating the configuration.
 impl CuConfig {
     /// Add a new node to the configuration graph.
@@ -558,9 +558,13 @@ impl CuConfig {
     }
 
     pub fn deserialize_ron(ron: &str) -> Self {
-        Self::get_options()
-            .from_str(ron)
-            .expect("Syntax Error in config")
+        match Self::get_options().from_str(ron) {
+            Ok(ron) => ron,
+            Err(e) => panic!(
+                "Syntax Error in config: {} at position {}",
+                e.code, e.position
+            ),
+        }
     }
 
     /// Render the configuration graph in the dot format.
@@ -691,6 +695,14 @@ mod tests {
                 .unwrap(),
             1080
         );
+    }
+
+    #[test]
+    #[should_panic(expected = "Syntax Error in config: Expected opening `[` at position 1:10")]
+    fn test_deserialization_error() {
+        // Task needs to be an array, but provided tuple wrongfully
+        let txt = r#"( tasks: (), cnx: [], monitor: (type: "ExampleMonitor", ) ) "#;
+        CuConfig::deserialize_ron(txt);
     }
 
     #[test]

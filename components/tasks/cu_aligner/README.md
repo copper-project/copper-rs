@@ -73,5 +73,5 @@ Copper by itself never buffers anything to avoid copies but for this aligner has
 It means you will have 1 copy from the input to the internal buffer and 1 copy from the internal buffer to the output.
 
 If your usecase is just to get the latest message from 2 sources, just connect your task to the upstream tasks
-but do not use this aligner. It is only useful if the time of arrival from the 2 upstream tasks are too far appart
+but do not use this aligner. It is only useful if the time of arrival from the 2 upstream tasks are too far apart
 in terms of tov.
