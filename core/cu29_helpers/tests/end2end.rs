@@ -11,13 +11,13 @@ use cu29_log_runtime::log;
 use cu29_log_runtime::log_debug_mode;
 
 use serde::Serialize;
-use tempdir::TempDir;
+use tempfile::TempDir;
 
 // Those should be in cu29_log_runtime but got moved here to avoid circular dependencies
 
 #[test]
 fn log_derive_end2end() {
-    let tmp_dir = TempDir::new("teststructlog").expect("Failed to create temp dir");
+    let tmp_dir = TempDir::new().expect("Failed to create temp dir");
     let log_path = tmp_dir.path().join("teststructlog.copper");
 
     let _ = basic_copper_setup(&log_path, None, true, None).expect("Failed to setup logger.");
