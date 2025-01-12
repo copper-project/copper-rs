@@ -51,18 +51,13 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           winget install DaiyuuNobori.Win10Pcap --accept-source-agreements --accept-package-agreements
-          dir "C:\Program Files"
-          dir "C:\Program Files (x86)"
-          dir "C:\Program Files\Win10Pcap"
           dir "C:\Program Files (x86)\Win10Pcap"
-          dir "C:\Program Files\Win10Pcap\x64"
           dir "C:\Program Files (x86)\Win10Pcap\x64"
 
       - name: Set Library and Include Paths (Windows)
         if: runner.os == 'Windows'
         run: |
-          Add-Content -Path $env:GITHUB_ENV -Value "LIB=$env:ProgramFiles\Win10Pcap\x64"
-          Add-Content -Path $env:GITHUB_ENV -Value "LIB=$env:ProgramFiles (x86)\Win10Pcap\x64"
+          Add-Content -Path $env:GITHUB_ENV -Value "LIB=C:\Program Files (x86)\Win10Pcap\x64"
 
       - name: Set build mode (Linux / MacOS)
         if: runner.os != 'Windows'
