@@ -1,15 +1,25 @@
-name: "CI/CD"
+name: Weekly Audit and Beta Test
 
 on:
-  push:
-    branches: ["master"]
-  pull_request:
-    branches: ["master"]
+  schedule:
+    - cron: "0 12 * * 1"
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@beta
+      - name: Install audit
+        run: cargo install cargo-audit cargo-deny
+      - name: Run audit
+        run: cargo audit
+      - name: Run deny bans
+        run: cargo deny check bans
+
   Unit-Tests:
     name: Unit Tests
 
@@ -22,7 +32,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@beta
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -92,11 +102,3 @@ jobs:
         run: |
           cd templates/test_project
           cargo +stable build
-  typos:
-    name: Typos Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: crate-ci/typos@master
-        with:
-          config: ./.config/_typos.toml
