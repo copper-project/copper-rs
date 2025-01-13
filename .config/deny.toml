@@ -1,4 +1,2 @@
 [advisories]
 ignore = ["RUSTSEC-2024-0320", "RUSTSEC-2024-0388"]
-[licenses]
-allow = ["MIT", "Apache-2.0"]
