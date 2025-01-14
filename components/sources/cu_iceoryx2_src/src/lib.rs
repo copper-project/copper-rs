@@ -8,7 +8,7 @@ use iceoryx2::service::port_factory::publish_subscribe::PortFactory;
 /// P is the payload type of the messages.
 pub struct IceoryxSrc<P>
 where
-    P: CuMsgPayload,
+    P: CuMsgPayload + 'static,
 {
     service_name: ServiceName,
     node: iceoryx2::prelude::Node<ipc::Service>,
@@ -20,7 +20,7 @@ impl<P> Freezable for IceoryxSrc<P> where P: CuMsgPayload {}
 
 impl<'cl, P> CuSrcTask<'cl> for IceoryxSrc<P>
 where
-    P: CuMsgPayload + 'cl,
+    P: CuMsgPayload + 'cl + 'static,
 {
     type Output = output_msg!('cl, P);
 
