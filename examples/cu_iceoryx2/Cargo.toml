@@ -10,9 +10,11 @@ homepage.workspace = true
 repository.workspace = true
 description = "Copper example to use Iceoryx2 as a middleware."
 
+[package.metadata.cargo-machete]
+ignored = ["bincode", "cu-caterpillar", "cu-consolemon"]
+
 [dependencies]
-iceoryx2 = { version = "0.4.1" }
-iceoryx2-bb-log = { version = "0.4.1" }
+iceoryx2-bb-log = { version = "0.5.0" }
 cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
 bincode = { workspace = true }  # needed
