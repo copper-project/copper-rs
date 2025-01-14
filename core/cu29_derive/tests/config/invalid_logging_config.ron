@@ -1,0 +1,26 @@
+(
+    tasks: [
+        (
+            id: "task0",
+            type: "tasks::ExampleSrc",
+        ),
+        (
+            id: "task1",
+            type: "tasks::ExampleTask",
+        ),
+        (
+            id: "task2",
+            type: "tasks::ExampleSink",
+        ),
+     ],
+    cnx: [
+        (src: "task0", dst: "task1", msg: "i32"),
+        (src: "task1", dst: "task2", msg: "i32"),
+    ],
+    monitor: (type: "ExampleMonitor"),
+    logging: (
+        section_size_mib: 2,
+        slab_size_mib: 1,
+        enable_task_logging: true
+    )
+)
