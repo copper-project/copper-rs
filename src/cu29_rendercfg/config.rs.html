@@ -743,7 +743,49 @@
 <a href="#742" id="742">742</a>
 <a href="#743" id="743">743</a>
 <a href="#744" id="744">744</a>
-<a href="#745" id="745">745</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module defines the configuration of the copper runtime.
+<a href="#745" id="745">745</a>
+<a href="#746" id="746">746</a>
+<a href="#747" id="747">747</a>
+<a href="#748" id="748">748</a>
+<a href="#749" id="749">749</a>
+<a href="#750" id="750">750</a>
+<a href="#751" id="751">751</a>
+<a href="#752" id="752">752</a>
+<a href="#753" id="753">753</a>
+<a href="#754" id="754">754</a>
+<a href="#755" id="755">755</a>
+<a href="#756" id="756">756</a>
+<a href="#757" id="757">757</a>
+<a href="#758" id="758">758</a>
+<a href="#759" id="759">759</a>
+<a href="#760" id="760">760</a>
+<a href="#761" id="761">761</a>
+<a href="#762" id="762">762</a>
+<a href="#763" id="763">763</a>
+<a href="#764" id="764">764</a>
+<a href="#765" id="765">765</a>
+<a href="#766" id="766">766</a>
+<a href="#767" id="767">767</a>
+<a href="#768" id="768">768</a>
+<a href="#769" id="769">769</a>
+<a href="#770" id="770">770</a>
+<a href="#771" id="771">771</a>
+<a href="#772" id="772">772</a>
+<a href="#773" id="773">773</a>
+<a href="#774" id="774">774</a>
+<a href="#775" id="775">775</a>
+<a href="#776" id="776">776</a>
+<a href="#777" id="777">777</a>
+<a href="#778" id="778">778</a>
+<a href="#779" id="779">779</a>
+<a href="#780" id="780">780</a>
+<a href="#781" id="781">781</a>
+<a href="#782" id="782">782</a>
+<a href="#783" id="783">783</a>
+<a href="#784" id="784">784</a>
+<a href="#785" id="785">785</a>
+<a href="#786" id="786">786</a>
+<a href="#787" id="787">787</a></pre></div><pre class="rust"><code><span class="doccomment">//! This module defines the configuration of the copper runtime.
 //! The configuration is a directed graph where nodes are tasks and edges are connections between tasks.
 //! The configuration is serialized in the RON format.
 //! The configuration is used to generate the runtime code at compile time.
@@ -1388,6 +1430,30 @@
     </span><span class="kw">pub fn </span>get_monitor_config(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>MonitorConfig&gt; {
         <span class="self">self</span>.monitor.as_ref()
     }
+
+    <span class="doccomment">/// Validate the logging configuration to ensure section pre-allocation sizes do not exceed slab sizes.
+    /// This method is wrapper around [LoggingConfig::validate]
+    </span><span class="kw">pub fn </span>validate_logging_config(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; CuResult&lt;()&gt; {
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(logging) = <span class="kw-2">&amp;</span><span class="self">self</span>.logging {
+            <span class="kw">return </span>logging.validate();
+        }
+        <span class="prelude-val">Ok</span>(())
+    }
+}
+
+<span class="kw">impl </span>LoggingConfig {
+    <span class="doccomment">/// Validate the logging configuration to ensure section pre-allocation sizes do not exceed slab sizes.
+    </span><span class="kw">pub fn </span>validate(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; CuResult&lt;()&gt; {
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(section_size_mib) = <span class="self">self</span>.section_size_mib {
+            <span class="kw">if let </span><span class="prelude-val">Some</span>(slab_size_mib) = <span class="self">self</span>.slab_size_mib {
+                <span class="kw">if </span>section_size_mib &gt; slab_size_mib {
+                    <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(<span class="macro">format!</span>(<span class="string">"Section size ({} MiB) cannot be larger than slab size ({} MiB). Adjust the parameters accordingly."</span>, section_size_mib, slab_size_mib)));
+                }
+            }
+        }
+
+        <span class="prelude-val">Ok</span>(())
+    }
 }
 
 <span class="doccomment">/// Read a copper configuration from a file.
@@ -1402,9 +1468,12 @@
     read_configuration_str(config_content)
 }
 
-<span class="doccomment">/// Read a copper configuration from a file.
+<span class="doccomment">/// Read a copper configuration from a String.
 </span><span class="kw">pub fn </span>read_configuration_str(config_content: String) -&gt; CuResult&lt;CuConfig&gt; {
-    <span class="prelude-val">Ok</span>(CuConfig::deserialize_ron(<span class="kw-2">&amp;</span>config_content))
+    <span class="kw">let </span>cuconfig = CuConfig::deserialize_ron(<span class="kw-2">&amp;</span>config_content);
+    cuconfig.validate_logging_config()<span class="question-mark">?</span>;
+
+    <span class="prelude-val">Ok</span>(cuconfig)
 }
 
 <span class="comment">// tests
@@ -1486,6 +1555,21 @@
         <span class="macro">assert_eq!</span>(logging_config.slab_size_mib.unwrap(), <span class="number">1024</span>);
         <span class="macro">assert_eq!</span>(logging_config.section_size_mib.unwrap(), <span class="number">100</span>);
         <span class="macro">assert!</span>(logging_config.enable_task_logging);
+    }
+
+    <span class="attr">#[test]
+    </span><span class="kw">fn </span>test_validate_logging_config() {
+        <span class="comment">// Test with valid logging configuration
+        </span><span class="kw">let </span>txt =
+            <span class="string">r#"( tasks: [], cnx: [], logging: ( slab_size_mib: 1024, section_size_mib: 100 ) )"#</span>;
+        <span class="kw">let </span>config = CuConfig::deserialize_ron(txt);
+        <span class="macro">assert!</span>(config.validate_logging_config().is_ok());
+
+        <span class="comment">// Test with invalid logging configuration
+        </span><span class="kw">let </span>txt =
+            <span class="string">r#"( tasks: [], cnx: [], logging: ( slab_size_mib: 100, section_size_mib: 1024 ) )"#</span>;
+        <span class="kw">let </span>config = CuConfig::deserialize_ron(txt);
+        <span class="macro">assert!</span>(config.validate_logging_config().is_err());
     }
 }
 </code></pre></div></section></main></body></html>

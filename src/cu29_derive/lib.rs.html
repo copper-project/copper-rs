@@ -1431,7 +1431,13 @@
 <a href="#1430" id="1430">1430</a>
 <a href="#1431" id="1431">1431</a>
 <a href="#1432" id="1432">1432</a>
-<a href="#1433" id="1433">1433</a></pre></div><pre class="rust"><code><span class="kw">extern crate </span>proc_macro;
+<a href="#1433" id="1433">1433</a>
+<a href="#1434" id="1434">1434</a>
+<a href="#1435" id="1435">1435</a>
+<a href="#1436" id="1436">1436</a>
+<a href="#1437" id="1437">1437</a>
+<a href="#1438" id="1438">1438</a>
+<a href="#1439" id="1439">1439</a></pre></div><pre class="rust"><code><span class="kw">extern crate </span>proc_macro;
 
 <span class="kw">use </span>proc_macro::TokenStream;
 <span class="kw">use </span>quote::{format_ident, quote};
@@ -1487,8 +1493,9 @@
     }
     <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
     </span><span class="macro">eprintln!</span>(<span class="string">"[gen culist support with {:?}]"</span>, config);
-    <span class="kw">let </span><span class="prelude-val">Ok</span>(cuconfig) = read_config(<span class="kw-2">&amp;</span>config) <span class="kw">else </span>{
-        <span class="kw">return </span>return_error(<span class="macro">format!</span>(<span class="string">"Failed to read the configuration file: {}"</span>, config));
+    <span class="kw">let </span>cuconfig = <span class="kw">match </span>read_config(<span class="kw-2">&amp;</span>config) {
+        <span class="prelude-val">Ok</span>(cuconfig) =&gt; cuconfig,
+        <span class="prelude-val">Err</span>(e) =&gt; <span class="kw">return </span>return_error(e.to_string()),
     };
     <span class="kw">let </span>runtime_plan: CuExecutionLoop = <span class="kw">match </span>compute_runtime_plan(<span class="kw-2">&amp;</span>cuconfig) {
         <span class="prelude-val">Ok</span>(plan) =&gt; plan,
@@ -1704,11 +1711,16 @@
         }
     };
 
-    <span class="kw">let </span><span class="prelude-val">Ok</span>(copper_config) = read_config(<span class="kw-2">&amp;</span>config_file) <span class="kw">else </span>{
+    <span class="kw">if </span>!std::path::Path::new(<span class="kw-2">&amp;</span>config_full_path(<span class="kw-2">&amp;</span>config_file)).exists() {
         <span class="kw">return </span>return_error(<span class="macro">format!</span>(
-            <span class="string">"Failed to read the configuration file: {}"</span>,
+            <span class="string">"The configuration file `{}` does not exist. Please provide a valid path."</span>,
             config_file
         ));
+    }
+
+    <span class="kw">let </span>copper_config = <span class="kw">match </span>read_config(<span class="kw-2">&amp;</span>config_file) {
+        <span class="prelude-val">Ok</span>(cuconfig) =&gt; cuconfig,
+        <span class="prelude-val">Err</span>(e) =&gt; <span class="kw">return </span>return_error(e.to_string()),
     };
     <span class="kw">let </span>copper_config_content = <span class="kw">match </span>read_to_string(config_full_path(config_file.as_str())) {
         <span class="prelude-val">Ok</span>(ok) =&gt; ok,
