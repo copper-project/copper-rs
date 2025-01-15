@@ -11,5 +11,5 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-iceoryx2 = { version = "0.4.1" }
+iceoryx2 = { version = "0.5.0" }
 cu29 = { workspace = true }
