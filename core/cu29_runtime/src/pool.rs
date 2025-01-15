@@ -3,7 +3,6 @@ use object_pool::{Pool, Reusable};
 use std::alloc::{alloc, dealloc, Layout};
 use std::fmt::Debug;
 use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
 
 /// Basic Type that can be used in a buffer in a CuPool.
 pub trait ElementType: Sized + Copy + Encode + Decode + Debug + Unpin {}
@@ -26,6 +25,7 @@ impl<'a, T: ArrayLike> CuHandle<'a, T> {
         Self(inner)
     }
 
+    #[allow(dead_code)]
     fn inner(&self) -> &T {
         self.0.deref()
     }
@@ -141,6 +141,7 @@ impl<E: ElementType, const N: usize> ArrayLike for [E; N] {
 mod cuda {
     use super::*;
     use cudarc::driver::{CudaDevice, CudaSlice, DeviceRepr, ValidAsZeroBits};
+    use std::sync::Arc;
 
     pub struct CuCudaPool<E>
     where
