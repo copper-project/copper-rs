@@ -18,7 +18,11 @@ jobs:
       - name: Run audit
         run: cargo audit
       - name: Run deny bans
-        run: cargo deny check bans
+        run: cargo deny check bans -c .config/deny.toml
+      - name: Run deny sources
+        run: cargo deny check sources -c .config/deny.toml
+      - name: Run deny advisories
+        run: cargo deny check advisories -c .config/deny.toml
 
   Unit-Tests:
     name: Unit Tests

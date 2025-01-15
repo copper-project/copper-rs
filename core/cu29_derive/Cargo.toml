@@ -22,8 +22,8 @@ quote = { workspace = true }
 proc-macro2 = { workspace = true }
 walkdir = "2.5.0"
 syntect = "5.2.0"
-itertools = "0.13.0"
-convert_case = "0.6.0"
+itertools = "0.14.0"
+convert_case = "0.7.1"
 
 [build-dependencies]
 cu29-unifiedlog = { workspace = true }  # needed

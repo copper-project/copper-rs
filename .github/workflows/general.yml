@@ -63,7 +63,7 @@ jobs:
         run: cargo +stable clippy $RELEASE_FLAG --workspace --all-targets -- --deny warnings
       - name: Run clippy with all features on (${{ matrix.os }} | ${{matrix.mode}})
         run: cargo +stable clippy $RELEASE_FLAG --workspace --all-targets --all-features -- --deny warnings
-      - name: Run build with all features on $(${{ matrix.os }} | ${{matrix.mode}})
+      - name: Run build with all features on (${{ matrix.os }} | ${{matrix.mode}})
         run: cargo +stable build $RELEASE_FLAG --workspace --all-targets --all-features
 
       - name: Run doctests on (${{ matrix.os }} | debug)

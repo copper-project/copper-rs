@@ -643,6 +643,30 @@ impl CuConfig {
     pub fn get_monitor_config(&self) -> Option<&MonitorConfig> {
         self.monitor.as_ref()
     }
+
+    /// Validate the logging configuration to ensure section pre-allocation sizes do not exceed slab sizes.
+    /// This method is wrapper around [LoggingConfig::validate]
+    pub fn validate_logging_config(&self) -> CuResult<()> {
+        if let Some(logging) = &self.logging {
+            return logging.validate();
+        }
+        Ok(())
+    }
+}
+
+impl LoggingConfig {
+    /// Validate the logging configuration to ensure section pre-allocation sizes do not exceed slab sizes.
+    pub fn validate(&self) -> CuResult<()> {
+        if let Some(section_size_mib) = self.section_size_mib {
+            if let Some(slab_size_mib) = self.slab_size_mib {
+                if section_size_mib > slab_size_mib {
+                    return Err(CuError::from(format!("Section size ({} MiB) cannot be larger than slab size ({} MiB). Adjust the parameters accordingly.", section_size_mib, slab_size_mib)));
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 /// Read a copper configuration from a file.
@@ -657,9 +681,12 @@ pub fn read_configuration(config_filename: &str) -> CuResult<CuConfig> {
     read_configuration_str(config_content)
 }
 
-/// Read a copper configuration from a file.
+/// Read a copper configuration from a String.
 pub fn read_configuration_str(config_content: String) -> CuResult<CuConfig> {
-    Ok(CuConfig::deserialize_ron(&config_content))
+    let cuconfig = CuConfig::deserialize_ron(&config_content);
+    cuconfig.validate_logging_config()?;
+
+    Ok(cuconfig)
 }
 
 // tests
@@ -741,5 +768,20 @@ mod tests {
         assert_eq!(logging_config.slab_size_mib.unwrap(), 1024);
         assert_eq!(logging_config.section_size_mib.unwrap(), 100);
         assert!(logging_config.enable_task_logging);
+    }
+
+    #[test]
+    fn test_validate_logging_config() {
+        // Test with valid logging configuration
+        let txt =
+            r#"( tasks: [], cnx: [], logging: ( slab_size_mib: 1024, section_size_mib: 100 ) )"#;
+        let config = CuConfig::deserialize_ron(txt);
+        assert!(config.validate_logging_config().is_ok());
+
+        // Test with invalid logging configuration
+        let txt =
+            r#"( tasks: [], cnx: [], logging: ( slab_size_mib: 100, section_size_mib: 1024 ) )"#;
+        let config = CuConfig::deserialize_ron(txt);
+        assert!(config.validate_logging_config().is_err());
     }
 }
