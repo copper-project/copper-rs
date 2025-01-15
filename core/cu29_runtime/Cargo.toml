@@ -39,6 +39,7 @@ ron = "0.8.1"
 hdrhistogram = "7.5.4"
 petgraph = { version = "0.6.5", features = ["serde", "serde-1", "serde_derive"] }
 cudarc = { version = "0.12.2", optional = true, features = ["cuda-version-from-build-system"] }
+object-pool = "0.6.0"
 
 [features]
 cuda = ["cudarc"]
