@@ -13,7 +13,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [package.metadata.cargo-machete]
-ignored = ["cu29-log", "cu29-log-runtime", "cu29-unifiedlog", "copper-traits"]  # proc macro
+ignored = ["cu29-log", "cu29-log-runtime", "cu29-unifiedlog", "cu-consolemon", "copper-traits"]  # proc macro and console
 
 [[bin]]
 name = "cu-caterpillar"

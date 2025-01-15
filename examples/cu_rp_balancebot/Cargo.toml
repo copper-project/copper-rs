@@ -12,7 +12,7 @@ repository.workspace = true
 default-run = "balancebot-sim"
 
 [package.metadata.cargo-machete]
-ignored = ["cu29-log", "cu29-log-runtime", "cu29-unifiedlog", "copper-traits"]  # proc macro
+ignored = ["cu-consolemon", "cu29-log", "cu29-log-runtime", "cu29-unifiedlog", "copper-traits"]  # proc macro and console
 
 [dependencies]
 # Core dependencies
@@ -31,7 +31,6 @@ cu29-export = { workspace = true, optional = true }
 # Sim dependencies
 bevy = { version = "0.15.1", default-features = false, features = ["x11", "wayland", "default_font", "bevy_render", "bevy_window", "bevy_core_pipeline", "bevy_pbr", "bevy_scene", "bevy_sprite", "bevy_gltf", "animation", "bevy_picking", "bevy_mesh_picking_backend", "tonemapping_luts", "bevy_ui", "ktx2", "jpeg", "png"], optional = true }
 avian3d = { version = "0.2.0", default-features = false, features = ["bevy_scene", "collider-from-mesh", "debug-plugin", "parallel", "f32", "3d", "parry-f32"], optional = true }
-parry3d = { version = "0.17.4", optional = true }
 cached-path = { version = "0.6.1", optional = true }
 iyes_perf_ui = { git = "https://github.com/makeecat/iyes_perf_ui", version = "0.4.0", optional = true }
 
@@ -40,7 +39,7 @@ default = ["logreader", "sim"]
 # generates an executable to read the logs
 logreader = ["cu29-export"]
 # dependencies to build to matrix for copper
-sim = ["bevy", "avian3d", "parry3d", "cached-path"]
+sim = ["bevy", "avian3d", "cached-path"]
 perf-ui = ["iyes_perf_ui"]
 
 [[bin]]
