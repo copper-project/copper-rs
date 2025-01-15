@@ -141,6 +141,37 @@ impl ScopedAllocCounter {
             bf_deallocated: GLOBAL.get_deallocated(),
         }
     }
+
+    /// Returns the total number of bytes allocated in the current scope
+    /// since the creation of this `ScopedAllocCounter`.
+    ///
+    /// # Example
+    /// ```
+    /// use cu29_runtime::monitoring::ScopedAllocCounter;
+    ///
+    /// let counter = ScopedAllocCounter::new();
+    /// let _vec = vec![0u8; 1024];
+    /// println!("Bytes allocated: {}", counter.get_allocated());
+    /// ```
+    pub fn get_allocated(&self) -> usize {
+        GLOBAL.get_allocated() - self.bf_allocated
+    }
+
+    /// Returns the total number of bytes deallocated in the current scope
+    /// since the creation of this `ScopedAllocCounter`.
+    ///
+    /// # Example
+    /// ```
+    /// use cu29_runtime::monitoring::ScopedAllocCounter;
+    ///
+    /// let counter = ScopedAllocCounter::new();
+    /// let _vec = vec![0u8; 1024];
+    /// drop(_vec);
+    /// println!("Bytes deallocated: {}", counter.get_deallocated());
+    /// ```
+    pub fn get_deallocated(&self) -> usize {
+        GLOBAL.get_deallocated() - self.bf_deallocated
+    }
 }
 
 /// Build a difference between the number of bytes allocated and deallocated in the scope at drop time.
