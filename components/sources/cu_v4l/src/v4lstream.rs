@@ -1,6 +1,6 @@
-use cu29::prelude::{CuBufferHandle, CuHostMemoryPool};
+use cu29::prelude::CuPool;
+use cu29::prelude::{ArrayLike, CuHandle, CuHostMemoryPool};
 use std::convert::TryInto;
-use std::rc::Rc;
 use std::time::Duration;
 use std::{io, mem, sync::Arc};
 use v4l::buffer::{Metadata, Type};
@@ -11,18 +11,18 @@ use v4l::v4l_sys::*;
 use v4l::{v4l2, Device};
 
 // A specialized V4L stream that uses Copper Buffers for memory management.
-pub struct CuV4LStream {
+pub struct CuV4LStream<'a> {
     v4l_handle: Arc<Handle>,
     v4l_buf_type: Type,
-    memory_pool: Rc<CuHostMemoryPool<u8>>,
+    memory_pool: CuHostMemoryPool<Vec<u8>>,
     // Arena matching the vl42 metadata and the Copper Buffers
-    arena: Vec<(Metadata, Option<CuBufferHandle<u8>>)>,
+    arena: Vec<(Metadata, Option<CuHandle<'a, Vec<u8>>>)>,
     arena_last_freed_up_index: usize,
     timeout: Option<i32>,
     active: bool,
 }
 
-impl CuV4LStream {
+impl CuV4LStream<'_> {
     #[allow(dead_code)]
     pub fn new(dev: &Device, buf_size: usize, buf_type: Type) -> io::Result<Self> {
         CuV4LStream::with_buffers(dev, buf_type, buf_size, 4)
@@ -34,13 +34,17 @@ impl CuV4LStream {
         buf_size: usize,
         buf_count: u32,
     ) -> io::Result<Self> {
-        let memory_pool = CuHostMemoryPool::new(buf_size, buf_count + 1, page_size::get()); // +1 to be able to queue one last buffer before zapping the first
+        let memory_pool = CuHostMemoryPool::new(buf_count as usize + 1, || {
+            let mut v = Vec::with_capacity(buf_size);
+            v.resize(buf_size, 0u8);
+            v
+        }); // +1 to be able to queue one last buffer before zapping the first
         let mut arena = Vec::new();
         arena.resize(buf_count as usize, (Metadata::default(), None));
 
         let mut result = CuV4LStream {
             v4l_handle: dev.handle(),
-            memory_pool: Rc::new(memory_pool),
+            memory_pool,
             arena,
             arena_last_freed_up_index: 0,
             v4l_buf_type: buf_type,
@@ -132,7 +136,7 @@ impl CuV4LStream {
     }
 }
 
-impl Drop for CuV4LStream {
+impl Drop for CuV4LStream<'_> {
     fn drop(&mut self) {
         if let Err(e) = self.stop() {
             if let Some(code) = e.raw_os_error() {
@@ -150,14 +154,14 @@ impl Drop for CuV4LStream {
     }
 }
 
-impl Stream for CuV4LStream {
-    type Item = CuBufferHandle<u8>;
+impl<'a> Stream for CuV4LStream<'a> {
+    type Item = CuHandle<'a, Vec<u8>>;
 
     fn start(&mut self) -> io::Result<()> {
         // Enqueue all buffers once on stream start
         // -1 to leave one buffer unqueued as temporary storage
         for index in 1..self.arena.len() {
-            self.queue(index)?;
+            // self.queue(index)?;
         }
 
         self.arena_last_freed_up_index = 0;
@@ -189,30 +193,34 @@ impl Stream for CuV4LStream {
     }
 }
 
-impl CaptureStream<'_> for CuV4LStream {
+impl<'a> CaptureStream<'a> for CuV4LStream<'a> {
     fn queue(&mut self, index: usize) -> io::Result<()> {
-        let buffer_handle = CuHostMemoryPool::allocate(&self.memory_pool).ok_or(io::Error::new(
-            io::ErrorKind::Other,
-            "Failed to allocate buffer",
-        ))?;
-
-        let buf: &[u8] = buffer_handle.as_ref();
-        let mut v4l2_buf = v4l2_buffer {
-            index: index as u32,
-            m: v4l2_buffer__bindgen_ty_1 {
-                userptr: buf.as_ptr() as std::os::raw::c_ulong,
-            },
-            length: buf.len() as u32,
-            ..self.buffer_desc()
-        };
-        unsafe {
-            v4l2::ioctl(
-                self.v4l_handle.fd(),
-                v4l2::vidioc::VIDIOC_QBUF,
-                &mut v4l2_buf as *mut _ as *mut std::os::raw::c_void,
-            )?;
-        }
+        let buffer_handle = self.memory_pool.acquire().unwrap();
         self.arena[index] = (Metadata::default(), Some(buffer_handle));
+
+        match &buffer_handle {
+            CuHandle::Pooled(pooled) => {
+                let pooled = pooled.lock().unwrap();
+                let buf: &[u8] = pooled.slice();
+                let mut v4l2_buf = v4l2_buffer {
+                    index: index as u32,
+                    m: v4l2_buffer__bindgen_ty_1 {
+                        userptr: buf.as_ptr() as std::os::raw::c_ulong,
+                    },
+                    length: buf.len() as u32,
+                    ..self.buffer_desc()
+                };
+                unsafe {
+                    v4l2::ioctl(
+                        self.v4l_handle.fd(),
+                        v4l2::vidioc::VIDIOC_QBUF,
+                        &mut v4l2_buf as *mut _ as *mut std::os::raw::c_void,
+                    )?;
+                }
+            }
+            _ => panic!("Expected a pooled handle"),
+        }
+
         Ok(())
     }
 

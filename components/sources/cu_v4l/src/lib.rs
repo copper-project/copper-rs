@@ -52,22 +52,21 @@ mod linux_impl {
     pub use v4l::{Format, FourCC, Timestamp};
 
     // A Copper source task that reads frames from a V4L device.
-    // BS is the image buffer size to be used. ie the maximum size of the image buffer.
-    pub struct V4l {
-        stream: CuV4LStream, // move that as a generic parameter
+    pub struct V4l<'a> {
+        stream: CuV4LStream<'a>,
         settled_format: CuImageBufferFormat,
         v4l_clock_time_offset_ns: i64,
     }
 
-    impl Freezable for V4l {}
+    impl<'a> Freezable for V4l<'a> {}
 
     fn cutime_from_v4ltime(offset_ns: i64, v4l_time: Timestamp) -> CuTime {
         let duration: Duration = v4l_time.into();
         ((duration.as_nanos() as i64 + offset_ns) as u64).into()
     }
 
-    impl<'cl> CuSrcTask<'cl> for V4l {
-        type Output = output_msg!('cl, CuImage);
+    impl<'cl> CuSrcTask<'cl> for V4l<'cl> {
+        type Output = output_msg!('cl, CuImage<'cl, Vec<u8>>);
 
         fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
         where
@@ -311,7 +310,7 @@ mod linux_impl {
                 let _output = v4l.process(&clock, &mut msg);
                 if let Some(frame) = msg.payload() {
                     debug!("Buffer index: {}", frame.buffer_handle.index());
-                    let slice = frame.as_slice();
+                    let slice = frame.buffer_handle.as_slice();
                     let arrow_buffer = ArrowBuffer::from(slice);
                     let blob = Blob::from(arrow_buffer);
                     let rerun_img = ImageBuffer::from(blob);
