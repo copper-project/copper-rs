@@ -10,7 +10,7 @@ use iceoryx2::service::port_factory::publish_subscribe::PortFactory;
 /// Copper messages and Iceoryx2 payloads are compatible.
 pub struct IceoryxSink<P>
 where
-    P: CuMsgPayload, // TODO: Maybe with something a little more generic we can be ROS2 compatible
+    P: CuMsgPayload + 'static, // TODO: Maybe with something a little more generic we can be ROS2 compatible
 {
     service_name: ServiceName,
     node: iceoryx2::prelude::Node<ipc::Service>,
@@ -22,7 +22,7 @@ impl<P> Freezable for IceoryxSink<P> where P: CuMsgPayload {}
 
 impl<'cl, P> CuSinkTask<'cl> for IceoryxSink<P>
 where
-    P: CuMsgPayload + 'cl,
+    P: CuMsgPayload + 'cl + 'static,
 {
     type Input = input_msg!('cl, P);
 

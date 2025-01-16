@@ -33,6 +33,7 @@ members = [
     "components/testing/cu_udp_inject",
     "examples/cu_caterpillar",
     "examples/cu_config_gen",
+    "examples/cu_config_variation",
     "examples/cu_iceoryx2",
     "examples/cu_logging_size",
     "examples/cu_monitoring",
@@ -105,7 +106,7 @@ clap = { version = "4.5.21", features = ["derive"] }
 
 # External proc macros
 proc-macro2 = { version = "1.0.89" }
-quote = "1.0.37" # proc macros
+quote = "1.0.37"                                  # proc macros
 syn = { version = "2.0.85", features = ["full"] } # proc macros
 
 # Unit of measure to be consistent across the project
