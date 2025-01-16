@@ -12,7 +12,7 @@ mod empty_impl {
     impl Freezable for V4l {}
 
     impl<'cl> CuSrcTask<'cl> for V4l {
-        type Output = output_msg!('cl, CuImage);
+        type Output = output_msg!('cl, CuImage<Vec<u8>>);
 
         fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
         where
