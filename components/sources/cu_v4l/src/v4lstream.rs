@@ -193,19 +193,18 @@ impl CaptureStream<'_> for CuV4LStream {
     fn queue(&mut self, index: usize) -> io::Result<()> {
         let buffer_handle = self.memory_pool.acquire().unwrap();
         self.arena[index] = (Metadata::default(), Some(buffer_handle.clone()));
+        let mut v4l2_buf = buffer_handle.with_inner_mut(|inner| {
+            let destination = inner.slice_mut();
 
-        let arc = buffer_handle.inner_handle();
-        let mut guard = arc.lock().unwrap();
-        let destination = guard.slice_mut();
-
-        let mut v4l2_buf = v4l2_buffer {
-            index: index as u32,
-            m: v4l2_buffer__bindgen_ty_1 {
-                userptr: destination.as_ptr() as std::os::raw::c_ulong,
-            },
-            length: destination.len() as u32,
-            ..self.buffer_desc()
-        };
+            v4l2_buffer {
+                index: index as u32,
+                m: v4l2_buffer__bindgen_ty_1 {
+                    userptr: destination.as_ptr() as std::os::raw::c_ulong,
+                },
+                length: destination.len() as u32,
+                ..self.buffer_desc()
+            }
+        });
         unsafe {
             v4l2::ioctl(
                 self.v4l_handle.fd(),
