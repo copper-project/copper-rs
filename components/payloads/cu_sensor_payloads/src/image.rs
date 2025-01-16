@@ -3,7 +3,6 @@ use bincode::error::DecodeError;
 use bincode::{Decode, Encode};
 use cu29::prelude::{ArrayLike, CuHandle};
 use std::fmt::Debug;
-use std::sync::{Arc, Mutex};
 
 #[allow(unused_imports)]
 use cu29::{CuError, CuResult};
@@ -28,21 +27,21 @@ impl CuImageBufferFormat {
 }
 
 #[derive(Debug, Default, Clone, Encode)]
-pub struct CuImage<'a, A>
+pub struct CuImage<A>
 where
     A: ArrayLike<Element = u8>,
 {
     pub seq: u64,
     pub format: CuImageBufferFormat,
-    pub buffer_handle: CuHandle<'a, A>,
+    pub buffer_handle: CuHandle<A>,
 }
 
-impl<'a> Decode for CuImage<'a, Vec<u8>> {
+impl Decode for CuImage<Vec<u8>> {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let seq = u64::decode(decoder)?;
         let format = CuImageBufferFormat::decode(decoder)?;
         let buffer = Vec::decode(decoder)?;
-        let buffer_handle = CuHandle::Detached(Arc::new(Mutex::new(buffer)));
+        let buffer_handle = CuHandle::new_detached(buffer);
 
         Ok(Self {
             seq,
@@ -52,28 +51,24 @@ impl<'a> Decode for CuImage<'a, Vec<u8>> {
     }
 }
 
-impl<'a, A> CuImage<'a, A>
+impl<A> CuImage<A>
 where
     A: ArrayLike<Element = u8>,
 {
-    pub fn new(format: CuImageBufferFormat, buffer_handle: CuHandle<'a, A>) -> Self {
-        // assert!(
-        //     format.byte_size() < buffer_handle.lock().unwrap().len(),
-        //     "Buffer size must at least match the format."
-        // );
+    pub fn new(format: CuImageBufferFormat, buffer_handle: CuHandle<A>) -> Self {
+        assert!(
+            format.byte_size() < buffer_handle.with_inner(|i| i.len()),
+            "Buffer size must at least match the format."
+        );
         CuImage {
             seq: 0,
             format,
-            buffer_handle: buffer_handle,
+            buffer_handle,
         }
-    }
-
-    fn buffer_handle(&self) -> &CuHandle<'a, A> {
-        &self.buffer_handle
     }
 }
 
-impl<'a, A> CuImage<'a, A>
+impl<A> CuImage<A>
 where
     A: ArrayLike<Element = u8>,
 {
@@ -87,22 +82,10 @@ where
             "STRIDE must equal WIDTH for ImageBuffer compatibility."
         );
 
-        let raw_pixels: &[P::Subpixel] = match self.buffer_handle {
-            CuHandle::Detached(ref detached) => {
-                let handle = detached.lock().unwrap();
-                let data = handle.slice();
-                unsafe {
-                    core::slice::from_raw_parts(data.as_ptr() as *const P::Subpixel, data.len())
-                }
-            }
-            CuHandle::Pooled(ref pooled) => {
-                let handle = pooled.lock().unwrap();
-                let data = handle.slice();
-                unsafe {
-                    core::slice::from_raw_parts(data.as_ptr() as *const P::Subpixel, data.len())
-                }
-            }
-        };
+        let raw_pixels: &[P::Subpixel] = self.buffer_handle.with_inner(|inner| unsafe {
+            let data = inner.slice();
+            core::slice::from_raw_parts(data.as_ptr() as *const P::Subpixel, data.len())
+        });
         ImageBuffer::from_raw(width, height, raw_pixels)
             .ok_or("Could not create the image:: buffer".into())
     }
@@ -118,29 +101,13 @@ where
         );
 
         let size = width * height * C;
-
-        let raw_pixels: &[T] = match self.buffer_handle {
-            CuHandle::Detached(ref detached) => {
-                let handle = detached.lock().unwrap();
-                let data = handle.slice();
-                unsafe {
-                    core::slice::from_raw_parts(
-                        data.as_ptr() as *const T,
-                        data.len() / size_of::<T>(),
-                    )
-                }
-            }
-            CuHandle::Pooled(ref pooled) => {
-                let handle = pooled.lock().unwrap();
-                let data = handle.slice();
-                unsafe {
-                    core::slice::from_raw_parts(
-                        data.as_ptr() as *const T,
-                        data.len() / size_of::<T>(),
-                    )
-                }
-            }
-        };
+        let raw_pixels: &[T] = self.buffer_handle.with_inner(|inner| unsafe {
+            let data = inner.slice();
+            core::slice::from_raw_parts(
+                data.as_ptr() as *const T,
+                data.len() / std::mem::size_of::<T>(),
+            )
+        });
 
         unsafe { Image::from_raw_parts([height, width].into(), raw_pixels.as_ptr(), size) }
             .map_err(|e| CuError::new_with_cause("Could not create a Kornia Image", e))
