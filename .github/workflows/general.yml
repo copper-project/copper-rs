@@ -23,8 +23,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Jimver/cuda-toolkit@master
-        if: runner.os != 'macOS'
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -41,6 +39,12 @@ jobs:
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libudev-dev libpcap-dev
+
+      - name: Install CUDA
+        uses: Jimver/cuda-toolkit@master
+        if: runner.os != 'macOS'
+        with:
+          log-file-suffix: '${{ matrix.os }}-${{ matrix.mode }}.txt'
 
       - name: Install dependencies (Windows)
         if: runner.os == 'Windows'
