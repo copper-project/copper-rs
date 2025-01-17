@@ -64,7 +64,12 @@ pub fn basic_copper_setup(
     let extra: Option<TermLogger> = None;
 
     let clock = clock.unwrap_or_default();
-    let structured_logging = LoggerRuntime::init(clock.clone(), structured_stream, extra);
+    #[cfg(debug_assertions)]
+    let monitor_subscriber = true;
+    #[cfg(not(debug_assertions))]
+    let monitor_subscriber = false;
+    let structured_logging =
+        LoggerRuntime::init(clock.clone(), structured_stream, monitor_subscriber, extra);
     Ok(CopperContext {
         unified_logger: unified_logger.clone(),
         logger_runtime: structured_logging,

@@ -36,7 +36,7 @@ type WriterPair = (Mutex<LogWriter>, RobotClock);
 static WRITER: OnceLock<WriterPair> = OnceLock::new();
 
 #[cfg(debug_assertions)]
-static EXTRA_TEXT_LOGGER: OnceLock<Option<Box<dyn Log>>> = OnceLock::new();
+pub static EXTRA_TEXT_LOGGER: OnceLock<Option<Box<dyn Log>>> = OnceLock::new();
 
 pub struct NullLog {}
 impl Log for NullLog {
@@ -53,10 +53,12 @@ pub struct LoggerRuntime {}
 
 impl LoggerRuntime {
     /// destination is the binary stream in which we will log the structured log.
-    /// extra_text_logger is the logger that will log the text logs in real time. This is slow and only for debug builds.
+    /// `extra_text_logger` is the logger that will log the text logs in real time. This is slow and only for debug builds.
+    /// `custom_logger`, if true _(only in `dev` profile)_ will not set `extra_text_logger` and will allow you to set the same using [EXTRA_TEXT_LOGGER]
     pub fn init(
         clock: RobotClock,
         destination: impl WriteStream<CuLogEntry> + 'static,
+        #[allow(unused_variables)] custom_logger: bool,
         #[allow(unused_variables)] extra_text_logger: Option<impl Log + 'static>,
     ) -> Self {
         let runtime = LoggerRuntime {};
@@ -72,8 +74,10 @@ impl LoggerRuntime {
                 .unwrap();
         }
         #[cfg(debug_assertions)]
-        let _ =
-            EXTRA_TEXT_LOGGER.set(extra_text_logger.map(|logger| Box::new(logger) as Box<dyn Log>));
+        if !custom_logger {
+            let _ = EXTRA_TEXT_LOGGER
+                .set(extra_text_logger.map(|logger| Box::new(logger) as Box<dyn Log>));
+        }
 
         runtime
     }

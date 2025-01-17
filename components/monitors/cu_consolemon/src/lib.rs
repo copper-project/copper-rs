@@ -8,7 +8,6 @@ use cu29::config::{CuConfig, Node};
 use cu29::cutask::CuMsgMetadata;
 use cu29::monitoring::{CuDurationStatistics, CuMonitor, CuTaskState, Decision};
 use cu29::{CuError, CuResult};
-use gag::Gag;
 use ratatui::backend::CrosstermBackend;
 use ratatui::buffer::Buffer;
 use ratatui::crossterm::event::{DisableMouseCapture, EnableMouseCapture, Event, KeyCode};
@@ -33,11 +32,28 @@ use std::{io, thread};
 use tui_nodes::{Connection, NodeGraph, NodeLayout};
 use tui_widgets::scrollview::{ScrollView, ScrollViewState};
 
+#[cfg(feature = "debug_pane")]
+use {
+    compact_str::CompactStringExt,
+    log::{Level, LevelFilter, Log, Metadata, Record},
+    std::collections::VecDeque,
+    std::io::Read,
+    std::sync::atomic::AtomicU16,
+    std::sync::mpsc::{Receiver, SyncSender},
+};
+
+#[cfg(feature = "debug_pane")]
+const MENU_CONTENT: &str = "   [1] SysInfo  [2] DAG  [3] Latencies  [4] Debug Output  [q] Quit   ";
+#[cfg(not(feature = "debug_pane"))]
+const MENU_CONTENT: &str = "   [1] SysInfo  [2] DAG  [3] Latencies  [q] Quit   ";
+
 #[derive(PartialEq)]
 enum Screen {
     Neofetch,
     Dag,
     Latency,
+    #[cfg(feature = "debug_pane")]
+    DebugOutput,
 }
 
 struct TaskStats {
@@ -282,9 +298,131 @@ struct UI {
     sysinfo: String,
     task_stats: Arc<Mutex<TaskStats>>,
     nodes_scrollable_widget_state: NodesScrollableWidgetState,
+    #[cfg(feature = "debug_pane")]
+    error_redirect: gag::BufferRedirect,
+    #[cfg(feature = "debug_pane")]
+    debug_output: DebugLog,
+}
+
+#[cfg(feature = "debug_pane")]
+struct DebugLog {
+    debug_log: VecDeque<String>,
+    max_rows: AtomicU16,
+    rx: Receiver<String>,
+}
+
+#[cfg(feature = "debug_pane")]
+impl DebugLog {
+    fn new(max_lines: u16) -> (Self, SyncSender<String>) {
+        let (tx, rx) = std::sync::mpsc::sync_channel(1000);
+        (
+            Self {
+                debug_log: VecDeque::new(),
+                max_rows: AtomicU16::new(max_lines),
+                rx,
+            },
+            tx,
+        )
+    }
+
+    fn push_logs(&mut self, logs: String) {
+        if logs.is_empty() {
+            return;
+        }
+
+        self.debug_log.push_back(logs);
+        let max_row = self.max_rows.load(Ordering::SeqCst) as usize;
+        while self.debug_log.len() > max_row {
+            self.debug_log.pop_front();
+        }
+    }
+
+    fn update_logs(&mut self) {
+        let max_row = self.max_rows.load(Ordering::SeqCst) as usize;
+
+        for log in self.rx.try_iter() {
+            if log.is_empty() {
+                continue;
+            }
+
+            self.debug_log.push_back(log);
+            if self.debug_log.len() > max_row {
+                self.debug_log.pop_front();
+            }
+        }
+    }
+
+    fn get_logs(&mut self) -> String {
+        self.update_logs();
+        self.debug_log.join_compact("").to_string()
+    }
+}
+
+#[cfg(feature = "debug_pane")]
+#[derive(Clone)]
+struct LogSubscriber {
+    tx: SyncSender<String>,
+}
+
+#[cfg(feature = "debug_pane")]
+impl LogSubscriber {
+    fn new(tx: SyncSender<String>) -> Self {
+        let log_subscriber = Self { tx };
+        log::set_boxed_logger(Box::new(log_subscriber.clone())).unwrap();
+        log::set_max_level(LevelFilter::Info);
+        log_subscriber
+    }
+
+    fn push_logs(&self, log: String) {
+        if let Err(err) = self.tx.send(log) {
+            eprintln!("Error Sending Logs to MPSC Channel: {}", err.0)
+        }
+    }
+}
+
+#[cfg(feature = "debug_pane")]
+impl Log for LogSubscriber {
+    fn enabled(&self, metadata: &Metadata) -> bool {
+        metadata.level() <= Level::Debug
+    }
+
+    fn log(&self, record: &Record) {
+        if self.enabled(record.metadata()) {
+            let message = format!("[{}] - {}\n", record.level(), record.args());
+
+            self.push_logs(message);
+        }
+    }
+
+    fn flush(&self) {}
 }
 
 impl UI {
+    #[cfg(feature = "debug_pane")]
+    fn new(
+        config: CuConfig,
+        task_ids: &'static [&'static str],
+        task_stats: Arc<Mutex<TaskStats>>,
+        task_statuses: Arc<Mutex<Vec<TaskStatus>>>,
+        error_redirect: gag::BufferRedirect,
+        debug_output: DebugLog,
+    ) -> UI {
+        init_error_hooks();
+        let nodes_scrollable_widget_state =
+            NodesScrollableWidgetState::new(&config, task_statuses.clone());
+
+        Self {
+            task_ids,
+            active_screen: Screen::Neofetch,
+            sysinfo: sysinfo::pfetch_info(),
+            task_stats,
+            nodes_scrollable_widget_state,
+            error_redirect,
+            debug_output,
+        }
+    }
+
+    #[cfg(not(feature = "debug_pane"))]
     fn new(
         config: CuConfig,
         task_ids: &'static [&'static str],
@@ -294,6 +432,7 @@ impl UI {
         init_error_hooks();
         let nodes_scrollable_widget_state =
             NodesScrollableWidgetState::new(&config, task_statuses.clone());
+
         Self {
             task_ids,
             active_screen: Screen::Neofetch,
@@ -431,6 +570,25 @@ impl UI {
         )
     }
 
+    #[cfg(feature = "debug_pane")]
+    fn draw_debug_output(&mut self, f: &mut Frame, area: Rect) {
+        let mut error_buffer = String::new();
+        self.error_redirect
+            .read_to_string(&mut error_buffer)
+            .unwrap();
+        self.debug_output.push_logs(error_buffer);
+
+        let debug_output = self.debug_output.get_logs();
+
+        let p = Paragraph::new(debug_output).block(
+            Block::default()
+                .title(" Debug Output ")
+                .title_bottom(format!("{} log entries", self.debug_output.debug_log.len()))
+                .borders(Borders::ALL),
+        );
+        f.render_widget(p, area);
+    }
+
     fn draw(&mut self, f: &mut Frame) {
         let layout = Layout::default()
             .direction(Direction::Vertical)
@@ -443,7 +601,7 @@ impl UI {
             )
             .split(f.area());
 
-        let menu = Paragraph::new("   [1] SysInfo  [2] DAG  [3] Latencies  [q] Quit")
+        let menu = Paragraph::new(MENU_CONTENT)
             .style(
                 Style::default()
                     .fg(Color::Yellow)
@@ -469,6 +627,8 @@ impl UI {
                 self.draw_nodes(f, layout[1]);
             }
             Screen::Latency => self.draw_latency_table(f, layout[1]),
+            #[cfg(feature = "debug_pane")]
+            Screen::DebugOutput => self.draw_debug_output(f, layout[1]),
         };
     }
 
@@ -484,6 +644,8 @@ impl UI {
                         KeyCode::Char('1') => self.active_screen = Screen::Neofetch,
                         KeyCode::Char('2') => self.active_screen = Screen::Dag,
                         KeyCode::Char('3') => self.active_screen = Screen::Latency,
+                        #[cfg(feature = "debug_pane")]
+                        KeyCode::Char('4') => self.active_screen = Screen::DebugOutput,
                         KeyCode::Char('r') => {
                             if self.active_screen == Screen::Latency {
                                 self.task_stats.lock().unwrap().reset()
@@ -531,6 +693,11 @@ impl UI {
                         _ => {}
                     }
                 }
+
+                #[cfg(feature = "debug_pane")]
+                if let Event::Resize(_columns, rows) = event::read()? {
+                    self.debug_output.max_rows.store(rows, Ordering::SeqCst)
+                }
             }
         }
         Ok(())
@@ -570,16 +737,53 @@ impl CuMonitor for CuConsoleMon {
 
             setup_terminal();
 
-            // nukes stderr into orbit as anything in the stack can corrupt the terminal
-            let print_gag = Gag::stderr().unwrap();
-
             let mut terminal =
                 Terminal::new(backend).expect("Failed to initialize terminal backend");
-            let mut ui = UI::new(config_dup, taskids, task_stats_ui, error_states);
-            ui.run_app(&mut terminal).expect("Failed to run app");
+
+            #[cfg(feature = "debug_pane")]
+            {
+                let max_lines = terminal.size().unwrap().height - 5;
+                let (debug_log, tx) = DebugLog::new(max_lines);
+
+                // redirect stderr, so it doesn't pop in the terminal
+                let error_redirect = gag::BufferRedirect::stderr().unwrap();
+
+                let mut ui = UI::new(
+                    config_dup,
+                    taskids,
+                    task_stats_ui,
+                    error_states,
+                    error_redirect,
+                    debug_log,
+                );
+
+                #[allow(unused_variables)]
+                let log_subscriber = LogSubscriber::new(tx);
+
+                // Override the cu29-log-runtime Log Subscriber
+                #[cfg(debug_assertions)]
+                if cu29_log_runtime::EXTRA_TEXT_LOGGER
+                    .set(Some(Box::new(log_subscriber) as Box<dyn Log>))
+                    .is_err()
+                {
+                    eprintln!("Failed to override default log subscriber of cu29-log-runtime\nIf you are using `basic_copper_setup` function provided by `cu29-helper` crate, please pass `monitor_subscriber` as true");
+                }
+
+                ui.run_app(&mut terminal).expect("Failed to run app");
+            }
+
+            #[cfg(not(feature = "debug_pane"))]
+            {
+                let stderr_gag = gag::Gag::stderr().unwrap();
+
+                let mut ui = UI::new(config_dup, taskids, task_stats_ui, error_states);
+                ui.run_app(&mut terminal).expect("Failed to run app");
+
+                drop(stderr_gag);
+            }
+
             quitting.store(true, Ordering::SeqCst);
             // restoring the terminal
-            drop(print_gag);
             restore_terminal();
         });
 
