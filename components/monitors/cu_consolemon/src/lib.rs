@@ -762,11 +762,9 @@ impl CuMonitor for CuConsoleMon {
 
                 // Override the cu29-log-runtime Log Subscriber
                 #[cfg(debug_assertions)]
-                if cu29_log_runtime::EXTRA_TEXT_LOGGER
-                    .set(Some(Box::new(log_subscriber) as Box<dyn Log>))
-                    .is_err()
                 {
-                    eprintln!("Failed to override default log subscriber of cu29-log-runtime\nIf you are using `basic_copper_setup` function provided by `cu29-helper` crate, please pass `monitor_subscriber` as true");
+                    *cu29_log_runtime::EXTRA_TEXT_LOGGER.write().unwrap() =
+                        Some(Box::new(log_subscriber) as Box<dyn Log>);
                 }
 
                 ui.run_app(&mut terminal).expect("Failed to run app");

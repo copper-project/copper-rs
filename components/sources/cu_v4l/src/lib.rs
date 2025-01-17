@@ -279,7 +279,7 @@ mod linux_impl {
                 TerminalMode::Mixed,
                 ColorChoice::Auto,
             );
-            let _logger = LoggerRuntime::init(clock.clone(), NullLog {}, false, Some(*term_logger));
+            let _logger = LoggerRuntime::init(clock.clone(), NullLog {}, Some(*term_logger));
 
             let rec = RecordingStreamBuilder::new("Camera Viz")
                 .spawn()
