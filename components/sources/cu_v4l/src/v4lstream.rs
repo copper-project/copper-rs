@@ -1,22 +1,22 @@
-use cu29::prelude::{CuBufferHandle, CuHostMemoryPool};
+use cu29::prelude::CuPool;
+use cu29::prelude::{CuHandle, CuHostMemoryPool};
 use std::convert::TryInto;
-use std::rc::Rc;
 use std::time::Duration;
 use std::{io, mem, sync::Arc};
 use v4l::buffer::{Metadata, Type};
 use v4l::device::Handle;
 use v4l::io::traits::{CaptureStream, Stream};
 use v4l::memory::Memory;
-use v4l::v4l_sys::*;
+use v4l::v4l_sys::{v4l2_buffer, v4l2_buffer__bindgen_ty_1, v4l2_format, v4l2_requestbuffers};
 use v4l::{v4l2, Device};
 
 // A specialized V4L stream that uses Copper Buffers for memory management.
 pub struct CuV4LStream {
     v4l_handle: Arc<Handle>,
     v4l_buf_type: Type,
-    memory_pool: Rc<CuHostMemoryPool>,
+    memory_pool: CuHostMemoryPool<Vec<u8>>,
     // Arena matching the vl42 metadata and the Copper Buffers
-    arena: Vec<(Metadata, Option<CuBufferHandle>)>,
+    arena: Vec<(Metadata, Option<CuHandle<Vec<u8>>>)>,
     arena_last_freed_up_index: usize,
     timeout: Option<i32>,
     active: bool,
@@ -34,13 +34,13 @@ impl CuV4LStream {
         buf_size: usize,
         buf_count: u32,
     ) -> io::Result<Self> {
-        let memory_pool = CuHostMemoryPool::new(buf_size, buf_count + 1, page_size::get()); // +1 to be able to queue one last buffer before zapping the first
+        let memory_pool = CuHostMemoryPool::new(buf_count as usize + 1, || vec![0; buf_size]); // +1 to be able to queue one last buffer before zapping the first
         let mut arena = Vec::new();
         arena.resize(buf_count as usize, (Metadata::default(), None));
 
         let mut result = CuV4LStream {
             v4l_handle: dev.handle(),
-            memory_pool: Rc::new(memory_pool),
+            memory_pool,
             arena,
             arena_last_freed_up_index: 0,
             v4l_buf_type: buf_type,
@@ -151,7 +151,7 @@ impl Drop for CuV4LStream {
 }
 
 impl Stream for CuV4LStream {
-    type Item = CuBufferHandle;
+    type Item = CuHandle<Vec<u8>>;
 
     fn start(&mut self) -> io::Result<()> {
         // Enqueue all buffers once on stream start
@@ -191,20 +191,20 @@ impl Stream for CuV4LStream {
 
 impl CaptureStream<'_> for CuV4LStream {
     fn queue(&mut self, index: usize) -> io::Result<()> {
-        let buffer_handle = CuHostMemoryPool::allocate(&self.memory_pool).ok_or(io::Error::new(
-            io::ErrorKind::Other,
-            "Failed to allocate buffer",
-        ))?;
+        let buffer_handle = self.memory_pool.acquire().unwrap();
+        self.arena[index] = (Metadata::default(), Some(buffer_handle.clone()));
+        let mut v4l2_buf = buffer_handle.with_inner_mut(|inner| {
+            let destination: &mut [u8] = inner;
 
-        let buf: &[u8] = buffer_handle.as_slice();
-        let mut v4l2_buf = v4l2_buffer {
-            index: index as u32,
-            m: v4l2_buffer__bindgen_ty_1 {
-                userptr: buf.as_ptr() as std::os::raw::c_ulong,
-            },
-            length: buf.len() as u32,
-            ..self.buffer_desc()
-        };
+            v4l2_buffer {
+                index: index as u32,
+                m: v4l2_buffer__bindgen_ty_1 {
+                    userptr: destination.as_ptr() as std::os::raw::c_ulong,
+                },
+                length: destination.len() as u32,
+                ..self.buffer_desc()
+            }
+        });
         unsafe {
             v4l2::ioctl(
                 self.v4l_handle.fd(),
@@ -212,7 +212,6 @@ impl CaptureStream<'_> for CuV4LStream {
                 &mut v4l2_buf as *mut _ as *mut std::os::raw::c_void,
             )?;
         }
-        self.arena[index] = (Metadata::default(), Some(buffer_handle));
         Ok(())
     }
 
@@ -238,12 +237,6 @@ impl CaptureStream<'_> for CuV4LStream {
             )?;
         }
         let index = v4l2_buf.index as usize;
-        // println!("dequeue: dequeueing buffer {}", index);
-        // println!(" length {}", v4l2_buf.length);
-        // println!(" bytesused {}", v4l2_buf.bytesused);
-        // println!(" timestamp {:?}", v4l2_buf.timestamp);
-        // println!(" sequence {}", v4l2_buf.sequence);
-        // println!(" field {}", v4l2_buf.field);
 
         self.arena[index].0 = Metadata {
             bytesused: v4l2_buf.bytesused,

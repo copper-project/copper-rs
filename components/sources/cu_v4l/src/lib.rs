@@ -12,7 +12,7 @@ mod empty_impl {
     impl Freezable for V4l {}
 
     impl<'cl> CuSrcTask<'cl> for V4l {
-        type Output = output_msg!('cl, CuImage);
+        type Output = output_msg!('cl, CuImage<Vec<u8>>);
 
         fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
         where
@@ -52,9 +52,8 @@ mod linux_impl {
     pub use v4l::{Format, FourCC, Timestamp};
 
     // A Copper source task that reads frames from a V4L device.
-    // BS is the image buffer size to be used. ie the maximum size of the image buffer.
     pub struct V4l {
-        stream: CuV4LStream, // move that as a generic parameter
+        stream: CuV4LStream,
         settled_format: CuImageBufferFormat,
         v4l_clock_time_offset_ns: i64,
     }
@@ -67,7 +66,7 @@ mod linux_impl {
     }
 
     impl<'cl> CuSrcTask<'cl> for V4l {
-        type Output = output_msg!('cl, CuImage);
+        type Output = output_msg!('cl, CuImage<Vec<u8>>);
 
         fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
         where
@@ -154,7 +153,6 @@ mod linux_impl {
                         };
                         (size.width, size.height)
                     };
-                debug!("V4L: Use resolution: {}x{}", width, height);
 
                 // Set the format with the chosen resolution
                 let req_fmt = Format::new(width, height, fourcc);
@@ -168,6 +166,10 @@ mod linux_impl {
                     dev.set_params(&new_params)
                         .map_err(|e| CuError::new_with_cause("Failed to set params", e))?;
                 }
+                debug!(
+                    "V4L: Negotiated resolution: {}x{}",
+                    actual_fmt.width, actual_fmt.height
+                );
                 actual_fmt
             } else {
                 return Err(format!(
@@ -310,8 +312,7 @@ mod linux_impl {
             for _ in 0..1000 {
                 let _output = v4l.process(&clock, &mut msg);
                 if let Some(frame) = msg.payload() {
-                    debug!("Buffer index: {}", frame.buffer_handle.index());
-                    let slice = frame.as_slice();
+                    let slice: &[u8] = &frame.buffer_handle.lock().unwrap();
                     let arrow_buffer = ArrowBuffer::from(slice);
                     let blob = Blob::from(arrow_buffer);
                     let rerun_img = ImageBuffer::from(blob);
