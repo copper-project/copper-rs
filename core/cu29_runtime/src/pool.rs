@@ -220,7 +220,7 @@ impl<E: ElementType + 'static> ArrayLike for Vec<E> {
 #[cfg(all(feature = "cuda", not(target_os = "macos")))]
 mod cuda {
     use super::*;
-    use cudarc::driver::{CudaDevice, CudaSlice, DeviceRepr, DeviceSlice, ValidAsZeroBits};
+    use cudarc::driver::{CudaDevice, CudaSlice, DeviceRepr, ValidAsZeroBits};
     use std::sync::Arc;
 
     #[derive(Debug)]
