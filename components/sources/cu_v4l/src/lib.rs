@@ -312,9 +312,7 @@ mod linux_impl {
             for _ in 0..1000 {
                 let _output = v4l.process(&clock, &mut msg);
                 if let Some(frame) = msg.payload() {
-                    let arc = frame.buffer_handle.inner_handle();
-                    let guard = arc.lock().unwrap();
-                    let slice = guard.slice();
+                    let slice: &[u8] = &frame.buffer_handle.lock().unwrap();
                     let arrow_buffer = ArrowBuffer::from(slice);
                     let blob = Blob::from(arrow_buffer);
                     let rerun_img = ImageBuffer::from(blob);

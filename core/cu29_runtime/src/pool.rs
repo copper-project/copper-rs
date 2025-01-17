@@ -43,34 +43,22 @@ where
     }
 }
 
-impl<T> CuHandleInner<T>
-where
-    T: ArrayLike,
-{
-    pub fn slice(&self) -> &[T::Element] {
+impl<T: ArrayLike> Deref for CuHandleInner<T> {
+    type Target = [T::Element];
+
+    fn deref(&self) -> &Self::Target {
         match self {
             CuHandleInner::Pooled(pooled) => pooled,
             CuHandleInner::Detached(detached) => detached,
         }
     }
-    pub fn slice_mut(&mut self) -> &mut [T::Element] {
+}
+
+impl<T: ArrayLike> DerefMut for CuHandleInner<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
         match self {
             CuHandleInner::Pooled(pooled) => pooled.deref_mut(),
             CuHandleInner::Detached(detached) => detached,
-        }
-    }
-
-    pub fn len(&self) -> usize {
-        match self {
-            CuHandleInner::Pooled(pooled) => pooled.len(),
-            CuHandleInner::Detached(detached) => detached.len(),
-        }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        match self {
-            CuHandleInner::Pooled(pooled) => pooled.is_empty(),
-            CuHandleInner::Detached(detached) => detached.is_empty(),
         }
     }
 }
@@ -79,25 +67,29 @@ where
 #[derive(Clone, Debug)]
 pub struct CuHandle<T: ArrayLike>(Arc<Mutex<CuHandleInner<T>>>);
 
+impl<T: ArrayLike> Deref for CuHandle<T> {
+    type Target = Arc<Mutex<CuHandleInner<T>>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 impl<T: ArrayLike> CuHandle<T> {
     /// Create a new CuHandle not part of a Pool (not for onboard usages, use pools instead)
     pub fn new_detached(inner: T) -> Self {
         CuHandle(Arc::new(Mutex::new(CuHandleInner::Detached(inner))))
     }
 
-    pub fn inner_handle(&self) -> Arc<Mutex<CuHandleInner<T>>> {
-        self.0.clone()
-    }
-
     /// Safely access the inner value, applying a closure to it.
     pub fn with_inner<R>(&self, f: impl FnOnce(&CuHandleInner<T>) -> R) -> R {
-        let lock = self.0.lock().unwrap();
+        let lock = self.lock().unwrap();
         f(&*lock)
     }
 
     /// Mutably access the inner value, applying a closure to it.
     pub fn with_inner_mut<R>(&self, f: impl FnOnce(&mut CuHandleInner<T>) -> R) -> R {
-        let mut lock = self.0.lock().unwrap();
+        let mut lock = self.lock().unwrap();
         f(&mut *lock)
     }
 }
@@ -107,7 +99,7 @@ where
     <T as ArrayLike>::Element: 'static,
 {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        let inner = self.0.lock().unwrap();
+        let inner = self.lock().unwrap();
         match inner.deref() {
             CuHandleInner::Pooled(pooled) => pooled.encode(encoder),
             CuHandleInner::Detached(detached) => detached.encode(encoder),
@@ -177,8 +169,8 @@ impl<T: ArrayLike> CuPool<T> for CuHostMemoryPool<T> {
     fn copy_from<O: ArrayLike<Element = T::Element>>(&self, from: &mut CuHandle<O>) -> CuHandle<T> {
         let to_handle = self.acquire().expect("No available buffers in the pool");
 
-        match from.0.lock().unwrap().deref() {
-            CuHandleInner::Detached(source) => match to_handle.0.lock().unwrap().deref_mut() {
+        match from.lock().unwrap().deref() {
+            CuHandleInner::Detached(source) => match to_handle.lock().unwrap().deref_mut() {
                 CuHandleInner::Detached(destination) => {
                     destination.copy_from_slice(source);
                 }
@@ -186,7 +178,7 @@ impl<T: ArrayLike> CuPool<T> for CuHostMemoryPool<T> {
                     destination.copy_from_slice(source);
                 }
             },
-            CuHandleInner::Pooled(source) => match to_handle.0.lock().unwrap().deref_mut() {
+            CuHandleInner::Pooled(source) => match to_handle.lock().unwrap().deref_mut() {
                 CuHandleInner::Detached(destination) => {
                     destination.copy_from_slice(source);
                 }
@@ -234,7 +226,7 @@ mod cuda {
 
         fn deref(&self) -> &Self::Target {
             // Implement logic to return a slice
-            panic!("You need to copy data to host memory before accessing it.");
+            panic!("You need to copy data to host memory pool before accessing it.");
         }
     }
 
@@ -243,7 +235,7 @@ mod cuda {
         E: ElementType,
     {
         fn deref_mut(&mut self) -> &mut Self::Target {
-            panic!("You need to copy data to host memory before accessing it.");
+            panic!("You need to copy data to host memory pool before accessing it.");
         }
     }
 
@@ -270,6 +262,7 @@ mod cuda {
     }
 
     impl<E: ElementType + ValidAsZeroBits + DeviceRepr> CuCudaPool<E> {
+        #[allow(dead_code)]
         pub fn new(
             device: Arc<CudaDevice>,
             nb_buffers: usize,
@@ -317,8 +310,8 @@ mod cuda {
         {
             let to_handle = self.acquire().expect("No available buffers in the pool");
 
-            match from_handle.0.lock().unwrap().deref() {
-                CuHandleInner::Detached(from) => match to_handle.0.lock().unwrap().deref_mut() {
+            match from_handle.lock().unwrap().deref() {
+                CuHandleInner::Detached(from) => match to_handle.lock().unwrap().deref_mut() {
                     CuHandleInner::Detached(CudaSliceWrapper(to)) => {
                         self.device
                             .htod_sync_copy_into(from, to)
@@ -330,7 +323,7 @@ mod cuda {
                             .expect("Failed to copy data to device");
                     }
                 },
-                CuHandleInner::Pooled(from) => match to_handle.0.lock().unwrap().deref_mut() {
+                CuHandleInner::Pooled(from) => match to_handle.lock().unwrap().deref_mut() {
                     CuHandleInner::Detached(CudaSliceWrapper(to)) => {
                         self.device
                             .htod_sync_copy_into(from, to)
@@ -364,9 +357,9 @@ mod cuda {
                 .acquire()
                 .expect("No available buffers in the pool");
 
-            match device_handle.0.lock().unwrap().deref() {
+            match device_handle.lock().unwrap().deref() {
                 CuHandleInner::Pooled(source) => {
-                    match destination_handle.0.lock().unwrap().deref_mut() {
+                    match destination_handle.lock().unwrap().deref_mut() {
                         CuHandleInner::Pooled(ref mut destination) => {
                             self.device
                                 .dtoh_sync_copy_into(source.as_cuda_slice(), destination)
@@ -380,7 +373,7 @@ mod cuda {
                     }
                 }
                 CuHandleInner::Detached(source) => {
-                    match destination_handle.0.lock().unwrap().deref_mut() {
+                    match destination_handle.lock().unwrap().deref_mut() {
                         CuHandleInner::Pooled(ref mut destination) => {
                             self.device
                                 .dtoh_sync_copy_into(source.as_cuda_slice(), destination)
@@ -464,15 +457,14 @@ mod tests {
         let obj1 = pool.acquire().unwrap();
         {
             let obj2 = pool.acquire().unwrap();
-
-            assert!(objs_as_slices.contains(&obj1.0.lock().unwrap().slice()));
-            assert!(objs_as_slices.contains(&obj2.0.lock().unwrap().slice()));
+            assert!(objs_as_slices.contains(&obj1.lock().unwrap().deref().deref()));
+            assert!(objs_as_slices.contains(&obj2.lock().unwrap().deref().deref()));
             assert_eq!(pool.space_left(), 1);
         }
         assert_eq!(pool.space_left(), 2);
 
         let obj3 = pool.acquire().unwrap();
-        assert!(objs_as_slices.contains(&obj3.0.lock().unwrap().slice()));
+        assert!(objs_as_slices.contains(&obj3.lock().unwrap().deref().deref()));
 
         assert_eq!(pool.space_left(), 1);
 
@@ -521,7 +513,7 @@ mod tests {
         let cuda_handle = {
             let mut initial_handle = host_pool.acquire().unwrap();
             {
-                let mut inner_initial_handle = initial_handle.0.lock().unwrap();
+                let mut inner_initial_handle = initial_handle.lock().unwrap();
                 if let CuHandleInner::Pooled(ref mut pooled) = *inner_initial_handle {
                     pooled[0] = 42.0;
                 } else {
@@ -536,7 +528,7 @@ mod tests {
         // get it back to the host
         let final_handle = cuda_pool.copy_into(&cuda_handle, &mut host_pool);
 
-        let value = final_handle.0.lock().unwrap().slice()[0];
+        let value = final_handle.lock().unwrap().deref().deref()[0];
         assert_eq!(value, 42.0);
     }
 }

@@ -44,7 +44,4 @@ cudarc = { version = "0.13", optional = true, features = ["cuda-version-from-bui
 
 [features]
 default = []
-cuda = []
-
-[target.'cfg(target_os = "linux")'.features]
 cuda = ["cudarc"]

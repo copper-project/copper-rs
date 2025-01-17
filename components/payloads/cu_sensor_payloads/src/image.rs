@@ -83,7 +83,7 @@ where
         );
 
         let raw_pixels: &[P::Subpixel] = self.buffer_handle.with_inner(|inner| unsafe {
-            let data = inner.slice();
+            let data: &[u8] = inner;
             core::slice::from_raw_parts(data.as_ptr() as *const P::Subpixel, data.len())
         });
         ImageBuffer::from_raw(width, height, raw_pixels)
@@ -102,7 +102,7 @@ where
 
         let size = width * height * C;
         let raw_pixels: &[T] = self.buffer_handle.with_inner(|inner| unsafe {
-            let data = inner.slice();
+            let data: &[u8] = inner;
             core::slice::from_raw_parts(
                 data.as_ptr() as *const T,
                 data.len() / std::mem::size_of::<T>(),

@@ -194,7 +194,7 @@ impl CaptureStream<'_> for CuV4LStream {
         let buffer_handle = self.memory_pool.acquire().unwrap();
         self.arena[index] = (Metadata::default(), Some(buffer_handle.clone()));
         let mut v4l2_buf = buffer_handle.with_inner_mut(|inner| {
-            let destination = inner.slice_mut();
+            let destination: &mut [u8] = inner;
 
             v4l2_buffer {
                 index: index as u32,
