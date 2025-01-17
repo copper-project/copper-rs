@@ -217,7 +217,7 @@ impl<E: ElementType + 'static> ArrayLike for Vec<E> {
     type Element = E;
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", not(target_os = "macos")))]
 mod cuda {
     use super::*;
     use cudarc::driver::{CudaDevice, CudaSlice, DeviceRepr, DeviceSlice, ValidAsZeroBits};
@@ -483,7 +483,7 @@ mod tests {
         assert!(obj5.is_none());
     }
 
-    #[cfg(feature = "cuda")]
+    #[cfg(all(feature = "cuda", not(target_os = "macos")))]
     #[test]
     fn test_cuda_pool() {
         use cudarc::driver::CudaDevice;
@@ -509,7 +509,7 @@ mod tests {
         assert!(obj5.is_none());
     }
 
-    #[cfg(feature = "cuda")]
+    #[cfg(all(feature = "cuda", not(target_os = "macos")))]
     #[test]
     fn test_copy_roundtrip() {
         use cudarc::driver::CudaDevice;
