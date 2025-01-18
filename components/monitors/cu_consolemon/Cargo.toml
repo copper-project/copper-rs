@@ -10,8 +10,14 @@ categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
+[features]
+default = ["debug_pane"]
+# Enables 'Debug Output' Pane
+debug_pane = ["dep:log", "dep:chrono", "dep:dashmap"]
+
 [dependencies]
 cu29 = { workspace = true }
+cu29-log-runtime = { workspace = true }
 compact_str = { workspace = true }
 ratatui = "0.29"
 pfetch-logo-parser = "0.1"
@@ -23,3 +29,6 @@ tui-nodes = "0.8"
 tui-widgets = "0.4"  # 0.4.0 brings ratatui 0.29
 color-eyre = "0.6"
 gag = "1.0.0"
+log = { version = "0.4", optional = true }
+chrono = { version = "0.4", optional = true }
+dashmap = { version = "6.1", optional = true }

@@ -9,11 +9,7 @@ use cu29_traits::{CuResult, WriteStream};
 use log::Log;
 
 #[cfg(debug_assertions)]
-use cu29_log::format_logline;
-#[cfg(debug_assertions)]
-use log::Record;
-#[cfg(debug_assertions)]
-use std::collections::HashMap;
+use {cu29_log::format_logline, std::collections::HashMap, std::sync::RwLock};
 
 use std::fmt::{Debug, Formatter};
 use std::fs::File;
@@ -36,9 +32,9 @@ type WriterPair = (Mutex<LogWriter>, RobotClock);
 static WRITER: OnceLock<WriterPair> = OnceLock::new();
 
 #[cfg(debug_assertions)]
-static EXTRA_TEXT_LOGGER: OnceLock<Option<Box<dyn Log>>> = OnceLock::new();
+pub static EXTRA_TEXT_LOGGER: RwLock<Option<Box<dyn Log + 'static>>> = RwLock::new(None);
 
-pub struct NullLog {}
+pub struct NullLog;
 impl Log for NullLog {
     fn enabled(&self, _metadata: &log::Metadata) -> bool {
         false
@@ -53,7 +49,7 @@ pub struct LoggerRuntime {}
 
 impl LoggerRuntime {
     /// destination is the binary stream in which we will log the structured log.
-    /// extra_text_logger is the logger that will log the text logs in real time. This is slow and only for debug builds.
+    /// `extra_text_logger` is the logger that will log the text logs in real time. This is slow and only for debug builds.
     pub fn init(
         clock: RobotClock,
         destination: impl WriteStream<CuLogEntry> + 'static,
@@ -72,8 +68,9 @@ impl LoggerRuntime {
                 .unwrap();
         }
         #[cfg(debug_assertions)]
-        let _ =
-            EXTRA_TEXT_LOGGER.set(extra_text_logger.map(|logger| Box::new(logger) as Box<dyn Log>));
+        if let Some(logger) = extra_text_logger {
+            *EXTRA_TEXT_LOGGER.write().unwrap() = Some(Box::new(logger) as Box<dyn Log>);
+        }
 
         runtime
     }
@@ -138,11 +135,11 @@ pub fn log_debug_mode(
 ) -> CuResult<()> {
     log(entry)?;
 
-    let guarded_logger = EXTRA_TEXT_LOGGER.get();
+    let guarded_logger = EXTRA_TEXT_LOGGER.read().unwrap();
     if guarded_logger.is_none() {
         return Ok(());
     }
-    if let Some(logger) = guarded_logger.unwrap() {
+    if let Some(logger) = guarded_logger.as_ref() {
         let fstr = format_str.to_string();
         // transform the slice into a hashmap
         let params: Vec<String> = entry.params.iter().map(|v| v.to_string()).collect();
@@ -158,7 +155,7 @@ pub fn log_debug_mode(
             .collect();
         let logline = format_logline(entry.time, &fstr, params.as_slice(), &named_params)?;
         logger.log(
-            &Record::builder()
+            &log::Record::builder()
                 .args(format_args!("{logline}"))
                 .level(log::Level::Info)
                 .target("cu29_log")
