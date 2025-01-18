@@ -9,9 +9,7 @@ use cu29_traits::{CuResult, WriteStream};
 use log::Log;
 
 #[cfg(debug_assertions)]
-use {
-    cu29_log::format_logline, once_cell::sync::Lazy, std::collections::HashMap, std::sync::RwLock,
-};
+use {cu29_log::format_logline, std::collections::HashMap, std::sync::RwLock};
 
 use std::fmt::{Debug, Formatter};
 use std::fs::File;
@@ -34,8 +32,7 @@ type WriterPair = (Mutex<LogWriter>, RobotClock);
 static WRITER: OnceLock<WriterPair> = OnceLock::new();
 
 #[cfg(debug_assertions)]
-pub static EXTRA_TEXT_LOGGER: Lazy<RwLock<Option<Box<dyn Log + 'static>>>> =
-    Lazy::new(|| RwLock::new(None));
+pub static EXTRA_TEXT_LOGGER: RwLock<Option<Box<dyn Log + 'static>>> = RwLock::new(None);
 
 pub struct NullLog;
 impl Log for NullLog {
