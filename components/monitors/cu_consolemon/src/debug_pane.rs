@@ -59,7 +59,6 @@ impl DebugLog {
     }
 
     pub fn get_logs(&mut self) -> String {
-        self.update_logs();
         self.debug_log.join_compact("").to_string()
     }
 }
@@ -101,10 +100,21 @@ impl Log for LogSubscriber {
 }
 
 pub trait UIExt {
+    fn update_debug_output(&mut self);
+
     fn draw_debug_output(&mut self, f: &mut Frame, area: Rect);
 }
 
 impl UIExt for UI {
+    fn update_debug_output(&mut self) {
+        let mut error_buffer = String::new();
+        self.error_redirect
+            .read_to_string(&mut error_buffer)
+            .unwrap();
+        self.debug_output.push_logs(error_buffer);
+        self.debug_output.update_logs();
+    }
+
     fn draw_debug_output(&mut self, f: &mut Frame, area: Rect) {
         let mut error_buffer = String::new();
         self.error_redirect

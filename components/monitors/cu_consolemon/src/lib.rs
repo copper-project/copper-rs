@@ -516,6 +516,9 @@ impl UI {
 
     fn run_app<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> io::Result<()> {
         loop {
+            #[cfg(feature = "debug_pane")]
+            self.update_debug_output();
+
             terminal.draw(|f| {
                 self.draw(f);
             })?;
