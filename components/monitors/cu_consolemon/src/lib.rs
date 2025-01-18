@@ -10,6 +10,8 @@ use cu29::config::{CuConfig, Node};
 use cu29::cutask::CuMsgMetadata;
 use cu29::monitoring::{CuDurationStatistics, CuMonitor, CuTaskState, Decision};
 use cu29::{CuError, CuResult};
+#[cfg(feature = "debug_pane")]
+use debug_pane::UIExt;
 use ratatui::backend::CrosstermBackend;
 use ratatui::buffer::Buffer;
 use ratatui::crossterm::event::{DisableMouseCapture, EnableMouseCapture, Event, KeyCode};
@@ -33,8 +35,6 @@ use std::time::Duration;
 use std::{io, thread};
 use tui_nodes::{Connection, NodeGraph, NodeLayout};
 use tui_widgets::scrollview::{ScrollView, ScrollViewState};
-#[cfg(feature = "debug_pane")]
-use {debug_pane::UIExt, log::Log};
 
 #[cfg(feature = "debug_pane")]
 const MENU_CONTENT: &str = "   [1] SysInfo  [2] DAG  [3] Latencies  [4] Debug Output  [q] Quit   ";
@@ -649,7 +649,7 @@ impl CuMonitor for CuConsoleMon {
                 #[cfg(debug_assertions)]
                 {
                     *cu29_log_runtime::EXTRA_TEXT_LOGGER.write().unwrap() =
-                        Some(Box::new(log_subscriber) as Box<dyn Log>);
+                        Some(Box::new(log_subscriber) as Box<dyn log::Log>);
                 }
 
                 ui.run_app(&mut terminal).expect("Failed to run app");
