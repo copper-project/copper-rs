@@ -209,7 +209,7 @@ impl<E: ElementType + 'static> ArrayLike for Vec<E> {
     type Element = E;
 }
 
-#[cfg(all(feature = "cuda", target_os = "linux"))]
+#[cfg(all(feature = "cuda", not(target_os = "macos")))]
 mod cuda {
     use super::*;
     use cudarc::driver::{CudaDevice, CudaSlice, DeviceRepr, ValidAsZeroBits};
@@ -443,7 +443,7 @@ impl<E: ElementType> Drop for AlignedBuffer<E> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(all(feature = "cuda", target_os = "linux"))]
+    #[cfg(all(feature = "cuda", not(target_os = "macos")))]
     use crate::pool::cuda::CuCudaPool;
     use std::cell::RefCell;
 
@@ -475,7 +475,7 @@ mod tests {
         assert!(obj5.is_none());
     }
 
-    #[cfg(all(feature = "cuda", target_os = "linux"))]
+    #[cfg(all(feature = "cuda", not(target_os = "macos")))]
     #[test]
     #[ignore] // Can only be executed if a real CUDA device is present
     fn test_cuda_pool() {
@@ -502,7 +502,7 @@ mod tests {
         assert!(obj5.is_none());
     }
 
-    #[cfg(all(feature = "cuda", target_os = "linux"))]
+    #[cfg(all(feature = "cuda", not(target_os = "macos")))]
     #[test]
     #[ignore] // Can only be executed if a real CUDA device is present
     fn test_copy_roundtrip() {
