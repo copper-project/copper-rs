@@ -277,10 +277,7 @@
 <a href="#276" id="276">276</a>
 <a href="#277" id="277">277</a>
 <a href="#278" id="278">278</a>
-<a href="#279" id="279">279</a>
-<a href="#280" id="280">280</a>
-<a href="#281" id="281">281</a>
-<a href="#282" id="282">282</a></pre></div><pre class="rust"><code><span class="kw">use </span>bincode::config::Configuration;
+<a href="#279" id="279">279</a></pre></div><pre class="rust"><code><span class="kw">use </span>bincode::config::Configuration;
 <span class="kw">use </span>bincode::enc::write::Writer;
 <span class="kw">use </span>bincode::enc::Encode;
 <span class="kw">use </span>bincode::enc::{Encoder, EncoderImpl};
@@ -291,11 +288,7 @@
 <span class="kw">use </span>log::Log;
 
 <span class="attr">#[cfg(debug_assertions)]
-</span><span class="kw">use </span>cu29_log::format_logline;
-<span class="attr">#[cfg(debug_assertions)]
-</span><span class="kw">use </span>log::Record;
-<span class="attr">#[cfg(debug_assertions)]
-</span><span class="kw">use </span>std::collections::HashMap;
+</span><span class="kw">use </span>{cu29_log::format_logline, std::collections::HashMap, std::sync::RwLock};
 
 <span class="kw">use </span>std::fmt::{Debug, Formatter};
 <span class="kw">use </span>std::fs::File;
@@ -318,9 +311,9 @@
 <span class="kw">static </span>WRITER: OnceLock&lt;WriterPair&gt; = OnceLock::new();
 
 <span class="attr">#[cfg(debug_assertions)]
-</span><span class="kw">static </span>EXTRA_TEXT_LOGGER: OnceLock&lt;<span class="prelude-ty">Option</span>&lt;Box&lt;<span class="kw">dyn </span>Log&gt;&gt;&gt; = OnceLock::new();
+</span><span class="kw">pub static </span>EXTRA_TEXT_LOGGER: RwLock&lt;<span class="prelude-ty">Option</span>&lt;Box&lt;<span class="kw">dyn </span>Log + <span class="lifetime">'static</span>&gt;&gt;&gt; = RwLock::new(<span class="prelude-val">None</span>);
 
-<span class="kw">pub struct </span>NullLog {}
+<span class="kw">pub struct </span>NullLog;
 <span class="kw">impl </span>Log <span class="kw">for </span>NullLog {
     <span class="kw">fn </span>enabled(<span class="kw-2">&amp;</span><span class="self">self</span>, _metadata: <span class="kw-2">&amp;</span>log::Metadata) -&gt; bool {
         <span class="bool-val">false
@@ -335,7 +328,7 @@
 
 <span class="kw">impl </span>LoggerRuntime {
     <span class="doccomment">/// destination is the binary stream in which we will log the structured log.
-    /// extra_text_logger is the logger that will log the text logs in real time. This is slow and only for debug builds.
+    /// `extra_text_logger` is the logger that will log the text logs in real time. This is slow and only for debug builds.
     </span><span class="kw">pub fn </span>init(
         clock: RobotClock,
         destination: <span class="kw">impl </span>WriteStream&lt;CuLogEntry&gt; + <span class="lifetime">'static</span>,
@@ -354,8 +347,9 @@
                 .unwrap();
         }
         <span class="attr">#[cfg(debug_assertions)]
-        </span><span class="kw">let _ </span>=
-            EXTRA_TEXT_LOGGER.set(extra_text_logger.map(|logger| Box::new(logger) <span class="kw">as </span>Box&lt;<span class="kw">dyn </span>Log&gt;));
+        </span><span class="kw">if let </span><span class="prelude-val">Some</span>(logger) = extra_text_logger {
+            <span class="kw-2">*</span>EXTRA_TEXT_LOGGER.write().unwrap() = <span class="prelude-val">Some</span>(Box::new(logger) <span class="kw">as </span>Box&lt;<span class="kw">dyn </span>Log&gt;);
+        }
 
         runtime
     }
@@ -420,11 +414,11 @@
 ) -&gt; CuResult&lt;()&gt; {
     log(entry)<span class="question-mark">?</span>;
 
-    <span class="kw">let </span>guarded_logger = EXTRA_TEXT_LOGGER.get();
+    <span class="kw">let </span>guarded_logger = EXTRA_TEXT_LOGGER.read().unwrap();
     <span class="kw">if </span>guarded_logger.is_none() {
         <span class="kw">return </span><span class="prelude-val">Ok</span>(());
     }
-    <span class="kw">if let </span><span class="prelude-val">Some</span>(logger) = guarded_logger.unwrap() {
+    <span class="kw">if let </span><span class="prelude-val">Some</span>(logger) = guarded_logger.as_ref() {
         <span class="kw">let </span>fstr = format_str.to_string();
         <span class="comment">// transform the slice into a hashmap
         </span><span class="kw">let </span>params: Vec&lt;String&gt; = entry.params.iter().map(|v| v.to_string()).collect();
@@ -440,7 +434,7 @@
             .collect();
         <span class="kw">let </span>logline = format_logline(entry.time, <span class="kw-2">&amp;</span>fstr, params.as_slice(), <span class="kw-2">&amp;</span>named_params)<span class="question-mark">?</span>;
         logger.log(
-            <span class="kw-2">&amp;</span>Record::builder()
+            <span class="kw-2">&amp;</span>log::Record::builder()
                 .args(<span class="macro">format_args!</span>(<span class="string">"{logline}"</span>))
                 .level(log::Level::Info)
                 .target(<span class="string">"cu29_log"</span>)
