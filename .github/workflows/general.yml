@@ -18,90 +18,7 @@ jobs:
     strategy:
       matrix:
         os: [ ubuntu-latest, macos-latest, windows-latest ]
-        mode: [ debug, release ]
-
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Setup rust-cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.mode }}
-      - name: Install latest nextest
-        uses: taiki-e/install-action@nextest
-      - name: Install winget
-        if: runner.os == 'Windows'
-        uses: Cyberboss/install-winget@v1
-
-      - name: Check formatting
-        run: cargo +stable fmt --all -- --check
-
-      - name: Install dependencies (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libudev-dev libpcap-dev
-
-      - name: Install dependencies (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          Invoke-WebRequest -Uri https://npcap.com/dist/npcap-sdk-1.13.zip -OutFile npcap-sdk.zip
-          Expand-Archive -Path npcap-sdk.zip -DestinationPath $env:USERPROFILE\npcap-sdk
-          Remove-Item npcap-sdk.zip
-          winget install DaiyuuNobori.Win10Pcap --accept-source-agreements --accept-package-agreements
-          Add-Content -Path $env:GITHUB_ENV -Value "LIB=$env:USERPROFILE\npcap-sdk\Lib\x64"
-
-      - name: Set build mode (Linux / MacOS)
-        if: runner.os != 'Windows'
-        run: echo "RELEASE_FLAG=$([[ '${{ matrix.mode }}' == 'release' ]] && echo '--release' || echo '')" >> $GITHUB_ENV
-
-      - name: Set build mode (Windows)
-        if: runner.os == 'Windows' && matrix.mode == 'release'
-        run: |
-          Add-Content -Path $env:GITHUB_ENV -Value "RELEASE_FLAG=--release"
-
-      # Run Clippy and build
-      - name: Run clippy on (${{ matrix.os }} | ${{matrix.mode}})
-        run: cargo +stable clippy $RELEASE_FLAG --workspace --all-targets -- --deny warnings
-      - name: Run clippy with all features on (${{ matrix.os }} | ${{matrix.mode}})
-        run: cargo +stable clippy $RELEASE_FLAG --workspace --all-targets --features macro_debug,mock,iyes_perf_ui,image,kornia  -- --deny warnings
-      - name: Run build with all features on (${{ matrix.os }} | ${{matrix.mode}})
-        run: cargo +stable build $RELEASE_FLAG --workspace --all-targets --features macro_debug,mock,iyes_perf_ui,image,kornia
-
-      - name: Run doctests on (${{ matrix.os }} | debug)
-        if: matrix.mode == 'debug'
-        run: cargo +stable test --doc --workspace
-
-      # Run Unit Tests
-      - name: Run Unit Tests on (${{ matrix.os }} | ${{matrix.mode}})
-        run: cargo +stable nextest run $RELEASE_FLAG --all-targets --workspace
-      - name: Run Unit Tests with all features on (${{ matrix.os }} | ${{matrix.mode}})
-        run: cargo +stable nextest run $RELEASE_FLAG --all-targets --workspace --features macro_debug,mock,iyes_perf_ui,image,kornia
-
-      # Run Project Generation Tests
-      - name: Install cargo-generate on (${{ matrix.os }} | debug)
-        if: matrix.mode == 'debug'
-        run: cargo +stable install cargo-generate
-
-      - name: Generate new project on (${{ matrix.os }} | debug)
-        if: matrix.mode == 'debug'
-        run: |
-          cd templates
-          cargo +stable generate -p cu_full --name test_project --destination . -d copper_source=local --silent
-
-      - name: Build generated project on (${{ matrix.os }} | debug)
-        if: matrix.mode == 'debug'
-        run: |
-          cd templates/test_project
-          cargo +stable build
-    
-  Unit-Tests-CUDA:
-    name: Unit Tests (CUDA)
-
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      matrix:
-        os: [ ubuntu-latest, windows-latest ]
-        mode: [ release ]
+        mode: [ debug, release, cuda-release]
 
     steps:
       - uses: actions/checkout@v4
@@ -120,17 +37,16 @@ jobs:
         run: cargo +stable fmt --all -- --check
 
       - name: Free Disk Space (Ubuntu)
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && matrix.mode == 'cuda-release'
         uses: jlumbroso/free-disk-space@main
         with:
           # this might remove tools that are actually needed,
           # if set to "true" but frees about 6 GB
           tool-cache: false
-          # all of these default to true, but feel free to set to
-          # "false" if necessary for your workflow
           android: true
           dotnet: true
           haskell: true
+          # do not remove large-packages, as it is necessary
           large-packages: false
           docker-images: true
           swap-storage: true
@@ -138,12 +54,6 @@ jobs:
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libudev-dev libpcap-dev
-
-      - name: Install CUDA
-        uses: Jimver/cuda-toolkit@master
-        if: runner.os != 'macOS'
-        with:
-          log-file-suffix: '${{ matrix.os }}-${{ matrix.mode }}.txt'
 
       - name: Install dependencies (Windows)
         if: runner.os == 'Windows'
@@ -154,22 +64,37 @@ jobs:
           winget install DaiyuuNobori.Win10Pcap --accept-source-agreements --accept-package-agreements
           Add-Content -Path $env:GITHUB_ENV -Value "LIB=$env:USERPROFILE\npcap-sdk\Lib\x64"
 
+      - name: Install CUDA
+        uses: Jimver/cuda-toolkit@master
+        if: runner.os != 'macOS' && matrix.mode == 'cuda-release'
+        with:
+          log-file-suffix: '${{ matrix.os }}-${{ matrix.mode }}-cuda.txt'
+
       - name: Set build mode (Linux / MacOS)
-        if: runner.os != 'Windows'
-        run: echo "RELEASE_FLAG=$([[ '${{ matrix.mode }}' == 'release' ]] && echo '--release' || echo '')" >> $GITHUB_ENV
+        if: runner.os != 'Windows' && ( matrix.mode == 'release' || matrix.mode == 'cuda-release' )
+        run: echo "RELEASE_FLAG=--release" >> $GITHUB_ENV
 
       - name: Set build mode (Windows)
-        if: runner.os == 'Windows' && matrix.mode == 'release'
+        if: runner.os == 'Windows' && ( matrix.mode == 'release' || matrix.mode == 'cuda-release' )
         run: |
           Add-Content -Path $env:GITHUB_ENV -Value "RELEASE_FLAG=--release"
+
+      - name: Set features (Linux / MacOS)
+        if: runner.os != 'Windows'
+        run: echo "FEATURES_FLAG=$([[ '${{ matrix.mode }}' == 'cuda-release' ]] && echo '--all-features' || echo 'macro_debug,mock,iyes_perf_ui,image,kornia')" >> $GITHUB_ENV
+
+      - name: Set features (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Add-Content -Path $env:GITHUB_ENV -Value "FEATURES_FLAG=$([[ '${{ matrix.mode }}' == 'cuda-release' ]] && echo '--all-features' || echo 'macro_debug,mock,iyes_perf_ui,image,kornia')"
 
       # Run Clippy and build
       - name: Run clippy on (${{ matrix.os }} | ${{matrix.mode}})
         run: cargo +stable clippy $RELEASE_FLAG --workspace --all-targets -- --deny warnings
       - name: Run clippy with all features on (${{ matrix.os }} | ${{matrix.mode}})
-        run: cargo +stable clippy $RELEASE_FLAG --workspace --all-targets --all-features -- --deny warnings
+        run: cargo +stable clippy $RELEASE_FLAG --workspace --all-targets $FEATURES_FLAG  -- --deny warnings
       - name: Run build with all features on (${{ matrix.os }} | ${{matrix.mode}})
-        run: cargo +stable build $RELEASE_FLAG --workspace --all-targets --all-features
+        run: cargo +stable build $RELEASE_FLAG --workspace --all-targets $FEATURES_FLAG
 
       - name: Run doctests on (${{ matrix.os }} | debug)
         if: matrix.mode == 'debug'
@@ -179,7 +104,7 @@ jobs:
       - name: Run Unit Tests on (${{ matrix.os }} | ${{matrix.mode}})
         run: cargo +stable nextest run $RELEASE_FLAG --all-targets --workspace
       - name: Run Unit Tests with all features on (${{ matrix.os }} | ${{matrix.mode}})
-        run: cargo +stable nextest run $RELEASE_FLAG --all-targets --workspace --all-features
+        run: cargo +stable nextest run $RELEASE_FLAG --all-targets --workspace $FEATURES_FLAG
 
       # Run Project Generation Tests
       - name: Install cargo-generate on (${{ matrix.os }} | debug)
