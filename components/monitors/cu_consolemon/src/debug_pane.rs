@@ -91,7 +91,12 @@ impl Log for LogSubscriber {
 
     fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
-            let message = format!("[{}] - {}\n", record.level(), record.args());
+            let message = format!(
+                "{} [{}] - {}\n",
+                chrono::Local::now().time().format("%H:%M:%S"),
+                record.level(),
+                record.args()
+            );
 
             self.push_logs(message);
         }
