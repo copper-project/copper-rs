@@ -651,7 +651,6 @@ impl CuMonitor for CuConsoleMon {
                     let max_lines = terminal.size().unwrap().height - 5;
                     let (debug_log, tx) = debug_pane::DebugLog::new(max_lines);
 
-                    #[allow(unused_variables)]
                     let log_subscriber = debug_pane::LogSubscriber::new(tx);
 
                     *cu29_log_runtime::EXTRA_TEXT_LOGGER.write().unwrap() =
@@ -661,8 +660,9 @@ impl CuMonitor for CuConsoleMon {
                     setup_terminal();
 
                     ui.debug_output = Some(debug_log);
+                } else {
+                    println!("EXTRA_TEXT_LOGGER is none");
                 }
-
                 ui.run_app(&mut terminal).expect("Failed to run app");
             }
 

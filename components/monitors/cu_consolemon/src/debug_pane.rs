@@ -13,6 +13,7 @@ use {
     std::sync::mpsc::{Receiver, SyncSender},
 };
 
+#[derive(Debug)]
 pub struct DebugLog {
     debug_log: VecDeque<String>,
     pub(crate) max_rows: AtomicU16,
@@ -74,8 +75,10 @@ impl LogSubscriber {
     #[allow(dead_code)]
     pub fn new(tx: SyncSender<String>) -> Self {
         let log_subscriber = Self { tx };
-        log::set_boxed_logger(Box::new(log_subscriber.clone())).unwrap();
-        log::set_max_level(LevelFilter::Info);
+        if log::set_boxed_logger(Box::new(log_subscriber.clone())).is_err() {
+            eprintln!("Failed to set `LogSubscriber` as global log subscriber")
+        }
+        log::set_max_level(LevelFilter::Debug);
         log_subscriber
     }
 
