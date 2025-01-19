@@ -20,6 +20,7 @@ pub struct DebugLog {
 }
 
 impl DebugLog {
+    #[allow(dead_code)]
     pub fn new(max_lines: u16) -> (Self, SyncSender<String>) {
         let (tx, rx) = std::sync::mpsc::sync_channel(1000);
         (
@@ -70,6 +71,7 @@ pub struct LogSubscriber {
 }
 
 impl LogSubscriber {
+    #[allow(dead_code)]
     pub fn new(tx: SyncSender<String>) -> Self {
         let log_subscriber = Self { tx };
         log::set_boxed_logger(Box::new(log_subscriber.clone())).unwrap();
