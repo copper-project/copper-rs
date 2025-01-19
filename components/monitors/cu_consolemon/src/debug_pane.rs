@@ -1,5 +1,6 @@
 use crate::UI;
 use ratatui::layout::Rect;
+use ratatui::prelude::Stylize;
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Frame;
 use std::sync::atomic::Ordering;
@@ -107,29 +108,42 @@ pub trait UIExt {
 
 impl UIExt for UI {
     fn update_debug_output(&mut self) {
-        let mut error_buffer = String::new();
-        self.error_redirect
-            .read_to_string(&mut error_buffer)
-            .unwrap();
-        self.debug_output.push_logs(error_buffer);
-        self.debug_output.update_logs();
+        if let Some(debug_output) = self.debug_output.as_mut() {
+            let mut error_buffer = String::new();
+            self.error_redirect
+                .read_to_string(&mut error_buffer)
+                .unwrap();
+            debug_output.push_logs(error_buffer);
+            debug_output.update_logs();
+        }
     }
 
     fn draw_debug_output(&mut self, f: &mut Frame, area: Rect) {
-        let mut error_buffer = String::new();
-        self.error_redirect
-            .read_to_string(&mut error_buffer)
-            .unwrap();
-        self.debug_output.push_logs(error_buffer);
+        if let Some(debug_output) = self.debug_output.as_mut() {
+            let mut error_buffer = String::new();
+            self.error_redirect
+                .read_to_string(&mut error_buffer)
+                .unwrap();
+            debug_output.push_logs(error_buffer);
 
-        let debug_output = self.debug_output.get_logs();
+            let debug_log = debug_output.get_logs();
 
-        let p = Paragraph::new(debug_output).block(
-            Block::default()
-                .title(" Debug Output ")
-                .title_bottom(format!("{} log entries", self.debug_output.debug_log.len()))
-                .borders(Borders::ALL),
-        );
-        f.render_widget(p, area);
+            let p = Paragraph::new(debug_log).block(
+                Block::default()
+                    .title(" Debug Output ")
+                    .title_bottom(format!("{} log entries", debug_output.debug_log.len()))
+                    .borders(Borders::ALL),
+            );
+            f.render_widget(p, area);
+        } else {
+            #[cfg(debug_assertions)]
+            let text = "Text logger is disabled";
+
+            #[cfg(not(debug_assertions))]
+            let text = "Only available in dev profile";
+
+            let p = Paragraph::new(text.italic());
+            f.render_widget(p, area);
+        }
     }
 }

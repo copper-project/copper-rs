@@ -22,7 +22,7 @@ fn main() {
         }
     }
 
-    let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), SLAB_SIZE, false, None)
+    let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), SLAB_SIZE, true, None)
         .expect("Failed to setup logger.");
     debug!("Logger created at {}.", path = logger_path);
 

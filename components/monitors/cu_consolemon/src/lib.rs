@@ -295,7 +295,7 @@ struct UI {
     #[cfg(feature = "debug_pane")]
     error_redirect: gag::BufferRedirect,
     #[cfg(feature = "debug_pane")]
-    debug_output: debug_pane::DebugLog,
+    debug_output: Option<debug_pane::DebugLog>,
 }
 
 impl UI {
@@ -306,7 +306,7 @@ impl UI {
         task_stats: Arc<Mutex<TaskStats>>,
         task_statuses: Arc<Mutex<Vec<TaskStatus>>>,
         error_redirect: gag::BufferRedirect,
-        debug_output: debug_pane::DebugLog,
+        debug_output: Option<debug_pane::DebugLog>,
     ) -> UI {
         init_error_hooks();
         let nodes_scrollable_widget_state =
@@ -581,7 +581,9 @@ impl UI {
 
                 #[cfg(feature = "debug_pane")]
                 if let Event::Resize(_columns, rows) = event::read()? {
-                    self.debug_output.max_rows.store(rows, Ordering::SeqCst)
+                    if let Some(debug_output) = self.debug_output.as_mut() {
+                        debug_output.max_rows.store(rows, Ordering::SeqCst)
+                    }
                 }
             }
         }
@@ -627,9 +629,6 @@ impl CuMonitor for CuConsoleMon {
 
             #[cfg(feature = "debug_pane")]
             {
-                let max_lines = terminal.size().unwrap().height - 5;
-                let (debug_log, tx) = debug_pane::DebugLog::new(max_lines);
-
                 // redirect stderr, so it doesn't pop in the terminal
                 let error_redirect = gag::BufferRedirect::stderr().unwrap();
 
@@ -639,17 +638,29 @@ impl CuMonitor for CuConsoleMon {
                     task_stats_ui,
                     error_states,
                     error_redirect,
-                    debug_log,
+                    None,
                 );
-
-                #[allow(unused_variables)]
-                let log_subscriber = debug_pane::LogSubscriber::new(tx);
 
                 // Override the cu29-log-runtime Log Subscriber
                 #[cfg(debug_assertions)]
+                if cu29_log_runtime::EXTRA_TEXT_LOGGER
+                    .read()
+                    .unwrap()
+                    .is_some()
                 {
+                    let max_lines = terminal.size().unwrap().height - 5;
+                    let (debug_log, tx) = debug_pane::DebugLog::new(max_lines);
+
+                    #[allow(unused_variables)]
+                    let log_subscriber = debug_pane::LogSubscriber::new(tx);
+
                     *cu29_log_runtime::EXTRA_TEXT_LOGGER.write().unwrap() =
                         Some(Box::new(log_subscriber) as Box<dyn log::Log>);
+
+                    // Set up the terminal again, as there might be some logs which in the console before updating `EXTRA_TEXT_LOGGER`
+                    setup_terminal();
+
+                    ui.debug_output = Some(debug_log);
                 }
 
                 ui.run_app(&mut terminal).expect("Failed to run app");
