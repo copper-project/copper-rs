@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["CuHandleInner"],"struct":["AlignedBuffer","CuHandle","CuHostMemoryPool"],"trait":["ArrayLike","CuPool","DeviceCuPool","ElementType"]};
+window.SIDEBAR_ITEMS = {"enum":["CuHandleInner"],"fn":["pools_statistics"],"struct":["AlignedBuffer","CuHandle","CuHostMemoryPool"],"trait":["ArrayLike","CuPool","DeviceCuPool","ElementType","PoolMonitor"]};

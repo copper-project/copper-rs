@@ -534,15 +534,154 @@
 <a href="#533" id="533">533</a>
 <a href="#534" id="534">534</a>
 <a href="#535" id="535">535</a>
-<a href="#536" id="536">536</a></pre></div><pre class="rust"><code><span class="kw">use </span>bincode::de::Decoder;
+<a href="#536" id="536">536</a>
+<a href="#537" id="537">537</a>
+<a href="#538" id="538">538</a>
+<a href="#539" id="539">539</a>
+<a href="#540" id="540">540</a>
+<a href="#541" id="541">541</a>
+<a href="#542" id="542">542</a>
+<a href="#543" id="543">543</a>
+<a href="#544" id="544">544</a>
+<a href="#545" id="545">545</a>
+<a href="#546" id="546">546</a>
+<a href="#547" id="547">547</a>
+<a href="#548" id="548">548</a>
+<a href="#549" id="549">549</a>
+<a href="#550" id="550">550</a>
+<a href="#551" id="551">551</a>
+<a href="#552" id="552">552</a>
+<a href="#553" id="553">553</a>
+<a href="#554" id="554">554</a>
+<a href="#555" id="555">555</a>
+<a href="#556" id="556">556</a>
+<a href="#557" id="557">557</a>
+<a href="#558" id="558">558</a>
+<a href="#559" id="559">559</a>
+<a href="#560" id="560">560</a>
+<a href="#561" id="561">561</a>
+<a href="#562" id="562">562</a>
+<a href="#563" id="563">563</a>
+<a href="#564" id="564">564</a>
+<a href="#565" id="565">565</a>
+<a href="#566" id="566">566</a>
+<a href="#567" id="567">567</a>
+<a href="#568" id="568">568</a>
+<a href="#569" id="569">569</a>
+<a href="#570" id="570">570</a>
+<a href="#571" id="571">571</a>
+<a href="#572" id="572">572</a>
+<a href="#573" id="573">573</a>
+<a href="#574" id="574">574</a>
+<a href="#575" id="575">575</a>
+<a href="#576" id="576">576</a>
+<a href="#577" id="577">577</a>
+<a href="#578" id="578">578</a>
+<a href="#579" id="579">579</a>
+<a href="#580" id="580">580</a>
+<a href="#581" id="581">581</a>
+<a href="#582" id="582">582</a>
+<a href="#583" id="583">583</a>
+<a href="#584" id="584">584</a>
+<a href="#585" id="585">585</a>
+<a href="#586" id="586">586</a>
+<a href="#587" id="587">587</a>
+<a href="#588" id="588">588</a>
+<a href="#589" id="589">589</a>
+<a href="#590" id="590">590</a>
+<a href="#591" id="591">591</a>
+<a href="#592" id="592">592</a>
+<a href="#593" id="593">593</a>
+<a href="#594" id="594">594</a>
+<a href="#595" id="595">595</a>
+<a href="#596" id="596">596</a>
+<a href="#597" id="597">597</a>
+<a href="#598" id="598">598</a>
+<a href="#599" id="599">599</a>
+<a href="#600" id="600">600</a>
+<a href="#601" id="601">601</a>
+<a href="#602" id="602">602</a>
+<a href="#603" id="603">603</a>
+<a href="#604" id="604">604</a>
+<a href="#605" id="605">605</a>
+<a href="#606" id="606">606</a>
+<a href="#607" id="607">607</a>
+<a href="#608" id="608">608</a>
+<a href="#609" id="609">609</a>
+<a href="#610" id="610">610</a>
+<a href="#611" id="611">611</a>
+<a href="#612" id="612">612</a>
+<a href="#613" id="613">613</a>
+<a href="#614" id="614">614</a>
+<a href="#615" id="615">615</a>
+<a href="#616" id="616">616</a>
+<a href="#617" id="617">617</a>
+<a href="#618" id="618">618</a>
+<a href="#619" id="619">619</a>
+<a href="#620" id="620">620</a>
+<a href="#621" id="621">621</a>
+<a href="#622" id="622">622</a>
+<a href="#623" id="623">623</a>
+<a href="#624" id="624">624</a></pre></div><pre class="rust"><code><span class="kw">use </span>arrayvec::ArrayString;
+<span class="kw">use </span>bincode::de::Decoder;
 <span class="kw">use </span>bincode::enc::Encoder;
 <span class="kw">use </span>bincode::error::{DecodeError, EncodeError};
 <span class="kw">use </span>bincode::{Decode, Encode};
+<span class="kw">use </span>cu29_traits::CuResult;
 <span class="kw">use </span>object_pool::{Pool, ReusableOwned};
+<span class="kw">use </span>smallvec::SmallVec;
 <span class="kw">use </span>std::alloc::{alloc, dealloc, Layout};
+<span class="kw">use </span>std::collections::HashMap;
 <span class="kw">use </span>std::fmt::Debug;
 <span class="kw">use </span>std::ops::{Deref, DerefMut};
-<span class="kw">use </span>std::sync::{Arc, Mutex};
+<span class="kw">use </span>std::sync::{Arc, Mutex, OnceLock};
+
+<span class="kw">type </span>PoolID = ArrayString&lt;<span class="number">64</span>&gt;;
+
+<span class="doccomment">/// Trait for a Pool to exposed to be monitored by the monitoring API.
+</span><span class="kw">pub trait </span>PoolMonitor: Send + Sync {
+    <span class="doccomment">/// A unique and descriptive identifier for the pool.
+    </span><span class="kw">fn </span>id(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; PoolID;
+
+    <span class="doccomment">/// Number of buffer slots left in the pool.
+    </span><span class="kw">fn </span>space_left(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize;
+
+    <span class="doccomment">/// Total size of the pool in number of buffers.
+    </span><span class="kw">fn </span>total_size(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize;
+
+    <span class="doccomment">/// Size of one buffer
+    </span><span class="kw">fn </span>buffer_size(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize;
+}
+
+<span class="kw">static </span>POOL_REGISTRY: OnceLock&lt;Mutex&lt;HashMap&lt;String, Arc&lt;<span class="kw">dyn </span>PoolMonitor&gt;&gt;&gt;&gt; = OnceLock::new();
+<span class="kw">const </span>MAX_POOLS: usize = <span class="number">16</span>;
+
+<span class="comment">// Register a pool to the global registry.
+</span><span class="kw">fn </span>register_pool(pool: Arc&lt;<span class="kw">dyn </span>PoolMonitor&gt;) {
+    POOL_REGISTRY
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .unwrap()
+        .insert(pool.id().to_string(), pool);
+}
+
+<span class="kw">type </span>PoolStats = (PoolID, usize, usize, usize);
+
+<span class="doccomment">/// Get the list of pools and their statistics.
+/// We use SmallVec here to avoid heap allocations while the stack is running.
+</span><span class="kw">pub fn </span>pools_statistics() -&gt; SmallVec&lt;[PoolStats; MAX_POOLS]&gt; {
+    <span class="kw">let </span>registry = POOL_REGISTRY.get().unwrap().lock().unwrap();
+    <span class="kw">let </span><span class="kw-2">mut </span>result = SmallVec::with_capacity(MAX_POOLS);
+    <span class="kw">for </span>pool <span class="kw">in </span>registry.values() {
+        result.push((
+            pool.id(),
+            pool.space_left(),
+            pool.total_size(),
+            pool.buffer_size(),
+        ));
+    }
+    result
+}
 
 <span class="doccomment">/// Basic Type that can be used in a buffer in a CuPool.
 </span><span class="kw">pub trait </span>ElementType:
@@ -556,11 +695,14 @@
 {
 }
 
-<span class="kw">pub trait </span>ArrayLike: Deref&lt;Target = [<span class="self">Self</span>::Element]&gt; + DerefMut + Debug {
+<span class="kw">pub trait </span>ArrayLike: Deref&lt;Target = [<span class="self">Self</span>::Element]&gt; + DerefMut + Debug + Sync + Send {
     <span class="kw">type </span>Element: ElementType;
 }
 
-<span class="kw">pub enum </span>CuHandleInner&lt;T: Debug&gt; {
+<span class="doccomment">/// A Handle to a Buffer.
+/// For onboard usages, the buffer should be Pooled (ie, coming from a preallocated pool).
+/// The Detached version is for offline usages where we don't really need a pool to deserialize them.
+</span><span class="kw">pub enum </span>CuHandleInner&lt;T: Debug&gt; {
     Pooled(ReusableOwned&lt;T&gt;),
     Detached(T), <span class="comment">// Should only be used in offline cases (e.g. deserialization)
 </span>}
@@ -656,38 +798,76 @@
     }
 }
 
-<span class="kw">pub trait </span>CuPool&lt;T: ArrayLike&gt; {
-    <span class="kw">fn </span>acquire(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;CuHandle&lt;T&gt;&gt;;
-    <span class="kw">fn </span>space_left(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize;
-    <span class="kw">fn </span>copy_from&lt;O&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, from: <span class="kw-2">&amp;mut </span>CuHandle&lt;O&gt;) -&gt; CuHandle&lt;T&gt;
+<span class="doccomment">/// A CuPool is a pool of buffers that can be shared between different parts of the code.
+/// Handles can be stored locally in the tasks and shared between them.
+</span><span class="kw">pub trait </span>CuPool&lt;T: ArrayLike&gt;: PoolMonitor {
+    <span class="doccomment">/// Acquire a buffer from the pool.
+    </span><span class="kw">fn </span>acquire(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;CuHandle&lt;T&gt;&gt;;
+
+    <span class="doccomment">/// Copy data from a handle to a new handle from the pool.
+    </span><span class="kw">fn </span>copy_from&lt;O&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, from: <span class="kw-2">&amp;mut </span>CuHandle&lt;O&gt;) -&gt; CuHandle&lt;T&gt;
     <span class="kw">where
         </span>O: ArrayLike&lt;Element = T::Element&gt;;
 }
 
-<span class="kw">pub trait </span>DeviceCuPool&lt;T: ArrayLike&gt; {
-    <span class="kw">type </span>O: ArrayLike&lt;Element = T::Element&gt;;
-
+<span class="doccomment">/// A device memory pool can copy data from a device to a host memory pool on top.
+</span><span class="kw">pub trait </span>DeviceCuPool&lt;T: ArrayLike&gt;: CuPool&lt;T&gt; {
     <span class="doccomment">/// Takes a handle to a device buffer and copies it into a host buffer pool.
     /// It returns a new handle from the host pool with the data from the device handle given.
-    </span><span class="kw">fn </span>copy_into(
+    </span><span class="kw">fn </span>copy_to_host_pool&lt;O&gt;(
         <span class="kw-2">&amp;</span><span class="self">self</span>,
-        from_device_handle: <span class="kw-2">&amp;</span>CuHandle&lt;<span class="self">Self</span>::O&gt;,
-        into_cu_host_memory_pool: <span class="kw-2">&amp;mut </span>CuHostMemoryPool&lt;T&gt;,
-    ) -&gt; CuHandle&lt;T&gt;;
+        from_device_handle: <span class="kw-2">&amp;</span>CuHandle&lt;T&gt;,
+        to_host_handle: <span class="kw-2">&amp;mut </span>CuHandle&lt;O&gt;,
+    ) -&gt; CuResult&lt;()&gt;
+    <span class="kw">where
+        </span>O: ArrayLike&lt;Element = T::Element&gt;;
 }
 
-<span class="kw">pub struct </span>CuHostMemoryPool&lt;T&gt; {
+<span class="doccomment">/// A pool of host memory buffers.
+</span><span class="kw">pub struct </span>CuHostMemoryPool&lt;T&gt; {
+    <span class="doccomment">/// Underlying pool of host buffers.
+    </span><span class="comment">// Being an Arc is a requirement of try_pull_owned() so buffers can refer back to the pool.
+    </span>id: PoolID,
     pool: Arc&lt;Pool&lt;T&gt;&gt;,
+    size: usize,
+    buffer_size: usize,
 }
 
-<span class="kw">impl</span>&lt;T&gt; CuHostMemoryPool&lt;T&gt; {
-    <span class="kw">pub fn </span>new&lt;F&gt;(size: usize, f: F) -&gt; <span class="self">Self
-    </span><span class="kw">where
+<span class="kw">impl</span>&lt;T: ArrayLike + <span class="lifetime">'static</span>&gt; CuHostMemoryPool&lt;T&gt; {
+    <span class="kw">pub fn </span>new&lt;F&gt;(id: <span class="kw-2">&amp;</span>str, size: usize, buffer_initializer: F) -&gt; CuResult&lt;Arc&lt;<span class="self">Self</span>&gt;&gt;
+    <span class="kw">where
         </span>F: Fn() -&gt; T,
     {
-        <span class="self">Self </span>{
-            pool: Arc::new(Pool::new(size, f)),
-        }
+        <span class="kw">let </span>pool = Arc::new(Pool::new(size, buffer_initializer));
+        <span class="kw">let </span>buffer_size = pool.try_pull().unwrap().len() * size_of::&lt;T::Element&gt;();
+
+        <span class="kw">let </span>og = <span class="self">Self </span>{
+            id: PoolID::from(id).map_err(|<span class="kw">_</span>| <span class="string">"Failed to create PoolID"</span>)<span class="question-mark">?</span>,
+            pool,
+            size,
+            buffer_size,
+        };
+        <span class="kw">let </span>og = Arc::new(og);
+        register_pool(og.clone());
+        <span class="prelude-val">Ok</span>(og)
+    }
+}
+
+<span class="kw">impl</span>&lt;T: ArrayLike&gt; PoolMonitor <span class="kw">for </span>CuHostMemoryPool&lt;T&gt; {
+    <span class="kw">fn </span>id(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; PoolID {
+        <span class="self">self</span>.id
+    }
+
+    <span class="kw">fn </span>space_left(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
+        <span class="self">self</span>.pool.len()
+    }
+
+    <span class="kw">fn </span>total_size(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
+        <span class="self">self</span>.size
+    }
+
+    <span class="kw">fn </span>buffer_size(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
+        <span class="self">self</span>.buffer_size
     }
 }
 
@@ -696,10 +876,6 @@
         <span class="kw">let </span>owned_object = <span class="self">self</span>.pool.try_pull_owned(); <span class="comment">// Use the owned version
 
         </span>owned_object.map(|reusable| CuHandle(Arc::new(Mutex::new(CuHandleInner::Pooled(reusable)))))
-    }
-
-    <span class="kw">fn </span>space_left(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
-        <span class="self">self</span>.pool.len()
     }
 
     <span class="kw">fn </span>copy_from&lt;O: ArrayLike&lt;Element = T::Element&gt;&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, from: <span class="kw-2">&amp;mut </span>CuHandle&lt;O&gt;) -&gt; CuHandle&lt;T&gt; {
@@ -727,20 +903,6 @@
     }
 }
 
-<span class="kw">impl</span>&lt;T&gt; CuHostMemoryPool&lt;T&gt;
-<span class="kw">where
-    </span>T: ArrayLike,
-{
-    <span class="kw">pub fn </span>new_buffers&lt;F&gt;(size: usize, f: F) -&gt; <span class="self">Self
-    </span><span class="kw">where
-        </span>F: Fn() -&gt; T,
-    {
-        <span class="self">Self </span>{
-            pool: Arc::new(Pool::new(size, f)),
-        }
-    }
-}
-
 <span class="kw">impl</span>&lt;E: ElementType + <span class="lifetime">'static</span>&gt; ArrayLike <span class="kw">for </span>Vec&lt;E&gt; {
     <span class="kw">type </span>Element = E;
 }
@@ -748,6 +910,7 @@
 <span class="attr">#[cfg(all(feature = <span class="string">"cuda"</span>, not(target_os = <span class="string">"macos"</span>)))]
 </span><span class="kw">mod </span>cuda {
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
+    <span class="kw">use </span>cu29_traits::CuError;
     <span class="kw">use </span>cudarc::driver::{CudaDevice, CudaSlice, DeviceRepr, ValidAsZeroBits};
     <span class="kw">use </span>std::sync::Arc;
 
@@ -789,58 +952,77 @@
         </span>}
     }
 
-    <span class="kw">pub struct </span>CuCudaPool&lt;E&gt;
+    <span class="doccomment">/// A pool of CUDA memory buffers.
+    </span><span class="kw">pub struct </span>CuCudaPool&lt;E&gt;
     <span class="kw">where
         </span>E: ElementType + ValidAsZeroBits + DeviceRepr + Unpin,
     {
+        id: PoolID,
         device: Arc&lt;CudaDevice&gt;,
         pool: Arc&lt;Pool&lt;CudaSliceWrapper&lt;E&gt;&gt;&gt;,
+        nb_buffers: usize,
+        nb_element_per_buffer: usize,
     }
 
     <span class="kw">impl</span>&lt;E: ElementType + ValidAsZeroBits + DeviceRepr&gt; CuCudaPool&lt;E&gt; {
         <span class="attr">#[allow(dead_code)]
         </span><span class="kw">pub fn </span>new(
+            id: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str,
             device: Arc&lt;CudaDevice&gt;,
             nb_buffers: usize,
             nb_element_per_buffer: usize,
-        ) -&gt; <span class="self">Self </span>{
-            <span class="self">Self </span>{
-                device: device.clone(),
-                pool: Arc::new(Pool::new(nb_buffers, || {
-                    CudaSliceWrapper(
-                        device
-                            .alloc_zeros(nb_element_per_buffer)
-                            .expect(<span class="string">"Failed to allocate device memory"</span>),
-                    )
-                })),
-            }
-        }
+        ) -&gt; CuResult&lt;<span class="self">Self</span>&gt; {
+            <span class="kw">let </span>pool = (<span class="number">0</span>..nb_buffers)
+                .map(|<span class="kw">_</span>| {
+                    device
+                        .alloc_zeros(nb_element_per_buffer)
+                        .map(CudaSliceWrapper)
+                        .map_err(|<span class="kw">_</span>| <span class="string">"Failed to allocate device memory"</span>)
+                })
+                .collect::&lt;<span class="prelude-ty">Result</span>&lt;Vec&lt;<span class="kw">_</span>&gt;, <span class="kw">_</span>&gt;&gt;()<span class="question-mark">?</span>;
 
-        <span class="attr">#[allow(dead_code)]
-        </span><span class="kw">pub fn </span>new_with&lt;F&gt;(device: Arc&lt;CudaDevice&gt;, nb_buffers: usize, f: F) -&gt; <span class="self">Self
-        </span><span class="kw">where
-            </span>F: Fn() -&gt; CudaSliceWrapper&lt;E&gt;,
-        {
-            <span class="self">Self </span>{
+            <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
+                id: PoolID::from(id).map_err(|<span class="kw">_</span>| <span class="string">"Failed to create PoolID"</span>)<span class="question-mark">?</span>,
                 device: device.clone(),
-                pool: Arc::new(Pool::new(nb_buffers, f)),
-            }
+                pool: Arc::new(Pool::from_vec(pool)),
+                nb_buffers,
+                nb_element_per_buffer,
+            })
         }
     }
 
-    <span class="kw">impl</span>&lt;E: ElementType + ValidAsZeroBits + DeviceRepr&gt; CuPool&lt;CudaSliceWrapper&lt;E&gt;&gt; <span class="kw">for </span>CuCudaPool&lt;E&gt; {
-        <span class="kw">fn </span>acquire(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;CuHandle&lt;CudaSliceWrapper&lt;E&gt;&gt;&gt; {
-            <span class="self">self</span>.pool
-                .try_pull_owned()
-                .map(|x| CuHandle(Arc::new(Mutex::new(CuHandleInner::Pooled(x)))))
+    <span class="kw">impl</span>&lt;E&gt; PoolMonitor <span class="kw">for </span>CuCudaPool&lt;E&gt;
+    <span class="kw">where
+        </span>E: DeviceRepr + ElementType + ValidAsZeroBits,
+    {
+        <span class="kw">fn </span>id(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; PoolID {
+            <span class="self">self</span>.id
         }
 
         <span class="kw">fn </span>space_left(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
             <span class="self">self</span>.pool.len()
         }
 
-        <span class="doccomment">/// Copy from host to device
-        </span><span class="kw">fn </span>copy_from&lt;O&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, from_handle: <span class="kw-2">&amp;mut </span>CuHandle&lt;O&gt;) -&gt; CuHandle&lt;CudaSliceWrapper&lt;E&gt;&gt;
+        <span class="kw">fn </span>total_size(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
+            <span class="self">self</span>.nb_buffers
+        }
+
+        <span class="kw">fn </span>buffer_size(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
+            <span class="self">self</span>.nb_element_per_buffer * size_of::&lt;E&gt;()
+        }
+    }
+
+    <span class="kw">impl</span>&lt;E&gt; CuPool&lt;CudaSliceWrapper&lt;E&gt;&gt; <span class="kw">for </span>CuCudaPool&lt;E&gt;
+    <span class="kw">where
+        </span>E: DeviceRepr + ElementType + ValidAsZeroBits,
+    {
+        <span class="kw">fn </span>acquire(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;CuHandle&lt;CudaSliceWrapper&lt;E&gt;&gt;&gt; {
+            <span class="self">self</span>.pool
+                .try_pull_owned()
+                .map(|x| CuHandle(Arc::new(Mutex::new(CuHandleInner::Pooled(x)))))
+        }
+
+        <span class="kw">fn </span>copy_from&lt;O&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, from_handle: <span class="kw-2">&amp;mut </span>CuHandle&lt;O&gt;) -&gt; CuHandle&lt;CudaSliceWrapper&lt;E&gt;&gt;
         <span class="kw">where
             </span>O: ArrayLike&lt;Element = E&gt;,
         {
@@ -876,55 +1058,46 @@
         }
     }
 
-    <span class="kw">impl</span>&lt;E, T&gt; DeviceCuPool&lt;T&gt; <span class="kw">for </span>CuCudaPool&lt;E&gt;
+    <span class="kw">impl</span>&lt;E&gt; DeviceCuPool&lt;CudaSliceWrapper&lt;E&gt;&gt; <span class="kw">for </span>CuCudaPool&lt;E&gt;
     <span class="kw">where
         </span>E: ElementType + ValidAsZeroBits + DeviceRepr,
-        T: ArrayLike&lt;Element = E&gt;,
     {
-        <span class="kw">type </span>O = CudaSliceWrapper&lt;T::Element&gt;;
-
         <span class="doccomment">/// Copy from device to host
-        </span><span class="kw">fn </span>copy_into(
+        </span><span class="kw">fn </span>copy_to_host_pool&lt;O&gt;(
             <span class="kw-2">&amp;</span><span class="self">self</span>,
-            device_handle: <span class="kw-2">&amp;</span>CuHandle&lt;<span class="self">Self</span>::O&gt;,
-            cu_host_memory_pool: <span class="kw-2">&amp;mut </span>CuHostMemoryPool&lt;T&gt;,
-        ) -&gt; CuHandle&lt;T&gt; {
-            <span class="kw">let </span>destination_handle = cu_host_memory_pool
-                .acquire()
-                .expect(<span class="string">"No available buffers in the pool"</span>);
-
+            device_handle: <span class="kw-2">&amp;</span>CuHandle&lt;CudaSliceWrapper&lt;E&gt;&gt;,
+            host_handle: <span class="kw-2">&amp;mut </span>CuHandle&lt;O&gt;,
+        ) -&gt; <span class="prelude-ty">Result</span>&lt;(), CuError&gt;
+        <span class="kw">where
+            </span>O: ArrayLike&lt;Element = E&gt;,
+        {
             <span class="kw">match </span>device_handle.lock().unwrap().deref() {
-                CuHandleInner::Pooled(source) =&gt; {
-                    <span class="kw">match </span>destination_handle.lock().unwrap().deref_mut() {
-                        CuHandleInner::Pooled(<span class="kw-2">ref mut </span>destination) =&gt; {
-                            <span class="self">self</span>.device
-                                .dtoh_sync_copy_into(source.as_cuda_slice(), destination)
-                                .expect(<span class="string">"Failed to copy data to device"</span>);
-                        }
-                        CuHandleInner::Detached(<span class="kw-2">ref mut </span>destination) =&gt; {
-                            <span class="self">self</span>.device
-                                .dtoh_sync_copy_into(source.as_cuda_slice(), destination)
-                                .expect(<span class="string">"Failed to copy data to device"</span>);
-                        }
+                CuHandleInner::Pooled(source) =&gt; <span class="kw">match </span>host_handle.lock().unwrap().deref_mut() {
+                    CuHandleInner::Pooled(<span class="kw-2">ref mut </span>destination) =&gt; {
+                        <span class="self">self</span>.device
+                            .dtoh_sync_copy_into(source.as_cuda_slice(), destination)
+                            .expect(<span class="string">"Failed to copy data to device"</span>);
                     }
-                }
-                CuHandleInner::Detached(source) =&gt; {
-                    <span class="kw">match </span>destination_handle.lock().unwrap().deref_mut() {
-                        CuHandleInner::Pooled(<span class="kw-2">ref mut </span>destination) =&gt; {
-                            <span class="self">self</span>.device
-                                .dtoh_sync_copy_into(source.as_cuda_slice(), destination)
-                                .expect(<span class="string">"Failed to copy data to device"</span>);
-                        }
-                        CuHandleInner::Detached(<span class="kw-2">ref mut </span>destination) =&gt; {
-                            <span class="self">self</span>.device
-                                .dtoh_sync_copy_into(source.as_cuda_slice(), destination)
-                                .expect(<span class="string">"Failed to copy data to device"</span>);
-                        }
+                    CuHandleInner::Detached(<span class="kw-2">ref mut </span>destination) =&gt; {
+                        <span class="self">self</span>.device
+                            .dtoh_sync_copy_into(source.as_cuda_slice(), destination)
+                            .expect(<span class="string">"Failed to copy data to device"</span>);
                     }
-                }
+                },
+                CuHandleInner::Detached(source) =&gt; <span class="kw">match </span>host_handle.lock().unwrap().deref_mut() {
+                    CuHandleInner::Pooled(<span class="kw-2">ref mut </span>destination) =&gt; {
+                        <span class="self">self</span>.device
+                            .dtoh_sync_copy_into(source.as_cuda_slice(), destination)
+                            .expect(<span class="string">"Failed to copy data to device"</span>);
+                    }
+                    CuHandleInner::Detached(<span class="kw-2">ref mut </span>destination) =&gt; {
+                        <span class="self">self</span>.device
+                            .dtoh_sync_copy_into(source.as_cuda_slice(), destination)
+                            .expect(<span class="string">"Failed to copy data to device"</span>);
+                    }
+                },
             }
-
-            destination_handle
+            <span class="prelude-val">Ok</span>(())
         }
     }
 }
@@ -988,7 +1161,8 @@
         <span class="kw">let </span>objs = RefCell::new(<span class="macro">vec!</span>[<span class="macro">vec!</span>[<span class="number">1</span>], <span class="macro">vec!</span>[<span class="number">2</span>], <span class="macro">vec!</span>[<span class="number">3</span>]]);
         <span class="kw">let </span>holding = objs.borrow().clone();
         <span class="kw">let </span>objs_as_slices = holding.iter().map(|x| x.as_slice()).collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;();
-        <span class="kw">let </span>pool = CuHostMemoryPool::new(<span class="number">3</span>, || objs.borrow_mut().pop().unwrap());
+        <span class="kw">let </span>pool = CuHostMemoryPool::new(<span class="string">"mytestcudapool"</span>, <span class="number">3</span>, || objs.borrow_mut().pop().unwrap())
+            .unwrap();
 
         <span class="kw">let </span>obj1 = pool.acquire().unwrap();
         {
@@ -1017,7 +1191,7 @@
     </span><span class="kw">fn </span>test_cuda_pool() {
         <span class="kw">use </span>cudarc::driver::CudaDevice;
         <span class="kw">let </span>device = CudaDevice::new(<span class="number">0</span>).unwrap();
-        <span class="kw">let </span>pool = CuCudaPool::&lt;f32&gt;::new(device, <span class="number">3</span>, <span class="number">1</span>);
+        <span class="kw">let </span>pool = CuCudaPool::&lt;f32&gt;::new(<span class="string">"mytestcudapool"</span>, device, <span class="number">3</span>, <span class="number">1</span>).unwrap();
 
         <span class="kw">let </span>_obj1 = pool.acquire().unwrap();
 
@@ -1044,9 +1218,8 @@
     </span><span class="kw">fn </span>test_copy_roundtrip() {
         <span class="kw">use </span>cudarc::driver::CudaDevice;
         <span class="kw">let </span>device = CudaDevice::new(<span class="number">0</span>).unwrap();
-        <span class="kw">let </span><span class="kw-2">mut </span>host_pool = CuHostMemoryPool::new(<span class="number">3</span>, || <span class="macro">vec!</span>[<span class="number">0.0</span>; <span class="number">1</span>]);
-
-        <span class="kw">let </span>cuda_pool = CuCudaPool::&lt;f32&gt;::new(device, <span class="number">3</span>, <span class="number">1</span>);
+        <span class="kw">let </span>host_pool = CuHostMemoryPool::new(<span class="string">"mytesthostpool"</span>, <span class="number">3</span>, || <span class="macro">vec!</span>[<span class="number">0.0</span>; <span class="number">1</span>]).unwrap();
+        <span class="kw">let </span>cuda_pool = CuCudaPool::&lt;f32&gt;::new(<span class="string">"mytestcudapool"</span>, device, <span class="number">3</span>, <span class="number">1</span>).unwrap();
 
         <span class="kw">let </span>cuda_handle = {
             <span class="kw">let </span><span class="kw-2">mut </span>initial_handle = host_pool.acquire().unwrap();
@@ -1064,7 +1237,10 @@
         };
 
         <span class="comment">// get it back to the host
-        </span><span class="kw">let </span>final_handle = cuda_pool.copy_into(<span class="kw-2">&amp;</span>cuda_handle, <span class="kw-2">&amp;mut </span>host_pool);
+        </span><span class="kw">let </span><span class="kw-2">mut </span>final_handle = host_pool.acquire().unwrap();
+        cuda_pool
+            .copy_to_host_pool(<span class="kw-2">&amp;</span>cuda_handle, <span class="kw-2">&amp;mut </span>final_handle)
+            .unwrap();
 
         <span class="kw">let </span>value = final_handle.lock().unwrap().deref().deref()[<span class="number">0</span>];
         <span class="macro">assert_eq!</span>(value, <span class="number">42.0</span>);
