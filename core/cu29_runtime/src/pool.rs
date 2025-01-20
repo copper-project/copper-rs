@@ -202,7 +202,7 @@ pub trait DeviceCuPool<T: ArrayLike>: CuPool<T> {
 /// A pool of host memory buffers.
 pub struct CuHostMemoryPool<T> {
     /// Underlying pool of host buffers.
-    // Beeing an Arc is a requirement of try_pull_owned() so buffers can refer back to the pool.
+    // Being an Arc is a requirement of try_pull_owned() so buffers can refer back to the pool.
     id: PoolID,
     pool: Arc<Pool<T>>,
     size: usize,
