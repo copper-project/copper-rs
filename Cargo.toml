@@ -124,5 +124,8 @@ tempfile = "3.14.0"
 # rerun
 rerun = "0.21.0"
 
+# smallvec to avoid heap allocations
+smallvec = { version = "1.13.2", fetures = ["serde"] }
+
 # [profile.release]
 # lto = true

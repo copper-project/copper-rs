@@ -45,7 +45,8 @@ impl CuV4LStream {
             format!("V4L Host Pool {}", original_path.display()).as_str(),
             4,
             || vec![0; buf_size],
-        );
+        )
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
         CuV4LStream::with_buffers(dev, buf_type, 4, pool)
     }
