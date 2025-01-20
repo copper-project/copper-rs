@@ -1,12 +1,63 @@
+use arrayvec::ArrayString;
 use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
+use cu29_traits::CuResult;
 use object_pool::{Pool, ReusableOwned};
+use smallvec::SmallVec;
 use std::alloc::{alloc, dealloc, Layout};
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::ops::{Deref, DerefMut};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
+
+type PoolID = ArrayString<64>;
+
+/// Trait for a Pool to exposed to be monitored by the monitoring API.
+pub trait PoolMonitor: Send + Sync {
+    /// A unique and descriptive identifier for the pool.
+    fn id(&self) -> PoolID;
+
+    /// Number of buffer slots left in the pool.
+    fn space_left(&self) -> usize;
+
+    /// Total size of the pool in number of buffers.
+    fn total_size(&self) -> usize;
+
+    /// Size of one buffer
+    fn buffer_size(&self) -> usize;
+}
+
+static POOL_REGISTRY: OnceLock<Mutex<HashMap<String, Arc<dyn PoolMonitor>>>> = OnceLock::new();
+const MAX_POOLS: usize = 16;
+
+// Register a pool to the global registry.
+fn register_pool(pool: Arc<dyn PoolMonitor>) {
+    POOL_REGISTRY
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .unwrap()
+        .insert(pool.id().to_string(), pool);
+}
+
+type PoolStats = (PoolID, usize, usize, usize);
+
+/// Get the list of pools and their statistics.
+/// We use SmallVec here to avoid heap allocations while the stack is running.
+pub fn pools_statistics() -> SmallVec<[PoolStats; MAX_POOLS]> {
+    let registry = POOL_REGISTRY.get().unwrap().lock().unwrap();
+    let mut result = SmallVec::with_capacity(MAX_POOLS);
+    for pool in registry.values() {
+        result.push((
+            pool.id(),
+            pool.space_left(),
+            pool.total_size(),
+            pool.buffer_size(),
+        ));
+    }
+    result
+}
 
 /// Basic Type that can be used in a buffer in a CuPool.
 pub trait ElementType:
@@ -20,10 +71,13 @@ impl<T> ElementType for T where
 {
 }
 
-pub trait ArrayLike: Deref<Target = [Self::Element]> + DerefMut + Debug {
+pub trait ArrayLike: Deref<Target = [Self::Element]> + DerefMut + Debug + Sync + Send {
     type Element: ElementType;
 }
 
+/// A Handle to a Buffer.
+/// For onboard usages, the buffer should be Pooled (ie, coming from a preallocated pool).
+/// The Detached version is for offline usages where we don't really need a pool to deserialize them.
 pub enum CuHandleInner<T: Debug> {
     Pooled(ReusableOwned<T>),
     Detached(T), // Should only be used in offline cases (e.g. deserialization)
@@ -120,38 +174,76 @@ impl<U: ElementType + 'static> Decode for CuHandle<Vec<U>> {
     }
 }
 
-pub trait CuPool<T: ArrayLike> {
+/// A CuPool is a pool of buffers that can be shared between different parts of the code.
+/// Handles can be stored locally in the tasks and shared between them.
+pub trait CuPool<T: ArrayLike>: PoolMonitor {
+    /// Acquire a buffer from the pool.
     fn acquire(&self) -> Option<CuHandle<T>>;
-    fn space_left(&self) -> usize;
+
+    /// Copy data from a handle to a new handle from the pool.
     fn copy_from<O>(&self, from: &mut CuHandle<O>) -> CuHandle<T>
     where
         O: ArrayLike<Element = T::Element>;
 }
 
-pub trait DeviceCuPool<T: ArrayLike> {
-    type O: ArrayLike<Element = T::Element>;
-
+/// A device memory pool can copy data from a device to a host memory pool on top.
+pub trait DeviceCuPool<T: ArrayLike>: CuPool<T> {
     /// Takes a handle to a device buffer and copies it into a host buffer pool.
     /// It returns a new handle from the host pool with the data from the device handle given.
-    fn copy_into(
+    fn copy_to_host_pool<O>(
         &self,
-        from_device_handle: &CuHandle<Self::O>,
-        into_cu_host_memory_pool: &mut CuHostMemoryPool<T>,
-    ) -> CuHandle<T>;
+        from_device_handle: &CuHandle<T>,
+        to_host_handle: &mut CuHandle<O>,
+    ) -> CuResult<()>
+    where
+        O: ArrayLike<Element = T::Element>;
 }
 
+/// A pool of host memory buffers.
 pub struct CuHostMemoryPool<T> {
+    /// Underlying pool of host buffers.
+    // Being an Arc is a requirement of try_pull_owned() so buffers can refer back to the pool.
+    id: PoolID,
     pool: Arc<Pool<T>>,
+    size: usize,
+    buffer_size: usize,
 }
 
-impl<T> CuHostMemoryPool<T> {
-    pub fn new<F>(size: usize, f: F) -> Self
+impl<T: ArrayLike + 'static> CuHostMemoryPool<T> {
+    pub fn new<F>(id: &str, size: usize, buffer_initializer: F) -> CuResult<Arc<Self>>
     where
         F: Fn() -> T,
     {
-        Self {
-            pool: Arc::new(Pool::new(size, f)),
-        }
+        let pool = Arc::new(Pool::new(size, buffer_initializer));
+        let buffer_size = pool.try_pull().unwrap().len() * size_of::<T::Element>();
+
+        let og = Self {
+            id: PoolID::from(id).map_err(|_| "Failed to create PoolID")?,
+            pool,
+            size,
+            buffer_size,
+        };
+        let og = Arc::new(og);
+        register_pool(og.clone());
+        Ok(og)
+    }
+}
+
+impl<T: ArrayLike> PoolMonitor for CuHostMemoryPool<T> {
+    fn id(&self) -> PoolID {
+        self.id
+    }
+
+    fn space_left(&self) -> usize {
+        self.pool.len()
+    }
+
+    fn total_size(&self) -> usize {
+        self.size
+    }
+
+    fn buffer_size(&self) -> usize {
+        self.buffer_size
     }
 }
 
@@ -160,10 +252,6 @@ impl<T: ArrayLike> CuPool<T> for CuHostMemoryPool<T> {
         let owned_object = self.pool.try_pull_owned(); // Use the owned version
 
         owned_object.map(|reusable| CuHandle(Arc::new(Mutex::new(CuHandleInner::Pooled(reusable)))))
-    }
-
-    fn space_left(&self) -> usize {
-        self.pool.len()
     }
 
     fn copy_from<O: ArrayLike<Element = T::Element>>(&self, from: &mut CuHandle<O>) -> CuHandle<T> {
@@ -191,20 +279,6 @@ impl<T: ArrayLike> CuPool<T> for CuHostMemoryPool<T> {
     }
 }
 
-impl<T> CuHostMemoryPool<T>
-where
-    T: ArrayLike,
-{
-    pub fn new_buffers<F>(size: usize, f: F) -> Self
-    where
-        F: Fn() -> T,
-    {
-        Self {
-            pool: Arc::new(Pool::new(size, f)),
-        }
-    }
-}
-
 impl<E: ElementType + 'static> ArrayLike for Vec<E> {
     type Element = E;
 }
@@ -212,6 +286,7 @@ impl<E: ElementType + 'static> ArrayLike for Vec<E> {
 #[cfg(all(feature = "cuda", not(target_os = "macos")))]
 mod cuda {
     use super::*;
+    use cu29_traits::CuError;
     use cudarc::driver::{CudaDevice, CudaSlice, DeviceRepr, ValidAsZeroBits};
     use std::sync::Arc;
 
@@ -253,57 +328,76 @@ mod cuda {
         }
     }
 
+    /// A pool of CUDA memory buffers.
     pub struct CuCudaPool<E>
     where
         E: ElementType + ValidAsZeroBits + DeviceRepr + Unpin,
     {
+        id: PoolID,
         device: Arc<CudaDevice>,
         pool: Arc<Pool<CudaSliceWrapper<E>>>,
+        nb_buffers: usize,
+        nb_element_per_buffer: usize,
     }
 
     impl<E: ElementType + ValidAsZeroBits + DeviceRepr> CuCudaPool<E> {
         #[allow(dead_code)]
         pub fn new(
+            id: &'static str,
             device: Arc<CudaDevice>,
             nb_buffers: usize,
             nb_element_per_buffer: usize,
-        ) -> Self {
-            Self {
-                device: device.clone(),
-                pool: Arc::new(Pool::new(nb_buffers, || {
-                    CudaSliceWrapper(
-                        device
-                            .alloc_zeros(nb_element_per_buffer)
-                            .expect("Failed to allocate device memory"),
-                    )
-                })),
-            }
-        }
+        ) -> CuResult<Self> {
+            let pool = (0..nb_buffers)
+                .map(|_| {
+                    device
+                        .alloc_zeros(nb_element_per_buffer)
+                        .map(CudaSliceWrapper)
+                        .map_err(|_| "Failed to allocate device memory")
+                })
+                .collect::<Result<Vec<_>, _>>()?;
 
-        #[allow(dead_code)]
-        pub fn new_with<F>(device: Arc<CudaDevice>, nb_buffers: usize, f: F) -> Self
-        where
-            F: Fn() -> CudaSliceWrapper<E>,
-        {
-            Self {
+            Ok(Self {
+                id: PoolID::from(id).map_err(|_| "Failed to create PoolID")?,
                 device: device.clone(),
-                pool: Arc::new(Pool::new(nb_buffers, f)),
-            }
+                pool: Arc::new(Pool::from_vec(pool)),
+                nb_buffers,
+                nb_element_per_buffer,
+            })
         }
     }
 
-    impl<E: ElementType + ValidAsZeroBits + DeviceRepr> CuPool<CudaSliceWrapper<E>> for CuCudaPool<E> {
-        fn acquire(&self) -> Option<CuHandle<CudaSliceWrapper<E>>> {
-            self.pool
-                .try_pull_owned()
-                .map(|x| CuHandle(Arc::new(Mutex::new(CuHandleInner::Pooled(x)))))
+    impl<E> PoolMonitor for CuCudaPool<E>
+    where
+        E: DeviceRepr + ElementType + ValidAsZeroBits,
+    {
+        fn id(&self) -> PoolID {
+            self.id
         }
 
         fn space_left(&self) -> usize {
             self.pool.len()
         }
 
-        /// Copy from host to device
+        fn total_size(&self) -> usize {
+            self.nb_buffers
+        }
+
+        fn buffer_size(&self) -> usize {
+            self.nb_element_per_buffer * size_of::<E>()
+        }
+    }
+
+    impl<E> CuPool<CudaSliceWrapper<E>> for CuCudaPool<E>
+    where
+        E: DeviceRepr + ElementType + ValidAsZeroBits,
+    {
+        fn acquire(&self) -> Option<CuHandle<CudaSliceWrapper<E>>> {
+            self.pool
+                .try_pull_owned()
+                .map(|x| CuHandle(Arc::new(Mutex::new(CuHandleInner::Pooled(x)))))
+        }
+
         fn copy_from<O>(&self, from_handle: &mut CuHandle<O>) -> CuHandle<CudaSliceWrapper<E>>
         where
             O: ArrayLike<Element = E>,
@@ -340,55 +434,46 @@ mod cuda {
         }
     }
 
-    impl<E, T> DeviceCuPool<T> for CuCudaPool<E>
+    impl<E> DeviceCuPool<CudaSliceWrapper<E>> for CuCudaPool<E>
     where
         E: ElementType + ValidAsZeroBits + DeviceRepr,
-        T: ArrayLike<Element = E>,
     {
-        type O = CudaSliceWrapper<T::Element>;
-
         /// Copy from device to host
-        fn copy_into(
+        fn copy_to_host_pool<O>(
             &self,
-            device_handle: &CuHandle<Self::O>,
-            cu_host_memory_pool: &mut CuHostMemoryPool<T>,
-        ) -> CuHandle<T> {
-            let destination_handle = cu_host_memory_pool
-                .acquire()
-                .expect("No available buffers in the pool");
-
+            device_handle: &CuHandle<CudaSliceWrapper<E>>,
+            host_handle: &mut CuHandle<O>,
+        ) -> Result<(), CuError>
+        where
+            O: ArrayLike<Element = E>,
+        {
             match device_handle.lock().unwrap().deref() {
-                CuHandleInner::Pooled(source) => {
-                    match destination_handle.lock().unwrap().deref_mut() {
-                        CuHandleInner::Pooled(ref mut destination) => {
-                            self.device
-                                .dtoh_sync_copy_into(source.as_cuda_slice(), destination)
-                                .expect("Failed to copy data to device");
-                        }
-                        CuHandleInner::Detached(ref mut destination) => {
-                            self.device
-                                .dtoh_sync_copy_into(source.as_cuda_slice(), destination)
-                                .expect("Failed to copy data to device");
-                        }
+                CuHandleInner::Pooled(source) => match host_handle.lock().unwrap().deref_mut() {
+                    CuHandleInner::Pooled(ref mut destination) => {
+                        self.device
+                            .dtoh_sync_copy_into(source.as_cuda_slice(), destination)
+                            .expect("Failed to copy data to device");
                     }
-                }
-                CuHandleInner::Detached(source) => {
-                    match destination_handle.lock().unwrap().deref_mut() {
-                        CuHandleInner::Pooled(ref mut destination) => {
-                            self.device
-                                .dtoh_sync_copy_into(source.as_cuda_slice(), destination)
-                                .expect("Failed to copy data to device");
-                        }
-                        CuHandleInner::Detached(ref mut destination) => {
-                            self.device
-                                .dtoh_sync_copy_into(source.as_cuda_slice(), destination)
-                                .expect("Failed to copy data to device");
-                        }
+                    CuHandleInner::Detached(ref mut destination) => {
+                        self.device
+                            .dtoh_sync_copy_into(source.as_cuda_slice(), destination)
+                            .expect("Failed to copy data to device");
                     }
-                }
+                },
+                CuHandleInner::Detached(source) => match host_handle.lock().unwrap().deref_mut() {
+                    CuHandleInner::Pooled(ref mut destination) => {
+                        self.device
+                            .dtoh_sync_copy_into(source.as_cuda_slice(), destination)
+                            .expect("Failed to copy data to device");
+                    }
+                    CuHandleInner::Detached(ref mut destination) => {
+                        self.device
+                            .dtoh_sync_copy_into(source.as_cuda_slice(), destination)
+                            .expect("Failed to copy data to device");
+                    }
+                },
             }
-
-            destination_handle
+            Ok(())
         }
     }
 }
@@ -452,7 +537,8 @@ mod tests {
         let objs = RefCell::new(vec![vec![1], vec![2], vec![3]]);
         let holding = objs.borrow().clone();
         let objs_as_slices = holding.iter().map(|x| x.as_slice()).collect::<Vec<_>>();
-        let pool = CuHostMemoryPool::new(3, || objs.borrow_mut().pop().unwrap());
+        let pool = CuHostMemoryPool::new("mytestcudapool", 3, || objs.borrow_mut().pop().unwrap())
+            .unwrap();
 
         let obj1 = pool.acquire().unwrap();
         {
@@ -481,7 +567,7 @@ mod tests {
     fn test_cuda_pool() {
         use cudarc::driver::CudaDevice;
         let device = CudaDevice::new(0).unwrap();
-        let pool = CuCudaPool::<f32>::new(device, 3, 1);
+        let pool = CuCudaPool::<f32>::new("mytestcudapool", device, 3, 1).unwrap();
 
         let _obj1 = pool.acquire().unwrap();
 
@@ -508,9 +594,8 @@ mod tests {
     fn test_copy_roundtrip() {
         use cudarc::driver::CudaDevice;
         let device = CudaDevice::new(0).unwrap();
-        let mut host_pool = CuHostMemoryPool::new(3, || vec![0.0; 1]);
-
-        let cuda_pool = CuCudaPool::<f32>::new(device, 3, 1);
+        let host_pool = CuHostMemoryPool::new("mytesthostpool", 3, || vec![0.0; 1]).unwrap();
+        let cuda_pool = CuCudaPool::<f32>::new("mytestcudapool", device, 3, 1).unwrap();
 
         let cuda_handle = {
             let mut initial_handle = host_pool.acquire().unwrap();
@@ -528,7 +613,10 @@ mod tests {
         };
 
         // get it back to the host
-        let final_handle = cuda_pool.copy_into(&cuda_handle, &mut host_pool);
+        let mut final_handle = host_pool.acquire().unwrap();
+        cuda_pool
+            .copy_to_host_pool(&cuda_handle, &mut final_handle)
+            .unwrap();
 
         let value = final_handle.lock().unwrap().deref().deref()[0];
         assert_eq!(value, 42.0);

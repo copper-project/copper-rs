@@ -186,8 +186,18 @@ mod linux_impl {
             let mut stream = CuV4LStream::with_buffers(
                 &dev,
                 Type::VideoCapture,
-                actual_fmt.size as usize,
                 req_buffers,
+                CuHostMemoryPool::new(
+                    format!("V4L Host Pool {}", v4l_device).as_str(),
+                    req_buffers as usize + 1,
+                    || vec![0; actual_fmt.size as usize],
+                )
+                .map_err(|e| {
+                    CuError::new_with_cause(
+                        "Could not create host memory pool backing the V4lStream",
+                        e,
+                    )
+                })?,
             )
             .map_err(|e| CuError::new_with_cause("Could not create the V4lStream", e))?;
             debug!("V4L: Set timeout to {} ms", req_timeout.as_millis() as u64);

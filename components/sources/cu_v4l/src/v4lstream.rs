@@ -14,7 +14,7 @@ use v4l::{v4l2, Device};
 pub struct CuV4LStream {
     v4l_handle: Arc<Handle>,
     v4l_buf_type: Type,
-    memory_pool: CuHostMemoryPool<Vec<u8>>,
+    pool: Arc<CuHostMemoryPool<Vec<u8>>>,
     // Arena matching the vl42 metadata and the Copper Buffers
     arena: Vec<(Metadata, Option<CuHandle<Vec<u8>>>)>,
     arena_last_freed_up_index: usize,
@@ -22,25 +22,47 @@ pub struct CuV4LStream {
     active: bool,
 }
 
+use std::fs;
+use std::os::fd::RawFd;
+use std::path::PathBuf;
+
+fn get_original_dev_path(fd: RawFd) -> Option<PathBuf> {
+    let link_path = format!("/proc/self/fd/{}", fd);
+
+    if let Ok(path) = fs::read_link(link_path) {
+        if path.to_string_lossy().starts_with("/dev/video") {
+            return Some(path);
+        }
+    }
+    None
+}
+
 impl CuV4LStream {
     #[allow(dead_code)]
     pub fn new(dev: &Device, buf_size: usize, buf_type: Type) -> io::Result<Self> {
-        CuV4LStream::with_buffers(dev, buf_type, buf_size, 4)
+        let original_path = get_original_dev_path(dev.handle().fd()).unwrap();
+        let pool = CuHostMemoryPool::new(
+            format!("V4L Host Pool {}", original_path.display()).as_str(),
+            4,
+            || vec![0; buf_size],
+        )
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+
+        CuV4LStream::with_buffers(dev, buf_type, 4, pool)
     }
 
     pub fn with_buffers(
         dev: &Device,
         buf_type: Type,
-        buf_size: usize,
         buf_count: u32,
+        pool: Arc<CuHostMemoryPool<Vec<u8>>>,
     ) -> io::Result<Self> {
-        let memory_pool = CuHostMemoryPool::new(buf_count as usize + 1, || vec![0; buf_size]); // +1 to be able to queue one last buffer before zapping the first
         let mut arena = Vec::new();
         arena.resize(buf_count as usize, (Metadata::default(), None));
 
         let mut result = CuV4LStream {
             v4l_handle: dev.handle(),
-            memory_pool,
+            pool,
             arena,
             arena_last_freed_up_index: 0,
             v4l_buf_type: buf_type,
@@ -191,7 +213,7 @@ impl Stream for CuV4LStream {
 
 impl CaptureStream<'_> for CuV4LStream {
     fn queue(&mut self, index: usize) -> io::Result<()> {
-        let buffer_handle = self.memory_pool.acquire().unwrap();
+        let buffer_handle = self.pool.acquire().unwrap();
         self.arena[index] = (Metadata::default(), Some(buffer_handle.clone()));
         let mut v4l2_buf = buffer_handle.with_inner_mut(|inner| {
             let destination: &mut [u8] = inner;
