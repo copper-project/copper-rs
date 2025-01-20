@@ -36,7 +36,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@beta
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -48,7 +48,7 @@ jobs:
         uses: Cyberboss/install-winget@v1
 
       - name: Check formatting
-        run: cargo +stable fmt --all -- --check
+        run: cargo +beta fmt --all -- --check
 
       - name: Free Disk Space (Ubuntu)
         if: runner.os == 'Linux' && matrix.mode == 'cuda-release'
@@ -109,35 +109,35 @@ jobs:
 
       # Run Clippy and build
       - name: Run clippy on (${{ matrix.os }} | ${{matrix.mode}})
-        run: cargo +stable clippy $RELEASE_FLAG --workspace --all-targets -- --deny warnings
+        run: cargo +beta clippy $RELEASE_FLAG --workspace --all-targets -- --deny warnings
       - name: Run clippy with all features on (${{ matrix.os }} | ${{matrix.mode}})
-        run: cargo +stable clippy $RELEASE_FLAG --workspace --all-targets $FEATURES_FLAG  -- --deny warnings
+        run: cargo +beta clippy $RELEASE_FLAG --workspace --all-targets $FEATURES_FLAG  -- --deny warnings
       - name: Run build with all features on (${{ matrix.os }} | ${{matrix.mode}})
-        run: cargo +stable build $RELEASE_FLAG --workspace --all-targets $FEATURES_FLAG
+        run: cargo +beta build $RELEASE_FLAG --workspace --all-targets $FEATURES_FLAG
 
       - name: Run doctests on (${{ matrix.os }} | debug)
         if: matrix.mode == 'debug'
-        run: cargo +stable test --doc --workspace
+        run: cargo +beta test --doc --workspace
 
       # Run Unit Tests
       - name: Run Unit Tests on (${{ matrix.os }} | ${{matrix.mode}})
-        run: cargo +stable nextest run $RELEASE_FLAG --all-targets --workspace
+        run: cargo +beta nextest run $RELEASE_FLAG --all-targets --workspace
       - name: Run Unit Tests with all features on (${{ matrix.os }} | ${{matrix.mode}})
-        run: cargo +stable nextest run $RELEASE_FLAG --all-targets --workspace $FEATURES_FLAG
+        run: cargo +beta nextest run $RELEASE_FLAG --all-targets --workspace $FEATURES_FLAG
 
       # Run Project Generation Tests
       - name: Install cargo-generate on (${{ matrix.os }} | debug)
         if: matrix.mode == 'debug'
-        run: cargo +stable install cargo-generate
+        run: cargo +beta install cargo-generate
 
       - name: Generate new project on (${{ matrix.os }} | debug)
         if: matrix.mode == 'debug'
         run: |
           cd templates
-          cargo +stable generate -p cu_full --name test_project --destination . -d copper_source=local --silent
+          cargo +beta generate -p cu_full --name test_project --destination . -d copper_source=local --silent
 
       - name: Build generated project on (${{ matrix.os }} | debug)
         if: matrix.mode == 'debug'
         run: |
           cd templates/test_project
-          cargo +stable build
+          cargo +beta build
