@@ -372,7 +372,7 @@ mod cuda {
         E: DeviceRepr + ElementType + ValidAsZeroBits,
     {
         fn id(&self) -> PoolID {
-            self.id.clone()
+            self.id
         }
 
         fn space_left(&self) -> usize {
