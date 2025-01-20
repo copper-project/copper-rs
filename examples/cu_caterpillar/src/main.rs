@@ -13,7 +13,7 @@ fn main() {
     let logger_path = tmp_dir.path().join("caterpillar.copper");
 
     let copper_ctx =
-        basic_copper_setup(&logger_path, SLAB_SIZE, false, None).expect("Failed to setup logger.");
+        basic_copper_setup(&logger_path, SLAB_SIZE, true, None).expect("Failed to setup logger.");
     let mut application = CaterpillarApplicationBuilder::new()
         .with_context(&copper_ctx)
         .build()

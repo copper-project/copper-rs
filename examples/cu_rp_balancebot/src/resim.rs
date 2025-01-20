@@ -82,7 +82,7 @@ fn main() {
     let copper_ctx = basic_copper_setup(
         &PathBuf::from(logger_path),
         LOG_SLAB_SIZE,
-        false,
+        true,
         Some(robot_clock.clone()),
     )
     .expect("Failed to setup logger.");
