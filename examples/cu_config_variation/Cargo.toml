@@ -1,6 +1,6 @@
 [package]
 name = "cu-config-variation"
-dependencies = "Example of a Copper configuration with programmatic multiple variations"
+description = "Example of a Copper configuration with programmatic multiple variations"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
