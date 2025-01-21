@@ -1,5 +1,6 @@
 [package]
 name = "cu-config-variation"
+dependencies = "Example of a Copper configuration with programmatic multiple variations"
 version = "0.6.0"
 edition = "2021"
 
