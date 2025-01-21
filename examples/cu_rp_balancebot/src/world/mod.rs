@@ -283,8 +283,6 @@ fn setup_ui(mut commands: Commands) {
                 TextColor(Color::WHITE),
             ));
         });
-    #[cfg(feature = "perf-ui")]
-    commands.spawn(PerfUiAllEntries::default());
 }
 
 // This needs to match an object / parent object name in the GLTF file (in blender this is the object name).

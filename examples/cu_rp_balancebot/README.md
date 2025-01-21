@@ -16,12 +16,6 @@ $ cargo run --release
 
 See the UI help for the navigation.
 
-To debug the game engine side you can add a perf overlay with:
-
-```bash
-$ cargo run --release --features perf-ui
-```
-
 ## To run the resimulation
 
 (you need at least a log in `logs` for example from a simulation run).
