@@ -18,7 +18,7 @@ jobs:
     strategy:
       matrix:
         os: [ ubuntu-latest, macos-latest, windows-latest ]
-        mode: [ debug, release, cuda-release]
+        mode: [ debug, release, cuda-release ]
 
     steps:
       - uses: actions/checkout@v4
@@ -37,7 +37,7 @@ jobs:
         run: cargo +stable fmt --all -- --check
 
       - name: Free Disk Space (Ubuntu)
-        if: runner.os == 'Linux' && matrix.mode == 'cuda-release'
+        if: runner.os == 'Linux'
         uses: jlumbroso/free-disk-space@main
         with:
           # this might remove tools that are actually needed,
