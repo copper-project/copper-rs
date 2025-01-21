@@ -9,12 +9,6 @@ use bevy::pbr::{DefaultOpaqueRendererMethod, ScreenSpaceReflections};
 use bevy::prelude::*;
 use cached_path::{Cache, ProgressBar};
 
-#[cfg(feature = "perf-ui")]
-use iyes_perf_ui::PerfUiPlugin;
-
-#[cfg(feature = "perf-ui")]
-use iyes_perf_ui::prelude::PerfUiAllEntries;
-
 use std::path::Path;
 use std::{fs, io};
 
@@ -88,9 +82,6 @@ pub fn build_world(app: &mut App) -> &mut App {
         .add_systems(Update, update_physics)
         .add_systems(Update, global_cart_drag_listener)
         .add_systems(PostUpdate, reset_sim);
-
-    #[cfg(feature = "perf-ui")]
-    app.add_plugins(PerfUiPlugin);
 
     app
 }
