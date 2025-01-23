@@ -234,7 +234,7 @@ switch from one another. This is useful for running the stack in predeterministi
 Full autonomy, Charging, etc.</li>
 <li><input disabled="" type="checkbox"/>
 <strong>Microcontroller and RTOS support</strong>: port all the crates to be able to run in with “nostd” so we can run on
-microcontrollers. This would allow a seemless environment for high level on a standard kernel (ML inference etc…)
+microcontrollers. This would allow a seamless environment for high level on a standard kernel (ML inference etc…)
 and low level tasks on MCUs (control, HW interfacing…).</li>
 <li><input disabled="" type="checkbox"/>
 <strong>Parallel Copper Lists</strong>: allow Copper lists to get executed in a staggered and parallel way to improve
@@ -252,7 +252,7 @@ their robots without duplicating their entire RON file.</li>
 <li><input disabled="" type="checkbox"/>
 <strong>MCAP support</strong>: Allow the interfacing of Foxglove and ROS ecosystems at the logging level.</li>
 </ul>
-</div></details><h2 id="reexports" class="section-header">Re-exports<a href="#reexports" class="anchor">§</a></h2><dl class="item-table reexports"><dt id="reexport.bincode"><code>pub use <a class="mod" href="https://docs.rs/bincode/2.0.0-rc.3/bincode/index.html" title="mod bincode">bincode</a>;</code></dt><dt id="reexport.clock"><code>pub use cu29_clock as clock;</code></dt></dl><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="config/index.html" title="mod cu29::config">config</a></dt><dd>This module defines the configuration of the copper runtime.
+</div></details><h2 id="reexports" class="section-header">Re-exports<a href="#reexports" class="anchor">§</a></h2><dl class="item-table reexports"><dt id="reexport.bincode"><code>pub use <a class="mod" href="https://docs.rs/bincode/2.0.0-rc.3/bincode/index.html" title="mod bincode">bincode</a>;</code></dt><dt id="reexport.clock"><code>pub use <a class="mod" href="../cu29_clock/index.html" title="mod cu29_clock">cu29_clock</a> as clock;</code></dt></dl><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="config/index.html" title="mod cu29::config">config</a></dt><dd>This module defines the configuration of the copper runtime.
 The configuration is a directed graph where nodes are tasks and edges are connections between tasks.
 The configuration is serialized in the RON format.
 The configuration is used to generate the runtime code at compile time.</dd><dt><a class="mod" href="copperlist/index.html" title="mod cu29::copperlist">copperlist</a></dt><dd>CopperList is the main data structure used by Copper to communicate between tasks.
