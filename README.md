@@ -270,7 +270,7 @@ on any of those, please let us know!:
   switch from one another. This is useful for running the stack in predeterministic modes: for example Data acquisition,
   Full autonomy, Charging, etc.
 - [ ] **Microcontroller and RTOS support**: port all the crates to be able to run in with "nostd" so we can run on
-  microcontrollers. This would allow a seemless environment for high level on a standard kernel (ML inference etc...)
+  microcontrollers. This would allow a seamless environment for high level on a standard kernel (ML inference etc...)
   and low level tasks on MCUs (control, HW interfacing...).
 - [ ] **Parallel Copper Lists**: allow Copper lists to get executed in a staggered and parallel way to improve
   throughput.
