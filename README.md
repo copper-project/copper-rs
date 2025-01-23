@@ -260,16 +260,24 @@ You can find the release notes [here](https://github.com/copper-project/copper-r
 > We are looking for contributors to help us build the best robotics framework possible. If you are interested, please
 > join us on [Discord](https://discord.gg/VkCG7Sb9Kw) or open an issue.
 
-Here are some of the features we plan to implement next (in ~order of priority), if you are interested in contributing
+Here are some of the features we plan to implement next, if you are interested in contributing
 on any of those, please let us know!:
 
-- [ ] **Parallel Copper Lists**: Today Copper is single-threaded; this should enable concurrent Copper Lists to be
-  executed
-  at the same time with no contention.
-- [ ] **ROS/DDS interfacing**: Build a pair of sink and source to connect to existing ROS systems, helping users migrate
-  their infra bit by bit.
-- [ ] **Extensible scheduling**: Enables a way to give hints to copper to schedule the workload.
+- [x] **Buffer Pools**: Implement a large buffer (Host or Device/GPU) pools for 0 copy large intertask transfers.
+- [ ] **Log Compression & Selection**: Implement a pluggable compression system for logs and its resim counterpart.
+  For example to encode video from images. Selection is about NOT logging something if it is not needed.
+- [ ] **Modes**: Implement a way to have multiple DAGS in the RON configuration file and have a centralized way to
+  switch from one another. This is useful for running the stack in predeterministic modes: for example Data acquisition,
+  Full autonomy, Charging, etc.
+- [ ] **Microcontroller and RTOS support**: port all the crates to be able to run in with "nostd" so we can run on
+  microcontrollers. This would allow a seemless environment for high level on a standard kernel (ML inference etc...)
+  and low level tasks on MCUs (control, HW interfacing...).
+- [ ] **Parallel Copper Lists**: allow Copper lists to get executed in a staggered and parallel way to improve
+  throughput.
+- [ ] **ROS2/DDS interfacing**: Build a pair of sink and source to connect to existing ROS systems, helping users
+  migrate their stack bit by bit.
 - [ ] **Modular Configuration**: As robots built with Copper gain complexity, users will need to build "variations" of
   their robots without duplicating their entire RON file.
-- [ ] **Distributed Copper**: Currently, we can only create one process. We need proper RPC filtering copper lists per
-  subsystem.
+- [ ] **Extensible scheduling**: Enables a way to give hints to copper to schedule better the workload at compile time.
+- [ ] **Swarm support**: Implement Zenoh to allow a swarm of robots powered by Copper to cooperate.
+- [ ] **MCAP support**: Allow the interfacing of Foxglove and ROS ecosystems at the logging level.
