@@ -85,6 +85,7 @@ jobs:
         if: runner.os != 'macOS' && matrix.mode == 'cuda-release'
         with:
           log-file-suffix: '${{ matrix.os }}-${{ matrix.mode }}-cuda.txt'
+          cuda: 12.6.1
 
       - name: Set build mode (Linux / MacOS)
         if: runner.os != 'Windows' && ( matrix.mode == 'release' || matrix.mode == 'cuda-release' )

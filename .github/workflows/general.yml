@@ -68,6 +68,7 @@ jobs:
         uses: Jimver/cuda-toolkit@master
         if: runner.os != 'macOS' && matrix.mode == 'cuda-release'
         with:
+          cuda: 12.6.1
           log-file-suffix: '${{ matrix.os }}-${{ matrix.mode }}-cuda.txt'
 
       - name: Set build mode (Linux / MacOS)
