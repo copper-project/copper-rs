@@ -13,6 +13,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@beta
+        with:
+          components: clippy,rustfmt
       - name: Install audit
         run: cargo install cargo-audit cargo-deny
       - name: Run audit
