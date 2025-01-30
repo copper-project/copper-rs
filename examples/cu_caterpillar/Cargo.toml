@@ -29,7 +29,7 @@ cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
 cu29-export = { workspace = true }
 bincode = { workspace = true }
-cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.6.0" }  # needed
+cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.6.0-1" }  # needed
 cu-rp-gpio = { path = "../../components/sinks/cu_rp_gpio", version = "0.6.0" }
 tempfile = "3.14.0"
 

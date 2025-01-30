@@ -18,7 +18,7 @@ iceoryx2-bb-log = { version = "0.5.0" }
 cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
 bincode = { workspace = true }  # needed
-cu-consolemon = { path = "../../components/monitors/cu_consolemon" , version = "0.6.0"}  # needed
+cu-consolemon = { path = "../../components/monitors/cu_consolemon" , version = "0.6.0-1"}  # needed
 cu-rp-gpio = { path = "../../components/sinks/cu_rp_gpio" , version = "0.6.0"}
 cu-caterpillar = { path = "../cu_caterpillar" , version = "0.6.0"}  # needed
 cu-iceoryx2-sink = { path = "../../components/sinks/cu_iceoryx2_sink" , version = "0.6.0"}
