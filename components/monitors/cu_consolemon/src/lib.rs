@@ -524,8 +524,10 @@ impl UI {
             })?;
 
             if event::poll(Duration::from_millis(50))? {
-                if let Event::Key(key) = event::read()? {
-                    match key.code {
+                let event = event::read()?;
+
+                match event {
+                    Event::Key(key) => match key.code {
                         KeyCode::Char('1') => self.active_screen = Screen::Neofetch,
                         KeyCode::Char('2') => self.active_screen = Screen::Dag,
                         KeyCode::Char('3') => self.active_screen = Screen::Latency,
@@ -576,14 +578,15 @@ impl UI {
                             break;
                         }
                         _ => {}
-                    }
-                }
+                    },
 
-                #[cfg(feature = "debug_pane")]
-                if let Event::Resize(_columns, rows) = event::read()? {
-                    if let Some(debug_output) = self.debug_output.as_mut() {
-                        debug_output.max_rows.store(rows, Ordering::SeqCst)
+                    #[cfg(feature = "debug_pane")]
+                    Event::Resize(_columns, rows) => {
+                        if let Some(debug_output) = self.debug_output.as_mut() {
+                            debug_output.max_rows.store(rows, Ordering::SeqCst)
+                        }
                     }
+                    _ => {}
                 }
             }
         }
