@@ -1,0 +1,19 @@
+[package]
+name = "cu-gstreamer"
+description = "This is a Copper GStreamer sink."
+
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+gstreamer = "0.23.4"
+gstreamer-app = "0.23.4"
+gstreamer-pbutils = "0.23.4"
+gstreamer-video = "0.23.4"
+rerun = "*"
