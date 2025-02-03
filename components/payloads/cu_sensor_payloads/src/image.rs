@@ -29,7 +29,7 @@ impl CuImageBufferFormat {
 #[derive(Debug, Default, Clone, Encode)]
 pub struct CuImage<A>
 where
-    A: ArrayLike<Element=u8>,
+    A: ArrayLike<Element = u8>,
 {
     pub seq: u64,
     pub format: CuImageBufferFormat,
@@ -53,7 +53,7 @@ impl Decode for CuImage<Vec<u8>> {
 
 impl<A> CuImage<A>
 where
-    A: ArrayLike<Element=u8>,
+    A: ArrayLike<Element = u8>,
 {
     pub fn new(format: CuImageBufferFormat, buffer_handle: CuHandle<A>) -> Self {
         assert!(
@@ -70,7 +70,7 @@ where
 
 impl<A> CuImage<A>
 where
-    A: ArrayLike<Element=u8>,
+    A: ArrayLike<Element = u8>,
 {
     /// Builds an ImageBuffer from the image crate backed by the CuImage's pixel data.
     #[cfg(feature = "image")]
@@ -113,11 +113,3 @@ where
             .map_err(|e| CuError::new_with_cause("Could not create a Kornia Image", e))
     }
 }
-
-
-// Gstreamer support
-#[cfg(feature = "gst")]
-mod gst {}
-
-#[cfg!(feature = "gst")]
-pub use gst::*;

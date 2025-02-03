@@ -14,6 +14,8 @@ repository.workspace = true
 [dependencies]
 gstreamer = "0.23.4"
 gstreamer-app = "0.23.4"
+cu29 = { workspace = true }
 gstreamer-pbutils = "0.23.4"
 gstreamer-video = "0.23.4"
 rerun = "*"
+bincode = "2.0.0-rc.3"

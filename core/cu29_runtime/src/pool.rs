@@ -525,51 +525,12 @@ impl<E: ElementType> Drop for AlignedBuffer<E> {
     }
 }
 
-// Gstreamer buffer pools: support
-#[cfg(feature = "gst")]
-mod gst {
-    use bincode::de::Decoder;
-    use bincode::enc::Encoder;
-    use bincode::error::{DecodeError, EncodeError};
-    use bincode::{Decode, Encode};
-    use gstreamer::Buffer;
-    use std::fmt::Debug;
-
-    #[derive(Debug, Clone, Default)]
-    pub struct GstBufferWrapper(Buffer);
-    impl Decode for GstBufferWrapper {
-        fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-            let vec: Vec<u8> = Vec::decode(decoder)?;
-            let buffer = Buffer::from_slice(vec);
-            Ok(GstBufferWrapper(buffer))
-        }
-    }
-
-    impl Encode for GstBufferWrapper {
-        fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-            self.0
-                .as_ref()
-                .map_readable()
-                .map_err(|_| EncodeError::Other {
-                    0: "Could not map readable",
-                })?
-                .encode(encoder)
-        }
-    }
-}
-
-#[cfg(feature = "gst")]
-pub use gst::*;
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::ComponentConfig;
-    use crate::cutask::{CuSrcTask, Freezable};
-    use crate::output_msg;
+    use crate::cutask::CuSrcTask;
     #[cfg(all(feature = "cuda", not(target_os = "macos")))]
     use crate::pool::cuda::CuCudaPool;
-    use cu29_clock::RobotClock;
     use std::cell::RefCell;
 
     #[test]
@@ -660,29 +621,5 @@ mod tests {
 
         let value = final_handle.lock().unwrap().deref().deref()[0];
         assert_eq!(value, 42.0);
-    }
-
-    mod gst_compat {
-        use super::*;
-        use crate::cutask::CuMsg;
-        // just test if the GstBuffers are message compatible with Copper
-        struct MySrc;
-
-        impl Freezable for MySrc {}
-
-        impl<'cl> CuSrcTask<'cl> for MySrc {
-            type Output = output_msg!('cl, GstBufferWrapper);
-
-            fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
-            where
-                Self: Sized,
-            {
-                todo!()
-            }
-
-            fn process(&mut self, clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
-                todo!()
-            }
-        }
     }
 }
