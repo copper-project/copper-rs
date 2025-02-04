@@ -64,6 +64,10 @@ jobs:
           winget install DaiyuuNobori.Win10Pcap --accept-source-agreements --accept-package-agreements
           Add-Content -Path $env:GITHUB_ENV -Value "LIB=$env:USERPROFILE\npcap-sdk\Lib\x64"
 
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install pkg-config glib gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad
+
       - name: Install CUDA
         uses: Jimver/cuda-toolkit@master
         if: runner.os != 'macOS' && matrix.mode == 'cuda-release'
