@@ -58,6 +58,22 @@ jobs:
       - name: Install dependencies (Windows)
         if: runner.os == 'Windows'
         run: |
+          
+          # Install GStreamer Runtime
+          Invoke-WebRequest -Uri https://gstreamer.freedesktop.org/data/pkg/windows/1.24.12/msvc/gstreamer-1.0-msvc-x86_64-1.24.12.msi -OutFile gstreamer-runtime.msi
+          Start-Process msiexec.exe -ArgumentList '/i gstreamer-runtime.msi /quiet /norestart' -NoNewWindow -Wait
+          Remove-Item gstreamer-runtime.msi
+
+          # Install GStreamer Development
+          Invoke-WebRequest -Uri https://gstreamer.freedesktop.org/data/pkg/windows/1.24.12/msvc/gstreamer-1.0-devel-msvc-x86_64-1.24.12.msi -OutFile gstreamer-devel.msi
+          Start-Process msiexec.exe -ArgumentList '/i gstreamer-devel.msi /quiet /norestart' -NoNewWindow -Wait
+          Remove-Item gstreamer-devel.msi
+          
+          # Set environment variables for GStreamer
+          echo "GSTREAMER_1_0_ROOT_MSVC_X86_64=C:\gstreamer\1.0\msvc_x86_64" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          echo "PATH=$env:GSTREAMER_1_0_ROOT_MSVC_X86_64\bin;$env:PATH" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          
+          # Install PCAP
           Invoke-WebRequest -Uri https://npcap.com/dist/npcap-sdk-1.13.zip -OutFile npcap-sdk.zip
           Expand-Archive -Path npcap-sdk.zip -DestinationPath $env:USERPROFILE\npcap-sdk
           Remove-Item npcap-sdk.zip
