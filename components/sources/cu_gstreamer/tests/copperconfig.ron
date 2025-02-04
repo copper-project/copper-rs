@@ -1,0 +1,21 @@
+(
+    tasks: [
+        (
+            id: "src",
+            type: "cu_gstreamer::CuDefaultGStreamer",
+            config: { // my webcam produces mjpeg, this is just to emulate a more embedded format like NV12
+                "pipeline": "v4l2src device=/dev/video0 ! image/jpeg, width=1920, height=1080 ! jpegdec ! videoconvert ! video/x-raw, format=NV12 ! appsink name=copper",
+                "caps": "video/x-raw, format=NV12, width=1920, height=1080",
+            },
+        ),
+        (   id: "tester",
+            type: "GStreamerTester"
+        ),
+     ],
+    cnx: [
+        (src: "src",  dst: "tester",   msg: "cu_gstreamer::CuGstBuffer"),
+    ],
+     logging: (
+            enable_task_logging: false
+    )
+)

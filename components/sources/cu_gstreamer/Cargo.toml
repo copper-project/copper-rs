@@ -12,11 +12,15 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
+cu29 = { workspace = true }
+bincode = { workspace = true }
+circular-buffer = "1.0.0"
 gstreamer = "0.23.4"
 gstreamer-app = "0.23.4"
-cu29 = { workspace = true }
-gstreamer-pbutils = "0.23.4"
-gstreamer-video = "0.23.4"
-circular-buffer = "1.0.0"
-rerun = "*"
-bincode = "2.0.0-rc.3"
+
+[dev-dependencies]
+rerun = { workspace = true }
+cu29-helpers = { workspace = true }
+
+[build-dependencies]
+cfg_aliases = "0.2.1"
