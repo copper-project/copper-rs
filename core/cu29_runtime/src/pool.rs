@@ -528,7 +528,6 @@ impl<E: ElementType> Drop for AlignedBuffer<E> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cutask::CuSrcTask;
     #[cfg(all(feature = "cuda", not(target_os = "macos")))]
     use crate::pool::cuda::CuCudaPool;
     use std::cell::RefCell;
