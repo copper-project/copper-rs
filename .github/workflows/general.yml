@@ -58,12 +58,6 @@ jobs:
       - name: Install dependencies (Windows)
         if: runner.os == 'Windows'
         run: |
-          
-          # Install GStreamer Runtime
-          Invoke-WebRequest -Uri https://gstreamer.freedesktop.org/data/pkg/windows/1.24.12/msvc/gstreamer-1.0-msvc-x86_64-1.24.12.msi -OutFile gstreamer-runtime.msi
-          Start-Process msiexec.exe -ArgumentList '/i gstreamer-runtime.msi /quiet /norestart' -NoNewWindow -Wait
-          Remove-Item gstreamer-runtime.msi
-
           # Install GStreamer Development
           Invoke-WebRequest -Uri https://gstreamer.freedesktop.org/data/pkg/windows/1.24.12/msvc/gstreamer-1.0-devel-msvc-x86_64-1.24.12.msi -OutFile gstreamer-devel.msi
           Start-Process msiexec.exe -ArgumentList '/i gstreamer-devel.msi /quiet /norestart' -NoNewWindow -Wait
@@ -79,12 +73,22 @@ jobs:
           echo "PKG_CONFIG_PATH=$env:GSTREAMER_1_0_ROOT_MSVC_X86_64\lib\pkgconfig" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
           echo "PATH=C:\pkg-config;$env:GSTREAMER_1_0_ROOT_MSVC_X86_64\bin;$env:PATH" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
           
-          # Install PCAP
+          # Verify winget availability
+          if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
+              Write-Host "winget is not installed or available."
+              exit 1
+          }
+          
+          # Install PCAP SDK
           Invoke-WebRequest -Uri https://npcap.com/dist/npcap-sdk-1.13.zip -OutFile npcap-sdk.zip
           Expand-Archive -Path npcap-sdk.zip -DestinationPath $env:USERPROFILE\npcap-sdk
           Remove-Item npcap-sdk.zip
+          
+          # Install Win10Pcap (if winget is available)
           winget install DaiyuuNobori.Win10Pcap --accept-source-agreements --accept-package-agreements
-          Add-Content -Path $env:GITHUB_ENV -Value "LIB=$env:USERPROFILE\npcap-sdk\Lib\x64"
+          
+          # Set PCAP library path
+          echo "LIB=$env:USERPROFILE\npcap-sdk\Lib\x64" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV 
 
       - name: Install dependencies (macOS)
         if: runner.os == 'macOS'
