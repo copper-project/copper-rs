@@ -43,9 +43,7 @@ impl Encode for CuGstBuffer {
         self.0
             .as_ref()
             .map_readable()
-            .map_err(|_| EncodeError::Other {
-                0: "Could not map readable",
-            })?
+            .map_err(|_| EncodeError::Other("Could not map readable"))?
             .encode(encoder)
     }
 }
