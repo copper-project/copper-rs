@@ -69,9 +69,15 @@ jobs:
           Start-Process msiexec.exe -ArgumentList '/i gstreamer-devel.msi /quiet /norestart' -NoNewWindow -Wait
           Remove-Item gstreamer-devel.msi
           
-          # Set environment variables for GStreamer
+          # Install pkg-config
+          Invoke-WebRequest -Uri https://downloads.sourceforge.net/project/pkgconfiglite/0.28-1/pkg-config-lite-0.28-1_bin-win32.zip -OutFile pkg-config.zip
+          Expand-Archive pkg-config.zip -DestinationPath C:\pkg-config
+          Remove-Item pkg-config.zip
+          
+          # Set environment variables for GStreamer and pkg-config
           echo "GSTREAMER_1_0_ROOT_MSVC_X86_64=C:\gstreamer\1.0\msvc_x86_64" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
-          echo "PATH=$env:GSTREAMER_1_0_ROOT_MSVC_X86_64\bin;$env:PATH" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          echo "PKG_CONFIG_PATH=$env:GSTREAMER_1_0_ROOT_MSVC_X86_64\lib\pkgconfig" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          echo "PATH=C:\pkg-config;$env:GSTREAMER_1_0_ROOT_MSVC_X86_64\bin;$env:PATH" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
           
           # Install PCAP
           Invoke-WebRequest -Uri https://npcap.com/dist/npcap-sdk-1.13.zip -OutFile npcap-sdk.zip
