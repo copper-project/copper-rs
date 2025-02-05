@@ -13,6 +13,7 @@ repository.workspace = true
 
 # This is a python binding
 [lib]
+name = "cu29_export"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]

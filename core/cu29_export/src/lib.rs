@@ -276,7 +276,8 @@ mod python {
         }
     }
 
-    #[pymodule]
+    /// This needs to match the name of the generated '.so'
+    #[pymodule(name = "libcu29_export")]
     fn cu29_export(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.add_class::<PyCuLogEntry>()?;
         m.add_class::<PyLogIterator>()?;
