@@ -150,7 +150,7 @@ pub fn textlog_dump(mut src: impl Read, index: &Path) -> CuResult<()> {
 }
 
 // only for users opting into python interface
-#[cfg(all(feature = "python"))]
+#[cfg(feature = "python")]
 mod python {
     use bincode::config::standard;
     use bincode::decode_from_std_read;
