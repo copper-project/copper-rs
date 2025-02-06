@@ -149,8 +149,8 @@ pub fn textlog_dump(mut src: impl Read, index: &Path) -> CuResult<()> {
     Ok(())
 }
 
-// only for users opting into python interface
-#[cfg(feature = "python")]
+// only for users opting into python interface, not supported on macOS at the moment
+#[cfg(all(feature = "python", not(target_os = "macos")))]
 mod python {
     use bincode::config::standard;
     use bincode::decode_from_std_read;
