@@ -89,6 +89,35 @@ jobs:
         with:
           arch: 'arm64'
 
+      - name: Debug GStreamer Installation
+        if: runner.os == 'macOS'
+        run: |
+          echo "Checking GStreamer version..."
+          pkg-config --modversion gstreamer-1.0 || { echo "GStreamer not found!"; }
+
+          echo "Checking GStreamer library path..."
+          if [[ -d "/Library/Frameworks/GStreamer.framework" ]]; then
+            echo "GStreamer is installed at /Library/Frameworks/GStreamer.framework"
+          else
+            echo "GStreamer framework is missing!"
+          fi
+
+          echo "Checking GStreamer shared libraries..."
+          ls -l /Library/Frameworks/GStreamer.framework/Versions/Current/lib/ | grep libgstapp || { echo "libgstapp missing!"; }
+
+          echo "Checking PKG_CONFIG_PATH..."
+          echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
+
+          echo "Checking DYLD_LIBRARY_PATH..."
+          echo "DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH"
+
+          echo "Checking linked libraries for cu_gstreamer..."
+          if ls target/debug/deps/cu_gstreamer-* 1> /dev/null 2>&1; then
+            otool -L target/debug/deps/cu_gstreamer-* | grep libgstapp || { echo "libgstapp is not linked!"; }
+          else
+            echo "cu_gstreamer binary not found, skipping otool check."
+          fi
+
       - name: Install CUDA
         uses: Jimver/cuda-toolkit@master
         if: runner.os != 'macOS' && matrix.mode == 'cuda-release'
