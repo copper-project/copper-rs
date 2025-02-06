@@ -53,26 +53,11 @@ jobs:
 
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y pkg-config libudev-dev libpcap-dev libglib2.0-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-good1.0-dev libgstreamer-plugins-bad1.0-dev
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libudev-dev libpcap-dev libglib2.0-dev
 
       - name: Install dependencies (Windows)
         if: runner.os == 'Windows'
         run: |
-          # Install GStreamer Development
-          Invoke-WebRequest -Uri https://gstreamer.freedesktop.org/data/pkg/windows/1.24.12/msvc/gstreamer-1.0-devel-msvc-x86_64-1.24.12.msi -OutFile gstreamer-devel.msi
-          Start-Process msiexec.exe -ArgumentList '/i gstreamer-devel.msi /quiet /norestart' -NoNewWindow -Wait
-          Remove-Item gstreamer-devel.msi
-          
-          # Install pkg-config
-          Invoke-WebRequest -Uri https://download.gnome.org/binaries/win32/dependencies/pkg-config_0.26-1_win32.zip -OutFile pkg-config.zip
-          Expand-Archive pkg-config.zip -DestinationPath C:\pkg-config
-          Remove-Item pkg-config.zip
-          
-          # Set environment variables for GStreamer and pkg-config
-          echo "GSTREAMER_1_0_ROOT_MSVC_X86_64=C:\gstreamer\1.0\msvc_x86_64" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
-          echo "PKG_CONFIG_PATH=$env:GSTREAMER_1_0_ROOT_MSVC_X86_64\lib\pkgconfig" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
-          echo "PATH=C:\pkg-config\bin;$env:GSTREAMER_1_0_ROOT_MSVC_X86_64\bin;$env:PATH" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
-          
           # Verify winget availability
           if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
               Write-Host "winget is not installed or available."
@@ -93,6 +78,13 @@ jobs:
       - name: Install dependencies (macOS)
         if: runner.os == 'macOS'
         run: brew install pkg-config glib gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad
+
+      - name: Setup GStreamer
+        id:   setup_gstreamer
+        uses: blinemedical/setup-gstreamer@1.0
+        with:
+          version: '1.25.1'
+          arch: 'x86_64'
 
       - name: Install CUDA
         uses: Jimver/cuda-toolkit@master
