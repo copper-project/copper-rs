@@ -71,7 +71,7 @@ jobs:
           # Set environment variables for GStreamer and pkg-config
           echo "GSTREAMER_1_0_ROOT_MSVC_X86_64=C:\gstreamer\1.0\msvc_x86_64" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
           echo "PKG_CONFIG_PATH=$env:GSTREAMER_1_0_ROOT_MSVC_X86_64\lib\pkgconfig" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
-          echo "PATH=C:\pkg-config;$env:GSTREAMER_1_0_ROOT_MSVC_X86_64\bin;$env:PATH" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          echo "PATH=C:\pkg-config\bin;$env:GSTREAMER_1_0_ROOT_MSVC_X86_64\bin;$env:PATH" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
           
           # Verify winget availability
           if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
