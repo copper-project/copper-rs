@@ -76,11 +76,11 @@ jobs:
           echo "LIB=$env:USERPROFILE\npcap-sdk\Lib\x64" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV 
 
       - name: Install dependencies (macOS)
-        if: runner.os == 'macOS'
-        run: brew install pkg-config glib gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad
+        run: brew install pkg-config glib 
 
       - name: Setup GStreamer
-        uses: blinemedical/setup-gstreamer@1.0
+        id:   setup_gstreamer
+        uses: blinemedical/setup-gstreamer@v1.4.0
         with:
           arch: 'x86_64'
 
