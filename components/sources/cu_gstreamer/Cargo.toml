@@ -1,0 +1,26 @@
+[package]
+name = "cu-gstreamer"
+description = "This is a Copper GStreamer sink."
+
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+cu29 = { workspace = true }
+bincode = { workspace = true }
+circular-buffer = "1.0.0"
+gstreamer = "0.23.4"
+gstreamer-app = "0.23.4"
+
+[dev-dependencies]
+rerun = { workspace = true }
+cu29-helpers = { workspace = true }
+
+[build-dependencies]
+cfg_aliases = "0.2.1"

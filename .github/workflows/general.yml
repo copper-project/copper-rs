@@ -15,9 +15,12 @@ jobs:
 
     runs-on: ${{ matrix.os }}
 
+    env:
+      DYLD_LIBRARY_PATH: /Library/Frameworks/GStreamer.framework/Versions/Current/lib:$DYLD_LIBRARY_PATH
+
     strategy:
       matrix:
-        os: [ ubuntu-latest, macos-latest, windows-latest ]
+        os: [ ubuntu-22.04, macos-latest, windows-latest ]
         mode: [ debug, release, cuda-release ]
 
     steps:
@@ -53,16 +56,71 @@ jobs:
 
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libudev-dev libpcap-dev
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libudev-dev libpcap-dev libglib2.0-dev
 
       - name: Install dependencies (Windows)
         if: runner.os == 'Windows'
         run: |
+          # Verify winget availability
+          if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
+              Write-Host "winget is not installed or available."
+              exit 1
+          }
+          
+          # Install PCAP SDK
           Invoke-WebRequest -Uri https://npcap.com/dist/npcap-sdk-1.13.zip -OutFile npcap-sdk.zip
           Expand-Archive -Path npcap-sdk.zip -DestinationPath $env:USERPROFILE\npcap-sdk
           Remove-Item npcap-sdk.zip
+          
+          # Install Win10Pcap (if winget is available)
           winget install DaiyuuNobori.Win10Pcap --accept-source-agreements --accept-package-agreements
-          Add-Content -Path $env:GITHUB_ENV -Value "LIB=$env:USERPROFILE\npcap-sdk\Lib\x64"
+          
+          # Set PCAP library path
+          echo "LIB=$env:USERPROFILE\npcap-sdk\Lib\x64" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV 
+
+      - name: Setup GStreamer (x86_64)
+        if: runner.os != 'MacOs'
+        id:   setup_gstreamer_mac
+        uses: blinemedical/setup-gstreamer@v1.4.0
+        with:
+          arch: 'x86_64'
+
+      - name: Setup GStreamer
+        if: runner.os == 'MacOS'
+        id:   setup_gstreamer_other
+        uses: blinemedical/setup-gstreamer@v1.4.0
+        with:
+          arch: 'arm64'
+
+      - name: Debug GStreamer Installation
+        if: runner.os == 'macOS'
+        run: |
+          echo "Checking GStreamer version..."
+          pkg-config --modversion gstreamer-1.0 || { echo "GStreamer not found!"; }
+
+          echo "Checking GStreamer library path..."
+          if [[ -d "/Library/Frameworks/GStreamer.framework" ]]; then
+            echo "GStreamer is installed at /Library/Frameworks/GStreamer.framework"
+          else
+            echo "GStreamer framework is missing!"
+          fi
+
+          echo "Checking GStreamer shared libraries..."
+          ls -l /Library/Frameworks/GStreamer.framework/Versions/Current/lib/ | grep libgstapp || { echo "libgstapp missing!"; }
+
+          echo "Checking PKG_CONFIG_PATH..."
+          echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
+
+          echo "Checking DYLD_LIBRARY_PATH..."
+          echo "DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH"
+
+          echo "Checking linked libraries for cu_gstreamer..."
+          if ls target/debug/deps/cu_gstreamer-* 1> /dev/null 2>&1; then
+            otool -L target/debug/deps/cu_gstreamer-* | grep libgstapp || { echo "libgstapp is not linked!"; }
+          else
+            echo "cu_gstreamer binary not found, skipping otool check."
+          fi
+
 
       - name: Install CUDA
         uses: Jimver/cuda-toolkit@master

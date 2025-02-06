@@ -39,6 +39,8 @@ ron = "0.8.1"
 hdrhistogram = "7.5.4"
 petgraph = { version = "0.7.1", features = ["serde", "serde-1", "serde_derive"] }
 object-pool = "0.6.0"
+gstreamer = { version = "0.23.4", optional = true }
+gstreamer-app = { version = "0.23.4", optional = true }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 cudarc = { version = "0.13", optional = true, features = ["cuda-version-from-build-system"] }
@@ -46,3 +48,4 @@ cudarc = { version = "0.13", optional = true, features = ["cuda-version-from-bui
 [features]
 default = []
 cuda = ["cudarc"]
+gst = ["gstreamer", "gstreamer-app"]
