@@ -75,11 +75,19 @@ jobs:
           # Set PCAP library path
           echo "LIB=$env:USERPROFILE\npcap-sdk\Lib\x64" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV 
 
-      - name: Setup GStreamer
+      - name: Setup GStreamer (x86_64)
+        if: runner.os != 'MacOs'
         id:   setup_gstreamer
         uses: blinemedical/setup-gstreamer@v1.4.0
         with:
           arch: 'x86_64'
+
+      - name: Setup GStreamer
+        if: runner.os == 'MacOS'
+        id:   setup_gstreamer
+        uses: blinemedical/setup-gstreamer@v1.4.0
+        with:
+          arch: 'arm64'
 
       - name: Install CUDA
         uses: Jimver/cuda-toolkit@master
