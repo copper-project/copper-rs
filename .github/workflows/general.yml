@@ -64,7 +64,7 @@ jobs:
           Remove-Item gstreamer-devel.msi
           
           # Install pkg-config
-          Invoke-WebRequest -Uri https://downloads.sourceforge.net/project/pkgconfiglite/0.28-1/pkg-config-lite-0.28-1_bin-win32.zip -OutFile pkg-config.zip
+          Invoke-WebRequest -Uri https://download.gnome.org/binaries/win32/dependencies/pkg-config_0.26-1_win32.zip -OutFile pkg-config.zip
           Expand-Archive pkg-config.zip -DestinationPath C:\pkg-config
           Remove-Item pkg-config.zip
           
