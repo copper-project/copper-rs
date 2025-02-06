@@ -77,14 +77,14 @@ jobs:
 
       - name: Setup GStreamer (x86_64)
         if: runner.os != 'MacOs'
-        id:   setup_gstreamer
+        id:   setup_gstreamer_mac
         uses: blinemedical/setup-gstreamer@v1.4.0
         with:
           arch: 'x86_64'
 
       - name: Setup GStreamer
         if: runner.os == 'MacOS'
-        id:   setup_gstreamer
+        id:   setup_gstreamer_other
         uses: blinemedical/setup-gstreamer@v1.4.0
         with:
           arch: 'arm64'
