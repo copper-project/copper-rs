@@ -75,9 +75,6 @@ jobs:
           # Set PCAP library path
           echo "LIB=$env:USERPROFILE\npcap-sdk\Lib\x64" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV 
 
-      - name: Install dependencies (macOS)
-        run: brew install pkg-config glib 
-
       - name: Setup GStreamer
         id:   setup_gstreamer
         uses: blinemedical/setup-gstreamer@v1.4.0
