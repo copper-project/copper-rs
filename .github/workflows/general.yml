@@ -15,6 +15,9 @@ jobs:
 
     runs-on: ${{ matrix.os }}
 
+    env:
+      DYLD_LIBRARY_PATH: /Library/Frameworks/GStreamer.framework/Versions/Current/lib:$DYLD_LIBRARY_PATH
+
     strategy:
       matrix:
         os: [ ubuntu-22.04, macos-latest, windows-latest ]
@@ -117,6 +120,7 @@ jobs:
           else
             echo "cu_gstreamer binary not found, skipping otool check."
           fi
+
 
       - name: Install CUDA
         uses: Jimver/cuda-toolkit@master
