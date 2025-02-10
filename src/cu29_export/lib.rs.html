@@ -433,7 +433,8 @@
 <a href="#432" id="432">432</a>
 <a href="#433" id="433">433</a>
 <a href="#434" id="434">434</a>
-<a href="#435" id="435">435</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::fmt::{Display, Formatter};
+<a href="#435" id="435">435</a>
+<a href="#436" id="436">436</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::fmt::{Display, Formatter};
 <span class="kw">use </span>std::io::Read;
 <span class="kw">use </span>std::path::{Path, PathBuf};
 
@@ -584,8 +585,8 @@
     <span class="prelude-val">Ok</span>(())
 }
 
-<span class="comment">// only for not macos platforms
-</span><span class="attr">#[cfg(not(target_os = <span class="string">"macos"</span>))]
+<span class="comment">// only for users opting into python interface, not supported on macOS at the moment
+</span><span class="attr">#[cfg(all(feature = <span class="string">"python"</span>, not(target_os = <span class="string">"macos"</span>)))]
 </span><span class="kw">mod </span>python {
     <span class="kw">use </span>bincode::config::standard;
     <span class="kw">use </span>bincode::decode_from_std_read;
@@ -711,7 +712,8 @@
         }
     }
 
-    <span class="attr">#[pymodule]
+    <span class="doccomment">/// This needs to match the name of the generated '.so'
+    </span><span class="attr">#[pymodule(name = <span class="string">"libcu29_export"</span>)]
     </span><span class="kw">fn </span>cu29_export(m: <span class="kw-2">&amp;</span>Bound&lt;<span class="lifetime">'_</span>, PyModule&gt;) -&gt; PyResult&lt;()&gt; {
         m.add_class::&lt;PyCuLogEntry&gt;()<span class="question-mark">?</span>;
         m.add_class::&lt;PyLogIterator&gt;()<span class="question-mark">?</span>;
