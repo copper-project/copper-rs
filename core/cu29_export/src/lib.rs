@@ -149,8 +149,8 @@ pub fn textlog_dump(mut src: impl Read, index: &Path) -> CuResult<()> {
     Ok(())
 }
 
-// only for not macos platforms
-#[cfg(not(target_os = "macos"))]
+// only for users opting into python interface, not supported on macOS at the moment
+#[cfg(all(feature = "python", not(target_os = "macos")))]
 mod python {
     use bincode::config::standard;
     use bincode::decode_from_std_read;
@@ -276,7 +276,8 @@ mod python {
         }
     }
 
-    #[pymodule]
+    /// This needs to match the name of the generated '.so'
+    #[pymodule(name = "libcu29_export")]
     fn cu29_export(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.add_class::<PyCuLogEntry>()?;
         m.add_class::<PyLogIterator>()?;

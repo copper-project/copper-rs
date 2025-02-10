@@ -8,12 +8,12 @@ target_dir = crate_dir.parent.parent / "target" / "debug"  # Use "release" if yo
 sys.path.append(str(target_dir))
 
 
-import cu29_export
+import libcu29_export
 
 log_file_path = "logfile.bin"
 index_file_path = target_dir / "cu29_log_index"
 
-log_iterator, all_strings = cu29_export.struct_log_iterator_bare(log_file_path, str(index_file_path))
+log_iterator, all_strings = libcu29_export.struct_log_iterator_bare(log_file_path, str(index_file_path))
 
 
 for log_entry in log_iterator:
