@@ -81,7 +81,7 @@ fn read_adc(spi: &mut Spidev) -> std::io::Result<u16> {
     // conversion is in progress. The data word contains two leading zeros, followed by 12-bit data in MSB first format
     // and padded by two lagging zeros."
     //
-    let adc_value = ((rx_buf[0] as u16) << 8 | (rx_buf[1] as u16)) >> 2;
+    let adc_value = (((rx_buf[0] as u16) << 8) | (rx_buf[1] as u16)) >> 2;
 
     Ok(adc_value)
 }
