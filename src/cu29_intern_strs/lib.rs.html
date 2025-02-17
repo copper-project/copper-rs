@@ -1,73 +1,36 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29_intern_strs/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-cf3c48c1.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_intern_strs" data-themes="" data-resource-suffix="" data-rustdoc-version="1.86.0-nightly (124cc9219 2025-02-09)" data-channel="nightly" data-search-js="search-581efc7a.js" data-settings-js="settings-6dad6058.js" ><script src="../../static.files/storage-3a5871a4.js"></script><script defer src="../../static.files/src-script-8fee9dc5.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-4d63596a.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">cu29_intern_strs/</div>lib.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap"><div data-nosnippet><pre class="src-line-numbers">
-<a href="#1" id="1">1</a>
-<a href="#2" id="2">2</a>
-<a href="#3" id="3">3</a>
-<a href="#4" id="4">4</a>
-<a href="#5" id="5">5</a>
-<a href="#6" id="6">6</a>
-<a href="#7" id="7">7</a>
-<a href="#8" id="8">8</a>
-<a href="#9" id="9">9</a>
-<a href="#10" id="10">10</a>
-<a href="#11" id="11">11</a>
-<a href="#12" id="12">12</a>
-<a href="#13" id="13">13</a>
-<a href="#14" id="14">14</a>
-<a href="#15" id="15">15</a>
-<a href="#16" id="16">16</a>
-<a href="#17" id="17">17</a>
-<a href="#18" id="18">18</a>
-<a href="#19" id="19">19</a>
-<a href="#20" id="20">20</a>
-<a href="#21" id="21">21</a>
-<a href="#22" id="22">22</a>
-<a href="#23" id="23">23</a>
-<a href="#24" id="24">24</a>
-<a href="#25" id="25">25</a>
-<a href="#26" id="26">26</a>
-<a href="#27" id="27">27</a>
-<a href="#28" id="28">28</a>
-<a href="#29" id="29">29</a>
-<a href="#30" id="30">30</a>
-<a href="#31" id="31">31</a>
-<a href="#32" id="32">32</a>
-<a href="#33" id="33">33</a>
-<a href="#34" id="34">34</a>
-<a href="#35" id="35">35</a>
-<a href="#36" id="36">36</a></pre></div><pre class="rust"><code><span class="kw">use </span>std::path::Path;
-
-<span class="kw">use </span>cu29_traits::{CuError, CuResult};
-<span class="kw">use </span>rkv::backend::Lmdb;
-<span class="kw">use </span>rkv::{Rkv, StoreOptions};
-
-<span class="kw">use </span>byteorder::{ByteOrder, LittleEndian};
-
-<span class="doccomment">/// Rebuild the interned string index in memory.
-</span><span class="kw">pub fn </span>read_interned_strings(index: <span class="kw-2">&amp;</span>Path) -&gt; CuResult&lt;Vec&lt;String&gt;&gt; {
-    <span class="kw">let </span><span class="kw-2">mut </span>all_strings = Vec::&lt;String&gt;::new();
-    <span class="kw">let </span>env = Rkv::new::&lt;Lmdb&gt;(index).map_err(|e| {
-        CuError::from(<span class="string">"Could not open the string index. Check the path."</span>)
-            .add_cause(e.to_string().as_str())
-    })<span class="question-mark">?</span>;
-
-    <span class="kw">let </span>index_to_string = env
-        .open_single(<span class="string">"index_to_string"</span>, StoreOptions::default())
-        .map_err(|e| CuError::new_with_cause(<span class="string">"Could not open the index_to_string store"</span>, e))<span class="question-mark">?</span>;
-    <span class="kw">let </span>db_reader = env.read().unwrap();
-    <span class="kw">let </span>ri = index_to_string.iter_start(<span class="kw-2">&amp;</span>db_reader);
-    <span class="kw">let </span><span class="kw-2">mut </span>i = ri.expect(<span class="string">"Failed to start iterator"</span>);
-    <span class="kw">while let </span><span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(v)) = i.next() {
-        <span class="kw">let </span>(k, v) = v;
-        <span class="kw">let </span>index = LittleEndian::read_u32(k) <span class="kw">as </span>usize;
-
-        <span class="kw">if let </span>rkv::Value::Str(s) = v {
-            <span class="kw">if </span>all_strings.len() &lt;= index {
-                all_strings.resize(index + <span class="number">1</span>, String::new());
-            }
-
-            all_strings[index] = s.to_string();
-        }
-    }
-    <span class="prelude-val">Ok</span>(all_strings)
-}
-</code></pre></div></section></main></body></html>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29_intern_strs/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-6c3ea77c.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_intern_strs" data-themes="" data-resource-suffix="" data-rustdoc-version="1.87.0-nightly (5bc623145 2025-02-16)" data-channel="nightly" data-search-js="search-f7327375.js" data-settings-js="settings-6dad6058.js" ><script src="../../static.files/storage-3a5871a4.js"></script><script defer src="../../static.files/src-script-b8d3f215.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-5332ae0c.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">cu29_intern_strs/</div>lib.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-2"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>std::path::Path;
+<a href=#2 id=2 data-nosnippet>2</a>
+<a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>cu29_traits::{CuError, CuResult};
+<a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>rkv::backend::Lmdb;
+<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>rkv::{Rkv, StoreOptions};
+<a href=#6 id=6 data-nosnippet>6</a>
+<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>byteorder::{ByteOrder, LittleEndian};
+<a href=#8 id=8 data-nosnippet>8</a>
+<a href=#9 id=9 data-nosnippet>9</a><span class="doccomment">/// Rebuild the interned string index in memory.
+<a href=#10 id=10 data-nosnippet>10</a></span><span class="kw">pub fn </span>read_interned_strings(index: <span class="kw-2">&amp;</span>Path) -&gt; CuResult&lt;Vec&lt;String&gt;&gt; {
+<a href=#11 id=11 data-nosnippet>11</a>    <span class="kw">let </span><span class="kw-2">mut </span>all_strings = Vec::&lt;String&gt;::new();
+<a href=#12 id=12 data-nosnippet>12</a>    <span class="kw">let </span>env = Rkv::new::&lt;Lmdb&gt;(index).map_err(|e| {
+<a href=#13 id=13 data-nosnippet>13</a>        CuError::from(<span class="string">"Could not open the string index. Check the path."</span>)
+<a href=#14 id=14 data-nosnippet>14</a>            .add_cause(e.to_string().as_str())
+<a href=#15 id=15 data-nosnippet>15</a>    })<span class="question-mark">?</span>;
+<a href=#16 id=16 data-nosnippet>16</a>
+<a href=#17 id=17 data-nosnippet>17</a>    <span class="kw">let </span>index_to_string = env
+<a href=#18 id=18 data-nosnippet>18</a>        .open_single(<span class="string">"index_to_string"</span>, StoreOptions::default())
+<a href=#19 id=19 data-nosnippet>19</a>        .map_err(|e| CuError::new_with_cause(<span class="string">"Could not open the index_to_string store"</span>, e))<span class="question-mark">?</span>;
+<a href=#20 id=20 data-nosnippet>20</a>    <span class="kw">let </span>db_reader = env.read().unwrap();
+<a href=#21 id=21 data-nosnippet>21</a>    <span class="kw">let </span>ri = index_to_string.iter_start(<span class="kw-2">&amp;</span>db_reader);
+<a href=#22 id=22 data-nosnippet>22</a>    <span class="kw">let </span><span class="kw-2">mut </span>i = ri.expect(<span class="string">"Failed to start iterator"</span>);
+<a href=#23 id=23 data-nosnippet>23</a>    <span class="kw">while let </span><span class="prelude-val">Some</span>(<span class="prelude-val">Ok</span>(v)) = i.next() {
+<a href=#24 id=24 data-nosnippet>24</a>        <span class="kw">let </span>(k, v) = v;
+<a href=#25 id=25 data-nosnippet>25</a>        <span class="kw">let </span>index = LittleEndian::read_u32(k) <span class="kw">as </span>usize;
+<a href=#26 id=26 data-nosnippet>26</a>
+<a href=#27 id=27 data-nosnippet>27</a>        <span class="kw">if let </span>rkv::Value::Str(s) = v {
+<a href=#28 id=28 data-nosnippet>28</a>            <span class="kw">if </span>all_strings.len() &lt;= index {
+<a href=#29 id=29 data-nosnippet>29</a>                all_strings.resize(index + <span class="number">1</span>, String::new());
+<a href=#30 id=30 data-nosnippet>30</a>            }
+<a href=#31 id=31 data-nosnippet>31</a>
+<a href=#32 id=32 data-nosnippet>32</a>            all_strings[index] = s.to_string();
+<a href=#33 id=33 data-nosnippet>33</a>        }
+<a href=#34 id=34 data-nosnippet>34</a>    }
+<a href=#35 id=35 data-nosnippet>35</a>    <span class="prelude-val">Ok</span>(all_strings)
+<a href=#36 id=36 data-nosnippet>36</a>}</code></pre></div></section></main></body></html>
