@@ -327,7 +327,7 @@ fn plan_tasks_tree_branch(
         input_msg_indices_types.sort_by(|a, b| {
             let (a_id, _) = a;
             let (b_id, _) = b;
-            a_id.cmp(&b_id)
+            a_id.cmp(b_id)
         });
 
         // Try to see if we did not already add this node to the plan
