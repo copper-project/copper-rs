@@ -205,8 +205,8 @@ impl<'cl> CuSinkTask<'cl> for Lewansoul {
     where
         Self: Sized,
     {
-        let config = config.ok_or("RPGpio needs a config, None was passed as ComponentConfig")?;
-        let kv = &config.0;
+        let ComponentConfig(kv) =
+            config.ok_or("RPGpio needs a config, None was passed as ComponentConfig")?;
 
         let serial_dev: String = kv
             .get("serial_dev")

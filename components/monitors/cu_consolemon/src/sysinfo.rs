@@ -197,7 +197,15 @@ fn pfetch(info: Vec<(Color, String, String)>, logo: Logo, logo_enabled: bool) ->
                 logo_width - raw_logo_lines.get(l).map_or(0, |line| line.chars().count())
                     + if logo_enabled { padding2 } else { 0 }
             ),
-            color = if color_enabled {info.get(l).map_or("".to_owned(), |line| line.0.to_string())} else {"".into()},
+            color = if color_enabled {
+                info.get(l).map_or("".to_owned(), |line| {
+                    let (color, _, _) = line;
+                    color.to_string()
+                }
+                )
+            } else {
+                "".into()
+            },
             info1 = info.get(l).map_or("", |line| &line.1),
             nobold = if color_enabled {"\x1b[0m"} else {""},
             separator = info.get(l).map_or("".into(), |line|

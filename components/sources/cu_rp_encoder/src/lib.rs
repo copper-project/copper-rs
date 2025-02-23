@@ -64,8 +64,8 @@ impl<'cl> CuSrcTask<'cl> for Encoder {
     where
         Self: Sized,
     {
-        let config = config.ok_or("Encoder needs a config with clk_pin and dat_pin.")?;
-        let config = &config.0;
+        let ComponentConfig(config) =
+            config.ok_or("Encoder needs a config with clk_pin and dat_pin.")?;
 
         let clk_pin_nb_value = config.get("clk_pin").ok_or("Encoder needs a clk_pin")?;
         let clk_pin: u8 = clk_pin_nb_value.clone().into();

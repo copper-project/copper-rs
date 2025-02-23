@@ -16,4 +16,6 @@ cu29-helpers = { workspace = true }
 tempfile = "3.14.0"
 cu-hesai = { path = "../../components/sources/cu_hesai", version = "0.6.0" }
 cu-udp-inject = { path = "../../components/testing/cu_udp_inject" }
+cu-sensor-payloads = { path = "../../components/payloads/cu_sensor_payloads" }
+uom = { workspace = true }
 rerun = { workspace = true }

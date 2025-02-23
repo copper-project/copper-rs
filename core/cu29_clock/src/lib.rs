@@ -27,25 +27,21 @@ impl CuDuration {
     pub const MIN: CuDuration = CuDuration(0u64);
     // Highest value a CuDuration can have reserving the max value for None.
     pub const MAX: CuDuration = CuDuration(NONE_VALUE - 1);
-
-    pub fn max(&self, p0: CuDuration) -> CuDuration {
-        if self.0 > p0.0 {
-            CuDuration(self.0)
-        } else {
-            p0
-        }
+    pub fn max(self, other: CuDuration) -> CuDuration {
+        let Self(lhs) = self;
+        let Self(rhs) = other;
+        CuDuration(lhs.max(rhs))
     }
 
-    pub fn min(&self, p0: CuDuration) -> CuDuration {
-        if self.0 < p0.0 {
-            CuDuration(self.0)
-        } else {
-            p0
-        }
+    pub fn min(self, other: CuDuration) -> CuDuration {
+        let Self(lhs) = self;
+        let Self(rhs) = other;
+        CuDuration(lhs.min(rhs))
     }
 
     pub fn as_nanos(&self) -> u64 {
-        self.0
+        let Self(nanos) = self;
+        *nanos
     }
 }
 
@@ -58,7 +54,8 @@ impl From<Duration> for CuDuration {
 
 impl From<CuDuration> for Duration {
     fn from(val: CuDuration) -> Self {
-        Duration::from_nanos(val.0)
+        let CuDuration(nanos) = val;
+        Duration::from_nanos(nanos)
     }
 }
 
@@ -70,7 +67,8 @@ impl From<u64> for CuDuration {
 
 impl From<CuDuration> for u64 {
     fn from(val: CuDuration) -> Self {
-        val.0
+        let CuDuration(nanos) = val;
+        nanos
     }
 }
 
@@ -78,7 +76,9 @@ impl Sub for CuDuration {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        CuDuration(self.0 - rhs.0)
+        let CuDuration(lhs) = self;
+        let CuDuration(rhs) = rhs;
+        CuDuration(lhs - rhs)
     }
 }
 
@@ -86,19 +86,25 @@ impl Add for CuDuration {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
-        CuDuration(self.0 + rhs.0)
+        let CuDuration(lhs) = self;
+        let CuDuration(rhs) = rhs;
+        CuDuration(lhs + rhs)
     }
 }
 
 impl AddAssign for CuDuration {
     fn add_assign(&mut self, rhs: Self) {
-        self.0 += rhs.0
+        let CuDuration(lhs) = self;
+        let CuDuration(rhs) = rhs;
+        *lhs += rhs;
     }
 }
 
 impl SubAssign for CuDuration {
     fn sub_assign(&mut self, rhs: Self) {
-        self.0 -= rhs.0
+        let CuDuration(lhs) = self;
+        let CuDuration(rhs) = rhs;
+        *lhs -= rhs;
     }
 }
 
@@ -110,7 +116,8 @@ where
 {
     type Output = Self;
     fn div(self, rhs: T) -> Self {
-        CuDuration(self.0 / rhs.into())
+        let CuDuration(lhs) = self;
+        CuDuration(lhs / rhs.into())
     }
 }
 //
@@ -124,7 +131,8 @@ where
     type Output = CuDuration;
 
     fn mul(self, rhs: T) -> CuDuration {
-        CuDuration(self.0 * rhs.into())
+        let CuDuration(lhs) = self;
+        CuDuration(lhs * rhs.into())
     }
 }
 
@@ -133,7 +141,8 @@ impl Mul<CuDuration> for u64 {
     type Output = CuDuration;
 
     fn mul(self, rhs: CuDuration) -> CuDuration {
-        CuDuration(self * rhs.0)
+        let CuDuration(nanos) = rhs;
+        CuDuration(self * nanos)
     }
 }
 
@@ -142,7 +151,8 @@ impl Mul<CuDuration> for u32 {
     type Output = CuDuration;
 
     fn mul(self, rhs: CuDuration) -> CuDuration {
-        CuDuration(self as u64 * rhs.0)
+        let CuDuration(nanos) = rhs;
+        CuDuration(self as u64 * nanos)
     }
 }
 
@@ -151,13 +161,15 @@ impl Mul<CuDuration> for i32 {
     type Output = CuDuration;
 
     fn mul(self, rhs: CuDuration) -> CuDuration {
-        CuDuration(self as u64 * rhs.0)
+        let CuDuration(nanos) = rhs;
+        CuDuration(self as u64 * nanos)
     }
 }
 
 impl Encode for CuDuration {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        self.0.encode(encoder)
+        let CuDuration(nanos) = self;
+        nanos.encode(encoder)
     }
 }
 
@@ -175,7 +187,7 @@ impl<'de> BorrowDecode<'de> for CuDuration {
 
 impl Display for CuDuration {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let nanos = self.0;
+        let Self(nanos) = *self;
         if nanos >= 86_400_000_000_000 {
             write!(f, "{:.3} d", nanos as f64 / 86_400_000_000_000.0)
         } else if nanos >= 3_600_000_000_000 {
@@ -206,7 +218,8 @@ const NONE_VALUE: u64 = 0xFFFFFFFFFFFFFFFF;
 impl OptionCuTime {
     #[inline]
     pub fn is_none(&self) -> bool {
-        self.0 .0 == NONE_VALUE
+        let Self(CuDuration(nanos)) = self;
+        *nanos == NONE_VALUE
     }
 
     #[inline]
@@ -252,10 +265,11 @@ impl From<Option<CuTime>> for OptionCuTime {
 impl From<OptionCuTime> for Option<CuTime> {
     #[inline]
     fn from(val: OptionCuTime) -> Self {
-        if val.0 .0 == NONE_VALUE {
+        let OptionCuTime(CuDuration(nanos)) = val;
+        if nanos == NONE_VALUE {
             None
         } else {
-            Some(val.0)
+            Some(CuDuration(nanos))
         }
     }
 }
@@ -341,28 +355,33 @@ pub struct RobotClockMock(Arc<Mock>); // wraps the Mock from quanta today.
 
 impl RobotClockMock {
     pub fn increment(&self, amount: Duration) {
-        self.0.increment(amount);
+        let Self(mock) = self;
+        mock.increment(amount);
     }
 
     /// Decrements the time by the given amount.
     /// Be careful this brakes the monotonicity of the clock.
     pub fn decrement(&self, amount: Duration) {
-        self.0.decrement(amount);
+        let Self(mock) = self;
+        mock.decrement(amount);
     }
 
     /// Gets the current value of time.
     pub fn value(&self) -> u64 {
-        self.0.value()
+        let Self(mock) = self;
+        mock.value()
     }
 
     /// A convenient way to get the current time from the mocking side.
     pub fn now(&self) -> CuTime {
-        self.0.value().into()
+        let Self(mock) = self;
+        mock.value().into()
     }
 
     /// Sets the absolute value of the time.
     pub fn set_value(&self, value: u64) {
-        let v = self.0.value();
+        let Self(mock) = self;
+        let v = mock.value();
         // had to work around the quata API here.
         if v < value {
             self.increment(Duration::from_nanos(value) - Duration::from_nanos(v));

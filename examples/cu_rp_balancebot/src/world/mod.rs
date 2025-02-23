@@ -337,7 +337,8 @@ fn setup_entities(
     query: Query<(Entity, &Name), Without<Cart>>,
     mut setup_completed: ResMut<SetupCompleted>,
 ) {
-    if setup_completed.0 {
+    let SetupCompleted(completed) = *setup_completed;
+    if completed {
         return;
     }
 
@@ -488,11 +489,13 @@ fn reset_sim(
             if let Some(mut ext_force) = ext_force {
                 ext_force.clear();
             }
-            if let Some(mut linear_velocity) = linear_velocity {
-                linear_velocity.0 = Vec3::ZERO;
+
+            if let Some(mut velocity) = linear_velocity {
+                *velocity = LinearVelocity::ZERO;
             }
+
             if let Some(mut angular_velocity) = angular_velocity {
-                angular_velocity.0 = Vec3::ZERO;
+                *angular_velocity = AngularVelocity::ZERO;
             }
         }
     }

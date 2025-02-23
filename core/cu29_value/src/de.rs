@@ -1,4 +1,5 @@
 use crate::Value;
+use cu29_clock::CuDuration;
 use serde::{de, forward_to_deserialize_any};
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -376,7 +377,10 @@ where
                     |(k, v)| (ValueDeserializer::new(k), ValueDeserializer::new(v)),
                 ))),
             Value::Bytes(v) => visitor.visit_byte_buf(v),
-            Value::CuTime(v) => visitor.visit_u64(v.0),
+            Value::CuTime(v) => {
+                let CuDuration(nanos) = v;
+                visitor.visit_u64(nanos)
+            }
         }
     }
 

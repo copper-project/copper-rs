@@ -1,6 +1,6 @@
 #![doc(html_root_url = "https://docs.rs/serde-value/0.7.0/")]
 
-use cu29_clock::CuTime;
+use cu29_clock::{CuDuration, CuTime};
 use ordered_float::OrderedFloat;
 use serde::Deserialize;
 use std::cmp::Ordering;
@@ -128,7 +128,10 @@ impl Hash for Value {
             Value::Seq(ref v) => v.hash(hasher),
             Value::Map(ref v) => v.hash(hasher),
             Value::Bytes(ref v) => v.hash(hasher),
-            Value::CuTime(v) => v.0.hash(hasher),
+            Value::CuTime(v) => {
+                let CuDuration(nanos) = v;
+                nanos.hash(hasher)
+            }
         }
     }
 }
@@ -236,7 +239,10 @@ impl Value {
             Value::Seq(_) => serde::de::Unexpected::Seq,
             Value::Map(_) => serde::de::Unexpected::Map,
             Value::Bytes(ref b) => serde::de::Unexpected::Bytes(b),
-            Value::CuTime(n) => serde::de::Unexpected::Unsigned(n.0),
+            Value::CuTime(n) => {
+                let CuDuration(nanos) = n;
+                serde::de::Unexpected::Unsigned(nanos)
+            }
         }
     }
 

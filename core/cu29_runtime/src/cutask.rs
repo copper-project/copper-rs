@@ -73,7 +73,8 @@ pub struct CuCompactString(pub CompactString);
 
 impl Encode for CuCompactString {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        let bytes = self.0.as_bytes();
+        let CuCompactString(ref compact_string) = self;
+        let bytes = compact_string.as_bytes();
         bytes.encode(encoder)
     }
 }

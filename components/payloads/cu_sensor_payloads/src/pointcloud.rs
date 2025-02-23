@@ -21,7 +21,8 @@ impl From<f32> for Reflectivity {
 /// Encode as f32
 impl Encode for Reflectivity {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        Encode::encode(&self.0.value, encoder)
+        let Reflectivity(ratio) = self;
+        Encode::encode(&ratio.value, encoder)
     }
 }
 
@@ -47,7 +48,8 @@ pub struct Distance(pub Length);
 /// Encode it as a f32 in m
 impl Encode for Distance {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        Encode::encode(&self.0.value, encoder)
+        let Distance(length) = self;
+        Encode::encode(&length.value, encoder)
     }
 }
 

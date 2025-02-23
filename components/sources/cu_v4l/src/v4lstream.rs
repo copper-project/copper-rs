@@ -260,7 +260,9 @@ impl CaptureStream<'_> for CuV4LStream {
         }
         let index = v4l2_buf.index as usize;
 
-        self.arena[index].0 = Metadata {
+        let (metadata, _) = &mut self.arena[index];
+
+        *metadata = Metadata {
             bytesused: v4l2_buf.bytesused,
             flags: v4l2_buf.flags.into(),
             field: v4l2_buf.field,

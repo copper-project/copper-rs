@@ -2,6 +2,7 @@ use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
 use cu_hesai::parser::Packet;
 use cu_hesai::LidarCuMsgPayload;
+use cu_sensor_payloads::Distance;
 use cu_udp_inject::PcapStreamer;
 use rerun::Position3D;
 
@@ -39,7 +40,12 @@ impl<'cl> CuSinkTask<'cl> for RerunPlyViz {
         let payload = payload.unwrap();
         let points: Vec<Position3D> = payload
             .iter()
-            .map(|p| Position3D::new(p.x.0.value, p.y.0.value, p.z.0.value))
+            .map(|p| {
+                let Distance(x) = p.x;
+                let Distance(y) = p.y;
+                let Distance(z) = p.z;
+                Position3D::new(x.value, y.value, z.value)
+            })
             .collect();
 
         self.rec

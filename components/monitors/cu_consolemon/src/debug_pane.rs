@@ -4,6 +4,7 @@ use ratatui::prelude::Stylize;
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Frame;
 use std::sync::atomic::Ordering;
+use std::sync::mpsc::SendError;
 use {
     compact_str::CompactStringExt,
     log::{Level, LevelFilter, Log, Metadata, Record},
@@ -84,7 +85,8 @@ impl LogSubscriber {
 
     pub fn push_logs(&self, log: String) {
         if let Err(err) = self.tx.send(log) {
-            eprintln!("Error Sending Logs to MPSC Channel: {}", err.0)
+            let SendError(msg) = err;
+            eprintln!("Error Sending Logs to MPSC Channel: {}", msg)
         }
     }
 }

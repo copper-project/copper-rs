@@ -20,13 +20,15 @@ impl Deref for CuGstBuffer {
     type Target = Buffer;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        let Self(r) = self;
+        r
     }
 }
 
 impl DerefMut for CuGstBuffer {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+        let Self(r) = self;
+        r
     }
 }
 
@@ -40,8 +42,8 @@ impl Decode for CuGstBuffer {
 
 impl Encode for CuGstBuffer {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        self.0
-            .as_ref()
+        let Self(r) = self;
+        r.as_ref()
             .map_readable()
             .map_err(|_| EncodeError::Other("Could not map readable"))?
             .encode(encoder)

@@ -9,6 +9,7 @@ use cu29::clock::{CuDuration, RobotClock};
 use cu29::config::{CuConfig, Node};
 use cu29::cutask::CuMsgMetadata;
 use cu29::monitoring::{CuDurationStatistics, CuMonitor, CuTaskState, Decision};
+use cu29::prelude::CuCompactString;
 use cu29::{CuError, CuResult};
 #[cfg(feature = "debug_pane")]
 use debug_pane::UIExt;
@@ -695,7 +696,8 @@ impl CuMonitor for CuConsoleMon {
         {
             let mut task_statuses = self.task_statuses.lock().unwrap();
             for (i, msg) in msgs.iter().enumerate() {
-                task_statuses[i].status_txt = msg.status_txt.0.clone();
+                let CuCompactString(status_txt) = &msg.status_txt;
+                task_statuses[i].status_txt = status_txt.clone();
                 if task_statuses[i].status_txt.as_bytes()[0] == 0 {
                     task_statuses[i].status_txt = "".to_compact_string();
                 }
