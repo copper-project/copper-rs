@@ -334,11 +334,12 @@ impl CuDurationStatistics {
     #[inline]
     pub fn record(&mut self, value: CuDuration) {
         let CuDuration(nanos) = value;
-        self.bare.stats.record(nanos).unwrap();
         if self.bare.is_empty() {
+            self.bare.stats.record(nanos).unwrap();
             self.last_value = value;
             return;
         }
+        self.bare.stats.record(nanos).unwrap();
         let CuDuration(last_nanos) = self.last_value;
         self.jitter
             .stats
