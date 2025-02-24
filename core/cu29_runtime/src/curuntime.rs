@@ -324,7 +324,11 @@ fn plan_tasks_tree_branch(
         // Sort the input messages by index
         // It means that the tuple presented as input to the merging task
         // depends on the order of *declaration* in the node section of the config file.
-        input_msg_indices_types.sort_by(|a, b| a.0.cmp(&b.0));
+        input_msg_indices_types.sort_by(|a, b| {
+            let (a_id, _) = a;
+            let (b_id, _) = b;
+            a_id.cmp(b_id)
+        });
 
         // Try to see if we did not already add this node to the plan
         if let Some(pos) = plan.iter().position(|step| {

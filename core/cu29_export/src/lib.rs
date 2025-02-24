@@ -250,7 +250,7 @@ mod python {
     impl PyCuLogEntry {
         /// Returns the timestamp of the log entry.
         pub fn ts<'a>(&self, py: Python<'a>) -> Bound<'a, PyDelta> {
-            let nanoseconds = self.inner.time.0;
+            let nanoseconds: u64 = self.inner.time.into();
 
             // Convert nanoseconds to seconds and microseconds
             let days = (nanoseconds / 86_400_000_000_000) as i32;

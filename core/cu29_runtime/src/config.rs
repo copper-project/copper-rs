@@ -29,8 +29,9 @@ pub struct ComponentConfig(pub HashMap<String, Value>);
 impl Display for ComponentConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut first = true;
+        let ComponentConfig(config) = self;
         write!(f, "{{")?;
-        for (key, value) in self.0.iter() {
+        for (key, value) in config.iter() {
             if !first {
                 write!(f, ", ")?;
             }
@@ -50,12 +51,14 @@ impl ComponentConfig {
 
     #[allow(dead_code)]
     pub fn get<T: From<Value>>(&self, key: &str) -> Option<T> {
-        self.0.get(key).map(|v| T::from(v.clone()))
+        let ComponentConfig(config) = self;
+        config.get(key).map(|v| T::from(v.clone()))
     }
 
     #[allow(dead_code)]
     pub fn set<T: Into<Value>>(&mut self, key: &str, value: T) {
-        self.0.insert(key.to_string(), value.into());
+        let ComponentConfig(config) = self;
+        config.insert(key.to_string(), value.into());
     }
 }
 
@@ -102,7 +105,7 @@ impl From<f64> for Value {
 
 impl From<Value> for bool {
     fn from(value: Value) -> Self {
-        if let RonValue::Bool(v) = value.0 {
+        if let Value(RonValue::Bool(v)) = value {
             v
         } else {
             panic!("Expected a Boolean variant but got {value:?}")
@@ -112,7 +115,7 @@ impl From<Value> for bool {
 
 impl From<Value> for u8 {
     fn from(value: Value) -> Self {
-        if let RonValue::Number(num) = value.0 {
+        if let Value(RonValue::Number(num)) = value {
             if let Some(i) = num.as_i64() {
                 i as u8
             } else {
@@ -126,7 +129,7 @@ impl From<Value> for u8 {
 
 impl From<Value> for u32 {
     fn from(value: Value) -> Self {
-        if let RonValue::Number(num) = value.0 {
+        if let Value(RonValue::Number(num)) = value {
             if let Some(i) = num.as_i64() {
                 i as u32
             } else {
@@ -140,7 +143,7 @@ impl From<Value> for u32 {
 
 impl From<Value> for i32 {
     fn from(value: Value) -> Self {
-        if let RonValue::Number(num) = value.0 {
+        if let Value(RonValue::Number(num)) = value {
             if let Some(i) = num.as_i64() {
                 i as i32
             } else {
@@ -154,7 +157,7 @@ impl From<Value> for i32 {
 
 impl From<Value> for f64 {
     fn from(value: Value) -> Self {
-        if let RonValue::Number(num) = value.0 {
+        if let Value(RonValue::Number(num)) = value {
             if let Some(f) = num.as_f64() {
                 f
             } else {
@@ -174,7 +177,7 @@ impl From<String> for Value {
 
 impl From<Value> for String {
     fn from(value: Value) -> Self {
-        if let RonValue::String(s) = value.0 {
+        if let Value(RonValue::String(s)) = value {
             s
         } else {
             panic!("Expected a String variant")
@@ -184,7 +187,8 @@ impl From<Value> for String {
 
 impl Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.0 {
+        let Value(value) = self;
+        match value {
             RonValue::Number(n) => write!(f, "{}", n.as_i64().unwrap()),
             RonValue::String(s) => write!(f, "{s}"),
             RonValue::Bool(b) => write!(f, "{b}"),
@@ -242,7 +246,8 @@ impl Node {
     #[allow(dead_code)]
     pub fn get_param<T: From<Value>>(&self, key: &str) -> Option<T> {
         let pc = self.config.as_ref()?;
-        let v = pc.0.get(key)?;
+        let ComponentConfig(pc) = pc;
+        let v = pc.get(key)?;
         Some(T::from(v.clone()))
     }
 
@@ -251,11 +256,8 @@ impl Node {
         if self.config.is_none() {
             self.config = Some(ComponentConfig(HashMap::new()));
         }
-        self.config
-            .as_mut()
-            .unwrap()
-            .0
-            .insert(key.to_string(), value.into());
+        let ComponentConfig(config) = self.config.as_mut().unwrap();
+        config.insert(key.to_string(), value.into());
     }
 }
 

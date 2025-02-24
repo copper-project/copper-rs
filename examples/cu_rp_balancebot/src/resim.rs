@@ -28,14 +28,13 @@ fn run_one_copperlist(
 
     // Simulate what the sim is doing here
     // TODO: set that at every step instead of just at the CL level like the sim.
-    robot_clock.set_value(
-        msgs.get_balpos_output()
-            .metadata
-            .process_time
-            .start
-            .unwrap()
-            .0,
-    );
+    let CuDuration(process_time) = msgs
+        .get_balpos_output()
+        .metadata
+        .process_time
+        .start
+        .unwrap();
+    robot_clock.set_value(process_time);
 
     let mut sim_callback = move |step: SimStep<'_>| -> SimOverride {
         match step {

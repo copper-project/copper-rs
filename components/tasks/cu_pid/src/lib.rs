@@ -90,7 +90,8 @@ impl PIDController {
         }
 
         let error = self.setpoint - measurement;
-        let dt = self.elapsed.0 as f32 / 1_000_000f32; // the unit is kind of arbitrary.
+        let CuDuration(elapsed) = self.elapsed;
+        let dt = elapsed as f32 / 1_000_000f32; // the unit is kind of arbitrary.
 
         // Proportional term
         let p_unbounded = self.kp * error;

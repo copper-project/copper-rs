@@ -263,9 +263,10 @@ pub struct CuDurationStatistics {
 
 impl CuDurationStatistics {
     pub fn new(max: CuDuration) -> Self {
+        let CuDuration(max) = max;
         CuDurationStatistics {
-            bare: LiveStatistics::new_with_max(max.0),
-            jitter: LiveStatistics::new_with_max(max.0),
+            bare: LiveStatistics::new_with_max(max),
+            jitter: LiveStatistics::new_with_max(max),
             last_value: CuDuration::default(),
         }
     }
@@ -332,15 +333,17 @@ impl CuDurationStatistics {
 
     #[inline]
     pub fn record(&mut self, value: CuDuration) {
+        let CuDuration(nanos) = value;
         if self.bare.is_empty() {
-            self.bare.stats.record(value.0).unwrap();
+            self.bare.stats.record(nanos).unwrap(); // this needs to happen *after* the check.
             self.last_value = value;
             return;
         }
-        self.bare.stats.record(value.0).unwrap();
+        self.bare.stats.record(nanos).unwrap(); // .. and needs to happen here too.
+        let CuDuration(last_nanos) = self.last_value;
         self.jitter
             .stats
-            .record(value.0.abs_diff(self.last_value.0))
+            .record(nanos.abs_diff(last_nanos))
             .unwrap();
         self.last_value = value;
     }

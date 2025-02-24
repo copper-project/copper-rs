@@ -65,13 +65,14 @@ impl<'cl> CuSinkTask<'cl> for RPGpio {
     where
         Self: Sized,
     {
-        let config = config.ok_or("RPGpio needs a config, None was passed as ComponentConfig")?;
+        let ComponentConfig(kv) =
+            config.ok_or("RPGpio needs a config, None was passed as ComponentConfig")?;
 
-        let pin_nb: u8 = (*config.0.get("pin").expect(
-            "RPGpio expects a pin config value pointing to output pin you want to address",
-        ))
-        .clone()
-        .into();
+        let pin_nb: u8 = kv
+            .get("pin")
+            .expect("RPGpio expects a pin config value pointing to output pin you want to address")
+            .clone()
+            .into();
 
         #[cfg(not(feature = "mock"))]
         let pin = GPIO

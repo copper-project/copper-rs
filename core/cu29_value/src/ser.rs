@@ -274,13 +274,15 @@ impl ser::SerializeSeq for SerializeSeq {
         &mut self,
         value: &T,
     ) -> Result<(), Self::Error> {
+        let Self(vec) = self;
         let value = value.serialize(Serializer)?;
-        self.0.push(value);
+        vec.push(value);
         Ok(())
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        Ok(Value::Seq(self.0))
+        let Self(vec) = self;
+        Ok(Value::Seq(vec))
     }
 }
 
@@ -295,12 +297,14 @@ impl ser::SerializeTuple for SerializeTuple {
         value: &T,
     ) -> Result<(), Self::Error> {
         let value = value.serialize(Serializer)?;
-        self.0.push(value);
+        let Self(vec) = self;
+        vec.push(value);
         Ok(())
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        Ok(Value::Seq(self.0))
+        let Self(vec) = self;
+        Ok(Value::Seq(vec))
     }
 }
 
@@ -315,12 +319,14 @@ impl ser::SerializeTupleStruct for SerializeTupleStruct {
         value: &T,
     ) -> Result<(), Self::Error> {
         let value = value.serialize(Serializer)?;
-        self.0.push(value);
+        let Self(vec) = self;
+        vec.push(value);
         Ok(())
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        Ok(Value::Seq(self.0))
+        let Self(vec) = self;
+        Ok(Value::Seq(vec))
     }
 }
 
@@ -341,7 +347,8 @@ impl ser::SerializeTupleVariant for SerializeTupleVariant {
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
         let mut map = BTreeMap::new();
-        map.insert(self.0, Value::Seq(self.1));
+        let Self(key, value) = self;
+        map.insert(key, Value::Seq(value));
         Ok(Value::Map(map))
     }
 }
@@ -388,12 +395,14 @@ impl ser::SerializeStruct for SerializeStruct {
     ) -> Result<(), Self::Error> {
         let key = Value::String(key.to_string());
         let value = value.serialize(Serializer)?;
-        self.0.insert(key, value);
+        let Self(map) = self;
+        map.insert(key, value);
         Ok(())
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        Ok(Value::Map(self.0))
+        let Self(map) = self;
+        Ok(Value::Map(map))
     }
 }
 
@@ -416,7 +425,8 @@ impl ser::SerializeStructVariant for SerializeStructVariant {
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
         let mut map = BTreeMap::new();
-        map.insert(self.0, Value::Map(self.1));
+        let Self(key, value) = self;
+        map.insert(key, Value::Map(value));
         Ok(Value::Map(map))
     }
 }
