@@ -551,4 +551,27 @@ mod tests {
 
         assert_eq!(runtime.available_copper_lists(), 2);
     }
+
+    #[test]
+    fn test_config_cnx_id_assignment() {
+        let mut config = CuConfig::default();
+        let src1_id = config.add_node(Node::new("a", "Source1"));
+        let src2_id = config.add_node(Node::new("b", "Source2"));
+        let sink_id = config.add_node(Node::new("c", "Sink"));
+
+        assert_eq!(src1_id, 0);
+        assert_eq!(src2_id, 1);
+
+        // note that the source2 connection is before the source1
+        config.connect(src2_id, sink_id, "type1");
+        config.connect(src1_id, sink_id, "type2");
+
+        let src1_edge_id = *config.get_src_edges(src1_id).first().unwrap();
+        let src2_edge_id = *config.get_src_edges(src2_id).first().unwrap();
+
+        // the edge id depends on the order the connection is created, not
+        // on the node id!
+        assert_eq!(src1_edge_id, 1);
+        assert_eq!(src2_edge_id, 0);
+    }
 }

@@ -786,4 +786,30 @@ mod tests {
         let config = CuConfig::deserialize_ron(txt);
         assert!(config.validate_logging_config().is_err());
     }
+
+    // this test makes sure the edge id is suitable to be used to sort the inputs of a task
+    #[test]
+    fn test_deserialization_edge_id_assignment() {
+        // note here that the src1 task is added before src2 in the tasks array,
+        // however, src1 connection is added AFTER src2 in the cnx array
+        let txt = r#"( 
+            tasks: [(id: "src1", type: "a"), (id: "src2", type: "b"), (id: "sink", type: "c")],
+            cnx: [(src: "src2", dst: "sink", msg: "msg1"), (src: "src1", dst: "sink", msg: "msg2")]
+        )"#;
+        let config = CuConfig::deserialize_ron(txt);
+        assert!(config.validate_logging_config().is_ok());
+
+        // the node id depends on the order the taks are added
+        let src1_id = 0;
+        assert_eq!(config.get_node(src1_id).unwrap().id, "src1");
+        let src2_id = 1;
+        assert_eq!(config.get_node(src2_id).unwrap().id, "src2");
+
+        // the edge id depends on the order the connection is created
+        // the src2 was added second in the tasks, but the connection was added first
+        let src1_edge_id = *config.get_src_edges(src1_id).first().unwrap();
+        assert_eq!(src1_edge_id, 1);
+        let src2_edge_id = *config.get_src_edges(src2_id).first().unwrap();
+        assert_eq!(src2_edge_id, 0);
+    }
 }
