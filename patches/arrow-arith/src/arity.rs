@@ -162,7 +162,7 @@ where
     }
 }
 
-/// Allies a binary infallable function to two [`PrimitiveArray`]s,
+/// Allies a binary infallible function to two [`PrimitiveArray`]s,
 /// producing a new [`PrimitiveArray`]
 ///
 /// # Details
@@ -596,7 +596,7 @@ mod tests {
             Some(vec![true, true, true, true, true].into()),
         );
 
-        // unwrap here means that no copying occured
+        // unwrap here means that no copying occurred
         let r2 = binary_mut(a, &b, |a, b| a + b).unwrap();
         assert_eq!(r1.unwrap(), r2.unwrap());
     }
@@ -645,7 +645,7 @@ mod tests {
             Some(vec![true, true, true, true, true].into()),
         );
 
-        // unwrap here means that no copying occured
+        // unwrap here means that no copying occurred
         let r2 = try_binary_mut(a, &b, |a, b| Ok(a + b)).unwrap();
         assert_eq!(r1.unwrap(), r2.unwrap());
     }
