@@ -30,5 +30,5 @@ tui-widgets = "0.4.1"
 color-eyre = "0.6.3"
 gag = "1.0.0"
 log = { version = "0.4.25", features = ["std"], optional = true }
-chrono = { version = "0.4.39", optional = true }
+chrono = { version = "0.4.39", optional = true } # 0.4.40 is not supported by arrow pulled from rerun
 dashmap = { version = "6.1.0", optional = true }
