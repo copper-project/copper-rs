@@ -13,11 +13,11 @@ repository.workspace = true
 [dependencies]
 cu29 = { workspace = true }
 cu-sensor-payloads = { workspace = true }
-bytemuck = { version = "1.19.0", features = ["derive"] }
+bytemuck = { version = "1.21.0", features = ["derive"] }
 uom = { workspace = true }
-chrono = { version = "0.4.38", features = ["serde"] }
-socket2 = { version = "0.5.7", features = ["all"] }
-tempfile = {workspace = true}
+chrono = { version = "0.4.40", features = ["serde"] }  # 0.4.40 conflicts with rerun and arrow
+socket2 = { version = "0.5.8", features = ["all"] }
+tempfile = { workspace = true }
 
 [dev-dependencies]
 cu-udp-inject = { path = "../../testing/cu_udp_inject" }
