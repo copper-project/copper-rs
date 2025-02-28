@@ -12,5 +12,9 @@ description = "AprilTag detection and pose for Copper"
 
 [dependencies]
 apriltag = "0.4.0"
-
+apriltag-sys = "0.3.0"
+bincode = { workspace = true }
 cu29 = { workspace = true }
+arrayvec = "0.7.6"
+cu-spatial-payloads = { path = "../../payloads/cu_spatial_payloads" }
+cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads" }
