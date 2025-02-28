@@ -198,9 +198,11 @@ mod glam_integration {
 }
 
 #[cfg(feature = "nalgebra")]
+#[allow(unused_imports)]
 pub use nalgebra_integration::*;
 
 #[cfg(feature = "faer")]
+#[allow(unused_imports)]
 pub use faer_integration::*;
 
 #[cfg(test)]
