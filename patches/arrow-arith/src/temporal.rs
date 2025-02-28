@@ -649,10 +649,12 @@ trait ChronoDateExt {
 }
 
 impl<T: Datelike> ChronoDateExt for T {
+    #[allow(unused)]
     fn quarter(&self) -> u32 {
         self.quarter0() + 1
     }
 
+    #[allow(unused)]
     fn quarter0(&self) -> u32 {
         self.month0() / 3
     }
