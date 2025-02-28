@@ -14,7 +14,7 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, Default)]
-pub struct CuGstBuffer(Buffer);
+pub struct CuGstBuffer(pub Buffer);
 
 impl Deref for CuGstBuffer {
     type Target = Buffer;

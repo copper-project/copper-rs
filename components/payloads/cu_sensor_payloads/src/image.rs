@@ -2,10 +2,9 @@ use bincode::de::Decoder;
 use bincode::error::DecodeError;
 use bincode::{Decode, Encode};
 use cu29::prelude::{ArrayLike, CuHandle};
-use std::fmt::Debug;
-
 #[allow(unused_imports)]
 use cu29::{CuError, CuResult};
+use std::fmt::Debug;
 
 #[cfg(feature = "image")]
 use image::{ImageBuffer, Pixel};
@@ -57,7 +56,7 @@ where
 {
     pub fn new(format: CuImageBufferFormat, buffer_handle: CuHandle<A>) -> Self {
         assert!(
-            format.byte_size() < buffer_handle.with_inner(|i| i.len()),
+            format.byte_size() <= buffer_handle.with_inner(|i| i.len()),
             "Buffer size must at least match the format."
         );
         CuImage {
