@@ -40,7 +40,7 @@ members = [
     "examples/cu_multisources",
     "examples/cu_pointclouds",
     "examples/cu_rp_balancebot",
-    "examples/cu_standalone_structlog", "components/sources/cu_gstreamer",
+    "examples/cu_standalone_structlog", "components/sources/cu_gstreamer", "components/payloads/cu_spatial_payloads",
 ]
 
 # put only the core crates here that are not platform specific
