@@ -103,9 +103,9 @@ mod faer_integration {
             assert_eq!(mat.nrows(), 4);
             assert_eq!(mat.ncols(), 4);
             let mut transform = [[0.0; 4]; 4];
-            for r in 0..4 {
-                for c in 0..4 {
-                    transform[r][c] = *mat.get(r, c);
+            for (r, row) in transform.iter_mut().enumerate() {
+                for (c, val) in row.iter_mut().enumerate() {
+                    *val = *mat.get(r, c);
                 }
             }
             Self { mat: transform }
