@@ -8,6 +8,7 @@ keywords.workspace = true
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
+description = "Spatial payloads for the Copper."
 
 [dependencies]
 bincode = { workspace = true }
