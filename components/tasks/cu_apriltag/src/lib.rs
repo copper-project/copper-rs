@@ -208,12 +208,13 @@ impl<'cl> CuTask<'cl> for AprilTags {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Context;
     use anyhow::Result;
     use image::{imageops::crop, imageops::resize, imageops::FilterType, GenericImageView, Luma};
     use image::{ImageBuffer, ImageReader};
 
     fn process_image(path: &str) -> Result<ImageBuffer<Luma<u8>, Vec<u8>>> {
-        let reader = ImageReader::open(&path).context("Failed to open image")?;
+        let reader = ImageReader::open(&path).with_context(|| "Failed to open image")?;
         let img = reader.decode().context("Failed to decode image")?;
 
         println!(
