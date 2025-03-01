@@ -198,8 +198,7 @@ impl<'cl> CuTask<'cl> for AprilTags {
     ) -> CuResult<()> {
         let mut result = AprilTagDetections::new();
         if let Some(payload) = input.payload() {
-            let image = image_from_cuimage(&payload);
-
+            let image = image_from_cuimage(payload);
             let detections = self.detector.detect(&image);
             for detection in detections {
                 if let Some(aprilpose) = detection.estimate_tag_pose(&self.tag_params) {
