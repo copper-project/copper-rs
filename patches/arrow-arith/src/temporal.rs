@@ -634,9 +634,11 @@ pub(crate) use return_compute_error_with;
 // Internal trait, which is used for mapping values from DateLike structures
 trait ChronoDateExt {
     /// Returns a value in range `1..=4` indicating the quarter this date falls into
+    #[allow(unused)]
     fn quarter(&self) -> u32;
 
     /// Returns a value in range `0..=3` indicating the quarter (zero-based) this date falls into
+    #[allow(unused)]
     fn quarter0(&self) -> u32;
 
     /// Returns the day of week; Monday is encoded as `0`, Tuesday as `1`, etc.
@@ -647,10 +649,12 @@ trait ChronoDateExt {
 }
 
 impl<T: Datelike> ChronoDateExt for T {
+    #[allow(unused)]
     fn quarter(&self) -> u32 {
         self.quarter0() + 1
     }
 
+    #[allow(unused)]
     fn quarter0(&self) -> u32 {
         self.month0() / 3
     }

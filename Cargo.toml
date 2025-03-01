@@ -16,6 +16,7 @@ members = [
     "core/cu29_unifiedlog",
     "components/monitors/cu_consolemon",
     "components/payloads/cu_sensor_payloads",
+    "components/payloads/cu_spatial_payloads",
     "components/sinks/cu_iceoryx2_sink",
     "components/sinks/cu_rp_gpio",
     "components/sinks/cu_rp_sn754410",
@@ -42,7 +43,6 @@ members = [
     "examples/cu_multisources",
     "examples/cu_pointclouds",
     "examples/cu_rp_balancebot",
-    "examples/cu_standalone_structlog",
 ]
 
 # put only the core crates here that are not platform specific
