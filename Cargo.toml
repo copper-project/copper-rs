@@ -32,6 +32,7 @@ members = [
     "components/sources/cu_rp_encoder",
     "components/tasks/cu_aligner",
     "components/tasks/cu_apriltag",
+    "components/tasks/cu_dynthreshold",
     "components/tasks/cu_pid",
     "components/testing/cu_udp_inject",
     "examples/cu_caterpillar",
@@ -44,6 +45,7 @@ members = [
     "examples/cu_pointclouds",
     "examples/cu_rp_balancebot",
     "examples/cu_standalone_structlog",  
+    "examples/cu_standalone_structlog",
 ]
 
 # put only the core crates here that are not platform specific
