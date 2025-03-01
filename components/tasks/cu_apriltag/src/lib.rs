@@ -207,13 +207,34 @@ impl<'cl> CuTask<'cl> for AprilTags {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use anyhow::Result;
+    use image::{imageops::crop, imageops::resize, imageops::FilterType, GenericImageView, Luma};
+    use image::{ImageBuffer, ImageReader};
+
+    fn process_image(path: &str) -> Result<ImageBuffer<Luma<u8>, Vec<u8>>> {
+        let reader = ImageReader::open(&path).context("Failed to open image")?;
+        let img = reader.decode().context("Failed to decode image")?;
+
+        println!(
+            "Loaded image with dimensions: {} x {}",
+            img.width(),
+            img.height()
+        );
+
+        let mut img = img.into_luma8();
+        let (orig_w, orig_h) = img.dimensions();
+
+        let new_h = (orig_w as f32 * 9.0 / 16.0) as u32;
+        let crop_y = (orig_h - new_h) / 2; // Center crop
+
+        let cropped = crop(&mut img, 0, crop_y, orig_w, new_h).to_image();
+        Ok(resize(&cropped, 1920, 1080, FilterType::Lanczos3))
+    }
+
     #[test]
-    fn test_apriltag() {
-        // let mut apriltags = AprilTags {
-        //     detector: Detector::new(),
-        // };
-        // let input = ();
-        // let output = ();
-        // apriltags.process(&RobotClock::new(), input, output).unwrap();
+    fn test_end2end_apriltag() -> Result<()> {
+        let img = process_image("tests/data/simple.jpg")?;
+        Ok(())
     }
 }

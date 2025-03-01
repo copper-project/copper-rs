@@ -18,3 +18,7 @@ cu29 = { workspace = true }
 arrayvec = "0.7.6"
 cu-spatial-payloads = { path = "../../payloads/cu_spatial_payloads" }
 cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads" }
+
+[dev-dependencies]
+image = "0.25.5"
+anyhow = "1.0.96"
