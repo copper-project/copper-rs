@@ -185,11 +185,11 @@ impl Stream for CuV4LStream {
         self.arena_last_freed_up_index = 0;
 
         unsafe {
-            let mut typ = self.v4l_buf_type as u32;
+            let mut type_ = self.v4l_buf_type as u32;
             v4l2::ioctl(
                 self.v4l_handle.fd(),
                 v4l2::vidioc::VIDIOC_STREAMON,
-                &mut typ as *mut _ as *mut std::os::raw::c_void,
+                &mut type_ as *mut _ as *mut std::os::raw::c_void,
             )?;
         }
         self.active = true;
@@ -198,11 +198,11 @@ impl Stream for CuV4LStream {
 
     fn stop(&mut self) -> io::Result<()> {
         unsafe {
-            let mut typ = self.v4l_buf_type as u32;
+            let mut type_ = self.v4l_buf_type as u32;
             v4l2::ioctl(
                 self.v4l_handle.fd(),
                 v4l2::vidioc::VIDIOC_STREAMOFF,
-                &mut typ as *mut _ as *mut std::os::raw::c_void,
+                &mut type_ as *mut _ as *mut std::os::raw::c_void,
             )?;
         }
 
