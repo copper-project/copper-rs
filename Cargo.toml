@@ -21,6 +21,7 @@ members = [
     "components/sinks/cu_rp_sn754410",
     "components/sinks/cu_lewansoul",
     "components/sources/cu_ads7883",
+    "components/sources/cu_gstreamer",
     "components/sources/cu_hesai",
     "components/sources/cu_livox",
     "components/sources/cu_iceoryx2_src",
@@ -29,6 +30,7 @@ members = [
     "components/sources/cu_wt901",
     "components/sources/cu_rp_encoder",
     "components/tasks/cu_aligner",
+    "components/tasks/cu_dynthreshold",
     "components/tasks/cu_pid",
     "components/testing/cu_udp_inject",
     "examples/cu_caterpillar",
@@ -40,7 +42,7 @@ members = [
     "examples/cu_multisources",
     "examples/cu_pointclouds",
     "examples/cu_rp_balancebot",
-    "examples/cu_standalone_structlog", "components/sources/cu_gstreamer",
+    "examples/cu_standalone_structlog",
 ]
 
 # put only the core crates here that are not platform specific

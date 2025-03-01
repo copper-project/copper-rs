@@ -1,0 +1,17 @@
+[package]
+name = "cu-dynthreshold"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+gstreamer = "0.23.4"
+cu29 = { workspace = true }
+cu29-clock = { workspace = true }
+cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads" }
+cu-gstreamer = { path = "../../sources/cu_gstreamer" }
