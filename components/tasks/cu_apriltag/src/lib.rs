@@ -1,5 +1,5 @@
 use apriltag::{Detector, DetectorBuilder, Family, Image, TagParams};
-use apriltag_sys::image_u8;
+use apriltag_sys::image_u8_t;
 use arrayvec::ArrayVec;
 use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
@@ -9,6 +9,7 @@ use cu29::bincode::{Decode, Encode};
 use cu29::prelude::*;
 use cu_sensor_payloads::CuImage;
 use cu_spatial_payloads::Pose as CuPose;
+use std::mem::ManuallyDrop;
 
 // the maximum number of detections that can be returned by the detector
 const MAX_DETECTIONS: usize = 16;
@@ -87,19 +88,55 @@ where
 
 #[derive(Default, Debug, Clone, Encode, Decode)]
 pub struct AprilTagDetections {
-    pub detections: CuArrayVec<CuPose<f32>, MAX_DETECTIONS>,
-    pub thresholds: CuArrayVec<f32, MAX_DETECTIONS>,
+    pub ids: CuArrayVec<usize, MAX_DETECTIONS>,
+    pub poses: CuArrayVec<CuPose<f32>, MAX_DETECTIONS>,
+    pub decision_margins: CuArrayVec<f32, MAX_DETECTIONS>,
 }
 
 impl AprilTagDetections {
     fn new() -> Self {
         Self::default()
     }
+    pub fn filtered_by_decision_margin(
+        &self,
+        threshold: f32,
+    ) -> impl Iterator<Item = (usize, &CuPose<f32>, f32)> {
+        let CuArrayVec(ids) = &self.ids;
+        let CuArrayVec(poses) = &self.poses;
+        let CuArrayVec(decision_margins) = &self.decision_margins;
+
+        ids.iter()
+            .zip(poses.iter())
+            .zip(decision_margins.iter())
+            .filter_map(move |((id, pose), margin)| {
+                (*margin > threshold).then_some((*id, pose, *margin))
+            })
+    }
 }
 
 struct AprilTags {
     detector: Detector,
     tag_params: TagParams,
+}
+
+// Absolute shitshow of an API. This is to avoid a full image copy.
+// Hopefully this is sound.
+fn image_from_cuimage<A>(cu_image: &CuImage<A>) -> ManuallyDrop<Image>
+where
+    A: ArrayLike<Element = u8>,
+{
+    unsafe {
+        // Try to emulate what the C code is doing on the heap to avoid double free
+        let buffer_ptr = cu_image.buffer_handle.with_inner(|inner| inner.as_ptr());
+        let low_level_img = Box::new(image_u8_t {
+            buf: buffer_ptr as *mut u8,
+            width: cu_image.format.width as i32,
+            height: cu_image.format.height as i32,
+            stride: cu_image.format.stride as i32,
+        });
+        let ptr = Box::into_raw(low_level_img);
+        ManuallyDrop::new(Image::from_raw(ptr))
+    }
 }
 
 impl Freezable for AprilTags {}
@@ -161,44 +198,34 @@ impl<'cl> CuTask<'cl> for AprilTags {
     ) -> CuResult<()> {
         let mut result = AprilTagDetections::new();
         if let Some(payload) = input.payload() {
-            payload.buffer_handle.with_inner(|buffer| {
-                let slice: &[u8] = buffer.as_ref();
-                let mut low_level_img: image_u8 = image_u8 {
-                    buf: slice.as_ptr() as *mut u8,
-                    width: payload.format.width as i32,
-                    height: payload.format.height as i32,
-                    stride: payload.format.width as i32,
-                };
-                // If those API developers could give us a safe way to inject a buffer
-                // without copying megabytes of data in their types this would avoid this kind of
-                // shady crap.
-                let image = unsafe { Image::from_raw(&mut low_level_img) };
+            let image = image_from_cuimage(&payload);
 
-                let detections = self.detector.detect(&image);
-                for detection in detections {
-                    if let Some(aprilpose) = detection.estimate_tag_pose(&self.tag_params) {
-                        let translation = aprilpose.translation();
-                        let rotation = aprilpose.rotation();
-                        let mut pose = CuPose::<f32>::default();
-                        pose.mat[0][3] = translation.data()[0] as f32;
-                        pose.mat[1][3] = translation.data()[1] as f32;
-                        pose.mat[2][3] = translation.data()[2] as f32;
-                        pose.mat[0][0] = rotation.data()[0] as f32;
-                        pose.mat[0][1] = rotation.data()[3] as f32;
-                        pose.mat[0][2] = rotation.data()[2 * 3] as f32;
-                        pose.mat[1][0] = rotation.data()[1] as f32;
-                        pose.mat[1][1] = rotation.data()[1 + 3] as f32;
-                        pose.mat[1][2] = rotation.data()[1 + 2 * 3] as f32;
-                        pose.mat[2][0] = rotation.data()[2] as f32;
-                        pose.mat[2][1] = rotation.data()[2 + 3] as f32;
-                        pose.mat[2][2] = rotation.data()[2 + 2 * 3] as f32;
-                        let CuArrayVec(detections) = &mut result.detections;
-                        detections.push(pose);
-                        let CuArrayVec(thresholds) = &mut result.thresholds;
-                        thresholds.push(detection.decision_margin());
-                    }
+            let detections = self.detector.detect(&image);
+            for detection in detections {
+                if let Some(aprilpose) = detection.estimate_tag_pose(&self.tag_params) {
+                    let translation = aprilpose.translation();
+                    let rotation = aprilpose.rotation();
+                    let mut pose = CuPose::<f32>::default();
+                    pose.mat[0][3] = translation.data()[0] as f32;
+                    pose.mat[1][3] = translation.data()[1] as f32;
+                    pose.mat[2][3] = translation.data()[2] as f32;
+                    pose.mat[0][0] = rotation.data()[0] as f32;
+                    pose.mat[0][1] = rotation.data()[3] as f32;
+                    pose.mat[0][2] = rotation.data()[2 * 3] as f32;
+                    pose.mat[1][0] = rotation.data()[1] as f32;
+                    pose.mat[1][1] = rotation.data()[1 + 3] as f32;
+                    pose.mat[1][2] = rotation.data()[1 + 2 * 3] as f32;
+                    pose.mat[2][0] = rotation.data()[2] as f32;
+                    pose.mat[2][1] = rotation.data()[2 + 3] as f32;
+                    pose.mat[2][2] = rotation.data()[2 + 2 * 3] as f32;
+                    let CuArrayVec(detections) = &mut result.poses;
+                    detections.push(pose);
+                    let CuArrayVec(decision_margin) = &mut result.decision_margins;
+                    decision_margin.push(detection.decision_margin());
+                    let CuArrayVec(ids) = &mut result.ids;
+                    ids.push(detection.id());
                 }
-            })
+            }
         };
         output.set_payload(result);
         Ok(())
@@ -210,20 +237,16 @@ mod tests {
     use super::*;
     use anyhow::Context;
     use anyhow::Result;
-    use image::{imageops::crop, imageops::resize, imageops::FilterType, GenericImageView, Luma};
+    use cu_sensor_payloads::CuImageBufferFormat;
+    use image::{imageops::crop, imageops::resize, imageops::FilterType, Luma};
     use image::{ImageBuffer, ImageReader};
 
     fn process_image(path: &str) -> Result<ImageBuffer<Luma<u8>, Vec<u8>>> {
-        let reader = ImageReader::open(&path).with_context(|| "Failed to open image")?;
-        let img = reader.decode().context("Failed to decode image")?;
-
-        println!(
-            "Loaded image with dimensions: {} x {}",
-            img.width(),
-            img.height()
-        );
-
-        let mut img = img.into_luma8();
+        let reader = ImageReader::open(path).with_context(|| "Failed to open image")?;
+        let mut img = reader
+            .decode()
+            .context("Failed to decode image")?
+            .into_luma8();
         let (orig_w, orig_h) = img.dimensions();
 
         let new_h = (orig_w as f32 * 9.0 / 16.0) as u32;
@@ -236,6 +259,40 @@ mod tests {
     #[test]
     fn test_end2end_apriltag() -> Result<()> {
         let img = process_image("tests/data/simple.jpg")?;
-        Ok(())
+        let format = CuImageBufferFormat {
+            width: img.width(),
+            height: img.height(),
+            stride: img.width(),
+            pixel_format: "GRAY".as_bytes().try_into()?,
+        };
+        let buffer_handle = CuHandle::new_detached(img.into_raw());
+        let cuimage = CuImage::new(format, buffer_handle);
+
+        let mut config = ComponentConfig::default();
+        config.set("tag_size", 0.14);
+        config.set("fx", 2600.0);
+        config.set("fy", 2600.0);
+        config.set("cx", 900.0);
+        config.set("cy", 520.0);
+        config.set("family", "tag16h5".to_string());
+
+        let mut task = AprilTags::new(Some(&config))?;
+        let input = CuMsg::<CuImage<Vec<u8>>>::new(Some(cuimage));
+        let mut output = CuMsg::<AprilTagDetections>::default();
+
+        let clock = RobotClock::new();
+        let result = task.process(&clock, &input, &mut output);
+        assert!(result.is_ok());
+
+        if let Some(detections) = output.payload() {
+            let detections = detections
+                .filtered_by_decision_margin(150.0)
+                .collect::<Vec<_>>();
+
+            assert_eq!(detections.len(), 1);
+            assert_eq!(detections[0].0, 4);
+            return Ok(());
+        }
+        Err(anyhow::anyhow!("No output"))
     }
 }
