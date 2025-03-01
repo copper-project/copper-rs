@@ -682,7 +682,7 @@ impl From<Baudrate> for String {
             Baudrate::Baud2000000 => "2000000",
             Baudrate::Baud2470000 => "2470000",
         }
-            .to_owned()
+        .to_owned()
     }
 }
 
@@ -818,9 +818,7 @@ pub struct MspRc {
 
 impl MspRc {
     pub fn new() -> Self {
-        MspRc {
-            channels: [0; 16],
-        }
+        MspRc { channels: [0; 16] }
     }
 
     pub fn set_roll(&mut self, value: u16) {

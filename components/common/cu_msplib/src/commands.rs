@@ -194,4 +194,3 @@ impl From<u16> for MspCommandCode {
         Self::from_primitive(value).unwrap_or_else(|| panic!("Invalid MSP command code: {}", value))
     }
 }
-
