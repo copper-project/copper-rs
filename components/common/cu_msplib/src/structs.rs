@@ -443,8 +443,8 @@ pub struct MspServoConfig {
     pub rate: i8,
     pub unused1: u8,
     pub unused2: u8,
-    pub forward_from_channel: u8, // Depracted, set to 255 for backward compatibility
-    pub reverse_input: u32, // Depracted, Input reversing is not required since it can be done on mixer level
+    pub forward_from_channel: u8, // Deprecated, set to 255 for backward compatibility
+    pub reverse_input: u32, // Deprecated, Input reversing is not required since it can be done on mixer level
 }
 
 #[derive(PackedStruct, Debug, Copy, Clone)]
