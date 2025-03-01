@@ -816,6 +816,12 @@ pub struct MspRc {
     pub channels: [u16; 16], // 16 RC channels
 }
 
+impl Default for MspRc {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MspRc {
     pub fn new() -> Self {
         MspRc { channels: [0; 16] }

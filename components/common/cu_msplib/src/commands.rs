@@ -3,7 +3,6 @@ use packed_struct::PrimitiveEnum;
 
 #[derive(PrimitiveEnum, Debug, Copy, Clone, PartialEq)]
 #[allow(non_camel_case_types)]
-
 /// MSP command values, used for command encapsulation
 pub enum MspCommandCode {
     MSP_API_VERSION = 1,
