@@ -443,8 +443,6 @@ mod tests {
             let mut output = vec![0; size];
 
             packet.serialize(&mut output).unwrap();
-            println!("{:?}", packet);
-
             let mut parser = MspParser::new();
             let mut packet_parsed = None;
             for b in output {
