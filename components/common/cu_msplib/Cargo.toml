@@ -1,0 +1,18 @@
+[package]
+name = "cu_msplib"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+anyhow = "1.0.96"
+serialport = "4.7.0"
+crc-any = "2.5.0"
+smallvec = "1.14.0"
+packed_struct = "0.10.1"
+serde = { version = "1.0.218", features = ["derive"] }

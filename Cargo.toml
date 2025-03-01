@@ -14,6 +14,7 @@ members = [
     "core/cu29_soa_derive",
     "core/cu29_traits",
     "core/cu29_unifiedlog",
+    "components/common/cu_msplib",
     "components/monitors/cu_consolemon",
     "components/payloads/cu_sensor_payloads",
     "components/payloads/cu_spatial_payloads",
