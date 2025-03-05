@@ -21,7 +21,7 @@ Add the parameters of the expected image size and the block radius for the thres
         (
             id: "thres",
             type: "cu_dynthreshold::DynThreshold",
-            config: {width: 640, height: 480, block_radius: 3}
+            config: {"width": 1920, "height": 1080, "block_radius": 100}
         ),
     ]
 )
