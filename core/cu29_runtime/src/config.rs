@@ -799,7 +799,7 @@ mod tests {
         let config = CuConfig::deserialize_ron(txt);
         assert!(config.validate_logging_config().is_ok());
 
-        // the node id depends on the order the taks are added
+        // the node id depends on the order in which the tasks are added
         let src1_id = 0;
         assert_eq!(config.get_node(src1_id).unwrap().id, "src1");
         let src2_id = 1;
