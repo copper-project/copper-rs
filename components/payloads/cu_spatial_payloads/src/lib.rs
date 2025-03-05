@@ -1,5 +1,6 @@
 use bincode::{Decode, Encode};
 use core::fmt::Debug;
+use serde::{Deserialize, Serialize};
 use uom::si::angle::radian;
 use uom::si::length::meter;
 pub type Pose<T> = Transform3D<T>;
@@ -8,7 +9,7 @@ use uom::si::f32::Length as Length32;
 use uom::si::f64::Angle as Angle64;
 use uom::si::f64::Length as Length64;
 
-#[derive(Debug, Clone, Encode, Decode)]
+#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct Transform3D<T: Copy + Debug + 'static> {
     pub mat: [[T; 4]; 4],
 }

@@ -9,6 +9,8 @@ use cu29::bincode::{Decode, Encode};
 use cu29::prelude::*;
 use cu_sensor_payloads::CuImage;
 use cu_spatial_payloads::Pose as CuPose;
+use serde::ser::SerializeTuple;
+use serde::{Deserialize, Deserializer, Serialize};
 use std::mem::ManuallyDrop;
 
 // the maximum number of detections that can be returned by the detector
@@ -93,6 +95,62 @@ pub struct AprilTagDetections {
     pub decision_margins: CuArrayVec<f32, MAX_DETECTIONS>,
 }
 
+// implement serde support for AprilTagDetections
+// This is so it can be logged with debug!.
+impl Serialize for AprilTagDetections {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let CuArrayVec(ids) = &self.ids;
+        let CuArrayVec(poses) = &self.poses;
+        let CuArrayVec(decision_margins) = &self.decision_margins;
+        let mut tup = serializer.serialize_tuple(ids.len())?;
+
+        ids.iter()
+            .zip(poses.iter())
+            .zip(decision_margins.iter())
+            .map(|((id, pose), margin)| (id, pose, margin))
+            .for_each(|(id, pose, margin)| {
+                tup.serialize_element(&(id, pose, margin)).unwrap();
+            });
+
+        tup.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for AprilTagDetections {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct AprilTagDetectionsVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for AprilTagDetectionsVisitor {
+            type Value = AprilTagDetections;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a tuple of (id, pose, decision_margin)")
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                let mut detections = AprilTagDetections::new();
+                while let Some((id, pose, decision_margin)) = seq.next_element()? {
+                    let CuArrayVec(ids) = &mut detections.ids;
+                    ids.push(id);
+                    let CuArrayVec(poses) = &mut detections.poses;
+                    poses.push(pose);
+                    let CuArrayVec(decision_margins) = &mut detections.decision_margins;
+                    decision_margins.push(decision_margin);
+                }
+                Ok(detections)
+            }
+        }
+
+        deserializer.deserialize_tuple(MAX_DETECTIONS, AprilTagDetectionsVisitor)
+    }
+}
+
 impl AprilTagDetections {
     fn new() -> Self {
         Self::default()
@@ -114,7 +172,7 @@ impl AprilTagDetections {
     }
 }
 
-struct AprilTags {
+pub struct AprilTags {
     detector: Detector,
     tag_params: TagParams,
 }
