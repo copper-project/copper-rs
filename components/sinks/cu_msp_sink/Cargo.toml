@@ -1,0 +1,21 @@
+[package]
+name = "cu-msp-sink"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+description = "This is the sink side of an MSP (Multiwii Serial Protocol) for Copper."
+
+[dependencies]
+cu29 = { workspace = true }
+serialport = "4.7.0"
+cu-msp-lib = { path = "../../common/cu_msp_lib" }
+cu-msp-src = { path = "../../sources/cu_msp_src" }
+smallvec = "1.14.0"
+bincode = { workspace = true }
+serde = { version = "1.0.218", features = ["derive"] }

@@ -4,7 +4,8 @@ pub mod structs;
 use crc_any::CRCu8;
 use packed_struct::PackedStruct;
 use smallvec::SmallVec;
-use std::fmt::{Debug, Formatter};
+use std::error::Error;
+use std::fmt::{Debug, Display, Formatter};
 use std::{fmt, mem};
 
 #[derive(Clone, PartialEq)]
@@ -61,6 +62,31 @@ pub enum MspPacketParseError {
     InvalidDirection,
     InvalidDataLength,
 }
+
+impl Display for MspPacketParseError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            MspPacketParseError::OutputBufferSizeMismatch => {
+                write!(f, "Output buffer size mismatch")
+            }
+            MspPacketParseError::CrcMismatch {
+                expected,
+                calculated,
+            } => write!(
+                f,
+                "CRC mismatch, expected: 0x{:02X}, calculated: 0x{:02X}",
+                expected, calculated
+            ),
+            MspPacketParseError::InvalidData => write!(f, "Invalid data"),
+            MspPacketParseError::InvalidHeader1 => write!(f, "Invalid header 1"),
+            MspPacketParseError::InvalidHeader2 => write!(f, "Invalid header 2"),
+            MspPacketParseError::InvalidDirection => write!(f, "Invalid direction"),
+            MspPacketParseError::InvalidDataLength => write!(f, "Invalid data length"),
+        }
+    }
+}
+
+impl Error for MspPacketParseError {}
 
 /// Packet's desired destination
 #[derive(Copy, Clone, Debug, PartialEq)]

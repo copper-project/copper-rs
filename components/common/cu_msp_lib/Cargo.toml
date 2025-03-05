@@ -1,0 +1,21 @@
+[package]
+name = "cu-msp-lib"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+bincode = { workspace = true, optional = true }
+crc-any = "2.5.0"
+smallvec = "1.14.0"
+packed_struct = "0.10.1"
+serde = { version = "1.0.218", features = ["derive"] }
+
+[features]
+default = ["bincode"]
+bincode = ["dep:bincode"]
