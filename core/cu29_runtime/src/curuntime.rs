@@ -237,6 +237,44 @@ pub fn find_task_type_for_id(
     }
 }
 
+/// This function gets the input node by using the input step plan id, to get the edge that
+/// connects the input to the output in the config graph
+fn find_edge_with_plan_input_id(
+    plan: &[CuExecutionUnit],
+    config: &CuConfig,
+    plan_id: u32,
+    output_node_id: NodeId,
+) -> usize {
+    let input_node = plan
+        .get(plan_id as usize)
+        .expect("Input step should've been added to plan before the step that receives the input");
+    let CuExecutionUnit::Step(input_step) = input_node else {
+        panic!("Expected input to be from a step, not a loop");
+    };
+    let input_node_id = input_step.node_id;
+
+    config
+        .graph
+        .edges_connecting(input_node_id.into(), output_node_id.into())
+        .map(|edge| edge.id().index())
+        .next()
+        .expect("An edge connecting the input to the output should exist")
+}
+
+/// The connection id used here is the index of the config graph edge that equates to the wanted
+/// connection
+fn sort_inputs_by_cnx_id(
+    input_msg_indices_types: &mut [(u32, String)],
+    plan: &[CuExecutionUnit],
+    config: &CuConfig,
+    curr_node_id: NodeId,
+) {
+    input_msg_indices_types.sort_by(|(a_index, _), (b_index, _)| {
+        let a_edge_id = find_edge_with_plan_input_id(plan, config, *a_index, curr_node_id);
+        let b_edge_id = find_edge_with_plan_input_id(plan, config, *b_index, curr_node_id);
+        a_edge_id.cmp(&b_edge_id)
+    });
+}
 /// Explores a subbranch and build the partial plan out of it.
 fn plan_tasks_tree_branch(
     config: &CuConfig,
@@ -324,11 +362,7 @@ fn plan_tasks_tree_branch(
         // Sort the input messages by index
         // It means that the tuple presented as input to the merging task
         // depends on the order of *declaration* in the node section of the config file.
-        input_msg_indices_types.sort_by(|a, b| {
-            let (a_id, _) = a;
-            let (b_id, _) = b;
-            a_id.cmp(b_id)
-        });
+        sort_inputs_by_cnx_id(&mut input_msg_indices_types, plan, config, id);
 
         // Try to see if we did not already add this node to the plan
         if let Some(pos) = plan.iter().position(|step| {
@@ -550,5 +584,44 @@ mod tests {
         // This should free up 2 CLs
 
         assert_eq!(runtime.available_copper_lists(), 2);
+    }
+
+    #[test]
+    fn test_runtime_task_input_order() {
+        let mut config = CuConfig::default();
+        let src1_id = config.add_node(Node::new("a", "Source1"));
+        let src2_id = config.add_node(Node::new("b", "Source2"));
+        let sink_id = config.add_node(Node::new("c", "Sink"));
+
+        assert_eq!(src1_id, 0);
+        assert_eq!(src2_id, 1);
+
+        // note that the source2 connection is before the source1
+        let src1_type = "src1_type";
+        let src2_type = "src2_type";
+        config.connect(src2_id, sink_id, src2_type);
+        config.connect(src1_id, sink_id, src1_type);
+
+        let src1_edge_id = *config.get_src_edges(src1_id).first().unwrap();
+        let src2_edge_id = *config.get_src_edges(src2_id).first().unwrap();
+        // the edge id depends on the order the connection is created, not
+        // on the node id, and that is what determines the input order
+        assert_eq!(src1_edge_id, 1);
+        assert_eq!(src2_edge_id, 0);
+
+        let runtime = compute_runtime_plan(&config).unwrap();
+        let sink_step = runtime
+            .steps
+            .iter()
+            .find_map(|step| match step {
+                CuExecutionUnit::Step(step) if step.node_id == sink_id => Some(step),
+                _ => None,
+            })
+            .unwrap();
+
+        // since the src2 connection was added before src1 connection, the src2 type should be
+        // first
+        assert_eq!(sink_step.input_msg_indices_types[0].1, src2_type);
+        assert_eq!(sink_step.input_msg_indices_types[1].1, src1_type);
     }
 }
