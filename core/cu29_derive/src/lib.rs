@@ -714,6 +714,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                             };
                                             cumsg_output.metadata.process_time.end = self.copper_runtime.clock.now().into();
                                             if let Err(error) = maybe_error {
+                                                debug!("Task Error during process: {}", &error);
                                                 #monitoring_action
                                             }
                                         }
