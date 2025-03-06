@@ -146,6 +146,10 @@ impl<'cl> CuTask<'cl> for DynThreshold {
         input: Self::Input,
         output: Self::Output,
     ) -> CuResult<()> {
+        if input.payload().is_none() {
+            debug!("DynThreshold: No payload in input message, skipping.");
+            return Ok(());
+        }
         let buffer_hold = input.payload().ok_or(CuError::from("No payload"))?;
         let buffer_hold = buffer_hold
             .as_ref()

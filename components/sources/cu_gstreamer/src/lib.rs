@@ -152,7 +152,7 @@ impl<'cl, const N: usize> CuSrcTask<'cl> for CuGStreamer<N> {
             // TODO: timing metadata
             new_msg.set_payload(buffer);
         } else {
-            debug!("Empty circular buffer.");
+            debug!("Gstreamer: Empty circular buffer, sending no payload.");
         }
         Ok(())
     }
