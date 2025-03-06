@@ -659,6 +659,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 let output_culist_index = int2sliceindex(*index);
 
                                 let monitoring_action = quote! {
+                                    debug!("Task {}: Error during process: {}", TASKS_IDS[#tid], &error);
                                     let decision = self.copper_runtime.monitor.process_error(#tid, _CuTaskState::Process, &error);
                                     match decision {
                                         _Decision::Abort => {
@@ -714,7 +715,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                             };
                                             cumsg_output.metadata.process_time.end = self.copper_runtime.clock.now().into();
                                             if let Err(error) = maybe_error {
-                                                debug!("Task Error during process: {}", &error);
                                                 #monitoring_action
                                             }
                                         }
@@ -731,6 +731,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 let output_culist_index = int2sliceindex(*output_index);
 
                                 let monitoring_action = quote! {
+                                    debug!("Task {}: Error during process: {}", TASKS_IDS[#tid], &error);
                                     let decision = self.copper_runtime.monitor.process_error(#tid, _CuTaskState::Process, &error);
                                     match decision {
                                         _Decision::Abort => {
@@ -798,6 +799,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 let output_culist_index = int2sliceindex(*output_index);
 
                                 let monitoring_action = quote! {
+                                    debug!("Task {}: Error during process: {}", TASKS_IDS[#tid], &error);
                                     let decision = self.copper_runtime.monitor.process_error(#tid, _CuTaskState::Process, &error);
                                     match decision {
                                         _Decision::Abort => {
