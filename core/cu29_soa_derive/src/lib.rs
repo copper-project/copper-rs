@@ -276,8 +276,8 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl<const N: usize> Decode for #soa_struct_name<N> {
-                fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+            impl<const N: usize> Decode<()> for #soa_struct_name<N> {
+                fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
                     let mut result = Self::default();
                     result.len = Decode::decode(decoder)?;
                     #(

@@ -1,7 +1,6 @@
-use bincode::de::{BorrowDecoder, Decoder};
-use bincode::enc::Encoder;
+use bincode::de::{BorrowDecode, BorrowDecoder, Decode, Decoder};
+use bincode::enc::{Encode, Encoder};
 use bincode::error::{DecodeError, EncodeError};
-use bincode::{BorrowDecode, Decode, Encode};
 use cu29_clock::CuTime;
 use cu29_soa_derive::Soa;
 use derive_more::{Add, Deref, Div, From, Mul, Sub};
@@ -27,7 +26,7 @@ impl Encode for Reflectivity {
 }
 
 /// Decode as f32
-impl Decode for Reflectivity {
+impl Decode<()> for Reflectivity {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let value: f32 = Decode::decode(decoder)?;
         Ok(Reflectivity(Ratio::new::<percent>(value)))
@@ -35,7 +34,7 @@ impl Decode for Reflectivity {
 }
 
 /// Decode as f32
-impl<'de> BorrowDecode<'de> for Reflectivity {
+impl<'de> BorrowDecode<'de, ()> for Reflectivity {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let value: f32 = Decode::decode(decoder)?;
         Ok(Reflectivity(Ratio::new::<percent>(value)))
@@ -60,7 +59,7 @@ impl From<f32> for Distance {
 }
 
 /// Decode it as a f32 in m
-impl Decode for Distance {
+impl Decode<()> for Distance {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let value: f32 = Decode::decode(decoder)?;
         Ok(Distance(Length::new::<meter>(value)))
@@ -68,7 +67,7 @@ impl Decode for Distance {
 }
 
 /// Decode it as a f32 in m
-impl<'de> BorrowDecode<'de> for Distance {
+impl<'de> BorrowDecode<'de, ()> for Distance {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let value: f32 = Decode::decode(decoder)?;
         Ok(Distance(Length::new::<meter>(value)))
@@ -79,7 +78,7 @@ impl<'de> BorrowDecode<'de> for Distance {
 /// note: the derive(Soa) will generate a PointCloudSoa struct that will store the data in a SoA format.
 /// The Soa format is appropriate for early pipeline operations like changing their frame of reference.
 /// important: The ToV of the points are not assumed to be sorted.
-#[derive(Default, Clone, Encode, Decode, PartialEq, Debug, Soa)]
+#[derive(Default, Clone, PartialEq, Debug, Soa)]
 pub struct PointCloud {
     pub tov: CuTime, // Time of Validity, not sorted.
     pub x: Distance,
@@ -87,6 +86,36 @@ pub struct PointCloud {
     pub z: Distance,
     pub i: Reflectivity,
     pub return_order: u8, // 0 for first return, 1 for second return, etc.
+}
+
+impl Encode for PointCloud {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        self.tov.encode(encoder)?;
+        self.x.encode(encoder)?;
+        self.y.encode(encoder)?;
+        self.z.encode(encoder)?;
+        self.i.encode(encoder)?;
+        self.return_order.encode(encoder)
+    }
+}
+
+impl Decode<()> for PointCloud {
+    fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let tov = CuTime::decode(decoder)?;
+        let x = Distance::decode(decoder)?;
+        let y = Distance::decode(decoder)?;
+        let z = Distance::decode(decoder)?;
+        let i = Reflectivity::decode(decoder)?;
+        let return_order = u8::decode(decoder)?;
+        Ok(PointCloud {
+            tov,
+            x,
+            y,
+            z,
+            i,
+            return_order,
+        })
+    }
 }
 
 impl PointCloud {

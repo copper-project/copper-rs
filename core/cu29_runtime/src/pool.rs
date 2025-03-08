@@ -60,15 +60,25 @@ pub fn pools_statistics() -> SmallVec<[PoolStats; MAX_POOLS]> {
 }
 
 /// Basic Type that can be used in a buffer in a CuPool.
-pub trait ElementType:
-    Default + Sized + Copy + Encode + Decode + Debug + Unpin + Send + Sync
-{
+pub trait ElementType: Default + Sized + Copy + Debug + Unpin + Send + Sync {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError>;
+    fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError>;
 }
 
 /// Blanket implementation for all types that are Sized, Copy, Encode, Decode and Debug.
-impl<T> ElementType for T where
-    T: Default + Sized + Copy + Encode + Decode + Debug + Unpin + Send + Sync
+impl<T> ElementType for T
+where
+    T: Default + Sized + Copy + Debug + Unpin + Send + Sync,
+    T: Encode,
+    T: Decode<()>,
 {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        self.encode(encoder)
+    }
+
+    fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        Self::decode(decoder)
+    }
 }
 
 pub trait ArrayLike: Deref<Target = [Self::Element]> + DerefMut + Debug + Sync + Send {
@@ -148,14 +158,14 @@ impl<T: ArrayLike> CuHandle<T> {
     }
 }
 
-impl<T: ArrayLike> Encode for CuHandle<T>
+impl<T: ArrayLike + Encode> Encode for CuHandle<T>
 where
     <T as ArrayLike>::Element: 'static,
 {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         let inner = self.lock().unwrap();
         match inner.deref() {
-            CuHandleInner::Pooled(pooled) => pooled.encode(encoder),
+            CuHandleInner::Pooled(pooled) => pooled.deref().encode(encoder),
             CuHandleInner::Detached(detached) => detached.encode(encoder),
         }
     }
@@ -167,8 +177,8 @@ impl<T: ArrayLike> Default for CuHandle<T> {
     }
 }
 
-impl<U: ElementType + 'static> Decode for CuHandle<Vec<U>> {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+impl<U: ElementType + Decode<()> + 'static> Decode<()> for CuHandle<Vec<U>> {
+    fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let vec: Vec<U> = Vec::decode(decoder)?;
         Ok(CuHandle(Arc::new(Mutex::new(CuHandleInner::Detached(vec)))))
     }
