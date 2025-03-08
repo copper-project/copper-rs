@@ -114,16 +114,19 @@ impl<'cl, const N: usize> CuSrcTask<'cl> for CuGStreamer<N> {
                 .new_sample({
                     let circular_buffer = circular_buffer.clone();
                     move |appsink| {
+                        debug!("Gstreamer: New sample received.");
                         let sample = appsink
                             .pull_sample()
                             .map_err(|_| gstreamer::FlowError::Eos)?;
                         let buffer: &BufferRef =
                             sample.buffer().ok_or(gstreamer::FlowError::Error)?;
+                        debug!("Gstreamer: Adding to buffer.");
                         circular_buffer
                             .lock()
                             .unwrap()
                             .push_back(CuGstBuffer(buffer.to_owned()));
 
+                        debug!("Gstreamer: FlowSuccess.");
                         Ok(FlowSuccess::Ok)
                     }
                 })
@@ -139,10 +142,12 @@ impl<'cl, const N: usize> CuSrcTask<'cl> for CuGStreamer<N> {
     }
 
     fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        debug!("Gstreamer: Starting pipeline.");
         self.circular_buffer.lock().unwrap().clear();
         self.pipeline
             .set_state(gstreamer::State::Playing)
             .map_err(|e| CuError::new_with_cause("Failed to start the gstreamer pipeline.", e))?;
+        debug!("Gstreamer: Starting pipeline OK.");
         Ok(())
     }
 
@@ -153,6 +158,7 @@ impl<'cl, const N: usize> CuSrcTask<'cl> for CuGStreamer<N> {
             new_msg.set_payload(buffer);
         } else {
             debug!("Gstreamer: Empty circular buffer, sending no payload.");
+            new_msg.clear_payload();
         }
         Ok(())
     }

@@ -157,6 +157,14 @@ impl<'cl> CuTask<'cl> for DynThreshold {
             .map_err(|e| CuError::new_with_cause("Could not map the gstreamer buffer", e))?;
         let src = buffer_hold.as_slice();
 
+        if src.len() != (self.width * self.height) as usize {
+            return Err(CuError::from(format!(
+                "Input buffer size does not match the expected size {}, slice {}",
+                self.width * self.height,
+                src.len(),
+            )));
+        }
+
         let handle = self
             .pool
             .acquire()
