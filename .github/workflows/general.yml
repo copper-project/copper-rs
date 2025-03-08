@@ -77,17 +77,27 @@ jobs:
           
           # Set PCAP library path
           echo "LIB=$env:USERPROFILE\npcap-sdk\Lib\x64" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV 
+          
+          
+          # Install Pthreads for Windows
+          Invoke-WebRequest -Uri https://sourceforge.net/projects/pthreads4w/files/pthreads-2-9-1-release.zip -OutFile pthreads.zip
+          Expand-Archive -Path pthreads.zip -DestinationPath $env:USERPROFILE\pthreads
+          Remove-Item pthreads.zip
+          
+          # Set environment variables for AprilTag
+          echo "APRILTAG_SYS_WINDOWS_PTHREAD_INCLUDE_DIR=$env:USERPROFILE\pthreads\include" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          echo "APRILTAG_SYS_WINDOWS_PTHREAD_STATIC_LIB=$env:USERPROFILE\pthreads\lib\pthreadVC3.lib" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
 
       - name: Setup GStreamer (x86_64)
         if: runner.os != 'MacOs'
-        id:   setup_gstreamer_mac
+        id: setup_gstreamer_mac
         uses: blinemedical/setup-gstreamer@v1.4.0
         with:
           arch: 'x86_64'
 
       - name: Setup GStreamer
         if: runner.os == 'MacOS'
-        id:   setup_gstreamer_other
+        id: setup_gstreamer_other
         uses: blinemedical/setup-gstreamer@v1.4.0
         with:
           arch: 'arm64'
@@ -141,7 +151,7 @@ jobs:
       - name: Set features (Linux)
         if: runner.os == 'Linux'
         run: echo "FEATURES_FLAG=$([[ '${{ matrix.mode }}' == 'cuda-release' ]] && echo '--all-features' || echo '--features macro_debug,mock,image,kornia,python')" >> $GITHUB_ENV
-      
+
       - name: Set features (MacOS)
         if: runner.os == 'macOS'
         run: echo "FEATURES_FLAG=$([[ '${{ matrix.mode }}' == 'cuda-release' ]] && echo '--all-features' || echo '--features macro_debug,mock,image,kornia')" >> $GITHUB_ENV
