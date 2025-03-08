@@ -44,11 +44,11 @@ where
     }
 }
 
-impl<T, const N: usize> Decode for CuArrayVec<T, N>
+impl<T, const N: usize> Decode<()> for CuArrayVec<T, N>
 where
-    T: Decode + 'static,
+    T: Decode<()> + 'static,
 {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+    fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let inner = Vec::<T>::decode(decoder)?;
         let actual_len = inner.len();
         if actual_len > N {
@@ -66,11 +66,13 @@ where
     }
 }
 
-impl<'de, T, const N: usize> BorrowDecode<'de> for CuArrayVec<T, N>
+impl<'de, T, const N: usize> BorrowDecode<'de, ()> for CuArrayVec<T, N>
 where
-    T: BorrowDecode<'de> + 'static,
+    T: BorrowDecode<'de, ()> + 'static,
 {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
+    fn borrow_decode<D: BorrowDecoder<'de, Context = ()>>(
+        decoder: &mut D,
+    ) -> Result<Self, DecodeError> {
         let inner = Vec::<T>::borrow_decode(decoder)?;
         let actual_len = inner.len();
         if actual_len > N {
@@ -88,11 +90,24 @@ where
     }
 }
 
-#[derive(Default, Debug, Clone, Encode, Decode)]
+#[derive(Default, Debug, Clone, Encode)]
 pub struct AprilTagDetections {
     pub ids: CuArrayVec<usize, MAX_DETECTIONS>,
     pub poses: CuArrayVec<CuPose<f32>, MAX_DETECTIONS>,
     pub decision_margins: CuArrayVec<f32, MAX_DETECTIONS>,
+}
+
+impl Decode<()> for AprilTagDetections {
+    fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let ids = CuArrayVec::<usize, MAX_DETECTIONS>::decode(decoder)?;
+        let poses = CuArrayVec::<CuPose<f32>, MAX_DETECTIONS>::decode(decoder)?;
+        let decision_margins = CuArrayVec::<f32, MAX_DETECTIONS>::decode(decoder)?;
+        Ok(AprilTagDetections {
+            ids,
+            poses,
+            decision_margins,
+        })
+    }
 }
 
 // implement serde support for AprilTagDetections

@@ -4,6 +4,7 @@
 use arrayvec::ArrayVec;
 use bincode::{Decode, Encode};
 
+
 /// Copper friendly wrapper for a fixed size array.
 #[derive(Clone, Debug, Default)]
 pub struct CuArray<T, const N: usize> {
@@ -64,11 +65,11 @@ where
     }
 }
 
-impl<T, const N: usize> Decode for CuArray<T, N>
+impl<T, const N: usize> Decode<()> for CuArray<T, N>
 where
-    T: Decode,
+    T: Decode<()>,
 {
-    fn decode<D: bincode::de::Decoder>(
+    fn decode<D: bincode::de::Decoder<Context = ()>>(
         decoder: &mut D,
     ) -> Result<Self, bincode::error::DecodeError> {
         // Decode the length first

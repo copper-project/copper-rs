@@ -22,10 +22,10 @@ impl Encode for MspResponseBatch {
     }
 }
 
-impl Decode for MspResponseBatch {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+impl Decode<()> for MspResponseBatch {
+    fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
         // allocations are ok in decode
-        let v = <Vec<MspResponse> as Decode>::decode(decoder)?;
+        let v = <Vec<MspResponse> as Decode<()>>::decode(decoder)?;
         Ok(Self(v.into()))
     }
 }

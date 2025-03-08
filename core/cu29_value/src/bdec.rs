@@ -8,7 +8,7 @@ use bincode::error::DecodeError;
 use cu29_clock::CuTime;
 
 // TODO: Unharcode all those enum types values
-impl Decode for Value {
+impl<Context> Decode<Context> for Value {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         match u8::decode(decoder)? {
             0 => Ok(Value::Bool(bool::decode(decoder)?)),
@@ -39,7 +39,7 @@ impl Decode for Value {
     }
 }
 
-impl<'de> BorrowDecode<'de> for Value {
+impl<'de, Context> BorrowDecode<'de, Context> for Value {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         match u8::borrow_decode(decoder)? {
             0 => Ok(Value::U8(u8::borrow_decode(decoder)?)),

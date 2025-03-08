@@ -32,9 +32,9 @@ impl Encode for MspRequestBatch {
     }
 }
 
-impl Decode for MspRequestBatch {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let v = <Vec<MspRequest> as Decode>::decode(decoder)?;
+impl Decode<()> for MspRequestBatch {
+    fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let v = <Vec<MspRequest> as Decode<()>>::decode(decoder)?;
         Ok(Self(v.into()))
     }
 }

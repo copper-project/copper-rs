@@ -32,7 +32,7 @@ impl DerefMut for CuGstBuffer {
     }
 }
 
-impl Decode for CuGstBuffer {
+impl Decode<()> for CuGstBuffer {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let vec: Vec<u8> = Vec::decode(decoder)?;
         let buffer = Buffer::from_slice(vec);
