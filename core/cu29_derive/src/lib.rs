@@ -1399,8 +1399,8 @@ fn build_culist_tuple_decode(all_msgs_types_in_culist_order: &[Type]) -> ItemImp
         .collect();
 
     parse_quote! {
-        impl _Decode for CuMsgs {
-            fn decode<D: _Decoder>(decoder: &mut D) -> Result<Self, _DecodeError> {
+        impl _Decode<()> for CuMsgs {
+            fn decode<D: _Decoder<Context=()>>(decoder: &mut D) -> Result<Self, _DecodeError> {
                 Ok(CuMsgs ((
                     #(#decode_fields),*
                 )))

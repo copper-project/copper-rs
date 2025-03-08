@@ -141,38 +141,38 @@ impl<'de> Deserialize<'de> for PositionalReadingsPayload {
 impl Encode for PositionalReadingsPayload {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         // Encode in natural SI units
-        self.acc_x.value.encode(encoder)?;
-        self.acc_y.value.encode(encoder)?;
-        self.acc_z.value.encode(encoder)?;
-        self.gyro_x.value.encode(encoder)?;
-        self.gyro_y.value.encode(encoder)?;
-        self.gyro_z.value.encode(encoder)?;
-        self.mag_x.value.encode(encoder)?;
-        self.mag_y.value.encode(encoder)?;
-        self.mag_z.value.encode(encoder)?;
-        self.roll.value.encode(encoder)?;
-        self.pitch.value.encode(encoder)?;
-        self.yaw.value.encode(encoder)?;
+        Encode::encode(&self.acc_x.value, encoder)?;
+        bincode::Encode::encode(&self.acc_y.value, encoder)?;
+        bincode::Encode::encode(&self.acc_z.value, encoder)?;
+        bincode::Encode::encode(&self.gyro_x.value, encoder)?;
+        bincode::Encode::encode(&self.gyro_y.value, encoder)?;
+        bincode::Encode::encode(&self.gyro_z.value, encoder)?;
+        bincode::Encode::encode(&self.mag_x.value, encoder)?;
+        bincode::Encode::encode(&self.mag_y.value, encoder)?;
+        bincode::Encode::encode(&self.mag_z.value, encoder)?;
+        bincode::Encode::encode(&self.roll.value, encoder)?;
+        bincode::Encode::encode(&self.pitch.value, encoder)?;
+        bincode::Encode::encode(&self.yaw.value, encoder)?;
         Ok(())
     }
 }
 
-impl Decode for PositionalReadingsPayload {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
+impl Decode<()> for PositionalReadingsPayload {
+    fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
         Ok(PositionalReadingsPayload {
             // Decode back from the natural SI units
-            acc_x: Acceleration::new::<meter_per_second_squared>(f32::decode(decoder)?),
-            acc_y: Acceleration::new::<meter_per_second_squared>(f32::decode(decoder)?),
-            acc_z: Acceleration::new::<meter_per_second_squared>(f32::decode(decoder)?),
-            gyro_x: AngularVelocity::new::<radian_per_second>(f32::decode(decoder)?),
-            gyro_y: AngularVelocity::new::<radian_per_second>(f32::decode(decoder)?),
-            gyro_z: AngularVelocity::new::<radian_per_second>(f32::decode(decoder)?),
-            mag_x: MagneticFluxDensity::new::<tesla>(f32::decode(decoder)?),
-            mag_y: MagneticFluxDensity::new::<tesla>(f32::decode(decoder)?),
-            mag_z: MagneticFluxDensity::new::<tesla>(f32::decode(decoder)?),
-            roll: Angle::new::<radian>(f32::decode(decoder)?),
-            pitch: Angle::new::<radian>(f32::decode(decoder)?),
-            yaw: Angle::new::<radian>(f32::decode(decoder)?),
+            acc_x: Acceleration::new::<meter_per_second_squared>(bincode::Decode::decode(decoder)?),
+            acc_y: Acceleration::new::<meter_per_second_squared>(bincode::Decode::decode(decoder)?),
+            acc_z: Acceleration::new::<meter_per_second_squared>(bincode::Decode::decode(decoder)?),
+            gyro_x: AngularVelocity::new::<radian_per_second>(bincode::Decode::decode(decoder)?),
+            gyro_y: AngularVelocity::new::<radian_per_second>(bincode::Decode::decode(decoder)?),
+            gyro_z: AngularVelocity::new::<radian_per_second>(bincode::Decode::decode(decoder)?),
+            mag_x: MagneticFluxDensity::new::<tesla>(bincode::Decode::decode(decoder)?),
+            mag_y: MagneticFluxDensity::new::<tesla>(bincode::Decode::decode(decoder)?),
+            mag_z: MagneticFluxDensity::new::<tesla>(bincode::Decode::decode(decoder)?),
+            roll: Angle::new::<radian>(bincode::Decode::decode(decoder)?),
+            pitch: Angle::new::<radian>(bincode::Decode::decode(decoder)?),
+            yaw: Angle::new::<radian>(bincode::Decode::decode(decoder)?),
         })
     }
 }

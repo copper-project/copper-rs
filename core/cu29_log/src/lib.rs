@@ -55,7 +55,7 @@ impl Encode for CuLogEntry {
     }
 }
 
-impl Decode for CuLogEntry {
+impl<Context> Decode<Context> for CuLogEntry {
     fn decode<D: bincode::de::Decoder>(
         decoder: &mut D,
     ) -> Result<Self, bincode::error::DecodeError> {

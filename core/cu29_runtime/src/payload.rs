@@ -64,11 +64,11 @@ where
     }
 }
 
-impl<T, const N: usize> Decode for CuArray<T, N>
+impl<T, const N: usize> Decode<()> for CuArray<T, N>
 where
-    T: Decode,
+    T: Decode<()>,
 {
-    fn decode<D: bincode::de::Decoder>(
+    fn decode<D: bincode::de::Decoder<Context = ()>>(
         decoder: &mut D,
     ) -> Result<Self, bincode::error::DecodeError> {
         // Decode the length first

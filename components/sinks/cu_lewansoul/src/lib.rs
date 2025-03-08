@@ -190,7 +190,7 @@ impl Encode for ServoPositionsPayload {
     }
 }
 
-impl Decode for ServoPositionsPayload {
+impl Decode<()> for ServoPositionsPayload {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let angles: [f32; 8] = Decode::decode(decoder)?;
         let positions: [Angle; 8] = angles.map(Angle::new::<radian>);

@@ -173,13 +173,13 @@ impl Encode for CuDuration {
     }
 }
 
-impl Decode for CuDuration {
+impl<Context> Decode<Context> for CuDuration {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         Ok(CuDuration(u64::decode(decoder)?))
     }
 }
 
-impl<'de> BorrowDecode<'de> for CuDuration {
+impl<'de, Context> BorrowDecode<'de, Context> for CuDuration {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         Ok(CuDuration(u64::decode(decoder)?))
     }

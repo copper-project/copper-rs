@@ -16,12 +16,12 @@ use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 
 // Everything that is stateful in copper for zero copy constraints need to be restricted to this trait.
-pub trait CuMsgPayload: Default + Debug + Clone + Encode + Decode + Sized {}
+pub trait CuMsgPayload: Default + Debug + Clone + Encode + Decode<()> + Sized {}
 
 pub trait CuMsgPack<'cl> {}
 
 // Also anything that follows this contract can be a payload (blanket implementation)
-impl<T: Default + Debug + Clone + Encode + Decode + Sized> CuMsgPayload for T {}
+impl<T: Default + Debug + Clone + Encode + Decode<()> + Sized> CuMsgPayload for T {}
 
 macro_rules! impl_cu_msg_pack {
     ($(($($ty:ident),*)),*) => {
@@ -79,16 +79,16 @@ impl Encode for CuCompactString {
     }
 }
 
-impl Decode for CuCompactString {
+impl<Context> Decode<Context> for CuCompactString {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let bytes = <Vec<u8> as Decode>::decode(decoder)?; // Decode into a byte buffer
+        let bytes = <Vec<u8> as Decode<D::Context>>::decode(decoder)?; // Decode into a byte buffer
         let compact_string =
             CompactString::from_utf8(bytes).map_err(|e| DecodeError::Utf8 { inner: e })?;
         Ok(CuCompactString(compact_string))
     }
 }
 
-impl<'de> BorrowDecode<'de> for CuCompactString {
+impl<'de, Context> BorrowDecode<'de, Context> for CuCompactString {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         CuCompactString::decode(decoder)
     }
