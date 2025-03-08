@@ -1,3 +1,4 @@
+// you need a blank line between the cfg and the use
 use apriltag::{Detector, DetectorBuilder, Family, Image, TagParams};
 use apriltag_sys::image_u8_t;
 use arrayvec::ArrayVec;
