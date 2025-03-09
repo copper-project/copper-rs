@@ -8,7 +8,8 @@ use crate::MspPacketDirection::{FromFlightController, ToFlightController};
 use crate::{MspPacket, MspPacketData};
 #[cfg(feature = "bincode")]
 use bincode::{Decode, Encode};
-use packed_struct::{PackedStructSlice, PackingError, PrimitiveEnum};
+use packed_struct::{PackedStruct, PackedStructSlice, PackingError, PrimitiveEnum};
+use smallvec::SmallVec;
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
@@ -948,6 +949,7 @@ pub enum MspRequest {
     Unknown,
     MspBatteryState,
     MspRc,
+    MspSetRawRc(MspRc),
     MspRawImu,
 }
 
@@ -956,6 +958,7 @@ impl MspRequest {
         match self {
             MspRequest::MspBatteryState => MspCommandCode::MSP_BATTERY_STATE,
             MspRequest::MspRc => MspCommandCode::MSP_RC,
+            MspRequest::MspSetRawRc(_) => MspCommandCode::MSP_SET_RAW_RC,
             MspRequest::MspRawImu => MspCommandCode::MSP_RAW_IMU,
             _ => MspCommandCode::MSP_API_VERSION,
         }
@@ -964,20 +967,67 @@ impl MspRequest {
 
 impl From<MspRequest> for MspPacket {
     fn from(request: MspRequest) -> Self {
-        MspPacket {
-            cmd: request.command_code().to_primitive(),
-            direction: ToFlightController,
-            data: MspPacketData::new(), // empty
+        match request {
+            MspRequest::MspBatteryState => MspPacket {
+                cmd: MspCommandCode::MSP_BATTERY_STATE.to_primitive(),
+                direction: ToFlightController,
+                data: MspPacketData::new(), // empty
+            },
+            MspRequest::MspRc => MspPacket {
+                cmd: MspCommandCode::MSP_RC.to_primitive(),
+                direction: ToFlightController,
+                data: MspPacketData::new(), // empty
+            },
+            MspRequest::MspSetRawRc(rc) => {
+                let data = rc.pack().unwrap();
+                MspPacket {
+                    cmd: MspCommandCode::MSP_SET_RAW_RC.to_primitive(),
+                    direction: ToFlightController,
+                    data: MspPacketData(SmallVec::from_slice(data.as_slice())),
+                }
+            }
+            MspRequest::MspRawImu => MspPacket {
+                cmd: MspCommandCode::MSP_RAW_IMU.to_primitive(),
+                direction: ToFlightController,
+                data: MspPacketData::new(), // empty
+            },
+            _ => MspPacket {
+                cmd: MspCommandCode::MSP_API_VERSION.to_primitive(),
+                direction: ToFlightController,
+                data: MspPacketData::new(), // empty
+            },
         }
     }
 }
 
 impl From<&MspRequest> for MspPacket {
     fn from(request: &MspRequest) -> Self {
-        MspPacket {
-            cmd: request.command_code().to_primitive(),
-            direction: ToFlightController,
-            data: MspPacketData::new(), // empty
+        match request {
+            MspRequest::MspBatteryState => MspPacket {
+                cmd: MspCommandCode::MSP_BATTERY_STATE.to_primitive(),
+                direction: ToFlightController,
+                data: MspPacketData::new(), // empty
+            },
+            MspRequest::MspRc => MspPacket {
+                cmd: MspCommandCode::MSP_RC.to_primitive(),
+                direction: ToFlightController,
+                data: MspPacketData::new(), // empty
+            },
+            MspRequest::MspSetRawRc(rc) => MspPacket {
+                cmd: MspCommandCode::MSP_SET_RAW_RC.to_primitive(),
+                direction: ToFlightController,
+                data: MspPacketData::from(rc.pack().unwrap().as_slice()),
+            },
+            MspRequest::MspRawImu => MspPacket {
+                cmd: MspCommandCode::MSP_RAW_IMU.to_primitive(),
+                direction: ToFlightController,
+                data: MspPacketData::new(), // empty
+            },
+            _ => MspPacket {
+                cmd: MspCommandCode::MSP_API_VERSION.to_primitive(),
+                direction: ToFlightController,
+                data: MspPacketData::new(), // empty
+            },
         }
     }
 }

@@ -114,19 +114,15 @@ impl<'cl, const N: usize> CuSrcTask<'cl> for CuGStreamer<N> {
                 .new_sample({
                     let circular_buffer = circular_buffer.clone();
                     move |appsink| {
-                        debug!("Gstreamer: New sample received.");
                         let sample = appsink
                             .pull_sample()
                             .map_err(|_| gstreamer::FlowError::Eos)?;
                         let buffer: &BufferRef =
                             sample.buffer().ok_or(gstreamer::FlowError::Error)?;
-                        debug!("Gstreamer: Adding to buffer.");
                         circular_buffer
                             .lock()
                             .unwrap()
                             .push_back(CuGstBuffer(buffer.to_owned()));
-
-                        debug!("Gstreamer: FlowSuccess.");
                         Ok(FlowSuccess::Ok)
                     }
                 })
@@ -151,10 +147,11 @@ impl<'cl, const N: usize> CuSrcTask<'cl> for CuGStreamer<N> {
         Ok(())
     }
 
-    fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
+    fn process(&mut self, clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
         let mut circular_buffer = self.circular_buffer.lock().unwrap();
         if let Some(buffer) = circular_buffer.pop_front() {
-            // TODO: timing metadata
+            // TODO: do precise timing metadata from gstreamer
+            new_msg.metadata.tov = clock.now().into();
             new_msg.set_payload(buffer);
         } else {
             debug!("Gstreamer: Empty circular buffer, sending no payload.");

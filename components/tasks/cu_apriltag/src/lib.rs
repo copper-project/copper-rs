@@ -26,7 +26,7 @@ const FAMILY: &str = "tag16h5";
 
 /// TODO: Move that to the runtime as it is useful.
 #[derive(Debug, Clone)]
-pub struct CuArrayVec<T, const N: usize>(ArrayVec<T, N>);
+pub struct CuArrayVec<T, const N: usize>(pub ArrayVec<T, N>);
 
 impl<T, const N: usize> Default for CuArrayVec<T, N> {
     fn default() -> Self {
@@ -299,6 +299,7 @@ impl<'cl> CuTask<'cl> for AprilTags {
                 }
             }
         };
+        output.metadata.tov = input.metadata.tov;
         output.set_payload(result);
         Ok(())
     }
