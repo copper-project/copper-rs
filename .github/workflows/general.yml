@@ -20,8 +20,7 @@ jobs:
 
     strategy:
       matrix:
-        # os: [ ubuntu-22.04, macos-latest, windows-latest ] Windows is locking up CI
-        os: [ ubuntu-22.04, macos-latest ]
+        os: [ ubuntu-22.04, macos-latest, windows-latest ]
         mode: [ debug, release, cuda-release ]
 
     steps:
@@ -81,14 +80,14 @@ jobs:
 
       - name: Setup GStreamer (x86_64)
         if: runner.os != 'MacOs'
-        id:   setup_gstreamer_mac
+        id: setup_gstreamer_mac
         uses: blinemedical/setup-gstreamer@v1.4.0
         with:
           arch: 'x86_64'
 
       - name: Setup GStreamer
         if: runner.os == 'MacOS'
-        id:   setup_gstreamer_other
+        id: setup_gstreamer_other
         uses: blinemedical/setup-gstreamer@v1.4.0
         with:
           arch: 'arm64'
@@ -142,7 +141,7 @@ jobs:
       - name: Set features (Linux)
         if: runner.os == 'Linux'
         run: echo "FEATURES_FLAG=$([[ '${{ matrix.mode }}' == 'cuda-release' ]] && echo '--all-features' || echo '--features macro_debug,mock,image,kornia,python')" >> $GITHUB_ENV
-      
+
       - name: Set features (MacOS)
         if: runner.os == 'macOS'
         run: echo "FEATURES_FLAG=$([[ '${{ matrix.mode }}' == 'cuda-release' ]] && echo '--all-features' || echo '--features macro_debug,mock,image,kornia')" >> $GITHUB_ENV
