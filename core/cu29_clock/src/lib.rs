@@ -317,7 +317,7 @@ impl Default for PartialCuTimeRange {
 
 /// The time of validity of a message can be more than one time but can be a time range of Tovs.
 /// For example a sub scan for a lidar, a set of images etc... can have a range of validity.
-#[derive(Default, Clone, Debug, PartialEq, Encode, Decode, Serialize, Deserialize)]
+#[derive(Default, Clone, Debug, PartialEq, Encode, Decode, Serialize, Deserialize, Copy)]
 pub enum Tov {
     #[default]
     None,
