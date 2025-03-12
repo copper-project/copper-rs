@@ -38,7 +38,7 @@ impl<'cl> CuTask<'cl> for PIDMerger {
             None => return Err(CuError::from("Safety mode [rail].")),
         };
         // Take the fastest measure as the reference time for the merge
-        output.metadata.tov = bal_pid_msg.metadata.tov.clone();
+        output.metadata.tov = bal_pid_msg.metadata.tov;
         let composite_output = (bal_pid.output - pos_pid.output).clamp(-1.0, 1.0);
         output.set_payload(MotorPayload {
             power: composite_output,
