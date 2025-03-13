@@ -1,5 +1,6 @@
 [package]
 name = "cu-msp-src"
+description = "This is the source side of an MSP (Multiwii Serial Protocol) for Copper."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -8,13 +9,12 @@ keywords.workspace = true
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
-description = "This is the source side of an MSP (Multiwii Serial Protocol) for Copper."
 
 [dependencies]
 cu29 = { workspace = true }
-serde = { workspace = true }
+cu-msp-lib = { path = "../../common/cu_msp_lib", version = "0.7.0" }
 serialport = "4.7.0"
-cu-msp-lib = { path = "../../common/cu_msp_lib" }
-smallvec = "1.14.0"
+serde = { workspace = true }
+smallvec = { workspace = true }
 bincode = { workspace = true }
 

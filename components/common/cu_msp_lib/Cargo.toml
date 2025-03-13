@@ -1,5 +1,6 @@
 [package]
 name = "cu-msp-lib"
+description = "This is the library side of an MSP (Multiwii Serial Protocol) originally for Copper but can be used independently."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

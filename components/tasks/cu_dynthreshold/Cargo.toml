@@ -1,5 +1,7 @@
 [package]
 name = "cu-dynthreshold"
+description = "Image Dynamic thresholding for Copper."
+
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -13,5 +15,5 @@ repository.workspace = true
 gstreamer = "0.23.5"
 cu29 = { workspace = true }
 cu29-clock = { workspace = true }
-cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads" }
-cu-gstreamer = { path = "../../sources/cu_gstreamer" }
+cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "0.7.0" }
+cu-gstreamer = { path = "../../sources/cu_gstreamer", version = "0.7.0" }
