@@ -18,11 +18,11 @@ ignored = ["cu-consolemon", "cu29-log", "cu29-log-runtime", "cu29-unifiedlog", "
 # Core dependencies
 cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
-cu-ads7883-new = { path = "../../components/sources/cu_ads7883", version = "0.6.0" }
-cu-rp-sn754410-new = { path = "../../components/sinks/cu_rp_sn754410", version = "0.6.0" }
-cu-rp-encoder = { path = "../../components/sources/cu_rp_encoder", version = "0.6.0" }
-cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.6.0" } # needed
-cu-pid = { path = "../../components/tasks/cu_pid", version = "0.6.0" }
+cu-ads7883-new = { path = "../../components/sources/cu_ads7883", version = "0.7.0" }
+cu-rp-sn754410-new = { path = "../../components/sinks/cu_rp_sn754410", version = "0.7.0" }
+cu-rp-encoder = { path = "../../components/sources/cu_rp_encoder", version = "0.7.0" }
+cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.7.0" } # needed
+cu-pid = { path = "../../components/tasks/cu_pid", version = "0.7.0" }
 ctrlc = "3.4.5"
 
 # Log reader depencies
