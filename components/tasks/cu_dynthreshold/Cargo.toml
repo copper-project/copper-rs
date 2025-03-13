@@ -10,7 +10,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-gstreamer = "0.23.4"
+gstreamer = "0.23.5"
 cu29 = { workspace = true }
 cu29-clock = { workspace = true }
 cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads" }
