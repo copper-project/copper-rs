@@ -140,7 +140,7 @@ impl<'cl> CuSrcTask<'cl> for MSPSrc {
         #[cfg(unix)]
         output.set_payload(batch);
 
-        #[cfg(not(unix))]
+        #[cfg(windows)]
         output.set_payload(MspResponseBatch::default());
         Ok(())
     }
