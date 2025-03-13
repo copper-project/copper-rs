@@ -23,11 +23,17 @@ use serde::{Deserialize, Deserializer, Serialize};
 const MAX_DETECTIONS: usize = 16;
 
 // Defaults
+#[cfg(not(windows))]
 const TAG_SIZE: f64 = 0.14;
+#[cfg(not(windows))]
 const FX: f64 = 2600.0;
+#[cfg(not(windows))]
 const FY: f64 = 2600.0;
+#[cfg(not(windows))]
 const CX: f64 = 900.0;
+#[cfg(not(windows))]
 const CY: f64 = 520.0;
+#[cfg(not(windows))]
 const FAMILY: &str = "tag16h5";
 
 /// TODO: Move that to the runtime as it is useful.
