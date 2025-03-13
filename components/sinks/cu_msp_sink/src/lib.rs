@@ -10,9 +10,10 @@ use serde::{Deserialize, Serialize};
 use serialport::SerialPort;
 #[cfg(unix)]
 use serialport::TTYPort;
+#[cfg(unix)]
+use std::io::Write;
 
 use smallvec::SmallVec;
-use std::io::Write;
 
 const MAX_MSG_SIZE: usize = 8;
 
@@ -60,13 +61,16 @@ impl<'cl> CuSinkTask<'cl> for MSPSink {
         if config.is_none() {
             return Err("No config provided".into());
         }
+        #[cfg(unix)]
         let port: String = config
             .and_then(|config| config.get::<String>("device"))
             .unwrap_or("/dev/ttyUSB0".to_string());
+        #[cfg(unix)]
         let baudrate = config
             .and_then(|config| config.get::<u32>("baudrate"))
             .unwrap_or(115200);
 
+        #[cfg(unix)]
         let builder = serialport::new(port, baudrate);
 
         #[cfg(unix)]
@@ -97,6 +101,7 @@ impl<'cl> CuSinkTask<'cl> for MSPSink {
                     debug!("Error Serializing packet {}", e.to_string());
                     CuError::new_with_cause("failed to serialize msp packet", e)
                 })?;
+                #[cfg(unix)]
                 self.serial.write_all(buffer.as_slice()).map_err(|e| {
                     debug!("Error writing to serial port {}", e.to_string());
                     CuError::new_with_cause("failed to write to serial port", e)
