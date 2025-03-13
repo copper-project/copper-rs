@@ -1,5 +1,12 @@
+#[cfg(unix)]
+use std::mem::ManuallyDrop;
+
+#[cfg(unix)]
 use apriltag::{Detector, DetectorBuilder, Family, Image, TagParams};
+
+#[cfg(unix)]
 use apriltag_sys::image_u8_t;
+
 use arrayvec::ArrayVec;
 use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
@@ -11,17 +18,22 @@ use cu_sensor_payloads::CuImage;
 use cu_spatial_payloads::Pose as CuPose;
 use serde::ser::SerializeTuple;
 use serde::{Deserialize, Deserializer, Serialize};
-use std::mem::ManuallyDrop;
 
 // the maximum number of detections that can be returned by the detector
 const MAX_DETECTIONS: usize = 16;
 
 // Defaults
+#[cfg(not(windows))]
 const TAG_SIZE: f64 = 0.14;
+#[cfg(not(windows))]
 const FX: f64 = 2600.0;
+#[cfg(not(windows))]
 const FY: f64 = 2600.0;
+#[cfg(not(windows))]
 const CX: f64 = 900.0;
+#[cfg(not(windows))]
 const CY: f64 = 520.0;
+#[cfg(not(windows))]
 const FAMILY: &str = "tag16h5";
 
 /// TODO: Move that to the runtime as it is useful.
@@ -187,13 +199,16 @@ impl AprilTagDetections {
     }
 }
 
+#[cfg(unix)]
 pub struct AprilTags {
     detector: Detector,
     tag_params: TagParams,
 }
 
-// Absolute shitshow of an API. This is to avoid a full image copy.
-// Hopefully this is sound.
+#[cfg(not(unix))]
+pub struct AprilTags {}
+
+#[cfg(not(windows))]
 fn image_from_cuimage<A>(cu_image: &CuImage<A>) -> ManuallyDrop<Image>
 where
     A: ArrayLike<Element = u8>,
@@ -214,6 +229,29 @@ where
 
 impl Freezable for AprilTags {}
 
+#[cfg(windows)]
+impl<'cl> CuTask<'cl> for AprilTags {
+    type Input = input_msg!('cl, CuImage<Vec<u8>>);
+    type Output = output_msg!('cl, AprilTagDetections);
+
+    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+    where
+        Self: Sized,
+    {
+        Ok(Self {})
+    }
+
+    fn process(
+        &mut self,
+        _clock: &RobotClock,
+        _input: Self::Input,
+        _output: Self::Output,
+    ) -> CuResult<()> {
+        Ok(())
+    }
+}
+
+#[cfg(not(windows))]
 impl<'cl> CuTask<'cl> for AprilTags {
     type Input = input_msg!('cl, CuImage<Vec<u8>>);
     type Output = output_msg!('cl, AprilTagDetections);
@@ -307,13 +345,17 @@ impl<'cl> CuTask<'cl> for AprilTags {
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
     use super::*;
     use anyhow::Context;
     use anyhow::Result;
-    use cu_sensor_payloads::CuImageBufferFormat;
     use image::{imageops::crop, imageops::resize, imageops::FilterType, Luma};
     use image::{ImageBuffer, ImageReader};
 
+    #[cfg(not(windows))]
+    use cu_sensor_payloads::CuImageBufferFormat;
+
+    #[allow(dead_code)]
     fn process_image(path: &str) -> Result<ImageBuffer<Luma<u8>, Vec<u8>>> {
         let reader = ImageReader::open(path).with_context(|| "Failed to open image")?;
         let mut img = reader
@@ -330,6 +372,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(windows))]
     fn test_end2end_apriltag() -> Result<()> {
         let img = process_image("tests/data/simple.jpg")?;
         let format = CuImageBufferFormat {
