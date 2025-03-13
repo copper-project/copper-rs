@@ -345,6 +345,7 @@ impl<'cl> CuTask<'cl> for AprilTags {
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
     use super::*;
     use anyhow::Context;
     use anyhow::Result;
@@ -354,6 +355,7 @@ mod tests {
     #[cfg(not(windows))]
     use cu_sensor_payloads::CuImageBufferFormat;
 
+    #[allow(dead_code)]
     fn process_image(path: &str) -> Result<ImageBuffer<Luma<u8>, Vec<u8>>> {
         let reader = ImageReader::open(path).with_context(|| "Failed to open image")?;
         let mut img = reader
