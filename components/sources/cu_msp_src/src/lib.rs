@@ -1,6 +1,8 @@
 use cu29::prelude::*;
 use cu_msp_lib::structs::MspResponse;
+#[cfg(unix)]
 use cu_msp_lib::MspParser;
+#[cfg(unix)]
 use serialport::SerialPort;
 #[cfg(unix)]
 use serialport::TTYPort;
@@ -55,6 +57,7 @@ impl MspResponseBatch {
 pub struct MSPSrc {
     #[cfg(unix)]
     serial: TTYPort,
+    #[cfg(unix)]
     parser: MspParser,
     buffer: SmallVec<[u8; 512]>,
 }
@@ -91,10 +94,12 @@ impl<'cl> CuSrcTask<'cl> for MSPSrc {
             .set_timeout(std::time::Duration::from_millis(100))
             .unwrap();
 
+        #[cfg(unix)]
         let parser = MspParser::new();
         Ok(Self {
             #[cfg(unix)]
             serial,
+            #[cfg(unix)]
             parser,
             buffer: SmallVec::new(),
         })
@@ -115,6 +120,7 @@ impl<'cl> CuSrcTask<'cl> for MSPSrc {
         #[cfg(unix)]
         self.buffer.truncate(n);
 
+        #[cfg(unix)]
         let mut batch = MspResponseBatch::default();
         #[cfg(unix)]
         if n > 0 {
@@ -131,6 +137,7 @@ impl<'cl> CuSrcTask<'cl> for MSPSrc {
                 }
             }
         }
+        #[cfg(unix)]
         output.set_payload(batch);
         Ok(())
     }
