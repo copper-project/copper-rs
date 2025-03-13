@@ -15,8 +15,8 @@ repository.workspace = true
 cu29 = { workspace = true }
 bincode = { workspace = true }
 circular-buffer = "1.0.0"
-gstreamer = "0.23.4"
-gstreamer-app = "0.23.4"
+gstreamer = "0.23.5"
+gstreamer-app = "0.23.5"
 
 [dev-dependencies]
 rerun = { workspace = true }

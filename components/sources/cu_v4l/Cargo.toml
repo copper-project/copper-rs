@@ -13,7 +13,7 @@ repository.workspace = true
 [dependencies]
 cu29 = { workspace = true }
 cu-sensor-payloads = { workspace = true }
-libc = "0.2.168"
+libc = "0.2.171"
 page_size = "0.6.0"
 nix = { version = "0.29.0", features = ["time"] }
 

@@ -11,10 +11,10 @@ repository.workspace = true
 
 [dependencies]
 bincode = { workspace = true, optional = true }
+serde = { workspace = true }
+smallvec = { workspace = true }
 crc-any = "2.5.0"
-smallvec = "1.14.0"
 packed_struct = "0.10.1"
-serde = { version = "1.0.218", features = ["derive"] }
 
 [features]
 default = ["bincode"]

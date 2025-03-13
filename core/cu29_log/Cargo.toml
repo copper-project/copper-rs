@@ -18,4 +18,4 @@ cu29-value = { workspace = true }
 cu29-traits = { workspace = true }
 cu29-clock = { workspace = true }
 strfmt = "0.2.4"
-smallvec = { version = "1.13.2", features = ["serde"] }
+smallvec = { version = "1.14.0", features = ["serde"] }

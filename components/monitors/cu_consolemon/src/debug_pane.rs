@@ -63,7 +63,8 @@ impl DebugLog {
     }
 
     pub fn get_logs(&mut self) -> String {
-        self.debug_log.join_compact("").to_string()
+        let logs = &self.debug_log;
+        logs.concat_compact().to_string()
     }
 }
 

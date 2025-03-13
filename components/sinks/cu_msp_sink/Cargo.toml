@@ -13,9 +13,9 @@ description = "This is the sink side of an MSP (Multiwii Serial Protocol) for Co
 
 [dependencies]
 cu29 = { workspace = true }
+smallvec = {workspace = true }
+bincode = { workspace = true }
+serde = { workspace = true } 
 serialport = "4.7.0"
 cu-msp-lib = { path = "../../common/cu_msp_lib" }
 cu-msp-src = { path = "../../sources/cu_msp_src" }
-smallvec = "1.14.0"
-bincode = { workspace = true }
-serde = { version = "1.0.218", features = ["derive"] }
