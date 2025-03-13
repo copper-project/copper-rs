@@ -11,6 +11,7 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
+#[cfg(unix)]
 use std::io::Read;
 
 const MAX_MSG_SIZE: usize = 16;
@@ -70,13 +71,16 @@ impl<'cl> CuSrcTask<'cl> for MSPSrc {
         if config.is_none() {
             return Err("No config provided".into());
         }
+        #[cfg(unix)]
         let port: String = config
             .and_then(|config| config.get::<String>("device"))
             .unwrap_or("/dev/ttyUSB0".to_string());
+        #[cfg(unix)]
         let baudrate = config
             .and_then(|config| config.get::<u32>("baudrate"))
             .unwrap_or(115200);
 
+        #[cfg(unix)]
         let builder = serialport::new(port, baudrate);
         #[cfg(unix)]
         let mut serial = TTYPort::open(&builder).unwrap();
@@ -99,15 +103,20 @@ impl<'cl> CuSrcTask<'cl> for MSPSrc {
     fn process(&mut self, _clock: &RobotClock, output: Self::Output) -> CuResult<()> {
         self.buffer.clear();
         self.buffer.resize(512, 0);
+        #[cfg(unix)]
         let n = self.serial.read(&mut self.buffer);
+        #[cfg(unix)]
         if let Err(e) = &n {
             debug!("read error: {}", e.to_string());
             return Ok(());
         }
+        #[cfg(unix)]
         let n = n.unwrap();
+        #[cfg(unix)]
         self.buffer.truncate(n);
 
         let mut batch = MspResponseBatch::default();
+        #[cfg(unix)]
         if n > 0 {
             for &b in &self.buffer {
                 let maybe_packet = self.parser.parse(b);
