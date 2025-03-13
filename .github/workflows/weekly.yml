@@ -158,7 +158,7 @@ jobs:
 
       - name: Set features (Linux / MacOS)
         if: runner.os != 'Windows'
-        run: echo "FEATURES_FLAG=$([[ '${{ matrix.mode }}' == 'cuda-release' ]] && echo '--all-features' || echo '--features macro_debug,mock,image,kornia')" >> $GITHUB_ENV
+        run: echo "FEATURES_FLAG=$([[ '${{ matrix.mode }}' == 'cuda-release' ]] && echo '--all-features' || echo '--features macro_debug,mock,iyes_perf_ui,image,kornia')" >> $GITHUB_ENV
 
       - name: Set features (Windows)
         if: runner.os == 'Windows'
@@ -166,7 +166,7 @@ jobs:
           $features = if ($env:matrix_mode -eq 'cuda-release') {
             '--all-features'
           } else {
-            '--features macro_debug,mock,image,kornia'
+            '--features macro_debug,mock,iyes_perf_ui,image,kornia'
           }
           Add-Content -Path $env:GITHUB_ENV -Value "FEATURES_FLAG=$features"
 
