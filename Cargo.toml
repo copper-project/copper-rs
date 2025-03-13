@@ -140,3 +140,5 @@ smallvec = { version = "1.13.2", features = ["serde"] }
 
 [patch.crates-io]
 arrow-arith = { path = "patches/arrow-arith" }
+
+
