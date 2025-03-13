@@ -1,10 +1,10 @@
-#[cfg(not(windows))]
+#[cfg(unix)]
 use std::mem::ManuallyDrop;
 
-#[cfg(not(windows))]
+#[cfg(unix)]
 use apriltag::{Detector, DetectorBuilder, Family, Image, TagParams};
 
-#[cfg(not(windows))]
+#[cfg(unix)]
 use apriltag_sys::image_u8_t;
 
 use arrayvec::ArrayVec;
@@ -193,13 +193,13 @@ impl AprilTagDetections {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(unix)]
 pub struct AprilTags {
     detector: Detector,
     tag_params: TagParams,
 }
 
-#[cfg(windows)]
+#[cfg(not(unix))]
 pub struct AprilTags {}
 
 #[cfg(not(windows))]

@@ -6,7 +6,11 @@ use cu29::prelude::*;
 use cu_msp_lib::structs::MspRequest;
 use cu_msp_lib::MspPacket;
 use serde::{Deserialize, Serialize};
-use serialport::{SerialPort, TTYPort};
+#[cfg(unix)]
+use serialport::SerialPort;
+#[cfg(unix)]
+use serialport::TTYPort;
+
 use smallvec::SmallVec;
 use std::io::Write;
 
@@ -40,6 +44,7 @@ impl Decode<()> for MspRequestBatch {
 }
 
 pub struct MSPSink {
+    #[cfg(unix)]
     serial: TTYPort,
 }
 
@@ -63,13 +68,20 @@ impl<'cl> CuSinkTask<'cl> for MSPSink {
             .unwrap_or(115200);
 
         let builder = serialport::new(port, baudrate);
+
+        #[cfg(unix)]
         let mut serial = TTYPort::open(&builder).unwrap();
+        #[cfg(unix)]
         serial.set_exclusive(false).unwrap();
+        #[cfg(unix)]
         serial
             .set_timeout(std::time::Duration::from_millis(10))
             .unwrap();
 
-        Ok(Self { serial })
+        Ok(Self {
+            #[cfg(unix)]
+            serial,
+        })
     }
 
     fn process(&mut self, _clock: &RobotClock, input: Self::Input) -> CuResult<()> {

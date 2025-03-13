@@ -1,7 +1,9 @@
 use cu29::prelude::*;
 use cu_msp_lib::structs::MspResponse;
 use cu_msp_lib::MspParser;
-use serialport::{SerialPort, TTYPort};
+use serialport::SerialPort;
+#[cfg(unix)]
+use serialport::TTYPort;
 use smallvec::SmallVec;
 
 use bincode::de::Decoder;
@@ -50,6 +52,7 @@ impl MspResponseBatch {
 }
 
 pub struct MSPSrc {
+    #[cfg(unix)]
     serial: TTYPort,
     parser: MspParser,
     buffer: SmallVec<[u8; 512]>,
@@ -75,14 +78,18 @@ impl<'cl> CuSrcTask<'cl> for MSPSrc {
             .unwrap_or(115200);
 
         let builder = serialport::new(port, baudrate);
+        #[cfg(unix)]
         let mut serial = TTYPort::open(&builder).unwrap();
+        #[cfg(unix)]
         serial.set_exclusive(false).unwrap();
+        #[cfg(unix)]
         serial
             .set_timeout(std::time::Duration::from_millis(100))
             .unwrap();
 
         let parser = MspParser::new();
         Ok(Self {
+            #[cfg(unix)]
             serial,
             parser,
             buffer: SmallVec::new(),
@@ -120,9 +127,12 @@ impl<'cl> CuSrcTask<'cl> for MSPSrc {
     }
 }
 
+#[cfg(unix)]
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use serialport::SerialPort;
+    use serialport::TTYPort;
+    use std::io::Read;
     use std::io::Write;
 
     #[test]
