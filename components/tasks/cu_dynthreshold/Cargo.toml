@@ -1,5 +1,7 @@
 [package]
 name = "cu-dynthreshold"
+description = "Image Dynamic thresholding for Copper."
+
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
