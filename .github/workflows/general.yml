@@ -91,6 +91,7 @@ jobs:
         uses: blinemedical/setup-gstreamer@v1.4.0
         with:
           arch: 'arm64'
+          version: 1.24.12
 
       - name: Debug GStreamer Installation
         if: runner.os == 'macOS'
