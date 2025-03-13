@@ -6,7 +6,7 @@ It can be used standalone or in pair with the MSP sink component for the writing
 
 ## Configuration
 
-Example in your Copprt configuration file:
+Example in your Copper configuration file:
 
 ```RON
     tasks: [

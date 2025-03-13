@@ -8,6 +8,7 @@ keywords.workspace = true
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
+description = "This is the library side of an MSP (Multiwii Serial Protocol) originally for Copper but can be used independently."
 
 [dependencies]
 bincode = { workspace = true, optional = true }
