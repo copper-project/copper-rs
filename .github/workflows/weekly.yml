@@ -98,17 +98,19 @@ jobs:
 
       - name: Setup GStreamer (x86_64)
         if: runner.os != 'MacOs'
-        id:   setup_gstreamer_mac
+        id: setup_gstreamer_mac
         uses: blinemedical/setup-gstreamer@v1.4.0
         with:
           arch: 'x86_64'
+          version: 1.24.12
 
       - name: Setup GStreamer
         if: runner.os == 'MacOS'
-        id:   setup_gstreamer_other
+        id: setup_gstreamer_other
         uses: blinemedical/setup-gstreamer@v1.4.0
         with:
           arch: 'arm64'
+          version: 1.24.12
 
       - name: Debug GStreamer Installation
         if: runner.os == 'macOS'
@@ -156,8 +158,12 @@ jobs:
         run: |
           Add-Content -Path $env:GITHUB_ENV -Value "RELEASE_FLAG=--release"
 
-      - name: Set features (Linux / MacOS)
-        if: runner.os != 'Windows'
+      - name: Set features (Linux)
+        if: runner.os == 'Linux'
+        run: echo "FEATURES_FLAG=$([[ '${{ matrix.mode }}' == 'cuda-release' ]] && echo '--all-features' || echo '--features macro_debug,mock,iyes_perf_ui,image,kornia,python')" >> $GITHUB_ENV
+
+      - name: Set features (MacOS)
+        if: runner.os == 'macOS'
         run: echo "FEATURES_FLAG=$([[ '${{ matrix.mode }}' == 'cuda-release' ]] && echo '--all-features' || echo '--features macro_debug,mock,iyes_perf_ui,image,kornia')" >> $GITHUB_ENV
 
       - name: Set features (Windows)
@@ -166,7 +172,7 @@ jobs:
           $features = if ($env:matrix_mode -eq 'cuda-release') {
             '--all-features'
           } else {
-            '--features macro_debug,mock,iyes_perf_ui,image,kornia'
+            '--features macro_debug,mock,iyes_perf_ui,image,kornia,python'
           }
           Add-Content -Path $env:GITHUB_ENV -Value "FEATURES_FLAG=$features"
 
