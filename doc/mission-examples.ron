@@ -1,0 +1,38 @@
+(
+    missions: [
+        (id: "A"),
+        (id: "B")
+    ],
+    tasks: [
+        (
+            id: "src",
+            type: "tasks::IntegerSrcTask",
+            missions: ["A", "B"],
+        ),
+        (
+            id: "top",
+            type: "tasks::MyTask",
+            mission: ["A"],
+            config: {"threshold": 42},
+        ),
+        (
+            id: "bottom",
+            type: "tasks::MyTask",
+            missions: ["B"],
+            config: {"threshold": 20},
+        ),
+        (
+            id: "sink",
+            type: "tasks::MergingSinkTask",
+            missions: ["A", "B"],
+        ),
+    ],
+    cnx: [
+        (src: "src", dst: "top", msg: "i32"),
+        (src: "src", dst: "bottom", msg: "i32"),
+        (src: "top", dst: "sink", msg: "i32"),
+        (src: "bottom", dst: "sink", msg: "i32"),
+    ],
+)
+
+
