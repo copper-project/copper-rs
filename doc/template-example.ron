@@ -1,0 +1,32 @@
+(
+    tasks: [
+        (
+            id: "src",
+            type: "tasks::IntegerSrcTask",
+        ),
+        (
+            id: "top",
+            type: "tasks::MyTask",
+            config: {"threshold": 42},
+        ),
+        (
+            id: "sink",
+            type: "tasks::MergingSinkTask",
+        ),
+    ],
+    templates: [
+        (
+          file: "sub.ron",
+          params: {"instance": 1, "threshold": 20},
+        )
+    ],
+    cnx: [
+        (src: "src", dst: "top", msg: "i32"),
+        (src: "src", dst: "bottom1", msg: "i32"),
+        (src: "top", dst: "sink", msg: "i32"),
+        (src: "bottom1", dst: "sink", msg: "i32"),
+    ],
+)
+
+
+
