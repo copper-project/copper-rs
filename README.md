@@ -25,8 +25,10 @@ game engine is to games.
 * **Product Oriented**: Copper aims to avoid late-stage infra integration issues by generating a very predictable
   runtime.
 
-Copper has been tested on: Linux (x86_64, armv7, aarch64 & riskv64) and MacOS (arm64).
-Testers would be welcomed on Windows and other platforms.
+Copper has been tested on: 
+* **Linux** (x86_64, armv7, aarch64 & riskv64)
+* **MacOS** (arm64)
+* **Windows** (x86_64)
 
 ### Technical Overview
 
