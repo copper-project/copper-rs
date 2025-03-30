@@ -9,7 +9,7 @@ use petgraph::stable_graph::{EdgeIndex, StableDiGraph};
 use petgraph::visit::EdgeRef;
 use ron::extensions::Extensions;
 use ron::value::Value as RonValue;
-use ron::Options;
+use ron::{Number, Options};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 use std::fmt;
@@ -112,57 +112,40 @@ impl From<Value> for bool {
         }
     }
 }
-
-impl From<Value> for u8 {
-    fn from(value: Value) -> Self {
-        if let Value(RonValue::Number(num)) = value {
-            if let Some(i) = num.as_i64() {
-                i as u8
-            } else {
-                panic!("Expected an integer value but got {value:?}")
+macro_rules! impl_from_value_for_int {
+    ($($target:ty),* $(,)?) => {
+        $(
+            impl From<Value> for $target {
+                fn from(value: Value) -> Self {
+                    if let Value(RonValue::Number(num)) = value {
+                        match num {
+                            Number::I8(n) => n as $target,
+                            Number::I16(n) => n as $target,
+                            Number::I32(n) => n as $target,
+                            Number::I64(n) => n as $target,
+                            Number::U8(n) => n as $target,
+                            Number::U16(n) => n as $target,
+                            Number::U32(n) => n as $target,
+                            Number::U64(n) => n as $target,
+                            Number::F32(_) | Number::F64(_) => {
+                                panic!("Expected an integer Number variant but got {num:?}")
+                            }
+                        }
+                    } else {
+                        panic!("Expected a Number variant but got {value:?}")
+                    }
+                }
             }
-        } else {
-            panic!("Expected a Number variant but got {value:?}")
-        }
-    }
+        )*
+    };
 }
 
-impl From<Value> for u32 {
-    fn from(value: Value) -> Self {
-        if let Value(RonValue::Number(num)) = value {
-            if let Some(i) = num.as_i64() {
-                i as u32
-            } else {
-                panic!("Expected an integer value but got {value:?}")
-            }
-        } else {
-            panic!("Expected a Number variant but got {value:?}")
-        }
-    }
-}
-
-impl From<Value> for i32 {
-    fn from(value: Value) -> Self {
-        if let Value(RonValue::Number(num)) = value {
-            if let Some(i) = num.as_i64() {
-                i as i32
-            } else {
-                panic!("Expected an integer value but got {value:?}")
-            }
-        } else {
-            panic!("Expected a Number variant but got {value:?}")
-        }
-    }
-}
+impl_from_value_for_int!(u8, i8, u16, i16, u32, i32, u64, i64);
 
 impl From<Value> for f64 {
     fn from(value: Value) -> Self {
         if let Value(RonValue::Number(num)) = value {
-            if let Some(f) = num.as_f64() {
-                f
-            } else {
-                panic!("Expected a float value but got {value:?}")
-            }
+            num.into_f64()
         } else {
             panic!("Expected a Number variant but got {value:?}")
         }
@@ -189,7 +172,21 @@ impl Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Value(value) = self;
         match value {
-            RonValue::Number(n) => write!(f, "{}", n.as_i64().unwrap()),
+            RonValue::Number(n) => {
+                let s = match n {
+                    Number::I8(n) => n.to_string(),
+                    Number::I16(n) => n.to_string(),
+                    Number::I32(n) => n.to_string(),
+                    Number::I64(n) => n.to_string(),
+                    Number::U8(n) => n.to_string(),
+                    Number::U16(n) => n.to_string(),
+                    Number::U32(n) => n.to_string(),
+                    Number::U64(n) => n.to_string(),
+                    Number::F32(n) => n.0.to_string(),
+                    Number::F64(n) => n.0.to_string(),
+                };
+                write!(f, "{s}")
+            }
             RonValue::String(s) => write!(f, "{s}"),
             RonValue::Bool(b) => write!(f, "{b}"),
             RonValue::Map(m) => write!(f, "{m:?}"),
@@ -197,6 +194,7 @@ impl Display for Value {
             RonValue::Unit => write!(f, "unit"),
             RonValue::Option(o) => write!(f, "{o:?}"),
             RonValue::Seq(s) => write!(f, "{s:?}"),
+            RonValue::Bytes(bytes) => write!(f, "{bytes:?}"),
         }
     }
 }
@@ -744,8 +742,8 @@ mod tests {
             r#"( tasks: [], cnx: [], monitor: (type: "ExampleMonitor", config: { "toto": 4, } )) "#;
         let config = CuConfig::deserialize_ron(txt);
         assert_eq!(
-            config.monitor.as_ref().unwrap().config.as_ref().unwrap().0["toto"],
-            4.into()
+            config.monitor.as_ref().unwrap().config.as_ref().unwrap().0["toto"].0,
+            4u8.into()
         );
     }
 
