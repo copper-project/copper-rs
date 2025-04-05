@@ -20,7 +20,8 @@ jobs:
 
     strategy:
       matrix:
-        os: [ ubuntu-22.04, macos-latest, windows-latest ]
+        os: [ ubuntu-22.04, macos-latest ]
+        # os: [ ubuntu-22.04, macos-latest, windows-latest ]
         mode: [ debug, release, cuda-release ]
 
     steps:
@@ -32,9 +33,10 @@ jobs:
           key: ${{ matrix.mode }}
       - name: Install latest nextest
         uses: taiki-e/install-action@nextest
-      - name: Install winget
-        if: runner.os == 'Windows'
-        uses: Cyberboss/install-winget@v1
+        # gbin:IT BROKE ALL CI. 
+        # - name: Install winget
+        #   if: runner.os == 'Windows'
+        #   uses: Cyberboss/install-winget@v1
 
       - name: Check formatting
         run: cargo +stable fmt --all -- --check
