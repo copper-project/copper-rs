@@ -35,5 +35,5 @@ cu29 = { workspace = true } # needed for compile_fail tests
 [features]
 default = []
 # enables a more verbose build log showing the code generation.
-macro_debug = []
+macro_debug = ["cu29-runtime/macro_debug"]
 
