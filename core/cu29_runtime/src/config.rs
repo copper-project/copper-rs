@@ -4,6 +4,7 @@
 //! The configuration is used to generate the runtime code at compile time.
 
 use cu29_traits::{CuError, CuResult};
+use html_escape::encode_text;
 use petgraph::adj::NodeIndex;
 use petgraph::stable_graph::{EdgeIndex, StableDiGraph};
 use petgraph::visit::EdgeRef;
@@ -582,7 +583,7 @@ impl CuConfig {
                         .map(|(k, v)| format!("<B>{k}</B> = {v}<BR ALIGN=\"LEFT\"/>"))
                         .collect::<Vec<String>>()
                         .join("\n");
-                    format!("<BR/>____________<BR ALIGN=\"LEFT\"/>{config_str}")
+                    format!("____________<BR/><BR ALIGN=\"LEFT\"/>{config_str}")
                 }
                 None => String::new(),
             };
@@ -605,7 +606,7 @@ impl CuConfig {
             writeln!(output, "labeljust=l,").unwrap();
             writeln!(
                 output,
-                "label=< <FONT COLOR=\"red\"><B>{}</B></FONT><BR ALIGN=\"LEFT\"/><BR ALIGN=\"RIGHT\"/><FONT COLOR=\"dimgray\">{}</FONT><BR ALIGN=\"LEFT\"/>{} >",
+                "label=< <FONT COLOR=\"red\"><B>{}</B></FONT> <FONT COLOR=\"dimgray\">[{}]</FONT><BR ALIGN=\"LEFT\"/>{} >",
                 node.id,
                 node.get_type(),
                 config_str
@@ -618,14 +619,13 @@ impl CuConfig {
             let (src, dst) = self.graph.edge_endpoints(edge).unwrap();
 
             let cnx = &self.graph[edge];
+            let msg = encode_text(&cnx.msg);
             writeln!(
                 output,
-                "{} -> {} [label=< <B><FONT COLOR=\"gray\">{}/{}/{}</FONT></B> >];",
+                "{} -> {} [label=< <B><FONT COLOR=\"gray\">{}</FONT></B> >];",
                 src.index(),
                 dst.index(),
-                cnx.msg,
-                cnx.batch.unwrap_or(1),
-                cnx.store.unwrap_or(false)
+                msg
             )
             .unwrap();
         }
