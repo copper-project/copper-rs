@@ -184,6 +184,7 @@ impl Display for Value {
                     Number::U64(n) => n.to_string(),
                     Number::F32(n) => n.0.to_string(),
                     Number::F64(n) => n.0.to_string(),
+                    _ => panic!("Expected a Number variant but got {value:?}"),
                 };
                 write!(f, "{s}")
             }
