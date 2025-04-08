@@ -49,3 +49,4 @@ cudarc = { version = "0.13.9", optional = true, features = ["cuda-version-from-b
 default = []
 cuda = ["cudarc"]
 gst = ["gstreamer", "gstreamer-app"]
+macro_debug = []

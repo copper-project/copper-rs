@@ -15,6 +15,8 @@ use cu29_unifiedlog::UnifiedLoggerWrite;
 use std::sync::{Arc, Mutex};
 
 use petgraph::prelude::*;
+use petgraph::visit::VisitMap;
+use petgraph::visit::Visitable;
 use std::fmt::Debug;
 
 /// Just a simple struct to hold the various bits needed to run a Copper application.
@@ -281,21 +283,29 @@ fn plan_tasks_tree_branch(
     mut next_culist_output_index: u32,
     starting_point: NodeId,
     plan: &mut Vec<CuExecutionUnit>,
-) -> u32 {
-    // prob not exactly what we want but to get us started
+) -> (u32, bool) {
+    #[cfg(feature = "macro_debug")]
+    eprintln!("-- starting branch from node {starting_point}");
     let mut visitor = Bfs::new(&config.graph, starting_point.into());
+    let mut handled = false;
 
     while let Some(node) = visitor.next(&config.graph) {
         let id = node.index() as NodeId;
-        let node = config.get_node(id).unwrap();
+        let node_ref = config.get_node(id).unwrap();
+        #[cfg(feature = "macro_debug")]
+        eprintln!("  Visiting node: {:?}", node_ref);
 
         let mut input_msg_indices_types: Vec<(u32, String)> = Vec::new();
         let output_msg_index_type: Option<(u32, String)>;
-
         let task_type = find_task_type_for_id(&config.graph, id);
 
         match task_type {
             CuTaskType::Source => {
+                #[cfg(feature = "macro_debug")]
+                eprintln!(
+                    "    → Source node, assign output index {}",
+                    next_culist_output_index
+                );
                 output_msg_index_type = Some((
                     next_culist_output_index,
                     config
@@ -312,22 +322,22 @@ fn plan_tasks_tree_branch(
                     .graph
                     .neighbors_directed(id.into(), Incoming)
                     .collect();
-
-                for parent in parents {
-                    let index_type =
-                        find_output_index_type_from_nodeid(parent.index() as NodeId, plan);
+                #[cfg(feature = "macro_debug")]
+                eprintln!("    → Sink with parents: {:?}", parents);
+                for parent in &parents {
+                    let pid = parent.index() as NodeId;
+                    let index_type = find_output_index_type_from_nodeid(pid, plan);
                     if let Some(index_type) = index_type {
+                        #[cfg(feature = "macro_debug")]
+                        eprintln!("      ✓ Input from {pid} ready: {:?}", index_type);
                         input_msg_indices_types.push(index_type);
                     } else {
-                        // here do not add this node yet, wait for the other inputs to do it with all the inputs earliers in the copper list.
-                        return next_culist_output_index;
+                        #[cfg(feature = "macro_debug")]
+                        eprintln!("      ✗ Input from {pid} not ready, returning");
+                        return (next_culist_output_index, handled);
                     }
                 }
-                // Here we create an artificial "end node" for this sink to record the metadata associated with it.
-                output_msg_index_type = Some((
-                    next_culist_output_index,
-                    "()".to_string(), // empty type
-                ));
+                output_msg_index_type = Some((next_culist_output_index, "()".to_string()));
                 next_culist_output_index += 1;
             }
             CuTaskType::Regular => {
@@ -335,15 +345,19 @@ fn plan_tasks_tree_branch(
                     .graph
                     .neighbors_directed(id.into(), Incoming)
                     .collect();
-
-                for parent in parents {
-                    let index_type =
-                        find_output_index_type_from_nodeid(parent.index() as NodeId, plan);
+                #[cfg(feature = "macro_debug")]
+                eprintln!("    → Regular task with parents: {:?}", parents);
+                for parent in &parents {
+                    let pid = parent.index() as NodeId;
+                    let index_type = find_output_index_type_from_nodeid(pid, plan);
                     if let Some(index_type) = index_type {
+                        #[cfg(feature = "macro_debug")]
+                        eprintln!("      ✓ Input from {pid} ready: {:?}", index_type);
                         input_msg_indices_types.push(index_type);
                     } else {
-                        // here do not add this node yet, wait for the other inputs to do it with all the inputs earliers in the copper list.
-                        return next_culist_output_index;
+                        #[cfg(feature = "macro_debug")]
+                        eprintln!("      ✗ Input from {pid} not ready, returning");
+                        return (next_culist_output_index, handled);
                     }
                 }
                 output_msg_index_type = Some((
@@ -359,69 +373,111 @@ fn plan_tasks_tree_branch(
             }
         }
 
-        // Sort the input messages by index
-        // It means that the tuple presented as input to the merging task
-        // depends on the order of *declaration* in the node section of the config file.
         sort_inputs_by_cnx_id(&mut input_msg_indices_types, plan, config, id);
 
-        // Try to see if we did not already add this node to the plan
-        if let Some(pos) = plan.iter().position(|step| {
-            if let CuExecutionUnit::Step(ref s) = step {
-                s.node_id == id
-            } else {
-                false
-            }
-        }) {
-            // modify the existing step and put it back in the plan as the current step as it needs this subsequent output.
+        if let Some(pos) = plan
+            .iter()
+            .position(|step| matches!(step, CuExecutionUnit::Step(s) if s.node_id == id))
+        {
+            #[cfg(feature = "macro_debug")]
+            eprintln!("    → Already in plan, modifying existing step");
             let mut step = plan.remove(pos);
             if let CuExecutionUnit::Step(ref mut s) = step {
                 s.input_msg_indices_types = input_msg_indices_types;
             }
             plan.push(step);
         } else {
-            // ok this is just a new step
+            #[cfg(feature = "macro_debug")]
+            eprintln!("    → New step added to plan");
             let step = CuExecutionStep {
                 node_id: id,
-                node: node.clone(),
+                node: node_ref.clone(),
                 task_type,
                 input_msg_indices_types,
                 output_msg_index_type,
             };
             plan.push(CuExecutionUnit::Step(step));
         }
+
+        handled = true;
     }
-    next_culist_output_index
+
+    #[cfg(feature = "macro_debug")]
+    eprintln!("-- finished branch from node {starting_point} with handled={handled}");
+    (next_culist_output_index, handled)
 }
 
 /// This is the main heuristics to compute an execution plan at compilation time.
 /// TODO: Make that heuristic pluggable.
 pub fn compute_runtime_plan(config: &CuConfig) -> CuResult<CuExecutionLoop> {
-    // find all the sources.
-    let nodes_to_visit = config
+    #[cfg(feature = "macro_debug")]
+    eprintln!("[runtime plan]");
+    let visited = config.graph.visit_map();
+    let mut plan = Vec::new();
+    let mut next_culist_output_index = 0u32;
+
+    let mut queue: std::collections::VecDeque<NodeId> = config
         .graph
         .node_indices()
-        .filter(|node_id| {
-            let id = node_id.index() as NodeId;
-            let task_type = find_task_type_for_id(&config.graph, id);
-            task_type == CuTaskType::Source
+        .filter(|&node| {
+            find_task_type_for_id(&config.graph, node.index() as NodeId) == CuTaskType::Source
         })
-        .collect::<Vec<NodeIndex>>();
+        .map(|node| node.index() as NodeId)
+        .collect();
 
-    let mut next_culist_output_index = 0u32;
-    let mut plan: Vec<CuExecutionUnit> = Vec::new();
+    #[cfg(feature = "macro_debug")]
+    eprintln!("Initial source nodes: {:?}", queue);
 
-    for node_index in &nodes_to_visit {
-        next_culist_output_index = plan_tasks_tree_branch(
-            config,
-            next_culist_output_index,
-            node_index.index() as NodeId,
-            &mut plan,
-        );
+    while let Some(start_node) = queue.pop_front() {
+        if visited.is_visited(&start_node) {
+            #[cfg(feature = "macro_debug")]
+            eprintln!("→ Skipping already visited source {start_node}");
+            continue;
+        }
+
+        #[cfg(feature = "macro_debug")]
+        eprintln!("→ Starting BFS from source {start_node}");
+        let mut bfs = Bfs::new(&config.graph, start_node.into());
+
+        while let Some(node_index) = bfs.next(&config.graph) {
+            let node_id = node_index.index() as NodeId;
+            let already_in_plan = plan
+                .iter()
+                .any(|unit| matches!(unit, CuExecutionUnit::Step(s) if s.node_id == node_id));
+            if already_in_plan {
+                #[cfg(feature = "macro_debug")]
+                eprintln!("    → Node {node_id} already planned, skipping");
+                continue;
+            }
+
+            #[cfg(feature = "macro_debug")]
+            eprintln!("    Planning from node {node_id}");
+            let (new_index, handled) =
+                plan_tasks_tree_branch(config, next_culist_output_index, node_id, &mut plan);
+            next_culist_output_index = new_index;
+
+            if !handled {
+                #[cfg(feature = "macro_debug")]
+                eprintln!("    ✗ Node {node_id} was not handled, skipping enqueue of neighbors");
+                continue;
+            }
+
+            #[cfg(feature = "macro_debug")]
+            eprintln!("    ✓ Node {node_id} handled successfully, enqueueing neighbors");
+            for neighbor in config.graph.neighbors(node_index) {
+                if !visited.is_visited(&neighbor) {
+                    let nid = neighbor.index() as NodeId;
+                    #[cfg(feature = "macro_debug")]
+                    eprintln!("      → Enqueueing neighbor {nid}");
+                    queue.push_back(nid);
+                }
+            }
+        }
     }
 
     Ok(CuExecutionLoop {
         steps: plan,
-        loop_count: None, // if in not unit testing, the main loop is infinite
+        loop_count: None,
     })
 }
 
@@ -623,5 +679,71 @@ mod tests {
         // first
         assert_eq!(sink_step.input_msg_indices_types[0].1, src2_type);
         assert_eq!(sink_step.input_msg_indices_types[1].1, src1_type);
+    }
+
+    #[test]
+    fn test_runtime_plan_diamond_case1() {
+        // more complex topology that tripped the scheduler
+        let mut config = CuConfig::default();
+        let cam0_id = config.add_node(Node::new("cam0", "tasks::IntegerSrcTask"));
+        let inf0_id = config.add_node(Node::new("inf0", "tasks::Integer2FloatTask"));
+        let broadcast_id = config.add_node(Node::new("broadcast", "tasks::MergingSinkTask"));
+
+        // case 1 order
+        config.connect(cam0_id, broadcast_id, "i32");
+        config.connect(cam0_id, inf0_id, "i32");
+        config.connect(inf0_id, broadcast_id, "f32");
+
+        let edge_cam0_to_broadcast = *config.get_src_edges(cam0_id).first().unwrap();
+        let edge_cam0_to_inf0 = config.get_src_edges(cam0_id)[1];
+
+        assert_eq!(edge_cam0_to_inf0, 0);
+        assert_eq!(edge_cam0_to_broadcast, 1);
+
+        let runtime = compute_runtime_plan(&config).unwrap();
+        let broadcast_step = runtime
+            .steps
+            .iter()
+            .find_map(|step| match step {
+                CuExecutionUnit::Step(step) if step.node_id == broadcast_id => Some(step),
+                _ => None,
+            })
+            .unwrap();
+
+        assert_eq!(broadcast_step.input_msg_indices_types[0].1, "i32");
+        assert_eq!(broadcast_step.input_msg_indices_types[1].1, "f32");
+    }
+
+    #[test]
+    fn test_runtime_plan_diamond_case2() {
+        // more complex topology that tripped the scheduler variation 2
+        let mut config = CuConfig::default();
+        let cam0_id = config.add_node(Node::new("cam0", "tasks::IntegerSrcTask"));
+        let inf0_id = config.add_node(Node::new("inf0", "tasks::Integer2FloatTask"));
+        let broadcast_id = config.add_node(Node::new("broadcast", "tasks::MergingSinkTask"));
+
+        // case 2 order
+        config.connect(cam0_id, inf0_id, "i32");
+        config.connect(cam0_id, broadcast_id, "i32");
+        config.connect(inf0_id, broadcast_id, "f32");
+
+        let edge_cam0_to_inf0 = *config.get_src_edges(cam0_id).first().unwrap();
+        let edge_cam0_to_broadcast = config.get_src_edges(cam0_id)[1];
+
+        assert_eq!(edge_cam0_to_broadcast, 0);
+        assert_eq!(edge_cam0_to_inf0, 1);
+
+        let runtime = compute_runtime_plan(&config).unwrap();
+        let broadcast_step = runtime
+            .steps
+            .iter()
+            .find_map(|step| match step {
+                CuExecutionUnit::Step(step) if step.node_id == broadcast_id => Some(step),
+                _ => None,
+            })
+            .unwrap();
+
+        assert_eq!(broadcast_step.input_msg_indices_types[0].1, "i32");
+        assert_eq!(broadcast_step.input_msg_indices_types[1].1, "f32");
     }
 }
