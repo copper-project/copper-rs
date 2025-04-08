@@ -39,11 +39,14 @@ fn main() -> std::io::Result<()> {
         .stdout(Stdio::piped())
         .spawn()
         .expect("Failed to start dot process");
-    child.wait().expect("Failed to wait for dot process");
 
     {
         let stdin = child.stdin.as_mut().expect("Failed to open stdin");
-        stdin.write_all(&content)?;
+        let result = stdin.write_all(&content);
+        if let Err(e) = result {
+            eprintln!("Failed to write to stdin of the dot process: {}", e);
+            std::process::exit(1);
+        }
     }
 
     let output = child.wait_with_output().expect("Failed to read stdout");
