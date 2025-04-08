@@ -710,7 +710,7 @@
 <a href=#710 id=710 data-nosnippet>710</a>                <span class="prelude-val">Ok</span>(<span class="bool-val">true</span>)
 <a href=#711 id=711 data-nosnippet>711</a>            }
 <a href=#712 id=712 data-nosnippet>712</a>            <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>) =&gt; <span class="prelude-val">Ok</span>(<span class="bool-val">false</span>), <span class="comment">// No more sections of this type
-<a href=#713 id=713 data-nosnippet>713</a>            </span><span class="prelude-val">Err</span>(e) =&gt; <span class="prelude-val">Err</span>(io::Error::new(io::ErrorKind::Other, e.to_string())),
+<a href=#713 id=713 data-nosnippet>713</a>            </span><span class="prelude-val">Err</span>(e) =&gt; <span class="prelude-val">Err</span>(io::Error::other(e.to_string())),
 <a href=#714 id=714 data-nosnippet>714</a>        }
 <a href=#715 id=715 data-nosnippet>715</a>    }
 <a href=#716 id=716 data-nosnippet>716</a>}
