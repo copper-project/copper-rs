@@ -154,7 +154,7 @@ impl Lewansoul {
         let mut header = [0; 5];
         self.port.read_exact(&mut header)?;
         if header[0] != 0x55 || header[1] != 0x55 {
-            return Err(io::Error::new(io::ErrorKind::Other, "Invalid header"));
+            return Err(io::Error::other("Invalid header"));
         }
         let id = header[2];
         let length = header[3];
@@ -168,7 +168,7 @@ impl Lewansoul {
                 .cloned(),
         );
         if checksum != *remaining.last().unwrap() {
-            return Err(io::Error::new(io::ErrorKind::Other, "Invalid checksum"));
+            return Err(io::Error::other("Invalid checksum"));
         }
         Ok((id, command, remaining[..remaining.len() - 1].to_vec()))
     }
