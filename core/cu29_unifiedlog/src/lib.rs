@@ -710,7 +710,7 @@ impl UnifiedLoggerIOReader {
                 Ok(true)
             }
             Ok(None) => Ok(false), // No more sections of this type
-            Err(e) => Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
+            Err(e) => Err(io::Error::other(e.to_string())),
         }
     }
 }
