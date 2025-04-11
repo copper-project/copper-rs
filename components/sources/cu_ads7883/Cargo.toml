@@ -16,7 +16,7 @@ bincode = { workspace = true }
 serde = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-spidev = "0.6.0"
+spidev = "0.7.0"
 
 [dev-dependencies]
 cu29-helpers = { workspace = true }
