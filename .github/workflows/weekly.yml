@@ -38,6 +38,9 @@ jobs:
       matrix:
         os: [ ubuntu-22.04, macos-latest, windows-latest ]
         mode: [ debug, release, cuda-release ]
+        exclude:
+          - os: macos-latest
+            mode: cuda-release
 
     steps:
       - uses: actions/checkout@v4
