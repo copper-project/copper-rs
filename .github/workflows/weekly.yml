@@ -38,6 +38,9 @@ jobs:
       matrix:
         os: [ ubuntu-22.04, macos-latest, windows-latest ]
         mode: [ debug, release, cuda-release ]
+        exclude:
+          - os: macos-latest
+            mode: cuda-release
 
     steps:
       - uses: actions/checkout@v4
@@ -47,7 +50,7 @@ jobs:
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.mode }}
+          key: ${{ matrix.mode }}-${{ hashFiles('**/Cargo.lock') }}
       - name: Install latest nextest
         uses: taiki-e/install-action@nextest
       - name: Install winget

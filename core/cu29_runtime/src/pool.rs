@@ -297,7 +297,9 @@ impl<E: ElementType + 'static> ArrayLike for Vec<E> {
 mod cuda {
     use super::*;
     use cu29_traits::CuError;
-    use cudarc::driver::{CudaDevice, CudaSlice, DeviceRepr, ValidAsZeroBits};
+    use cudarc::driver::{
+        CudaContext, CudaSlice, CudaStream, DeviceRepr, HostSlice, SyncOnDrop, ValidAsZeroBits,
+    };
     use std::sync::Arc;
 
     #[derive(Debug)]
@@ -338,13 +340,85 @@ mod cuda {
         }
     }
 
+    // Create a wrapper type to bridge between ArrayLike and HostSlice
+    pub struct HostSliceWrapper<'a, T: ArrayLike> {
+        inner: &'a T,
+    }
+
+    impl<T: ArrayLike> HostSlice<T::Element> for HostSliceWrapper<'_, T> {
+        fn len(&self) -> usize {
+            self.inner.len()
+        }
+
+        unsafe fn stream_synced_slice<'b>(
+            &'b self,
+            stream: &'b CudaStream,
+        ) -> (&'b [T::Element], SyncOnDrop<'b>) {
+            (self.inner.deref(), SyncOnDrop::sync_stream(stream))
+        }
+
+        unsafe fn stream_synced_mut_slice<'b>(
+            &'b mut self,
+            _stream: &'b CudaStream,
+        ) -> (&'b mut [T::Element], SyncOnDrop<'b>) {
+            panic!("Cannot get mutable reference from immutable wrapper")
+        }
+    }
+
+    // Mutable wrapper
+    pub struct HostSliceMutWrapper<'a, T: ArrayLike> {
+        inner: &'a mut T,
+    }
+
+    impl<T: ArrayLike> HostSlice<T::Element> for HostSliceMutWrapper<'_, T> {
+        fn len(&self) -> usize {
+            self.inner.len()
+        }
+
+        unsafe fn stream_synced_slice<'b>(
+            &'b self,
+            stream: &'b CudaStream,
+        ) -> (&'b [T::Element], SyncOnDrop<'b>) {
+            (self.inner.deref(), SyncOnDrop::sync_stream(stream))
+        }
+
+        unsafe fn stream_synced_mut_slice<'b>(
+            &'b mut self,
+            stream: &'b CudaStream,
+        ) -> (&'b mut [T::Element], SyncOnDrop<'b>) {
+            (self.inner.deref_mut(), SyncOnDrop::sync_stream(stream))
+        }
+    }
+
+    // Add helper methods to the CuCudaPool implementation
+    impl<E: ElementType + ValidAsZeroBits + DeviceRepr> CuCudaPool<E> {
+        // Helper method to get a HostSliceWrapper from a CuHandleInner
+        fn get_host_slice_wrapper<O: ArrayLike<Element = E>>(
+            handle_inner: &CuHandleInner<O>,
+        ) -> HostSliceWrapper<'_, O> {
+            match handle_inner {
+                CuHandleInner::Pooled(pooled) => HostSliceWrapper { inner: pooled },
+                CuHandleInner::Detached(detached) => HostSliceWrapper { inner: detached },
+            }
+        }
+
+        // Helper method to get a HostSliceMutWrapper from a CuHandleInner
+        fn get_host_slice_mut_wrapper<O: ArrayLike<Element = E>>(
+            handle_inner: &mut CuHandleInner<O>,
+        ) -> HostSliceMutWrapper<'_, O> {
+            match handle_inner {
+                CuHandleInner::Pooled(pooled) => HostSliceMutWrapper { inner: pooled },
+                CuHandleInner::Detached(detached) => HostSliceMutWrapper { inner: detached },
+            }
+        }
+    }
     /// A pool of CUDA memory buffers.
     pub struct CuCudaPool<E>
     where
         E: ElementType + ValidAsZeroBits + DeviceRepr + Unpin,
     {
         id: PoolID,
-        device: Arc<CudaDevice>,
+        stream: Arc<CudaStream>,
         pool: Arc<Pool<CudaSliceWrapper<E>>>,
         nb_buffers: usize,
         nb_element_per_buffer: usize,
@@ -354,13 +428,14 @@ mod cuda {
         #[allow(dead_code)]
         pub fn new(
             id: &'static str,
-            device: Arc<CudaDevice>,
+            ctx: Arc<CudaContext>,
             nb_buffers: usize,
             nb_element_per_buffer: usize,
         ) -> CuResult<Self> {
+            let stream = ctx.default_stream();
             let pool = (0..nb_buffers)
                 .map(|_| {
-                    device
+                    stream
                         .alloc_zeros(nb_element_per_buffer)
                         .map(CudaSliceWrapper)
                         .map_err(|_| "Failed to allocate device memory")
@@ -369,7 +444,7 @@ mod cuda {
 
             Ok(Self {
                 id: PoolID::from(id).map_err(|_| "Failed to create PoolID")?,
-                device: device.clone(),
+                stream,
                 pool: Arc::new(Pool::from_vec(pool)),
                 nb_buffers,
                 nb_element_per_buffer,
@@ -414,33 +489,26 @@ mod cuda {
         {
             let to_handle = self.acquire().expect("No available buffers in the pool");
 
-            match from_handle.lock().unwrap().deref() {
-                CuHandleInner::Detached(from) => match to_handle.lock().unwrap().deref_mut() {
+            {
+                let from_lock = from_handle.lock().unwrap();
+                let mut to_lock = to_handle.lock().unwrap();
+
+                match &mut *to_lock {
                     CuHandleInner::Detached(CudaSliceWrapper(to)) => {
-                        self.device
-                            .htod_sync_copy_into(from, to)
+                        let wrapper = Self::get_host_slice_wrapper(&*from_lock);
+                        self.stream
+                            .memcpy_htod(&wrapper, to)
                             .expect("Failed to copy data to device");
                     }
                     CuHandleInner::Pooled(to) => {
-                        self.device
-                            .htod_sync_copy_into(from, to.as_cuda_slice_mut())
+                        let wrapper = Self::get_host_slice_wrapper(&*from_lock);
+                        self.stream
+                            .memcpy_htod(&wrapper, to.as_cuda_slice_mut())
                             .expect("Failed to copy data to device");
                     }
-                },
-                CuHandleInner::Pooled(from) => match to_handle.lock().unwrap().deref_mut() {
-                    CuHandleInner::Detached(CudaSliceWrapper(to)) => {
-                        self.device
-                            .htod_sync_copy_into(from, to)
-                            .expect("Failed to copy data to device");
-                    }
-                    CuHandleInner::Pooled(to) => {
-                        self.device
-                            .htod_sync_copy_into(from, to.as_cuda_slice_mut())
-                            .expect("Failed to copy data to device");
-                    }
-                },
-            }
-            to_handle
+                }
+            } // locks are dropped here
+            to_handle // now we can safely return to_handle
         }
     }
 
@@ -457,32 +525,16 @@ mod cuda {
         where
             O: ArrayLike<Element = E>,
         {
-            match device_handle.lock().unwrap().deref() {
-                CuHandleInner::Pooled(source) => match host_handle.lock().unwrap().deref_mut() {
-                    CuHandleInner::Pooled(ref mut destination) => {
-                        self.device
-                            .dtoh_sync_copy_into(source.as_cuda_slice(), destination)
-                            .expect("Failed to copy data to device");
-                    }
-                    CuHandleInner::Detached(ref mut destination) => {
-                        self.device
-                            .dtoh_sync_copy_into(source.as_cuda_slice(), destination)
-                            .expect("Failed to copy data to device");
-                    }
-                },
-                CuHandleInner::Detached(source) => match host_handle.lock().unwrap().deref_mut() {
-                    CuHandleInner::Pooled(ref mut destination) => {
-                        self.device
-                            .dtoh_sync_copy_into(source.as_cuda_slice(), destination)
-                            .expect("Failed to copy data to device");
-                    }
-                    CuHandleInner::Detached(ref mut destination) => {
-                        self.device
-                            .dtoh_sync_copy_into(source.as_cuda_slice(), destination)
-                            .expect("Failed to copy data to device");
-                    }
-                },
-            }
+            let device_lock = device_handle.lock().unwrap();
+            let mut host_lock = host_handle.lock().unwrap();
+            let src = match &*device_lock {
+                CuHandleInner::Pooled(source) => source.as_cuda_slice(),
+                CuHandleInner::Detached(source) => source.as_cuda_slice(),
+            };
+            let mut wrapper = Self::get_host_slice_mut_wrapper(&mut *host_lock);
+            self.stream
+                .memcpy_dtoh(src, &mut wrapper)
+                .expect("Failed to copy data from device to host");
             Ok(())
         }
     }
@@ -575,9 +627,9 @@ mod tests {
     #[test]
     #[ignore] // Can only be executed if a real CUDA device is present
     fn test_cuda_pool() {
-        use cudarc::driver::CudaDevice;
-        let device = CudaDevice::new(0).unwrap();
-        let pool = CuCudaPool::<f32>::new("mytestcudapool", device, 3, 1).unwrap();
+        use cudarc::driver::CudaContext;
+        let ctx = CudaContext::new(0).unwrap();
+        let pool = CuCudaPool::<f32>::new("mytestcudapool", ctx, 3, 1).unwrap();
 
         let _obj1 = pool.acquire().unwrap();
 
@@ -602,10 +654,10 @@ mod tests {
     #[test]
     #[ignore] // Can only be executed if a real CUDA device is present
     fn test_copy_roundtrip() {
-        use cudarc::driver::CudaDevice;
-        let device = CudaDevice::new(0).unwrap();
+        use cudarc::driver::CudaContext;
+        let ctx = CudaContext::new(0).unwrap();
         let host_pool = CuHostMemoryPool::new("mytesthostpool", 3, || vec![0.0; 1]).unwrap();
-        let cuda_pool = CuCudaPool::<f32>::new("mytestcudapool", device, 3, 1).unwrap();
+        let cuda_pool = CuCudaPool::<f32>::new("mytestcudapool", ctx, 3, 1).unwrap();
 
         let cuda_handle = {
             let mut initial_handle = host_pool.acquire().unwrap();
