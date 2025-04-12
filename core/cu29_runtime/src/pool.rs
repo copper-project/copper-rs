@@ -623,7 +623,7 @@ mod tests {
         assert!(obj5.is_none());
     }
 
-    #[cfg(all(feature = "cuda", not(target_os = "macos")))]
+    #[cfg(all(feature = "cuda", has_nvidia_gpu))]
     #[test]
     fn test_cuda_pool() {
         use cudarc::driver::CudaContext;
@@ -649,7 +649,7 @@ mod tests {
         assert!(obj5.is_none());
     }
 
-    #[cfg(all(feature = "cuda", not(target_os = "macos")))]
+    #[cfg(all(feature = "cuda", has_nvidia_gpu))]
     #[test]
     fn test_copy_roundtrip() {
         use cudarc::driver::CudaContext;
