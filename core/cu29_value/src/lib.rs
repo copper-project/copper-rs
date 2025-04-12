@@ -570,7 +570,7 @@ mod tests {
         // Verify type discrimination
         assert!(matches!(bool_val, Value::Bool(true)));
         assert!(matches!(i32_val, Value::I32(42)));
-        assert!(matches!(str_val, Value::String(s) if s == "test"));
+        assert!(matches!(str_val, Value::String(ref s) if s == "test"));
         assert!(matches!(unit_val, Value::Unit));
         assert!(matches!(option_val, Value::Option(Some(_))));
 
@@ -598,7 +598,15 @@ mod tests {
 
         // Make sure these encode and decode correctly
         for val in [
-            min_i8, max_i8, min_i64, max_u64, nan, pos_inf, neg_inf, zero, neg_zero,
+            min_i8,
+            max_i8,
+            min_i64,
+            max_u64,
+            nan.clone(),
+            pos_inf.clone(),
+            neg_inf.clone(),
+            zero.clone(),
+            neg_zero.clone(),
         ] {
             let encoded = encode_to_vec(&val, standard()).unwrap();
             let (decoded, _): (Value, _) = decode_from_slice(&encoded, standard()).unwrap();
@@ -704,7 +712,7 @@ mod tests {
         // Container comparisons
         assert!(
             Value::Seq(vec![Value::I32(1), Value::I32(2)])
-            Value::Seq(vec![Value::I32(1), Value::I32(3)])
+                < Value::Seq(vec![Value::I32(1), Value::I32(3)])
         );
 
         let mut map1 = BTreeMap::new();
@@ -866,7 +874,7 @@ mod tests {
     fn test_error_handling() {
         // Type mismatch
         let bool_val = Value::Bool(true);
-        let result = bool_val.deserialize_into::<i32>();
+        let result = bool_val.clone().deserialize_into::<i32>();
         assert!(result.is_err());
 
         // Missing fields
@@ -874,7 +882,7 @@ mod tests {
 
         #[derive(Deserialize)]
         struct RequiredFields {
-            required: String,
+            _required: String,
         }
 
         let result = empty_map.deserialize_into::<RequiredFields>();
@@ -927,7 +935,7 @@ mod tests {
         }
 
         // Test various Unicode characters
-        let chars = vec!['a', 'é', '日', '🦀', "\u{1F468}\u{200D}\u{1F469}"];
+        let chars = vec!['a', 'é', '日', '🦀'];
 
         for c in chars {
             let char_val = Value::Char(c);
@@ -951,7 +959,7 @@ mod tests {
         let value = to_value(&original).unwrap();
 
         // Create a deserializer
-        let deserializer = ValueDeserializer::new(value);
+        let deserializer: de::ValueDeserializer<DeserializerError> = ValueDeserializer::new(value);
 
         // Use it to deserialize
         let result: Vec<i32> = serde::Deserialize::deserialize(deserializer).unwrap();
@@ -1032,6 +1040,7 @@ mod tests {
         let u16_val = Value::U16(42);
         let u32_val = Value::U32(42);
         let u64_val = Value::U64(42);
+        let u64_val_large = Value::U64(u64::MAX);
         let f32_val = Value::F32(42.0);
         let f64_val = Value::F64(42.0);
 
@@ -1039,15 +1048,18 @@ mod tests {
         // Note: Some of these might depend on implementation details
         assert!(i8_val.deserialize_into::<i16>().is_ok());
         assert!(i16_val.deserialize_into::<i32>().is_ok());
-        assert!(i32_val.deserialize_into::<i64>().is_ok());
+        assert!(i32_val.clone().deserialize_into::<i64>().is_ok());
         assert!(u8_val.deserialize_into::<u16>().is_ok());
         assert!(u16_val.deserialize_into::<u32>().is_ok());
         assert!(u32_val.deserialize_into::<u64>().is_ok());
+        assert!(u64_val.clone().deserialize_into::<f64>().is_ok());
         assert!(i32_val.deserialize_into::<f32>().is_ok());
-        assert!(i64_val.deserialize_into::<f64>().is_ok());
+        assert!(f32_val.deserialize_into::<f64>().is_ok());
+        assert!(i64_val.clone().deserialize_into::<f64>().is_ok());
+        assert!(u64_val.deserialize_into::<i8>().is_ok());
 
         // Test conversions that shouldn't work
-        assert!(u64_val.deserialize_into::<i8>().is_err());
+        assert!(u64_val_large.deserialize_into::<i8>().is_err());
         assert!(f64_val.deserialize_into::<u32>().is_err());
         assert!(i64_val.deserialize_into::<bool>().is_err());
     }
@@ -1061,7 +1073,10 @@ mod tests {
             (Value::I32(42), "42"),
             (Value::String("test".to_string()), "test"),
             (Value::Unit, "()"),
-            (Value::CuTime(CuTime::from(CuDuration(1_000_000_000))), "1s"),
+            (
+                Value::CuTime(CuTime::from(CuDuration(1_000_000_000))),
+                "1.000 s",
+            ),
         ];
 
         for (val, expected) in values {
@@ -1104,13 +1119,13 @@ mod tests {
         let as_f64: f64 = as_value.deserialize_into().unwrap();
         let round_trip = Value::F64(as_f64).deserialize_into::<i64>();
 
-        // This will likely fail due to precision loss
-        assert_ne!(round_trip.unwrap(), original);
+        // the round_trip should return Error since f64 cannot represent all i64 values
+        assert!(round_trip.is_err());
 
         // Fractional values to integers
         let half = Value::F64(0.5);
-        let result = half.deserialize_into::<i32>();
-        // Does it truncate, round, or reject? The test depends on expected behavior
+        let half_as_i32 = half.deserialize_into::<i32>();
+        assert!(half_as_i32.is_err());
     }
 
     #[test]
