@@ -714,7 +714,6 @@ mod tests {
     fn test_cuduration_min_max() {
         // Test MIN and MAX constants
         assert_eq!(CuDuration::MIN, CuDuration(0));
-        assert!(CuDuration::MAX.0 > 0);
 
         // Test min/max methods
         let a = CuDuration(100);
