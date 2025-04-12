@@ -591,7 +591,6 @@ impl<E: ElementType> Drop for AlignedBuffer<E> {
 mod tests {
     use super::*;
     #[cfg(all(feature = "cuda", not(target_os = "macos")))]
-    use crate::pool::cuda::CuCudaPool;
     use std::cell::RefCell;
 
     #[test]
@@ -626,6 +625,7 @@ mod tests {
     #[cfg(all(feature = "cuda", has_nvidia_gpu))]
     #[test]
     fn test_cuda_pool() {
+        use crate::pool::cuda::CuCudaPool;
         use cudarc::driver::CudaContext;
         let ctx = CudaContext::new(0).unwrap();
         let pool = CuCudaPool::<f32>::new("mytestcudapool", ctx, 3, 1).unwrap();
@@ -652,6 +652,7 @@ mod tests {
     #[cfg(all(feature = "cuda", has_nvidia_gpu))]
     #[test]
     fn test_copy_roundtrip() {
+        use crate::pool::cuda::CuCudaPool;
         use cudarc::driver::CudaContext;
         let ctx = CudaContext::new(0).unwrap();
         let host_pool = CuHostMemoryPool::new("mytesthostpool", 3, || vec![0.0; 1]).unwrap();
