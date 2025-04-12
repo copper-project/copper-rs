@@ -590,11 +590,10 @@ impl<E: ElementType> Drop for AlignedBuffer<E> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(all(feature = "cuda", not(target_os = "macos")))]
-    use std::cell::RefCell;
-
+    
     #[test]
     fn test_pool() {
+        use std::cell::RefCell;
         let objs = RefCell::new(vec![vec![1], vec![2], vec![3]]);
         let holding = objs.borrow().clone();
         let objs_as_slices = holding.iter().map(|x| x.as_slice()).collect::<Vec<_>>();
