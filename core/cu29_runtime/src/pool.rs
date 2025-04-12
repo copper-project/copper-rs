@@ -625,7 +625,6 @@ mod tests {
 
     #[cfg(all(feature = "cuda", not(target_os = "macos")))]
     #[test]
-    #[ignore] // Can only be executed if a real CUDA device is present
     fn test_cuda_pool() {
         use cudarc::driver::CudaContext;
         let ctx = CudaContext::new(0).unwrap();
@@ -652,7 +651,6 @@ mod tests {
 
     #[cfg(all(feature = "cuda", not(target_os = "macos")))]
     #[test]
-    #[ignore] // Can only be executed if a real CUDA device is present
     fn test_copy_roundtrip() {
         use cudarc::driver::CudaContext;
         let ctx = CudaContext::new(0).unwrap();
