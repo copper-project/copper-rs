@@ -671,7 +671,7 @@ mod tests {
     #[test]
     fn test_large_values() {
         // Large sequence
-        let large_seq = Value::Seq((0..10000).map(|i| Value::I32(i)).collect());
+        let large_seq = Value::Seq((0..10000).map(Value::I32).collect());
 
         // Large string
         let large_string = Value::String("x".repeat(100000));
@@ -736,7 +736,7 @@ mod tests {
             Value::Bool(true),
             Value::I32(42),
             Value::String("hash me".to_string()),
-            Value::F64(3.14),
+            Value::F64(3.1),
             Value::Char('🦀'),
             Value::Option(Some(Box::new(Value::U8(5)))),
             Value::Unit,
@@ -860,7 +860,7 @@ mod tests {
             assert_eq!(time_value, decoded);
 
             // Convert through to_value
-            let via_to_value = to_value(&time).unwrap();
+            let via_to_value = to_value(time).unwrap();
             assert_eq!(via_to_value, time_value);
 
             // Deserialize back to CuTime
@@ -979,9 +979,9 @@ mod tests {
         let none_string: Option<String> = None;
 
         // Convert to Value
-        let some_i32_value = to_value(&some_i32).unwrap();
+        let some_i32_value = to_value(some_i32).unwrap();
         let some_string_value = to_value(&some_string).unwrap();
-        let none_i32_value = to_value(&none_i32).unwrap();
+        let none_i32_value = to_value(none_i32).unwrap();
         let none_string_value = to_value(&none_string).unwrap();
 
         // Check structure
@@ -1009,7 +1009,7 @@ mod tests {
         let nested_option: Option<Option<Option<i32>>> = Some(Some(Some(42)));
 
         // Convert to Value
-        let value = to_value(&nested_option).unwrap();
+        let value = to_value(nested_option).unwrap();
 
         // Verify structure
         let mut current = &value;
