@@ -9,7 +9,7 @@ use cu29::clock::{CuDuration, RobotClock};
 use cu29::config::{CuConfig, Node};
 use cu29::cutask::CuMsgMetadata;
 use cu29::monitoring::{CuDurationStatistics, CuMonitor, CuTaskState, Decision};
-use cu29::prelude::CuCompactString;
+use cu29::prelude::{pool, CuCompactString};
 use cu29::{CuError, CuResult};
 #[cfg(feature = "debug_pane")]
 use debug_pane::UIExt;
@@ -32,15 +32,16 @@ use std::io::stdout;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::{io, thread};
 use tui_nodes::{Connection, NodeGraph, NodeLayout};
 use tui_widgets::scrollview::{ScrollView, ScrollViewState};
 
 #[cfg(feature = "debug_pane")]
-const MENU_CONTENT: &str = "   [1] SysInfo  [2] DAG  [3] Latencies  [4] Debug Output  [q] Quit   ";
+const MENU_CONTENT: &str =
+    "   [1] SysInfo  [2] DAG  [3] Latencies  [4] Memory Pools [5] Debug Output  [q] Quit   ";
 #[cfg(not(feature = "debug_pane"))]
-const MENU_CONTENT: &str = "   [1] SysInfo  [2] DAG  [3] Latencies  [q] Quit   ";
+const MENU_CONTENT: &str = "   [1] SysInfo  [2] DAG  [3] Latencies  [4] Memory Pools [q] Quit   ";
 
 #[derive(PartialEq)]
 enum Screen {
@@ -49,6 +50,7 @@ enum Screen {
     Latency,
     #[cfg(feature = "debug_pane")]
     DebugOutput,
+    MemoryPools,
 }
 
 struct TaskStats {
@@ -83,7 +85,53 @@ impl TaskStats {
         self.end2end.reset();
     }
 }
+struct PoolStats {
+    id: CompactString,
+    space_left: usize,
+    total_size: usize,
+    buffer_size: usize,
+    handles_in_use: usize,
+    handles_per_second: usize,
+    last_update: Instant,
+    prev_handles_in_use: usize,
+}
 
+impl PoolStats {
+    fn new(
+        id: impl ToCompactString,
+        space_left: usize,
+        total_size: usize,
+        buffer_size: usize,
+    ) -> Self {
+        Self {
+            id: id.to_compact_string(),
+            space_left,
+            total_size,
+            buffer_size,
+            handles_in_use: total_size - space_left,
+            handles_per_second: 0,
+            last_update: Instant::now(),
+            prev_handles_in_use: 0,
+        }
+    }
+
+    fn update(&mut self, space_left: usize, total_size: usize) {
+        let now = Instant::now();
+        let handles_in_use = total_size - space_left;
+        let elapsed = now.duration_since(self.last_update).as_secs_f32();
+
+        if elapsed >= 1.0 {
+            self.handles_per_second =
+                ((handles_in_use.abs_diff(self.handles_in_use)) as f32 / elapsed) as usize;
+            self.prev_handles_in_use = self.handles_in_use;
+            self.last_update = now;
+        }
+
+        self.handles_in_use = handles_in_use;
+        self.space_left = space_left;
+        self.total_size = total_size;
+    }
+}
 fn compute_end_to_end_latency(msgs: &[&CuMsgMetadata]) -> CuDuration {
     msgs.last().unwrap().process_time.end.unwrap()
         - msgs.first().unwrap().process_time.start.unwrap()
@@ -284,6 +332,7 @@ pub struct CuConsoleMon {
     taskids: &'static [&'static str],
     task_stats: Arc<Mutex<TaskStats>>,
     task_statuses: Arc<Mutex<Vec<TaskStatus>>>,
+    pool_stats: Arc<Mutex<Vec<PoolStats>>>,
     quitting: Arc<AtomicBool>,
 }
 
@@ -297,6 +346,7 @@ struct UI {
     error_redirect: gag::BufferRedirect,
     #[cfg(feature = "debug_pane")]
     debug_output: Option<debug_pane::DebugLog>,
+    pool_stats: Arc<Mutex<Vec<PoolStats>>>,
 }
 
 impl UI {
@@ -308,6 +358,7 @@ impl UI {
         task_statuses: Arc<Mutex<Vec<TaskStatus>>>,
         error_redirect: gag::BufferRedirect,
         debug_output: Option<debug_pane::DebugLog>,
+        pool_stats: Arc<Mutex<Vec<PoolStats>>>,
     ) -> UI {
         init_error_hooks();
         let nodes_scrollable_widget_state =
@@ -321,6 +372,7 @@ impl UI {
             nodes_scrollable_widget_state,
             error_redirect,
             debug_output,
+            pool_stats,
         }
     }
 
@@ -330,6 +382,7 @@ impl UI {
         task_ids: &'static [&'static str],
         task_stats: Arc<Mutex<TaskStats>>,
         task_statuses: Arc<Mutex<Vec<TaskStatus>>>,
+        pool_stats: Arc<Mutex<Vec<PoolStats>>>,
     ) -> UI {
         init_error_hooks();
         let nodes_scrollable_widget_state =
@@ -341,6 +394,7 @@ impl UI {
             sysinfo: sysinfo::pfetch_info(),
             task_stats,
             nodes_scrollable_widget_state,
+            pool_stats,
         }
     }
 
@@ -461,6 +515,86 @@ impl UI {
         f.render_widget(table, area);
     }
 
+    fn draw_memory_pools(&self, f: &mut Frame, area: Rect) {
+        let header_cells = [
+            "Pool ID",
+            "Used/Total",
+            "Buffer Size",
+            "Handles in Use",
+            "Handles/sec",
+        ]
+        .iter()
+        .map(|h| {
+            Cell::from(Line::from(*h).alignment(Alignment::Center)).style(
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )
+        });
+
+        let header = Row::new(header_cells)
+            .style(Style::default().fg(Color::Yellow))
+            .bottom_margin(1);
+
+        let pool_stats = self.pool_stats.lock().unwrap();
+        let rows = pool_stats
+            .iter()
+            .map(|stat| {
+                let used = stat.total_size - stat.space_left;
+                let percent = if stat.total_size > 0 {
+                    100.0 * used as f64 / stat.total_size as f64
+                } else {
+                    0.0
+                };
+
+                let cells = vec![
+                    Cell::from(Line::from(stat.id.to_string()).alignment(Alignment::Left))
+                        .light_blue(),
+                    Cell::from(
+                        Line::from(format!(
+                            "{} / {} MB ({:.1}%)",
+                            used / (1024 * 1024),
+                            stat.total_size / (1024 * 1024),
+                            percent
+                        ))
+                        .alignment(Alignment::Right),
+                    ),
+                    Cell::from(
+                        Line::from(format!("{} KB", stat.buffer_size / 1024))
+                            .alignment(Alignment::Right),
+                    ),
+                    Cell::from(
+                        Line::from(format!("{}", stat.handles_in_use)).alignment(Alignment::Right),
+                    ),
+                    Cell::from(
+                        Line::from(format!("{}/s", stat.handles_per_second))
+                            .alignment(Alignment::Right),
+                    ),
+                ];
+                Row::new(cells)
+            })
+            .collect::<Vec<Row>>();
+
+        let table = Table::new(
+            rows,
+            &[
+                Constraint::Percentage(30),
+                Constraint::Percentage(20),
+                Constraint::Percentage(15),
+                Constraint::Percentage(15),
+                Constraint::Percentage(20),
+            ],
+        )
+        .header(header)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Memory Pools "),
+        );
+
+        f.render_widget(table, area);
+    }
+
     fn draw_nodes(&mut self, f: &mut Frame, space: Rect) {
         NodesScrollableWidget {
             _marker: Default::default(),
@@ -510,6 +644,7 @@ impl UI {
                 self.draw_nodes(f, layout[1]);
             }
             Screen::Latency => self.draw_latency_table(f, layout[1]),
+            Screen::MemoryPools => self.draw_memory_pools(f, layout[1]),
             #[cfg(feature = "debug_pane")]
             Screen::DebugOutput => self.draw_debug_output(f, layout[1]),
         };
@@ -532,8 +667,9 @@ impl UI {
                         KeyCode::Char('1') => self.active_screen = Screen::Neofetch,
                         KeyCode::Char('2') => self.active_screen = Screen::Dag,
                         KeyCode::Char('3') => self.active_screen = Screen::Latency,
+                        KeyCode::Char('4') => self.active_screen = Screen::MemoryPools,
                         #[cfg(feature = "debug_pane")]
-                        KeyCode::Char('4') => self.active_screen = Screen::DebugOutput,
+                        KeyCode::Char('5') => self.active_screen = Screen::DebugOutput,
                         KeyCode::Char('r') => {
                             if self.active_screen == Screen::Latency {
                                 self.task_stats.lock().unwrap().reset()
@@ -611,6 +747,7 @@ impl CuMonitor for CuConsoleMon {
             task_stats,
             task_statuses: Arc::new(Mutex::new(vec![TaskStatus::default(); taskids.len()])),
             quitting: Arc::new(AtomicBool::new(false)),
+            pool_stats: Arc::new(Mutex::new(Vec::new())),
         })
     }
 
@@ -620,6 +757,7 @@ impl CuMonitor for CuConsoleMon {
 
         let task_stats_ui = self.task_stats.clone();
         let error_states = self.task_statuses.clone();
+        let pool_stats_ui = self.pool_stats.clone();
         let quitting = self.quitting.clone();
 
         // Start the main UI loop
@@ -643,6 +781,7 @@ impl CuMonitor for CuConsoleMon {
                     error_states,
                     error_redirect,
                     None,
+                    pool_stats_ui,
                 );
 
                 // Override the cu29-log-runtime Log Subscriber
@@ -674,7 +813,13 @@ impl CuMonitor for CuConsoleMon {
             {
                 let stderr_gag = gag::Gag::stderr().unwrap();
 
-                let mut ui = UI::new(config_dup, taskids, task_stats_ui, error_states);
+                let mut ui = UI::new(
+                    config_dup,
+                    taskids,
+                    task_stats_ui,
+                    error_states,
+                    pool_stats_ui,
+                );
                 ui.run_app(&mut terminal).expect("Failed to run app");
 
                 drop(stderr_gag);
@@ -700,6 +845,22 @@ impl CuMonitor for CuConsoleMon {
                 task_statuses[i].status_txt = status_txt.clone();
                 if task_statuses[i].status_txt.as_bytes()[0] == 0 {
                     task_statuses[i].status_txt = "".to_compact_string();
+                }
+            }
+        }
+
+        // Update pool statistics
+        {
+            let pool_stats_data = pool::pools_statistics();
+            let mut pool_stats = self.pool_stats.lock().unwrap();
+
+            // Update existing pools or add new ones
+            for (id, space_left, total_size, buffer_size) in pool_stats_data {
+                let id_str = id.to_string();
+                if let Some(existing) = pool_stats.iter_mut().find(|p| p.id == id_str) {
+                    existing.update(space_left, total_size);
+                } else {
+                    pool_stats.push(PoolStats::new(id_str, space_left, total_size, buffer_size));
                 }
             }
         }
