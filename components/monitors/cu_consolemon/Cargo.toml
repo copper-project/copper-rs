@@ -13,7 +13,7 @@ repository.workspace = true
 [features]
 default = ["debug_pane"]
 # Enables 'Debug Output' Pane
-debug_pane = ["dep:log", "dep:chrono", "dep:dashmap"]
+debug_pane = ["dep:log", "dep:chrono"]
 
 [dependencies]
 cu29 = { workspace = true }
@@ -23,7 +23,7 @@ ratatui = "0.29"
 pfetch-logo-parser = "0.1.1"
 pfetch = "2.11.1"
 dotenvy = "0.15.7"
-libmacchina = "8.0.0" # 8.0.0+ is not supported by pfetch at the time of writing
+libmacchina = "8.0.0"
 ansi-to-tui = "7.0.0"
 tui-nodes = "0.8.0"
 tui-widgets = "0.4.1"
@@ -31,4 +31,3 @@ color-eyre = "0.6.3"
 gag = "1.0.0"
 log = { version = "0.4.26", features = ["std"], optional = true }
 chrono = { version = "0.4.40", optional = true }
-dashmap = { version = "6.1.0", optional = true }

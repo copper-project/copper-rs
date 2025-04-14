@@ -31,4 +31,4 @@ fs_extra = "1.3.0"
 
 [features]
 default = []
-python = ["pyo3"]
+python = ["dep:pyo3"]
