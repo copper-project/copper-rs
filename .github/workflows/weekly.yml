@@ -51,7 +51,8 @@ jobs:
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.mode }}-${{ hashFiles('**/Cargo.lock') }}
+          prefix-key: ${{ matrix.mode }}-${{ hashFiles('Cargo.lock') }}
+          shared-key: rust-${{ matrix.os }}
       - name: Install latest nextest
         uses: taiki-e/install-action@nextest
       - name: Install winget
