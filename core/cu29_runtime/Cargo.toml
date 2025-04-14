@@ -11,8 +11,6 @@ categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
-[package.metadata.cargo-machete]
-ignored = ["cu29-log-runtime", "cu29-log"] # It is used from a proc macro
 
 [[bin]]
 name = "cu29-rendercfg"
@@ -47,6 +45,6 @@ cudarc = { version = "0.15.0", optional = true, features = ["cuda-version-from-b
 
 [features]
 default = []
-cuda = ["cudarc"]
-gst = ["gstreamer", "gstreamer-app"]
+cuda = ["dep:cudarc"]
+gst = ["dep:gstreamer", "dep:gstreamer-app"]
 macro_debug = []
