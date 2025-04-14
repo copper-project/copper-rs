@@ -15,8 +15,8 @@ repository.workspace = true
 cu29 = { workspace = true }
 bincode = { workspace = true }
 circular-buffer = "1.0.0"
-gstreamer = "0.23.5"
-gstreamer-app = "0.23.5"
+gstreamer = { version = "0.23.5", optional = true }
+gstreamer-app = { version = "0.23.5", optional = true }
 
 [dev-dependencies]
 rerun = { workspace = true }
@@ -24,3 +24,6 @@ cu29-helpers = { workspace = true }
 
 [build-dependencies]
 cfg_aliases = "0.2.1"
+
+[features]
+gst = [ "dep:gstreamer", "dep:gstreamer-app" ]
