@@ -204,6 +204,7 @@ impl<'cl> CuTask<'cl> for DynThreshold {
 }
 
 #[cfg(test)]
+#[cfg(feature = "gst")]
 mod tests {
     use crate::DynThreshold;
     use cu29::prelude::*;

@@ -1,5 +1,5 @@
 #[cfg(feature = "gst")]
-mod cu_dynthreadold_impl;
+mod cu_dynthreshold_impl;
 
 #[cfg(feature = "gst")]
 pub use cu_dynthreshold_impl::*;
