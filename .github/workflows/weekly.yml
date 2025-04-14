@@ -3,6 +3,7 @@ name: Weekly Audit and Beta Test
 on:
   schedule:
     - cron: "0 12 * * 1"
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
