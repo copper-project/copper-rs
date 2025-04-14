@@ -46,7 +46,7 @@ impl CuV4LStream {
             4,
             || vec![0; buf_size],
         )
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        .map_err(io::Error::other)?;
 
         CuV4LStream::with_buffers(dev, buf_type, 4, pool)
     }
@@ -275,8 +275,7 @@ impl CaptureStream<'_> for CuV4LStream {
 
     fn next(&mut self) -> io::Result<(&Self::Item, &Metadata)> {
         if !self.active {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
+            return Err(io::Error::other(
                 "Stream is not active. Call start() first.",
             ));
         } else {
