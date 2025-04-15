@@ -17,7 +17,8 @@ cargo install cargo-generate
 Now you can generate a new Copper project, for example execute this from this directory to build an end to end Copper project:
 
 ```bash
-cargo cunew [destination folder]
+cd templates
+cargo +stable generate -p cu_full --name test_project --destination . -d copper_source=local --silent
 ```
 
 It should ask you what is your project name and it should generate a full project for you.
