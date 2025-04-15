@@ -74,7 +74,7 @@ cargo nextest run --workspace --all-targets --features macro_debug,mock,perf-ui,
     ```
 7. **Create a Pull Request**: Open a pull request (PR) from your branch to the master branch of the main copper-rs repository. Provide a clear description of your changes in the PR.
 
-## Dependency Manaegment
+## Dependency Management
 
 We keep our dependencies minimal and up-to-date.
 
