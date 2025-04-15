@@ -51,11 +51,11 @@ cargo nextest run --workspace --all-targets --features macro_debug,mock,perf-ui,
 
 2. **Clone Your Fork**: Clone your forked repository to your local machine.
     ```bash
-    git clone [https://github.com/YOUR_USERNAME/copper-rs.git](https://github.com/YOUR_USERNAME/copper-rs.git)
+    git clone https://github.com/YOUR_USERNAME/copper-rs.git
     cd copper-rs
     ```
 
-3. **Create a Branch**: Create a new branch for your changes. Choose a descriptive branch name.
+3. **Create a Branch**: Create a new branch for your changes. Choose a descriptive branch name. ex: ```yang/chore/beta_clippy```, ```gbin/feat/soa```, ```gbin/fix/balancebot_sim```.
     ```bash
     git checkout -b user/feat/description
     ```
