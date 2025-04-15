@@ -2,9 +2,6 @@ use std::path::{Path, PathBuf};
 use std::{fs, io};
 
 fn main() {
-    if cfg!(target_os = "windows") {
-        println!("cargo:rustc-link-lib=advapi32");
-    }
     println!("cargo::rerun-if-changed=tests/config");
     let trybuild_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap())
         .ancestors()
