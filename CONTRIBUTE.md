@@ -65,7 +65,7 @@ cargo nextest run --workspace --all-targets --features macro_debug,mock,perf-ui,
     - **Formatting**: ```cargo fmt --all -- --check```
     - **Clippy Lints**: ```cargo clippy --workspace --all-targets -- --deny warnings```
     - **Tests**: ```cargo nextest run --workspace --all-targets``` (run with relevant features if applicable)
-    - **Typos**: Ensure you run a spell checker. We use ```typos --config .config/_typos.toml``.
+    - **Typos**: Ensure you run a spell checker. We use ```typos --config .config/_typos.toml```.
 6. **Commit and push Changes**: Commit your changes with clear and descriptive commit messages. (Consider using [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/))
     ```bash
     git add .
