@@ -130,7 +130,7 @@ impl<'cl> CuTask<'cl> for DynThreshold {
             .expect("No block_radius provided");
 
         let pool =
-            CuHostMemoryPool::new("mytestcudapool", 3, || vec![0u8; (width * height) as usize])?;
+            CuHostMemoryPool::new("dynthreshold", 3, || vec![0u8; (width * height) as usize])?;
         Ok(DynThreshold {
             integral_img: vec![0; ((width + 1) * (height + 1)) as usize],
             pool,
