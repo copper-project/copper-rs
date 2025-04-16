@@ -28,19 +28,32 @@ where
     where
         Self: Sized,
     {
-        let config = config.ok_or_else(|| CuError::from("You need a config"))?;
-        let service_name = config
-            .get::<String>("service")
-            .ok_or_else(|| CuError::from("You need a service name"))?;
+        let config =
+            config.ok_or_else(|| CuError::from("IceoryxSource: Missing configuration."))?;
+        let service_name_str = config.get::<String>("service").ok_or_else(|| {
+            CuError::from("IceoryxSource: Configuration requires 'service' key (string).")
+        })?;
 
-        debug!("Service name: {}", service_name.as_str());
+        debug!(
+            "IceoryxSource: Configuring service name: {}",
+            service_name_str.as_str()
+        );
 
-        let service_name = ServiceName::new(service_name.as_str())
-            .map_err(|e| CuError::new_with_cause("Failed to create service name.", e))?;
+        let service_name = ServiceName::new(service_name_str.as_str()).map_err(|e| {
+            CuError::new_with_cause("IceoryxSource: Failed to create service name.", e)
+        })?;
 
-        let node: iceoryx2::prelude::Node<ipc::Service> = NodeBuilder::new()
-            .create::<ipc::Service>()
-            .map_err(|e| CuError::new_with_cause("Failed to create node.", e))?;
+        let node: iceoryx2::prelude::Node<ipc::Service> =
+            NodeBuilder::new().create::<ipc::Service>().map_err(|e| {
+                CuError::new_with_cause(
+                    format!(
+                        "IceoryxSource({}): Failed to create node.",
+                        service_name_str
+                    )
+                    .as_str(),
+                    e,
+                )
+            })?;
 
         Ok(Self {
             service_name,
@@ -56,12 +69,27 @@ where
             .service_builder(&self.service_name)
             .publish_subscribe::<CuMsg<P>>()
             .open_or_create()
-            .map_err(|e| CuError::new_with_cause("Failed to create service.", e))?;
+            .map_err(|e| {
+                CuError::new_with_cause(
+                    format!(
+                        "IceoryxSource({}): Failed to create service.",
+                        self.service_name
+                    )
+                    .as_str(),
+                    e,
+                )
+            })?;
 
-        let subscriber = service
-            .subscriber_builder()
-            .create()
-            .map_err(|e| CuError::new_with_cause("Failed to create subscriber.", e))?;
+        let subscriber = service.subscriber_builder().create().map_err(|e| {
+            CuError::new_with_cause(
+                format!(
+                    "IceoryxSource({}): Failed to create subscriber.",
+                    self.service_name
+                )
+                .as_str(),
+                e,
+            )
+        })?;
 
         self.subscriber = Some(subscriber);
         self.service = Some(service);
@@ -69,25 +97,45 @@ where
     }
 
     fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
-        let sub = self
-            .subscriber
-            .as_ref()
-            .ok_or_else(|| CuError::from("Subscriber not found"))?;
+        let sub = self.subscriber.as_ref().ok_or_else(|| {
+            CuError::from(
+                format!(
+                    "IceoryxSource({}): Subscriber not found.",
+                    self.service_name
+                )
+                .as_str(),
+            )
+        })?;
 
-        if let Some(icemsg) = sub
-            .receive()
-            .map_err(|e| CuError::new_with_cause("Error receiving message.", e))?
-        {
+        if let Some(icemsg) = sub.receive().map_err(|e| {
+            CuError::new_with_cause(
+                format!(
+                    "IceoryxSource({}): Error receiving message.",
+                    self.service_name
+                )
+                .as_str(),
+                e,
+            )
+        })? {
             new_msg.set_payload(
                 icemsg
                     .payload()
                     .payload()
-                    .ok_or(CuError::from("Failed to get payload."))?
+                    .ok_or(CuError::from(
+                        format!(
+                            "IceoryxSource({}): Failed to get payload.",
+                            self.service_name
+                        )
+                        .as_str(),
+                    ))?
                     .clone(),
             );
             new_msg.metadata.tov = icemsg.payload().metadata.tov;
         } else {
-            debug!("No message received");
+            debug!(
+                "IceoryxSource({}): No message received.",
+                self.service_name.as_str()
+            );
         }
 
         Ok(())
@@ -95,6 +143,7 @@ where
     fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
         self.service = None;
         self.subscriber = None;
+        debug!("IceoryxSource({}): Stopped.", self.service_name.as_str());
         Ok(())
     }
 }
