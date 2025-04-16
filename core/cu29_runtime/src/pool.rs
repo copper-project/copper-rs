@@ -46,9 +46,13 @@ type PoolStats = (PoolID, usize, usize, usize);
 /// Get the list of pools and their statistics.
 /// We use SmallVec here to avoid heap allocations while the stack is running.
 pub fn pools_statistics() -> SmallVec<[PoolStats; MAX_POOLS]> {
-    let registry = POOL_REGISTRY.get().unwrap().lock().unwrap();
+    // Safely get the registry, returning empty stats if not initialized.
+    let registry_lock = match POOL_REGISTRY.get() {
+        Some(lock) => lock.lock().unwrap(),
+        None => return SmallVec::new(), // Return empty if registry is not initialized
+    };
     let mut result = SmallVec::with_capacity(MAX_POOLS);
-    for pool in registry.values() {
+    for pool in registry_lock.values() {
         result.push((
             pool.id(),
             pool.space_left(),
