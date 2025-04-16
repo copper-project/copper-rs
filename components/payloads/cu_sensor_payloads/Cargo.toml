@@ -17,7 +17,7 @@ cu29-clock = { workspace = true }
 cu29 = { workspace = true }
 uom = { workspace = true }
 derive_more = { workspace = true }
-image = { version = "0.25.5", optional = true }
+image = { version = "0.25.6", optional = true }
 kornia = { version = "0.1.8", optional = true }
 
 [features]
