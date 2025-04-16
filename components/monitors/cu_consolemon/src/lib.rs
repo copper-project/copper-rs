@@ -525,7 +525,7 @@ impl UI {
         ]
         .iter()
         .map(|h| {
-            Cell::from(Line::from(*h).alignment(Alignment::Center)).style(
+            Cell::from(Line::from(*h).alignment(Alignment::Right)).style(
                 Style::default()
                     .fg(Color::Yellow)
                     .add_modifier(Modifier::BOLD),
@@ -546,15 +546,17 @@ impl UI {
                 } else {
                     0.0
                 };
+                let buffer_size = stat.buffer_size;
+                let mb_unit = 1024.0 * 1024.0;
 
                 let cells = vec![
-                    Cell::from(Line::from(stat.id.to_string()).alignment(Alignment::Left))
+                    Cell::from(Line::from(stat.id.to_string()).alignment(Alignment::Right))
                         .light_blue(),
                     Cell::from(
                         Line::from(format!(
-                            "{} / {} MB ({:.1}%)",
-                            used / (1024 * 1024),
-                            stat.total_size / (1024 * 1024),
+                            "{:.2} MB / {:.2} MB ({:.1}%)",
+                            used as f64 * buffer_size as f64 / mb_unit,
+                            stat.total_size as f64 * buffer_size as f64 / mb_unit,
                             percent
                         ))
                         .alignment(Alignment::Right),
