@@ -15,4 +15,4 @@ repository.workspace = true
 uom = { workspace = true }
 cu29 = { workspace = true }
 bincode = { workspace = true }
-serialport = "4.7.0"
+serialport = "4.7.1"
