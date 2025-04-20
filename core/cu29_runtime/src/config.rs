@@ -206,10 +206,14 @@ impl Display for Value {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Node {
     id: String,
+
     #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
     type_: Option<String>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     config: Option<ComponentConfig>,
+
+    missions: Option<Vec<String>>,
 }
 
 impl Node {
@@ -220,6 +224,7 @@ impl Node {
             type_: Some(ptype.to_string()),
             // base_period_ns: None,
             config: None,
+            missions: None,
         }
     }
 
@@ -272,6 +277,9 @@ pub struct Cnx {
 
     /// Message type exchanged between src and dst.
     pub msg: String,
+
+    /// Restrict this connection for this list of missions.
+    pub missions: Option<Vec<String>>,
 
     /// Tells Copper to batch messages before sending the buffer to the next node.
     /// If None, Copper will just send 1 message at a time.
@@ -340,6 +348,7 @@ pub struct MissionsConfig {
 pub struct IncludesConfig {
     pub path: String,
     pub params: HashMap<String, Value>,
+    pub missions: Option<Vec<String>>,
 }
 
 /// This is the main Copper configuration representation.
@@ -385,6 +394,7 @@ impl<'de> Deserialize<'de> for CuConfig {
                     src.index() as NodeId,
                     dst.index() as NodeId,
                     &c.msg,
+                    c.missions,
                     c.batch,
                     c.store,
                 );
@@ -549,9 +559,11 @@ impl CuConfig {
         source: NodeId,
         target: NodeId,
         msg_type: &str,
+        missions: Option<Vec<String>>,
         batch: Option<u32>,
         store: Option<bool>,
     ) {
+        // TODO: build the mission hashmap here.
         self.graph.add_edge(
             source.into(),
             target.into(),
@@ -567,6 +579,7 @@ impl CuConfig {
                     .id
                     .clone(),
                 msg: msg_type.to_string(),
+                missions,
                 batch,
                 store,
             },
@@ -577,7 +590,7 @@ impl CuConfig {
     /// msg_type is the type of message exchanged between the two nodes/tasks.
     #[allow(dead_code)]
     pub fn connect(&mut self, source: NodeId, target: NodeId, msg_type: &str) {
-        self.connect_ext(source, target, msg_type, None, None);
+        self.connect_ext(source, target, msg_type, None, None, None);
     }
 
     fn get_options() -> Options {
