@@ -282,14 +282,17 @@ pub struct Cnx {
     pub store: Option<bool>,
 }
 
+pub type CuGraph = StableDiGraph<Node, Cnx, NodeId>;
+
 /// CuConfig is the programmatic representation of the configuration graph.
 /// It is a directed graph where nodes are tasks and edges are connections between tasks.
 #[derive(Debug, Clone)]
 pub struct CuConfig {
     // This is not what is directly serialized, see the custom serialization below.
-    pub graph: StableDiGraph<Node, Cnx, NodeId>,
+    pub graph: CuGraph,
     pub monitor: Option<MonitorConfig>,
     pub logging: Option<LoggingConfig>,
+    pub missions: HashMap<String, CuGraph>,
 }
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
@@ -326,13 +329,28 @@ pub struct LoggingConfig {
     pub enable_task_logging: bool,
 }
 
-/// The config is a list of tasks and their connections.
+/// Missions are used to generate alternative DAGs within the same configuration.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct MissionsConfig {
+    pub id: String,
+}
+
+/// Includes are used to include other configuration files.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct IncludesConfig {
+    pub path: String,
+    pub params: HashMap<String, Value>,
+}
+
+/// This is the main Copper configuration representation.
 #[derive(Serialize, Deserialize, Default)]
 struct CuConfigRepresentation {
-    tasks: Vec<Node>,
-    cnx: Vec<Cnx>,
+    tasks: Option<Vec<Node>>,
+    cnx: Option<Vec<Cnx>>,
     monitor: Option<MonitorConfig>,
     logging: Option<LoggingConfig>,
+    missions: Option<Vec<MissionsConfig>>,
+    includes: Option<Vec<IncludesConfig>>,
 }
 
 impl<'de> Deserialize<'de> for CuConfig {
@@ -345,31 +363,45 @@ impl<'de> Deserialize<'de> for CuConfig {
             CuConfigRepresentation::deserialize(deserializer).map_err(serde::de::Error::custom)?;
 
         let mut cuconfig = CuConfig::default();
-        for task in representation.tasks {
-            cuconfig.add_node(task);
+        if let Some(tasks) = representation.tasks {
+            for task in tasks {
+                cuconfig.add_node(task);
+            }
         }
 
-        for c in representation.cnx {
-            let src = cuconfig
-                .graph
-                .node_indices()
-                .find(|i| cuconfig.graph[*i].id == c.src)
-                .expect("Source node not found");
-            let dst = cuconfig
-                .graph
-                .node_indices()
-                .find(|i| cuconfig.graph[*i].id == c.dst)
-                .unwrap_or_else(|| panic!("Destination {} node not found", c.dst));
-            cuconfig.connect_ext(
-                src.index() as NodeId,
-                dst.index() as NodeId,
-                &c.msg,
-                c.batch,
-                c.store,
-            );
+        if let Some(cnx) = representation.cnx {
+            for c in cnx {
+                let src = cuconfig
+                    .graph
+                    .node_indices()
+                    .find(|i| cuconfig.graph[*i].id == c.src)
+                    .expect("Source node not found");
+                let dst = cuconfig
+                    .graph
+                    .node_indices()
+                    .find(|i| cuconfig.graph[*i].id == c.dst)
+                    .unwrap_or_else(|| panic!("Destination {} node not found", c.dst));
+                cuconfig.connect_ext(
+                    src.index() as NodeId,
+                    dst.index() as NodeId,
+                    &c.msg,
+                    c.batch,
+                    c.store,
+                );
+            }
         }
+
         cuconfig.monitor = representation.monitor;
         cuconfig.logging = representation.logging;
+
+        // Build the missions one by one.
+        if let Some(mission_configs) = &representation.missions {
+            for mission in mission_configs {
+                let id = mission.id.clone();
+                let mission_graph = StableDiGraph::new();
+                cuconfig.missions.insert(id, mission_graph);
+            }
+        }
         Ok(cuconfig)
     }
 }
@@ -393,10 +425,12 @@ impl Serialize for CuConfig {
             .collect();
 
         CuConfigRepresentation {
-            tasks,
-            cnx,
+            tasks: Some(tasks),
+            cnx: Some(cnx),
             monitor: self.monitor.clone(),
             logging: self.logging.clone(),
+            missions: None,
+            includes: None,
         }
         .serialize(serializer)
     }
@@ -408,6 +442,7 @@ impl Default for CuConfig {
             graph: StableDiGraph::new(),
             monitor: None,
             logging: None,
+            missions: HashMap::new(),
         }
     }
 }
@@ -731,6 +766,13 @@ mod tests {
         // Task needs to be an array, but provided tuple wrongfully
         let txt = r#"( tasks: (), cnx: [], monitor: (type: "ExampleMonitor", ) ) "#;
         CuConfig::deserialize_ron(txt);
+    }
+    #[test]
+    fn test_missions() {
+        let txt = r#"( missions: [ (id: "data_collection"), (id: "autonomous")])"#;
+        let config = CuConfig::deserialize_ron(txt);
+        assert!(config.missions.contains_key("data_collection"));
+        assert!(config.missions.contains_key("autonomous"));
     }
 
     #[test]
