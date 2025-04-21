@@ -831,7 +831,6 @@ impl<'de> Deserialize<'de> for CuConfig {
                 }
             }
             cuconfig.graphs = missions;
-            // TODO: Continue
         } else {
             // this is the simple case
             let mut graphs = Simple(CuGraph::default());
@@ -909,9 +908,33 @@ impl Serialize for CuConfig {
                     .map(|id| MissionsConfig { id: id.clone() })
                     .collect();
 
+                // Collect all unique tasks across missions
+                let mut tasks = Vec::new();
+                let mut cnx = Vec::new();
+
+                for graph in graphs.values() {
+                    // Add all nodes from this mission
+                    for node_idx in graph.node_indices() {
+                        let node = &graph[node_idx];
+                        if !tasks.iter().any(|n: &Node| n.id == node.id) {
+                            tasks.push(node.clone());
+                        }
+                    }
+
+                    // Add all edges from this mission
+                    for edge_idx in graph.edge_indices() {
+                        let edge = &graph[edge_idx];
+                        if !cnx.iter().any(|c: &Cnx| {
+                            c.src == edge.src && c.dst == edge.dst && c.msg == edge.msg
+                        }) {
+                            cnx.push(edge.clone());
+                        }
+                    }
+                }
+
                 CuConfigRepresentation {
-                    tasks: None,
-                    cnx: None,
+                    tasks: Some(tasks),
+                    cnx: Some(cnx),
                     monitor: self.monitor.clone(),
                     logging: self.logging.clone(),
                     missions: Some(missions),
@@ -1379,6 +1402,47 @@ mod tests {
         let index = EdgeIndex::new(0);
         let cnx = m1_graph.edge_weight(index).unwrap();
 
+        assert_eq!(cnx.src, "src1");
+        assert_eq!(cnx.dst, "sink");
+        assert_eq!(cnx.msg, "u32");
+        assert_eq!(cnx.missions, Some(vec!["m1".to_string()]));
+
+        let m2_graph = config.graphs.get_graph(Some("m2")).unwrap();
+        assert_eq!(m2_graph.edge_count(), 1);
+        assert_eq!(m2_graph.node_count(), 2);
+        let index = EdgeIndex::new(0);
+        let cnx = m2_graph.edge_weight(index).unwrap();
+        assert_eq!(cnx.src, "src2");
+        assert_eq!(cnx.dst, "sink");
+        assert_eq!(cnx.msg, "u32");
+        assert_eq!(cnx.missions, Some(vec!["m2".to_string()]));
+    }
+    #[test]
+    fn test_mission_serde() {
+        // A simple config that selection a source depending on the mission it is in.
+        let txt = r#"(
+                    missions: [ (id: "m1"),
+                                (id: "m2"),
+                                ],
+                    tasks: [(id: "src1", type: "a", missions: ["m1"]),
+                            (id: "src2", type: "b", missions: ["m2"]),
+                            (id: "sink", type: "c")],
+
+                    cnx: [
+                            (src: "src1", dst: "sink", msg: "u32", missions: ["m1"]),
+                            (src: "src2", dst: "sink", msg: "u32", missions: ["m2"]),
+                         ],
+              )
+              "#;
+
+        let config = CuConfig::deserialize_ron(txt);
+        let serialized = config.serialize_ron();
+        let deserialized = CuConfig::deserialize_ron(&serialized);
+        let m1_graph = deserialized.graphs.get_graph(Some("m1")).unwrap();
+        assert_eq!(m1_graph.edge_count(), 1);
+        assert_eq!(m1_graph.node_count(), 2);
+        let index = EdgeIndex::new(0);
+        let cnx = m1_graph.edge_weight(index).unwrap();
         assert_eq!(cnx.src, "src1");
         assert_eq!(cnx.dst, "sink");
         assert_eq!(cnx.msg, "u32");
