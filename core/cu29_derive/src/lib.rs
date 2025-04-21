@@ -65,7 +65,7 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
 
     // Give a name compatible with a struct to match the task ids to their output in the CuMsgs tuple.
     let all_tasks_member_ids: Vec<String> = cuconfig
-        .get_all_nodes()
+        .get_all_nodes(None) // FIXME(gbin): Multimission
         .iter()
         .map(|(_, node)| utils::config_id_to_struct_member(node.get_id().as_str()))
         .collect();
@@ -309,7 +309,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         .map(|((task_id, cutype), stype)| match cutype {
             CuTaskType::Source => {
                 let msg_type = copper_config
-                    .get_node_output_msg_type(task_id.as_str())
+                    .get_node_output_msg_type(task_id.as_str(), None) // FIXME(gbin): Multimission
                     .unwrap_or_else(|| panic!("CuSrcTask {task_id} should have an outgoing connection with a valid output msg type"));
                 let sim_task_name = format!("cu29::simulation::CuSimSrcTask<{msg_type}>");
                 parse_str(sim_task_name.as_str()).unwrap_or_else(|_| panic!("Could not build the placeholder for simulation: {sim_task_name}"))
@@ -317,7 +317,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             CuTaskType::Regular => stype.clone(),
             CuTaskType::Sink => {
                 let msg_type = copper_config
-                    .get_node_input_msg_type(task_id.as_str())
+                    .get_node_input_msg_type(task_id.as_str(), None) // FIXME(gbin): Multimission
                     .unwrap_or_else(|| panic!("CuSinkTask {task_id} should have an incoming connection with a valid input msg type"));
                 let sim_task_name = format!("cu29::simulation::CuSimSinkTask<{msg_type}>");
                 parse_str(sim_task_name.as_str()).unwrap_or_else(|_| panic!("Could not build the placeholder for simulation: {sim_task_name}"))
@@ -947,7 +947,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let sim_callback_on_new = if sim_mode {
         Some(quote! {
             let all_instances_configs: Vec<Option<&_ComponentConfig>> = config
-                .get_all_nodes()
+                .get_all_nodes(None) // FIXME(gbin): Multimission
                 .iter()
                 .map(|(_, node)| node.get_instance_config())
                 .collect();
@@ -1300,7 +1300,7 @@ fn config_full_path(config_file: &str) -> String {
 fn extract_tasks_types(
     copper_config: &CuConfig,
 ) -> (Vec<String>, Vec<CuTaskType>, Vec<String>, Vec<Type>) {
-    let all_id_nodes = copper_config.get_all_nodes();
+    let all_id_nodes = copper_config.get_all_nodes(None); // FIXME(gbin): Multimission
 
     // Get all the tasks Ids
     let all_tasks_ids: Vec<String> = all_id_nodes
@@ -1310,7 +1310,14 @@ fn extract_tasks_types(
 
     let all_task_cutype: Vec<CuTaskType> = all_id_nodes
         .iter()
-        .map(|(id, _)| find_task_type_for_id(&copper_config.graph, *id))
+        .map(|(id, _)| {
+            find_task_type_for_id(
+                &copper_config
+                    .get_graph(None)
+                    .expect("Only implemented for Simple"),
+                *id,
+            )
+        }) // FIXME(gbin): Multimission
         .collect();
 
     // Collect all the type names used by our configs.
