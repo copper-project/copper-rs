@@ -40,6 +40,7 @@ The monitor has 4 screens:
 - **SysInfo**: A quick system information screen (CPU, Memory, Distrib ...)
 - **DAG**: A Directed Acyclic Graph of the tasks with their real time error status and short string info.
 - **Latencies**: A list of the tasks with their real time latencies & assorted statistics (Jitter, Min, Max, Avg).
+- **Memory Pools**: A list of the memory pools with their real time usage and statistics (Pool ID, Used/Total, Buffer Size, Handles in Use, Handles/sec).
 - **Debug Output** [`debug_pane`](#debug_pane-feature): A pane that displays debug logs in real-time.
 
 ## `debug_pane` feature

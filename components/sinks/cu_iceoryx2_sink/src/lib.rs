@@ -30,18 +30,26 @@ where
     where
         Self: Sized,
     {
-        let config = config.ok_or_else(|| CuError::from("You need a config."))?;
-        let service_name = config
-            .get::<String>("service")
-            .ok_or_else(|| CuError::from("You need a service name"))?;
+        let config = config.ok_or_else(|| CuError::from("IceoryxSink: Missing configuration."))?;
+        let service_name_str = config.get::<String>("service").ok_or_else(|| {
+            CuError::from("IceoryxSink: Configuration requires 'service' key (string).")
+        })?;
 
-        debug!("Service name: {}", service_name.as_str());
+        debug!(
+            "IceoryxSink: Configuring service name: {}",
+            service_name_str.as_str()
+        );
 
-        let service_name = ServiceName::new(service_name.as_str())
-            .map_err(|e| CuError::new_with_cause("Failed to create service name.", e))?;
-        let node: iceoryx2::prelude::Node<ipc::Service> = NodeBuilder::new()
-            .create::<ipc::Service>()
-            .map_err(|e| CuError::new_with_cause("Failed to create node.", e))?;
+        let service_name = ServiceName::new(service_name_str.as_str()).map_err(|e| {
+            CuError::new_with_cause("IceoryxSink: Failed to create service name.", e)
+        })?;
+        let node: iceoryx2::prelude::Node<ipc::Service> =
+            NodeBuilder::new().create::<ipc::Service>().map_err(|e| {
+                CuError::new_with_cause(
+                    format!("IceoryxSink({}): Failed to create node.", service_name_str).as_str(),
+                    e,
+                )
+            })?;
 
         Ok(Self {
             service_name,
@@ -57,12 +65,27 @@ where
             .service_builder(&self.service_name)
             .publish_subscribe::<CuMsg<P>>()
             .open_or_create()
-            .map_err(|e| CuError::new_with_cause("Failed to create service.", e))?;
+            .map_err(|e| {
+                CuError::new_with_cause(
+                    format!(
+                        "IceoryxSink({}): Failed to create service.",
+                        self.service_name
+                    )
+                    .as_str(),
+                    e,
+                )
+            })?;
 
-        let publisher = service
-            .publisher_builder()
-            .create()
-            .map_err(|e| CuError::new_with_cause("Failed to create publisher.", e))?;
+        let publisher = service.publisher_builder().create().map_err(|e| {
+            CuError::new_with_cause(
+                format!(
+                    "IceoryxSink({}): Failed to create publisher.",
+                    self.service_name
+                )
+                .as_str(),
+                e,
+            )
+        })?;
 
         self.service = Some(service);
         self.publisher = Some(publisher);
@@ -70,25 +93,39 @@ where
     }
 
     fn process(&mut self, _clock: &RobotClock, input: Self::Input) -> CuResult<()> {
-        let publisher = self
-            .publisher
-            .as_mut()
-            .ok_or_else(|| CuError::from("Publisher not found."))?;
+        let publisher = self.publisher.as_mut().ok_or_else(|| {
+            CuError::from(
+                format!("IceoryxSink({}): Publisher not found.", self.service_name).as_str(),
+            )
+        })?;
 
-        let dst = publisher
-            .loan_uninit()
-            .map_err(|e| CuError::new_with_cause("Failed to loan uninit.", e))?;
+        let dst = publisher.loan_uninit().map_err(|e| {
+            CuError::new_with_cause(
+                format!("IceoryxSink({}): Failed to loan uninit.", self.service_name).as_str(),
+                e,
+            )
+        })?;
 
         let dst = dst.write_payload(input.clone());
 
-        dst.send()
-            .map_err(|e| CuError::new_with_cause("Failed to send message.", e))?;
+        dst.send().map_err(|e| {
+            CuError::new_with_cause(
+                format!(
+                    "IceoryxSink({}): Failed to send message.",
+                    self.service_name
+                )
+                .as_str(),
+                e,
+            )
+        })?;
 
         Ok(())
     }
 
     fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        self.service = None;
         self.publisher = None;
+        debug!("IceoryxSink({}): Stopped.", self.service_name.as_str());
         Ok(())
     }
 }
