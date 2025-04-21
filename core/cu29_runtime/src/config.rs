@@ -1280,7 +1280,6 @@ mod tests {
         CuConfig::deserialize_ron(txt);
     }
     #[test]
-    #[should_panic(expected = "missing field `tasks`")]
     fn test_missions() {
         let txt = r#"( missions: [ (id: "data_collection"), (id: "autonomous")])"#;
         let config = CuConfig::deserialize_ron(txt);
