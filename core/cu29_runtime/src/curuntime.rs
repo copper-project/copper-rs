@@ -300,7 +300,7 @@ fn plan_tasks_tree_branch(
 
         let mut input_msg_indices_types: Vec<(u32, String)> = Vec::new();
         let output_msg_index_type: Option<(u32, String)>;
-        let task_type = find_task_type_for_id(&graph, id);
+        let task_type = find_task_type_for_id(graph, id);
 
         match task_type {
             CuTaskType::Source => {
@@ -655,7 +655,7 @@ mod tests {
         // note that the source2 connection is before the source1
         let src1_type = "src1_type";
         let src2_type = "src2_type";
-        config.connect(src2_id, sink_id.into(), src2_type).unwrap();
+        config.connect(src2_id, sink_id, src2_type).unwrap();
         config.connect(src1_id, sink_id, src1_type).unwrap();
 
         let src1_edge_id = *config

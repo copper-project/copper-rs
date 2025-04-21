@@ -1312,7 +1312,7 @@ fn extract_tasks_types(
         .iter()
         .map(|(id, _)| {
             find_task_type_for_id(
-                &copper_config
+                copper_config
                     .get_graph(None)
                     .expect("Only implemented for Simple"),
                 *id,

@@ -219,6 +219,7 @@ pub struct Node {
 }
 
 impl Node {
+    #[allow(dead_code)]
     pub fn new(id: &str, ptype: &str) -> Self {
         Node {
             id: id.to_string(),
@@ -250,6 +251,7 @@ impl Node {
         self.config.as_ref()
     }
 
+    #[allow(dead_code)]
     pub fn get_param<T: From<Value>>(&self, key: &str) -> Option<T> {
         let pc = self.config.as_ref()?;
         let ComponentConfig(pc) = pc;
@@ -257,6 +259,7 @@ impl Node {
         Some(T::from(v.clone()))
     }
 
+    #[allow(dead_code)]
     pub fn set_param<T: Into<Value>>(&mut self, key: &str, value: T) {
         if self.config.is_none() {
             self.config = Some(ComponentConfig(HashMap::new()));
@@ -280,11 +283,6 @@ pub struct Cnx {
 
     /// Restrict this connection for this list of missions.
     pub missions: Option<Vec<String>>,
-
-    /// Tells Copper to batch messages before sending the buffer to the next node.
-    /// If None, Copper will just send 1 message at a time.
-    /// If Some(n), Copper will batch n messages before sending the buffer.
-    pub batch: Option<u32>,
 
     /// Tells Copper if it needs to log the messages.
     pub store: Option<bool>,
@@ -387,7 +385,6 @@ impl ConfigGraphs {
         source: NodeId,
         target: NodeId,
         msg_type: &str,
-        batch: Option<u32>,
         store: Option<bool>,
         mission_id: Option<&str>,
         missions: Option<Vec<String>>,
@@ -412,7 +409,6 @@ impl ConfigGraphs {
                 dst: dst_id,
                 msg: msg_type.to_string(),
                 missions,
-                batch,
                 store,
             },
         );
@@ -669,10 +665,12 @@ pub struct MonitorConfig {
 }
 
 impl MonitorConfig {
+    #[allow(dead_code)]
     pub fn get_type(&self) -> &str {
         &self.type_
     }
 
+    #[allow(dead_code)]
     pub fn get_config(&self) -> Option<&ComponentConfig> {
         self.config.as_ref()
     }
@@ -788,7 +786,6 @@ impl<'de> Deserialize<'de> for CuConfig {
                                         src.index() as NodeId,
                                         dst.index() as NodeId,
                                         &c.msg,
-                                        c.batch,
                                         c.store,
                                         Some(mission_id),
                                         Some(cnx_missions.clone()),
@@ -824,7 +821,6 @@ impl<'de> Deserialize<'de> for CuConfig {
                                     src.index() as NodeId,
                                     dst.index() as NodeId,
                                     &c.msg,
-                                    c.batch,
                                     c.store,
                                     Some(mission_id),
                                     None,
@@ -865,7 +861,6 @@ impl<'de> Deserialize<'de> for CuConfig {
                             src.index() as NodeId,
                             dst.index() as NodeId,
                             &c.msg,
-                            c.batch,
                             c.store,
                             None,
                             None,
@@ -959,10 +954,12 @@ impl CuConfig {
     /// Add a new node to the configuration graph.
     /// If mission_id is provided, adds the node to that mission's graph.
     /// Otherwise adds it to the simple graph.
+    #[allow(dead_code)]
     pub fn add_node(&mut self, node: Node, mission_id: Option<&str>) -> CuResult<NodeId> {
         self.graphs.add_node(node, mission_id)
     }
 
+    #[allow(dead_code)]
     pub fn get_node(&self, node_id: NodeId, mission_id: Option<&str>) -> Option<&Node> {
         self.graphs.get_node(node_id, mission_id)
     }
@@ -1019,24 +1016,25 @@ impl CuConfig {
     /// msg_type is the type of message exchanged between the two nodes/tasks.
     /// batch is the number of messages to batch before sending the buffer.
     /// store tells Copper if it needs to log the messages.
+    #[allow(dead_code)]
     pub fn connect_ext(
         &mut self,
         source: NodeId,
         target: NodeId,
         msg_type: &str,
-        batch: Option<u32>,
         store: Option<bool>,
         mission_id: Option<&str>,
         missions: Option<Vec<String>>,
     ) -> CuResult<()> {
         self.graphs
-            .connect_ext(source, target, msg_type, batch, store, mission_id, missions)
+            .connect_ext(source, target, msg_type, store, mission_id, missions)
     }
 
     /// Adds an edge between two nodes/tasks in the configuration graph.
     /// msg_type is the type of message exchanged between the two nodes/tasks.
+    #[allow(dead_code)]
     pub fn connect(&mut self, source: NodeId, target: NodeId, msg_type: &str) -> CuResult<()> {
-        self.connect_ext(source, target, msg_type, None, None, None, None)
+        self.connect_ext(source, target, msg_type, None, None, None)
     }
 
     fn get_options() -> Options {
@@ -1139,6 +1137,7 @@ impl CuConfig {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn get_all_instances_configs(
         &self,
         mission_id: Option<&str>,
@@ -1149,10 +1148,12 @@ impl CuConfig {
             .collect()
     }
 
+    #[allow(dead_code)]
     pub fn get_graph(&self, mission_id: Option<&str>) -> CuResult<&CuGraph> {
         self.graphs.get_graph(mission_id)
     }
 
+    #[allow(dead_code)]
     pub fn get_graph_mut(&mut self, mission_id: Option<&str>) -> CuResult<&mut CuGraph> {
         self.graphs.get_graph_mut(mission_id)
     }
