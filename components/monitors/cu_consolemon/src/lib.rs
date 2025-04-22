@@ -196,18 +196,23 @@ impl NodesScrollableWidgetState {
     fn new(config: &CuConfig, errors: Arc<Mutex<Vec<TaskStatus>>>) -> Self {
         let mut config_nodes: Vec<Node> = Vec::new();
         let mut node_types: Vec<NodeType> = Vec::new();
-        for (_, node) in config.get_all_nodes() {
+        for (_, node) in config.get_all_nodes(None) {
+            // FIXME(gbin): Multimission
             config_nodes.push(node.clone());
             node_types.push(NodeType::Unknown);
         }
-        let mut connections: Vec<Connection> = Vec::with_capacity(config.graph.edge_count());
+        let graph = config
+            .get_graph(None)
+            .expect("Only supported for simple config");
+        let mut connections: Vec<Connection> = Vec::with_capacity(graph.edge_count()); // FIXME(gbin): Multimission
 
         // Keep track if we already used a port.
         for (dst_index, dst_node) in config_nodes.iter().enumerate() {
-            let node_incoming_edges = config.get_dst_edges(dst_index as u32);
+            let node_incoming_edges = config
+                .get_dst_edges(dst_index as u32, None)
+                .expect("Only supported for simple config"); // FIXME(gbin): Multimission
             for (dst_port, edge_id) in node_incoming_edges.iter().enumerate() {
-                if let Some((src_index, dst_index)) =
-                    config.graph.edge_endpoints((*edge_id as u32).into())
+                if let Some((src_index, dst_index)) = graph.edge_endpoints((*edge_id as u32).into())
                 {
                     let (src_index, dst_index) = (src_index.index(), dst_index.index());
                     connections.push(Connection::new(

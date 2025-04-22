@@ -35,10 +35,14 @@ fn main() {
 
     // restart with a variation of the configuration
     {
-        let node_indices = copperconfig.graph.node_indices().collect::<Vec<_>>();
+        let node_indices = copperconfig
+            .get_graph(None)
+            .unwrap()
+            .node_indices()
+            .collect::<Vec<_>>();
         node_indices.iter().for_each(|node_index| {
             let node = copperconfig
-                .get_node_mut(node_index.index() as NodeId)
+                .get_node_mut(node_index.index() as NodeId, None)
                 .unwrap();
             if node.get_id() == "dst" {
                 node.set_param("pin", 42);

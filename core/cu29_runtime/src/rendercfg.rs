@@ -29,7 +29,7 @@ fn main() -> std::io::Result<()> {
     let mut content = Vec::<u8>::new();
     {
         let mut cursor = Cursor::new(&mut content);
-        config.render(&mut cursor);
+        config.render(&mut cursor, None).unwrap();
     }
 
     // Generate SVG from DOT

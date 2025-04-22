@@ -5,9 +5,10 @@
 
 use cu29_traits::{CuError, CuResult};
 use html_escape::encode_text;
-use petgraph::adj::NodeIndex;
 use petgraph::stable_graph::{EdgeIndex, StableDiGraph};
 use petgraph::visit::EdgeRef;
+pub use petgraph::Direction::Incoming;
+pub use petgraph::Direction::Outgoing;
 use ron::extensions::Extensions;
 use ron::value::Value as RonValue;
 use ron::{Number, Options};
@@ -16,6 +17,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Display;
 use std::fs::read_to_string;
+use ConfigGraphs::{Missions, Simple};
 
 /// NodeId is the unique identifier of a node in the configuration graph for petgraph
 /// and the code generation.
@@ -206,10 +208,14 @@ impl Display for Value {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Node {
     id: String,
+
     #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
     type_: Option<String>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     config: Option<ComponentConfig>,
+
+    missions: Option<Vec<String>>,
 }
 
 impl Node {
@@ -220,6 +226,7 @@ impl Node {
             type_: Some(ptype.to_string()),
             // base_period_ns: None,
             config: None,
+            missions: None,
         }
     }
 
@@ -234,6 +241,7 @@ impl Node {
         self
     }
 
+    #[allow(dead_code)]
     pub fn get_type(&self) -> &str {
         self.type_.as_ref().unwrap()
     }
@@ -273,13 +281,369 @@ pub struct Cnx {
     /// Message type exchanged between src and dst.
     pub msg: String,
 
-    /// Tells Copper to batch messages before sending the buffer to the next node.
-    /// If None, Copper will just send 1 message at a time.
-    /// If Some(n), Copper will batch n messages before sending the buffer.
-    pub batch: Option<u32>,
+    /// Restrict this connection for this list of missions.
+    pub missions: Option<Vec<String>>,
 
     /// Tells Copper if it needs to log the messages.
     pub store: Option<bool>,
+}
+
+pub type CuGraph = StableDiGraph<Node, Cnx, NodeId>;
+
+#[derive(Debug, Clone)]
+pub enum ConfigGraphs {
+    Simple(CuGraph),
+    Missions(HashMap<String, CuGraph>),
+}
+
+impl ConfigGraphs {
+    #[allow(dead_code)]
+    pub fn get_all_nodes(&self, mission_id: Option<&str>) -> Vec<(NodeId, &Node)> {
+        match self {
+            Simple(graph) => {
+                if mission_id.is_none() {
+                    graph
+                        .node_indices()
+                        .map(|index| (index.index() as u32, &graph[index]))
+                        .collect()
+                } else {
+                    Vec::new()
+                }
+            }
+            Missions(graphs) => {
+                if let Some(id) = mission_id {
+                    if let Some(graph) = graphs.get(id) {
+                        graph
+                            .node_indices()
+                            .map(|index| (index.index() as u32, &graph[index]))
+                            .collect()
+                    } else {
+                        Vec::new()
+                    }
+                } else {
+                    Vec::new()
+                }
+            }
+        }
+    }
+
+    pub fn node_indices(&self, mission_id: Option<&str>) -> Vec<petgraph::stable_graph::NodeIndex> {
+        match self {
+            Simple(graph) => {
+                if mission_id.is_none() {
+                    graph.node_indices().collect()
+                } else {
+                    Vec::new()
+                }
+            }
+            Missions(graphs) => {
+                if let Some(id) = mission_id {
+                    graphs
+                        .get(id)
+                        .map(|graph| graph.node_indices().collect())
+                        .unwrap_or_default()
+                } else {
+                    Vec::new()
+                }
+            }
+        }
+    }
+
+    pub fn get_node_input_msg_type(
+        &self,
+        node_id: &str,
+        mission_id: Option<&str>,
+    ) -> Option<String> {
+        match self {
+            Simple(graph) => {
+                if mission_id.is_none() {
+                    ConfigGraphs::get_node_input_msg_type_from_graph(graph, node_id)
+                } else {
+                    None
+                }
+            }
+            Missions(graphs) => {
+                if let Some(id) = mission_id {
+                    if let Some(graph) = graphs.get(id) {
+                        ConfigGraphs::get_node_input_msg_type_from_graph(graph, node_id)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
+        }
+    }
+    pub fn add_node(&mut self, node: Node, mission_id: Option<&str>) -> CuResult<NodeId> {
+        let graph = self.get_graph_mut(mission_id)?;
+        Ok(graph.add_node(node).index() as NodeId)
+    }
+
+    pub fn connect_ext(
+        &mut self,
+        source: NodeId,
+        target: NodeId,
+        msg_type: &str,
+        store: Option<bool>,
+        mission_id: Option<&str>,
+        missions: Option<Vec<String>>,
+    ) -> CuResult<()> {
+        let (src_id, dst_id) = (
+            self.get_node(source, mission_id)
+                .ok_or("Source node not found")?
+                .id
+                .clone(),
+            self.get_node(target, mission_id)
+                .ok_or("Target node not found")?
+                .id
+                .clone(),
+        );
+
+        let graph = self.get_graph_mut(mission_id)?;
+        graph.add_edge(
+            source.into(),
+            target.into(),
+            Cnx {
+                src: src_id,
+                dst: dst_id,
+                msg: msg_type.to_string(),
+                missions,
+                store,
+            },
+        );
+        Ok(())
+    }
+
+    pub fn get_graph(&self, mission_id: Option<&str>) -> CuResult<&CuGraph> {
+        match self {
+            Simple(graph) => {
+                if mission_id.is_none() {
+                    Ok(graph)
+                } else {
+                    Err("Cannot get mission graph from simple config".into())
+                }
+            }
+            Missions(graphs) => {
+                if let Some(id) = mission_id {
+                    graphs
+                        .get(id)
+                        .ok_or_else(|| format!("Mission {id} not found").into())
+                } else {
+                    Err("Mission ID required for mission configs".into())
+                }
+            }
+        }
+    }
+
+    /// Get the node with the given id.
+    /// If mission_id is provided, get the node from that mission's graph.
+    /// Otherwise get the node from the simple graph.
+    pub fn get_node(&self, node_id: NodeId, mission_id: Option<&str>) -> Option<&Node> {
+        match self {
+            Simple(graph) => {
+                if mission_id.is_none() {
+                    graph.node_weight(node_id.into())
+                } else {
+                    None
+                }
+            }
+            Missions(graphs) => {
+                if let Some(id) = mission_id {
+                    if let Some(graph) = graphs.get(id) {
+                        graph.node_weight(node_id.into())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
+    pub fn get_node_mut(&mut self, node_id: NodeId, mission_id: Option<&str>) -> Option<&mut Node> {
+        match self {
+            Simple(graph) => {
+                if mission_id.is_none() {
+                    graph.node_weight_mut(node_id.into())
+                } else {
+                    None
+                }
+            }
+            Missions(graphs) => {
+                if let Some(id) = mission_id {
+                    if let Some(graph) = graphs.get_mut(id) {
+                        graph.node_weight_mut(node_id.into())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
+    pub fn get_node_output_msg_type(
+        &self,
+        node_id: &str,
+        mission_id: Option<&str>,
+    ) -> Option<String> {
+        match self {
+            Simple(graph) => {
+                if mission_id.is_none() {
+                    ConfigGraphs::get_node_output_msg_type_from_graph(graph, node_id)
+                } else {
+                    None
+                }
+            }
+            Missions(graphs) => {
+                if let Some(id) = mission_id {
+                    if let Some(graph) = graphs.get(id) {
+                        ConfigGraphs::get_node_output_msg_type_from_graph(graph, node_id)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
+    pub fn get_graph_mut(&mut self, mission_id: Option<&str>) -> CuResult<&mut CuGraph> {
+        match self {
+            Simple(graph) => {
+                if mission_id.is_none() {
+                    Ok(graph)
+                } else {
+                    Err("Cannot get mission graph from simple config".into())
+                }
+            }
+            ConfigGraphs::Missions(graphs) => {
+                if let Some(id) = mission_id {
+                    graphs
+                        .get_mut(id)
+                        .ok_or_else(|| format!("Mission {id} not found").into())
+                } else {
+                    Err("Mission ID required for mission configs".into())
+                }
+            }
+        }
+    }
+
+    pub fn get_edge_weight(&self, index: usize, mission_id: Option<&str>) -> Option<Cnx> {
+        match self {
+            Simple(graph) => {
+                if mission_id.is_none() {
+                    graph.edge_weight(EdgeIndex::new(index)).cloned()
+                } else {
+                    None
+                }
+            }
+            Missions(graphs) => {
+                if let Some(id) = mission_id {
+                    graphs.get(id)?.edge_weight(EdgeIndex::new(index)).cloned()
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
+    fn get_node_output_msg_type_from_graph(graph: &CuGraph, node_id: &str) -> Option<String> {
+        graph.node_indices().find_map(|node_index| {
+            if let Some(node) = graph.node_weight(node_index) {
+                if node.id != node_id {
+                    return None;
+                }
+                let edges: Vec<_> = graph
+                    .edges_directed(node_index, Outgoing)
+                    .map(|edge| edge.id().index())
+                    .collect();
+                if edges.is_empty() {
+                    panic!("A CuSrcTask is configured with no task connected to it.")
+                }
+                let cnx = graph
+                    .edge_weight(EdgeIndex::new(edges[0]))
+                    .expect("Found an cnx id but could not retrieve it back");
+                return Some(cnx.msg.clone());
+            }
+            None
+        })
+    }
+
+    fn get_node_input_msg_type_from_graph(graph: &CuGraph, node_id: &str) -> Option<String> {
+        graph.node_indices().find_map(|node_index| {
+            if let Some(node) = graph.node_weight(node_index) {
+                if node.id != node_id {
+                    return None;
+                }
+                let edges: Vec<_> = graph
+                    .edges_directed(node_index, Incoming)
+                    .map(|edge| edge.id().index())
+                    .collect();
+                if edges.is_empty() {
+                    panic!("A CuSinkTask is configured with no task connected to it.")
+                }
+                let cnx = graph
+                    .edge_weight(EdgeIndex::new(edges[0]))
+                    .expect("Found an cnx id but could not retrieve it back");
+                return Some(cnx.msg.clone());
+            }
+            None
+        })
+    }
+
+    /// Get the list of edges that are connected to the given node as a source.
+    fn get_edges_by_direction(
+        &self,
+        node_id: NodeId,
+        mission_id: Option<&str>,
+        direction: petgraph::Direction,
+    ) -> CuResult<Vec<usize>> {
+        match self {
+            Simple(graph) => {
+                if mission_id.is_none() {
+                    Ok(graph
+                        .edges_directed(node_id.into(), direction)
+                        .map(|edge| edge.id().index())
+                        .collect())
+                } else {
+                    Err(CuError::from("Cannot get mission edges from simple graph"))
+                }
+            }
+            Missions(graphs) => {
+                if let Some(id) = mission_id {
+                    if let Some(graph) = graphs.get(id) {
+                        Ok(graph
+                            .edges_directed(node_id.into(), direction)
+                            .map(|edge| edge.id().index())
+                            .collect())
+                    } else {
+                        Err(CuError::from(format!("Mission {id} not found")))
+                    }
+                } else {
+                    Err(CuError::from("Mission ID required for mission graphs"))
+                }
+            }
+        }
+    }
+
+    pub fn add_mission(&mut self, mission_id: &str) -> CuResult<()> {
+        match self {
+            Simple(_) => Err("Cannot add mission to simple config".into()),
+            Missions(graphs) => {
+                if graphs.contains_key(mission_id) {
+                    Err(format!("Mission {mission_id} already exists").into())
+                } else {
+                    graphs.insert(mission_id.to_string(), CuGraph::default());
+                    Ok(())
+                }
+            }
+        }
+    }
 }
 
 /// CuConfig is the programmatic representation of the configuration graph.
@@ -287,9 +651,9 @@ pub struct Cnx {
 #[derive(Debug, Clone)]
 pub struct CuConfig {
     // This is not what is directly serialized, see the custom serialization below.
-    pub graph: StableDiGraph<Node, Cnx, NodeId>,
     pub monitor: Option<MonitorConfig>,
     pub logging: Option<LoggingConfig>,
+    pub graphs: ConfigGraphs,
 }
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
@@ -326,13 +690,29 @@ pub struct LoggingConfig {
     pub enable_task_logging: bool,
 }
 
-/// The config is a list of tasks and their connections.
+/// Missions are used to generate alternative DAGs within the same configuration.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct MissionsConfig {
+    pub id: String,
+}
+
+/// Includes are used to include other configuration files.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct IncludesConfig {
+    pub path: String,
+    pub params: HashMap<String, Value>,
+    pub missions: Option<Vec<String>>,
+}
+
+/// This is the main Copper configuration representation.
 #[derive(Serialize, Deserialize, Default)]
 struct CuConfigRepresentation {
-    tasks: Vec<Node>,
-    cnx: Vec<Cnx>,
+    tasks: Option<Vec<Node>>,
+    cnx: Option<Vec<Cnx>>,
     monitor: Option<MonitorConfig>,
     logging: Option<LoggingConfig>,
+    missions: Option<Vec<MissionsConfig>>,
+    includes: Option<Vec<IncludesConfig>>,
 }
 
 impl<'de> Deserialize<'de> for CuConfig {
@@ -343,33 +723,156 @@ impl<'de> Deserialize<'de> for CuConfig {
     {
         let representation =
             CuConfigRepresentation::deserialize(deserializer).map_err(serde::de::Error::custom)?;
-
         let mut cuconfig = CuConfig::default();
-        for task in representation.tasks {
-            cuconfig.add_node(task);
+
+        if let Some(mission_configs) = &representation.missions {
+            // This is the multi-mission case
+            let mut missions = Missions(HashMap::new());
+
+            for mission_config in mission_configs {
+                let mission_id = mission_config.id.as_str();
+                missions
+                    .add_mission(mission_id)
+                    .map_err(serde::de::Error::custom)?;
+                if let Some(tasks) = &representation.tasks {
+                    for task in tasks {
+                        if let Some(task_missions) = &task.missions {
+                            // if there is a filter by mission on the task, only add the task to the mission if it matches the filter.
+                            if task_missions.contains(&mission_id.to_owned()) {
+                                missions
+                                    .add_node(task.clone(), Some(mission_id))
+                                    .map_err(serde::de::Error::custom)?;
+                            }
+                        } else {
+                            // if there is no filter by mission on the task, add the task to the mission.
+                            missions
+                                .add_node(task.clone(), Some(mission_id))
+                                .map_err(serde::de::Error::custom)?;
+                        }
+                    }
+                }
+
+                if let Some(cnx) = &representation.cnx {
+                    for c in cnx {
+                        if let Some(cnx_missions) = &c.missions {
+                            // if there is a filter by mission on the connection, only add the connection to the mission if it matches the filter.
+                            if cnx_missions.contains(&mission_id.to_owned()) {
+                                let src = missions
+                                    .node_indices(Some(mission_id))
+                                    .into_iter()
+                                    .find(|i| {
+                                        missions
+                                            .get_node(i.index() as NodeId, Some(mission_id))
+                                            .unwrap()
+                                            .id
+                                            == c.src
+                                    })
+                                    .expect("Source node not found");
+                                let dst = missions
+                                    .node_indices(Some(mission_id))
+                                    .into_iter()
+                                    .find(|i| {
+                                        missions
+                                            .get_node(i.index() as NodeId, Some(mission_id))
+                                            .unwrap()
+                                            .id
+                                            == c.dst
+                                    })
+                                    .unwrap_or_else(|| {
+                                        panic!("Destination {} node not found", c.dst)
+                                    });
+                                missions
+                                    .connect_ext(
+                                        src.index() as NodeId,
+                                        dst.index() as NodeId,
+                                        &c.msg,
+                                        c.store,
+                                        Some(mission_id),
+                                        Some(cnx_missions.clone()),
+                                    )
+                                    .map_err(serde::de::Error::custom)?;
+                            }
+                        } else {
+                            // if there is no filter by mission on the connection, add the connection to the mission.
+                            let src = missions
+                                .node_indices(Some(mission_id))
+                                .into_iter()
+                                .find(|i| {
+                                    missions
+                                        .get_node(i.index() as NodeId, Some(mission_id))
+                                        .unwrap()
+                                        .id
+                                        == c.src
+                                })
+                                .expect("Source node not found");
+                            let dst = missions
+                                .node_indices(Some(mission_id))
+                                .into_iter()
+                                .find(|i| {
+                                    missions
+                                        .get_node(i.index() as NodeId, Some(mission_id))
+                                        .unwrap()
+                                        .id
+                                        == c.dst
+                                })
+                                .unwrap_or_else(|| panic!("Destination {} node not found", c.dst));
+                            missions
+                                .connect_ext(
+                                    src.index() as NodeId,
+                                    dst.index() as NodeId,
+                                    &c.msg,
+                                    c.store,
+                                    Some(mission_id),
+                                    None,
+                                )
+                                .map_err(serde::de::Error::custom)?;
+                        }
+                    }
+                }
+            }
+            cuconfig.graphs = missions;
+        } else {
+            // this is the simple case
+            let mut graphs = Simple(CuGraph::default());
+
+            if let Some(tasks) = representation.tasks {
+                for task in tasks {
+                    graphs
+                        .add_node(task, None)
+                        .map_err(serde::de::Error::custom)?;
+                }
+            }
+
+            if let Some(cnx) = representation.cnx {
+                for c in cnx {
+                    let src = graphs
+                        .node_indices(None)
+                        .into_iter()
+                        .find(|i| graphs.get_node(i.index() as NodeId, None).unwrap().id == c.src)
+                        .expect("Source node not found");
+                    let dst = graphs
+                        .node_indices(None)
+                        .into_iter()
+                        .find(|i| graphs.get_node(i.index() as NodeId, None).unwrap().id == c.dst)
+                        .unwrap_or_else(|| panic!("Destination {} node not found", c.dst));
+                    graphs
+                        .connect_ext(
+                            src.index() as NodeId,
+                            dst.index() as NodeId,
+                            &c.msg,
+                            c.store,
+                            None,
+                            None,
+                        )
+                        .map_err(serde::de::Error::custom)?;
+                }
+            }
+            cuconfig.graphs = graphs;
         }
 
-        for c in representation.cnx {
-            let src = cuconfig
-                .graph
-                .node_indices()
-                .find(|i| cuconfig.graph[*i].id == c.src)
-                .expect("Source node not found");
-            let dst = cuconfig
-                .graph
-                .node_indices()
-                .find(|i| cuconfig.graph[*i].id == c.dst)
-                .unwrap_or_else(|| panic!("Destination {} node not found", c.dst));
-            cuconfig.connect_ext(
-                src.index() as NodeId,
-                dst.index() as NodeId,
-                &c.msg,
-                c.batch,
-                c.store,
-            );
-        }
         cuconfig.monitor = representation.monitor;
         cuconfig.logging = representation.logging;
+
         Ok(cuconfig)
     }
 }
@@ -380,32 +883,73 @@ impl Serialize for CuConfig {
     where
         S: Serializer,
     {
-        let tasks: Vec<Node> = self
-            .graph
-            .node_indices()
-            .map(|idx| self.graph[idx].clone())
-            .collect();
+        match &self.graphs {
+            Simple(graph) => {
+                let tasks: Vec<Node> = graph.node_indices().map(|idx| graph[idx].clone()).collect();
 
-        let cnx: Vec<Cnx> = self
-            .graph
-            .edge_indices()
-            .map(|edge| self.graph[edge].clone())
-            .collect();
+                let cnx: Vec<Cnx> = graph
+                    .edge_indices()
+                    .map(|edge| graph[edge].clone())
+                    .collect();
 
-        CuConfigRepresentation {
-            tasks,
-            cnx,
-            monitor: self.monitor.clone(),
-            logging: self.logging.clone(),
+                CuConfigRepresentation {
+                    tasks: Some(tasks),
+                    cnx: Some(cnx),
+                    monitor: self.monitor.clone(),
+                    logging: self.logging.clone(),
+                    missions: None,
+                    includes: None,
+                }
+                .serialize(serializer)
+            }
+            Missions(graphs) => {
+                let missions = graphs
+                    .keys()
+                    .map(|id| MissionsConfig { id: id.clone() })
+                    .collect();
+
+                // Collect all unique tasks across missions
+                let mut tasks = Vec::new();
+                let mut cnx = Vec::new();
+
+                for graph in graphs.values() {
+                    // Add all nodes from this mission
+                    for node_idx in graph.node_indices() {
+                        let node = &graph[node_idx];
+                        if !tasks.iter().any(|n: &Node| n.id == node.id) {
+                            tasks.push(node.clone());
+                        }
+                    }
+
+                    // Add all edges from this mission
+                    for edge_idx in graph.edge_indices() {
+                        let edge = &graph[edge_idx];
+                        if !cnx.iter().any(|c: &Cnx| {
+                            c.src == edge.src && c.dst == edge.dst && c.msg == edge.msg
+                        }) {
+                            cnx.push(edge.clone());
+                        }
+                    }
+                }
+
+                CuConfigRepresentation {
+                    tasks: Some(tasks),
+                    cnx: Some(cnx),
+                    monitor: self.monitor.clone(),
+                    logging: self.logging.clone(),
+                    missions: Some(missions),
+                    includes: None,
+                }
+                .serialize(serializer)
+            }
         }
-        .serialize(serializer)
     }
 }
 
 impl Default for CuConfig {
     fn default() -> Self {
         CuConfig {
-            graph: StableDiGraph::new(),
+            graphs: Simple(StableDiGraph::new()),
             monitor: None,
             logging: None,
         }
@@ -415,134 +959,105 @@ impl Default for CuConfig {
 /// The implementation has a lot of convenience methods to manipulate
 /// the configuration to give some flexibility into programmatically creating the configuration.
 impl CuConfig {
-    /// Add a new node to the configuration graph.
-    pub fn add_node(&mut self, node: Node) -> NodeId {
-        self.graph.add_node(node).index() as NodeId
+    #[allow(dead_code)]
+    pub fn new_simple_type() -> Self {
+        Self::default()
     }
 
-    /// Get the node with the given id.
-    #[allow(dead_code)] // Used in proc macro
-    pub fn get_node(&self, node_id: NodeId) -> Option<&Node> {
-        self.graph.node_weight(node_id.into())
+    #[allow(dead_code)]
+    pub fn new_mission_type() -> Self {
+        CuConfig {
+            graphs: Missions(HashMap::new()),
+            monitor: None,
+            logging: None,
+        }
+    }
+
+    /// Add a new node to the simple configuration graph.
+    /// Add a new node to the configuration graph.
+    /// If mission_id is provided, adds the node to that mission's graph.
+    /// Otherwise adds it to the simple graph.
+    #[allow(dead_code)]
+    pub fn add_node(&mut self, node: Node, mission_id: Option<&str>) -> CuResult<NodeId> {
+        self.graphs.add_node(node, mission_id)
+    }
+
+    #[allow(dead_code)]
+    pub fn get_node(&self, node_id: NodeId, mission_id: Option<&str>) -> Option<&Node> {
+        self.graphs.get_node(node_id, mission_id)
     }
 
     /// Get the node with the given id mutably.
     #[allow(dead_code)] // Used in proc macro
-    pub fn get_node_mut(&mut self, node_id: NodeId) -> Option<&mut Node> {
-        self.graph.node_weight_mut(node_id.into())
+    pub fn get_node_mut(&mut self, node_id: NodeId, mission_id: Option<&str>) -> Option<&mut Node> {
+        self.graphs.get_node_mut(node_id, mission_id)
     }
 
-    /// this is more like infer from the connections of this node.
     #[allow(dead_code)] // Used in proc macro
-    pub fn get_node_output_msg_type(&self, node_id: &str) -> Option<String> {
-        self.graph.node_indices().find_map(|node_index| {
-            if let Some(node) = self.get_node(node_index.index() as u32) {
-                if node.id != node_id {
-                    return None;
-                }
-                let edges = self.get_src_edges(node_index.index() as u32);
-                if edges.is_empty() {
-                    panic!("A CuSrcTask is configured with no task connected to it.")
-                }
-                let cnx = self
-                    .graph
-                    .edge_weight(EdgeIndex::new(edges[0]))
-                    .expect("Found an cnx id but could not retrieve it back");
-                return Some(cnx.msg.clone());
-            }
-            None
-        })
+    pub fn get_node_output_msg_type(
+        &self,
+        node_id: &str,
+        mission_id: Option<&str>,
+    ) -> Option<String> {
+        self.graphs.get_node_output_msg_type(node_id, mission_id)
     }
 
-    /// this is more like infer from the connections of this node.
     #[allow(dead_code)] // Used in proc macro
-    pub fn get_node_input_msg_type(&self, node_id: &str) -> Option<String> {
-        self.graph.node_indices().find_map(|node_index| {
-            if let Some(node) = self.get_node(node_index.index() as u32) {
-                if node.id != node_id {
-                    return None;
-                }
-                let edges = self.get_dst_edges(node_index.index() as u32);
-                if edges.is_empty() {
-                    panic!("A CuSinkTask is configured with no task connected to it.")
-                }
-                let cnx = self
-                    .graph
-                    .edge_weight(EdgeIndex::new(edges[0]))
-                    .expect("Found an cnx id but could not retrieve it back");
-                return Some(cnx.msg.clone());
-            }
-            None
-        })
+    pub fn get_node_input_msg_type(
+        &self,
+        node_id: &str,
+        mission_id: Option<&str>,
+    ) -> Option<String> {
+        self.graphs.get_node_input_msg_type(node_id, mission_id)
     }
 
-    /// Get the list of edges that are connected to the given node as a source.
-    pub fn get_src_edges(&self, node_id: NodeId) -> Vec<usize> {
-        self.graph
-            .edges_directed(node_id.into(), petgraph::Direction::Outgoing)
-            .map(|edge| edge.id().index())
-            .collect()
+    pub fn get_src_edges(&self, node_id: NodeId, mission_id: Option<&str>) -> CuResult<Vec<usize>> {
+        self.graphs
+            .get_edges_by_direction(node_id, mission_id, Outgoing)
     }
 
     /// Get the list of edges that are connected to the given node as a destination.
-    pub fn get_dst_edges(&self, node_id: NodeId) -> Vec<usize> {
-        self.graph
-            .edges_directed(node_id.into(), petgraph::Direction::Incoming)
-            .map(|edge| edge.id().index())
-            .collect()
+    pub fn get_dst_edges(&self, node_id: NodeId, mission_id: Option<&str>) -> CuResult<Vec<usize>> {
+        self.graphs
+            .get_edges_by_direction(node_id, mission_id, Incoming)
     }
 
     #[allow(dead_code)]
-    pub fn get_edge_weight(&self, index: usize) -> Option<Cnx> {
-        self.graph.edge_weight(EdgeIndex::new(index)).cloned()
+    pub fn get_edge_weight(&self, index: usize, mission_id: Option<&str>) -> Option<Cnx> {
+        self.graphs.get_edge_weight(index, mission_id)
     }
 
     /// Convenience method to get all nodes in the configuration graph.
-    pub fn get_all_nodes(&self) -> Vec<(NodeIndex, &Node)> {
-        self.graph
-            .node_indices()
-            .map(|index| (index.index() as u32, &self.graph[index]))
-            .collect()
+    /// If mission_id is provided, gets nodes from that mission's graph.
+    /// Otherwise gets nodes from the simple graph.
+    #[allow(dead_code)]
+    pub fn get_all_nodes(&self, mission_id: Option<&str>) -> Vec<(NodeId, &Node)> {
+        self.graphs.get_all_nodes(mission_id)
     }
 
     /// Adds an edge between two nodes/tasks in the configuration graph.
     /// msg_type is the type of message exchanged between the two nodes/tasks.
     /// batch is the number of messages to batch before sending the buffer.
     /// store tells Copper if it needs to log the messages.
+    #[allow(dead_code)]
     pub fn connect_ext(
         &mut self,
         source: NodeId,
         target: NodeId,
         msg_type: &str,
-        batch: Option<u32>,
         store: Option<bool>,
-    ) {
-        self.graph.add_edge(
-            source.into(),
-            target.into(),
-            Cnx {
-                src: self
-                    .get_node(source)
-                    .expect("Source node not found")
-                    .id
-                    .clone(),
-                dst: self
-                    .get_node(target)
-                    .expect("Target node not found")
-                    .id
-                    .clone(),
-                msg: msg_type.to_string(),
-                batch,
-                store,
-            },
-        );
+        mission_id: Option<&str>,
+        missions: Option<Vec<String>>,
+    ) -> CuResult<()> {
+        self.graphs
+            .connect_ext(source, target, msg_type, store, mission_id, missions)
     }
 
     /// Adds an edge between two nodes/tasks in the configuration graph.
     /// msg_type is the type of message exchanged between the two nodes/tasks.
     #[allow(dead_code)]
-    pub fn connect(&mut self, source: NodeId, target: NodeId, msg_type: &str) {
-        self.connect_ext(source, target, msg_type, None, None);
+    pub fn connect(&mut self, source: NodeId, target: NodeId, msg_type: &str) -> CuResult<()> {
+        self.connect_ext(source, target, msg_type, None, None, None)
     }
 
     fn get_options() -> Options {
@@ -570,11 +1085,17 @@ impl CuConfig {
     }
 
     /// Render the configuration graph in the dot format.
-    pub fn render(&self, output: &mut dyn std::io::Write) {
+    pub fn render(
+        &self,
+        output: &mut dyn std::io::Write,
+        mission_id: Option<&str>,
+    ) -> CuResult<()> {
         writeln!(output, "digraph G {{").unwrap();
 
-        for index in self.graph.node_indices() {
-            let node = &self.graph[index];
+        let graph = self.graphs.get_graph(mission_id)?;
+
+        for index in graph.node_indices() {
+            let node = &graph[index];
             let config_str = match &node.config {
                 Some(config) => {
                     let config_str = config
@@ -592,8 +1113,14 @@ impl CuConfig {
             writeln!(output, "style=\"rounded, filled\",").unwrap();
             writeln!(output, "fontname=\"Noto Sans\"").unwrap();
 
-            let is_src = self.get_dst_edges(index.index() as NodeId).is_empty();
-            let is_sink = self.get_src_edges(index.index() as NodeId).is_empty();
+            let is_src = self
+                .get_dst_edges(index.index() as NodeId, mission_id)
+                .unwrap_or_default()
+                .is_empty();
+            let is_sink = self
+                .get_src_edges(index.index() as NodeId, mission_id)
+                .unwrap_or_default()
+                .is_empty();
             if is_src {
                 writeln!(output, "fillcolor=lightgreen,").unwrap();
             } else if is_sink {
@@ -615,10 +1142,10 @@ impl CuConfig {
 
             writeln!(output, "];").unwrap();
         }
-        for edge in self.graph.edge_indices() {
-            let (src, dst) = self.graph.edge_endpoints(edge).unwrap();
+        for edge in graph.edge_indices() {
+            let (src, dst) = graph.edge_endpoints(edge).unwrap();
 
-            let cnx = &self.graph[edge];
+            let cnx = &graph[edge];
             let msg = encode_text(&cnx.msg);
             writeln!(
                 output,
@@ -630,14 +1157,28 @@ impl CuConfig {
             .unwrap();
         }
         writeln!(output, "}}").unwrap();
+        Ok(())
     }
 
     #[allow(dead_code)]
-    pub fn get_all_instances_configs(&self) -> Vec<Option<&ComponentConfig>> {
-        self.get_all_nodes()
+    pub fn get_all_instances_configs(
+        &self,
+        mission_id: Option<&str>,
+    ) -> Vec<Option<&ComponentConfig>> {
+        self.get_all_nodes(mission_id)
             .iter()
             .map(|(_, node)| node.get_instance_config())
             .collect()
+    }
+
+    #[allow(dead_code)]
+    pub fn get_graph(&self, mission_id: Option<&str>) -> CuResult<&CuGraph> {
+        self.graphs.get_graph(mission_id)
+    }
+
+    #[allow(dead_code)]
+    pub fn get_graph_mut(&mut self, mission_id: Option<&str>) -> CuResult<&mut CuGraph> {
+        self.graphs.get_graph_mut(mission_id)
     }
 
     #[allow(dead_code)]
@@ -698,13 +1239,19 @@ mod tests {
     #[test]
     fn test_plain_serialize() {
         let mut config = CuConfig::default();
-        let n1 = config.add_node(Node::new("test1", "package::Plugin1"));
-        let n2 = config.add_node(Node::new("test2", "package::Plugin2"));
-        config.connect(n1, n2, "msgpkg::MsgType");
+        let n1 = config
+            .add_node(Node::new("test1", "package::Plugin1"), None)
+            .unwrap();
+        let n2 = config
+            .add_node(Node::new("test2", "package::Plugin2"), None)
+            .unwrap();
+        config.connect(n1, n2, "msgpkg::MsgType").unwrap();
         let serialized = config.serialize_ron();
         let deserialized = CuConfig::deserialize_ron(&serialized);
-        assert_eq!(config.graph.node_count(), deserialized.graph.node_count());
-        assert_eq!(config.graph.edge_count(), deserialized.graph.edge_count());
+        let graph = config.graphs.get_graph(None).unwrap();
+        let deserialized_graph = deserialized.graphs.get_graph(None).unwrap();
+        assert_eq!(graph.node_count(), deserialized_graph.node_count());
+        assert_eq!(graph.edge_count(), deserialized_graph.edge_count());
     }
 
     #[test]
@@ -712,12 +1259,12 @@ mod tests {
         let mut config = CuConfig::default();
         let mut camera = Node::new("copper-camera", "camerapkg::Camera");
         camera.set_param::<Value>("resolution-height", 1080.into());
-        config.add_node(camera);
+        config.add_node(camera, None).unwrap();
         let serialized = config.serialize_ron();
         let deserialized = CuConfig::deserialize_ron(&serialized);
         assert_eq!(
             deserialized
-                .get_node(0)
+                .get_node(0, None)
                 .unwrap()
                 .get_param::<i32>("resolution-height")
                 .unwrap(),
@@ -731,6 +1278,15 @@ mod tests {
         // Task needs to be an array, but provided tuple wrongfully
         let txt = r#"( tasks: (), cnx: [], monitor: (type: "ExampleMonitor", ) ) "#;
         CuConfig::deserialize_ron(txt);
+    }
+    #[test]
+    fn test_missions() {
+        let txt = r#"( missions: [ (id: "data_collection"), (id: "autonomous")])"#;
+        let config = CuConfig::deserialize_ron(txt);
+        let graph = config.graphs.get_graph(Some("data_collection")).unwrap();
+        assert!(graph.node_count() == 0);
+        let graph = config.graphs.get_graph(Some("autonomous")).unwrap();
+        assert!(graph.node_count() == 0);
     }
 
     #[test]
@@ -800,15 +1356,95 @@ mod tests {
 
         // the node id depends on the order in which the tasks are added
         let src1_id = 0;
-        assert_eq!(config.get_node(src1_id).unwrap().id, "src1");
+        assert_eq!(config.get_node(src1_id, None).unwrap().id, "src1");
         let src2_id = 1;
-        assert_eq!(config.get_node(src2_id).unwrap().id, "src2");
+        assert_eq!(config.get_node(src2_id, None).unwrap().id, "src2");
 
         // the edge id depends on the order the connection is created
         // the src2 was added second in the tasks, but the connection was added first
-        let src1_edge_id = *config.get_src_edges(src1_id).first().unwrap();
+        let src1_edge_id = *config
+            .get_src_edges(src1_id, None)
+            .unwrap()
+            .first()
+            .unwrap();
         assert_eq!(src1_edge_id, 1);
-        let src2_edge_id = *config.get_src_edges(src2_id).first().unwrap();
+        let src2_edge_id = *config
+            .get_src_edges(src2_id, None)
+            .unwrap()
+            .first()
+            .unwrap();
         assert_eq!(src2_edge_id, 0);
+    }
+
+    #[test]
+    fn test_simple_missions() {
+        // A simple config that selection a source depending on the mission it is in.
+        let txt = r#"(
+                    missions: [ (id: "m1"),
+                                (id: "m2"),
+                                ],
+                    tasks: [(id: "src1", type: "a", missions: ["m1"]),
+                            (id: "src2", type: "b", missions: ["m2"]),
+                            (id: "sink", type: "c")],
+
+                    cnx: [
+                            (src: "src1", dst: "sink", msg: "u32", missions: ["m1"]),
+                            (src: "src2", dst: "sink", msg: "u32", missions: ["m2"]),
+                         ],
+              )
+              "#;
+
+        let config = CuConfig::deserialize_ron(txt);
+        let m1_graph = config.graphs.get_graph(Some("m1")).unwrap();
+        assert_eq!(m1_graph.edge_count(), 1);
+        assert_eq!(m1_graph.node_count(), 2);
+        let index = EdgeIndex::new(0);
+        let cnx = m1_graph.edge_weight(index).unwrap();
+
+        assert_eq!(cnx.src, "src1");
+        assert_eq!(cnx.dst, "sink");
+        assert_eq!(cnx.msg, "u32");
+        assert_eq!(cnx.missions, Some(vec!["m1".to_string()]));
+
+        let m2_graph = config.graphs.get_graph(Some("m2")).unwrap();
+        assert_eq!(m2_graph.edge_count(), 1);
+        assert_eq!(m2_graph.node_count(), 2);
+        let index = EdgeIndex::new(0);
+        let cnx = m2_graph.edge_weight(index).unwrap();
+        assert_eq!(cnx.src, "src2");
+        assert_eq!(cnx.dst, "sink");
+        assert_eq!(cnx.msg, "u32");
+        assert_eq!(cnx.missions, Some(vec!["m2".to_string()]));
+    }
+    #[test]
+    fn test_mission_serde() {
+        // A simple config that selection a source depending on the mission it is in.
+        let txt = r#"(
+                    missions: [ (id: "m1"),
+                                (id: "m2"),
+                                ],
+                    tasks: [(id: "src1", type: "a", missions: ["m1"]),
+                            (id: "src2", type: "b", missions: ["m2"]),
+                            (id: "sink", type: "c")],
+
+                    cnx: [
+                            (src: "src1", dst: "sink", msg: "u32", missions: ["m1"]),
+                            (src: "src2", dst: "sink", msg: "u32", missions: ["m2"]),
+                         ],
+              )
+              "#;
+
+        let config = CuConfig::deserialize_ron(txt);
+        let serialized = config.serialize_ron();
+        let deserialized = CuConfig::deserialize_ron(&serialized);
+        let m1_graph = deserialized.graphs.get_graph(Some("m1")).unwrap();
+        assert_eq!(m1_graph.edge_count(), 1);
+        assert_eq!(m1_graph.node_count(), 2);
+        let index = EdgeIndex::new(0);
+        let cnx = m1_graph.edge_weight(index).unwrap();
+        assert_eq!(cnx.src, "src1");
+        assert_eq!(cnx.dst, "sink");
+        assert_eq!(cnx.msg, "u32");
+        assert_eq!(cnx.missions, Some(vec!["m1".to_string()]));
     }
 }
