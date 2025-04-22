@@ -1025,7 +1025,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         quote!(tasks_instanciator)
     };
 
-    let runtime_impl = quote! {
+    let application_impl = quote! {
         impl #name {
 
             #new {
@@ -1060,7 +1060,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     // This is to be sure we have the size of at least a Culist and some.
                 );
 
-                let runtime = Ok(#name {
+                let application = Ok(#name {
                     copper_runtime: _CuRuntime::<#tasks_type, CuMsgs, #monitor_type, #DEFAULT_CLNB>::new(
                         clock,
                         &config,
@@ -1071,7 +1071,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 #sim_callback_on_new
 
-                runtime
+                application
             }
 
             pub fn get_original_config() -> String {
@@ -1262,7 +1262,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         pub #item_struct
 
-        #runtime_impl
+        #application_impl
 
         #builder
     };
