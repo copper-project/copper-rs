@@ -105,17 +105,17 @@ cu29-value = { path = "core/cu29_value", version = "0.7.0" }
 cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads", version = "0.7.0" }
 
 # External serialization
-bincode = { version = "2.0.0", features = ["derive"] }
-serde = { version = "1.0.215", features = ["derive"] }
-serde_derive = { version = "1.0.215", features = ["default"] }
+bincode = { version = "2.0.1", features = ["derive"] }
+serde = { version = "1.0.219", features = ["derive"] }
+serde_derive = { version = "1.0.219", features = ["default"] }
 
 # External CLI
-clap = { version = "4.5.21", features = ["derive"] }
+clap = { version = "4.5.36", features = ["derive"] }
 
 # External proc macros
-proc-macro2 = { version = "1.0.89" }
-quote = "1.0.37"                                  # proc macros
-syn = { version = "2.0.85", features = ["full"] } # proc macros
+proc-macro2 = { version = "1.0.95" }
+quote = "1.0.40"                                  # proc macros
+syn = { version = "2.0.100", features = ["full"] } # proc macros
 
 # Unit of measure to be consistent across the project
 uom = { version = "0.36.0", features = ["serde"] }
@@ -127,13 +127,13 @@ compact_str = { version = "0.9.0", features = ["serde"] }
 derive_more = { version = "2.0.1", features = ["full"] }
 
 # used across testing
-tempfile = "3.18.0"
+tempfile = "3.19.1"
 
 # rerun
 rerun = { version = "0.22.1", default-features = false, features = ["sdk", "server", "log"] }
 
 # smallvec to avoid heap allocations
-smallvec = { version = "1.14.0", features = ["serde"] }
+smallvec = { version = "1.15.0", features = ["serde"] }
 
 # [profile.release]
 # lto = true
