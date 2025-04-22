@@ -39,7 +39,7 @@ Copper is a data-oriented Robot SDK with these key components:
   Configures the system's topology, specifies inter-task communication paths, and sets types for nodes and messages. The Task Graph is generated in [RON](https://github.com/ron-rs/ron), 
 
 * **Runtime Generator**: Creates an execution plan based on the Task Graph's metadata. It preallocates a
- "Copper List" to maximize sequential memory access during execution.
+  "Copper List" to maximize sequential memory access during execution.
 
 * **Zero-Copy Data Logging**: Records all messages between tasks without copying data, ensuring efficient logging.
 
@@ -277,7 +277,7 @@ on any of those, please let us know!:
   switch from one to another. This is useful for running the stack in predeterministic modes: for example Data acquisition,
   Full autonomy, Charging, etc.
 - [ ] **Microcontroller and RTOS support**: Modify all necessary Copper code packages to remove dependencies on the standard library (std) to support "no_std" (#![no_std])
- to support running the code on bare-metal on microcontrollers.  This will allow a seamless environment for high level calls on a standard kernel (ML inference etc...)
+  to support running the code on bare-metal on microcontrollers.  This will allow a seamless environment for high level calls on a standard kernel (ML inference etc...)
   and low level tasks on MCUs (control, HW interfacing...).
 - [ ] **Parallel Copper Lists**: allow Copper lists to be executed in a staggered and parallel way to improve
   throughput.
