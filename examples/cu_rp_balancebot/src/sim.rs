@@ -36,12 +36,12 @@ struct Copper {
 // This is queried by the sim runtime to know what it should do
 // at any stage passed as a parameter to the enums
 // see the more complete example below for the runtime part.
-fn default_callback(step: SimStep) -> SimOverride {
+fn default_callback(step: default::SimStep) -> SimOverride {
     match step {
         // Don't let the real task execute process and override with our logic.
-        SimStep::Balpos(_) => SimOverride::ExecutedBySim,
-        SimStep::Railpos(_) => SimOverride::ExecutedBySim,
-        SimStep::Motor(_) => SimOverride::ExecutedBySim,
+        default::SimStep::Balpos(_) => SimOverride::ExecutedBySim,
+        default::SimStep::Railpos(_) => SimOverride::ExecutedBySim,
+        default::SimStep::Motor(_) => SimOverride::ExecutedBySim,
         _ => SimOverride::ExecuteByRuntime,
     }
 }
@@ -110,9 +110,9 @@ fn run_copper_callback(
     robot_clock
         .clock
         .set_value(physics_time.elapsed().as_nanos() as u64);
-    let mut sim_callback = move |step: SimStep<'_>| -> SimOverride {
+    let mut sim_callback = move |step: default::SimStep<'_>| -> SimOverride {
         match step {
-            SimStep::Balpos(CuTaskCallbackState::Process(_, output)) => {
+            default::SimStep::Balpos(CuTaskCallbackState::Process(_, output)) => {
                 // so here we jump when the balpos source (the adc giving the rod position) is called
                 // we get the physical state of the work and inject back to copper what would the sensor read
                 let bindings = query_set.p1();
@@ -131,8 +131,8 @@ fn run_copper_callback(
                 output.metadata.tov = robot_clock.clock.now().into();
                 SimOverride::ExecutedBySim
             }
-            SimStep::Balpos(_) => SimOverride::ExecutedBySim,
-            SimStep::Railpos(CuTaskCallbackState::Process(_, output)) => {
+            default::SimStep::Balpos(_) => SimOverride::ExecutedBySim,
+            default::SimStep::Railpos(CuTaskCallbackState::Process(_, output)) => {
                 // Here same thing for the rail encoder.
                 let bindings = query_set.p0();
                 let (cart_transform, _) = bindings.single();
@@ -141,8 +141,8 @@ fn run_copper_callback(
                 output.metadata.tov = robot_clock.clock.now().into();
                 SimOverride::ExecutedBySim
             }
-            SimStep::Railpos(_) => SimOverride::ExecutedBySim,
-            SimStep::Motor(CuTaskCallbackState::Process(input, output)) => {
+            default::SimStep::Railpos(_) => SimOverride::ExecutedBySim,
+            default::SimStep::Motor(CuTaskCallbackState::Process(input, output)) => {
                 // And now when copper wants to use the motor
                 // we apply a force in the simulation.
                 let mut bindings = query_set.p0();
@@ -165,7 +165,7 @@ fn run_copper_callback(
                     SimOverride::Errored("Safety Mode.".into())
                 }
             }
-            SimStep::Motor(_) => SimOverride::ExecutedBySim,
+            default::SimStep::Motor(_) => SimOverride::ExecutedBySim,
             _ => SimOverride::ExecuteByRuntime,
         }
     };

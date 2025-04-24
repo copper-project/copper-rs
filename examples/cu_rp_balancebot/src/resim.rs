@@ -8,12 +8,12 @@ use std::path::{Path, PathBuf};
 #[copper_runtime(config = "copperconfig.ron", sim_mode = true)]
 struct BalanceBotReSim {}
 
-fn default_callback(step: SimStep) -> SimOverride {
+fn default_callback(step: default::SimStep) -> SimOverride {
     match step {
         // Don't let the real task execute process and override with our logic.
-        SimStep::Balpos(_) => SimOverride::ExecutedBySim,
-        SimStep::Railpos(_) => SimOverride::ExecutedBySim,
-        SimStep::Motor(_) => SimOverride::ExecutedBySim,
+        default::SimStep::Balpos(_) => SimOverride::ExecutedBySim,
+        default::SimStep::Railpos(_) => SimOverride::ExecutedBySim,
+        default::SimStep::Motor(_) => SimOverride::ExecutedBySim,
         _ => SimOverride::ExecuteByRuntime,
     }
 }
@@ -21,7 +21,7 @@ fn default_callback(step: SimStep) -> SimOverride {
 fn run_one_copperlist(
     copper_app: &mut BalanceBotReSim,
     robot_clock: &mut RobotClockMock,
-    copper_list: CopperList<CuMsgs>,
+    copper_list: CopperList<default::CuMsgs>,
 ) {
     // Sync the copper clock to the simulated physics clock.
     let msgs = &copper_list.msgs;
@@ -36,19 +36,19 @@ fn run_one_copperlist(
         .unwrap();
     robot_clock.set_value(process_time);
 
-    let mut sim_callback = move |step: SimStep<'_>| -> SimOverride {
+    let mut sim_callback = move |step: default::SimStep<'_>| -> SimOverride {
         match step {
-            SimStep::Balpos(CuTaskCallbackState::Process(_, output)) => {
+            default::SimStep::Balpos(CuTaskCallbackState::Process(_, output)) => {
                 *output = msgs.get_balpos_output().clone();
                 SimOverride::ExecutedBySim
             }
-            SimStep::Balpos(_) => SimOverride::ExecutedBySim,
-            SimStep::Railpos(CuTaskCallbackState::Process(_, output)) => {
+            default::SimStep::Balpos(_) => SimOverride::ExecutedBySim,
+            default::SimStep::Railpos(CuTaskCallbackState::Process(_, output)) => {
                 *output = msgs.get_railpos_output().clone();
                 SimOverride::ExecutedBySim
             }
-            SimStep::Railpos(_) => SimOverride::ExecutedBySim,
-            SimStep::Motor(CuTaskCallbackState::Process(input, output)) => {
+            default::SimStep::Railpos(_) => SimOverride::ExecutedBySim,
+            default::SimStep::Motor(CuTaskCallbackState::Process(input, output)) => {
                 // Here the Sim change stuff in the message, just redo the same thing
                 // so we can only show possible differences from copper's execution itself.
                 let maybe_motor_actuation = input.payload();
@@ -63,7 +63,7 @@ fn run_one_copperlist(
                 }
                 SimOverride::ExecutedBySim
             }
-            SimStep::Motor(_) => SimOverride::ExecutedBySim,
+            default::SimStep::Motor(_) => SimOverride::ExecutedBySim,
             _ => SimOverride::ExecuteByRuntime,
         }
     };
@@ -105,7 +105,7 @@ fn main() {
         panic!("Failed to create logger");
     };
     let mut reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
-    let iter = copperlists_dump::<CuMsgs>(&mut reader);
+    let iter = copperlists_dump::<default::CuMsgs>(&mut reader);
     for entry in iter {
         println!("{:#?}", entry);
         run_one_copperlist(&mut copper_app, &mut robot_clock_mock, entry);
