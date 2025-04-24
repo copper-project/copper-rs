@@ -1123,7 +1123,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     F: FnMut(SimStep) -> cu29::simulation::SimOverride,
             },
             Some(quote! {
-                fn with_sim_callback(mut self, sim_callback: &'a mut F) -> Self
+                pub fn with_sim_callback(mut self, sim_callback: &'a mut F) -> Self
                 {
                     self.sim_callback = Some(sim_callback);
                     self
@@ -1289,6 +1289,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             use cu29::monitoring::CuTaskState as _CuTaskState;
             use cu29::monitoring::Decision as _Decision;
             use cu29::monitoring::NoMonitor as _NoMonitor;
+            use cu29::config::ComponentConfig as _ComponentConfig;
+
+            // FIXME(gbin): this is not good.
+            use default::SimStep;
 
             pub #application_struct
 
