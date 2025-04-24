@@ -1288,6 +1288,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             use cu29::CuError as _CuError;
             use cu29::monitoring::CuTaskState as _CuTaskState;
             use cu29::monitoring::Decision as _Decision;
+            use cu29::monitoring::NoMonitor as _NoMonitor;
 
             pub #application_struct
 
@@ -1297,6 +1298,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         }
 
         use app::#builder_name;
+        use app::#name;
     };
     let tokens: TokenStream = result.into();
 
