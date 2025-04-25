@@ -15,7 +15,7 @@ bincode = { workspace = true }
 uom = { workspace = true }
 serde = { workspace = true }
 
-faer = { version = "0.21.9", optional = true }
+faer = { version = "0.22.4", optional = true }
 nalgebra = { version = "0.33.2", optional = true }
 glam = { version = "0.30.2", optional = true }
 
