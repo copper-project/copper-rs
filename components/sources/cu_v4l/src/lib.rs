@@ -259,7 +259,6 @@ mod linux_impl {
         use super::*;
         use rerun::components::ImageBuffer;
         use rerun::datatypes::{Blob, ImageFormat};
-        use rerun::external::re_types::ArrowBuffer;
         use rerun::RecordingStreamBuilder;
         use rerun::{Image, PixelFormat};
         use std::thread;
@@ -323,8 +322,7 @@ mod linux_impl {
                 let _output = v4l.process(&clock, &mut msg);
                 if let Some(frame) = msg.payload() {
                     let slice: &[u8] = &frame.buffer_handle.lock().unwrap();
-                    let arrow_buffer = ArrowBuffer::from(slice);
-                    let blob = Blob::from(arrow_buffer);
+                    let blob = Blob::from(slice);
                     let rerun_img = ImageBuffer::from(blob);
                     let image = Image::new(rerun_img, format);
 

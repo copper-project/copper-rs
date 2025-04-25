@@ -130,15 +130,10 @@ derive_more = { version = "2.0.1", features = ["full"] }
 tempfile = "3.19.1"
 
 # rerun
-rerun = { version = "0.22.1", default-features = false, features = ["sdk", "server", "log"] }
+rerun = { version = "0.23.0", default-features = false, features = ["sdk", "server", "log"] }
 
 # smallvec to avoid heap allocations
 smallvec = { version = "1.15.0", features = ["serde"] }
 
 # [profile.release]
 # lto = true
-
-[patch.crates-io]
-arrow-arith = { path = "patches/arrow-arith" }
-
-
