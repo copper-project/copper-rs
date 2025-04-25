@@ -61,13 +61,11 @@ pub struct Rod;
 
 pub fn build_world(app: &mut App) -> &mut App {
     let app = app
-        .add_plugins((
-            MeshPickingPlugin,
-            PhysicsPlugins::default().with_length_unit(1000.0),
-        ))
+        .add_plugins(MeshPickingPlugin)
+        .add_plugins(PhysicsPlugins::default().with_length_unit(1000.0))
         // we want Bevy to measure these values for us:
-        .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin)
-        .add_plugins(bevy::diagnostic::EntityCountDiagnosticsPlugin)
+        .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default())
+        .add_plugins(bevy::diagnostic::EntityCountDiagnosticsPlugin::default())
         .insert_resource(DefaultOpaqueRendererMethod::deferred())
         .insert_resource(SimulationState::Running)
         .insert_resource(CameraControl {
@@ -205,6 +203,7 @@ fn setup_scene(
     commands.insert_resource(AmbientLight {
         color: Color::srgb_u8(210, 220, 240),
         brightness: 1.0,
+        affects_lightmapped_meshes: true,
     });
 
     // load the scene
@@ -311,7 +310,7 @@ fn try_to_find_cart_entity(query: Query<(Entity, &Name), Without<Cart>>) -> Opti
 // It is a bit of a hack, but it tries to find back the cart entity parent from any of the possible clickable children
 fn global_cart_drag_listener(
     mut drag_events: EventReader<Pointer<Drag>>,
-    parents: Query<(&Parent, Option<&Cart>)>,
+    parents: Query<(&ChildOf, Option<&Cart>)>,
     mut transforms: Query<&mut Transform, With<Cart>>,
     camera_query: Query<&Transform, (With<Camera>, Without<Cart>)>, // Add Without<Cart> to prevent conflicts
 ) {
@@ -324,7 +323,7 @@ fn global_cart_drag_listener(
             if maybe_cart.is_some() {
                 break;
             }
-            entity = parent.get();
+            entity = parent.parent();
         }
 
         if let Ok(mut root_transform) = transforms.get_mut(entity) {
@@ -338,6 +337,16 @@ fn global_cart_drag_listener(
 
 #[derive(Resource)]
 struct SetupCompleted(bool);
+
+#[derive(Bundle)]
+struct CartBundle {
+    external_force: ExternalForce,
+    cart: Cart,
+    mass_props: MassPropertiesBundle,
+    dominance: Dominance,
+    rigid_body: RigidBody,
+    locked_axes: LockedAxes,
+}
 
 fn setup_entities(
     mut commands: Commands,
@@ -360,19 +369,19 @@ fn setup_entities(
     let cart_collider_model = Collider::cuboid(CART_WIDTH, CART_HEIGHT, CART_DEPTH);
     let cart_mass_props = MassPropertiesBundle::from_shape(&cart_collider_model, ALUMINUM_DENSITY); // It is a mix of emptiness and motor and steel.. overall some aluminum?
 
-    commands.entity(cart_entity).insert((
-        ExternalForce::default(),
-        Cart,
-        cart_mass_props,
-        Dominance(5),
-        RigidBody::Dynamic,
-        LockedAxes::new()
+    commands.entity(cart_entity).insert(CartBundle {
+        external_force: ExternalForce::new(Vec3::ZERO),
+        cart: Cart,
+        mass_props: cart_mass_props,
+        dominance: Dominance(5),
+        rigid_body: RigidBody::Dynamic,
+        locked_axes: LockedAxes::new()
             .lock_translation_z()
             .lock_translation_y()
             .lock_rotation_x()
             .lock_rotation_y()
             .lock_rotation_z(),
-    ));
+    });
 
     let rail_entity = commands
         .spawn((
@@ -520,7 +529,7 @@ fn camera_control_system(
     time: Res<Time>,
     mouse_button_input: Res<ButtonInput<MouseButton>>,
 ) {
-    let mut camera_transform = query.single_mut();
+    let mut camera_transform = query.single_mut().expect("Failed to get camera transform");
     let focal_point = Vec3::ZERO; // Define the point to orbit around (usually the center of the scene)
 
     // Calculate the direction vector from the camera to the focal point
