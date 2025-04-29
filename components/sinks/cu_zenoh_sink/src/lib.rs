@@ -77,7 +77,8 @@ where
         let session = zenoh::Wait::wait(zenoh::open(self.config.config.clone()))
             .map_err(cu_error_map("ZenohSink: Failed to open session"))?;
 
-        let key_expr = KeyExpr::<'static>::new(self.config.topic.clone()).unwrap();
+        let key_expr = KeyExpr::<'static>::new(self.config.topic.clone())
+            .map_err(cu_error_map("ZenohSink: Invalid topic string"))?;
 
         debug!("Zenoh session open");
         let publisher = zenoh::Wait::wait(session.declare_publisher(key_expr))
