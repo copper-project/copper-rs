@@ -1,0 +1,20 @@
+[package]
+name = "cu-zenoh"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "Copper example to use zenoh as a middleware."
+
+[package.metadata.cargo-machete]
+ignored = ["bincode", "cu-caterpillar", "cu-consolemon"]
+
+[dependencies]
+cu29 = { workspace = true }
+cu29-helpers = { workspace = true }
+cu-zenoh-sink = { path = "../../components/sinks/cu_zenoh_sink" , version = "0.7.0"}
+tempfile = { workspace = true }

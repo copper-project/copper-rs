@@ -16,7 +16,8 @@ ignored = ["cu29-log", "cu29-log-runtime", "cu29-soa-derive"]  # proc macro
 [dependencies]
 cu29 = { workspace = true }
 cu-sensor-payloads = { workspace = true }
-velodyne-lidar = { version = "0.3.0", features = ["full"] }
+velodyne-lidar = { version = "0.3.0", features = ["pcap", "parallel"] } 
+# remove `nmea` for `velodyne-lidar` since it has conflicts for `dep:serde_with` with `dep:zenoh-config`
 
 [dev-dependencies]
 cu-udp-inject = { path = "../../testing/cu_udp_inject" }

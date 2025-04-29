@@ -1,0 +1,16 @@
+[package]
+name = "cu-zenoh-sink"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "Copper sink task for Zenoh."
+
+[dependencies]
+zenoh = { version = "1.3.4" }
+cu29 = { workspace = true }
+
