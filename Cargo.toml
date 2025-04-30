@@ -141,4 +141,4 @@ smallvec = { version = "1.15.0", features = ["serde"] }
 # lto = true
 
 [patch.crates-io]
-cached-path = { path = "patches/rust-cached-path" }
+cached-path = { git = "https://github.com/makeecat/rust-cached-path", branch = "yang/fix/offline_cache_path"}
