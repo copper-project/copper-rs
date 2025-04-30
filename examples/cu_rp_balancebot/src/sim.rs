@@ -4,6 +4,7 @@ mod world;
 use crate::world::{Cart, Rod};
 use avian3d::math::Vector;
 use avian3d::prelude::{ExternalForce, Physics};
+use bevy::asset::UnapprovedPathMode;
 use bevy::prelude::*;
 use bevy::render::RenderPlugin;
 // disembiguation as there is also a bevy::prelude::debug
@@ -202,13 +203,19 @@ fn main() {
         ..Default::default()
     };
 
-    let default_plugin = DefaultPlugins.set(render_plugin).set(WindowPlugin {
-        primary_window: Some(Window {
-            title: "Copper Simulator".into(),
+    let default_plugin = DefaultPlugins
+        .set(render_plugin)
+        .set(WindowPlugin {
+            primary_window: Some(Window {
+                title: "Copper Simulator".into(),
+                ..default()
+            }),
             ..default()
-        }),
-        ..default()
-    });
+        })
+        .set(AssetPlugin {
+            unapproved_path_mode: UnapprovedPathMode::Allow,
+            ..default()
+        });
 
     world.add_plugins(default_plugin);
 
