@@ -7,12 +7,11 @@ use bevy::input::{
 };
 use bevy::pbr::{DefaultOpaqueRendererMethod, ScreenSpaceReflections};
 use bevy::prelude::*;
-use cached_path::{Cache, ProgressBar};
-
+use cached_path::{Cache, Error as CacheError, ProgressBar};
 #[cfg(feature = "perf-ui")]
 use iyes_perf_ui::prelude::{PerfUiAllEntries, PerfUiPlugin};
+use std::path::{Path, PathBuf}; // Import PathBuf
 
-use std::path::Path;
 use std::{fs, io};
 
 pub const BALANCEBOT: &str = "balancebot.glb";
@@ -65,7 +64,7 @@ pub fn build_world(app: &mut App) -> &mut App {
         .add_plugins(PhysicsPlugins::default().with_length_unit(1000.0))
         // we want Bevy to measure these values for us:
         .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default())
-        .add_plugins(bevy::diagnostic::EntityCountDiagnosticsPlugin::default())
+        .add_plugins(bevy::diagnostic::EntityCountDiagnosticsPlugin)
         .insert_resource(DefaultOpaqueRendererMethod::deferred())
         .insert_resource(SimulationState::Running)
         .insert_resource(CameraControl {
@@ -144,6 +143,35 @@ fn create_symlink(src: &str, dst: &str) -> io::Result<()> {
     }
 }
 
+/// Tries to get the asset path using the online cache first.
+/// If that fails due to a network error, falls back to the offline cache.
+fn get_asset_path(
+    online_cache: &Cache,
+    offline_cache: &Cache,
+    asset_url: &str,
+    asset_name: &str, // For logging purposes
+) -> Result<PathBuf, CacheError> {
+    match online_cache.cached_path(asset_url) {
+        Ok(path) => Ok(path),
+        Err(err) => {
+            // Check if the error is network-related
+            if matches!(
+                err,
+                CacheError::HttpError(_) | CacheError::IoError(_) | CacheError::ResourceNotFound(_)
+            ) {
+                warn!(
+                    "Failed to fetch latest '{}' from network ({}). Attempting to use cached version.",
+                    asset_name, err
+                );
+                // Fallback to offline cache
+                offline_cache.cached_path(asset_url)
+            } else {
+                // Not a network error, propagate the original error
+                Err(err)
+            }
+        }
+    }
+}
 pub const BASE_ASSETS_URL: &str = "https://cdn.copper-robotics.com/";
 
 fn setup_scene(
@@ -153,14 +181,21 @@ fn setup_scene(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     // Precache where the user executes the binary
-    let cache = Cache::builder()
+
+    let online_cache = Cache::builder()
         .progress_bar(Some(ProgressBar::Full))
         .build()
-        .expect("Failed to create the file cache.");
+        .expect("Failed to create the online file cache.");
 
-    let balance_bot_hashed = cache
-        .cached_path(format!("{}{}", BASE_ASSETS_URL, BALANCEBOT).as_str())
-        .expect("Failed to download and cache balancebot.glb.");
+    let offline_cache = Cache::builder()
+        .progress_bar(Some(ProgressBar::Full))
+        .offline(true) // Force offline mode
+        .build()
+        .expect("Failed to create the offline file cache.");
+    let balance_bot_url = format!("{}{}", BASE_ASSETS_URL, BALANCEBOT);
+    let balance_bot_hashed =
+        get_asset_path(&online_cache, &offline_cache, &balance_bot_url, BALANCEBOT)
+            .expect("Failed to get balancebot.glb (online or cached).");
     let balance_bot_path = balance_bot_hashed.parent().unwrap().join(BALANCEBOT);
 
     create_symlink(
@@ -169,10 +204,9 @@ fn setup_scene(
     )
     .expect("Failed to create symlink to balancebot.glb.");
 
-    let skybox_path_hashed = cache
-        .cached_path(format!("{}{}", BASE_ASSETS_URL, SKYBOX).as_str())
-        .expect("Failed download and cache skybox.ktx2.");
-
+    let skybox_url = format!("{}{}", BASE_ASSETS_URL, SKYBOX);
+    let skybox_path_hashed = get_asset_path(&online_cache, &offline_cache, &skybox_url, SKYBOX)
+        .expect("Failed to get skybox.ktx2 (online or cached).");
     let skybox_path = skybox_path_hashed.parent().unwrap().join(SKYBOX);
     create_symlink(
         skybox_path_hashed.to_str().unwrap(),
@@ -180,10 +214,10 @@ fn setup_scene(
     )
     .expect("Failed to create symlink to skybox.ktx2.");
 
-    let diffuse_map_path_hashed = cache
-        .cached_path(format!("{}{}", BASE_ASSETS_URL, DIFFUSE_MAP).as_str())
-        .expect("Failed download and cache diffuse_map.");
-
+    let diffuse_map_url = format!("{}{}", BASE_ASSETS_URL, DIFFUSE_MAP);
+    let diffuse_map_path_hashed =
+        get_asset_path(&online_cache, &offline_cache, &diffuse_map_url, DIFFUSE_MAP)
+            .expect("Failed to get diffuse_map.ktx2 (online or cached).");
     let diffuse_map_path = diffuse_map_path_hashed.parent().unwrap().join(DIFFUSE_MAP);
     create_symlink(
         diffuse_map_path_hashed.to_str().unwrap(),

@@ -1,0 +1,60 @@
+name: Readme
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'src/lib.rs'
+      - 'README.md'
+
+env:
+  CACHE_PREFIX: v0
+
+jobs:
+  readme:
+    name: README
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+
+      - name: Find latest cargo-rdme version
+        shell: bash
+        run: |
+          set -e
+          set -u
+          set -o pipefail
+          CARGO_RDME_VERSION=$(curl -s https://api.github.com/repos/orium/cargo-rdme/releases/latest | jq -r '.tag_name')
+          # Alternate method using cargo (takes longer):
+          # CARGO_RDME_VERSION=$(cargo search --limit 1 cargo-rdme | grep cargo-rdme | head -n 1 | sed -E 's/cargo-rdme = "([^"]+)".*/v\1/g')
+          echo "CARGO_RDME_VERSION=$CARGO_RDME_VERSION" >> $GITHUB_ENV
+          echo "$CARGO_RDME_VERSION"
+
+      - name: Cache cargo-rdme
+        uses: actions/cache@v2
+        id: cache-cargo-rdme
+        with:
+          path: ~/.cargo/bin/cargo-rdme
+          key: ${{ env.CACHE_PREFIX }}-${{ env.CARGO_RDME_VERSION }}
+
+      - name: Install cargo-rdme
+        if: steps.cache-cargo-rdme.outputs.cache-hit != 'true'
+        run: |
+          cargo install cargo-rdme
+
+      - name: Check README is up-to-date
+        run: |
+          # If this step fails it means you haven't ran 'make readme' to update the README.
+          cargo rdme --check

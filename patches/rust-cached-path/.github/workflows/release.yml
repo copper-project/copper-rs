@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  publish:
+    name: Publish
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+
+    - name: Prepare environment
+      run: |
+        echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV;
+
+    - name: Install rust stable
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        pip install packaging
+
+    - name: Authenticate with crates.io
+      uses: actions-rs/cargo@v1
+      with:
+        command: login
+        args: ${{ secrets.CARGO_TOKEN }}
+
+    - name: Generate release notes
+      run: |
+        python scripts/release_notes.py > ${{ github.workspace }}-RELEASE_NOTES.md
+
+    - name: Publish to crates.io
+      uses: actions-rs/cargo@v1
+      with:
+        command: publish
+
+    - name: Publish GitHub release
+      uses: softprops/action-gh-release@v1
+      with:
+        body_path: ${{ github.workspace }}-RELEASE_NOTES.md
+        prerelease: ${{ contains(env.TAG, '-rc') }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

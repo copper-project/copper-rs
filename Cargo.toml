@@ -139,3 +139,6 @@ smallvec = { version = "1.15.0", features = ["serde"] }
 
 # [profile.release]
 # lto = true
+
+[patch.crates-io]
+cached-path = { path = "patches/rust-cached-path" }
