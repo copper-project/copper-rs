@@ -7,8 +7,14 @@ struct MyApp {}
 
 fn main() {
     let mut copperconfig: CuConfig = read_configuration("copperconfig.ron").unwrap();
-    let copper_ctx = basic_copper_setup(Path::new("/tmp/test.copper"), None, true, None)
-        .expect("Failed to setup logger.");
+    let copper_ctx = basic_copper_setup(
+        Path::new("/tmp/test.copper"),
+        None,
+        true,
+        None,
+        Some("copperconfig.ron"),
+    )
+    .expect("Failed to setup logger.");
 
     // First run with the base configuration
     {
