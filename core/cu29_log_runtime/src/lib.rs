@@ -4,7 +4,7 @@ use bincode::enc::Encode;
 use bincode::enc::{Encoder, EncoderImpl};
 use bincode::error::EncodeError;
 use cu29_clock::RobotClock;
-use cu29_log::CuLogEntry;
+use cu29_log::{CuLogEntry, CuLogLevel};
 use cu29_traits::{CuResult, WriteStream};
 use log::Log;
 
@@ -27,9 +27,9 @@ impl WriteStream<CuLogEntry> for DummyWriteStream {
     }
 }
 type LogWriter = Box<dyn WriteStream<CuLogEntry>>;
-type WriterPair = (Mutex<LogWriter>, RobotClock);
+type WriterConfig = (Mutex<LogWriter>, RobotClock, Option<CuLogLevel>);
 
-static WRITER: OnceLock<WriterPair> = OnceLock::new();
+static LOGGER_CONFIG: OnceLock<WriterConfig> = OnceLock::new();
 
 #[cfg(debug_assertions)]
 pub static EXTRA_TEXT_LOGGER: RwLock<Option<Box<dyn Log + 'static>>> = RwLock::new(None);
@@ -54,17 +54,18 @@ impl LoggerRuntime {
         clock: RobotClock,
         destination: impl WriteStream<CuLogEntry> + 'static,
         #[allow(unused_variables)] extra_text_logger: Option<impl Log + 'static>,
+        max_level: Option<CuLogLevel>,
     ) -> Self {
         let runtime = LoggerRuntime {};
 
-        // If WRITER is already initialized, update the inner value.
+        // If LOGGER_CONFIG is already initialized, update the inner value.
         // This should only be useful for unit testing.
-        if let Some((writer, _)) = WRITER.get() {
+        if let Some((writer, _, _)) = LOGGER_CONFIG.get() {
             let mut writer_guard = writer.lock().unwrap();
             *writer_guard = Box::new(destination);
         } else {
-            WRITER
-                .set((Mutex::new(Box::new(destination)), clock))
+            LOGGER_CONFIG
+                .set((Mutex::new(Box::new(destination)), clock, max_level))
                 .unwrap();
         }
         #[cfg(debug_assertions)]
@@ -76,7 +77,7 @@ impl LoggerRuntime {
     }
 
     pub fn flush(&self) {
-        if let Some((writer, _clock)) = WRITER.get() {
+        if let Some((writer, _clock, _max_level)) = LOGGER_CONFIG.get() {
             if let Ok(mut writer) = writer.lock() {
                 if let Err(err) = writer.flush() {
                     eprintln!("cu29_log: Failed to flush writer: {err}");
@@ -93,7 +94,7 @@ impl LoggerRuntime {
 impl Drop for LoggerRuntime {
     fn drop(&mut self) {
         self.flush();
-        if let Some((mutex, _clock)) = WRITER.get() {
+        if let Some((mutex, _clock, _max_level)) = LOGGER_CONFIG.get() {
             if let Ok(mut writer_guard) = mutex.lock() {
                 // Replace the current WriteStream with a DummyWriteStream
                 *writer_guard = Box::new(DummyWriteStream);
@@ -106,11 +107,22 @@ impl Drop for LoggerRuntime {
 /// It moves entry by design, it will be absorbed in the queue.
 #[inline(always)]
 pub fn log(entry: &mut CuLogEntry) -> CuResult<()> {
-    let d = WRITER.get().map(|(writer, clock)| (writer, clock));
-    if d.is_none() {
+    let config = LOGGER_CONFIG
+        .get()
+        .map(|(writer, clock, max_level)| (writer, clock, max_level));
+    if config.is_none() {
         return Err("Logger not initialized.".into());
     }
-    let (writer, clock) = d.unwrap();
+    let (writer, clock, max_level) = config.unwrap();
+
+    // Check if this log entry should be filtered out based on max_level
+    if let Some(max) = max_level {
+        if &entry.level > max {
+            // Skip logging if the entry's level is higher than the max configured level
+            return Ok(());
+        }
+    }
+
     entry.time = clock.now();
     if let Err(err) = writer.lock().unwrap().log(entry) {
         eprintln!("Failed to log data: {err}");
@@ -133,6 +145,8 @@ pub fn log_debug_mode(
     format_str: &str, // this is the missing info at runtime.
     param_names: &[&str],
 ) -> CuResult<()> {
+    // We call log() which will handle max_level filtering for us
+    // If the log level is filtered out, log() will return Ok(()) early
     log(entry)?;
 
     let guarded_logger = EXTRA_TEXT_LOGGER.read().unwrap();
@@ -154,10 +168,20 @@ pub fn log_debug_mode(
             .map(|(k, v)| (k.to_string(), v.clone()))
             .collect();
         let logline = format_logline(entry.time, &fstr, params.as_slice(), &named_params)?;
+
+        // Map CuLogLevel to log::Level
+        let log_level = match entry.level {
+            CuLogLevel::Error => log::Level::Error,
+            CuLogLevel::Warn => log::Level::Warn,
+            CuLogLevel::Info => log::Level::Info,
+            CuLogLevel::Debug => log::Level::Debug,
+            CuLogLevel::Trace => log::Level::Trace,
+        };
+
         logger.log(
             &log::Record::builder()
                 .args(format_args!("{logline}"))
-                .level(log::Level::Info)
+                .level(log_level)
                 .target("cu29_log")
                 .module_path_static(Some("cu29_log"))
                 .file_static(Some("cu29_log"))
@@ -258,7 +282,7 @@ impl WriteStream<CuLogEntry> for SimpleFileWriter {
 
 #[cfg(test)]
 mod tests {
-    use crate::CuLogEntry;
+    use crate::{CuLogEntry, CuLogLevel};
     use bincode::config::standard;
     use cu29_value::Value;
     use smallvec::smallvec;
@@ -266,6 +290,7 @@ mod tests {
     #[test]
     fn test_encode_decode_structured_log() {
         let log_entry = CuLogEntry {
+            level: CuLogLevel::Info,
             time: 0.into(),
             msg_index: 1,
             paramname_indexes: smallvec![2, 3],

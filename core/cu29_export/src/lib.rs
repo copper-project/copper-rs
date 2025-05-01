@@ -377,7 +377,7 @@ mod tests {
             };
             let data_logger = Arc::new(Mutex::new(logger));
             let stream = stream_write(data_logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
-            let rt = LoggerRuntime::init(RobotClock::default(), stream, None::<NullLog>);
+            let rt = LoggerRuntime::init(RobotClock::default(), stream, None::<NullLog>, None);
 
             let mut entry = CuLogEntry::new(4); // this is a "Just a String {}" log line
             entry.add_param(0, Value::String("Parameter for the log line".into()));

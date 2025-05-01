@@ -688,6 +688,8 @@ pub struct LoggingConfig {
     pub section_size_mib: Option<u64>,
     #[serde(default = "default_as_true", skip_serializing_if = "Clone::clone")]
     pub enable_task_logging: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_level: Option<cu29_log::CuLogLevel>,
 }
 
 /// Missions are used to generate alternative DAGs within the same configuration.

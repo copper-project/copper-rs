@@ -12,8 +12,14 @@ fn main() {
     // the iceoryx logger does break if you attach a debugger to it.
     set_log_level(LogLevel::Fatal);
     let logger_path = "/tmp/downstream.copper";
-    let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), SLAB_SIZE, false, None)
-        .expect("Failed to setup logger.");
+    let copper_ctx = basic_copper_setup(
+        &PathBuf::from(logger_path),
+        SLAB_SIZE,
+        false,
+        None,
+        Some("downstream.ron"),
+    )
+    .expect("Failed to setup logger.");
     let mut application = DownstreamApplicationBuilder::new()
         .with_context(&copper_ctx)
         .build()

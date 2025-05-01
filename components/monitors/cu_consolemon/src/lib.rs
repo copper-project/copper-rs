@@ -9,6 +9,8 @@ use cu29::clock::{CuDuration, RobotClock};
 use cu29::config::{CuConfig, Node};
 use cu29::cutask::CuMsgMetadata;
 use cu29::monitoring::{CuDurationStatistics, CuMonitor, CuTaskState, Decision};
+#[cfg(debug_assertions)]
+use cu29::prelude::CuLogLevel;
 use cu29::prelude::{pool, CuCompactString};
 use cu29::{CuError, CuResult};
 #[cfg(feature = "debug_pane")]
@@ -800,8 +802,8 @@ impl CuMonitor for CuConsoleMon {
                 {
                     let max_lines = terminal.size().unwrap().height - 5;
                     let (debug_log, tx) = debug_pane::DebugLog::new(max_lines);
-
-                    let log_subscriber = debug_pane::LogSubscriber::new(tx);
+                    let log_level = CuLogLevel::Debug;
+                    let log_subscriber = debug_pane::LogSubscriber::new(tx, log_level);
 
                     *cu29_log_runtime::EXTRA_TEXT_LOGGER.write().unwrap() =
                         Some(Box::new(log_subscriber) as Box<dyn log::Log>);

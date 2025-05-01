@@ -64,6 +64,7 @@ fn setup_copper(mut commands: Commands) {
         LOG_SLAB_SIZE,
         true,
         Some(robot_clock.clone()),
+        Some("copperconfig.ron"),
     )
     .expect("Failed to setup logger.");
     debug!(

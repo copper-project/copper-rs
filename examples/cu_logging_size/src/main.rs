@@ -82,8 +82,14 @@ fn main() {
     let dir = tempdir().expect("Could not get a temporary directory");
     // construct dir/logger_path
     let logger_path = dir.path().join(logger_path);
-    let copper_ctx =
-        basic_copper_setup(&logger_path, SLAB_SIZE, true, None).expect("Failed to setup logger.");
+    let copper_ctx = basic_copper_setup(
+        &logger_path,
+        SLAB_SIZE,
+        true,
+        None,
+        Some("copperconfig.ron"),
+    )
+    .expect("Failed to setup logger.");
     debug!("Logger created at {}.", path = &logger_path);
     let clock = copper_ctx.clock;
     debug!("Creating application... ");

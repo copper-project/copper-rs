@@ -59,7 +59,7 @@ mod tests {
     #[ignore]
     fn end_2_end() {
         let logger_path = "/tmp/caterpillar.copper";
-        let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), None, true, None)
+        let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), None, true, None, None)
             .expect("Failed to setup logger.");
         debug!("Logger created at {}.", logger_path);
         debug!("Creating application... ");

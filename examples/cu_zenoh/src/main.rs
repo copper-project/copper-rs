@@ -42,8 +42,14 @@ const SLAB_SIZE: Option<usize> = Some(150 * 1024 * 1024);
 fn main() {
     let tmp_dir = tempfile::TempDir::new().expect("could not create a tmp dir");
     let logger_path = tmp_dir.path().join("zenoh.copper");
-    let copper_ctx =
-        basic_copper_setup(&logger_path, SLAB_SIZE, true, None).expect("Failed to setup logger.");
+    let copper_ctx = basic_copper_setup(
+        &logger_path,
+        SLAB_SIZE,
+        true,
+        None,
+        Some("copperconfig.ron"),
+    )
+    .expect("Failed to setup logger.");
     debug!("Logger created at {}.", path = &logger_path);
     let clock = copper_ctx.clock;
     debug!("Creating application... ");
