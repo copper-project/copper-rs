@@ -14,7 +14,7 @@ struct {{project-name | upper_camel_case}}Application {}
 fn main() {
     let logger_path = "{{project-name | kebab_case}}.copper";
     let copper_ctx =
-        basic_copper_setup(&PathBuf::from(logger_path), PREALLOCATED_STORAGE_SIZE, true, None).expect("Failed to setup logger.");
+        basic_copper_setup(&PathBuf::from(logger_path), PREALLOCATED_STORAGE_SIZE, true, None, Some("copperconfig.ron")).expect("Failed to setup logger.");
     debug!("Logger created at {}.", logger_path);
     debug!("Creating application... ");
     let mut application = {{project-name | upper_camel_case}}ApplicationBuilder::new()
