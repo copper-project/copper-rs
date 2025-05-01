@@ -32,6 +32,45 @@ use syn::{Expr, ExprAssign, ExprLit, Lit};
 /// In release mode, the log will be only be written to the unified logger.
 #[proc_macro]
 pub fn debug(input: TokenStream) -> TokenStream {
+    log_with_level(input, LogLevel::Debug)
+}
+
+/// This macro is used to log a message with parameters at INFO level.
+#[proc_macro]
+pub fn info(input: TokenStream) -> TokenStream {
+    log_with_level(input, LogLevel::Info)
+}
+
+/// This macro is used to log a message with parameters at WARN level.
+#[proc_macro]
+pub fn warn(input: TokenStream) -> TokenStream {
+    log_with_level(input, LogLevel::Warn)
+}
+
+/// This macro is used to log a message with parameters at ERROR level.
+#[proc_macro]
+pub fn error(input: TokenStream) -> TokenStream {
+    log_with_level(input, LogLevel::Error)
+}
+
+/// This macro is used to log a message with parameters at TRACE level.
+#[proc_macro]
+pub fn trace(input: TokenStream) -> TokenStream {
+    log_with_level(input, LogLevel::Trace)
+}
+
+/// Enum to represent log levels
+#[derive(Copy, Clone)]
+enum LogLevel {
+    Error,
+    Warn,
+    Info,
+    Debug,
+    Trace,
+}
+
+/// Implementation for all log level macros - creates appropriate log entry based on level
+fn log_with_level(input: TokenStream, level: LogLevel) -> TokenStream {
     let parser = syn::punctuated::Punctuated::<Expr, Token![,]>::parse_terminated;
     let exprs = parser.parse(input).expect("Failed to parse input");
 
@@ -48,8 +87,19 @@ pub fn debug(input: TokenStream) -> TokenStream {
     } else {
         panic!("The first parameter of the argument needs to be a string literal.");
     };
+
+    // Map LogLevel to CuLogLevel directly
+    let level_token = match level {
+        LogLevel::Error => quote! { CuLogLevel::Error },
+        LogLevel::Warn => quote! { CuLogLevel::Warn },
+        LogLevel::Info => quote! { CuLogLevel::Info },
+        LogLevel::Debug => quote! { CuLogLevel::Debug },
+        LogLevel::Trace => quote! { CuLogLevel::Trace },
+    };
+
+    // Generate the log entry creation with the appropriate level
     let prefix = quote! {
-        let mut log_entry = CuLogEntry::new(#index);
+        let mut log_entry = CuLogEntry::with_level(#index, #level_token);
     };
 
     let mut unnamed_params = vec![];

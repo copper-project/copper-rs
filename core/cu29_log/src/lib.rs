@@ -17,9 +17,36 @@ pub const ANONYMOUS: u32 = 0;
 
 pub const MAX_LOG_PARAMS_ON_STACK: usize = 10;
 
+#[repr(u8)] // Explicit representation for stable serialization
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Encode,
+    Decode,
+    Serialize,
+    Deserialize,
+)]
+pub enum CuLogLevel {
+    Error = 1, // Assign explicit values
+    Warn = 2,
+    #[default]
+    Info = 3,
+    Debug = 4,
+    Trace = 5,
+}
+
 /// This is the basic structure for a log entry in Copper.
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct CuLogEntry {
+    // LogLevel
+    pub level: CuLogLevel,
+
     // Approximate time when the log entry was created.
     pub time: CuTime,
 
@@ -38,6 +65,7 @@ impl Encode for CuLogEntry {
         &self,
         encoder: &mut E,
     ) -> Result<(), bincode::error::EncodeError> {
+        self.level.encode(encoder)?;
         self.time.encode(encoder)?;
         self.msg_index.encode(encoder)?;
 
@@ -59,6 +87,7 @@ impl<Context> Decode<Context> for CuLogEntry {
     fn decode<D: bincode::de::Decoder>(
         decoder: &mut D,
     ) -> Result<Self, bincode::error::DecodeError> {
+        let level = CuLogLevel::decode(decoder)?;
         let time = CuTime::decode(decoder)?;
         let msg_index = u32::decode(decoder)?;
 
@@ -75,6 +104,7 @@ impl<Context> Decode<Context> for CuLogEntry {
         }
 
         Ok(CuLogEntry {
+            level,
             time,
             msg_index,
             paramname_indexes,
@@ -88,8 +118,8 @@ impl Display for CuLogEntry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "CuLogEntry {{ msg_index: {}, paramname_indexes: {:?}, params: {:?} }}",
-            self.msg_index, self.paramname_indexes, self.params
+            "CuLogEntry {{ level: {:?}, msg_index: {}, paramname_indexes: {:?}, params: {:?} }}",
+            self.level, self.msg_index, self.paramname_indexes, self.params
         )
     }
 }
@@ -98,12 +128,30 @@ impl CuLogEntry {
     /// msg_index is the interned index of the message.
     pub fn new(msg_index: u32) -> Self {
         CuLogEntry {
+            level: CuLogLevel::Info,
             time: 0.into(), // We have no clock at that point it is called from random places
             // the clock will be set at actual log time from clock source provided
             msg_index,
             paramname_indexes: SmallVec::new(),
             params: SmallVec::new(),
         }
+    }
+
+    /// Create a new log entry with the specified level.
+    pub fn with_level(msg_index: u32, level: CuLogLevel) -> Self {
+        CuLogEntry {
+            level,
+            time: 0.into(),
+            msg_index,
+            paramname_indexes: SmallVec::new(),
+            params: SmallVec::new(),
+        }
+    }
+
+    /// Set the log level for this entry.
+    pub fn set_level(&mut self, level: CuLogLevel) -> &mut Self {
+        self.level = level;
+        self
     }
 
     /// Add a parameter to the log entry.
