@@ -3,7 +3,7 @@ use cu29_helpers::basic_copper_setup;
 use cu_livox::parser::LidarFrame;
 use cu_livox::LidarCuMsgPayload;
 use cu_udp_inject::PcapStreamer;
-use std::path::PathBuf;
+
 use std::thread;
 use std::time::Duration;
 struct LivoxTestSink {}
@@ -70,8 +70,8 @@ struct LivoxTester {}
 fn main() {
     let tmp_dir = tempfile::TempDir::new().expect("could not create a tmp dir");
     let logger_path = tmp_dir.path().join("livox_tester.copper");
-    let copper_ctx = basic_copper_setup(&PathBuf::from(&logger_path), None, true, None)
-        .expect("Failed to setup logger.");
+    let copper_ctx =
+        basic_copper_setup(&logger_path, None, true, None).expect("Failed to setup logger.");
     debug!("Logger created at {}.", logger_path);
 
     thread::spawn(|| {

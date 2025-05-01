@@ -1,7 +1,7 @@
 use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
 use std::fs::metadata;
-use tempfile::tempdir;
+
 
 pub mod tasks {
     use cu29::prelude::*;
@@ -77,11 +77,8 @@ struct App {}
 
 const SLAB_SIZE: Option<usize> = Some(150 * 1024 * 1024);
 fn main() {
-    let logger_path = "logger.copper";
-    // get a temporary directory
-    let dir = tempdir().expect("Could not get a temporary directory");
-    // construct dir/logger_path
-    let logger_path = dir.path().join(logger_path);
+    let tmp_dir = tempfile::TempDir::new().expect("Could not create temporary directory");
+    let logger_path = tmp_dir.path().join("logger.copper");
     let copper_ctx =
         basic_copper_setup(&logger_path, SLAB_SIZE, true, None).expect("Failed to setup logger.");
     debug!("Logger created at {}.", path = &logger_path);
@@ -103,7 +100,7 @@ fn main() {
     // check if the logger file is at least 1 section in length
 
     // change the end of the logger_path from copper to _0.copper
-    let logger_first_path = dir.path().join("logger_0.copper"); // get the first slab
+    let logger_first_path = tmp_dir.path().join("logger_0.copper"); // get the first slab
 
     match metadata(&logger_first_path) {
         Ok(meta) => {

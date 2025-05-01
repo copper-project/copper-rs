@@ -1,7 +1,6 @@
 use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
 use cu_ads7883_new::ADSReadingPayload;
-use std::path::PathBuf;
 
 #[copper_runtime(config = "tests/copperconfig.ron")]
 struct ADS78883Tester {}
@@ -30,8 +29,8 @@ impl<'cl> CuSinkTask<'cl> for ADS78883TestSink {
 fn test_driver_with_hardware() {
     let tmp_dir = tempfile::TempDir::new().expect("could not create a tmp dir");
     let logger_path = tmp_dir.path().join("caterpillar.copper");
-    let copper_ctx = basic_copper_setup(&PathBuf::from(&logger_path), None, true, None)
-        .expect("Failed to setup logger.");
+    let copper_ctx =
+        basic_copper_setup(&logger_path, None, true, None).expect("Failed to setup logger.");
     debug!("Logger created at {}.", logger_path);
     let clock = copper_ctx.clock;
     debug!("Creating application... ");

@@ -4,7 +4,6 @@ mod tests {
     use cu29_helpers::basic_copper_setup;
     use cu_gstreamer::CuGstBuffer;
     use rerun::{ChannelDatatype, ColorModel, Image, RecordingStream, RecordingStreamBuilder};
-    use std::path::PathBuf;
     use std::thread::sleep;
     use std::time::Duration;
 
@@ -60,8 +59,8 @@ mod tests {
     fn end_2_end() {
         let tmp_dir = tempfile::TempDir::new().expect("could not create a tmp dir");
         let logger_path = tmp_dir.path().join("caterpillar.copper");
-        let copper_ctx = basic_copper_setup(&PathBuf::from(&logger_path), None, true, None)
-            .expect("Failed to setup logger.");
+        let copper_ctx =
+            basic_copper_setup(&logger_path, None, true, None).expect("Failed to setup logger.");
         debug!("Logger created at {}.", logger_path);
         debug!("Creating application... ");
         let mut application = GStreamerTestAppBuilder::new()

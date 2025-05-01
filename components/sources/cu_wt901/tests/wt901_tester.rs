@@ -1,7 +1,7 @@
 use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
 use cu_wt901::PositionalReadingsPayload;
-use std::path::PathBuf;
+
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -31,8 +31,8 @@ struct WT910Tester {}
 fn main() {
     let tmp_dir = tempfile::TempDir::new().expect("could not create a tmp dir");
     let logger_path = tmp_dir.path().join("caterpillar.copper");
-    let copper_ctx = basic_copper_setup(&PathBuf::from(&logger_path), None, true, None)
-        .expect("Failed to setup logger.");
+    let copper_ctx =
+        basic_copper_setup(&logger_path, None, true, None).expect("Failed to setup logger.");
     debug!("Logger created at {}.", logger_path);
     let clock = copper_ctx.clock;
     debug!("Creating application... ");
