@@ -58,8 +58,9 @@ mod tests {
     #[test]
     #[ignore]
     fn end_2_end() {
-        let logger_path = "/tmp/caterpillar.copper";
-        let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), None, true, None)
+        let tmp_dir = tempfile::TempDir::new().expect("could not create a tmp dir");
+        let logger_path = tmp_dir.path().join("caterpillar.copper");
+        let copper_ctx = basic_copper_setup(&PathBuf::from(&logger_path), None, true, None)
             .expect("Failed to setup logger.");
         debug!("Logger created at {}.", logger_path);
         debug!("Creating application... ");

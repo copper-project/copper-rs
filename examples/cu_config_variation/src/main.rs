@@ -1,13 +1,17 @@
 use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
-use std::path::Path;
+use std::path::PathBuf;
 
 #[copper_runtime(config = "copperconfig.ron")]
 struct MyApp {}
 
 fn main() {
     let mut copperconfig: CuConfig = read_configuration("copperconfig.ron").unwrap();
-    let copper_ctx = basic_copper_setup(Path::new("/tmp/test.copper"), None, true, None)
+
+    let tmp_dir = tempfile::TempDir::new().expect("could not create a tmp dir");
+    let logger_path = tmp_dir.path().join("test.copper");
+
+    let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), None, true, None)
         .expect("Failed to setup logger.");
 
     // First run with the base configuration
