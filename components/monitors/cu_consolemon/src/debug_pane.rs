@@ -1,4 +1,5 @@
 use crate::UI;
+use cu29::prelude::CuLogLevel;
 use ratatui::layout::Rect;
 use ratatui::prelude::Stylize;
 use ratatui::widgets::{Block, Borders, Paragraph};
@@ -13,7 +14,6 @@ use {
     std::sync::atomic::AtomicU16,
     std::sync::mpsc::{Receiver, SyncSender},
 };
-use cu29::prelude::CuLogLevel;
 
 #[derive(Debug)]
 pub struct DebugLog {
