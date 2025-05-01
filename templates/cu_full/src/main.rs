@@ -4,7 +4,7 @@ use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
 use std::thread::sleep;
 use std::time::Duration;
-use std::path::PathBuf;
+use std::path::{Path,PathBuf};
 
 const PREALLOCATED_STORAGE_SIZE: Option<usize> = Some(1024 * 1024 * 100);
 
@@ -12,7 +12,12 @@ const PREALLOCATED_STORAGE_SIZE: Option<usize> = Some(1024 * 1024 * 100);
 struct {{project-name | upper_camel_case}}Application {}
 
 fn main() {
-    let logger_path = "{{project-name | kebab_case}}.copper";
+    let logger_path = "logs/{{project-name | kebab_case}}.copper";
+    if let Some(parent) = Path::new(logger_path).parent() {
+        if !parent.exists() {
+            std::fs::create_dir_all(parent).expect("Failed to create logs directory");
+        }
+    }
     let copper_ctx =
         basic_copper_setup(&PathBuf::from(&logger_path), PREALLOCATED_STORAGE_SIZE, true, None).expect("Failed to setup logger.");
     debug!("Logger created at {}.", logger_path);
