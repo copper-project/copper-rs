@@ -9,8 +9,10 @@ use cu29::clock::{CuDuration, RobotClock};
 use cu29::config::{CuConfig, Node};
 use cu29::cutask::CuMsgMetadata;
 use cu29::monitoring::{CuDurationStatistics, CuMonitor, CuTaskState, Decision};
-use cu29::prelude::{pool, CuCompactString, CuLogLevel};
+use cu29::prelude::{pool, CuCompactString};
 use cu29::{CuError, CuResult};
+#[cfg(feature = "debug_pane")]
+use cu29::prelude::CuLogLevel;
 #[cfg(feature = "debug_pane")]
 use debug_pane::UIExt;
 use ratatui::backend::CrosstermBackend;
