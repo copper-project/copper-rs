@@ -13,6 +13,7 @@ use {
     std::sync::atomic::AtomicU16,
     std::sync::mpsc::{Receiver, SyncSender},
 };
+use cu29::prelude::CuLogLevel;
 
 #[derive(Debug)]
 pub struct DebugLog {
@@ -75,12 +76,18 @@ pub struct LogSubscriber {
 
 impl LogSubscriber {
     #[allow(dead_code)]
-    pub fn new(tx: SyncSender<String>) -> Self {
+    pub fn new(tx: SyncSender<String>, level: CuLogLevel) -> Self {
         let log_subscriber = Self { tx };
         if log::set_boxed_logger(Box::new(log_subscriber.clone())).is_err() {
             eprintln!("Failed to set `LogSubscriber` as global log subscriber")
         }
-        log::set_max_level(LevelFilter::Debug);
+        match level {
+            CuLogLevel::Trace => log::set_max_level(LevelFilter::Trace),
+            CuLogLevel::Debug => log::set_max_level(LevelFilter::Debug),
+            CuLogLevel::Info => log::set_max_level(LevelFilter::Info),
+            CuLogLevel::Warn => log::set_max_level(LevelFilter::Warn),
+            CuLogLevel::Error => log::set_max_level(LevelFilter::Error),
+        }
         log_subscriber
     }
 

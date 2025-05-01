@@ -1,5 +1,7 @@
 use cu29_clock::RobotClock;
+use cu29_log::CuLogLevel;
 use cu29_log_runtime::LoggerRuntime;
+use cu29_runtime::config::read_configuration;
 use cu29_runtime::curuntime::CopperContext;
 use cu29_traits::{CuResult, UnifiedLogType};
 use cu29_unifiedlog::{stream_write, UnifiedLogger, UnifiedLoggerBuilder};
@@ -23,11 +25,13 @@ use std::sync::{Arc, Mutex};
 /// slab_size: The logger will pre-allocate large files of those sizes. With the name of the given file _0, _1 etc.
 /// clock: if you let it to None it will create a default clock otherwise you can provide your own, for example a simulation clock.
 ///        with let (clock , mock) = RobotClock::mock();
+/// config_path: Optional path to a configuration file (.ron) to load logging settings from
 pub fn basic_copper_setup(
     unifiedlogger_output_base_name: &Path,
     slab_size: Option<usize>,
     _text_log: bool,
     clock: Option<RobotClock>,
+    config_path: Option<&str>,
 ) -> CuResult<CopperContext> {
     let preallocated_size = slab_size.unwrap_or(1024 * 1024 * 10);
     let UnifiedLogger::Write(logger) = UnifiedLoggerBuilder::new()
@@ -47,10 +51,32 @@ pub fn basic_copper_setup(
         4096 * 10,
     );
 
+    // Extract max_level from logging_config if available and not explicitly provided
+    let max_level = if config_path.is_some() {
+        if let Ok(config) = read_configuration(config_path.unwrap()) {
+            config
+                .logging
+                .and_then(|logging_config| logging_config.max_level)
+        } else {
+            Some(CuLogLevel::Info)
+        }
+    } else {
+        Some(CuLogLevel::Info)
+    };
+
     #[cfg(debug_assertions)]
     let extra: Option<TermLogger> = if _text_log {
+        let log_level = match max_level {
+            Some(CuLogLevel::Error) => LevelFilter::Error,
+            Some(CuLogLevel::Warn) => LevelFilter::Warn,
+            Some(CuLogLevel::Info) => LevelFilter::Info,
+            Some(CuLogLevel::Debug) => LevelFilter::Debug,
+            Some(CuLogLevel::Trace) => LevelFilter::Trace,
+            None => LevelFilter::Info,
+        };
+
         let slow_text_logger = TermLogger::new(
-            LevelFilter::Debug,
+            log_level,
             Config::default(),
             TerminalMode::Mixed,
             ColorChoice::Auto,
@@ -64,7 +90,8 @@ pub fn basic_copper_setup(
     let extra: Option<TermLogger> = None;
 
     let clock = clock.unwrap_or_default();
-    let structured_logging = LoggerRuntime::init(clock.clone(), structured_stream, extra);
+    let structured_logging =
+        LoggerRuntime::init(clock.clone(), structured_stream, extra, max_level);
     Ok(CopperContext {
         unified_logger: unified_logger.clone(),
         logger_runtime: structured_logging,

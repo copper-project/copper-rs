@@ -1,4 +1,10 @@
 (
+    logging: (
+        slab_size_mib: 20,
+        section_size_mib: 2,
+        enable_task_logging: false,
+        max_level: Debug,
+    ),
     tasks: [
         (
             id: "balpos",
