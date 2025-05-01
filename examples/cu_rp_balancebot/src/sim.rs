@@ -12,6 +12,8 @@ use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
 use cu_ads7883_new::ADSReadingPayload;
 use cu_rp_encoder::EncoderPayload;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 // To enable sim, it is just your regular macro with sim_mode true
 #[copper_runtime(config = "copperconfig.ron", sim_mode = true)]
@@ -48,14 +50,22 @@ fn default_callback(step: default::SimStep) -> SimOverride {
 fn setup_copper(mut commands: Commands) {
     #[allow(clippy::identity_op)]
     const LOG_SLAB_SIZE: Option<usize> = Some(1 * 1024 * 1024 * 1024);
-    let tmp_dir = tempfile::TempDir::new().expect("could not create a tmp dir");
-    let logger_path = tmp_dir.path().join("balance.copper");
+    let logger_path = "logs/balance.copper";
+    if let Some(parent) = Path::new(logger_path).parent() {
+        if !parent.exists() {
+            fs::create_dir_all(parent).expect("Failed to create logs directory");
+        }
+    }
 
     // here we set up a mock clock so the simulation can take control of it.
     let (robot_clock, mock) = RobotClock::mock();
-    let copper_ctx =
-        basic_copper_setup(&logger_path, LOG_SLAB_SIZE, true, Some(robot_clock.clone()))
-            .expect("Failed to setup logger.");
+    let copper_ctx = basic_copper_setup(
+        &PathBuf::from(logger_path),
+        LOG_SLAB_SIZE,
+        true,
+        Some(robot_clock.clone()),
+    )
+    .expect("Failed to setup logger.");
     debug!(
         "Logger created at {}. This is a simulation.",
         path = logger_path
