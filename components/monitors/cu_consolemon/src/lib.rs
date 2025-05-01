@@ -9,7 +9,7 @@ use cu29::clock::{CuDuration, RobotClock};
 use cu29::config::{CuConfig, Node};
 use cu29::cutask::CuMsgMetadata;
 use cu29::monitoring::{CuDurationStatistics, CuMonitor, CuTaskState, Decision};
-#[cfg(feature = "debug_pane")]
+#[cfg(debug_assertions)]
 use cu29::prelude::CuLogLevel;
 use cu29::prelude::{pool, CuCompactString};
 use cu29::{CuError, CuResult};
