@@ -92,17 +92,17 @@ jobs:
               Write-Host "winget is not installed or available."
               exit 1
           }
-          
+
           # Install PCAP SDK
           Invoke-WebRequest -Uri https://npcap.com/dist/npcap-sdk-1.13.zip -OutFile npcap-sdk.zip
           Expand-Archive -Path npcap-sdk.zip -DestinationPath $env:USERPROFILE\npcap-sdk
           Remove-Item npcap-sdk.zip
-          
+
           # Install Win10Pcap (if winget is available)
           winget install DaiyuuNobori.Win10Pcap --accept-source-agreements --accept-package-agreements
-          
+
           # Set PCAP library path
-          echo "LIB=$env:USERPROFILE\npcap-sdk\Lib\x64" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV 
+          echo "LIB=$env:USERPROFILE\npcap-sdk\Lib\x64" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
 
       - name: Setup GStreamer (x86_64)
         if: runner.os != 'MacOs'
@@ -211,7 +211,7 @@ jobs:
         if: matrix.mode == 'debug'
         run: |
           cd templates
-          cargo +beta generate -p cu_full --name test_project --destination . -d copper_source=local --silent
+          cargo +beta generate -p cu_full --name test_project --destination . -d copper_source=local -d copper_root_path=../.. --silent
 
       - name: Build generated project on (${{ matrix.os }} | debug)
         if: matrix.mode == 'debug'
