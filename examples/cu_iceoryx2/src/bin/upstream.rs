@@ -1,6 +1,5 @@
 use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
-use std::path::PathBuf;
 
 #[copper_runtime(config = "upstream.ron")]
 struct UpstreamApplication {}
@@ -8,9 +7,10 @@ struct UpstreamApplication {}
 const SLAB_SIZE: Option<usize> = Some(100 * 1024 * 1024);
 
 fn main() {
-    let logger_path = "/tmp/upstream.copper";
-    let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), SLAB_SIZE, false, None)
-        .expect("Failed to setup logger.");
+    let tmp_dir = tempfile::TempDir::new().expect("could not create a tmp dir");
+    let logger_path = tmp_dir.path().join("upstream.copper");
+    let copper_ctx =
+        basic_copper_setup(&logger_path, SLAB_SIZE, false, None).expect("Failed to setup logger.");
     let mut application = UpstreamApplicationBuilder::new()
         .with_context(&copper_ctx)
         .build()

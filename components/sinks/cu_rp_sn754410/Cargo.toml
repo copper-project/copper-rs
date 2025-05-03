@@ -14,6 +14,7 @@ repository.workspace = true
 cu29 = { workspace = true }
 bincode = { workspace = true }
 serde = { workspace = true }
+tempfile = { workspace = true }
 
 [dev-dependencies]
 cu29-helpers = { workspace = true }

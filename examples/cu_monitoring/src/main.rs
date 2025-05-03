@@ -1,6 +1,5 @@
 use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
-use std::path::PathBuf;
 
 pub mod tasks {
     use cu29::prelude::*;
@@ -113,10 +112,11 @@ impl CuMonitor for ExampleMonitor {
 }
 const SLAB_SIZE: Option<usize> = Some(1024 * 1024);
 fn main() {
-    let logger_path = "monitor.copper";
+    let tmp_dir = tempfile::TempDir::new().expect("could not create a tmp dir");
+    let logger_path = tmp_dir.path().join("monitor.copper");
 
-    let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), SLAB_SIZE, true, None)
-        .expect("Failed to setup logger.");
+    let copper_ctx =
+        basic_copper_setup(&logger_path, SLAB_SIZE, true, None).expect("Failed to setup logger.");
     debug!("Logger created at {}.", path = logger_path);
     debug!("Creating application... ");
     let mut application = AppBuilder::new()
