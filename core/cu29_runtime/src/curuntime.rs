@@ -305,9 +305,7 @@ fn plan_tasks_tree_branch(
         match task_type {
             CuTaskType::Source => {
                 #[cfg(feature = "macro_debug")]
-                eprintln!(
-                    "    → Source node, assign output index {next_culist_output_index}"
-                );
+                eprintln!("    → Source node, assign output index {next_culist_output_index}");
                 output_msg_index_type = Some((
                     next_culist_output_index,
                     graph
