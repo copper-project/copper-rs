@@ -48,32 +48,32 @@ pub enum Value {
 impl Display for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Value::Bool(v) => write!(f, "{}", v),
-            Value::U8(v) => write!(f, "{}", v),
-            Value::U16(v) => write!(f, "{}", v),
-            Value::U32(v) => write!(f, "{}", v),
-            Value::U64(v) => write!(f, "{}", v),
-            Value::I8(v) => write!(f, "{}", v),
-            Value::I16(v) => write!(f, "{}", v),
-            Value::I32(v) => write!(f, "{}", v),
-            Value::I64(v) => write!(f, "{}", v),
-            Value::F32(v) => write!(f, "{}", v),
-            Value::F64(v) => write!(f, "{}", v),
-            Value::Char(v) => write!(f, "{}", v),
-            Value::String(v) => write!(f, "{}", v),
+            Value::Bool(v) => write!(f, "{v}"),
+            Value::U8(v) => write!(f, "{v}"),
+            Value::U16(v) => write!(f, "{v}"),
+            Value::U32(v) => write!(f, "{v}"),
+            Value::U64(v) => write!(f, "{v}"),
+            Value::I8(v) => write!(f, "{v}"),
+            Value::I16(v) => write!(f, "{v}"),
+            Value::I32(v) => write!(f, "{v}"),
+            Value::I64(v) => write!(f, "{v}"),
+            Value::F32(v) => write!(f, "{v}"),
+            Value::F64(v) => write!(f, "{v}"),
+            Value::Char(v) => write!(f, "{v}"),
+            Value::String(v) => write!(f, "{v}"),
             Value::Unit => write!(f, "()"),
             Value::Option(v) => match v {
-                Some(v) => write!(f, "Some({})", v),
+                Some(v) => write!(f, "Some({v})"),
                 None => write!(f, "None"),
             },
-            Value::Newtype(v) => write!(f, "{}", v),
+            Value::Newtype(v) => write!(f, "{v}"),
             Value::Seq(v) => {
                 write!(f, "[")?;
                 for (i, v) in v.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
-                    write!(f, "{}", v)?;
+                    write!(f, "{v}")?;
                 }
                 write!(f, "]")
             }
@@ -83,7 +83,7 @@ impl Display for Value {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
-                    write!(f, "{}: {}", k, v)?;
+                    write!(f, "{k}: {v}")?;
                 }
                 write!(f, "}}")
             }
@@ -93,11 +93,11 @@ impl Display for Value {
                     if i > 0 {
                         write!(f, " ")?;
                     }
-                    write!(f, "{:02x}", b)?;
+                    write!(f, "{b:02x}")?;
                 }
                 write!(f, "]")
             }
-            Value::CuTime(v) => write!(f, "{}", v),
+            Value::CuTime(v) => write!(f, "{v}"),
         }
     }
 }
@@ -904,7 +904,7 @@ mod tests {
         // Check we get appropriate error types
         match bool_val.deserialize_into::<String>() {
             Err(DeserializerError::InvalidType(..)) => (), // Expected
-            other => panic!("Expected InvalidType error, got: {:?}", other),
+            other => panic!("Expected InvalidType error, got: {other:?}"),
         }
     }
 

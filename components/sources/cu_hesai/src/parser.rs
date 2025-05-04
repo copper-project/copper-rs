@@ -25,8 +25,8 @@ pub enum HesaiError {
 impl fmt::Display for HesaiError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            HesaiError::InvalidPacket(msg) => write!(f, "Invalid packet: {}", msg),
-            HesaiError::InvalidTimestamp(msg) => write!(f, "Invalid timestamp: {}", msg),
+            HesaiError::InvalidPacket(msg) => write!(f, "Invalid packet: {msg}"),
+            HesaiError::InvalidTimestamp(msg) => write!(f, "Invalid timestamp: {msg}"),
         }
     }
 }
@@ -609,7 +609,7 @@ mod tests {
             robot_clock.now(),
         );
         for (bid, ts) in packet.block_ts(&rt).unwrap().iter().enumerate() {
-            println!("Block {} tov: {}", bid, ts);
+            println!("Block {bid} tov: {ts}");
         }
     }
 }

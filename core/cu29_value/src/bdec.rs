@@ -32,8 +32,7 @@ impl<Context> Decode<Context> for Value {
             18 => Ok(Value::Bytes(Vec::<u8>::decode(decoder)?)),
             32 => Ok(Value::CuTime(CuTime::decode(decoder)?)),
             r => Err(DecodeError::OtherString(format!(
-                "Unknown Value variant: {}",
-                r
+                "Unknown Value variant: {r}"
             ))),
         }
     }
@@ -64,8 +63,7 @@ impl<'de, Context> BorrowDecode<'de, Context> for Value {
             17 => Ok(Value::Option(Option::<Box<Value>>::borrow_decode(decoder)?)),
             18 => Ok(Value::Newtype(Box::<Value>::borrow_decode(decoder)?)),
             r => Err(DecodeError::OtherString(format!(
-                "Unknown Value variant: {}",
-                r
+                "Unknown Value variant: {r}"
             ))),
         }
     }

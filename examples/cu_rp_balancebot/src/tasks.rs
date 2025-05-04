@@ -45,7 +45,7 @@ impl<'cl> CuTask<'cl> for PIDMerger {
         });
         output
             .metadata
-            .set_status(format!("Comp:{:.2}", composite_output));
+            .set_status(format!("Comp:{composite_output:.2}"));
 
         Ok(())
     }

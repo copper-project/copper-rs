@@ -46,7 +46,7 @@ where
         let node: iceoryx2::prelude::Node<ipc::Service> =
             NodeBuilder::new().create::<ipc::Service>().map_err(|e| {
                 CuError::new_with_cause(
-                    format!("IceoryxSink({}): Failed to create node.", service_name_str).as_str(),
+                    format!("IceoryxSink({service_name_str}): Failed to create node.").as_str(),
                     e,
                 )
             })?;

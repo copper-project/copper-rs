@@ -161,7 +161,7 @@ fn setup_scene(
         .expect("Failed to create the file cache.");
 
     let balance_bot_hashed = cache
-        .cached_path(format!("{}{}", BASE_ASSETS_URL, BALANCEBOT).as_str())
+        .cached_path(format!("{BASE_ASSETS_URL}{BALANCEBOT}").as_str())
         .expect("Failed to download and cache balancebot.glb.");
     let balance_bot_path = balance_bot_hashed.parent().unwrap().join(BALANCEBOT);
 
@@ -172,7 +172,7 @@ fn setup_scene(
     .expect("Failed to create symlink to balancebot.glb.");
 
     let skybox_path_hashed = cache
-        .cached_path(format!("{}{}", BASE_ASSETS_URL, SKYBOX).as_str())
+        .cached_path(format!("{BASE_ASSETS_URL}{SKYBOX}").as_str())
         .expect("Failed download and cache skybox.ktx2.");
 
     let skybox_path = skybox_path_hashed.parent().unwrap().join(SKYBOX);
@@ -183,7 +183,7 @@ fn setup_scene(
     .expect("Failed to create symlink to skybox.ktx2.");
 
     let diffuse_map_path_hashed = cache
-        .cached_path(format!("{}{}", BASE_ASSETS_URL, DIFFUSE_MAP).as_str())
+        .cached_path(format!("{BASE_ASSETS_URL}{DIFFUSE_MAP}").as_str())
         .expect("Failed download and cache diffuse_map.");
 
     let diffuse_map_path = diffuse_map_path_hashed.parent().unwrap().join(DIFFUSE_MAP);
