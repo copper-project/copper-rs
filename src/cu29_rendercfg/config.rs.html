@@ -1202,7 +1202,7 @@
 <a href=#1202 id=1202 data-nosnippet>1202</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(section_size_mib) = <span class="self">self</span>.section_size_mib {
 <a href=#1203 id=1203 data-nosnippet>1203</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(slab_size_mib) = <span class="self">self</span>.slab_size_mib {
 <a href=#1204 id=1204 data-nosnippet>1204</a>                <span class="kw">if </span>section_size_mib &gt; slab_size_mib {
-<a href=#1205 id=1205 data-nosnippet>1205</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(<span class="macro">format!</span>(<span class="string">"Section size ({} MiB) cannot be larger than slab size ({} MiB). Adjust the parameters accordingly."</span>, section_size_mib, slab_size_mib)));
+<a href=#1205 id=1205 data-nosnippet>1205</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(CuError::from(<span class="macro">format!</span>(<span class="string">"Section size ({section_size_mib} MiB) cannot be larger than slab size ({slab_size_mib} MiB). Adjust the parameters accordingly."</span>)));
 <a href=#1206 id=1206 data-nosnippet>1206</a>                }
 <a href=#1207 id=1207 data-nosnippet>1207</a>            }
 <a href=#1208 id=1208 data-nosnippet>1208</a>        }
