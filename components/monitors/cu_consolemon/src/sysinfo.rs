@@ -143,7 +143,7 @@ fn pfetch(info: Vec<(Color, String, String)>, logo: Logo, logo_enabled: bool) ->
     let logo = if color_enabled {
         logo.to_string()
     } else {
-        format!("{:#}", logo)
+        format!("{logo:#}")
     };
     let mut logo_lines = logo.lines();
     let raw_logo_lines: Vec<_> = raw_logo.lines().collect();

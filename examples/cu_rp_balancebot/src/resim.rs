@@ -59,7 +59,7 @@ fn run_one_copperlist(
                     let force_magnitude = motor_actuation.power * 2.0;
                     output
                         .metadata
-                        .set_status(format!("Applied force: {}", force_magnitude));
+                        .set_status(format!("Applied force: {force_magnitude}"));
                 }
                 SimOverride::ExecutedBySim
             }
@@ -107,7 +107,7 @@ fn main() {
     let mut reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
     let iter = copperlists_dump::<default::CuMsgs>(&mut reader);
     for entry in iter {
-        println!("{:#?}", entry);
+        println!("{entry:#?}");
         run_one_copperlist(&mut copper_app, &mut robot_clock_mock, entry);
     }
     copper_app

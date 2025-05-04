@@ -87,7 +87,7 @@ impl LogSubscriber {
     pub fn push_logs(&self, log: String) {
         if let Err(err) = self.tx.send(log) {
             let SendError(msg) = err;
-            eprintln!("Error Sending Logs to MPSC Channel: {}", msg)
+            eprintln!("Error Sending Logs to MPSC Channel: {msg}")
         }
     }
 }

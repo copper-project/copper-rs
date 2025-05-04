@@ -48,19 +48,18 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
     let config = parse_macro_input!(config_path_lit as LitStr).value();
     if !std::path::Path::new(&config_full_path(&config)).exists() {
         return return_error(format!(
-            "The configuration file `{}` does not exist. Please provide a valid path.",
-            config
+            "The configuration file `{config}` does not exist. Please provide a valid path."
         ));
     }
     #[cfg(feature = "macro_debug")]
-    eprintln!("[gen culist support with {:?}]", config);
+    eprintln!("[gen culist support with {config:?}]");
     let cuconfig = match read_config(&config) {
         Ok(cuconfig) => cuconfig,
         Err(e) => return return_error(e.to_string()),
     };
     let runtime_plan: CuExecutionLoop = match compute_runtime_plan(&cuconfig) {
         Ok(plan) => plan,
-        Err(e) => return return_error(format!("Could not compute runtime plan: {}", e)),
+        Err(e) => return return_error(format!("Could not compute runtime plan: {e}")),
     };
 
     // Give a name compatible with a struct to match the task ids to their output in the CuMsgs tuple.
@@ -275,8 +274,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
     if !std::path::Path::new(&config_full_path(&config_file)).exists() {
         return return_error(format!(
-            "The configuration file `{}` does not exist. Please provide a valid path.",
-            config_file
+            "The configuration file `{config_file}` does not exist. Please provide a valid path."
         ));
     }
 
@@ -286,7 +284,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     };
     let copper_config_content = match read_to_string(config_full_path(config_file.as_str())) {
         Ok(ok) => ok,
-        Err(e) => return return_error(format!("Could not read the config file (should not happen because we just succeeded just before). {}", e))
+        Err(e) => return return_error(format!("Could not read the config file (should not happen because we just succeeded just before). {e}"))
     };
 
     let mission = "default"; // FIXME(gbin) generate all the missions from the config.
@@ -294,13 +292,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         parse_str::<Ident>(mission).expect("Could not make an identifier of the mission name");
 
     #[cfg(feature = "macro_debug")]
-    eprintln!("[runtime plan for mission {}]", mission);
+    eprintln!("[runtime plan for mission {mission}]");
     let runtime_plan: CuExecutionLoop = match compute_runtime_plan(&copper_config) {
         Ok(plan) => plan,
-        Err(e) => return return_error(format!("Could not compute runtime plan: {}", e)),
+        Err(e) => return return_error(format!("Could not compute runtime plan: {e}")),
     };
     #[cfg(feature = "macro_debug")]
-    eprintln!("{:?}", runtime_plan);
+    eprintln!("{runtime_plan:?}");
 
     #[cfg(feature = "macro_debug")]
     eprintln!("[extract tasks ids & types]");
@@ -875,7 +873,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         }).collect();
     #[cfg(feature = "macro_debug")]
-    eprintln!("[Culist access order:  {:?}]", taskid_call_order);
+    eprintln!("[Culist access order:  {taskid_call_order:?}]");
 
     // Give a name compatible with a struct to match the task ids to their output in the CuMsgs tuple.
     let all_tasks_member_ids: Vec<String> = all_tasks_ids

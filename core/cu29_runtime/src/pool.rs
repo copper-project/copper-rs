@@ -106,7 +106,7 @@ where
             CuHandleInner::Pooled(r) => {
                 write!(f, "Pooled: {:?}", r.deref())
             }
-            CuHandleInner::Detached(r) => write!(f, "Detached: {:?}", r),
+            CuHandleInner::Detached(r) => write!(f, "Detached: {r:?}"),
         }
     }
 }

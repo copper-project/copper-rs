@@ -107,7 +107,7 @@ fn main() {
             assert!(file_size >= SLAB_SIZE.unwrap() as u64);
         }
         Err(e) => {
-            eprintln!("Failed to get file metadata: {}", e);
+            eprintln!("Failed to get file metadata: {e}");
         }
     }
     let (current_slab_used, _current_slab_offsets, _back_slab_in_flight) =

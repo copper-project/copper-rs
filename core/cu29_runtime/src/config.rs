@@ -1202,7 +1202,7 @@ impl LoggingConfig {
         if let Some(section_size_mib) = self.section_size_mib {
             if let Some(slab_size_mib) = self.slab_size_mib {
                 if section_size_mib > slab_size_mib {
-                    return Err(CuError::from(format!("Section size ({} MiB) cannot be larger than slab size ({} MiB). Adjust the parameters accordingly.", section_size_mib, slab_size_mib)));
+                    return Err(CuError::from(format!("Section size ({section_size_mib} MiB) cannot be larger than slab size ({slab_size_mib} MiB). Adjust the parameters accordingly.")));
                 }
             }
         }

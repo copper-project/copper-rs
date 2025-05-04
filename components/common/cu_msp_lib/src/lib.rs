@@ -32,7 +32,7 @@ impl Debug for MspPacketData {
         }
         write!(f, "0x")?;
         for byte in data {
-            write!(f, "{:02X}", byte)?;
+            write!(f, "{byte:02X}")?;
         }
         Ok(())
     }
@@ -74,8 +74,7 @@ impl Display for MspPacketParseError {
                 calculated,
             } => write!(
                 f,
-                "CRC mismatch, expected: 0x{:02X}, calculated: 0x{:02X}",
-                expected, calculated
+                "CRC mismatch, expected: 0x{expected:02X}, calculated: 0x{calculated:02X}"
             ),
             MspPacketParseError::InvalidData => write!(f, "Invalid data"),
             MspPacketParseError::InvalidHeader1 => write!(f, "Invalid header 1"),

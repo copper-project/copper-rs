@@ -44,7 +44,7 @@ fn main() -> std::io::Result<()> {
         let stdin = child.stdin.as_mut().expect("Failed to open stdin");
         let result = stdin.write_all(&content);
         if let Err(e) = result {
-            eprintln!("Failed to write to stdin of the dot process: {}", e);
+            eprintln!("Failed to write to stdin of the dot process: {e}");
             std::process::exit(1);
         }
     }

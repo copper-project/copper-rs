@@ -158,7 +158,7 @@ fn run_copper_callback(
                     cart_force.apply_force(new_force);
                     output
                         .metadata
-                        .set_status(format!("Applied force: {}", force_magnitude));
+                        .set_status(format!("Applied force: {force_magnitude}"));
                     SimOverride::ExecutedBySim
                 } else {
                     cart_force.apply_force(Vector::ZERO);

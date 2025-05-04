@@ -218,7 +218,7 @@ impl<'cl> CuSinkTask<'cl> for Lewansoul {
 
         let mut ids = [0u8; 8];
         for (i, id) in ids.iter_mut().enumerate() {
-            let servo = kv.get(format!("servo{}", i).as_str());
+            let servo = kv.get(format!("servo{i}").as_str());
             if servo.is_none() {
                 if i == 0 {
                     return Err(
@@ -238,7 +238,7 @@ impl<'cl> CuSinkTask<'cl> for Lewansoul {
             .stop_bits(StopBits::One)
             .timeout(TIMEOUT)
             .open()
-            .map_err(|e| format!("Error opening serial port: {:?}", e))?;
+            .map_err(|e| format!("Error opening serial port: {e:?}"))?;
 
         Ok(Lewansoul { port, ids })
     }

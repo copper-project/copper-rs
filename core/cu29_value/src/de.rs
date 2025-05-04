@@ -156,7 +156,7 @@ impl Error for DeserializerError {
 impl fmt::Display for DeserializerError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            DeserializerError::Custom(ref msg) => write!(f, "{}", msg),
+            DeserializerError::Custom(ref msg) => write!(f, "{msg}"),
             DeserializerError::InvalidType(ref unexp, ref exp) => {
                 write!(
                     f,
@@ -174,7 +174,7 @@ impl fmt::Display for DeserializerError {
                 )
             }
             DeserializerError::InvalidLength(len, ref exp) => {
-                write!(f, "Invalid length {}. Expected {}", len, exp)
+                write!(f, "Invalid length {len}. Expected {exp}")
             }
             DeserializerError::UnknownVariant(ref field, exp) => {
                 write!(
@@ -192,8 +192,8 @@ impl fmt::Display for DeserializerError {
                     exp.join(", ")
                 )
             }
-            DeserializerError::MissingField(field) => write!(f, "Missing field {}", field),
-            DeserializerError::DuplicateField(field) => write!(f, "Duplicate field {}", field),
+            DeserializerError::MissingField(field) => write!(f, "Missing field {field}"),
+            DeserializerError::DuplicateField(field) => write!(f, "Duplicate field {field}"),
         }
     }
 }
