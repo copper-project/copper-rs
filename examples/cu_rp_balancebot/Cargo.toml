@@ -39,7 +39,7 @@ default = ["logreader", "sim"]
 # generates an executable to read the logs
 logreader = ["dep:cu29-export"]
 # dependencies to build to matrix for copper
-sim = ["dep:bevy", "dep:avian3d", "dep:cached-path", "dep:cu29-export"]
+sim = ["dep:bevy", "dep:avian3d", "dep:cached-path", "dep:cu29-export"] # required for exporting simulation data
 perf-ui = ["dep:iyes_perf_ui"]
 
 [[bin]]
