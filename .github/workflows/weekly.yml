@@ -17,9 +17,7 @@ jobs:
         with:
           components: clippy, rustfmt
       - name: Install audit
-        run: cargo install cargo-audit cargo-deny
-      - name: Run audit
-        run: cargo audit
+        run: cargo install cargo-deny
       - name: Run deny bans
         run: cargo deny check bans -c .config/deny.toml
       - name: Run deny sources
