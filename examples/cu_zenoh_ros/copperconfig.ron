@@ -1,0 +1,22 @@
+(
+    tasks: [
+        (
+            id: "source",
+            type: "tasks::ExampleSrc",
+        ),
+        (
+            id: "publisher",
+            type: "cu_zenoh_ros::ExamplePublisher",
+            config: {
+                "zenoh_config_file": "/opt/ros/humble/share/rmw_zenoh_cpp/config/DEFAULT_RMW_ZENOH_SESSION_CONFIG.json5",
+                "domain_id": 0,
+                "namespace": "copper",
+                "node": "sink_node",
+                "topic": "/output",
+            }
+        ),
+    ],
+    cnx: [
+        (src: "source", dst: "publisher", msg: "i8"),
+    ]
+) 

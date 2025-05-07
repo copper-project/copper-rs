@@ -16,6 +16,7 @@ members = [
     "core/cu29_unifiedlog",
     "components/common/cu_msp_lib",
     "components/monitors/cu_consolemon",
+    "components/payloads/cu_ros_payloads",
     "components/payloads/cu_sensor_payloads",
     "components/payloads/cu_spatial_payloads",
     "components/sinks/cu_iceoryx2_sink",
@@ -24,6 +25,7 @@ members = [
     "components/sinks/cu_rp_sn754410",
     "components/sinks/cu_lewansoul",
     "components/sinks/cu_zenoh_sink",
+    "components/sinks/cu_zenoh_ros_sink",
     "components/sources/cu_ads7883",
     "components/sources/cu_gstreamer",
     "components/sources/cu_hesai",
@@ -51,6 +53,7 @@ members = [
     "examples/cu_standalone_structlog",
     "examples/cu_standalone_structlog",
     "examples/cu_zenoh",
+    "examples/cu_zenoh_ros",
 ]
 
 # put only the core crates here that are not platform specific
@@ -105,6 +108,7 @@ cu29-value = { path = "core/cu29_value", version = "0.7.0" }
 
 # Payload definitions
 cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads", version = "0.7.0" }
+cu-ros-payloads = { path = "components/payloads/cu_ros_payloads", version = "0.7.0" }
 
 # External serialization
 bincode = { version = "2.0.1", features = ["derive"] }
