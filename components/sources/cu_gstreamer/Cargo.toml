@@ -17,6 +17,7 @@ bincode = { workspace = true }
 circular-buffer = "1.1.0"
 gstreamer = { version = "0.23.5", optional = true }
 gstreamer-app = { version = "0.23.5", optional = true }
+tempfile = { workspace = true }
 
 [dev-dependencies]
 rerun = { workspace = true }

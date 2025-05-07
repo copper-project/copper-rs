@@ -137,8 +137,5 @@ rerun = { version = "0.23.0", default-features = false, features = ["sdk", "serv
 # smallvec to avoid heap allocations
 smallvec = { version = "1.15.0", features = ["serde"] }
 
-# [profile.release]
-# lto = true
-
 [patch.crates-io]
-cached-path = { git = "https://github.com/makeecat/rust-cached-path", branch = "yang/fix/offline_cache_path"}
+onig = { git = "https://github.com/rust-onig/rust-onig", rev = "25a950f0045600645d9f51da2b4f8b057cc017f1" }

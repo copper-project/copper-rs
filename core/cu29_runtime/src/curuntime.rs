@@ -296,7 +296,7 @@ fn plan_tasks_tree_branch(
         let id = node.index() as NodeId;
         let node_ref = config.graphs.get_node(id, None).unwrap();
         #[cfg(feature = "macro_debug")]
-        eprintln!("  Visiting node: {:?}", node_ref);
+        eprintln!("  Visiting node: {node_ref:?}");
 
         let mut input_msg_indices_types: Vec<(u32, String)> = Vec::new();
         let output_msg_index_type: Option<(u32, String)>;
@@ -305,10 +305,7 @@ fn plan_tasks_tree_branch(
         match task_type {
             CuTaskType::Source => {
                 #[cfg(feature = "macro_debug")]
-                eprintln!(
-                    "    → Source node, assign output index {}",
-                    next_culist_output_index
-                );
+                eprintln!("    → Source node, assign output index {next_culist_output_index}");
                 output_msg_index_type = Some((
                     next_culist_output_index,
                     graph
@@ -323,13 +320,13 @@ fn plan_tasks_tree_branch(
                 let parents: Vec<NodeIndex> =
                     graph.neighbors_directed(id.into(), Incoming).collect();
                 #[cfg(feature = "macro_debug")]
-                eprintln!("    → Sink with parents: {:?}", parents);
+                eprintln!("    → Sink with parents: {parents:?}");
                 for parent in &parents {
                     let pid = parent.index() as NodeId;
                     let index_type = find_output_index_type_from_nodeid(pid, plan);
                     if let Some(index_type) = index_type {
                         #[cfg(feature = "macro_debug")]
-                        eprintln!("      ✓ Input from {pid} ready: {:?}", index_type);
+                        eprintln!("      ✓ Input from {pid} ready: {index_type:?}");
                         input_msg_indices_types.push(index_type);
                     } else {
                         #[cfg(feature = "macro_debug")]
@@ -344,13 +341,13 @@ fn plan_tasks_tree_branch(
                 let parents: Vec<NodeIndex> =
                     graph.neighbors_directed(id.into(), Incoming).collect();
                 #[cfg(feature = "macro_debug")]
-                eprintln!("    → Regular task with parents: {:?}", parents);
+                eprintln!("    → Regular task with parents: {parents:?}");
                 for parent in &parents {
                     let pid = parent.index() as NodeId;
                     let index_type = find_output_index_type_from_nodeid(pid, plan);
                     if let Some(index_type) = index_type {
                         #[cfg(feature = "macro_debug")]
-                        eprintln!("      ✓ Input from {pid} ready: {:?}", index_type);
+                        eprintln!("      ✓ Input from {pid} ready: {index_type:?}");
                         input_msg_indices_types.push(index_type);
                     } else {
                         #[cfg(feature = "macro_debug")]
@@ -422,7 +419,7 @@ pub fn compute_runtime_plan(config: &CuConfig) -> CuResult<CuExecutionLoop> {
         .collect();
 
     #[cfg(feature = "macro_debug")]
-    eprintln!("Initial source nodes: {:?}", queue);
+    eprintln!("Initial source nodes: {queue:?}");
 
     while let Some(start_node) = queue.pop_front() {
         if visited.is_visited(&start_node) {

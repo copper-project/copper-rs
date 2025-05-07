@@ -192,7 +192,7 @@ fn setup_scene(
         .offline(true) // Force offline mode
         .build()
         .expect("Failed to create the offline file cache.");
-    let balance_bot_url = format!("{}{}", BASE_ASSETS_URL, BALANCEBOT);
+    let balance_bot_url = format!("{BASE_ASSETS_URL}{BALANCEBOT}");
     let balance_bot_hashed =
         get_asset_path(&online_cache, &offline_cache, &balance_bot_url, BALANCEBOT)
             .expect("Failed to get balancebot.glb (online or cached).");
@@ -204,9 +204,10 @@ fn setup_scene(
     )
     .expect("Failed to create symlink to balancebot.glb.");
 
-    let skybox_url = format!("{}{}", BASE_ASSETS_URL, SKYBOX);
+    let skybox_url = format!("{BASE_ASSETS_URL}{SKYBOX}");
     let skybox_path_hashed = get_asset_path(&online_cache, &offline_cache, &skybox_url, SKYBOX)
         .expect("Failed to get skybox.ktx2 (online or cached).");
+
     let skybox_path = skybox_path_hashed.parent().unwrap().join(SKYBOX);
     create_symlink(
         skybox_path_hashed.to_str().unwrap(),
@@ -214,7 +215,7 @@ fn setup_scene(
     )
     .expect("Failed to create symlink to skybox.ktx2.");
 
-    let diffuse_map_url = format!("{}{}", BASE_ASSETS_URL, DIFFUSE_MAP);
+    let diffuse_map_url = format!("{BASE_ASSETS_URL}{DIFFUSE_MAP}");
     let diffuse_map_path_hashed =
         get_asset_path(&online_cache, &offline_cache, &diffuse_map_url, DIFFUSE_MAP)
             .expect("Failed to get diffuse_map.ktx2 (online or cached).");

@@ -263,8 +263,8 @@ pub struct LidarFrame {
 impl fmt::Display for LivoxError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            LivoxError::InvalidFrame(msg) => write!(f, "Invalid frame: {}", msg),
-            LivoxError::InvalidTimestamp(msg) => write!(f, "Invalid timestamp: {}", msg),
+            LivoxError::InvalidFrame(msg) => write!(f, "Invalid frame: {msg}"),
+            LivoxError::InvalidTimestamp(msg) => write!(f, "Invalid timestamp: {msg}"),
         }
     }
 }
@@ -429,6 +429,6 @@ mod tests {
         let datetime = Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap();
         let _rt: RefTime = (datetime, robot_clock.now());
         let timestamp = packet.header.timestamp;
-        println!("Tov: {}", timestamp);
+        println!("Tov: {timestamp}");
     }
 }

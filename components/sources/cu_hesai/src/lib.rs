@@ -174,11 +174,11 @@ mod tests {
         {
             let err = xt32.process(&clock, &mut new_msg);
             if let Err(e) = err {
-                println!("Error: {:?}", e);
+                println!("Error: {e:?}");
                 continue;
             }
             if let Some(payload) = new_msg.payload() {
-                println!("Lidar Payload: {:?}", payload);
+                println!("Lidar Payload: {payload:?}");
             }
             break;
         }

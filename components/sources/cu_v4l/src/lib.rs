@@ -173,8 +173,7 @@ mod linux_impl {
                 actual_fmt
             } else {
                 return Err(format!(
-                    "The V4l device {} does not provide a format with the FourCC {}.",
-                    v4l_device, fourcc
+                    "The V4l device {v4l_device} does not provide a format with the FourCC {fourcc}."
                 )
                 .into());
             };
@@ -188,7 +187,7 @@ mod linux_impl {
                 Type::VideoCapture,
                 req_buffers,
                 CuHostMemoryPool::new(
-                    format!("V4L Host Pool {}", v4l_device).as_str(),
+                    format!("V4L Host Pool {v4l_device}").as_str(),
                     req_buffers as usize + 1,
                     || vec![0; actual_fmt.size as usize],
                 )

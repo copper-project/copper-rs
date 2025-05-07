@@ -190,6 +190,6 @@ pub enum MspCommandCode {
 
 impl From<u16> for MspCommandCode {
     fn from(value: u16) -> Self {
-        Self::from_primitive(value).unwrap_or_else(|| panic!("Invalid MSP command code: {}", value))
+        Self::from_primitive(value).unwrap_or_else(|| panic!("Invalid MSP command code: {value}"))
     }
 }
