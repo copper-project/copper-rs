@@ -4,6 +4,7 @@ mod world;
 use crate::world::{Cart, Rod};
 use avian3d::math::Vector;
 use avian3d::prelude::{ExternalForce, Physics};
+use bevy::asset::UnapprovedPathMode;
 use bevy::prelude::*;
 use bevy::render::RenderPlugin;
 // disembiguation as there is also a bevy::prelude::debug
@@ -116,7 +117,7 @@ fn run_copper_callback(
                 // so here we jump when the balpos source (the adc giving the rod position) is called
                 // we get the physical state of the work and inject back to copper what would the sensor read
                 let bindings = query_set.p1();
-                let rod_transform = bindings.single();
+                let rod_transform = bindings.single().expect("Failed to get rod transform");
 
                 let (_roll, _pitch, yaw) = rod_transform.rotation.to_euler(EulerRot::YXZ);
 
@@ -135,7 +136,7 @@ fn run_copper_callback(
             default::SimStep::Railpos(CuTaskCallbackState::Process(_, output)) => {
                 // Here same thing for the rail encoder.
                 let bindings = query_set.p0();
-                let (cart_transform, _) = bindings.single();
+                let (cart_transform, _) = bindings.single().expect("Failed to get cart transform");
                 let ticks = (cart_transform.translation.x * 2000.0) as i32;
                 output.set_payload(EncoderPayload { ticks });
                 output.metadata.tov = robot_clock.clock.now().into();
@@ -146,7 +147,7 @@ fn run_copper_callback(
                 // And now when copper wants to use the motor
                 // we apply a force in the simulation.
                 let mut bindings = query_set.p0();
-                let (_, mut cart_force) = bindings.single_mut();
+                let (_, mut cart_force) = bindings.single_mut().expect("Failed to get cart force");
                 let maybe_motor_actuation = input.payload();
                 if let Some(motor_actuation) = maybe_motor_actuation {
                     if motor_actuation.power.is_nan() {
@@ -202,13 +203,19 @@ fn main() {
         ..Default::default()
     };
 
-    let default_plugin = DefaultPlugins.set(render_plugin).set(WindowPlugin {
-        primary_window: Some(Window {
-            title: "Copper Simulator".into(),
+    let default_plugin = DefaultPlugins
+        .set(render_plugin)
+        .set(WindowPlugin {
+            primary_window: Some(Window {
+                title: "Copper Simulator".into(),
+                ..default()
+            }),
             ..default()
-        }),
-        ..default()
-    });
+        })
+        .set(AssetPlugin {
+            unapproved_path_mode: UnapprovedPathMode::Allow,
+            ..default()
+        });
 
     world.add_plugins(default_plugin);
 

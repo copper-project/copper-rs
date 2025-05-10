@@ -2,3 +2,5 @@
 mis = "mis"
 ratatui = "ratatui"
 thr = "thr"
+[files]
+extend-exclude = ["patches/*"]
