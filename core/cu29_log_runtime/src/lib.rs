@@ -4,7 +4,7 @@ use bincode::enc::Encode;
 use bincode::enc::{Encoder, EncoderImpl};
 use bincode::error::EncodeError;
 use cu29_clock::RobotClock;
-use cu29_log::CuLogEntry;
+use cu29_log::{CuLogEntry, CuLogLevel};
 use cu29_traits::{CuResult, WriteStream};
 use log::Log;
 
@@ -153,11 +153,27 @@ pub fn log_debug_mode(
             .iter()
             .map(|(k, v)| (k.to_string(), v.clone()))
             .collect();
-        let logline = format_logline(entry.time, &fstr, params.as_slice(), &named_params)?;
+
+        // Convert Copper log level to the standard log level
+        let log_level = match entry.level {
+            CuLogLevel::Debug => log::Level::Debug,
+            CuLogLevel::Info => log::Level::Info,
+            CuLogLevel::Warning => log::Level::Warn,
+            CuLogLevel::Error => log::Level::Error,
+            CuLogLevel::Critical => log::Level::Error,
+        };
+
+        let logline = format_logline(
+            entry.time,
+            entry.level,
+            &fstr,
+            params.as_slice(),
+            &named_params,
+        )?;
         logger.log(
             &log::Record::builder()
                 .args(format_args!("{logline}"))
-                .level(log::Level::Info)
+                .level(log_level)
                 .target("cu29_log")
                 .module_path_static(Some("cu29_log"))
                 .file_static(Some("cu29_log"))
@@ -260,6 +276,7 @@ impl WriteStream<CuLogEntry> for SimpleFileWriter {
 mod tests {
     use crate::CuLogEntry;
     use bincode::config::standard;
+    use cu29_log::CuLogLevel;
     use cu29_value::Value;
     use smallvec::smallvec;
 
@@ -267,6 +284,7 @@ mod tests {
     fn test_encode_decode_structured_log() {
         let log_entry = CuLogEntry {
             time: 0.into(),
+            level: CuLogLevel::Info,
             msg_index: 1,
             paramname_indexes: smallvec![2, 3],
             params: smallvec![Value::String("test".to_string())],

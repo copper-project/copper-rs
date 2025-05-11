@@ -5,6 +5,8 @@ use crate::config::CuConfig;
 use crate::cutask::CuMsgMetadata;
 use crate::log::*;
 use cu29_clock::{CuDuration, RobotClock};
+#[allow(unused_imports)]
+use cu29_log::CuLogLevel;
 use cu29_traits::{CuError, CuResult};
 use hdrhistogram::Histogram;
 use serde_derive::{Deserialize, Serialize};
