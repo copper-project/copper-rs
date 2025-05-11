@@ -8,6 +8,7 @@ use cu29_log_derive::debug;
 use cu29_value::to_value;
 
 #[cfg(not(debug_assertions))]
+#[allow(unused_imports)]
 use cu29_log_runtime::log;
 
 #[cfg(debug_assertions)]

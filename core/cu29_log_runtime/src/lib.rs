@@ -4,7 +4,9 @@ use bincode::enc::Encode;
 use bincode::enc::{Encoder, EncoderImpl};
 use bincode::error::EncodeError;
 use cu29_clock::RobotClock;
-use cu29_log::{CuLogEntry, CuLogLevel};
+use cu29_log::CuLogEntry;
+#[allow(unused_imports)]
+use cu29_log::CuLogLevel;
 use cu29_traits::{CuResult, WriteStream};
 use log::Log;
 
