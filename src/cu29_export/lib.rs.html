@@ -351,7 +351,7 @@
 <a href=#351 id=351 data-nosnippet>351</a>    </span><span class="kw">fn </span>test_extract_low_level_cu29_log() {
 <a href=#352 id=352 data-nosnippet>352</a>        <span class="kw">let </span>temp_dir = TempDir::new().unwrap();
 <a href=#353 id=353 data-nosnippet>353</a>        <span class="kw">let </span>temp_path = copy_stringindex_to_temp(<span class="kw-2">&amp;</span>temp_dir);
-<a href=#354 id=354 data-nosnippet>354</a>        <span class="kw">let </span>entry = CuLogEntry::new(<span class="number">3</span>);
+<a href=#354 id=354 data-nosnippet>354</a>        <span class="kw">let </span>entry = CuLogEntry::new(<span class="number">3</span>, CuLogLevel::Info);
 <a href=#355 id=355 data-nosnippet>355</a>        <span class="kw">let </span>bytes = bincode::encode_to_vec(<span class="kw-2">&amp;</span>entry, standard()).unwrap();
 <a href=#356 id=356 data-nosnippet>356</a>        <span class="kw">let </span>reader = Cursor::new(bytes.as_slice());
 <a href=#357 id=357 data-nosnippet>357</a>        textlog_dump(reader, temp_path.as_path()).unwrap();
@@ -379,10 +379,10 @@
 <a href=#379 id=379 data-nosnippet>379</a>            <span class="kw">let </span>stream = stream_write(data_logger.clone(), UnifiedLogType::StructuredLogLine, <span class="number">1024</span>);
 <a href=#380 id=380 data-nosnippet>380</a>            <span class="kw">let </span>rt = LoggerRuntime::init(RobotClock::default(), stream, <span class="prelude-val">None</span>::&lt;NullLog&gt;);
 <a href=#381 id=381 data-nosnippet>381</a>
-<a href=#382 id=382 data-nosnippet>382</a>            <span class="kw">let </span><span class="kw-2">mut </span>entry = CuLogEntry::new(<span class="number">4</span>); <span class="comment">// this is a "Just a String {}" log line
+<a href=#382 id=382 data-nosnippet>382</a>            <span class="kw">let </span><span class="kw-2">mut </span>entry = CuLogEntry::new(<span class="number">4</span>, CuLogLevel::Info); <span class="comment">// this is a "Just a String {}" log line
 <a href=#383 id=383 data-nosnippet>383</a>            </span>entry.add_param(<span class="number">0</span>, Value::String(<span class="string">"Parameter for the log line"</span>.into()));
 <a href=#384 id=384 data-nosnippet>384</a>            log(<span class="kw-2">&amp;mut </span>entry).expect(<span class="string">"Failed to log"</span>);
-<a href=#385 id=385 data-nosnippet>385</a>            <span class="kw">let </span><span class="kw-2">mut </span>entry = CuLogEntry::new(<span class="number">2</span>); <span class="comment">// this is a "Just a String {}" log line
+<a href=#385 id=385 data-nosnippet>385</a>            <span class="kw">let </span><span class="kw-2">mut </span>entry = CuLogEntry::new(<span class="number">2</span>, CuLogLevel::Info); <span class="comment">// this is a "Just a String {}" log line
 <a href=#386 id=386 data-nosnippet>386</a>            </span>entry.add_param(<span class="number">0</span>, Value::String(<span class="string">"Parameter for the log line"</span>.into()));
 <a href=#387 id=387 data-nosnippet>387</a>            log(<span class="kw-2">&amp;mut </span>entry).expect(<span class="string">"Failed to log"</span>);
 <a href=#388 id=388 data-nosnippet>388</a>
