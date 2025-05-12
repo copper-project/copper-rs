@@ -41,7 +41,7 @@ Available feature flags:
 - `log-level-error`: Includes Error and Critical logs
 - `log-level-critical`: Includes only Critical logs
 
-By default, `log-level-debug` is enabled if no feature is specified.
+By default, no feature flag is enabled. If two feature flags are enabled, the higher level feature flag will be used as the max log level. For example, if `log-level-info` and `log-level-error` are enabled, `info!`, `warning!`, `error!` and `critical!` will be logged.
 
 ## Using the Logging Macros
 
