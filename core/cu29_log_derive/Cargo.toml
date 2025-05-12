@@ -27,4 +27,9 @@ lazy_static = "1.5.0"
 default = []
 # enables a more verbose build log showing the index generation.
 macro_debug = []
-
+# Log level features to control compile-time log level filtering
+log-level-debug = []
+log-level-info = []
+log-level-warning = []
+log-level-error = []
+log-level-critical = []

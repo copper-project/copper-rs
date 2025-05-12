@@ -199,7 +199,8 @@ mod linux_impl {
                 })?,
             )
             .map_err(|e| CuError::new_with_cause("Could not create the V4lStream", e))?;
-            debug!("V4L: Set timeout to {} ms", req_timeout.as_millis() as u64);
+            let req_timeout_ms = req_timeout.as_millis() as u64;
+            debug!("V4L: Set timeout to {} ms", req_timeout_ms);
             stream.set_timeout(req_timeout);
 
             let cuformat = CuImageBufferFormat {

@@ -1,13 +1,18 @@
 use cu29_helpers::basic_copper_setup;
-use cu29_log::CuLogEntry;
+#[allow(unused_imports)]
 use cu29_log::ANONYMOUS;
+#[allow(unused_imports)]
+use cu29_log::{CuLogEntry, CuLogLevel};
 use cu29_log_derive::debug;
+#[allow(unused_imports)]
 use cu29_value::to_value;
 
 #[cfg(not(debug_assertions))]
+#[allow(unused_imports)]
 use cu29_log_runtime::log;
 
 #[cfg(debug_assertions)]
+#[allow(unused_imports)]
 use cu29_log_runtime::log_debug_mode;
 
 use serde::Serialize;

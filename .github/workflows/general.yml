@@ -150,11 +150,11 @@ jobs:
 
       - name: Set features (Linux)
         if: runner.os == 'Linux'
-        run: echo "FEATURES_FLAG=$([[ '${{ matrix.mode }}' == 'cuda-release' ]] && echo '--all-features' || echo '--features macro_debug,mock,perf-ui,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode')" >> $GITHUB_ENV
+        run: echo "FEATURES_FLAG=$([[ '${{ matrix.mode }}' == 'cuda-release' ]] && echo '--all-features' || echo '--features macro_debug,mock,perf-ui,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug')" >> $GITHUB_ENV
 
       - name: Set features (MacOS)
         if: runner.os == 'macOS'
-        run: echo "FEATURES_FLAG=$([[ '${{ matrix.mode }}' == 'cuda-release' ]] && echo '--all-features' || echo '--features macro_debug,mock,perf-ui,image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode')" >> $GITHUB_ENV
+        run: echo "FEATURES_FLAG=$([[ '${{ matrix.mode }}' == 'cuda-release' ]] && echo '--all-features' || echo '--features macro_debug,mock,perf-ui,image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug')" >> $GITHUB_ENV
 
       - name: Set features (Windows)
         if: runner.os == 'Windows'
