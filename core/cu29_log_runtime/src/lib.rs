@@ -157,6 +157,9 @@ pub fn log_debug_mode(
             .collect();
 
         // Convert Copper log level to the standard log level
+        // Note: CuLogLevel::Critical is mapped to log::Level::Error because the `log` crate
+        // does not have a `Critical` level. `Error` is the highest severity level available
+        // in the `log` crate, making it the closest equivalent.
         let log_level = match entry.level {
             CuLogLevel::Debug => log::Level::Debug,
             CuLogLevel::Info => log::Level::Info,
