@@ -7,12 +7,11 @@ use bevy::input::{
 };
 use bevy::pbr::{DefaultOpaqueRendererMethod, ScreenSpaceReflections};
 use bevy::prelude::*;
-use cached_path::{Cache, ProgressBar};
-
+use cached_path::{Cache, Error as CacheError, ProgressBar};
 #[cfg(feature = "perf-ui")]
 use iyes_perf_ui::prelude::{PerfUiAllEntries, PerfUiPlugin};
+use std::path::{Path, PathBuf}; // Import PathBuf
 
-use std::path::Path;
 use std::{fs, io};
 
 pub const BALANCEBOT: &str = "balancebot.glb";
@@ -61,12 +60,10 @@ pub struct Rod;
 
 pub fn build_world(app: &mut App) -> &mut App {
     let app = app
-        .add_plugins((
-            MeshPickingPlugin,
-            PhysicsPlugins::default().with_length_unit(1000.0),
-        ))
+        .add_plugins(MeshPickingPlugin)
+        .add_plugins(PhysicsPlugins::default().with_length_unit(1000.0))
         // we want Bevy to measure these values for us:
-        .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin)
+        .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default())
         .add_plugins(bevy::diagnostic::EntityCountDiagnosticsPlugin)
         .insert_resource(DefaultOpaqueRendererMethod::deferred())
         .insert_resource(SimulationState::Running)
@@ -146,6 +143,35 @@ fn create_symlink(src: &str, dst: &str) -> io::Result<()> {
     }
 }
 
+/// Tries to get the asset path using the online cache first.
+/// If that fails due to a network error, falls back to the offline cache.
+fn get_asset_path(
+    online_cache: &Cache,
+    offline_cache: &Cache,
+    asset_url: &str,
+    asset_name: &str, // For logging purposes
+) -> Result<PathBuf, CacheError> {
+    match online_cache.cached_path(asset_url) {
+        Ok(path) => Ok(path),
+        Err(err) => {
+            // Check if the error is network-related
+            if matches!(
+                err,
+                CacheError::HttpError(_) | CacheError::IoError(_) | CacheError::ResourceNotFound(_)
+            ) {
+                warn!(
+                    "Failed to fetch latest '{}' from network ({}). Attempting to use cached version.",
+                    asset_name, err
+                );
+                // Fallback to offline cache
+                offline_cache.cached_path(asset_url)
+            } else {
+                // Not a network error, propagate the original error
+                Err(err)
+            }
+        }
+    }
+}
 pub const BASE_ASSETS_URL: &str = "https://cdn.copper-robotics.com/";
 
 fn setup_scene(
@@ -155,14 +181,21 @@ fn setup_scene(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     // Precache where the user executes the binary
-    let cache = Cache::builder()
+
+    let online_cache = Cache::builder()
         .progress_bar(Some(ProgressBar::Full))
         .build()
-        .expect("Failed to create the file cache.");
+        .expect("Failed to create the online file cache.");
 
-    let balance_bot_hashed = cache
-        .cached_path(format!("{BASE_ASSETS_URL}{BALANCEBOT}").as_str())
-        .expect("Failed to download and cache balancebot.glb.");
+    let offline_cache = Cache::builder()
+        .progress_bar(Some(ProgressBar::Full))
+        .offline(true) // Force offline mode
+        .build()
+        .expect("Failed to create the offline file cache.");
+    let balance_bot_url = format!("{BASE_ASSETS_URL}{BALANCEBOT}");
+    let balance_bot_hashed =
+        get_asset_path(&online_cache, &offline_cache, &balance_bot_url, BALANCEBOT)
+            .expect("Failed to get balancebot.glb (online or cached).");
     let balance_bot_path = balance_bot_hashed.parent().unwrap().join(BALANCEBOT);
 
     create_symlink(
@@ -171,9 +204,9 @@ fn setup_scene(
     )
     .expect("Failed to create symlink to balancebot.glb.");
 
-    let skybox_path_hashed = cache
-        .cached_path(format!("{BASE_ASSETS_URL}{SKYBOX}").as_str())
-        .expect("Failed download and cache skybox.ktx2.");
+    let skybox_url = format!("{BASE_ASSETS_URL}{SKYBOX}");
+    let skybox_path_hashed = get_asset_path(&online_cache, &offline_cache, &skybox_url, SKYBOX)
+        .expect("Failed to get skybox.ktx2 (online or cached).");
 
     let skybox_path = skybox_path_hashed.parent().unwrap().join(SKYBOX);
     create_symlink(
@@ -182,10 +215,10 @@ fn setup_scene(
     )
     .expect("Failed to create symlink to skybox.ktx2.");
 
-    let diffuse_map_path_hashed = cache
-        .cached_path(format!("{BASE_ASSETS_URL}{DIFFUSE_MAP}").as_str())
-        .expect("Failed download and cache diffuse_map.");
-
+    let diffuse_map_url = format!("{BASE_ASSETS_URL}{DIFFUSE_MAP}");
+    let diffuse_map_path_hashed =
+        get_asset_path(&online_cache, &offline_cache, &diffuse_map_url, DIFFUSE_MAP)
+            .expect("Failed to get diffuse_map.ktx2 (online or cached).");
     let diffuse_map_path = diffuse_map_path_hashed.parent().unwrap().join(DIFFUSE_MAP);
     create_symlink(
         diffuse_map_path_hashed.to_str().unwrap(),
@@ -205,6 +238,7 @@ fn setup_scene(
     commands.insert_resource(AmbientLight {
         color: Color::srgb_u8(210, 220, 240),
         brightness: 1.0,
+        affects_lightmapped_meshes: true,
     });
 
     // load the scene
@@ -311,7 +345,7 @@ fn try_to_find_cart_entity(query: Query<(Entity, &Name), Without<Cart>>) -> Opti
 // It is a bit of a hack, but it tries to find back the cart entity parent from any of the possible clickable children
 fn global_cart_drag_listener(
     mut drag_events: EventReader<Pointer<Drag>>,
-    parents: Query<(&Parent, Option<&Cart>)>,
+    parents: Query<(&ChildOf, Option<&Cart>)>,
     mut transforms: Query<&mut Transform, With<Cart>>,
     camera_query: Query<&Transform, (With<Camera>, Without<Cart>)>, // Add Without<Cart> to prevent conflicts
 ) {
@@ -324,7 +358,7 @@ fn global_cart_drag_listener(
             if maybe_cart.is_some() {
                 break;
             }
-            entity = parent.get();
+            entity = parent.parent();
         }
 
         if let Ok(mut root_transform) = transforms.get_mut(entity) {
@@ -338,6 +372,16 @@ fn global_cart_drag_listener(
 
 #[derive(Resource)]
 struct SetupCompleted(bool);
+
+#[derive(Bundle)]
+struct CartBundle {
+    external_force: ExternalForce,
+    cart: Cart,
+    mass_props: MassPropertiesBundle,
+    dominance: Dominance,
+    rigid_body: RigidBody,
+    locked_axes: LockedAxes,
+}
 
 fn setup_entities(
     mut commands: Commands,
@@ -360,19 +404,19 @@ fn setup_entities(
     let cart_collider_model = Collider::cuboid(CART_WIDTH, CART_HEIGHT, CART_DEPTH);
     let cart_mass_props = MassPropertiesBundle::from_shape(&cart_collider_model, ALUMINUM_DENSITY); // It is a mix of emptiness and motor and steel.. overall some aluminum?
 
-    commands.entity(cart_entity).insert((
-        ExternalForce::default(),
-        Cart,
-        cart_mass_props,
-        Dominance(5),
-        RigidBody::Dynamic,
-        LockedAxes::new()
+    commands.entity(cart_entity).insert(CartBundle {
+        external_force: ExternalForce::new(Vec3::ZERO),
+        cart: Cart,
+        mass_props: cart_mass_props,
+        dominance: Dominance(5),
+        rigid_body: RigidBody::Dynamic,
+        locked_axes: LockedAxes::new()
             .lock_translation_z()
             .lock_translation_y()
             .lock_rotation_x()
             .lock_rotation_y()
             .lock_rotation_z(),
-    ));
+    });
 
     let rail_entity = commands
         .spawn((
@@ -520,7 +564,7 @@ fn camera_control_system(
     time: Res<Time>,
     mouse_button_input: Res<ButtonInput<MouseButton>>,
 ) {
-    let mut camera_transform = query.single_mut();
+    let mut camera_transform = query.single_mut().expect("Failed to get camera transform");
     let focal_point = Vec3::ZERO; // Define the point to orbit around (usually the center of the scene)
 
     // Calculate the direction vector from the camera to the focal point
