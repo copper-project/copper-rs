@@ -74,7 +74,7 @@ impl<'cl> CuSinkTask<'cl> for RPGpio {
             .clone()
             .into();
 
-        #[cfg(not(feature = "mock"))]
+        #[cfg(hardware)]
         let pin = GPIO
             .get(pin_nb)
             .map_err(|e| CuError::new_with_cause("Could not get pin", e))?
