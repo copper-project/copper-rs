@@ -21,7 +21,6 @@ cu29-log = { workspace = true }
 syn = { workspace = true }
 quote = { workspace = true }
 rkv = { version = "0.19.0", features = ["lmdb"] }
-lazy_static = "1.5.0"
 
 [features]
 default = []
