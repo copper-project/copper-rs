@@ -11,10 +11,10 @@ pub(crate) use cu29_log_runtime::log;
 pub(crate) use cu29_log_runtime::log_debug_mode;
 
 #[allow(unused_imports)]
-pub(crate) use cu29_log_derive::debug;
+pub(crate) use cu29_log_derive::{critical, debug, error, info, warning};
 
 #[allow(unused_imports)]
-pub(crate) use cu29_log::CuLogEntry;
+pub(crate) use cu29_log::{CuLogEntry, CuLogLevel};
 
 #[allow(unused_imports)]
 pub(crate) use cu29_log::ANONYMOUS;

@@ -351,7 +351,7 @@ mod tests {
     fn test_extract_low_level_cu29_log() {
         let temp_dir = TempDir::new().unwrap();
         let temp_path = copy_stringindex_to_temp(&temp_dir);
-        let entry = CuLogEntry::new(3);
+        let entry = CuLogEntry::new(3, CuLogLevel::Info);
         let bytes = bincode::encode_to_vec(&entry, standard()).unwrap();
         let reader = Cursor::new(bytes.as_slice());
         textlog_dump(reader, temp_path.as_path()).unwrap();
@@ -379,10 +379,10 @@ mod tests {
             let stream = stream_write(data_logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
             let rt = LoggerRuntime::init(RobotClock::default(), stream, None::<NullLog>);
 
-            let mut entry = CuLogEntry::new(4); // this is a "Just a String {}" log line
+            let mut entry = CuLogEntry::new(4, CuLogLevel::Info); // this is a "Just a String {}" log line
             entry.add_param(0, Value::String("Parameter for the log line".into()));
             log(&mut entry).expect("Failed to log");
-            let mut entry = CuLogEntry::new(2); // this is a "Just a String {}" log line
+            let mut entry = CuLogEntry::new(2, CuLogLevel::Info); // this is a "Just a String {}" log line
             entry.add_param(0, Value::String("Parameter for the log line".into()));
             log(&mut entry).expect("Failed to log");
 

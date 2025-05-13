@@ -26,3 +26,8 @@ bincode = { workspace = true }
 
 [features]
 macro_debug = ["cu29-derive/macro_debug", "cu29-log-derive/macro_debug"]
+log-level-debug = ["cu29-log-derive/log-level-debug"]
+log-level-info = ["cu29-log-derive/log-level-info"]
+log-level-warning = ["cu29-log-derive/log-level-warning"]
+log-level-error = ["cu29-log-derive/log-level-error"]
+log-level-critical = ["cu29-log-derive/log-level-critical"]

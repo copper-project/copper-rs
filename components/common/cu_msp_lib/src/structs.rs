@@ -1370,6 +1370,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "bincode")]
     fn test_command_enum_with_bincode() {
         let command = MspResponse::MspApiVersion(MspApiVersion {
             protocol_version: 1,
