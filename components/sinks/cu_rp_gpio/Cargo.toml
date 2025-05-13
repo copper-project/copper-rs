@@ -19,7 +19,6 @@ cu29-log = { workspace = true }
 cu29-log-runtime = { workspace = true } # needed
 bincode = { workspace = true }
 serde = { workspace = true }
-lazy_static = "1.5.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 rppal = { version = "0.22.1", features = ["hal"] }

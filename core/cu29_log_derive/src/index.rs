@@ -1,10 +1,10 @@
 use cu29_log::default_log_index_dir;
-use lazy_static::lazy_static;
 use rkv::backend::{Lmdb, LmdbDatabase};
 use rkv::backend::{LmdbEnvironment, LmdbRwTransaction};
 use rkv::{MultiStore, Rkv, SingleStore, StoreOptions, Value, Writer};
 use std::fs;
 use std::sync::Mutex;
+use std::sync::OnceLock;
 
 type SStore = SingleStore<LmdbDatabase>;
 type MStore = MultiStore<LmdbDatabase>;
@@ -20,9 +20,11 @@ macro_rules! build_log {
     };
 }
 
-lazy_static! {
-    static ref RKV: Mutex<Rkv<LmdbEnvironment>> = {
+static RKV: OnceLock<Mutex<rkv::Rkv<rkv::backend::LmdbEnvironment>>> = OnceLock::new();
+static DBS: OnceLock<Mutex<(SStore, SStore, SStore, MStore)>> = OnceLock::new();
 
+fn rkv() -> &'static Mutex<rkv::Rkv<rkv::backend::LmdbEnvironment>> {
+    RKV.get_or_init(|| {
         let target_dir = default_log_index_dir();
 
         // Should never happen I believe.
@@ -41,11 +43,16 @@ lazy_static! {
                 "=================================================================================="
             );
         }
-        let env = Rkv::new::<Lmdb>(&target_dir).unwrap();
+
+        let env = rkv::Rkv::new::<rkv::backend::Lmdb>(&target_dir).unwrap();
         Mutex::new(env)
-    };
-    static ref DBS: Mutex<(SStore, SStore, SStore, MStore)> = {
-        let env = RKV.lock().unwrap();
+    })
+}
+
+fn dbs() -> &'static Mutex<(SStore, SStore, SStore, MStore)> {
+    DBS.get_or_init(|| {
+        let env = rkv().lock().unwrap();
+
         let counter = env.open_single("counter", StoreOptions::create()).unwrap();
         let index_to_string = env
             .open_single("index_to_string", StoreOptions::create())
@@ -63,12 +70,13 @@ lazy_static! {
             string_to_index,
             index_to_callsites,
         ))
-    };
+    })
 }
+
 pub fn intern_string(s: &str) -> Option<IndexType> {
-    let (counter_store, index_to_string, string_to_index, _) = &mut *DBS.lock().unwrap();
+    let (counter_store, index_to_string, string_to_index, _) = &mut *dbs().lock().unwrap();
     let index = {
-        let env = RKV.lock().unwrap();
+        let env = rkv().lock().unwrap();
         // If this string already exists in the store, return the index
         {
             let reader = env.read().unwrap();

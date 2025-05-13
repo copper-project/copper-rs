@@ -5,13 +5,16 @@ use serde::{Deserialize, Serialize};
 #[cfg(hardware)]
 use {
     cu29::CuError,
-    lazy_static::lazy_static,
     rppal::gpio::{Gpio, Level, OutputPin},
+    std::sync::OnceLock,
 };
 
 #[cfg(hardware)]
-lazy_static! {
-    static ref GPIO: Gpio = Gpio::new().expect("Could not create GPIO bindings");
+static GPIO: OnceLock<Gpio> = OnceLock::new();
+
+#[cfg(hardware)]
+fn gpio() -> &'static Gpio {
+    GPIO.get_or_init(|| Gpio::new().expect("Could not create GPIO bindings"))
 }
 
 /// Example of a GPIO output driver for the Raspberry Pi
@@ -75,7 +78,7 @@ impl<'cl> CuSinkTask<'cl> for RPGpio {
             .into();
 
         #[cfg(not(feature = "mock"))]
-        let pin = GPIO
+        let pin = gpio()
             .get(pin_nb)
             .map_err(|e| CuError::new_with_cause("Could not get pin", e))?
             .into_output();
