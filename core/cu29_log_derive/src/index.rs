@@ -20,10 +20,10 @@ macro_rules! build_log {
     };
 }
 
-static RKV: OnceLock<Mutex<rkv::Rkv<rkv::backend::LmdbEnvironment>>> = OnceLock::new();
+static RKV: OnceLock<Mutex<Rkv<LmdbEnvironment>>> = OnceLock::new();
 static DBS: OnceLock<Mutex<(SStore, SStore, SStore, MStore)>> = OnceLock::new();
 
-fn rkv() -> &'static Mutex<rkv::Rkv<rkv::backend::LmdbEnvironment>> {
+fn rkv() -> &'static Mutex<Rkv<LmdbEnvironment>> {
     RKV.get_or_init(|| {
         let target_dir = default_log_index_dir();
 
@@ -44,7 +44,7 @@ fn rkv() -> &'static Mutex<rkv::Rkv<rkv::backend::LmdbEnvironment>> {
             );
         }
 
-        let env = rkv::Rkv::new::<rkv::backend::Lmdb>(&target_dir).unwrap();
+        let env = Rkv::new::<Lmdb>(&target_dir).unwrap();
         Mutex::new(env)
     })
 }
