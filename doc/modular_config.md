@@ -174,9 +174,9 @@ When Copper processes the configuration:
 3. It will then include `nested.ron` (which includes its own task)
 4. The final configuration will contain tasks from all three files
 
-### Circular References
+### Nested References
 
-Copper detects and prevents circular includes. If configuration A includes configuration B, and configuration B includes configuration A (directly or indirectly), Copper will detect the cycle and return an error.
+Configuration files can include other configuration files, creating a hierarchy of configurations. Be careful when creating deeply nested configurations to avoid unintended recursion or excessive nesting, as this may impact performance.
 
 ## Common Use Cases
 

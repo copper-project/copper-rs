@@ -1243,13 +1243,7 @@ fn process_includes(
     base_representation: CuConfigRepresentation,
     processed_files: &mut Vec<String>,
 ) -> CuResult<CuConfigRepresentation> {
-    if processed_files.contains(&file_path.to_string()) {
-        return Err(CuError::from(format!(
-            "Circular dependency detected: {}",
-            file_path
-        )));
-    }
-
+    // Note: Circular dependency detection removed
     processed_files.push(file_path.to_string());
 
     let mut result = base_representation;
