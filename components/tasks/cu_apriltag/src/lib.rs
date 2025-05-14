@@ -7,11 +7,8 @@ use apriltag::{Detector, DetectorBuilder, Family, Image, TagParams};
 #[cfg(unix)]
 use apriltag_sys::image_u8_t;
 
-use arrayvec::ArrayVec;
-use bincode::de::{BorrowDecoder, Decoder};
-use bincode::enc::Encoder;
-use bincode::error::{DecodeError, EncodeError};
-use bincode::BorrowDecode;
+use bincode::de::Decoder;
+use bincode::error::DecodeError;
 use cu29::bincode::{Decode, Encode};
 use cu29::prelude::*;
 use cu_sensor_payloads::CuImage;
@@ -35,72 +32,6 @@ const CX: f64 = 900.0;
 const CY: f64 = 520.0;
 #[cfg(not(windows))]
 const FAMILY: &str = "tag16h5";
-
-/// TODO: Move that to the runtime as it is useful.
-#[derive(Debug, Clone)]
-pub struct CuArrayVec<T, const N: usize>(pub ArrayVec<T, N>);
-
-impl<T, const N: usize> Default for CuArrayVec<T, N> {
-    fn default() -> Self {
-        Self(ArrayVec::new())
-    }
-}
-
-impl<T, const N: usize> Encode for CuArrayVec<T, N>
-where
-    T: Encode + 'static,
-{
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        let CuArrayVec(inner) = self;
-        inner.as_slice().encode(encoder)
-    }
-}
-
-impl<T, const N: usize> Decode<()> for CuArrayVec<T, N>
-where
-    T: Decode<()> + 'static,
-{
-    fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let inner = Vec::<T>::decode(decoder)?;
-        let actual_len = inner.len();
-        if actual_len > N {
-            return Err(DecodeError::ArrayLengthMismatch {
-                required: N,
-                found: actual_len,
-            });
-        }
-
-        let mut array_vec = ArrayVec::new();
-        for item in inner {
-            array_vec.push(item); // Push elements one by one
-        }
-        Ok(CuArrayVec(array_vec))
-    }
-}
-
-impl<'de, T, const N: usize> BorrowDecode<'de, ()> for CuArrayVec<T, N>
-where
-    T: BorrowDecode<'de, ()> + 'static,
-{
-    fn borrow_decode<D: BorrowDecoder<'de, Context = ()>>(
-        decoder: &mut D,
-    ) -> Result<Self, DecodeError> {
-        let inner = Vec::<T>::borrow_decode(decoder)?;
-        let actual_len = inner.len();
-        if actual_len > N {
-            return Err(DecodeError::ArrayLengthMismatch {
-                required: N,
-                found: actual_len,
-            });
-        }
-
-        let mut array_vec = ArrayVec::new();
-        for item in inner {
-            array_vec.push(item); // Push elements one by one
-        }
-        Ok(CuArrayVec(array_vec))
-    }
-}
 
 #[derive(Default, Debug, Clone, Encode)]
 pub struct AprilTagDetections {
