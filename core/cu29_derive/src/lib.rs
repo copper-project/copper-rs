@@ -1044,7 +1044,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 } else {
                     let original_config = Self::get_original_config();
                     debug!("CuConfig: Using the original configuration the project was compiled with: {}", &original_config);
-                    cu29::config::read_configuration_str(original_config)?
+                    cu29::config::read_configuration_str(original_config, None)?
                 };
 
                 // For simple cases we can say the section is just a bunch of Copper Lists.

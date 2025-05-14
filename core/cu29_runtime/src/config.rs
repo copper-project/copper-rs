@@ -1076,12 +1076,166 @@ impl CuConfig {
 
     pub fn deserialize_ron(ron: &str) -> Self {
         match Self::get_options().from_str(ron) {
-            Ok(ron) => ron,
+            Ok(representation) => Self::deserialize_impl(representation).unwrap_or_else(|e| {
+                panic!("Error deserializing configuration: {}", e);
+            }),
             Err(e) => panic!(
                 "Syntax Error in config: {} at position {}",
                 e.code, e.position
             ),
         }
+    }
+
+    fn deserialize_impl(representation: CuConfigRepresentation) -> Result<Self, String> {
+        let mut cuconfig = CuConfig::default();
+
+        if let Some(mission_configs) = &representation.missions {
+            // This is the multi-mission case
+            let mut missions = Missions(HashMap::new());
+
+            for mission_config in mission_configs {
+                let mission_id = mission_config.id.as_str();
+                missions
+                    .add_mission(mission_id)
+                    .map_err(|e| e.to_string())?;
+                if let Some(tasks) = &representation.tasks {
+                    for task in tasks {
+                        if let Some(task_missions) = &task.missions {
+                            // if there is a filter by mission on the task, only add the task to the mission if it matches the filter.
+                            if task_missions.contains(&mission_id.to_owned()) {
+                                missions
+                                    .add_node(task.clone(), Some(mission_id))
+                                    .map_err(|e| e.to_string())?;
+                            }
+                        } else {
+                            // if there is no filter by mission on the task, add the task to the mission.
+                            missions
+                                .add_node(task.clone(), Some(mission_id))
+                                .map_err(|e| e.to_string())?;
+                        }
+                    }
+                }
+
+                if let Some(cnx) = &representation.cnx {
+                    for c in cnx {
+                        if let Some(cnx_missions) = &c.missions {
+                            // if there is a filter by mission on the connection, only add the connection to the mission if it matches the filter.
+                            if cnx_missions.contains(&mission_id.to_owned()) {
+                                let src = missions
+                                    .node_indices(Some(mission_id))
+                                    .into_iter()
+                                    .find(|i| {
+                                        missions
+                                            .get_node(i.index() as NodeId, Some(mission_id))
+                                            .unwrap()
+                                            .id
+                                            == c.src
+                                    })
+                                    .ok_or_else(|| format!("Source node not found: {}", c.src))?;
+                                let dst = missions
+                                    .node_indices(Some(mission_id))
+                                    .into_iter()
+                                    .find(|i| {
+                                        missions
+                                            .get_node(i.index() as NodeId, Some(mission_id))
+                                            .unwrap()
+                                            .id
+                                            == c.dst
+                                    })
+                                    .ok_or_else(|| {
+                                        format!("Destination node not found: {}", c.dst)
+                                    })?;
+                                missions
+                                    .connect_ext(
+                                        src.index() as NodeId,
+                                        dst.index() as NodeId,
+                                        &c.msg,
+                                        c.store,
+                                        Some(mission_id),
+                                        Some(cnx_missions.clone()),
+                                    )
+                                    .map_err(|e| e.to_string())?;
+                            }
+                        } else {
+                            // if there is no filter by mission on the connection, add the connection to the mission.
+                            let src = missions
+                                .node_indices(Some(mission_id))
+                                .into_iter()
+                                .find(|i| {
+                                    missions
+                                        .get_node(i.index() as NodeId, Some(mission_id))
+                                        .unwrap()
+                                        .id
+                                        == c.src
+                                })
+                                .ok_or_else(|| format!("Source node not found: {}", c.src))?;
+                            let dst = missions
+                                .node_indices(Some(mission_id))
+                                .into_iter()
+                                .find(|i| {
+                                    missions
+                                        .get_node(i.index() as NodeId, Some(mission_id))
+                                        .unwrap()
+                                        .id
+                                        == c.dst
+                                })
+                                .ok_or_else(|| format!("Destination node not found: {}", c.dst))?;
+                            missions
+                                .connect_ext(
+                                    src.index() as NodeId,
+                                    dst.index() as NodeId,
+                                    &c.msg,
+                                    c.store,
+                                    Some(mission_id),
+                                    None,
+                                )
+                                .map_err(|e| e.to_string())?;
+                        }
+                    }
+                }
+            }
+            cuconfig.graphs = missions;
+        } else {
+            // this is the simple case
+            let mut graphs = Simple(CuGraph::default());
+
+            if let Some(tasks) = representation.tasks {
+                for task in tasks {
+                    graphs.add_node(task, None).map_err(|e| e.to_string())?;
+                }
+            }
+
+            if let Some(cnx) = representation.cnx {
+                for c in cnx {
+                    let src = graphs
+                        .node_indices(None)
+                        .into_iter()
+                        .find(|i| graphs.get_node(i.index() as NodeId, None).unwrap().id == c.src)
+                        .ok_or_else(|| format!("Source node not found: {}", c.src))?;
+                    let dst = graphs
+                        .node_indices(None)
+                        .into_iter()
+                        .find(|i| graphs.get_node(i.index() as NodeId, None).unwrap().id == c.dst)
+                        .ok_or_else(|| format!("Destination node not found: {}", c.dst))?;
+                    graphs
+                        .connect_ext(
+                            src.index() as NodeId,
+                            dst.index() as NodeId,
+                            &c.msg,
+                            c.store,
+                            None,
+                            None,
+                        )
+                        .map_err(|e| e.to_string())?;
+                }
+            }
+            cuconfig.graphs = graphs;
+        }
+
+        cuconfig.monitor = representation.monitor;
+        cuconfig.logging = representation.logging;
+
+        Ok(cuconfig)
     }
 
     /// Render the configuration graph in the dot format.
@@ -1211,6 +1365,131 @@ impl LoggingConfig {
     }
 }
 
+fn substitute_parameters(content: &str, params: &HashMap<String, Value>) -> String {
+    let mut result = content.to_string();
+
+    for (key, value) in params {
+        let pattern = format!("{{{{{}}}}}", key);
+        result = result.replace(&pattern, &value.to_string());
+    }
+
+    result
+}
+
+/// Returns a merged CuConfigRepresentation.
+fn process_includes(
+    file_path: &str,
+    base_representation: CuConfigRepresentation,
+    processed_files: &mut Vec<String>,
+) -> CuResult<CuConfigRepresentation> {
+    if processed_files.contains(&file_path.to_string()) {
+        return Err(CuError::from(format!(
+            "Circular dependency detected: {}",
+            file_path
+        )));
+    }
+
+    processed_files.push(file_path.to_string());
+
+    let mut result = base_representation;
+
+    if let Some(includes) = result.includes.take() {
+        for include in includes {
+            let include_path = if include.path.starts_with('/') {
+                include.path.clone()
+            } else {
+                let current_dir = std::path::Path::new(file_path)
+                    .parent()
+                    .unwrap_or_else(|| std::path::Path::new(""))
+                    .to_string_lossy()
+                    .to_string();
+
+                format!("{}/{}", current_dir, include.path)
+            };
+
+            let include_content = read_to_string(&include_path).map_err(|e| {
+                CuError::from(format!("Failed to read include file: {}", include_path))
+                    .add_cause(e.to_string().as_str())
+            })?;
+
+            let processed_content = substitute_parameters(&include_content, &include.params);
+
+            let mut included_representation: CuConfigRepresentation = match Options::default()
+                .with_default_extension(Extensions::IMPLICIT_SOME)
+                .with_default_extension(Extensions::UNWRAP_NEWTYPES)
+                .with_default_extension(Extensions::UNWRAP_VARIANT_NEWTYPES)
+                .from_str(&processed_content)
+            {
+                Ok(rep) => rep,
+                Err(e) => {
+                    return Err(CuError::from(format!(
+                        "Failed to parse include file: {} - Error: {} at position {}",
+                        include_path, e.code, e.position
+                    )));
+                }
+            };
+
+            included_representation =
+                process_includes(&include_path, included_representation, processed_files)?;
+
+            if let Some(included_tasks) = included_representation.tasks {
+                if result.tasks.is_none() {
+                    result.tasks = Some(included_tasks);
+                } else {
+                    let mut tasks = result.tasks.take().unwrap();
+                    for included_task in included_tasks {
+                        if !tasks.iter().any(|t| t.id == included_task.id) {
+                            tasks.push(included_task);
+                        }
+                    }
+                    result.tasks = Some(tasks);
+                }
+            }
+
+            if let Some(included_cnx) = included_representation.cnx {
+                if result.cnx.is_none() {
+                    result.cnx = Some(included_cnx);
+                } else {
+                    let mut cnx = result.cnx.take().unwrap();
+                    for included_c in included_cnx {
+                        if !cnx
+                            .iter()
+                            .any(|c| c.src == included_c.src && c.dst == included_c.dst)
+                        {
+                            cnx.push(included_c);
+                        }
+                    }
+                    result.cnx = Some(cnx);
+                }
+            }
+
+            if result.monitor.is_none() {
+                result.monitor = included_representation.monitor;
+            }
+
+            if result.logging.is_none() {
+                result.logging = included_representation.logging;
+            }
+
+            if let Some(included_missions) = included_representation.missions {
+                if result.missions.is_none() {
+                    result.missions = Some(included_missions);
+                } else {
+                    let mut missions = result.missions.take().unwrap();
+                    for included_mission in included_missions {
+                        if !missions.iter().any(|m| m.id == included_mission.id) {
+                            missions.push(included_mission);
+                        }
+                    }
+                    result.missions = Some(missions);
+                }
+            }
+        }
+    }
+
+    Ok(result)
+}
+
 /// Read a copper configuration from a file.
 pub fn read_configuration(config_filename: &str) -> CuResult<CuConfig> {
     let config_content = read_to_string(config_filename).map_err(|e| {
@@ -1220,12 +1499,39 @@ pub fn read_configuration(config_filename: &str) -> CuResult<CuConfig> {
         ))
         .add_cause(e.to_string().as_str())
     })?;
-    read_configuration_str(config_content)
+    read_configuration_str(config_content, Some(config_filename))
 }
 
 /// Read a copper configuration from a String.
-pub fn read_configuration_str(config_content: String) -> CuResult<CuConfig> {
-    let cuconfig = CuConfig::deserialize_ron(&config_content);
+pub fn read_configuration_str(
+    config_content: String,
+    file_path: Option<&str>,
+) -> CuResult<CuConfig> {
+    let representation: CuConfigRepresentation = match Options::default()
+        .with_default_extension(Extensions::IMPLICIT_SOME)
+        .with_default_extension(Extensions::UNWRAP_NEWTYPES)
+        .with_default_extension(Extensions::UNWRAP_VARIANT_NEWTYPES)
+        .from_str(&config_content)
+    {
+        Ok(rep) => rep,
+        Err(e) => {
+            return Err(CuError::from(format!(
+                "Failed to parse configuration: Error: {} at position {}",
+                e.code, e.position
+            )));
+        }
+    };
+
+    // Process includes and generate a merged configuration
+    let processed_representation = if let Some(path) = file_path {
+        process_includes(path, representation, &mut Vec::new())?
+    } else {
+        representation
+    };
+
+    let cuconfig = CuConfig::deserialize_impl(processed_representation)
+        .map_err(|e| CuError::from(format!("Error deserializing configuration: {}", e)))?;
+
     cuconfig.validate_logging_config()?;
 
     Ok(cuconfig)
