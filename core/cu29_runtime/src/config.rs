@@ -1086,7 +1086,7 @@ impl CuConfig {
     pub fn deserialize_ron(ron: &str) -> Self {
         match Self::get_options().from_str(ron) {
             Ok(representation) => Self::deserialize_impl(representation).unwrap_or_else(|e| {
-                panic!("Error deserializing configuration: {}", e);
+                panic!("Error deserializing configuration: {e}");
             }),
             Err(e) => panic!(
                 "Syntax Error in config: {} at position {}",
@@ -1230,7 +1230,7 @@ fn substitute_parameters(content: &str, params: &HashMap<String, Value>) -> Stri
     let mut result = content.to_string();
 
     for (key, value) in params {
-        let pattern = format!("{{{{{}}}}}", key);
+        let pattern = format!("{{{{{key}}}}}");
         result = result.replace(&pattern, &value.to_string());
     }
 
@@ -1263,7 +1263,7 @@ fn process_includes(
             };
 
             let include_content = read_to_string(&include_path).map_err(|e| {
-                CuError::from(format!("Failed to read include file: {}", include_path))
+                CuError::from(format!("Failed to read include file: {include_path}"))
                     .add_cause(e.to_string().as_str())
             })?;
 
@@ -1378,7 +1378,7 @@ fn parse_config_string(content: &str) -> CuResult<CuConfigRepresentation> {
 /// Uses the deserialize_impl method and validates the logging configuration.
 fn config_representation_to_config(representation: CuConfigRepresentation) -> CuResult<CuConfig> {
     let cuconfig = CuConfig::deserialize_impl(representation)
-        .map_err(|e| CuError::from(format!("Error deserializing configuration: {}", e)))?;
+        .map_err(|e| CuError::from(format!("Error deserializing configuration: {e}")))?;
 
     cuconfig.validate_logging_config()?;
 

@@ -1,4 +1,5 @@
-use cu29_runtime::config::read_configuration;
+use cu29_runtime::config::{read_configuration, Outgoing};
+use petgraph::visit::EdgeRef;
 use std::fs::{create_dir_all, write};
 use tempfile::tempdir;
 
@@ -328,4 +329,195 @@ fn test_error_handling() {
 
     let result = read_configuration(main_path.to_str().unwrap());
     assert!(result.is_err());
+}
+
+#[test]
+fn test_multiple_parameterized_includes() {
+    let temp_dir = tempdir().unwrap();
+    let base_path = temp_dir.path();
+
+    let config_dir = base_path.join("config");
+    create_dir_all(&config_dir).unwrap();
+
+    // Create sensor-detect.ron template file
+    let sensor_detect_config = r#"(
+        tasks: [
+            (
+                id: "camera{{id}}",
+                type: "cu_camera::Camera",
+                config: {
+                    "port": "{{port}}",
+                },
+            ),
+            (
+                id: "detect{{id}}",
+                type: "cu_detector::Detector",
+                config: {
+                    "threshold": {{threshold}},
+                },
+            ),
+        ],
+        cnx: [
+            (src: "camera{{id}}", dst: "detect{{id}}", msg: "cu_camera::CameraPayload"),
+        ],
+    )"#;
+
+    let sensor_detect_path = config_dir.join("sensor-detect.ron");
+    write(&sensor_detect_path, sensor_detect_config).unwrap();
+
+    // Create main.ron file with multiple includes
+    let main_config = r#"(
+        tasks: [
+            (
+                id: "octopus",
+                type: "cu_octopus::octopus0",
+            ),
+        ],
+        includes: [
+            ( path: "sensor-detect.ron", params: { "id": 0, "port": "/dev/video0", "threshold": 0.5, },),
+            ( path: "sensor-detect.ron", params: { "id": 1, "port": "/dev/video1", "threshold": 0.1, },),
+            ( path: "sensor-detect.ron", params: { "id": 2, "port": "/dev/video2", "threshold": 0.7, },),
+        ],
+        cnx: [
+            (src: "detect0", dst: "octopus", msg: "cu_detect::DetectionPayload"),
+            (src: "detect1", dst: "octopus", msg: "cu_detect::DetectionPayload"),
+            (src: "detect2", dst: "octopus", msg: "cu_detect::DetectionPayload"),
+        ],
+        monitor: (
+            type: "cu_consolemon::CuConsoleMon",
+        )
+    )"#;
+
+    let main_path = config_dir.join("main.ron");
+    write(&main_path, main_config).unwrap();
+
+    // Parse the configuration and verify
+    let config = read_configuration(main_path.to_str().unwrap()).unwrap();
+
+    // Verify tasks
+    let all_nodes = config.get_all_nodes(None);
+    assert_eq!(all_nodes.len(), 7); // 1 octopus + 3 cameras + 3 detectors
+
+    // Verify octopus task exists
+    let octopus_task = all_nodes
+        .iter()
+        .find(|(_, node)| node.get_id() == "octopus")
+        .map(|(_, node)| node);
+    assert!(octopus_task.is_some());
+    assert_eq!(octopus_task.unwrap().get_type(), "cu_octopus::octopus0");
+
+    // Verify camera tasks with correct ports
+    for id in 0..3 {
+        let camera_id = format!("camera{id}");
+        let camera_task = all_nodes
+            .iter()
+            .find(|(_, node)| node.get_id() == camera_id)
+            .map(|(_, node)| node);
+
+        assert!(camera_task.is_some());
+        let camera = camera_task.unwrap();
+        assert_eq!(camera.get_type(), "cu_camera::Camera");
+
+        let expected_port = format!("/dev/video{id}");
+        assert_eq!(camera.get_param::<String>("port").unwrap(), expected_port);
+    }
+
+    // Verify detector tasks with correct thresholds
+    let expected_thresholds = [0.5, 0.1, 0.7];
+    #[allow(clippy::needless_range_loop)]
+    for id in 0..3 {
+        let detect_id = format!("detect{id}");
+        let detect_task = all_nodes
+            .iter()
+            .find(|(_, node)| node.get_id() == detect_id)
+            .map(|(_, node)| node);
+
+        assert!(detect_task.is_some());
+        let detector = detect_task.unwrap();
+        assert_eq!(detector.get_type(), "cu_detector::Detector");
+
+        let threshold = detector.get_param::<f64>("threshold").unwrap();
+        assert_eq!(threshold, expected_thresholds[id]);
+    }
+
+    // Get the graph and verify connections
+    let graph = config.graphs.get_graph(None).unwrap();
+
+    // Find the node IDs for verification
+    let mut camera_node_ids = Vec::new();
+    let mut detector_node_ids = Vec::new();
+    let mut octopus_node_id = None;
+
+    for idx in graph.node_indices() {
+        let node = graph.node_weight(idx).unwrap();
+        let id = node.get_id();
+
+        if id == "octopus" {
+            octopus_node_id = Some(idx);
+        } else if id.starts_with("camera") {
+            camera_node_ids.push((id.clone(), idx));
+        } else if id.starts_with("detect") {
+            detector_node_ids.push((id.clone(), idx));
+        }
+    }
+
+    // Verify camera-to-detector connections (internal to sensor-detect)
+    for id in 0..3 {
+        let camera_id = format!("camera{id}");
+        let detect_id = format!("detect{id}");
+
+        let camera_idx = camera_node_ids
+            .iter()
+            .find(|(id, _)| *id == camera_id)
+            .unwrap()
+            .1;
+        let detector_idx = detector_node_ids
+            .iter()
+            .find(|(id, _)| *id == detect_id)
+            .unwrap()
+            .1;
+
+        // Check if there's an edge from camera to detector
+        let has_connection = graph.edges_directed(camera_idx, Outgoing).any(|edge| {
+            let target = edge.target();
+            let cnx = edge.weight();
+            target == detector_idx && cnx.msg == "cu_camera::CameraPayload"
+        });
+
+        assert!(
+            has_connection,
+            "Connection from {camera_id} to {detect_id} not found"
+        );
+    }
+
+    // Verify detector-to-octopus connections (defined in main.ron)
+    let octopus_idx = octopus_node_id.unwrap();
+
+    for id in 0..3 {
+        let detect_id = format!("detect{id}");
+        let detector_idx = detector_node_ids
+            .iter()
+            .find(|(id, _)| *id == detect_id)
+            .unwrap()
+            .1;
+
+        // Check if there's an edge from detector to octopus
+        let has_connection = graph.edges_directed(detector_idx, Outgoing).any(|edge| {
+            let target = edge.target();
+            let cnx = edge.weight();
+            target == octopus_idx && cnx.msg == "cu_detect::DetectionPayload"
+        });
+
+        assert!(
+            has_connection,
+            "Connection from {detect_id} to octopus not found"
+        );
+    }
+
+    // Verify monitor
+    assert!(config.monitor.is_some());
+    assert_eq!(
+        config.monitor.as_ref().unwrap().get_type(),
+        "cu_consolemon::CuConsoleMon"
+    );
 }
