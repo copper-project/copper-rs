@@ -93,7 +93,13 @@ where
     }
 }
 
-/// TODO: Move that to the runtime as it is useful.
+/// A Copper-friendly wrapper around ArrayVec with bincode serialization support.
+/// 
+/// This provides a fixed-capacity, stack-allocated vector that can be efficiently 
+/// serialized and deserialized. It is particularly useful for message payloads that 
+/// need to avoid heap allocations while supporting varying lengths of data up to a maximum.
+/// 
+/// Unlike standard Vec, CuArrayVec will never reallocate or use the heap for the elements storage.
 #[derive(Debug, Clone)]
 pub struct CuArrayVec<T, const N: usize>(pub ArrayVec<T, N>);
 
