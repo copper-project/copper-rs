@@ -1,0 +1,15 @@
+(
+    tasks: [
+        (
+            id: "motor_{{id}}",
+            type: "cu_rp_gpio::RPGpio",
+            config: {
+                "pin": {{pin}},
+                "direction": "{{direction}}",
+            },
+        ),
+    ],
+    cnx: [
+        (src: "source", dst: "motor_{{id}}", msg: "cu_rp_gpio::RPGpioPayload"),
+    ],
+)
