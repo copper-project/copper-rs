@@ -404,13 +404,13 @@ mod tests {
 
         // Debug output for frames
         println!("Frames in the tree:");
-        for (frame, _) in &tree.frame_indices {
+        for frame in tree.frame_indices.keys() {
             println!("  {}", frame);
         }
 
         // Debug output for connections
         println!("Connections in the tree:");
-        for ((parent, child), _) in &tree.transform_buffers {
+        for (parent, child) in tree.transform_buffers.keys() {
             println!("  {} -> {}", parent, child);
         }
 
@@ -470,13 +470,13 @@ mod tests {
 
         // Debug output for frames
         println!("Frames in the tree:");
-        for (frame, _) in &tree.frame_indices {
+        for frame in tree.frame_indices.keys() {
             println!("  {}", frame);
         }
 
         // Debug output for connections
         println!("Connections in the tree:");
-        for ((parent, child), _) in &tree.transform_buffers {
+        for (parent, child) in tree.transform_buffers.keys() {
             println!("  {} -> {}", parent, child);
         }
 
