@@ -132,7 +132,7 @@ where
 }
 
 /// Generic implementation of matrix multiplication: reference * owned for transforms
-impl<'a, T> Mul<Transform3D<T>> for &'a Transform3D<T>
+impl<T> Mul<Transform3D<T>> for &Transform3D<T>
 where
     T: Copy + Debug + 'static + Default + std::ops::Add<Output = T> + std::ops::Mul<Output = T>,
 {
