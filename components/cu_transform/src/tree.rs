@@ -32,7 +32,7 @@ pub struct TransformTree<T: Copy + Debug + Default + 'static> {
 }
 
 // We need to limit T to types where Transform3D<T> has Clone and inverse method
-impl<T: Copy + Debug + Default + 'static> TransformTree<T> 
+impl<T: Copy + Debug + Default + 'static> TransformTree<T>
 where
     Transform3D<T>: Clone + HasInverse<T>,
 {
@@ -43,7 +43,7 @@ where
             transform_buffers: HashMap::new(),
         }
     }
-    
+
     fn create_identity_transform() -> Transform3D<T> {
         // Create an identity matrix for transformation
         // For floating point types, this would set diagonal to 1.0
@@ -51,7 +51,7 @@ where
         // should be 0 for most numeric types. In practice, the caller should
         // use a correct type like f32/f64.
         let mut identity = Transform3D::default();
-        
+
         // Hardcode for common types
         if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
             // Use unsafe to set to 1.0 for f32
@@ -75,7 +75,7 @@ where
             }
         }
         // For other types, we'll leave as default
-        
+
         identity
     }
 
@@ -128,7 +128,7 @@ where
         if from_frame == to_frame {
             return Ok(Vec::new());
         }
-        
+
         let from_idx = self
             .frame_indices
             .get(from_frame)
@@ -138,10 +138,10 @@ where
             .frame_indices
             .get(to_frame)
             .ok_or(TransformError::FrameNotFound(to_frame.to_string()))?;
-            
+
         // Create an undirected version of the graph to find any path (forward or inverse)
         let mut undirected_graph = self.graph.clone();
-        
+
         // Add reverse edges for every existing edge to make it undirected
         let edges: Vec<_> = self.graph.edge_indices().collect();
         for edge_idx in edges {
@@ -150,24 +150,24 @@ where
                 undirected_graph.add_edge(b, a, ());
             }
         }
-        
+
         // Now find path in undirected graph
         let path = dijkstra(&undirected_graph, *from_idx, Some(*to_idx), |_| 1);
-        
+
         if !path.contains_key(to_idx) {
             return Err(TransformError::TransformNotFound {
                 from: from_frame.to_string(),
                 to: to_frame.to_string(),
             });
         }
-        
+
         // Reconstruct the path
         let mut current = *to_idx;
         let mut path_nodes = vec![current];
-        
+
         while current != *from_idx {
             let mut found_next = false;
-            
+
             // Try all neighbors in undirected graph
             for neighbor in undirected_graph.neighbors(current) {
                 if path.contains_key(&neighbor) && path[&neighbor] < path[&current] {
@@ -177,29 +177,29 @@ where
                     break;
                 }
             }
-            
+
             if !found_next {
                 return Err(TransformError::TransformNotFound {
-                    from: from_frame.to_string(), 
+                    from: from_frame.to_string(),
                     to: to_frame.to_string(),
                 });
             }
         }
-        
+
         path_nodes.reverse();
-        
+
         // Convert node path to edge path with direction information
         let mut path_edges = Vec::new();
         for i in 0..path_nodes.len() - 1 {
             let parent_idx = path_nodes[i];
             let child_idx = path_nodes[i + 1];
-            
+
             let parent_frame = self.graph[parent_idx].clone();
             let child_frame = self.graph[child_idx].clone();
-            
+
             // Check if this is a forward edge in original directed graph
             let is_forward = self.graph.contains_edge(parent_idx, child_idx);
-            
+
             if is_forward {
                 // Forward edge: parent -> child
                 path_edges.push((parent_frame, child_frame, false));
@@ -208,7 +208,7 @@ where
                 path_edges.push((child_frame, parent_frame, true));
             }
         }
-        
+
         Ok(path_edges)
     }
 
@@ -224,21 +224,21 @@ where
         }
 
         let path = self.find_path(from_frame, to_frame)?;
-        
+
         if path.is_empty() {
             // Another case for identity transform
             return Ok(Self::create_identity_transform());
         }
-        
+
         // For now, we're only handling individual transforms, not chaining them
         // A complete implementation would multiply the transforms together
-        
+
         // Get the appropriate step from the path
         let (parent, child, inverse) = &path[0];
-        
+
         // In all cases, the buffer is stored with the parent->child key
         let buffer_key = (parent.clone(), child.clone());
-                
+
         // Check if the buffer exists with this key
         let buffer = match self.transform_buffers.get(&buffer_key) {
             Some(b) => b,
@@ -274,7 +274,7 @@ where
 }
 
 impl<T: Copy + Debug + Default + 'static> Default for TransformTree<T>
-where 
+where
     Transform3D<T>: Clone + HasInverse<T>,
 {
     fn default() -> Self {
@@ -286,7 +286,7 @@ where
 mod tests {
     use super::*;
     use cu29::clock::CuDuration;
-    
+
     // Only use f32/f64 for tests since our inverse transform is only implemented for these types
 
     #[test]
@@ -369,16 +369,16 @@ mod tests {
         assert_eq!(path_vec[1].0, "robot");
         assert_eq!(path_vec[1].1, "sensor");
     }
-    
+
     #[test]
     fn test_lookup_transform_with_inverse() {
         let mut tree = TransformTree::<f32>::new();
-        
+
         // Define a transform from world to robot
         let world_to_robot = StampedTransform {
             transform: Transform3D {
                 mat: [
-                    [1.0, 0.0, 0.0, 2.0],  // Translation by (2,3,4)
+                    [1.0, 0.0, 0.0, 2.0], // Translation by (2,3,4)
                     [0.0, 1.0, 0.0, 3.0],
                     [0.0, 0.0, 1.0, 4.0],
                     [0.0, 0.0, 0.0, 1.0],
@@ -388,52 +388,52 @@ mod tests {
             parent_frame: "world".to_string(),
             child_frame: "robot".to_string(),
         };
-        
+
         // Add the transform to the tree
         assert!(tree.add_transform(world_to_robot).is_ok());
-        
+
         // Get the transform from world to robot (forward)
         let forward_transform = tree.lookup_transform("world", "robot", CuDuration(1000));
         assert!(forward_transform.is_ok());
         let forward = forward_transform.unwrap();
-        
+
         // The forward transform should be exactly what we added
         assert_eq!(forward.mat[0][3], 2.0);
         assert_eq!(forward.mat[1][3], 3.0);
         assert_eq!(forward.mat[2][3], 4.0);
-        
+
         // Debug output for frames
         println!("Frames in the tree:");
         for (frame, _) in &tree.frame_indices {
             println!("  {}", frame);
         }
-        
+
         // Debug output for connections
         println!("Connections in the tree:");
         for ((parent, child), _) in &tree.transform_buffers {
             println!("  {} -> {}", parent, child);
         }
-        
+
         // Now get the inverse transform (robot to world)
         let inverse_transform = tree.lookup_transform("robot", "world", CuDuration(1000));
-        
+
         if let Err(e) = &inverse_transform {
             println!("Error looking up inverse transform: {:?}", e);
         }
-        
+
         assert!(inverse_transform.is_ok());
         let inverse = inverse_transform.unwrap();
-        
+
         // The inverse transform should have negated translation
         assert_eq!(inverse.mat[0][3], -2.0);
         assert_eq!(inverse.mat[1][3], -3.0);
         assert_eq!(inverse.mat[2][3], -4.0);
     }
-    
+
     #[test]
     fn test_multi_step_transform_with_inverse() {
         let mut tree = TransformTree::<f32>::new();
-        
+
         // Define a transform from world to robot
         let world_to_robot = StampedTransform {
             transform: Transform3D {
@@ -448,12 +448,12 @@ mod tests {
             parent_frame: "world".to_string(),
             child_frame: "robot".to_string(),
         };
-        
+
         // Define a transform from robot to camera
         let robot_to_camera = StampedTransform {
             transform: Transform3D {
                 mat: [
-                    [0.0, -1.0, 0.0, 0.5],  // 90-degree rotation around z-axis with translation
+                    [0.0, -1.0, 0.0, 0.5], // 90-degree rotation around z-axis with translation
                     [1.0, 0.0, 0.0, 0.0],
                     [0.0, 0.0, 1.0, 0.2],
                     [0.0, 0.0, 0.0, 1.0],
@@ -463,39 +463,39 @@ mod tests {
             parent_frame: "robot".to_string(),
             child_frame: "camera".to_string(),
         };
-        
+
         // Add the transforms to the tree
         assert!(tree.add_transform(world_to_robot).is_ok());
         assert!(tree.add_transform(robot_to_camera).is_ok());
-        
+
         // Debug output for frames
         println!("Frames in the tree:");
         for (frame, _) in &tree.frame_indices {
             println!("  {}", frame);
         }
-        
+
         // Debug output for connections
         println!("Connections in the tree:");
         for ((parent, child), _) in &tree.transform_buffers {
             println!("  {} -> {}", parent, child);
         }
-        
+
         // Look up the transform from world to camera (should combine both transforms)
         let world_to_camera = tree.lookup_transform("world", "camera", CuDuration(1000));
-        
+
         if let Err(e) = &world_to_camera {
             println!("Error looking up world to camera transform: {:?}", e);
         }
-        
+
         assert!(world_to_camera.is_ok());
-        
+
         // Now look up the inverse transform (camera to world)
         let camera_to_world = tree.lookup_transform("camera", "world", CuDuration(1000));
-        
+
         if let Err(e) = &camera_to_world {
             println!("Error looking up camera to world transform: {:?}", e);
         }
-        
+
         // Try getting the path directly
         let path = tree.find_path("camera", "world");
         if let Ok(p) = path {
@@ -506,9 +506,9 @@ mod tests {
         } else if let Err(e) = path {
             println!("Error finding path: {:?}", e);
         }
-        
+
         assert!(camera_to_world.is_ok());
-        
+
         // Check if one transform is the inverse of the other
         // We'd need matrix multiplication to properly verify this, but for now
         // we'll just check that we get a result without error
