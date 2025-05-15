@@ -19,6 +19,7 @@ bincode = { workspace = true }   # For serialization
 serde = { workspace = true }
 smallvec = { workspace = true } # For small vector optimizations
 rand = "0.9.0"      # For random number generation in cache cleanup
+dashmap = "6.1.0"
 
 [dev-dependencies]
 approx = "0.5"      # For float comparisons in tests

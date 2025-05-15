@@ -1,8 +1,10 @@
 use cu29::clock::{CuTime, CuTimeRange};
 use cu_spatial_payloads::Transform3D;
+use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fmt::Debug;
+use std::sync::{Arc, RwLock};
 
 const DEFAULT_CACHE_SIZE: usize = 100;
 
@@ -14,25 +16,32 @@ pub struct StampedTransform<T: Copy + Debug + 'static> {
     pub child_frame: String,
 }
 
+/// Internal transform buffer that holds ordered transforms between two frames
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct TransformBuffer<T: Copy + Debug + 'static> {
+struct TransformBufferInternal<T: Copy + Debug + 'static> {
     transforms: VecDeque<StampedTransform<T>>,
     max_capacity: usize,
 }
 
-impl<T: Copy + Debug + 'static> TransformBuffer<T> {
-    pub fn new() -> Self {
+/// Thread-safe wrapper around a transform buffer with concurrent access
+#[derive(Clone)]
+pub struct TransformBuffer<T: Copy + Debug + 'static> {
+    buffer: Arc<RwLock<TransformBufferInternal<T>>>,
+}
+
+impl<T: Copy + Debug + 'static> TransformBufferInternal<T> {
+    fn new() -> Self {
         Self::with_capacity(DEFAULT_CACHE_SIZE)
     }
 
-    pub fn with_capacity(capacity: usize) -> Self {
+    fn with_capacity(capacity: usize) -> Self {
         Self {
             transforms: VecDeque::with_capacity(capacity),
             max_capacity: capacity,
         }
     }
 
-    pub fn add_transform(&mut self, transform: StampedTransform<T>) {
+    fn add_transform(&mut self, transform: StampedTransform<T>) {
         let pos = self
             .transforms
             .partition_point(|t| t.stamp <= transform.stamp);
@@ -44,11 +53,11 @@ impl<T: Copy + Debug + 'static> TransformBuffer<T> {
         }
     }
 
-    pub fn get_latest_transform(&self) -> Option<&StampedTransform<T>> {
+    fn get_latest_transform(&self) -> Option<&StampedTransform<T>> {
         self.transforms.back()
     }
 
-    pub fn get_time_range(&self) -> Option<CuTimeRange> {
+    fn get_time_range(&self) -> Option<CuTimeRange> {
         if self.transforms.is_empty() {
             return None;
         }
@@ -59,7 +68,7 @@ impl<T: Copy + Debug + 'static> TransformBuffer<T> {
         })
     }
 
-    pub fn get_transforms_in_range(
+    fn get_transforms_in_range(
         &self,
         start_time: CuTime,
         end_time: CuTime,
@@ -70,7 +79,7 @@ impl<T: Copy + Debug + 'static> TransformBuffer<T> {
             .collect()
     }
 
-    pub fn get_closest_transform(&self, time: CuTime) -> Option<&StampedTransform<T>> {
+    fn get_closest_transform(&self, time: CuTime) -> Option<&StampedTransform<T>> {
         if self.transforms.is_empty() {
             return None;
         }
@@ -98,7 +107,101 @@ impl<T: Copy + Debug + 'static> TransformBuffer<T> {
     }
 }
 
+impl<T: Copy + Debug + 'static> TransformBuffer<T> {
+    pub fn new() -> Self {
+        Self {
+            buffer: Arc::new(RwLock::new(TransformBufferInternal::new())),
+        }
+    }
+
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            buffer: Arc::new(RwLock::new(TransformBufferInternal::with_capacity(
+                capacity,
+            ))),
+        }
+    }
+
+    /// Add a transform to the buffer
+    pub fn add_transform(&self, transform: StampedTransform<T>) {
+        let mut buffer = self.buffer.write().unwrap();
+        buffer.add_transform(transform);
+    }
+
+    /// Get the latest transform in the buffer
+    pub fn get_latest_transform(&self) -> Option<StampedTransform<T>> {
+        let buffer = self.buffer.read().unwrap();
+        buffer.get_latest_transform().cloned()
+    }
+
+    /// Get the time range of transforms in this buffer
+    pub fn get_time_range(&self) -> Option<CuTimeRange> {
+        let buffer = self.buffer.read().unwrap();
+        buffer.get_time_range()
+    }
+
+    /// Get transforms within a specific time range
+    pub fn get_transforms_in_range(
+        &self,
+        start_time: CuTime,
+        end_time: CuTime,
+    ) -> Vec<StampedTransform<T>> {
+        let buffer = self.buffer.read().unwrap();
+        buffer
+            .get_transforms_in_range(start_time, end_time)
+            .into_iter()
+            .cloned()
+            .collect()
+    }
+
+    /// Get the transform closest to the specified time
+    pub fn get_closest_transform(&self, time: CuTime) -> Option<StampedTransform<T>> {
+        let buffer = self.buffer.read().unwrap();
+        buffer.get_closest_transform(time).cloned()
+    }
+}
+
 impl<T: Copy + std::fmt::Debug + 'static> Default for TransformBuffer<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// A concurrent transform buffer store to reduce contention among multiple transform pairs
+pub struct TransformStore<T: Copy + Debug + 'static> {
+    buffers: DashMap<(String, String), TransformBuffer<T>>,
+}
+
+impl<T: Copy + Debug + 'static> TransformStore<T> {
+    pub fn new() -> Self {
+        Self {
+            buffers: DashMap::new(),
+        }
+    }
+
+    /// Get or create a transform buffer for a specific parent-child frame pair
+    pub fn get_or_create_buffer(&self, parent: &str, child: &str) -> TransformBuffer<T> {
+        self.buffers
+            .entry((parent.to_string(), child.to_string()))
+            .or_insert_with(|| TransformBuffer::new())
+            .clone()
+    }
+
+    /// Add a transform to the appropriate buffer
+    pub fn add_transform(&self, transform: StampedTransform<T>) {
+        let buffer = self.get_or_create_buffer(&transform.parent_frame, &transform.child_frame);
+        buffer.add_transform(transform);
+    }
+
+    /// Get a transform buffer if it exists
+    pub fn get_buffer(&self, parent: &str, child: &str) -> Option<TransformBuffer<T>> {
+        self.buffers
+            .get(&(parent.to_string(), child.to_string()))
+            .map(|entry| entry.clone())
+    }
+}
+
+impl<T: Copy + Debug + 'static> Default for TransformStore<T> {
     fn default() -> Self {
         Self::new()
     }
@@ -111,7 +214,7 @@ mod tests {
 
     #[test]
     fn test_add_transform() {
-        let mut buffer = TransformBuffer::<f32>::new();
+        let buffer = TransformBuffer::<f32>::new();
 
         let transform = StampedTransform {
             transform: Transform3D::default(),
@@ -122,12 +225,13 @@ mod tests {
 
         buffer.add_transform(transform);
 
-        assert_eq!(buffer.transforms.len(), 1);
+        let latest = buffer.get_latest_transform();
+        assert!(latest.is_some());
     }
 
     #[test]
     fn test_time_ordering() {
-        let mut buffer = TransformBuffer::<f32>::new();
+        let buffer = TransformBuffer::<f32>::new();
 
         let transform1 = StampedTransform {
             transform: Transform3D::default(),
@@ -154,16 +258,18 @@ mod tests {
         buffer.add_transform(transform2);
         buffer.add_transform(transform3);
 
-        assert_eq!(buffer.transforms.len(), 3);
+        let range = buffer.get_time_range().unwrap();
+        assert_eq!(range.start.as_nanos(), 1000);
+        assert_eq!(range.end.as_nanos(), 3000);
 
-        assert_eq!(buffer.transforms[0].stamp.as_nanos(), 1000);
-        assert_eq!(buffer.transforms[1].stamp.as_nanos(), 2000);
-        assert_eq!(buffer.transforms[2].stamp.as_nanos(), 3000);
+        let transforms = buffer.get_transforms_in_range(CuDuration(1500), CuDuration(2500));
+        assert_eq!(transforms.len(), 1);
+        assert_eq!(transforms[0].stamp.as_nanos(), 2000);
     }
 
     #[test]
     fn test_capacity_limit() {
-        let mut buffer = TransformBuffer::<f32>::with_capacity(2);
+        let buffer = TransformBuffer::<f32>::with_capacity(2);
 
         let transform1 = StampedTransform {
             transform: Transform3D::default(),
@@ -190,14 +296,14 @@ mod tests {
         buffer.add_transform(transform2);
         buffer.add_transform(transform3);
 
-        assert_eq!(buffer.transforms.len(), 2);
-        assert_eq!(buffer.transforms[0].stamp.as_nanos(), 2000);
-        assert_eq!(buffer.transforms[1].stamp.as_nanos(), 3000);
+        let range = buffer.get_time_range().unwrap();
+        assert_eq!(range.start.as_nanos(), 2000);
+        assert_eq!(range.end.as_nanos(), 3000);
     }
 
     #[test]
     fn test_get_closest_transform() {
-        let mut buffer = TransformBuffer::<f32>::new();
+        let buffer = TransformBuffer::<f32>::new();
 
         let transform1 = StampedTransform {
             transform: Transform3D::default(),
@@ -235,5 +341,31 @@ mod tests {
         let closest = buffer.get_closest_transform(CuDuration(2600));
         assert!(closest.is_some());
         assert_eq!(closest.unwrap().stamp.as_nanos(), 3000);
+    }
+
+    #[test]
+    fn test_transform_store() {
+        let store = TransformStore::<f32>::new();
+
+        let transform = StampedTransform {
+            transform: Transform3D::default(),
+            stamp: CuDuration(1000),
+            parent_frame: "world".to_string(),
+            child_frame: "robot".to_string(),
+        };
+
+        store.add_transform(transform.clone());
+
+        let buffer = store.get_buffer("world", "robot").unwrap();
+        let closest = buffer.get_closest_transform(CuDuration(1000));
+        assert!(closest.is_some());
+
+        // Non-existent buffer
+        let missing = store.get_buffer("world", "camera");
+        assert!(missing.is_none());
+
+        // Get or create should create a new buffer
+        let _ = store.get_or_create_buffer("world", "camera");
+        assert!(store.get_buffer("world", "camera").is_some());
     }
 }

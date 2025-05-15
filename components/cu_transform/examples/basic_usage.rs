@@ -47,7 +47,7 @@ fn main() {
             );
         }
         Err(e) => {
-            println!("Error looking up transform: {:?}", e);
+            println!("Error looking up transform: {e:?}");
         }
     }
 }

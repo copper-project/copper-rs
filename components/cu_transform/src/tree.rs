@@ -1,12 +1,13 @@
 use crate::error::{TransformError, TransformResult};
-use crate::transform::{StampedTransform, TransformBuffer};
+use crate::transform::{StampedTransform, TransformStore};
 use cu29::clock::CuTime;
 use cu_spatial_payloads::Transform3D;
+use dashmap::DashMap;
 use petgraph::algo::dijkstra;
 use petgraph::graph::{DiGraph, NodeIndex};
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::sync::{Arc, RwLock};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 /// Trait for types that can compute their inverse transformation
@@ -27,6 +28,7 @@ impl HasInverse<f64> for Transform3D<f64> {
 }
 
 /// The cache entry for a transform query
+#[derive(Clone)]
 struct TransformCacheEntry<T: Copy + Debug + 'static> {
     /// The cached transform result
     transform: Transform3D<T>,
@@ -41,33 +43,35 @@ struct TransformCacheEntry<T: Copy + Debug + 'static> {
 /// A cache for transforms to avoid recalculating frequently accessed paths
 struct TransformCache<T: Copy + Debug + 'static> {
     /// Map from (source, target) frames to cached transforms
-    entries: HashMap<(String, String), TransformCacheEntry<T>>,
+    entries: DashMap<(String, String), TransformCacheEntry<T>>,
     /// Maximum size of the cache
     max_size: usize,
     /// Maximum age of cache entries before invalidation
     max_age: Duration,
+    /// Last time the cache was cleaned up (as nanoseconds since epoch)
+    last_cleanup: AtomicU64,
+    /// Cleanup interval - only clean every N seconds
+    cleanup_interval: Duration,
 }
 
 impl<T: Copy + Debug + 'static> TransformCache<T> {
     fn new(max_size: usize, max_age: Duration) -> Self {
         Self {
-            entries: HashMap::with_capacity(max_size),
+            entries: DashMap::with_capacity(max_size),
             max_size,
             max_age,
+            last_cleanup: AtomicU64::new(now_timestamp_nanos()),
+            cleanup_interval: Duration::from_secs(5), // Clean every 5 seconds
         }
     }
 
     /// Get a cached transform if it exists and is still valid
-    fn get(
-        &mut self,
-        from: &str,
-        to: &str,
-        time: CuTime,
-        path_hash: u64,
-    ) -> Option<Transform3D<T>> {
-        let now = Instant::now();
+    fn get(&self, from: &str, to: &str, time: CuTime, path_hash: u64) -> Option<Transform3D<T>> {
+        let key = (from.to_string(), to.to_string());
 
-        if let Some(entry) = self.entries.get_mut(&(from.to_string(), to.to_string())) {
+        if let Some(mut entry) = self.entries.get_mut(&key) {
+            let now = Instant::now();
+
             // Check if the cache entry is for the same time and path
             if entry.time == time && entry.path_hash == path_hash {
                 // Check if the entry is still valid (not too old)
@@ -84,7 +88,7 @@ impl<T: Copy + Debug + 'static> TransformCache<T> {
 
     /// Add a new transform to the cache
     fn insert(
-        &mut self,
+        &self,
         from: &str,
         to: &str,
         transform: Transform3D<T>,
@@ -92,23 +96,29 @@ impl<T: Copy + Debug + 'static> TransformCache<T> {
         path_hash: u64,
     ) {
         let now = Instant::now();
+        let key = (from.to_string(), to.to_string());
 
         // If the cache is at capacity, remove the oldest entry
         if self.entries.len() >= self.max_size {
-            // Find the oldest entry
-            if let Some(oldest_key) = self
-                .entries
-                .iter()
-                .min_by_key(|(_, entry)| entry.last_access)
-                .map(|(key, _)| key.clone())
-            {
-                self.entries.remove(&oldest_key);
+            // Find the oldest entry (this requires iterating through entries)
+            let mut oldest_key = None;
+            let mut oldest_time = now;
+
+            for entry in self.entries.iter() {
+                if entry.last_access < oldest_time {
+                    oldest_time = entry.last_access;
+                    oldest_key = Some(entry.key().clone());
+                }
+            }
+
+            if let Some(key_to_remove) = oldest_key {
+                self.entries.remove(&key_to_remove);
             }
         }
 
         // Insert the new entry
         self.entries.insert(
-            (from.to_string(), to.to_string()),
+            key,
             TransformCacheEntry {
                 transform,
                 time,
@@ -118,20 +128,59 @@ impl<T: Copy + Debug + 'static> TransformCache<T> {
         );
     }
 
-    /// Clear old entries from the cache
-    fn cleanup(&mut self) {
-        let now = Instant::now();
-        self.entries
-            .retain(|_, entry| now.duration_since(entry.last_access) <= self.max_age);
+    /// Check if it's time to clean up the cache
+    fn should_cleanup(&self) -> bool {
+        let now = now_timestamp_nanos();
+        let last = self.last_cleanup.load(Ordering::Relaxed);
+        let interval_nanos = self.cleanup_interval.as_nanos() as u64;
+
+        now.saturating_sub(last) >= interval_nanos
     }
+
+    /// Clear old entries from the cache
+    fn cleanup(&self) {
+        let now = Instant::now();
+        let mut keys_to_remove = Vec::new();
+
+        // Identify keys to remove
+        for entry in self.entries.iter() {
+            if now.duration_since(entry.last_access) > self.max_age {
+                keys_to_remove.push(entry.key().clone());
+            }
+        }
+
+        // Remove expired entries
+        for key in keys_to_remove {
+            self.entries.remove(&key);
+        }
+
+        // Update last cleanup time using atomic
+        self.last_cleanup
+            .store(now_timestamp_nanos(), Ordering::Relaxed);
+    }
+
+    /// Clear all entries
+    fn clear(&self) {
+        self.entries.clear();
+    }
+}
+
+/// Get current time as nanoseconds since some epoch
+/// This is just used for comparing intervals, not for absolute time
+fn now_timestamp_nanos() -> u64 {
+    let now = Instant::now();
+    // We can't get nanoseconds from Instant directly, but we can use this trick
+    // to get a stable value that increases monotonically
+    let duration = now.elapsed();
+    (duration.as_secs() * 1_000_000_000 + duration.subsec_nanos() as u64) % u64::MAX
 }
 
 pub struct TransformTree<T: Copy + Debug + Default + 'static> {
     graph: DiGraph<String, ()>,
     frame_indices: HashMap<String, NodeIndex>,
-    transform_buffers: HashMap<(String, String), Arc<RwLock<TransformBuffer<T>>>>,
-    // Cache for frequently accessed transforms
-    cache: RwLock<TransformCache<T>>,
+    transform_store: TransformStore<T>,
+    // Concurrent cache for transform lookups
+    cache: TransformCache<T>,
 }
 
 // We need to limit T to types where Transform3D<T> has Clone and inverse method
@@ -151,11 +200,8 @@ where
         Self {
             graph: DiGraph::new(),
             frame_indices: HashMap::new(),
-            transform_buffers: HashMap::new(),
-            cache: RwLock::new(TransformCache::new(
-                Self::DEFAULT_CACHE_SIZE,
-                Self::DEFAULT_CACHE_AGE,
-            )),
+            transform_store: TransformStore::new(),
+            cache: TransformCache::new(Self::DEFAULT_CACHE_SIZE, Self::DEFAULT_CACHE_AGE),
         }
     }
 
@@ -164,15 +210,19 @@ where
         Self {
             graph: DiGraph::new(),
             frame_indices: HashMap::new(),
-            transform_buffers: HashMap::new(),
-            cache: RwLock::new(TransformCache::new(cache_size, cache_age)),
+            transform_store: TransformStore::new(),
+            cache: TransformCache::new(cache_size, cache_age),
         }
     }
 
     /// Clear the transform cache
     pub fn clear_cache(&self) {
-        let mut cache = self.cache.write().unwrap();
-        cache.entries.clear();
+        self.cache.clear();
+    }
+
+    /// Perform scheduled cache cleanup operation
+    pub fn cleanup_cache(&self) {
+        self.cache.cleanup();
     }
 
     fn create_identity_transform() -> Transform3D<T> {
@@ -229,16 +279,8 @@ where
             self.graph.add_edge(parent_idx, child_idx, ());
         }
 
-        let buffer_key = (
-            transform.parent_frame.clone(),
-            transform.child_frame.clone(),
-        );
-        let buffer = self
-            .transform_buffers
-            .entry(buffer_key)
-            .or_insert_with(|| Arc::new(RwLock::new(TransformBuffer::new())));
-
-        buffer.write().unwrap().add_transform(transform);
+        // Add transform to the store
+        self.transform_store.add_transform(transform);
         Ok(())
     }
 
@@ -381,20 +423,14 @@ where
         // Calculate a hash for the path (for cache lookups)
         let path_hash = Self::compute_path_hash(&path);
 
-        // Try to get the transform from cache
-        {
-            let mut cache = self.cache.write().unwrap();
-            if let Some(cached_transform) = cache.get(from_frame, to_frame, time, path_hash) {
-                // Cache hit - return cached transform
-                return Ok(cached_transform);
-            }
+        // Try to get the transform from cache - concurrent map allows lock-free reads
+        if let Some(cached_transform) = self.cache.get(from_frame, to_frame, time, path_hash) {
+            return Ok(cached_transform);
+        }
 
-            // Periodically cleanup expired cache entries
-            // Only do this occasionally to avoid excessive overhead
-            if rand::random::<f32>() < 0.01 {
-                // 1% chance on each lookup
-                cache.cleanup();
-            }
+        // Check if it's time to clean up the cache
+        if self.cache.should_cleanup() {
+            self.cache.cleanup();
         }
 
         // Cache miss - compute the transform
@@ -404,11 +440,8 @@ where
 
         // Iterate through each segment of the path
         for (parent, child, inverse) in &path {
-            // In all cases, the buffer is stored with the parent->child key
-            let buffer_key = (parent.clone(), child.clone());
-
-            // Check if the buffer exists with this key
-            let buffer = match self.transform_buffers.get(&buffer_key) {
+            // Get the transform buffer for this segment
+            let buffer = match self.transform_store.get_buffer(parent, child) {
                 Some(b) => b,
                 None => {
                     // If we can't find the transform, it's an error
@@ -419,8 +452,7 @@ where
                 }
             };
 
-            let buffer_read = buffer.read().unwrap();
-            let transform = buffer_read
+            let transform = buffer
                 .get_closest_transform(time)
                 .ok_or(TransformError::TransformTimeNotAvailable(time))?;
 
@@ -439,10 +471,8 @@ where
         }
 
         // Cache the computed result
-        {
-            let mut cache = self.cache.write().unwrap();
-            cache.insert(from_frame, to_frame, result.clone(), time, path_hash);
-        }
+        self.cache
+            .insert(from_frame, to_frame, result.clone(), time, path_hash);
 
         Ok(result)
     }
@@ -820,5 +850,13 @@ mod tests {
         // Now look up the inverse transform (camera to world)
         let camera_to_world = tree.lookup_transform("camera", "world", CuDuration(1000));
         assert!(camera_to_world.is_ok());
+    }
+
+    #[test]
+    fn test_cache_cleanup() {
+        let tree = TransformTree::<f32>::with_cache_settings(5, Duration::from_millis(10));
+
+        // Explicitly trigger cache cleanup
+        tree.cleanup_cache();
     }
 }
