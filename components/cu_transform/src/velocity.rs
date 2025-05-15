@@ -181,8 +181,8 @@ where
     // First calculate R * p
     let mut rotated_position = [T::default(); 3];
     for i in 0..3 {
-        for j in 0..3 {
-            rotated_position[i] = rotated_position[i] + rot[i][j] * position[j];
+        for (j, pos) in position.iter().enumerate() {
+            rotated_position[i] = rotated_position[i] + rot[i][j] * *pos;
         }
     }
 

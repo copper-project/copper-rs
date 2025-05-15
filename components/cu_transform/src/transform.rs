@@ -65,11 +65,11 @@ impl<
 
         // Extract positions from transforms
         let mut linear_velocity = [T::default(); 3];
-        for i in 0..3 {
+        for (i, vel) in linear_velocity.iter_mut().enumerate() {
             // Calculate position difference
             let pos_diff = self.transform.mat[i][3] - previous.transform.mat[i][3];
             // Divide by time difference to get velocity
-            linear_velocity[i] = pos_diff / dt_t;
+            *vel = pos_diff / dt_t;
         }
 
         // Extract rotation matrices from both transforms
@@ -125,9 +125,9 @@ impl<
         for i in 0..3 {
             for j in 0..3 {
                 let mut sum = T::default();
-                for k in 0..3 {
+                for (k, r1t) in rot1_t.iter().enumerate() {
                     // This requires T to support multiplication and addition
-                    sum = sum + (rot2[i][k] * rot1_t[k][j]);
+                    sum = sum + (rot2[i][k] * r1t[j]);
                 }
                 rot_diff[i][j] = sum;
             }
