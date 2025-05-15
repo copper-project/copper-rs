@@ -1,0 +1,23 @@
+[package]
+name = "cu-transform"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "A coordinate frame transformation library for copper-rs, similar to tf2 in ROS2"
+
+[dependencies]
+cu29 = { path = "../../core/cu29", version = "0.7.0" }
+cu-spatial-payloads = { path = "../payloads/cu_spatial_payloads", version = "0.7.0" }
+petgraph = "0.8.1"  # For transform tree management
+thiserror = "1.0"   # For error handling
+bincode = "2.0.1"   # For serialization
+serde = { version = "1.0", features = ["derive"] }
+smallvec = "1.15.0" # For small vector optimizations
+
+[dev-dependencies]
+approx = "0.5"      # For float comparisons in tests

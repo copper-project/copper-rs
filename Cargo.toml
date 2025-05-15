@@ -50,7 +50,7 @@ members = [
     "examples/cu_rp_balancebot",
     "examples/cu_standalone_structlog",
     "examples/cu_standalone_structlog",
-    "examples/cu_zenoh",
+    "examples/cu_zenoh", "components/cu_transform",
 ]
 
 # put only the core crates here that are not platform specific
