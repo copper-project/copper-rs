@@ -66,9 +66,7 @@ fn main() {
     println!("  Avg: {:?} per lookup", elapsed / num_lookups as u32);
 
     // Multi-threaded benchmark
-    println!(
-        "\nMulti-threaded lookup benchmark ({num_threads}x threads):"
-    );
+    println!("\nMulti-threaded lookup benchmark ({num_threads}x threads):");
     let start = Instant::now();
 
     // Create threads that all access the same transform tree
