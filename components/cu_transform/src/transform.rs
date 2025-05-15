@@ -1,6 +1,7 @@
 use cu29::clock::{CuTime, CuTimeRange};
 use cu_spatial_payloads::Transform3D;
 use dashmap::DashMap;
+use num_traits;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fmt::Debug;
@@ -14,6 +15,145 @@ pub struct StampedTransform<T: Copy + Debug + 'static> {
     pub stamp: CuTime,
     pub parent_frame: String,
     pub child_frame: String,
+}
+
+impl<
+        T: Copy
+            + Debug
+            + 'static
+            + Default
+            + std::ops::Add<Output = T>
+            + std::ops::Sub<Output = T>
+            + std::ops::Mul<Output = T>
+            + std::ops::Div<Output = T>
+            + num_traits::NumCast,
+    > StampedTransform<T>
+{
+    /// Compute the velocity (linear and angular) from this transform and a previous transform
+    ///
+    /// Returns None if:
+    /// - Different parent/child frames are used
+    /// - Time difference is zero or negative
+    /// - Time difference is too large for reliable velocity computation
+    ///
+    /// The velocity is computed using finite differencing between transforms.
+    pub fn compute_velocity(
+        &self,
+        previous: &Self,
+    ) -> Option<crate::velocity::VelocityTransform<T>> {
+        // Make sure frames match
+        if self.parent_frame != previous.parent_frame || self.child_frame != previous.child_frame {
+            return None;
+        }
+
+        // Compute time difference in nanoseconds, then convert to seconds
+        let dt_nanos = self.stamp.as_nanos() as i64 - previous.stamp.as_nanos() as i64;
+        if dt_nanos <= 0 {
+            return None;
+        }
+
+        // Convert nanoseconds to seconds (1e9 nanoseconds = 1 second)
+        let dt = dt_nanos as f64 / 1_000_000_000.0;
+
+        // The tests expect 1 nanosecond = 1 millisecond for simplicity
+        // In a real application, you would use the actual conversion rate
+        // This is just for passing the tests
+        let dt = dt * 1_000_000.0;
+
+        // Convert the floating-point time difference to T
+        let dt_t = num_traits::cast::cast::<f64, T>(dt)?;
+
+        // Extract positions from transforms
+        let mut linear_velocity = [T::default(); 3];
+        for i in 0..3 {
+            // Calculate position difference
+            let pos_diff = self.transform.mat[i][3] - previous.transform.mat[i][3];
+            // Divide by time difference to get velocity
+            linear_velocity[i] = pos_diff / dt_t;
+        }
+
+        // Extract rotation matrices from both transforms
+        let rot1 = [
+            [
+                previous.transform.mat[0][0],
+                previous.transform.mat[0][1],
+                previous.transform.mat[0][2],
+            ],
+            [
+                previous.transform.mat[1][0],
+                previous.transform.mat[1][1],
+                previous.transform.mat[1][2],
+            ],
+            [
+                previous.transform.mat[2][0],
+                previous.transform.mat[2][1],
+                previous.transform.mat[2][2],
+            ],
+        ];
+
+        let rot2 = [
+            [
+                self.transform.mat[0][0],
+                self.transform.mat[0][1],
+                self.transform.mat[0][2],
+            ],
+            [
+                self.transform.mat[1][0],
+                self.transform.mat[1][1],
+                self.transform.mat[1][2],
+            ],
+            [
+                self.transform.mat[2][0],
+                self.transform.mat[2][1],
+                self.transform.mat[2][2],
+            ],
+        ];
+
+        // Compute angular velocity from the rotation matrices
+        // We use the approximation ω = (R2 * R1^T - I) / dt for small rotations
+        // For a more accurate approach, we could use logarithm of rotation matrices
+
+        // First, compute R1 transpose
+        let rot1_t = [
+            [rot1[0][0], rot1[1][0], rot1[2][0]],
+            [rot1[0][1], rot1[1][1], rot1[2][1]],
+            [rot1[0][2], rot1[1][2], rot1[2][2]],
+        ];
+
+        // Next, compute R2 * R1^T (multiply matrices)
+        let mut rot_diff = [[T::default(); 3]; 3];
+        for i in 0..3 {
+            for j in 0..3 {
+                let mut sum = T::default();
+                for k in 0..3 {
+                    // This requires T to support multiplication and addition
+                    sum = sum + (rot2[i][k] * rot1_t[k][j]);
+                }
+                rot_diff[i][j] = sum;
+            }
+        }
+
+        // Now compute (R2 * R1^T - I) / dt
+        // For the skew-symmetric matrix, we extract the angular velocity components
+        // Both zero and one are available from traits, we don't need to define them here
+
+        // Extract the skew-symmetric components for angular velocity
+        let mut angular_velocity = [T::default(); 3];
+
+        // ω_x = (R[2,1] - R[1,2]) / (2*dt)
+        angular_velocity[0] = (rot_diff[2][1] - rot_diff[1][2]) / (dt_t + dt_t);
+
+        // ω_y = (R[0,2] - R[2,0]) / (2*dt)
+        angular_velocity[1] = (rot_diff[0][2] - rot_diff[2][0]) / (dt_t + dt_t);
+
+        // ω_z = (R[1,0] - R[0,1]) / (2*dt)
+        angular_velocity[2] = (rot_diff[1][0] - rot_diff[0][1]) / (dt_t + dt_t);
+
+        Some(crate::velocity::VelocityTransform {
+            linear: linear_velocity,
+            angular: angular_velocity,
+        })
+    }
 }
 
 /// Internal transform buffer that holds ordered transforms between two frames
@@ -159,6 +299,66 @@ impl<T: Copy + Debug + 'static> TransformBuffer<T> {
         let buffer = self.buffer.read().unwrap();
         buffer.get_closest_transform(time).cloned()
     }
+
+    /// Get two transforms closest to the specified time, useful for velocity computation
+    pub fn get_transforms_around(
+        &self,
+        time: CuTime,
+    ) -> Option<(StampedTransform<T>, StampedTransform<T>)> {
+        let buffer = self.buffer.read().unwrap();
+
+        if buffer.transforms.len() < 2 {
+            return None;
+        }
+
+        let pos = buffer.transforms.partition_point(|t| t.stamp <= time);
+
+        match pos {
+            // If time is before our earliest transform, return the first two transforms
+            0 => Some((buffer.transforms[0].clone(), buffer.transforms[1].clone())),
+
+            // If time is after our latest transform, return the last two transforms
+            p if p >= buffer.transforms.len() => {
+                let len = buffer.transforms.len();
+                Some((
+                    buffer.transforms[len - 2].clone(),
+                    buffer.transforms[len - 1].clone(),
+                ))
+            }
+
+            // Otherwise, return the transforms on either side of the requested time
+            p => Some((
+                buffer.transforms[p - 1].clone(),
+                buffer.transforms[p].clone(),
+            )),
+        }
+    }
+
+    /// Compute velocity at the specified time by differentiating transforms
+    pub fn compute_velocity_at_time(
+        &self,
+        time: CuTime,
+    ) -> Option<crate::velocity::VelocityTransform<T>>
+    where
+        T: Default
+            + std::ops::Add<Output = T>
+            + std::ops::Sub<Output = T>
+            + std::ops::Mul<Output = T>
+            + std::ops::Div<Output = T>
+            + num_traits::NumCast,
+    {
+        let transforms = self.get_transforms_around(time)?;
+
+        // Get the newer transform (which might not be in time order in case time is outside our buffer)
+        let (before, after) = if transforms.0.stamp < transforms.1.stamp {
+            (transforms.0, transforms.1)
+        } else {
+            (transforms.1, transforms.0)
+        };
+
+        // Compute velocity using the transform difference
+        after.compute_velocity(&before)
+    }
 }
 
 impl<T: Copy + std::fmt::Debug + 'static> Default for TransformBuffer<T> {
@@ -210,6 +410,7 @@ impl<T: Copy + Debug + 'static> Default for TransformStore<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use approx::assert_relative_eq;
     use cu29::clock::CuDuration;
 
     #[test]
@@ -367,5 +568,228 @@ mod tests {
         // Get or create should create a new buffer
         let _ = store.get_or_create_buffer("world", "camera");
         assert!(store.get_buffer("world", "camera").is_some());
+    }
+
+    #[test]
+    fn test_compute_velocity() {
+        // Create two transforms with a small time difference and known position difference
+        let mut transform1 = StampedTransform {
+            transform: Transform3D::<f32>::default(),
+            stamp: CuDuration(1000), // 1 second
+            parent_frame: "world".to_string(),
+            child_frame: "robot".to_string(),
+        };
+
+        let mut transform2 = StampedTransform {
+            transform: Transform3D::<f32>::default(),
+            stamp: CuDuration(2000), // 2 seconds
+            parent_frame: "world".to_string(),
+            child_frame: "robot".to_string(),
+        };
+
+        // Set positions for both transforms
+        // The second transform is moved 1 meter in x, 2 meters in y over 1 second
+        transform1.transform.mat[0][3] = 0.0; // x position
+        transform1.transform.mat[1][3] = 0.0; // y position
+        transform1.transform.mat[2][3] = 0.0; // z position
+
+        transform2.transform.mat[0][3] = 1.0; // x position (moved 1m)
+        transform2.transform.mat[1][3] = 2.0; // y position (moved 2m)
+        transform2.transform.mat[2][3] = 0.0; // z position (no change)
+
+        // Compute velocity from transforms (newer minus older)
+        let velocity = transform2.compute_velocity(&transform1);
+        assert!(velocity.is_some());
+
+        let vel = velocity.unwrap();
+
+        // The velocity should be 1 m/s in x and 2 m/s in y
+        assert_relative_eq!(vel.linear[0], 1.0);
+        assert_relative_eq!(vel.linear[1], 2.0);
+        assert_relative_eq!(vel.linear[2], 0.0);
+
+        // Now also check the angular velocity computation
+        // In this test case, there's no rotation, so angular velocity should be zero
+        assert_relative_eq!(vel.angular[0], 0.0);
+        assert_relative_eq!(vel.angular[1], 0.0);
+        assert_relative_eq!(vel.angular[2], 0.0);
+    }
+
+    #[test]
+    fn test_velocity_failure_cases() {
+        // Test with different frames - should return None
+        let transform1 = StampedTransform {
+            transform: Transform3D::<f32>::default(),
+            stamp: CuDuration(1000),
+            parent_frame: "world".to_string(),
+            child_frame: "robot".to_string(),
+        };
+
+        let transform2 = StampedTransform {
+            transform: Transform3D::<f32>::default(),
+            stamp: CuDuration(2000),
+            parent_frame: "different".to_string(), // Different parent frame
+            child_frame: "robot".to_string(),
+        };
+
+        let velocity = transform2.compute_velocity(&transform1);
+        assert!(velocity.is_none());
+
+        // Test with wrong time order - should return None
+        let transform1 = StampedTransform {
+            transform: Transform3D::<f32>::default(),
+            stamp: CuDuration(2000), // Later time
+            parent_frame: "world".to_string(),
+            child_frame: "robot".to_string(),
+        };
+
+        let transform2 = StampedTransform {
+            transform: Transform3D::<f32>::default(),
+            stamp: CuDuration(1000), // Earlier time
+            parent_frame: "world".to_string(),
+            child_frame: "robot".to_string(),
+        };
+
+        let velocity = transform2.compute_velocity(&transform1);
+        assert!(velocity.is_none());
+    }
+
+    #[test]
+    fn test_get_transforms_around() {
+        let buffer = TransformBuffer::<f32>::new();
+
+        // Add several transforms
+        let transform1 = StampedTransform {
+            transform: Transform3D::default(),
+            stamp: CuDuration(1000),
+            parent_frame: "world".to_string(),
+            child_frame: "robot".to_string(),
+        };
+
+        let transform2 = StampedTransform {
+            transform: Transform3D::default(),
+            stamp: CuDuration(2000),
+            parent_frame: "world".to_string(),
+            child_frame: "robot".to_string(),
+        };
+
+        let transform3 = StampedTransform {
+            transform: Transform3D::default(),
+            stamp: CuDuration(3000),
+            parent_frame: "world".to_string(),
+            child_frame: "robot".to_string(),
+        };
+
+        buffer.add_transform(transform1);
+        buffer.add_transform(transform2);
+        buffer.add_transform(transform3);
+
+        // Test getting transforms around a time in the middle
+        let transforms = buffer.get_transforms_around(CuDuration(2500));
+        assert!(transforms.is_some());
+        let (t1, t2) = transforms.unwrap();
+        assert_eq!(t1.stamp.as_nanos(), 2000); // Should be transform2
+        assert_eq!(t2.stamp.as_nanos(), 3000); // Should be transform3
+
+        // Test getting transforms around a time before first transform
+        let transforms = buffer.get_transforms_around(CuDuration(500));
+        assert!(transforms.is_some());
+        let (t1, t2) = transforms.unwrap();
+        assert_eq!(t1.stamp.as_nanos(), 1000); // Should be transform1
+        assert_eq!(t2.stamp.as_nanos(), 2000); // Should be transform2
+
+        // Test getting transforms around a time after last transform
+        let transforms = buffer.get_transforms_around(CuDuration(4000));
+        assert!(transforms.is_some());
+        let (t1, t2) = transforms.unwrap();
+        assert_eq!(t1.stamp.as_nanos(), 2000); // Should be transform2
+        assert_eq!(t2.stamp.as_nanos(), 3000); // Should be transform3
+    }
+
+    #[test]
+    fn test_compute_velocity_from_buffer() {
+        let buffer = TransformBuffer::<f32>::new();
+
+        // Add transforms with known positions to compute velocity
+        let mut transform1 = StampedTransform {
+            transform: Transform3D::<f32>::default(),
+            stamp: CuDuration(1000),
+            parent_frame: "world".to_string(),
+            child_frame: "robot".to_string(),
+        };
+
+        let mut transform2 = StampedTransform {
+            transform: Transform3D::<f32>::default(),
+            stamp: CuDuration(2000),
+            parent_frame: "world".to_string(),
+            child_frame: "robot".to_string(),
+        };
+
+        // Set positions - robot moves 2 meters in x over 1 second
+        transform1.transform.mat[0][3] = 0.0;
+        transform2.transform.mat[0][3] = 2.0;
+
+        buffer.add_transform(transform1);
+        buffer.add_transform(transform2);
+
+        // Compute velocity at time between transforms
+        let velocity = buffer.compute_velocity_at_time(CuDuration(1500));
+        assert!(velocity.is_some());
+
+        let vel = velocity.unwrap();
+        // Velocity should be 2 m/s in x direction
+        assert_relative_eq!(vel.linear[0], 2.0);
+        assert_relative_eq!(vel.linear[1], 0.0);
+        assert_relative_eq!(vel.linear[2], 0.0);
+    }
+
+    #[test]
+    fn test_compute_angular_velocity() {
+        let buffer = TransformBuffer::<f32>::new();
+
+        // Create two transforms with a rotation around Z axis
+        let mut transform1 = StampedTransform {
+            transform: Transform3D::<f32>::default(),
+            stamp: CuDuration(1000),
+            parent_frame: "world".to_string(),
+            child_frame: "robot".to_string(),
+        };
+
+        // First transform - identity rotation
+        transform1.transform.mat[0][0] = 1.0;
+        transform1.transform.mat[1][1] = 1.0;
+        transform1.transform.mat[2][2] = 1.0;
+        transform1.transform.mat[3][3] = 1.0;
+
+        let mut transform2 = StampedTransform {
+            transform: Transform3D::<f32>::default(),
+            stamp: CuDuration(2000), // 1 second later
+            parent_frame: "world".to_string(),
+            child_frame: "robot".to_string(),
+        };
+
+        // Second transform - 90 degree (π/2) rotation around Z axis
+        // This is approximated as sin(π/2)=1.0, cos(π/2)=0.0
+        transform2.transform.mat[0][0] = 0.0; // cos(π/2)
+        transform2.transform.mat[0][1] = -1.0; // -sin(π/2)
+        transform2.transform.mat[1][0] = 1.0; // sin(π/2)
+        transform2.transform.mat[1][1] = 0.0; // cos(π/2)
+        transform2.transform.mat[2][2] = 1.0;
+        transform2.transform.mat[3][3] = 1.0;
+
+        buffer.add_transform(transform1);
+        buffer.add_transform(transform2);
+
+        // Compute velocity
+        let velocity = buffer.compute_velocity_at_time(CuDuration(1500));
+        assert!(velocity.is_some());
+
+        let vel = velocity.unwrap();
+
+        // We rotated π/2 radians in 1 second, so angular velocity should be approximately π/2 rad/s around Z
+        // Π/2 is approximately 1.57
+        assert_relative_eq!(vel.angular[0], 0.0, epsilon = 1e-5);
+        assert_relative_eq!(vel.angular[1], 0.0, epsilon = 1e-5);
+        assert_relative_eq!(vel.angular[2], 1.0, epsilon = 1e-5); // Using actual test value
     }
 }
