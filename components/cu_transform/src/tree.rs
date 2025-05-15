@@ -183,8 +183,52 @@ pub struct TransformTree<T: Copy + Debug + Default + 'static> {
     cache: TransformCache<T>,
 }
 
+/// Trait for types that can provide a value representing "one"
+pub trait One {
+    /// Returns a value representing "one" for this type
+    fn one() -> Self;
+}
+
+// Implement One for common numeric types
+impl One for f32 {
+    fn one() -> Self {
+        1.0
+    }
+}
+
+impl One for f64 {
+    fn one() -> Self {
+        1.0
+    }
+}
+
+impl One for i32 {
+    fn one() -> Self {
+        1
+    }
+}
+
+impl One for i64 {
+    fn one() -> Self {
+        1
+    }
+}
+
+impl One for u32 {
+    fn one() -> Self {
+        1
+    }
+}
+
+impl One for u64 {
+    fn one() -> Self {
+        1
+    }
+}
+
 // We need to limit T to types where Transform3D<T> has Clone and inverse method
-impl<T: Copy + Debug + Default + 'static> TransformTree<T>
+// and now we also require T to implement One
+impl<T: Copy + Debug + Default + One + 'static> TransformTree<T>
 where
     Transform3D<T>: Clone + HasInverse<T>,
     T: std::ops::Add<Output = T> + std::ops::Mul<Output = T>,
@@ -225,37 +269,16 @@ where
         self.cache.cleanup();
     }
 
+    /// Creates an identity transform matrix in a type-safe way
     fn create_identity_transform() -> Transform3D<T> {
-        // Create an identity matrix for transformation
-        // For floating point types, this would set diagonal to 1.0
-        // But since we can't guarantee the type, we use the default which
-        // should be 0 for most numeric types. In practice, the caller should
-        // use a correct type like f32/f64.
         let mut identity = Transform3D::default();
 
-        // Hardcode for common types
-        if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
-            // Use unsafe to set to 1.0 for f32
-            unsafe {
-                let one_f32 = 1.0f32;
-                let ptr = &one_f32 as *const f32 as *const T;
-                identity.mat[0][0] = *ptr;
-                identity.mat[1][1] = *ptr;
-                identity.mat[2][2] = *ptr;
-                identity.mat[3][3] = *ptr;
-            }
-        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
-            // Use unsafe to set to 1.0 for f64
-            unsafe {
-                let one_f64 = 1.0f64;
-                let ptr = &one_f64 as *const f64 as *const T;
-                identity.mat[0][0] = *ptr;
-                identity.mat[1][1] = *ptr;
-                identity.mat[2][2] = *ptr;
-                identity.mat[3][3] = *ptr;
-            }
-        }
-        // For other types, we'll leave as default
+        // Set the diagonal elements to one
+        let one = T::one();
+        identity.mat[0][0] = one;
+        identity.mat[1][1] = one;
+        identity.mat[2][2] = one;
+        identity.mat[3][3] = one;
 
         identity
     }
@@ -478,7 +501,7 @@ where
     }
 }
 
-impl<T: Copy + Debug + Default + 'static> Default for TransformTree<T>
+impl<T: Copy + Debug + Default + One + 'static> Default for TransformTree<T>
 where
     Transform3D<T>: Clone + HasInverse<T>,
     T: std::ops::Add<Output = T> + std::ops::Mul<Output = T>,
