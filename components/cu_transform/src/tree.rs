@@ -56,11 +56,17 @@ impl<T: Copy + Debug + 'static> TransformCache<T> {
             max_age,
         }
     }
-    
+
     /// Get a cached transform if it exists and is still valid
-    fn get(&mut self, from: &str, to: &str, time: CuTime, path_hash: u64) -> Option<Transform3D<T>> {
+    fn get(
+        &mut self,
+        from: &str,
+        to: &str,
+        time: CuTime,
+        path_hash: u64,
+    ) -> Option<Transform3D<T>> {
         let now = Instant::now();
-        
+
         if let Some(entry) = self.entries.get_mut(&(from.to_string(), to.to_string())) {
             // Check if the cache entry is for the same time and path
             if entry.time == time && entry.path_hash == path_hash {
@@ -72,26 +78,34 @@ impl<T: Copy + Debug + 'static> TransformCache<T> {
                 }
             }
         }
-        
+
         None
     }
-    
+
     /// Add a new transform to the cache
-    fn insert(&mut self, from: &str, to: &str, transform: Transform3D<T>, time: CuTime, path_hash: u64) {
+    fn insert(
+        &mut self,
+        from: &str,
+        to: &str,
+        transform: Transform3D<T>,
+        time: CuTime,
+        path_hash: u64,
+    ) {
         let now = Instant::now();
-        
+
         // If the cache is at capacity, remove the oldest entry
         if self.entries.len() >= self.max_size {
             // Find the oldest entry
-            if let Some(oldest_key) = self.entries
+            if let Some(oldest_key) = self
+                .entries
                 .iter()
                 .min_by_key(|(_, entry)| entry.last_access)
-                .map(|(key, _)| key.clone()) 
+                .map(|(key, _)| key.clone())
             {
                 self.entries.remove(&oldest_key);
             }
         }
-        
+
         // Insert the new entry
         self.entries.insert(
             (from.to_string(), to.to_string()),
@@ -100,16 +114,15 @@ impl<T: Copy + Debug + 'static> TransformCache<T> {
                 time,
                 last_access: now,
                 path_hash,
-            }
+            },
         );
     }
-    
+
     /// Clear old entries from the cache
     fn cleanup(&mut self) {
         let now = Instant::now();
-        self.entries.retain(|_, entry| {
-            now.duration_since(entry.last_access) <= self.max_age
-        });
+        self.entries
+            .retain(|_, entry| now.duration_since(entry.last_access) <= self.max_age);
     }
 }
 
@@ -129,10 +142,10 @@ where
 {
     /// Default cache size (number of transforms to cache)
     const DEFAULT_CACHE_SIZE: usize = 100;
-    
+
     /// Default cache entry lifetime (5 seconds)
     const DEFAULT_CACHE_AGE: Duration = Duration::from_secs(5);
-    
+
     /// Create a new transform tree with default settings
     pub fn new() -> Self {
         Self {
@@ -140,12 +153,12 @@ where
             frame_indices: HashMap::new(),
             transform_buffers: HashMap::new(),
             cache: RwLock::new(TransformCache::new(
-                Self::DEFAULT_CACHE_SIZE, 
-                Self::DEFAULT_CACHE_AGE
+                Self::DEFAULT_CACHE_SIZE,
+                Self::DEFAULT_CACHE_AGE,
             )),
         }
     }
-    
+
     /// Create a new transform tree with custom cache settings
     pub fn with_cache_settings(cache_size: usize, cache_age: Duration) -> Self {
         Self {
@@ -155,7 +168,7 @@ where
             cache: RwLock::new(TransformCache::new(cache_size, cache_age)),
         }
     }
-    
+
     /// Clear the transform cache
     pub fn clear_cache(&self) {
         let mut cache = self.cache.write().unwrap();
@@ -334,18 +347,18 @@ where
     fn compute_path_hash(path: &[(String, String, bool)]) -> u64 {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let mut hasher = DefaultHasher::new();
-        
+
         for (parent, child, inverse) in path {
             parent.hash(&mut hasher);
             child.hash(&mut hasher);
             inverse.hash(&mut hasher);
         }
-        
+
         hasher.finish()
     }
-    
+
     pub fn lookup_transform(
         &self,
         from_frame: &str,
@@ -364,10 +377,10 @@ where
             // Empty path is another case for identity transform
             return Ok(Self::create_identity_transform());
         }
-        
+
         // Calculate a hash for the path (for cache lookups)
         let path_hash = Self::compute_path_hash(&path);
-        
+
         // Try to get the transform from cache
         {
             let mut cache = self.cache.write().unwrap();
@@ -375,16 +388,17 @@ where
                 // Cache hit - return cached transform
                 return Ok(cached_transform);
             }
-            
+
             // Periodically cleanup expired cache entries
             // Only do this occasionally to avoid excessive overhead
-            if rand::random::<f32>() < 0.01 { // 1% chance on each lookup
+            if rand::random::<f32>() < 0.01 {
+                // 1% chance on each lookup
                 cache.cleanup();
             }
         }
-        
+
         // Cache miss - compute the transform
-        
+
         // Compose multiple transforms along the path
         let mut result = Self::create_identity_transform();
 
@@ -423,7 +437,7 @@ where
                 result = transform_to_apply * result;
             }
         }
-        
+
         // Cache the computed result
         {
             let mut cache = self.cache.write().unwrap();
@@ -647,45 +661,49 @@ mod tests {
         // Final expected transform has rotation of base_to_arm and
         // translation of (1,0,0) + (-2,0,0) = (-1,0,0)
         let epsilon = 1e-5;
-        
+
         // Check rotation part (should match base_to_arm)
         assert_relative_eq!(transform.mat[0][0], 0.0, epsilon = epsilon);
         assert_relative_eq!(transform.mat[0][1], -1.0, epsilon = epsilon);
         assert_relative_eq!(transform.mat[1][0], 1.0, epsilon = epsilon);
         assert_relative_eq!(transform.mat[1][1], 0.0, epsilon = epsilon);
-        
+
         // Check translation part (should be in world frame)
         assert_relative_eq!(transform.mat[0][3], 0.0, epsilon = epsilon); // Changed to 0.0 to match our transform composition
         assert_relative_eq!(transform.mat[1][3], 3.0, epsilon = epsilon); // Changed to 3.0 to match our transform composition
         assert_relative_eq!(transform.mat[2][3], 0.0, epsilon = epsilon);
-        
+
         // Verify cache works by checking the same transform again
         let cached_transform = tree.lookup_transform("world", "gripper", CuDuration(1000));
         assert!(cached_transform.is_ok());
         let cached_result = cached_transform.unwrap();
-        
+
         // Verify it's the same result
         for i in 0..4 {
             for j in 0..4 {
-                assert_relative_eq!(transform.mat[i][j], cached_result.mat[i][j], epsilon = epsilon);
+                assert_relative_eq!(
+                    transform.mat[i][j],
+                    cached_result.mat[i][j],
+                    epsilon = epsilon
+                );
             }
         }
-        
+
         // Now test reverse path
         let gripper_to_world = tree.lookup_transform("gripper", "world", CuDuration(1000));
         assert!(gripper_to_world.is_ok());
         let inverse_transform = gripper_to_world.unwrap();
-        
+
         // This should be the inverse of world_to_gripper
         // Check a few elements to verify
         assert_relative_eq!(inverse_transform.mat[0][1], 1.0, epsilon = epsilon);
         assert_relative_eq!(inverse_transform.mat[1][0], -1.0, epsilon = epsilon);
         assert_relative_eq!(inverse_transform.mat[0][3], -3.0, epsilon = epsilon); // Updated to match new transform composition
         assert_relative_eq!(inverse_transform.mat[1][3], 0.0, epsilon = epsilon); // Updated to match new transform composition
-        
+
         // Manual verification: if we multiply world_to_gripper * gripper_to_world, should get identity
         let product = &transform * &inverse_transform;
-        
+
         // Check if product is identity matrix
         for i in 0..4 {
             for j in 0..4 {
@@ -697,11 +715,11 @@ mod tests {
             }
         }
     }
-    
+
     #[test]
     fn test_cache_invalidation() {
         let mut tree = TransformTree::<f32>::with_cache_settings(5, Duration::from_millis(50));
-        
+
         // Add a simple transform
         let transform = StampedTransform {
             transform: Transform3D {
@@ -716,32 +734,32 @@ mod tests {
             parent_frame: "a".to_string(),
             child_frame: "b".to_string(),
         };
-        
+
         assert!(tree.add_transform(transform).is_ok());
-        
+
         // Look up the transform (populates cache)
         let result1 = tree.lookup_transform("a", "b", CuDuration(1000));
         assert!(result1.is_ok());
-        
+
         // Verify transform is correct
         let transform1 = result1.unwrap();
         assert_eq!(transform1.mat[0][3], 1.0);
-        
+
         // Sleep longer than cache TTL to invalidate the cache
         std::thread::sleep(Duration::from_millis(100));
-        
+
         // Look up again - should still work even though cache is expired
         let result2 = tree.lookup_transform("a", "b", CuDuration(1000));
         assert!(result2.is_ok());
-        
+
         // Explicitly clear the cache
         tree.clear_cache();
-        
+
         // Should still work after clearing the cache
         let result3 = tree.lookup_transform("a", "b", CuDuration(1000));
         assert!(result3.is_ok());
     }
-    
+
     #[test]
     fn test_multi_step_transform_with_inverse() {
         let mut tree = TransformTree::<f32>::new();
@@ -784,16 +802,16 @@ mod tests {
         let world_to_camera = tree.lookup_transform("world", "camera", CuDuration(1000));
         assert!(world_to_camera.is_ok());
         let transform = world_to_camera.unwrap();
-        
+
         // Check the composed transform
         let epsilon = 1e-5;
-        
+
         // Check rotation part (should match robot_to_camera's rotation)
         assert_relative_eq!(transform.mat[0][0], 0.0, epsilon = epsilon);
         assert_relative_eq!(transform.mat[0][1], -1.0, epsilon = epsilon);
         assert_relative_eq!(transform.mat[1][0], 1.0, epsilon = epsilon);
         assert_relative_eq!(transform.mat[1][1], 0.0, epsilon = epsilon);
-        
+
         // Check translation - complex due to rotation and translation composition
         assert_relative_eq!(transform.mat[0][3], -1.5, epsilon = epsilon); // Changed to match our transform composition
         assert_relative_eq!(transform.mat[1][3], 1.0, epsilon = epsilon); // Changed to match our transform composition

@@ -84,9 +84,9 @@ impl<T: Copy + Debug + Default> Default for Transform3D<T> {
 }
 
 /// Generic implementation of matrix multiplication for transforms
-impl<T> Mul for Transform3D<T> 
-where 
-    T: Copy + Debug + 'static + Default + std::ops::Add<Output = T> + std::ops::Mul<Output = T>
+impl<T> Mul for Transform3D<T>
+where
+    T: Copy + Debug + 'static + Default + std::ops::Add<Output = T> + std::ops::Mul<Output = T>,
 {
     type Output = Self;
 
@@ -108,9 +108,9 @@ where
 }
 
 /// Generic implementation of matrix multiplication on references for transforms
-impl<T> Mul for &Transform3D<T> 
-where 
-    T: Copy + Debug + 'static + Default + std::ops::Add<Output = T> + std::ops::Mul<Output = T>
+impl<T> Mul for &Transform3D<T>
+where
+    T: Copy + Debug + 'static + Default + std::ops::Add<Output = T> + std::ops::Mul<Output = T>,
 {
     type Output = Transform3D<T>;
 
@@ -133,8 +133,8 @@ where
 
 /// Generic implementation of matrix multiplication: reference * owned for transforms
 impl<'a, T> Mul<Transform3D<T>> for &'a Transform3D<T>
-where 
-    T: Copy + Debug + 'static + Default + std::ops::Add<Output = T> + std::ops::Mul<Output = T>
+where
+    T: Copy + Debug + 'static + Default + std::ops::Add<Output = T> + std::ops::Mul<Output = T>,
 {
     type Output = Transform3D<T>;
 
@@ -157,8 +157,8 @@ where
 
 /// Generic implementation of matrix multiplication: owned * reference for transforms
 impl<'a, T> Mul<&'a Transform3D<T>> for Transform3D<T>
-where 
-    T: Copy + Debug + 'static + Default + std::ops::Add<Output = T> + std::ops::Mul<Output = T>
+where
+    T: Copy + Debug + 'static + Default + std::ops::Add<Output = T> + std::ops::Mul<Output = T>,
 {
     type Output = Transform3D<T>;
 
