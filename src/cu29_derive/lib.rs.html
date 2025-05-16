@@ -1044,7 +1044,7 @@
 <a href=#1044 id=1044 data-nosnippet>1044</a>                </span>} <span class="kw">else </span>{
 <a href=#1045 id=1045 data-nosnippet>1045</a>                    <span class="kw">let </span>original_config = <span class="self">Self</span>::get_original_config();
 <a href=#1046 id=1046 data-nosnippet>1046</a>                    <span class="macro">debug!</span>(<span class="string">"CuConfig: Using the original configuration the project was compiled with: {}"</span>, <span class="kw-2">&amp;</span>original_config);
-<a href=#1047 id=1047 data-nosnippet>1047</a>                    cu29::config::read_configuration_str(original_config)<span class="question-mark">?
+<a href=#1047 id=1047 data-nosnippet>1047</a>                    cu29::config::read_configuration_str(original_config, <span class="prelude-val">None</span>)<span class="question-mark">?
 <a href=#1048 id=1048 data-nosnippet>1048</a>                </span>};
 <a href=#1049 id=1049 data-nosnippet>1049</a>
 <a href=#1050 id=1050 data-nosnippet>1050</a>                <span class="comment">// For simple cases we can say the section is just a bunch of Copper Lists.
