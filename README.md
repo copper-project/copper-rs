@@ -222,6 +222,78 @@ fn main() {
 But this is a very minimal example for a task; please see [lifecycle](doc/lifecycle.md) for a more complete explanation
 of a task lifecycle.
 
+### Modular Configuration
+
+Copper supports modular configuration through file includes and parameter substitution, allowing you to:
+
+1. Split large configurations into manageable, reusable chunks
+2. Create configuration variations without duplicating the entire RON file
+3. Parameterize configurations for different deployment environments
+
+#### Including Configuration Files
+
+You can include other RON configuration files using the `includes` section:
+
+```ron
+(
+    tasks: [
+        // Your main configuration tasks...
+    ],
+    cnx: [
+        // Your main configuration connections...
+    ],
+    includes: [
+        (
+            path: "path/to/included_config.ron",
+            params: {}, // Optional parameter substitutions
+        ),
+    ],
+)
+```
+
+#### Parameter Substitution
+
+You can parameterize your included configurations using template variables:
+
+```ron
+// included_config.ron
+(
+    tasks: [
+        (
+            id: "task_{{instance_id}}", // Will be replaced with the provided instance_id
+            type: "tasks::Task{{instance_id}}",
+            config: {
+                "param_value": {{param_value}}, // Will be replaced with the provided param_value
+            },
+        ),
+    ],
+    cnx: [],
+)
+
+// main_config.ron
+(
+    tasks: [],
+    cnx: [],
+    includes: [
+        (
+            path: "included_config.ron",
+            params: {
+                "instance_id": "42", // Replaces {{instance_id}} with "42"
+                "param_value": 100,  // Replaces {{param_value}} with 100
+            },
+        ),
+    ],
+)
+```
+
+#### Use Cases
+
+1. **Sharing common components** across multiple robot configurations
+2. **Creating environment-specific configurations** (development, testing, production)
+3. **Reusing task templates** with different parameters (e.g., multiple motors with different pins)
+
+For more details on modular configuration, see the [Modular Configuration documentation](doc/modular_config.md).
+
 ## Deployment of the application
 
 Check out the [deployment](doc/deploy.md) page for more information.
@@ -284,7 +356,7 @@ on any of those, please let us know!:
   throughput.
 - [ ] **ROS2/DDS interfacing**: Build a pair of sink and source to connect to existing [ROS2](https://github.com/ros2) systems, helping users
   migrate their stack bit by bit.
-- [ ] **Modular Configuration**: As robots built with Copper gain complexity, users will need to build "variations" of
+- [x] **Modular Configuration**: As robots built with Copper gain complexity, users will need to build "variations" of
   their robots without duplicating their entire RON file.
 - [ ] **Extensible scheduling**: Enable a way to give hints to Copper to better schedule workloads at compile time.
 - [ ] **Swarm support**: Implement Zenoh to allow a swarm of robots powered by Copper to cooperate.
