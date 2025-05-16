@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["CuArray"]};
+window.SIDEBAR_ITEMS = {"struct":["CuArray","CuArrayVec"]};
