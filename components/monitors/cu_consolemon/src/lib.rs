@@ -359,6 +359,7 @@ struct UI {
 
 impl UI {
     #[cfg(feature = "debug_pane")]
+    #[allow(clippy::too_many_arguments)]
     fn new(
         config: CuConfig,
         mission: Option<&str>,
