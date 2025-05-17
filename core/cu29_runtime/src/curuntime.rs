@@ -2,8 +2,8 @@
 //! It is exposed to the user via the `copper_runtime` macro injecting it as a field in their application struct.
 //!
 
-use crate::config::{Cnx, CuConfig, NodeId};
 use crate::config::{ComponentConfig, Node};
+use crate::config::{CuConfig, CuGraph, NodeId};
 use crate::copperlist::{CopperList, CopperListState, CuListsManager};
 use crate::monitoring::CuMonitor;
 use cu29_clock::{ClockProvider, RobotClock};
@@ -58,12 +58,14 @@ impl<CT, P: CopperListTuple + 'static, M: CuMonitor, const NBCL: usize> CuRuntim
     pub fn new(
         clock: RobotClock,
         config: &CuConfig,
+        mission: Option<&str>,
         tasks_instanciator: impl Fn(Vec<Option<&ComponentConfig>>) -> CuResult<CT>,
         monitor_instanciator: impl Fn(&CuConfig) -> M,
         logger: impl WriteStream<CopperList<P>> + 'static,
     ) -> CuResult<Self> {
-        let all_instances_configs: Vec<Option<&ComponentConfig>> = config
-            .get_all_nodes(None) // FIXME(gbin): Multimission support
+        let graph = config.get_graph(mission)?;
+        let all_instances_configs: Vec<Option<&ComponentConfig>> = graph
+            .get_all_nodes()
             .iter()
             .map(|(_, node)| node.get_instance_config())
             .collect();
@@ -226,13 +228,10 @@ fn find_output_index_type_from_nodeid(
     None
 }
 
-pub fn find_task_type_for_id(
-    graph: &StableDiGraph<Node, Cnx, NodeId>,
-    node_id: NodeId,
-) -> CuTaskType {
-    if graph.neighbors_directed(node_id.into(), Incoming).count() == 0 {
+pub fn find_task_type_for_id(graph: &CuGraph, node_id: NodeId) -> CuTaskType {
+    if graph.0.neighbors_directed(node_id.into(), Incoming).count() == 0 {
         CuTaskType::Source
-    } else if graph.neighbors_directed(node_id.into(), Outgoing).count() == 0 {
+    } else if graph.0.neighbors_directed(node_id.into(), Outgoing).count() == 0 {
         CuTaskType::Sink
     } else {
         CuTaskType::Regular
@@ -243,7 +242,7 @@ pub fn find_task_type_for_id(
 /// connects the input to the output in the config graph
 fn find_edge_with_plan_input_id(
     plan: &[CuExecutionUnit],
-    config: &CuConfig,
+    graph: &CuGraph,
     plan_id: u32,
     output_node_id: NodeId,
 ) -> usize {
@@ -255,9 +254,8 @@ fn find_edge_with_plan_input_id(
     };
     let input_node_id = input_step.node_id;
 
-    config
-        .get_graph(None)
-        .unwrap() // FIXME(gbin): Error handling and multimission
+    graph
+        .0
         .edges_connecting(input_node_id.into(), output_node_id.into())
         .map(|edge| edge.id().index())
         .next()
@@ -269,18 +267,18 @@ fn find_edge_with_plan_input_id(
 fn sort_inputs_by_cnx_id(
     input_msg_indices_types: &mut [(u32, String)],
     plan: &[CuExecutionUnit],
-    config: &CuConfig,
+    graph: &CuGraph,
     curr_node_id: NodeId,
 ) {
     input_msg_indices_types.sort_by(|(a_index, _), (b_index, _)| {
-        let a_edge_id = find_edge_with_plan_input_id(plan, config, *a_index, curr_node_id);
-        let b_edge_id = find_edge_with_plan_input_id(plan, config, *b_index, curr_node_id);
+        let a_edge_id = find_edge_with_plan_input_id(plan, graph, *a_index, curr_node_id);
+        let b_edge_id = find_edge_with_plan_input_id(plan, graph, *b_index, curr_node_id);
         a_edge_id.cmp(&b_edge_id)
     });
 }
 /// Explores a subbranch and build the partial plan out of it.
 fn plan_tasks_tree_branch(
-    config: &CuConfig,
+    graph: &CuGraph,
     mut next_culist_output_index: u32,
     starting_point: NodeId,
     plan: &mut Vec<CuExecutionUnit>,
@@ -288,13 +286,12 @@ fn plan_tasks_tree_branch(
     #[cfg(feature = "macro_debug")]
     eprintln!("-- starting branch from node {starting_point}");
 
-    let graph = config.get_graph(None).unwrap(); // FIXME(gbin): Error handling and multimission
-    let mut visitor = Bfs::new(&graph, starting_point.into());
+    let mut visitor = Bfs::new(&graph.0, starting_point.into());
     let mut handled = false;
 
-    while let Some(node) = visitor.next(&graph) {
+    while let Some(node) = visitor.next(&graph.0) {
         let id = node.index() as NodeId;
-        let node_ref = config.graphs.get_node(id, None).unwrap();
+        let node_ref = graph.get_node(id).unwrap();
         #[cfg(feature = "macro_debug")]
         eprintln!("  Visiting node: {node_ref:?}");
 
@@ -309,8 +306,9 @@ fn plan_tasks_tree_branch(
                 output_msg_index_type = Some((
                     next_culist_output_index,
                     graph
-                        .edge_weight(EdgeIndex::new(config.get_src_edges(id, None).unwrap()[0])) // FIXME(gbin): Error handling and multimission
-                        .unwrap()
+                        .0
+                        .edge_weight(EdgeIndex::new(graph.get_src_edges(id).unwrap()[0]))
+                        .unwrap() // FIXME(gbin): Error handling
                         .msg
                         .clone(),
                 ));
@@ -318,7 +316,7 @@ fn plan_tasks_tree_branch(
             }
             CuTaskType::Sink => {
                 let parents: Vec<NodeIndex> =
-                    graph.neighbors_directed(id.into(), Incoming).collect();
+                    graph.0.neighbors_directed(id.into(), Incoming).collect();
                 #[cfg(feature = "macro_debug")]
                 eprintln!("    → Sink with parents: {parents:?}");
                 for parent in &parents {
@@ -339,7 +337,7 @@ fn plan_tasks_tree_branch(
             }
             CuTaskType::Regular => {
                 let parents: Vec<NodeIndex> =
-                    graph.neighbors_directed(id.into(), Incoming).collect();
+                    graph.0.neighbors_directed(id.into(), Incoming).collect();
                 #[cfg(feature = "macro_debug")]
                 eprintln!("    → Regular task with parents: {parents:?}");
                 for parent in &parents {
@@ -358,7 +356,8 @@ fn plan_tasks_tree_branch(
                 output_msg_index_type = Some((
                     next_culist_output_index,
                     graph
-                        .edge_weight(EdgeIndex::new(config.get_src_edges(id, None).unwrap()[0])) // FIXME(gbin): Error handling and multimission
+                        .0
+                        .edge_weight(EdgeIndex::new(graph.get_src_edges(id).unwrap()[0])) // FIXME(gbin): Error handling and multimission
                         .unwrap()
                         .msg
                         .clone(),
@@ -367,7 +366,7 @@ fn plan_tasks_tree_branch(
             }
         }
 
-        sort_inputs_by_cnx_id(&mut input_msg_indices_types, plan, config, id);
+        sort_inputs_by_cnx_id(&mut input_msg_indices_types, plan, graph, id);
 
         if let Some(pos) = plan
             .iter()
@@ -402,18 +401,17 @@ fn plan_tasks_tree_branch(
 }
 
 /// This is the main heuristics to compute an execution plan at compilation time.
-/// TODO: Make that heuristic pluggable.
-pub fn compute_runtime_plan(config: &CuConfig) -> CuResult<CuExecutionLoop> {
+/// TODO(gbin): Make that heuristic pluggable.
+pub fn compute_runtime_plan(graph: &CuGraph) -> CuResult<CuExecutionLoop> {
     #[cfg(feature = "macro_debug")]
     eprintln!("[runtime plan]");
-    let graph = config.get_graph(None).unwrap(); // FIXME(gbin): Error handling and multimission
-    let visited = graph.visit_map();
+    let visited = graph.0.visit_map();
     let mut plan = Vec::new();
     let mut next_culist_output_index = 0u32;
 
-    let graph = config.get_graph(None).unwrap(); // FIXME(gbin): Error handling and multimission
     let mut queue: std::collections::VecDeque<NodeId> = graph
         .node_indices()
+        .iter()
         .filter(|&node| find_task_type_for_id(graph, node.index() as NodeId) == CuTaskType::Source)
         .map(|node| node.index() as NodeId)
         .collect();
@@ -430,10 +428,9 @@ pub fn compute_runtime_plan(config: &CuConfig) -> CuResult<CuExecutionLoop> {
 
         #[cfg(feature = "macro_debug")]
         eprintln!("→ Starting BFS from source {start_node}");
-        let graph = config.get_graph(None).unwrap(); // FIXME(gbin): Error handling and multimission
-        let mut bfs = Bfs::new(graph, start_node.into());
+        let mut bfs = Bfs::new(&graph.0, start_node.into());
 
-        while let Some(node_index) = bfs.next(graph) {
+        while let Some(node_index) = bfs.next(&graph.0) {
             let node_id = node_index.index() as NodeId;
             let already_in_plan = plan
                 .iter()
@@ -447,7 +444,7 @@ pub fn compute_runtime_plan(config: &CuConfig) -> CuResult<CuExecutionLoop> {
             #[cfg(feature = "macro_debug")]
             eprintln!("    Planning from node {node_id}");
             let (new_index, handled) =
-                plan_tasks_tree_branch(config, next_culist_output_index, node_id, &mut plan);
+                plan_tasks_tree_branch(graph, next_culist_output_index, node_id, &mut plan);
             next_culist_output_index = new_index;
 
             if !handled {
@@ -458,8 +455,7 @@ pub fn compute_runtime_plan(config: &CuConfig) -> CuResult<CuExecutionLoop> {
 
             #[cfg(feature = "macro_debug")]
             eprintln!("    ✓ Node {node_id} handled successfully, enqueueing neighbors");
-            let graph = config.get_graph(None).unwrap(); // FIXME(gbin): Error handling and multimission
-            for neighbor in graph.neighbors(node_index) {
+            for neighbor in graph.0.neighbors(node_index) {
                 if !visited.is_visited(&neighbor) {
                     let nid = neighbor.index() as NodeId;
                     #[cfg(feature = "macro_debug")]
@@ -551,12 +547,13 @@ mod tests {
     fn test_runtime_instantiation() {
         let mut config = CuConfig::default();
         let graph = config.get_graph_mut(None).unwrap();
-        graph.add_node(Node::new("a", "TestSource"));
-        graph.add_node(Node::new("b", "TestSink"));
-        config.connect(0, 1, "()").unwrap();
+        graph.add_node(Node::new("a", "TestSource")).unwrap();
+        graph.add_node(Node::new("b", "TestSink")).unwrap();
+        graph.connect(0, 1, "()").unwrap();
         let runtime = CuRuntime::<Tasks, Msgs, NoMonitor, 2>::new(
             RobotClock::default(),
             &config,
+            None,
             tasks_instanciator,
             monitor_instanciator,
             FakeWriter {},
@@ -568,12 +565,13 @@ mod tests {
     fn test_copperlists_manager_lifecycle() {
         let mut config = CuConfig::default();
         let graph = config.get_graph_mut(None).unwrap();
-        graph.add_node(Node::new("a", "TestSource"));
-        graph.add_node(Node::new("b", "TestSink"));
-        config.connect(0, 1, "()").unwrap();
+        graph.add_node(Node::new("a", "TestSource")).unwrap();
+        graph.add_node(Node::new("b", "TestSink")).unwrap();
+        graph.connect(0, 1, "()").unwrap();
         let mut runtime = CuRuntime::<Tasks, Msgs, NoMonitor, 2>::new(
             RobotClock::default(),
             &config,
+            None,
             tasks_instanciator,
             monitor_instanciator,
             FakeWriter {},
@@ -642,9 +640,10 @@ mod tests {
     #[test]
     fn test_runtime_task_input_order() {
         let mut config = CuConfig::default();
-        let src1_id = config.add_node(Node::new("a", "Source1"), None).unwrap();
-        let src2_id = config.add_node(Node::new("b", "Source2"), None).unwrap();
-        let sink_id = config.add_node(Node::new("c", "Sink"), None).unwrap();
+        let graph = config.get_graph_mut(None).unwrap();
+        let src1_id = graph.add_node(Node::new("a", "Source1")).unwrap();
+        let src2_id = graph.add_node(Node::new("b", "Source2")).unwrap();
+        let sink_id = graph.add_node(Node::new("c", "Sink")).unwrap();
 
         assert_eq!(src1_id, 0);
         assert_eq!(src2_id, 1);
@@ -652,25 +651,17 @@ mod tests {
         // note that the source2 connection is before the source1
         let src1_type = "src1_type";
         let src2_type = "src2_type";
-        config.connect(src2_id, sink_id, src2_type).unwrap();
-        config.connect(src1_id, sink_id, src1_type).unwrap();
+        graph.connect(src2_id, sink_id, src2_type).unwrap();
+        graph.connect(src1_id, sink_id, src1_type).unwrap();
 
-        let src1_edge_id = *config
-            .get_src_edges(src1_id, None)
-            .unwrap()
-            .first()
-            .unwrap();
-        let src2_edge_id = *config
-            .get_src_edges(src2_id, None)
-            .unwrap()
-            .first()
-            .unwrap();
+        let src1_edge_id = *graph.get_src_edges(src1_id).unwrap().first().unwrap();
+        let src2_edge_id = *graph.get_src_edges(src2_id).unwrap().first().unwrap();
         // the edge id depends on the order the connection is created, not
         // on the node id, and that is what determines the input order
         assert_eq!(src1_edge_id, 1);
         assert_eq!(src2_edge_id, 0);
 
-        let runtime = compute_runtime_plan(&config).unwrap();
+        let runtime = compute_runtime_plan(graph).unwrap();
         let sink_step = runtime
             .steps
             .iter()
@@ -690,32 +681,29 @@ mod tests {
     fn test_runtime_plan_diamond_case1() {
         // more complex topology that tripped the scheduler
         let mut config = CuConfig::default();
-        let cam0_id = config
-            .add_node(Node::new("cam0", "tasks::IntegerSrcTask"), None)
+        let graph = config.get_graph_mut(None).unwrap();
+        let cam0_id = graph
+            .add_node(Node::new("cam0", "tasks::IntegerSrcTask"))
             .unwrap();
-        let inf0_id = config
-            .add_node(Node::new("inf0", "tasks::Integer2FloatTask"), None)
+        let inf0_id = graph
+            .add_node(Node::new("inf0", "tasks::Integer2FloatTask"))
             .unwrap();
-        let broadcast_id = config
-            .add_node(Node::new("broadcast", "tasks::MergingSinkTask"), None)
+        let broadcast_id = graph
+            .add_node(Node::new("broadcast", "tasks::MergingSinkTask"))
             .unwrap();
 
         // case 1 order
-        config.connect(cam0_id, broadcast_id, "i32").unwrap();
-        config.connect(cam0_id, inf0_id, "i32").unwrap();
-        config.connect(inf0_id, broadcast_id, "f32").unwrap();
+        graph.connect(cam0_id, broadcast_id, "i32").unwrap();
+        graph.connect(cam0_id, inf0_id, "i32").unwrap();
+        graph.connect(inf0_id, broadcast_id, "f32").unwrap();
 
-        let edge_cam0_to_broadcast = *config
-            .get_src_edges(cam0_id, None)
-            .unwrap()
-            .first()
-            .unwrap();
-        let edge_cam0_to_inf0 = config.get_src_edges(cam0_id, None).unwrap()[1];
+        let edge_cam0_to_broadcast = *graph.get_src_edges(cam0_id).unwrap().first().unwrap();
+        let edge_cam0_to_inf0 = graph.get_src_edges(cam0_id).unwrap()[1];
 
         assert_eq!(edge_cam0_to_inf0, 0);
         assert_eq!(edge_cam0_to_broadcast, 1);
 
-        let runtime = compute_runtime_plan(&config).unwrap();
+        let runtime = compute_runtime_plan(graph).unwrap();
         let broadcast_step = runtime
             .steps
             .iter()
@@ -733,32 +721,29 @@ mod tests {
     fn test_runtime_plan_diamond_case2() {
         // more complex topology that tripped the scheduler variation 2
         let mut config = CuConfig::default();
-        let cam0_id = config
-            .add_node(Node::new("cam0", "tasks::IntegerSrcTask"), None)
+        let graph = config.get_graph_mut(None).unwrap();
+        let cam0_id = graph
+            .add_node(Node::new("cam0", "tasks::IntegerSrcTask"))
             .unwrap();
-        let inf0_id = config
-            .add_node(Node::new("inf0", "tasks::Integer2FloatTask"), None)
+        let inf0_id = graph
+            .add_node(Node::new("inf0", "tasks::Integer2FloatTask"))
             .unwrap();
-        let broadcast_id = config
-            .add_node(Node::new("broadcast", "tasks::MergingSinkTask"), None)
+        let broadcast_id = graph
+            .add_node(Node::new("broadcast", "tasks::MergingSinkTask"))
             .unwrap();
 
         // case 2 order
-        config.connect(cam0_id, inf0_id, "i32").unwrap();
-        config.connect(cam0_id, broadcast_id, "i32").unwrap();
-        config.connect(inf0_id, broadcast_id, "f32").unwrap();
+        graph.connect(cam0_id, inf0_id, "i32").unwrap();
+        graph.connect(cam0_id, broadcast_id, "i32").unwrap();
+        graph.connect(inf0_id, broadcast_id, "f32").unwrap();
 
-        let edge_cam0_to_inf0 = *config
-            .get_src_edges(cam0_id, None)
-            .unwrap()
-            .first()
-            .unwrap();
-        let edge_cam0_to_broadcast = config.get_src_edges(cam0_id, None).unwrap()[1];
+        let edge_cam0_to_inf0 = *graph.get_src_edges(cam0_id).unwrap().first().unwrap();
+        let edge_cam0_to_broadcast = graph.get_src_edges(cam0_id).unwrap()[1];
 
         assert_eq!(edge_cam0_to_broadcast, 0);
         assert_eq!(edge_cam0_to_inf0, 1);
 
-        let runtime = compute_runtime_plan(&config).unwrap();
+        let runtime = compute_runtime_plan(graph).unwrap();
         let broadcast_step = runtime
             .steps
             .iter()

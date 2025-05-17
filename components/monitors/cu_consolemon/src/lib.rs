@@ -193,26 +193,29 @@ struct NodesScrollableWidgetState {
 }
 
 impl NodesScrollableWidgetState {
-    fn new(config: &CuConfig, errors: Arc<Mutex<Vec<TaskStatus>>>) -> Self {
+    fn new(config: &CuConfig, errors: Arc<Mutex<Vec<TaskStatus>>>, mission: Option<&str>) -> Self {
         let mut config_nodes: Vec<Node> = Vec::new();
         let mut node_types: Vec<NodeType> = Vec::new();
-        for (_, node) in config.get_all_nodes(None) {
+
+        let graph = config
+            .get_graph(mission)
+            .expect("Only supported for simple config");
+
+        for (_, node) in graph.get_all_nodes() {
             // FIXME(gbin): Multimission
             config_nodes.push(node.clone());
             node_types.push(NodeType::Unknown);
         }
-        let graph = config
-            .get_graph(None)
-            .expect("Only supported for simple config");
-        let mut connections: Vec<Connection> = Vec::with_capacity(graph.edge_count()); // FIXME(gbin): Multimission
+        let mut connections: Vec<Connection> = Vec::with_capacity(graph.0.edge_count());
 
         // Keep track if we already used a port.
         for (dst_index, dst_node) in config_nodes.iter().enumerate() {
-            let node_incoming_edges = config
-                .get_dst_edges(dst_index as u32, None)
-                .expect("Only supported for simple config"); // FIXME(gbin): Multimission
+            let node_incoming_edges = graph
+                .get_dst_edges(dst_index as u32)
+                .expect("Error getting edges");
             for (dst_port, edge_id) in node_incoming_edges.iter().enumerate() {
-                if let Some((src_index, dst_index)) = graph.edge_endpoints((*edge_id as u32).into())
+                if let Some((src_index, dst_index)) =
+                    graph.0.edge_endpoints((*edge_id as u32).into())
                 {
                     let (src_index, dst_index) = (src_index.index(), dst_index.index());
                     connections.push(Connection::new(
@@ -356,8 +359,10 @@ struct UI {
 
 impl UI {
     #[cfg(feature = "debug_pane")]
+    #[allow(clippy::too_many_arguments)]
     fn new(
         config: CuConfig,
+        mission: Option<&str>,
         task_ids: &'static [&'static str],
         task_stats: Arc<Mutex<TaskStats>>,
         task_statuses: Arc<Mutex<Vec<TaskStatus>>>,
@@ -367,7 +372,7 @@ impl UI {
     ) -> UI {
         init_error_hooks();
         let nodes_scrollable_widget_state =
-            NodesScrollableWidgetState::new(&config, task_statuses.clone());
+            NodesScrollableWidgetState::new(&config, task_statuses.clone(), mission);
 
         Self {
             task_ids,
@@ -783,6 +788,7 @@ impl CuMonitor for CuConsoleMon {
 
                 let mut ui = UI::new(
                     config_dup,
+                    None, // FIXME(gbin): Allow somethere an API to get the current mission running
                     taskids,
                     task_stats_ui,
                     error_states,

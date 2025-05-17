@@ -11,8 +11,8 @@ use syn::{
 };
 
 use crate::utils::config_id_to_enum;
-use cu29_runtime::config::read_configuration;
 use cu29_runtime::config::CuConfig;
+use cu29_runtime::config::{read_configuration, CuGraph};
 use cu29_runtime::curuntime::{
     compute_runtime_plan, find_task_type_for_id, CuExecutionLoop, CuExecutionUnit, CuTaskType,
 };
@@ -57,14 +57,17 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
         Ok(cuconfig) => cuconfig,
         Err(e) => return return_error(e.to_string()),
     };
-    let runtime_plan: CuExecutionLoop = match compute_runtime_plan(&cuconfig) {
+    let graph = cuconfig
+        .get_graph(None) // FIXME(gbin): Multimission
+        .expect("Could not find the specified mission for gen_cumsgs");
+    let runtime_plan: CuExecutionLoop = match compute_runtime_plan(graph) {
         Ok(plan) => plan,
         Err(e) => return return_error(format!("Could not compute runtime plan: {e}")),
     };
 
     // Give a name compatible with a struct to match the task ids to their output in the CuMsgs tuple.
-    let all_tasks_member_ids: Vec<String> = cuconfig
-        .get_all_nodes(None) // FIXME(gbin): Multimission
+    let all_tasks_member_ids: Vec<String> = graph
+        .get_all_nodes()
         .iter()
         .map(|(_, node)| utils::config_id_to_struct_member(node.get_id().as_str()))
         .collect();
@@ -287,13 +290,18 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         Err(e) => return return_error(format!("Could not read the config file (should not happen because we just succeeded just before). {e}"))
     };
 
-    let mission = "default"; // FIXME(gbin) generate all the missions from the config.
+    // FIXME(gbin): next PR
+    // let all_missions = copper_config.graphs.get_all_missions_graphs();
+    // for (mission_id, mission_graph) in all_missions {}
+
+    let mission = "default";
     let mission_mod =
         parse_str::<Ident>(mission).expect("Could not make an identifier of the mission name");
+    let graph = copper_config.get_graph(None).unwrap(); // FIXME(gbin)
 
     #[cfg(feature = "macro_debug")]
     eprintln!("[runtime plan for mission {mission}]");
-    let runtime_plan: CuExecutionLoop = match compute_runtime_plan(&copper_config) {
+    let runtime_plan: CuExecutionLoop = match compute_runtime_plan(graph) {
         Ok(plan) => plan,
         Err(e) => return return_error(format!("Could not compute runtime plan: {e}")),
     };
@@ -303,7 +311,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     #[cfg(feature = "macro_debug")]
     eprintln!("[extract tasks ids & types]");
     let (all_tasks_ids, all_tasks_cutype, all_tasks_types_names, all_tasks_types) =
-        extract_tasks_types(&copper_config);
+        extract_tasks_types(graph);
 
     let all_sim_tasks_types: Vec<Type> = all_tasks_ids
         .iter()
@@ -311,16 +319,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         .zip(&all_tasks_types)
         .map(|((task_id, cutype), stype)| match cutype {
             CuTaskType::Source => {
-                let msg_type = copper_config
-                    .get_node_output_msg_type(task_id.as_str(), None) // FIXME(gbin): Multimission
+                let msg_type = graph
+                    .get_node_output_msg_type(task_id.as_str())
                     .unwrap_or_else(|| panic!("CuSrcTask {task_id} should have an outgoing connection with a valid output msg type"));
                 let sim_task_name = format!("cu29::simulation::CuSimSrcTask<{msg_type}>");
                 parse_str(sim_task_name.as_str()).unwrap_or_else(|_| panic!("Could not build the placeholder for simulation: {sim_task_name}"))
             }
             CuTaskType::Regular => stype.clone(),
             CuTaskType::Sink => {
-                let msg_type = copper_config
-                    .get_node_input_msg_type(task_id.as_str(), None) // FIXME(gbin): Multimission
+                let msg_type = graph
+                    .get_node_input_msg_type(task_id.as_str())
                     .unwrap_or_else(|| panic!("CuSinkTask {task_id} should have an incoming connection with a valid input msg type"));
                 let sim_task_name = format!("cu29::simulation::CuSimSinkTask<{msg_type}>");
                 parse_str(sim_task_name.as_str()).unwrap_or_else(|_| panic!("Could not build the placeholder for simulation: {sim_task_name}"))
@@ -350,7 +358,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         quote! { NoMonitor }
     };
 
-    // FIXME(gbin): generate that per mission
     #[cfg(feature = "macro_debug")]
     eprintln!("[build runtime field]");
     // add that to a new field
@@ -950,8 +957,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let sim_callback_on_new = if sim_mode {
         Some(quote! {
-            let all_instances_configs: Vec<Option<&ComponentConfig>> = config
-                .get_all_nodes(None) // FIXME(gbin): Multimission
+            let graph = config.get_graph(Some(#mission)).expect("Could not find the mission #mission");
+            let all_instances_configs: Vec<Option<&ComponentConfig>> = graph
+                .get_all_nodes()
                 .iter()
                 .map(|(_, node)| node.get_instance_config())
                 .collect();
@@ -1064,12 +1072,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     // This is to be sure we have the size of at least a Culist and some.
                 );
 
-                // FIXME(gbin): mission support
-
                 let application = Ok(#name {
                     copper_runtime: CuRuntime::<#mission_mod::#tasks_type, #mission_mod::CuMsgs, #monitor_type, #DEFAULT_CLNB>::new(
                         clock,
                         &config,
+                        Some(#mission),
                         #mission_mod::#tasks_instanciator,
                         #mission_mod::monitor_instanciator,
                         copperlist_stream)?,
@@ -1333,10 +1340,8 @@ fn config_full_path(config_file: &str) -> String {
 }
 
 /// Extract all the tasks types in their index order and their ids.
-fn extract_tasks_types(
-    copper_config: &CuConfig,
-) -> (Vec<String>, Vec<CuTaskType>, Vec<String>, Vec<Type>) {
-    let all_id_nodes = copper_config.get_all_nodes(None); // FIXME(gbin): Multimission
+fn extract_tasks_types(graph: &CuGraph) -> (Vec<String>, Vec<CuTaskType>, Vec<String>, Vec<Type>) {
+    let all_id_nodes = graph.get_all_nodes();
 
     // Get all the tasks Ids
     let all_tasks_ids: Vec<String> = all_id_nodes
@@ -1346,14 +1351,7 @@ fn extract_tasks_types(
 
     let all_task_cutype: Vec<CuTaskType> = all_id_nodes
         .iter()
-        .map(|(id, _)| {
-            find_task_type_for_id(
-                copper_config
-                    .get_graph(None)
-                    .expect("Only implemented for Simple"),
-                *id,
-            )
-        }) // FIXME(gbin): Multimission
+        .map(|(id, _)| find_task_type_for_id(graph, *id))
         .collect();
 
     // Collect all the type names used by our configs.
