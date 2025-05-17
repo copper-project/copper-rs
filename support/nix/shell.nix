@@ -25,7 +25,7 @@ let
   # CUDA-specific packages
   cudaPackages = with pkgs; if withCuda then [
     cudatoolkit
-    linuxPackages.nvidia_x11
+    linuxPackages.nvidia_x11 # nvidia driver 570.133.20
     libGL
     libGLU
   ] else [];
@@ -125,13 +125,20 @@ pkgs.mkShell {
       export EXTRA_LDFLAGS="-L/lib -L${pkgs.linuxPackages.nvidia_x11}/lib"
       export EXTRA_CCFLAGS="-I/usr/include"
       
-      # Check CUDA availability
-      if command -v nvidia-smi &> /dev/null; then
-        echo "CUDA support enabled - GPU detected"
-        nvidia-smi --query-gpu=name,driver_version --format=csv,noheader
+      # Check if device files exist but have permission issues
+      if [ -e /dev/nvidia0 ]; then
+        echo "NVIDIA devices exist but may have permission issues."
+        echo "Please use sudo nvidia-smi to check if GPU is detected"
+
+        # Attempt to fix permissions if user has sudo access
+        if command -v sudo &> /dev/null && sudo -n true 2>/dev/null; then
+          # echo "Attempting to fix NVIDIA device permissions (one-time)..."
+          # sudo chmod 666 /dev/nvidia* 2>/dev/null
+          sudo nvidia-smi --query-gpu=name,driver_version --format=csv,noheader
+        fi
       else
-        echo "Warning: No NVIDIA GPU detected or drivers not loaded."
-        echo "CUDA libraries are available but may not function properly."
+        echo "Warning: No NVIDIA GPU devices detected (/dev/nvidia*)."
+        echo "Make sure NVIDIA drivers are properly installed on your system."
       fi
     '' else ""}
     
