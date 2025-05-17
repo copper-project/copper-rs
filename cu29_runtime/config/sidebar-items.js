@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["ConfigGraphs"],"fn":["read_configuration","read_configuration_str"],"struct":["Cnx","ComponentConfig","CuConfig","IncludesConfig","LoggingConfig","MissionsConfig","MonitorConfig","Node","Value"],"type":["CuGraph","NodeId"]};
+window.SIDEBAR_ITEMS = {"enum":["ConfigGraphs"],"fn":["read_configuration","read_configuration_str"],"struct":["Cnx","ComponentConfig","CuConfig","CuGraph","IncludesConfig","LoggingConfig","MissionsConfig","MonitorConfig","Node","Value"],"type":["NodeId"]};
