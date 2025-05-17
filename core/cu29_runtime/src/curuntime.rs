@@ -661,7 +661,7 @@ mod tests {
         assert_eq!(src1_edge_id, 1);
         assert_eq!(src2_edge_id, 0);
 
-        let runtime = compute_runtime_plan(&graph).unwrap();
+        let runtime = compute_runtime_plan(graph).unwrap();
         let sink_step = runtime
             .steps
             .iter()
@@ -703,7 +703,7 @@ mod tests {
         assert_eq!(edge_cam0_to_inf0, 0);
         assert_eq!(edge_cam0_to_broadcast, 1);
 
-        let runtime = compute_runtime_plan(&graph).unwrap();
+        let runtime = compute_runtime_plan(graph).unwrap();
         let broadcast_step = runtime
             .steps
             .iter()
@@ -743,7 +743,7 @@ mod tests {
         assert_eq!(edge_cam0_to_broadcast, 0);
         assert_eq!(edge_cam0_to_inf0, 1);
 
-        let runtime = compute_runtime_plan(&graph).unwrap();
+        let runtime = compute_runtime_plan(graph).unwrap();
         let broadcast_step = runtime
             .steps
             .iter()
