@@ -272,7 +272,7 @@ pub struct Cnx {
     pub store: Option<bool>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct CuGraph(pub StableDiGraph<Node, Cnx, NodeId>);
 
 impl CuGraph {
@@ -333,18 +333,22 @@ impl CuGraph {
         self.0.node_weight(node_id.into())
     }
 
+    #[allow(dead_code)]
     pub fn get_node_weight(&self, index: NodeId) -> Option<&Node> {
         self.0.node_weight(index.into())
     }
 
+    #[allow(dead_code)]
     pub fn get_node_mut(&mut self, node_id: NodeId) -> Option<&mut Node> {
         self.0.node_weight_mut(node_id.into())
     }
 
+    #[allow(dead_code)]
     pub fn get_edge_weight(&self, index: usize) -> Option<Cnx> {
         self.0.edge_weight(EdgeIndex::new(index)).cloned()
     }
 
+    #[allow(dead_code)]
     pub fn get_node_output_msg_type(&self, node_id: &str) -> Option<String> {
         self.0.node_indices().find_map(|node_index| {
             if let Some(node) = self.0.node_weight(node_index) {
@@ -369,6 +373,7 @@ impl CuGraph {
         })
     }
 
+    #[allow(dead_code)]
     pub fn get_node_input_msg_type(&self, node_id: &str) -> Option<String> {
         self.0.node_indices().find_map(|node_index| {
             if let Some(node) = self.0.node_weight(node_index) {
@@ -431,12 +436,6 @@ impl std::ops::Index<NodeIndex> for CuGraph {
     }
 }
 
-impl Default for CuGraph {
-    fn default() -> Self {
-        Self(StableDiGraph::default())
-    }
-}
-
 #[derive(Debug, Clone)]
 pub enum ConfigGraphs {
     Simple(CuGraph),
@@ -446,6 +445,7 @@ pub enum ConfigGraphs {
 impl ConfigGraphs {
     /// Returns a consistent hashmap of mission names to Graphs whatever the shape of the config is.
     /// Note: if there is only one anonymous mission it will be called "default"
+    #[allow(dead_code)]
     pub fn get_all_missions_graphs(&self) -> HashMap<String, CuGraph> {
         match self {
             Simple(graph) => {
@@ -457,6 +457,7 @@ impl ConfigGraphs {
         }
     }
 
+    #[allow(dead_code)]
     pub fn get_default_mission_graph(&self) -> CuResult<&CuGraph> {
         match self {
             Simple(graph) => Ok(graph),
@@ -469,6 +470,8 @@ impl ConfigGraphs {
             }
         }
     }
+
+    #[allow(dead_code)]
     pub fn get_graph(&self, mission_id: Option<&str>) -> CuResult<&CuGraph> {
         match self {
             Simple(graph) => {
@@ -489,6 +492,8 @@ impl ConfigGraphs {
             }
         }
     }
+
+    #[allow(dead_code)]
     pub fn get_graph_mut(&mut self, mission_id: Option<&str>) -> CuResult<&mut CuGraph> {
         match self {
             Simple(ref mut graph) => {
@@ -977,10 +982,12 @@ impl CuConfig {
             .collect()
     }
 
+    #[allow(dead_code)]
     pub fn get_graph(&self, mission_id: Option<&str>) -> CuResult<&CuGraph> {
         self.graphs.get_graph(mission_id)
     }
 
+    #[allow(dead_code)]
     pub fn get_graph_mut(&mut self, mission_id: Option<&str>) -> CuResult<&mut CuGraph> {
         self.graphs.get_graph_mut(mission_id)
     }

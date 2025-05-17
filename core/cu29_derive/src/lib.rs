@@ -60,7 +60,7 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
     let graph = cuconfig
         .get_graph(None) // FIXME(gbin): Multimission
         .expect("Could not find the specified mission for gen_cumsgs");
-    let runtime_plan: CuExecutionLoop = match compute_runtime_plan(&graph) {
+    let runtime_plan: CuExecutionLoop = match compute_runtime_plan(graph) {
         Ok(plan) => plan,
         Err(e) => return return_error(format!("Could not compute runtime plan: {e}")),
     };
