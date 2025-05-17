@@ -7,7 +7,7 @@ use cu29::config::Value;
 fn main() {
     // Generate a config
     let mut copperconfig = CuConfig::default();
-    let mut graph = copperconfig.get_graph_mut(None).unwrap();
+    let graph = copperconfig.get_graph_mut(None).unwrap();
     let mut camera = Node::new("camera", "camerapkg::Camera");
     camera.set_param::<Value>("resolution-height", 1080.into());
     let isp = Node::new("copper-isp", "isppkg::Isp");

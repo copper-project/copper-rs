@@ -565,8 +565,8 @@ mod tests {
     fn test_copperlists_manager_lifecycle() {
         let mut config = CuConfig::default();
         let graph = config.get_graph_mut(None).unwrap();
-        graph.add_node(Node::new("a", "TestSource"));
-        graph.add_node(Node::new("b", "TestSink"));
+        graph.add_node(Node::new("a", "TestSource")).unwrap();
+        graph.add_node(Node::new("b", "TestSink")).unwrap();
         graph.connect(0, 1, "()").unwrap();
         let mut runtime = CuRuntime::<Tasks, Msgs, NoMonitor, 2>::new(
             RobotClock::default(),
@@ -681,7 +681,7 @@ mod tests {
     fn test_runtime_plan_diamond_case1() {
         // more complex topology that tripped the scheduler
         let mut config = CuConfig::default();
-        let mut graph = config.get_graph_mut(None).unwrap();
+        let graph = config.get_graph_mut(None).unwrap();
         let cam0_id = graph
             .add_node(Node::new("cam0", "tasks::IntegerSrcTask"))
             .unwrap();
@@ -721,7 +721,7 @@ mod tests {
     fn test_runtime_plan_diamond_case2() {
         // more complex topology that tripped the scheduler variation 2
         let mut config = CuConfig::default();
-        let mut graph = config.get_graph_mut(None).unwrap();
+        let graph = config.get_graph_mut(None).unwrap();
         let cam0_id = graph
             .add_node(Node::new("cam0", "tasks::IntegerSrcTask"))
             .unwrap();

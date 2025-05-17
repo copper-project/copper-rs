@@ -1207,7 +1207,7 @@ mod tests {
     #[test]
     fn test_plain_serialize() {
         let mut config = CuConfig::default();
-        let mut graph = config.get_graph_mut(None).unwrap();
+        let graph = config.get_graph_mut(None).unwrap();
         let n1 = graph
             .add_node(Node::new("test1", "package::Plugin1"))
             .unwrap();
@@ -1226,7 +1226,7 @@ mod tests {
     #[test]
     fn test_serialize_with_params() {
         let mut config = CuConfig::default();
-        let mut graph = config.get_graph_mut(None).unwrap();
+        let graph = config.get_graph_mut(None).unwrap();
         let mut camera = Node::new("copper-camera", "camerapkg::Camera");
         camera.set_param::<Value>("resolution-height", 1080.into());
         graph.add_node(camera).unwrap();
