@@ -1,0 +1,17 @@
+[package]
+name = "cu-ros-payloads"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "Sepcial copper payloads designed to be ROS compatible"
+
+[dependencies]
+compact_str = { workspace = true }
+serde = { workspace = true }
+cu29-value = { workspace = true }
+cu-sensor-payloads = { workspace = true }
