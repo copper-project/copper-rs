@@ -45,8 +45,9 @@ fn test_basic_include() {
     write(&main_path, main_config).unwrap();
 
     let config = read_configuration(main_path.to_str().unwrap()).unwrap();
+    let graph = config.get_graph(None).unwrap();
 
-    let all_nodes = config.get_all_nodes(None);
+    let all_nodes = graph.get_all_nodes();
     assert_eq!(all_nodes.len(), 2);
 
     let task_ids: Vec<_> = all_nodes
@@ -100,8 +101,9 @@ fn test_parameter_substitution() {
     write(&main_path, main_config).unwrap();
 
     let config = read_configuration(main_path.to_str().unwrap()).unwrap();
+    let graph = config.get_graph(None).unwrap();
 
-    let all_nodes = config.get_all_nodes(None);
+    let all_nodes = graph.get_all_nodes();
     assert_eq!(all_nodes.len(), 1);
 
     let (_, node) = all_nodes[0];
@@ -172,8 +174,9 @@ fn test_nested_includes() {
     write(&main_path, main_config).unwrap();
 
     let config = read_configuration(main_path.to_str().unwrap()).unwrap();
+    let graph = config.get_graph(None).unwrap();
 
-    let all_nodes = config.get_all_nodes(None);
+    let all_nodes = graph.get_all_nodes();
     assert_eq!(all_nodes.len(), 3);
 
     let task_ids: Vec<_> = all_nodes
@@ -247,8 +250,9 @@ fn test_override_behavior() {
     write(&main_path, main_config).unwrap();
 
     let config = read_configuration(main_path.to_str().unwrap()).unwrap();
+    let graph = config.get_graph(None).unwrap();
 
-    let all_nodes = config.get_all_nodes(None);
+    let all_nodes = graph.get_all_nodes();
     assert_eq!(all_nodes.len(), 3);
 
     let task_ids: Vec<_> = all_nodes
@@ -393,9 +397,10 @@ fn test_multiple_parameterized_includes() {
 
     // Parse the configuration and verify
     let config = read_configuration(main_path.to_str().unwrap()).unwrap();
+    let graph = config.get_graph(None).unwrap();
 
     // Verify tasks
-    let all_nodes = config.get_all_nodes(None);
+    let all_nodes = graph.get_all_nodes();
     assert_eq!(all_nodes.len(), 7); // 1 octopus + 3 cameras + 3 detectors
 
     // Verify octopus task exists
@@ -449,7 +454,7 @@ fn test_multiple_parameterized_includes() {
     let mut octopus_node_id = None;
 
     for idx in graph.node_indices() {
-        let node = graph.node_weight(idx).unwrap();
+        let node = graph.0.node_weight(idx).unwrap();
         let id = node.get_id();
 
         if id == "octopus" {
@@ -478,7 +483,7 @@ fn test_multiple_parameterized_includes() {
             .1;
 
         // Check if there's an edge from camera to detector
-        let has_connection = graph.edges_directed(camera_idx, Outgoing).any(|edge| {
+        let has_connection = graph.0.edges_directed(camera_idx, Outgoing).any(|edge| {
             let target = edge.target();
             let cnx = edge.weight();
             target == detector_idx && cnx.msg == "cu_camera::CameraPayload"
@@ -502,7 +507,7 @@ fn test_multiple_parameterized_includes() {
             .1;
 
         // Check if there's an edge from detector to octopus
-        let has_connection = graph.edges_directed(detector_idx, Outgoing).any(|edge| {
+        let has_connection = graph.0.edges_directed(detector_idx, Outgoing).any(|edge| {
             let target = edge.target();
             let cnx = edge.weight();
             target == octopus_idx && cnx.msg == "cu_detect::DetectionPayload"

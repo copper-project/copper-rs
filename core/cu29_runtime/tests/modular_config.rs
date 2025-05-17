@@ -88,9 +88,10 @@ fn test_modular_config_basic() {
 
     // Read and validate the configuration
     let config = read_configuration(main_path.to_str().unwrap()).unwrap();
+    let graph = config.graphs.get_graph(None).unwrap();
 
     // Verify tasks
-    let all_nodes = config.get_all_nodes(None);
+    let all_nodes = graph.get_all_nodes();
     assert_eq!(all_nodes.len(), 3);
 
     // Verify task IDs
@@ -134,32 +135,35 @@ fn test_modular_config_basic() {
     let graph = config.graphs.get_graph(None).unwrap();
 
     // Find node indices for verification
-    let source_idx = graph
-        .node_indices()
-        .find(|idx| graph.node_weight(*idx).unwrap().get_id() == "source")
+    let indices = graph.node_indices();
+    let source_idx = indices
+        .iter()
+        .find(|idx| graph.0.node_weight(**idx).unwrap().get_id() == "source")
         .unwrap();
 
-    let motor_left_idx = graph
-        .node_indices()
-        .find(|idx| graph.node_weight(*idx).unwrap().get_id() == "motor_left")
+    let motor_left_idx = indices
+        .iter()
+        .find(|idx| graph.0.node_weight(**idx).unwrap().get_id() == "motor_left")
         .unwrap();
 
-    let motor_right_idx = graph
-        .node_indices()
-        .find(|idx| graph.node_weight(*idx).unwrap().get_id() == "motor_right")
+    let motor_right_idx = indices
+        .iter()
+        .find(|idx| graph.0.node_weight(**idx).unwrap().get_id() == "motor_right")
         .unwrap();
 
     // Verify source to left motor connection exists
     let left_connection = graph
-        .edges_directed(source_idx, Outgoing)
-        .find(|edge| edge.target() == motor_left_idx)
+        .0
+        .edges_directed(*source_idx, Outgoing)
+        .find(|edge| edge.target() == *motor_left_idx)
         .unwrap();
     assert_eq!(left_connection.weight().msg, "tasks::GPIOPayload");
 
     // Verify source to right motor connection exists
     let right_connection = graph
-        .edges_directed(source_idx, Outgoing)
-        .find(|edge| edge.target() == motor_right_idx)
+        .0
+        .edges_directed(*source_idx, Outgoing)
+        .find(|edge| edge.target() == *motor_right_idx)
         .unwrap();
     assert_eq!(right_connection.weight().msg, "tasks::GPIOPayload");
 
@@ -280,9 +284,10 @@ fn test_modular_config_nested() {
 
     // Read and validate the configuration
     let config = read_configuration(main_path.to_str().unwrap()).unwrap();
+    let graph = config.graphs.get_graph(None).unwrap();
 
     // Verify tasks
-    let all_nodes = config.get_all_nodes(None);
+    let all_nodes = graph.get_all_nodes();
     assert_eq!(all_nodes.len(), 5); // 1 controller + 2 sensors + 2 processors
 
     // Verify task IDs
@@ -336,35 +341,37 @@ fn test_modular_config_nested() {
 
     // Get the graph and verify connections
     let graph = config.graphs.get_graph(None).unwrap();
+    let indices = graph.node_indices();
 
     // Find the node indices
-    let controller_idx = graph
-        .node_indices()
-        .find(|idx| graph.node_weight(*idx).unwrap().get_id() == "controller")
+    let controller_idx = *indices
+        .iter()
+        .find(|idx| graph.0.node_weight(**idx).unwrap().get_id() == "controller")
         .unwrap();
 
-    let sensor_front_idx = graph
-        .node_indices()
-        .find(|idx| graph.node_weight(*idx).unwrap().get_id() == "sensor_front")
+    let sensor_front_idx = *indices
+        .iter()
+        .find(|idx| graph.0.node_weight(**idx).unwrap().get_id() == "sensor_front")
         .unwrap();
 
-    let sensor_rear_idx = graph
-        .node_indices()
-        .find(|idx| graph.node_weight(*idx).unwrap().get_id() == "sensor_rear")
+    let sensor_rear_idx = *indices
+        .iter()
+        .find(|idx| graph.0.node_weight(**idx).unwrap().get_id() == "sensor_rear")
         .unwrap();
 
-    let processor_front_idx = graph
-        .node_indices()
-        .find(|idx| graph.node_weight(*idx).unwrap().get_id() == "processor_front")
+    let processor_front_idx = *indices
+        .iter()
+        .find(|idx| graph.0.node_weight(**idx).unwrap().get_id() == "processor_front")
         .unwrap();
 
-    let processor_rear_idx = graph
-        .node_indices()
-        .find(|idx| graph.node_weight(*idx).unwrap().get_id() == "processor_rear")
+    let processor_rear_idx = *indices
+        .iter()
+        .find(|idx| graph.0.node_weight(**idx).unwrap().get_id() == "processor_rear")
         .unwrap();
 
     // Verify sensor to processor connections
     let sensor_front_to_processor = graph
+        .0
         .edges_directed(sensor_front_idx, Outgoing)
         .any(|edge| edge.target() == processor_front_idx);
     assert!(
@@ -373,6 +380,7 @@ fn test_modular_config_nested() {
     );
 
     let sensor_rear_to_processor = graph
+        .0
         .edges_directed(sensor_rear_idx, Outgoing)
         .any(|edge| edge.target() == processor_rear_idx);
     assert!(
@@ -382,6 +390,7 @@ fn test_modular_config_nested() {
 
     // Verify processor to controller connections
     let processor_front_to_controller = graph
+        .0
         .edges_directed(processor_front_idx, Outgoing)
         .any(|edge| edge.target() == controller_idx);
     assert!(
@@ -390,6 +399,7 @@ fn test_modular_config_nested() {
     );
 
     let processor_rear_to_controller = graph
+        .0
         .edges_directed(processor_rear_idx, Outgoing)
         .any(|edge| edge.target() == controller_idx);
     assert!(
@@ -470,9 +480,10 @@ fn test_modular_config_override() {
 
     // Read and validate the configuration
     let config = read_configuration(main_path.to_str().unwrap()).unwrap();
+    let graph = config.graphs.get_graph(None).unwrap();
 
     // Verify tasks
-    let all_nodes = config.get_all_nodes(None);
+    let all_nodes = graph.get_all_nodes();
     assert_eq!(all_nodes.len(), 3); // source, processor, sink
 
     // Verify source task has been overridden
@@ -506,25 +517,27 @@ fn test_modular_config_override() {
 
     // Get the graph and verify connections
     let graph = config.graphs.get_graph(None).unwrap();
+    let indices = graph.node_indices();
 
     // Find node indices
-    let source_idx = graph
-        .node_indices()
-        .find(|idx| graph.node_weight(*idx).unwrap().get_id() == "source")
+    let source_idx = *indices
+        .iter()
+        .find(|idx| graph.0.node_weight(**idx).unwrap().get_id() == "source")
         .unwrap();
 
-    let processor_idx = graph
-        .node_indices()
-        .find(|idx| graph.node_weight(*idx).unwrap().get_id() == "processor")
+    let processor_idx = *indices
+        .iter()
+        .find(|idx| graph.0.node_weight(**idx).unwrap().get_id() == "processor")
         .unwrap();
 
-    let sink_idx = graph
-        .node_indices()
-        .find(|idx| graph.node_weight(*idx).unwrap().get_id() == "sink")
+    let sink_idx = *indices
+        .iter()
+        .find(|idx| graph.0.node_weight(**idx).unwrap().get_id() == "sink")
         .unwrap();
 
     // Verify source to processor connection
     let source_to_processor = graph
+        .0
         .edges_directed(source_idx, Outgoing)
         .any(|edge| edge.target() == processor_idx);
     assert!(
@@ -534,6 +547,7 @@ fn test_modular_config_override() {
 
     // Verify processor to sink connection
     let processor_to_sink = graph
+        .0
         .edges_directed(processor_idx, Outgoing)
         .any(|edge| edge.target() == sink_idx);
     assert!(
