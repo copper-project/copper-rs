@@ -13,3 +13,4 @@ description = "Copper sink task for Iceoryx2."
 [dependencies]
 iceoryx2 = { version = "0.6.1" }
 cu29 = { workspace = true }
+bincode = { workspace = true }

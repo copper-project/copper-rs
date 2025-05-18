@@ -8,7 +8,7 @@ use iceoryx2::service::port_factory::publish_subscribe::PortFactory;
 #[derive(Clone, Debug, Default, Decode, Encode)]
 pub struct IceorixCuMsg<P: CuMsgPayload>(CuMsg<P>);
 
-unsafe impl<P: CuMsgPayload> ZeroCopySend for IceorixCuMsg<IceorixCuMsg<P>> {}
+unsafe impl<P: CuMsgPayload> ZeroCopySend for IceorixCuMsg<P> {}
 
 /// This is a source task that receives messages from an iceoryx2 service.
 /// P is the payload type of the messages.

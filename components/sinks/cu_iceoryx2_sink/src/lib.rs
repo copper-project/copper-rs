@@ -1,3 +1,4 @@
+use bincode::{Decode, Encode};
 use cu29::clock::RobotClock;
 use cu29::prelude::*;
 use iceoryx2::node::NodeBuilder;
@@ -5,6 +6,10 @@ use iceoryx2::port::publisher::Publisher;
 use iceoryx2::prelude::*;
 use iceoryx2::service::port_factory::publish_subscribe::PortFactory;
 
+#[derive(Clone, Debug, Default, Decode, Encode)]
+pub struct IceorixCuMsg<P: CuMsgPayload>(CuMsg<P>);
+
+unsafe impl<P: CuMsgPayload> ZeroCopySend for IceorixCuMsg<P> {}
 /// This is a sink task that sends messages to an iceoryx2 service.
 /// P is the payload type of the messages.
 /// Copper messages and Iceoryx2 payloads are compatible.
@@ -14,8 +19,8 @@ where
 {
     service_name: ServiceName,
     node: iceoryx2::prelude::Node<ipc::Service>,
-    service: Option<PortFactory<ipc::Service, CuMsg<P>, ()>>,
-    publisher: Option<Publisher<ipc::Service, CuMsg<P>, ()>>,
+    service: Option<PortFactory<ipc::Service, IceorixCuMsg<P>, ()>>,
+    publisher: Option<Publisher<ipc::Service, IceorixCuMsg<P>, ()>>,
 }
 
 impl<P> Freezable for IceoryxSink<P> where P: CuMsgPayload {}
@@ -63,7 +68,7 @@ where
         let service = self
             .node
             .service_builder(&self.service_name)
-            .publish_subscribe::<CuMsg<P>>()
+            .publish_subscribe::<IceorixCuMsg<P>>()
             .open_or_create()
             .map_err(|e| {
                 CuError::new_with_cause(
@@ -106,7 +111,7 @@ where
             )
         })?;
 
-        let dst = dst.write_payload(input.clone());
+        let dst = dst.write_payload(IceorixCuMsg(input.clone()));
 
         dst.send().map_err(|e| {
             CuError::new_with_cause(
