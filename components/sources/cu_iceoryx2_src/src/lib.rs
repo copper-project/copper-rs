@@ -1,26 +1,39 @@
+use bincode::{Decode, Encode};
 use cu29::prelude::*;
 use iceoryx2::node::NodeBuilder;
 use iceoryx2::port::subscriber::Subscriber;
 use iceoryx2::prelude::*;
 use iceoryx2::service::port_factory::publish_subscribe::PortFactory;
 
+#[derive(Clone, Debug, Default, Decode, Encode)]
+pub struct IceorixCuMsg<P: CuMsgPayload>(CuMsg<P>);
+
+unsafe impl<P: CuMsgPayload> ZeroCopySend for IceorixCuMsg<IceorixCuMsg<P>> {}
+
 /// This is a source task that receives messages from an iceoryx2 service.
 /// P is the payload type of the messages.
 pub struct IceoryxSrc<P>
 where
     P: CuMsgPayload + 'static,
+    IceorixCuMsg<P>: iceoryx2::prelude::ZeroCopySend,
 {
     service_name: ServiceName,
     node: iceoryx2::prelude::Node<ipc::Service>,
-    service: Option<PortFactory<ipc::Service, CuMsg<P>, ()>>,
-    subscriber: Option<Subscriber<ipc::Service, CuMsg<P>, ()>>,
+    service: Option<PortFactory<ipc::Service, IceorixCuMsg<P>, ()>>,
+    subscriber: Option<Subscriber<ipc::Service, IceorixCuMsg<P>, ()>>,
 }
 
-impl<P> Freezable for IceoryxSrc<P> where P: CuMsgPayload {}
+impl<P> Freezable for IceoryxSrc<P>
+where
+    P: CuMsgPayload,
+    IceorixCuMsg<P>: iceoryx2::prelude::ZeroCopySend,
+{
+}
 
 impl<'cl, P> CuSrcTask<'cl> for IceoryxSrc<P>
 where
     P: CuMsgPayload + 'cl + 'static,
+    IceorixCuMsg<P>: iceoryx2::prelude::ZeroCopySend,
 {
     type Output = output_msg!('cl, P);
 
@@ -63,7 +76,7 @@ where
         let service = self
             .node
             .service_builder(&self.service_name)
-            .publish_subscribe::<CuMsg<P>>()
+            .publish_subscribe::<IceorixCuMsg<P>>()
             .open_or_create()
             .map_err(|e| {
                 CuError::new_with_cause(
@@ -116,6 +129,7 @@ where
             new_msg.set_payload(
                 icemsg
                     .payload()
+                    .0
                     .payload()
                     .ok_or(CuError::from(
                         format!(
@@ -126,7 +140,8 @@ where
                     ))?
                     .clone(),
             );
-            new_msg.metadata.tov = icemsg.payload().metadata.tov;
+
+            new_msg.metadata.tov = icemsg.payload().0.metadata.tov;
         } else {
             debug!(
                 "IceoryxSource({}): No message received.",
