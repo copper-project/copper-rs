@@ -296,10 +296,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let all_missions = copper_config.graphs.get_all_missions_graphs();
     let mut all_missions_tokens = Vec::<proc_macro2::TokenStream>::new();
     for (mission, graph) in all_missions {
-        // let mission = "default";
         let mission_mod = parse_str::<Ident>(mission.as_str())
             .expect("Could not make an identifier of the mission name");
-        // let graph = copper_config.get_graph(None).unwrap(); // FIXME(gbin)
 
         #[cfg(feature = "macro_debug")]
         eprintln!("[runtime plan for mission {mission}]");
