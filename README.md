@@ -346,9 +346,8 @@ on any of those, please let us know!:
 - [x] **Buffer Pools**: Implement a large buffer (Host or Device/GPU) pools for 0 copy large inter-task transfers.
 - [ ] **Log Compression & Selection**: Implement a pluggable compression system for logs and its resim counterpart.
   For example to encode video from images. Selection is about NOT logging something if it is not needed.
-- [ ] **Modes**: Implement a way to have multiple DAGS in the RON configuration file and have a centralized way to
-  switch from one to another. This is useful for running the stack in predeterministic modes: for example Data acquisition,
-  Full autonomy, Charging, etc.
+- [x] **Missions**: Implement a way to have multiple DAGS in the RON configuration file and have a centralized way to
+  switch from one to another. This is useful for running the stack for a specific mission: for example Data acquisition missiom, Full autonomy mission, Charging, etc.
 - [ ] **Microcontroller and RTOS support**: Modify all necessary Copper code packages to remove dependencies on the standard library (std) to support "no_std" (#![no_std])
   to support running the code on bare-metal on microcontrollers.  This will allow a seamless environment for high level calls on a standard kernel (ML inference etc...)
   and low level tasks on MCUs (control, HW interfacing...).
