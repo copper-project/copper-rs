@@ -120,7 +120,7 @@ quote = "1.0.40"                                  # proc macros
 syn = { version = "2.0.100", features = ["full"] } # proc macros
 
 # Unit of measure to be consistent across the project
-uom = { version = "0.36.0", features = ["serde"] }
+uom = { version = "0.37.0", features = ["serde"] }
 
 # Compact strings support
 compact_str = { version = "0.9.0", features = ["serde"] }
