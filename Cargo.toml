@@ -38,6 +38,7 @@ members = [
     "components/tasks/cu_apriltag",
     "components/tasks/cu_dynthreshold",
     "components/tasks/cu_pid",
+    "components/tasks/cu_ratelimit",
     "components/testing/cu_udp_inject",
     "examples/cu_caterpillar",
     "examples/cu_config_gen",

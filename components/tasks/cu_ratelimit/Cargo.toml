@@ -1,0 +1,15 @@
+[package]
+name = "cu-ratelimit"
+description = "A simple generic rate limiter for Copper"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+cu29 = { workspace = true }
+bincode = { workspace = true }
