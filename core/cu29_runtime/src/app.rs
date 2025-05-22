@@ -46,7 +46,7 @@ pub trait CuApplication {
     /// # Returns
     ///
     /// * `CuResult<()>` - Returns `Ok(())` if the iteration completes successfully, or an error
-    /// wrapped in `CuResult` if something goes wrong during execution.
+    ///   wrapped in `CuResult` if something goes wrong during execution.
     ///
     fn run_one_iteration(&mut self) -> CuResult<()>;
 
@@ -105,7 +105,7 @@ pub trait CuSimApplication {
     ///   - If `Some`, the provided configuration will be used.
     ///   - If `None`, the default configuration will be applied.
     /// * `sim_callback` - A mutable function reference that allows overriding individual simulation steps.
-    ///    The callback receives a Step parameter and returns a SimOverride indicating how to handle the step.
+    ///   The callback receives a Step parameter and returns a SimOverride indicating how to handle the step.
     ///
     /// # Returns
     ///
@@ -129,7 +129,7 @@ pub trait CuSimApplication {
     /// # Returns
     ///
     /// * `CuResult<()>` - Returns `Ok(())` if the iteration completes successfully, or an error
-    /// wrapped in `CuResult` if something goes wrong during execution.
+    ///   wrapped in `CuResult` if something goes wrong during execution.
     fn run_one_iteration(
         &mut self,
         sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> crate::simulation::SimOverride,
