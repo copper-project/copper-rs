@@ -32,7 +32,7 @@ cu29-export = { workspace = true, optional = true }
 bevy = { version = "0.16.0", default-features = false, features = ["x11", "wayland", "default_font", "bevy_render", "bevy_window", "bevy_core_pipeline", "bevy_pbr", "bevy_scene", "bevy_sprite", "bevy_gltf", "animation", "bevy_picking", "bevy_mesh_picking_backend", "tonemapping_luts", "bevy_ui", "ktx2", "jpeg", "png"], optional = true }
 avian3d = { version = "0.3.0", default-features = false, features = ["bevy_scene", "collider-from-mesh", "debug-plugin", "parallel", "f32", "3d", "parry-f32"], optional = true }
 cached-path = { version = "0.7.0", optional = true }
-iyes_perf_ui = { git = "https://github.com/IyesGames/iyes_perf_ui", rev = "8e6dd607", optional = true }
+iyes_perf_ui = { version = "0.5.0", optional = true }
 
 [features]
 default = ["logreader", "sim"]
