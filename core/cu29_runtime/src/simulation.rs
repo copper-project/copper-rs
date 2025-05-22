@@ -109,7 +109,7 @@
 
 use crate::config::ComponentConfig;
 
-use crate::cutask::{CuMsg, CuMsgPack, CuMsgPayload, CuSinkTask, CuSrcTask, Freezable};
+use crate::cutask::{CuMsg, CuMsgPayload, CuSinkTask, CuSrcTask, Freezable};
 use crate::{input_msg, output_msg};
 use cu29_clock::RobotClock;
 use cu29_traits::CuResult;
@@ -117,11 +117,7 @@ use std::marker::PhantomData;
 
 /// This is the state that will be passed to the simulation support to hook
 /// into the lifecycle of the tasks.
-pub enum CuTaskCallbackState<'cl, I, O>
-where
-    I: CuMsgPack<'cl>,
-    O: CuMsgPack<'cl>,
-{
+pub enum CuTaskCallbackState<I, O> {
     /// Callbacked when a task is created.
     /// It gives you the opportunity to adapt the sim to the given config.
     New(Option<ComponentConfig>),
@@ -138,9 +134,6 @@ where
     Postprocess,
     /// Callbacked when a task is stopped.
     Stop,
-    // We don't hold the lifetime for the copper list backing the message so we need to
-    // hold a phantom reference to it.
-    _Phantom(PhantomData<&'cl ()>),
 }
 
 /// This is the answer the simulator can give to control the simulation flow.
