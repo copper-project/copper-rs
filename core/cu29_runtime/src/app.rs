@@ -1,4 +1,5 @@
 use crate::config::CuConfig;
+use crate::simulation::SimOverride;
 use cu29_clock::RobotClock;
 use cu29_traits::CuResult;
 use cu29_unifiedlog::UnifiedLoggerWrite;
@@ -41,6 +42,14 @@ pub trait CuApplication {
     where
         Self: Sized;
 
+    /// Starts all tasks managed by the application/runtime.
+    ///
+    /// # Returns
+    /// * `Ok(())` - If all tasks are started successfully.
+    /// * `Err(CuResult)` - If an error occurs while attempting to start one
+    ///   or more tasks.
+    fn start_all_tasks(&mut self) -> CuResult<()>;
+
     /// Executes a single iteration of copper-generated runtime (generating and logging one copperlist)
     ///
     /// # Returns
@@ -50,13 +59,15 @@ pub trait CuApplication {
     ///
     fn run_one_iteration(&mut self) -> CuResult<()>;
 
-    /// Starts all tasks managed by the application/runtime.
+    /// Runs indefinitely looping over run_one_iteration
     ///
     /// # Returns
-    /// * `Ok(())` - If all tasks are started successfully.
-    /// * `Err(CuResult)` - If an error occurs while attempting to start one
-    ///   or more tasks.
-    fn start_all_tasks(&mut self) -> CuResult<()>;
+    ///
+    /// Returns a `CuResult<()>`, which indicates the success or failure of the
+    /// operation.
+    /// - On success, the result is `Ok(())`.
+    /// - On failure, an appropriate error wrapped in `CuResult` is returned.
+    fn run(&mut self) -> CuResult<()>;
 
     /// Stops all tasks managed by the application/runtime.
     ///
@@ -68,16 +79,6 @@ pub trait CuApplication {
     /// - On failure, an appropriate error wrapped in `CuResult` is returned.
     ///
     fn stop_all_tasks(&mut self) -> CuResult<()>;
-
-    /// Runs indefinitely looping over run_one_iteration
-    ///
-    /// # Returns
-    ///
-    /// Returns a `CuResult<()>`, which indicates the success or failure of the
-    /// operation.
-    /// - On success, the result is `Ok(())`.
-    /// - On failure, an appropriate error wrapped in `CuResult` is returned.
-    fn run(&mut self) -> CuResult<()>;
 }
 
 /// A trait that defines the structure and behavior of a simulation-enabled CuApplication.
@@ -116,24 +117,10 @@ pub trait CuSimApplication {
         clock: RobotClock,
         unified_logger: Arc<Mutex<UnifiedLoggerWrite>>,
         config_override: Option<CuConfig>,
-        sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> crate::simulation::SimOverride,
+        sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
     ) -> CuResult<Self>
     where
         Self: Sized;
-
-    /// Executes a single iteration of copper-generated runtime in simulation mode.
-    ///
-    /// # Arguments
-    /// * `sim_callback` - A mutable function reference that allows overriding individual simulation steps.
-    ///
-    /// # Returns
-    ///
-    /// * `CuResult<()>` - Returns `Ok(())` if the iteration completes successfully, or an error
-    ///   wrapped in `CuResult` if something goes wrong during execution.
-    fn run_one_iteration(
-        &mut self,
-        sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> crate::simulation::SimOverride,
-    ) -> CuResult<()>;
 
     /// Starts all tasks managed by the application/runtime in simulation mode.
     ///
@@ -146,23 +133,21 @@ pub trait CuSimApplication {
     ///   or more tasks.
     fn start_all_tasks(
         &mut self,
-        sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> crate::simulation::SimOverride,
+        sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
     ) -> CuResult<()>;
 
-    /// Stops all tasks managed by the application/runtime in simulation mode.
+    /// Executes a single iteration of copper-generated runtime in simulation mode.
     ///
     /// # Arguments
     /// * `sim_callback` - A mutable function reference that allows overriding individual simulation steps.
     ///
     /// # Returns
     ///
-    /// Returns a `CuResult<()>`, which indicates the success or failure of the
-    /// operation.
-    /// - On success, the result is `Ok(())`.
-    /// - On failure, an appropriate error wrapped in `CuResult` is returned.
-    fn stop_all_tasks(
+    /// * `CuResult<()>` - Returns `Ok(())` if the iteration completes successfully, or an error
+    ///   wrapped in `CuResult` if something goes wrong during execution.
+    fn run_one_iteration(
         &mut self,
-        sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> crate::simulation::SimOverride,
+        sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
     ) -> CuResult<()>;
 
     /// Runs indefinitely looping over run_one_iteration in simulation mode
@@ -178,6 +163,22 @@ pub trait CuSimApplication {
     /// - On failure, an appropriate error wrapped in `CuResult` is returned.
     fn run(
         &mut self,
-        sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> crate::simulation::SimOverride,
+        sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
+    ) -> CuResult<()>;
+
+    /// Stops all tasks managed by the application/runtime in simulation mode.
+    ///
+    /// # Arguments
+    /// * `sim_callback` - A mutable function reference that allows overriding individual simulation steps.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `CuResult<()>`, which indicates the success or failure of the
+    /// operation.
+    /// - On success, the result is `Ok(())`.
+    /// - On failure, an appropriate error wrapped in `CuResult` is returned.
+    fn stop_all_tasks(
+        &mut self,
+        sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
     ) -> CuResult<()>;
 }
