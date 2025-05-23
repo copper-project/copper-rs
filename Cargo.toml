@@ -141,6 +141,3 @@ rerun = { version = "0.23.2", default-features = false, features = ["sdk", "serv
 
 # smallvec to avoid heap allocations
 smallvec = { version = "1.15.0", features = ["serde"] }
-
-[patch.crates-io]
-onig = { git = "https://github.com/rust-onig/rust-onig", rev = "25a950f0045600645d9f51da2b4f8b057cc017f1" }
