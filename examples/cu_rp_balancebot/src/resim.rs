@@ -36,7 +36,7 @@ fn run_one_copperlist(
         .unwrap();
     robot_clock.set_value(process_time);
 
-    let mut sim_callback = move |step: default::SimStep<'_>| -> SimOverride {
+    let mut sim_callback = move |step: default::SimStep| -> SimOverride {
         match step {
             default::SimStep::Balpos(CuTaskCallbackState::Process(_, output)) => {
                 *output = msgs.get_balpos_output().clone();

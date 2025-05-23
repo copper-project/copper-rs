@@ -111,7 +111,7 @@ fn run_copper_callback(
     robot_clock
         .clock
         .set_value(physics_time.elapsed().as_nanos() as u64);
-    let mut sim_callback = move |step: default::SimStep<'_>| -> SimOverride {
+    let mut sim_callback = move |step: default::SimStep| -> SimOverride {
         match step {
             default::SimStep::Balpos(CuTaskCallbackState::Process(_, output)) => {
                 // so here we jump when the balpos source (the adc giving the rod position) is called
