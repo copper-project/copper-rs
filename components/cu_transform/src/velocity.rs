@@ -225,9 +225,10 @@ mod tests {
 
     #[test]
     fn test_velocity_with_units() {
-        let mut vel = VelocityTransform::<f32>::default();
-        vel.linear = [1.0, 2.0, 3.0];
-        vel.angular = [0.1, 0.2, 0.3];
+        let vel = VelocityTransform::<f32> {
+            linear: [1.0, 2.0, 3.0],
+            angular: [0.1, 0.2, 0.3],
+        };
 
         let linear_vel = vel.linear_velocity();
         let angular_vel = vel.angular_velocity();

@@ -1,53 +1,74 @@
 use cu29::clock::CuDuration;
 use cu_spatial_payloads::Transform3D;
-use cu_transform::{StampedTransform, TransformTree};
+use cu_transform::{TypedTransformMsg, TypedTransformBuffer, WorldFrame, RobotFrame};
 
 fn main() {
-    let mut tree = TransformTree::<f32>::new();
-
-    let world_to_robot = StampedTransform {
-        transform: {
-            let mut t = Transform3D::default();
-            t.mat[0][3] = 1.0; // X translation
-            t.mat[1][3] = 2.0; // Y translation
-            t
-        },
-        stamp: CuDuration(1000),
-        parent_frame: "world".to_string(),
-        child_frame: "robot".to_string(),
-    };
-
-    let robot_to_camera = StampedTransform {
-        transform: {
-            let mut t = Transform3D::default();
-            t.mat[0][3] = 0.2; // X translation
-            t.mat[1][3] = 0.0; // Y translation
-            t.mat[2][3] = 0.3; // Z translation
-            t
-        },
-        stamp: CuDuration(1000),
-        parent_frame: "robot".to_string(),
-        child_frame: "camera".to_string(),
-    };
-
-    tree.add_transform(world_to_robot)
-        .expect("Failed to add world_to_robot transform");
-    tree.add_transform(robot_to_camera)
-        .expect("Failed to add robot_to_camera transform");
-
-    let time = CuDuration(1000);
-    let transform = tree.lookup_transform("world", "camera", time);
-
-    match transform {
-        Ok(t) => {
-            println!("Transform from world to camera:");
-            println!(
-                "Translation: [{}, {}, {}]",
-                t.mat[0][3], t.mat[1][3], t.mat[2][3]
-            );
+    // Example using the new typed transform approach
+    println!("Cu Transform - New Typed Approach Demo");
+    println!("=====================================");
+    
+    // Create a buffer for world -> robot transforms  
+    let mut world_to_robot_buffer: TypedTransformBuffer<f32, WorldFrame, RobotFrame, 10> = 
+        TypedTransformBuffer::new();
+    
+    // Create a transform message
+    let mut transform = Transform3D::default();
+    transform.mat[0][3] = 1.0; // X translation
+    transform.mat[1][3] = 2.0; // Y translation
+    
+    let world_to_robot_msg = TypedTransformMsg::new(transform, CuDuration(1000));
+    
+    println!("Created transform from {} to {}", 
+             world_to_robot_msg.parent_name(), 
+             world_to_robot_msg.child_name());
+    if let Some(t) = world_to_robot_msg.transform() {
+        println!("  Translation: [{}, {}, {}]", 
+                 t.mat[0][3], t.mat[1][3], t.mat[2][3]);
+    }
+    
+    // Add to buffer
+    world_to_robot_buffer.add_transform(world_to_robot_msg);
+    
+    // Create second transform
+    let mut transform2 = Transform3D::default();
+    transform2.mat[0][3] = 2.0; // X translation  
+    transform2.mat[1][3] = 4.0; // Y translation
+    
+    let world_to_robot_msg2 = TypedTransformMsg::new(transform2, CuDuration(2000));
+    world_to_robot_buffer.add_transform(world_to_robot_msg2);
+    
+    // Query the buffer
+    if let Some(latest) = world_to_robot_buffer.get_latest_transform() {
+        println!("\nLatest transform at time {}:", latest.timestamp().unwrap().as_nanos());
+        if let Some(t) = latest.transform() {
+            println!("  Translation: [{}, {}, {}]", 
+                     t.mat[0][3], t.mat[1][3], t.mat[2][3]);
         }
-        Err(e) => {
-            println!("Error looking up transform: {e:?}");
+    }
+    
+    // Query closest to a specific time
+    if let Some(closest) = world_to_robot_buffer.get_closest_transform(CuDuration(1500)) {
+        println!("\nClosest transform to time 1500:");
+        println!("  Actual time: {}", closest.timestamp().unwrap().as_nanos());
+        if let Some(t) = closest.transform() {
+            println!("  Translation: [{}, {}, {}]", 
+                     t.mat[0][3], t.mat[1][3], t.mat[2][3]);
+        }
+    }
+    
+    // Demonstrate time range
+    if let Some(range) = world_to_robot_buffer.get_time_range() {
+        println!("\nTime range: {} to {}", range.start.as_nanos(), range.end.as_nanos());
+    }
+    
+    // Demonstrate velocity computation
+    if let Some(latest) = world_to_robot_buffer.get_latest_transform() {
+        if let Some(closest) = world_to_robot_buffer.get_closest_transform(CuDuration(1000)) {
+            if let Some(velocity) = latest.compute_velocity(closest) {
+                println!("\nVelocity computation:");
+                println!("  Linear velocity: [{}, {}, {}]", 
+                         velocity.linear[0], velocity.linear[1], velocity.linear[2]);
+            }
         }
     }
 }
