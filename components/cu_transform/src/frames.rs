@@ -9,7 +9,7 @@ use std::fmt::Debug;
 pub trait FrameId: Debug + Clone + Copy + PartialEq + Eq + 'static {
     /// Unique identifier for this frame
     const ID: u32;
-    
+
     /// Human-readable name for debugging
     const NAME: &'static str;
 }
@@ -30,19 +30,19 @@ impl<Parent: FrameId, Child: FrameId> FramePair<Parent, Child> {
             child: std::marker::PhantomData,
         }
     }
-    
+
     pub fn parent_id() -> u32 {
         Parent::ID
     }
-    
+
     pub fn child_id() -> u32 {
         Child::ID
     }
-    
+
     pub fn parent_name() -> &'static str {
         Parent::NAME
     }
-    
+
     pub fn child_name() -> &'static str {
         Child::NAME
     }
@@ -127,7 +127,7 @@ mod tests {
     fn test_frame_ids() {
         assert_eq!(WorldFrame::ID, 0);
         assert_eq!(WorldFrame::NAME, "world");
-        
+
         assert_eq!(RobotFrame::ID, 2);
         assert_eq!(RobotFrame::NAME, "robot");
     }
@@ -146,7 +146,7 @@ mod tests {
         let frame1 = WorldFrame;
         let frame2 = WorldFrame;
         assert_eq!(frame1, frame2);
-        
+
         // Test different frame types
         assert_eq!(WorldFrame::ID, 0);
         assert_eq!(RobotFrame::ID, 2);
