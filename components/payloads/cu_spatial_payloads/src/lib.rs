@@ -1,6 +1,7 @@
 use bincode::{Decode, Encode};
 use core::fmt::Debug;
 use serde::{Deserialize, Serialize};
+use std::ops::Mul;
 use uom::si::angle::radian;
 use uom::si::length::meter;
 pub type Pose<T> = Transform3D<T>;
@@ -79,6 +80,204 @@ impl<T: Copy + Debug + Default> Default for Transform3D<T> {
         Self {
             mat: [[T::default(); 4]; 4],
         }
+    }
+}
+
+/// Generic implementation of matrix multiplication for transforms
+impl<T> Mul for Transform3D<T>
+where
+    T: Copy + Debug + 'static + Default + std::ops::Add<Output = T> + std::ops::Mul<Output = T>,
+{
+    type Output = Self;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        let mut result = Transform3D::default();
+
+        for i in 0..4 {
+            for j in 0..4 {
+                let mut sum = T::default();
+                for k in 0..4 {
+                    sum = sum + (self.mat[i][k] * rhs.mat[k][j]);
+                }
+                result.mat[i][j] = sum;
+            }
+        }
+
+        result
+    }
+}
+
+/// Generic implementation of matrix multiplication on references for transforms
+impl<T> Mul for &Transform3D<T>
+where
+    T: Copy + Debug + 'static + Default + std::ops::Add<Output = T> + std::ops::Mul<Output = T>,
+{
+    type Output = Transform3D<T>;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        let mut result = Transform3D::default();
+
+        for i in 0..4 {
+            for j in 0..4 {
+                let mut sum = T::default();
+                for k in 0..4 {
+                    sum = sum + (self.mat[i][k] * rhs.mat[k][j]);
+                }
+                result.mat[i][j] = sum;
+            }
+        }
+
+        result
+    }
+}
+
+/// Generic implementation of matrix multiplication: reference * owned for transforms
+impl<T> Mul<Transform3D<T>> for &Transform3D<T>
+where
+    T: Copy + Debug + 'static + Default + std::ops::Add<Output = T> + std::ops::Mul<Output = T>,
+{
+    type Output = Transform3D<T>;
+
+    fn mul(self, rhs: Transform3D<T>) -> Self::Output {
+        let mut result = Transform3D::default();
+
+        for i in 0..4 {
+            for j in 0..4 {
+                let mut sum = T::default();
+                for k in 0..4 {
+                    sum = sum + (self.mat[i][k] * rhs.mat[k][j]);
+                }
+                result.mat[i][j] = sum;
+            }
+        }
+
+        result
+    }
+}
+
+/// Generic implementation of matrix multiplication: owned * reference for transforms
+impl<'a, T> Mul<&'a Transform3D<T>> for Transform3D<T>
+where
+    T: Copy + Debug + 'static + Default + std::ops::Add<Output = T> + std::ops::Mul<Output = T>,
+{
+    type Output = Transform3D<T>;
+
+    fn mul(self, rhs: &'a Transform3D<T>) -> Self::Output {
+        let mut result = Transform3D::default();
+
+        for i in 0..4 {
+            for j in 0..4 {
+                let mut sum = T::default();
+                for k in 0..4 {
+                    sum = sum + (self.mat[i][k] * rhs.mat[k][j]);
+                }
+                result.mat[i][j] = sum;
+            }
+        }
+
+        result
+    }
+}
+
+impl Transform3D<f32> {
+    /// Computes the inverse of this transformation matrix.
+    /// For a valid homogeneous transformation matrix, this efficiently
+    /// computes the inverse by using the block structure of the matrix.
+    pub fn inverse(&self) -> Self {
+        // Extract rotation matrix (top-left 3x3)
+        let r = [
+            [self.mat[0][0], self.mat[0][1], self.mat[0][2]],
+            [self.mat[1][0], self.mat[1][1], self.mat[1][2]],
+            [self.mat[2][0], self.mat[2][1], self.mat[2][2]],
+        ];
+
+        // Extract translation (top-right 3x1)
+        let t = [self.mat[0][3], self.mat[1][3], self.mat[2][3]];
+
+        // Compute transpose of rotation matrix (which is its inverse for orthogonal matrices)
+        let r_inv = [
+            [r[0][0], r[1][0], r[2][0]],
+            [r[0][1], r[1][1], r[2][1]],
+            [r[0][2], r[1][2], r[2][2]],
+        ];
+
+        // Compute -R^T * t
+        let t_inv = [
+            -(r_inv[0][0] * t[0] + r_inv[0][1] * t[1] + r_inv[0][2] * t[2]),
+            -(r_inv[1][0] * t[0] + r_inv[1][1] * t[1] + r_inv[1][2] * t[2]),
+            -(r_inv[2][0] * t[0] + r_inv[2][1] * t[1] + r_inv[2][2] * t[2]),
+        ];
+
+        // Construct the inverse transformation matrix
+        let mut inv_mat = [[0.0f32; 4]; 4];
+
+        // Copy rotation transpose
+        for i in 0..3 {
+            for j in 0..3 {
+                inv_mat[i][j] = r_inv[i][j];
+            }
+        }
+
+        // Copy translation part
+        inv_mat[0][3] = t_inv[0];
+        inv_mat[1][3] = t_inv[1];
+        inv_mat[2][3] = t_inv[2];
+
+        // Keep the homogeneous coordinate the same
+        inv_mat[3][3] = 1.0;
+
+        Self { mat: inv_mat }
+    }
+}
+
+impl Transform3D<f64> {
+    /// Computes the inverse of this transformation matrix.
+    /// For a valid homogeneous transformation matrix, this efficiently
+    /// computes the inverse by using the block structure of the matrix.
+    pub fn inverse(&self) -> Self {
+        // Extract rotation matrix (top-left 3x3)
+        let r = [
+            [self.mat[0][0], self.mat[0][1], self.mat[0][2]],
+            [self.mat[1][0], self.mat[1][1], self.mat[1][2]],
+            [self.mat[2][0], self.mat[2][1], self.mat[2][2]],
+        ];
+
+        // Extract translation (top-right 3x1)
+        let t = [self.mat[0][3], self.mat[1][3], self.mat[2][3]];
+
+        // Compute transpose of rotation matrix (which is its inverse for orthogonal matrices)
+        let r_inv = [
+            [r[0][0], r[1][0], r[2][0]],
+            [r[0][1], r[1][1], r[2][1]],
+            [r[0][2], r[1][2], r[2][2]],
+        ];
+
+        // Compute -R^T * t
+        let t_inv = [
+            -(r_inv[0][0] * t[0] + r_inv[0][1] * t[1] + r_inv[0][2] * t[2]),
+            -(r_inv[1][0] * t[0] + r_inv[1][1] * t[1] + r_inv[1][2] * t[2]),
+            -(r_inv[2][0] * t[0] + r_inv[2][1] * t[1] + r_inv[2][2] * t[2]),
+        ];
+
+        // Construct the inverse transformation matrix
+        let mut inv_mat = [[0.0f64; 4]; 4];
+
+        // Copy rotation transpose
+        for i in 0..3 {
+            for j in 0..3 {
+                inv_mat[i][j] = r_inv[i][j];
+            }
+        }
+
+        // Copy translation part
+        inv_mat[0][3] = t_inv[0];
+        inv_mat[1][3] = t_inv[1];
+        inv_mat[2][3] = t_inv[2];
+
+        // Keep the homogeneous coordinate the same
+        inv_mat[3][3] = 1.0;
+
+        Self { mat: inv_mat }
     }
 }
 
@@ -217,6 +416,269 @@ mod tests {
             pose.mat, [[0.0; 4]; 4],
             "Default pose should be a zero matrix"
         );
+    }
+
+    #[test]
+    fn test_transform_inverse_f32() {
+        // Create a test transform with rotation and translation
+        let transform = Transform3D::<f32> {
+            mat: [
+                [1.0, 0.0, 0.0, 2.0], // x-axis with 2m translation
+                [0.0, 1.0, 0.0, 3.0], // y-axis with 3m translation
+                [0.0, 0.0, 1.0, 4.0], // z-axis with 4m translation
+                [0.0, 0.0, 0.0, 1.0], // homogeneous coordinate
+            ],
+        };
+
+        // Compute inverse
+        let inverse = transform.inverse();
+
+        // Expected inverse for this transform
+        let expected_inverse = Transform3D::<f32> {
+            mat: [
+                [1.0, 0.0, 0.0, -2.0], // Negated translation
+                [0.0, 1.0, 0.0, -3.0],
+                [0.0, 0.0, 1.0, -4.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+        };
+
+        // Check each element with a small epsilon for floating-point comparison
+        let epsilon = 1e-5;
+        for i in 0..4 {
+            for j in 0..4 {
+                assert!(
+                    (inverse.mat[i][j] - expected_inverse.mat[i][j]).abs() < epsilon,
+                    "Element at [{},{}] differs: {} vs expected {}",
+                    i,
+                    j,
+                    inverse.mat[i][j],
+                    expected_inverse.mat[i][j]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_transform_inverse_f64() {
+        // Create a test transform with rotation and translation
+        let transform = Transform3D::<f64> {
+            mat: [
+                [0.0, -1.0, 0.0, 5.0], // 90-degree rotation around z with translation
+                [1.0, 0.0, 0.0, 6.0],
+                [0.0, 0.0, 1.0, 7.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+        };
+
+        // Compute inverse
+        let inverse = transform.inverse();
+
+        // Expected inverse for this transform
+        let expected_inverse = Transform3D::<f64> {
+            mat: [
+                [0.0, 1.0, 0.0, -6.0], // Transposed rotation and adjusted translation
+                [-1.0, 0.0, 0.0, 5.0],
+                [0.0, 0.0, 1.0, -7.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+        };
+
+        // Check each element with a small epsilon for floating-point comparison
+        let epsilon = 1e-10;
+        for i in 0..4 {
+            for j in 0..4 {
+                assert!(
+                    (inverse.mat[i][j] - expected_inverse.mat[i][j]).abs() < epsilon,
+                    "Element at [{},{}] differs: {} vs expected {}",
+                    i,
+                    j,
+                    inverse.mat[i][j],
+                    expected_inverse.mat[i][j]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_transform_inverse_identity() {
+        // Create identity transform
+        let identity = Transform3D::<f32> {
+            mat: [
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+        };
+
+        // Inverse of identity should be identity
+        let inverse = identity.inverse();
+
+        // Check if inverse is also identity
+        let epsilon = 1e-5;
+        for i in 0..4 {
+            for j in 0..4 {
+                assert!(
+                    (inverse.mat[i][j] - identity.mat[i][j]).abs() < epsilon,
+                    "Element at [{},{}] differs: {} vs expected {}",
+                    i,
+                    j,
+                    inverse.mat[i][j],
+                    identity.mat[i][j]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_transform_multiplication_f32() {
+        // Create two transforms to multiply
+        let t1 = Transform3D::<f32> {
+            mat: [
+                [1.0, 0.0, 0.0, 2.0], // Identity rotation + translation (2,3,4)
+                [0.0, 1.0, 0.0, 3.0],
+                [0.0, 0.0, 1.0, 4.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+        };
+
+        let t2 = Transform3D::<f32> {
+            mat: [
+                [0.0, -1.0, 0.0, 5.0], // 90-degree rotation around z + translation (5,6,7)
+                [1.0, 0.0, 0.0, 6.0],
+                [0.0, 0.0, 1.0, 7.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+        };
+
+        // Compute t1 * t2
+        let result = t1 * t2;
+
+        // Expected result: t1 * t2 represents first rotating by t2, then translating by t1
+        let expected = Transform3D::<f32> {
+            mat: [
+                [0.0, -1.0, 0.0, 7.0], // Rotation from t2 + combined translation
+                [1.0, 0.0, 0.0, 9.0],
+                [0.0, 0.0, 1.0, 11.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+        };
+
+        // Check results
+        let epsilon = 1e-5;
+        for i in 0..4 {
+            for j in 0..4 {
+                assert!(
+                    (result.mat[i][j] - expected.mat[i][j]).abs() < epsilon,
+                    "Element at [{},{}] differs: {} vs expected {}",
+                    i,
+                    j,
+                    result.mat[i][j],
+                    expected.mat[i][j]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_transform_multiplication_f64() {
+        // Create two transforms to multiply
+        let t1 = Transform3D::<f64> {
+            mat: [
+                [1.0, 0.0, 0.0, 2.0], // Identity rotation + translation (2,3,4)
+                [0.0, 1.0, 0.0, 3.0],
+                [0.0, 0.0, 1.0, 4.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+        };
+
+        let t2 = Transform3D::<f64> {
+            mat: [
+                [0.0, -1.0, 0.0, 5.0], // 90-degree rotation around z + translation (5,6,7)
+                [1.0, 0.0, 0.0, 6.0],
+                [0.0, 0.0, 1.0, 7.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+        };
+
+        // Compute t1 * t2
+        let result = t1 * t2;
+
+        // Expected result
+        let expected = Transform3D::<f64> {
+            mat: [
+                [0.0, -1.0, 0.0, 7.0], // Rotation from t2 + combined translation
+                [1.0, 0.0, 0.0, 9.0],
+                [0.0, 0.0, 1.0, 11.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+        };
+
+        // Check results
+        let epsilon = 1e-10;
+        for i in 0..4 {
+            for j in 0..4 {
+                assert!(
+                    (result.mat[i][j] - expected.mat[i][j]).abs() < epsilon,
+                    "Element at [{},{}] differs: {} vs expected {}",
+                    i,
+                    j,
+                    result.mat[i][j],
+                    expected.mat[i][j]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_transform_reference_multiplication() {
+        // Test multiplication on references
+        let t1 = Transform3D::<f32> {
+            mat: [
+                [1.0, 0.0, 0.0, 2.0],
+                [0.0, 1.0, 0.0, 3.0],
+                [0.0, 0.0, 1.0, 4.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+        };
+
+        let t2 = Transform3D::<f32> {
+            mat: [
+                [0.0, -1.0, 0.0, 5.0],
+                [1.0, 0.0, 0.0, 6.0],
+                [0.0, 0.0, 1.0, 7.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+        };
+
+        // Compute &t1 * &t2
+        let result = &t1 * &t2;
+
+        // Expected result
+        let expected = Transform3D::<f32> {
+            mat: [
+                [0.0, -1.0, 0.0, 7.0],
+                [1.0, 0.0, 0.0, 9.0],
+                [0.0, 0.0, 1.0, 11.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+        };
+
+        // Check results
+        let epsilon = 1e-5;
+        for i in 0..4 {
+            for j in 0..4 {
+                assert!(
+                    (result.mat[i][j] - expected.mat[i][j]).abs() < epsilon,
+                    "Element at [{},{}] differs: {} vs expected {}",
+                    i,
+                    j,
+                    result.mat[i][j],
+                    expected.mat[i][j]
+                );
+            }
+        }
     }
 
     #[cfg(feature = "faer")]
