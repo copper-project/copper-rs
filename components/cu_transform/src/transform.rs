@@ -163,10 +163,173 @@ struct TransformBufferInternal<T: Copy + Debug + 'static> {
     max_capacity: usize,
 }
 
+/// Constant-size transform buffer using fixed arrays (no dynamic allocation)
+#[derive(Clone, Debug)]
+pub struct ConstTransformBuffer<T: Copy + Debug + 'static, const N: usize> {
+    transforms: [Option<StampedTransform<T>>; N],
+    count: usize,
+    head: usize, // Index where the next element will be inserted
+}
+
 /// Thread-safe wrapper around a transform buffer with concurrent access
 #[derive(Clone)]
 pub struct TransformBuffer<T: Copy + Debug + 'static> {
     buffer: Arc<RwLock<TransformBufferInternal<T>>>,
+}
+
+impl<T: Copy + Debug + 'static, const N: usize> ConstTransformBuffer<T, N> {
+    pub fn new() -> Self {
+        Self {
+            transforms: [const { None }; N],
+            count: 0,
+            head: 0,
+        }
+    }
+
+    /// Add a transform to the buffer, maintaining time ordering
+    pub fn add_transform(&mut self, transform: StampedTransform<T>) {
+        if self.count == 0 {
+            // First transform
+            self.transforms[0] = Some(transform);
+            self.count = 1;
+            self.head = 1;
+        } else if self.count < N {
+            // Buffer not full - find insertion position
+            let mut insert_pos = 0;
+            for i in 0..self.count {
+                if let Some(ref t) = self.transforms[i] {
+                    if t.stamp <= transform.stamp {
+                        insert_pos = i + 1;
+                    } else {
+                        break;
+                    }
+                }
+            }
+
+            // Shift elements to make room
+            for i in (insert_pos..self.count).rev() {
+                self.transforms[i + 1] = self.transforms[i].take();
+            }
+
+            self.transforms[insert_pos] = Some(transform);
+            self.count += 1;
+            if self.count < N {
+                self.head = self.count;
+            } else {
+                self.head = 0; // Reset to 0 when buffer becomes full
+            }
+        } else {
+            // Buffer full - use circular buffer
+            // For simplicity, always replace the oldest element (FIFO behavior)
+            self.transforms[self.head] = Some(transform);
+            self.head = (self.head + 1) % N;
+        }
+    }
+
+    pub fn get_latest_transform(&self) -> Option<&StampedTransform<T>> {
+        if self.count == 0 {
+            return None;
+        }
+
+        let mut latest_time = None;
+        let mut latest_idx = 0;
+
+        for i in 0..self.count.min(N) {
+            if let Some(ref t) = self.transforms[i] {
+                if latest_time.is_none() || t.stamp > latest_time.unwrap() {
+                    latest_time = Some(t.stamp);
+                    latest_idx = i;
+                }
+            }
+        }
+
+        self.transforms[latest_idx].as_ref()
+    }
+
+    pub fn get_time_range(&self) -> Option<CuTimeRange> {
+        if self.count == 0 {
+            return None;
+        }
+
+        let mut min_time = None;
+        let mut max_time = None;
+
+        for i in 0..self.count.min(N) {
+            if let Some(ref t) = self.transforms[i] {
+                match (min_time, max_time) {
+                    (None, None) => {
+                        min_time = Some(t.stamp);
+                        max_time = Some(t.stamp);
+                    }
+                    (Some(min), Some(max)) => {
+                        if t.stamp < min {
+                            min_time = Some(t.stamp);
+                        }
+                        if t.stamp > max {
+                            max_time = Some(t.stamp);
+                        }
+                    }
+                    _ => unreachable!(),
+                }
+            }
+        }
+
+        Some(CuTimeRange {
+            start: min_time.unwrap(),
+            end: max_time.unwrap(),
+        })
+    }
+
+    pub fn get_transforms_in_range(
+        &self,
+        start_time: CuTime,
+        end_time: CuTime,
+    ) -> Vec<&StampedTransform<T>> {
+        let mut result = Vec::new();
+
+        for i in 0..self.count.min(N) {
+            if let Some(ref t) = self.transforms[i] {
+                if t.stamp >= start_time && t.stamp <= end_time {
+                    result.push(t);
+                }
+            }
+        }
+
+        result.sort_by_key(|t| t.stamp);
+        result
+    }
+
+    pub fn get_closest_transform(&self, time: CuTime) -> Option<&StampedTransform<T>> {
+        if self.count == 0 {
+            return None;
+        }
+
+        let mut closest_diff = None;
+        let mut closest_idx = 0;
+
+        for i in 0..self.count.min(N) {
+            if let Some(ref t) = self.transforms[i] {
+                let diff = if t.stamp.as_nanos() > time.as_nanos() {
+                    t.stamp.as_nanos() - time.as_nanos()
+                } else {
+                    time.as_nanos() - t.stamp.as_nanos()
+                };
+
+                if closest_diff.is_none() || diff < closest_diff.unwrap() {
+                    closest_diff = Some(diff);
+                    closest_idx = i;
+                }
+            }
+        }
+
+        self.transforms[closest_idx].as_ref()
+    }
+}
+
+impl<T: Copy + Debug + 'static, const N: usize> Default for ConstTransformBuffer<T, N> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<T: Copy + Debug + 'static> TransformBufferInternal<T> {
@@ -791,5 +954,141 @@ mod tests {
         assert_relative_eq!(vel.angular[0], 0.0, epsilon = 1e-5);
         assert_relative_eq!(vel.angular[1], 0.0, epsilon = 1e-5);
         assert_relative_eq!(vel.angular[2], 1.0, epsilon = 1e-5); // Using actual test value
+    }
+
+    #[test]
+    fn test_const_transform_buffer_basic() {
+        let mut buffer = ConstTransformBuffer::<f32, 10>::new();
+
+        let transform = StampedTransform {
+            transform: Transform3D::default(),
+            stamp: CuDuration(1000),
+            parent_frame: "world".to_string(),
+            child_frame: "robot".to_string(),
+        };
+
+        buffer.add_transform(transform);
+
+        let latest = buffer.get_latest_transform();
+        assert!(latest.is_some());
+        assert_eq!(latest.unwrap().stamp.as_nanos(), 1000);
+    }
+
+    #[test]
+    fn test_const_transform_buffer_ordering() {
+        let mut buffer = ConstTransformBuffer::<f32, 10>::new();
+
+        let transform1 = StampedTransform {
+            transform: Transform3D::default(),
+            stamp: CuDuration(2000),
+            parent_frame: "world".to_string(),
+            child_frame: "robot".to_string(),
+        };
+
+        let transform2 = StampedTransform {
+            transform: Transform3D::default(),
+            stamp: CuDuration(1000),
+            parent_frame: "world".to_string(),
+            child_frame: "robot".to_string(),
+        };
+
+        let transform3 = StampedTransform {
+            transform: Transform3D::default(),
+            stamp: CuDuration(3000),
+            parent_frame: "world".to_string(),
+            child_frame: "robot".to_string(),
+        };
+
+        buffer.add_transform(transform1);
+        buffer.add_transform(transform2);
+        buffer.add_transform(transform3);
+
+        let range = buffer.get_time_range().unwrap();
+        assert_eq!(range.start.as_nanos(), 1000);
+        assert_eq!(range.end.as_nanos(), 3000);
+
+        let transforms = buffer.get_transforms_in_range(CuDuration(1500), CuDuration(2500));
+        assert_eq!(transforms.len(), 1);
+        assert_eq!(transforms[0].stamp.as_nanos(), 2000);
+    }
+
+    #[test]
+    fn test_const_transform_buffer_capacity() {
+        let mut buffer = ConstTransformBuffer::<f32, 2>::new();
+
+        let transform1 = StampedTransform {
+            transform: Transform3D::default(),
+            stamp: CuDuration(1000),
+            parent_frame: "world".to_string(),
+            child_frame: "robot".to_string(),
+        };
+
+        let transform2 = StampedTransform {
+            transform: Transform3D::default(),
+            stamp: CuDuration(2000),
+            parent_frame: "world".to_string(),
+            child_frame: "robot".to_string(),
+        };
+
+        let transform3 = StampedTransform {
+            transform: Transform3D::default(),
+            stamp: CuDuration(3000),
+            parent_frame: "world".to_string(),
+            child_frame: "robot".to_string(),
+        };
+
+        buffer.add_transform(transform1);
+        buffer.add_transform(transform2);
+        buffer.add_transform(transform3);
+
+        // With capacity 2, we should still have access to transforms
+        let latest = buffer.get_latest_transform();
+        assert!(latest.is_some());
+
+        // Should be able to find closest transforms
+        let closest = buffer.get_closest_transform(CuDuration(2500));
+        assert!(closest.is_some());
+    }
+
+    #[test]
+    fn test_const_transform_buffer_closest() {
+        let mut buffer = ConstTransformBuffer::<f32, 10>::new();
+
+        let transform1 = StampedTransform {
+            transform: Transform3D::default(),
+            stamp: CuDuration(1000),
+            parent_frame: "world".to_string(),
+            child_frame: "robot".to_string(),
+        };
+
+        let transform2 = StampedTransform {
+            transform: Transform3D::default(),
+            stamp: CuDuration(3000),
+            parent_frame: "world".to_string(),
+            child_frame: "robot".to_string(),
+        };
+
+        buffer.add_transform(transform1);
+        buffer.add_transform(transform2);
+
+        let closest = buffer.get_closest_transform(CuDuration(1000));
+        assert!(closest.is_some());
+        assert_eq!(closest.unwrap().stamp.as_nanos(), 1000);
+
+        let closest = buffer.get_closest_transform(CuDuration(500));
+        assert!(closest.is_some());
+        assert_eq!(closest.unwrap().stamp.as_nanos(), 1000);
+
+        let closest = buffer.get_closest_transform(CuDuration(4000));
+        assert!(closest.is_some());
+        assert_eq!(closest.unwrap().stamp.as_nanos(), 3000);
+
+        let closest = buffer.get_closest_transform(CuDuration(1900));
+        assert!(closest.is_some());
+        assert_eq!(closest.unwrap().stamp.as_nanos(), 1000); // Closer to 1000 than 3000
+
+        let closest = buffer.get_closest_transform(CuDuration(2100));
+        assert!(closest.is_some());
+        assert_eq!(closest.unwrap().stamp.as_nanos(), 3000); // Closer to 3000 than 1000
     }
 }

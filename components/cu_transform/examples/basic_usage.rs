@@ -1,6 +1,9 @@
 use cu29::clock::CuDuration;
 use cu_spatial_payloads::Transform3D;
-use cu_transform::{RobotFrame, TypedTransformBuffer, TypedTransformMsg, WorldFrame};
+use cu_transform::{
+    ConstTransformBuffer, RobotFrame, StampedTransform, TypedTransformBuffer, TypedTransformMsg,
+    WorldFrame,
+};
 
 fn main() {
     // Example using the new typed transform approach
@@ -16,7 +19,7 @@ fn main() {
     transform.mat[0][3] = 1.0; // X translation
     transform.mat[1][3] = 2.0; // Y translation
 
-    let world_to_robot_msg = TypedTransformMsg::new(transform, CuDuration(1000));
+    let world_to_robot_msg = TypedTransformMsg::new(transform.clone(), CuDuration(1000));
 
     println!(
         "Created transform from {} to {}",
@@ -88,4 +91,37 @@ fn main() {
             }
         }
     }
+
+    // Demonstrate the new constant-size buffer (no dynamic allocation)
+    println!("\n\nConstant-Size Buffer Demo (Stack Allocated)");
+    println!("===========================================");
+
+    let mut const_buffer: ConstTransformBuffer<f32, 5> = ConstTransformBuffer::new();
+
+    // Add some stamped transforms
+    let stamped_transform = StampedTransform {
+        transform: transform.clone(),
+        stamp: CuDuration(1000),
+        parent_frame: "world".to_string(),
+        child_frame: "robot".to_string(),
+    };
+
+    const_buffer.add_transform(stamped_transform);
+
+    if let Some(latest_stamped) = const_buffer.get_latest_transform() {
+        println!("Latest transform in constant buffer:");
+        println!(
+            "  From: {} to: {}",
+            latest_stamped.parent_frame, latest_stamped.child_frame
+        );
+        println!("  Time: {}", latest_stamped.stamp.as_nanos());
+        println!(
+            "  Translation: [{}, {}, {}]",
+            latest_stamped.transform.mat[0][3],
+            latest_stamped.transform.mat[1][3],
+            latest_stamped.transform.mat[2][3]
+        );
+    }
+
+    println!("\nThis buffer is stack-allocated with capacity 5 - no heap allocation!");
 }
