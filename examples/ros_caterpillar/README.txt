@@ -1,27 +1,18 @@
 This a ROS2 comparison for the caterpillar example.
 
-Tried: humble, impossible to compile because of SIP, tried git, impossible to compile.
+Note: ROS2 basically only compiles on specific OS so you need to use a VM or Docker container.
 
-On Arch Linux: 
-- paru -S ros2-arch-deps
-needed to clone ros2-iron 
-git clone https://aur.archlinux.org/ros2-iron.git
+# install docker on your system
+docker pull osrf/ros:jazzy-desktop
 
-then patch PKGBUILD before colcon build with: 
-printf '{ "names": { "tracetools" : { "cmake-args": ["-DTRACETOOLS_TRACEPOINTS_EXCLUDED=ON"]}}}' > colcon.meta
+# be sure you are in this directory
 
-# on armv7 you need to remove the option -mno-omit-leaf-frame-pointer from the C flags in /etc/makepkg.conf
+cd ~/[path_to_copper]/examples/ros_caterpillar
 
-- makepkg -si
-On an RPi it will take an eternity to compile.
+docker run --rm -it -v "$PWD":/ros2_ws -w /ros2_ws osrf/ros:jazzy-desktop ./run.sh
 
-Then in this directory:
-export ROS_DOMAIN_ID=42
-source /opt/ros/iron/setup.zsh   # or .bash
-colcon build
+# the run script will clean, rebuild and start all the nodes.
 
-# then again a this
-source install/setup.zsh
 
 
 
