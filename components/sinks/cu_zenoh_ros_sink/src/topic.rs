@@ -5,7 +5,9 @@ use zenoh::key_expr::KeyExpr;
 use crate::{format_keyexpr, node::Node};
 
 // ROS Humble does not support hash
-const UNSUPPORTED_HASH: &str = "TypeHashNotSupported";
+// const UNSUPPORTED_HASH: &str = "TypeHashNotSupported";
+const UNSUPPORTED_HASH: &str =
+    "RIHS01_26525065a403d972cb672f0777e333f0c799ad444ae5fcd79e43d1e73bd0f440";
 
 pub struct Topic<'a> {
     name: &'a str,
