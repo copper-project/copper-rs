@@ -9,7 +9,8 @@ class FlipNode : public rclcpp::Node {
 public:
     FlipNode() : Node("flip_node"), flip_count_(0) {
         publisher_ = this->create_publisher<std_msgs::msg::Bool>("flip_topic_1", 10);
-        timer_ = this->create_wall_timer(1ms, std::bind(&FlipNode::timer_callback, this));
+        timer_ = this->create_wall_timer(100ms, std::bind(&FlipNode::timer_callback, this));
+        RCLCPP_INFO(this->get_logger(), "Publisher ready: %s", publisher_->get_topic_name());
     }
 
 private:
@@ -21,9 +22,6 @@ private:
         RCLCPP_INFO(this->get_logger(), "Start chain. TS: %ld", duration);
         publisher_->publish(message);
         flip_count_++;
-        if (flip_count_ >= 2) {  // Flip twice for measurement
-            timer_->cancel();
-        }
     }
 
     rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr publisher_;

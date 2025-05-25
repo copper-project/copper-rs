@@ -14,11 +14,12 @@ public:
             input_topic, 10, std::bind(&PropagateNode::topic_callback, this, std::placeholders::_1));
         publisher_ = this->create_publisher<std_msgs::msg::Bool>(output_topic, 10);
         actuation_publisher_ = this->create_publisher<std_msgs::msg::Bool>(node_name + "_actuation", 10);
+	RCLCPP_INFO(this->get_logger(), "Subscribed to: %s", input_topic.c_str());
     }
 
 private:
     void topic_callback(const std_msgs::msg::Bool::SharedPtr msg) {
-        // RCLCPP_INFO(this->get_logger(), "Propagating boolean %s", msg->data ? "true" : "false");
+        RCLCPP_INFO(this->get_logger(), "Propagating boolean %s", msg->data ? "true" : "false");
         actuation_publisher_->publish(*msg);  // Actuate GPIO
         publisher_->publish(*msg);  // Propagate the same value to the next node
     }
