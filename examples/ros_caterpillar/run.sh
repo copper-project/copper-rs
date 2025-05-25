@@ -1,7 +1,15 @@
-#!/usr/bin/env zsh
+#!/usr/bin/env bash
 
-source /opt/ros/iron/setup.zsh
-source install/setup.zsh
+## !!! this needs to be run in the target environment of ROS2, e.g. in a docker container with ROS2 installed or target machine.
+
+# Clean up previous builds and installations
+rm -rf build/ install/ log/
+
+# build
+colcon build
+source install/setup.bash
+
+export ROS_DOMAIN_ID=42
 
 echo "Starting all nodes..."
 ros2 run gpio_caterpillar propagate_node gpio_node_1 flip_topic_1 flip_topic_2 &
