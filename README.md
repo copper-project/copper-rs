@@ -1,8 +1,7 @@
-<img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/static/cu29.png?raw=true" alt="logo"/>
-
-#
-
-# <strong style="color: #b87333;">Copper Runtime & SDK</strong>
+<div style="display: flex; align-items: center; gap: 1rem;">
+  <img src="https://github.com/copper-project/copper-rs/blob/master/doc/static/cu29.png?raw=true" alt="logo" width="60" />
+  <h1 style="margin: 0;">Copper Runtime & SDK</h1>
+</div>
 
 [![copper](https://github.com/gbin/copper-project/actions/workflows/general.yml/badge.svg)](https://github.com/gbin/copper-project/actions/workflows/general.yml)
 ![GitHub last commit](https://img.shields.io/github/last-commit/copper-project/copper-rs)
@@ -19,11 +18,11 @@
   </em>
 </blockquote>
 
-<p><strong style="color: #b87333;">User Friendly</strong>: Copper offers a high-level configuration system and a natural Rust-first API.</p>
-<p><strong style="color: #b87333;">Fast</strong>: Copper uses Rust's zero-cost abstractions and a data-oriented approach to achieve sub-microsecond latency on commodity hardware, avoiding heap allocation during execution.</p>
-<p><strong style="color: #b87333;">Deterministic</strong>: When you replay a log, Copper will execute the same code with the same data in the same order, ensuring that your robot behaves consistently every time. <strong>No more test datasets that are flip flopping between runs!</strong></p>
-<p><strong style="color: #b87333;">Reliable</strong>: Copper leverages Rust's ownership, type system, and concurrency model to minimize bugs and ensure thread safety.</p>
-<p><strong style="color: #b87333;">Product Oriented</strong>: Copper aims to avoid late-stage infra integration issues by generating a very predictable runtime.</p>
+<p><strong style="color: #b87333;">🦀 User Friendly</strong>: Copper offers a high-level configuration system and a natural Rust-first API.</p>
+<p><strong style="color: #b87333;">🚀 Fast</strong>: Copper uses Rust's zero-cost abstractions and a data-oriented approach to achieve sub-microsecond latency on commodity hardware, avoiding heap allocation during execution.</p>
+<p><strong style="color: #b87333;">⏱️ Deterministic</strong>: When you replay a log, Copper will execute the same code with the same data in the same order, ensuring that your robot behaves consistently every time. <strong>No more test datasets that are flip flopping between runs!</strong></p>
+<p><strong style="color: #b87333;">🛡️ Reliable</strong>: Copper leverages Rust's ownership, type system, and concurrency model to minimize bugs and ensure thread safety.</p>
+<p><strong style="color: #b87333;">📦 Built to ship</strong>: Copper aims to avoid late-stage infra integration issues by generating a very predictable runtime.</p>
 
 Copper has been tested on:
 <table style="border: 0; color: white; background-color: black; font-family: sans-serif;">
@@ -442,7 +441,7 @@ in C++ and Python.
 
 Let's talk about some of the benefits and differences between the two.
 
-### Performance
+### 🚀 Performance
 
 In the example directory, we have 2 equivalent applications. One written in C++ for ROS and a port in Rust with Copper.
 
