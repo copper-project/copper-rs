@@ -1,7 +1,9 @@
-<div style="display: flex; align-items: center; gap: 1rem;">
-  <img src="https://github.com/copper-project/copper-rs/blob/master/doc/static/cu29.png?raw=true" alt="logo" width="60" />
-  <h1 style="margin: 0;">Copper Runtime & SDK</h1>
-</div>
+<table style="border: 0;">
+<tr style="border: 0;">
+<td style="border: 0;"><img src="https://github.com/copper-project/copper-rs/blob/master/doc/static/cu29.png?raw=true" width="60" /></td>
+<td style="border: 0;"><h1 style="margin: 0; color: #b87333;">Copper Runtime & SDK</h1></td>
+</tr>
+</table>
 
 [![copper](https://github.com/gbin/copper-project/actions/workflows/general.yml/badge.svg)](https://github.com/gbin/copper-project/actions/workflows/general.yml)
 ![GitHub last commit](https://img.shields.io/github/last-commit/copper-project/copper-rs)
@@ -110,7 +112,7 @@ The source code for this demo is available in the [examples/cu_rp_balancebot](ex
 7. **Simulation**: We have a simple simulation environment to test your robot. Test your robot before the hardware is
    built and try out your robot the first time without risking a real crash.
 
-### Growing list of readily avaible Components
+### Growing list of readily available Components
 
 <table style="border-collapse:collapse; width:100%;">
   <thead style="background:#1f3f1f; color:white;">
