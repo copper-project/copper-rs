@@ -6,7 +6,6 @@
 [![dependency status](https://deps.rs/repo/github/copper-project/copper-rs/status.svg)](https://deps.rs/repo/github/copper-project/copper-rs)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Discord](https://img.shields.io/discord/1305916875741597826?logo=discord)](https://discord.gg/VkCG7Sb9Kw)
-[<img src="https://devin.ai/assets/askdeepwiki.png" alt="Ask http://DeepWiki.com" height="20"/>](https://deepwiki.com/copper-project/copper-rs)
 
 <blockquote>
 🤖&nbsp&nbsp&nbsp&nbsp
