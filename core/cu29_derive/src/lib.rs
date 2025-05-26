@@ -17,9 +17,10 @@ use cu29_runtime::curuntime::{
     compute_runtime_plan, find_task_type_for_id, CuExecutionLoop, CuExecutionUnit, CuTaskType,
 };
 use cu29_traits::CuResult;
-
-use crate::format::{highlight_rust_code, rustfmt_generated_code};
 use proc_macro2::{Ident, Span};
+
+#[cfg(feature = "macro_debug")]
+use crate::format::{highlight_rust_code, rustfmt_generated_code};
 
 mod format;
 mod utils;
@@ -348,7 +349,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         #[cfg(feature = "macro_debug")]
         eprintln!("[extract tasks ids & types]");
         let (all_tasks_ids, all_tasks_cutype, all_tasks_types_names, all_tasks_types) =
-            extract_tasks_types(&graph);
+            extract_tasks_types(graph);
 
         let all_sim_tasks_types: Vec<Type> = all_tasks_ids
             .iter()
