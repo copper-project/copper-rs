@@ -20,15 +20,25 @@ macro_rules! ros_type_name {
 pub trait RosMsgAdapter<'a>: Sized {
     type Output: Serialize + for<'b> From<&'b Self>;
 
+    /// The namespace of the ROS message, such as "std_msgs" or "sensor_msgs".
     fn namespace() -> &'a str;
+
+    /// The type name of the ROS message, such as "Int8" or "PointCloud2".
     fn type_name() -> &'a str {
         ros_type_name!(Self::Output)
     }
 
-    /// This hash is generated from an MD5 from the IDL.
+    /// This hash is generated from an SHA256 from the IDL.
+    /// It is obscure.
     /// For example Int8 is "RIHS01_26525065a403d972cb672f0777e333f0c799ad444ae5fcd79e43d1e73bd0f440"
     fn type_hash() -> &'a str;
 
+    /// Converts the current Copper type into the corresponding ROS message type.
+    ///
+    /// # Returns
+    /// A tuple containing:
+    /// - The converted ROS message type (`Self::Output`).
+    /// - The type hash as a string, which is used to identify the message type in ROS.
     fn convert(&self) -> (Self::Output, String) {
         (self.into(), Self::type_hash().into())
     }
