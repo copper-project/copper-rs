@@ -218,7 +218,7 @@ The source code for this demo is available in the [examples/cu_rp_balancebot](ex
     <tr style="background:#111;">
       <td rowspan="1">Bridges</td>
       <td style="padding:8px; border:1px solid #444;">ROS2 (Humble+)</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://github.com/copper-project/copper-rs/blob/master/components/sinks/cu_zenoh_ros_sink/doc/ros2.png?raw=true"/></td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://github.com/copper-project/copper-rs/blob/master/components/sinks/cu_zenoh_ros_sink/doc/ROS2.png?raw=true"/></td>
       <td style="padding:8px; border:1px solid #444;">ROS2 Bridge (over Zenoh)<br/><a href="components/sinks/cu_zenoh_ros_sink">sink</a></td>
       <td style="padding:8px; border:1px solid #444;"><code>cu-zenoh-ros-sink</code></td>
     </tr>
