@@ -18,8 +18,7 @@ use cu29_runtime::curuntime::{
 };
 use cu29_traits::CuResult;
 
-#[cfg(feature = "macro_debug")]
-use format::{highlight_rust_code, rustfmt_generated_code};
+use crate::format::{highlight_rust_code, rustfmt_generated_code};
 use proc_macro2::{Ident, Span};
 
 mod format;
@@ -293,15 +292,53 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         Err(e) => return return_error(format!("Could not read the config file (should not happen because we just succeeded just before). {e}"))
     };
 
+    #[cfg(feature = "macro_debug")]
+    eprintln!("[build monitor type]");
+    let monitor_type = if let Some(monitor_config) = copper_config.get_monitor_config() {
+        let monitor_type = parse_str::<Type>(monitor_config.get_type())
+            .expect("Could not transform the monitor type name into a Rust type.");
+        quote! { #monitor_type }
+    } else {
+        quote! { NoMonitor }
+    };
+
+    // This is common for all the mission as it will be inserted in the respective modules with their local CuTasks, CuMsgs etc...
+    #[cfg(feature = "macro_debug")]
+    eprintln!("[build runtime field]");
+    // add that to a new field
+    let runtime_field: Field = if sim_mode {
+        parse_quote! {
+            copper_runtime: cu29::curuntime::CuRuntime<CuSimTasks, CuMsgs, #monitor_type, #DEFAULT_CLNB>
+        }
+    } else {
+        parse_quote! {
+            copper_runtime: cu29::curuntime::CuRuntime<CuTasks, CuMsgs, #monitor_type, #DEFAULT_CLNB>
+        }
+    };
+
+    #[cfg(feature = "macro_debug")]
+    eprintln!("[match struct anonymity]");
+    match &mut application_struct.fields {
+        Named(fields_named) => {
+            fields_named.named.push(runtime_field);
+        }
+        Unnamed(fields_unnamed) => {
+            fields_unnamed.unnamed.push(runtime_field);
+        }
+        Fields::Unit => {
+            panic!("This struct is a unit struct, it should have named or unnamed fields. use struct Something {{}} and not struct Something;")
+        }
+    };
+
     let all_missions = copper_config.graphs.get_all_missions_graphs();
     let mut all_missions_tokens = Vec::<proc_macro2::TokenStream>::new();
-    for (mission, graph) in all_missions {
+    for (mission, graph) in &all_missions {
         let mission_mod = parse_str::<Ident>(mission.as_str())
             .expect("Could not make an identifier of the mission name");
 
         #[cfg(feature = "macro_debug")]
         eprintln!("[runtime plan for mission {mission}]");
-        let runtime_plan: CuExecutionLoop = match compute_runtime_plan(&graph) {
+        let runtime_plan: CuExecutionLoop = match compute_runtime_plan(graph) {
             Ok(plan) => plan,
             Err(e) => return return_error(format!("Could not compute runtime plan: {e}")),
         };
@@ -346,43 +383,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         let task_types_tuple_sim: TypeTuple = parse_quote! {
             (#(#all_sim_tasks_types),*,)
-        };
-
-        #[cfg(feature = "macro_debug")]
-        eprintln!("[build monitor type]");
-        let monitor_type = if let Some(monitor_config) = copper_config.get_monitor_config() {
-            let monitor_type = parse_str::<Type>(monitor_config.get_type())
-                .expect("Could not transform the monitor type name into a Rust type.");
-            quote! { #monitor_type }
-        } else {
-            quote! { NoMonitor }
-        };
-
-        #[cfg(feature = "macro_debug")]
-        eprintln!("[build runtime field]");
-        // add that to a new field
-        let runtime_field: Field = if sim_mode {
-            parse_quote! {
-                copper_runtime: cu29::curuntime::CuRuntime<#mission_mod::CuSimTasks, #mission_mod::CuMsgs, #monitor_type, #DEFAULT_CLNB>
-            }
-        } else {
-            parse_quote! {
-                copper_runtime: cu29::curuntime::CuRuntime<#mission_mod::CuTasks, #mission_mod::CuMsgs, #monitor_type, #DEFAULT_CLNB>
-            }
-        };
-
-        #[cfg(feature = "macro_debug")]
-        eprintln!("[match struct anonymity]");
-        match &mut application_struct.fields {
-            Named(fields_named) => {
-                fields_named.named.push(runtime_field);
-            }
-            Unnamed(fields_unnamed) => {
-                fields_unnamed.unnamed.push(runtime_field);
-            }
-            Fields::Unit => {
-                panic!("This struct is a unit struct, it should have named or unnamed fields. use struct Something {{}} and not struct Something;")
-            }
         };
 
         #[cfg(feature = "macro_debug")]
@@ -1311,12 +1311,18 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
 
         };
+        eprintln!("Push mission mod tokens for mission: {}", mission);
+
         all_missions_tokens.push(mission_mod_tokens);
     }
 
-    let default_application_tokens = quote! {
-            use default::#builder_name;
-            use default::#application_name;
+    let default_application_tokens = if all_missions.contains_key("default") {
+        quote! {
+        use default::#builder_name;
+        use default::#application_name;
+        }
+    } else {
+        quote! {}
     };
 
     let result: proc_macro2::TokenStream = quote! {
