@@ -20,8 +20,8 @@ cu29-helpers = { workspace = true }
 bincode = { workspace = true }  # needed
 tempfile = { workspace = true }
 
-cu-consolemon = { path = "../../components/monitors/cu_consolemon" , version = "0.7.0"}  # needed
-cu-rp-gpio = { path = "../../components/sinks/cu_rp_gpio" , version = "0.7.0"}
-cu-caterpillar = { path = "../cu_caterpillar" , version = "0.7.0"}  # needed
-cu-iceoryx2-sink = { path = "../../components/sinks/cu_iceoryx2_sink" , version = "0.7.0"}
-cu-iceoryx2-src = { path = "../../components/sources/cu_iceoryx2_src" , version = "0.7.0"}
+cu-consolemon = { path = "../../components/monitors/cu_consolemon" , version = "0.8.0"}  # needed
+cu-rp-gpio = { path = "../../components/sinks/cu_rp_gpio" , version = "0.8.0"}
+cu-caterpillar = { path = "../cu_caterpillar" , version = "0.8.0"}  # needed
+cu-iceoryx2-sink = { path = "../../components/sinks/cu_iceoryx2_sink" , version = "0.8.0"}
+cu-iceoryx2-src = { path = "../../components/sources/cu_iceoryx2_src" , version = "0.8.0"}
