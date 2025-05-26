@@ -14,3 +14,6 @@ description = "ROS2 Payloads that can be constructed from/to Copper Payloads for
 compact_str = { workspace = true }
 serde = { workspace = true }
 cu-sensor-payloads = { workspace = true }
+
+[features]
+humble = [] # Activate for ROS2 Humble, disable for later versions

@@ -31,7 +31,8 @@ pub trait RosMsgAdapter<'a>: Sized {
     /// This hash is generated from an SHA256 from the IDL.
     /// It is obscure.
     /// For example Int8 is "RIHS01_26525065a403d972cb672f0777e333f0c799ad444ae5fcd79e43d1e73bd0f440"
-    fn type_hash() -> &'a str;
+    /// This will only be used in ROS 2 Iron and later versions.
+    fn type_hash() -> &'static str;
 
     /// Converts the current Copper type into the corresponding ROS message type.
     ///
@@ -39,7 +40,13 @@ pub trait RosMsgAdapter<'a>: Sized {
     /// A tuple containing:
     /// - The converted ROS message type (`Self::Output`).
     /// - The type hash as a string, which is used to identify the message type in ROS.
-    fn convert(&self) -> (Self::Output, String) {
-        (self.into(), Self::type_hash().into())
+    #[cfg(not(feature = "humble"))]
+    fn convert(&self) -> (Self::Output, &'static str) {
+        (self.into(), Self::type_hash())
+    }
+
+    #[cfg(feature = "humble")]
+    fn convert(&self) -> (Self::Output, &str) {
+        (self.into(), "TypeHashNotSupported")
     }
 }
