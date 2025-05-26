@@ -14,6 +14,11 @@ impl RosMsgAdapter<'static> for i8 {
     fn namespace() -> &'static str {
         "std_msgs"
     }
+
+    fn type_hash() -> String {
+        // If you value your own sanity, NEVER attempt to compute this bullshit.
+        "RIHS01_26525065a403d972cb672f0777e333f0c799ad444ae5fcd79e43d1e73bd0f440".into()
+    }
 }
 
 impl From<&i8> for Int8 {
@@ -29,7 +34,7 @@ mod tests {
     #[test]
     fn test_adapter_type_info() {
         let x: i8 = 42;
-        let msg = x.convert();
+        let (msg, _) = x.convert();
         assert_eq!(msg.data, 42);
         assert_eq!(<i8 as RosMsgAdapter>::namespace(), "std_msgs");
         assert_eq!(<i8 as RosMsgAdapter>::type_name(), "Int8");

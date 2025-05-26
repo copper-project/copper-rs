@@ -17,14 +17,19 @@ macro_rules! ros_type_name {
 /// The output type must match the structure of the related "msg" file.
 /// The namespace relates to the ROS namespace (such as "std_msgs")
 /// and the type name is the same as the message filename.
-pub trait RosMsgAdapter<'a>: std::marker::Sized {
+pub trait RosMsgAdapter<'a>: Sized {
     type Output: Serialize + for<'b> From<&'b Self>;
 
     fn namespace() -> &'a str;
     fn type_name() -> &'a str {
         ros_type_name!(Self::Output)
     }
-    fn convert(&self) -> Self::Output {
-        self.into()
+
+    /// This hash is generated from an MD5 from the IDL.
+    /// For example Int8 is "RIHS01_26525065a403d972cb672f0777e333f0c799ad444ae5fcd79e43d1e73bd0f440"
+    fn type_hash() -> String;
+
+    fn convert(&self) -> (Self::Output, String) {
+        (self.into(), Self::type_hash())
     }
 }

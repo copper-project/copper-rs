@@ -4,15 +4,10 @@ use zenoh::key_expr::KeyExpr;
 
 use crate::{format_keyexpr, node::Node};
 
-// ROS Humble does not support hash
-// const UNSUPPORTED_HASH: &str = "TypeHashNotSupported";
-const UNSUPPORTED_HASH: &str =
-    "RIHS01_26525065a403d972cb672f0777e333f0c799ad444ae5fcd79e43d1e73bd0f440";
-
 pub struct Topic<'a> {
     name: &'a str,
     type_name: String,
-    hash: &'a str,
+    type_hash: String,
 }
 
 impl<'a> Topic<'a> {
@@ -23,8 +18,7 @@ impl<'a> Topic<'a> {
         Self {
             name,
             type_name: get_dds_type_name::<T>(),
-            // TODO implement hash for other ROS distribution
-            hash: UNSUPPORTED_HASH,
+            type_hash: T::type_hash().into(),
         }
     }
 
@@ -37,7 +31,7 @@ impl<'a> Topic<'a> {
     }
 
     pub fn hash(&self) -> &str {
-        self.hash
+        self.type_hash.as_ref()
     }
 
     pub fn qos(&self) -> &str {

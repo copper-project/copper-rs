@@ -13,5 +13,4 @@ description = "Sepcial copper payloads designed to be ROS compatible"
 [dependencies]
 compact_str = { workspace = true }
 serde = { workspace = true }
-cu29-value = { workspace = true }
 cu-sensor-payloads = { workspace = true }
