@@ -1312,8 +1312,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
 
         };
-        eprintln!("Push mission mod tokens for mission: {}", mission);
-
         all_missions_tokens.push(mission_mod_tokens);
     }
 

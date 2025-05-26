@@ -41,7 +41,7 @@ impl<'cl> CuTask<'cl> for ExampleTaskA {
         input: Self::Input,
         output: Self::Output,
     ) -> CuResult<()> {
-        debug!("Procession from Mission A.");
+        debug!("Processing from Mission A.");
         output.set_payload(input.payload().unwrap() + 1);
         Ok(())
     }
@@ -68,7 +68,7 @@ impl<'cl> CuTask<'cl> for ExampleTaskB {
         input: Self::Input,
         output: Self::Output,
     ) -> CuResult<()> {
-        debug!("Procession from Mission B.");
+        debug!("Processing from Mission B.");
         output.set_payload(input.payload().unwrap() + 1);
         Ok(())
     }

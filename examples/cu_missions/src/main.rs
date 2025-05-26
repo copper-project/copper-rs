@@ -35,7 +35,7 @@ fn main() {
         .start_all_tasks()
         .expect("Failed to start application.");
 
-    // It the real world, exect this as many times as needed
+    // In the real world, execute this as many times as needed
     application_a
         .run_one_iteration()
         .expect("Failed to run application.");
@@ -52,7 +52,7 @@ fn main() {
         .start_all_tasks()
         .expect("Failed to start application.");
 
-    // It the real world, exect this as many times as needed
+    // In the real world, execute this as many times as needed
     application_b
         .run_one_iteration()
         .expect("Failed to run application.");
