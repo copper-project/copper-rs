@@ -55,7 +55,7 @@ Dumping ALL the traffic:
 zenoh subscribe -k '0/output/**'
 ```
 0 is the ROS2 domain
+output is the name of the topic
 
-Those key mappings hidden in the ** are straight from a psychatric asylum with QOS, type hash, the baby, the bathwater.
-
+It is followed with some mangled things like the RIHS01 an and QOS.
 
