@@ -468,7 +468,7 @@ thousand cuts" that can happen in a complex system.
 
 ### Release Notes
 
-You can find the release notes [here](https://github.com/copper-project/copper-rs/wiki/Copper-Release-Log).
+You can find the full release notes [here](https://github.com/copper-project/copper-rs/wiki/Copper-Release-Log).
 
 ### Roadmap
 
@@ -476,15 +476,19 @@ You can find the release notes [here](https://github.com/copper-project/copper-r
 > We are looking for contributors to help us build the best robotics framework possible. If you are interested, please
 > join us on [Discord](https://discord.gg/VkCG7Sb9Kw) or open an issue.
 
-Here are some of the features we plan to implement next, if you are interested in contributing
+Here are some of the features we just release and some we plan to implement next, if you are interested in contributing
 on any of those, please let us know!:
 
 - [x] **Buffer Pools**: Implement a large buffer (Host or Device/GPU) pools for 0 copy large inter-task transfers.
-- [ ] **Log Compression & Selection**: Implement a pluggable compression system for logs and its resim counterpart.
-  For example to encode video from images. Selection is about NOT logging something if it is not needed.
 - [x] **Missions**: Implement a way to have multiple DAGS in the RON configuration file and have a centralized way to
   switch from one to another. This is useful for running the stack for a specific mission: for example Data acquisition
   missiom, Full autonomy mission, Charging, etc.
+- [x] **Modular Configuration**: As robots built with Copper gain complexity, users will need to build "variations" of
+  their robots without duplicating their entire RON file.
+- [x] **ROS2/DDS interfacing**: Build a pair of sink and source to connect to existing [ROS2](https://github.com/ros2)
+  systems, helping users migrate their stack bit by bit.
+- [ ] **Log Compression & Selection**: Implement a pluggable compression system for logs and its resim counterpart.
+  For example to encode video from images. Selection is about NOT logging something if it is not needed.
 - [ ] **Microcontroller and RTOS support**: Modify all necessary Copper code packages to remove dependencies on the
   standard library (std) to support "no_std" (#![no_std])
   to support running the code on bare-metal on microcontrollers. This will allow a seamless environment for high level
@@ -492,11 +496,6 @@ on any of those, please let us know!:
   and low level tasks on MCUs (control, HW interfacing...).
 - [ ] **Parallel Copper Lists**: allow Copper lists to be executed in a staggered and parallel way to improve
   throughput.
-- [ ] **ROS2/DDS interfacing**: Build a pair of sink and source to connect to existing [ROS2](https://github.com/ros2)
-  systems, helping users
-  migrate their stack bit by bit.
-- [x] **Modular Configuration**: As robots built with Copper gain complexity, users will need to build "variations" of
-  their robots without duplicating their entire RON file.
 - [ ] **Extensible scheduling**: Enable a way to give hints to Copper to better schedule workloads at compile time.
 - [ ] **Swarm support**: Implement Zenoh to allow a swarm of robots powered by Copper to cooperate.
 - [ ] **MCAP support**: Allow the interfacing of Foxglove and [ROS](https://github.com/ros) ecosystems at the logging
