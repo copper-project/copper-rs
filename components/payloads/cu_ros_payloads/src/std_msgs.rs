@@ -15,9 +15,9 @@ impl RosMsgAdapter<'static> for i8 {
         "std_msgs"
     }
 
-    fn type_hash() -> String {
+    fn type_hash() -> &'static str {
         // If you value your own sanity, NEVER attempt to compute this bullshit.
-        "RIHS01_26525065a403d972cb672f0777e333f0c799ad444ae5fcd79e43d1e73bd0f440".into()
+        "RIHS01_26525065a403d972cb672f0777e333f0c799ad444ae5fcd79e43d1e73bd0f440"
     }
 }
 

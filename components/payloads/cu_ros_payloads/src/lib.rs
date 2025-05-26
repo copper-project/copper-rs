@@ -27,9 +27,9 @@ pub trait RosMsgAdapter<'a>: Sized {
 
     /// This hash is generated from an MD5 from the IDL.
     /// For example Int8 is "RIHS01_26525065a403d972cb672f0777e333f0c799ad444ae5fcd79e43d1e73bd0f440"
-    fn type_hash() -> String;
+    fn type_hash() -> &'a str;
 
     fn convert(&self) -> (Self::Output, String) {
-        (self.into(), Self::type_hash())
+        (self.into(), Self::type_hash().into())
     }
 }

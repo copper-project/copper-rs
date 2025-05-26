@@ -38,8 +38,8 @@ impl<const N: usize> RosMsgAdapter<'static> for PointCloudSoa<N> {
         "PointCloud2"
     }
 
-    fn type_hash() -> String {
-        "TODO".into() // FIXME
+    fn type_hash() -> &'static str {
+        "TODO" // FIXME
     }
 }
 
