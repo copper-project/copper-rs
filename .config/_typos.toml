@@ -4,4 +4,4 @@ ratatui = "ratatui"
 thr = "thr"
 
 [files]
-extend-exclude = ["patches/*", "components/payloads/cu_ros_payloads/all_rihs.md"]
+extend-exclude = ["patches/*", "components/payloads/cu_ros_payloads/**"]
