@@ -14,6 +14,10 @@ impl RosMsgAdapter<'static> for i8 {
     fn namespace() -> &'static str {
         "std_msgs"
     }
+
+    fn type_hash() -> &'static str {
+        "RIHS01_26525065a403d972cb672f0777e333f0c799ad444ae5fcd79e43d1e73bd0f440"
+    }
 }
 
 impl From<&i8> for Int8 {
@@ -29,9 +33,28 @@ mod tests {
     #[test]
     fn test_adapter_type_info() {
         let x: i8 = 42;
-        let msg = x.convert();
+        let (msg, _) = x.convert();
         assert_eq!(msg.data, 42);
         assert_eq!(<i8 as RosMsgAdapter>::namespace(), "std_msgs");
         assert_eq!(<i8 as RosMsgAdapter>::type_name(), "Int8");
+    }
+
+    #[test]
+    #[cfg(feature = "humble")]
+    fn test_humble() {
+        let x: i8 = 42;
+        let (_, hash) = x.convert();
+        assert_eq!(hash, "TypeHashNotSupported");
+    }
+
+    #[test]
+    #[cfg(not(feature = "humble"))]
+    fn test_not_humble() {
+        let x: i8 = 42;
+        let (_, hash) = x.convert();
+        assert_eq!(
+            hash,
+            "RIHS01_26525065a403d972cb672f0777e333f0c799ad444ae5fcd79e43d1e73bd0f440"
+        );
     }
 }

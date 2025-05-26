@@ -8,10 +8,12 @@ keywords.workspace = true
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
-description = "Sepcial copper payloads designed to be ROS compatible"
+description = "ROS2 Payloads that can be constructed from/to Copper Payloads for compatibility"
 
 [dependencies]
 compact_str = { workspace = true }
 serde = { workspace = true }
-cu29-value = { workspace = true }
 cu-sensor-payloads = { workspace = true }
+
+[features]
+humble = [] # Activate for ROS2 Humble, disable for later versions
