@@ -13,8 +13,8 @@ repository.workspace = true
 [dependencies]
 cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
-cu-caterpillar = { path = "../cu_caterpillar", version = "0.7.0" }
-cu-rp-gpio = { path = "../../components/sinks/cu_rp_gpio", version = "0.7.0" }
+cu-caterpillar = { path = "../cu_caterpillar", version = "0.8.0" }
+cu-rp-gpio = { path = "../../components/sinks/cu_rp_gpio", version = "0.8.0" }
 tempfile = { workspace = true }
 
 [package.metadata.cargo-machete]

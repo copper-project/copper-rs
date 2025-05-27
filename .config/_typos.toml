@@ -2,5 +2,6 @@
 mis = "mis"
 ratatui = "ratatui"
 thr = "thr"
+
 [files]
-extend-exclude = ["patches/*"]
+extend-exclude = ["patches/*", "components/payloads/cu_ros_payloads/**"]

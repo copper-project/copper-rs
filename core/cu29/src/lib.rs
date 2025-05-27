@@ -23,6 +23,7 @@ pub mod prelude {
     pub use cu29_log::*;
     pub use cu29_log_derive::*;
     pub use cu29_log_runtime::*;
+    pub use cu29_runtime::app::*;
     pub use cu29_runtime::config::*;
     pub use cu29_runtime::copperlist::*;
     pub use cu29_runtime::curuntime::*;

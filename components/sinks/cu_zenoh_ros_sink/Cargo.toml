@@ -1,0 +1,19 @@
+[package]
+name = "cu-zenoh-ros-sink"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "Copper sink task for ROS-compatible Zenoh messages."
+
+[dependencies]
+cu29 = { workspace = true }
+cu-ros-payloads = { workspace = true }
+serde = { workspace = true }
+zenoh = { version = "1.4.0" }
+zenoh-ext = { version = "1.4.0" }
+cdr = { version = "0.2.4" }

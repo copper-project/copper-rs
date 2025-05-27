@@ -1,0 +1,17 @@
+[package]
+name = "cu-missions"
+description = "This shows how to build a multimission configuration and switch from one mission to another."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+
+[dependencies]
+cu29 = { workspace = true, features = ["macro_debug", "log-level-debug"] }
+cu29-helpers = { workspace = true }
+tempfile = { workspace = true }

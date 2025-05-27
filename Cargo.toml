@@ -17,6 +17,7 @@ members = [
     "components/common/cu_msp_lib",
     "components/cu_transform",
     "components/monitors/cu_consolemon",
+    "components/payloads/cu_ros_payloads",
     "components/payloads/cu_sensor_payloads",
     "components/payloads/cu_spatial_payloads",
     "components/sinks/cu_iceoryx2_sink",
@@ -25,6 +26,7 @@ members = [
     "components/sinks/cu_rp_sn754410",
     "components/sinks/cu_lewansoul",
     "components/sinks/cu_zenoh_sink",
+    "components/sinks/cu_zenoh_ros_sink",
     "components/sources/cu_ads7883",
     "components/sources/cu_gstreamer",
     "components/sources/cu_hesai",
@@ -39,6 +41,7 @@ members = [
     "components/tasks/cu_apriltag",
     "components/tasks/cu_dynthreshold",
     "components/tasks/cu_pid",
+    "components/tasks/cu_ratelimit",
     "components/testing/cu_udp_inject",
     "examples/cu_caterpillar",
     "examples/cu_config_gen",
@@ -46,12 +49,13 @@ members = [
     "examples/cu_iceoryx2",
     "examples/cu_logging_size",
     "examples/cu_monitoring",
+    "examples/cu_missions",
     "examples/cu_multisources",
     "examples/cu_pointclouds",
     "examples/cu_rp_balancebot",
     "examples/cu_standalone_structlog",
-    "examples/cu_standalone_structlog",
     "examples/cu_zenoh",
+    "examples/cu_zenoh_ros",
 ]
 
 # put only the core crates here that are not platform specific
@@ -74,7 +78,7 @@ default-members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.7.0"
+version = "0.8.0"
 authors = ["Guillaume Binet <gbin@gootz.net>"]
 edition = "2021"
 license = "Apache-2.0"
@@ -89,23 +93,24 @@ no_individual_tags = true
 [workspace.dependencies]
 
 # Copper Core
-cu29 = { path = "core/cu29", version = "0.7.0" }
-cu29-clock = { path = "core/cu29_clock", version = "0.7.0" }
-cu29-derive = { path = "core/cu29_derive", version = "0.7.0" }
-cu29-export = { path = "core/cu29_export", version = "0.7.0" }
-cu29-helpers = { path = "core/cu29_helpers", version = "0.7.0" }
-cu29-intern-strs = { path = "core/cu29_intern_strs", version = "0.7.0" }
-cu29-log = { path = "core/cu29_log", version = "0.7.0" }
-cu29-log-derive = { path = "core/cu29_log_derive", version = "0.7.0" }
-cu29-log-runtime = { path = "core/cu29_log_runtime", version = "0.7.0" }
-cu29-runtime = { path = "core/cu29_runtime", version = "0.7.0" }
-cu29-soa-derive = { path = "core/cu29_soa_derive", version = "0.7.0" }
-cu29-traits = { path = "core/cu29_traits", version = "0.7.0" }
-cu29-unifiedlog = { path = "core/cu29_unifiedlog", version = "0.7.0" }
-cu29-value = { path = "core/cu29_value", version = "0.7.0" }
+cu29 = { path = "core/cu29", version = "0.8.0" }
+cu29-clock = { path = "core/cu29_clock", version = "0.8.0" }
+cu29-derive = { path = "core/cu29_derive", version = "0.8.0" }
+cu29-export = { path = "core/cu29_export", version = "0.8.0" }
+cu29-helpers = { path = "core/cu29_helpers", version = "0.8.0" }
+cu29-intern-strs = { path = "core/cu29_intern_strs", version = "0.8.0" }
+cu29-log = { path = "core/cu29_log", version = "0.8.0" }
+cu29-log-derive = { path = "core/cu29_log_derive", version = "0.8.0" }
+cu29-log-runtime = { path = "core/cu29_log_runtime", version = "0.8.0" }
+cu29-runtime = { path = "core/cu29_runtime", version = "0.8.0" }
+cu29-soa-derive = { path = "core/cu29_soa_derive", version = "0.8.0" }
+cu29-traits = { path = "core/cu29_traits", version = "0.8.0" }
+cu29-unifiedlog = { path = "core/cu29_unifiedlog", version = "0.8.0" }
+cu29-value = { path = "core/cu29_value", version = "0.8.0" }
 
 # Payload definitions
-cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads", version = "0.7.0" }
+cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads", version = "0.8.0" }
+cu-ros-payloads = { path = "components/payloads/cu_ros_payloads", version = "0.8.0" }
 
 # External serialization
 bincode = { version = "2.0.1", features = ["derive"] }
@@ -113,15 +118,15 @@ serde = { version = "1.0.219", features = ["derive"] }
 serde_derive = { version = "1.0.219", features = ["default"] }
 
 # External CLI
-clap = { version = "4.5.36", features = ["derive"] }
+clap = { version = "4.5.38", features = ["derive"] }
 
 # External proc macros
 proc-macro2 = { version = "1.0.95" }
 quote = "1.0.40"                                  # proc macros
-syn = { version = "2.0.100", features = ["full"] } # proc macros
+syn = { version = "2.0.101", features = ["full"] } # proc macros
 
 # Unit of measure to be consistent across the project
-uom = { version = "0.36.0", features = ["serde"] }
+uom = { version = "0.37.0", features = ["serde"] }
 
 # Compact strings support
 compact_str = { version = "0.9.0", features = ["serde"] }
@@ -130,13 +135,10 @@ compact_str = { version = "0.9.0", features = ["serde"] }
 derive_more = { version = "2.0.1", features = ["full"] }
 
 # used across testing
-tempfile = "3.19.1"
+tempfile = "3.20.0"
 
 # rerun
-rerun = { version = "0.23.0", default-features = false, features = ["sdk", "server", "log"] }
+rerun = { version = "0.23.2", default-features = false, features = ["sdk", "server", "log"] }
 
 # smallvec to avoid heap allocations
 smallvec = { version = "1.15.0", features = ["serde"] }
-
-[patch.crates-io]
-onig = { git = "https://github.com/rust-onig/rust-onig", rev = "25a950f0045600645d9f51da2b4f8b057cc017f1" }
