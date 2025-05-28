@@ -111,6 +111,9 @@ cu29-value = { path = "core/cu29_value", version = "0.8.0" }
 cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads", version = "0.8.0" }
 cu-ros-payloads = { path = "components/payloads/cu_ros_payloads", version = "0.8.0" }
 
+# Most structures are fixed size in Copper this is our base wrapper for strings and arrays
+arrayvec = { version = "0.7.6", features = ["serde"] }
+
 # External serialization
 bincode = { version = "2.0.1", features = ["derive"] }
 serde = { version = "1.0.219", features = ["derive"] }

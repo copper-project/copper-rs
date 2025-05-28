@@ -14,7 +14,7 @@ description = "AprilTag detection and pose for Copper"
 bincode = { workspace = true }
 cu29 = { workspace = true }
 serde = { workspace = true }
-arrayvec = "0.7.6"
+arrayvec = { workspace = true }
 cu-spatial-payloads = { path = "../../payloads/cu_spatial_payloads", version = "0.8.0" }
 cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "0.8.0" }
 

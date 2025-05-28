@@ -30,7 +30,7 @@ cu29-value = { workspace = true }
 cu29-clock = { workspace = true }
 clap = { workspace = true }
 tempfile = { workspace = true }
-arrayvec = "0.7.6"
+arrayvec = { workspace = true }
 smallvec = { workspace = true }
 ron = "0.10.1"
 hdrhistogram = "7.5.4"

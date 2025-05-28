@@ -1,20 +1,69 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+extern crate alloc;
+
+use alloc::string::ToString;
+use arrayvec::ArrayString;
 use bincode::{Decode as dDecode, Encode, Encode as dEncode};
+use core::error::Error;
+use core::fmt::{Debug, Display, Formatter, Result};
+use core::result;
 use serde::{Deserialize, Serialize};
-use std::error::Error;
-use std::fmt::{Debug, Display, Formatter};
+
+/// Most structures in Copper are fixed size. This is a wrapper for the strings.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CuString<const N: usize>(pub ArrayString<N>);
+
+impl<const N: usize> CuString<N> {
+    fn new() -> Self {
+        Self(ArrayString::new())
+    }
+}
+
+pub type CuStr16 = CuString<16>;
+pub type CuStr32 = CuString<32>;
+pub type CuStr64 = CuString<64>;
+pub type CuStr128 = CuString<128>;
+
+impl From<&str> for CuStr64 {
+    /// This will be a safe operation by truncating to the capacity
+    fn from(s: &str) -> Self {
+        let mut out = ArrayString::new();
+        out.push_str(&s[..s.len().min(64)]);
+        CuString::<64>(out.into())
+    }
+}
+
+#[cfg(feature = "std")]
+impl From<String> for CuStr64 {
+    fn from(value: String) -> Self {
+        value.as_str().into()
+    }
+}
+
+impl Display for CuStr64 {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<&dyn Error> for CuStr64 {
+    fn from(value: &dyn Error) -> Self {
+        value.to_string().as_str().into()
+    }
+}
 
 /// Common copper Error type.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CuError {
-    message: String,
-    cause: Option<String>,
+    message: CuStr64,
+    cause: Option<CuStr64>,
 }
 
 impl Display for CuError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         let context_str = match &self.cause {
-            Some(c) => c.to_string(),
-            None => "None".to_string(),
+            Some(c) => c,
+            None => &"None".into(),
         };
         write!(f, "{}\n   context:{}", self.message, context_str)?;
         Ok(())
@@ -26,16 +75,26 @@ impl Error for CuError {}
 impl From<&str> for CuError {
     fn from(s: &str) -> CuError {
         CuError {
-            message: s.to_string(),
+            message: s.into(),
             cause: None,
         }
     }
 }
 
+impl From<CuStr64> for CuError {
+    fn from(s: CuStr64) -> CuError {
+        CuError {
+            message: s.into(),
+            cause: None,
+        }
+    }
+}
+
+#[cfg(feature = "std")]
 impl From<String> for CuError {
     fn from(s: String) -> CuError {
         CuError {
-            message: s,
+            message: s.into(),
             cause: None,
         }
     }
@@ -44,8 +103,8 @@ impl From<String> for CuError {
 impl CuError {
     pub fn new_with_cause(message: &str, cause: impl Error) -> CuError {
         CuError {
-            message: message.to_string(),
-            cause: Some(cause.to_string()),
+            message: message.into(),
+            cause: Some(cause.to_string().as_str().into()),
         }
     }
 
@@ -56,7 +115,7 @@ impl CuError {
 }
 
 // Generic Result type for copper.
-pub type CuResult<T> = Result<T, CuError>;
+pub type CuResult<T> = result::Result<T, CuError>;
 
 /// Defines a basic write, append only stream trait to be able to log or send serializable objects.
 pub trait WriteStream<E: Encode>: Sync + Send + Debug {
