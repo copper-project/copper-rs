@@ -177,6 +177,12 @@ pub struct TransformBuffer<T: Copy + Debug + 'static> {
     buffer: Arc<RwLock<TransformBufferInternal<T>>>,
 }
 
+/// Thread-safe constant-size transform buffer with concurrent access
+#[derive(Clone)]
+pub struct ConstTransformBufferSync<T: Copy + Debug + 'static, const N: usize> {
+    buffer: Arc<RwLock<ConstTransformBuffer<T, N>>>,
+}
+
 impl<T: Copy + Debug + 'static, const N: usize> ConstTransformBuffer<T, N> {
     pub fn new() -> Self {
         Self {
@@ -530,6 +536,143 @@ impl<T: Copy + std::fmt::Debug + 'static> Default for TransformBuffer<T> {
     }
 }
 
+impl<T: Copy + Debug + 'static, const N: usize> ConstTransformBufferSync<T, N> {
+    pub fn new() -> Self {
+        Self {
+            buffer: Arc::new(RwLock::new(ConstTransformBuffer::new())),
+        }
+    }
+
+    /// Add a transform to the buffer
+    pub fn add_transform(&self, transform: StampedTransform<T>) {
+        let mut buffer = self.buffer.write().unwrap();
+        buffer.add_transform(transform);
+    }
+
+    /// Get the latest transform in the buffer
+    pub fn get_latest_transform(&self) -> Option<StampedTransform<T>> {
+        let buffer = self.buffer.read().unwrap();
+        buffer.get_latest_transform().cloned()
+    }
+
+    /// Get the time range of transforms in this buffer
+    pub fn get_time_range(&self) -> Option<CuTimeRange> {
+        let buffer = self.buffer.read().unwrap();
+        buffer.get_time_range()
+    }
+
+    /// Get transforms within a specific time range
+    pub fn get_transforms_in_range(
+        &self,
+        start_time: CuTime,
+        end_time: CuTime,
+    ) -> Vec<StampedTransform<T>> {
+        let buffer = self.buffer.read().unwrap();
+        buffer
+            .get_transforms_in_range(start_time, end_time)
+            .into_iter()
+            .cloned()
+            .collect()
+    }
+
+    /// Get the transform closest to the specified time
+    pub fn get_closest_transform(&self, time: CuTime) -> Option<StampedTransform<T>> {
+        let buffer = self.buffer.read().unwrap();
+        buffer.get_closest_transform(time).cloned()
+    }
+
+    /// Get two transforms closest to the specified time, useful for velocity computation
+    pub fn get_transforms_around(
+        &self,
+        time: CuTime,
+    ) -> Option<(StampedTransform<T>, StampedTransform<T>)> {
+        let buffer = self.buffer.read().unwrap();
+
+        // Find the two closest transforms
+        if buffer.count < 2 {
+            return None;
+        }
+
+        let mut best_pair: Option<(usize, usize)> = None;
+        let mut best_distance = u64::MAX;
+
+        // Compare all pairs of transforms to find the ones closest to the target time
+        for i in 0..buffer.count.min(N) {
+            if let Some(ref t1) = buffer.transforms[i] {
+                for j in (i + 1)..buffer.count.min(N) {
+                    if let Some(ref t2) = buffer.transforms[j] {
+                        // Ensure t1 is before t2
+                        let (earlier, later) = if t1.stamp <= t2.stamp { (t1, t2) } else { (t2, t1) };
+                        
+                        // Calculate how well this pair brackets the target time
+                        let distance = if time <= earlier.stamp {
+                            // Time is before both transforms
+                            earlier.stamp.as_nanos() - time.as_nanos()
+                        } else if time >= later.stamp {
+                            // Time is after both transforms
+                            time.as_nanos() - later.stamp.as_nanos()
+                        } else {
+                            // Time is between transforms - this is ideal
+                            0
+                        };
+
+                        if distance < best_distance {
+                            best_distance = distance;
+                            best_pair = Some((i, j));
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Some((i, j)) = best_pair {
+            let t1 = buffer.transforms[i].as_ref()?.clone();
+            let t2 = buffer.transforms[j].as_ref()?.clone();
+            
+            // Return in time order
+            if t1.stamp <= t2.stamp {
+                Some((t1, t2))
+            } else {
+                Some((t2, t1))
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Compute velocity at the specified time by differentiating transforms
+    pub fn compute_velocity_at_time(
+        &self,
+        time: CuTime,
+    ) -> Option<crate::velocity::VelocityTransform<T>>
+    where
+        T: Default
+            + std::ops::Add<Output = T>
+            + std::ops::Sub<Output = T>
+            + std::ops::Mul<Output = T>
+            + std::ops::Div<Output = T>
+            + num_traits::NumCast,
+    {
+        let transforms = self.get_transforms_around(time)?;
+
+        // Get the newer transform (which might not be in time order in case time is outside our buffer)
+        let (before, after) = if transforms.0.stamp < transforms.1.stamp {
+            (transforms.0, transforms.1)
+        } else {
+            (transforms.1, transforms.0)
+        };
+
+        // Compute velocity using the transform difference
+        after.compute_velocity(&before)
+    }
+}
+
+impl<T: Copy + Debug + 'static, const N: usize> Default for ConstTransformBufferSync<T, N> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// A concurrent transform buffer store to reduce contention among multiple transform pairs
 pub struct TransformStore<T: Copy + Debug + 'static> {
     buffers: DashMap<(String, String), TransformBuffer<T>>,
@@ -565,6 +708,46 @@ impl<T: Copy + Debug + 'static> TransformStore<T> {
 }
 
 impl<T: Copy + Debug + 'static> Default for TransformStore<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// A concurrent constant-size transform buffer store
+pub struct ConstTransformStore<T: Copy + Debug + 'static, const N: usize> {
+    buffers: DashMap<(String, String), ConstTransformBufferSync<T, N>>,
+}
+
+impl<T: Copy + Debug + 'static, const N: usize> ConstTransformStore<T, N> {
+    pub fn new() -> Self {
+        Self {
+            buffers: DashMap::new(),
+        }
+    }
+
+    /// Get or create a transform buffer for a specific parent-child frame pair
+    pub fn get_or_create_buffer(&self, parent: &str, child: &str) -> ConstTransformBufferSync<T, N> {
+        self.buffers
+            .entry((parent.to_string(), child.to_string()))
+            .or_insert_with(|| ConstTransformBufferSync::new())
+            .clone()
+    }
+
+    /// Add a transform to the appropriate buffer
+    pub fn add_transform(&self, transform: StampedTransform<T>) {
+        let buffer = self.get_or_create_buffer(&transform.parent_frame, &transform.child_frame);
+        buffer.add_transform(transform);
+    }
+
+    /// Get a transform buffer if it exists
+    pub fn get_buffer(&self, parent: &str, child: &str) -> Option<ConstTransformBufferSync<T, N>> {
+        self.buffers
+            .get(&(parent.to_string(), child.to_string()))
+            .map(|entry| entry.clone())
+    }
+}
+
+impl<T: Copy + Debug + 'static, const N: usize> Default for ConstTransformStore<T, N> {
     fn default() -> Self {
         Self::new()
     }
@@ -1090,5 +1273,86 @@ mod tests {
         let closest = buffer.get_closest_transform(CuDuration(2100));
         assert!(closest.is_some());
         assert_eq!(closest.unwrap().stamp.as_nanos(), 3000); // Closer to 3000 than 1000
+    }
+
+    #[test]
+    fn test_const_transform_buffer_sync_basic() {
+        let buffer = ConstTransformBufferSync::<f32, 10>::new();
+
+        let transform = StampedTransform {
+            transform: Transform3D::default(),
+            stamp: CuDuration(1000),
+            parent_frame: "world".to_string(),
+            child_frame: "robot".to_string(),
+        };
+
+        buffer.add_transform(transform);
+
+        let latest = buffer.get_latest_transform();
+        assert!(latest.is_some());
+        assert_eq!(latest.unwrap().stamp.as_nanos(), 1000);
+    }
+
+    #[test]
+    fn test_const_transform_buffer_sync_velocity() {
+        let buffer = ConstTransformBufferSync::<f32, 10>::new();
+
+        // Add transforms with known positions to compute velocity
+        let mut transform1 = StampedTransform {
+            transform: Transform3D::<f32>::default(),
+            stamp: CuDuration(1000),
+            parent_frame: "world".to_string(),
+            child_frame: "robot".to_string(),
+        };
+
+        let mut transform2 = StampedTransform {
+            transform: Transform3D::<f32>::default(),
+            stamp: CuDuration(2000),
+            parent_frame: "world".to_string(),
+            child_frame: "robot".to_string(),
+        };
+
+        // Set positions - robot moves 3 meters in x over 1 second
+        transform1.transform.mat[0][3] = 0.0;
+        transform2.transform.mat[0][3] = 3.0;
+
+        buffer.add_transform(transform1);
+        buffer.add_transform(transform2);
+
+        // Compute velocity at time between transforms
+        let velocity = buffer.compute_velocity_at_time(CuDuration(1500));
+        assert!(velocity.is_some());
+
+        let vel = velocity.unwrap();
+        // Velocity should be 3 m/s in x direction
+        assert_relative_eq!(vel.linear[0], 3.0);
+        assert_relative_eq!(vel.linear[1], 0.0);
+        assert_relative_eq!(vel.linear[2], 0.0);
+    }
+
+    #[test]
+    fn test_const_transform_store() {
+        let store = ConstTransformStore::<f32, 10>::new();
+
+        let transform = StampedTransform {
+            transform: Transform3D::default(),
+            stamp: CuDuration(1000),
+            parent_frame: "world".to_string(),
+            child_frame: "robot".to_string(),
+        };
+
+        store.add_transform(transform.clone());
+
+        let buffer = store.get_buffer("world", "robot").unwrap();
+        let closest = buffer.get_closest_transform(CuDuration(1000));
+        assert!(closest.is_some());
+
+        // Non-existent buffer
+        let missing = store.get_buffer("world", "camera");
+        assert!(missing.is_none());
+
+        // Get or create should create a new buffer
+        let _ = store.get_or_create_buffer("world", "camera");
+        assert!(store.get_buffer("world", "camera").is_some());
     }
 }
