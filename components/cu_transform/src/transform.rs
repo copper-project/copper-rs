@@ -602,8 +602,12 @@ impl<T: Copy + Debug + 'static, const N: usize> ConstTransformBufferSync<T, N> {
                 for j in (i + 1)..buffer.count.min(N) {
                     if let Some(ref t2) = buffer.transforms[j] {
                         // Ensure t1 is before t2
-                        let (earlier, later) = if t1.stamp <= t2.stamp { (t1, t2) } else { (t2, t1) };
-                        
+                        let (earlier, later) = if t1.stamp <= t2.stamp {
+                            (t1, t2)
+                        } else {
+                            (t2, t1)
+                        };
+
                         // Calculate how well this pair brackets the target time
                         let distance = if time <= earlier.stamp {
                             // Time is before both transforms
@@ -628,7 +632,7 @@ impl<T: Copy + Debug + 'static, const N: usize> ConstTransformBufferSync<T, N> {
         if let Some((i, j)) = best_pair {
             let t1 = buffer.transforms[i].as_ref()?.clone();
             let t2 = buffer.transforms[j].as_ref()?.clone();
-            
+
             // Return in time order
             if t1.stamp <= t2.stamp {
                 Some((t1, t2))
@@ -726,7 +730,11 @@ impl<T: Copy + Debug + 'static, const N: usize> ConstTransformStore<T, N> {
     }
 
     /// Get or create a transform buffer for a specific parent-child frame pair
-    pub fn get_or_create_buffer(&self, parent: &str, child: &str) -> ConstTransformBufferSync<T, N> {
+    pub fn get_or_create_buffer(
+        &self,
+        parent: &str,
+        child: &str,
+    ) -> ConstTransformBufferSync<T, N> {
         self.buffers
             .entry((parent.to_string(), child.to_string()))
             .or_insert_with(|| ConstTransformBufferSync::new())
