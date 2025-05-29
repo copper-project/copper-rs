@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 pub struct CuString<const N: usize>(pub ArrayString<N>);
 
 impl<const N: usize> CuString<N> {
+    #[allow(dead_code)]
     fn new() -> Self {
         Self(ArrayString::new())
     }
@@ -29,7 +30,7 @@ impl From<&str> for CuStr64 {
     fn from(s: &str) -> Self {
         let mut out = ArrayString::new();
         out.push_str(&s[..s.len().min(64)]);
-        CuString::<64>(out.into())
+        CuString::<64>(out)
     }
 }
 
@@ -84,7 +85,7 @@ impl From<&str> for CuError {
 impl From<CuStr64> for CuError {
     fn from(s: CuStr64) -> CuError {
         CuError {
-            message: s.into(),
+            message: s,
             cause: None,
         }
     }
