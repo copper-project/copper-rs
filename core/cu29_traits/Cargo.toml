@@ -14,3 +14,8 @@ repository.workspace = true
 [dependencies]
 bincode = { workspace = true }
 serde = { workspace = true }
+arrayvec = { workspace = true }
+
+[features]
+default = ["std"]
+std = []
