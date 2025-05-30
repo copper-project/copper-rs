@@ -1,7 +1,6 @@
 extern crate proc_macro;
-mod index;
 
-use crate::index::intern_string;
+use cu29_intern_strs::intern_string;
 use cu29_log::CuLogLevel;
 use proc_macro::TokenStream;
 use quote::quote;

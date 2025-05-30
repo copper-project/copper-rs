@@ -18,6 +18,7 @@ proc-macro = true
 
 [dependencies]
 cu29-log = { workspace = true }
+cu29-intern-strs = { workspace = true, features = ["macro_debug"] }
 syn = { workspace = true }
 quote = { workspace = true }
 rkv = { version = "0.19.0", features = ["lmdb"] }
@@ -25,7 +26,7 @@ rkv = { version = "0.19.0", features = ["lmdb"] }
 [features]
 default = []
 # enables a more verbose build log showing the index generation.
-macro_debug = []
+macro_debug = ["cu29-intern-strs/macro_debug"]
 # Log level features to control compile-time log level filtering
 log-level-debug = []
 log-level-info = []
