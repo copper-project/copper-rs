@@ -1,7 +1,6 @@
 extern crate proc_macro;
-mod index;
 
-use crate::index::intern_string;
+use cu29_intern_strs::intern_string;
 use cu29_log::CuLogLevel;
 use proc_macro::TokenStream;
 use quote::quote;
@@ -283,4 +282,26 @@ pub fn error(input: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn critical(input: TokenStream) -> TokenStream {
     reference_unused_variables(input)
+}
+
+/// Interns a string
+/// For example:
+///
+/// let string_number: u32 = intern!("my string");
+///
+/// will store "my string" in the interned string db at compile time and return the index of the string.
+#[proc_macro]
+pub fn intern(input: TokenStream) -> TokenStream {
+    let expr = syn::parse::<Expr>(input).expect("Failed to parse input as expression");
+    let (index, _msg) = if let Expr::Lit(ExprLit {
+        lit: Lit::Str(msg), ..
+    }) = expr
+    {
+        let msg = msg.value();
+        let index = intern_string(&msg).expect("Failed to insert log string.");
+        (index, msg)
+    } else {
+        panic!("The first parameter of the argument needs to be a string literal.");
+    };
+    quote! { #index }.into()
 }
