@@ -3,6 +3,7 @@
 //! The configuration is serialized in the RON format.
 //! The configuration is used to generate the runtime code at compile time.
 
+use cu29_base_derive::cu_error;
 use cu29_traits::{CuError, CuResult};
 use html_escape::encode_text;
 use petgraph::stable_graph::{EdgeIndex, NodeIndex, StableDiGraph};
@@ -303,12 +304,12 @@ impl CuGraph {
         let (src_id, dst_id) = (
             self.0
                 .node_weight(source.into())
-                .ok_or("Source node not found")?
+                .ok_or(cu_error!("Source node not found"))?
                 .id
                 .clone(),
             self.0
                 .node_weight(target.into())
-                .ok_or("Target node not found")?
+                .ok_or(cu_error!("Target node not found"))?
                 .id
                 .clone(),
         );
@@ -465,7 +466,9 @@ impl ConfigGraphs {
                 if graphs.len() == 1 {
                     Ok(graphs.values().next().unwrap())
                 } else {
-                    Err("Cannot get default mission graph from mission config".into())
+                    Err(cu_error!(
+                        "Cannot get default mission graph from mission config"
+                    ))
                 }
             }
         }
@@ -478,16 +481,16 @@ impl ConfigGraphs {
                 if mission_id.is_none() || mission_id.unwrap() == "default" {
                     Ok(graph)
                 } else {
-                    Err("Cannot get mission graph from simple config".into())
+                    Err(cu_error!("Cannot get mission graph from simple config"))
                 }
             }
             Missions(graphs) => {
                 if let Some(id) = mission_id {
                     graphs
                         .get(id)
-                        .ok_or_else(|| format!("Mission {id} not found").into())
+                        .ok_or_else(|| cu_error!(format!("Mission {id} not found").as_str))
                 } else {
-                    Err("Mission ID required for mission configs".into())
+                    Err(cu_error!("Mission ID required for mission configs"))
                 }
             }
         }

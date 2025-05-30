@@ -7,12 +7,13 @@ use cu29_clock::RobotClock;
 use cu29_log::CuLogEntry;
 #[allow(unused_imports)]
 use cu29_log::CuLogLevel;
-use cu29_traits::{CuResult, WriteStream};
+use cu29_traits::{CuError, CuResult, WriteStream};
 use log::Log;
 
 #[cfg(debug_assertions)]
 use {cu29_log::format_logline, std::collections::HashMap, std::sync::RwLock};
 
+use cu29_base_derive::cu_error;
 use std::fmt::{Debug, Formatter};
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -110,7 +111,7 @@ impl Drop for LoggerRuntime {
 pub fn log(entry: &mut CuLogEntry) -> CuResult<()> {
     let d = WRITER.get().map(|(writer, clock)| (writer, clock));
     if d.is_none() {
-        return Err("Logger not initialized.".into());
+        return Err(cu_error!("Logger not initialized."));
     }
     let (writer, clock) = d.unwrap();
     entry.time = clock.now();
@@ -242,7 +243,7 @@ impl SimpleFileWriter {
             .truncate(true)
             .write(true)
             .open(path)
-            .map_err(|e| format!("Failed to open file: {e:?}"))?;
+            .map_err(|e| cu_error!("Failed to open file").with_cause(e))?;
 
         let writer = OwningIoWriter::new(file);
         let encoder = EncoderImpl::new(writer, bincode::config::standard());
@@ -264,7 +265,7 @@ impl WriteStream<CuLogEntry> for SimpleFileWriter {
     #[inline(always)]
     fn log(&mut self, obj: &CuLogEntry) -> CuResult<()> {
         obj.encode(&mut self.encoder)
-            .map_err(|e| format!("Failed to write to file: {e:?}"))?;
+            .map_err(|e| cu_error!("Failed to write to file").with_cause(e))?;
         Ok(())
     }
 
@@ -272,7 +273,7 @@ impl WriteStream<CuLogEntry> for SimpleFileWriter {
         self.encoder
             .writer()
             .flush()
-            .map_err(|e| format!("Failed to flush file: {e:?}"))?;
+            .map_err(|e| cu_error!("Failed to flush file").with_cause(e))?;
         Ok(())
     }
 }
