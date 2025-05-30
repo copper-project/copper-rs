@@ -13,3 +13,4 @@ repository.workspace = true
 [dependencies]
 pcap = "2.2.0"
 cu29-traits = { workspace = true }
+cu29-base-derive = { workspace = true }

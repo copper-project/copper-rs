@@ -14,3 +14,5 @@ repository.workspace = true
 [dependencies]
 bincode = { workspace = true }
 serde = { workspace = true }
+anyhow = "1.0.98"
+cu29-intern-strs = { workspace = true }

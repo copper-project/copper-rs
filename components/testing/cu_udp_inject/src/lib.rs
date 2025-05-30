@@ -1,4 +1,5 @@
-use cu29_traits::CuResult;
+use cu29_base_derive::cu_error;
+use cu29_traits::{CuError, CuResult};
 use pcap::Capture;
 use std::net::UdpSocket;
 use std::path::Path;
@@ -40,7 +41,7 @@ impl PcapStreamer {
         // Assume 42-byte header (Ethernet + IP + UDP) and an optional 4-byte FCS
         let payload_offset = 42;
         if packet.data.len() < payload_offset + PS {
-            return Err("Packet too short".into());
+            return Err(cu_error!("Packet too short"));
         }
 
         // Extract only the payload, excluding headers and trailing FCS if present

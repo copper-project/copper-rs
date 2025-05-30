@@ -16,6 +16,7 @@ bincode = { workspace = true }
 serde = { workspace = true }
 cu29-value = { workspace = true }
 cu29-traits = { workspace = true }
+cu29-base-derive = { workspace = true }
 cu29-clock = { workspace = true }
 strfmt = "0.2.4"
 smallvec = { workspace = true }

@@ -17,6 +17,7 @@ ignored = ["simplelog"]  # Used from conditional compilation
 [dependencies]
 cu29-log = { workspace = true }
 cu29-traits = { workspace = true }
+cu29-base-derive = { workspace = true }
 cu29-clock = { workspace = true }
 bincode = { workspace = true }
 smallvec = { workspace = true }
