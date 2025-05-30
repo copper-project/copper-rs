@@ -21,7 +21,6 @@ cu29-log = { workspace = true }
 cu29-intern-strs = { workspace = true, features = ["macro_debug"] }
 syn = { workspace = true }
 quote = { workspace = true }
-rkv = { version = "0.19.0", features = ["lmdb"] }
 
 [features]
 default = []
