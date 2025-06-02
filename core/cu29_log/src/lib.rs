@@ -1,4 +1,5 @@
 use bincode::{Decode, Encode};
+use cu29_base_derive::cu_error;
 use cu29_clock::CuTime;
 use cu29_traits::{CuError, CuResult};
 use cu29_value::Value;
@@ -6,7 +7,6 @@ use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use std::collections::HashMap;
 use std::fmt::Display;
-use std::path::{Path, PathBuf};
 use strfmt::strfmt;
 
 /// Log levels for Copper.
@@ -35,9 +35,6 @@ impl CuLogLevel {
         self as u8 >= max_level as u8
     }
 }
-
-/// The name of the directory where the log index is stored.
-const INDEX_DIR_NAME: &str = "cu29_log_index";
 
 #[allow(dead_code)]
 pub const ANONYMOUS: u32 = 0;
@@ -176,11 +173,13 @@ pub fn format_logline(
     }
 
     let logline = strfmt(&format_str, named_params).map_err(|e| {
-        CuError::new_with_cause(
-            format!("Failed to format log line: {format_str:?} with variables [{named_params:?}]")
-                .as_str(),
-            e,
-        )
+        cu_error!("Failed to format log line").with_cause(e)
+        // FIXME
+        // .with_context(|| {
+        //     format!(
+        //         "Failed to format log line: {format_str:?} with variables [{named_params:?}]"
+        //     )
+        // })
     })?;
     Ok(format!("{time} [{level:?}]: {logline}"))
 }
@@ -210,22 +209,6 @@ pub fn rebuild_logline(all_interned_strings: &[String], entry: &CuLogEntry) -> C
         &anon_params,
         &named_params,
     )
-}
-
-fn parent_n_times(path: &Path, n: usize) -> Option<PathBuf> {
-    let mut result = Some(path.to_path_buf());
-    for _ in 0..n {
-        result = result?.parent().map(PathBuf::from);
-    }
-    result
-}
-
-/// Convenience function to returns the default path for the log index directory.
-pub fn default_log_index_dir() -> PathBuf {
-    let outdir = std::env::var("LOG_INDEX_DIR").expect("no LOG_INDEX_DIR system variable set, be sure build.rs sets it, see cu29_log/build.rs for example.");
-    let outdir_path = Path::new(&outdir);
-
-    parent_n_times(outdir_path, 3).unwrap().join(INDEX_DIR_NAME)
 }
 
 #[cfg(test)]
