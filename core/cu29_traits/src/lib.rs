@@ -18,6 +18,19 @@ impl<const N: usize> CuString<N> {
     fn new() -> Self {
         Self(ArrayString::new())
     }
+    /// Returns the string and number of truncated characters
+    #[allow(dead_code)]
+    fn new_truncated(s: &str) -> (Self, usize) {
+        let cu_string = Self::from(s);
+
+        if s.len() > N {
+            // Input string is longer than our fixed size of N
+            (cu_string, s.len() - N)
+        } else {
+            // Our fixed size of N is equal to or longer than the input string
+            (cu_string, 0)
+        }
+    }
 }
 
 pub type CuStr16 = CuString<16>;
@@ -25,12 +38,18 @@ pub type CuStr32 = CuString<32>;
 pub type CuStr64 = CuString<64>;
 pub type CuStr128 = CuString<128>;
 
-impl From<&str> for CuStr64 {
+impl<const N: usize> From<&str> for CuString<N> {
     /// This will be a safe operation by truncating to the capacity
     fn from(s: &str) -> Self {
         let mut out = ArrayString::new();
-        out.push_str(&s[..s.len().min(64)]);
-        CuString::<64>(out)
+        out.push_str(&s[..s.len().min(N)]);
+        CuString::<N>(out)
+    }
+}
+
+impl<const N: usize> Display for CuString<N> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        write!(f, "{}", self.0)
     }
 }
 
@@ -38,12 +57,6 @@ impl From<&str> for CuStr64 {
 impl From<String> for CuStr64 {
     fn from(value: String) -> Self {
         value.as_str().into()
-    }
-}
-
-impl Display for CuStr64 {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        write!(f, "{}", self.0)
     }
 }
 
@@ -140,3 +153,32 @@ pub trait CopperListTuple: bincode::Encode + bincode::Decode<()> + Debug {} // D
 
 // Also anything that follows this contract can be a payload (blanket implementation)
 impl<T> CopperListTuple for T where T: bincode::Encode + bincode::Decode<()> + Debug {} // Decode is Sized
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+    #[test]
+    fn test_cu_string() {
+        let my_str = CuString::<5>::from("hello");
+        assert!(format!("{}", my_str) == "hello");
+    }
+    #[test]
+    fn test_new_truncated_lost_chars() {
+        let (my_str, n_truncated_chars) = CuString::<1>::new_truncated("hello");
+        assert!(format!("{}", my_str) == "h");
+        assert!(n_truncated_chars == 4);
+    }
+    #[test]
+    fn test_new_truncated_no_lost_chars() {
+        let (my_str, n_truncated_chars) = CuString::<50>::new_truncated("hello");
+        assert!(format!("{}", my_str) == "hello");
+        assert!(n_truncated_chars == 0);
+    }
+    #[test]
+    fn test_new_truncated_equal_size() {
+        let (my_str, n_truncated_chars) = CuString::<1>::new_truncated("h");
+        assert!(format!("{}", my_str) == "h");
+        assert!(n_truncated_chars == 0);
+    }
+}
