@@ -13,6 +13,9 @@ Nix flake providing a cross-platform Rust development environment with optional 
 ## Quick Start
 
 ```bash
+# Setup experimental feature
+mkdir -p ~/.conf/nix && echo "experimental-features = nix-command flakes" >> ~/.conf/nix/nix.conf
+
 # Setup flake
 nix flake update
 
