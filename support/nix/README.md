@@ -54,9 +54,6 @@ cargo build --workspace $FEATURES_FLAG
 
 # Run tests
 cargo nextest run --workspace $FEATURES_FLAG
-
-# Check CUDA (Linux with cuda shell)
-nvidia-smi
 ```
 
 ## Environment Variables
@@ -73,7 +70,7 @@ nvidia-smi
 
 ## Notes
 
-- CUDA support requires Linux with NVIDIA drivers
+- [BETA] CUDA support requires Linux with NVIDIA drivers.
 - Uses LLVM 14 on Linux, latest on macOS
 - Automatically navigates to `../..` (project root) on shell entry
 - For order nix version on Linux, you can also you `nix-shell` and `nix-shell --arg withCuda true``
