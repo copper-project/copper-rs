@@ -5,11 +5,26 @@ use cu_spatial_payloads::Transform3D;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
-#[derive(Debug, Default, Clone)]
+/// Maximum number of transforms in a single broadcast message
+pub const MAX_TRANSFORMS_PER_BROADCAST: usize = 10;
+
+#[derive(Debug, Clone)]
 pub struct TransformBroadcastPayload<
     T: Copy + Debug + Default + bincode::enc::Encode + bincode::de::Decode<()> + 'static,
 > {
-    pub transforms: Vec<StampedTransform<T>>,
+    /// Fixed-size array of transforms
+    pub transforms: [Option<StampedTransform<T>>; MAX_TRANSFORMS_PER_BROADCAST],
+    /// Number of valid transforms in the array
+    pub count: usize,
+}
+
+impl<T: Copy + Debug + Default + bincode::enc::Encode + bincode::de::Decode<()> + 'static> Default for TransformBroadcastPayload<T> {
+    fn default() -> Self {
+        Self {
+            transforms: [const { None }; MAX_TRANSFORMS_PER_BROADCAST],
+            count: 0,
+        }
+    }
 }
 
 impl<T: Copy + Debug + Default + bincode::enc::Encode + bincode::de::Decode<()> + 'static>
@@ -19,22 +34,24 @@ impl<T: Copy + Debug + Default + bincode::enc::Encode + bincode::de::Decode<()> 
         &self,
         encoder: &mut E,
     ) -> Result<(), bincode::error::EncodeError> {
-        // Encode the number of transforms
-        bincode::enc::Encode::encode(&self.transforms.len(), encoder)?;
+        // Encode the number of valid transforms
+        bincode::enc::Encode::encode(&self.count, encoder)?;
 
-        // Encode each transform
-        for transform in &self.transforms {
-            // Encode transform.transform (Transform3D)
-            bincode::enc::Encode::encode(&transform.transform, encoder)?;
+        // Encode only the valid transforms
+        for i in 0..self.count {
+            if let Some(transform) = &self.transforms[i] {
+                // Encode transform.transform (Transform3D)
+                bincode::enc::Encode::encode(&transform.transform, encoder)?;
 
-            // Encode timestamp
-            bincode::enc::Encode::encode(&transform.stamp, encoder)?;
+                // Encode timestamp
+                bincode::enc::Encode::encode(&transform.stamp, encoder)?;
 
-            // Encode parent_frame string
-            bincode::enc::Encode::encode(&transform.parent_frame, encoder)?;
+                // Encode parent_frame string
+                bincode::enc::Encode::encode(&transform.parent_frame, encoder)?;
 
-            // Encode child_frame string
-            bincode::enc::Encode::encode(&transform.child_frame, encoder)?;
+                // Encode child_frame string
+                bincode::enc::Encode::encode(&transform.child_frame, encoder)?;
+            }
         }
 
         Ok(())
@@ -48,13 +65,17 @@ impl<T: Copy + Debug + Default + bincode::enc::Encode + bincode::de::Decode<()> 
         decoder: &mut D,
     ) -> Result<Self, bincode::error::DecodeError> {
         // Decode the number of transforms
-        let len = <usize as bincode::de::Decode<()>>::decode(decoder)?;
+        let count = <usize as bincode::de::Decode<()>>::decode(decoder)?;
+        
+        if count > MAX_TRANSFORMS_PER_BROADCAST {
+            return Err(bincode::error::DecodeError::Other("Too many transforms in broadcast"));
+        }
 
-        // Create vector to hold the transforms
-        let mut transforms = Vec::with_capacity(len);
+        // Create array to hold the transforms
+        let mut transforms = [const { None }; MAX_TRANSFORMS_PER_BROADCAST];
 
         // Decode each transform
-        for _ in 0..len {
+        for i in 0..count {
             // Decode transform.transform (Transform3D)
             let transform_3d = <Transform3D<T> as bincode::de::Decode<()>>::decode(decoder)?;
 
@@ -67,8 +88,8 @@ impl<T: Copy + Debug + Default + bincode::enc::Encode + bincode::de::Decode<()> 
             // Decode child_frame string
             let child_frame = <String as bincode::de::Decode<()>>::decode(decoder)?;
 
-            // Create StampedTransform and add to vector
-            transforms.push(StampedTransform {
+            // Create StampedTransform and add to array
+            transforms[i] = Some(StampedTransform {
                 transform: transform_3d,
                 stamp,
                 parent_frame,
@@ -76,7 +97,7 @@ impl<T: Copy + Debug + Default + bincode::enc::Encode + bincode::de::Decode<()> 
             });
         }
 
-        Ok(Self { transforms })
+        Ok(Self { transforms, count })
     }
 }
 
@@ -179,52 +200,49 @@ mod tests {
         let payload: TransformBroadcastPayload<f32> = TransformBroadcastPayload::default();
 
         // Check that the empty payload has no transforms
-        assert_eq!(payload.transforms.len(), 0);
+        assert_eq!(payload.count, 0);
 
         // Create a payload with transforms
         let mut payload = TransformBroadcastPayload::default();
 
         // Add transforms
         let transform1 = StampedTransform {
-            transform: Transform3D {
-                mat: [
+            transform: Transform3D::from_matrix([
                     [1.0, 0.0, 0.0, 2.0],
                     [0.0, 1.0, 0.0, 3.0],
                     [0.0, 0.0, 1.0, 4.0],
                     [0.0, 0.0, 0.0, 1.0],
-                ],
-            },
+            ]),
             stamp: CuDuration(1000),
             parent_frame: "world".to_string(),
             child_frame: "robot".to_string(),
         };
 
         let transform2 = StampedTransform {
-            transform: Transform3D {
-                mat: [
+            transform: Transform3D::from_matrix([
                     [0.0, -1.0, 0.0, 5.0],
                     [1.0, 0.0, 0.0, 6.0],
                     [0.0, 0.0, 1.0, 7.0],
                     [0.0, 0.0, 0.0, 1.0],
-                ],
-            },
+            ]),
             stamp: CuDuration(2000),
             parent_frame: "robot".to_string(),
             child_frame: "camera".to_string(),
         };
 
-        payload.transforms.push(transform1);
-        payload.transforms.push(transform2);
+        payload.transforms[0] = Some(transform1);
+        payload.transforms[1] = Some(transform2);
+        payload.count = 2;
 
         // Verify transforms
-        assert_eq!(payload.transforms.len(), 2);
-        assert_eq!(payload.transforms[0].stamp.as_nanos(), 1000);
-        assert_eq!(payload.transforms[0].parent_frame, "world");
-        assert_eq!(payload.transforms[0].child_frame, "robot");
+        assert_eq!(payload.count, 2);
+        assert_eq!(payload.transforms[0].as_ref().unwrap().stamp.as_nanos(), 1000);
+        assert_eq!(payload.transforms[0].as_ref().unwrap().parent_frame, "world");
+        assert_eq!(payload.transforms[0].as_ref().unwrap().child_frame, "robot");
 
-        assert_eq!(payload.transforms[1].stamp.as_nanos(), 2000);
-        assert_eq!(payload.transforms[1].parent_frame, "robot");
-        assert_eq!(payload.transforms[1].child_frame, "camera");
+        assert_eq!(payload.transforms[1].as_ref().unwrap().stamp.as_nanos(), 2000);
+        assert_eq!(payload.transforms[1].as_ref().unwrap().parent_frame, "robot");
+        assert_eq!(payload.transforms[1].as_ref().unwrap().child_frame, "camera");
     }
 
     #[test]
@@ -234,20 +252,19 @@ mod tests {
 
         // Add transforms with specific values for testing
         let transform1 = StampedTransform {
-            transform: Transform3D {
-                mat: [
+            transform: Transform3D::from_matrix([
                     [1.0, 0.0, 0.0, 2.0],
                     [0.0, 1.0, 0.0, 3.0],
                     [0.0, 0.0, 1.0, 4.0],
                     [0.0, 0.0, 0.0, 1.0],
-                ],
-            },
+            ]),
             stamp: CuDuration(1000),
             parent_frame: "world".to_string(),
             child_frame: "robot".to_string(),
         };
 
-        payload.transforms.push(transform1);
+        payload.transforms[0] = Some(transform1);
+        payload.count = 1;
 
         // Encode to bytes
         let encoded = bincode::encode_to_vec(&payload, bincode::config::standard())
@@ -259,17 +276,19 @@ mod tests {
                 .expect("Failed to decode");
 
         // Verify the decoded payload
-        assert_eq!(decoded.transforms.len(), 1);
-        assert_eq!(decoded.transforms[0].stamp.as_nanos(), 1000);
-        assert_eq!(decoded.transforms[0].parent_frame, "world");
-        assert_eq!(decoded.transforms[0].child_frame, "robot");
+        assert_eq!(decoded.count, 1);
+        assert_eq!(decoded.transforms[0].as_ref().unwrap().stamp.as_nanos(), 1000);
+        assert_eq!(decoded.transforms[0].as_ref().unwrap().parent_frame, "world");
+        assert_eq!(decoded.transforms[0].as_ref().unwrap().child_frame, "robot");
 
         // Check transform matrix
+        let decoded_mat = decoded.transforms[0].as_ref().unwrap().transform.to_matrix();
+        let payload_mat = payload.transforms[0].as_ref().unwrap().transform.to_matrix();
         for i in 0..4 {
             for j in 0..4 {
                 assert_eq!(
-                    decoded.transforms[0].transform.mat[i][j],
-                    payload.transforms[0].transform.mat[i][j]
+                    decoded_mat[i][j],
+                    payload_mat[i][j]
                 );
             }
         }

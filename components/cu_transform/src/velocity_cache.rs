@@ -1,9 +1,7 @@
 use crate::velocity::VelocityTransform;
-use cu29::clock::CuTime;
+use cu29::clock::{CuTime, RobotClock};
 use dashmap::DashMap;
 use std::fmt::Debug;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, Instant};
 
 /// The cache entry for a velocity transform query
 #[derive(Clone)]
@@ -12,8 +10,8 @@ pub(crate) struct VelocityTransformCacheEntry<T: Copy + Debug + 'static> {
     pub(crate) velocity: VelocityTransform<T>,
     /// The time for which this velocity was calculated
     pub(crate) time: CuTime,
-    /// When this cache entry was last accessed
-    pub(crate) last_access: Instant,
+    /// When this cache entry was last accessed (robot time)
+    pub(crate) last_access: CuTime,
     /// Path hash used to calculate this velocity
     pub(crate) path_hash: u64,
 }
@@ -24,32 +22,22 @@ pub(crate) struct VelocityTransformCache<T: Copy + Debug + 'static> {
     entries: DashMap<(String, String), VelocityTransformCacheEntry<T>>,
     /// Maximum size of the cache
     max_size: usize,
-    /// Maximum age of cache entries before invalidation
-    max_age: Duration,
-    /// Last time the cache was cleaned up (as nanoseconds since epoch)
-    last_cleanup: AtomicU64,
-    /// Cleanup interval - only clean every N seconds
-    cleanup_interval: Duration,
-}
-
-/// Get current time as nanoseconds since some epoch
-/// This is just used for comparing intervals, not for absolute time
-fn now_timestamp_nanos() -> u64 {
-    let now = Instant::now();
-    // We can't get nanoseconds from Instant directly, but we can use this trick
-    // to get a stable value that increases monotonically
-    let duration = now.elapsed();
-    (duration.as_secs() * 1_000_000_000 + duration.subsec_nanos() as u64) % u64::MAX
+    /// Maximum age of cache entries before invalidation (in nanoseconds)
+    max_age_nanos: u64,
+    /// Cleanup interval - only clean every N nanoseconds
+    cleanup_interval_nanos: u64,
+    /// Last time the cache was cleaned up (needs to be mutable)
+    last_cleanup_cell: std::sync::Mutex<CuTime>,
 }
 
 impl<T: Copy + Debug + 'static> VelocityTransformCache<T> {
-    pub(crate) fn new(max_size: usize, max_age: Duration) -> Self {
+    pub(crate) fn new(max_size: usize, max_age_nanos: u64) -> Self {
         Self {
             entries: DashMap::with_capacity(max_size),
             max_size,
-            max_age,
-            last_cleanup: AtomicU64::new(now_timestamp_nanos()),
-            cleanup_interval: Duration::from_secs(5), // Clean every 5 seconds
+            max_age_nanos,
+            cleanup_interval_nanos: 5_000_000_000, // Clean every 5 seconds
+            last_cleanup_cell: std::sync::Mutex::new(CuTime::from(0u64)),
         }
     }
 
@@ -60,16 +48,18 @@ impl<T: Copy + Debug + 'static> VelocityTransformCache<T> {
         to: &str,
         time: CuTime,
         path_hash: u64,
+        robot_clock: &RobotClock,
     ) -> Option<VelocityTransform<T>> {
         let key = (from.to_string(), to.to_string());
 
         if let Some(mut entry) = self.entries.get_mut(&key) {
-            let now = Instant::now();
+            let now = robot_clock.now();
 
             // Check if the cache entry is for the same time and path
             if entry.time == time && entry.path_hash == path_hash {
                 // Check if the entry is still valid (not too old)
-                if now.duration_since(entry.last_access) <= self.max_age {
+                let age = now.as_nanos().saturating_sub(entry.last_access.as_nanos());
+                if age <= self.max_age_nanos {
                     // Update last access time
                     entry.last_access = now;
                     return Some(entry.velocity.clone());
@@ -88,8 +78,9 @@ impl<T: Copy + Debug + 'static> VelocityTransformCache<T> {
         velocity: VelocityTransform<T>,
         time: CuTime,
         path_hash: u64,
+        robot_clock: &RobotClock,
     ) {
-        let now = Instant::now();
+        let now = robot_clock.now();
         let key = (from.to_string(), to.to_string());
 
         // If the cache is at capacity, remove the oldest entry
@@ -123,22 +114,22 @@ impl<T: Copy + Debug + 'static> VelocityTransformCache<T> {
     }
 
     /// Check if it's time to clean up the cache
-    pub(crate) fn should_cleanup(&self) -> bool {
-        let now = now_timestamp_nanos();
-        let last = self.last_cleanup.load(Ordering::Relaxed);
-        let interval_nanos = self.cleanup_interval.as_nanos() as u64;
-
-        now.saturating_sub(last) >= interval_nanos
+    pub(crate) fn should_cleanup(&self, robot_clock: &RobotClock) -> bool {
+        let now = robot_clock.now();
+        let last_cleanup = *self.last_cleanup_cell.lock().unwrap();
+        let elapsed = now.as_nanos().saturating_sub(last_cleanup.as_nanos());
+        elapsed >= self.cleanup_interval_nanos
     }
 
     /// Clear old entries from the cache
-    pub(crate) fn cleanup(&self) {
-        let now = Instant::now();
+    pub(crate) fn cleanup(&self, robot_clock: &RobotClock) {
+        let now = robot_clock.now();
         let mut keys_to_remove = Vec::new();
 
         // Identify keys to remove
         for entry in self.entries.iter() {
-            if now.duration_since(entry.last_access) > self.max_age {
+            let age = now.as_nanos().saturating_sub(entry.last_access.as_nanos());
+            if age > self.max_age_nanos {
                 keys_to_remove.push(entry.key().clone());
             }
         }
@@ -148,9 +139,8 @@ impl<T: Copy + Debug + 'static> VelocityTransformCache<T> {
             self.entries.remove(&key);
         }
 
-        // Update last cleanup time using atomic
-        self.last_cleanup
-            .store(now_timestamp_nanos(), Ordering::Relaxed);
+        // Update last cleanup time
+        *self.last_cleanup_cell.lock().unwrap() = now;
     }
 
     /// Clear all entries

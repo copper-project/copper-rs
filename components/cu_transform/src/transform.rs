@@ -10,7 +10,7 @@ use std::sync::{Arc, RwLock};
 const DEFAULT_CACHE_SIZE: usize = 100;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct StampedTransform<T: Copy + Debug + 'static> {
+pub struct StampedTransform<T: Copy + Debug + Default + 'static> {
     pub transform: Transform3D<T>,
     pub stamp: CuTime,
     pub parent_frame: String,
@@ -64,10 +64,12 @@ impl<
         let dt_t = num_traits::cast::cast::<f64, T>(dt)?;
 
         // Extract positions from transforms
+        let self_mat = self.transform.to_matrix();
+        let prev_mat = previous.transform.to_matrix();
         let mut linear_velocity = [T::default(); 3];
         for (i, vel) in linear_velocity.iter_mut().enumerate() {
             // Calculate position difference
-            let pos_diff = self.transform.mat[i][3] - previous.transform.mat[i][3];
+            let pos_diff = self_mat[i][3] - prev_mat[i][3];
             // Divide by time difference to get velocity
             *vel = pos_diff / dt_t;
         }
@@ -75,37 +77,37 @@ impl<
         // Extract rotation matrices from both transforms
         let rot1 = [
             [
-                previous.transform.mat[0][0],
-                previous.transform.mat[0][1],
-                previous.transform.mat[0][2],
+                prev_mat[0][0],
+                prev_mat[0][1],
+                prev_mat[0][2],
             ],
             [
-                previous.transform.mat[1][0],
-                previous.transform.mat[1][1],
-                previous.transform.mat[1][2],
+                prev_mat[1][0],
+                prev_mat[1][1],
+                prev_mat[1][2],
             ],
             [
-                previous.transform.mat[2][0],
-                previous.transform.mat[2][1],
-                previous.transform.mat[2][2],
+                prev_mat[2][0],
+                prev_mat[2][1],
+                prev_mat[2][2],
             ],
         ];
 
         let rot2 = [
             [
-                self.transform.mat[0][0],
-                self.transform.mat[0][1],
-                self.transform.mat[0][2],
+                self_mat[0][0],
+                self_mat[0][1],
+                self_mat[0][2],
             ],
             [
-                self.transform.mat[1][0],
-                self.transform.mat[1][1],
-                self.transform.mat[1][2],
+                self_mat[1][0],
+                self_mat[1][1],
+                self_mat[1][2],
             ],
             [
-                self.transform.mat[2][0],
-                self.transform.mat[2][1],
-                self.transform.mat[2][2],
+                self_mat[2][0],
+                self_mat[2][1],
+                self_mat[2][2],
             ],
         ];
 
@@ -158,14 +160,14 @@ impl<
 
 /// Internal transform buffer that holds ordered transforms between two frames
 #[derive(Clone, Debug, Serialize, Deserialize)]
-struct TransformBufferInternal<T: Copy + Debug + 'static> {
+struct TransformBufferInternal<T: Copy + Debug + Default + 'static> {
     transforms: VecDeque<StampedTransform<T>>,
     max_capacity: usize,
 }
 
 /// Constant-size transform buffer using fixed arrays (no dynamic allocation)
 #[derive(Clone, Debug)]
-pub struct ConstTransformBuffer<T: Copy + Debug + 'static, const N: usize> {
+pub struct ConstTransformBuffer<T: Copy + Debug + Default + 'static, const N: usize> {
     transforms: [Option<StampedTransform<T>>; N],
     count: usize,
     head: usize, // Index where the next element will be inserted
@@ -173,17 +175,17 @@ pub struct ConstTransformBuffer<T: Copy + Debug + 'static, const N: usize> {
 
 /// Thread-safe wrapper around a transform buffer with concurrent access
 #[derive(Clone)]
-pub struct TransformBuffer<T: Copy + Debug + 'static> {
+pub struct TransformBuffer<T: Copy + Debug + Default + 'static> {
     buffer: Arc<RwLock<TransformBufferInternal<T>>>,
 }
 
 /// Thread-safe constant-size transform buffer with concurrent access
 #[derive(Clone)]
-pub struct ConstTransformBufferSync<T: Copy + Debug + 'static, const N: usize> {
+pub struct ConstTransformBufferSync<T: Copy + Debug + Default + 'static, const N: usize> {
     buffer: Arc<RwLock<ConstTransformBuffer<T, N>>>,
 }
 
-impl<T: Copy + Debug + 'static, const N: usize> ConstTransformBuffer<T, N> {
+impl<T: Copy + Debug + Default + 'static, const N: usize> ConstTransformBuffer<T, N> {
     pub fn new() -> Self {
         Self {
             transforms: [const { None }; N],
@@ -332,13 +334,13 @@ impl<T: Copy + Debug + 'static, const N: usize> ConstTransformBuffer<T, N> {
     }
 }
 
-impl<T: Copy + Debug + 'static, const N: usize> Default for ConstTransformBuffer<T, N> {
+impl<T: Copy + Debug + Default + 'static, const N: usize> Default for ConstTransformBuffer<T, N> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T: Copy + Debug + 'static> TransformBufferInternal<T> {
+impl<T: Copy + Debug + Default + 'static> TransformBufferInternal<T> {
     fn new() -> Self {
         Self::with_capacity(DEFAULT_CACHE_SIZE)
     }
@@ -416,7 +418,7 @@ impl<T: Copy + Debug + 'static> TransformBufferInternal<T> {
     }
 }
 
-impl<T: Copy + Debug + 'static> TransformBuffer<T> {
+impl<T: Copy + Debug + Default + 'static> TransformBuffer<T> {
     pub fn new() -> Self {
         Self {
             buffer: Arc::new(RwLock::new(TransformBufferInternal::new())),
@@ -530,13 +532,13 @@ impl<T: Copy + Debug + 'static> TransformBuffer<T> {
     }
 }
 
-impl<T: Copy + std::fmt::Debug + 'static> Default for TransformBuffer<T> {
+impl<T: Copy + std::fmt::Debug + Default + 'static> Default for TransformBuffer<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T: Copy + Debug + 'static, const N: usize> ConstTransformBufferSync<T, N> {
+impl<T: Copy + Debug + Default + 'static, const N: usize> ConstTransformBufferSync<T, N> {
     pub fn new() -> Self {
         Self {
             buffer: Arc::new(RwLock::new(ConstTransformBuffer::new())),
@@ -671,18 +673,18 @@ impl<T: Copy + Debug + 'static, const N: usize> ConstTransformBufferSync<T, N> {
     }
 }
 
-impl<T: Copy + Debug + 'static, const N: usize> Default for ConstTransformBufferSync<T, N> {
+impl<T: Copy + Debug + Default + 'static, const N: usize> Default for ConstTransformBufferSync<T, N> {
     fn default() -> Self {
         Self::new()
     }
 }
 
 /// A concurrent transform buffer store to reduce contention among multiple transform pairs
-pub struct TransformStore<T: Copy + Debug + 'static> {
+pub struct TransformStore<T: Copy + Debug + Default + 'static> {
     buffers: DashMap<(String, String), TransformBuffer<T>>,
 }
 
-impl<T: Copy + Debug + 'static> TransformStore<T> {
+impl<T: Copy + Debug + Default + 'static> TransformStore<T> {
     pub fn new() -> Self {
         Self {
             buffers: DashMap::new(),
@@ -711,18 +713,18 @@ impl<T: Copy + Debug + 'static> TransformStore<T> {
     }
 }
 
-impl<T: Copy + Debug + 'static> Default for TransformStore<T> {
+impl<T: Copy + Debug + Default + 'static> Default for TransformStore<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
 /// A concurrent constant-size transform buffer store
-pub struct ConstTransformStore<T: Copy + Debug + 'static, const N: usize> {
+pub struct ConstTransformStore<T: Copy + Debug + Default + 'static, const N: usize> {
     buffers: DashMap<(String, String), ConstTransformBufferSync<T, N>>,
 }
 
-impl<T: Copy + Debug + 'static, const N: usize> ConstTransformStore<T, N> {
+impl<T: Copy + Debug + Default + 'static, const N: usize> ConstTransformStore<T, N> {
     pub fn new() -> Self {
         Self {
             buffers: DashMap::new(),
@@ -755,7 +757,7 @@ impl<T: Copy + Debug + 'static, const N: usize> ConstTransformStore<T, N> {
     }
 }
 
-impl<T: Copy + Debug + 'static, const N: usize> Default for ConstTransformStore<T, N> {
+impl<T: Copy + Debug + Default + 'static, const N: usize> Default for ConstTransformStore<T, N> {
     fn default() -> Self {
         Self::new()
     }
@@ -943,13 +945,17 @@ mod tests {
 
         // Set positions for both transforms
         // The second transform is moved 1 meter in x, 2 meters in y over 1 second
-        transform1.transform.mat[0][3] = 0.0; // x position
-        transform1.transform.mat[1][3] = 0.0; // y position
-        transform1.transform.mat[2][3] = 0.0; // z position
+        let mut mat1 = transform1.transform.to_matrix();
+        mat1[0][3] = 0.0; // x position
+        mat1[1][3] = 0.0; // y position
+        mat1[2][3] = 0.0; // z position
+        transform1.transform = Transform3D::from_matrix(mat1);
 
-        transform2.transform.mat[0][3] = 1.0; // x position (moved 1m)
-        transform2.transform.mat[1][3] = 2.0; // y position (moved 2m)
-        transform2.transform.mat[2][3] = 0.0; // z position (no change)
+        let mut mat2 = transform2.transform.to_matrix();
+        mat2[0][3] = 1.0; // x position (moved 1m)
+        mat2[1][3] = 2.0; // y position (moved 2m)
+        mat2[2][3] = 0.0; // z position (no change)
+        transform2.transform = Transform3D::from_matrix(mat2);
 
         // Compute velocity from transforms (newer minus older)
         let velocity = transform2.compute_velocity(&transform1);
@@ -1080,8 +1086,13 @@ mod tests {
         };
 
         // Set positions - robot moves 2 meters in x over 1 second
-        transform1.transform.mat[0][3] = 0.0;
-        transform2.transform.mat[0][3] = 2.0;
+        let mut mat1 = transform1.transform.to_matrix();
+        mat1[0][3] = 0.0;
+        transform1.transform = Transform3D::from_matrix(mat1);
+        
+        let mut mat2 = transform2.transform.to_matrix();
+        mat2[0][3] = 2.0;
+        transform2.transform = Transform3D::from_matrix(mat2);
 
         buffer.add_transform(transform1);
         buffer.add_transform(transform2);
@@ -1110,10 +1121,12 @@ mod tests {
         };
 
         // First transform - identity rotation
-        transform1.transform.mat[0][0] = 1.0;
-        transform1.transform.mat[1][1] = 1.0;
-        transform1.transform.mat[2][2] = 1.0;
-        transform1.transform.mat[3][3] = 1.0;
+        let mut mat1 = transform1.transform.to_matrix();
+        mat1[0][0] = 1.0;
+        mat1[1][1] = 1.0;
+        mat1[2][2] = 1.0;
+        mat1[3][3] = 1.0;
+        transform1.transform = Transform3D::from_matrix(mat1);
 
         let mut transform2 = StampedTransform {
             transform: Transform3D::<f32>::default(),
@@ -1124,12 +1137,14 @@ mod tests {
 
         // Second transform - 90 degree (π/2) rotation around Z axis
         // This is approximated as sin(π/2)=1.0, cos(π/2)=0.0
-        transform2.transform.mat[0][0] = 0.0; // cos(π/2)
-        transform2.transform.mat[0][1] = -1.0; // -sin(π/2)
-        transform2.transform.mat[1][0] = 1.0; // sin(π/2)
-        transform2.transform.mat[1][1] = 0.0; // cos(π/2)
-        transform2.transform.mat[2][2] = 1.0;
-        transform2.transform.mat[3][3] = 1.0;
+        let mut mat2 = transform2.transform.to_matrix();
+        mat2[0][0] = 0.0; // cos(π/2)
+        mat2[0][1] = -1.0; // -sin(π/2)
+        mat2[1][0] = 1.0; // sin(π/2)
+        mat2[1][1] = 0.0; // cos(π/2)
+        mat2[2][2] = 1.0;
+        mat2[3][3] = 1.0;
+        transform2.transform = Transform3D::from_matrix(mat2);
 
         buffer.add_transform(transform1);
         buffer.add_transform(transform2);
@@ -1321,8 +1336,13 @@ mod tests {
         };
 
         // Set positions - robot moves 3 meters in x over 1 second
-        transform1.transform.mat[0][3] = 0.0;
-        transform2.transform.mat[0][3] = 3.0;
+        let mut mat1 = transform1.transform.to_matrix();
+        mat1[0][3] = 0.0;
+        transform1.transform = Transform3D::from_matrix(mat1);
+        
+        let mut mat2 = transform2.transform.to_matrix();
+        mat2[0][3] = 3.0;
+        transform2.transform = Transform3D::from_matrix(mat2);
 
         buffer.add_transform(transform1);
         buffer.add_transform(transform2);

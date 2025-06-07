@@ -2,7 +2,7 @@ use crate::error::{TransformError, TransformResult};
 use crate::transform::{StampedTransform, TransformStore};
 use crate::velocity::VelocityTransform;
 use crate::velocity_cache::VelocityTransformCache;
-use cu29::clock::CuTime;
+use cu29::clock::{CuTime, RobotClock};
 use cu_spatial_payloads::Transform3D;
 use dashmap::DashMap;
 use petgraph::algo::dijkstra;
@@ -10,8 +10,7 @@ use petgraph::graph::{DiGraph, NodeIndex};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::ops::Neg;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// Trait for types that can compute their inverse transformation
 pub trait HasInverse<T: Copy + Debug + 'static> {
@@ -38,7 +37,7 @@ struct TransformCacheEntry<T: Copy + Debug + 'static> {
     /// The time for which this transform was calculated
     time: CuTime,
     /// When this cache entry was last accessed
-    last_access: Instant,
+    last_access: CuTime,
     /// Path used to calculate this transform
     path_hash: u64,
 }
@@ -49,12 +48,12 @@ struct TransformCache<T: Copy + Debug + 'static> {
     entries: DashMap<(String, String), TransformCacheEntry<T>>,
     /// Maximum size of the cache
     max_size: usize,
-    /// Maximum age of cache entries before invalidation
-    max_age: Duration,
-    /// Last time the cache was cleaned up (as nanoseconds since epoch)
-    last_cleanup: AtomicU64,
-    /// Cleanup interval - only clean every N seconds
-    cleanup_interval: Duration,
+    /// Maximum age of cache entries before invalidation (in nanoseconds)
+    max_age_nanos: u64,
+    /// Last time the cache was cleaned up (needs to be mutable)
+    last_cleanup_cell: std::sync::Mutex<CuTime>,
+    /// Cleanup interval (in nanoseconds)
+    cleanup_interval_nanos: u64,
 }
 
 impl<T: Copy + Debug + 'static> TransformCache<T> {
@@ -62,23 +61,24 @@ impl<T: Copy + Debug + 'static> TransformCache<T> {
         Self {
             entries: DashMap::with_capacity(max_size),
             max_size,
-            max_age,
-            last_cleanup: AtomicU64::new(now_timestamp_nanos()),
-            cleanup_interval: Duration::from_secs(5), // Clean every 5 seconds
+            max_age_nanos: max_age.as_nanos() as u64,
+            last_cleanup_cell: std::sync::Mutex::new(CuTime::from(0u64)),
+            cleanup_interval_nanos: 5_000_000_000, // Clean every 5 seconds
         }
     }
 
     /// Get a cached transform if it exists and is still valid
-    fn get(&self, from: &str, to: &str, time: CuTime, path_hash: u64) -> Option<Transform3D<T>> {
+    fn get(&self, from: &str, to: &str, time: CuTime, path_hash: u64, robot_clock: &RobotClock) -> Option<Transform3D<T>> {
         let key = (from.to_string(), to.to_string());
 
         if let Some(mut entry) = self.entries.get_mut(&key) {
-            let now = Instant::now();
+            let now = robot_clock.now();
 
             // Check if the cache entry is for the same time and path
             if entry.time == time && entry.path_hash == path_hash {
                 // Check if the entry is still valid (not too old)
-                if now.duration_since(entry.last_access) <= self.max_age {
+                let age = now.as_nanos().saturating_sub(entry.last_access.as_nanos());
+                if age <= self.max_age_nanos {
                     // Update last access time
                     entry.last_access = now;
                     return Some(entry.transform.clone());
@@ -97,8 +97,9 @@ impl<T: Copy + Debug + 'static> TransformCache<T> {
         transform: Transform3D<T>,
         time: CuTime,
         path_hash: u64,
+        robot_clock: &RobotClock,
     ) {
-        let now = Instant::now();
+        let now = robot_clock.now();
         let key = (from.to_string(), to.to_string());
 
         // If the cache is at capacity, remove the oldest entry
@@ -132,22 +133,22 @@ impl<T: Copy + Debug + 'static> TransformCache<T> {
     }
 
     /// Check if it's time to clean up the cache
-    fn should_cleanup(&self) -> bool {
-        let now = now_timestamp_nanos();
-        let last = self.last_cleanup.load(Ordering::Relaxed);
-        let interval_nanos = self.cleanup_interval.as_nanos() as u64;
-
-        now.saturating_sub(last) >= interval_nanos
+    fn should_cleanup(&self, robot_clock: &RobotClock) -> bool {
+        let now = robot_clock.now();
+        let last_cleanup = *self.last_cleanup_cell.lock().unwrap();
+        let elapsed = now.as_nanos().saturating_sub(last_cleanup.as_nanos());
+        elapsed >= self.cleanup_interval_nanos
     }
 
     /// Clear old entries from the cache
-    fn cleanup(&self) {
-        let now = Instant::now();
+    fn cleanup(&self, robot_clock: &RobotClock) {
+        let now = robot_clock.now();
         let mut keys_to_remove = Vec::new();
 
         // Identify keys to remove
         for entry in self.entries.iter() {
-            if now.duration_since(entry.last_access) > self.max_age {
+            let age = now.as_nanos().saturating_sub(entry.last_access.as_nanos());
+            if age > self.max_age_nanos {
                 keys_to_remove.push(entry.key().clone());
             }
         }
@@ -157,9 +158,8 @@ impl<T: Copy + Debug + 'static> TransformCache<T> {
             self.entries.remove(&key);
         }
 
-        // Update last cleanup time using atomic
-        self.last_cleanup
-            .store(now_timestamp_nanos(), Ordering::Relaxed);
+        // Update last cleanup time
+        *self.last_cleanup_cell.lock().unwrap() = now;
     }
 
     /// Clear all entries
@@ -168,15 +168,6 @@ impl<T: Copy + Debug + 'static> TransformCache<T> {
     }
 }
 
-/// Get current time as nanoseconds since some epoch
-/// This is just used for comparing intervals, not for absolute time
-fn now_timestamp_nanos() -> u64 {
-    let now = Instant::now();
-    // We can't get nanoseconds from Instant directly, but we can use this trick
-    // to get a stable value that increases monotonically
-    let duration = now.elapsed();
-    (duration.as_secs() * 1_000_000_000 + duration.subsec_nanos() as u64) % u64::MAX
-}
 
 pub struct TransformTree<T: Copy + Debug + Default + 'static> {
     graph: DiGraph<String, ()>,
@@ -235,7 +226,7 @@ impl One for u64 {
 // and now we also require T to implement One
 impl<T: Copy + Debug + Default + One + 'static + Neg<Output = T>> TransformTree<T>
 where
-    Transform3D<T>: Clone + HasInverse<T>,
+    Transform3D<T>: Clone + HasInverse<T> + std::ops::Mul<Output = Transform3D<T>>,
     T: std::ops::Add<Output = T>
         + std::ops::Sub<Output = T>
         + std::ops::Mul<Output = T>
@@ -259,7 +250,7 @@ where
             cache: TransformCache::new(Self::DEFAULT_CACHE_SIZE, Self::DEFAULT_CACHE_AGE),
             velocity_cache: VelocityTransformCache::new(
                 Self::DEFAULT_CACHE_SIZE,
-                Self::DEFAULT_CACHE_AGE,
+                Self::DEFAULT_CACHE_AGE.as_nanos() as u64,
             ),
         }
     }
@@ -271,7 +262,7 @@ where
             frame_indices: HashMap::new(),
             transform_store: TransformStore::new(),
             cache: TransformCache::new(cache_size, cache_age),
-            velocity_cache: VelocityTransformCache::new(cache_size, cache_age),
+            velocity_cache: VelocityTransformCache::new(cache_size, cache_age.as_nanos() as u64),
         }
     }
 
@@ -282,23 +273,23 @@ where
     }
 
     /// Perform scheduled cache cleanup operation
-    pub fn cleanup_cache(&self) {
-        self.cache.cleanup();
-        self.velocity_cache.cleanup();
+    pub fn cleanup_cache(&self, robot_clock: &RobotClock) {
+        self.cache.cleanup(robot_clock);
+        self.velocity_cache.cleanup(robot_clock);
     }
 
     /// Creates an identity transform matrix in a type-safe way
     fn create_identity_transform() -> Transform3D<T> {
-        let mut identity = Transform3D::default();
+        let mut mat = [[T::default(); 4]; 4];
 
         // Set the diagonal elements to one
         let one = T::one();
-        identity.mat[0][0] = one;
-        identity.mat[1][1] = one;
-        identity.mat[2][2] = one;
-        identity.mat[3][3] = one;
+        mat[0][0] = one;
+        mat[1][1] = one;
+        mat[2][2] = one;
+        mat[3][3] = one;
 
-        identity
+        Transform3D::from_matrix(mat)
     }
 
     fn ensure_frame(&mut self, frame_id: &str) -> NodeIndex {
@@ -450,6 +441,7 @@ where
         from_frame: &str,
         to_frame: &str,
         time: CuTime,
+        robot_clock: &RobotClock,
     ) -> TransformResult<Transform3D<T>> {
         // Identity case: same frame
         if from_frame == to_frame {
@@ -468,13 +460,13 @@ where
         let path_hash = Self::compute_path_hash(&path);
 
         // Try to get the transform from cache - concurrent map allows lock-free reads
-        if let Some(cached_transform) = self.cache.get(from_frame, to_frame, time, path_hash) {
+        if let Some(cached_transform) = self.cache.get(from_frame, to_frame, time, path_hash, robot_clock) {
             return Ok(cached_transform);
         }
 
         // Check if it's time to clean up the cache
-        if self.cache.should_cleanup() {
-            self.cache.cleanup();
+        if self.cache.should_cleanup(robot_clock) {
+            self.cache.cleanup(robot_clock);
         }
 
         // Cache miss - compute the transform
@@ -516,7 +508,7 @@ where
 
         // Cache the computed result
         self.cache
-            .insert(from_frame, to_frame, result.clone(), time, path_hash);
+            .insert(from_frame, to_frame, result.clone(), time, path_hash, robot_clock);
 
         Ok(result)
     }
@@ -553,6 +545,7 @@ where
         from_frame: &str,
         to_frame: &str,
         time: CuTime,
+        robot_clock: &RobotClock,
     ) -> TransformResult<VelocityTransform<T>> {
         // Identity case: same frame
         if from_frame == to_frame {
@@ -573,14 +566,14 @@ where
         // Try to get the velocity from cache
         if let Some(cached_velocity) = self
             .velocity_cache
-            .get(from_frame, to_frame, time, path_hash)
+            .get(from_frame, to_frame, time, path_hash, robot_clock)
         {
             return Ok(cached_velocity);
         }
 
         // Check if it's time to clean up the cache
-        if self.velocity_cache.should_cleanup() {
-            self.velocity_cache.cleanup();
+        if self.velocity_cache.should_cleanup(robot_clock) {
+            self.velocity_cache.cleanup(robot_clock);
         }
 
         // Cache miss - compute the velocity
@@ -671,7 +664,7 @@ where
 
         // Cache the computed result
         self.velocity_cache
-            .insert(from_frame, to_frame, result.clone(), time, path_hash);
+            .insert(from_frame, to_frame, result.clone(), time, path_hash, robot_clock);
 
         Ok(result)
     }
@@ -679,7 +672,7 @@ where
 
 impl<T: Copy + Debug + Default + One + 'static + Neg<Output = T>> Default for TransformTree<T>
 where
-    Transform3D<T>: Clone + HasInverse<T>,
+    Transform3D<T>: Clone + HasInverse<T> + std::ops::Mul<Output = Transform3D<T>>,
     T: std::ops::Add<Output = T>
         + std::ops::Sub<Output = T>
         + std::ops::Mul<Output = T>
@@ -697,7 +690,7 @@ where
 mod tests {
     use super::*;
     use approx::assert_relative_eq;
-    use cu29::clock::CuDuration;
+    use cu29::clock::{CuDuration, RobotClock};
 
     // Only use f32/f64 for tests since our inverse transform is only implemented for these types
 
@@ -805,7 +798,8 @@ mod tests {
         assert!(tree.add_transform(world_to_robot).is_ok());
 
         // Get the transform from world to robot (forward)
-        let forward_transform = tree.lookup_transform("world", "robot", CuDuration(1000));
+        let clock = RobotClock::default();
+        let forward_transform = tree.lookup_transform("world", "robot", CuDuration(1000), &clock);
         assert!(forward_transform.is_ok());
         let forward = forward_transform.unwrap();
 
@@ -815,7 +809,7 @@ mod tests {
         assert_eq!(forward.mat[2][3], 4.0);
 
         // Now get the inverse transform (robot to world)
-        let inverse_transform = tree.lookup_transform("robot", "world", CuDuration(1000));
+        let inverse_transform = tree.lookup_transform("robot", "world", CuDuration(1000), &clock);
         assert!(inverse_transform.is_ok());
         let inverse = inverse_transform.unwrap();
 
@@ -883,7 +877,8 @@ mod tests {
         assert!(tree.add_transform(arm_to_gripper).is_ok());
 
         // Now lookup the composed transform from world to gripper
-        let world_to_gripper = tree.lookup_transform("world", "gripper", CuDuration(1000));
+        let clock = RobotClock::default();
+        let world_to_gripper = tree.lookup_transform("world", "gripper", CuDuration(1000), &clock);
         assert!(world_to_gripper.is_ok());
         let transform = world_to_gripper.unwrap();
 
@@ -909,7 +904,7 @@ mod tests {
         assert_relative_eq!(transform.mat[2][3], 0.0, epsilon = epsilon);
 
         // Verify cache works by checking the same transform again
-        let cached_transform = tree.lookup_transform("world", "gripper", CuDuration(1000));
+        let cached_transform = tree.lookup_transform("world", "gripper", CuDuration(1000), &clock);
         assert!(cached_transform.is_ok());
         let cached_result = cached_transform.unwrap();
 
@@ -925,7 +920,7 @@ mod tests {
         }
 
         // Now test reverse path
-        let gripper_to_world = tree.lookup_transform("gripper", "world", CuDuration(1000));
+        let gripper_to_world = tree.lookup_transform("gripper", "world", CuDuration(1000), &clock);
         assert!(gripper_to_world.is_ok());
         let inverse_transform = gripper_to_world.unwrap();
 
@@ -973,7 +968,8 @@ mod tests {
         assert!(tree.add_transform(transform).is_ok());
 
         // Look up the transform (populates cache)
-        let result1 = tree.lookup_transform("a", "b", CuDuration(1000));
+        let clock = RobotClock::default();
+        let result1 = tree.lookup_transform("a", "b", CuDuration(1000), &clock);
         assert!(result1.is_ok());
 
         // Verify transform is correct
@@ -984,14 +980,14 @@ mod tests {
         std::thread::sleep(Duration::from_millis(100));
 
         // Look up again - should still work even though cache is expired
-        let result2 = tree.lookup_transform("a", "b", CuDuration(1000));
+        let result2 = tree.lookup_transform("a", "b", CuDuration(1000), &clock);
         assert!(result2.is_ok());
 
         // Explicitly clear the cache
         tree.clear_cache();
 
         // Should still work after clearing the cache
-        let result3 = tree.lookup_transform("a", "b", CuDuration(1000));
+        let result3 = tree.lookup_transform("a", "b", CuDuration(1000), &clock);
         assert!(result3.is_ok());
     }
 
@@ -1034,7 +1030,8 @@ mod tests {
         assert!(tree.add_transform(robot_to_camera).is_ok());
 
         // Look up the transform from world to camera (should combine both transforms)
-        let world_to_camera = tree.lookup_transform("world", "camera", CuDuration(1000));
+        let clock = RobotClock::default();
+        let world_to_camera = tree.lookup_transform("world", "camera", CuDuration(1000), &clock);
         assert!(world_to_camera.is_ok());
         let transform = world_to_camera.unwrap();
 
@@ -1053,7 +1050,7 @@ mod tests {
         assert_relative_eq!(transform.mat[2][3], 3.2, epsilon = epsilon);
 
         // Now look up the inverse transform (camera to world)
-        let camera_to_world = tree.lookup_transform("camera", "world", CuDuration(1000));
+        let camera_to_world = tree.lookup_transform("camera", "world", CuDuration(1000), &clock);
         assert!(camera_to_world.is_ok());
     }
 
@@ -1062,7 +1059,8 @@ mod tests {
         let tree = TransformTree::<f32>::with_cache_settings(5, Duration::from_millis(10));
 
         // Explicitly trigger cache cleanup
-        tree.cleanup_cache();
+        let clock = RobotClock::default();
+        tree.cleanup_cache(&clock);
     }
 
     #[test]
@@ -1106,7 +1104,8 @@ mod tests {
         tree.add_transform(transform2).unwrap();
 
         // Request velocity at time 1500 (halfway between transforms)
-        let velocity = tree.lookup_velocity("world", "robot", CuDuration(1500));
+        let clock = RobotClock::default();
+        let velocity = tree.lookup_velocity("world", "robot", CuDuration(1500), &clock);
         assert!(velocity.is_ok());
 
         let vel = velocity.unwrap();
@@ -1117,7 +1116,7 @@ mod tests {
         assert_relative_eq!(vel.linear[2], 0.0, epsilon = 1e-5);
 
         // Test the inverse direction
-        let reverse_velocity = tree.lookup_velocity("robot", "world", CuDuration(1500));
+        let reverse_velocity = tree.lookup_velocity("robot", "world", CuDuration(1500), &clock);
         assert!(reverse_velocity.is_ok());
 
         let rev_vel = reverse_velocity.unwrap();
@@ -1202,7 +1201,8 @@ mod tests {
         tree.add_transform(base_to_sensor_2).unwrap();
 
         // Look up combined velocity from world to sensor
-        let velocity = tree.lookup_velocity("world", "sensor", CuDuration(1500));
+        let clock = RobotClock::default();
+        let velocity = tree.lookup_velocity("world", "sensor", CuDuration(1500), &clock);
         assert!(velocity.is_ok());
 
         let vel = velocity.unwrap();
@@ -1289,7 +1289,8 @@ mod tests {
         tree.add_transform(base_to_sensor_2).unwrap();
 
         // Look up combined velocity from world to sensor at time 1500
-        let velocity = tree.lookup_velocity("world", "sensor", CuDuration(1500));
+        let clock = RobotClock::default();
+        let velocity = tree.lookup_velocity("world", "sensor", CuDuration(1500), &clock);
         assert!(velocity.is_ok());
 
         let vel = velocity.unwrap();
@@ -1303,7 +1304,7 @@ mod tests {
         assert_relative_eq!(vel.linear[2], 0.0, epsilon = epsilon);
 
         // Test the reverse velocity (sensor to world)
-        let reverse_velocity = tree.lookup_velocity("sensor", "world", CuDuration(1500));
+        let reverse_velocity = tree.lookup_velocity("sensor", "world", CuDuration(1500), &clock);
         assert!(reverse_velocity.is_ok());
 
         let rev_vel = reverse_velocity.unwrap();
@@ -1388,7 +1389,8 @@ mod tests {
         tree.add_transform(base_to_sensor_2).unwrap();
 
         // Look up velocity of sensor as seen from world
-        let velocity = tree.lookup_velocity("world", "sensor", CuDuration(1500));
+        let clock = RobotClock::default();
+        let velocity = tree.lookup_velocity("world", "sensor", CuDuration(1500), &clock);
         assert!(velocity.is_ok());
 
         let vel = velocity.unwrap();
@@ -1456,8 +1458,9 @@ mod tests {
         tree.add_transform(transform2).unwrap();
 
         // First lookup - should compute and cache the velocity
-        let start_time = Instant::now();
-        let velocity1 = tree.lookup_velocity("world", "robot", CuDuration(1500));
+        let clock = RobotClock::default();
+        let start_time = std::time::Instant::now();
+        let velocity1 = tree.lookup_velocity("world", "robot", CuDuration(1500), &clock);
         let first_lookup_time = start_time.elapsed();
 
         assert!(velocity1.is_ok());
@@ -1465,8 +1468,8 @@ mod tests {
         assert_relative_eq!(vel1.linear[0], 2.0, epsilon = 0.01);
 
         // Second lookup - should use the cache and be faster
-        let start_time = Instant::now();
-        let velocity2 = tree.lookup_velocity("world", "robot", CuDuration(1500));
+        let start_time = std::time::Instant::now();
+        let velocity2 = tree.lookup_velocity("world", "robot", CuDuration(1500), &clock);
         let second_lookup_time = start_time.elapsed();
 
         assert!(velocity2.is_ok());
@@ -1478,8 +1481,8 @@ mod tests {
         // Clear cache and do another lookup - should be slower again
         tree.clear_cache();
 
-        let start_time = Instant::now();
-        let velocity3 = tree.lookup_velocity("world", "robot", CuDuration(1500));
+        let start_time = std::time::Instant::now();
+        let velocity3 = tree.lookup_velocity("world", "robot", CuDuration(1500), &clock);
         let third_lookup_time = start_time.elapsed();
 
         assert!(velocity3.is_ok());
@@ -1534,7 +1537,8 @@ mod tests {
         tree.add_transform(transform2).unwrap();
 
         // First lookup - compute and cache
-        let velocity1 = tree.lookup_velocity("world", "robot", CuDuration(1500));
+        let clock = RobotClock::default();
+        let velocity1 = tree.lookup_velocity("world", "robot", CuDuration(1500), &clock);
         assert!(velocity1.is_ok());
         let vel1 = velocity1.unwrap();
         assert_relative_eq!(vel1.linear[0], 1.0, epsilon = 0.01);
@@ -1558,13 +1562,13 @@ mod tests {
 
         // Look up velocity at t=1500 again - should return the same result
         // since it's between the first two transforms
-        let velocity2 = tree.lookup_velocity("world", "robot", CuDuration(1500));
+        let velocity2 = tree.lookup_velocity("world", "robot", CuDuration(1500), &clock);
         assert!(velocity2.is_ok());
         let vel2 = velocity2.unwrap();
         assert_relative_eq!(vel2.linear[0], 1.0, epsilon = 0.01);
 
         // Look up velocity at t=2500 - should reflect the new velocity between transform2 and transform3
-        let velocity3 = tree.lookup_velocity("world", "robot", CuDuration(2500));
+        let velocity3 = tree.lookup_velocity("world", "robot", CuDuration(2500), &clock);
         assert!(velocity3.is_ok());
         let vel3 = velocity3.unwrap();
         assert_relative_eq!(vel3.linear[0], 2.0, epsilon = 0.01); // Velocity between t=2000 and t=3000

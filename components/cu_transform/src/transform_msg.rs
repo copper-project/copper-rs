@@ -314,9 +314,11 @@ where
         let dt_t = num_traits::cast::cast::<f64, T>(dt)?;
 
         // Extract positions from transforms
+        let current_mat = current_transform.to_matrix();
+        let previous_mat = previous_transform.to_matrix();
         let mut linear_velocity = [T::default(); 3];
         for (i, vel) in linear_velocity.iter_mut().enumerate() {
-            let pos_diff = current_transform.mat[i][3] - previous_transform.mat[i][3];
+            let pos_diff = current_mat[i][3] - previous_mat[i][3];
             *vel = pos_diff / dt_t;
         }
 

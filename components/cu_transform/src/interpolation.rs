@@ -107,27 +107,32 @@ pub fn interpolate_transforms<T: Interpolate>(
 
     let ratio = (time_nanos - before_nanos) / (after_nanos - before_nanos);
 
-    let mut result = Transform3D::default();
+    // Get matrices from transforms
+    let before_mat = before.transform.to_matrix();
+    let after_mat = after.transform.to_matrix();
+    
+    // Initialize result matrix
+    let mut result_mat = [[T::default(); 4]; 4];
 
     // Copy rotation matrix from before transform (no interpolation for rotation yet)
     for i in 0..3 {
         for j in 0..3 {
-            result.mat[i][j] = before.transform.mat[i][j];
+            result_mat[i][j] = before_mat[i][j];
         }
     }
 
     // Interpolate translation (last column of matrix)
     for i in 0..3 {
-        let before_val = before.transform.mat[i][3].to_f64();
-        let after_val = after.transform.mat[i][3].to_f64();
+        let before_val = before_mat[i][3].to_f64();
+        let after_val = after_mat[i][3].to_f64();
         let interpolated = before_val + (after_val - before_val) * ratio;
-        result.mat[i][3] = T::from_f64(interpolated);
+        result_mat[i][3] = T::from_f64(interpolated);
     }
 
     // Copy homogeneous component
-    result.mat[3][3] = before.transform.mat[3][3];
+    result_mat[3][3] = before_mat[3][3];
 
-    Ok(result)
+    Ok(Transform3D::from_matrix(result_mat))
 }
 
 #[cfg(test)]
@@ -152,26 +157,31 @@ mod tests {
             child_frame: "robot".to_string(),
         };
 
-        before.transform.mat[0][3] = 0.0;
-        after.transform.mat[0][3] = 10.0;
+        let mut before_mat = before.transform.to_matrix();
+        before_mat[0][3] = 0.0;
+        before.transform = Transform3D::from_matrix(before_mat);
+        
+        let mut after_mat = after.transform.to_matrix();
+        after_mat[0][3] = 10.0;
+        after.transform = Transform3D::from_matrix(after_mat);
 
         let result = interpolate_transforms(&before, &after, CuDuration(2000));
         assert!(result.is_ok());
 
         let transform = result.unwrap();
-        assert_relative_eq!(transform.mat[0][3], 5.0);
+        assert_relative_eq!(transform.to_matrix()[0][3], 5.0);
 
         let result = interpolate_transforms(&before, &after, CuDuration(1500));
         assert!(result.is_ok());
 
         let transform = result.unwrap();
-        assert_relative_eq!(transform.mat[0][3], 2.5);
+        assert_relative_eq!(transform.to_matrix()[0][3], 2.5);
 
         let result = interpolate_transforms(&before, &after, CuDuration(2500));
         assert!(result.is_ok());
 
         let transform = result.unwrap();
-        assert_relative_eq!(transform.mat[0][3], 7.5);
+        assert_relative_eq!(transform.to_matrix()[0][3], 7.5);
     }
 
     #[test]
@@ -190,14 +200,19 @@ mod tests {
             child_frame: "robot".to_string(),
         };
 
-        before.transform.mat[0][3] = 0.0;
-        after.transform.mat[0][3] = 10.0;
+        let mut before_mat = before.transform.to_matrix();
+        before_mat[0][3] = 0.0;
+        before.transform = Transform3D::from_matrix(before_mat);
+        
+        let mut after_mat = after.transform.to_matrix();
+        after_mat[0][3] = 10.0;
+        after.transform = Transform3D::from_matrix(after_mat);
 
         // Test at midpoint
         let result = interpolate_transforms(&before, &after, CuDuration(2000));
         assert!(result.is_ok());
         let transform = result.unwrap();
-        assert_relative_eq!(transform.mat[0][3], 5.0);
+        assert_relative_eq!(transform.to_matrix()[0][3], 5.0);
     }
 
     #[test]
@@ -217,20 +232,25 @@ mod tests {
             child_frame: "robot".to_string(),
         };
 
-        before.transform.mat[0][3] = 0;
-        after.transform.mat[0][3] = 10;
+        let mut before_mat = before.transform.to_matrix();
+        before_mat[0][3] = 0;
+        before.transform = Transform3D::from_matrix(before_mat);
+        
+        let mut after_mat = after.transform.to_matrix();
+        after_mat[0][3] = 10;
+        after.transform = Transform3D::from_matrix(after_mat);
 
         // Test at midpoint
         let result = interpolate_transforms(&before, &after, CuDuration(2000));
         assert!(result.is_ok());
         let transform = result.unwrap();
-        assert_eq!(transform.mat[0][3], 5);
+        assert_eq!(transform.to_matrix()[0][3], 5);
 
         // Test with non-integer result (should round)
         let result = interpolate_transforms(&before, &after, CuDuration(1500));
         assert!(result.is_ok());
         let transform = result.unwrap();
-        assert_eq!(transform.mat[0][3], 3); // 2.5 rounds to 3
+        assert_eq!(transform.to_matrix()[0][3], 3); // 2.5 rounds to 3
     }
 
     #[test]
@@ -251,14 +271,19 @@ mod tests {
         };
 
         // Set large values to test u64 range
-        before.transform.mat[0][3] = 1_000_000_000;
-        after.transform.mat[0][3] = 2_000_000_000;
+        let mut before_mat = before.transform.to_matrix();
+        before_mat[0][3] = 1_000_000_000;
+        before.transform = Transform3D::from_matrix(before_mat);
+        
+        let mut after_mat = after.transform.to_matrix();
+        after_mat[0][3] = 2_000_000_000;
+        after.transform = Transform3D::from_matrix(after_mat);
 
         // Test at 75% point
         let result = interpolate_transforms(&before, &after, CuDuration(2500));
         assert!(result.is_ok());
         let transform = result.unwrap();
-        assert_eq!(transform.mat[0][3], 1_750_000_000);
+        assert_eq!(transform.to_matrix()[0][3], 1_750_000_000);
     }
 
     #[test]
