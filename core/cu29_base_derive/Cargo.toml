@@ -1,0 +1,21 @@
+[package]
+name = "cu29-base-derive"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+quote = { workspace = true }
+syn = { workspace = true }
+cu29-intern-strs = { workspace = true, features = ["macro_debug"] }
+
+[features]
+macro_debug = ["cu29-intern-strs/macro_debug"]
