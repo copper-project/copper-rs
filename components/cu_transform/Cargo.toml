@@ -23,6 +23,7 @@ dashmap = "6.1.0"
 uom = "0.35.0"       # For units of measurement support
 num-traits = "0.2.18" # For numeric trait implementations
 glam = { version = "0.24", features = ["serde", "bytemuck"] } # For optimized math operations
+arrayvec = { version = "0.7.6", features = ["serde"] }    # For stack-allocated strings
 
 [features]
 default = []

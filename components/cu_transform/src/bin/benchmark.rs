@@ -3,6 +3,7 @@ use cu29::prelude::RobotClock;
 use cu_spatial_payloads::Transform3D;
 use cu_transform::transform::StampedTransform;
 use cu_transform::tree::TransformTree;
+use cu_transform::FrameIdString;
 use std::time::Instant;
 
 fn main() {
@@ -20,13 +21,16 @@ fn main() {
     // Set up a chain of transforms: base -> frame1 -> frame2 -> ... -> frameN
     println!("Setting up {num_frames} frames in a chain");
     for i in 0..num_frames {
-        let parent = if i == 0 {
+        let parent_str = if i == 0 {
             "base".to_string()
         } else {
             format!("frame{i}")
         };
 
-        let child = format!("frame{}", i + 1);
+        let child_str = format!("frame{}", i + 1);
+        
+        let parent = FrameIdString::from(&parent_str).unwrap();
+        let child = FrameIdString::from(&child_str).unwrap();
 
         // Create a simple translation
         let transform = StampedTransform {

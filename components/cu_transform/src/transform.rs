@@ -1,3 +1,4 @@
+use crate::FrameIdString;
 use cu29::clock::{CuTime, CuTimeRange};
 use cu_spatial_payloads::Transform3D;
 use dashmap::DashMap;
@@ -13,8 +14,8 @@ const DEFAULT_CACHE_SIZE: usize = 100;
 pub struct StampedTransform<T: Copy + Debug + Default + 'static> {
     pub transform: Transform3D<T>,
     pub stamp: CuTime,
-    pub parent_frame: String,
-    pub child_frame: String,
+    pub parent_frame: FrameIdString,
+    pub child_frame: FrameIdString,
 }
 
 impl<
@@ -55,10 +56,7 @@ impl<
         // Convert nanoseconds to seconds (1e9 nanoseconds = 1 second)
         let dt = dt_nanos as f64 / 1_000_000_000.0;
 
-        // The tests expect 1 nanosecond = 1 millisecond for simplicity
-        // In a real application, you would use the actual conversion rate
-        // This is just for passing the tests
-        let dt = dt * 1_000_000.0;
+        // Don't modify the time - use the actual conversion
 
         // Convert the floating-point time difference to T
         let dt_t = num_traits::cast::cast::<f64, T>(dt)?;
@@ -67,9 +65,11 @@ impl<
         let self_mat = self.transform.to_matrix();
         let prev_mat = previous.transform.to_matrix();
         let mut linear_velocity = [T::default(); 3];
+        // Note: When glam feature is enabled, matrices are in column-major format
+        // Translation is in the last row: mat[3][0], mat[3][1], mat[3][2]
         for (i, vel) in linear_velocity.iter_mut().enumerate() {
             // Calculate position difference
-            let pos_diff = self_mat[i][3] - prev_mat[i][3];
+            let pos_diff = self_mat[3][i] - prev_mat[3][i];
             // Divide by time difference to get velocity
             *vel = pos_diff / dt_t;
         }
@@ -681,7 +681,7 @@ impl<T: Copy + Debug + Default + 'static, const N: usize> Default for ConstTrans
 
 /// A concurrent transform buffer store to reduce contention among multiple transform pairs
 pub struct TransformStore<T: Copy + Debug + Default + 'static> {
-    buffers: DashMap<(String, String), TransformBuffer<T>>,
+    buffers: DashMap<(FrameIdString, FrameIdString), TransformBuffer<T>>,
 }
 
 impl<T: Copy + Debug + Default + 'static> TransformStore<T> {
@@ -693,8 +693,10 @@ impl<T: Copy + Debug + Default + 'static> TransformStore<T> {
 
     /// Get or create a transform buffer for a specific parent-child frame pair
     pub fn get_or_create_buffer(&self, parent: &str, child: &str) -> TransformBuffer<T> {
+        let parent_frame = FrameIdString::from(parent).expect("Parent frame name too long");
+        let child_frame = FrameIdString::from(child).expect("Child frame name too long");
         self.buffers
-            .entry((parent.to_string(), child.to_string()))
+            .entry((parent_frame, child_frame))
             .or_insert_with(|| TransformBuffer::new())
             .clone()
     }
@@ -707,8 +709,10 @@ impl<T: Copy + Debug + Default + 'static> TransformStore<T> {
 
     /// Get a transform buffer if it exists
     pub fn get_buffer(&self, parent: &str, child: &str) -> Option<TransformBuffer<T>> {
+        let parent_frame = FrameIdString::from(parent).ok()?;
+        let child_frame = FrameIdString::from(child).ok()?;
         self.buffers
-            .get(&(parent.to_string(), child.to_string()))
+            .get(&(parent_frame, child_frame))
             .map(|entry| entry.clone())
     }
 }
@@ -721,7 +725,7 @@ impl<T: Copy + Debug + Default + 'static> Default for TransformStore<T> {
 
 /// A concurrent constant-size transform buffer store
 pub struct ConstTransformStore<T: Copy + Debug + Default + 'static, const N: usize> {
-    buffers: DashMap<(String, String), ConstTransformBufferSync<T, N>>,
+    buffers: DashMap<(FrameIdString, FrameIdString), ConstTransformBufferSync<T, N>>,
 }
 
 impl<T: Copy + Debug + Default + 'static, const N: usize> ConstTransformStore<T, N> {
@@ -737,8 +741,10 @@ impl<T: Copy + Debug + Default + 'static, const N: usize> ConstTransformStore<T,
         parent: &str,
         child: &str,
     ) -> ConstTransformBufferSync<T, N> {
+        let parent_frame = FrameIdString::from(parent).expect("Parent frame name too long");
+        let child_frame = FrameIdString::from(child).expect("Child frame name too long");
         self.buffers
-            .entry((parent.to_string(), child.to_string()))
+            .entry((parent_frame, child_frame))
             .or_insert_with(|| ConstTransformBufferSync::new())
             .clone()
     }
@@ -751,8 +757,10 @@ impl<T: Copy + Debug + Default + 'static, const N: usize> ConstTransformStore<T,
 
     /// Get a transform buffer if it exists
     pub fn get_buffer(&self, parent: &str, child: &str) -> Option<ConstTransformBufferSync<T, N>> {
+        let parent_frame = FrameIdString::from(parent).ok()?;
+        let child_frame = FrameIdString::from(child).ok()?;
         self.buffers
-            .get(&(parent.to_string(), child.to_string()))
+            .get(&(parent_frame, child_frame))
             .map(|entry| entry.clone())
     }
 }
@@ -776,8 +784,8 @@ mod tests {
         let transform = StampedTransform {
             transform: Transform3D::default(),
             stamp: CuDuration(1000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         buffer.add_transform(transform);
@@ -793,22 +801,22 @@ mod tests {
         let transform1 = StampedTransform {
             transform: Transform3D::default(),
             stamp: CuDuration(2000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let transform2 = StampedTransform {
             transform: Transform3D::default(),
             stamp: CuDuration(1000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let transform3 = StampedTransform {
             transform: Transform3D::default(),
             stamp: CuDuration(3000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         buffer.add_transform(transform1);
@@ -831,22 +839,22 @@ mod tests {
         let transform1 = StampedTransform {
             transform: Transform3D::default(),
             stamp: CuDuration(1000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let transform2 = StampedTransform {
             transform: Transform3D::default(),
             stamp: CuDuration(2000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let transform3 = StampedTransform {
             transform: Transform3D::default(),
             stamp: CuDuration(3000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         buffer.add_transform(transform1);
@@ -865,15 +873,15 @@ mod tests {
         let transform1 = StampedTransform {
             transform: Transform3D::default(),
             stamp: CuDuration(1000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let transform2 = StampedTransform {
             transform: Transform3D::default(),
             stamp: CuDuration(3000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         buffer.add_transform(transform1);
@@ -907,8 +915,8 @@ mod tests {
         let transform = StampedTransform {
             transform: Transform3D::default(),
             stamp: CuDuration(1000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         store.add_transform(transform.clone());
@@ -931,31 +939,34 @@ mod tests {
         // Create two transforms with a small time difference and known position difference
         let mut transform1 = StampedTransform {
             transform: Transform3D::<f32>::default(),
-            stamp: CuDuration(1000), // 1 second
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            stamp: CuDuration(1_000_000_000), // 1 second in nanoseconds
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let mut transform2 = StampedTransform {
             transform: Transform3D::<f32>::default(),
-            stamp: CuDuration(2000), // 2 seconds
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            stamp: CuDuration(2_000_000_000), // 2 seconds in nanoseconds
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         // Set positions for both transforms
         // The second transform is moved 1 meter in x, 2 meters in y over 1 second
-        let mut mat1 = transform1.transform.to_matrix();
-        mat1[0][3] = 0.0; // x position
-        mat1[1][3] = 0.0; // y position
-        mat1[2][3] = 0.0; // z position
-        transform1.transform = Transform3D::from_matrix(mat1);
+        // Using column-major format (each inner array is a column)
+        transform1.transform = Transform3D::from_matrix([
+            [1.0, 0.0, 0.0, 0.0], // Column 0: x-axis
+            [0.0, 1.0, 0.0, 0.0], // Column 1: y-axis
+            [0.0, 0.0, 1.0, 0.0], // Column 2: z-axis
+            [0.0, 0.0, 0.0, 1.0], // Column 3: translation (x=0, y=0, z=0)
+        ]);
 
-        let mut mat2 = transform2.transform.to_matrix();
-        mat2[0][3] = 1.0; // x position (moved 1m)
-        mat2[1][3] = 2.0; // y position (moved 2m)
-        mat2[2][3] = 0.0; // z position (no change)
-        transform2.transform = Transform3D::from_matrix(mat2);
+        transform2.transform = Transform3D::from_matrix([
+            [1.0, 0.0, 0.0, 0.0], // Column 0: x-axis
+            [0.0, 1.0, 0.0, 0.0], // Column 1: y-axis
+            [0.0, 0.0, 1.0, 0.0], // Column 2: z-axis
+            [1.0, 2.0, 0.0, 1.0], // Column 3: translation (x=1, y=2, z=0)
+        ]);
 
         // Compute velocity from transforms (newer minus older)
         let velocity = transform2.compute_velocity(&transform1);
@@ -963,6 +974,7 @@ mod tests {
 
         let vel = velocity.unwrap();
 
+        
         // The velocity should be 1 m/s in x and 2 m/s in y
         assert_relative_eq!(vel.linear[0], 1.0);
         assert_relative_eq!(vel.linear[1], 2.0);
@@ -981,15 +993,15 @@ mod tests {
         let transform1 = StampedTransform {
             transform: Transform3D::<f32>::default(),
             stamp: CuDuration(1000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let transform2 = StampedTransform {
             transform: Transform3D::<f32>::default(),
             stamp: CuDuration(2000),
-            parent_frame: "different".to_string(), // Different parent frame
-            child_frame: "robot".to_string(),
+            parent_frame: FrameIdString::from("different").unwrap(), // Different parent frame
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let velocity = transform2.compute_velocity(&transform1);
@@ -999,15 +1011,15 @@ mod tests {
         let transform1 = StampedTransform {
             transform: Transform3D::<f32>::default(),
             stamp: CuDuration(2000), // Later time
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let transform2 = StampedTransform {
             transform: Transform3D::<f32>::default(),
             stamp: CuDuration(1000), // Earlier time
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let velocity = transform2.compute_velocity(&transform1);
@@ -1022,22 +1034,22 @@ mod tests {
         let transform1 = StampedTransform {
             transform: Transform3D::default(),
             stamp: CuDuration(1000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let transform2 = StampedTransform {
             transform: Transform3D::default(),
             stamp: CuDuration(2000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let transform3 = StampedTransform {
             transform: Transform3D::default(),
             stamp: CuDuration(3000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         buffer.add_transform(transform1);
@@ -1073,32 +1085,39 @@ mod tests {
         // Add transforms with known positions to compute velocity
         let mut transform1 = StampedTransform {
             transform: Transform3D::<f32>::default(),
-            stamp: CuDuration(1000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            stamp: CuDuration(1_000_000_000), // 1 second in nanoseconds
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let mut transform2 = StampedTransform {
             transform: Transform3D::<f32>::default(),
-            stamp: CuDuration(2000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            stamp: CuDuration(2_000_000_000), // 2 seconds in nanoseconds
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         // Set positions - robot moves 2 meters in x over 1 second
-        let mut mat1 = transform1.transform.to_matrix();
-        mat1[0][3] = 0.0;
-        transform1.transform = Transform3D::from_matrix(mat1);
+        // Using column-major format (each inner array is a column)
+        transform1.transform = Transform3D::from_matrix([
+            [1.0, 0.0, 0.0, 0.0], // Column 0: x-axis
+            [0.0, 1.0, 0.0, 0.0], // Column 1: y-axis
+            [0.0, 0.0, 1.0, 0.0], // Column 2: z-axis
+            [0.0, 0.0, 0.0, 1.0], // Column 3: translation (x=0, y=0, z=0)
+        ]);
         
-        let mut mat2 = transform2.transform.to_matrix();
-        mat2[0][3] = 2.0;
-        transform2.transform = Transform3D::from_matrix(mat2);
+        transform2.transform = Transform3D::from_matrix([
+            [1.0, 0.0, 0.0, 0.0], // Column 0: x-axis
+            [0.0, 1.0, 0.0, 0.0], // Column 1: y-axis
+            [0.0, 0.0, 1.0, 0.0], // Column 2: z-axis
+            [2.0, 0.0, 0.0, 1.0], // Column 3: translation (x=2, y=0, z=0)
+        ]);
 
         buffer.add_transform(transform1);
         buffer.add_transform(transform2);
 
         // Compute velocity at time between transforms
-        let velocity = buffer.compute_velocity_at_time(CuDuration(1500));
+        let velocity = buffer.compute_velocity_at_time(CuDuration(1_500_000_000)); // 1.5 seconds in nanoseconds
         assert!(velocity.is_some());
 
         let vel = velocity.unwrap();
@@ -1115,42 +1134,41 @@ mod tests {
         // Create two transforms with a rotation around Z axis
         let mut transform1 = StampedTransform {
             transform: Transform3D::<f32>::default(),
-            stamp: CuDuration(1000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            stamp: CuDuration(1_000_000_000), // 1 second in nanoseconds
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         // First transform - identity rotation
-        let mut mat1 = transform1.transform.to_matrix();
-        mat1[0][0] = 1.0;
-        mat1[1][1] = 1.0;
-        mat1[2][2] = 1.0;
-        mat1[3][3] = 1.0;
-        transform1.transform = Transform3D::from_matrix(mat1);
+        transform1.transform = Transform3D::from_matrix([
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ]);
 
         let mut transform2 = StampedTransform {
             transform: Transform3D::<f32>::default(),
-            stamp: CuDuration(2000), // 1 second later
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            stamp: CuDuration(2_000_000_000), // 2 seconds in nanoseconds
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         // Second transform - 90 degree (π/2) rotation around Z axis
         // This is approximated as sin(π/2)=1.0, cos(π/2)=0.0
-        let mut mat2 = transform2.transform.to_matrix();
-        mat2[0][0] = 0.0; // cos(π/2)
-        mat2[0][1] = -1.0; // -sin(π/2)
-        mat2[1][0] = 1.0; // sin(π/2)
-        mat2[1][1] = 0.0; // cos(π/2)
-        mat2[2][2] = 1.0;
-        mat2[3][3] = 1.0;
-        transform2.transform = Transform3D::from_matrix(mat2);
+        // Using column-major format (each inner array is a column)
+        transform2.transform = Transform3D::from_matrix([
+            [0.0, -1.0, 0.0, 0.0], // Column 0: rotated x-axis
+            [1.0, 0.0, 0.0, 0.0],  // Column 1: rotated y-axis
+            [0.0, 0.0, 1.0, 0.0],  // Column 2: z-axis unchanged
+            [0.0, 0.0, 0.0, 1.0],  // Column 3: no translation
+        ]);
 
         buffer.add_transform(transform1);
         buffer.add_transform(transform2);
 
         // Compute velocity
-        let velocity = buffer.compute_velocity_at_time(CuDuration(1500));
+        let velocity = buffer.compute_velocity_at_time(CuDuration(1_500_000_000)); // 1.5 seconds in nanoseconds
         assert!(velocity.is_some());
 
         let vel = velocity.unwrap();
@@ -1169,8 +1187,8 @@ mod tests {
         let transform = StampedTransform {
             transform: Transform3D::default(),
             stamp: CuDuration(1000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         buffer.add_transform(transform);
@@ -1187,22 +1205,22 @@ mod tests {
         let transform1 = StampedTransform {
             transform: Transform3D::default(),
             stamp: CuDuration(2000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let transform2 = StampedTransform {
             transform: Transform3D::default(),
             stamp: CuDuration(1000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let transform3 = StampedTransform {
             transform: Transform3D::default(),
             stamp: CuDuration(3000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         buffer.add_transform(transform1);
@@ -1225,22 +1243,22 @@ mod tests {
         let transform1 = StampedTransform {
             transform: Transform3D::default(),
             stamp: CuDuration(1000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let transform2 = StampedTransform {
             transform: Transform3D::default(),
             stamp: CuDuration(2000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let transform3 = StampedTransform {
             transform: Transform3D::default(),
             stamp: CuDuration(3000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         buffer.add_transform(transform1);
@@ -1263,15 +1281,15 @@ mod tests {
         let transform1 = StampedTransform {
             transform: Transform3D::default(),
             stamp: CuDuration(1000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let transform2 = StampedTransform {
             transform: Transform3D::default(),
             stamp: CuDuration(3000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         buffer.add_transform(transform1);
@@ -1305,8 +1323,8 @@ mod tests {
         let transform = StampedTransform {
             transform: Transform3D::default(),
             stamp: CuDuration(1000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         buffer.add_transform(transform);
@@ -1323,32 +1341,39 @@ mod tests {
         // Add transforms with known positions to compute velocity
         let mut transform1 = StampedTransform {
             transform: Transform3D::<f32>::default(),
-            stamp: CuDuration(1000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            stamp: CuDuration(1_000_000_000), // 1 second in nanoseconds
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         let mut transform2 = StampedTransform {
             transform: Transform3D::<f32>::default(),
-            stamp: CuDuration(2000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            stamp: CuDuration(2_000_000_000), // 2 seconds in nanoseconds
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         // Set positions - robot moves 3 meters in x over 1 second
-        let mut mat1 = transform1.transform.to_matrix();
-        mat1[0][3] = 0.0;
-        transform1.transform = Transform3D::from_matrix(mat1);
+        // Using column-major format (each inner array is a column)
+        transform1.transform = Transform3D::from_matrix([
+            [1.0, 0.0, 0.0, 0.0], // Column 0: x-axis
+            [0.0, 1.0, 0.0, 0.0], // Column 1: y-axis
+            [0.0, 0.0, 1.0, 0.0], // Column 2: z-axis
+            [0.0, 0.0, 0.0, 1.0], // Column 3: translation (x=0, y=0, z=0)
+        ]);
         
-        let mut mat2 = transform2.transform.to_matrix();
-        mat2[0][3] = 3.0;
-        transform2.transform = Transform3D::from_matrix(mat2);
+        transform2.transform = Transform3D::from_matrix([
+            [1.0, 0.0, 0.0, 0.0], // Column 0: x-axis
+            [0.0, 1.0, 0.0, 0.0], // Column 1: y-axis
+            [0.0, 0.0, 1.0, 0.0], // Column 2: z-axis
+            [3.0, 0.0, 0.0, 1.0], // Column 3: translation (x=3, y=0, z=0)
+        ]);
 
         buffer.add_transform(transform1);
         buffer.add_transform(transform2);
 
         // Compute velocity at time between transforms
-        let velocity = buffer.compute_velocity_at_time(CuDuration(1500));
+        let velocity = buffer.compute_velocity_at_time(CuDuration(1_500_000_000)); // 1.5 seconds in nanoseconds
         assert!(velocity.is_some());
 
         let vel = velocity.unwrap();
@@ -1365,8 +1390,8 @@ mod tests {
         let transform = StampedTransform {
             transform: Transform3D::default(),
             stamp: CuDuration(1000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: FrameIdString::from("world").unwrap(),
+            child_frame: FrameIdString::from("robot").unwrap(),
         };
 
         store.add_transform(transform.clone());

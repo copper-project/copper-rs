@@ -2,7 +2,7 @@ use cu29::clock::CuDuration;
 use cu_spatial_payloads::Transform3D;
 use cu_transform::{
     ConstTransformBuffer, RobotFrame, StampedTransform, TypedTransformBuffer, TypedTransformMsg,
-    WorldFrame,
+    WorldFrame, FrameIdString,
 };
 
 fn main() {
@@ -15,9 +15,12 @@ fn main() {
         TypedTransformBuffer::new();
 
     // Create a transform message
-    let mut transform = Transform3D::default();
-    transform.mat[0][3] = 1.0; // X translation
-    transform.mat[1][3] = 2.0; // Y translation
+    let transform = Transform3D::from_matrix([
+        [1.0, 0.0, 0.0, 1.0], // X translation
+        [0.0, 1.0, 0.0, 2.0], // Y translation
+        [0.0, 0.0, 1.0, 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ]);
 
     let world_to_robot_msg = TypedTransformMsg::new(transform.clone(), CuDuration(1000));
 
@@ -27,9 +30,10 @@ fn main() {
         world_to_robot_msg.child_name()
     );
     if let Some(t) = world_to_robot_msg.transform() {
+        let mat = t.to_matrix();
         println!(
             "  Translation: [{}, {}, {}]",
-            t.mat[0][3], t.mat[1][3], t.mat[2][3]
+            mat[0][3], mat[1][3], mat[2][3]
         );
     }
 
@@ -37,9 +41,12 @@ fn main() {
     world_to_robot_buffer.add_transform(world_to_robot_msg);
 
     // Create second transform
-    let mut transform2 = Transform3D::default();
-    transform2.mat[0][3] = 2.0; // X translation
-    transform2.mat[1][3] = 4.0; // Y translation
+    let transform2 = Transform3D::from_matrix([
+        [1.0, 0.0, 0.0, 2.0], // X translation
+        [0.0, 1.0, 0.0, 4.0], // Y translation
+        [0.0, 0.0, 1.0, 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ]);
 
     let world_to_robot_msg2 = TypedTransformMsg::new(transform2, CuDuration(2000));
     world_to_robot_buffer.add_transform(world_to_robot_msg2);
@@ -51,9 +58,10 @@ fn main() {
             latest.timestamp().unwrap().as_nanos()
         );
         if let Some(t) = latest.transform() {
+            let mat = t.to_matrix();
             println!(
                 "  Translation: [{}, {}, {}]",
-                t.mat[0][3], t.mat[1][3], t.mat[2][3]
+                mat[0][3], mat[1][3], mat[2][3]
             );
         }
     }
@@ -63,9 +71,10 @@ fn main() {
         println!("\nClosest transform to time 1500:");
         println!("  Actual time: {}", closest.timestamp().unwrap().as_nanos());
         if let Some(t) = closest.transform() {
+            let mat = t.to_matrix();
             println!(
                 "  Translation: [{}, {}, {}]",
-                t.mat[0][3], t.mat[1][3], t.mat[2][3]
+                mat[0][3], mat[1][3], mat[2][3]
             );
         }
     }
@@ -102,8 +111,8 @@ fn main() {
     let stamped_transform = StampedTransform {
         transform: transform.clone(),
         stamp: CuDuration(1000),
-        parent_frame: "world".to_string(),
-        child_frame: "robot".to_string(),
+        parent_frame: FrameIdString::from("world").unwrap(),
+        child_frame: FrameIdString::from("robot").unwrap(),
     };
 
     const_buffer.add_transform(stamped_transform);
@@ -115,11 +124,12 @@ fn main() {
             latest_stamped.parent_frame, latest_stamped.child_frame
         );
         println!("  Time: {}", latest_stamped.stamp.as_nanos());
+        let mat = latest_stamped.transform.to_matrix();
         println!(
             "  Translation: [{}, {}, {}]",
-            latest_stamped.transform.mat[0][3],
-            latest_stamped.transform.mat[1][3],
-            latest_stamped.transform.mat[2][3]
+            mat[0][3],
+            mat[1][3],
+            mat[2][3]
         );
     }
 

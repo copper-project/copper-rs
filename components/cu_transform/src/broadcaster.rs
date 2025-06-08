@@ -5,6 +5,9 @@ use cu_spatial_payloads::Transform3D;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
+#[cfg(test)]
+use crate::frame_id;
+
 /// Maximum number of transforms in a single broadcast message
 pub const MAX_TRANSFORMS_PER_BROADCAST: usize = 10;
 
@@ -46,11 +49,11 @@ impl<T: Copy + Debug + Default + bincode::enc::Encode + bincode::de::Decode<()> 
                 // Encode timestamp
                 bincode::enc::Encode::encode(&transform.stamp, encoder)?;
 
-                // Encode parent_frame string
-                bincode::enc::Encode::encode(&transform.parent_frame, encoder)?;
+                // Encode parent_frame as string
+                bincode::enc::Encode::encode(&transform.parent_frame.as_str(), encoder)?;
 
-                // Encode child_frame string
-                bincode::enc::Encode::encode(&transform.child_frame, encoder)?;
+                // Encode child_frame as string
+                bincode::enc::Encode::encode(&transform.child_frame.as_str(), encoder)?
             }
         }
 
@@ -83,10 +86,14 @@ impl<T: Copy + Debug + Default + bincode::enc::Encode + bincode::de::Decode<()> 
             let stamp = <CuTime as bincode::de::Decode<()>>::decode(decoder)?;
 
             // Decode parent_frame string
-            let parent_frame = <String as bincode::de::Decode<()>>::decode(decoder)?;
+            let parent_frame_str = <String as bincode::de::Decode<()>>::decode(decoder)?;
+            let parent_frame = crate::FrameIdString::from(&parent_frame_str)
+                .map_err(|_| bincode::error::DecodeError::Other("Parent frame name too long"))?;
 
             // Decode child_frame string
-            let child_frame = <String as bincode::de::Decode<()>>::decode(decoder)?;
+            let child_frame_str = <String as bincode::de::Decode<()>>::decode(decoder)?;
+            let child_frame = crate::FrameIdString::from(&child_frame_str)
+                .map_err(|_| bincode::error::DecodeError::Other("Child frame name too long"))?;
 
             // Create StampedTransform and add to array
             transforms[i] = Some(StampedTransform {
@@ -214,8 +221,8 @@ mod tests {
                     [0.0, 0.0, 0.0, 1.0],
             ]),
             stamp: CuDuration(1000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: frame_id!("world"),
+            child_frame: frame_id!("robot"),
         };
 
         let transform2 = StampedTransform {
@@ -226,8 +233,8 @@ mod tests {
                     [0.0, 0.0, 0.0, 1.0],
             ]),
             stamp: CuDuration(2000),
-            parent_frame: "robot".to_string(),
-            child_frame: "camera".to_string(),
+            parent_frame: frame_id!("robot"),
+            child_frame: frame_id!("camera"),
         };
 
         payload.transforms[0] = Some(transform1);
@@ -237,12 +244,12 @@ mod tests {
         // Verify transforms
         assert_eq!(payload.count, 2);
         assert_eq!(payload.transforms[0].as_ref().unwrap().stamp.as_nanos(), 1000);
-        assert_eq!(payload.transforms[0].as_ref().unwrap().parent_frame, "world");
-        assert_eq!(payload.transforms[0].as_ref().unwrap().child_frame, "robot");
+        assert_eq!(payload.transforms[0].as_ref().unwrap().parent_frame.as_str(), "world");
+        assert_eq!(payload.transforms[0].as_ref().unwrap().child_frame.as_str(), "robot");
 
         assert_eq!(payload.transforms[1].as_ref().unwrap().stamp.as_nanos(), 2000);
-        assert_eq!(payload.transforms[1].as_ref().unwrap().parent_frame, "robot");
-        assert_eq!(payload.transforms[1].as_ref().unwrap().child_frame, "camera");
+        assert_eq!(payload.transforms[1].as_ref().unwrap().parent_frame.as_str(), "robot");
+        assert_eq!(payload.transforms[1].as_ref().unwrap().child_frame.as_str(), "camera");
     }
 
     #[test]
@@ -259,8 +266,8 @@ mod tests {
                     [0.0, 0.0, 0.0, 1.0],
             ]),
             stamp: CuDuration(1000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: frame_id!("world"),
+            child_frame: frame_id!("robot"),
         };
 
         payload.transforms[0] = Some(transform1);
@@ -278,8 +285,8 @@ mod tests {
         // Verify the decoded payload
         assert_eq!(decoded.count, 1);
         assert_eq!(decoded.transforms[0].as_ref().unwrap().stamp.as_nanos(), 1000);
-        assert_eq!(decoded.transforms[0].as_ref().unwrap().parent_frame, "world");
-        assert_eq!(decoded.transforms[0].as_ref().unwrap().child_frame, "robot");
+        assert_eq!(decoded.transforms[0].as_ref().unwrap().parent_frame.as_str(), "world");
+        assert_eq!(decoded.transforms[0].as_ref().unwrap().child_frame.as_str(), "robot");
 
         // Check transform matrix
         let decoded_mat = decoded.transforms[0].as_ref().unwrap().transform.to_matrix();

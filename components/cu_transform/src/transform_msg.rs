@@ -3,11 +3,104 @@
 
 use crate::frames::{FrameId, FramePair};
 use crate::velocity::VelocityTransform;
+use crate::FrameIdString;
+use bincode::{Decode, Encode};
 use cu29::clock::{CuTime, CuTimeRange, Tov};
 use cu29::prelude::{CuMsg, CuMsgPayload};
 use cu_spatial_payloads::Transform3D;
 use num_traits;
+use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
+
+/// Transform message payload for use with CuMsg
+/// This contains just the transform data without timestamps,
+/// as timestamps are handled by CuMsg metadata
+/// 
+/// # Example
+/// ```
+/// use cu_transform::{TransformMsg, Transform3D};
+/// use cu29::prelude::*;
+/// use cu29::clock::{CuDuration, Tov};
+/// 
+/// // Create a transform message
+/// let transform = Transform3D::<f32>::default();
+/// let msg = TransformMsg::new(
+///     transform,
+///     "world",
+///     "robot"
+/// );
+/// 
+/// // Wrap in CuMsg for timestamp handling
+/// let mut cu_msg = CuMsg::new(Some(msg));
+/// cu_msg.metadata.tov = Tov::Time(CuDuration(1000));
+/// ```
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+pub struct TransformMsg<T: Copy + Debug + Default + 'static> {
+    /// The actual transform
+    pub transform: Transform3D<T>,
+    /// Parent frame identifier
+    pub parent_frame: FrameIdString,
+    /// Child frame identifier
+    pub child_frame: FrameIdString,
+}
+
+impl<T: Copy + Debug + Default + 'static> TransformMsg<T> {
+    /// Create a new transform message
+    pub fn new(transform: Transform3D<T>, parent_frame: impl AsRef<str>, child_frame: impl AsRef<str>) -> Self {
+        Self {
+            transform,
+            parent_frame: FrameIdString::from(parent_frame.as_ref()).expect("Parent frame name too long (max 64 chars)"),
+            child_frame: FrameIdString::from(child_frame.as_ref()).expect("Child frame name too long (max 64 chars)"),
+        }
+    }
+
+    /// Create from a StampedTransform (for migration)
+    pub fn from_stamped(stamped: &crate::transform::StampedTransform<T>) -> Self {
+        Self {
+            transform: stamped.transform,
+            parent_frame: FrameIdString::from(stamped.parent_frame.as_str()).expect("Parent frame name too long"),
+            child_frame: FrameIdString::from(stamped.child_frame.as_str()).expect("Child frame name too long"),
+        }
+    }
+}
+
+// Manual Encode/Decode implementations to work with Transform3D's specific implementations
+impl<T: Copy + Debug + Default + 'static> Encode for TransformMsg<T>
+where
+    T: Encode,
+{
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        self.transform.encode(encoder)?;
+        self.parent_frame.encode(encoder)?;
+        self.child_frame.encode(encoder)?;
+        Ok(())
+    }
+}
+
+impl<T: Copy + Debug + Default + 'static> Decode<()> for TransformMsg<T>
+where
+    T: Decode<()>,
+{
+    fn decode<D: bincode::de::Decoder<Context = ()>>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        let transform = Transform3D::decode(decoder)?;
+        let parent_frame_str = String::decode(decoder)?;
+        let child_frame_str = String::decode(decoder)?;
+        let parent_frame = FrameIdString::from(&parent_frame_str)
+            .map_err(|_| bincode::error::DecodeError::OtherString("Parent frame name too long".to_string()))?;
+        let child_frame = FrameIdString::from(&child_frame_str)
+            .map_err(|_| bincode::error::DecodeError::OtherString("Child frame name too long".to_string()))?;
+        Ok(Self {
+            transform,
+            parent_frame,
+            child_frame,
+        })
+    }
+}
 
 /// A typed transform message that carries frame relationship information at compile time
 #[derive(Debug, Clone)]
@@ -308,17 +401,14 @@ where
         // Convert nanoseconds to seconds (1e9 nanoseconds = 1 second)
         let dt = dt_nanos as f64 / 1_000_000_000.0;
 
-        // For test compatibility, use the same scaling as the original
-        let dt = dt * 1_000_000.0;
-
         let dt_t = num_traits::cast::cast::<f64, T>(dt)?;
 
-        // Extract positions from transforms
+        // Extract positions from transforms (column-major format)
         let current_mat = current_transform.to_matrix();
         let previous_mat = previous_transform.to_matrix();
         let mut linear_velocity = [T::default(); 3];
         for (i, vel) in linear_velocity.iter_mut().enumerate() {
-            let pos_diff = current_mat[i][3] - previous_mat[i][3];
+            let pos_diff = current_mat[3][i] - previous_mat[3][i];
             *vel = pos_diff / dt_t;
         }
 
@@ -399,16 +489,13 @@ mod tests {
 
     #[test]
     fn test_velocity_computation() {
-        let mut transform1 = Transform3D::<f32>::default();
-        transform1.mat[0][3] = 0.0; // x position
-        transform1.mat[1][3] = 0.0; // y position
+        use crate::test_utils::translation_transform;
+        
+        let transform1 = translation_transform(0.0f32, 0.0, 0.0);
+        let transform2 = translation_transform(1.0f32, 2.0, 0.0);
 
-        let mut transform2 = Transform3D::<f32>::default();
-        transform2.mat[0][3] = 1.0; // x position (moved 1m)
-        transform2.mat[1][3] = 2.0; // y position (moved 2m)
-
-        let msg1 = WorldToRobotMsg::new(transform1, CuDuration(1000));
-        let msg2 = WorldToRobotMsg::new(transform2, CuDuration(2000));
+        let msg1 = WorldToRobotMsg::new(transform1, CuDuration(1_000_000_000)); // 1 second
+        let msg2 = WorldToRobotMsg::new(transform2, CuDuration(2_000_000_000)); // 2 seconds
 
         let velocity = msg2.compute_velocity(&msg1).unwrap();
 

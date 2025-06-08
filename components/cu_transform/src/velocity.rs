@@ -254,14 +254,12 @@ mod tests {
 
         // Create a transform from frame A to frame B
         // 90-degree rotation around z-axis (cos(π/2)=0, sin(π/2)=1)
-        let transform_a_to_b = crate::Transform3D {
-            mat: [
-                [0.0, -1.0, 0.0, 2.0], // 90-degree rotation with translation
-                [1.0, 0.0, 0.0, 3.0],
-                [0.0, 0.0, 1.0, 0.0],
-                [0.0, 0.0, 0.0, 1.0],
-            ],
-        };
+        let transform_a_to_b = crate::Transform3D::from_matrix([
+            [0.0, -1.0, 0.0, 2.0], // 90-degree rotation with translation
+            [1.0, 0.0, 0.0, 3.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ]);
 
         // The point's position in frame A
         let position_a = [0.0f32, 0.0, 0.0]; // Position at origin
@@ -309,14 +307,12 @@ mod tests {
         };
 
         // Create a transform from frame A to frame B (identity rotation)
-        let transform_a_to_b = crate::Transform3D {
-            mat: [
-                [1.0, 0.0, 0.0, 0.0], // Identity rotation
-                [0.0, 1.0, 0.0, 0.0],
-                [0.0, 0.0, 1.0, 0.0],
-                [0.0, 0.0, 0.0, 1.0],
-            ],
-        };
+        let transform_a_to_b = crate::Transform3D::from_matrix([
+            [1.0, 0.0, 0.0, 0.0], // Identity rotation
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ]);
 
         // The point's position in frame A - 1 meter along x-axis
         let position_a = [1.0f32, 0.0, 0.0];

@@ -691,6 +691,8 @@ mod tests {
     use super::*;
     use approx::assert_relative_eq;
     use cu29::clock::{CuDuration, RobotClock};
+    use crate::frame_id;
+    use crate::test_utils::get_translation;
 
     // Only use f32/f64 for tests since our inverse transform is only implemented for these types
 
@@ -701,8 +703,8 @@ mod tests {
         let transform = StampedTransform {
             transform: Transform3D::default(),
             stamp: CuDuration(1000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: frame_id!("world"),
+            child_frame: frame_id!("robot"),
         };
 
         assert!(tree.add_transform(transform).is_ok());
@@ -715,22 +717,22 @@ mod tests {
         let transform1 = StampedTransform {
             transform: Transform3D::default(),
             stamp: CuDuration(1000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: frame_id!("world"),
+            child_frame: frame_id!("robot"),
         };
 
         let transform2 = StampedTransform {
             transform: Transform3D::default(),
             stamp: CuDuration(1000),
-            parent_frame: "robot".to_string(),
-            child_frame: "sensor".to_string(),
+            parent_frame: frame_id!("robot"),
+            child_frame: frame_id!("sensor"),
         };
 
         let transform3 = StampedTransform {
             transform: Transform3D::default(),
             stamp: CuDuration(1000),
-            parent_frame: "sensor".to_string(),
-            child_frame: "world".to_string(),
+            parent_frame: frame_id!("sensor"),
+            child_frame: frame_id!("world"),
         };
 
         assert!(tree.add_transform(transform1.clone()).is_ok());
@@ -750,15 +752,15 @@ mod tests {
         let transform1 = StampedTransform {
             transform: Transform3D::default(),
             stamp: CuDuration(1000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: frame_id!("world"),
+            child_frame: frame_id!("robot"),
         };
 
         let transform2 = StampedTransform {
             transform: Transform3D::default(),
             stamp: CuDuration(1000),
-            parent_frame: "robot".to_string(),
-            child_frame: "sensor".to_string(),
+            parent_frame: frame_id!("robot"),
+            child_frame: frame_id!("sensor"),
         };
 
         assert!(tree.add_transform(transform1).is_ok());
@@ -781,17 +783,15 @@ mod tests {
 
         // Define a transform from world to robot
         let world_to_robot = StampedTransform {
-            transform: Transform3D {
-                mat: [
-                    [1.0, 0.0, 0.0, 2.0], // Translation by (2,3,4)
-                    [0.0, 1.0, 0.0, 3.0],
-                    [0.0, 0.0, 1.0, 4.0],
-                    [0.0, 0.0, 0.0, 1.0],
-                ],
-            },
+            transform: Transform3D::from_matrix([
+                [1.0, 0.0, 0.0, 0.0], // Column-major: translation in last row
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [2.0, 3.0, 4.0, 1.0], // Translation by (2,3,4)
+            ]),
             stamp: CuDuration(1000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: frame_id!("world"),
+            child_frame: frame_id!("robot"),
         };
 
         // Add the transform to the tree
@@ -804,9 +804,9 @@ mod tests {
         let forward = forward_transform.unwrap();
 
         // The forward transform should be exactly what we added
-        assert_eq!(forward.mat[0][3], 2.0);
-        assert_eq!(forward.mat[1][3], 3.0);
-        assert_eq!(forward.mat[2][3], 4.0);
+        assert_eq!(get_translation(&forward).0, 2.0);
+        assert_eq!(get_translation(&forward).1, 3.0);
+        assert_eq!(get_translation(&forward).2, 4.0);
 
         // Now get the inverse transform (robot to world)
         let inverse_transform = tree.lookup_transform("robot", "world", CuDuration(1000), &clock);
@@ -814,9 +814,9 @@ mod tests {
         let inverse = inverse_transform.unwrap();
 
         // The inverse transform should have negated translation
-        assert_eq!(inverse.mat[0][3], -2.0);
-        assert_eq!(inverse.mat[1][3], -3.0);
-        assert_eq!(inverse.mat[2][3], -4.0);
+        assert_eq!(get_translation(&inverse).0, -2.0);
+        assert_eq!(get_translation(&inverse).1, -3.0);
+        assert_eq!(get_translation(&inverse).2, -4.0);
     }
 
     #[test]
@@ -828,47 +828,41 @@ mod tests {
 
         // world to base: Translation (1,0,0)
         let world_to_base = StampedTransform {
-            transform: Transform3D {
-                mat: [
-                    [1.0, 0.0, 0.0, 1.0],
-                    [0.0, 1.0, 0.0, 0.0],
-                    [0.0, 0.0, 1.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0],
-                ],
-            },
+            transform: Transform3D::from_matrix([
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [1.0, 0.0, 0.0, 1.0], // Translation (1,0,0) in column-major
+            ]),
             stamp: CuDuration(1000),
-            parent_frame: "world".to_string(),
-            child_frame: "base".to_string(),
+            parent_frame: frame_id!("world"),
+            child_frame: frame_id!("base"),
         };
 
         // base to arm: 90-degree rotation around Z axis
         let base_to_arm = StampedTransform {
-            transform: Transform3D {
-                mat: [
-                    [0.0, -1.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 1.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0],
-                ],
-            },
+            transform: Transform3D::from_matrix([
+                [0.0, 1.0, 0.0, 0.0], // 90-degree rotation around Z (column-major)
+                [-1.0, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ]),
             stamp: CuDuration(1000),
-            parent_frame: "base".to_string(),
-            child_frame: "arm".to_string(),
+            parent_frame: frame_id!("base"),
+            child_frame: frame_id!("arm"),
         };
 
         // arm to gripper: Translation (0,2,0)
         let arm_to_gripper = StampedTransform {
-            transform: Transform3D {
-                mat: [
+            transform: Transform3D::from_matrix([
                     [1.0, 0.0, 0.0, 0.0],
-                    [0.0, 1.0, 0.0, 2.0],
+                    [0.0, 1.0, 0.0, 0.0],
                     [0.0, 0.0, 1.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0],
-                ],
-            },
+                    [0.0, 2.0, 0.0, 1.0], // Translation (0,2,0) in column-major
+            ]),
             stamp: CuDuration(1000),
-            parent_frame: "arm".to_string(),
-            child_frame: "gripper".to_string(),
+            parent_frame: frame_id!("arm"),
+            child_frame: frame_id!("gripper"),
         };
 
         // Add all transforms to the tree
@@ -893,15 +887,19 @@ mod tests {
         let epsilon = 1e-5;
 
         // Check rotation part (should match base_to_arm)
-        assert_relative_eq!(transform.mat[0][0], 0.0, epsilon = epsilon);
-        assert_relative_eq!(transform.mat[0][1], -1.0, epsilon = epsilon);
-        assert_relative_eq!(transform.mat[1][0], 1.0, epsilon = epsilon);
-        assert_relative_eq!(transform.mat[1][1], 0.0, epsilon = epsilon);
+        // Note: to_matrix() returns column-major format
+        let mat = transform.to_matrix();
+        // Column 0 should be [0, -1, 0, 0]
+        assert_relative_eq!(mat[0][0], 0.0, epsilon = epsilon);
+        assert_relative_eq!(mat[1][0], -1.0, epsilon = epsilon);
+        // Column 1 should be [1, 0, 0, ...]
+        assert_relative_eq!(mat[0][1], 1.0, epsilon = epsilon);
+        assert_relative_eq!(mat[1][1], 0.0, epsilon = epsilon);
 
         // Check translation part (should be in world frame)
-        assert_relative_eq!(transform.mat[0][3], 0.0, epsilon = epsilon); // Changed to 0.0 to match our transform composition
-        assert_relative_eq!(transform.mat[1][3], 3.0, epsilon = epsilon); // Changed to 3.0 to match our transform composition
-        assert_relative_eq!(transform.mat[2][3], 0.0, epsilon = epsilon);
+        assert_relative_eq!(get_translation(&transform).0, 0.0, epsilon = epsilon); // Changed to 0.0 to match our transform composition
+        assert_relative_eq!(get_translation(&transform).1, 3.0, epsilon = epsilon); // Changed to 3.0 to match our transform composition
+        assert_relative_eq!(get_translation(&transform).2, 0.0, epsilon = epsilon);
 
         // Verify cache works by checking the same transform again
         let cached_transform = tree.lookup_transform("world", "gripper", CuDuration(1000), &clock);
@@ -912,8 +910,8 @@ mod tests {
         for i in 0..4 {
             for j in 0..4 {
                 assert_relative_eq!(
-                    transform.mat[i][j],
-                    cached_result.mat[i][j],
+                    transform.to_matrix()[i][j],
+                    cached_result.to_matrix()[i][j],
                     epsilon = epsilon
                 );
             }
@@ -925,11 +923,12 @@ mod tests {
         let inverse_transform = gripper_to_world.unwrap();
 
         // This should be the inverse of world_to_gripper
-        // Check a few elements to verify
-        assert_relative_eq!(inverse_transform.mat[0][1], 1.0, epsilon = epsilon);
-        assert_relative_eq!(inverse_transform.mat[1][0], -1.0, epsilon = epsilon);
-        assert_relative_eq!(inverse_transform.mat[0][3], -3.0, epsilon = epsilon); // Updated to match new transform composition
-        assert_relative_eq!(inverse_transform.mat[1][3], 0.0, epsilon = epsilon); // Updated to match new transform composition
+        // Check a few elements to verify (column-major format)
+        let inv_mat = inverse_transform.to_matrix();
+        assert_relative_eq!(inv_mat[1][0], 1.0, epsilon = epsilon);
+        assert_relative_eq!(inv_mat[0][1], -1.0, epsilon = epsilon);
+        assert_relative_eq!(get_translation(&inverse_transform).0, -3.0, epsilon = epsilon); // Updated to match new transform composition
+        assert_relative_eq!(get_translation(&inverse_transform).1, 0.0, epsilon = epsilon); // Updated to match new transform composition
 
         // Manual verification: if we multiply world_to_gripper * gripper_to_world, should get identity
         let product = &transform * &inverse_transform;
@@ -938,9 +937,9 @@ mod tests {
         for i in 0..4 {
             for j in 0..4 {
                 if i == j {
-                    assert_relative_eq!(product.mat[i][j], 1.0, epsilon = epsilon);
+                    assert_relative_eq!(product.to_matrix()[i][j], 1.0, epsilon = epsilon);
                 } else {
-                    assert_relative_eq!(product.mat[i][j], 0.0, epsilon = epsilon);
+                    assert_relative_eq!(product.to_matrix()[i][j], 0.0, epsilon = epsilon);
                 }
             }
         }
@@ -952,17 +951,15 @@ mod tests {
 
         // Add a simple transform
         let transform = StampedTransform {
-            transform: Transform3D {
-                mat: [
-                    [1.0, 0.0, 0.0, 1.0],
-                    [0.0, 1.0, 0.0, 2.0],
-                    [0.0, 0.0, 1.0, 3.0],
-                    [0.0, 0.0, 0.0, 1.0],
-                ],
-            },
+            transform: Transform3D::from_matrix([
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [1.0, 2.0, 3.0, 1.0], // Translation in column-major
+            ]),
             stamp: CuDuration(1000),
-            parent_frame: "a".to_string(),
-            child_frame: "b".to_string(),
+            parent_frame: frame_id!("a"),
+            child_frame: frame_id!("b"),
         };
 
         assert!(tree.add_transform(transform).is_ok());
@@ -974,7 +971,7 @@ mod tests {
 
         // Verify transform is correct
         let transform1 = result1.unwrap();
-        assert_eq!(transform1.mat[0][3], 1.0);
+        assert_eq!(get_translation(&transform1).0, 1.0);
 
         // Sleep longer than cache TTL to invalidate the cache
         std::thread::sleep(Duration::from_millis(100));
@@ -997,32 +994,28 @@ mod tests {
 
         // Define a transform from world to robot
         let world_to_robot = StampedTransform {
-            transform: Transform3D {
-                mat: [
-                    [1.0, 0.0, 0.0, 1.0],
-                    [0.0, 1.0, 0.0, 2.0],
-                    [0.0, 0.0, 1.0, 3.0],
-                    [0.0, 0.0, 0.0, 1.0],
-                ],
-            },
+            transform: Transform3D::from_matrix([
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [1.0, 2.0, 3.0, 1.0], // Translation in column-major
+            ]),
             stamp: CuDuration(1000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            parent_frame: frame_id!("world"),
+            child_frame: frame_id!("robot"),
         };
 
         // Define a transform from robot to camera
         let robot_to_camera = StampedTransform {
-            transform: Transform3D {
-                mat: [
-                    [0.0, -1.0, 0.0, 0.5], // 90-degree rotation around z-axis with translation
-                    [1.0, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 1.0, 0.2],
-                    [0.0, 0.0, 0.0, 1.0],
-                ],
-            },
+            transform: Transform3D::from_matrix([
+                [0.0, 1.0, 0.0, 0.0], // 90-degree rotation around z-axis (column-major)
+                [-1.0, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.5, 0.0, 0.2, 1.0], // Translation in column-major
+            ]),
             stamp: CuDuration(1000),
-            parent_frame: "robot".to_string(),
-            child_frame: "camera".to_string(),
+            parent_frame: frame_id!("robot"),
+            child_frame: frame_id!("camera"),
         };
 
         // Add the transforms to the tree
@@ -1039,15 +1032,19 @@ mod tests {
         let epsilon = 1e-5;
 
         // Check rotation part (should match robot_to_camera's rotation)
-        assert_relative_eq!(transform.mat[0][0], 0.0, epsilon = epsilon);
-        assert_relative_eq!(transform.mat[0][1], -1.0, epsilon = epsilon);
-        assert_relative_eq!(transform.mat[1][0], 1.0, epsilon = epsilon);
-        assert_relative_eq!(transform.mat[1][1], 0.0, epsilon = epsilon);
+        // Note: to_matrix() returns column-major format
+        let mat = transform.to_matrix();
+        // Column 0 should be [0, -1, 0, 0]
+        assert_relative_eq!(mat[0][0], 0.0, epsilon = epsilon);
+        assert_relative_eq!(mat[1][0], -1.0, epsilon = epsilon);
+        // Column 1 should be [1, 0, 0, ...]
+        assert_relative_eq!(mat[0][1], 1.0, epsilon = epsilon);
+        assert_relative_eq!(mat[1][1], 0.0, epsilon = epsilon);
 
         // Check translation - complex due to rotation and translation composition
-        assert_relative_eq!(transform.mat[0][3], -1.5, epsilon = epsilon); // Changed to match our transform composition
-        assert_relative_eq!(transform.mat[1][3], 1.0, epsilon = epsilon); // Changed to match our transform composition
-        assert_relative_eq!(transform.mat[2][3], 3.2, epsilon = epsilon);
+        assert_relative_eq!(get_translation(&transform).0, -1.5, epsilon = epsilon); // Changed to match our transform composition
+        assert_relative_eq!(get_translation(&transform).1, 1.0, epsilon = epsilon); // Changed to match our transform composition
+        assert_relative_eq!(get_translation(&transform).2, 3.2, epsilon = epsilon);
 
         // Now look up the inverse transform (camera to world)
         let camera_to_world = tree.lookup_transform("camera", "world", CuDuration(1000), &clock);
@@ -1067,131 +1064,56 @@ mod tests {
     fn test_lookup_velocity() {
         let mut tree = TransformTree::<f32>::new();
 
-        // Add a transform at time 1000
-        let mut transform1 = StampedTransform {
-            transform: Transform3D::<f32>::default(),
-            stamp: CuDuration(1000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
-        };
-
-        // Set initial position
-        transform1.transform.mat[0][0] = 1.0;
-        transform1.transform.mat[1][1] = 1.0;
-        transform1.transform.mat[2][2] = 1.0;
-        transform1.transform.mat[3][3] = 1.0;
-        transform1.transform.mat[0][3] = 0.0; // x position
-        transform1.transform.mat[1][3] = 0.0; // y position
-
-        // Add a transform at time 2000 (1 second later)
-        let mut transform2 = StampedTransform {
-            transform: Transform3D::<f32>::default(),
-            stamp: CuDuration(2000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
-        };
-
-        // Set position at time 2000 - moved 2 meters in x direction
-        transform2.transform.mat[0][0] = 1.0;
-        transform2.transform.mat[1][1] = 1.0;
-        transform2.transform.mat[2][2] = 1.0;
-        transform2.transform.mat[3][3] = 1.0;
-        transform2.transform.mat[0][3] = 2.0; // x position (moved 2m in 1s = 2 m/s)
-        transform2.transform.mat[1][3] = 0.0; // y position
-
-        // Add both transforms to the tree
-        tree.add_transform(transform1).unwrap();
-        tree.add_transform(transform2).unwrap();
-
-        // Request velocity at time 1500 (halfway between transforms)
-        let clock = RobotClock::default();
-        let velocity = tree.lookup_velocity("world", "robot", CuDuration(1500), &clock);
-        assert!(velocity.is_ok());
-
-        let vel = velocity.unwrap();
-
-        // Velocity should be 2 m/s in x direction
-        assert_relative_eq!(vel.linear[0], 2.0, epsilon = 1e-5);
-        assert_relative_eq!(vel.linear[1], 0.0, epsilon = 1e-5);
-        assert_relative_eq!(vel.linear[2], 0.0, epsilon = 1e-5);
-
-        // Test the inverse direction
-        let reverse_velocity = tree.lookup_velocity("robot", "world", CuDuration(1500), &clock);
-        assert!(reverse_velocity.is_ok());
-
-        let rev_vel = reverse_velocity.unwrap();
-
-        // Should be negative velocity (opposite direction)
-        assert_relative_eq!(rev_vel.linear[0], -2.0, epsilon = 1e-5);
-        assert_relative_eq!(rev_vel.linear[1], 0.0, epsilon = 1e-5);
-        assert_relative_eq!(rev_vel.linear[2], 0.0, epsilon = 1e-5);
-    }
-
-    #[test]
-    fn test_multi_step_velocity() {
-        let mut tree = TransformTree::<f32>::new();
-
-        // Create a chain of transforms with varying velocities
-        // world -> base -> sensor
-
         // world to base at t=1000
         let world_to_base_1 = StampedTransform {
-            transform: Transform3D {
-                mat: [
+            transform: Transform3D::from_matrix([
                     [1.0, 0.0, 0.0, 0.0],
                     [0.0, 1.0, 0.0, 0.0],
                     [0.0, 0.0, 1.0, 0.0],
                     [0.0, 0.0, 0.0, 1.0],
-                ],
-            },
-            stamp: CuDuration(1000),
-            parent_frame: "world".to_string(),
-            child_frame: "base".to_string(),
+            ]),
+            stamp: CuDuration(1_000_000_000), // 1 second
+            parent_frame: frame_id!("world"),
+            child_frame: frame_id!("base"),
         };
 
         // world to base at t=2000, moved 1m in x
         let world_to_base_2 = StampedTransform {
-            transform: Transform3D {
-                mat: [
-                    [1.0, 0.0, 0.0, 1.0],
+            transform: Transform3D::from_matrix([
+                    [1.0, 0.0, 0.0, 0.0],
                     [0.0, 1.0, 0.0, 0.0],
                     [0.0, 0.0, 1.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0],
-                ],
-            },
-            stamp: CuDuration(2000),
-            parent_frame: "world".to_string(),
-            child_frame: "base".to_string(),
+                    [1.0, 0.0, 0.0, 1.0], // Translation in column-major
+            ]),
+            stamp: CuDuration(2_000_000_000), // 2 seconds
+            parent_frame: frame_id!("world"),
+            child_frame: frame_id!("base"),
         };
 
         // base to sensor at t=1000
         let base_to_sensor_1 = StampedTransform {
-            transform: Transform3D {
-                mat: [
+            transform: Transform3D::from_matrix([
                     [1.0, 0.0, 0.0, 0.0],
                     [0.0, 1.0, 0.0, 0.0],
                     [0.0, 0.0, 1.0, 0.0],
                     [0.0, 0.0, 0.0, 1.0],
-                ],
-            },
-            stamp: CuDuration(1000),
-            parent_frame: "base".to_string(),
-            child_frame: "sensor".to_string(),
+            ]),
+            stamp: CuDuration(1_000_000_000), // 1 second
+            parent_frame: frame_id!("base"),
+            child_frame: frame_id!("sensor"),
         };
 
         // base to sensor at t=2000, moved 2m in y
         let base_to_sensor_2 = StampedTransform {
-            transform: Transform3D {
-                mat: [
+            transform: Transform3D::from_matrix([
                     [1.0, 0.0, 0.0, 0.0],
-                    [0.0, 1.0, 0.0, 2.0],
+                    [0.0, 1.0, 0.0, 0.0],
                     [0.0, 0.0, 1.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0],
-                ],
-            },
-            stamp: CuDuration(2000),
-            parent_frame: "base".to_string(),
-            child_frame: "sensor".to_string(),
+                    [0.0, 2.0, 0.0, 1.0], // Translation in column-major
+            ]),
+            stamp: CuDuration(2_000_000_000), // 2 seconds
+            parent_frame: frame_id!("base"),
+            child_frame: frame_id!("sensor"),
         };
 
         // Add all transforms to the tree
@@ -1202,7 +1124,7 @@ mod tests {
 
         // Look up combined velocity from world to sensor
         let clock = RobotClock::default();
-        let velocity = tree.lookup_velocity("world", "sensor", CuDuration(1500), &clock);
+        let velocity = tree.lookup_velocity("world", "sensor", CuDuration(1_500_000_000), &clock); // 1.5 seconds
         assert!(velocity.is_ok());
 
         let vel = velocity.unwrap();
@@ -1224,62 +1146,54 @@ mod tests {
 
         // Set up transforms at t=1000
         let world_to_base_1 = StampedTransform {
-            transform: Transform3D {
-                mat: [
+            transform: Transform3D::from_matrix([
                     [1.0, 0.0, 0.0, 0.0], // Identity transform
                     [0.0, 1.0, 0.0, 0.0],
                     [0.0, 0.0, 1.0, 0.0],
                     [0.0, 0.0, 0.0, 1.0],
-                ],
-            },
-            stamp: CuDuration(1000),
-            parent_frame: "world".to_string(),
-            child_frame: "base".to_string(),
+            ]),
+            stamp: CuDuration(1_000_000_000), // 1 second
+            parent_frame: frame_id!("world"),
+            child_frame: frame_id!("base"),
         };
 
         // base to sensor at t=1000 - rotated 90 degrees around Z
         let base_to_sensor_1 = StampedTransform {
-            transform: Transform3D {
-                mat: [
-                    [0.0, -1.0, 0.0, 1.0], // 90-degree rotation + offset in x
-                    [1.0, 0.0, 0.0, 0.0],
+            transform: Transform3D::from_matrix([
+                    [0.0, 1.0, 0.0, 0.0], // 90-degree rotation (column-major)
+                    [-1.0, 0.0, 0.0, 0.0],
                     [0.0, 0.0, 1.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0],
-                ],
-            },
-            stamp: CuDuration(1000),
-            parent_frame: "base".to_string(),
-            child_frame: "sensor".to_string(),
+                    [1.0, 0.0, 0.0, 1.0], // offset in x (column-major)
+            ]),
+            stamp: CuDuration(1_000_000_000), // 1 second
+            parent_frame: frame_id!("base"),
+            child_frame: frame_id!("sensor"),
         };
 
         // Same transforms at t=2000, but base is moving 1m/s in x
         let world_to_base_2 = StampedTransform {
-            transform: Transform3D {
-                mat: [
-                    [1.0, 0.0, 0.0, 1.0], // Moved 1m in x in 1 second
+            transform: Transform3D::from_matrix([
+                    [1.0, 0.0, 0.0, 0.0],
                     [0.0, 1.0, 0.0, 0.0],
                     [0.0, 0.0, 1.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0],
-                ],
-            },
-            stamp: CuDuration(2000),
-            parent_frame: "world".to_string(),
-            child_frame: "base".to_string(),
+                    [1.0, 0.0, 0.0, 1.0], // Moved 1m in x (column-major)
+            ]),
+            stamp: CuDuration(2_000_000_000), // 2 seconds
+            parent_frame: frame_id!("world"),
+            child_frame: frame_id!("base"),
         };
 
         // Same orientation at t=2000
         let base_to_sensor_2 = StampedTransform {
-            transform: Transform3D {
-                mat: [
-                    [0.0, -1.0, 0.0, 1.0], // Same rotation + same offset
-                    [1.0, 0.0, 0.0, 0.0],
+            transform: Transform3D::from_matrix([
+                    [0.0, 1.0, 0.0, 0.0], // Same rotation (column-major)
+                    [-1.0, 0.0, 0.0, 0.0],
                     [0.0, 0.0, 1.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0],
-                ],
-            },
-            stamp: CuDuration(2000),
-            parent_frame: "base".to_string(),
-            child_frame: "sensor".to_string(),
+                    [1.0, 0.0, 0.0, 1.0], // Same offset (column-major)
+            ]),
+            stamp: CuDuration(2_000_000_000), // 2 seconds
+            parent_frame: frame_id!("base"),
+            child_frame: frame_id!("sensor"),
         };
 
         // Add all transforms to the tree
@@ -1290,7 +1204,7 @@ mod tests {
 
         // Look up combined velocity from world to sensor at time 1500
         let clock = RobotClock::default();
-        let velocity = tree.lookup_velocity("world", "sensor", CuDuration(1500), &clock);
+        let velocity = tree.lookup_velocity("world", "sensor", CuDuration(1_500_000_000), &clock); // 1.5 seconds
         assert!(velocity.is_ok());
 
         let vel = velocity.unwrap();
@@ -1304,7 +1218,7 @@ mod tests {
         assert_relative_eq!(vel.linear[2], 0.0, epsilon = epsilon);
 
         // Test the reverse velocity (sensor to world)
-        let reverse_velocity = tree.lookup_velocity("sensor", "world", CuDuration(1500), &clock);
+        let reverse_velocity = tree.lookup_velocity("sensor", "world", CuDuration(1_500_000_000), &clock); // 1.5 seconds
         assert!(reverse_velocity.is_ok());
 
         let rev_vel = reverse_velocity.unwrap();
@@ -1324,62 +1238,54 @@ mod tests {
 
         // world to base at t=1000 (identity)
         let world_to_base_1 = StampedTransform {
-            transform: Transform3D {
-                mat: [
+            transform: Transform3D::from_matrix([
                     [1.0, 0.0, 0.0, 0.0],
                     [0.0, 1.0, 0.0, 0.0],
                     [0.0, 0.0, 1.0, 0.0],
                     [0.0, 0.0, 0.0, 1.0],
-                ],
-            },
-            stamp: CuDuration(1000),
-            parent_frame: "world".to_string(),
-            child_frame: "base".to_string(),
+            ]),
+            stamp: CuDuration(1_000_000_000), // 1 second
+            parent_frame: frame_id!("world"),
+            child_frame: frame_id!("base"),
         };
 
         // world to base at t=2000 (rotated 90 degrees around Z)
         let world_to_base_2 = StampedTransform {
-            transform: Transform3D {
-                mat: [
-                    [0.0, -1.0, 0.0, 0.0], // 90-degree rotation around Z
-                    [1.0, 0.0, 0.0, 0.0],
+            transform: Transform3D::from_matrix([
+                    [0.0, 1.0, 0.0, 0.0], // 90-degree rotation around Z (column-major)
+                    [-1.0, 0.0, 0.0, 0.0],
                     [0.0, 0.0, 1.0, 0.0],
                     [0.0, 0.0, 0.0, 1.0],
-                ],
-            },
-            stamp: CuDuration(2000),
-            parent_frame: "world".to_string(),
-            child_frame: "base".to_string(),
+            ]),
+            stamp: CuDuration(2_000_000_000), // 2 seconds
+            parent_frame: frame_id!("world"),
+            child_frame: frame_id!("base"),
         };
 
         // base to sensor at t=1000 (identity with offset)
         let base_to_sensor_1 = StampedTransform {
-            transform: Transform3D {
-                mat: [
-                    [1.0, 0.0, 0.0, 1.0], // Offset 1m in x
+            transform: Transform3D::from_matrix([
+                    [1.0, 0.0, 0.0, 0.0],
                     [0.0, 1.0, 0.0, 0.0],
                     [0.0, 0.0, 1.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0],
-                ],
-            },
-            stamp: CuDuration(1000),
-            parent_frame: "base".to_string(),
-            child_frame: "sensor".to_string(),
+                    [1.0, 0.0, 0.0, 1.0], // Offset 1m in x (column-major)
+            ]),
+            stamp: CuDuration(1_000_000_000), // 1 second
+            parent_frame: frame_id!("base"),
+            child_frame: frame_id!("sensor"),
         };
 
         // base to sensor at t=2000 (identity with same offset)
         let base_to_sensor_2 = StampedTransform {
-            transform: Transform3D {
-                mat: [
-                    [1.0, 0.0, 0.0, 1.0], // Same offset
+            transform: Transform3D::from_matrix([
+                    [1.0, 0.0, 0.0, 0.0],
                     [0.0, 1.0, 0.0, 0.0],
                     [0.0, 0.0, 1.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0],
-                ],
-            },
-            stamp: CuDuration(2000),
-            parent_frame: "base".to_string(),
-            child_frame: "sensor".to_string(),
+                    [1.0, 0.0, 0.0, 1.0], // Same offset (column-major)
+            ]),
+            stamp: CuDuration(2_000_000_000), // 2 seconds
+            parent_frame: frame_id!("base"),
+            child_frame: frame_id!("sensor"),
         };
 
         // Add all transforms to the tree
@@ -1390,7 +1296,7 @@ mod tests {
 
         // Look up velocity of sensor as seen from world
         let clock = RobotClock::default();
-        let velocity = tree.lookup_velocity("world", "sensor", CuDuration(1500), &clock);
+        let velocity = tree.lookup_velocity("world", "sensor", CuDuration(1_500_000_000), &clock); // 1.5 seconds
         assert!(velocity.is_ok());
 
         let vel = velocity.unwrap();
@@ -1405,7 +1311,7 @@ mod tests {
         // Check angular velocity (should be around Z axis)
         assert_relative_eq!(vel.angular[0], 0.0, epsilon = epsilon);
         assert_relative_eq!(vel.angular[1], 0.0, epsilon = epsilon);
-        assert_relative_eq!(vel.angular[2], 1.0, epsilon = epsilon); // Using actual test value
+        assert_relative_eq!(vel.angular[2], -1.0, epsilon = epsilon); // Negative rotation (clockwise)
 
         // Check linear velocity (tangential velocity due to offset from rotation center)
         // V = ω × r, so magnitude should be ω * r = 1.0 * 1.0 = 1.0 m/s
@@ -1426,31 +1332,27 @@ mod tests {
 
         // Set up transforms for a moving robot
         let transform1 = StampedTransform {
-            transform: Transform3D {
-                mat: [
+            transform: Transform3D::from_matrix([
                     [1.0, 0.0, 0.0, 0.0],
                     [0.0, 1.0, 0.0, 0.0],
                     [0.0, 0.0, 1.0, 0.0],
                     [0.0, 0.0, 0.0, 1.0],
-                ],
-            },
-            stamp: CuDuration(1000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            ]),
+            stamp: CuDuration(1_000_000_000), // 1 second
+            parent_frame: frame_id!("world"),
+            child_frame: frame_id!("robot"),
         };
 
         let transform2 = StampedTransform {
-            transform: Transform3D {
-                mat: [
-                    [1.0, 0.0, 0.0, 2.0], // Moved 2m in x over 1 second -> 2 m/s
+            transform: Transform3D::from_matrix([
+                    [1.0, 0.0, 0.0, 0.0],
                     [0.0, 1.0, 0.0, 0.0],
                     [0.0, 0.0, 1.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0],
-                ],
-            },
-            stamp: CuDuration(2000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+                    [2.0, 0.0, 0.0, 1.0], // Moved 2m in x over 1 second -> 2 m/s (column-major)
+            ]),
+            stamp: CuDuration(2_000_000_000), // 2 seconds
+            parent_frame: frame_id!("world"),
+            child_frame: frame_id!("robot"),
         };
 
         // Add transforms to the tree
@@ -1460,7 +1362,7 @@ mod tests {
         // First lookup - should compute and cache the velocity
         let clock = RobotClock::default();
         let start_time = std::time::Instant::now();
-        let velocity1 = tree.lookup_velocity("world", "robot", CuDuration(1500), &clock);
+        let velocity1 = tree.lookup_velocity("world", "robot", CuDuration(1_500_000_000), &clock); // 1.5 seconds
         let first_lookup_time = start_time.elapsed();
 
         assert!(velocity1.is_ok());
@@ -1469,7 +1371,7 @@ mod tests {
 
         // Second lookup - should use the cache and be faster
         let start_time = std::time::Instant::now();
-        let velocity2 = tree.lookup_velocity("world", "robot", CuDuration(1500), &clock);
+        let velocity2 = tree.lookup_velocity("world", "robot", CuDuration(1_500_000_000), &clock); // 1.5 seconds
         let second_lookup_time = start_time.elapsed();
 
         assert!(velocity2.is_ok());
@@ -1482,7 +1384,7 @@ mod tests {
         tree.clear_cache();
 
         let start_time = std::time::Instant::now();
-        let velocity3 = tree.lookup_velocity("world", "robot", CuDuration(1500), &clock);
+        let velocity3 = tree.lookup_velocity("world", "robot", CuDuration(1_500_000_000), &clock); // 1.5 seconds
         let third_lookup_time = start_time.elapsed();
 
         assert!(velocity3.is_ok());
@@ -1505,31 +1407,27 @@ mod tests {
 
         // Add transforms for a moving robot
         let transform1 = StampedTransform {
-            transform: Transform3D {
-                mat: [
+            transform: Transform3D::from_matrix([
                     [1.0, 0.0, 0.0, 0.0],
                     [0.0, 1.0, 0.0, 0.0],
                     [0.0, 0.0, 1.0, 0.0],
                     [0.0, 0.0, 0.0, 1.0],
-                ],
-            },
-            stamp: CuDuration(1000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+            ]),
+            stamp: CuDuration(1_000_000_000), // 1 second
+            parent_frame: frame_id!("world"),
+            child_frame: frame_id!("robot"),
         };
 
         let transform2 = StampedTransform {
-            transform: Transform3D {
-                mat: [
-                    [1.0, 0.0, 0.0, 1.0], // Moving 1 m/s
+            transform: Transform3D::from_matrix([
+                    [1.0, 0.0, 0.0, 0.0],
                     [0.0, 1.0, 0.0, 0.0],
                     [0.0, 0.0, 1.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0],
-                ],
-            },
-            stamp: CuDuration(2000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+                    [1.0, 0.0, 0.0, 1.0], // Moving 1 m/s (column-major)
+            ]),
+            stamp: CuDuration(2_000_000_000), // 2 seconds
+            parent_frame: frame_id!("world"),
+            child_frame: frame_id!("robot"),
         };
 
         // Add transforms to the tree
@@ -1538,37 +1436,35 @@ mod tests {
 
         // First lookup - compute and cache
         let clock = RobotClock::default();
-        let velocity1 = tree.lookup_velocity("world", "robot", CuDuration(1500), &clock);
+        let velocity1 = tree.lookup_velocity("world", "robot", CuDuration(1_500_000_000), &clock); // 1.5 seconds
         assert!(velocity1.is_ok());
         let vel1 = velocity1.unwrap();
         assert_relative_eq!(vel1.linear[0], 1.0, epsilon = 0.01);
 
         // Add a new transform to the tree - this should invalidate the cache
         let transform3 = StampedTransform {
-            transform: Transform3D {
-                mat: [
-                    [1.0, 0.0, 0.0, 3.0], // Now moving 2 m/s (from t=2000 to t=3000)
+            transform: Transform3D::from_matrix([
+                    [1.0, 0.0, 0.0, 0.0],
                     [0.0, 1.0, 0.0, 0.0],
                     [0.0, 0.0, 1.0, 0.0],
-                    [0.0, 0.0, 0.0, 1.0],
-                ],
-            },
-            stamp: CuDuration(3000),
-            parent_frame: "world".to_string(),
-            child_frame: "robot".to_string(),
+                    [3.0, 0.0, 0.0, 1.0], // Now moving 2 m/s (from t=2000 to t=3000) (column-major)
+            ]),
+            stamp: CuDuration(3_000_000_000), // 3 seconds
+            parent_frame: frame_id!("world"),
+            child_frame: frame_id!("robot"),
         };
 
         tree.add_transform(transform3).unwrap();
 
         // Look up velocity at t=1500 again - should return the same result
         // since it's between the first two transforms
-        let velocity2 = tree.lookup_velocity("world", "robot", CuDuration(1500), &clock);
+        let velocity2 = tree.lookup_velocity("world", "robot", CuDuration(1_500_000_000), &clock); // 1.5 seconds
         assert!(velocity2.is_ok());
         let vel2 = velocity2.unwrap();
         assert_relative_eq!(vel2.linear[0], 1.0, epsilon = 0.01);
 
         // Look up velocity at t=2500 - should reflect the new velocity between transform2 and transform3
-        let velocity3 = tree.lookup_velocity("world", "robot", CuDuration(2500), &clock);
+        let velocity3 = tree.lookup_velocity("world", "robot", CuDuration(2_500_000_000), &clock); // 2.5 seconds
         assert!(velocity3.is_ok());
         let vel3 = velocity3.unwrap();
         assert_relative_eq!(vel3.linear[0], 2.0, epsilon = 0.01); // Velocity between t=2000 and t=3000
