@@ -22,7 +22,7 @@ fn main() {
         [0.0, 0.0, 0.0, 1.0],
     ]);
 
-    let world_to_robot_msg = TypedTransformMsg::new(transform.clone(), CuDuration(1000));
+    let world_to_robot_msg = TypedTransformMsg::new(transform, CuDuration(1000));
 
     println!(
         "Created transform from {} to {}",
@@ -109,7 +109,7 @@ fn main() {
 
     // Add some stamped transforms
     let stamped_transform = StampedTransform {
-        transform: transform.clone(),
+        transform,
         stamp: CuDuration(1000),
         parent_frame: FrameIdString::from("world").unwrap(),
         child_frame: FrameIdString::from("robot").unwrap(),

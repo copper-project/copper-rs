@@ -78,6 +78,7 @@ impl<T: Copy + Debug + Default + bincode::enc::Encode + bincode::de::Decode<()> 
         let mut transforms = [const { None }; MAX_TRANSFORMS_PER_BROADCAST];
 
         // Decode each transform
+        #[allow(clippy::needless_range_loop)]
         for i in 0..count {
             // Decode transform.transform (Transform3D)
             let transform_3d = <Transform3D<T> as bincode::de::Decode<()>>::decode(decoder)?;

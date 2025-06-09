@@ -5,7 +5,7 @@ use cu_spatial_payloads::Transform3D;
 #[macro_export]
 macro_rules! frame_id {
     ($s:expr) => {
-        crate::FrameIdString::from($s).unwrap()
+        $crate::FrameIdString::from($s).unwrap()
     };
 }
 

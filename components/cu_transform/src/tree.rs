@@ -81,7 +81,7 @@ impl<T: Copy + Debug + 'static> TransformCache<T> {
                 if age <= self.max_age_nanos {
                     // Update last access time
                     entry.last_access = now;
-                    return Some(entry.transform.clone());
+                    return Some(entry.transform);
                 }
             }
         }
@@ -501,14 +501,14 @@ where
             } else {
                 // For regular transforms, we multiply directly
                 // Note: In transform composition, the right-most transform is applied first
-                let transform_to_apply = transform.transform.clone();
+                let transform_to_apply = transform.transform;
                 result = transform_to_apply * result;
             }
         }
 
         // Cache the computed result
         self.cache
-            .insert(from_frame, to_frame, result.clone(), time, path_hash, robot_clock);
+            .insert(from_frame, to_frame, result, time, path_hash, robot_clock);
 
         Ok(result)
     }
@@ -931,7 +931,7 @@ mod tests {
         assert_relative_eq!(get_translation(&inverse_transform).1, 0.0, epsilon = epsilon); // Updated to match new transform composition
 
         // Manual verification: if we multiply world_to_gripper * gripper_to_world, should get identity
-        let product = &transform * &inverse_transform;
+        let product = transform * inverse_transform;
 
         // Check if product is identity matrix
         for i in 0..4 {
