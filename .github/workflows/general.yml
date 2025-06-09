@@ -138,6 +138,7 @@ jobs:
         with:
           cuda: 12.6.1
           log-file-suffix: '${{ matrix.os }}-${{ matrix.mode }}-cuda.txt'
+          use-github-cache: ${{ runner.os != 'Windows' }}
 
       - name: Set build mode (Linux / MacOS)
         if: runner.os != 'Windows' && ( matrix.mode == 'release' || matrix.mode == 'cuda-release' )
