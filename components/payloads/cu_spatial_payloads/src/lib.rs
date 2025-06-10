@@ -3,14 +3,14 @@ use core::fmt::Debug;
 use serde::{Deserialize, Serialize};
 use std::ops::Mul;
 use uom::si::angle::radian;
-use uom::si::length::meter;
 use uom::si::f32::Angle as Angle32;
 use uom::si::f32::Length as Length32;
 use uom::si::f64::Angle as Angle64;
 use uom::si::f64::Length as Length64;
+use uom::si::length::meter;
 
 #[cfg(feature = "glam")]
-use glam::{Affine3A, DAffine3, Mat4, DMat4};
+use glam::{Affine3A, DAffine3, DMat4, Mat4};
 
 /// Transform3D represents a 3D transformation (rotation + translation)
 /// When the glam feature is enabled, it uses glam's optimized types internally
@@ -33,7 +33,7 @@ enum TransformInner<T: Copy + Debug + 'static> {
 pub type Pose<T> = Transform3D<T>;
 
 // Manual implementations for serialization
-impl<T: Copy + Debug + Default + 'static> Serialize for Transform3D<T> 
+impl<T: Copy + Debug + Default + 'static> Serialize for Transform3D<T>
 where
     T: Serialize,
 {
@@ -115,7 +115,7 @@ impl<T: Copy + Debug + Default + 'static> Transform3D<T> {
     }
 
     /// Get the transform as a 4x4 matrix
-    pub fn to_matrix(&self) -> [[T; 4]; 4] {
+    pub fn to_matrix(self) -> [[T; 4]; 4] {
         #[cfg(feature = "glam")]
         {
             self.inner.to_matrix()
@@ -137,7 +137,7 @@ impl<T: Copy + Debug + Default + 'static> Transform3D<T> {
 impl<T: Copy + Debug + Default + 'static> TransformInner<T> {
     fn from_matrix(mat: [[T; 4]; 4]) -> Self {
         use std::any::TypeId;
-        
+
         // This is a bit hacky but necessary for type safety
         // In practice, T will be f32 or f64
         if TypeId::of::<T>() == TypeId::of::<f32>() {
@@ -157,15 +157,15 @@ impl<T: Copy + Debug + Default + 'static> TransformInner<T> {
         }
     }
 
-    fn to_matrix(&self) -> [[T; 4]; 4] {
+    fn to_matrix(self) -> [[T; 4]; 4] {
         match self {
             TransformInner::F32(affine) => {
-                let mat = Mat4::from(*affine);
+                let mat = Mat4::from(affine);
                 let mat_array = mat.to_cols_array_2d();
                 unsafe { std::mem::transmute_copy(&mat_array) }
             }
             TransformInner::F64(affine) => {
-                let mat = DMat4::from(*affine);
+                let mat = DMat4::from(affine);
                 let mat_array = mat.to_cols_array_2d();
                 unsafe { std::mem::transmute_copy(&mat_array) }
             }
@@ -252,11 +252,9 @@ impl Mul for Transform3D<f32> {
         #[cfg(feature = "glam")]
         {
             match (&self.inner, &rhs.inner) {
-                (TransformInner::F32(a), TransformInner::F32(b)) => {
-                    Self {
-                        inner: TransformInner::F32(*a * *b),
-                    }
-                }
+                (TransformInner::F32(a), TransformInner::F32(b)) => Self {
+                    inner: TransformInner::F32(*a * *b),
+                },
                 _ => unreachable!(),
             }
         }
@@ -285,11 +283,9 @@ impl Mul for Transform3D<f64> {
         #[cfg(feature = "glam")]
         {
             match (&self.inner, &rhs.inner) {
-                (TransformInner::F64(a), TransformInner::F64(b)) => {
-                    Self {
-                        inner: TransformInner::F64(*a * *b),
-                    }
-                }
+                (TransformInner::F64(a), TransformInner::F64(b)) => Self {
+                    inner: TransformInner::F64(*a * *b),
+                },
                 _ => unreachable!(),
             }
         }
@@ -484,7 +480,6 @@ impl Transform3D<f64> {
     }
 }
 
-
 #[cfg(feature = "faer")]
 mod faer_integration {
     use super::Transform3D;
@@ -670,7 +665,7 @@ mod tests {
     fn test_pose_default() {
         let pose: Transform3D<f32> = Transform3D::default();
         let mat = pose.to_matrix();
-        
+
         // With glam feature, the default is created from a zero matrix
         // but internally glam may adjust it to ensure valid transforms
         #[cfg(feature = "glam")]
@@ -685,7 +680,7 @@ mod tests {
             ];
             assert_eq!(mat, expected, "Default pose with glam should have w=1");
         }
-        
+
         #[cfg(not(feature = "glam"))]
         {
             assert_eq!(
@@ -958,7 +953,8 @@ mod tests {
         let pose_from_mat = Transform3D::from(mat);
 
         assert_eq!(
-            pose.to_matrix(), pose_from_mat.to_matrix(),
+            pose.to_matrix(),
+            pose_from_mat.to_matrix(),
             "Faer conversion should be lossless"
         );
     }
@@ -979,7 +975,8 @@ mod tests {
         let pose_from_iso: Transform3D<f64> = iso.into();
 
         assert_eq!(
-            pose.to_matrix(), pose_from_iso.to_matrix(),
+            pose.to_matrix(),
+            pose_from_iso.to_matrix(),
             "Nalgebra conversion should be lossless"
         );
     }
@@ -1002,7 +999,8 @@ mod tests {
         let pose_from_aff: Transform3D<f64> = aff.into();
 
         assert_eq!(
-            orig_pose.to_matrix(), pose_from_aff.to_matrix(),
+            orig_pose.to_matrix(),
+            pose_from_aff.to_matrix(),
             "Glam conversion should be lossless"
         );
     }
@@ -1011,36 +1009,36 @@ mod tests {
     #[test]
     fn test_matrix_format_issue() {
         use glam::Mat4;
-        
+
         // Test case: row-major matrix with translation in last column
         let row_major = [
-            [1.0, 0.0, 0.0, 5.0],  // row 0: x-axis + x translation
-            [0.0, 1.0, 0.0, 6.0],  // row 1: y-axis + y translation  
-            [0.0, 0.0, 1.0, 7.0],  // row 2: z-axis + z translation
-            [0.0, 0.0, 0.0, 1.0],  // row 3: homogeneous
+            [1.0, 0.0, 0.0, 5.0], // row 0: x-axis + x translation
+            [0.0, 1.0, 0.0, 6.0], // row 1: y-axis + y translation
+            [0.0, 0.0, 1.0, 7.0], // row 2: z-axis + z translation
+            [0.0, 0.0, 0.0, 1.0], // row 3: homogeneous
         ];
-        
+
         // What glam expects: column-major format
         // Each inner array is a COLUMN, not a row
         let col_major = [
-            [1.0, 0.0, 0.0, 0.0],  // column 0: x-axis
-            [0.0, 1.0, 0.0, 0.0],  // column 1: y-axis
-            [0.0, 0.0, 1.0, 0.0],  // column 2: z-axis
-            [5.0, 6.0, 7.0, 1.0],  // column 3: translation + w
+            [1.0, 0.0, 0.0, 0.0], // column 0: x-axis
+            [0.0, 1.0, 0.0, 0.0], // column 1: y-axis
+            [0.0, 0.0, 1.0, 0.0], // column 2: z-axis
+            [5.0, 6.0, 7.0, 1.0], // column 3: translation + w
         ];
-        
+
         // Create matrices
         let mat_from_row = Mat4::from_cols_array_2d(&row_major);
         let mat_from_col = Mat4::from_cols_array_2d(&col_major);
-        
+
         // When using row-major data directly, translation ends up in wrong place
         assert_ne!(mat_from_row.w_axis.x, 5.0); // Translation is NOT where we expect
-        
+
         // When using column-major data, translation is correct
         assert_eq!(mat_from_col.w_axis.x, 5.0);
         assert_eq!(mat_from_col.w_axis.y, 6.0);
         assert_eq!(mat_from_col.w_axis.z, 7.0);
-        
+
         // The fix: transpose the row-major matrix
         let mat_transposed = Mat4::from_cols_array_2d(&row_major).transpose();
         assert_eq!(mat_transposed.w_axis.x, 5.0);
