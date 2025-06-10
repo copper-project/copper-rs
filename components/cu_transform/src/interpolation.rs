@@ -136,7 +136,22 @@ pub fn interpolate_transforms<T: Interpolate>(
 mod tests {
     use super::*;
     use crate::frame_id;
-    use approx::assert_relative_eq;
+    // Helper function to replace assert_relative_eq - made generic
+    fn assert_approx_eq<T>(actual: T, expected: T, epsilon: T)
+    where
+        T: Copy + std::fmt::Display + std::ops::Sub<Output = T> + PartialOrd,
+        T: num_traits::Signed,
+    {
+        let diff = (actual - expected).abs();
+        assert!(
+            diff <= epsilon,
+            "expected {}, got {}, difference {} exceeds epsilon {}",
+            expected,
+            actual,
+            diff,
+            epsilon
+        );
+    }
     use cu29::clock::CuDuration;
 
     #[test]
@@ -169,19 +184,19 @@ mod tests {
         assert!(result.is_ok());
 
         let transform = result.unwrap();
-        assert_relative_eq!(transform.to_matrix()[3][0], 5.0);
+        assert_approx_eq(transform.to_matrix()[3][0], 5.0, 1e-5);
 
         let result = interpolate_transforms(&before, &after, CuDuration(1500));
         assert!(result.is_ok());
 
         let transform = result.unwrap();
-        assert_relative_eq!(transform.to_matrix()[3][0], 2.5);
+        assert_approx_eq(transform.to_matrix()[3][0], 2.5, 1e-5);
 
         let result = interpolate_transforms(&before, &after, CuDuration(2500));
         assert!(result.is_ok());
 
         let transform = result.unwrap();
-        assert_relative_eq!(transform.to_matrix()[3][0], 7.5);
+        assert_approx_eq(transform.to_matrix()[3][0], 7.5, 1e-5);
     }
 
     #[test]
@@ -214,7 +229,7 @@ mod tests {
         let result = interpolate_transforms(&before, &after, CuDuration(2000));
         assert!(result.is_ok());
         let transform = result.unwrap();
-        assert_relative_eq!(transform.to_matrix()[3][0], 5.0);
+        assert_approx_eq(transform.to_matrix()[3][0], 5.0, 1e-5);
     }
 
     // Disabled: Transform3D only supports f32 and f64 when using glam (default)

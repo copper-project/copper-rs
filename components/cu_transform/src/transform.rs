@@ -752,7 +752,18 @@ impl<T: Copy + Debug + Default + 'static, const N: usize> Default for ConstTrans
 #[cfg(test)]
 mod tests {
     use super::*;
-    use approx::assert_relative_eq;
+    // Helper function to replace assert_relative_eq
+    fn assert_approx_eq(actual: f32, expected: f32, epsilon: f32) {
+        let diff = (actual - expected).abs();
+        assert!(
+            diff <= epsilon,
+            "expected {}, got {}, difference {} exceeds epsilon {}",
+            expected,
+            actual,
+            diff,
+            epsilon
+        );
+    }
     use cu29::clock::CuDuration;
 
     #[test]
@@ -953,15 +964,15 @@ mod tests {
         let vel = velocity.unwrap();
 
         // The velocity should be 1 m/s in x and 2 m/s in y
-        assert_relative_eq!(vel.linear[0], 1.0);
-        assert_relative_eq!(vel.linear[1], 2.0);
-        assert_relative_eq!(vel.linear[2], 0.0);
+        assert_approx_eq(vel.linear[0], 1.0, 1e-5);
+        assert_approx_eq(vel.linear[1], 2.0, 1e-5);
+        assert_approx_eq(vel.linear[2], 0.0, 1e-5);
 
         // Now also check the angular velocity computation
         // In this test case, there's no rotation, so angular velocity should be zero
-        assert_relative_eq!(vel.angular[0], 0.0);
-        assert_relative_eq!(vel.angular[1], 0.0);
-        assert_relative_eq!(vel.angular[2], 0.0);
+        assert_approx_eq(vel.angular[0], 0.0, 1e-5);
+        assert_approx_eq(vel.angular[1], 0.0, 1e-5);
+        assert_approx_eq(vel.angular[2], 0.0, 1e-5);
     }
 
     #[test]
@@ -1099,9 +1110,9 @@ mod tests {
 
         let vel = velocity.unwrap();
         // Velocity should be 2 m/s in x direction
-        assert_relative_eq!(vel.linear[0], 2.0);
-        assert_relative_eq!(vel.linear[1], 0.0);
-        assert_relative_eq!(vel.linear[2], 0.0);
+        assert_approx_eq(vel.linear[0], 2.0, 1e-5);
+        assert_approx_eq(vel.linear[1], 0.0, 1e-5);
+        assert_approx_eq(vel.linear[2], 0.0, 1e-5);
     }
 
     #[test]
@@ -1152,9 +1163,9 @@ mod tests {
 
         // We rotated π/2 radians in 1 second, so angular velocity should be approximately π/2 rad/s around Z
         // Π/2 is approximately 1.57
-        assert_relative_eq!(vel.angular[0], 0.0, epsilon = 1e-5);
-        assert_relative_eq!(vel.angular[1], 0.0, epsilon = 1e-5);
-        assert_relative_eq!(vel.angular[2], 1.0, epsilon = 1e-5); // Using actual test value
+        assert_approx_eq(vel.angular[0], 0.0, 1e-5);
+        assert_approx_eq(vel.angular[1], 0.0, 1e-5);
+        assert_approx_eq(vel.angular[2], 1.0, 1e-5); // Using actual test value
     }
 
     #[test]
@@ -1355,9 +1366,9 @@ mod tests {
 
         let vel = velocity.unwrap();
         // Velocity should be 3 m/s in x direction
-        assert_relative_eq!(vel.linear[0], 3.0);
-        assert_relative_eq!(vel.linear[1], 0.0);
-        assert_relative_eq!(vel.linear[2], 0.0);
+        assert_approx_eq(vel.linear[0], 3.0, 1e-5);
+        assert_approx_eq(vel.linear[1], 0.0, 1e-5);
+        assert_approx_eq(vel.linear[2], 0.0, 1e-5);
     }
 
     #[test]

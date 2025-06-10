@@ -436,7 +436,18 @@ where
 mod tests {
     use super::*;
     use crate::frames::{RobotFrame, WorldFrame};
-    use approx::assert_relative_eq;
+    // Helper function to replace assert_relative_eq
+    fn assert_approx_eq(actual: f32, expected: f32, epsilon: f32) {
+        let diff = (actual - expected).abs();
+        assert!(
+            diff <= epsilon,
+            "expected {}, got {}, difference {} exceeds epsilon {}",
+            expected,
+            actual,
+            diff,
+            epsilon
+        );
+    }
     use cu29::clock::CuDuration;
 
     type WorldToRobotMsg = TypedTransformMsg<f32, WorldFrame, RobotFrame>;
@@ -509,8 +520,8 @@ mod tests {
 
         let velocity = msg2.compute_velocity(&msg1).unwrap();
 
-        assert_relative_eq!(velocity.linear[0], 1.0);
-        assert_relative_eq!(velocity.linear[1], 2.0);
-        assert_relative_eq!(velocity.linear[2], 0.0);
+        assert_approx_eq(velocity.linear[0], 1.0, 1e-5);
+        assert_approx_eq(velocity.linear[1], 2.0, 1e-5);
+        assert_approx_eq(velocity.linear[2], 0.0, 1e-5);
     }
 }

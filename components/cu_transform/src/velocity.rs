@@ -45,15 +45,88 @@ pub struct VelocityTransform<T: Copy + Debug + 'static> {
     pub angular: [T; 3],
 }
 
-impl VelocityTransform<f64> {
+impl<T: Copy + Debug + Default + num_traits::Zero + 'static> VelocityTransform<T> {
     /// Create a new velocity transform with zero velocities
     pub fn zero() -> Self {
         Self {
-            linear: [0.0, 0.0, 0.0],
-            angular: [0.0, 0.0, 0.0],
+            linear: [T::zero(); 3],
+            angular: [T::zero(); 3],
+        }
+    }
+}
+
+// Generic implementations for all numeric types
+impl<T> VelocityTransform<T>
+where
+    T: Copy
+        + Debug
+        + Default
+        + 'static
+        + std::ops::Add<Output = T>
+        + std::ops::Sub<Output = T>
+        + std::ops::Mul<Output = T>
+        + std::ops::Div<Output = T>
+        + std::ops::Neg<Output = T>,
+{
+    /// Add two velocity transforms component-wise
+    pub fn add(&self, other: &Self) -> Self {
+        Self {
+            linear: [
+                self.linear[0] + other.linear[0],
+                self.linear[1] + other.linear[1],
+                self.linear[2] + other.linear[2],
+            ],
+            angular: [
+                self.angular[0] + other.angular[0],
+                self.angular[1] + other.angular[1],
+                self.angular[2] + other.angular[2],
+            ],
         }
     }
 
+    /// Subtract two velocity transforms component-wise
+    pub fn sub(&self, other: &Self) -> Self {
+        Self {
+            linear: [
+                self.linear[0] - other.linear[0],
+                self.linear[1] - other.linear[1],
+                self.linear[2] - other.linear[2],
+            ],
+            angular: [
+                self.angular[0] - other.angular[0],
+                self.angular[1] - other.angular[1],
+                self.angular[2] - other.angular[2],
+            ],
+        }
+    }
+
+    /// Scale a velocity transform by a scalar
+    pub fn scale(&self, scalar: T) -> Self {
+        Self {
+            linear: [
+                self.linear[0] * scalar,
+                self.linear[1] * scalar,
+                self.linear[2] * scalar,
+            ],
+            angular: [
+                self.angular[0] * scalar,
+                self.angular[1] * scalar,
+                self.angular[2] * scalar,
+            ],
+        }
+    }
+
+    /// Negate a velocity transform
+    pub fn negate(&self) -> Self {
+        Self {
+            linear: [-self.linear[0], -self.linear[1], -self.linear[2]],
+            angular: [-self.angular[0], -self.angular[1], -self.angular[2]],
+        }
+    }
+}
+
+// Specific implementations for f32 and f64 that provide unit conversions
+impl VelocityTransform<f64> {
     /// Get linear velocity components with units
     pub fn linear_velocity(&self) -> [Velocity64; 3] {
         [
@@ -74,14 +147,6 @@ impl VelocityTransform<f64> {
 }
 
 impl VelocityTransform<f32> {
-    /// Create a new velocity transform with zero velocities
-    pub fn zero() -> Self {
-        Self {
-            linear: [0.0, 0.0, 0.0],
-            angular: [0.0, 0.0, 0.0],
-        }
-    }
-
     /// Get linear velocity components with units
     pub fn linear_velocity(&self) -> [Velocity32; 3] {
         [
@@ -106,6 +171,67 @@ impl<T: Copy + Debug + Default> Default for VelocityTransform<T> {
         Self {
             linear: [T::default(); 3],
             angular: [T::default(); 3],
+        }
+    }
+}
+
+// Implement Add trait for VelocityTransform
+impl<T> std::ops::Add for VelocityTransform<T>
+where
+    T: Copy + Debug + Default + 'static + std::ops::Add<Output = T>,
+{
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self::Output {
+        Self {
+            linear: [
+                self.linear[0] + other.linear[0],
+                self.linear[1] + other.linear[1],
+                self.linear[2] + other.linear[2],
+            ],
+            angular: [
+                self.angular[0] + other.angular[0],
+                self.angular[1] + other.angular[1],
+                self.angular[2] + other.angular[2],
+            ],
+        }
+    }
+}
+
+// Implement Sub trait for VelocityTransform
+impl<T> std::ops::Sub for VelocityTransform<T>
+where
+    T: Copy + Debug + Default + 'static + std::ops::Sub<Output = T>,
+{
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self::Output {
+        Self {
+            linear: [
+                self.linear[0] - other.linear[0],
+                self.linear[1] - other.linear[1],
+                self.linear[2] - other.linear[2],
+            ],
+            angular: [
+                self.angular[0] - other.angular[0],
+                self.angular[1] - other.angular[1],
+                self.angular[2] - other.angular[2],
+            ],
+        }
+    }
+}
+
+// Implement Neg trait for VelocityTransform
+impl<T> std::ops::Neg for VelocityTransform<T>
+where
+    T: Copy + Debug + Default + 'static + std::ops::Neg<Output = T>,
+{
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        Self {
+            linear: [-self.linear[0], -self.linear[1], -self.linear[2]],
+            angular: [-self.angular[0], -self.angular[1], -self.angular[2]],
         }
     }
 }
@@ -210,6 +336,11 @@ mod tests {
         let vel = VelocityTransform::<f64>::zero();
         assert_eq!(vel.linear, [0.0, 0.0, 0.0]);
         assert_eq!(vel.angular, [0.0, 0.0, 0.0]);
+
+        // Test generic zero() with other types
+        let vel_f32 = VelocityTransform::<f32>::zero();
+        assert_eq!(vel_f32.linear, [0.0, 0.0, 0.0]);
+        assert_eq!(vel_f32.angular, [0.0, 0.0, 0.0]);
     }
 
     #[test]
