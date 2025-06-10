@@ -76,39 +76,15 @@ impl<
 
         // Extract rotation matrices from both transforms
         let rot1 = [
-            [
-                prev_mat[0][0],
-                prev_mat[0][1],
-                prev_mat[0][2],
-            ],
-            [
-                prev_mat[1][0],
-                prev_mat[1][1],
-                prev_mat[1][2],
-            ],
-            [
-                prev_mat[2][0],
-                prev_mat[2][1],
-                prev_mat[2][2],
-            ],
+            [prev_mat[0][0], prev_mat[0][1], prev_mat[0][2]],
+            [prev_mat[1][0], prev_mat[1][1], prev_mat[1][2]],
+            [prev_mat[2][0], prev_mat[2][1], prev_mat[2][2]],
         ];
 
         let rot2 = [
-            [
-                self_mat[0][0],
-                self_mat[0][1],
-                self_mat[0][2],
-            ],
-            [
-                self_mat[1][0],
-                self_mat[1][1],
-                self_mat[1][2],
-            ],
-            [
-                self_mat[2][0],
-                self_mat[2][1],
-                self_mat[2][2],
-            ],
+            [self_mat[0][0], self_mat[0][1], self_mat[0][2]],
+            [self_mat[1][0], self_mat[1][1], self_mat[1][2]],
+            [self_mat[2][0], self_mat[2][1], self_mat[2][2]],
         ];
 
         // Compute angular velocity from the rotation matrices
@@ -673,7 +649,9 @@ impl<T: Copy + Debug + Default + 'static, const N: usize> ConstTransformBufferSy
     }
 }
 
-impl<T: Copy + Debug + Default + 'static, const N: usize> Default for ConstTransformBufferSync<T, N> {
+impl<T: Copy + Debug + Default + 'static, const N: usize> Default
+    for ConstTransformBufferSync<T, N>
+{
     fn default() -> Self {
         Self::new()
     }
@@ -974,7 +952,6 @@ mod tests {
 
         let vel = velocity.unwrap();
 
-        
         // The velocity should be 1 m/s in x and 2 m/s in y
         assert_relative_eq!(vel.linear[0], 1.0);
         assert_relative_eq!(vel.linear[1], 2.0);
@@ -1105,7 +1082,7 @@ mod tests {
             [0.0, 0.0, 1.0, 0.0], // Column 2: z-axis
             [0.0, 0.0, 0.0, 1.0], // Column 3: translation (x=0, y=0, z=0)
         ]);
-        
+
         transform2.transform = Transform3D::from_matrix([
             [1.0, 0.0, 0.0, 0.0], // Column 0: x-axis
             [0.0, 1.0, 0.0, 0.0], // Column 1: y-axis
@@ -1361,7 +1338,7 @@ mod tests {
             [0.0, 0.0, 1.0, 0.0], // Column 2: z-axis
             [0.0, 0.0, 0.0, 1.0], // Column 3: translation (x=0, y=0, z=0)
         ]);
-        
+
         transform2.transform = Transform3D::from_matrix([
             [1.0, 0.0, 0.0, 0.0], // Column 0: x-axis
             [0.0, 1.0, 0.0, 0.0], // Column 1: y-axis

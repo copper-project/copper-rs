@@ -27,7 +27,7 @@ where
 {
     let zero = T::zero();
     let one = T::one();
-    
+
     // Note: glam uses column-major order, so translation is in the last row
     Transform3D::from_matrix([
         [one, zero, zero, zero],
@@ -41,12 +41,18 @@ where
 #[allow(dead_code)]
 pub fn rotation_z_90<T>() -> Transform3D<T>
 where
-    T: Copy + std::fmt::Debug + Default + num_traits::Zero + num_traits::One + std::ops::Neg<Output = T> + 'static,
+    T: Copy
+        + std::fmt::Debug
+        + Default
+        + num_traits::Zero
+        + num_traits::One
+        + std::ops::Neg<Output = T>
+        + 'static,
 {
     let zero = T::zero();
     let one = T::one();
     let neg_one = -one;
-    
+
     // Note: glam uses column-major order
     Transform3D::from_matrix([
         [zero, one, zero, zero],

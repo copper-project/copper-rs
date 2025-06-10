@@ -110,7 +110,7 @@ pub fn interpolate_transforms<T: Interpolate>(
     // Get matrices from transforms
     let before_mat = before.transform.to_matrix();
     let after_mat = after.transform.to_matrix();
-    
+
     // Initialize result matrix
     let mut result_mat = [[T::default(); 4]; 4];
 
@@ -128,7 +128,6 @@ pub fn interpolate_transforms<T: Interpolate>(
         let interpolated = before_val + (after_val - before_val) * ratio;
         result_mat[3][i] = T::from_f64(interpolated);
     }
-
 
     Ok(Transform3D::from_matrix(result_mat))
 }
@@ -240,7 +239,7 @@ mod tests {
         let mut before_mat = before.transform.to_matrix();
         before_mat[0][3] = 0;
         before.transform = Transform3D::from_matrix(before_mat);
-        
+
         let mut after_mat = after.transform.to_matrix();
         after_mat[0][3] = 10;
         after.transform = Transform3D::from_matrix(after_mat);
@@ -281,7 +280,7 @@ mod tests {
         let mut before_mat = before.transform.to_matrix();
         before_mat[0][3] = 1_000_000_000;
         before.transform = Transform3D::from_matrix(before_mat);
-        
+
         let mut after_mat = after.transform.to_matrix();
         after_mat[0][3] = 2_000_000_000;
         after.transform = Transform3D::from_matrix(after_mat);

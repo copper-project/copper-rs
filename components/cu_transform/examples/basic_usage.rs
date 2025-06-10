@@ -1,8 +1,9 @@
-use cu29::clock::CuDuration;
+use cu29::clock::{CuDuration, Tov};
+use cu29::prelude::CuMsg;
 use cu_spatial_payloads::Transform3D;
 use cu_transform::{
-    ConstTransformBuffer, RobotFrame, StampedTransform, TypedTransformBuffer, TypedTransformMsg,
-    WorldFrame, FrameIdString,
+    ConstTransformBuffer, FrameIdString, RobotFrame, StampedTransform, TransformMsg, TransformTree,
+    TypedTransformBuffer, TypedTransformMsg, WorldFrame,
 };
 
 fn main() {
@@ -127,11 +128,51 @@ fn main() {
         let mat = latest_stamped.transform.to_matrix();
         println!(
             "  Translation: [{}, {}, {}]",
-            mat[0][3],
-            mat[1][3],
-            mat[2][3]
+            mat[0][3], mat[1][3], mat[2][3]
         );
     }
 
     println!("\nThis buffer is stack-allocated with capacity 5 - no heap allocation!");
+
+    // Demonstrate the new CuMsg pattern with TransformTree
+    println!("\n\nCuMsg<TransformMsg> Pattern Demo");
+    println!("================================");
+
+    let mut tree = TransformTree::<f32>::new();
+
+    // Create a CuMsg with TransformMsg
+    let transform_msg = TransformMsg::new(
+        transform,
+        FrameIdString::from("world").expect("Frame name too long"),
+        FrameIdString::from("robot").expect("Frame name too long"),
+    );
+
+    let mut cu_msg = CuMsg::new(Some(transform_msg));
+    cu_msg.metadata.tov = Tov::Time(CuDuration(1_000_000_000)); // 1 second
+
+    // Add using the new API
+    tree.add_transform_msg(&cu_msg)
+        .expect("Failed to add transform");
+    println!("Added transform using CuMsg<TransformMsg> pattern");
+
+    // Query the transform
+    let robot_clock = cu29::clock::RobotClock::default();
+    let result = tree.lookup_transform("world", "robot", CuDuration(1_000_000_000), &robot_clock);
+
+    match result {
+        Ok(transform) => {
+            let mat = transform.to_matrix();
+            println!(
+                "Retrieved transform: translation=({:.2}, {:.2}, {:.2})",
+                mat[3][0], mat[3][1], mat[3][2]
+            );
+        }
+        Err(e) => println!("Error: {}", e),
+    }
+
+    println!("\nKey benefits of CuMsg pattern:");
+    println!("- Integrates with Copper's message system");
+    println!("- Timestamps handled via Tov (Time of Validity)");
+    println!("- Supports time ranges for broadcasts");
+    println!("- No need for separate StampedTransform");
 }

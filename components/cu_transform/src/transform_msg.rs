@@ -15,13 +15,13 @@ use std::fmt::Debug;
 /// Transform message payload for use with CuMsg
 /// This contains just the transform data without timestamps,
 /// as timestamps are handled by CuMsg metadata
-/// 
+///
 /// # Example
 /// ```
 /// use cu_transform::{TransformMsg, Transform3D};
 /// use cu29::prelude::*;
 /// use cu29::clock::{CuDuration, Tov};
-/// 
+///
 /// // Create a transform message
 /// let transform = Transform3D::<f32>::default();
 /// let msg = TransformMsg::new(
@@ -29,7 +29,7 @@ use std::fmt::Debug;
 ///     "world",
 ///     "robot"
 /// );
-/// 
+///
 /// // Wrap in CuMsg for timestamp handling
 /// let mut cu_msg = CuMsg::new(Some(msg));
 /// cu_msg.metadata.tov = Tov::Time(CuDuration(1000));
@@ -46,11 +46,17 @@ pub struct TransformMsg<T: Copy + Debug + Default + 'static> {
 
 impl<T: Copy + Debug + Default + 'static> TransformMsg<T> {
     /// Create a new transform message
-    pub fn new(transform: Transform3D<T>, parent_frame: impl AsRef<str>, child_frame: impl AsRef<str>) -> Self {
+    pub fn new(
+        transform: Transform3D<T>,
+        parent_frame: impl AsRef<str>,
+        child_frame: impl AsRef<str>,
+    ) -> Self {
         Self {
             transform,
-            parent_frame: FrameIdString::from(parent_frame.as_ref()).expect("Parent frame name too long (max 64 chars)"),
-            child_frame: FrameIdString::from(child_frame.as_ref()).expect("Child frame name too long (max 64 chars)"),
+            parent_frame: FrameIdString::from(parent_frame.as_ref())
+                .expect("Parent frame name too long (max 64 chars)"),
+            child_frame: FrameIdString::from(child_frame.as_ref())
+                .expect("Child frame name too long (max 64 chars)"),
         }
     }
 
@@ -58,8 +64,10 @@ impl<T: Copy + Debug + Default + 'static> TransformMsg<T> {
     pub fn from_stamped(stamped: &crate::transform::StampedTransform<T>) -> Self {
         Self {
             transform: stamped.transform,
-            parent_frame: FrameIdString::from(stamped.parent_frame.as_str()).expect("Parent frame name too long"),
-            child_frame: FrameIdString::from(stamped.child_frame.as_str()).expect("Child frame name too long"),
+            parent_frame: FrameIdString::from(stamped.parent_frame.as_str())
+                .expect("Parent frame name too long"),
+            child_frame: FrameIdString::from(stamped.child_frame.as_str())
+                .expect("Child frame name too long"),
         }
     }
 }
@@ -90,10 +98,12 @@ where
         let transform = Transform3D::decode(decoder)?;
         let parent_frame_str = String::decode(decoder)?;
         let child_frame_str = String::decode(decoder)?;
-        let parent_frame = FrameIdString::from(&parent_frame_str)
-            .map_err(|_| bincode::error::DecodeError::OtherString("Parent frame name too long".to_string()))?;
-        let child_frame = FrameIdString::from(&child_frame_str)
-            .map_err(|_| bincode::error::DecodeError::OtherString("Child frame name too long".to_string()))?;
+        let parent_frame = FrameIdString::from(&parent_frame_str).map_err(|_| {
+            bincode::error::DecodeError::OtherString("Parent frame name too long".to_string())
+        })?;
+        let child_frame = FrameIdString::from(&child_frame_str).map_err(|_| {
+            bincode::error::DecodeError::OtherString("Child frame name too long".to_string())
+        })?;
         Ok(Self {
             transform,
             parent_frame,
@@ -490,7 +500,7 @@ mod tests {
     #[test]
     fn test_velocity_computation() {
         use crate::test_utils::translation_transform;
-        
+
         let transform1 = translation_transform(0.0f32, 0.0, 0.0);
         let transform2 = translation_transform(1.0f32, 2.0, 0.0);
 

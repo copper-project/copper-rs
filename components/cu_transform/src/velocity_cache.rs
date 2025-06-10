@@ -1,4 +1,5 @@
 use crate::velocity::VelocityTransform;
+use crate::FrameIdString;
 use cu29::clock::{CuTime, RobotClock};
 use dashmap::DashMap;
 use std::fmt::Debug;
@@ -19,7 +20,7 @@ pub(crate) struct VelocityTransformCacheEntry<T: Copy + Debug + 'static> {
 /// A cache for velocity transforms to avoid recalculating frequently accessed paths
 pub(crate) struct VelocityTransformCache<T: Copy + Debug + 'static> {
     /// Map from (source, target) frames to cached velocity transforms
-    entries: DashMap<(String, String), VelocityTransformCacheEntry<T>>,
+    entries: DashMap<(FrameIdString, FrameIdString), VelocityTransformCacheEntry<T>>,
     /// Maximum size of the cache
     max_size: usize,
     /// Maximum age of cache entries before invalidation (in nanoseconds)
@@ -50,7 +51,10 @@ impl<T: Copy + Debug + 'static> VelocityTransformCache<T> {
         path_hash: u64,
         robot_clock: &RobotClock,
     ) -> Option<VelocityTransform<T>> {
-        let key = (from.to_string(), to.to_string());
+        let key = (
+            FrameIdString::from(from).expect("Frame name too long"),
+            FrameIdString::from(to).expect("Frame name too long"),
+        );
 
         if let Some(mut entry) = self.entries.get_mut(&key) {
             let now = robot_clock.now();
@@ -81,7 +85,10 @@ impl<T: Copy + Debug + 'static> VelocityTransformCache<T> {
         robot_clock: &RobotClock,
     ) {
         let now = robot_clock.now();
-        let key = (from.to_string(), to.to_string());
+        let key = (
+            FrameIdString::from(from).expect("Frame name too long"),
+            FrameIdString::from(to).expect("Frame name too long"),
+        );
 
         // If the cache is at capacity, remove the oldest entry
         if self.entries.len() >= self.max_size {
@@ -92,7 +99,7 @@ impl<T: Copy + Debug + 'static> VelocityTransformCache<T> {
             for entry in self.entries.iter() {
                 if entry.last_access < oldest_time {
                     oldest_time = entry.last_access;
-                    oldest_key = Some(entry.key().clone());
+                    oldest_key = Some(*entry.key());
                 }
             }
 
@@ -130,7 +137,7 @@ impl<T: Copy + Debug + 'static> VelocityTransformCache<T> {
         for entry in self.entries.iter() {
             let age = now.as_nanos().saturating_sub(entry.last_access.as_nanos());
             if age > self.max_age_nanos {
-                keys_to_remove.push(entry.key().clone());
+                keys_to_remove.push(*entry.key());
             }
         }
 

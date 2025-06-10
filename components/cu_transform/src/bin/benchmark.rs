@@ -1,9 +1,7 @@
-use cu29::clock::CuDuration;
-use cu29::prelude::RobotClock;
+use cu29::clock::{CuDuration, Tov};
+use cu29::prelude::{CuMsg, RobotClock};
 use cu_spatial_payloads::Transform3D;
-use cu_transform::transform::StampedTransform;
-use cu_transform::tree::TransformTree;
-use cu_transform::FrameIdString;
+use cu_transform::{TransformMsg, TransformTree};
 use std::time::Instant;
 
 fn main() {
@@ -28,34 +26,35 @@ fn main() {
         };
 
         let child_str = format!("frame{}", i + 1);
-        
-        let parent = FrameIdString::from(&parent_str).unwrap();
-        let child = FrameIdString::from(&child_str).unwrap();
 
         // Create a simple translation
-        let transform = StampedTransform {
-            transform: Transform3D::from_matrix([
-                [1.0, 0.0, 0.0, 1.0],
-                [0.0, 1.0, 0.0, 0.0],
-                [0.0, 0.0, 1.0, 0.0],
-                [0.0, 0.0, 0.0, 1.0],
-            ]),
-            stamp: CuDuration(1000),
-            parent_frame: parent,
-            child_frame: child,
-        };
+        let transform = Transform3D::from_matrix([
+            [1.0, 0.0, 0.0, 1.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ]);
 
-        tree.add_transform(transform).unwrap();
+        let msg = TransformMsg::new(transform, &parent_str, &child_str);
+        let mut cu_msg = CuMsg::new(Some(msg));
+        cu_msg.metadata.tov = Tov::Time(CuDuration(1000));
+
+        tree.add_transform_msg(&cu_msg).unwrap();
     }
 
     // Create a RobotClock for timing
     let clock = RobotClock::default();
-    
+
     // Warm up the cache
     println!("Warming up cache...");
     for _ in 0..100 {
         let _ = tree
-            .lookup_transform("base", &format!("frame{num_frames}"), CuDuration(1000), &clock)
+            .lookup_transform(
+                "base",
+                &format!("frame{num_frames}"),
+                CuDuration(1000),
+                &clock,
+            )
             .unwrap();
     }
 
@@ -64,7 +63,12 @@ fn main() {
     let start = Instant::now();
     for _ in 0..num_lookups {
         let _ = tree
-            .lookup_transform("base", &format!("frame{num_frames}"), CuDuration(1000), &clock)
+            .lookup_transform(
+                "base",
+                &format!("frame{num_frames}"),
+                CuDuration(1000),
+                &clock,
+            )
             .unwrap();
     }
     let elapsed = start.elapsed();
@@ -95,7 +99,12 @@ fn main() {
                 };
 
                 let _ = tree_clone
-                    .lookup_transform("base", &format!("frame{frame_num}"), CuDuration(1000), &clock_clone)
+                    .lookup_transform(
+                        "base",
+                        &format!("frame{frame_num}"),
+                        CuDuration(1000),
+                        &clock_clone,
+                    )
                     .unwrap();
             }
         }));

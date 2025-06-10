@@ -29,4 +29,4 @@ arrayvec = { version = "0.7.6", features = ["serde"] }    # For stack-allocated 
 default = []
 
 [dev-dependencies]
-approx = "0.5"      # For float comparisons in tests
+# approx dependency removed - using manual epsilon comparisons instead
