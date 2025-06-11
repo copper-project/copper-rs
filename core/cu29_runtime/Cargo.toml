@@ -22,6 +22,7 @@ serde = { workspace = true }
 serde_derive = { workspace = true }
 compact_str = { workspace = true }
 cu29-traits = { workspace = true }
+cu29-base-derive = { workspace = true }
 cu29-log = { workspace = true }
 cu29-log-derive = { workspace = true }
 cu29-log-runtime = { workspace = true }  # needed
