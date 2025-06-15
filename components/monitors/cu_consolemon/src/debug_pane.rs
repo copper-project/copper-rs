@@ -6,7 +6,6 @@ use ratatui::Frame;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc::SendError;
 use {
-    compact_str::CompactStringExt,
     log::{Level, LevelFilter, Log, Metadata, Record},
     std::collections::VecDeque,
     std::io::Read,
@@ -62,9 +61,39 @@ impl DebugLog {
         }
     }
 
-    pub fn get_logs(&mut self) -> String {
-        let logs = &self.debug_log;
-        logs.concat_compact().to_string()
+    pub fn get_logs(&self) -> String {
+        if self.debug_log.is_empty() {
+            return String::new();
+        }
+
+        fn push_line(target: &mut String, message: &str, count: usize) {
+            if count > 1 {
+                let trimmed = message.trim_end_matches('\n');
+                target.push_str(&format!("{} (x{})\n", trimmed, count));
+            } else {
+                target.push_str(message);
+            }
+        }
+
+        let mut result = String::new();
+
+        let mut iter = self.debug_log.iter();
+        let mut last_msg = iter.next().unwrap();
+        let mut repeat_count: usize = 1;
+
+        for msg in iter {
+            if msg == last_msg {
+                repeat_count += 1;
+            } else {
+                push_line(&mut result, last_msg, repeat_count);
+                last_msg = msg;
+                repeat_count = 1;
+            }
+        }
+
+        push_line(&mut result, last_msg, repeat_count);
+
+        result
     }
 }
 
