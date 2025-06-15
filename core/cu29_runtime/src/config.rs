@@ -1054,8 +1054,11 @@ fn process_includes(
                     .unwrap_or_else(|| std::path::Path::new(""))
                     .to_string_lossy()
                     .to_string();
-
-                format!("{}/{}", current_dir, include.path)
+                if current_dir.is_empty() {
+                    format!("{}", include.path)
+                } else {
+                    format!("{}/{}", current_dir, include.path)
+                }
             };
 
             let include_content = read_to_string(&include_path).map_err(|e| {
