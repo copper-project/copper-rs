@@ -1055,7 +1055,7 @@ fn process_includes(
                     .to_string_lossy()
                     .to_string();
                 if current_dir.is_empty() {
-                    format!("{}", include.path)
+                    include.path
                 } else {
                     format!("{}/{}", current_dir, include.path)
                 }
