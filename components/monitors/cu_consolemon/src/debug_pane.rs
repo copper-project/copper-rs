@@ -68,7 +68,6 @@ impl DebugLog {
 
         fn push_line(target: &mut String, message: &str, count: usize) {
             if count > 1 {
-                // Trim the trailing newline so we can append our repetition suffix.
                 let trimmed = message.trim_end_matches('\n');
                 target.push_str(&format!("{} (x{})\n", trimmed, count));
             } else {
@@ -76,35 +75,23 @@ impl DebugLog {
             }
         }
 
-
-        fn strip_timestamp(s: &str) -> &str {
-            if s.len() >= 9 && s.as_bytes()[2] == b':' && s.as_bytes()[5] == b':' && s.as_bytes()[8] == b' ' {
-                &s[9..]
-            } else {
-                s
-            }
-        }
-
         let mut result = String::new();
 
         let mut iter = self.debug_log.iter();
-        let mut last_msg_full = iter.next().unwrap();
-        let mut last_msg_core = strip_timestamp(last_msg_full);
+        let mut last_msg = iter.next().unwrap();
         let mut repeat_count: usize = 1;
 
-        for msg_full in iter {
-            let core = strip_timestamp(msg_full);
-            if core == last_msg_core {
+        for msg in iter {
+            if msg == last_msg {
                 repeat_count += 1;
             } else {
-                push_line(&mut result, last_msg_full, repeat_count);
-                last_msg_full = msg_full;
-                last_msg_core = core;
+                push_line(&mut result, last_msg, repeat_count);
+                last_msg = msg;
                 repeat_count = 1;
             }
         }
 
-        push_line(&mut result, last_msg_full, repeat_count);
+        push_line(&mut result, last_msg, repeat_count);
 
         result
     }
