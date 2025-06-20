@@ -5,6 +5,7 @@
 use crate::config::{ComponentConfig, Node};
 use crate::config::{CuConfig, CuGraph, NodeId};
 use crate::copperlist::{CopperList, CopperListState, CuListsManager};
+use crate::cutask::{BincodeAdapter, Freezable};
 use crate::monitoring::CuMonitor;
 use cu29_clock::{ClockProvider, RobotClock};
 use cu29_log_runtime::LoggerRuntime;
@@ -14,6 +15,8 @@ use cu29_traits::WriteStream;
 use cu29_unifiedlog::UnifiedLoggerWrite;
 use std::sync::{Arc, Mutex};
 
+use bincode::error::EncodeError;
+use bincode::{encode_into_std_write, Decode, Encode};
 use petgraph::prelude::*;
 use petgraph::visit::VisitMap;
 use petgraph::visit::Visitable;
@@ -26,84 +29,18 @@ pub struct CopperContext {
     pub clock: RobotClock,
 }
 
-/// This is the main structure that will be injected as a member of the Application struct.
-/// CT is the tuple of all the tasks in order of execution.
-/// CL is the type of the copper list, representing the input/output messages for all the tasks.
-pub struct CuRuntime<CT, P: CopperListTuple, M: CuMonitor, const NBCL: usize> {
-    /// The tuple of all the tasks in order of execution.
-    pub tasks: CT,
-
-    pub monitor: M,
-
-    /// Copper lists hold in order all the input/output messages for all the tasks.
-    pub copper_lists_manager: CuListsManager<P, NBCL>,
-
-    /// The base clock the runtime will be using to record time.
-    pub clock: RobotClock, // TODO: remove public at some point
-
-    /// Logger
-    logger: Option<Box<dyn WriteStream<CopperList<P>>>>,
+/// Manages the lifecycle of the copper lists and logging.
+pub struct CopperListsManager<P: CopperListTuple, const NBCL: usize> {
+    pub inner: CuListsManager<P, NBCL>,
+    /// Logger for the copper lists (messages between tasks)
+    pub logger: Option<Box<dyn WriteStream<CopperList<P>>>>,
 }
 
-/// To be able to share the clock we make the runtime a clock provider.
-impl<CT, P: CopperListTuple, M: CuMonitor, const NBCL: usize> ClockProvider
-    for CuRuntime<CT, P, M, NBCL>
-{
-    fn get_clock(&self) -> RobotClock {
-        self.clock.clone()
-    }
-}
-
-impl<CT, P: CopperListTuple + 'static, M: CuMonitor, const NBCL: usize> CuRuntime<CT, P, M, NBCL> {
-    pub fn new(
-        clock: RobotClock,
-        config: &CuConfig,
-        mission: Option<&str>,
-        tasks_instanciator: impl Fn(Vec<Option<&ComponentConfig>>) -> CuResult<CT>,
-        monitor_instanciator: impl Fn(&CuConfig) -> M,
-        logger: impl WriteStream<CopperList<P>> + 'static,
-    ) -> CuResult<Self> {
-        let graph = config.get_graph(mission)?;
-        let all_instances_configs: Vec<Option<&ComponentConfig>> = graph
-            .get_all_nodes()
-            .iter()
-            .map(|(_, node)| node.get_instance_config())
-            .collect();
-        let tasks = tasks_instanciator(all_instances_configs)?;
-
-        let monitor = monitor_instanciator(config);
-
-        // Needed to declare type explicitly as `cargo check` was failing without it
-        let logger_: Option<Box<dyn WriteStream<CopperList<P>>>> =
-            if let Some(logging_config) = &config.logging {
-                if logging_config.enable_task_logging {
-                    Some(Box::new(logger))
-                } else {
-                    None
-                }
-            } else {
-                Some(Box::new(logger))
-            };
-
-        let runtime = Self {
-            tasks,
-            monitor,
-            copper_lists_manager: CuListsManager::new(), // placeholder
-            clock,
-            logger: logger_,
-        };
-
-        Ok(runtime)
-    }
-
-    pub fn available_copper_lists(&self) -> usize {
-        NBCL - self.copper_lists_manager.len()
-    }
-
+impl<P: CopperListTuple, const NBCL: usize> CopperListsManager<P, NBCL> {
     pub fn end_of_processing(&mut self, culistid: u32) {
         let mut is_top = true;
         let mut nb_done = 0;
-        self.copper_lists_manager.iter_mut().for_each(|cl| {
+        self.inner.iter_mut().for_each(|cl| {
             if cl.id == culistid && cl.get_state() == CopperListState::Processing {
                 cl.change_state(CopperListState::DoneProcessing);
             }
@@ -121,8 +58,165 @@ impl<CT, P: CopperListTuple + 'static, M: CuMonitor, const NBCL: usize> CuRuntim
             }
         });
         for _ in 0..nb_done {
-            let _ = self.copper_lists_manager.pop();
+            let _ = self.inner.pop();
         }
+    }
+
+    pub fn available_copper_lists(&self) -> usize {
+        NBCL - self.inner.len()
+    }
+}
+
+/// Manages the frozen tasks state and logging.
+pub struct FrozenTasksManager {
+    inner: Freezer,
+    /// Logger for the state of the tasks (frozen tasks)
+    logger: Option<Box<dyn WriteStream<Freezer>>>,
+}
+
+impl FrozenTasksManager {
+    pub fn new() -> Self {
+        Self {
+            inner: Freezer::new(),
+            logger: None,
+        }
+    }
+
+    pub fn reset(&mut self, culistid: u32) {
+        if self.logger.is_some() {
+            self.inner.reset(culistid);
+        }
+    }
+
+    pub fn freeze_task(
+        &mut self,
+        culistid: u32,
+        task: &impl Freezable,
+    ) -> Result<usize, EncodeError> {
+        if self.logger.is_some() {
+            if self.inner.culistid != culistid {
+                panic!("Freezing task for a different culistid");
+            }
+            self.inner.add_frozen_task(task)
+        } else {
+            Ok(0)
+        }
+    }
+}
+
+/// This is the main structure that will be injected as a member of the Application struct.
+/// CT is the tuple of all the tasks in order of execution.
+/// CL is the type of the copper list, representing the input/output messages for all the tasks.
+pub struct CuRuntime<CT, P: CopperListTuple, M: CuMonitor, const NBCL: usize> {
+    /// The base clock the runtime will be using to record time.
+    pub clock: RobotClock, // TODO: remove public at some point
+
+    /// The tuple of all the tasks in order of execution.
+    pub tasks: CT,
+
+    /// The runtime monitoring.
+    pub monitor: M,
+
+    /// The logger for the copper lists (messages between tasks)
+    pub copperlists_manager: CopperListsManager<P, NBCL>,
+
+    /// The logger for the state of the tasks (frozen tasks)
+    pub frozentasks_manager: FrozenTasksManager,
+    // pub copperlists_manager: CuListsManager<P, NBCL>,
+    // copperlists_logger: Option<Box<dyn WriteStream<CopperList<P>>>>,
+    // frozentasks_logger: Option<Box<dyn WriteStream<Freezer>>>,
+    // freezer: Freezer,
+}
+
+/// To be able to share the clock we make the runtime a clock provider.
+impl<CT, P: CopperListTuple, M: CuMonitor, const NBCL: usize> ClockProvider
+    for CuRuntime<CT, P, M, NBCL>
+{
+    fn get_clock(&self) -> RobotClock {
+        self.clock.clone()
+    }
+}
+
+#[derive(Encode, Decode)]
+pub struct Freezer {
+    culistid: u32,
+    serialized_tasks: Vec<u8>,
+}
+
+impl Freezer {
+    fn new() -> Self {
+        Freezer {
+            culistid: 0,
+            serialized_tasks: Vec::new(),
+        }
+    }
+
+    /// This is to be able to avoid reallocations
+    fn reset(&mut self, culistid: u32) {
+        self.culistid = culistid;
+        self.serialized_tasks.clear();
+    }
+
+    /// We need to be able to accumulate tasks to the serialization as they are executed after the step.
+    fn add_frozen_task(&mut self, task: &impl Freezable) -> Result<usize, EncodeError> {
+        let config = bincode::config::standard();
+        encode_into_std_write(BincodeAdapter(task), &mut self.serialized_tasks, config)
+    }
+}
+
+impl<CT, P: CopperListTuple + 'static, M: CuMonitor, const NBCL: usize> CuRuntime<CT, P, M, NBCL> {
+    pub fn new(
+        clock: RobotClock,
+        config: &CuConfig,
+        mission: Option<&str>,
+        tasks_instanciator: impl Fn(Vec<Option<&ComponentConfig>>) -> CuResult<CT>,
+        monitor_instanciator: impl Fn(&CuConfig) -> M,
+        copperlists_logger: impl WriteStream<CopperList<P>> + 'static,
+        frozentasks_logger: impl WriteStream<Freezer> + 'static,
+    ) -> CuResult<Self> {
+        let graph = config.get_graph(mission)?;
+        let all_instances_configs: Vec<Option<&ComponentConfig>> = graph
+            .get_all_nodes()
+            .iter()
+            .map(|(_, node)| node.get_instance_config())
+            .collect();
+        let tasks = tasks_instanciator(all_instances_configs)?;
+
+        let monitor = monitor_instanciator(config);
+
+        let (copperlists_logger, frozentasks_logger) = if let Some(logging_config) = &config.logging
+        {
+            if logging_config.enable_task_logging {
+                (
+                    Some(Box::new(copperlists_logger) as Box<dyn WriteStream<CopperList<P>>>),
+                    Some(Box::new(frozentasks_logger) as Box<dyn WriteStream<Freezer>>),
+                )
+            } else {
+                (None, None)
+            }
+        } else {
+            (None, None)
+        };
+
+        let copperlists_manager = CopperListsManager {
+            inner: CuListsManager::new(),
+            logger: copperlists_logger,
+        };
+
+        let frozentasks_manager = FrozenTasksManager {
+            inner: Freezer::new(),
+            logger: frozentasks_logger,
+        };
+
+        let runtime = Self {
+            tasks,
+            monitor,
+            clock,
+            copperlists_manager,
+            frozentasks_manager,
+        };
+
+        Ok(runtime)
     }
 }
 
@@ -557,6 +651,7 @@ mod tests {
             tasks_instanciator,
             monitor_instanciator,
             FakeWriter {},
+            FakeWriter {},
         );
         assert!(runtime.is_ok());
     }
@@ -575,66 +670,68 @@ mod tests {
             tasks_instanciator,
             monitor_instanciator,
             FakeWriter {},
+            FakeWriter {},
         )
         .unwrap();
 
         // Now emulates the generated runtime
         {
-            let copperlists = &mut runtime.copper_lists_manager;
+            let copperlists = &mut runtime.copperlists_manager;
             let culist0 = copperlists
+                .inner
                 .create()
                 .expect("Ran out of space for copper lists");
             // FIXME: error handling.
             let id = culist0.id;
             assert_eq!(id, 0);
             culist0.change_state(CopperListState::Processing);
-            assert_eq!(runtime.available_copper_lists(), 1);
+            assert_eq!(copperlists.available_copper_lists(), 1);
         }
 
         {
-            let copperlists = &mut runtime.copper_lists_manager;
+            let copperlists = &mut runtime.copperlists_manager;
             let culist1 = copperlists
+                .inner
                 .create()
                 .expect("Ran out of space for copper lists"); // FIXME: error handling.
             let id = culist1.id;
             assert_eq!(id, 1);
             culist1.change_state(CopperListState::Processing);
-            assert_eq!(runtime.available_copper_lists(), 0);
+            assert_eq!(copperlists.available_copper_lists(), 0);
         }
 
         {
-            let copperlists = &mut runtime.copper_lists_manager;
-            let culist2 = copperlists.create();
+            let copperlists = &mut runtime.copperlists_manager;
+            let culist2 = copperlists.inner.create();
             assert!(culist2.is_none());
-            assert_eq!(runtime.available_copper_lists(), 0);
+            assert_eq!(copperlists.available_copper_lists(), 0);
+            // Free in order, should let the top of the stack be serialized and freed.
+            copperlists.end_of_processing(1);
+            assert_eq!(copperlists.available_copper_lists(), 1);
         }
-
-        // Free in order, should let the top of the stack be serialized and freed.
-        runtime.end_of_processing(1);
-        assert_eq!(runtime.available_copper_lists(), 1);
 
         // Readd a CL
         {
-            let copperlists = &mut runtime.copper_lists_manager;
+            let copperlists = &mut runtime.copperlists_manager;
             let culist2 = copperlists
+                .inner
                 .create()
                 .expect("Ran out of space for copper lists"); // FIXME: error handling.
             let id = culist2.id;
             assert_eq!(id, 2);
             culist2.change_state(CopperListState::Processing);
-            assert_eq!(runtime.available_copper_lists(), 0);
+            assert_eq!(copperlists.available_copper_lists(), 0);
+            // Free out of order, the #0 first
+            copperlists.end_of_processing(0);
+            // Should not free up the top of the stack
+            assert_eq!(copperlists.available_copper_lists(), 0);
+
+            // Free up the top of the stack
+            copperlists.end_of_processing(2);
+            // This should free up 2 CLs
+
+            assert_eq!(copperlists.available_copper_lists(), 2);
         }
-
-        // Free out of order, the #0 first
-        runtime.end_of_processing(0);
-        // Should not free up the top of the stack
-        assert_eq!(runtime.available_copper_lists(), 0);
-
-        // Free up the top of the stack
-        runtime.end_of_processing(2);
-        // This should free up 2 CLs
-
-        assert_eq!(runtime.available_copper_lists(), 2);
     }
 
     #[test]
