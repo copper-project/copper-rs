@@ -72,6 +72,7 @@ pub enum UnifiedLogType {
     Empty,             // Dummy default used as a debug marker
     StructuredLogLine, // This is for the structured logs (ie. debug! etc..)
     CopperList,        // This is the actual data log storing activities between tasks.
+    FrozenTasks,       // Log of all frozen state of the tasks.
     LastEntry,         // This is a special entry that is used to signal the end of the log.
 }
 

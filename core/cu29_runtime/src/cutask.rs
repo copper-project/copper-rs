@@ -191,6 +191,16 @@ pub trait Freezable {
     }
 }
 
+/// Bincode Adapter for Freezable tasks
+/// This allows the use of the bincode API directly to freeze and thaw tasks.
+pub struct BincodeAdapter<'a, T: Freezable + ?Sized>(pub &'a T);
+
+impl<'a, T: Freezable + ?Sized> Encode for BincodeAdapter<'a, T> {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        self.0.freeze(encoder)
+    }
+}
+
 /// A Src Task is a task that only produces messages. For example drivers for sensors are Src Tasks.
 /// They are in push mode from the runtime.
 /// To set the frequency of the pulls and align them to any hw, see the runtime configuration.
