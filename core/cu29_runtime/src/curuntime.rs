@@ -9,9 +9,9 @@ use crate::cutask::{BincodeAdapter, Freezable};
 use crate::monitoring::CuMonitor;
 use cu29_clock::{ClockProvider, RobotClock};
 use cu29_log_runtime::LoggerRuntime;
-use cu29_traits::CopperListTuple;
 use cu29_traits::CuResult;
 use cu29_traits::WriteStream;
+use cu29_traits::{CopperListTuple, CuError};
 use cu29_unifiedlog::UnifiedLoggerWrite;
 use std::sync::{Arc, Mutex};
 
@@ -69,35 +69,35 @@ impl<P: CopperListTuple, const NBCL: usize> CopperListsManager<P, NBCL> {
 
 /// Manages the frozen tasks state and logging.
 pub struct FrozenTasksManager {
+    /// Where the serialized tasks are stored following the wave of execution of a CL.
     inner: Freezer,
+
     /// Logger for the state of the tasks (frozen tasks)
     logger: Option<Box<dyn WriteStream<Freezer>>>,
+
+    /// Capture a keyframe only each...
+    keyframe_interval: u32,
 }
 
 impl FrozenTasksManager {
-    pub fn new() -> Self {
-        Self {
-            inner: Freezer::new(),
-            logger: None,
-        }
+    fn is_keyframe(&self, culistid: u32) -> bool {
+        self.logger.is_some() && culistid % self.keyframe_interval == 0
     }
 
     pub fn reset(&mut self, culistid: u32) {
-        if self.logger.is_some() {
+        if self.is_keyframe(culistid) {
             self.inner.reset(culistid);
         }
     }
 
-    pub fn freeze_task(
-        &mut self,
-        culistid: u32,
-        task: &impl Freezable,
-    ) -> Result<usize, EncodeError> {
-        if self.logger.is_some() {
+    pub fn freeze_task(&mut self, culistid: u32, task: &impl Freezable) -> CuResult<usize> {
+        if self.is_keyframe(culistid) {
             if self.inner.culistid != culistid {
                 panic!("Freezing task for a different culistid");
             }
-            self.inner.add_frozen_task(task)
+            self.inner
+                .add_frozen_task(task)
+                .map_err(|e| CuError::from(format!("Failed to serialize task: {}", e)))
         } else {
             Ok(0)
         }
@@ -195,7 +195,11 @@ impl<CT, P: CopperListTuple + 'static, M: CuMonitor, const NBCL: usize> CuRuntim
                 (None, None)
             }
         } else {
-            (None, None)
+            // Enable by default logging
+            (
+                Some(Box::new(copperlists_logger) as Box<dyn WriteStream<CopperList<P>>>),
+                Some(Box::new(frozentasks_logger) as Box<dyn WriteStream<Freezer>>),
+            )
         };
 
         let copperlists_manager = CopperListsManager {
@@ -206,6 +210,7 @@ impl<CT, P: CopperListTuple + 'static, M: CuMonitor, const NBCL: usize> CuRuntim
         let frozentasks_manager = FrozenTasksManager {
             inner: Freezer::new(),
             logger: frozentasks_logger,
+            keyframe_interval: 100, // TODO(gbin): make that configurable
         };
 
         let runtime = Self {

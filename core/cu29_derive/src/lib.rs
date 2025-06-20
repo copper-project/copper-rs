@@ -717,7 +717,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                             #comment_tokens
                                             {
                                                 // Maybe freeze the task if this is a "key frame"
-                                                ft_manager.freeze_task(clid, &#task_instance);
+                                                ft_manager.freeze_task(clid, &#task_instance)?;
                                                 #call_sim_callback
                                                 let cumsg_output = &mut msgs.#output_culist_index;
                                                 cumsg_output.metadata.process_time.start = clock.now().into();
@@ -798,7 +798,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         {
                                             #comment_tokens
                                             // Maybe freeze the task if this is a "key frame"
-                                            ft_manager.freeze_task(clid, &#task_instance);
+                                            ft_manager.freeze_task(clid, &#task_instance)?;
                                             #call_sim_callback
                                             let cumsg_input = (#(&msgs.#indices),*);
                                             // This is the virtual output for the sink
@@ -875,7 +875,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         {
                                             #comment_tokens
                                             // Maybe freeze the task if this is a "key frame"
-                                            ft_manager.freeze_task(clid, &#task_instance);
+                                            ft_manager.freeze_task(clid, &#task_instance)?;
                                             #call_sim_callback
                                             let cumsg_input = (#(&msgs.#indices),*);
                                             let cumsg_output = &mut msgs.#output_culist_index;
