@@ -1296,9 +1296,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 // CuList is a CopperList with the list of all the messages types as msgs.
                 pub type CuTasks = #task_types_tuple;
 
-                // cutasks_encode_impl
-                // cutasks_decode_impl
-
                 // This is the variation with stubs for the sources and sinks in simulation mode.
                 pub type CuSimTasks = #task_types_tuple_sim;
 
