@@ -2,7 +2,7 @@
 //! It is exposed to the user via the `copper_runtime` macro injecting it as a field in their application struct.
 //!
 
-use crate::config::{ComponentConfig, Node};
+use crate::config::{ComponentConfig, Node, DEFAULT_KEYFRAME_INTERVAL};
 use crate::config::{CuConfig, CuGraph, NodeId};
 use crate::copperlist::{CopperList, CopperListState, CuListsManager};
 use crate::cutask::{BincodeAdapter, Freezable};
@@ -184,22 +184,19 @@ impl<CT, P: CopperListTuple + 'static, M: CuMonitor, const NBCL: usize> CuRuntim
 
         let monitor = monitor_instanciator(config);
 
-        let (copperlists_logger, frozentasks_logger) = if let Some(logging_config) = &config.logging
-        {
-            if logging_config.enable_task_logging {
-                (
-                    Some(Box::new(copperlists_logger) as Box<dyn WriteStream<CopperList<P>>>),
-                    Some(Box::new(frozentasks_logger) as Box<dyn WriteStream<Freezer>>),
-                )
-            } else {
-                (None, None)
-            }
-        } else {
-            // Enable by default logging
-            (
+        let (copperlists_logger, frozentasks_logger, keyframe_interval) = match &config.logging {
+            Some(logging_config) if logging_config.enable_task_logging => (
                 Some(Box::new(copperlists_logger) as Box<dyn WriteStream<CopperList<P>>>),
                 Some(Box::new(frozentasks_logger) as Box<dyn WriteStream<Freezer>>),
-            )
+                logging_config.keyframe_interval.unwrap(), // it is set to a default at parsing time
+            ),
+            Some(_) => (None, None, 0), // explicit no enable logging
+            None => (
+                // default
+                Some(Box::new(copperlists_logger) as Box<dyn WriteStream<CopperList<P>>>),
+                Some(Box::new(frozentasks_logger) as Box<dyn WriteStream<Freezer>>),
+                DEFAULT_KEYFRAME_INTERVAL,
+            ),
         };
 
         let copperlists_manager = CopperListsManager {
@@ -210,7 +207,7 @@ impl<CT, P: CopperListTuple + 'static, M: CuMonitor, const NBCL: usize> CuRuntim
         let frozentasks_manager = FrozenTasksManager {
             inner: Freezer::new(),
             logger: frozentasks_logger,
-            keyframe_interval: 100, // TODO(gbin): make that configurable
+            keyframe_interval,
         };
 
         let runtime = Self {
