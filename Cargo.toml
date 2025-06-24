@@ -55,6 +55,7 @@ members = [
     "examples/cu_standalone_structlog",
     "examples/cu_zenoh",
     "examples/cu_zenoh_ros",
+    "support/cargo_cubuild",
 ]
 
 # put only the core crates here that are not platform specific
