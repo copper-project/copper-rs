@@ -1,4 +1,8 @@
-use std::{fs, path::PathBuf, process::{Command, Stdio}};
+use std::{
+    fs,
+    path::PathBuf,
+    process::{Command, Stdio},
+};
 
 fn main() {
     let main_rs = PathBuf::from("src/main.rs");
