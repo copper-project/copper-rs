@@ -23,7 +23,7 @@ fn main() {
 }
 
 fn try_main(main_rs: &PathBuf, backup: &PathBuf) -> Result<(), i32> {
-    fs::copy(&main_rs, &backup).expect("Failed to backup main.rs");
+    fs::copy(main_rs, backup).expect("Failed to backup main.rs");
 
     let output = Command::new("cargo")
         .env("RUSTFLAGS", "--cfg feature=\"macro_debug\"")
@@ -43,9 +43,9 @@ fn try_main(main_rs: &PathBuf, backup: &PathBuf) -> Result<(), i32> {
         }
     };
 
-    let original = fs::read_to_string(&backup).expect("Failed to read main.rs");
+    let original = fs::read_to_string(backup).expect("Failed to read main.rs");
     let patched = inject_generated_code(&original, &expanded);
-    fs::write(&main_rs, &patched).expect("Failed to write patched main.rs");
+    fs::write(main_rs, patched).expect("Failed to write patched main.rs");
 
     let status = Command::new("cargo")
         .arg("check")
