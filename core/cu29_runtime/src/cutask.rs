@@ -185,8 +185,7 @@ pub trait Freezable {
 
     /// This method is called by the framework when it wants to restore the task to a specific state.
     /// Here it is similar to Decode but the framework will give you a new instance of the task (the new method will be called)
-    #[allow(unused_variables)]
-    fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+    fn thaw<D: Decoder>(&mut self, _decoder: &mut D) -> Result<(), DecodeError> {
         Ok(())
     }
 }

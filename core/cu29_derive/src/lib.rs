@@ -415,14 +415,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         // Generate the code to create instances of the nodes
         // It maps the types to their index
         let (task_instances_init_code,
+            task_restore_code,
             start_calls,
             stop_calls,
             preprocess_calls,
-            postprocess_calls): (Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>) = itertools::multiunzip(all_tasks_types
+            postprocess_calls): (Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>) = itertools::multiunzip(all_tasks_types
             .iter()
             .enumerate()
             .map(|(index, ty)| {
                 let task_index = int2sliceindex(index as u32);
+                let task_tuple_index = syn::Index::from(index);
                 let task_enum_name = config_id_to_enum(&all_tasks_ids[index]);
                 let enum_name = Ident::new(&task_enum_name, proc_macro2::Span::call_site());
                 let additional_error_info = format!(
@@ -432,6 +434,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 (   // Task instances initialization
                     quote! {
                         #ty::new(all_instances_configs[#index]).map_err(|e| e.add_cause(#additional_error_info))?
+                    },
+                    // Tasks keyframe restore code
+                    quote! {
+                        tasks.#task_tuple_index.thaw(decoder).map_err(|e| e.into())?
                     },
                     {  // Start calls
                         let monitoring_action = quote! {
@@ -1066,6 +1072,17 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 Ok(())
             }
 
+            fn restore_keyframe(&self, freezer: &Freezer) -> CuResult<()> {
+                let runtime = &mut self.copper_runtime;
+                let clock = &runtime.clock;
+                let tasks = &mut runtime.tasks;
+                let config = cu29::bincode::config::standard();
+                let mut slice: &[u8] = &freezer.serialized_tasks;
+                let mut decoder = DecoderImpl::new(slice, config, ());
+                #(#task_restore_code);*;
+                Ok(())
+            }
+
             #start_all_tasks {
                 #(#start_calls)*
                 self.copper_runtime.monitor.start(&self.copper_runtime.clock)?;
@@ -1316,6 +1333,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::bincode::error::EncodeError;
                 use cu29::bincode::Decode;
                 use cu29::bincode::de::Decoder;
+                use cu29::bincode::de::DecoderImpl;
                 use cu29::bincode::error::DecodeError;
                 use cu29::clock::RobotClock;
                 use cu29::config::CuConfig;

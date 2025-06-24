@@ -122,10 +122,6 @@ pub struct CuRuntime<CT, P: CopperListTuple, M: CuMonitor, const NBCL: usize> {
 
     /// The logger for the state of the tasks (frozen tasks)
     pub frozentasks_manager: FrozenTasksManager,
-    // pub copperlists_manager: CuListsManager<P, NBCL>,
-    // copperlists_logger: Option<Box<dyn WriteStream<CopperList<P>>>>,
-    // frozentasks_logger: Option<Box<dyn WriteStream<Freezer>>>,
-    // freezer: Freezer,
 }
 
 /// To be able to share the clock we make the runtime a clock provider.
@@ -139,8 +135,8 @@ impl<CT, P: CopperListTuple, M: CuMonitor, const NBCL: usize> ClockProvider
 
 #[derive(Encode, Decode)]
 pub struct Freezer {
-    culistid: u32,
-    serialized_tasks: Vec<u8>,
+    pub culistid: u32,
+    pub serialized_tasks: Vec<u8>,
 }
 
 impl Freezer {

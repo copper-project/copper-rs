@@ -1,4 +1,5 @@
 use crate::config::CuConfig;
+use crate::curuntime::Freezer;
 use crate::simulation::SimOverride;
 use cu29_clock::RobotClock;
 use cu29_traits::CuResult;
@@ -79,6 +80,9 @@ pub trait CuApplication {
     /// - On failure, an appropriate error wrapped in `CuResult` is returned.
     ///
     fn stop_all_tasks(&mut self) -> CuResult<()>;
+
+    /// Restore all tasks from the given frozen state
+    fn restore_keyframe(&self, freezer: &Freezer) -> CuResult<()>;
 }
 
 /// A trait that defines the structure and behavior of a simulation-enabled CuApplication.
@@ -181,4 +185,7 @@ pub trait CuSimApplication {
         &mut self,
         sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
     ) -> CuResult<()>;
+
+    /// Restore all tasks from the given frozen state
+    fn restore_keyframe(&self, freezer: &Freezer) -> CuResult<()>;
 }
