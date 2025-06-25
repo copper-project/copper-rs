@@ -68,10 +68,8 @@ fn cleanup_and_exit(backup: &PathBuf, main_rs: &PathBuf, code: i32) -> ! {
 }
 
 fn extract_expansion(stderr: &str) -> Option<String> {
-    let start_tag = "===    Gen. Runtime ===";
-    let end_tag = "=== === === === === ===";
-    let start = stderr.find(start_tag)? + start_tag.len();
-    let end = stderr[start..].find(end_tag)? + start;
+    let start = stderr.find(START_TAG)? + START_TAG.len();
+    let end = stderr[start..].find(END_TAG)? + start;
     stderr.get(start..end).map(|s| s.trim().to_string())
 }
 
