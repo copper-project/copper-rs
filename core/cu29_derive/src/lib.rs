@@ -20,7 +20,7 @@ use cu29_traits::CuResult;
 use proc_macro2::{Ident, Span};
 
 #[cfg(feature = "macro_debug")]
-use crate::format::{highlight_rust_code, rustfmt_generated_code};
+use crate::format::rustfmt_generated_code;
 
 mod format;
 mod utils;
@@ -1348,7 +1348,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     {
         let formatted_code = rustfmt_generated_code(result.to_string());
         eprintln!("\n     ===    Gen. Runtime ===\n");
-        eprintln!("{}", highlight_rust_code(formatted_code));
+        eprintln!("{}", formatted_code);
+        // if you need colors back: eprintln!("{}", highlight_rust_code(formatted_code)); was disabled for cubuild.
+        // or simply use cargo expand
         eprintln!("\n     === === === === === ===\n");
     }
     result.into()
