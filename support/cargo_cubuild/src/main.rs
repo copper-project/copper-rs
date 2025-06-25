@@ -67,6 +67,9 @@ fn cleanup_and_exit(backup: &PathBuf, main_rs: &PathBuf, code: i32) -> ! {
     std::process::exit(code);
 }
 
+const START_TAG: &str = "===    Gen. Runtime ===";
+const END_TAG: &str = "=== === === === === ===";
+
 fn extract_expansion(stderr: &str) -> Option<String> {
     let start = stderr.find(START_TAG)? + START_TAG.len();
     let end = stderr[start..].find(END_TAG)? + start;
