@@ -68,18 +68,18 @@ impl<P: CopperListTuple, const NBCL: usize> CopperListsManager<P, NBCL> {
 }
 
 /// Manages the frozen tasks state and logging.
-pub struct FrozenTasksManager {
+pub struct KeyFramesManager {
     /// Where the serialized tasks are stored following the wave of execution of a CL.
-    inner: Freezer,
+    inner: KeyFrame,
 
     /// Logger for the state of the tasks (frozen tasks)
-    logger: Option<Box<dyn WriteStream<Freezer>>>,
+    logger: Option<Box<dyn WriteStream<KeyFrame>>>,
 
     /// Capture a keyframe only each...
     keyframe_interval: u32,
 }
 
-impl FrozenTasksManager {
+impl KeyFramesManager {
     fn is_keyframe(&self, culistid: u32) -> bool {
         self.logger.is_some() && culistid % self.keyframe_interval == 0
     }
@@ -121,7 +121,7 @@ pub struct CuRuntime<CT, P: CopperListTuple, M: CuMonitor, const NBCL: usize> {
     pub copperlists_manager: CopperListsManager<P, NBCL>,
 
     /// The logger for the state of the tasks (frozen tasks)
-    pub frozentasks_manager: FrozenTasksManager,
+    pub keyframes_manager: KeyFramesManager,
 }
 
 /// To be able to share the clock we make the runtime a clock provider.
@@ -133,15 +133,20 @@ impl<CT, P: CopperListTuple, M: CuMonitor, const NBCL: usize> ClockProvider
     }
 }
 
+/// A KeyFrame is recording a snapshot of the tasks state before a given copperlist.
+/// It is a double encapsulation: this one recording the culistid and another even in
+/// bincode in the serialized_tasks.
 #[derive(Encode, Decode)]
-pub struct Freezer {
+pub struct KeyFrame {
+    // This is the id of the copper list that this keyframe is associated with (recorded before the copperlist).
     pub culistid: u32,
+    // This is the bincode representation of the tuple of all the tasks.
     pub serialized_tasks: Vec<u8>,
 }
 
-impl Freezer {
+impl KeyFrame {
     fn new() -> Self {
-        Freezer {
+        KeyFrame {
             culistid: 0,
             serialized_tasks: Vec::new(),
         }
@@ -168,7 +173,7 @@ impl<CT, P: CopperListTuple + 'static, M: CuMonitor, const NBCL: usize> CuRuntim
         tasks_instanciator: impl Fn(Vec<Option<&ComponentConfig>>) -> CuResult<CT>,
         monitor_instanciator: impl Fn(&CuConfig) -> M,
         copperlists_logger: impl WriteStream<CopperList<P>> + 'static,
-        frozentasks_logger: impl WriteStream<Freezer> + 'static,
+        keyframes_logger: impl WriteStream<KeyFrame> + 'static,
     ) -> CuResult<Self> {
         let graph = config.get_graph(mission)?;
         let all_instances_configs: Vec<Option<&ComponentConfig>> = graph
@@ -180,17 +185,17 @@ impl<CT, P: CopperListTuple + 'static, M: CuMonitor, const NBCL: usize> CuRuntim
 
         let monitor = monitor_instanciator(config);
 
-        let (copperlists_logger, frozentasks_logger, keyframe_interval) = match &config.logging {
+        let (copperlists_logger, keyframes_logger, keyframe_interval) = match &config.logging {
             Some(logging_config) if logging_config.enable_task_logging => (
                 Some(Box::new(copperlists_logger) as Box<dyn WriteStream<CopperList<P>>>),
-                Some(Box::new(frozentasks_logger) as Box<dyn WriteStream<Freezer>>),
+                Some(Box::new(keyframes_logger) as Box<dyn WriteStream<KeyFrame>>),
                 logging_config.keyframe_interval.unwrap(), // it is set to a default at parsing time
             ),
             Some(_) => (None, None, 0), // explicit no enable logging
             None => (
                 // default
                 Some(Box::new(copperlists_logger) as Box<dyn WriteStream<CopperList<P>>>),
-                Some(Box::new(frozentasks_logger) as Box<dyn WriteStream<Freezer>>),
+                Some(Box::new(keyframes_logger) as Box<dyn WriteStream<KeyFrame>>),
                 DEFAULT_KEYFRAME_INTERVAL,
             ),
         };
@@ -200,9 +205,9 @@ impl<CT, P: CopperListTuple + 'static, M: CuMonitor, const NBCL: usize> CuRuntim
             logger: copperlists_logger,
         };
 
-        let frozentasks_manager = FrozenTasksManager {
-            inner: Freezer::new(),
-            logger: frozentasks_logger,
+        let keyframes_manager = KeyFramesManager {
+            inner: KeyFrame::new(),
+            logger: keyframes_logger,
             keyframe_interval,
         };
 
@@ -211,7 +216,7 @@ impl<CT, P: CopperListTuple + 'static, M: CuMonitor, const NBCL: usize> CuRuntim
             monitor,
             clock,
             copperlists_manager,
-            frozentasks_manager,
+            keyframes_manager,
         };
 
         Ok(runtime)

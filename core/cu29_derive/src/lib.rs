@@ -740,7 +740,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                             #comment_tokens
                                             {
                                                 // Maybe freeze the task if this is a "key frame"
-                                                ft_manager.freeze_task(clid, &#task_instance)?;
+                                                kf_manager.freeze_task(clid, &#task_instance)?;
                                                 #call_sim_callback
                                                 let cumsg_output = &mut msgs.#output_culist_index;
                                                 cumsg_output.metadata.process_time.start = clock.now().into();
@@ -839,7 +839,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         {
                                             #comment_tokens
                                             // Maybe freeze the task if this is a "key frame"
-                                            ft_manager.freeze_task(clid, &#task_instance)?;
+                                            kf_manager.freeze_task(clid, &#task_instance)?;
                                             #call_sim_callback
                                             let cumsg_input = #inputs_type;
                                             // This is the virtual output for the sink
@@ -931,7 +931,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         {
                                             #comment_tokens
                                             // Maybe freeze the task if this is a "key frame"
-                                            ft_manager.freeze_task(clid, &#task_instance)?;
+                                            kf_manager.freeze_task(clid, &#task_instance)?;
                                             #call_sim_callback
                                             let cumsg_input = #inputs_type;
                                             let cumsg_output = &mut msgs.#output_culist_index;
@@ -1051,14 +1051,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let monitor = &mut runtime.monitor;
                 let tasks = &mut runtime.tasks;
                 let cl_manager = &mut runtime.copperlists_manager;
-                let ft_manager = &mut runtime.frozentasks_manager;
+                let kf_manager = &mut runtime.keyframes_manager;
 
                 // Preprocess calls can happen at any time, just packed them up front.
                 #(#preprocess_calls)*
 
                 let culist = cl_manager.inner.create().expect("Ran out of space for copper lists"); // FIXME: error handling
                 let clid = culist.id;
-                ft_manager.reset(clid); // beginning of processing, we empty the serialized frozen states of the tasks.
+                kf_manager.reset(clid); // beginning of processing, we empty the serialized frozen states of the tasks.
                 culist.change_state(cu29::copperlist::CopperListState::Processing);
                 {
                     let msgs = &mut culist.msgs.0;
@@ -1072,12 +1072,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 Ok(())
             }
 
-            fn restore_keyframe(&mut self, freezer: &Freezer) -> CuResult<()> {
+            fn restore_keyframe(&mut self, keyframe: &KeyFrame) -> CuResult<()> {
                 let runtime = &mut self.copper_runtime;
                 let clock = &runtime.clock;
                 let tasks = &mut runtime.tasks;
                 let config = cu29::bincode::config::standard();
-                let reader = cu29::bincode::de::read::SliceReader::new(&freezer.serialized_tasks);
+                let reader = cu29::bincode::de::read::SliceReader::new(&keyframe.serialized_tasks);
                 let mut decoder = DecoderImpl::new(reader, config, ());
                 #(#task_restore_code);*;
                 Ok(())
@@ -1172,7 +1172,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         // This is to be sure we have the size of at least a Culist and some.
                     );
 
-                    let frozentasks_stream = stream_write::<Freezer>(
+                    let keyframes_stream = stream_write::<KeyFrame>(
                         unified_logger.clone(),
                         UnifiedLogType::FrozenTasks,
                         1024 * 1024 * 10, // 10 MiB
@@ -1186,7 +1186,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             #mission_mod::#tasks_instanciator,
                             #mission_mod::monitor_instanciator,
                             copperlist_stream,
-                            frozentasks_stream)?, // FIXME: gbin
+                            keyframes_stream)?, // FIXME: gbin
                     });
 
                     #sim_callback_on_new
@@ -1339,7 +1339,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::config::CuConfig;
                 use cu29::config::ComponentConfig;
                 use cu29::curuntime::CuRuntime;
-                use cu29::curuntime::Freezer;
+                use cu29::curuntime::KeyFrame;
                 use cu29::curuntime::CopperContext;
                 use cu29::CuResult;
                 use cu29::CuError;
