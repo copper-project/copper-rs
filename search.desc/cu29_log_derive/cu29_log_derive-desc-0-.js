@@ -1,1 +1,1 @@
-searchState.loadedDescShard("cu29_log_derive", 0, "")
+searchState.loadedDescShard("cu29_log_derive", 0, "Interns a string For example:")

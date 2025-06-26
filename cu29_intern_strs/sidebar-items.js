@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["read_interned_strings"]};
+window.SIDEBAR_ITEMS = {"fn":["default_log_index_dir","intern_string","read_interned_strings","record_callsite"]};
