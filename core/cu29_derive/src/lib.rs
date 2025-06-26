@@ -210,8 +210,15 @@ fn gen_sim_support(runtime_plan: &CuExecutionLoop) -> proc_macro2::TokenStream {
                     .map(|(_, t)| parse_str::<Type>(format!("CuMsg<{t}>").as_str()).unwrap());
                 let no_output = parse_str::<Type>("CuMsg<()>").unwrap();
                 let output = output.as_ref().unwrap_or(&no_output);
+
+                let inputs_type = if inputs.len() == 1 {
+                    quote! { &'a #(#inputs)* }
+                } else {
+                    quote! { (#(&'a #inputs),*) }
+                };
+
                 quote! {
-                    #enum_ident(cu29::simulation::CuTaskCallbackState<(#(&'a #inputs),*), &'a mut #output>)
+                    #enum_ident(cu29::simulation::CuTaskCallbackState<#inputs_type, &'a mut #output>)
                 }
             }
             CuExecutionUnit::Loop(_) => {
@@ -770,9 +777,18 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     };
 
                                     let call_sim_callback = if sim_mode {
+
+                                        let inputs_type = if indices.len() == 1 {
+                                            // Not a tuple for a single input
+                                            quote! { #(&msgs.#indices)* }
+                                        } else {
+                                            // A tuple for multiple inputs
+                                            quote! { (#(&msgs.#indices),*) }
+                                        };
+
                                         quote! {
                                             let doit = {
-                                                let cumsg_input = (#(&msgs.#indices),*);
+                                                let cumsg_input = #inputs_type;
                                                 // This is the virtual output for the sink
                                                 let cumsg_output = &mut msgs.#output_culist_index;
                                                 let state = cu29::simulation::CuTaskCallbackState::Process(cumsg_input, cumsg_output);
@@ -794,13 +810,22 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     };
 
                                     let indices = step.input_msg_indices_types.iter().map(|(index, _)| int2sliceindex(*index));
+
+                                    let inputs_type = if indices.len() == 1 {
+                                        // Not a tuple for a single input
+                                        quote! { #(&msgs.#indices)* }
+                                    } else {
+                                        // A tuple for multiple inputs
+                                        quote! { (#(&msgs.#indices),*) }
+                                    };
+
                                     quote! {
                                         {
                                             #comment_tokens
                                             // Maybe freeze the task if this is a "key frame"
                                             ft_manager.freeze_task(clid, &#task_instance)?;
                                             #call_sim_callback
-                                            let cumsg_input = (#(&msgs.#indices),*);
+                                            let cumsg_input = #inputs_type;
                                             // This is the virtual output for the sink
                                             let cumsg_output = &mut msgs.#output_culist_index;
                                             cumsg_output.metadata.process_time.start = clock.now().into();
@@ -847,9 +872,17 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     };
 
                                     let call_sim_callback = if sim_mode {
+                                        let inputs_type = if indices.len() == 1 {
+                                            // Not a tuple for a single input
+                                            quote! { #(&msgs.#indices)* }
+                                        } else {
+                                            // A tuple for multiple inputs
+                                            quote! { (#(&msgs.#indices),*) }
+                                        };
+
                                         quote! {
                                             let doit = {
-                                                let cumsg_input = (#(&msgs.#indices),*);
+                                                let cumsg_input = #inputs_type;
                                                 let cumsg_output = &mut msgs.#output_culist_index;
                                                 let state = cu29::simulation::CuTaskCallbackState::Process(cumsg_input, cumsg_output);
                                                 let ovr = sim_callback(SimStep::#enum_name(state));
@@ -871,13 +904,20 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     };
 
                                     let indices = step.input_msg_indices_types.iter().map(|(index, _)| int2sliceindex(*index));
+                                    let inputs_type = if indices.len() == 1 {
+                                        // Not a tuple for a single input
+                                        quote! { #(&msgs.#indices)* }
+                                    } else {
+                                        // A tuple for multiple inputs
+                                        quote! { (#(&msgs.#indices),*) }
+                                    };
                                     quote! {
                                         {
                                             #comment_tokens
                                             // Maybe freeze the task if this is a "key frame"
                                             ft_manager.freeze_task(clid, &#task_instance)?;
                                             #call_sim_callback
-                                            let cumsg_input = (#(&msgs.#indices),*);
+                                            let cumsg_input = #inputs_type;
                                             let cumsg_output = &mut msgs.#output_culist_index;
                                             cumsg_output.metadata.process_time.start = clock.now().into();
                                             let maybe_error = if doit {#task_instance.process(clock, cumsg_input, cumsg_output)} else {Ok(())};
@@ -1259,13 +1299,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::bincode::de::Decoder;
                 use cu29::bincode::error::DecodeError;
                 use cu29::clock::RobotClock;
-                use cu29::clock::OptionCuTime;
-                use cu29::clock::ClockProvider;
                 use cu29::config::CuConfig;
                 use cu29::config::ComponentConfig;
-                use cu29::config::MonitorConfig;
-                use cu29::config::read_configuration;
-                use cu29::config::read_configuration_str;
                 use cu29::curuntime::CuRuntime;
                 use cu29::curuntime::Freezer;
                 use cu29::curuntime::CopperContext;
