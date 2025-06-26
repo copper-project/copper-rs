@@ -1332,7 +1332,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::cutask::CuMsgMetadata;
                 use cu29::copperlist::CopperList;
                 use cu29::monitoring::CuMonitor; // Trait import.
-                use cu29::monitoring::NoMonitor;
                 use cu29::monitoring::CuTaskState;
                 use cu29::monitoring::Decision;
                 use cu29::prelude::app::CuApplication;
@@ -1346,6 +1345,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 // Not used if the used doesn't generate Sim.
                 #[allow(unused_imports)]
                 use cu29::prelude::app::CuSimApplication;
+
+                // Not used if a monitor is present
+                #[allow(unused_imports)]
+                use cu29::monitoring::NoMonitor;
 
                 // This is the heart of everything.
                 // CuTasks is the list of all the tasks types.
@@ -1394,6 +1397,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         #[allow(unused_imports)]
         use default::#builder_name;
 
+        #[allow(unused_imports)]
         use default::#application_name;
         }
     } else {
