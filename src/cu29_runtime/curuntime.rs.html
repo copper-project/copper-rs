@@ -97,7 +97,7 @@
 <a href=#97 id=97 data-nosnippet>97</a>            }
 <a href=#98 id=98 data-nosnippet>98</a>            <span class="self">self</span>.inner
 <a href=#99 id=99 data-nosnippet>99</a>                .add_frozen_task(task)
-<a href=#100 id=100 data-nosnippet>100</a>                .map_err(|e| CuError::from(<span class="macro">format!</span>(<span class="string">"Failed to serialize task: {}"</span>, e)))
+<a href=#100 id=100 data-nosnippet>100</a>                .map_err(|e| CuError::from(<span class="macro">format!</span>(<span class="string">"Failed to serialize task: {e}"</span>)))
 <a href=#101 id=101 data-nosnippet>101</a>        } <span class="kw">else </span>{
 <a href=#102 id=102 data-nosnippet>102</a>            <span class="prelude-val">Ok</span>(<span class="number">0</span>)
 <a href=#103 id=103 data-nosnippet>103</a>        }
