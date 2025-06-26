@@ -39,7 +39,7 @@ fn try_main(main_rs: &PathBuf, backup: &PathBuf) -> Result<(), i32> {
         Some(e) => e,
         None => {
             eprintln!("[cubuild] Could not extract macro expansion from output:");
-            eprintln!("{}", stderr);
+            eprintln!("{stderr}");
             return Err(1);
         }
     };
