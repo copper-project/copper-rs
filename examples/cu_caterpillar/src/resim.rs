@@ -84,5 +84,5 @@ fn main() {
     }
     copper_app
         .stop_all_tasks(&mut default_callback)
-        .expect("Failed to start all tasks.");
+        .expect("Failed to stop all tasks.");
 }
