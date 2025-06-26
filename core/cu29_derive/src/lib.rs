@@ -437,7 +437,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     },
                     // Tasks keyframe restore code
                     quote! {
-                        tasks.#task_tuple_index.thaw(decoder).map_err(|e| e.into())?
+                        tasks.#task_tuple_index.thaw(&mut decoder).map_err(|e| CuError::new_with_cause("Failed to thaw", e))?
                     },
                     {  // Start calls
                         let monitoring_action = quote! {
@@ -1072,13 +1072,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 Ok(())
             }
 
-            fn restore_keyframe(&self, freezer: &Freezer) -> CuResult<()> {
+            fn restore_keyframe(&mut self, freezer: &Freezer) -> CuResult<()> {
                 let runtime = &mut self.copper_runtime;
                 let clock = &runtime.clock;
                 let tasks = &mut runtime.tasks;
                 let config = cu29::bincode::config::standard();
-                let mut slice: &[u8] = &freezer.serialized_tasks;
-                let mut decoder = DecoderImpl::new(slice, config, ());
+                let reader = cu29::bincode::de::read::SliceReader::new(&freezer.serialized_tasks);
+                let mut decoder = DecoderImpl::new(reader, config, ());
                 #(#task_restore_code);*;
                 Ok(())
             }

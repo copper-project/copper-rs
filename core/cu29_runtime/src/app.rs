@@ -82,7 +82,7 @@ pub trait CuApplication {
     fn stop_all_tasks(&mut self) -> CuResult<()>;
 
     /// Restore all tasks from the given frozen state
-    fn restore_keyframe(&self, freezer: &Freezer) -> CuResult<()>;
+    fn restore_keyframe(&mut self, freezer: &Freezer) -> CuResult<()>;
 }
 
 /// A trait that defines the structure and behavior of a simulation-enabled CuApplication.
@@ -187,5 +187,5 @@ pub trait CuSimApplication {
     ) -> CuResult<()>;
 
     /// Restore all tasks from the given frozen state
-    fn restore_keyframe(&self, freezer: &Freezer) -> CuResult<()>;
+    fn restore_keyframe(&mut self, freezer: &Freezer) -> CuResult<()>;
 }
