@@ -25,13 +25,14 @@ fn main() {
 fn try_main(main_rs: &PathBuf, backup: &PathBuf) -> Result<(), i32> {
     fs::copy(main_rs, backup).expect("Failed to backup main.rs");
 
+    println!("[cubuild] Expanding the macros... ");
     let output = Command::new("cargo")
-        .env("RUSTFLAGS", "--cfg feature=\"macro_debug\"")
-        .arg("run")
+        .env("RUSTFLAGS", "--cfg feature=\"cu29/macro_debug\"")
+        .arg("check")
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .output()
-        .expect("Failed to run cargo run with macro_debug");
+        .expect("Failed to run cargo build with macro_debug");
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     let expanded = match extract_expansion(&stderr) {
@@ -42,12 +43,15 @@ fn try_main(main_rs: &PathBuf, backup: &PathBuf) -> Result<(), i32> {
             return Err(1);
         }
     };
+    println!("[cubuild] Reinjecting the macros... ");
 
     let original = fs::read_to_string(backup).expect("Failed to read main.rs");
     let patched = inject_generated_code(&original, &expanded);
     fs::write(main_rs, patched).expect("Failed to write patched main.rs");
 
+    println!("[cubuild] Recompiling with the injected macros... ");
     let status = Command::new("cargo")
+        .env("RUSTFLAGS", "--cfg feature=\"cu29/macro_debug\"")
         .arg("check")
         .status()
         .expect("cargo check failed");
