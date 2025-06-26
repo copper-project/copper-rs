@@ -153,6 +153,7 @@ fn gen_culist_support(
             let payload_type = all_msgs_types_in_culist_order[*output_position].clone();
             let index = syn::Index::from(*output_position);
             quote! {
+                #[allow(dead_code)]
                 pub fn #fn_name(&self) -> &CuMsg<#payload_type> {
                     &self.0.#index
                 }
@@ -171,10 +172,12 @@ fn gen_culist_support(
         impl CuMsgs {
             #(#methods)*
 
+            #[allow(dead_code)]
             fn get_tuple(&self) -> &#msgs_types_tuple {
                 &self.0
             }
 
+            #[allow(dead_code)]
             fn get_tuple_mut(&mut self) -> &mut #msgs_types_tuple {
                 &mut self.0
             }
@@ -227,6 +230,8 @@ fn gen_sim_support(runtime_plan: &CuExecutionLoop) -> proc_macro2::TokenStream {
         })
         .collect();
     quote! {
+        // not used if sim is not generated but this is ok.
+        #[allow(dead_code)]
         pub enum SimStep<'a> {
             #(#plan_enum),*
         }
@@ -654,14 +659,19 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         let node_index = int2sliceindex(step.node_id);
                         let task_instance = quote! { tasks.#node_index };
                         let comment_str = format!(
-                            "/// {} ({:?}) Id:{} I:{:?} O:{:?}",
+                            "DEBUG ->> {} ({:?}) Id:{} I:{:?} O:{:?}",
                             step.node.get_id(),
                             step.task_type,
                             step.node_id,
                             step.input_msg_indices_types,
                             step.output_msg_index_type
                         );
-                        let comment_tokens: proc_macro2::TokenStream = parse_str(&comment_str).unwrap();
+                        let comment_tokens = quote! {
+                            {
+                                let _ = stringify!(#comment_str);
+                            }
+                        };
+                        // let comment_tokens: proc_macro2::TokenStream = parse_str(&comment_str).unwrap();
                         let tid = step.node_id as usize;
                         taskid_call_order.push(tid);
 
@@ -1040,7 +1050,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 // Preprocess calls can happen at any time, just packed them up front.
                 #(#preprocess_calls)*
 
-                let mut culist = cl_manager.inner.create().expect("Ran out of space for copper lists"); // FIXME: error handling
+                let culist = cl_manager.inner.create().expect("Ran out of space for copper lists"); // FIXME: error handling
                 let clid = culist.id;
                 ft_manager.reset(clid); // beginning of processing, we empty the serialized frozen states of the tasks.
                 culist.change_state(cu29::copperlist::CopperListState::Processing);
@@ -1184,6 +1194,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         ) = if sim_mode {
             (
                 quote! {
+                    #[allow(dead_code)]
                     pub struct #builder_name <'a, F> {
                         clock: Option<RobotClock>,
                         unified_logger: Option<Arc<Mutex<UnifiedLoggerWrite>>>,
@@ -1192,6 +1203,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     }
                 },
                 quote! {
+                    #[allow(dead_code)]
                     pub fn new() -> Self {
                         Self {
                             clock: None,
@@ -1221,6 +1233,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         } else {
             (
                 quote! {
+                    #[allow(dead_code)]
                     pub struct #builder_name {
                         clock: Option<RobotClock>,
                         unified_logger: Option<Arc<Mutex<UnifiedLoggerWrite>>>,
@@ -1228,6 +1241,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     }
                 },
                 quote! {
+                    #[allow(dead_code)]
                     pub fn new() -> Self {
                         Self {
                             clock: None,
@@ -1251,22 +1265,26 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             {
                 #builder_new
 
+                #[allow(dead_code)]
                 pub fn with_clock(mut self, clock: RobotClock) -> Self {
                     self.clock = Some(clock);
                     self
                 }
 
+                #[allow(dead_code)]
                 pub fn with_unified_logger(mut self, unified_logger: Arc<Mutex<UnifiedLoggerWrite>>) -> Self {
                     self.unified_logger = Some(unified_logger);
                     self
                 }
 
+                #[allow(dead_code)]
                 pub fn with_context(mut self, copper_ctx: &CopperContext) -> Self {
                     self.clock = Some(copper_ctx.clock.clone());
                     self.unified_logger = Some(copper_ctx.unified_logger.clone());
                     self
                 }
 
+                #[allow(dead_code)]
                 pub fn with_config(mut self, config_override: CuConfig) -> Self {
                         self.config_override = Some(config_override);
                         self
@@ -1274,6 +1292,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 #builder_sim_callback_method
 
+                #[allow(dead_code)]
                 pub fn build(self) -> CuResult<#application_name> {
                     #application_name::new(
                         self.clock
@@ -1317,7 +1336,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::monitoring::CuTaskState;
                 use cu29::monitoring::Decision;
                 use cu29::prelude::app::CuApplication;
-                use cu29::prelude::app::CuSimApplication;
                 use cu29::prelude::debug;
                 use cu29::prelude::stream_write;
                 use cu29::prelude::UnifiedLoggerWrite;
@@ -1325,6 +1343,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use std::sync::Arc;
                 use std::sync::Mutex;
 
+                // Not used if the used doesn't generate Sim.
+                #[allow(unused_imports)]
+                use cu29::prelude::app::CuSimApplication;
 
                 // This is the heart of everything.
                 // CuTasks is the list of all the tasks types.
@@ -1332,6 +1353,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 pub type CuTasks = #task_types_tuple;
 
                 // This is the variation with stubs for the sources and sinks in simulation mode.
+                // Not used if the used doesn't generate Sim.
+                #[allow(dead_code)]
                 pub type CuSimTasks = #task_types_tuple_sim;
 
                 pub const TASKS_IDS: &'static [&'static str] = &[#( #all_tasks_ids ),*];
@@ -1344,6 +1367,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     Ok(( #(#task_instances_init_code),*, ))
                 }
 
+                #[allow(dead_code)]
                 pub fn tasks_instanciator_sim(all_instances_configs: Vec<Option<&ComponentConfig>>) -> CuResult<CuSimTasks> {
                     Ok(( #(#task_sim_instances_init_code),*, ))
                 }
@@ -1366,7 +1390,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let default_application_tokens = if all_missions.contains_key("default") {
         quote! {
+        // you can bypass the builder and not use it
+        #[allow(unused_imports)]
         use default::#builder_name;
+
         use default::#application_name;
         }
     } else {
