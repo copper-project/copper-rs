@@ -114,7 +114,12 @@ pub fn copperlists_dump<P: CopperListTuple>(
 /// src: the source of the log data
 /// index: the path to the index file (containing the interned strings constructed at build time)
 pub fn textlog_dump(mut src: impl Read, index: &Path) -> CuResult<()> {
-    let all_strings = read_interned_strings(index)?;
+    let all_strings = read_interned_strings(index).map_err(|e| {
+        CuError::new_with_cause(
+            "Failed to read interned strings from index",
+            std::io::Error::other(e),
+        )
+    })?;
     loop {
         let entry = decode_from_std_read::<CuLogEntry, _, _>(&mut src, standard());
 
