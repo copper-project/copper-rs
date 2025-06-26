@@ -591,7 +591,7 @@ pub struct LoggingConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub section_size_mib: Option<u64>,
 
-    /// Interval in copperlists between two "keyframes" in the log file ie freezing tasks.
+    /// Interval in copperlists between two "keyframes" in the log file i.e. freezing tasks.
     #[serde(
         default = "default_keyframe_interval",
         skip_serializing_if = "Option::is_none"
