@@ -1414,7 +1414,7 @@
 <a href=#1414 id=1414 data-nosnippet>1414</a>    </span>{
 <a href=#1415 id=1415 data-nosnippet>1415</a>        <span class="kw">let </span>formatted_code = rustfmt_generated_code(result.to_string());
 <a href=#1416 id=1416 data-nosnippet>1416</a>        <span class="macro">eprintln!</span>(<span class="string">"\n     ===    Gen. Runtime ===\n"</span>);
-<a href=#1417 id=1417 data-nosnippet>1417</a>        <span class="macro">eprintln!</span>(<span class="string">"{}"</span>, formatted_code);
+<a href=#1417 id=1417 data-nosnippet>1417</a>        <span class="macro">eprintln!</span>(<span class="string">"{formatted_code}"</span>);
 <a href=#1418 id=1418 data-nosnippet>1418</a>        <span class="comment">// if you need colors back: eprintln!("{}", highlight_rust_code(formatted_code)); was disabled for cubuild.
 <a href=#1419 id=1419 data-nosnippet>1419</a>        // or simply use cargo expand
 <a href=#1420 id=1420 data-nosnippet>1420</a>        </span><span class="macro">eprintln!</span>(<span class="string">"\n     === === === === === ===\n"</span>);
