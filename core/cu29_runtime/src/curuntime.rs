@@ -97,7 +97,7 @@ impl FrozenTasksManager {
             }
             self.inner
                 .add_frozen_task(task)
-                .map_err(|e| CuError::from(format!("Failed to serialize task: {}", e)))
+                .map_err(|e| CuError::from(format!("Failed to serialize task: {e}")))
         } else {
             Ok(0)
         }
