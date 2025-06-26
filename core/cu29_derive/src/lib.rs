@@ -1432,7 +1432,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     {
         let formatted_code = rustfmt_generated_code(result.to_string());
         eprintln!("\n     ===    Gen. Runtime ===\n");
-        eprintln!("{}", formatted_code);
+        eprintln!("{formatted_code}");
         // if you need colors back: eprintln!("{}", highlight_rust_code(formatted_code)); was disabled for cubuild.
         // or simply use cargo expand
         eprintln!("\n     === === === === === ===\n");
