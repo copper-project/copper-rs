@@ -38,7 +38,7 @@ path = "src/resim.rs"
 cu29 = { workspace = true, features = ["macro_debug"] }
 cu29-helpers = { workspace = true }
 cu29-export = { workspace = true, features = ["python"] }
-bincode = { workspace = true }
+# cu-consolemon = { path = "../../components/monitors/cu_consolemon", default-features = false, version = "0.6" }  # needed
 cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.8.0" } # needed
 cu-rp-gpio = { path = "../../components/sinks/cu_rp_gpio", version = "0.8.0" }
 tempfile = { workspace = true }

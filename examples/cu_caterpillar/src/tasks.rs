@@ -1,7 +1,7 @@
-use bincode::de::Decoder;
-use bincode::enc::Encoder;
-use bincode::error::{DecodeError, EncodeError};
-use bincode::{Decode, Encode};
+use cu29::bincode::de::Decoder;
+use cu29::bincode::enc::Encoder;
+use cu29::bincode::error::{DecodeError, EncodeError};
+use cu29::bincode::{Decode, Encode};
 use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, CuTask, Freezable};
