@@ -11,6 +11,6 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-cu29 = { workspace = true }
+cu29 = { workspace = true, features=["macro_debug"] }
 cu29-helpers = { workspace = true }
 tempfile = { workspace = true }
