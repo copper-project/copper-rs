@@ -7,7 +7,7 @@ use crate::config::{CuConfig, CuGraph, NodeId};
 use crate::copperlist::{CopperList, CopperListState, CuListsManager};
 use crate::cutask::{BincodeAdapter, Freezable};
 use crate::monitoring::CuMonitor;
-use cu29_clock::{ClockProvider, RobotClock};
+use cu29_clock::{ClockProvider, CuTime, RobotClock};
 use cu29_log_runtime::LoggerRuntime;
 use cu29_traits::CuResult;
 use cu29_traits::WriteStream;
@@ -84,9 +84,9 @@ impl KeyFramesManager {
         self.logger.is_some() && culistid % self.keyframe_interval == 0
     }
 
-    pub fn reset(&mut self, culistid: u32) {
+    pub fn reset(&mut self, culistid: u32, clock: &RobotClock) {
         if self.is_keyframe(culistid) {
-            self.inner.reset(culistid);
+            self.inner.reset(culistid, clock.now());
         }
     }
 
@@ -140,6 +140,8 @@ impl<CT, P: CopperListTuple, M: CuMonitor, const NBCL: usize> ClockProvider
 pub struct KeyFrame {
     // This is the id of the copper list that this keyframe is associated with (recorded before the copperlist).
     pub culistid: u32,
+    // This is the timestamp when the keyframe was created, using the robot clock.
+    pub timestamp: CuTime,
     // This is the bincode representation of the tuple of all the tasks.
     pub serialized_tasks: Vec<u8>,
 }
@@ -148,13 +150,15 @@ impl KeyFrame {
     fn new() -> Self {
         KeyFrame {
             culistid: 0,
+            timestamp: CuTime::default(),
             serialized_tasks: Vec::new(),
         }
     }
 
     /// This is to be able to avoid reallocations
-    fn reset(&mut self, culistid: u32) {
+    fn reset(&mut self, culistid: u32, timestamp: CuTime) {
         self.culistid = culistid;
+        self.timestamp = timestamp;
         self.serialized_tasks.clear();
     }
 

@@ -1058,7 +1058,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 let culist = cl_manager.inner.create().expect("Ran out of space for copper lists"); // FIXME: error handling
                 let clid = culist.id;
-                kf_manager.reset(clid); // beginning of processing, we empty the serialized frozen states of the tasks.
+                kf_manager.reset(clid, clock); // beginning of processing, we empty the serialized frozen states of the tasks.
                 culist.change_state(cu29::copperlist::CopperListState::Processing);
                 {
                     let msgs = &mut culist.msgs.0;
