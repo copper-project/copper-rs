@@ -69,7 +69,7 @@ impl<'cl> CuSinkTask<'cl> for RPGpio {
         Self: Sized,
     {
         let ComponentConfig(kv) =
-            config.ok_or("RPGpio needs a config, None was passed as ComponentConfig")?;
+            config.ok_or_else(|| cu_error!("RPGpio needs a config, None was passed as ComponentConfig"))?;
 
         let pin_nb: u8 = kv
             .get("pin")

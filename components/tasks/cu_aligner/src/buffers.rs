@@ -1,7 +1,7 @@
 use circular_buffer::CircularBuffer;
 use cu29::clock::{CuTime, Tov};
 use cu29::cutask::{CuMsg, CuMsgPayload};
-use cu29::{CuError, CuResult};
+use cu29::{cu_error, CuError, CuResult};
 
 /// An augmented circular buffer that allows for time-based operations.
 pub struct TimeboundCircularBuffer<const S: usize, P>
@@ -86,7 +86,7 @@ where
             .map(|msg| extract_tov_time_right(&msg.metadata.tov))
             .try_fold(None, |acc, time| {
                 let time = time.ok_or_else(|| {
-                    CuError::from("Trying to align temporal data with no time information")
+                    cu_error!("Trying to align temporal data with no time information")
                 })?;
                 Ok(Some(
                     acc.map_or(time, |current_max: CuTime| current_max.max(time)),

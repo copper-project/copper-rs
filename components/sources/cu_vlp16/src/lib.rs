@@ -4,7 +4,7 @@ use velodyne_lidar::{DataPacket, Packet};
 use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, Freezable};
-use cu29::{output_msg, CuResult};
+use cu29::{cu_error, output_msg, CuResult};
 use cu_sensor_payloads::{PointCloud, PointCloudSoa};
 use std::net::UdpSocket;
 use std::time::Duration;
@@ -39,7 +39,7 @@ impl<'cl> CuSrcTask<'cl> for Vlp16 {
             "last" => Config16::new_vlp_16_last(),
             "dual" => Config16::new_vlp_16_dual(),
             _ => {
-                return Err("Invalid return_type for Vlp16.".into());
+                return Err(cu_error!("Invalid return_type for Vlp16."));
             }
         };
         Ok(Vlp16 {

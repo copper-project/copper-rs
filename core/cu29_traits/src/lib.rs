@@ -1,56 +1,35 @@
 use bincode::{Decode as dDecode, Encode, Encode as dEncode};
-use serde::{Deserialize, Serialize};
-use std::error::Error;
-use std::fmt::{Debug, Display, Formatter};
 
-/// Common copper Error type.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+use anyhow::Error as AnyhowError;
+use core::error::Error;
+use core::fmt::{Debug, Display};
+use std::fmt::Formatter;
+
+#[derive(Debug)]
 pub struct CuError {
-    message: String,
-    cause: Option<String>,
+    id: u32,
+    cause: Option<AnyhowError>,
 }
 
 impl Display for CuError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let context_str = match &self.cause {
-            Some(c) => c.to_string(),
-            None => "None".to_string(),
-        };
-        write!(f, "{}\n   context:{}", self.message, context_str)?;
-        Ok(())
+        if let Some(cause) = &self.cause {
+            write!(f, "CuError {}: {}", self.id, cause)
+        } else {
+            write!(f, "CuError {}", self.id)
+        }
     }
 }
 
 impl Error for CuError {}
 
-impl From<&str> for CuError {
-    fn from(s: &str) -> CuError {
-        CuError {
-            message: s.to_string(),
-            cause: None,
-        }
-    }
-}
-
-impl From<String> for CuError {
-    fn from(s: String) -> CuError {
-        CuError {
-            message: s,
-            cause: None,
-        }
-    }
-}
-
 impl CuError {
-    pub fn new_with_cause(message: &str, cause: impl Error) -> CuError {
-        CuError {
-            message: message.to_string(),
-            cause: Some(cause.to_string()),
-        }
+    pub fn new(id: u32) -> Self {
+        Self { id, cause: None }
     }
 
-    pub fn add_cause(mut self, context: &str) -> CuError {
-        self.cause = Some(context.into());
+    pub fn with_cause(mut self, cause: impl Into<AnyhowError>) -> Self {
+        self.cause = Some(cause.into());
         self
     }
 }

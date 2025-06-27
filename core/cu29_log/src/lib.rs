@@ -1,6 +1,6 @@
 use bincode::{Decode, Encode};
 use cu29_clock::CuTime;
-use cu29_traits::{CuError, CuResult};
+use cu29_traits::{cu_error, CuResult};
 use cu29_value::Value;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
@@ -172,11 +172,13 @@ pub fn format_logline(
     }
 
     let logline = strfmt(&format_str, named_params).map_err(|e| {
-        CuError::new_with_cause(
-            format!("Failed to format log line: {format_str:?} with variables [{named_params:?}]")
-                .as_str(),
-            e,
-        )
+        cu_error!("Failed to format log line").with_cause(e)
+        // FIXME
+        // .with_context(|| {
+        //     format!(
+        //         "Failed to format log line: {format_str:?} with variables [{named_params:?}]"
+        //     )
+        // })
     })?;
     Ok(format!("{time} [{level:?}]: {logline}"))
 }

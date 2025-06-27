@@ -35,9 +35,9 @@ where
     where
         Self: Sized,
     {
-        let config = config.ok_or_else(|| CuError::from("IceoryxSink: Missing configuration."))?;
+        let config = config.ok_or_else(|| cu_error!("IceoryxSink: Missing configuration."))?;
         let service_name_str = config.get::<String>("service").ok_or_else(|| {
-            CuError::from("IceoryxSink: Configuration requires 'service' key (string).")
+            cu_error!("IceoryxSink: Configuration requires 'service' key (string).")
         })?;
 
         debug!(
@@ -99,9 +99,7 @@ where
 
     fn process(&mut self, _clock: &RobotClock, input: Self::Input) -> CuResult<()> {
         let publisher = self.publisher.as_mut().ok_or_else(|| {
-            CuError::from(
-                format!("IceoryxSink({}): Publisher not found.", self.service_name).as_str(),
-            )
+            cu_error!("IceoryxSink: Publisher not found.")
         })?;
 
         let dst = publisher.loan_uninit().map_err(|e| {

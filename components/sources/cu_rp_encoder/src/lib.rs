@@ -6,7 +6,7 @@ use cu29::clock::{CuDuration, RobotClock};
 use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, Freezable};
 use cu29::output_msg;
-use cu29::CuResult;
+use cu29::{cu_error, CuResult};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 
@@ -65,12 +65,12 @@ impl<'cl> CuSrcTask<'cl> for Encoder {
         Self: Sized,
     {
         let ComponentConfig(config) =
-            config.ok_or("Encoder needs a config with clk_pin and dat_pin.")?;
+            config.ok_or_else(|| cu_error!("Encoder needs a config with clk_pin and dat_pin."))?;
 
-        let clk_pin_nb_value = config.get("clk_pin").ok_or("Encoder needs a clk_pin")?;
+        let clk_pin_nb_value = config.get("clk_pin").ok_or_else(|| cu_error!("Encoder needs a clk_pin"))?;
         let clk_pin: u8 = clk_pin_nb_value.clone().into();
 
-        let dat_pin_nb_value = config.get("dat_pin").ok_or("Encoder needs a dat_pin")?;
+        let dat_pin_nb_value = config.get("dat_pin").ok_or_else(|| cu_error!("Encoder needs a dat_pin"))?;
         let dat_pin: u8 = dat_pin_nb_value.clone().into();
 
         let clk_pin: InputPin = get_pin(clk_pin)?;

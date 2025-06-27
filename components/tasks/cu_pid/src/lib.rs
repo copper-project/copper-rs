@@ -3,6 +3,7 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29::prelude::*;
+use cu29::cu_error;
 use std::marker::PhantomData;
 
 /// Output of the PID controller.
@@ -152,19 +153,19 @@ where
                 debug!("PIDTask config: {:?}", config);
                 let setpoint: f32 = config
                     .get::<f64>("setpoint")
-                    .ok_or("'setpoint' not found in config")?
+                    .ok_or_else(|| cu_error!("'setpoint' not found in config"))?
                     as f32;
 
-                let cutoff: f32 = config.get::<f64>("cutoff").ok_or(
-                    "'cutoff' not found in config, please set an operating +/- limit on the input.",
+                let cutoff: f32 = config.get::<f64>("cutoff").ok_or_else(|| 
+                    cu_error!("'cutoff' not found in config, please set an operating +/- limit on the input.")
                 )? as f32;
 
                 // p is mandatory
                 let kp = if let Some(kp) = config.get::<f64>("kp") {
                     Ok(kp as f32)
                 } else {
-                    Err(CuError::from(
-                        "'kp' not found in the config. We need at least 'kp' to make the PID algorithm work.",
+                    Err(cu_error!(
+                        "'kp' not found in the config. We need at least 'kp' to make the PID algorithm work."
                     ))
                 }?;
 
@@ -202,7 +203,7 @@ where
                     cutoff,
                 })
             }
-            None => Err(CuError::from("PIDTask needs a config.")),
+            None => Err(cu_error!("PIDTask needs a config.")),
         }
     }
 
@@ -216,7 +217,7 @@ where
             Some(payload) => {
                 let tov = match input.metadata.tov {
                     Tov::Time(single) => single,
-                    _ => return Err("Unexpected variant for a TOV of PID".into()),
+                    _ => return Err(cu_error!("Unexpected variant for a TOV of PID")),
                 };
 
                 let measure: f32 = payload.into();
@@ -235,14 +236,10 @@ where
                 let state = self.pid.next_control_output(measure, dt);
                 // But safety check if the input is within operational margins and cut power if it is not.
                 if measure > self.setpoint + self.cutoff {
-                    return Err(
-                        format!("{} > {} (cutoff)", measure, self.setpoint + self.cutoff).into(),
-                    );
+                    return Err(cu_error!("Measure exceeds upper cutoff limit"));
                 }
                 if measure < self.setpoint - self.cutoff {
-                    return Err(
-                        format!("{} < {} (cutoff)", measure, self.setpoint - self.cutoff).into(),
-                    );
+                    return Err(cu_error!("Measure below lower cutoff limit"));
                 }
                 output.metadata.set_status(format!(
                     "{:>5.2} {:>5.2} {:>5.2} {:>5.2}",

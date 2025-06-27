@@ -7,7 +7,7 @@ use cu29_clock::RobotClock;
 use cu29_log::CuLogEntry;
 #[allow(unused_imports)]
 use cu29_log::CuLogLevel;
-use cu29_traits::{CuResult, WriteStream};
+use cu29_traits::{cu_error, CuError, CuResult, WriteStream};
 use log::Log;
 
 #[cfg(debug_assertions)]
@@ -110,7 +110,7 @@ impl Drop for LoggerRuntime {
 pub fn log(entry: &mut CuLogEntry) -> CuResult<()> {
     let d = WRITER.get().map(|(writer, clock)| (writer, clock));
     if d.is_none() {
-        return Err("Logger not initialized.".into());
+        return Err(cu_error!("Logger not initialized."));
     }
     let (writer, clock) = d.unwrap();
     entry.time = clock.now();
@@ -242,7 +242,7 @@ impl SimpleFileWriter {
             .truncate(true)
             .write(true)
             .open(path)
-            .map_err(|e| format!("Failed to open file: {e:?}"))?;
+            .map_err(|e| CuError::new_with_cause("Failed to open file", e))?;
 
         let writer = OwningIoWriter::new(file);
         let encoder = EncoderImpl::new(writer, bincode::config::standard());
@@ -264,7 +264,7 @@ impl WriteStream<CuLogEntry> for SimpleFileWriter {
     #[inline(always)]
     fn log(&mut self, obj: &CuLogEntry) -> CuResult<()> {
         obj.encode(&mut self.encoder)
-            .map_err(|e| format!("Failed to write to file: {e:?}"))?;
+            .map_err(|e| CuError::new_with_cause("Failed to write to file", e))?;
         Ok(())
     }
 
@@ -272,7 +272,7 @@ impl WriteStream<CuLogEntry> for SimpleFileWriter {
         self.encoder
             .writer()
             .flush()
-            .map_err(|e| format!("Failed to flush file: {e:?}"))?;
+            .map_err(|e| CuError::new_with_cause("Failed to flush file", e))?;
         Ok(())
     }
 }

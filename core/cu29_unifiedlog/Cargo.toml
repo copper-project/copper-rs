@@ -13,6 +13,7 @@ repository.workspace = true
 
 [dependencies]
 cu29-traits = { workspace = true }
+cu29-base-derive = { workspace = true }
 bincode = { workspace = true }
 memmap2 = "0.9.5"
 page_size = "0.6.0"

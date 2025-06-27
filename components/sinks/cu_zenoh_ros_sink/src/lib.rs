@@ -68,7 +68,7 @@ where
     where
         Self: Sized,
     {
-        let config = config.ok_or(CuError::from("ZenohRosSink: Missing configuration"))?;
+        let config = config.ok_or(cu_error!("ZenohRosSink: Missing configuration"))?;
 
         // Get json zenoh config
         let session_config = config.get::<String>("zenoh_config_json").map_or(
@@ -144,11 +144,11 @@ where
         let ctx = self
             .ctx
             .as_mut()
-            .ok_or(CuError::from("ZenohRosSink: Context not found"))?;
+            .ok_or(cu_error!("ZenohRosSink: Context not found"))?;
 
         // Convert the payload to ROS-compatible CDR format
-        let payload = input.payload().ok_or(CuError::from(
-            "ZenohRosSink: Cannot send empty payload through ROS bridge",
+        let payload = input.payload().ok_or(cu_error!(
+            "ZenohRosSink: Cannot send empty payload through ROS bridge"
         ))?;
 
         let ros_payload = payload.convert();

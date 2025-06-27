@@ -85,16 +85,30 @@ fn inject_generated_code(original: &str, generated: &str) -> String {
     let mut in_macro_block = false;
     for line in original.lines() {
         if line.contains("#[copper_runtime") {
+            // Comment out the macro attribute instead of removing it
+            output.push_str("// ");
+            output.push_str(line);
+            output.push('\n');
             in_macro_block = true;
             continue;
         }
         if in_macro_block && line.contains("struct") {
+            // Comment out the original struct declaration
+            output.push_str("// ");
+            output.push_str(line);
+            output.push('\n');
+            // Add the expanded code
             output.push_str(generated);
             output.push('\n');
             in_macro_block = false;
             continue;
         }
         if !in_macro_block {
+            output.push_str(line);
+            output.push('\n');
+        } else {
+            // Comment out any other lines in the macro block
+            output.push_str("// ");
             output.push_str(line);
             output.push('\n');
         }

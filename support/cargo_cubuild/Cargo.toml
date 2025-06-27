@@ -4,4 +4,6 @@ description = "A cargo tool to help with copper macro expansion errors."
 version = "0.1.0"
 edition = "2021"
 
+[workspace]
+
 [dependencies]
