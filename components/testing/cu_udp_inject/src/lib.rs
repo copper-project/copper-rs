@@ -1,5 +1,4 @@
-use cu29_base_derive::cu_error;
-use cu29_traits::{CuError, CuResult};
+use cu29_traits::{cu_error, CuError, CuResult};
 use pcap::Capture;
 use std::net::UdpSocket;
 use std::path::Path;

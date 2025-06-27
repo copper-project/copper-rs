@@ -1,7 +1,6 @@
 use bincode::{Decode, Encode};
-use cu29_base_derive::cu_error;
 use cu29_clock::CuTime;
-use cu29_traits::{CuError, CuResult};
+use cu29_traits::{cu_error, CuResult};
 use cu29_value::Value;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;

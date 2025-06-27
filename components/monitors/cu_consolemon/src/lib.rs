@@ -880,7 +880,7 @@ impl CuMonitor for CuConsoleMon {
         }
 
         if self.quitting.load(Ordering::SeqCst) {
-            return Err("Exiting...".into());
+            return Err(cu29::cu_error!("Exiting..."));
         }
         Ok(())
     }

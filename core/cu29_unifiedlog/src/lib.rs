@@ -13,8 +13,7 @@ use bincode::decode_from_slice;
 use bincode::encode_into_slice;
 use bincode::error::EncodeError;
 use bincode::{Decode, Encode};
-use cu29_base_derive::cu_error;
-use cu29_traits::{CuError, CuResult, UnifiedLogType, WriteStream};
+use cu29_traits::{cu_error, CuError, CuResult, UnifiedLogType, WriteStream};
 
 const MAIN_MAGIC: [u8; 4] = [0xB4, 0xA5, 0x50, 0xFF];
 
@@ -116,7 +115,7 @@ impl<E: Encode> WriteStream<E> for MmapStream {
                     self.current_section.used += result as u32;
                     Ok(())
                 }
-                _ => Err(cu_error!("Unexpected error while encoding object.").with_cause(e)),
+                _ => Err(CuError::new_with_cause("Unexpected error while encoding object.", e)),
             },
         }
     }
@@ -607,13 +606,13 @@ impl UnifiedLoggerRead {
         loop {
             if self.current_reading_position >= self.current_mmap_buffer.len() {
                 self.next_slab().map_err(|e| {
-                    cu_error!("Failed to read next slab, is the log complete?").with_cause(e)
+                    CuError::new_with_cause("Failed to read next slab, is the log complete?", e)
                 })?;
             }
 
             let header_result = self.read_section_header();
             if let Err(error) = header_result {
-                return Err(cu_error!("Could not read a sections header").with_cause(error));
+                return Err(CuError::new_with_cause("Could not read a sections header", error));
             };
             let header = header_result.unwrap();
 
@@ -638,7 +637,7 @@ impl UnifiedLoggerRead {
     pub fn read_section(&mut self) -> CuResult<Vec<u8>> {
         let read_result = self
             .read_section_header()
-            .map_err(|error| cu_error!("Could not read a sections header").with_cause(error))?;
+            .map_err(|error| CuError::new_with_cause("Could not read a sections header", error))?;
 
         self.read_section_content(&read_result)
     }

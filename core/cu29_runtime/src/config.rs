@@ -3,8 +3,7 @@
 //! The configuration is serialized in the RON format.
 //! The configuration is used to generate the runtime code at compile time.
 
-use cu29_base_derive::cu_error;
-use cu29_traits::{CuError, CuResult};
+use cu29_traits::{cu_error, CuError, CuResult};
 use html_escape::encode_text;
 use petgraph::stable_graph::{EdgeIndex, NodeIndex, StableDiGraph};
 use petgraph::visit::EdgeRef;
@@ -488,7 +487,7 @@ impl ConfigGraphs {
                 if let Some(id) = mission_id {
                     graphs
                         .get(id)
-                        .ok_or_else(|| cu_error!(format!("Mission {id} not found").as_str))
+                        .ok_or_else(|| cu_error!("Mission not found"))
                 } else {
                     Err(cu_error!("Mission ID required for mission configs"))
                 }
@@ -503,16 +502,16 @@ impl ConfigGraphs {
                 if mission_id.is_none() {
                     Ok(graph)
                 } else {
-                    Err("Cannot get mission graph from simple config".into())
+                    Err(cu_error!("Cannot get mission graph from simple config"))
                 }
             }
             Missions(ref mut graphs) => {
                 if let Some(id) = mission_id {
                     graphs
                         .get_mut(id)
-                        .ok_or_else(|| format!("Mission {id} not found").into())
+                        .ok_or_else(|| cu_error!("Mission not found"))
                 } else {
-                    Err("Mission ID required for mission configs".into())
+                    Err(cu_error!("Mission ID required for mission configs"))
                 }
             }
         }
@@ -520,10 +519,10 @@ impl ConfigGraphs {
 
     pub fn add_mission(&mut self, mission_id: &str) -> CuResult<&mut CuGraph> {
         match self {
-            Simple(_) => Err("Cannot add mission to simple config".into()),
+            Simple(_) => Err(cu_error!("Cannot add mission to simple config")),
             Missions(graphs) => {
                 if graphs.contains_key(mission_id) {
-                    Err(format!("Mission {mission_id} already exists").into())
+                    Err(cu_error!("Mission already exists"))
                 } else {
                     let graph = CuGraph::default();
                     graphs.insert(mission_id.to_string(), graph);
@@ -1034,7 +1033,7 @@ impl LoggingConfig {
         if let Some(section_size_mib) = self.section_size_mib {
             if let Some(slab_size_mib) = self.slab_size_mib {
                 if section_size_mib > slab_size_mib {
-                    return Err(CuError::from(format!("Section size ({section_size_mib} MiB) cannot be larger than slab size ({slab_size_mib} MiB). Adjust the parameters accordingly.")));
+                    return Err(cu_error!("Section size cannot be larger than slab size"));
                 }
             }
         }
@@ -1080,8 +1079,7 @@ fn process_includes(
             };
 
             let include_content = read_to_string(&include_path).map_err(|e| {
-                CuError::from(format!("Failed to read include file: {include_path}"))
-                    .add_cause(e.to_string().as_str())
+                CuError::new_with_cause("Failed to read include file", e)
             })?;
 
             let processed_content = substitute_parameters(&include_content, &include.params);
@@ -1093,11 +1091,8 @@ fn process_includes(
                 .from_str(&processed_content)
             {
                 Ok(rep) => rep,
-                Err(e) => {
-                    return Err(CuError::from(format!(
-                        "Failed to parse include file: {} - Error: {} at position {}",
-                        include_path, e.code, e.position
-                    )));
+                Err(_e) => {
+                    return Err(cu_error!("Failed to parse include file"));
                 }
             };
 
@@ -1165,11 +1160,7 @@ fn process_includes(
 /// Read a copper configuration from a file.
 pub fn read_configuration(config_filename: &str) -> CuResult<CuConfig> {
     let config_content = read_to_string(config_filename).map_err(|e| {
-        CuError::from(format!(
-            "Failed to read configuration file: {:?}",
-            &config_filename
-        ))
-        .add_cause(e.to_string().as_str())
+        CuError::new_with_cause("Failed to read configuration file", e)
     })?;
     read_configuration_str(config_content, Some(config_filename))
 }
@@ -1184,10 +1175,7 @@ fn parse_config_string(content: &str) -> CuResult<CuConfigRepresentation> {
         .with_default_extension(Extensions::UNWRAP_VARIANT_NEWTYPES)
         .from_str(content)
         .map_err(|e| {
-            CuError::from(format!(
-                "Failed to parse configuration: Error: {} at position {}",
-                e.code, e.position
-            ))
+            CuError::new_with_cause("Failed to parse configuration", e)
         })
 }
 
@@ -1195,7 +1183,7 @@ fn parse_config_string(content: &str) -> CuResult<CuConfigRepresentation> {
 /// Uses the deserialize_impl method and validates the logging configuration.
 fn config_representation_to_config(representation: CuConfigRepresentation) -> CuResult<CuConfig> {
     let cuconfig = CuConfig::deserialize_impl(representation)
-        .map_err(|e| CuError::from(format!("Error deserializing configuration: {e}")))?;
+        .map_err(|e| CuError::new_with_cause("Error deserializing configuration", e))?;
 
     cuconfig.validate_logging_config()?;
 

@@ -1,5 +1,5 @@
 use cu29::clock::RobotClock;
-use cu29::{bincode, prelude::*};
+use cu29::{bincode, cu_error, prelude::*};
 
 use zenoh::key_expr::KeyExpr;
 use zenoh::Config;
@@ -29,12 +29,8 @@ pub struct ZenohContext {
     publisher: zenoh::pubsub::Publisher<'static>,
 }
 
-fn cu_error(msg: &str, error: ZenohError) -> CuError {
-    CuError::new_with_cause(msg, error.as_ref())
-}
-
-fn cu_error_map(msg: &str) -> impl FnOnce(ZenohError) -> CuError + '_ {
-    |e| cu_error(msg, e)
+fn cu_error_map(msg: &'static str) -> impl FnOnce(ZenohError) -> CuError {
+    move |e| CuError::new_with_cause(msg, e)
 }
 
 impl<P> Freezable for ZenohSink<P> where P: CuMsgPayload {}
@@ -49,7 +45,7 @@ where
     where
         Self: Sized,
     {
-        let config = config.ok_or(CuError::from("ZenohSink: Missing configuration"))?;
+        let config = config.ok_or_else(|| cu_error!("ZenohSink: Missing configuration"))?;
 
         // Get json zenoh config
         let session_config = config.get::<String>("zenoh_config_file").map_or(
@@ -92,7 +88,7 @@ where
         let ctx = self
             .ctx
             .as_mut()
-            .ok_or_else(|| CuError::from("ZenohSink: Context not found"))?;
+            .ok_or_else(|| cu_error!("ZenohSink: Context not found"))?;
 
         let encoded =
             bincode::encode_to_vec(input, bincode::config::standard()).expect("Encoding failed");

@@ -204,7 +204,7 @@ impl<'cl> CuSinkTask<'cl> for SN754410 {
         } else {
             debug!("No payload in the message, stopping for safety.");
             self.stop()?;
-            return Err("Safety Mode.".into());
+            return Err(cu_error!("Safety Mode."));
         }
         Ok(())
     }

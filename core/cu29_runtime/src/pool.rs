@@ -232,7 +232,7 @@ impl<T: ArrayLike + 'static> CuHostMemoryPool<T> {
         let buffer_size = pool.try_pull().unwrap().len() * size_of::<T::Element>();
 
         let og = Self {
-            id: PoolID::from(id).map_err(|_| "Failed to create PoolID")?,
+            id: PoolID::from(id).map_err(|_| cu29_traits::cu_error!("Failed to create PoolID"))?,
             pool,
             size,
             buffer_size,

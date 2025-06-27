@@ -408,7 +408,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             );
 
             quote! {
-            <#ty>::new(all_instances_configs[#index]).map_err(|e| e.add_cause(#additional_error_info))?
+            <#ty>::new(all_instances_configs[#index]).map_err(|e| CuError::new_with_cause(#additional_error_info, e))?
             }
         }).collect::<Vec<_>>();
 
@@ -433,7 +433,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 );
                 (   // Task instances initialization
                     quote! {
-                        #ty::new(all_instances_configs[#index]).map_err(|e| e.add_cause(#additional_error_info))?
+                        #ty::new(all_instances_configs[#index]).map_err(|e| CuError::new_with_cause(#additional_error_info, e))?
                     },
                     // Tasks keyframe restore code
                     quote! {
@@ -467,7 +467,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 let ovr = sim_callback(SimStep::#enum_name(cu29::simulation::CuTaskCallbackState::Start));
 
                                 let doit = if let cu29::simulation::SimOverride::Errored(reason) = ovr  {
-                                    let error: CuError = reason.into();
+                                    let error: CuError = CuError::new_with_cause(&reason, "");
                                     #monitoring_action
                                     false
                                }
@@ -519,7 +519,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 let ovr = sim_callback(SimStep::#enum_name(cu29::simulation::CuTaskCallbackState::Stop));
 
                                 let doit = if let cu29::simulation::SimOverride::Errored(reason) = ovr  {
-                                    let error: CuError = reason.into();
+                                    let error: CuError = CuError::new_with_cause(&reason, "");
                                     #monitoring_action
                                     false
                                }
@@ -569,7 +569,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 let ovr = sim_callback(SimStep::#enum_name(cu29::simulation::CuTaskCallbackState::Preprocess));
 
                                 let doit = if let cu29::simulation::SimOverride::Errored(reason) = ovr  {
-                                    let error: CuError = reason.into();
+                                    let cause: Error = reason.into();
+                                    let error: CuError = cu_error!("Sim Error").with_cause(cause);
                                     #monitoring_action
                                     false
                                 } else {
@@ -607,7 +608,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 Decision::Shutdown => {
                                     debug!("Postprocess: SHUTDOWN decision from monitoring. Task '{}' errored out \
                                 during postprocess. The runtime cannot continue.", #mission_mod::TASKS_IDS[#index]);
-                                    return Err(CuError::new_with_cause("Task errored out during postprocess.", error));
+                                    return Err(cu_error!("Task errored out during postprocess.").with_cause(error));
                                 }
                             }
                         };
@@ -617,7 +618,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 let ovr = sim_callback(SimStep::#enum_name(cu29::simulation::CuTaskCallbackState::Postprocess));
 
                                 let doit = if let cu29::simulation::SimOverride::Errored(reason) = ovr  {
-                                    let error: CuError = reason.into();
+                                    let error: CuError = cu_error!("Task errored out during postprocess.").with_cause(reason.into());
                                     #monitoring_action
                                     false
                                 } else {
@@ -1313,9 +1314,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 pub fn build(self) -> CuResult<#application_name> {
                     #application_name::new(
                         self.clock
-                            .ok_or(CuError::from("Clock missing from builder"))?,
+                            .ok_or(cu_error!("Clock missing from builder"))?,
                         self.unified_logger
-                            .ok_or(CuError::from("Unified logger missing from builder"))?,
+                            .ok_or(cu_error!("Unified logger missing from builder"))?,
                         self.config_override,
                         #builder_build_sim_callback_arg
                     )
@@ -1343,6 +1344,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::curuntime::CopperContext;
                 use cu29::CuResult;
                 use cu29::CuError;
+                use cu29::cu_error;
                 use cu29::cutask::CuSrcTask;
                 use cu29::cutask::CuSinkTask;
                 use cu29::cutask::CuTask;
