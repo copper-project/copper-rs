@@ -1033,6 +1033,23 @@ impl From<&MspRequest> for MspPacket {
     }
 }
 
+impl Schema for MspRequest {
+    fn schema() -> std::collections::HashMap<String, SchemaType> {
+        // MspRequest is an enum with variants for different request types
+        let mut map = std::collections::HashMap::new();
+        map.insert("variant".to_string(), SchemaType::String);
+        map.insert(
+            "data".to_string(),
+            SchemaType::Custom("MspRequestData".to_string()),
+        );
+        map
+    }
+
+    fn type_name() -> &'static str {
+        "MspRequest"
+    }
+}
+
 // Gather all the commands in a common enum we can use as a higher level protocol
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

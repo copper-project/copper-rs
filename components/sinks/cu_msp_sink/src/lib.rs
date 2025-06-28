@@ -44,6 +44,19 @@ impl Decode<()> for MspRequestBatch {
     }
 }
 
+impl Schema for MspRequestBatch {
+    fn schema() -> std::collections::HashMap<String, SchemaType> {
+        // MspRequestBatch is a wrapper around SmallVec, but we represent it as Vec in schema
+        let mut map = std::collections::HashMap::new();
+        map.insert("requests".to_string(), SchemaType::Vec(Box::new(MspRequest::schema_type())));
+        map
+    }
+
+    fn type_name() -> &'static str {
+        "MspRequestBatch"
+    }
+}
+
 pub struct MSPSink {
     #[cfg(unix)]
     serial: TTYPort,
