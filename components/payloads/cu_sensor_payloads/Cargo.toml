@@ -11,10 +11,10 @@ repository.workspace = true
 description = "Those are standardized payloads for the Copper sensors. Feel free to contribute your own."
 
 [dependencies]
-bincode = { workspace = true }
-cu29-soa-derive = { workspace = true }
-cu29-clock = { workspace = true }
 cu29 = { workspace = true }
+cu29-clock = { workspace = true }
+cu29-soa-derive = { workspace = true }
+cu29-schema = { workspace = true }
 uom = { workspace = true }
 derive_more = { workspace = true }
 image = { version = "0.25.6", optional = true }

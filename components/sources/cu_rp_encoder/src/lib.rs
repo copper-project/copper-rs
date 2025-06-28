@@ -6,6 +6,7 @@ use cu29::clock::{CuDuration, RobotClock};
 use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, Freezable};
 use cu29::output_msg;
+use cu29::prelude::SchemaType;
 use cu29::CuResult;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
@@ -13,6 +14,7 @@ use std::sync::{Arc, Mutex};
 #[allow(unused_imports)]
 use cu29_traits::CuError;
 
+use cu29::prelude::Schema;
 #[cfg(mock)]
 use mock::{get_pin, InputPin};
 #[cfg(hardware)]
@@ -35,7 +37,7 @@ fn get_pin(pin_nb: u8) -> CuResult<InputPin> {
         .into_input())
 }
 
-#[derive(Default, Clone, Debug, Encode, Decode, Serialize, Deserialize)]
+#[derive(Default, Clone, Debug, Encode, Decode, Serialize, Deserialize, Schema)]
 pub struct EncoderPayload {
     pub ticks: i32,
 }

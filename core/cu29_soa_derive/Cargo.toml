@@ -15,10 +15,12 @@ repository.workspace = true
 syn = { workspace = true }
 quote = { workspace = true }
 syntect = "5.2.0"
+cu29-schema = { workspace = true }
 
 [dev-dependencies]
 bincode = { workspace = true }
 rand = "0.9.1"
+cu29-schema = { workspace = true }
 
 [lib]
 proc-macro = true
@@ -27,4 +29,3 @@ proc-macro = true
 default = []
 # enables a more verbose build log showing the code generation.
 macro_debug = []
-

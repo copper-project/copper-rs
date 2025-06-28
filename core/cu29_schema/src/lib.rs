@@ -24,6 +24,7 @@ pub enum SchemaType {
     Bool,
     String,
     Vec(Box<SchemaType>),
+    Array { element_type: Box<SchemaType>, size: usize }, // Fixed-size array with compile-time known size
     Option(Box<SchemaType>),
     Tuple(Vec<SchemaType>),
     Custom(String), // For foreign structs that don't implement Schema
@@ -51,6 +52,7 @@ impl Display for SchemaType {
             SchemaType::Bool => write!(f, "bool"),
             SchemaType::String => write!(f, "String"),
             SchemaType::Vec(inner) => write!(f, "Vec<{inner}>"),
+            SchemaType::Array { element_type, size } => write!(f, "[{element_type}; {size}]"),
             SchemaType::Option(inner) => write!(f, "Option<{inner}>"),
             SchemaType::Tuple(types) => {
                 write!(f, "(")?;
@@ -325,4 +327,49 @@ macro_rules! impl_schema_for_tuples {
 // Apply the macro to generate Schema implementations for tuple sizes up to 5
 impl_schema_for_tuples! {
     (T1, T2), (T1, T2, T3), (T1, T2, T3, T4), (T1, T2, T3, T4, T5)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_array_schema_type_display() {
+        let array_type = SchemaType::Array {
+            element_type: Box::new(SchemaType::F32),
+            size: 8,
+        };
+        assert_eq!(format!("{}", array_type), "[f32; 8]");
+    }
+
+    #[test]
+    fn test_array_schema_type_equality() {
+        let array1 = SchemaType::Array {
+            element_type: Box::new(SchemaType::F32),
+            size: 8,
+        };
+        let array2 = SchemaType::Array {
+            element_type: Box::new(SchemaType::F32),
+            size: 8,
+        };
+        let array3 = SchemaType::Array {
+            element_type: Box::new(SchemaType::F32),
+            size: 16,
+        };
+
+        assert_eq!(array1, array2);
+        assert_ne!(array1, array3);
+    }
+
+    #[test]
+    fn test_nested_array_display() {
+        let nested_array = SchemaType::Array {
+            element_type: Box::new(SchemaType::Array {
+                element_type: Box::new(SchemaType::I32),
+                size: 3,
+            }),
+            size: 2,
+        };
+        assert_eq!(format!("{}", nested_array), "[[i32; 3]; 2]");
+    }
 }

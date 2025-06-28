@@ -1,6 +1,6 @@
-use bincode::de::{BorrowDecode, BorrowDecoder, Decode, Decoder};
-use bincode::enc::{Encode, Encoder};
-use bincode::error::{DecodeError, EncodeError};
+use cu29::bincode::de::{BorrowDecode, BorrowDecoder, Decode, Decoder};
+use cu29::bincode::enc::{Encode, Encoder};
+use cu29::bincode::error::{DecodeError, EncodeError};
 use cu29::prelude::{Schema, SchemaType};
 use cu29_clock::CuTime;
 use cu29_soa_derive::Soa;

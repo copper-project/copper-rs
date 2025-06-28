@@ -2,6 +2,7 @@
 mod tests {
     use bincode::{Decode, Encode};
     use cu29_soa_derive::Soa;
+    use cu29_schema::{Schema, SchemaType};
     #[derive(Debug, Clone, Default, PartialEq, Soa, Encode, Decode)]
     pub struct Xyz {
         x: f32,
@@ -109,5 +110,47 @@ mod tests {
     pub struct Both {
         xyz: Xyz,
         color: Color,
+    }
+
+    #[test]
+    fn test_soa_schema_implementation() {
+        // Test that the SoA type implements Schema
+        let schema = XyzSoa::<10>::schema();
+        println!("Schema: {:?}", schema);
+
+        // Check that the schema contains the expected fields
+        assert!(schema.contains_key("x"));
+        assert!(schema.contains_key("y"));
+        assert!(schema.contains_key("z"));
+        assert!(schema.contains_key("i"));
+        assert!(schema.contains_key("len"));
+
+        // Check that the fields are Array types
+        if let Some(SchemaType::Array { element_type, size }) = schema.get("x") {
+            assert_eq!(*size, 0); // Placeholder for const generic N
+            assert_eq!(**element_type, SchemaType::Custom("f32".to_string()));
+        } else {
+            panic!("Expected x field to be an Array type");
+        }
+
+        if let Some(SchemaType::Array { element_type, size }) = schema.get("i") {
+            assert_eq!(*size, 0); // Placeholder for const generic N
+            assert_eq!(**element_type, SchemaType::Custom("i32".to_string()));
+        } else {
+            panic!("Expected i field to be an Array type");
+        }
+
+        // Test type name
+        let type_name = XyzSoa::<10>::type_name();
+        assert_eq!(type_name, "XyzSoa<N>");
+
+        // Test schema_type
+        let schema_type = XyzSoa::<10>::schema_type();
+        if let SchemaType::Struct { name, fields } = schema_type {
+            assert_eq!(name, "XyzSoa<N>");
+            assert_eq!(fields.len(), 5); // x, y, z, i, len
+        } else {
+            panic!("Expected schema_type to be a Struct");
+        }
     }
 }

@@ -169,11 +169,13 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
 
     let expanded = quote! {
         #visibility mod #module_name {
-            use bincode::{Decode, Encode};
-            use bincode::enc::Encoder;
-            use bincode::de::Decoder;
-            use bincode::error::{DecodeError, EncodeError};
+            use cu29::bincode::{Decode, Encode};
+            use cu29::bincode::enc::Encoder;
+            use cu29::bincode::de::Decoder;
+            use cu29::bincode::error::{DecodeError, EncodeError};
             use std::ops::{Index, IndexMut};
+            use cu29_schema::{Schema, SchemaType};
+            use std::collections::HashMap;
             #( use super::#unique_imports; )*
             use core::array::from_fn;
 
@@ -308,6 +310,34 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                     Self {
                         #( #field_names: self.#field_names.clone(), )*
                         len: self.len,
+                    }
+                }
+            }
+
+            impl<const N: usize> Schema for #soa_struct_name<N> {
+                fn schema() -> HashMap<String, SchemaType> {
+                    let mut fields = HashMap::new();
+                    #(
+                        fields.insert(
+                            stringify!(#field_names).to_string(),
+                            SchemaType::Array {
+                                element_type: Box::new(SchemaType::Custom(stringify!(#field_types).to_string())),
+                                size: 0, // Placeholder for const generic N
+                            }
+                        );
+                    )*
+                    fields.insert("len".to_string(), SchemaType::U64); // usize is typically u64
+                    fields
+                }
+
+                fn type_name() -> &'static str {
+                    concat!(stringify!(#soa_struct_name), "<N>")
+                }
+
+                fn schema_type() -> SchemaType {
+                    SchemaType::Struct {
+                        name: Self::type_name().to_string(),
+                        fields: Self::schema(),
                     }
                 }
             }

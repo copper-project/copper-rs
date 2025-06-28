@@ -5,6 +5,7 @@ use bincode::{Decode, Encode};
 use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuSinkTask, Freezable};
+use cu29::prelude::{Schema, SchemaType};
 use cu29::{input_msg, CuError, CuResult};
 use serialport::{DataBits, FlowControl, Parity, SerialPort, StopBits};
 use std::io::{self, Read, Write};
@@ -198,6 +199,22 @@ impl Decode<()> for ServoPositionsPayload {
     }
 }
 
+impl Schema for ServoPositionsPayload {
+    fn schema() -> std::collections::HashMap<String, SchemaType> {
+        let mut map = std::collections::HashMap::new();
+        // Represent the array with its compile-time known fixed size
+        map.insert("positions".to_string(), SchemaType::Array { 
+            element_type: Box::new(SchemaType::F32), 
+            size: MAX_SERVOS 
+        });
+        map
+    }
+
+    fn type_name() -> &'static str {
+        "ServoPositionsPayload"
+    }
+}
+
 impl<'cl> CuSinkTask<'cl> for Lewansoul {
     type Input = input_msg!('cl, ServoPositionsPayload);
 
@@ -267,5 +284,20 @@ mod tests {
         let _position = lewansoul.read_current_position(1).unwrap();
 
         let _angle_limits = lewansoul.read_angle_limits(1).unwrap();
+    }
+
+    #[test]
+    fn test_servo_positions_payload_schema() {
+        let schema = ServoPositionsPayload::schema();
+        assert_eq!(ServoPositionsPayload::type_name(), "ServoPositionsPayload");
+        assert!(schema.contains_key("positions"));
+
+        // Verify the positions field is an Array[f32; MAX_SERVOS]
+        if let Some(SchemaType::Array { element_type, size }) = schema.get("positions") {
+            assert_eq!(**element_type, SchemaType::F32);
+            assert_eq!(*size, MAX_SERVOS);
+        } else {
+            panic!("Expected positions field to be Array[f32; {}]", MAX_SERVOS);
+        }
     }
 }
