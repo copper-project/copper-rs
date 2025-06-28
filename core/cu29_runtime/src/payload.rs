@@ -7,6 +7,8 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::BorrowDecode;
 use bincode::{Decode, Encode};
+use cu29_schema::{Schema, SchemaType};
+use std::collections::HashMap;
 
 /// Copper friendly wrapper for a fixed size array.
 #[derive(Clone, Debug, Default)]
@@ -93,6 +95,26 @@ where
     }
 }
 
+impl<T, const N: usize> Schema for CuArray<T, N>
+where
+    T: Schema,
+{
+    fn schema() -> HashMap<String, SchemaType> {
+        HashMap::new()
+    }
+
+    fn type_name() -> &'static str {
+        "CuArray"
+    }
+
+    fn schema_type() -> SchemaType {
+        SchemaType::Array {
+            element_type: Box::new(T::schema_type()),
+            size: N,
+        }
+    }
+}
+
 /// A Copper-friendly wrapper around ArrayVec with bincode serialization support.
 ///
 /// This provides a fixed-capacity, stack-allocated vector that can be efficiently
@@ -162,5 +184,41 @@ where
             array_vec.push(item); // Push elements one by one
         }
         Ok(CuArrayVec(array_vec))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cuarray_schema() {
+        // Test Schema implementation for CuArray<f32, 5>
+        let schema_type = CuArray::<f32, 5>::schema_type();
+
+        match schema_type {
+            SchemaType::Array { element_type, size } => {
+                assert_eq!(size, 5);
+                assert_eq!(*element_type, SchemaType::F32);
+            }
+            _ => panic!("Expected Array schema type"),
+        }
+
+        assert_eq!(CuArray::<f32, 5>::type_name(), "CuArray");
+        assert!(CuArray::<f32, 5>::schema().is_empty());
+    }
+
+    #[test]
+    fn test_cuarray_schema_nested() {
+        // Test Schema implementation for CuArray<i32, 10>
+        let schema_type = CuArray::<i32, 10>::schema_type();
+
+        match schema_type {
+            SchemaType::Array { element_type, size } => {
+                assert_eq!(size, 10);
+                assert_eq!(*element_type, SchemaType::I32);
+            }
+            _ => panic!("Expected Array schema type"),
+        }
     }
 }

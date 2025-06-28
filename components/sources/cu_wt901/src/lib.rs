@@ -3,6 +3,7 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29::prelude::*;
+use std::collections::HashMap;
 #[cfg(hardware)]
 use embedded_hal::i2c::I2c;
 #[cfg(hardware)]
@@ -135,6 +136,32 @@ impl<'de> Deserialize<'de> for PositionalReadingsPayload {
             pitch: Angle::new::<degree>(values[10]),
             yaw: Angle::new::<degree>(values[11]),
         })
+    }
+}
+
+impl Schema for PositionalReadingsPayload {
+    fn schema() -> HashMap<String, SchemaType> {
+        let mut map = HashMap::new();
+
+        // All fields are UOM types that wrap f32 values
+        map.insert("acc_x".to_string(), SchemaType::F32);
+        map.insert("acc_y".to_string(), SchemaType::F32);
+        map.insert("acc_z".to_string(), SchemaType::F32);
+        map.insert("gyro_x".to_string(), SchemaType::F32);
+        map.insert("gyro_y".to_string(), SchemaType::F32);
+        map.insert("gyro_z".to_string(), SchemaType::F32);
+        map.insert("mag_x".to_string(), SchemaType::F32);
+        map.insert("mag_y".to_string(), SchemaType::F32);
+        map.insert("mag_z".to_string(), SchemaType::F32);
+        map.insert("roll".to_string(), SchemaType::F32);
+        map.insert("pitch".to_string(), SchemaType::F32);
+        map.insert("yaw".to_string(), SchemaType::F32);
+
+        map
+    }
+
+    fn type_name() -> &'static str {
+        "PositionalReadingsPayload"
     }
 }
 
@@ -277,4 +304,34 @@ fn convert_mag(mag: i16) -> MagneticFluxDensity {
 fn convert_angle(angle: i16) -> Angle {
     let angle = angle as f32 / 32768.0 * 180.0;
     Angle::new::<degree>(angle)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_positional_readings_schema() {
+        let schema = PositionalReadingsPayload::schema();
+
+        // Verify all expected fields are present
+        assert_eq!(schema.len(), 12);
+
+        // Verify all fields are F32 type
+        assert_eq!(schema.get("acc_x"), Some(&SchemaType::F32));
+        assert_eq!(schema.get("acc_y"), Some(&SchemaType::F32));
+        assert_eq!(schema.get("acc_z"), Some(&SchemaType::F32));
+        assert_eq!(schema.get("gyro_x"), Some(&SchemaType::F32));
+        assert_eq!(schema.get("gyro_y"), Some(&SchemaType::F32));
+        assert_eq!(schema.get("gyro_z"), Some(&SchemaType::F32));
+        assert_eq!(schema.get("mag_x"), Some(&SchemaType::F32));
+        assert_eq!(schema.get("mag_y"), Some(&SchemaType::F32));
+        assert_eq!(schema.get("mag_z"), Some(&SchemaType::F32));
+        assert_eq!(schema.get("roll"), Some(&SchemaType::F32));
+        assert_eq!(schema.get("pitch"), Some(&SchemaType::F32));
+        assert_eq!(schema.get("yaw"), Some(&SchemaType::F32));
+
+        // Verify type name
+        assert_eq!(PositionalReadingsPayload::type_name(), "PositionalReadingsPayload");
+    }
 }

@@ -1,7 +1,7 @@
 #[cfg(target_os = "linux")]
 mod v4lstream;
 
-// This allows this module to be used on simulation on Windows and MacOS
+// This allows this module to be used on simulation on Windows and macOS
 #[cfg(not(target_os = "linux"))]
 mod empty_impl {
     use cu29::prelude::*;

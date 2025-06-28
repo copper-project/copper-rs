@@ -6,7 +6,7 @@ use cu29::prelude::*;
 use std::marker::PhantomData;
 
 /// Output of the PID controller.
-#[derive(Debug, Default, Clone, Encode, Decode)]
+#[derive(Debug, Default, Clone, Encode, Decode, Schema)]
 pub struct PIDControlOutputPayload {
     /// Proportional term
     pub p: f32,

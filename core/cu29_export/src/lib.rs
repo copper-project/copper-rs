@@ -89,7 +89,7 @@ where
 }
 
 /// Exports copper lists to CSV format using schema information
-pub fn export_copperlists_csv<P>(mut src: impl Read) -> CuResult<()>
+pub fn export_copperlists_csv<P>(src: impl Read) -> CuResult<()>
 where
     P: CopperListTuple + Schema,
 {

@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use bincode::{Decode, Encode};
-    use cu29_soa_derive::Soa;
+    use cu29::bincode::{Decode, Encode};
     use cu29_schema::{Schema, SchemaType};
+    use cu29_soa_derive::Soa;
     #[derive(Debug, Clone, Default, PartialEq, Soa, Encode, Decode)]
     pub struct Xyz {
         x: f32,
