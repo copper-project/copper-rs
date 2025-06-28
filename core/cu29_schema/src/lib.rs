@@ -76,7 +76,7 @@ impl Display for SchemaType {
                 write!(f, ")")
             }
             SchemaType::Custom(name) => write!(f, "Custom({name})"),
-            SchemaType::Struct { name, .. } => write!(f, "Struct {name}"),
+            SchemaType::Struct { name, .. } => write!(f, "{name}"),
             &SchemaType::UNIT => write!(f, "()"),
         }
     }

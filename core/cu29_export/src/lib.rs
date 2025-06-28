@@ -89,7 +89,7 @@ where
 }
 
 /// Exports copper lists to CSV format using schema information
-pub fn export_copperlists_csv<P>(src: impl Read) -> CuResult<()>
+pub fn export_copperlists_csv<P>(mut src: impl Read) -> CuResult<()>
 where
     P: CopperListTuple + Schema,
 {
@@ -115,20 +115,13 @@ where
     }
     println!();
 
-    // // Process each copper list entry
-    // let iter = copperlists_dump::<P>(&mut src);
-    // for entry in iter {
-    //     print!("{}", entry.id);
-
-    //     for (name, field_type) in &schema {
-    //         if let SchemaType::Struct { name, fields } = field_type {
-    //             print!(",{}", format_field_for_csv(field_type));
-    //         } else {
-    //             print!(",meh?");
-    //         }
-    //     }
-    //     println!();
-    // }
+    // Process each copper list entry
+    let iter = copperlists_dump::<P>(&mut src);
+    for entry in iter {
+        print!("{}, ", entry.id);
+        print!("{:?}", entry.msgs);
+        println!();
+    }
 
     Ok(())
 }
