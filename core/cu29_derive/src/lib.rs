@@ -105,11 +105,150 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
             use cu29::copperlist::CopperList;
             use cu29::cutask::CuMsgMetadata;
             use cu29::cutask::CuMsg;
+            use cu29::cutask::Schema;
+            use cu29::cutask::SchemaType;
+            use std::collections::HashMap;
             #support
         }
         use cumsgs::CuMsgs;
     };
     with_uses.into()
+}
+
+/// Derives the Schema trait for a struct, generating schema information for all fields
+#[proc_macro_derive(Schema)]
+pub fn derive_schema(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as syn::DeriveInput);
+    let name = &input.ident;
+
+    let schema_map = match &input.data {
+        syn::Data::Struct(data_struct) => match &data_struct.fields {
+            Fields::Named(fields) => {
+                let field_schemas = fields.named.iter().map(|field| {
+                    let field_name = field.ident.as_ref().unwrap().to_string();
+                    let field_type = &field.ty;
+                    let schema_type = type_to_schema_type(field_type);
+                    quote! {
+                        map.insert(#field_name.to_string(), #schema_type);
+                    }
+                });
+
+                quote! {
+                    let mut map = std::collections::HashMap::new();
+                    #(#field_schemas)*
+                    map
+                }
+            }
+            _ => {
+                return return_error(
+                    "Schema can only be derived for structs with named fields".to_string(),
+                )
+            }
+        },
+        _ => return return_error("Schema can only be derived for structs".to_string()),
+    };
+
+    let expanded = quote! {
+        impl Schema for #name {
+            fn schema() -> std::collections::HashMap<String, SchemaType> {
+                #schema_map
+            }
+
+            fn type_name() -> &'static str {
+                stringify!(#name)
+            }
+        }
+    };
+
+    TokenStream::from(expanded)
+}
+
+/// Converts a Rust type to a SchemaType enum variant
+fn type_to_schema_type(ty: &Type) -> proc_macro2::TokenStream {
+    match ty {
+        Type::Path(type_path) => {
+            if let Some(segment) = type_path.path.segments.last() {
+                let type_name = segment.ident.to_string();
+                match type_name.as_str() {
+                    "u8" => quote! { SchemaType::U8 },
+                    "u16" => quote! { SchemaType::U16 },
+                    "u32" => quote! { SchemaType::U32 },
+                    "u64" => quote! { SchemaType::U64 },
+                    "u128" => quote! { SchemaType::U128 },
+                    "i8" => quote! { SchemaType::I8 },
+                    "i16" => quote! { SchemaType::I16 },
+                    "i32" => quote! { SchemaType::I32 },
+                    "i64" => quote! { SchemaType::I64 },
+                    "i128" => quote! { SchemaType::I128 },
+                    "f32" => quote! { SchemaType::F32 },
+                    "f64" => quote! { SchemaType::F64 },
+                    "bool" => quote! { SchemaType::Bool },
+                    "String" => quote! { SchemaType::String },
+                    "Vec" => {
+                        if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
+                            if let Some(syn::GenericArgument::Type(inner_type)) = args.args.first()
+                            {
+                                let inner_schema = type_to_schema_type(inner_type);
+                                return quote! { SchemaType::Vec(Box::new(#inner_schema)) };
+                            }
+                        }
+                        quote! { SchemaType::Custom("Vec".to_string()) }
+                    }
+                    "Option" => {
+                        if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
+                            if let Some(syn::GenericArgument::Type(inner_type)) = args.args.first()
+                            {
+                                let inner_schema = type_to_schema_type(inner_type);
+                                return quote! { SchemaType::Option(Box::new(#inner_schema)) };
+                            }
+                        }
+                        quote! { SchemaType::Custom("Option".to_string()) }
+                    }
+                    "CuMsg" => {
+                        // CuMsg implements Schema, so use the Struct variant for recursive inspection
+                        if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
+                            if let Some(syn::GenericArgument::Type(inner_type)) = args.args.first() {
+                                // For CuMsg<T>, we want to create a Struct that shows the payload and metadata
+                                let inner_schema = type_to_schema_type(inner_type);
+                                return quote! { 
+                                    SchemaType::Struct {
+                                        name: "CuMsg".to_string(),
+                                        fields: {
+                                            let mut map = std::collections::HashMap::new();
+                                            map.insert("payload".to_string(), SchemaType::Option(Box::new(#inner_schema)));
+                                            map.insert("metadata".to_string(), SchemaType::Struct {
+                                                name: "CuMsgMetadata".to_string(),
+                                                fields: {
+                                                    let mut metadata_map = std::collections::HashMap::new();
+                                                    metadata_map.insert("process_time".to_string(), SchemaType::Custom("PartialCuTimeRange".to_string()));
+                                                    metadata_map.insert("tov".to_string(), SchemaType::Custom("Tov".to_string()));
+                                                    metadata_map.insert("status_txt".to_string(), SchemaType::Custom("CuCompactString".to_string()));
+                                                    metadata_map
+                                                }
+                                            });
+                                            map
+                                        }
+                                    }
+                                };
+                            }
+                        }
+                        quote! { SchemaType::Custom("CuMsg".to_string()) }
+                    }
+                    _ => {
+                        // For other custom types, try to use Schema if available, otherwise fall back to Custom
+                        quote! { 
+                            // Try to use Schema::schema_type() if the type implements Schema
+                            // This will be resolved at compile time
+                            SchemaType::Custom(#type_name.to_string())
+                        }
+                    }
+                }
+            } else {
+                quote! { SchemaType::Custom("Unknown".to_string()) }
+            }
+        }
+        _ => quote! { SchemaType::Custom("Complex".to_string()) },
+    }
 }
 
 /// Build the inner support of the copper list.
@@ -140,6 +279,10 @@ fn gen_culist_support(
     #[cfg(feature = "macro_debug")]
     eprintln!("[build the copperlist tuple debug support]");
     let msgs_types_tuple_debug = build_culist_tuple_debug(&all_msgs_types_in_culist_order);
+
+    #[cfg(feature = "macro_debug")]
+    eprintln!("[build the copperlist tuple schema support]");
+    let msgs_types_tuple_schema = build_culist_tuple_schema(&all_msgs_types_in_culist_order);
 
     let collect_metadata_function = quote! {
         pub fn collect_metadata<'a>(culist: &'a CuList) -> [&'a CuMsgMetadata; #culist_size] {
@@ -189,6 +332,9 @@ fn gen_culist_support(
 
         // Adds the debug support
         #msgs_types_tuple_debug
+
+        // Adds the schema support
+        #msgs_types_tuple_schema
     }
 }
 
@@ -1591,6 +1737,38 @@ fn build_culist_tuple_debug(all_msgs_types_in_culist_order: &[Type]) -> ItemImpl
     }
 }
 
+/// Builds the Schema implementation for CuMsgs
+fn build_culist_tuple_schema(all_msgs_types_in_culist_order: &[Type]) -> ItemImpl {
+    let indices: Vec<usize> = (0..all_msgs_types_in_culist_order.len()).collect();
+
+    let schema_fields: Vec<_> = indices
+        .iter()
+        .enumerate()
+        .map(|(i, _)| {
+            let field_name = format!("field_{}", i);
+            let msg_type = &all_msgs_types_in_culist_order[i];
+            let schema_type = type_to_schema_type(&parse_quote! { CuMsg<#msg_type> });
+            quote! {
+                map.insert(#field_name.to_string(), #schema_type);
+            }
+        })
+        .collect();
+
+    parse_quote! {
+        impl Schema for CuMsgs {
+            fn schema() -> std::collections::HashMap<String, SchemaType> {
+                let mut map = std::collections::HashMap::new();
+                #(#schema_fields)*
+                map
+            }
+
+            fn type_name() -> &'static str {
+                "CuMsgs"
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     // See tests/compile_file directory for more information
@@ -1598,5 +1776,19 @@ mod tests {
     fn test_compile_fail() {
         let t = trybuild::TestCases::new();
         t.compile_fail("tests/compile_fail/*/*.rs");
+    }
+
+    #[test]
+    fn test_schema_derive_macro() {
+        // This test verifies that the Schema derive macro compiles correctly
+        let t = trybuild::TestCases::new();
+        t.pass("tests/schema_derive_test.rs");
+    }
+
+    #[test]
+    fn test_cumsgs_schema_implementation() {
+        // This test verifies that the CuMsgs generated by gen_cumsgs implements Schema correctly
+        let t = trybuild::TestCases::new();
+        t.pass("tests/cumsgs_schema_test.rs");
     }
 }

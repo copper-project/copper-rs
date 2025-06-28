@@ -27,7 +27,9 @@ pub struct RPGpio {
     pin: u8,
 }
 
-#[derive(Debug, Clone, Copy, Encode, Decode, Default, PartialEq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Encode, Decode, Default, PartialEq, Serialize, Deserialize, Schema,
+)]
 pub struct RPGpioPayload {
     pub on: bool,
 }

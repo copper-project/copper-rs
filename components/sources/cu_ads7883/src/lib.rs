@@ -39,9 +39,24 @@ fn open_spi(dev_device: Option<&str>, max_speed_hz: Option<u32>) -> std::io::Res
 #[derive(Debug, Clone, Copy, Default, Encode, Decode, PartialEq, Serialize, Deserialize)]
 pub struct ADCReadingPayload<T>
 where
-    T: Into<u128> + Copy, // Trick to say all unsigned integers.
+    T: Into<u128> + Copy + Schema, // Trick to say all unsigned integers.
 {
     pub analog_value: T,
+}
+
+impl<T> Schema for ADCReadingPayload<T>
+where
+    T: Into<u128> + Copy + Schema,
+{
+    fn schema() -> std::collections::HashMap<String, SchemaType> {
+        let mut map = std::collections::HashMap::new();
+        map.insert("analog_value".to_string(), T::schema_type());
+        map
+    }
+
+    fn type_name() -> &'static str {
+        "ADCReadingPayload"
+    }
 }
 
 /// This is the type of message that the ADS7883 driver will send.

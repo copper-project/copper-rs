@@ -38,9 +38,9 @@ pub struct LogReaderCli {
 #[derive(Subcommand)]
 pub enum Command {
     /// Extract logs
-    ExtractLog { log_index: PathBuf },
+    ExtractTextLog { log_index: PathBuf },
     /// Extract copperlists
-    ExtractCopperlist {
+    ExtractCopperlists {
         #[arg(short, long, default_value_t = ExportFormat::Json)]
         export_format: ExportFormat,
     },
@@ -50,7 +50,7 @@ pub enum Command {
 /// It depends on the specific type of the CopperList payload that is determined at compile time from the configuration.
 pub fn run_cli<P>() -> CuResult<()>
 where
-    P: CopperListTuple,
+    P: CopperListTuple + Schema,
 {
     let args = LogReaderCli::parse();
     let unifiedlog_base = args.unifiedlog_base;
@@ -64,19 +64,71 @@ where
     };
 
     match args.command {
-        Command::ExtractLog { log_index } => {
+        Command::ExtractTextLog { log_index } => {
             let reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::StructuredLogLine);
             textlog_dump(reader, &log_index)?;
         }
-        Command::ExtractCopperlist { export_format } => {
+        Command::ExtractCopperlists { export_format } => {
             println!("Extracting copperlists with format: {export_format}");
             let mut reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
-            let iter = copperlists_dump::<P>(&mut reader);
-            for entry in iter {
-                println!("{entry:#?}");
+            match export_format {
+                ExportFormat::Json => {
+                    let iter = copperlists_dump::<P>(&mut reader);
+                    for entry in iter {
+                        println!("{entry:#?}");
+                    }
+                }
+                ExportFormat::Csv => {
+                    export_copperlists_csv::<P>(&mut reader)?;
+                }
             }
         }
     }
+
+    Ok(())
+}
+
+/// Exports copper lists to CSV format using schema information
+pub fn export_copperlists_csv<P>(mut src: impl Read) -> CuResult<()>
+where
+    P: CopperListTuple + Schema,
+{
+    let schema = P::schema();
+
+    // Print CSV header
+    print!("copperlist_id");
+
+    for msg_type in schema.values() {
+        if let SchemaType::Struct {
+            name: _, // the first name is just CuMsg
+            fields: msg_fields,
+        } = msg_type
+        {
+            // Unpop the Option
+            let option_payload_type = msg_fields.get("payload").unwrap();
+            if let SchemaType::Option(payload_type) = option_payload_type {
+                print!(",{payload_type}");
+            }
+        } else {
+            print!(",meh?");
+        }
+    }
+    println!();
+
+    // // Process each copper list entry
+    // let iter = copperlists_dump::<P>(&mut src);
+    // for entry in iter {
+    //     print!("{}", entry.id);
+
+    //     for (name, field_type) in &schema {
+    //         if let SchemaType::Struct { name, fields } = field_type {
+    //             print!(",{}", format_field_for_csv(field_type));
+    //         } else {
+    //             print!(",meh?");
+    //         }
+    //     }
+    //     println!();
+    // }
 
     Ok(())
 }

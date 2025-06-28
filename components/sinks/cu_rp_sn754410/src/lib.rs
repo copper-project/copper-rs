@@ -22,7 +22,7 @@ pub struct SN754410 {
     last_update: CuTime,
 }
 
-#[derive(Debug, Clone, Copy, Default, Encode, Decode, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, Encode, Decode, Schema, PartialEq)]
 pub struct MotorPayload {
     pub power: f32, // -1.0 to 1.0
 }

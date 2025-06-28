@@ -31,7 +31,20 @@ impl Decode<()> for MspResponseBatch {
     fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
         // allocations are ok in decode
         let v = <Vec<MspResponse> as Decode<()>>::decode(decoder)?;
-        Ok(Self(v.into()))
+        Ok(Self(SmallVec::from_vec(v)))
+    }
+}
+
+impl Schema for MspResponseBatch {
+    fn schema() -> std::collections::HashMap<String, SchemaType> {
+        // MspResponseBatch is a wrapper around SmallVec, but we represent it as Vec in schema
+        let mut map = std::collections::HashMap::new();
+        map.insert("responses".to_string(), SchemaType::Vec(Box::new(MspResponse::schema_type())));
+        map
+    }
+
+    fn type_name() -> &'static str {
+        "MspResponseBatch"
     }
 }
 

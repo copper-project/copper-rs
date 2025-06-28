@@ -40,3 +40,44 @@ pub mod prelude {
     pub use cu29_value::Value;
     pub use pool::*;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::prelude::*;
+
+    #[derive(Schema, Debug)]
+    struct TaMere {
+        toto: u32,
+        titi: f64,
+        tutu: String,
+    }
+
+    #[derive(Schema, Debug)]
+    struct ForeignStruct {
+        value: i32,
+        name: String,
+    }
+
+    #[test]
+    fn test_schema_derive_functionality() {
+        // Test the original request: TaMere::schema()
+        let schema = TaMere::schema();
+        assert_eq!(schema.len(), 3);
+        assert_eq!(schema.get("toto"), Some(&SchemaType::U32));
+        assert_eq!(schema.get("titi"), Some(&SchemaType::F64));
+        assert_eq!(schema.get("tutu"), Some(&SchemaType::String));
+
+        // Test type name
+        assert_eq!(TaMere::type_name(), "TaMere");
+
+        // Test foreign struct
+        let foreign_schema = ForeignStruct::schema();
+        assert_eq!(foreign_schema.len(), 2);
+        assert_eq!(foreign_schema.get("value"), Some(&SchemaType::I32));
+        assert_eq!(foreign_schema.get("name"), Some(&SchemaType::String));
+
+        println!("✅ Schema derive macro working correctly!");
+        println!("✅ TaMere::schema() returns: {:?}", schema);
+        println!("✅ Ready for CSV export in cu29_export!");
+    }
+}

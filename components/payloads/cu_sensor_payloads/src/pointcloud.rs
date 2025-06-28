@@ -2,8 +2,10 @@ use bincode::de::{BorrowDecode, BorrowDecoder, Decode, Decoder};
 use bincode::enc::{Encode, Encoder};
 use bincode::error::{DecodeError, EncodeError};
 use cu29_clock::CuTime;
+use cu29::cutask::{Schema, SchemaType};
 use cu29_soa_derive::Soa;
 use derive_more::{Add, Deref, Div, From, Mul, Sub};
+use std::collections::HashMap;
 use uom::si::f32::{Length, Ratio};
 use uom::si::length::meter;
 use uom::si::ratio::percent;
@@ -115,6 +117,23 @@ impl Decode<()> for PointCloud {
             i,
             return_order,
         })
+    }
+}
+
+impl Schema for PointCloud {
+    fn schema() -> HashMap<String, SchemaType> {
+        let mut map = HashMap::new();
+        map.insert("tov".to_string(), SchemaType::Custom("CuTime".to_string()));
+        map.insert("x".to_string(), SchemaType::Custom("Distance".to_string()));
+        map.insert("y".to_string(), SchemaType::Custom("Distance".to_string()));
+        map.insert("z".to_string(), SchemaType::Custom("Distance".to_string()));
+        map.insert("i".to_string(), SchemaType::Custom("Reflectivity".to_string()));
+        map.insert("return_order".to_string(), SchemaType::U8);
+        map
+    }
+
+    fn type_name() -> &'static str {
+        "PointCloud"
     }
 }
 
