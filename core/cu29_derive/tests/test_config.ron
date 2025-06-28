@@ -1,0 +1,15 @@
+(
+    tasks: [
+        (
+            id: "test_task1",
+            type: "i32",
+        ),
+        (
+            id: "test_task2", 
+            type: "()",
+        ),
+    ],
+    cnx: [
+        (src: "test_task1", dst: "test_task2", msg: "i32"),
+    ],
+)
