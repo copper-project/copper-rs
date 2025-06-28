@@ -16,6 +16,7 @@ quanta = "0.12.5"
 bincode = { workspace = true }
 serde = { workspace = true }
 cu29-schema = { workspace = true }
+indexmap = { workspace = true }
 
 [dev-dependencies]
 approx = "0.5.1"

@@ -1,37 +1,46 @@
 //! Schema trait and types for copper runtime
-//! 
+//!
 //! This crate provides the Schema trait and SchemaType enum for describing
 //! the structure of data types in the copper runtime system.
 
-use std::collections::HashMap;
+use indexmap::IndexMap;
 use std::fmt::{Display, Formatter};
+
+/// Type alias for schema field mappings to avoid exposing IndexMap dependency
+pub type SchemaIndex = IndexMap<String, SchemaType>;
 
 /// Represents the type information for schema generation
 #[derive(Debug, Clone, PartialEq)]
 pub enum SchemaType {
+    UNIT,
     U8,
     U16,
     U32,
     U64,
     U128,
+    Usize,
     I8,
     I16,
     I32,
     I64,
     I128,
+    Isize,
     F32,
     F64,
     Bool,
     String,
     Vec(Box<SchemaType>),
-    Array { element_type: Box<SchemaType>, size: usize }, // Fixed-size array with compile-time known size
+    Array {
+        element_type: Box<SchemaType>,
+        size: usize,
+    }, // Fixed-size array with compile-time known size
     Option(Box<SchemaType>),
     Tuple(Vec<SchemaType>),
-    Custom(String), // For foreign structs that don't implement Schema
     Struct {
         name: String,
-        fields: HashMap<String, SchemaType>,
-    }, // For structs that implement Schema and allow recursive inspection
+        fields: SchemaIndex,
+    },
+    Custom(String),
 }
 
 impl Display for SchemaType {
@@ -42,11 +51,13 @@ impl Display for SchemaType {
             SchemaType::U32 => write!(f, "u32"),
             SchemaType::U64 => write!(f, "u64"),
             SchemaType::U128 => write!(f, "u128"),
+            SchemaType::Usize => write!(f, "usize"),
             SchemaType::I8 => write!(f, "i8"),
             SchemaType::I16 => write!(f, "i16"),
             SchemaType::I32 => write!(f, "i32"),
             SchemaType::I64 => write!(f, "i64"),
             SchemaType::I128 => write!(f, "i128"),
+            SchemaType::Isize => write!(f, "isize"),
             SchemaType::F32 => write!(f, "f32"),
             SchemaType::F64 => write!(f, "f64"),
             SchemaType::Bool => write!(f, "bool"),
@@ -60,20 +71,21 @@ impl Display for SchemaType {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
-                    write!(f, "{}", ty)?;
+                    write!(f, "{ty}")?;
                 }
                 write!(f, ")")
             }
             SchemaType::Custom(name) => write!(f, "Custom({name})"),
             SchemaType::Struct { name, .. } => write!(f, "Struct {name}"),
+            &SchemaType::UNIT => write!(f, "()"),
         }
     }
 }
 
 /// Trait for types that can provide schema information
 pub trait Schema {
-    /// Returns a HashMap mapping field names to their types
-    fn schema() -> HashMap<String, SchemaType>;
+    /// Returns a SchemaIndex mapping field names to their types
+    fn schema() -> SchemaIndex;
 
     /// Returns the type name of the struct
     fn type_name() -> &'static str;
@@ -98,19 +110,23 @@ pub trait Schema {
 }
 
 impl Schema for () {
-    fn schema() -> HashMap<String, SchemaType> {
-        HashMap::new()
+    fn schema() -> SchemaIndex {
+        IndexMap::new()
     }
 
     fn type_name() -> &'static str {
-        "(empty)"
+        "()"
+    }
+
+    fn schema_type() -> SchemaType {
+        SchemaType::UNIT
     }
 }
 
 // Schema implementations for primitive types
 impl Schema for u8 {
-    fn schema() -> HashMap<String, SchemaType> {
-        HashMap::new()
+    fn schema() -> SchemaIndex {
+        IndexMap::new()
     }
 
     fn type_name() -> &'static str {
@@ -123,8 +139,8 @@ impl Schema for u8 {
 }
 
 impl Schema for u16 {
-    fn schema() -> HashMap<String, SchemaType> {
-        HashMap::new()
+    fn schema() -> SchemaIndex {
+        IndexMap::new()
     }
 
     fn type_name() -> &'static str {
@@ -137,8 +153,8 @@ impl Schema for u16 {
 }
 
 impl Schema for u32 {
-    fn schema() -> HashMap<String, SchemaType> {
-        HashMap::new()
+    fn schema() -> SchemaIndex {
+        IndexMap::new()
     }
 
     fn type_name() -> &'static str {
@@ -151,8 +167,8 @@ impl Schema for u32 {
 }
 
 impl Schema for u64 {
-    fn schema() -> HashMap<String, SchemaType> {
-        HashMap::new()
+    fn schema() -> SchemaIndex {
+        IndexMap::new()
     }
 
     fn type_name() -> &'static str {
@@ -165,8 +181,8 @@ impl Schema for u64 {
 }
 
 impl Schema for u128 {
-    fn schema() -> HashMap<String, SchemaType> {
-        HashMap::new()
+    fn schema() -> SchemaIndex {
+        IndexMap::new()
     }
 
     fn type_name() -> &'static str {
@@ -178,9 +194,23 @@ impl Schema for u128 {
     }
 }
 
+impl Schema for usize {
+    fn schema() -> SchemaIndex {
+        IndexMap::new()
+    }
+
+    fn type_name() -> &'static str {
+        "usize"
+    }
+
+    fn schema_type() -> SchemaType {
+        SchemaType::Usize
+    }
+}
+
 impl Schema for i8 {
-    fn schema() -> HashMap<String, SchemaType> {
-        HashMap::new()
+    fn schema() -> SchemaIndex {
+        IndexMap::new()
     }
 
     fn type_name() -> &'static str {
@@ -193,8 +223,8 @@ impl Schema for i8 {
 }
 
 impl Schema for i16 {
-    fn schema() -> HashMap<String, SchemaType> {
-        HashMap::new()
+    fn schema() -> SchemaIndex {
+        IndexMap::new()
     }
 
     fn type_name() -> &'static str {
@@ -207,8 +237,8 @@ impl Schema for i16 {
 }
 
 impl Schema for i32 {
-    fn schema() -> HashMap<String, SchemaType> {
-        HashMap::new()
+    fn schema() -> SchemaIndex {
+        IndexMap::new()
     }
 
     fn type_name() -> &'static str {
@@ -221,8 +251,8 @@ impl Schema for i32 {
 }
 
 impl Schema for i64 {
-    fn schema() -> HashMap<String, SchemaType> {
-        HashMap::new()
+    fn schema() -> SchemaIndex {
+        IndexMap::new()
     }
 
     fn type_name() -> &'static str {
@@ -235,8 +265,8 @@ impl Schema for i64 {
 }
 
 impl Schema for i128 {
-    fn schema() -> HashMap<String, SchemaType> {
-        HashMap::new()
+    fn schema() -> SchemaIndex {
+        IndexMap::new()
     }
 
     fn type_name() -> &'static str {
@@ -248,9 +278,23 @@ impl Schema for i128 {
     }
 }
 
+impl Schema for isize {
+    fn schema() -> SchemaIndex {
+        IndexMap::new()
+    }
+
+    fn type_name() -> &'static str {
+        "isize"
+    }
+
+    fn schema_type() -> SchemaType {
+        SchemaType::Isize
+    }
+}
+
 impl Schema for f32 {
-    fn schema() -> HashMap<String, SchemaType> {
-        HashMap::new()
+    fn schema() -> SchemaIndex {
+        IndexMap::new()
     }
 
     fn type_name() -> &'static str {
@@ -263,8 +307,8 @@ impl Schema for f32 {
 }
 
 impl Schema for f64 {
-    fn schema() -> HashMap<String, SchemaType> {
-        HashMap::new()
+    fn schema() -> SchemaIndex {
+        IndexMap::new()
     }
 
     fn type_name() -> &'static str {
@@ -277,8 +321,8 @@ impl Schema for f64 {
 }
 
 impl Schema for bool {
-    fn schema() -> HashMap<String, SchemaType> {
-        HashMap::new()
+    fn schema() -> SchemaIndex {
+        IndexMap::new()
     }
 
     fn type_name() -> &'static str {
@@ -291,8 +335,8 @@ impl Schema for bool {
 }
 
 impl Schema for String {
-    fn schema() -> HashMap<String, SchemaType> {
-        HashMap::new()
+    fn schema() -> SchemaIndex {
+        IndexMap::new()
     }
 
     fn type_name() -> &'static str {
@@ -308,8 +352,8 @@ macro_rules! impl_schema_for_tuples {
     ($(($($ty:ident),*)),*) => {
         $(
             impl<$($ty: Schema),*> Schema for ($($ty,)*) {
-                fn schema() -> HashMap<String, SchemaType> {
-                    HashMap::new()
+                fn schema() -> SchemaIndex {
+                    IndexMap::new()
                 }
 
                 fn type_name() -> &'static str {
@@ -339,7 +383,7 @@ mod tests {
             element_type: Box::new(SchemaType::F32),
             size: 8,
         };
-        assert_eq!(format!("{}", array_type), "[f32; 8]");
+        assert_eq!(format!("{array_type}"), "[f32; 8]");
     }
 
     #[test]
@@ -370,6 +414,6 @@ mod tests {
             }),
             size: 2,
         };
-        assert_eq!(format!("{}", nested_array), "[[i32; 3]; 2]");
+        assert_eq!(format!("{nested_array}"), "[[i32; 3]; 2]");
     }
 }

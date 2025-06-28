@@ -48,8 +48,8 @@ impl<T> Schema for ADCReadingPayload<T>
 where
     T: Into<u128> + Copy + Schema,
 {
-    fn schema() -> std::collections::HashMap<String, SchemaType> {
-        let mut map = std::collections::HashMap::new();
+    fn schema() -> SchemaIndex {
+        let mut map = SchemaIndex::new();
         map.insert("analog_value".to_string(), T::schema_type());
         map
     }

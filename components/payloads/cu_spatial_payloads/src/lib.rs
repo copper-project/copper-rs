@@ -1,5 +1,6 @@
 use bincode::{Decode, Encode};
 use core::fmt::Debug;
+use cu29::prelude::*;
 use serde::{Deserialize, Serialize};
 use uom::si::angle::radian;
 use uom::si::length::meter;
@@ -12,6 +13,27 @@ use uom::si::f64::Length as Length64;
 #[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct Transform3D<T: Copy + Debug + 'static> {
     pub mat: [[T; 4]; 4],
+}
+
+impl<T: Copy + Debug + 'static + Schema> Schema for Transform3D<T> {
+    fn schema() -> SchemaIndex {
+        let mut fields = SchemaIndex::new();
+        fields.insert(
+            "mat".to_string(),
+            SchemaType::Array {
+                element_type: Box::new(SchemaType::Array {
+                    element_type: Box::new(T::schema_type()),
+                    size: 4,
+                }),
+                size: 4,
+            },
+        );
+        fields
+    }
+
+    fn type_name() -> &'static str {
+        "Transform3D"
+    }
 }
 
 impl Transform3D<f64> {

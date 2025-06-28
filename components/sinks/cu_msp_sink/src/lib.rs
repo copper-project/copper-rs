@@ -45,10 +45,13 @@ impl Decode<()> for MspRequestBatch {
 }
 
 impl Schema for MspRequestBatch {
-    fn schema() -> std::collections::HashMap<String, SchemaType> {
+    fn schema() -> SchemaIndex {
         // MspRequestBatch is a wrapper around SmallVec, but we represent it as Vec in schema
-        let mut map = std::collections::HashMap::new();
-        map.insert("requests".to_string(), SchemaType::Vec(Box::new(MspRequest::schema_type())));
+        let mut map = SchemaIndex::new();
+        map.insert(
+            "requests".to_string(),
+            SchemaType::Vec(Box::new(MspRequest::schema_type())),
+        );
         map
     }
 

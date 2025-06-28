@@ -107,7 +107,7 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
             use cu29::cutask::CuMsg;
             use cu29::prelude::Schema;
             use cu29::prelude::SchemaType;
-            use std::collections::HashMap;
+            use cu29::prelude::SchemaIndex;
             #support
         }
         use cumsgs::CuMsgs;
@@ -134,7 +134,7 @@ pub fn derive_schema(input: TokenStream) -> TokenStream {
                 });
 
                 quote! {
-                    let mut map = std::collections::HashMap::new();
+                    let mut map = SchemaIndex::new();
                     #(#field_schemas)*
                     map
                 }
@@ -150,7 +150,7 @@ pub fn derive_schema(input: TokenStream) -> TokenStream {
 
     let expanded = quote! {
         impl Schema for #name {
-            fn schema() -> std::collections::HashMap<String, SchemaType> {
+            fn schema() -> SchemaIndex {
                 #schema_map
             }
 
@@ -204,43 +204,12 @@ fn type_to_schema_type(ty: &Type) -> proc_macro2::TokenStream {
                         }
                         quote! { SchemaType::Custom("Option".to_string()) }
                     }
-                    "CuMsg" => {
-                        // CuMsg implements Schema, so use the Struct variant for recursive inspection
-                        if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
-                            if let Some(syn::GenericArgument::Type(inner_type)) = args.args.first()
-                            {
-                                // For CuMsg<T>, we want to create a Struct that shows the payload and metadata
-                                let inner_schema = type_to_schema_type(inner_type);
-                                return quote! {
-                                    SchemaType::Struct {
-                                        name: "CuMsg".to_string(),
-                                        fields: {
-                                            let mut map = std::collections::HashMap::new();
-                                            map.insert("payload".to_string(), SchemaType::Option(Box::new(#inner_schema)));
-                                            map.insert("metadata".to_string(), SchemaType::Struct {
-                                                name: "CuMsgMetadata".to_string(),
-                                                fields: {
-                                                    let mut metadata_map = std::collections::HashMap::new();
-                                                    metadata_map.insert("process_time".to_string(), SchemaType::Custom("PartialCuTimeRange".to_string()));
-                                                    metadata_map.insert("tov".to_string(), SchemaType::Custom("Tov".to_string()));
-                                                    metadata_map.insert("status_txt".to_string(), SchemaType::Custom("CuCompactString".to_string()));
-                                                    metadata_map
-                                                }
-                                            });
-                                            map
-                                        }
-                                    }
-                                };
-                            }
-                        }
-                        quote! { SchemaType::Custom("CuMsg".to_string()) }
-                    }
                     _ => {
-                        // For other custom types, try to use Schema if available, otherwise fall back to Custom
+                        // For other custom types, try to use Schema::schema_type() if available, otherwise fall back to Custom
                         quote! {
                             // Try to use Schema::schema_type() if the type implements Schema
                             // This will be resolved at compile time
-                            SchemaType::Custom(#type_name.to_string())
+                            <#segment as cu29::prelude::Schema>::schema_type()
                         }
                     }
                 }
@@ -248,7 +217,14 @@ fn type_to_schema_type(ty: &Type) -> proc_macro2::TokenStream {
                 quote! { SchemaType::Custom("Unknown".to_string()) }
             }
         }
-        _ => quote! { SchemaType::Custom("Complex".to_string()) },
+        _ => {
+            // For complex types (references, arrays, etc.), try to use Schema trait
+            quote! {
+                // Try to use Schema::schema_type() if the type implements Schema
+                // This will be resolved at compile time
+                <#ty as cu29::prelude::Schema>::schema_type()
+            }
+        }
     }
 }
 
@@ -348,7 +324,7 @@ fn gen_sim_support(runtime_plan: &CuExecutionLoop) -> proc_macro2::TokenStream {
         .map(|unit| match unit {
             CuExecutionUnit::Step(step) => {
                 let enum_entry_name = config_id_to_enum(step.node.get_id().as_str());
-                let enum_ident = Ident::new(&enum_entry_name, proc_macro2::Span::call_site());
+                let enum_ident = Ident::new(&enum_entry_name, Span::call_site());
                 let inputs: Vec<Type> = step
                     .input_msg_indices_types
                     .iter()
@@ -1757,8 +1733,8 @@ fn build_culist_tuple_schema(all_msgs_types_in_culist_order: &[Type]) -> ItemImp
 
     parse_quote! {
         impl Schema for CuMsgs {
-            fn schema() -> std::collections::HashMap<String, SchemaType> {
-                let mut map = std::collections::HashMap::new();
+            fn schema() -> SchemaIndex {
+                let mut map = SchemaIndex::new();
                 #(#schema_fields)*
                 map
             }

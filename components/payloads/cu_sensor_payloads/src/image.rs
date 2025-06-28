@@ -2,23 +2,38 @@ use bincode::de::Decoder;
 use bincode::error::DecodeError;
 use bincode::{Decode, Encode};
 use cu29::prelude::SchemaType;
-use cu29::prelude::{ArrayLike, CuHandle, Schema};
+use cu29::prelude::{ArrayLike, CuHandle};
 #[allow(unused_imports)]
 use cu29::{CuError, CuResult};
-use std::collections::HashMap;
 use std::fmt::Debug;
 
+use cu29_schema::{Schema, SchemaIndex};
 #[cfg(feature = "image")]
 use image::{ImageBuffer, Pixel};
 #[cfg(feature = "kornia")]
 use kornia::image::Image;
 
-#[derive(Default, Debug, Encode, Decode, Clone, Copy, Schema)]
+#[derive(Default, Debug, Encode, Decode, Clone, Copy)]
 pub struct CuImageBufferFormat {
     pub width: u32,
     pub height: u32,
     pub stride: u32,
     pub pixel_format: [u8; 4],
+}
+
+impl Schema for CuImageBufferFormat {
+    fn schema() -> SchemaIndex {
+        let mut schema_map = SchemaIndex::new();
+        schema_map.insert("width".to_string(), SchemaType::U32);
+        schema_map.insert("height".to_string(), SchemaType::U32);
+        schema_map.insert("stride".to_string(), SchemaType::U32);
+        schema_map.insert("pixel_format".to_string(), SchemaType::U32);
+        schema_map
+    }
+
+    fn type_name() -> &'static str {
+        "CuImageBufferFormat"
+    }
 }
 
 impl CuImageBufferFormat {
@@ -120,8 +135,8 @@ impl<A> Schema for CuImage<A>
 where
     A: ArrayLike<Element = u8>,
 {
-    fn schema() -> HashMap<String, SchemaType> {
-        let mut map = HashMap::new();
+    fn schema() -> SchemaIndex {
+        let mut map = SchemaIndex::new();
         map.insert("seq".to_string(), SchemaType::U64);
         map.insert("format".to_string(), CuImageBufferFormat::schema_type());
         map.insert("buffer_handle".to_string(), CuHandle::<A>::schema_type());
@@ -148,7 +163,10 @@ mod tests {
 
         // Check field types
         assert_eq!(schema["seq"], SchemaType::U64);
-        assert_eq!(schema["buffer_handle"], SchemaType::Custom("CuHandle".to_string()));
+        assert_eq!(
+            schema["buffer_handle"],
+            SchemaType::Custom("CuHandle".to_string())
+        );
 
         // Check type name
         assert_eq!(CuImage::<Vec<u8>>::type_name(), "CuImage");
@@ -163,6 +181,9 @@ mod tests {
 
         // Check type name and schema type
         assert_eq!(CuHandle::<Vec<u8>>::type_name(), "CuHandle");
-        assert_eq!(CuHandle::<Vec<u8>>::schema_type(), SchemaType::Custom("CuHandle".to_string()));
+        assert_eq!(
+            CuHandle::<Vec<u8>>::schema_type(),
+            SchemaType::Custom("CuHandle".to_string())
+        );
     }
 }

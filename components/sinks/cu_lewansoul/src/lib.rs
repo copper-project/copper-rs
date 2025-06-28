@@ -5,7 +5,7 @@ use bincode::{Decode, Encode};
 use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuSinkTask, Freezable};
-use cu29::prelude::{Schema, SchemaType};
+use cu29::prelude::{Schema, SchemaIndex, SchemaType};
 use cu29::{input_msg, CuError, CuResult};
 use serialport::{DataBits, FlowControl, Parity, SerialPort, StopBits};
 use std::io::{self, Read, Write};
@@ -200,13 +200,16 @@ impl Decode<()> for ServoPositionsPayload {
 }
 
 impl Schema for ServoPositionsPayload {
-    fn schema() -> std::collections::HashMap<String, SchemaType> {
-        let mut map = std::collections::HashMap::new();
+    fn schema() -> SchemaIndex {
+        let mut map = SchemaIndex::new();
         // Represent the array with its compile-time known fixed size
-        map.insert("positions".to_string(), SchemaType::Array { 
-            element_type: Box::new(SchemaType::F32), 
-            size: MAX_SERVOS 
-        });
+        map.insert(
+            "positions".to_string(),
+            SchemaType::Array {
+                element_type: Box::new(SchemaType::F32),
+                size: MAX_SERVOS,
+            },
+        );
         map
     }
 

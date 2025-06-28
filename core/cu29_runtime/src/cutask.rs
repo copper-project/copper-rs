@@ -10,8 +10,9 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::BorrowDecode;
 use compact_str::{CompactString, ToCompactString};
 use cu29_clock::{PartialCuTimeRange, RobotClock, Tov};
-use cu29_schema::Schema;
+use cu29_schema::{Schema, SchemaType};
 use cu29_traits::CuResult;
+use indexmap::IndexMap;
 use serde_derive::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
@@ -171,6 +172,83 @@ where
 
     pub fn payload_mut(&mut self) -> &mut Option<T> {
         &mut self.payload
+    }
+}
+
+/// Implementation of Schema trait for CuMsg<T> where T implements Schema
+impl<T> Schema for CuMsg<T>
+where
+    T: CuMsgPayload,
+{
+    fn schema() -> IndexMap<String, SchemaType> {
+        let mut map = IndexMap::new();
+
+        // Add payload field as Option<T>
+        map.insert(
+            "payload".to_string(),
+            SchemaType::Option(Box::new(T::schema_type())),
+        );
+
+        // Add metadata field - we'll create a custom struct type for CuMsgMetadata
+        let mut metadata_fields = IndexMap::new();
+        metadata_fields.insert(
+            "process_time".to_string(),
+            SchemaType::Custom("PartialCuTimeRange".to_string()),
+        );
+        metadata_fields.insert("tov".to_string(), SchemaType::Custom("Tov".to_string()));
+        metadata_fields.insert(
+            "status_txt".to_string(),
+            SchemaType::Custom("CuCompactString".to_string()),
+        );
+
+        map.insert(
+            "metadata".to_string(),
+            SchemaType::Struct {
+                name: "CuMsgMetadata".to_string(),
+                fields: metadata_fields,
+            },
+        );
+
+        map
+    }
+
+    fn type_name() -> &'static str {
+        "CuMsg"
+    }
+
+    fn schema_type() -> SchemaType {
+        let mut fields = IndexMap::new();
+
+        // Add payload field as Option<T>
+        fields.insert(
+            "payload".to_string(),
+            SchemaType::Option(Box::new(T::schema_type())),
+        );
+
+        // Add metadata field
+        let mut metadata_fields = IndexMap::new();
+        metadata_fields.insert(
+            "process_time".to_string(),
+            SchemaType::Custom("PartialCuTimeRange".to_string()),
+        );
+        metadata_fields.insert("tov".to_string(), SchemaType::Custom("Tov".to_string()));
+        metadata_fields.insert(
+            "status_txt".to_string(),
+            SchemaType::Custom("CuCompactString".to_string()),
+        );
+
+        fields.insert(
+            "metadata".to_string(),
+            SchemaType::Struct {
+                name: "CuMsgMetadata".to_string(),
+                fields: metadata_fields,
+            },
+        );
+
+        SchemaType::Struct {
+            name: "CuMsg".to_string(),
+            fields,
+        }
     }
 }
 

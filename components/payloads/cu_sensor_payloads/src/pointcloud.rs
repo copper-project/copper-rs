@@ -3,9 +3,9 @@ use cu29::bincode::enc::{Encode, Encoder};
 use cu29::bincode::error::{DecodeError, EncodeError};
 use cu29::prelude::{Schema, SchemaType};
 use cu29_clock::CuTime;
+use cu29_schema::SchemaIndex;
 use cu29_soa_derive::Soa;
 use derive_more::{Add, Deref, Div, From, Mul, Sub};
-use std::collections::HashMap;
 use uom::si::f32::{Length, Ratio};
 use uom::si::length::meter;
 use uom::si::ratio::percent;
@@ -121,8 +121,8 @@ impl Decode<()> for PointCloud {
 }
 
 impl Schema for PointCloud {
-    fn schema() -> HashMap<String, SchemaType> {
-        let mut map = HashMap::new();
+    fn schema() -> SchemaIndex {
+        let mut map = SchemaIndex::new();
 
         // Use CuTime's schema implementation
         map.insert("tov".to_string(), CuTime::schema_type());

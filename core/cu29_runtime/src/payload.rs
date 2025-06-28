@@ -7,8 +7,9 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::BorrowDecode;
 use bincode::{Decode, Encode};
-use cu29_schema::{Schema, SchemaType};
-use std::collections::HashMap;
+use cu29_schema::{Schema, SchemaIndex, SchemaType};
+use indexmap::IndexMap;
+
 
 /// Copper friendly wrapper for a fixed size array.
 #[derive(Clone, Debug, Default)]
@@ -99,8 +100,8 @@ impl<T, const N: usize> Schema for CuArray<T, N>
 where
     T: Schema,
 {
-    fn schema() -> HashMap<String, SchemaType> {
-        HashMap::new()
+    fn schema() -> SchemaIndex {
+        IndexMap::new()
     }
 
     fn type_name() -> &'static str {
@@ -187,6 +188,26 @@ where
     }
 }
 
+impl<T, const N: usize> Schema for CuArrayVec<T, N>
+where
+    T: Schema + 'static,
+{
+    fn schema() -> IndexMap<String, SchemaType> {
+        IndexMap::new()
+    }
+
+    fn type_name() -> &'static str {
+        "CuArrayVec"
+    }
+
+    fn schema_type() -> SchemaType {
+        SchemaType::Array {
+            element_type: Box::new(T::schema_type()),
+            size: N,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -212,6 +233,37 @@ mod tests {
     fn test_cuarray_schema_nested() {
         // Test Schema implementation for CuArray<i32, 10>
         let schema_type = CuArray::<i32, 10>::schema_type();
+
+        match schema_type {
+            SchemaType::Array { element_type, size } => {
+                assert_eq!(size, 10);
+                assert_eq!(*element_type, SchemaType::I32);
+            }
+            _ => panic!("Expected Array schema type"),
+        }
+    }
+
+    #[test]
+    fn test_cuarrayvec_schema() {
+        // Test Schema implementation for CuArrayVec<f32, 5>
+        let schema_type = CuArrayVec::<f32, 5>::schema_type();
+
+        match schema_type {
+            SchemaType::Array { element_type, size } => {
+                assert_eq!(size, 5);
+                assert_eq!(*element_type, SchemaType::F32);
+            }
+            _ => panic!("Expected Array schema type"),
+        }
+
+        assert_eq!(CuArrayVec::<f32, 5>::type_name(), "CuArrayVec");
+        assert!(CuArrayVec::<f32, 5>::schema().is_empty());
+    }
+
+    #[test]
+    fn test_cuarrayvec_schema_nested() {
+        // Test Schema implementation for CuArrayVec<i32, 10>
+        let schema_type = CuArrayVec::<i32, 10>::schema_type();
 
         match schema_type {
             SchemaType::Array { element_type, size } => {

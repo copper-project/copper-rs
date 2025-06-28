@@ -144,3 +144,6 @@ rerun = { version = "0.23.2", default-features = false, features = ["sdk", "serv
 
 # smallvec to avoid heap allocations
 smallvec = { version = "1.15.0", features = ["serde"] }
+
+# indexmap is used for any type Schema
+indexmap = "2.10.0"

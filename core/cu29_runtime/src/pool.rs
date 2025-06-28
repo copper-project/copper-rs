@@ -5,6 +5,7 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29_schema::{Schema, SchemaType};
 use cu29_traits::CuResult;
+use indexmap::IndexMap;
 use object_pool::{Pool, ReusableOwned};
 use smallvec::SmallVec;
 use std::alloc::{alloc, dealloc, Layout};
@@ -193,8 +194,8 @@ impl<A> Schema for CuHandle<A>
 where
     A: ArrayLike,
 {
-    fn schema() -> HashMap<String, SchemaType> {
-        HashMap::new()
+    fn schema() -> IndexMap<String, SchemaType> {
+        IndexMap::new()
     }
 
     fn type_name() -> &'static str {

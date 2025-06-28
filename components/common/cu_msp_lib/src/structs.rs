@@ -8,7 +8,7 @@ use crate::MspPacketDirection::{FromFlightController, ToFlightController};
 use crate::{MspPacket, MspPacketData};
 #[cfg(feature = "bincode")]
 use bincode::{Decode, Encode};
-use cu29::prelude::{Schema, SchemaType};
+use cu29::prelude::{Schema, SchemaIndex, SchemaType};
 use packed_struct::{PackedStruct, PackedStructSlice, PackingError, PrimitiveEnum};
 use smallvec::SmallVec;
 
@@ -1034,9 +1034,9 @@ impl From<&MspRequest> for MspPacket {
 }
 
 impl Schema for MspRequest {
-    fn schema() -> std::collections::HashMap<String, SchemaType> {
+    fn schema() -> SchemaIndex {
         // MspRequest is an enum with variants for different request types
-        let mut map = std::collections::HashMap::new();
+        let mut map = SchemaIndex::new();
         map.insert("variant".to_string(), SchemaType::String);
         map.insert(
             "data".to_string(),
@@ -1373,9 +1373,9 @@ impl From<MspPacket> for MspResponse {
 }
 
 impl Schema for MspResponse {
-    fn schema() -> std::collections::HashMap<String, SchemaType> {
+    fn schema() -> SchemaIndex {
         // MspResponse is an enum with many variants, each containing different data structures
-        let mut map = std::collections::HashMap::new();
+        let mut map = SchemaIndex::new();
         map.insert("variant".to_string(), SchemaType::String);
         map.insert(
             "data".to_string(),

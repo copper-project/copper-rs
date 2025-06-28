@@ -3,7 +3,6 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29::prelude::*;
-use std::collections::HashMap;
 #[cfg(hardware)]
 use embedded_hal::i2c::I2c;
 #[cfg(hardware)]
@@ -140,8 +139,8 @@ impl<'de> Deserialize<'de> for PositionalReadingsPayload {
 }
 
 impl Schema for PositionalReadingsPayload {
-    fn schema() -> HashMap<String, SchemaType> {
-        let mut map = HashMap::new();
+    fn schema() -> SchemaIndex {
+        let mut map = SchemaIndex::new();
 
         // All fields are UOM types that wrap f32 values
         map.insert("acc_x".to_string(), SchemaType::F32);
@@ -332,6 +331,9 @@ mod tests {
         assert_eq!(schema.get("yaw"), Some(&SchemaType::F32));
 
         // Verify type name
-        assert_eq!(PositionalReadingsPayload::type_name(), "PositionalReadingsPayload");
+        assert_eq!(
+            PositionalReadingsPayload::type_name(),
+            "PositionalReadingsPayload"
+        );
     }
 }

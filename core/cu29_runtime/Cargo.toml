@@ -33,6 +33,7 @@ clap = { workspace = true }
 tempfile = { workspace = true }
 arrayvec = "0.7.6"
 smallvec = { workspace = true }
+indexmap = { workspace = true }
 ron = "0.10.1"
 hdrhistogram = "7.5.4"
 petgraph = { version = "0.8.1", features = ["serde", "serde-1", "serde_derive"] }

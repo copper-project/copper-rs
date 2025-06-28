@@ -10,3 +10,4 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
+indexmap = "2.0"

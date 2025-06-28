@@ -33,7 +33,7 @@ const CY: f64 = 520.0;
 #[cfg(not(windows))]
 const FAMILY: &str = "tag16h5";
 
-#[derive(Default, Debug, Clone, Encode)]
+#[derive(Default, Debug, Clone, Encode, Schema)]
 pub struct AprilTagDetections {
     pub ids: CuArrayVec<usize, MAX_DETECTIONS>,
     pub poses: CuArrayVec<CuPose<f32>, MAX_DETECTIONS>,

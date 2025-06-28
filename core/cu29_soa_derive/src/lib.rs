@@ -174,8 +174,7 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
             use cu29::bincode::de::Decoder;
             use cu29::bincode::error::{DecodeError, EncodeError};
             use std::ops::{Index, IndexMut};
-            use cu29_schema::{Schema, SchemaType};
-            use std::collections::HashMap;
+            use cu29_schema::{Schema, SchemaType, SchemaIndex};
             #( use super::#unique_imports; )*
             use core::array::from_fn;
 
@@ -315,8 +314,8 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
             }
 
             impl<const N: usize> Schema for #soa_struct_name<N> {
-                fn schema() -> HashMap<String, SchemaType> {
-                    let mut fields = HashMap::new();
+                fn schema() -> SchemaIndex {
+                    let mut fields = SchemaIndex::new();
                     #(
                         fields.insert(
                             stringify!(#field_names).to_string(),

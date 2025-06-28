@@ -14,6 +14,7 @@ repository.workspace = true
 bincode = { workspace = true, optional = true }
 serde = { workspace = true }
 smallvec = { workspace = true }
+indexmap = { workspace = true }
 crc-any = "2.5.0"
 packed_struct = "0.10.1"
 cu29 = { path = "../../../core/cu29" }

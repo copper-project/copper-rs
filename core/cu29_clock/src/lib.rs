@@ -8,11 +8,10 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::BorrowDecode;
 use bincode::{Decode, Encode};
 use core::ops::{Add, Sub};
-use cu29_schema::{Schema, SchemaType};
+use cu29_schema::{Schema, SchemaIndex, SchemaType};
 pub use quanta::Instant;
 use quanta::{Clock, Mock};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::convert::Into;
 use std::fmt::{Display, Formatter};
 use std::ops::{AddAssign, Div, Mul, SubAssign};
@@ -209,8 +208,8 @@ impl Display for CuDuration {
 }
 
 impl Schema for CuDuration {
-    fn schema() -> HashMap<String, SchemaType> {
-        let mut map = HashMap::new();
+    fn schema() -> SchemaIndex {
+        let mut map = SchemaIndex::new();
         map.insert("0".to_string(), SchemaType::U64);
         map
     }

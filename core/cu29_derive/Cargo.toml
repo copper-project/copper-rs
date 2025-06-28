@@ -18,6 +18,7 @@ proc-macro = true
 cu29-runtime = { workspace = true }
 cu29-traits = { workspace = true }
 convert_case = "0.8.0"
+indexmap = "2.0"
 itertools = "0.14.0"
 quote = { workspace = true }
 proc-macro2 = { workspace = true }
@@ -36,4 +37,3 @@ cu29 = { workspace = true } # needed for compile_fail tests
 default = []
 # enables a more verbose build log showing the code generation.
 macro_debug = ["cu29-runtime/macro_debug"]
-
