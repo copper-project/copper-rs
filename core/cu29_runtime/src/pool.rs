@@ -3,6 +3,7 @@ use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
+use cu29_schema::{Schema, SchemaType};
 use cu29_traits::CuResult;
 use object_pool::{Pool, ReusableOwned};
 use smallvec::SmallVec;
@@ -14,7 +15,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 type PoolID = ArrayString<64>;
 
-/// Trait for a Pool to exposed to be monitored by the monitoring API.
+/// Trait for a Pool to expose to be monitored by the monitoring API.
 pub trait PoolMonitor: Send + Sync {
     /// A unique and descriptive identifier for the pool.
     fn id(&self) -> PoolID;
@@ -90,11 +91,11 @@ pub trait ArrayLike: Deref<Target = [Self::Element]> + DerefMut + Debug + Sync +
 }
 
 /// A Handle to a Buffer.
-/// For onboard usages, the buffer should be Pooled (ie, coming from a preallocated pool).
+/// For onboard usages, the buffer should be Pooled (i.e., coming from a preallocated pool).
 /// The Detached version is for offline usages where we don't really need a pool to deserialize them.
 pub enum CuHandleInner<T: Debug> {
     Pooled(ReusableOwned<T>),
-    Detached(T), // Should only be used in offline cases (e.g. deserialization)
+    Detached(T), // Should only be used in offline cases (e.g., deserialization)
 }
 
 impl<T> Debug for CuHandleInner<T>
@@ -185,6 +186,23 @@ impl<U: ElementType + Decode<()> + 'static> Decode<()> for CuHandle<Vec<U>> {
     fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let vec: Vec<U> = Vec::decode(decoder)?;
         Ok(CuHandle(Arc::new(Mutex::new(CuHandleInner::Detached(vec)))))
+    }
+}
+
+impl<A> Schema for CuHandle<A>
+where
+    A: ArrayLike,
+{
+    fn schema() -> HashMap<String, SchemaType> {
+        HashMap::new()
+    }
+
+    fn type_name() -> &'static str {
+        "CuHandle"
+    }
+
+    fn schema_type() -> SchemaType {
+        SchemaType::Custom("CuHandle".to_string())
     }
 }
 

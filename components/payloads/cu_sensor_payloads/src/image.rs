@@ -1,9 +1,11 @@
 use bincode::de::Decoder;
 use bincode::error::DecodeError;
 use bincode::{Decode, Encode};
-use cu29::prelude::{ArrayLike, CuHandle};
+use cu29::prelude::SchemaType;
+use cu29::prelude::{ArrayLike, CuHandle, Schema};
 #[allow(unused_imports)]
 use cu29::{CuError, CuResult};
+use std::collections::HashMap;
 use std::fmt::Debug;
 
 #[cfg(feature = "image")]
@@ -11,7 +13,7 @@ use image::{ImageBuffer, Pixel};
 #[cfg(feature = "kornia")]
 use kornia::image::Image;
 
-#[derive(Default, Debug, Encode, Decode, Clone, Copy)]
+#[derive(Default, Debug, Encode, Decode, Clone, Copy, Schema)]
 pub struct CuImageBufferFormat {
     pub width: u32,
     pub height: u32,
@@ -110,5 +112,57 @@ where
 
         unsafe { Image::from_raw_parts([height, width].into(), raw_pixels.as_ptr(), size) }
             .map_err(|e| CuError::new_with_cause("Could not create a Kornia Image", e))
+    }
+}
+
+// Schema implementation for CuImage<A>
+impl<A> Schema for CuImage<A>
+where
+    A: ArrayLike<Element = u8>,
+{
+    fn schema() -> HashMap<String, SchemaType> {
+        let mut map = HashMap::new();
+        map.insert("seq".to_string(), SchemaType::U64);
+        map.insert("format".to_string(), CuImageBufferFormat::schema_type());
+        map.insert("buffer_handle".to_string(), CuHandle::<A>::schema_type());
+        map
+    }
+
+    fn type_name() -> &'static str {
+        "CuImage"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cuimage_schema() {
+        let schema = CuImage::<Vec<u8>>::schema();
+
+        // Check that all expected fields are present
+        assert!(schema.contains_key("seq"));
+        assert!(schema.contains_key("format"));
+        assert!(schema.contains_key("buffer_handle"));
+
+        // Check field types
+        assert_eq!(schema["seq"], SchemaType::U64);
+        assert_eq!(schema["buffer_handle"], SchemaType::Custom("CuHandle".to_string()));
+
+        // Check type name
+        assert_eq!(CuImage::<Vec<u8>>::type_name(), "CuImage");
+    }
+
+    #[test]
+    fn test_cuhandle_schema() {
+        let schema = CuHandle::<Vec<u8>>::schema();
+
+        // CuHandle schema should be empty (it's a Custom type)
+        assert!(schema.is_empty());
+
+        // Check type name and schema type
+        assert_eq!(CuHandle::<Vec<u8>>::type_name(), "CuHandle");
+        assert_eq!(CuHandle::<Vec<u8>>::schema_type(), SchemaType::Custom("CuHandle".to_string()));
     }
 }
