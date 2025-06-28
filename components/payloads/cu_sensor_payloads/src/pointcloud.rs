@@ -1,8 +1,8 @@
 use bincode::de::{BorrowDecode, BorrowDecoder, Decode, Decoder};
 use bincode::enc::{Encode, Encoder};
 use bincode::error::{DecodeError, EncodeError};
+use cu29::prelude::{Schema, SchemaType};
 use cu29_clock::CuTime;
-use cu29::cutask::{Schema, SchemaType};
 use cu29_soa_derive::Soa;
 use derive_more::{Add, Deref, Div, From, Mul, Sub};
 use std::collections::HashMap;
@@ -123,11 +123,14 @@ impl Decode<()> for PointCloud {
 impl Schema for PointCloud {
     fn schema() -> HashMap<String, SchemaType> {
         let mut map = HashMap::new();
-        map.insert("tov".to_string(), SchemaType::Custom("CuTime".to_string()));
-        map.insert("x".to_string(), SchemaType::Custom("Distance".to_string()));
-        map.insert("y".to_string(), SchemaType::Custom("Distance".to_string()));
-        map.insert("z".to_string(), SchemaType::Custom("Distance".to_string()));
-        map.insert("i".to_string(), SchemaType::Custom("Reflectivity".to_string()));
+
+        // Use CuTime's schema implementation
+        map.insert("tov".to_string(), CuTime::schema_type());
+
+        map.insert("x".to_string(), SchemaType::F32);
+        map.insert("y".to_string(), SchemaType::F32);
+        map.insert("z".to_string(), SchemaType::F32);
+        map.insert("i".to_string(), SchemaType::F32);
         map.insert("return_order".to_string(), SchemaType::U8);
         map
     }
@@ -240,5 +243,33 @@ mod tests {
         let length =
             bincode::encode_into_slice(a, &mut encoded, bincode::config::standard()).unwrap();
         assert_eq!(length, 4);
+    }
+
+    #[test]
+    fn test_pointcloud_schema() {
+        let schema = PointCloud::schema();
+
+        // Check that CuTime is represented as Struct with u64 field
+        match schema.get("tov").unwrap() {
+            SchemaType::Struct { name, fields } => {
+                assert_eq!(name, "CuTime");
+                assert_eq!(fields.get("0").unwrap(), &SchemaType::U64);
+            }
+            _ => panic!("CuTime should be represented as Struct"),
+        }
+
+        // Check that Distance fields are F32
+        assert_eq!(schema.get("x").unwrap(), &SchemaType::F32);
+        assert_eq!(schema.get("y").unwrap(), &SchemaType::F32);
+        assert_eq!(schema.get("z").unwrap(), &SchemaType::F32);
+
+        // Check that Reflectivity is F32
+        assert_eq!(schema.get("i").unwrap(), &SchemaType::F32);
+
+        // Check that return_order is U8
+        assert_eq!(schema.get("return_order").unwrap(), &SchemaType::U8);
+
+        println!("PointCloud schema test passed!");
+        PointCloud::print_schema();
     }
 }

@@ -8,9 +8,11 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::BorrowDecode;
 use bincode::{Decode, Encode};
 use core::ops::{Add, Sub};
+use cu29_schema::{Schema, SchemaType};
 pub use quanta::Instant;
 use quanta::{Clock, Mock};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::convert::Into;
 use std::fmt::{Display, Formatter};
 use std::ops::{AddAssign, Div, Mul, SubAssign};
@@ -202,6 +204,25 @@ impl Display for CuDuration {
             write!(f, "{:.3} µs", nanos as f64 / 1_000.0)
         } else {
             write!(f, "{nanos} ns")
+        }
+    }
+}
+
+impl Schema for CuDuration {
+    fn schema() -> HashMap<String, SchemaType> {
+        let mut map = HashMap::new();
+        map.insert("0".to_string(), SchemaType::U64);
+        map
+    }
+
+    fn type_name() -> &'static str {
+        "CuDuration"
+    }
+
+    fn schema_type() -> SchemaType {
+        SchemaType::Struct {
+            name: Self::type_name().to_string(),
+            fields: Self::schema(),
         }
     }
 }

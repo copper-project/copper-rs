@@ -34,6 +34,7 @@ pub mod prelude {
     pub use cu29_runtime::payload::*;
     pub use cu29_runtime::simulation::*;
     pub use cu29_runtime::*;
+    pub use cu29_schema::*;
     pub use cu29_traits::*;
     pub use cu29_unifiedlog::*;
     pub use cu29_value::to_value;

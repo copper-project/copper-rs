@@ -105,8 +105,8 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
             use cu29::copperlist::CopperList;
             use cu29::cutask::CuMsgMetadata;
             use cu29::cutask::CuMsg;
-            use cu29::cutask::Schema;
-            use cu29::cutask::SchemaType;
+            use cu29::prelude::Schema;
+            use cu29::prelude::SchemaType;
             use std::collections::HashMap;
             #support
         }
@@ -207,10 +207,11 @@ fn type_to_schema_type(ty: &Type) -> proc_macro2::TokenStream {
                     "CuMsg" => {
                         // CuMsg implements Schema, so use the Struct variant for recursive inspection
                         if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
-                            if let Some(syn::GenericArgument::Type(inner_type)) = args.args.first() {
+                            if let Some(syn::GenericArgument::Type(inner_type)) = args.args.first()
+                            {
                                 // For CuMsg<T>, we want to create a Struct that shows the payload and metadata
                                 let inner_schema = type_to_schema_type(inner_type);
-                                return quote! { 
+                                return quote! {
                                     SchemaType::Struct {
                                         name: "CuMsg".to_string(),
                                         fields: {
@@ -236,7 +237,7 @@ fn type_to_schema_type(ty: &Type) -> proc_macro2::TokenStream {
                     }
                     _ => {
                         // For other custom types, try to use Schema if available, otherwise fall back to Custom
-                        quote! { 
+                        quote! {
                             // Try to use Schema::schema_type() if the type implements Schema
                             // This will be resolved at compile time
                             SchemaType::Custom(#type_name.to_string())

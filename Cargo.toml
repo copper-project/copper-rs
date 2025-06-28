@@ -11,6 +11,7 @@ members = [
     "core/cu29_log_derive",
     "core/cu29_log_runtime",
     "core/cu29_runtime",
+    "core/cu29_schema",
     "core/cu29_soa_derive",
     "core/cu29_traits",
     "core/cu29_unifiedlog",
@@ -69,6 +70,7 @@ default-members = [
     "core/cu29_log_derive",
     "core/cu29_log_runtime",
     "core/cu29_runtime",
+    "core/cu29_schema",
     "core/cu29_soa_derive",
     "core/cu29_traits",
     "core/cu29_unifiedlog",
@@ -102,6 +104,7 @@ cu29-log = { path = "core/cu29_log", version = "0.8.0" }
 cu29-log-derive = { path = "core/cu29_log_derive", version = "0.8.0" }
 cu29-log-runtime = { path = "core/cu29_log_runtime", version = "0.8.0" }
 cu29-runtime = { path = "core/cu29_runtime", version = "0.8.0" }
+cu29-schema = { path = "core/cu29_schema", version = "0.8.0" }
 cu29-soa-derive = { path = "core/cu29_soa_derive", version = "0.8.0" }
 cu29-traits = { path = "core/cu29_traits", version = "0.8.0" }
 cu29-unifiedlog = { path = "core/cu29_unifiedlog", version = "0.8.0" }

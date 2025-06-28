@@ -8,7 +8,7 @@ use crate::MspPacketDirection::{FromFlightController, ToFlightController};
 use crate::{MspPacket, MspPacketData};
 #[cfg(feature = "bincode")]
 use bincode::{Decode, Encode};
-use cu29::cutask::{Schema, SchemaType};
+use cu29::prelude::{Schema, SchemaType};
 use packed_struct::{PackedStruct, PackedStructSlice, PackingError, PrimitiveEnum};
 use smallvec::SmallVec;
 
@@ -1360,7 +1360,10 @@ impl Schema for MspResponse {
         // MspResponse is an enum with many variants, each containing different data structures
         let mut map = std::collections::HashMap::new();
         map.insert("variant".to_string(), SchemaType::String);
-        map.insert("data".to_string(), SchemaType::Custom("MspResponseData".to_string()));
+        map.insert(
+            "data".to_string(),
+            SchemaType::Custom("MspResponseData".to_string()),
+        );
         map
     }
 
