@@ -3,10 +3,11 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29::prelude::*;
+use serde::Serialize;
 use std::marker::PhantomData;
 
 /// Output of the PID controller.
-#[derive(Debug, Default, Clone, Encode, Decode)]
+#[derive(Debug, Default, Clone, Encode, Decode, Serialize)]
 pub struct PIDControlOutputPayload {
     /// Proportional term
     pub p: f32,

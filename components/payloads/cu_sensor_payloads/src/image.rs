@@ -10,8 +10,10 @@ use std::fmt::Debug;
 use image::{ImageBuffer, Pixel};
 #[cfg(feature = "kornia")]
 use kornia::image::Image;
+use serde::ser::SerializeStruct;
+use serde::{Serialize, Serializer};
 
-#[derive(Default, Debug, Encode, Decode, Clone, Copy)]
+#[derive(Default, Debug, Encode, Decode, Clone, Copy, Serialize)]
 pub struct CuImageBufferFormat {
     pub width: u32,
     pub height: u32,
@@ -47,6 +49,25 @@ impl Decode<()> for CuImage<Vec<u8>> {
             format,
             buffer_handle,
         })
+    }
+}
+
+impl<A> Serialize for CuImage<A>
+where
+    A: ArrayLike<Element = u8>,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut struct_ = serializer.serialize_struct("CuImage", 3)?;
+        struct_.serialize_field("seq", &self.seq)?;
+        struct_.serialize_field("format", &self.format)?;
+        // Use empty Vec as placeholder for buffer_handle to keep it opaque
+        let placeholder_buffer: Vec<u8> = Vec::new();
+        struct_.serialize_field("handle", &placeholder_buffer)?;
+        struct_.end()
     }
 }
 

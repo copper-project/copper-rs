@@ -7,9 +7,11 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::BorrowDecode;
 use bincode::{Decode, Encode};
+use serde_derive::{Deserialize, Serialize};
+
 
 /// Copper friendly wrapper for a fixed size array.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct CuArray<T, const N: usize> {
     inner: ArrayVec<T, N>,
 }
