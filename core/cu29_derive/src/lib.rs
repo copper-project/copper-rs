@@ -1722,7 +1722,7 @@ fn build_culist_tuple_schema(all_msgs_types_in_culist_order: &[Type]) -> ItemImp
         .iter()
         .enumerate()
         .map(|(i, _)| {
-            let field_name = format!("field_{}", i);
+            let field_name = format!("field_{i}");
             let msg_type = &all_msgs_types_in_culist_order[i];
             let schema_type = type_to_schema_type(&parse_quote! { CuMsg<#msg_type> });
             quote! {
