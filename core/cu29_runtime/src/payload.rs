@@ -10,7 +10,6 @@ use bincode::{Decode, Encode};
 use cu29_schema::{Schema, SchemaIndex, SchemaType};
 use indexmap::IndexMap;
 
-
 /// Copper friendly wrapper for a fixed size array.
 #[derive(Clone, Debug, Default)]
 pub struct CuArray<T, const N: usize> {
