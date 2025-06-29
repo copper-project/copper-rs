@@ -38,9 +38,9 @@ pub struct LogReaderCli {
 #[derive(Subcommand)]
 pub enum Command {
     /// Extract logs
-    ExtractLog { log_index: PathBuf },
+    ExtractTextLog { log_index: PathBuf },
     /// Extract copperlists
-    ExtractCopperlist {
+    ExtractCopperlists {
         #[arg(short, long, default_value_t = ExportFormat::Json)]
         export_format: ExportFormat,
     },
@@ -64,16 +64,26 @@ where
     };
 
     match args.command {
-        Command::ExtractLog { log_index } => {
+        Command::ExtractTextLog { log_index } => {
             let reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::StructuredLogLine);
             textlog_dump(reader, &log_index)?;
         }
-        Command::ExtractCopperlist { export_format } => {
+        Command::ExtractCopperlists { export_format } => {
             println!("Extracting copperlists with format: {export_format}");
             let mut reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
             let iter = copperlists_dump::<P>(&mut reader);
-            for entry in iter {
-                println!("{entry:#?}");
+
+            match export_format {
+                ExportFormat::Json => {
+                    for entry in iter {
+                        serde_json::to_writer_pretty(std::io::stdout(), &entry).unwrap();
+                    }
+                }
+                ExportFormat::Csv => {
+                    for entry in iter {
+                        todo!()
+                    }
+                }
             }
         }
     }

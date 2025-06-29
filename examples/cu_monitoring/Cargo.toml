@@ -14,3 +14,6 @@ repository.workspace = true
 cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
 tempfile = { workspace = true }
+serde = { workspace = true }
+
+

@@ -77,7 +77,7 @@ pub enum UnifiedLogType {
 }
 
 /// A CopperListTuple needs to be encodable, decodable and fixed size in memory.
-pub trait CopperListTuple: bincode::Encode + bincode::Decode<()> + Debug {} // Decode is Sized
+pub trait CopperListTuple: bincode::Encode + bincode::Decode<()> + Debug + Serialize {} // Decode is Sized
 
 // Also anything that follows this contract can be a payload (blanket implementation)
-impl<T> CopperListTuple for T where T: bincode::Encode + bincode::Decode<()> + Debug {} // Decode is Sized
+impl<T> CopperListTuple for T where T: bincode::Encode + bincode::Decode<()> + Debug + Serialize {} // Decode is Sized

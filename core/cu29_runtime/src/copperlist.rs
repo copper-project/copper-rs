@@ -43,7 +43,7 @@ impl Display for CopperListState {
     }
 }
 
-#[derive(Debug, Encode, Decode)]
+#[derive(Debug, Encode, Decode, Serialize)]
 pub struct CopperList<P: CopperListTuple> {
     pub id: u32,
     state: CopperListState,
@@ -247,6 +247,7 @@ impl<P: CopperListTuple, const N: usize> CuListsManager<P, N> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde::{Serialize, Serializer};
 
     #[test]
     fn empty_queue() {
@@ -358,9 +359,22 @@ mod tests {
         assert!(iter.next().is_none());
     }
 
+    #[derive(Decode, Encode, Debug, PartialEq, Clone, Copy)]
+    struct TestStruct {
+        content: [u8; 10_000_000],
+    }
+
+    impl Serialize for TestStruct {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            serializer.serialize_i8(0)
+        }
+    }
     #[test]
     fn be_sure_we_wont_stackoverflow_at_init() {
-        let _ = CuListsManager::<[u8; 10_000_000], 3>::new();
+        let _ = CuListsManager::<TestStruct, 3>::new();
     }
 
     #[test]
