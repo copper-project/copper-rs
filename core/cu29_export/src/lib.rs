@@ -80,7 +80,7 @@ where
                     }
                 }
                 ExportFormat::Csv => {
-                    for entry in iter {
+                    for _entry in iter {
                         todo!()
                     }
                 }
