@@ -9,7 +9,6 @@ use bincode::BorrowDecode;
 use bincode::{Decode, Encode};
 use serde_derive::{Deserialize, Serialize};
 
-
 /// Copper friendly wrapper for a fixed size array.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct CuArray<T, const N: usize> {
