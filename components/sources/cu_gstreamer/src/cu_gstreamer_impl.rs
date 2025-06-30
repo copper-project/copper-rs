@@ -8,12 +8,13 @@ use bincode::{Decode, Encode};
 use circular_buffer::CircularBuffer;
 use gstreamer::{parse, Buffer, BufferRef, Caps, FlowSuccess, Pipeline};
 use gstreamer_app::{AppSink, AppSinkCallbacks};
+use serde::Serialize;
 use std::fmt::Debug;
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct CuGstBuffer(pub Buffer);
 
 impl Deref for CuGstBuffer {
