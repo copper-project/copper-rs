@@ -105,7 +105,8 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
             use cu29::copperlist::CopperList;
             use cu29::cutask::CuMsgMetadata;
             use cu29::cutask::CuMsg;
-            use cu29::cutask::ErasedCuMsg;
+            use cu29::prelude::ErasedCuMsg;
+            use cu29::prelude::ErasedCuMsgs;
             use cu29::prelude::Serialize;
             #support
         }

@@ -77,7 +77,6 @@ pub enum UnifiedLogType {
 }
 
 pub trait ErasedCuMsg {
-    // fn get_metadata(&self) -> &CuMsgMetadata;
     fn erased_payload(&self) -> Option<&dyn erased_serde::Serialize>;
 }
 

@@ -80,8 +80,12 @@ where
                     }
                 }
                 ExportFormat::Csv => {
-                    for _entry in iter {
-                        todo!()
+                    for entry in iter {
+                        for msg in entry.erased_cumsgs() {
+                            if let Some(msg) = msg.erased_payload() {
+                                serde_json::to_writer_pretty(std::io::stdout(), msg).unwrap();
+                            }
+                        }
                     }
                 }
             }
