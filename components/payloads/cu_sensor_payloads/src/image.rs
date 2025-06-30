@@ -10,7 +10,6 @@ use std::fmt::Debug;
 use image::{ImageBuffer, Pixel};
 #[cfg(feature = "kornia")]
 use kornia::image::Image;
-use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
 
 #[derive(Default, Debug, Encode, Decode, Clone, Copy, Serialize)]
