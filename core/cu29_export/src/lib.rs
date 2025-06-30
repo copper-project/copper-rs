@@ -345,7 +345,7 @@ mod python {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bincode::encode_into_slice;
+    use bincode::{encode_into_slice, Decode, Encode};
     use fs_extra::dir::{copy, CopyOptions};
     use std::io::Cursor;
     use std::sync::{Arc, Mutex};
@@ -425,27 +425,39 @@ mod tests {
     }
 
     // This is normally generated at compile time in CuPayload.
-    type MyCuPayload = (u8, i32, f32);
+    #[derive(Debug, PartialEq, Clone, Copy, Serialize, Encode, Decode)]
+    struct MyMsgs((u8, i32, f32));
+
+    impl ErasedCuMsgs for MyMsgs {
+        fn erased_cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
+            Vec::new()
+        }
+    }
 
     /// Checks if we can recover the copper lists from a binary representation.
     #[test]
     fn test_copperlists_dump() {
         let mut data = vec![0u8; 10000];
-        let mypls: [MyCuPayload; 4] = [(1, 2, 3.0), (2, 3, 4.0), (3, 4, 5.0), (4, 5, 6.0)];
+        let mypls: [MyMsgs; 4] = [
+            MyMsgs((1, 2, 3.0)),
+            MyMsgs((2, 3, 4.0)),
+            MyMsgs((3, 4, 5.0)),
+            MyMsgs((4, 5, 6.0)),
+        ];
 
         let mut offset: usize = 0;
         for pl in mypls.iter() {
-            let cl = CopperList::<MyCuPayload>::new(1, *pl);
+            let cl = CopperList::<MyMsgs>::new(1, *pl);
             offset +=
                 encode_into_slice(&cl, &mut data.as_mut_slice()[offset..], standard()).unwrap();
         }
 
         let reader = Cursor::new(data);
 
-        let mut iter = copperlists_dump::<MyCuPayload>(reader);
-        assert_eq!(iter.next().unwrap().msgs, (1, 2, 3.0));
-        assert_eq!(iter.next().unwrap().msgs, (2, 3, 4.0));
-        assert_eq!(iter.next().unwrap().msgs, (3, 4, 5.0));
-        assert_eq!(iter.next().unwrap().msgs, (4, 5, 6.0));
+        let mut iter = copperlists_dump::<MyMsgs>(reader);
+        assert_eq!(iter.next().unwrap().msgs, MyMsgs((1, 2, 3.0)));
+        assert_eq!(iter.next().unwrap().msgs, MyMsgs((2, 3, 4.0)));
+        assert_eq!(iter.next().unwrap().msgs, MyMsgs((3, 4, 5.0)));
+        assert_eq!(iter.next().unwrap().msgs, MyMsgs((4, 5, 6.0)));
     }
 }
