@@ -1,3 +1,5 @@
+use crate::cached_path::progress_bar::ProgressBar;
+use crate::cached_path::{Cache, Error as CacheError};
 use avian3d::prelude::*;
 use bevy::core_pipeline::fxaa::Fxaa;
 use bevy::core_pipeline::Skybox;
@@ -7,10 +9,10 @@ use bevy::input::{
 };
 use bevy::pbr::{DefaultOpaqueRendererMethod, ScreenSpaceReflections};
 use bevy::prelude::*;
-use cached_path::{Cache, Error as CacheError, ProgressBar};
 #[cfg(feature = "perf-ui")]
 use iyes_perf_ui::prelude::{PerfUiAllEntries, PerfUiPlugin};
-use std::path::{Path, PathBuf}; // Import PathBuf
+use std::path::{Path, PathBuf};
+// Import PathBuf
 
 use std::{fs, io};
 

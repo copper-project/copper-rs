@@ -16,7 +16,8 @@ ignored = ["cu-consolemon", "cu29-log", "cu29-log-runtime", "cu29-unifiedlog", "
 
 [dependencies]
 # Core dependencies
-cu29 = { workspace = true, features = ["macro_debug"]}
+# cu29 = { workspace = true, features = ["macro_debug"]}
+cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
 cu-ads7883-new = { path = "../../components/sources/cu_ads7883", version = "0.8.0" }
 cu-rp-sn754410-new = { path = "../../components/sinks/cu_rp_sn754410", version = "0.8.0" }
@@ -32,14 +33,36 @@ cu29-export = { workspace = true, optional = true }
 bevy = { version = "0.16.0", default-features = false, features = ["x11", "wayland", "default_font", "bevy_render", "bevy_window", "bevy_core_pipeline", "bevy_pbr", "bevy_scene", "bevy_sprite", "bevy_gltf", "animation", "bevy_picking", "bevy_mesh_picking_backend", "tonemapping_luts", "bevy_ui", "ktx2", "jpeg", "png"], optional = true }
 avian3d = { version = "0.3.0", default-features = false, features = ["bevy_scene", "collider-from-mesh", "debug-plugin", "parallel", "f32", "3d", "parry-f32"], optional = true }
 iyes_perf_ui = { version = "0.5.0", optional = true }
-cached-path = { version = "0.8.0-1", path="rust-cached-path", optional = true }  # Vendored in because upstream is not responsive to fix
+
+# Vendored cached-path bullshit because they broke us
+indicatif = "0.17.11" ## gbin: this is the non fixed issue
+fs2 = "0.4"
+reqwest = { version = "0.11.0", default-features = false, features = [
+    "blocking", "default-tls"
+] }
+sha2 = "0.10"
+tempfile = "3.1"
+log = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rand = "0.8"
+glob = "0.3"
+thiserror = "1.0"
+flate2 = "1.0"
+tar = "0.4"
+zip = "0.6"
+env_logger = { version = "0.10", optional = true }
+structopt = { version = "0.3", optional = true }
+color-eyre = { version = "0.6", optional = true }
+infer = "0.19.0"
+lzma-rs = { version = "0.3", optional = true }
 
 [features]
 default = ["logreader", "sim"]
 # generates an executable to read the logs
 logreader = ["dep:cu29-export"]
 # dependencies to build to matrix for copper
-sim = ["dep:bevy", "dep:avian3d", "dep:cached-path", "dep:cu29-export"] # required for exporting simulation data
+sim = ["dep:bevy", "dep:avian3d", "dep:cu29-export"] # required for exporting simulation data
 perf-ui = ["dep:iyes_perf_ui"]
 
 [[bin]]

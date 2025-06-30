@@ -1,3 +1,4 @@
+mod cached_path;
 pub mod tasks;
 mod world;
 

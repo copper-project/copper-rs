@@ -61,8 +61,8 @@
         (src: "railpos_pid", dst: "merge_pids", msg:"cu_pid::PIDControlOutputPayload"),
         (src: "merge_pids", dst: "motor", msg:"cu_rp_sn754410_new::MotorPayload"),
     ],
-    monitor: (
-         type: "cu_consolemon::CuConsoleMon",
-    )
+   // monitor: (
+    //      type: "cu_consolemon::CuConsoleMon",
+    // )
 )
 
