@@ -253,7 +253,7 @@ impl<P: CopperListTuple, const N: usize> CuListsManager<P, N> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cu29_traits::{ErasedCuMsg, ErasedCuMsgs};
+    use cu29_traits::{ErasedCuMsg, ErasedCuMsgs, MatchingTasks};
     use serde::{Serialize, Serializer};
 
     #[derive(Debug, Encode, Decode, PartialEq, Clone, Copy, Serialize)]
@@ -262,6 +262,12 @@ mod tests {
     impl ErasedCuMsgs for CuMsgs {
         fn erased_cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
             Vec::new()
+        }
+    }
+
+    impl MatchingTasks for CuMsgs {
+        fn get_all_task_ids() -> &'static [&'static str] {
+            &[]
         }
     }
 
@@ -431,6 +437,13 @@ mod tests {
             serializer.serialize_i8(0)
         }
     }
+
+    impl MatchingTasks for TestStruct {
+        fn get_all_task_ids() -> &'static [&'static str] {
+            &[]
+        }
+    }
+
     #[test]
     fn be_sure_we_wont_stackoverflow_at_init() {
         let _ = CuListsManager::<TestStruct, 3>::new();

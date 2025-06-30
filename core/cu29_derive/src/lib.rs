@@ -107,6 +107,7 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
             use cu29::cutask::CuMsg;
             use cu29::prelude::ErasedCuMsg;
             use cu29::prelude::ErasedCuMsgs;
+            use cu29::prelude::MatchingTasks;
             use cu29::prelude::Serialize;
             #support
         }
@@ -189,6 +190,13 @@ fn gen_culist_support(
             #[allow(dead_code)]
             fn get_tuple_mut(&mut self) -> &mut #msgs_types_tuple {
                 &mut self.0
+            }
+        }
+
+        impl MatchingTasks for CuMsgs {
+            #[allow(dead_code)]
+            fn get_all_task_ids() -> &'static [&'static str] {
+                &[#(#all_tasks_as_struct_member_name),*]
             }
         }
 

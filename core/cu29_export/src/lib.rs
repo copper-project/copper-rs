@@ -80,12 +80,31 @@ where
                     }
                 }
                 ExportFormat::Csv => {
+                    let mut first = true;
+                    for origin in P::get_all_task_ids() {
+                        if !first {
+                            print!(", ");
+                        } else {
+                            print!("id, ");
+                        }
+                        print!("{origin}");
+                        first = false;
+                    }
+                    println!();
                     for entry in iter {
+                        let mut first = true;
                         for msg in entry.erased_cumsgs() {
                             if let Some(msg) = msg.erased_payload() {
-                                serde_json::to_writer_pretty(std::io::stdout(), msg).unwrap();
+                                if !first {
+                                    print!(", ");
+                                } else {
+                                    print!("{}, ", entry.id);
+                                }
+                                serde_json::to_writer(std::io::stdout(), msg).unwrap(); // TODO: escape for CSV
+                                first = false;
                             }
                         }
+                        println!();
                     }
                 }
             }
@@ -435,6 +454,12 @@ mod tests {
     impl ErasedCuMsgs for MyMsgs {
         fn erased_cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
             Vec::new()
+        }
+    }
+
+    impl MatchingTasks for MyMsgs {
+        fn get_all_task_ids() -> &'static [&'static str] {
+            &[]
         }
     }
 

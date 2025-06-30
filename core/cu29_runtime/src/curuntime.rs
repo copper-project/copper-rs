@@ -582,7 +582,7 @@ mod tests {
     use crate::cutask::{CuSrcTask, Freezable};
     use crate::monitoring::NoMonitor;
     use bincode::Encode;
-    use cu29_traits::{ErasedCuMsg, ErasedCuMsgs};
+    use cu29_traits::{ErasedCuMsg, ErasedCuMsgs, MatchingTasks};
     use serde_derive::Serialize;
 
     pub struct TestSource {}
@@ -631,6 +631,12 @@ mod tests {
     impl ErasedCuMsgs for Msgs {
         fn erased_cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
             Vec::new()
+        }
+    }
+
+    impl MatchingTasks for Msgs {
+        fn get_all_task_ids() -> &'static [&'static str] {
+            &[]
         }
     }
 
