@@ -14,8 +14,21 @@ use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default)]
 pub struct CuGstBuffer(pub Buffer);
+
+impl Serialize for CuGstBuffer {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let Self(r) = self;
+        r.as_ref()
+            .map_readable()
+            .map_err(|_| serde::ser::Error::custom("Could not map readable"))?
+            .serialize(serializer)
+    }
+}
 
 impl Deref for CuGstBuffer {
     type Target = Buffer;
