@@ -16,7 +16,8 @@ ignored = ["cu-consolemon", "cu29-log", "cu29-log-runtime", "cu29-unifiedlog", "
 
 [dependencies]
 # Core dependencies
-cu29 = { workspace = true, features = ["macro_debug"] }
+# cu29 = { workspace = true, features = ["macro_debug"] }
+cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
 serde = { workspace = true }
 cu-ads7883-new = { path = "../../components/sources/cu_ads7883", version = "0.8.0" }

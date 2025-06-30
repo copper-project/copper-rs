@@ -139,7 +139,7 @@ mod tests {
         );
 
         let json = json_result.unwrap();
-        println!("Serialized XyzSoa: {}", json);
+        println!("Serialized XyzSoa: {json}");
 
         // Verify the JSON contains expected fields
         assert!(json.contains("\"len\":"));
@@ -169,7 +169,7 @@ mod tests {
         );
 
         let color_json = color_json_result.unwrap();
-        println!("Serialized ColorSoa: {}", color_json);
+        println!("Serialized ColorSoa: {color_json}");
 
         // Verify the JSON contains expected fields
         assert!(color_json.contains("\"len\":"));
