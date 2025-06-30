@@ -10,7 +10,7 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::BorrowDecode;
 use compact_str::{CompactString, ToCompactString};
 use cu29_clock::{PartialCuTimeRange, RobotClock, Tov};
-use cu29_traits::CuResult;
+use cu29_traits::{CuResult, ErasedCuMsg};
 use serde::Serialize;
 use serde_derive::Deserialize;
 use std::fmt;
@@ -171,6 +171,21 @@ where
 
     pub fn payload_mut(&mut self) -> &mut Option<T> {
         &mut self.payload
+    }
+}
+
+impl<T> ErasedCuMsg for CuMsg<T>
+where
+    T: CuMsgPayload,
+{
+    // fn get_metadata(&self) -> &CuMsgMetadata {
+    //     &self.metadata
+    // }
+
+    fn erased_payload(&self) -> Option<&dyn erased_serde::Serialize> {
+        self.payload
+            .as_ref()
+            .map(|p| p as &dyn erased_serde::Serialize)
     }
 }
 

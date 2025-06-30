@@ -105,6 +105,7 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
             use cu29::copperlist::CopperList;
             use cu29::cutask::CuMsgMetadata;
             use cu29::cutask::CuMsg;
+            use cu29::cutask::ErasedCuMsg;
             use cu29::prelude::Serialize;
             #support
         }
@@ -145,6 +146,8 @@ fn gen_culist_support(
     #[cfg(feature = "macro_debug")]
     eprintln!("[build the copperlist tuple serialize support]");
     let msgs_types_tuple_serialize = build_culist_tuple_serialize(&all_msgs_types_in_culist_order);
+
+    let erasedmsg_trait_impl = build_culist_erasedcumsgs(&all_msgs_types_in_culist_order);
 
     let collect_metadata_function = quote! {
         pub fn collect_metadata<'a>(culist: &'a CuList) -> [&'a CuMsgMetadata; #culist_size] {
@@ -197,6 +200,9 @@ fn gen_culist_support(
 
         // Adds the serialize support
         #msgs_types_tuple_serialize
+
+        // Adds the type erased CuMsgs support (to help generic serialized conversions)
+        #erasedmsg_trait_impl
     }
 }
 
@@ -1572,6 +1578,26 @@ fn build_culist_tuple_decode(all_msgs_types_in_culist_order: &[Type]) -> ItemImp
                 Ok(CuMsgs ((
                     #(#decode_fields),*
                 )))
+            }
+        }
+    }
+}
+
+fn build_culist_erasedcumsgs(all_msgs_types_in_culist_order: &[Type]) -> ItemImpl {
+    let indices: Vec<usize> = (0..all_msgs_types_in_culist_order.len()).collect();
+    let casted_fields: Vec<_> = indices
+        .iter()
+        .map(|i| {
+            let idx = syn::Index::from(*i);
+            quote! { &self.0.#idx as &dyn ErasedCuMsg }
+        })
+        .collect();
+    parse_quote! {
+        impl ErasedCuMsgs for CuMsgs {
+            fn erased_cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
+                vec![
+                    #(#casted_fields),*
+                ]
             }
         }
     }
