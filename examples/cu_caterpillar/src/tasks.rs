@@ -6,7 +6,7 @@ use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, CuTask, Freezable};
 use cu29::prelude::Tov;
-use cu29::{input_msg, output_msg, CuResult, ErasedCuMsg};
+use cu29::{input_msg, output_msg, CuResult};
 use cu_rp_gpio::RPGpioPayload;
 
 #[derive(Default)]
