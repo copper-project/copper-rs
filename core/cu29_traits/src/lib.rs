@@ -82,7 +82,7 @@ pub enum UnifiedLogType {
 }
 
 /// Key metadata piece attached to every message in Copper.
-pub trait CuMsgMetadata {
+pub trait CuMsgMetadataTrait {
     /// The time range used for the processing of this message
     fn process_time(&self) -> PartialCuTimeRange;
 
@@ -97,7 +97,7 @@ pub trait CuMsgMetadata {
 
 /// A generic trait to expose the generated CuMsgs from the task graph.
 pub trait ErasedCuMsg {
-    fn metadata(&self) -> &dyn CuMsgMetadata;
+    fn metadata(&self) -> &dyn CuMsgMetadataTrait;
     fn payload(&self) -> Option<&dyn erased_serde::Serialize>;
 }
 

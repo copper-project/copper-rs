@@ -80,7 +80,7 @@ impl CuMsgMetadata {
     }
 }
 
-impl cu29_traits::CuMsgMetadata for CuMsgMetadata {
+impl cu29_traits::CuMsgMetadataTrait for CuMsgMetadata {
     fn process_time(&self) -> PartialCuTimeRange {
         self.process_time
     }
@@ -158,7 +158,7 @@ impl<T> ErasedCuMsg for CuMsg<T>
 where
     T: CuMsgPayload,
 {
-    fn metadata(&self) -> &dyn cu29_traits::CuMsgMetadata {
+    fn metadata(&self) -> &dyn cu29_traits::CuMsgMetadataTrait {
         &self.metadata
     }
 
