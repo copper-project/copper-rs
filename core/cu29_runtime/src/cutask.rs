@@ -2,15 +2,12 @@
 //! or interact with to create a Copper task.
 
 use crate::config::ComponentConfig;
-use bincode::de::Decoder;
-use bincode::de::{BorrowDecoder, Decode};
-use bincode::enc::Encode;
-use bincode::enc::Encoder;
+use bincode::de::{Decode, Decoder};
+use bincode::enc::{Encode, Encoder};
 use bincode::error::{DecodeError, EncodeError};
-use bincode::BorrowDecode;
 use compact_str::{CompactString, ToCompactString};
 use cu29_clock::{PartialCuTimeRange, RobotClock, Tov};
-use cu29_traits::{CuResult, ErasedCuMsg};
+use cu29_traits::{CuCompactString, CuResult, ErasedCuMsg, COMPACT_STRING_CAPACITY};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
@@ -64,36 +61,6 @@ macro_rules! output_msg {
     };
 }
 
-// MAX_SIZE from their repr module is not accessible so we need to copy paste their definition for 24
-// which is the maximum size for inline allocation (no heap)
-const COMPACT_STRING_CAPACITY: usize = size_of::<String>();
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
-pub struct CuCompactString(pub CompactString);
-
-impl Encode for CuCompactString {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        let CuCompactString(ref compact_string) = self;
-        let bytes = compact_string.as_bytes();
-        bytes.encode(encoder)
-    }
-}
-
-impl<Context> Decode<Context> for CuCompactString {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let bytes = <Vec<u8> as Decode<D::Context>>::decode(decoder)?; // Decode into a byte buffer
-        let compact_string =
-            CompactString::from_utf8(bytes).map_err(|e| DecodeError::Utf8 { inner: e })?;
-        Ok(CuCompactString(compact_string))
-    }
-}
-
-impl<'de, Context> BorrowDecode<'de, Context> for CuCompactString {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        CuCompactString::decode(decoder)
-    }
-}
-
 /// CuMsgMetadata is a structure that contains metadata common to all CuMsgs.
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode, Serialize, Deserialize)]
 pub struct CuMsgMetadata {
@@ -110,6 +77,20 @@ pub struct CuMsgMetadata {
 impl CuMsgMetadata {
     pub fn set_status(&mut self, status: impl ToCompactString) {
         self.status_txt = CuCompactString(status.to_compact_string());
+    }
+}
+
+impl cu29_traits::CuMsgMetadata for CuMsgMetadata {
+    fn process_time(&self) -> PartialCuTimeRange {
+        self.process_time
+    }
+
+    fn tov(&self) -> Tov {
+        self.tov
+    }
+
+    fn status_txt(&self) -> &CuCompactString {
+        &self.status_txt
     }
 }
 
@@ -177,11 +158,11 @@ impl<T> ErasedCuMsg for CuMsg<T>
 where
     T: CuMsgPayload,
 {
-    // fn get_metadata(&self) -> &CuMsgMetadata {
-    //     &self.metadata
-    // }
+    fn metadata(&self) -> &dyn cu29_traits::CuMsgMetadata {
+        &self.metadata
+    }
 
-    fn erased_payload(&self) -> Option<&dyn erased_serde::Serialize> {
+    fn payload(&self) -> Option<&dyn erased_serde::Serialize> {
         self.payload
             .as_ref()
             .map(|p| p as &dyn erased_serde::Serialize)

@@ -629,7 +629,7 @@ mod tests {
     struct Msgs(());
 
     impl ErasedCuMsgs for Msgs {
-        fn erased_cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
+        fn cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
             Vec::new()
         }
     }

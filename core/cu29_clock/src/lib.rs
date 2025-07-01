@@ -306,6 +306,22 @@ pub struct PartialCuTimeRange {
     pub end: OptionCuTime,
 }
 
+impl Display for PartialCuTimeRange {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let start = if self.start.is_none() {
+            "…"
+        } else {
+            &format!("{}", self.start)
+        };
+        let end = if self.end.is_none() {
+            "…"
+        } else {
+            &format!("{}", self.end)
+        };
+        write!(f, "[{start} – {end}]")
+    }
+}
+
 /// The time of validity of a message can be more than one time but can be a time range of Tovs.
 /// For example a sub scan for a lidar, a set of images etc... can have a range of validity.
 #[derive(Default, Clone, Debug, PartialEq, Encode, Decode, Serialize, Deserialize, Copy)]
@@ -314,6 +330,16 @@ pub enum Tov {
     None,
     Time(CuTime),
     Range(CuTimeRange),
+}
+
+impl Display for Tov {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Tov::None => write!(f, "None"),
+            Tov::Time(t) => write!(f, "{t}"),
+            Tov::Range(r) => write!(f, "[{} – {}]", r.start, r.end),
+        }
+    }
 }
 
 impl From<Option<CuDuration>> for Tov {
