@@ -136,6 +136,7 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
     }
 
     let soa_struct_name_iterator = format_ident!("{}Iterator", name);
+    let field_count = field_names.len() + 1; // +1 for the len field
 
     let iterator = quote! {
         pub struct #soa_struct_name_iterator<'a, const N: usize> {
@@ -173,6 +174,9 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
             use bincode::enc::Encoder;
             use bincode::de::Decoder;
             use bincode::error::{DecodeError, EncodeError};
+            use serde::Serialize;
+            use serde::Serializer;
+            use serde::ser::SerializeStruct;
             use std::ops::{Index, IndexMut};
             #( use super::#unique_imports; )*
             use core::array::from_fn;
@@ -309,6 +313,25 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                         #( #field_names: self.#field_names.clone(), )*
                         len: self.len,
                     }
+                }
+            }
+
+            impl<const N: usize> Serialize for #soa_struct_name<N>
+            where
+                #(
+                    #field_types: Serialize,
+                )*
+            {
+                fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+                where
+                    S: Serializer,
+                {
+                    let mut state = serializer.serialize_struct(stringify!(#soa_struct_name), #field_count)?;
+                    state.serialize_field("len", &self.len)?;
+                    #(
+                        state.serialize_field(stringify!(#field_names), &self.#field_names[..self.len])?;
+                    )*
+                    state.end()
                 }
             }
 

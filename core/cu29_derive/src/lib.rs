@@ -105,6 +105,10 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
             use cu29::copperlist::CopperList;
             use cu29::cutask::CuMsgMetadata;
             use cu29::cutask::CuMsg;
+            use cu29::prelude::ErasedCuMsg;
+            use cu29::prelude::ErasedCuMsgs;
+            use cu29::prelude::MatchingTasks;
+            use cu29::prelude::Serialize;
             #support
         }
         use cumsgs::CuMsgs;
@@ -140,6 +144,12 @@ fn gen_culist_support(
     #[cfg(feature = "macro_debug")]
     eprintln!("[build the copperlist tuple debug support]");
     let msgs_types_tuple_debug = build_culist_tuple_debug(&all_msgs_types_in_culist_order);
+
+    #[cfg(feature = "macro_debug")]
+    eprintln!("[build the copperlist tuple serialize support]");
+    let msgs_types_tuple_serialize = build_culist_tuple_serialize(&all_msgs_types_in_culist_order);
+
+    let erasedmsg_trait_impl = build_culist_erasedcumsgs(&all_msgs_types_in_culist_order);
 
     let collect_metadata_function = quote! {
         pub fn collect_metadata<'a>(culist: &'a CuList) -> [&'a CuMsgMetadata; #culist_size] {
@@ -183,12 +193,25 @@ fn gen_culist_support(
             }
         }
 
+        impl MatchingTasks for CuMsgs {
+            #[allow(dead_code)]
+            fn get_all_task_ids() -> &'static [&'static str] {
+                &[#(#all_tasks_as_struct_member_name),*]
+            }
+        }
+
         // Adds the bincode support for the copper list tuple
         #msgs_types_tuple_encode
         #msgs_types_tuple_decode
 
         // Adds the debug support
         #msgs_types_tuple_debug
+
+        // Adds the serialize support
+        #msgs_types_tuple_serialize
+
+        // Adds the type erased CuMsgs support (to help generic serialized conversions)
+        #erasedmsg_trait_impl
     }
 }
 
@@ -1569,6 +1592,26 @@ fn build_culist_tuple_decode(all_msgs_types_in_culist_order: &[Type]) -> ItemImp
     }
 }
 
+fn build_culist_erasedcumsgs(all_msgs_types_in_culist_order: &[Type]) -> ItemImpl {
+    let indices: Vec<usize> = (0..all_msgs_types_in_culist_order.len()).collect();
+    let casted_fields: Vec<_> = indices
+        .iter()
+        .map(|i| {
+            let idx = syn::Index::from(*i);
+            quote! { &self.0.#idx as &dyn ErasedCuMsg }
+        })
+        .collect();
+    parse_quote! {
+        impl ErasedCuMsgs for CuMsgs {
+            fn erased_cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
+                vec![
+                    #(#casted_fields),*
+                ]
+            }
+        }
+    }
+}
+
 fn build_culist_tuple_debug(all_msgs_types_in_culist_order: &[Type]) -> ItemImpl {
     let indices: Vec<usize> = (0..all_msgs_types_in_culist_order.len()).collect();
 
@@ -1586,6 +1629,35 @@ fn build_culist_tuple_debug(all_msgs_types_in_culist_order: &[Type]) -> ItemImpl
                 f.debug_tuple("CuMsgs")
                     #(#debug_fields)*
                     .finish()
+            }
+        }
+    }
+}
+
+/// This is the serde serialization part of the CuMsgs
+fn build_culist_tuple_serialize(all_msgs_types_in_culist_order: &[Type]) -> ItemImpl {
+    let indices: Vec<usize> = (0..all_msgs_types_in_culist_order.len()).collect();
+    let tuple_len = all_msgs_types_in_culist_order.len();
+
+    // Generate the serialization for each tuple field
+    let serialize_fields: Vec<_> = indices
+        .iter()
+        .map(|i| {
+            let idx = syn::Index::from(*i);
+            quote! { &self.0.#idx }
+        })
+        .collect();
+
+    parse_quote! {
+        impl Serialize for CuMsgs {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                use serde::ser::SerializeTuple;
+                let mut tuple = serializer.serialize_tuple(#tuple_len)?;
+                #(tuple.serialize_element(#serialize_fields)?;)*
+                tuple.end()
             }
         }
     }

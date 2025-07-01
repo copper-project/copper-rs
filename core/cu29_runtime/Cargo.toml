@@ -19,6 +19,7 @@ path = "src/rendercfg.rs"
 [dependencies]
 bincode = { workspace = true }
 serde = { workspace = true }
+erased-serde = "0.4.6"
 serde_derive = { workspace = true }
 compact_str = { workspace = true }
 cu29-traits = { workspace = true }
@@ -30,7 +31,7 @@ cu29-value = { workspace = true }
 cu29-clock = { workspace = true }
 clap = { workspace = true }
 tempfile = { workspace = true }
-arrayvec = "0.7.6"
+arrayvec = { version = "0.7.6", features = ["serde"] }
 smallvec = { workspace = true }
 ron = "0.10.1"
 hdrhistogram = "7.5.4"

@@ -38,9 +38,9 @@ pub struct LogReaderCli {
 #[derive(Subcommand)]
 pub enum Command {
     /// Extract logs
-    ExtractLog { log_index: PathBuf },
+    ExtractTextLog { log_index: PathBuf },
     /// Extract copperlists
-    ExtractCopperlist {
+    ExtractCopperlists {
         #[arg(short, long, default_value_t = ExportFormat::Json)]
         export_format: ExportFormat,
     },
@@ -64,16 +64,49 @@ where
     };
 
     match args.command {
-        Command::ExtractLog { log_index } => {
+        Command::ExtractTextLog { log_index } => {
             let reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::StructuredLogLine);
             textlog_dump(reader, &log_index)?;
         }
-        Command::ExtractCopperlist { export_format } => {
+        Command::ExtractCopperlists { export_format } => {
             println!("Extracting copperlists with format: {export_format}");
             let mut reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
             let iter = copperlists_dump::<P>(&mut reader);
-            for entry in iter {
-                println!("{entry:#?}");
+
+            match export_format {
+                ExportFormat::Json => {
+                    for entry in iter {
+                        serde_json::to_writer_pretty(std::io::stdout(), &entry).unwrap();
+                    }
+                }
+                ExportFormat::Csv => {
+                    let mut first = true;
+                    for origin in P::get_all_task_ids() {
+                        if !first {
+                            print!(", ");
+                        } else {
+                            print!("id, ");
+                        }
+                        print!("{origin}");
+                        first = false;
+                    }
+                    println!();
+                    for entry in iter {
+                        let mut first = true;
+                        for msg in entry.erased_cumsgs() {
+                            if let Some(msg) = msg.erased_payload() {
+                                if !first {
+                                    print!(", ");
+                                } else {
+                                    print!("{}, ", entry.id);
+                                }
+                                serde_json::to_writer(std::io::stdout(), msg).unwrap(); // TODO: escape for CSV
+                                first = false;
+                            }
+                        }
+                        println!();
+                    }
+                }
             }
         }
     }
@@ -335,7 +368,7 @@ mod python {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bincode::encode_into_slice;
+    use bincode::{encode_into_slice, Decode, Encode};
     use fs_extra::dir::{copy, CopyOptions};
     use std::io::Cursor;
     use std::sync::{Arc, Mutex};
@@ -415,27 +448,45 @@ mod tests {
     }
 
     // This is normally generated at compile time in CuPayload.
-    type MyCuPayload = (u8, i32, f32);
+    #[derive(Debug, PartialEq, Clone, Copy, Serialize, Encode, Decode)]
+    struct MyMsgs((u8, i32, f32));
+
+    impl ErasedCuMsgs for MyMsgs {
+        fn erased_cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
+            Vec::new()
+        }
+    }
+
+    impl MatchingTasks for MyMsgs {
+        fn get_all_task_ids() -> &'static [&'static str] {
+            &[]
+        }
+    }
 
     /// Checks if we can recover the copper lists from a binary representation.
     #[test]
     fn test_copperlists_dump() {
         let mut data = vec![0u8; 10000];
-        let mypls: [MyCuPayload; 4] = [(1, 2, 3.0), (2, 3, 4.0), (3, 4, 5.0), (4, 5, 6.0)];
+        let mypls: [MyMsgs; 4] = [
+            MyMsgs((1, 2, 3.0)),
+            MyMsgs((2, 3, 4.0)),
+            MyMsgs((3, 4, 5.0)),
+            MyMsgs((4, 5, 6.0)),
+        ];
 
         let mut offset: usize = 0;
         for pl in mypls.iter() {
-            let cl = CopperList::<MyCuPayload>::new(1, *pl);
+            let cl = CopperList::<MyMsgs>::new(1, *pl);
             offset +=
                 encode_into_slice(&cl, &mut data.as_mut_slice()[offset..], standard()).unwrap();
         }
 
         let reader = Cursor::new(data);
 
-        let mut iter = copperlists_dump::<MyCuPayload>(reader);
-        assert_eq!(iter.next().unwrap().msgs, (1, 2, 3.0));
-        assert_eq!(iter.next().unwrap().msgs, (2, 3, 4.0));
-        assert_eq!(iter.next().unwrap().msgs, (3, 4, 5.0));
-        assert_eq!(iter.next().unwrap().msgs, (4, 5, 6.0));
+        let mut iter = copperlists_dump::<MyMsgs>(reader);
+        assert_eq!(iter.next().unwrap().msgs, MyMsgs((1, 2, 3.0)));
+        assert_eq!(iter.next().unwrap().msgs, MyMsgs((2, 3, 4.0)));
+        assert_eq!(iter.next().unwrap().msgs, MyMsgs((3, 4, 5.0)));
+        assert_eq!(iter.next().unwrap().msgs, MyMsgs((4, 5, 6.0)));
     }
 }

@@ -6,6 +6,7 @@ use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuSinkTask, Freezable};
 use cu29::{input_msg, CuError, CuResult};
+use serde::Serialize;
 use serialport::{DataBits, FlowControl, Parity, SerialPort, StopBits};
 use std::io::{self, Read, Write};
 use std::time::Duration;
@@ -178,7 +179,7 @@ impl Freezable for Lewansoul {
     // This driver is stateless as the IDs are recreate at new time, we keep the default implementation.
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct ServoPositionsPayload {
     pub positions: [Angle; MAX_SERVOS],
 }

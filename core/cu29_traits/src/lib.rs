@@ -76,8 +76,29 @@ pub enum UnifiedLogType {
     LastEntry,         // This is a special entry that is used to signal the end of the log.
 }
 
+pub trait ErasedCuMsg {
+    fn erased_payload(&self) -> Option<&dyn erased_serde::Serialize>;
+}
+
+/// Trait to get a vector of type-erased CuMsgs
+/// This is used for generic serialization of the copperlists
+pub trait ErasedCuMsgs {
+    fn erased_cumsgs(&self) -> Vec<&dyn ErasedCuMsg>;
+}
+
+/// Trait to trace back from the CopperList the origin of the messages
+pub trait MatchingTasks {
+    fn get_all_task_ids() -> &'static [&'static str];
+}
+
 /// A CopperListTuple needs to be encodable, decodable and fixed size in memory.
-pub trait CopperListTuple: bincode::Encode + bincode::Decode<()> + Debug {} // Decode is Sized
+pub trait CopperListTuple:
+    bincode::Encode + bincode::Decode<()> + Debug + Serialize + ErasedCuMsgs + MatchingTasks
+{
+} // Decode forces Sized already
 
 // Also anything that follows this contract can be a payload (blanket implementation)
-impl<T> CopperListTuple for T where T: bincode::Encode + bincode::Decode<()> + Debug {} // Decode is Sized
+impl<T> CopperListTuple for T where
+    T: bincode::Encode + bincode::Decode<()> + Debug + Serialize + ErasedCuMsgs + MatchingTasks
+{
+}

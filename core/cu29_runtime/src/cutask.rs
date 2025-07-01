@@ -10,18 +10,18 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::BorrowDecode;
 use compact_str::{CompactString, ToCompactString};
 use cu29_clock::{PartialCuTimeRange, RobotClock, Tov};
-use cu29_traits::CuResult;
-use serde_derive::{Deserialize, Serialize};
+use cu29_traits::{CuResult, ErasedCuMsg};
+use serde::{Serialize, Deserialize};
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 
 // Everything that is stateful in copper for zero copy constraints need to be restricted to this trait.
-pub trait CuMsgPayload: Default + Debug + Clone + Encode + Decode<()> + Sized {}
+pub trait CuMsgPayload: Default + Debug + Clone + Encode + Decode<()> + Serialize + Sized {}
 
 pub trait CuMsgPack<'cl> {}
 
 // Also anything that follows this contract can be a payload (blanket implementation)
-impl<T: Default + Debug + Clone + Encode + Decode<()> + Sized> CuMsgPayload for T {}
+impl<T: Default + Debug + Clone + Encode + Decode<()> + Serialize + Sized> CuMsgPayload for T {}
 
 macro_rules! impl_cu_msg_pack {
     ($(($($ty:ident),*)),*) => {
@@ -124,7 +124,7 @@ impl Display for CuMsgMetadata {
 }
 
 /// CuMsg is the envelope holding the msg payload and the metadata between tasks.
-#[derive(Default, Debug, Clone, bincode::Encode, bincode::Decode)]
+#[derive(Default, Debug, Clone, bincode::Encode, bincode::Decode, Serialize)]
 pub struct CuMsg<T>
 where
     T: CuMsgPayload,
@@ -170,6 +170,21 @@ where
 
     pub fn payload_mut(&mut self) -> &mut Option<T> {
         &mut self.payload
+    }
+}
+
+impl<T> ErasedCuMsg for CuMsg<T>
+where
+    T: CuMsgPayload,
+{
+    // fn get_metadata(&self) -> &CuMsgMetadata {
+    //     &self.metadata
+    // }
+
+    fn erased_payload(&self) -> Option<&dyn erased_serde::Serialize> {
+        self.payload
+            .as_ref()
+            .map(|p| p as &dyn erased_serde::Serialize)
     }
 }
 

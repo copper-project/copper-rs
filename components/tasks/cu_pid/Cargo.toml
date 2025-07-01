@@ -13,3 +13,4 @@ repository.workspace = true
 [dependencies]
 cu29 = { workspace = true }
 bincode = { workspace = true }
+serde = { workspace = true }
