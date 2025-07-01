@@ -174,7 +174,8 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
             use bincode::enc::Encoder;
             use bincode::de::Decoder;
             use bincode::error::{DecodeError, EncodeError};
-            use serde::{Serialize, Serializer};
+            use serde::Serialize;
+            use serde::Serializer;
             use serde::ser::SerializeStruct;
             use std::ops::{Index, IndexMut};
             #( use super::#unique_imports; )*
