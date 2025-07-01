@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["UnifiedLogType"],"struct":["CuError"],"trait":["CopperListTuple","WriteStream"],"type":["CuResult"]};
+window.SIDEBAR_ITEMS = {"enum":["UnifiedLogType"],"struct":["CuError"],"trait":["CopperListTuple","ErasedCuMsg","ErasedCuMsgs","MatchingTasks","WriteStream"],"type":["CuResult"]};
