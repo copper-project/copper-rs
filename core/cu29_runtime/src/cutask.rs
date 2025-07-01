@@ -11,7 +11,7 @@ use bincode::BorrowDecode;
 use compact_str::{CompactString, ToCompactString};
 use cu29_clock::{PartialCuTimeRange, RobotClock, Tov};
 use cu29_traits::{CuResult, ErasedCuMsg};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 
