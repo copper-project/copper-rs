@@ -70,8 +70,8 @@ impl<P: CopperListTuple> CopperList<P> {
 }
 
 impl<P: CopperListTuple> ErasedCuMsgs for CopperList<P> {
-    fn erased_cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
-        self.msgs.erased_cumsgs()
+    fn cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
+        self.msgs.cumsgs()
     }
 }
 
@@ -260,7 +260,7 @@ mod tests {
     struct CuMsgs(i32);
 
     impl ErasedCuMsgs for CuMsgs {
-        fn erased_cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
+        fn cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
             Vec::new()
         }
     }
@@ -424,7 +424,7 @@ mod tests {
     }
 
     impl ErasedCuMsgs for TestStruct {
-        fn erased_cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
+        fn cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
             Vec::new()
         }
     }

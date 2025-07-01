@@ -1603,7 +1603,7 @@ fn build_culist_erasedcumsgs(all_msgs_types_in_culist_order: &[Type]) -> ItemImp
         .collect();
     parse_quote! {
         impl ErasedCuMsgs for CuMsgs {
-            fn erased_cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
+            fn cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
                 vec![
                     #(#casted_fields),*
                 ]

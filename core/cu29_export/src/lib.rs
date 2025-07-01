@@ -87,20 +87,22 @@ where
                         } else {
                             print!("id, ");
                         }
-                        print!("{origin}");
+                        print!("{origin}_time, {origin}_tov, {origin},");
                         first = false;
                     }
                     println!();
                     for entry in iter {
                         let mut first = true;
-                        for msg in entry.erased_cumsgs() {
-                            if let Some(msg) = msg.erased_payload() {
+                        for msg in entry.cumsgs() {
+                            if let Some(payload) = msg.payload() {
                                 if !first {
                                     print!(", ");
                                 } else {
                                     print!("{}, ", entry.id);
                                 }
-                                serde_json::to_writer(std::io::stdout(), msg).unwrap(); // TODO: escape for CSV
+                                let metadata = msg.metadata();
+                                print!("{}, {}, ", metadata.process_time(), metadata.tov());
+                                serde_json::to_writer(std::io::stdout(), payload).unwrap(); // TODO: escape for CSV
                                 first = false;
                             }
                         }
@@ -452,7 +454,7 @@ mod tests {
     struct MyMsgs((u8, i32, f32));
 
     impl ErasedCuMsgs for MyMsgs {
-        fn erased_cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
+        fn cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
             Vec::new()
         }
     }
