@@ -737,7 +737,7 @@ mod tests {
             assert!(culist2.is_none());
             assert_eq!(copperlists.available_copper_lists(), 0);
             // Free in order, should let the top of the stack be serialized and freed.
-            copperlists.end_of_processing(1);
+            let _ = copperlists.end_of_processing(1);
             assert_eq!(copperlists.available_copper_lists(), 1);
         }
 
@@ -753,12 +753,12 @@ mod tests {
             culist2.change_state(CopperListState::Processing);
             assert_eq!(copperlists.available_copper_lists(), 0);
             // Free out of order, the #0 first
-            copperlists.end_of_processing(0);
+            let _ = copperlists.end_of_processing(0);
             // Should not free up the top of the stack
             assert_eq!(copperlists.available_copper_lists(), 0);
 
             // Free up the top of the stack
-            copperlists.end_of_processing(2);
+            let _ = copperlists.end_of_processing(2);
             // This should free up 2 CLs
 
             assert_eq!(copperlists.available_copper_lists(), 2);
