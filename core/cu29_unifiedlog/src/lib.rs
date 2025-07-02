@@ -1,5 +1,5 @@
 use memmap2::{Mmap, MmapMut};
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::fs::{File, OpenOptions};
 use std::io::Read;
 use std::mem::ManuallyDrop;
@@ -21,10 +21,22 @@ const SECTION_MAGIC: [u8; 2] = [0xFA, 0x57];
 
 /// The main file header of the datalogger.
 #[derive(Encode, Decode, Debug)]
-struct MainHeader {
-    magic: [u8; 4],            // Magic number to identify the file.
-    first_section_offset: u16, // This is to align with a page at write time.
-    page_size: u16,
+pub struct MainHeader {
+    pub magic: [u8; 4],            // Magic number to identify the file.
+    pub first_section_offset: u16, // This is to align with a page at write time.
+    pub page_size: u16,
+}
+
+impl Display for MainHeader {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        writeln!(
+            f,
+            "  Magic -> {:2x}{:2x}{:2x}{:2x}",
+            self.magic[0], self.magic[1], self.magic[2], self.magic[3]
+        )?;
+        writeln!(f, "  first_section_offset -> {}", self.first_section_offset)?;
+        writeln!(f, "  page_size -> {}", self.page_size)
+    }
 }
 
 /// Each concurrent sublogger is tracked through a section header.
@@ -32,13 +44,25 @@ struct MainHeader {
 /// The entry type is used to identify the type of data in the section.
 #[derive(Encode, Decode, Debug)]
 pub struct SectionHeader {
-    magic: [u8; 2], // Magic number to identify the section.
-    entry_type: UnifiedLogType,
-    section_size: u32, // offset from the first byte of this header to the first byte of the next header (MAGIC to MAGIC).
-    filled_size: u32,  // how much of the section is filled.
+    pub magic: [u8; 2], // Magic number to identify the section.
+    pub entry_type: UnifiedLogType,
+    pub section_size: u32, // offset from the first byte of this header to the first byte of the next header (MAGIC to MAGIC).
+    pub filled_size: u32,  // how much of the section is filled.
 }
 
 const MAX_HEADER_SIZE: usize = mem::size_of::<SectionHeader>() + 3usize; // 3 == additional worse case scenario for the 3 int variable encoding
+
+impl Display for SectionHeader {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "    Magic -> {:2x}{:2x}", self.magic[0], self.magic[1])?;
+        writeln!(f, "    type -> {:?}", self.entry_type)?;
+        write!(
+            f,
+            "    use  -> {} / {}",
+            self.filled_size, self.section_size
+        )
+    }
+}
 
 impl Default for SectionHeader {
     fn default() -> Self {
@@ -217,6 +241,7 @@ impl UnifiedLoggerBuilder {
 /// A read side of the datalogger.
 pub struct UnifiedLoggerRead {
     base_file_path: PathBuf,
+    main_header: MainHeader,
     current_mmap_buffer: Mmap,
     current_file: File,
     current_slab_index: usize,
@@ -289,6 +314,7 @@ impl SlabEntry {
     /// Flush the section to disk.
     /// the flushing is permanent and the section is considered closed.
     fn flush_section(&mut self, section: &mut SectionHandle) {
+        println!("Flush Section {:?}", section.section_header.entry_type);
         if section.buffer.as_ptr() < self.mmap_buffer.as_ptr()
             || section.buffer.as_ptr() as usize
                 > self.mmap_buffer.as_ptr() as usize + self.mmap_buffer.len()
@@ -415,10 +441,6 @@ impl SectionHandle {
             return;
         }
         self.section_header.filled_size = self.used;
-
-        // FIX ME: This was flushed before and cannot be written back to.
-        // let _sz = encode_into_slice(&self.section_header, &mut self.buffer, standard())
-        //     .expect("Failed to encode section header");
     }
 }
 
@@ -551,13 +573,17 @@ impl UnifiedLoggerWrite {
 
 impl Drop for UnifiedLoggerWrite {
     fn drop(&mut self) {
+        println!("UnifiedLoggerWrite::drop");
         let mut section = self.add_section(UnifiedLogType::LastEntry, 80); // TODO: determine that exactly
         self.front_slab.flush_section(&mut section);
         self.garbage_collect_backslabs();
     }
 }
 
-fn open_slab_index(base_file_path: &Path, slab_index: usize) -> io::Result<(File, Mmap, u16)> {
+fn open_slab_index(
+    base_file_path: &Path,
+    slab_index: usize,
+) -> io::Result<(File, Mmap, u16, Option<MainHeader>)> {
     let mut options = OpenOptions::new();
     let options = options.read(true);
 
@@ -565,6 +591,7 @@ fn open_slab_index(base_file_path: &Path, slab_index: usize) -> io::Result<(File
     let file = options.open(file_path)?;
     let mmap = unsafe { Mmap::map(&file) }?;
     let mut prolog = 0u16;
+    let mut maybe_main_header: Option<MainHeader> = None;
     if slab_index == 0 {
         let main_header: MainHeader;
         let _read: usize;
@@ -577,16 +604,18 @@ fn open_slab_index(base_file_path: &Path, slab_index: usize) -> io::Result<(File
             ));
         }
         prolog = main_header.first_section_offset;
+        maybe_main_header = Some(main_header);
     }
-    Ok((file, mmap, prolog))
+    Ok((file, mmap, prolog, maybe_main_header))
 }
 
 impl UnifiedLoggerRead {
     pub fn new(base_file_path: &Path) -> io::Result<Self> {
-        let (file, mmap, prolog) = open_slab_index(base_file_path, 0)?;
+        let (file, mmap, prolog, header) = open_slab_index(base_file_path, 0)?;
 
         Ok(Self {
             base_file_path: base_file_path.to_path_buf(),
+            main_header: header.unwrap(),
             current_file: file,
             current_mmap_buffer: mmap,
             current_slab_index: 0,
@@ -596,7 +625,8 @@ impl UnifiedLoggerRead {
 
     fn next_slab(&mut self) -> io::Result<()> {
         self.current_slab_index += 1;
-        let (file, mmap, prolog) = open_slab_index(&self.base_file_path, self.current_slab_index)?;
+        let (file, mmap, prolog, _) =
+            open_slab_index(&self.base_file_path, self.current_slab_index)?;
         self.current_file = file;
         self.current_mmap_buffer = mmap;
         self.current_reading_position = prolog as usize;
@@ -641,25 +671,36 @@ impl UnifiedLoggerRead {
         }
     }
 
+    pub fn raw_main_header(&self) -> &MainHeader {
+        &self.main_header
+    }
+
     /// Reads the section from the section header pos.
-    pub fn read_section(&mut self) -> CuResult<Vec<u8>> {
+    pub fn raw_read_section(&mut self) -> CuResult<(SectionHeader, Vec<u8>)> {
+        if self.current_reading_position >= self.current_mmap_buffer.len() {
+            self.next_slab().map_err(|e| {
+                CuError::new_with_cause("Failed to read next slab, is the log complete?", e)
+            })?;
+        }
+
         let read_result = self.read_section_header();
-        if let Err(error) = read_result {
-            return Err(CuError::new_with_cause(
+
+        match read_result {
+            Err(error) => Err(CuError::new_with_cause(
                 "Could not read a sections header",
                 error,
-            ));
-        };
-
-        self.read_section_content(&read_result.unwrap())
+            )),
+            Ok(header) => {
+                let data = self.read_section_content(&header)?;
+                self.current_reading_position += header.section_size as usize;
+                Ok((header, data))
+            }
+        }
     }
 
     /// Reads the section content from the section header pos.
     fn read_section_content(&mut self, header: &SectionHeader) -> CuResult<Vec<u8>> {
         // TODO: we could optimize by asking the buffer to fill
-        if header.filled_size == 0 {
-            eprintln!("Warning: read an empty section");
-        }
         let mut section = vec![0; header.filled_size as usize];
         let start_of_data = self.current_reading_position + MAX_HEADER_SIZE;
         section.copy_from_slice(

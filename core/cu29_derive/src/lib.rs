@@ -1120,16 +1120,24 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             #run {
+                static STOP_FLAG: AtomicBool = AtomicBool::new(false);
+
+                ctrlc::set_handler(move || {
+                    STOP_FLAG.store(true, Ordering::SeqCst);
+                });
+
                 self.start_all_tasks(#sim_callback_arg)?;
-                let error = loop {
+                while !STOP_FLAG.load(Ordering::SeqCst) {
                     let error = self.run_one_iteration(#sim_callback_arg);
                     if error.is_err() {
-                        break error;
+                        debug!("A task errored out: {}", &error);
+                        self.stop_all_tasks(#sim_callback_arg)?;
+                        return error;
                     }
                 };
-                debug!("A task errored out: {}", &error);
                 self.stop_all_tasks(#sim_callback_arg)?;
-                error
+
+                Ok(())
             }
         };
 
@@ -1352,6 +1360,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             mod #mission_mod {
                 use super::*;  // import the modules the main app did.
 
+                use std::sync::atomic::{AtomicBool, Ordering};
                 use cu29::bincode::Encode;
                 use cu29::bincode::enc::Encoder;
                 use cu29::bincode::error::EncodeError;
