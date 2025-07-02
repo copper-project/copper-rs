@@ -1,6 +1,6 @@
 pub mod tasks;
 use cu29::prelude::*;
-use cu29_export::copperlists_dump;
+use cu29_export::copperlists_reader;
 use cu29_helpers::basic_copper_setup;
 use std::path::{Path, PathBuf};
 
@@ -105,7 +105,7 @@ fn main() {
         panic!("Failed to create logger");
     };
     let mut reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
-    let iter = copperlists_dump::<default::CuMsgs>(&mut reader);
+    let iter = copperlists_reader::<default::CuMsgs>(&mut reader);
     for entry in iter {
         println!("{entry:#?}");
         run_one_copperlist(&mut copper_app, &mut robot_clock_mock, entry);

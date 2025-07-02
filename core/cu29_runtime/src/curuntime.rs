@@ -102,6 +102,15 @@ impl KeyFramesManager {
             Ok(0)
         }
     }
+
+    pub fn end_of_processing(&mut self, culistid: u32) -> CuResult<()> {
+        if self.is_keyframe(culistid) {
+            let logger = self.logger.as_mut().unwrap();
+            logger.log(&self.inner)
+        } else {
+            Ok(())
+        }
+    }
 }
 
 /// This is the main structure that will be injected as a member of the Application struct.
