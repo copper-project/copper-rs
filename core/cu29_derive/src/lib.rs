@@ -720,7 +720,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                                 debug!("Process: ABORT decision from monitoring. Task '{}' errored out \
                                             during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#tid], clid);
                                                 monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
-                                                cl_manager.end_of_processing(clid);
+                                                cl_manager.end_of_processing(clid)?;
                                                 return Ok(()); // this returns early from the one iteration call.
 
                                             }
@@ -797,7 +797,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                                 debug!("Process: ABORT decision from monitoring. Task '{}' errored out \
                                             during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#tid], clid);
                                                 monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
-                                                cl_manager.end_of_processing(clid);
+                                                cl_manager.end_of_processing(clid)?;
                                                 return Ok(()); // this returns early from the one iteration call.
 
                                             }
@@ -892,7 +892,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                                 debug!("Process: ABORT decision from monitoring. Task '{}' errored out \
                                             during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#tid], clid);
                                                 monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
-                                                cl_manager.end_of_processing(clid);
+                                                cl_manager.end_of_processing(clid)?;
                                                 return Ok(()); // this returns early from the one iteration call.
 
                                             }
