@@ -1088,8 +1088,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     #(#runtime_plan_code)*
                 } // drop(msgs);
                 monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
-                cl_manager.end_of_processing(clid);
-                kf_manager.end_of_processing(clid);
+                cl_manager.end_of_processing(clid)?;
+                kf_manager.end_of_processing(clid)?;
 
                 // Postprocess calls can happen at any time, just packed them up at the end.
                 #(#postprocess_calls)*
