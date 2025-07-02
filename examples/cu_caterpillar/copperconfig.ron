@@ -113,8 +113,9 @@
         (src: "ct-6", dst: "gpio-6", msg: "cu_rp_gpio::RPGpioPayload"),
         (src: "ct-7", dst: "gpio-7", msg: "cu_rp_gpio::RPGpioPayload"),
     ],
-    monitor: (
-                 type: "cu_consolemon::CuConsoleMon",
-                 config: {"file": "copperconfig.ron"},
-             )
+    // logging: ( keyframe_interval: 2 ),
+    // monitor: (
+    //              type: "cu_consolemon::CuConsoleMon",
+    //              config: {"file": "copperconfig.ron"},
+    //          )
 )

@@ -514,7 +514,6 @@ impl UnifiedLoggerWrite {
         requested_section_size: usize,
     ) -> SectionHandle {
         self.garbage_collect_backslabs(); // Take the opportunity to keep up and close stale back slabs.
-
         let maybe_section = self
             .front_slab
             .add_section(entry_type, requested_section_size);

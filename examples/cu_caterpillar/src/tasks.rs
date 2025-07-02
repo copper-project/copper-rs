@@ -16,6 +16,7 @@ pub struct CaterpillarSource {
 
 impl Freezable for CaterpillarSource {
     fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        println!("Freezing state: {}", self.state);
         Encode::encode(&self.state, encoder)
     }
 

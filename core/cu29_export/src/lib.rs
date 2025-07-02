@@ -71,7 +71,7 @@ where
         Command::ExtractCopperlists { export_format } => {
             println!("Extracting copperlists with format: {export_format}");
             let mut reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
-            let iter = copperlists_dump::<P>(&mut reader);
+            let iter = copperlists_reader::<P>(&mut reader);
 
             match export_format {
                 ExportFormat::Json => {
@@ -118,11 +118,36 @@ where
 
 /// Extracts the copper lists from a binary representation.
 /// P is the Payload determined by the configuration of the application.
-pub fn copperlists_dump<P: CopperListTuple>(
+pub fn copperlists_reader<P: CopperListTuple>(
     mut src: impl Read,
 ) -> impl Iterator<Item = CopperList<P>> {
     std::iter::from_fn(move || {
         let entry = decode_from_std_read::<CopperList<P>, _, _>(&mut src, standard());
+        match entry {
+            Ok(entry) => Some(entry),
+            Err(e) => match e {
+                DecodeError::UnexpectedEnd { .. } => None,
+                DecodeError::Io { inner, additional } => {
+                    if inner.kind() == std::io::ErrorKind::UnexpectedEof {
+                        None
+                    } else {
+                        println!("Error {inner:?} additional:{additional}");
+                        None
+                    }
+                }
+                _ => {
+                    println!("Error {e:?}");
+                    None
+                }
+            },
+        }
+    })
+}
+
+/// Extracts the keyframes from the log.
+pub fn keyframes_reader(mut src: impl Read) -> impl Iterator<Item = KeyFrame> {
+    std::iter::from_fn(move || {
+        let entry = decode_from_std_read::<KeyFrame, _, _>(&mut src, standard());
         match entry {
             Ok(entry) => Some(entry),
             Err(e) => match e {
@@ -485,7 +510,7 @@ mod tests {
 
         let reader = Cursor::new(data);
 
-        let mut iter = copperlists_dump::<MyMsgs>(reader);
+        let mut iter = copperlists_reader::<MyMsgs>(reader);
         assert_eq!(iter.next().unwrap().msgs, MyMsgs((1, 2, 3.0)));
         assert_eq!(iter.next().unwrap().msgs, MyMsgs((2, 3, 4.0)));
         assert_eq!(iter.next().unwrap().msgs, MyMsgs((3, 4, 5.0)));
