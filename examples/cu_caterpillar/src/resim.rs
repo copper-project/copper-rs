@@ -99,7 +99,13 @@ fn main() {
             run_one_copperlist(&mut copper_app, &mut robot_clock_mock, entry);
         }
     }
-    copper_app
-        .stop_all_tasks(&mut default_callback)
-        .expect("Failed to stop all tasks.");
+
+    // let cl_iter = copperlists_reader::<default::CuMsgs>(&mut copperlists_reader);
+    // for entry in cl_iter {
+    //     println!("{entry:#?}");
+    //     run_one_copperlist(&mut copper_app, &mut robot_clock_mock, entry);
+    // }
+    // copper_app
+    //     .stop_all_tasks(&mut default_callback)
+    //     .expect("Failed to stop all tasks.");
 }

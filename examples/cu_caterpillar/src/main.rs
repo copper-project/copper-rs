@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 #[copper_runtime(config = "copperconfig.ron")]
 struct CaterpillarApplication {}
 
-const SLAB_SIZE: Option<usize> = Some(100 * 1024 * 1024);
+const SLAB_SIZE: Option<usize> = Some(1024 * 1024 * 1024);
 
 fn main() {
     let logger_path = "logs/caterpillar.copper";

@@ -1,12 +1,15 @@
-use std::fmt::{Display, Formatter};
-use std::io::Read;
-use std::path::{Path, PathBuf};
+mod fsck;
 
 use bincode::config::standard;
 use bincode::decode_from_std_read;
 use bincode::error::DecodeError;
 use clap::{Parser, Subcommand, ValueEnum};
 use cu29::prelude::*;
+use cu29::UnifiedLogType;
+use fsck::check;
+use std::fmt::{Display, Formatter};
+use std::io::Read;
+use std::path::{Path, PathBuf};
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum ExportFormat {
@@ -44,6 +47,11 @@ pub enum Command {
         #[arg(short, long, default_value_t = ExportFormat::Json)]
         export_format: ExportFormat,
     },
+    /// Check the log and dump info about it.
+    Fsck {
+        #[arg(short, long, action = clap::ArgAction::Count)]
+        verbose: u8,
+    },
 }
 
 /// This is a generator for a main function to build a log extractor.
@@ -55,7 +63,7 @@ where
     let args = LogReaderCli::parse();
     let unifiedlog_base = args.unifiedlog_base;
 
-    let UnifiedLogger::Read(dl) = UnifiedLoggerBuilder::new()
+    let UnifiedLogger::Read(mut dl) = UnifiedLoggerBuilder::new()
         .file_base_name(&unifiedlog_base)
         .build()
         .expect("Failed to create logger")
@@ -111,11 +119,15 @@ where
                 }
             }
         }
+        Command::Fsck { verbose } => {
+            if let Some(value) = check::<P>(&mut dl, verbose) {
+                return value;
+            }
+        }
     }
 
     Ok(())
 }
-
 /// Extracts the copper lists from a binary representation.
 /// P is the Payload determined by the configuration of the application.
 pub fn copperlists_reader<P: CopperListTuple>(
@@ -169,48 +181,56 @@ pub fn keyframes_reader(mut src: impl Read) -> impl Iterator<Item = KeyFrame> {
     })
 }
 
+pub fn structlog_reader(mut src: impl Read) -> impl Iterator<Item = CuResult<CuLogEntry>> {
+    std::iter::from_fn(move || {
+        let entry = decode_from_std_read::<CuLogEntry, _, _>(&mut src, standard());
+
+        match entry {
+            Err(DecodeError::UnexpectedEnd { .. }) => None,
+            Err(DecodeError::Io {
+                inner,
+                additional: _,
+            }) => {
+                if inner.kind() == std::io::ErrorKind::UnexpectedEof {
+                    None
+                } else {
+                    Some(Err(CuError::new_with_cause("Error reading log", inner)))
+                }
+            }
+            Err(e) => Some(Err(CuError::new_with_cause("Error reading log", e))),
+            Ok(entry) => {
+                if entry.msg_index == 0 {
+                    None
+                } else {
+                    Some(Ok(entry))
+                }
+            }
+        }
+    })
+}
+
 /// Full dump of the copper structured log from its binary representation.
 /// This rebuilds a textual log.
 /// src: the source of the log data
 /// index: the path to the index file (containing the interned strings constructed at build time)
-pub fn textlog_dump(mut src: impl Read, index: &Path) -> CuResult<()> {
+pub fn textlog_dump(src: impl Read, index: &Path) -> CuResult<()> {
     let all_strings = read_interned_strings(index).map_err(|e| {
         CuError::new_with_cause(
             "Failed to read interned strings from index",
             std::io::Error::other(e),
         )
     })?;
-    loop {
-        let entry = decode_from_std_read::<CuLogEntry, _, _>(&mut src, standard());
 
-        match entry {
-            Err(DecodeError::UnexpectedEnd { .. }) => return Ok(()),
-            Err(DecodeError::Io { inner, additional }) => {
-                if inner.kind() == std::io::ErrorKind::UnexpectedEof {
-                    return Ok(());
-                } else {
-                    println!("Error {inner:?} additional:{additional}");
-                    return Err(CuError::new_with_cause("Error reading log", inner));
-                }
-            }
-            Err(e) => {
-                println!("Error {e:?}");
-                return Err(CuError::new_with_cause("Error reading log", e));
-            }
-            Ok(entry) => {
-                if entry.msg_index == 0 {
-                    break;
-                }
-
-                let result = rebuild_logline(&all_strings, &entry);
-                if result.is_err() {
-                    println!("Failed to rebuild log line: {result:?}");
-                    continue;
-                }
-                println!("{}: {}", entry.time, result.unwrap());
-            }
-        };
+    for result in structlog_reader(src) {
+        match result {
+            Ok(entry) => match rebuild_logline(&all_strings, &entry) {
+                Ok(line) => println!("{}: {}", entry.time, line),
+                Err(e) => println!("Failed to rebuild log line: {e:?}"),
+            },
+            Err(e) => return Err(e),
+        }
     }
+
     Ok(())
 }
 

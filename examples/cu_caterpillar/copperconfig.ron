@@ -113,7 +113,11 @@
         (src: "ct-6", dst: "gpio-6", msg: "cu_rp_gpio::RPGpioPayload"),
         (src: "ct-7", dst: "gpio-7", msg: "cu_rp_gpio::RPGpioPayload"),
     ],
-    // logging: ( keyframe_interval: 2 ),
+    // This is going REALLY fast, adapt the pace of the logging to the rate of output.
+    logging: ( keyframe_interval: 10000,  // wait 10000 cycles to record a keyframe (~every 1/10 second at the observed rate)
+               slab_size_mib:     1024,   // allocate space on disk by the Gibibyte
+               section_size_mib:  100,    // allocate for the copperlists in the logs by 100MB at a time.
+    ),
     // monitor: (
     //              type: "cu_consolemon::CuConsoleMon",
     //              config: {"file": "copperconfig.ron"},
