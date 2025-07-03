@@ -816,7 +816,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     };
 
                                     let call_sim_callback = if sim_mode {
-
                                         let inputs_type = if indices.len() == 1 {
                                             // Not a tuple for a single input
                                             quote! { #(&msgs.#indices)* }
@@ -1120,16 +1119,24 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             #run {
+                static STOP_FLAG: AtomicBool = AtomicBool::new(false);
+                ctrlc::set_handler(move || {
+                    STOP_FLAG.store(true, Ordering::SeqCst);
+                }).expect("Error setting Ctrl-C handler");
+
                 self.start_all_tasks(#sim_callback_arg)?;
-                let error = loop {
-                    let error = self.run_one_iteration(#sim_callback_arg);
-                    if error.is_err() {
-                        break error;
+                let result = loop  {
+                    let result = self.run_one_iteration(#sim_callback_arg);
+
+                    if STOP_FLAG.load(Ordering::SeqCst) || result.is_err() {
+                        break result;
                     }
                 };
-                debug!("A task errored out: {}", &error);
+                if result.is_err() {
+                    error!("A task errored out: {}", &result);
+                }
                 self.stop_all_tasks(#sim_callback_arg)?;
-                error
+                result
             }
         };
 
@@ -1383,6 +1390,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::prelude::UnifiedLogType;
                 use std::sync::Arc;
                 use std::sync::Mutex;
+                use std::sync::atomic::{AtomicBool, Ordering};
 
                 // Not used if the used doesn't generate Sim.
                 #[allow(unused_imports)]
