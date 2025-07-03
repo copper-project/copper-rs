@@ -116,10 +116,21 @@ where
         0.0
     };
 
+    if result.is_ok() {
+        println!("The log checked out OK.");
+    } else {
+        println!("** The log is corrupted.");
+    }
+
+    let bytes_per_sec = useful_size as f64 * 1e9 / total_time.as_nanos() as f64;
+    let mib_per_sec = bytes_per_sec / (1024.0 * 1024.0);
+
     println!();
     println!("        === Statistics ===");
     println!("  Total time       -> {total_time}");
     println!("  Total used size  -> {useful_size} bytes");
+    println!("  Logging rate     -> {mib_per_sec:.02} MiB/s (effective)");
+
     println!();
     println!("  # of CL          -> {last_cl}");
     println!("  CL rate          -> {cl_rate:.2} Hz");
@@ -129,7 +140,6 @@ where
     println!("  KF rate          -> {kf_rate:.2} Hz");
     println!("  KF total size    -> {kfs_size} bytes");
     println!();
-    // println!("  # of StructLogs  -> {keyframes}");
     println!("  SL total size    -> {structured_log_size} bytes");
 
     None

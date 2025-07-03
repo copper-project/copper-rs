@@ -314,7 +314,6 @@ impl SlabEntry {
     /// Flush the section to disk.
     /// the flushing is permanent and the section is considered closed.
     fn flush_section(&mut self, section: &mut SectionHandle) {
-        println!("Flush Section {:?}", section.section_header.entry_type);
         if section.buffer.as_ptr() < self.mmap_buffer.as_ptr()
             || section.buffer.as_ptr() as usize
                 > self.mmap_buffer.as_ptr() as usize + self.mmap_buffer.len()
