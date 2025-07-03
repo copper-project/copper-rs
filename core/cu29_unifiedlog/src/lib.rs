@@ -550,9 +550,15 @@ impl UnifiedLoggerWrite {
 
 impl Drop for UnifiedLoggerWrite {
     fn drop(&mut self) {
+        #[cfg(debug_assertions)]
+        eprintln!("Flushing the unified Logger ... "); // Note this cannot be a structured log writing in this log.
+
         let mut section = self.add_section(UnifiedLogType::LastEntry, 80); // TODO: determine that exactly
         self.front_slab.flush_section(&mut section);
         self.garbage_collect_backslabs();
+
+        #[cfg(debug_assertions)]
+        eprintln!("Unified Logger flushed."); // Note this cannot be a structured log writing in this log.
     }
 }
 

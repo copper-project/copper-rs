@@ -5,7 +5,7 @@ use cu29::bincode::{Decode, Encode};
 use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
 use cu29::cutask::{CuMsg, CuSrcTask, CuTask, Freezable};
-use cu29::prelude::Tov;
+use cu29::prelude::{info, Tov};
 use cu29::{input_msg, output_msg, CuResult};
 use cu_rp_gpio::RPGpioPayload;
 
@@ -16,7 +16,7 @@ pub struct CaterpillarSource {
 
 impl Freezable for CaterpillarSource {
     fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        println!("Freezing state: {}", self.state);
+        info!("Freezing state: {}", self.state);
         Encode::encode(&self.state, encoder)
     }
 
