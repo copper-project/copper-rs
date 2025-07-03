@@ -1,6 +1,6 @@
 pub mod tasks;
 use cu29::prelude::*;
-use cu29_export::keyframes_reader;
+use cu29_export::{copperlists_reader, keyframes_reader};
 use cu29_helpers::basic_copper_setup;
 use default::SimStep::{Gpio0, Gpio1, Gpio2, Gpio3, Gpio4, Gpio5, Gpio6, Gpio7, Src};
 use std::path::{Path, PathBuf};
@@ -68,19 +68,36 @@ fn main() {
         .start_all_tasks(&mut default_callback)
         .expect("Failed to start all tasks.");
 
-    // Read back the logs from a previous run
-    let UnifiedLogger::Read(dl) = UnifiedLoggerBuilder::new()
-        .file_base_name(Path::new("logs/caterpillar.copper"))
-        .build()
-        .expect("Failed to create logger")
-    else {
-        panic!("Failed to create logger");
-    };
+    {
+        let UnifiedLogger::Read(dl) = UnifiedLoggerBuilder::new()
+            .file_base_name(Path::new("logs/caterpillar.copper"))
+            .build()
+            .expect("Failed to create logger")
+        else {
+            panic!("Failed to create logger");
+        };
+        let mut keyframes_ioreader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::FrozenTasks);
+        let kf_iter = keyframes_reader(&mut keyframes_ioreader);
+        for entry in kf_iter {
+            println!("{}: {}", entry.culistid, entry.timestamp);
+        }
+    }
+    {
+        // Read back the logs from a previous run
+        let UnifiedLogger::Read(dl) = UnifiedLoggerBuilder::new()
+            .file_base_name(Path::new("logs/caterpillar.copper"))
+            .build()
+            .expect("Failed to create logger")
+        else {
+            panic!("Failed to create logger");
+        };
 
-    let mut keyframes_ioreader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::FrozenTasks);
-    let kf_iter = keyframes_reader(&mut keyframes_ioreader);
-    for entry in kf_iter {
-        println!("{}: {}", entry.culistid, entry.timestamp);
+        let mut copperlists = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
+        let cl_iter = copperlists_reader::<default::CuMsgs>(&mut copperlists);
+        for entry in cl_iter {
+            println!("{entry:#?}");
+            run_one_copperlist(&mut copper_app, &mut robot_clock_mock, entry);
+        }
     }
 
     // let cl_iter = copperlists_reader::<default::CuMsgs>(&mut copperlists_reader);

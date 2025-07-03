@@ -37,29 +37,28 @@ pub struct CopperListsManager<P: CopperListTuple, const NBCL: usize> {
 }
 
 impl<P: CopperListTuple, const NBCL: usize> CopperListsManager<P, NBCL> {
-    pub fn end_of_processing(&mut self, culistid: u32) {
+    pub fn end_of_processing(&mut self, culistid: u32) -> CuResult<()> {
         let mut is_top = true;
         let mut nb_done = 0;
-        self.inner.iter_mut().for_each(|cl| {
+        for cl in self.inner.iter_mut() {
             if cl.id == culistid && cl.get_state() == CopperListState::Processing {
                 cl.change_state(CopperListState::DoneProcessing);
             }
-            // if we have a series of copper lists that are done processing at the top of the circular buffer
-            // serialize them all and Free them.
             if is_top && cl.get_state() == CopperListState::DoneProcessing {
                 if let Some(logger) = &mut self.logger {
                     cl.change_state(CopperListState::BeingSerialized);
-                    logger.log(cl).unwrap();
+                    logger.log(cl)?;
                 }
                 cl.change_state(CopperListState::Free);
                 nb_done += 1;
             } else {
                 is_top = false;
             }
-        });
+        }
         for _ in 0..nb_done {
             let _ = self.inner.pop();
         }
+        Ok(())
     }
 
     pub fn available_copper_lists(&self) -> usize {
@@ -738,7 +737,7 @@ mod tests {
             assert!(culist2.is_none());
             assert_eq!(copperlists.available_copper_lists(), 0);
             // Free in order, should let the top of the stack be serialized and freed.
-            copperlists.end_of_processing(1);
+            let _ = copperlists.end_of_processing(1);
             assert_eq!(copperlists.available_copper_lists(), 1);
         }
 
@@ -754,12 +753,12 @@ mod tests {
             culist2.change_state(CopperListState::Processing);
             assert_eq!(copperlists.available_copper_lists(), 0);
             // Free out of order, the #0 first
-            copperlists.end_of_processing(0);
+            let _ = copperlists.end_of_processing(0);
             // Should not free up the top of the stack
             assert_eq!(copperlists.available_copper_lists(), 0);
 
             // Free up the top of the stack
-            copperlists.end_of_processing(2);
+            let _ = copperlists.end_of_processing(2);
             // This should free up 2 CLs
 
             assert_eq!(copperlists.available_copper_lists(), 2);
