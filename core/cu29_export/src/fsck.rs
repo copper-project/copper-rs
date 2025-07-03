@@ -43,7 +43,7 @@ where
                         for entry in iter {
                             sl_entries += 1;
                             if entry.is_err() {
-                                println!("Struct log #{sl_entries} is corrupted: {:?}", entry);
+                                println!("Struct log #{sl_entries} is corrupted: {entry:?}");
                             }
                         }
                     }
