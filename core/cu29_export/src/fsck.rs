@@ -1,7 +1,8 @@
-use crate::{copperlists_reader, keyframes_reader};
+use crate::{copperlists_reader, keyframes_reader, structlog_reader};
 use cu29::prelude::UnifiedLoggerRead;
 use cu29::prelude::*;
 use cu29::{CopperListTuple, CuResult};
+use num_format::{Locale, ToFormattedString};
 use std::io::Cursor;
 
 pub(crate) fn check<P>(dl: &mut UnifiedLoggerRead, verbose: u8) -> Option<CuResult<()>>
@@ -21,6 +22,7 @@ where
     let mut structured_log_size: usize = 0;
     let mut cls_size: usize = 0;
     let mut kfs_size: usize = 0;
+    let mut sl_entries: usize = 0;
 
     let result = loop {
         // for _ in 0..4 {
@@ -36,6 +38,14 @@ where
                 match header.entry_type {
                     UnifiedLogType::StructuredLogLine => {
                         structured_log_size += content.len();
+                        let mut reader: Cursor<Vec<u8>> = Cursor::new(content);
+                        let iter = structlog_reader(&mut reader);
+                        for entry in iter {
+                            sl_entries += 1;
+                            if entry.is_err() {
+                                println!("Struct log #{sl_entries} is corrupted: {:?}", entry);
+                            }
+                        }
                     }
                     UnifiedLogType::CopperList => {
                         cls_size += content.len();
@@ -124,23 +134,42 @@ where
 
     let bytes_per_sec = useful_size as f64 * 1e9 / total_time.as_nanos() as f64;
     let mib_per_sec = bytes_per_sec / (1024.0 * 1024.0);
-
-    println!();
+    let l = &Locale::en;
     println!("        === Statistics ===");
     println!("  Total time       -> {total_time}");
-    println!("  Total used size  -> {useful_size} bytes");
+    println!(
+        "  Total used size  -> {} bytes",
+        useful_size.to_formatted_string(l)
+    );
     println!("  Logging rate     -> {mib_per_sec:.02} MiB/s (effective)");
 
     println!();
-    println!("  # of CL          -> {last_cl}");
-    println!("  CL rate          -> {cl_rate:.2} Hz");
-    println!("  CL total size    -> {cls_size} bytes");
+    println!("  # of CL          -> {}", last_cl.to_formatted_string(l));
+    println!(
+        "  CL rate          -> {}.{} Hz",
+        (cl_rate.trunc() as u64).to_formatted_string(&Locale::en),
+        format!("{:02}", (cl_rate.fract() * 100.0).round() as u64)
+    );
+    println!(
+        "  CL total size    -> {} bytes",
+        cls_size.to_formatted_string(l)
+    );
     println!();
-    println!("  # of Keyframes   -> {keyframes}");
+    println!("  # of Keyframes   -> {}", keyframes.to_formatted_string(l));
     println!("  KF rate          -> {kf_rate:.2} Hz");
-    println!("  KF total size    -> {kfs_size} bytes");
+    println!(
+        "  KF total size    -> {} bytes",
+        kfs_size.to_formatted_string(l)
+    );
     println!();
-    println!("  SL total size    -> {structured_log_size} bytes");
+    println!(
+        "  # of SL entries  -> {}",
+        sl_entries.to_formatted_string(l)
+    );
+    println!(
+        "  SL total size    -> {} bytes",
+        structured_log_size.to_formatted_string(l)
+    );
 
     None
 }
