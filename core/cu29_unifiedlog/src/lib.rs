@@ -645,13 +645,17 @@ impl UnifiedLoggerRead {
             }
 
             let header_result = self.read_section_header();
-            if let Err(error) = header_result {
-                return Err(CuError::new_with_cause(
-                    "Could not read a sections header",
+            let header = header_result.map_err(|error| {
+                CuError::new_with_cause(
+                    &format!(
+                        "Could not read a sections header: {}/{}:{}",
+                        self.base_file_path.as_os_str().to_string_lossy(),
+                        self.current_slab_index,
+                        self.current_reading_position,
+                    ),
                     error,
-                ));
-            };
-            let header = header_result.unwrap();
+                )
+            })?;
 
             // Reached the end of file
             if header.entry_type == UnifiedLogType::LastEntry {
@@ -686,7 +690,12 @@ impl UnifiedLoggerRead {
 
         match read_result {
             Err(error) => Err(CuError::new_with_cause(
-                "Could not read a sections header",
+                &format!(
+                    "Could not read a sections header: {}/{}:{}",
+                    self.base_file_path.as_os_str().to_string_lossy(),
+                    self.current_slab_index,
+                    self.current_reading_position,
+                ),
                 error,
             )),
             Ok(header) => {
