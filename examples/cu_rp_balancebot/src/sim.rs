@@ -9,6 +9,7 @@ use bevy::prelude::*;
 use bevy::render::RenderPlugin;
 // disembiguation as there is also a bevy::prelude::debug
 use cu29::prelude::debug;
+use cu29::prelude::error;
 use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
 use cu_ads7883_new::ADSReadingPayload;
