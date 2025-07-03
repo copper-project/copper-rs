@@ -146,9 +146,9 @@ where
     println!();
     println!("  # of CL          -> {}", last_cl.to_formatted_string(l));
     println!(
-        "  CL rate          -> {}.{} Hz",
+        "  CL rate          -> {}.{:02} Hz",
         (cl_rate.trunc() as u64).to_formatted_string(&Locale::en),
-        format!("{:02}", (cl_rate.fract() * 100.0).round() as u64)
+        (cl_rate.fract() * 100.0).round() as u64
     );
     println!(
         "  CL total size    -> {} bytes",
