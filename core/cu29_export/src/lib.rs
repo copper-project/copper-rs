@@ -224,7 +224,7 @@ where
                                 return Ok(());
                             }
                             UnifiedLogType::Empty => {
-                                println!("Error: Found an empty / Unitialized section");
+                                println!("Error: Found an empty / Uninitialized section");
                             }
                         }
                     }
