@@ -17,6 +17,7 @@ pub use cu29_runtime::config::read_configuration;
 pub use cu29_traits::*;
 
 pub mod prelude {
+    pub use ctrlc;
     pub use cu29_clock::*;
     pub use cu29_derive::*;
     pub use cu29_intern_strs::*;
@@ -39,4 +40,5 @@ pub mod prelude {
     pub use cu29_value::to_value;
     pub use cu29_value::Value;
     pub use pool::*;
+    pub use serde::Serialize;
 }

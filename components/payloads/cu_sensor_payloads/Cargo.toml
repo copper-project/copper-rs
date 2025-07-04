@@ -19,6 +19,7 @@ uom = { workspace = true }
 derive_more = { workspace = true }
 image = { version = "0.25.6", optional = true }
 kornia = { version = "0.1.9", optional = true }
+serde = { version = "1.0.219", features = ["derive"] }
 
 [features]
 image = ["dep:image"]

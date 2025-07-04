@@ -1,12 +1,15 @@
-use std::fmt::{Display, Formatter};
-use std::io::Read;
-use std::path::{Path, PathBuf};
+mod fsck;
 
 use bincode::config::standard;
 use bincode::decode_from_std_read;
 use bincode::error::DecodeError;
 use clap::{Parser, Subcommand, ValueEnum};
 use cu29::prelude::*;
+use cu29::UnifiedLogType;
+use fsck::check;
+use std::fmt::{Display, Formatter};
+use std::io::Read;
+use std::path::{Path, PathBuf};
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum ExportFormat {
@@ -38,11 +41,16 @@ pub struct LogReaderCli {
 #[derive(Subcommand)]
 pub enum Command {
     /// Extract logs
-    ExtractLog { log_index: PathBuf },
+    ExtractTextLog { log_index: PathBuf },
     /// Extract copperlists
-    ExtractCopperlist {
+    ExtractCopperlists {
         #[arg(short, long, default_value_t = ExportFormat::Json)]
         export_format: ExportFormat,
+    },
+    /// Check the log and dump info about it.
+    Fsck {
+        #[arg(short, long, action = clap::ArgAction::Count)]
+        verbose: u8,
     },
 }
 
@@ -55,7 +63,7 @@ where
     let args = LogReaderCli::parse();
     let unifiedlog_base = args.unifiedlog_base;
 
-    let UnifiedLogger::Read(dl) = UnifiedLoggerBuilder::new()
+    let UnifiedLogger::Read(mut dl) = UnifiedLoggerBuilder::new()
         .file_base_name(&unifiedlog_base)
         .build()
         .expect("Failed to create logger")
@@ -64,26 +72,65 @@ where
     };
 
     match args.command {
-        Command::ExtractLog { log_index } => {
+        Command::ExtractTextLog { log_index } => {
             let reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::StructuredLogLine);
             textlog_dump(reader, &log_index)?;
         }
-        Command::ExtractCopperlist { export_format } => {
+        Command::ExtractCopperlists { export_format } => {
             println!("Extracting copperlists with format: {export_format}");
             let mut reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
-            let iter = copperlists_dump::<P>(&mut reader);
-            for entry in iter {
-                println!("{entry:#?}");
+            let iter = copperlists_reader::<P>(&mut reader);
+
+            match export_format {
+                ExportFormat::Json => {
+                    for entry in iter {
+                        serde_json::to_writer_pretty(std::io::stdout(), &entry).unwrap();
+                    }
+                }
+                ExportFormat::Csv => {
+                    let mut first = true;
+                    for origin in P::get_all_task_ids() {
+                        if !first {
+                            print!(", ");
+                        } else {
+                            print!("id, ");
+                        }
+                        print!("{origin}_time, {origin}_tov, {origin},");
+                        first = false;
+                    }
+                    println!();
+                    for entry in iter {
+                        let mut first = true;
+                        for msg in entry.cumsgs() {
+                            if let Some(payload) = msg.payload() {
+                                if !first {
+                                    print!(", ");
+                                } else {
+                                    print!("{}, ", entry.id);
+                                }
+                                let metadata = msg.metadata();
+                                print!("{}, {}, ", metadata.process_time(), metadata.tov());
+                                serde_json::to_writer(std::io::stdout(), payload).unwrap(); // TODO: escape for CSV
+                                first = false;
+                            }
+                        }
+                        println!();
+                    }
+                }
+            }
+        }
+        Command::Fsck { verbose } => {
+            if let Some(value) = check::<P>(&mut dl, verbose) {
+                return value;
             }
         }
     }
 
     Ok(())
 }
-
 /// Extracts the copper lists from a binary representation.
 /// P is the Payload determined by the configuration of the application.
-pub fn copperlists_dump<P: CopperListTuple>(
+pub fn copperlists_reader<P: CopperListTuple>(
     mut src: impl Read,
 ) -> impl Iterator<Item = CopperList<P>> {
     std::iter::from_fn(move || {
@@ -109,43 +156,81 @@ pub fn copperlists_dump<P: CopperListTuple>(
     })
 }
 
+/// Extracts the keyframes from the log.
+pub fn keyframes_reader(mut src: impl Read) -> impl Iterator<Item = KeyFrame> {
+    std::iter::from_fn(move || {
+        let entry = decode_from_std_read::<KeyFrame, _, _>(&mut src, standard());
+        match entry {
+            Ok(entry) => Some(entry),
+            Err(e) => match e {
+                DecodeError::UnexpectedEnd { .. } => None,
+                DecodeError::Io { inner, additional } => {
+                    if inner.kind() == std::io::ErrorKind::UnexpectedEof {
+                        None
+                    } else {
+                        println!("Error {inner:?} additional:{additional}");
+                        None
+                    }
+                }
+                _ => {
+                    println!("Error {e:?}");
+                    None
+                }
+            },
+        }
+    })
+}
+
+pub fn structlog_reader(mut src: impl Read) -> impl Iterator<Item = CuResult<CuLogEntry>> {
+    std::iter::from_fn(move || {
+        let entry = decode_from_std_read::<CuLogEntry, _, _>(&mut src, standard());
+
+        match entry {
+            Err(DecodeError::UnexpectedEnd { .. }) => None,
+            Err(DecodeError::Io {
+                inner,
+                additional: _,
+            }) => {
+                if inner.kind() == std::io::ErrorKind::UnexpectedEof {
+                    None
+                } else {
+                    Some(Err(CuError::new_with_cause("Error reading log", inner)))
+                }
+            }
+            Err(e) => Some(Err(CuError::new_with_cause("Error reading log", e))),
+            Ok(entry) => {
+                if entry.msg_index == 0 {
+                    None
+                } else {
+                    Some(Ok(entry))
+                }
+            }
+        }
+    })
+}
+
 /// Full dump of the copper structured log from its binary representation.
 /// This rebuilds a textual log.
 /// src: the source of the log data
 /// index: the path to the index file (containing the interned strings constructed at build time)
-pub fn textlog_dump(mut src: impl Read, index: &Path) -> CuResult<()> {
-    let all_strings = read_interned_strings(index)?;
-    loop {
-        let entry = decode_from_std_read::<CuLogEntry, _, _>(&mut src, standard());
+pub fn textlog_dump(src: impl Read, index: &Path) -> CuResult<()> {
+    let all_strings = read_interned_strings(index).map_err(|e| {
+        CuError::new_with_cause(
+            "Failed to read interned strings from index",
+            std::io::Error::other(e),
+        )
+    })?;
 
-        match entry {
-            Err(DecodeError::UnexpectedEnd { .. }) => return Ok(()),
-            Err(DecodeError::Io { inner, additional }) => {
-                if inner.kind() == std::io::ErrorKind::UnexpectedEof {
-                    return Ok(());
-                } else {
-                    println!("Error {inner:?} additional:{additional}");
-                    return Err(CuError::new_with_cause("Error reading log", inner));
-                }
-            }
-            Err(e) => {
-                println!("Error {e:?}");
-                return Err(CuError::new_with_cause("Error reading log", e));
-            }
-            Ok(entry) => {
-                if entry.msg_index == 0 {
-                    break;
-                }
-
-                let result = rebuild_logline(&all_strings, &entry);
-                if result.is_err() {
-                    println!("Failed to rebuild log line: {result:?}");
-                    continue;
-                }
-                println!("{}: {}", entry.time, result.unwrap());
-            }
-        };
+    for result in structlog_reader(src) {
+        match result {
+            Ok(entry) => match rebuild_logline(&all_strings, &entry) {
+                Ok(line) => println!("{}: {}", entry.time, line),
+                Err(e) => println!("Failed to rebuild log line: {e:?}"),
+            },
+            Err(e) => return Err(e),
+        }
     }
+
     Ok(())
 }
 
@@ -330,7 +415,7 @@ mod python {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bincode::encode_into_slice;
+    use bincode::{encode_into_slice, Decode, Encode};
     use fs_extra::dir::{copy, CopyOptions};
     use std::io::Cursor;
     use std::sync::{Arc, Mutex};
@@ -410,27 +495,45 @@ mod tests {
     }
 
     // This is normally generated at compile time in CuPayload.
-    type MyCuPayload = (u8, i32, f32);
+    #[derive(Debug, PartialEq, Clone, Copy, Serialize, Encode, Decode)]
+    struct MyMsgs((u8, i32, f32));
+
+    impl ErasedCuMsgs for MyMsgs {
+        fn cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
+            Vec::new()
+        }
+    }
+
+    impl MatchingTasks for MyMsgs {
+        fn get_all_task_ids() -> &'static [&'static str] {
+            &[]
+        }
+    }
 
     /// Checks if we can recover the copper lists from a binary representation.
     #[test]
     fn test_copperlists_dump() {
         let mut data = vec![0u8; 10000];
-        let mypls: [MyCuPayload; 4] = [(1, 2, 3.0), (2, 3, 4.0), (3, 4, 5.0), (4, 5, 6.0)];
+        let mypls: [MyMsgs; 4] = [
+            MyMsgs((1, 2, 3.0)),
+            MyMsgs((2, 3, 4.0)),
+            MyMsgs((3, 4, 5.0)),
+            MyMsgs((4, 5, 6.0)),
+        ];
 
         let mut offset: usize = 0;
         for pl in mypls.iter() {
-            let cl = CopperList::<MyCuPayload>::new(1, *pl);
+            let cl = CopperList::<MyMsgs>::new(1, *pl);
             offset +=
                 encode_into_slice(&cl, &mut data.as_mut_slice()[offset..], standard()).unwrap();
         }
 
         let reader = Cursor::new(data);
 
-        let mut iter = copperlists_dump::<MyCuPayload>(reader);
-        assert_eq!(iter.next().unwrap().msgs, (1, 2, 3.0));
-        assert_eq!(iter.next().unwrap().msgs, (2, 3, 4.0));
-        assert_eq!(iter.next().unwrap().msgs, (3, 4, 5.0));
-        assert_eq!(iter.next().unwrap().msgs, (4, 5, 6.0));
+        let mut iter = copperlists_reader::<MyMsgs>(reader);
+        assert_eq!(iter.next().unwrap().msgs, MyMsgs((1, 2, 3.0)));
+        assert_eq!(iter.next().unwrap().msgs, MyMsgs((2, 3, 4.0)));
+        assert_eq!(iter.next().unwrap().msgs, MyMsgs((3, 4, 5.0)));
+        assert_eq!(iter.next().unwrap().msgs, MyMsgs((4, 5, 6.0)));
     }
 }

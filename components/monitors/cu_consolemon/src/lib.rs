@@ -39,9 +39,10 @@ use tui_widgets::scrollview::{ScrollView, ScrollViewState};
 
 #[cfg(feature = "debug_pane")]
 const MENU_CONTENT: &str =
-    "   [1] SysInfo  [2] DAG  [3] Latencies  [4] Memory Pools [5] Debug Output  [q] Quit   ";
+    "   [1] SysInfo  [2] DAG  [3] Latencies  [4] Memory Pools [5] Debug Output  [q] Quit | Scroll: hjkl or ↑↓←→   ";
 #[cfg(not(feature = "debug_pane"))]
-const MENU_CONTENT: &str = "   [1] SysInfo  [2] DAG  [3] Latencies  [4] Memory Pools [q] Quit   ";
+const MENU_CONTENT: &str =
+    "   [1] SysInfo  [2] DAG  [3] Latencies  [4] Memory Pools [q] Quit | Scroll: hjkl or ↑↓←→   ";
 
 #[derive(PartialEq)]
 enum Screen {
@@ -687,7 +688,7 @@ impl UI {
                                 self.task_stats.lock().unwrap().reset()
                             }
                         }
-                        KeyCode::Char('j') => {
+                        KeyCode::Char('j') | KeyCode::Down => {
                             if self.active_screen == Screen::Dag {
                                 for _ in 0..1 {
                                     self.nodes_scrollable_widget_state
@@ -696,7 +697,7 @@ impl UI {
                                 }
                             }
                         }
-                        KeyCode::Char('k') => {
+                        KeyCode::Char('k') | KeyCode::Up => {
                             if self.active_screen == Screen::Dag {
                                 for _ in 0..1 {
                                     self.nodes_scrollable_widget_state
@@ -705,7 +706,7 @@ impl UI {
                                 }
                             }
                         }
-                        KeyCode::Char('h') => {
+                        KeyCode::Char('h') | KeyCode::Left => {
                             if self.active_screen == Screen::Dag {
                                 for _ in 0..5 {
                                     self.nodes_scrollable_widget_state
@@ -714,7 +715,7 @@ impl UI {
                                 }
                             }
                         }
-                        KeyCode::Char('l') => {
+                        KeyCode::Char('l') | KeyCode::Right => {
                             if self.active_screen == Screen::Dag {
                                 for _ in 0..5 {
                                     self.nodes_scrollable_widget_state

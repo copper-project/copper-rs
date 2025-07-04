@@ -1,6 +1,5 @@
 [package]
-name = "cu-pid"
-description = "A PID controller for the Copper project."
+name = "cu29-base-derive"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -10,7 +9,13 @@ categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
+[lib]
+proc-macro = true
+
 [dependencies]
-cu29 = { workspace = true }
-bincode = { workspace = true }
-serde = { workspace = true }
+quote = { workspace = true }
+syn = { workspace = true }
+cu29-intern-strs = { workspace = true, features = ["macro_debug"] }
+
+[features]
+macro_debug = ["cu29-intern-strs/macro_debug"]

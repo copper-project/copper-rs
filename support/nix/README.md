@@ -1,8 +1,6 @@
-# Copper-rs NIX Development Environment
+# Copper-rs Development Environment
 
-This repository contains the Nix configuration for setting up a comprehensive nix development environment for the Copper-rs project. The environment includes all necessary dependencies and tools for building and testing the project, with optional CUDA support.
-
-This setup has been tested on Linux (x86_64).
+Nix flake providing a cross-platform Rust development environment with optional CUDA support.
 
 ## Prerequisites
 
@@ -14,91 +12,65 @@ This setup has been tested on Linux (x86_64).
 
 ## Quick Start
 
-### Basic Development Environment
+```bash
+# Setup experimental feature
+mkdir -p ~/.conf/nix && echo "experimental-features = nix-command flakes" >> ~/.conf/nix/nix.conf
 
-To enter the development environment without CUDA support:
+# Setup flake
+nix flake update
+
+# Basic development environment
+nix develop
+
+# With CUDA support (Linux only)
+nix develop #cuda
+```
+
+The environment automatically:
+
+- Sets up Rust toolchain with essential components
+- Configures all dependencies (GStreamer, LLVM, OpenSSL, system libraries)
+- Navigates to project root and sets feature flags
+- Displays platform and CUDA status
+
+## Features
+
+- **Cross-platform**: Linux and macOS support
+- **CUDA support**: GPU acceleration on Linux systems
+- **Pre-configured**: Comprehensive feature flags and environment variables
+- **Complete toolchain**: Latest stable Rust with rust-analyzer, clippy, rustfmt
+
+## Dependencies
+
+**All platforms**: Rust toolchain, GStreamer, LLVM/Clang, OpenSSL, pkg-config
+**Linux**: udev, libpcap, mold, optional CUDA toolkit
+**macOS**: Apple frameworks (Security, CoreFoundation), libiconv
+
+## Usage
 
 ```bash
-cd support/nix
-nix-shell
+# Build with pre-configured features
+cargo build --workspace $FEATURES_FLAG
+
+# Run tests
+cargo nextest run --workspace $FEATURES_FLAG
 ```
 
-This will set up a lightweight environment with all necessary dependencies for building and testing Copper-rs.
+## Environment Variables
 
-### Development Environment with CUDA Support
-
-To enable CUDA support for GPU acceleration:
-
-```bash
-cd support/nix
-nix-shell --arg withCuda true
-```
-
-This adds CUDA libraries and configures the environment for GPU-accelerated development.
-
-## Environment Features
-
-The development environment includes:
-
-- **Rust Toolchain**: Stable Rust with components like rust-analyzer, clippy, and rustfmt
-- **LLVM Dependencies**: Version 14 with proper configuration for bindgen
-- **GStreamer**: Complete suite of GStreamer libraries and plugins
-- **System Dependencies**: Common libraries like libpcap, udev, glib, openssl
-- **Development Tools**: cargo-nextest, cargo-generate, and other useful tools
-- **Optional CUDA Support**: NVIDIA CUDA toolkit and related libraries (when enabled)
-
-## Feature Flags
-
-When the environment is activated, it sets the `FEATURES_FLAG` environment variable with the following features:
-
-```
-macro_debug,mock,perf-ui,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode
-```
-
-When CUDA is enabled, the `cuda` feature is also added to this list.
-
-## Working Directory
-
-The shell automatically navigates to the project root directory (two levels up from the `support/nix` directory) when started.
-
-## CUDA Configuration
-
-When CUDA support is enabled:
-
-1. CUDA toolkit and NVIDIA drivers are added to the environment
-2. Environment variables like `CUDA_PATH` are configured appropriately
-3. Library paths are set up to find CUDA libraries
-4. The shell checks for available NVIDIA GPUs and displays information about them
+- `FEATURES_FLAG`: Pre-configured feature set including `macro_debug,mock,perf-ui,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode` (plus `cuda` when enabled)
+- `LLVM_CONFIG`, `LIBCLANG_PATH`: LLVM/Clang configuration
+- Platform-specific library paths automatically configured
 
 ## Troubleshooting
 
-### LLVM Library Issues
+**CUDA not accessible (Linux)**: Ensure NVIDIA drivers are installed, check `/dev/nvidia*` permissions
+**macOS OpenSSL issues**: PKG_CONFIG_PATH is automatically configured
+**LLVM library issues**: Symlinks created automatically in `$HOME/.nix-llvm-libs`
 
-If you encounter issues with LLVM libraries, the environment creates a symlink in `$HOME/.nix-llvm-libs` to ensure compatibility with bindgen and other tools that require specific library versions.
+## Notes
 
-### CUDA Detection
-
-If CUDA is enabled but your GPU isn't detected, verify that:
-1. You have a compatible NVIDIA GPU
-2. The NVIDIA drivers are properly installed
-3. The `nvidia-smi` command works outside the Nix shell
-
-### Unfree Packages
-
-CUDA and NVIDIA drivers are marked as "unfree" in Nix. The shell configuration handles this automatically, but if you get permission errors, you may need to:
-
-```bash
-export NIXPKGS_ALLOW_UNFREE=1
-```
-
-before running `nix-shell`.
-
-## Customization
-
-The development environment can be customized by editing the `shell.nix` file. You can:
-
-- Add additional packages to `buildInputs`
-- Modify feature flags in the `shellHook`
-- Change LLVM or CUDA versions
-- Add new environment variables or configurations
-
+- [BETA] CUDA support requires Linux with NVIDIA drivers.
+- Uses LLVM 14 on Linux, latest on macOS
+- Automatically navigates to `../..` (project root) on shell entry
+- For order nix version on Linux, you can also you `nix-shell` and `nix-shell --arg withCuda true``

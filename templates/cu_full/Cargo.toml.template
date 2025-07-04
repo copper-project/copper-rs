@@ -26,6 +26,7 @@ logreader = ["dep:cu29-export"]
 [dependencies]
 cu29 = { {%if copper_source == "crates.io" %} version = "*" {%elsif copper_source == "git" %} git = "https://github.com/copper-project/copper-rs.git" {%elsif copper_source == "local" %}path = "{{copper_root_path}}/core/cu29" {%endif %} }
 bincode = { version = "2.0.1", features = ["derive"] }
+serde = { version = "*", features = ["derive"] }
 cu29-helpers = { {%if copper_source == "crates.io" %}version = "*" {%elsif copper_source == "git" %} git = "https://github.com/copper-project/copper-rs.git" {%elsif copper_source == "local" %}path = "{{copper_root_path}}/core/cu29_helpers" {%endif %} }
 cu29-export = { {%if copper_source == "crates.io" %}version = "*" {%elsif copper_source == "git" %} git = "https://github.com/copper-project/copper-rs.git" {%elsif copper_source == "local" %}path = "{{copper_root_path}}/core/cu29_export" {%endif %}, optional = true }
 

@@ -571,14 +571,32 @@ fn default_as_true() -> bool {
     true
 }
 
+pub const DEFAULT_KEYFRAME_INTERVAL: u32 = 100;
+
+fn default_keyframe_interval() -> Option<u32> {
+    Some(DEFAULT_KEYFRAME_INTERVAL)
+}
+
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
 pub struct LoggingConfig {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub slab_size_mib: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub section_size_mib: Option<u64>,
+    /// Enable task logging to the log file.
     #[serde(default = "default_as_true", skip_serializing_if = "Clone::clone")]
     pub enable_task_logging: bool,
+
+    /// Size of each slab in the log file. (it is the size of the memory mapped file at a time)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slab_size_mib: Option<u64>,
+
+    /// Pre-allocated size for each section in the log file.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub section_size_mib: Option<u64>,
+
+    /// Interval in copperlists between two "keyframes" in the log file i.e. freezing tasks.
+    #[serde(
+        default = "default_keyframe_interval",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub keyframe_interval: Option<u32>,
 }
 
 /// Missions are used to generate alternative DAGs within the same configuration.
@@ -1410,5 +1428,33 @@ mod tests {
         assert_eq!(cnx.dst, "sink");
         assert_eq!(cnx.msg, "u32");
         assert_eq!(cnx.missions, Some(vec!["m1".to_string()]));
+    }
+
+    #[test]
+    fn test_keyframe_interval() {
+        // note here that the src1 task is added before src2 in the tasks array,
+        // however, src1 connection is added AFTER src2 in the cnx array
+        let txt = r#"(
+            tasks: [(id: "src1", type: "a"), (id: "src2", type: "b"), (id: "sink", type: "c")],
+            cnx: [(src: "src2", dst: "sink", msg: "msg1"), (src: "src1", dst: "sink", msg: "msg2")],
+            logging: ( keyframe_interval: 314 )
+        )"#;
+        let config = CuConfig::deserialize_ron(txt);
+        let logging_config = config.logging.unwrap();
+        assert_eq!(logging_config.keyframe_interval.unwrap(), 314);
+    }
+
+    #[test]
+    fn test_default_keyframe_interval() {
+        // note here that the src1 task is added before src2 in the tasks array,
+        // however, src1 connection is added AFTER src2 in the cnx array
+        let txt = r#"(
+            tasks: [(id: "src1", type: "a"), (id: "src2", type: "b"), (id: "sink", type: "c")],
+            cnx: [(src: "src2", dst: "sink", msg: "msg1"), (src: "src1", dst: "sink", msg: "msg2")],
+            logging: ( slab_size_mib: 200, section_size_mib: 1024, )
+        )"#;
+        let config = CuConfig::deserialize_ron(txt);
+        let logging_config = config.logging.unwrap();
+        assert_eq!(logging_config.keyframe_interval.unwrap(), 100);
     }
 }

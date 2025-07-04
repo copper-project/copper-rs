@@ -20,7 +20,7 @@ use cu29_traits::CuResult;
 use proc_macro2::{Ident, Span};
 
 #[cfg(feature = "macro_debug")]
-use crate::format::{highlight_rust_code, rustfmt_generated_code};
+use crate::format::rustfmt_generated_code;
 
 mod format;
 mod utils;
@@ -105,6 +105,10 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
             use cu29::copperlist::CopperList;
             use cu29::cutask::CuMsgMetadata;
             use cu29::cutask::CuMsg;
+            use cu29::prelude::ErasedCuMsg;
+            use cu29::prelude::ErasedCuMsgs;
+            use cu29::prelude::MatchingTasks;
+            use cu29::prelude::Serialize;
             #support
         }
         use cumsgs::CuMsgs;
@@ -141,6 +145,12 @@ fn gen_culist_support(
     eprintln!("[build the copperlist tuple debug support]");
     let msgs_types_tuple_debug = build_culist_tuple_debug(&all_msgs_types_in_culist_order);
 
+    #[cfg(feature = "macro_debug")]
+    eprintln!("[build the copperlist tuple serialize support]");
+    let msgs_types_tuple_serialize = build_culist_tuple_serialize(&all_msgs_types_in_culist_order);
+
+    let erasedmsg_trait_impl = build_culist_erasedcumsgs(&all_msgs_types_in_culist_order);
+
     let collect_metadata_function = quote! {
         pub fn collect_metadata<'a>(culist: &'a CuList) -> [&'a CuMsgMetadata; #culist_size] {
             [#( &culist.msgs.0.#task_indices.metadata, )*]
@@ -153,6 +163,7 @@ fn gen_culist_support(
             let payload_type = all_msgs_types_in_culist_order[*output_position].clone();
             let index = syn::Index::from(*output_position);
             quote! {
+                #[allow(dead_code)]
                 pub fn #fn_name(&self) -> &CuMsg<#payload_type> {
                     &self.0.#index
                 }
@@ -171,12 +182,21 @@ fn gen_culist_support(
         impl CuMsgs {
             #(#methods)*
 
+            #[allow(dead_code)]
             fn get_tuple(&self) -> &#msgs_types_tuple {
                 &self.0
             }
 
+            #[allow(dead_code)]
             fn get_tuple_mut(&mut self) -> &mut #msgs_types_tuple {
                 &mut self.0
+            }
+        }
+
+        impl MatchingTasks for CuMsgs {
+            #[allow(dead_code)]
+            fn get_all_task_ids() -> &'static [&'static str] {
+                &[#(#all_tasks_as_struct_member_name),*]
             }
         }
 
@@ -186,6 +206,12 @@ fn gen_culist_support(
 
         // Adds the debug support
         #msgs_types_tuple_debug
+
+        // Adds the serialize support
+        #msgs_types_tuple_serialize
+
+        // Adds the type erased CuMsgs support (to help generic serialized conversions)
+        #erasedmsg_trait_impl
     }
 }
 
@@ -210,8 +236,15 @@ fn gen_sim_support(runtime_plan: &CuExecutionLoop) -> proc_macro2::TokenStream {
                     .map(|(_, t)| parse_str::<Type>(format!("CuMsg<{t}>").as_str()).unwrap());
                 let no_output = parse_str::<Type>("CuMsg<()>").unwrap();
                 let output = output.as_ref().unwrap_or(&no_output);
+
+                let inputs_type = if inputs.len() == 1 {
+                    quote! { &'a #(#inputs)* }
+                } else {
+                    quote! { (#(&'a #inputs),*) }
+                };
+
                 quote! {
-                    #enum_ident(cu29::simulation::CuTaskCallbackState<(#(&'a #inputs),*), &'a mut #output>)
+                    #enum_ident(cu29::simulation::CuTaskCallbackState<#inputs_type, &'a mut #output>)
                 }
             }
             CuExecutionUnit::Loop(_) => {
@@ -220,6 +253,8 @@ fn gen_sim_support(runtime_plan: &CuExecutionLoop) -> proc_macro2::TokenStream {
         })
         .collect();
     quote! {
+        // not used if sim is not generated but this is ok.
+        #[allow(dead_code)]
         pub enum SimStep<'a> {
             #(#plan_enum),*
         }
@@ -403,25 +438,31 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         // Generate the code to create instances of the nodes
         // It maps the types to their index
         let (task_instances_init_code,
+            task_restore_code,
             start_calls,
             stop_calls,
             preprocess_calls,
-            postprocess_calls): (Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>) = itertools::multiunzip(all_tasks_types
+            postprocess_calls): (Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>) = itertools::multiunzip(all_tasks_types
             .iter()
             .enumerate()
             .map(|(index, ty)| {
                 let task_index = int2sliceindex(index as u32);
+                let task_tuple_index = syn::Index::from(index);
                 let task_enum_name = config_id_to_enum(&all_tasks_ids[index]);
                 let enum_name = Ident::new(&task_enum_name, proc_macro2::Span::call_site());
                 let additional_error_info = format!(
                     "Failed to get create instance for {}, instance index {}.",
                     all_tasks_types_names[index], index
                 );
-                (
+                (   // Task instances initialization
                     quote! {
                         #ty::new(all_instances_configs[#index]).map_err(|e| e.add_cause(#additional_error_info))?
                     },
-                    {
+                    // Tasks keyframe restore code
+                    quote! {
+                        tasks.#task_tuple_index.thaw(&mut decoder).map_err(|e| CuError::new_with_cause("Failed to thaw", e))?
+                    },
+                    {  // Start calls
                         let monitoring_action = quote! {
                             let decision = self.copper_runtime.monitor.process_error(#index, CuTaskState::Start, &error);
                             match decision {
@@ -474,7 +515,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             }
                         }
                     },
-                    {
+                    {  // Stop calls
                         let monitoring_action = quote! {
                                     let decision = self.copper_runtime.monitor.process_error(#index, CuTaskState::Stop, &error);
                                     match decision {
@@ -524,9 +565,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             }
                         }
                     },
-                    {
+                    {  // Preprocess calls
                         let monitoring_action = quote! {
-                            let decision = self.copper_runtime.monitor.process_error(#index, CuTaskState::Preprocess, &error);
+                            let decision = monitor.process_error(#index, CuTaskState::Preprocess, &error);
                             match decision {
                                 Decision::Abort => {
                                     debug!("Preprocess: ABORT decision from monitoring. Task '{}' errored out \
@@ -566,16 +607,15 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         quote! {
                             #call_sim_callback
                             if doit {
-                                let task = &mut self.copper_runtime.tasks.#task_index;
-                                if let Err(error) = task.preprocess(&self.copper_runtime.clock) {
+                                if let Err(error) = tasks.#task_index.preprocess(clock) {
                                     #monitoring_action
                                 }
                             }
                         }
                     },
-                    {
+                    {  // Postprocess calls
                         let monitoring_action = quote! {
-                            let decision = self.copper_runtime.monitor.process_error(#index, CuTaskState::Postprocess, &error);
+                            let decision = monitor.process_error(#index, CuTaskState::Postprocess, &error);
                             match decision {
                                 Decision::Abort => {
                                     debug!("Postprocess: ABORT decision from monitoring. Task '{}' errored out \
@@ -615,8 +655,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         quote! {
                             #call_sim_callback
                             if doit {
-                                let task = &mut self.copper_runtime.tasks.#task_index;
-                                if let Err(error) = task.postprocess(&self.copper_runtime.clock) {
+                                if let Err(error) = tasks.#task_index.postprocess(clock) {
                                     #monitoring_action
                                 }
                             }
@@ -647,16 +686,21 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         );
 
                         let node_index = int2sliceindex(step.node_id);
-                        let task_instance = quote! { self.copper_runtime.tasks.#node_index };
+                        let task_instance = quote! { tasks.#node_index };
                         let comment_str = format!(
-                            "/// {} ({:?}) Id:{} I:{:?} O:{:?}",
+                            "DEBUG ->> {} ({:?}) Id:{} I:{:?} O:{:?}",
                             step.node.get_id(),
                             step.task_type,
                             step.node_id,
                             step.input_msg_indices_types,
                             step.output_msg_index_type
                         );
-                        let comment_tokens: proc_macro2::TokenStream = parse_str(&comment_str).unwrap();
+                        let comment_tokens = quote! {
+                            {
+                                let _ = stringify!(#comment_str);
+                            }
+                        };
+                        // let comment_tokens: proc_macro2::TokenStream = parse_str(&comment_str).unwrap();
                         let tid = step.node_id as usize;
                         taskid_call_order.push(tid);
 
@@ -670,13 +714,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                                     let monitoring_action = quote! {
                                         debug!("Task {}: Error during process: {}", #mission_mod::TASKS_IDS[#tid], &error);
-                                        let decision = self.copper_runtime.monitor.process_error(#tid, CuTaskState::Process, &error);
+                                        let decision = monitor.process_error(#tid, CuTaskState::Process, &error);
                                         match decision {
                                             Decision::Abort => {
                                                 debug!("Process: ABORT decision from monitoring. Task '{}' errored out \
-                                            during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#tid], id);
-                                                self.copper_runtime.monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
-                                                self.copper_runtime.end_of_processing(id);
+                                            during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#tid], clid);
+                                                monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
+                                                cl_manager.end_of_processing(clid)?;
                                                 return Ok(()); // this returns early from the one iteration call.
 
                                             }
@@ -718,15 +762,17 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         {
                                             #comment_tokens
                                             {
+                                                // Maybe freeze the task if this is a "key frame"
+                                                kf_manager.freeze_task(clid, &#task_instance)?;
                                                 #call_sim_callback
                                                 let cumsg_output = &mut msgs.#output_culist_index;
-                                                cumsg_output.metadata.process_time.start = self.copper_runtime.clock.now().into();
+                                                cumsg_output.metadata.process_time.start = clock.now().into();
                                                 let maybe_error = if doit {
-                                                    #task_instance.process(&self.copper_runtime.clock, cumsg_output)
+                                                    #task_instance.process(clock, cumsg_output)
                                                 } else {
                                                     Ok(())
                                                 };
-                                                cumsg_output.metadata.process_time.end = self.copper_runtime.clock.now().into();
+                                                cumsg_output.metadata.process_time.end = clock.now().into();
                                                 if let Err(error) = maybe_error {
                                                     #monitoring_action
                                                 }
@@ -745,13 +791,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                                     let monitoring_action = quote! {
                                         debug!("Task {}: Error during process: {}", #mission_mod::TASKS_IDS[#tid], &error);
-                                        let decision = self.copper_runtime.monitor.process_error(#tid, CuTaskState::Process, &error);
+                                        let decision = monitor.process_error(#tid, CuTaskState::Process, &error);
                                         match decision {
                                             Decision::Abort => {
                                                 debug!("Process: ABORT decision from monitoring. Task '{}' errored out \
-                                            during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#tid], id);
-                                                self.copper_runtime.monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
-                                                self.copper_runtime.end_of_processing(id);
+                                            during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#tid], clid);
+                                                monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
+                                                cl_manager.end_of_processing(clid)?;
                                                 return Ok(()); // this returns early from the one iteration call.
 
                                             }
@@ -770,9 +816,17 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     };
 
                                     let call_sim_callback = if sim_mode {
+                                        let inputs_type = if indices.len() == 1 {
+                                            // Not a tuple for a single input
+                                            quote! { #(&msgs.#indices)* }
+                                        } else {
+                                            // A tuple for multiple inputs
+                                            quote! { (#(&msgs.#indices),*) }
+                                        };
+
                                         quote! {
                                             let doit = {
-                                                let cumsg_input = (#(&msgs.#indices),*);
+                                                let cumsg_input = #inputs_type;
                                                 // This is the virtual output for the sink
                                                 let cumsg_output = &mut msgs.#output_culist_index;
                                                 let state = cu29::simulation::CuTaskCallbackState::Process(cumsg_input, cumsg_output);
@@ -794,16 +848,27 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     };
 
                                     let indices = step.input_msg_indices_types.iter().map(|(index, _)| int2sliceindex(*index));
+
+                                    let inputs_type = if indices.len() == 1 {
+                                        // Not a tuple for a single input
+                                        quote! { #(&msgs.#indices)* }
+                                    } else {
+                                        // A tuple for multiple inputs
+                                        quote! { (#(&msgs.#indices),*) }
+                                    };
+
                                     quote! {
                                         {
                                             #comment_tokens
+                                            // Maybe freeze the task if this is a "key frame"
+                                            kf_manager.freeze_task(clid, &#task_instance)?;
                                             #call_sim_callback
-                                            let cumsg_input = (#(&msgs.#indices),*);
+                                            let cumsg_input = #inputs_type;
                                             // This is the virtual output for the sink
                                             let cumsg_output = &mut msgs.#output_culist_index;
-                                            cumsg_output.metadata.process_time.start = self.copper_runtime.clock.now().into();
-                                            let maybe_error = if doit {#task_instance.process(&self.copper_runtime.clock, cumsg_input)} else {Ok(())};
-                                            cumsg_output.metadata.process_time.end = self.copper_runtime.clock.now().into();
+                                            cumsg_output.metadata.process_time.start = clock.now().into();
+                                            let maybe_error = if doit {#task_instance.process(clock, cumsg_input)} else {Ok(())};
+                                            cumsg_output.metadata.process_time.end = clock.now().into();
                                             if let Err(error) = maybe_error {
                                                 #monitoring_action
                                             }
@@ -820,13 +885,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                                     let monitoring_action = quote! {
                                         debug!("Task {}: Error during process: {}", #mission_mod::TASKS_IDS[#tid], &error);
-                                        let decision = self.copper_runtime.monitor.process_error(#tid, CuTaskState::Process, &error);
+                                        let decision = monitor.process_error(#tid, CuTaskState::Process, &error);
                                         match decision {
                                             Decision::Abort => {
                                                 debug!("Process: ABORT decision from monitoring. Task '{}' errored out \
-                                            during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#tid], id);
-                                                self.copper_runtime.monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
-                                                self.copper_runtime.end_of_processing(id);
+                                            during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#tid], clid);
+                                                monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
+                                                cl_manager.end_of_processing(clid)?;
                                                 return Ok(()); // this returns early from the one iteration call.
 
                                             }
@@ -845,9 +910,17 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     };
 
                                     let call_sim_callback = if sim_mode {
+                                        let inputs_type = if indices.len() == 1 {
+                                            // Not a tuple for a single input
+                                            quote! { #(&msgs.#indices)* }
+                                        } else {
+                                            // A tuple for multiple inputs
+                                            quote! { (#(&msgs.#indices),*) }
+                                        };
+
                                         quote! {
                                             let doit = {
-                                                let cumsg_input = (#(&msgs.#indices),*);
+                                                let cumsg_input = #inputs_type;
                                                 let cumsg_output = &mut msgs.#output_culist_index;
                                                 let state = cu29::simulation::CuTaskCallbackState::Process(cumsg_input, cumsg_output);
                                                 let ovr = sim_callback(SimStep::#enum_name(state));
@@ -869,15 +942,24 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     };
 
                                     let indices = step.input_msg_indices_types.iter().map(|(index, _)| int2sliceindex(*index));
+                                    let inputs_type = if indices.len() == 1 {
+                                        // Not a tuple for a single input
+                                        quote! { #(&msgs.#indices)* }
+                                    } else {
+                                        // A tuple for multiple inputs
+                                        quote! { (#(&msgs.#indices),*) }
+                                    };
                                     quote! {
                                         {
                                             #comment_tokens
+                                            // Maybe freeze the task if this is a "key frame"
+                                            kf_manager.freeze_task(clid, &#task_instance)?;
                                             #call_sim_callback
-                                            let cumsg_input = (#(&msgs.#indices),*);
+                                            let cumsg_input = #inputs_type;
                                             let cumsg_output = &mut msgs.#output_culist_index;
-                                            cumsg_output.metadata.process_time.start = self.copper_runtime.clock.now().into();
-                                            let maybe_error = if doit {#task_instance.process(&self.copper_runtime.clock, cumsg_input, cumsg_output)} else {Ok(())};
-                                            cumsg_output.metadata.process_time.end = self.copper_runtime.clock.now().into();
+                                            cumsg_output.metadata.process_time.start = clock.now().into();
+                                            let maybe_error = if doit {#task_instance.process(clock, cumsg_input, cumsg_output)} else {Ok(())};
+                                            cumsg_output.metadata.process_time.end = clock.now().into();
                                             if let Err(error) = maybe_error {
                                                 #monitoring_action
                                             }
@@ -984,29 +1066,44 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let run_methods = quote! {
 
             #run_one_iteration {
+
+                // Pre-explode the runtime to avoid complexity with partial borrowing in the generated code.
+                let runtime = &mut self.copper_runtime;
+                let clock = &runtime.clock;
+                let monitor = &mut runtime.monitor;
+                let tasks = &mut runtime.tasks;
+                let cl_manager = &mut runtime.copperlists_manager;
+                let kf_manager = &mut runtime.keyframes_manager;
+
+                // Preprocess calls can happen at any time, just packed them up front.
                 #(#preprocess_calls)*
+
+                let culist = cl_manager.inner.create().expect("Ran out of space for copper lists"); // FIXME: error handling
+                let clid = culist.id;
+                kf_manager.reset(clid, clock); // beginning of processing, we empty the serialized frozen states of the tasks.
+                culist.change_state(cu29::copperlist::CopperListState::Processing);
                 {
-                    let mut culist: &mut _ = &mut self.copper_runtime.copper_lists_manager.create().expect("Ran out of space for copper lists"); // FIXME: error handling.
-                    let id = culist.id;
-                    culist.change_state(cu29::copperlist::CopperListState::Processing);
-                    {
-                        let msgs = &mut culist.msgs.0;
-                        #(#runtime_plan_code)*
-                    } // drop(msgs);
+                    let msgs = &mut culist.msgs.0;
+                    #(#runtime_plan_code)*
+                } // drop(msgs);
+                monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
+                cl_manager.end_of_processing(clid)?;
+                kf_manager.end_of_processing(clid)?;
 
-                    {
-                        // End of CL monitoring
-                        let md = #mission_mod::collect_metadata(&culist);
-                        let e2e = md.last().unwrap().process_time.end.unwrap() - md.first().unwrap().process_time.start.unwrap();
-                        let e2en: u64 = e2e.into();
-                    } // drop(md);
+                // Postprocess calls can happen at any time, just packed them up at the end.
+                #(#postprocess_calls)*
+                Ok(())
+            }
 
-                    self.copper_runtime.monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
-                    self.copper_runtime.end_of_processing(id);
-
-               }// drop(culist); avoids a double mutable borrow
-               #(#postprocess_calls)*
-               Ok(())
+            fn restore_keyframe(&mut self, keyframe: &KeyFrame) -> CuResult<()> {
+                let runtime = &mut self.copper_runtime;
+                let clock = &runtime.clock;
+                let tasks = &mut runtime.tasks;
+                let config = cu29::bincode::config::standard();
+                let reader = cu29::bincode::de::read::SliceReader::new(&keyframe.serialized_tasks);
+                let mut decoder = DecoderImpl::new(reader, config, ());
+                #(#task_restore_code);*;
+                Ok(())
             }
 
             #start_all_tasks {
@@ -1022,16 +1119,24 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             #run {
+                static STOP_FLAG: AtomicBool = AtomicBool::new(false);
+                ctrlc::set_handler(move || {
+                    STOP_FLAG.store(true, Ordering::SeqCst);
+                }).expect("Error setting Ctrl-C handler");
+
                 self.start_all_tasks(#sim_callback_arg)?;
-                let error = loop {
-                    let error = self.run_one_iteration(#sim_callback_arg);
-                    if error.is_err() {
-                        break error;
+                let result = loop  {
+                    let result = self.run_one_iteration(#sim_callback_arg);
+
+                    if STOP_FLAG.load(Ordering::SeqCst) || result.is_err() {
+                        break result;
                     }
                 };
-                debug!("A task errored out: {}", &error);
+                if result.is_err() {
+                    error!("A task errored out: {}", &result);
+                }
                 self.stop_all_tasks(#sim_callback_arg)?;
-                error
+                result
             }
         };
 
@@ -1062,7 +1167,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         #[cfg(feature = "macro_debug")]
         eprintln!("[build result]");
-
         let application_impl = quote! {
             #app_impl_decl {
                 #simstep_type_decl
@@ -1099,6 +1203,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         // This is to be sure we have the size of at least a Culist and some.
                     );
 
+                    let keyframes_stream = stream_write::<KeyFrame>(
+                        unified_logger.clone(),
+                        UnifiedLogType::FrozenTasks,
+                        1024 * 1024 * 10, // 10 MiB
+                    );
+
                     let application = Ok(#application_name {
                         copper_runtime: CuRuntime::<#mission_mod::#tasks_type, #mission_mod::CuMsgs, #monitor_type, #DEFAULT_CLNB>::new(
                             clock,
@@ -1106,7 +1216,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             Some(#mission),
                             #mission_mod::#tasks_instanciator,
                             #mission_mod::monitor_instanciator,
-                            copperlist_stream)?,
+                            copperlist_stream,
+                            keyframes_stream)?, // FIXME: gbin
                     });
 
                     #sim_callback_on_new
@@ -1131,6 +1242,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         ) = if sim_mode {
             (
                 quote! {
+                    #[allow(dead_code)]
                     pub struct #builder_name <'a, F> {
                         clock: Option<RobotClock>,
                         unified_logger: Option<Arc<Mutex<UnifiedLoggerWrite>>>,
@@ -1139,6 +1251,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     }
                 },
                 quote! {
+                    #[allow(dead_code)]
                     pub fn new() -> Self {
                         Self {
                             clock: None,
@@ -1168,6 +1281,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         } else {
             (
                 quote! {
+                    #[allow(dead_code)]
                     pub struct #builder_name {
                         clock: Option<RobotClock>,
                         unified_logger: Option<Arc<Mutex<UnifiedLoggerWrite>>>,
@@ -1175,6 +1289,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     }
                 },
                 quote! {
+                    #[allow(dead_code)]
                     pub fn new() -> Self {
                         Self {
                             clock: None,
@@ -1198,22 +1313,26 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             {
                 #builder_new
 
+                #[allow(dead_code)]
                 pub fn with_clock(mut self, clock: RobotClock) -> Self {
                     self.clock = Some(clock);
                     self
                 }
 
+                #[allow(dead_code)]
                 pub fn with_unified_logger(mut self, unified_logger: Arc<Mutex<UnifiedLoggerWrite>>) -> Self {
                     self.unified_logger = Some(unified_logger);
                     self
                 }
 
+                #[allow(dead_code)]
                 pub fn with_context(mut self, copper_ctx: &CopperContext) -> Self {
                     self.clock = Some(copper_ctx.clock.clone());
                     self.unified_logger = Some(copper_ctx.unified_logger.clone());
                     self
                 }
 
+                #[allow(dead_code)]
                 pub fn with_config(mut self, config_override: CuConfig) -> Self {
                         self.config_override = Some(config_override);
                         self
@@ -1221,6 +1340,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 #builder_sim_callback_method
 
+                #[allow(dead_code)]
                 pub fn build(self) -> CuResult<#application_name> {
                     #application_name::new(
                         self.clock
@@ -1244,16 +1364,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::bincode::error::EncodeError;
                 use cu29::bincode::Decode;
                 use cu29::bincode::de::Decoder;
+                use cu29::bincode::de::DecoderImpl;
                 use cu29::bincode::error::DecodeError;
                 use cu29::clock::RobotClock;
-                use cu29::clock::OptionCuTime;
-                use cu29::clock::ClockProvider;
                 use cu29::config::CuConfig;
                 use cu29::config::ComponentConfig;
-                use cu29::config::MonitorConfig;
-                use cu29::config::read_configuration;
-                use cu29::config::read_configuration_str;
                 use cu29::curuntime::CuRuntime;
+                use cu29::curuntime::KeyFrame;
                 use cu29::curuntime::CopperContext;
                 use cu29::CuResult;
                 use cu29::CuError;
@@ -1264,18 +1381,24 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::cutask::CuMsgMetadata;
                 use cu29::copperlist::CopperList;
                 use cu29::monitoring::CuMonitor; // Trait import.
-                use cu29::monitoring::NoMonitor;
                 use cu29::monitoring::CuTaskState;
                 use cu29::monitoring::Decision;
                 use cu29::prelude::app::CuApplication;
-                use cu29::prelude::app::CuSimApplication;
                 use cu29::prelude::debug;
                 use cu29::prelude::stream_write;
                 use cu29::prelude::UnifiedLoggerWrite;
                 use cu29::prelude::UnifiedLogType;
                 use std::sync::Arc;
                 use std::sync::Mutex;
+                use std::sync::atomic::{AtomicBool, Ordering};
 
+                // Not used if the used doesn't generate Sim.
+                #[allow(unused_imports)]
+                use cu29::prelude::app::CuSimApplication;
+
+                // Not used if a monitor is present
+                #[allow(unused_imports)]
+                use cu29::monitoring::NoMonitor;
 
                 // This is the heart of everything.
                 // CuTasks is the list of all the tasks types.
@@ -1283,6 +1406,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 pub type CuTasks = #task_types_tuple;
 
                 // This is the variation with stubs for the sources and sinks in simulation mode.
+                // Not used if the used doesn't generate Sim.
+                #[allow(dead_code)]
                 pub type CuSimTasks = #task_types_tuple_sim;
 
                 pub const TASKS_IDS: &'static [&'static str] = &[#( #all_tasks_ids ),*];
@@ -1295,6 +1420,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     Ok(( #(#task_instances_init_code),*, ))
                 }
 
+                #[allow(dead_code)]
                 pub fn tasks_instanciator_sim(all_instances_configs: Vec<Option<&ComponentConfig>>) -> CuResult<CuSimTasks> {
                     Ok(( #(#task_sim_instances_init_code),*, ))
                 }
@@ -1317,7 +1443,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let default_application_tokens = if all_missions.contains_key("default") {
         quote! {
+        // you can bypass the builder and not use it
+        #[allow(unused_imports)]
         use default::#builder_name;
+
+        #[allow(unused_imports)]
         use default::#application_name;
         }
     } else {
@@ -1334,7 +1464,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     {
         let formatted_code = rustfmt_generated_code(result.to_string());
         eprintln!("\n     ===    Gen. Runtime ===\n");
-        eprintln!("{}", highlight_rust_code(formatted_code));
+        eprintln!("{formatted_code}");
+        // if you need colors back: eprintln!("{}", highlight_rust_code(formatted_code)); was disabled for cubuild.
+        // or simply use cargo expand
         eprintln!("\n     === === === === === ===\n");
     }
     result.into()
@@ -1469,6 +1601,26 @@ fn build_culist_tuple_decode(all_msgs_types_in_culist_order: &[Type]) -> ItemImp
     }
 }
 
+fn build_culist_erasedcumsgs(all_msgs_types_in_culist_order: &[Type]) -> ItemImpl {
+    let indices: Vec<usize> = (0..all_msgs_types_in_culist_order.len()).collect();
+    let casted_fields: Vec<_> = indices
+        .iter()
+        .map(|i| {
+            let idx = syn::Index::from(*i);
+            quote! { &self.0.#idx as &dyn ErasedCuMsg }
+        })
+        .collect();
+    parse_quote! {
+        impl ErasedCuMsgs for CuMsgs {
+            fn cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
+                vec![
+                    #(#casted_fields),*
+                ]
+            }
+        }
+    }
+}
+
 fn build_culist_tuple_debug(all_msgs_types_in_culist_order: &[Type]) -> ItemImpl {
     let indices: Vec<usize> = (0..all_msgs_types_in_culist_order.len()).collect();
 
@@ -1486,6 +1638,35 @@ fn build_culist_tuple_debug(all_msgs_types_in_culist_order: &[Type]) -> ItemImpl
                 f.debug_tuple("CuMsgs")
                     #(#debug_fields)*
                     .finish()
+            }
+        }
+    }
+}
+
+/// This is the serde serialization part of the CuMsgs
+fn build_culist_tuple_serialize(all_msgs_types_in_culist_order: &[Type]) -> ItemImpl {
+    let indices: Vec<usize> = (0..all_msgs_types_in_culist_order.len()).collect();
+    let tuple_len = all_msgs_types_in_culist_order.len();
+
+    // Generate the serialization for each tuple field
+    let serialize_fields: Vec<_> = indices
+        .iter()
+        .map(|i| {
+            let idx = syn::Index::from(*i);
+            quote! { &self.0.#idx }
+        })
+        .collect();
+
+    parse_quote! {
+        impl Serialize for CuMsgs {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                use serde::ser::SerializeTuple;
+                let mut tuple = serializer.serialize_tuple(#tuple_len)?;
+                #(tuple.serialize_element(#serialize_fields)?;)*
+                tuple.end()
             }
         }
     }

@@ -5,7 +5,7 @@ extern crate alloc;
 use bincode::{Decode, Encode};
 use std::fmt;
 
-use cu29_traits::CopperListTuple;
+use cu29_traits::{CopperListTuple, ErasedCuMsg, ErasedCuMsgs};
 use serde_derive::Serialize;
 use std::fmt::Display;
 use std::iter::{Chain, Rev};
@@ -43,7 +43,7 @@ impl Display for CopperListState {
     }
 }
 
-#[derive(Debug, Encode, Decode)]
+#[derive(Debug, Encode, Decode, Serialize)]
 pub struct CopperList<P: CopperListTuple> {
     pub id: u32,
     state: CopperListState,
@@ -66,6 +66,12 @@ impl<P: CopperListTuple> CopperList<P> {
 
     pub fn get_state(&self) -> CopperListState {
         self.state
+    }
+}
+
+impl<P: CopperListTuple> ErasedCuMsgs for CopperList<P> {
+    fn cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
+        self.msgs.cumsgs()
     }
 }
 
@@ -247,10 +253,27 @@ impl<P: CopperListTuple, const N: usize> CuListsManager<P, N> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cu29_traits::{ErasedCuMsg, ErasedCuMsgs, MatchingTasks};
+    use serde::{Serialize, Serializer};
+
+    #[derive(Debug, Encode, Decode, PartialEq, Clone, Copy, Serialize)]
+    struct CuMsgs(i32);
+
+    impl ErasedCuMsgs for CuMsgs {
+        fn cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
+            Vec::new()
+        }
+    }
+
+    impl MatchingTasks for CuMsgs {
+        fn get_all_task_ids() -> &'static [&'static str] {
+            &[]
+        }
+    }
 
     #[test]
     fn empty_queue() {
-        let q = CuListsManager::<i32, 5>::new();
+        let q = CuListsManager::<CuMsgs, 5>::new();
 
         assert!(q.is_empty());
         assert!(q.iter().next().is_none());
@@ -258,55 +281,55 @@ mod tests {
 
     #[test]
     fn partially_full_queue() {
-        let mut q = CuListsManager::<i32, 5>::new();
-        q.create().unwrap().msgs = 1;
-        q.create().unwrap().msgs = 2;
-        q.create().unwrap().msgs = 3;
+        let mut q = CuListsManager::<CuMsgs, 5>::new();
+        q.create().unwrap().msgs.0 = 1;
+        q.create().unwrap().msgs.0 = 2;
+        q.create().unwrap().msgs.0 = 3;
 
         assert!(!q.is_empty());
         assert_eq!(q.len(), 3);
 
-        let res: Vec<i32> = q.iter().map(|x| x.msgs).collect();
+        let res: Vec<i32> = q.iter().map(|x| x.msgs.0).collect();
         assert_eq!(res, [3, 2, 1]);
     }
 
     #[test]
     fn full_queue() {
-        let mut q = CuListsManager::<i32, 5>::new();
-        q.create().unwrap().msgs = 1;
-        q.create().unwrap().msgs = 2;
-        q.create().unwrap().msgs = 3;
-        q.create().unwrap().msgs = 4;
-        q.create().unwrap().msgs = 5;
+        let mut q = CuListsManager::<CuMsgs, 5>::new();
+        q.create().unwrap().msgs.0 = 1;
+        q.create().unwrap().msgs.0 = 2;
+        q.create().unwrap().msgs.0 = 3;
+        q.create().unwrap().msgs.0 = 4;
+        q.create().unwrap().msgs.0 = 5;
         assert_eq!(q.len(), 5);
 
-        let res: Vec<_> = q.iter().map(|x| x.msgs).collect();
+        let res: Vec<_> = q.iter().map(|x| x.msgs.0).collect();
         assert_eq!(res, [5, 4, 3, 2, 1]);
     }
 
     #[test]
     fn over_full_queue() {
-        let mut q = CuListsManager::<i32, 5>::new();
-        q.create().unwrap().msgs = 1;
-        q.create().unwrap().msgs = 2;
-        q.create().unwrap().msgs = 3;
-        q.create().unwrap().msgs = 4;
-        q.create().unwrap().msgs = 5;
+        let mut q = CuListsManager::<CuMsgs, 5>::new();
+        q.create().unwrap().msgs.0 = 1;
+        q.create().unwrap().msgs.0 = 2;
+        q.create().unwrap().msgs.0 = 3;
+        q.create().unwrap().msgs.0 = 4;
+        q.create().unwrap().msgs.0 = 5;
         assert!(q.create().is_none());
         assert_eq!(q.len(), 5);
 
-        let res: Vec<_> = q.iter().map(|x| x.msgs).collect();
+        let res: Vec<_> = q.iter().map(|x| x.msgs.0).collect();
         assert_eq!(res, [5, 4, 3, 2, 1]);
     }
 
     #[test]
     fn clear() {
-        let mut q = CuListsManager::<i32, 5>::new();
-        q.create().unwrap().msgs = 1;
-        q.create().unwrap().msgs = 2;
-        q.create().unwrap().msgs = 3;
-        q.create().unwrap().msgs = 4;
-        q.create().unwrap().msgs = 5;
+        let mut q = CuListsManager::<CuMsgs, 5>::new();
+        q.create().unwrap().msgs.0 = 1;
+        q.create().unwrap().msgs.0 = 2;
+        q.create().unwrap().msgs.0 = 3;
+        q.create().unwrap().msgs.0 = 4;
+        q.create().unwrap().msgs.0 = 5;
         assert!(q.create().is_none());
         assert_eq!(q.len(), 5);
 
@@ -315,104 +338,114 @@ mod tests {
         assert_eq!(q.len(), 0);
         assert!(q.iter().next().is_none());
 
-        q.create().unwrap().msgs = 1;
-        q.create().unwrap().msgs = 2;
-        q.create().unwrap().msgs = 3;
+        q.create().unwrap().msgs.0 = 1;
+        q.create().unwrap().msgs.0 = 2;
+        q.create().unwrap().msgs.0 = 3;
 
         assert_eq!(q.len(), 3);
 
-        let res: Vec<_> = q.iter().map(|x| x.msgs).collect();
+        let res: Vec<_> = q.iter().map(|x| x.msgs.0).collect();
         assert_eq!(res, [3, 2, 1]);
     }
 
     #[test]
     fn mutable_iterator() {
-        let mut q = CuListsManager::<i32, 5>::new();
-        q.create().unwrap().msgs = 1;
-        q.create().unwrap().msgs = 2;
-        q.create().unwrap().msgs = 3;
-        q.create().unwrap().msgs = 4;
-        q.create().unwrap().msgs = 5;
+        let mut q = CuListsManager::<CuMsgs, 5>::new();
+        q.create().unwrap().msgs.0 = 1;
+        q.create().unwrap().msgs.0 = 2;
+        q.create().unwrap().msgs.0 = 3;
+        q.create().unwrap().msgs.0 = 4;
+        q.create().unwrap().msgs.0 = 5;
 
         for x in q.iter_mut() {
-            x.msgs *= 2;
+            x.msgs.0 *= 2;
         }
 
-        let res: Vec<_> = q.iter().map(|x| x.msgs).collect();
+        let res: Vec<_> = q.iter().map(|x| x.msgs.0).collect();
         assert_eq!(res, [10, 8, 6, 4, 2]);
     }
 
     #[test]
-    fn zero_sized() {
-        let mut q = CuListsManager::<(), 5>::new();
-        *q.create().unwrap() = CopperList::new(0, ());
-        *q.create().unwrap() = CopperList::new(1, ());
-        *q.create().unwrap() = CopperList::new(2, ());
-
-        assert_eq!(q.len(), 3);
-
-        let mut iter = q.iter();
-        iter.next().unwrap();
-        iter.next().unwrap();
-        iter.next().unwrap();
-        assert!(iter.next().is_none());
-    }
-
-    #[test]
-    fn be_sure_we_wont_stackoverflow_at_init() {
-        let _ = CuListsManager::<[u8; 10_000_000], 3>::new();
-    }
-
-    #[test]
     fn test_drop_last() {
-        let mut q = CuListsManager::<i32, 5>::new();
-        q.create().unwrap().msgs = 1;
-        q.create().unwrap().msgs = 2;
-        q.create().unwrap().msgs = 3;
-        q.create().unwrap().msgs = 4;
-        q.create().unwrap().msgs = 5;
+        let mut q = CuListsManager::<CuMsgs, 5>::new();
+        q.create().unwrap().msgs.0 = 1;
+        q.create().unwrap().msgs.0 = 2;
+        q.create().unwrap().msgs.0 = 3;
+        q.create().unwrap().msgs.0 = 4;
+        q.create().unwrap().msgs.0 = 5;
         assert_eq!(q.len(), 5);
 
         q.drop_last();
         assert_eq!(q.len(), 4);
 
-        let res: Vec<_> = q.iter().map(|x| x.msgs).collect();
+        let res: Vec<_> = q.iter().map(|x| x.msgs.0).collect();
         assert_eq!(res, [4, 3, 2, 1]);
     }
 
     #[test]
     fn test_pop() {
-        let mut q = CuListsManager::<i32, 5>::new();
-        q.create().unwrap().msgs = 1;
-        q.create().unwrap().msgs = 2;
-        q.create().unwrap().msgs = 3;
-        q.create().unwrap().msgs = 4;
-        q.create().unwrap().msgs = 5;
+        let mut q = CuListsManager::<CuMsgs, 5>::new();
+        q.create().unwrap().msgs.0 = 1;
+        q.create().unwrap().msgs.0 = 2;
+        q.create().unwrap().msgs.0 = 3;
+        q.create().unwrap().msgs.0 = 4;
+        q.create().unwrap().msgs.0 = 5;
         assert_eq!(q.len(), 5);
 
         let last = q.pop().unwrap();
-        assert_eq!(last.msgs, 5);
+        assert_eq!(last.msgs.0, 5);
         assert_eq!(q.len(), 4);
 
-        let res: Vec<_> = q.iter().map(|x| x.msgs).collect();
+        let res: Vec<_> = q.iter().map(|x| x.msgs.0).collect();
         assert_eq!(res, [4, 3, 2, 1]);
     }
 
     #[test]
     fn test_peek() {
-        let mut q = CuListsManager::<i32, 5>::new();
-        q.create().unwrap().msgs = 1;
-        q.create().unwrap().msgs = 2;
-        q.create().unwrap().msgs = 3;
-        q.create().unwrap().msgs = 4;
-        q.create().unwrap().msgs = 5;
+        let mut q = CuListsManager::<CuMsgs, 5>::new();
+        q.create().unwrap().msgs.0 = 1;
+        q.create().unwrap().msgs.0 = 2;
+        q.create().unwrap().msgs.0 = 3;
+        q.create().unwrap().msgs.0 = 4;
+        q.create().unwrap().msgs.0 = 5;
         assert_eq!(q.len(), 5);
 
         let last = q.peek().unwrap();
-        assert_eq!(last.msgs, 5);
+        assert_eq!(last.msgs.0, 5);
         assert_eq!(q.len(), 5);
 
-        let res: Vec<_> = q.iter().map(|x| x.msgs).collect();
+        let res: Vec<_> = q.iter().map(|x| x.msgs.0).collect();
         assert_eq!(res, [5, 4, 3, 2, 1]);
+    }
+
+    #[derive(Decode, Encode, Debug, PartialEq, Clone, Copy)]
+    struct TestStruct {
+        content: [u8; 10_000_000],
+    }
+
+    impl ErasedCuMsgs for TestStruct {
+        fn cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
+            Vec::new()
+        }
+    }
+
+    impl Serialize for TestStruct {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            serializer.serialize_i8(0)
+        }
+    }
+
+    impl MatchingTasks for TestStruct {
+        fn get_all_task_ids() -> &'static [&'static str] {
+            &[]
+        }
+    }
+
+    #[test]
+    fn be_sure_we_wont_stackoverflow_at_init() {
+        let _ = CuListsManager::<TestStruct, 3>::new();
     }
 }

@@ -2,26 +2,23 @@
 //! or interact with to create a Copper task.
 
 use crate::config::ComponentConfig;
-use bincode::de::Decoder;
-use bincode::de::{BorrowDecoder, Decode};
-use bincode::enc::Encode;
-use bincode::enc::Encoder;
+use bincode::de::{Decode, Decoder};
+use bincode::enc::{Encode, Encoder};
 use bincode::error::{DecodeError, EncodeError};
-use bincode::BorrowDecode;
 use compact_str::{CompactString, ToCompactString};
 use cu29_clock::{PartialCuTimeRange, RobotClock, Tov};
-use cu29_traits::CuResult;
-use serde_derive::{Deserialize, Serialize};
+use cu29_traits::{CuCompactString, CuResult, ErasedCuMsg, COMPACT_STRING_CAPACITY};
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 
 // Everything that is stateful in copper for zero copy constraints need to be restricted to this trait.
-pub trait CuMsgPayload: Default + Debug + Clone + Encode + Decode<()> + Sized {}
+pub trait CuMsgPayload: Default + Debug + Clone + Encode + Decode<()> + Serialize + Sized {}
 
 pub trait CuMsgPack<'cl> {}
 
 // Also anything that follows this contract can be a payload (blanket implementation)
-impl<T: Default + Debug + Clone + Encode + Decode<()> + Sized> CuMsgPayload for T {}
+impl<T: Default + Debug + Clone + Encode + Decode<()> + Serialize + Sized> CuMsgPayload for T {}
 
 macro_rules! impl_cu_msg_pack {
     ($(($($ty:ident),*)),*) => {
@@ -64,36 +61,6 @@ macro_rules! output_msg {
     };
 }
 
-// MAX_SIZE from their repr module is not accessible so we need to copy paste their definition for 24
-// which is the maximum size for inline allocation (no heap)
-const COMPACT_STRING_CAPACITY: usize = size_of::<String>();
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
-pub struct CuCompactString(pub CompactString);
-
-impl Encode for CuCompactString {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        let CuCompactString(ref compact_string) = self;
-        let bytes = compact_string.as_bytes();
-        bytes.encode(encoder)
-    }
-}
-
-impl<Context> Decode<Context> for CuCompactString {
-    fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let bytes = <Vec<u8> as Decode<D::Context>>::decode(decoder)?; // Decode into a byte buffer
-        let compact_string =
-            CompactString::from_utf8(bytes).map_err(|e| DecodeError::Utf8 { inner: e })?;
-        Ok(CuCompactString(compact_string))
-    }
-}
-
-impl<'de, Context> BorrowDecode<'de, Context> for CuCompactString {
-    fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        CuCompactString::decode(decoder)
-    }
-}
-
 /// CuMsgMetadata is a structure that contains metadata common to all CuMsgs.
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode, Serialize, Deserialize)]
 pub struct CuMsgMetadata {
@@ -113,6 +80,20 @@ impl CuMsgMetadata {
     }
 }
 
+impl cu29_traits::CuMsgMetadataTrait for CuMsgMetadata {
+    fn process_time(&self) -> PartialCuTimeRange {
+        self.process_time
+    }
+
+    fn tov(&self) -> Tov {
+        self.tov
+    }
+
+    fn status_txt(&self) -> &CuCompactString {
+        &self.status_txt
+    }
+}
+
 impl Display for CuMsgMetadata {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
@@ -124,7 +105,7 @@ impl Display for CuMsgMetadata {
 }
 
 /// CuMsg is the envelope holding the msg payload and the metadata between tasks.
-#[derive(Default, Debug, Clone, bincode::Encode, bincode::Decode)]
+#[derive(Default, Debug, Clone, bincode::Encode, bincode::Decode, Serialize)]
 pub struct CuMsg<T>
 where
     T: CuMsgPayload,
@@ -173,6 +154,21 @@ where
     }
 }
 
+impl<T> ErasedCuMsg for CuMsg<T>
+where
+    T: CuMsgPayload,
+{
+    fn metadata(&self) -> &dyn cu29_traits::CuMsgMetadataTrait {
+        &self.metadata
+    }
+
+    fn payload(&self) -> Option<&dyn erased_serde::Serialize> {
+        self.payload
+            .as_ref()
+            .map(|p| p as &dyn erased_serde::Serialize)
+    }
+}
+
 /// The internal state of a task needs to be serializable
 /// so the framework can take a snapshot of the task graph.
 pub trait Freezable {
@@ -185,9 +181,18 @@ pub trait Freezable {
 
     /// This method is called by the framework when it wants to restore the task to a specific state.
     /// Here it is similar to Decode but the framework will give you a new instance of the task (the new method will be called)
-    #[allow(unused_variables)]
-    fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+    fn thaw<D: Decoder>(&mut self, _decoder: &mut D) -> Result<(), DecodeError> {
         Ok(())
+    }
+}
+
+/// Bincode Adapter for Freezable tasks
+/// This allows the use of the bincode API directly to freeze and thaw tasks.
+pub struct BincodeAdapter<'a, T: Freezable + ?Sized>(pub &'a T);
+
+impl<'a, T: Freezable + ?Sized> Encode for BincodeAdapter<'a, T> {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        self.0.freeze(encoder)
     }
 }
 

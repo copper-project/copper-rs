@@ -13,5 +13,7 @@ repository.workspace = true
 
 [dependencies]
 cu29 = { workspace = true, features = ["macro_debug", "log-level-debug"] }
+# cu29 = { workspace = true, features = ["log-level-debug"] }
 cu29-helpers = { workspace = true }
 tempfile = { workspace = true }
+serde = { workspace = true }
