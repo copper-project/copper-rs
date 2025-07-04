@@ -19,20 +19,6 @@ use arrayvec::ArrayString;
 pub type FrameIdString = ArrayString<64>;
 
 pub use broadcaster::{ModernTransformBroadcaster, ModernTransformListener, TransformBroadcast};
-
-// Re-export the deprecated types under a legacy module
-// This way users can still access them if needed, but they won't pollute the main namespace
-pub mod legacy {
-    #[allow(deprecated)]
-    #[deprecated(note = "Use TransformBroadcast instead")]
-    pub use crate::broadcaster::TransformBroadcastPayload;
-    #[allow(deprecated)]
-    #[deprecated(note = "Use ModernTransformBroadcaster instead")]
-    pub use crate::broadcaster::TransformBroadcaster;
-    #[allow(deprecated)]
-    #[deprecated(note = "Use ModernTransformListener instead")]
-    pub use crate::broadcaster::TransformListener;
-}
 pub use error::{TransformError, TransformResult};
 pub use frames::{
     BaseFrame, CameraFrame, FrameId, FramePair, ImuFrame, LidarFrame, RobotFrame, WorldFrame,
