@@ -169,7 +169,7 @@ fn create_log_entry(input: TokenStream, level: CuLogLevel) -> TokenStream {
 /// In release mode, the log will be only be written to the unified logger.
 ///
 /// This macro will be compiled out if the max log level is set to a level higher than Debug.
-#[cfg(feature = "log-level-debug")]
+#[cfg(any(feature = "log-level-debug", cu29_default_log_level_debug))]
 #[proc_macro]
 pub fn debug(input: TokenStream) -> TokenStream {
     create_log_entry(input, CuLogLevel::Debug)
@@ -239,7 +239,7 @@ pub fn critical(input: TokenStream) -> TokenStream {
 }
 
 // Provide empty implementations for macros that are compiled out
-#[cfg(not(any(feature = "log-level-debug",)))]
+#[cfg(not(any(feature = "log-level-debug", cu29_default_log_level_debug)))]
 #[proc_macro]
 pub fn debug(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     reference_unused_variables(input)
