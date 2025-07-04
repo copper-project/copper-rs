@@ -18,7 +18,7 @@ proc-macro = true
 
 [dependencies]
 cu29-log = { workspace = true }
-cu29-intern-strs = { workspace = true, features = ["macro_debug"] }
+cu29-intern-strs = { workspace = true }
 syn = { workspace = true }
 quote = { workspace = true }
 
