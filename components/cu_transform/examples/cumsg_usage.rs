@@ -126,8 +126,7 @@ fn main() {
     }
 
     println!("\nKey advantages of CuMsg pattern:");
+    println!("- Integrates with Copper message system");
     println!("- Timestamps handled by CuMsg metadata (Tov)");
     println!("- Supports time ranges for broadcasts");
-    println!("- Integrates with Copper message system");
-    println!("- No separate StampedTransform type needed");
 }
