@@ -60,10 +60,10 @@ fn main() {
     println!("\nBroadcasting multiple transforms with time range...");
 
     // Create multiple transforms at different times
-    let times = vec![
+    let times = [
         CuDuration(2_000_000_000), // 2 seconds
         CuDuration(2_100_000_000), // 2.1 seconds
-        CuDuration(2_200_000_000), // 2.2 seconds
+        CuDuration(2_200_000_000),
     ];
 
     for (i, &time) in times.iter().enumerate() {
@@ -110,7 +110,7 @@ fn main() {
                 mat[3][0], mat[3][1], mat[3][2]
             );
         }
-        Err(e) => println!("  Error: {}", e),
+        Err(e) => println!("  Error: {e}"),
     }
 
     // Query velocity (requires transforms at multiple times)
@@ -122,7 +122,7 @@ fn main() {
                 vel.linear[0], vel.linear[1], vel.linear[2]
             );
         }
-        Err(e) => println!("  Error computing velocity: {}", e),
+        Err(e) => println!("  Error computing velocity: {e}"),
     }
 
     println!("\nKey advantages of CuMsg pattern:");

@@ -167,7 +167,7 @@ fn main() {
                 mat[3][0], mat[3][1], mat[3][2]
             );
         }
-        Err(e) => println!("Error: {}", e),
+        Err(e) => println!("Error: {e}"),
     }
 
     println!("\nKey benefits of CuMsg pattern:");

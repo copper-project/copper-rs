@@ -97,8 +97,7 @@ impl<T: Copy + Debug + Default + bincode::enc::Encode + bincode::de::Decode<()> 
 
         if count > MAX_TRANSFORMS_PER_BROADCAST {
             return Err(bincode::error::DecodeError::OtherString(format!(
-                "Too many transforms in broadcast: {} > {}",
-                count, MAX_TRANSFORMS_PER_BROADCAST
+                "Too many transforms in broadcast: {count} > {MAX_TRANSFORMS_PER_BROADCAST}"
             )));
         }
 
