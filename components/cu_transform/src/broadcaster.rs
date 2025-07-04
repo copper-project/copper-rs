@@ -14,15 +14,15 @@ pub const MAX_TRANSFORMS_PER_BROADCAST: usize = 10;
 
 /// Modern broadcast payload using TransformMsg
 /// This is the preferred way to broadcast transforms using CuMsg
-#[derive(Debug, Clone)]
-pub struct TransformBroadcast<T: Copy + Debug + Default + 'static> {
+#[derive(Debug, Clone, Serialize)]
+pub struct TransformBroadcast<T: Copy + Debug + Default + Serialize + 'static> {
     /// Fixed-size array of transform messages
     pub transforms: [Option<TransformMsg<T>>; MAX_TRANSFORMS_PER_BROADCAST],
     /// Number of valid transforms in the array
     pub count: usize,
 }
 
-impl<T: Copy + Debug + Default + 'static> Default for TransformBroadcast<T> {
+impl<T: Copy + Debug + Default + Serialize + 'static> Default for TransformBroadcast<T> {
     fn default() -> Self {
         Self {
             transforms: [const { None }; MAX_TRANSFORMS_PER_BROADCAST],
@@ -31,7 +31,7 @@ impl<T: Copy + Debug + Default + 'static> Default for TransformBroadcast<T> {
     }
 }
 
-impl<T: Copy + Debug + Default + 'static> TransformBroadcast<T> {
+impl<T: Copy + Debug + Default + Serialize + 'static> TransformBroadcast<T> {
     /// Create a new broadcast payload
     pub fn new() -> Self {
         Self::default()
@@ -65,8 +65,15 @@ impl<T: Copy + Debug + Default + 'static> TransformBroadcast<T> {
     }
 }
 
-impl<T: Copy + Debug + Default + bincode::enc::Encode + bincode::de::Decode<()> + 'static>
-    bincode::enc::Encode for TransformBroadcast<T>
+impl<
+        T: Copy
+            + Debug
+            + Default
+            + bincode::enc::Encode
+            + bincode::de::Decode<()>
+            + Serialize
+            + 'static,
+    > bincode::enc::Encode for TransformBroadcast<T>
 {
     fn encode<E: bincode::enc::Encoder>(
         &self,
@@ -86,8 +93,15 @@ impl<T: Copy + Debug + Default + bincode::enc::Encode + bincode::de::Decode<()> 
     }
 }
 
-impl<T: Copy + Debug + Default + bincode::enc::Encode + bincode::de::Decode<()> + 'static>
-    bincode::de::Decode<()> for TransformBroadcast<T>
+impl<
+        T: Copy
+            + Debug
+            + Default
+            + bincode::enc::Encode
+            + bincode::de::Decode<()>
+            + Serialize
+            + 'static,
+    > bincode::de::Decode<()> for TransformBroadcast<T>
 {
     fn decode<D: bincode::de::Decoder<Context = ()>>(
         decoder: &mut D,
@@ -114,7 +128,7 @@ impl<T: Copy + Debug + Default + bincode::enc::Encode + bincode::de::Decode<()> 
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 #[deprecated(note = "Use TransformBroadcast with TransformMsg instead")]
 pub struct TransformBroadcastPayload<
     T: Copy + Debug + Default + bincode::enc::Encode + bincode::de::Decode<()> + 'static,

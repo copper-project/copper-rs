@@ -12,7 +12,7 @@ description = "A coordinate frame transformation library for copper-rs, similar 
 
 [dependencies]
 cu29 = { path = "../../core/cu29", version = "0.8.0" }
-cu-spatial-payloads = { path = "../payloads/cu_spatial_payloads", version = "0.8.0" }
+cu-spatial-payloads = { path = "../payloads/cu_spatial_payloads", version = "0.8.0", features = ["glam"] }
 petgraph = "0.8.1"  # For transform tree management
 thiserror = "1.0"   # For error handling
 bincode = { workspace = true }   # For serialization

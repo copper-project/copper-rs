@@ -246,19 +246,21 @@ impl<'cl> CuTask<'cl> for AprilTags {
                 if let Some(aprilpose) = detection.estimate_tag_pose(&self.tag_params) {
                     let translation = aprilpose.translation();
                     let rotation = aprilpose.rotation();
-                    let mut pose = CuPose::<f32>::default();
-                    pose.mat[0][3] = translation.data()[0] as f32;
-                    pose.mat[1][3] = translation.data()[1] as f32;
-                    pose.mat[2][3] = translation.data()[2] as f32;
-                    pose.mat[0][0] = rotation.data()[0] as f32;
-                    pose.mat[0][1] = rotation.data()[3] as f32;
-                    pose.mat[0][2] = rotation.data()[2 * 3] as f32;
-                    pose.mat[1][0] = rotation.data()[1] as f32;
-                    pose.mat[1][1] = rotation.data()[1 + 3] as f32;
-                    pose.mat[1][2] = rotation.data()[1 + 2 * 3] as f32;
-                    pose.mat[2][0] = rotation.data()[2] as f32;
-                    pose.mat[2][1] = rotation.data()[2 + 3] as f32;
-                    pose.mat[2][2] = rotation.data()[2 + 2 * 3] as f32;
+                    let mut mat: [[f32; 4]; 4] = [[0.0, 0.0, 0.0, 0.0]; 4];
+                    mat[0][3] = translation.data()[0] as f32;
+                    mat[1][3] = translation.data()[1] as f32;
+                    mat[2][3] = translation.data()[2] as f32;
+                    mat[0][0] = rotation.data()[0] as f32;
+                    mat[0][1] = rotation.data()[3] as f32;
+                    mat[0][2] = rotation.data()[2 * 3] as f32;
+                    mat[1][0] = rotation.data()[1] as f32;
+                    mat[1][1] = rotation.data()[1 + 3] as f32;
+                    mat[1][2] = rotation.data()[1 + 2 * 3] as f32;
+                    mat[2][0] = rotation.data()[2] as f32;
+                    mat[2][1] = rotation.data()[2 + 3] as f32;
+                    mat[2][2] = rotation.data()[2 + 2 * 3] as f32;
+
+                    let pose = CuPose::<f32>::from_matrix(mat);
                     let CuArrayVec(detections) = &mut result.poses;
                     detections.push(pose);
                     let CuArrayVec(decision_margin) = &mut result.decision_margins;

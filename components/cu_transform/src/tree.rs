@@ -10,6 +10,7 @@ use cu_spatial_payloads::Transform3D;
 use dashmap::DashMap;
 use petgraph::algo::dijkstra;
 use petgraph::graph::{DiGraph, NodeIndex};
+use serde::Serialize;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::ops::Neg;
@@ -239,7 +240,7 @@ impl One for u64 {
 
 // We need to limit T to types where Transform3D<T> has Clone and inverse method
 // and now we also require T to implement One
-impl<T: Copy + Debug + Default + One + 'static + Neg<Output = T>> TransformTree<T>
+impl<T: Copy + Debug + Default + One + Serialize + 'static + Neg<Output = T>> TransformTree<T>
 where
     Transform3D<T>: Clone + HasInverse<T> + std::ops::Mul<Output = Transform3D<T>>,
     T: std::ops::Add<Output = T>
@@ -750,7 +751,8 @@ where
     }
 }
 
-impl<T: Copy + Debug + Default + One + 'static + Neg<Output = T>> Default for TransformTree<T>
+impl<T: Copy + Debug + Default + One + Serialize + 'static + Neg<Output = T>> Default
+    for TransformTree<T>
 where
     Transform3D<T>: Clone + HasInverse<T> + std::ops::Mul<Output = Transform3D<T>>,
     T: std::ops::Add<Output = T>

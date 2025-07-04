@@ -35,7 +35,7 @@ use std::fmt::Debug;
 /// cu_msg.metadata.tov = Tov::Time(CuDuration(1000));
 /// ```
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
-pub struct TransformMsg<T: Copy + Debug + Default + 'static> {
+pub struct TransformMsg<T: Copy + Debug + Default + Serialize + 'static> {
     /// The actual transform
     pub transform: Transform3D<T>,
     /// Parent frame identifier
@@ -44,7 +44,7 @@ pub struct TransformMsg<T: Copy + Debug + Default + 'static> {
     pub child_frame: FrameIdString,
 }
 
-impl<T: Copy + Debug + Default + 'static> TransformMsg<T> {
+impl<T: Copy + Debug + Default + Serialize + 'static> TransformMsg<T> {
     /// Create a new transform message
     pub fn new(
         transform: Transform3D<T>,
@@ -73,7 +73,7 @@ impl<T: Copy + Debug + Default + 'static> TransformMsg<T> {
 }
 
 // Manual Encode/Decode implementations to work with Transform3D's specific implementations
-impl<T: Copy + Debug + Default + 'static> Encode for TransformMsg<T>
+impl<T: Copy + Debug + Default + Serialize + 'static> Encode for TransformMsg<T>
 where
     T: Encode,
 {
@@ -88,7 +88,7 @@ where
     }
 }
 
-impl<T: Copy + Debug + Default + 'static> Decode<()> for TransformMsg<T>
+impl<T: Copy + Debug + Default + Serialize + 'static> Decode<()> for TransformMsg<T>
 where
     T: Decode<()>,
 {
