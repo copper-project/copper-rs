@@ -197,7 +197,7 @@ impl<'cl> CuTask<'cl> for DynThreshold {
             },
             handle,
         );
-        output.metadata.tov = input.metadata.tov;
+        output.tov = input.tov;
         output.set_payload(image);
         Ok(())
     }
