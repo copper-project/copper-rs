@@ -109,7 +109,7 @@ where
                                     print!("{}, ", entry.id);
                                 }
                                 let metadata = msg.metadata();
-                                print!("{}, {}, ", metadata.process_time(), metadata.tov());
+                                print!("{}, {}, ", metadata.process_time(), msg.tov());
                                 serde_json::to_writer(std::io::stdout(), payload).unwrap(); // TODO: escape for CSV
                                 first = false;
                             }
@@ -498,8 +498,8 @@ mod tests {
     #[derive(Debug, PartialEq, Clone, Copy, Serialize, Encode, Decode)]
     struct MyMsgs((u8, i32, f32));
 
-    impl ErasedCuMsgs for MyMsgs {
-        fn cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
+    impl ErasedCuStampedDataSet for MyMsgs {
+        fn cumsgs(&self) -> Vec<&dyn ErasedCuStampedData> {
             Vec::new()
         }
     }

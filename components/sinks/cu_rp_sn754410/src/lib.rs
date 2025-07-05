@@ -217,10 +217,7 @@ impl<'cl> CuSinkTask<'cl> for SN754410 {
 
 pub mod test_support {
     use crate::MotorPayload;
-    use cu29::clock::RobotClock;
-    use cu29::config::ComponentConfig;
-    use cu29::cutask::{CuMsg, CuSrcTask, Freezable};
-    use cu29::{output_msg, CuResult};
+    use cu29::prelude::*;
 
     pub struct SN754410TestSrc;
 

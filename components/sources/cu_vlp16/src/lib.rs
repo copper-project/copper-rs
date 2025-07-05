@@ -3,7 +3,7 @@ use velodyne_lidar::{DataPacket, Packet};
 
 use cu29::clock::RobotClock;
 use cu29::config::ComponentConfig;
-use cu29::cutask::{CuMsg, CuSrcTask, Freezable};
+use cu29::cutask::{CuSrcTask, CuStampedData, Freezable};
 use cu29::{output_msg, CuResult};
 use cu_sensor_payloads::{PointCloud, PointCloudSoa};
 use std::net::UdpSocket;
@@ -116,7 +116,7 @@ mod tests {
             .send_next::<PACKET_SIZE>()
             .expect("Failed to send packet")
         {
-            let mut msg = CuMsg::new(Some(PointCloudSoa::<10000>::default()));
+            let mut msg = CuStampedData::new(Some(PointCloudSoa::<10000>::default()));
             drv.process(&clk, &mut msg).unwrap();
             assert_eq!(-0.05115497, msg.payload().unwrap().x[0].value);
         }

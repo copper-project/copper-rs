@@ -69,7 +69,7 @@ macro_rules! define_task {
                     return Ok(());
                 }
 
-                // this is a tuple of iterators of CuMsgs
+                // this is a tuple of iterators of CuStampedDataSet
                 let tuple_of_iters = tuple_of_iters.unwrap();
 
                 // Populate the CuArray fields in the output message
@@ -86,7 +86,7 @@ macro_rules! define_task {
 mod tests {
     use super::define_task;
     use cu29::config::ComponentConfig;
-    use cu29::cutask::CuMsg;
+    use cu29::cutask::CuStampedData;
     use cu29::cutask::CuTask;
     use cu29::cutask::Freezable;
     use cu29::input_msg;
@@ -102,10 +102,10 @@ mod tests {
         config.set("target_alignment_window_ms", 1000);
         config.set("stale_data_horizon_ms", 2000);
         let mut aligner = AlignerTask::new(Some(&config)).unwrap();
-        let m1 = CuMsg::<f32>::default();
-        let m2 = CuMsg::<i32>::default();
+        let m1 = CuStampedData::<f32>::default();
+        let m2 = CuStampedData::<i32>::default();
         let input: <AlignerTask as CuTask>::Input = (&m1, &m2);
-        let mut m3 = CuMsg::<(CuArray<f32, 5>, CuArray<i32, 10>)>::default();
+        let mut m3 = CuStampedData::<(CuArray<f32, 5>, CuArray<i32, 10>)>::default();
         let output: <AlignerTask as CuTask>::Output = &mut m3;
 
         let clock = cu29::clock::RobotClock::new();

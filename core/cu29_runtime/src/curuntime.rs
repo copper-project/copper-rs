@@ -590,7 +590,7 @@ mod tests {
     use crate::cutask::{CuSrcTask, Freezable};
     use crate::monitoring::NoMonitor;
     use bincode::Encode;
-    use cu29_traits::{ErasedCuMsg, ErasedCuMsgs, MatchingTasks};
+    use cu29_traits::{ErasedCuStampedData, ErasedCuStampedDataSet, MatchingTasks};
     use serde_derive::Serialize;
 
     pub struct TestSource {}
@@ -636,8 +636,8 @@ mod tests {
     #[derive(Debug, Encode, Decode, Serialize)]
     struct Msgs(());
 
-    impl ErasedCuMsgs for Msgs {
-        fn cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
+    impl ErasedCuStampedDataSet for Msgs {
+        fn cumsgs(&self) -> Vec<&dyn ErasedCuStampedData> {
             Vec::new()
         }
     }

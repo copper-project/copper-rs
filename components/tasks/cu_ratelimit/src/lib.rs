@@ -53,7 +53,7 @@ where
         input: Self::Input,
         output: Self::Output,
     ) -> CuResult<()> {
-        let tov = match input.metadata.tov {
+        let tov = match input.tov {
             Tov::Time(ts) => ts,
             _ => return Err("Expected single timestamp TOV".into()),
         };
@@ -92,21 +92,21 @@ mod tests {
     fn test_rate_limiting() {
         let (clock, _) = RobotClock::mock();
         let mut limiter = create_test_ratelimiter(10.0); // 10 Hz = 100ms interval
-        let mut input = CuMsg::<i32>::new(Some(42));
-        let mut output = CuMsg::<i32>::new(None);
+        let mut input = CuStampedData::<i32>::new(Some(42));
+        let mut output = CuStampedData::<i32>::new(None);
 
         // First message should pass
-        input.metadata.tov = Tov::Time(CuTime::from(0));
+        input.tov = Tov::Time(CuTime::from(0));
         limiter.process(&clock, &input, &mut output).unwrap();
         assert_eq!(output.payload(), Some(&42));
 
         // Message within the interval should be blocked
-        input.metadata.tov = Tov::Time(CuTime::from(50_000_000)); // 50ms
+        input.tov = Tov::Time(CuTime::from(50_000_000)); // 50ms
         limiter.process(&clock, &input, &mut output).unwrap();
         assert_eq!(output.payload(), None);
 
         // Message after the interval should pass
-        input.metadata.tov = Tov::Time(CuTime::from(100_000_000)); // 100ms
+        input.tov = Tov::Time(CuTime::from(100_000_000)); // 100ms
         limiter.process(&clock, &input, &mut output).unwrap();
         assert_eq!(output.payload(), Some(&42));
     }
@@ -115,18 +115,18 @@ mod tests {
     fn test_payload_propagation() {
         let (clock, _) = RobotClock::mock();
         let mut limiter = create_test_ratelimiter(10.0);
-        let mut input = CuMsg::<i32>::new(None);
-        let mut output = CuMsg::<i32>::new(None);
+        let mut input = CuStampedData::<i32>::new(None);
+        let mut output = CuStampedData::<i32>::new(None);
 
         // Test payload propagation
         input.set_payload(123);
-        input.metadata.tov = Tov::Time(CuTime::from(0));
+        input.tov = Tov::Time(CuTime::from(0));
         limiter.process(&clock, &input, &mut output).unwrap();
         assert_eq!(output.payload(), Some(&123));
 
         // Test empty payload propagation
         input.clear_payload();
-        input.metadata.tov = Tov::Time(CuTime::from(100_000_000));
+        input.tov = Tov::Time(CuTime::from(100_000_000));
         limiter.process(&clock, &input, &mut output).unwrap();
         assert_eq!(output.payload(), None);
     }

@@ -21,7 +21,7 @@ fn default_callback(step: default::SimStep) -> SimOverride {
 fn run_one_copperlist(
     copper_app: &mut BalanceBotReSim,
     robot_clock: &mut RobotClockMock,
-    copper_list: CopperList<default::CuMsgs>,
+    copper_list: CopperList<default::CuStampedDataSet>,
 ) {
     // Sync the copper clock to the simulated physics clock.
     let msgs = &copper_list.msgs;
@@ -105,7 +105,7 @@ fn main() {
         panic!("Failed to create logger");
     };
     let mut reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
-    let iter = copperlists_reader::<default::CuMsgs>(&mut reader);
+    let iter = copperlists_reader::<default::CuStampedDataSet>(&mut reader);
     for entry in iter {
         println!("{entry:#?}");
         run_one_copperlist(&mut copper_app, &mut robot_clock_mock, entry);

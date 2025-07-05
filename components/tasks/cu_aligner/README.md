@@ -33,7 +33,7 @@ The goal of this Copper component is to align data from different sources.
            │              Msg6_S2 ─┤ (not yet aligned)
 ```
 
-The timings are taken from the CuMsg::metadata.tov field (time of validity).
+The timings are taken from the CuMsg::tov field (time of validity).
 
 ### Usage
 

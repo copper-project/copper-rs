@@ -215,7 +215,7 @@ where
     ) -> CuResult<()> {
         match input.payload() {
             Some(payload) => {
-                let tov = match input.metadata.tov {
+                let tov = match input.tov {
                     Tov::Time(single) => single,
                     _ => return Err("Unexpected variant for a TOV of PID".into()),
                 };

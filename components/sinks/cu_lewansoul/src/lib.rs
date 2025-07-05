@@ -2,10 +2,7 @@ use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
-use cu29::clock::RobotClock;
-use cu29::config::ComponentConfig;
-use cu29::cutask::{CuMsg, CuSinkTask, Freezable};
-use cu29::{input_msg, CuError, CuResult};
+use cu29::prelude::*;
 use serde::Serialize;
 use serialport::{DataBits, FlowControl, Parity, SerialPort, StopBits};
 use std::io::{self, Read, Write};
@@ -187,7 +184,7 @@ pub struct ServoPositionsPayload {
 impl Encode for ServoPositionsPayload {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         let angles: [f32; MAX_SERVOS] = self.positions.map(|a| a.value);
-        angles.encode(encoder)
+        bincode::Encode::encode(&angles, encoder)
     }
 }
 
