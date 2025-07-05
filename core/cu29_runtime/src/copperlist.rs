@@ -5,7 +5,7 @@ extern crate alloc;
 use bincode::{Decode, Encode};
 use std::fmt;
 
-use cu29_traits::{CopperListTuple, ErasedCuMsg, ErasedCuMsgs};
+use cu29_traits::{CopperListTuple, ErasedCuStampedData, ErasedCuStampedDataSet};
 use serde_derive::Serialize;
 use std::fmt::Display;
 use std::iter::{Chain, Rev};
@@ -69,8 +69,8 @@ impl<P: CopperListTuple> CopperList<P> {
     }
 }
 
-impl<P: CopperListTuple> ErasedCuMsgs for CopperList<P> {
-    fn cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
+impl<P: CopperListTuple> ErasedCuStampedDataSet for CopperList<P> {
+    fn cumsgs(&self) -> Vec<&dyn ErasedCuStampedData> {
         self.msgs.cumsgs()
     }
 }
@@ -253,19 +253,19 @@ impl<P: CopperListTuple, const N: usize> CuListsManager<P, N> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cu29_traits::{ErasedCuMsg, ErasedCuMsgs, MatchingTasks};
+    use cu29_traits::{ErasedCuStampedData, ErasedCuStampedDataSet, MatchingTasks};
     use serde::{Serialize, Serializer};
 
     #[derive(Debug, Encode, Decode, PartialEq, Clone, Copy, Serialize)]
-    struct CuMsgs(i32);
+    struct CuStampedDataSet(i32);
 
-    impl ErasedCuMsgs for CuMsgs {
-        fn cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
+    impl ErasedCuStampedDataSet for CuStampedDataSet {
+        fn cumsgs(&self) -> Vec<&dyn ErasedCuStampedData> {
             Vec::new()
         }
     }
 
-    impl MatchingTasks for CuMsgs {
+    impl MatchingTasks for CuStampedDataSet {
         fn get_all_task_ids() -> &'static [&'static str] {
             &[]
         }
@@ -273,7 +273,7 @@ mod tests {
 
     #[test]
     fn empty_queue() {
-        let q = CuListsManager::<CuMsgs, 5>::new();
+        let q = CuListsManager::<CuStampedDataSet, 5>::new();
 
         assert!(q.is_empty());
         assert!(q.iter().next().is_none());
@@ -281,7 +281,7 @@ mod tests {
 
     #[test]
     fn partially_full_queue() {
-        let mut q = CuListsManager::<CuMsgs, 5>::new();
+        let mut q = CuListsManager::<CuStampedDataSet, 5>::new();
         q.create().unwrap().msgs.0 = 1;
         q.create().unwrap().msgs.0 = 2;
         q.create().unwrap().msgs.0 = 3;
@@ -295,7 +295,7 @@ mod tests {
 
     #[test]
     fn full_queue() {
-        let mut q = CuListsManager::<CuMsgs, 5>::new();
+        let mut q = CuListsManager::<CuStampedDataSet, 5>::new();
         q.create().unwrap().msgs.0 = 1;
         q.create().unwrap().msgs.0 = 2;
         q.create().unwrap().msgs.0 = 3;
@@ -309,7 +309,7 @@ mod tests {
 
     #[test]
     fn over_full_queue() {
-        let mut q = CuListsManager::<CuMsgs, 5>::new();
+        let mut q = CuListsManager::<CuStampedDataSet, 5>::new();
         q.create().unwrap().msgs.0 = 1;
         q.create().unwrap().msgs.0 = 2;
         q.create().unwrap().msgs.0 = 3;
@@ -324,7 +324,7 @@ mod tests {
 
     #[test]
     fn clear() {
-        let mut q = CuListsManager::<CuMsgs, 5>::new();
+        let mut q = CuListsManager::<CuStampedDataSet, 5>::new();
         q.create().unwrap().msgs.0 = 1;
         q.create().unwrap().msgs.0 = 2;
         q.create().unwrap().msgs.0 = 3;
@@ -350,7 +350,7 @@ mod tests {
 
     #[test]
     fn mutable_iterator() {
-        let mut q = CuListsManager::<CuMsgs, 5>::new();
+        let mut q = CuListsManager::<CuStampedDataSet, 5>::new();
         q.create().unwrap().msgs.0 = 1;
         q.create().unwrap().msgs.0 = 2;
         q.create().unwrap().msgs.0 = 3;
@@ -367,7 +367,7 @@ mod tests {
 
     #[test]
     fn test_drop_last() {
-        let mut q = CuListsManager::<CuMsgs, 5>::new();
+        let mut q = CuListsManager::<CuStampedDataSet, 5>::new();
         q.create().unwrap().msgs.0 = 1;
         q.create().unwrap().msgs.0 = 2;
         q.create().unwrap().msgs.0 = 3;
@@ -384,7 +384,7 @@ mod tests {
 
     #[test]
     fn test_pop() {
-        let mut q = CuListsManager::<CuMsgs, 5>::new();
+        let mut q = CuListsManager::<CuStampedDataSet, 5>::new();
         q.create().unwrap().msgs.0 = 1;
         q.create().unwrap().msgs.0 = 2;
         q.create().unwrap().msgs.0 = 3;
@@ -402,7 +402,7 @@ mod tests {
 
     #[test]
     fn test_peek() {
-        let mut q = CuListsManager::<CuMsgs, 5>::new();
+        let mut q = CuListsManager::<CuStampedDataSet, 5>::new();
         q.create().unwrap().msgs.0 = 1;
         q.create().unwrap().msgs.0 = 2;
         q.create().unwrap().msgs.0 = 3;
@@ -423,8 +423,8 @@ mod tests {
         content: [u8; 10_000_000],
     }
 
-    impl ErasedCuMsgs for TestStruct {
-        fn cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
+    impl ErasedCuStampedDataSet for TestStruct {
+        fn cumsgs(&self) -> Vec<&dyn ErasedCuStampedData> {
             Vec::new()
         }
     }

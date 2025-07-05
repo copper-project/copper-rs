@@ -92,8 +92,8 @@ mod tests {
     fn test_rate_limiting() {
         let (clock, _) = RobotClock::mock();
         let mut limiter = create_test_ratelimiter(10.0); // 10 Hz = 100ms interval
-        let mut input = CuMsg::<i32>::new(Some(42));
-        let mut output = CuMsg::<i32>::new(None);
+        let mut input = CuStampedData::<i32>::new(Some(42));
+        let mut output = CuStampedData::<i32>::new(None);
 
         // First message should pass
         input.metadata.tov = Tov::Time(CuTime::from(0));
@@ -115,8 +115,8 @@ mod tests {
     fn test_payload_propagation() {
         let (clock, _) = RobotClock::mock();
         let mut limiter = create_test_ratelimiter(10.0);
-        let mut input = CuMsg::<i32>::new(None);
-        let mut output = CuMsg::<i32>::new(None);
+        let mut input = CuStampedData::<i32>::new(None);
+        let mut output = CuStampedData::<i32>::new(None);
 
         // Test payload propagation
         input.set_payload(123);

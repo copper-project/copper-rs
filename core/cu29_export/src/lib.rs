@@ -498,8 +498,8 @@ mod tests {
     #[derive(Debug, PartialEq, Clone, Copy, Serialize, Encode, Decode)]
     struct MyMsgs((u8, i32, f32));
 
-    impl ErasedCuMsgs for MyMsgs {
-        fn cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
+    impl ErasedCuStampedDataSet for MyMsgs {
+        fn cumsgs(&self) -> Vec<&dyn ErasedCuStampedData> {
             Vec::new()
         }
     }
