@@ -1,1 +1,1 @@
-searchState.loadedDescShard("cu29_log_derive", 0, "Interns a string For example:")
+searchState.loadedDescShard("cu29_log_derive", 0, "This macro is used to log a debug message with parameters. …\nInterns a string For example:")
