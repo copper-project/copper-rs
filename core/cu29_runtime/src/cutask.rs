@@ -66,9 +66,6 @@ macro_rules! output_msg {
 pub struct CuMsgMetadata {
     /// The time range used for the processing of this message
     pub process_time: PartialCuTimeRange,
-    /// The time of validity of the message.
-    /// It can be undefined (None), one measure point or a range of measures (TimeRange).
-    pub tov: Tov,
     /// A small string for real time feedback purposes.
     /// This is useful for to display on the field when the tasks are operating correctly.
     pub status_txt: CuCompactString,
@@ -83,10 +80,6 @@ impl CuMsgMetadata {
 impl cu29_traits::CuMetadataTrait for CuMsgMetadata {
     fn process_time(&self) -> PartialCuTimeRange {
         self.process_time
-    }
-
-    fn tov(&self) -> Tov {
-        self.tov
     }
 
     fn status_txt(&self) -> &CuCompactString {
@@ -113,6 +106,10 @@ where
     /// This payload is the actual data exchanged between tasks.
     payload: Option<T>,
 
+    /// The time of validity of the message.
+    /// It can be undefined (None), one measure point or a range of measures (TimeRange).
+    pub tov: Tov,
+
     /// This metadata is the data that is common to all messages.
     pub metadata: CuMsgMetadata,
 }
@@ -121,7 +118,6 @@ impl Default for CuMsgMetadata {
     fn default() -> Self {
         CuMsgMetadata {
             process_time: PartialCuTimeRange::default(),
-            tov: Tov::default(),
             status_txt: CuCompactString(CompactString::with_capacity(COMPACT_STRING_CAPACITY)),
         }
     }
@@ -134,6 +130,7 @@ where
     pub fn new(payload: Option<T>) -> Self {
         CuStampedData {
             payload,
+            tov: Tov::default(),
             metadata: CuMsgMetadata::default(),
         }
     }
@@ -158,14 +155,18 @@ impl<T> ErasedCuStampedData for CuStampedData<T>
 where
     T: CuMsgPayload,
 {
-    fn metadata(&self) -> &dyn cu29_traits::CuMetadataTrait {
-        &self.metadata
-    }
-
     fn payload(&self) -> Option<&dyn erased_serde::Serialize> {
         self.payload
             .as_ref()
             .map(|p| p as &dyn erased_serde::Serialize)
+    }
+
+    fn tov(&self) -> Tov {
+        self.tov
+    }
+
+    fn metadata(&self) -> &dyn cu29_traits::CuMetadataTrait {
+        &self.metadata
     }
 }
 

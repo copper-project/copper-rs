@@ -240,7 +240,7 @@ mod linux_impl {
                 let cutime = cutime_from_v4ltime(self.v4l_clock_time_offset_ns, meta.timestamp);
                 let image = CuImage::new(self.settled_format, handle.clone());
                 new_msg.set_payload(image);
-                new_msg.metadata.tov = Tov::Time(cutime);
+                new_msg.tov = Tov::Time(cutime);
             } else {
                 debug!("Empty frame received");
             }

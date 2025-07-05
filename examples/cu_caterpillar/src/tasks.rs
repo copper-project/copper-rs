@@ -35,7 +35,7 @@ impl<'cl> CuSrcTask<'cl> for CaterpillarSource {
         // forward the state to the next task
         self.state = !self.state;
         output.set_payload(RPGpioPayload { on: self.state });
-        output.metadata.tov = Tov::Time(clock.now());
+        output.tov = Tov::Time(clock.now());
         output.metadata.set_status(self.state);
         Ok(())
     }
@@ -65,7 +65,7 @@ impl<'cl> CuTask<'cl> for CaterpillarTask {
         // forward the state to the next task
         let incoming = *input.payload().unwrap();
         output.set_payload(incoming);
-        output.metadata.tov = input.metadata.tov;
+        output.tov = input.tov;
         output.metadata.set_status(incoming.on);
         Ok(())
     }

@@ -86,19 +86,15 @@ pub trait CuMetadataTrait {
     /// The time range used for the processing of this message
     fn process_time(&self) -> PartialCuTimeRange;
 
-    /// The time of validity ie. matching time in the real world of this measure or
-    /// computation derived from those measures.
-    /// It can be undefined (None), one measure point or a range of measures (TimeRange).
-    fn tov(&self) -> Tov;
-
     /// Small status text for user UI to get the realtime state of task (max 24 chrs)
     fn status_txt(&self) -> &CuCompactString;
 }
 
 /// A generic trait to expose the generated CuStampedDataSet from the task graph.
 pub trait ErasedCuStampedData {
-    fn metadata(&self) -> &dyn CuMetadataTrait;
     fn payload(&self) -> Option<&dyn erased_serde::Serialize>;
+    fn tov(&self) -> Tov;
+    fn metadata(&self) -> &dyn CuMetadataTrait;
 }
 
 /// Trait to get a vector of type-erased CuStampedDataSet

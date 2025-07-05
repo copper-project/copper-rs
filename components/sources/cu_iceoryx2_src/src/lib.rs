@@ -141,7 +141,7 @@ where
                     .clone(),
             );
 
-            new_msg.metadata.tov = icemsg.payload().0.metadata.tov;
+            new_msg.tov = icemsg.payload().0.tov;
         } else {
             debug!(
                 "IceoryxSource({}): No message received.",

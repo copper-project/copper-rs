@@ -55,7 +55,7 @@ where
         start_time: CuTime,
         end_time: CuTime,
     ) -> impl Iterator<Item = &CuStampedData<P>> {
-        self.inner.iter().filter(move |msg| match msg.metadata.tov {
+        self.inner.iter().filter(move |msg| match msg.tov {
             Tov::Time(time) => time >= start_time && time <= end_time,
             Tov::Range(range) => range.start >= start_time && range.end <= end_time,
             _ => false,
@@ -68,7 +68,7 @@ where
         let drain_end = self
             .inner
             .iter()
-            .position(|msg| match msg.metadata.tov {
+            .position(|msg| match msg.tov {
                 Tov::Time(time) => time >= time_horizon,
                 Tov::Range(range) => range.end >= time_horizon,
                 _ => false,
@@ -83,7 +83,7 @@ where
     pub fn most_recent_time(&self) -> CuResult<Option<CuTime>> {
         self.inner
             .iter()
-            .map(|msg| extract_tov_time_right(&msg.metadata.tov))
+            .map(|msg| extract_tov_time_right(&msg.tov))
             .try_fold(None, |acc, time| {
                 let time = time.ok_or_else(|| {
                     CuError::from("Trying to align temporal data with no time information")
@@ -178,7 +178,7 @@ mod tests {
             AlignmentBuffers::new(Duration::from_secs(1).into(), Duration::from_secs(2).into());
 
         let mut msg1 = CuStampedData::new(Some(1));
-        msg1.metadata.tov = Tov::Time(Duration::from_secs(1).into());
+        msg1.tov = Tov::Time(Duration::from_secs(1).into());
         buffers.buffer1.inner.push_back(msg1.clone());
         buffers.buffer2.inner.push_back(msg1);
         // within the horizon
@@ -223,16 +223,16 @@ mod tests {
 
         // Insert messages with timestamps
         let mut msg1 = CuStampedData::new(Some(1));
-        msg1.metadata.tov = Tov::Time(Duration::from_secs(1).into());
+        msg1.tov = Tov::Time(Duration::from_secs(1).into());
         buffers.buffer1.inner.push_back(msg1.clone());
         buffers.buffer2.inner.push_back(msg1);
 
         let mut msg2 = CuStampedData::new(Some(3));
-        msg2.metadata.tov = Tov::Time(Duration::from_secs(3).into());
+        msg2.tov = Tov::Time(Duration::from_secs(3).into());
         buffers.buffer2.inner.push_back(msg2);
 
         let mut msg3 = CuStampedData::new(Some(4));
-        msg3.metadata.tov = Tov::Time(Duration::from_secs(4).into());
+        msg3.tov = Tov::Time(Duration::from_secs(4).into());
         buffers.buffer1.inner.push_back(msg3.clone());
         buffers.buffer2.inner.push_back(msg3);
 

@@ -268,7 +268,7 @@ impl<'cl> CuTask<'cl> for AprilTags {
                 }
             }
         };
-        output.metadata.tov = input.metadata.tov;
+        output.tov = input.tov;
         output.set_payload(result);
         Ok(())
     }

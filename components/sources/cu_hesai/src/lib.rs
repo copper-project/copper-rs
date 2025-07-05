@@ -127,7 +127,7 @@ impl<'cl> CuSrcTask<'cl> for Xt32 {
                     start: min_tov,
                     end: max_tov,
                 };
-                new_msg.metadata.tov = Tov::Range(tov_range); // take the oldest timestamp
+                new_msg.tov = Tov::Range(tov_range); // take the oldest timestamp
             }
             Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
                 // Handle no data available (non-blocking behavior)

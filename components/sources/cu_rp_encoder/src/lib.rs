@@ -104,7 +104,7 @@ impl<'cl> CuSrcTask<'cl> for Encoder {
 
     fn process(&mut self, clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
         let idata = self.data_from_interrupts.lock().unwrap();
-        new_msg.metadata.tov = Some(clock.now()).into();
+        new_msg.tov = Some(clock.now()).into();
         new_msg.metadata.set_status(idata.ticks);
         new_msg.set_payload(EncoderPayload { ticks: idata.ticks });
         Ok(())

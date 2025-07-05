@@ -109,7 +109,7 @@ where
                                     print!("{}, ", entry.id);
                                 }
                                 let metadata = msg.metadata();
-                                print!("{}, {}, ", metadata.process_time(), metadata.tov());
+                                print!("{}, {}, ", metadata.process_time(), msg.tov());
                                 serde_json::to_writer(std::io::stdout(), payload).unwrap(); // TODO: escape for CSV
                                 first = false;
                             }
