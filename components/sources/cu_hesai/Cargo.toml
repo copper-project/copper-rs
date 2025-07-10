@@ -16,7 +16,7 @@ cu-sensor-payloads = { workspace = true }
 bytemuck = { version = "1.23.0", features = ["derive"] }
 uom = { workspace = true }
 chrono = { version = "0.4.41", features = ["serde"] }
-socket2 = { version = "0.5.9", features = ["all"] }
+socket2 = { version = "0.6.0", features = ["all"] }
 tempfile = { workspace = true }
 
 [dev-dependencies]

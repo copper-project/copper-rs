@@ -46,6 +46,7 @@ members = [
     "examples/cu_caterpillar",
     "examples/cu_config_gen",
     "examples/cu_config_variation",
+    "examples/cu_dorabench",
     "examples/cu_iceoryx2",
     "examples/cu_logging_size",
     "examples/cu_monitoring",
@@ -142,3 +143,14 @@ rerun = { version = "0.23.2", default-features = false, features = ["sdk", "serv
 
 # smallvec to avoid heap allocations
 smallvec = { version = "1.15.0", features = ["serde"] }
+
+
+[profile.screaming]
+inherits = "release"
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"  # or "debuginfo" or true
+debug = false
+incremental = false

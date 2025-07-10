@@ -2,11 +2,7 @@ use cu29::bincode::de::Decoder;
 use cu29::bincode::enc::Encoder;
 use cu29::bincode::error::{DecodeError, EncodeError};
 use cu29::bincode::{Decode, Encode};
-use cu29::clock::RobotClock;
-use cu29::config::ComponentConfig;
-use cu29::cutask::{CuMsg, CuSrcTask, CuTask, Freezable};
-use cu29::prelude::Tov;
-use cu29::{input_msg, output_msg, CuResult};
+use cu29::prelude::*;
 use cu_rp_gpio::RPGpioPayload;
 
 #[derive(Default)]
@@ -39,7 +35,7 @@ impl<'cl> CuSrcTask<'cl> for CaterpillarSource {
         // forward the state to the next task
         self.state = !self.state;
         output.set_payload(RPGpioPayload { on: self.state });
-        output.metadata.tov = Tov::Time(clock.now());
+        output.tov = Tov::Time(clock.now());
         output.metadata.set_status(self.state);
         Ok(())
     }
@@ -69,7 +65,7 @@ impl<'cl> CuTask<'cl> for CaterpillarTask {
         // forward the state to the next task
         let incoming = *input.payload().unwrap();
         output.set_payload(incoming);
-        output.metadata.tov = input.metadata.tov;
+        output.tov = input.tov;
         output.metadata.set_status(incoming.on);
         Ok(())
     }

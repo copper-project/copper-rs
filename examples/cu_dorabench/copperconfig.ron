@@ -1,0 +1,21 @@
+(
+    tasks: [
+        (
+            id: "src",
+            type: "tasks::FortyMegSrc",
+        ),
+        (
+            id: "dst",
+            type: "tasks::FortyMegSink",
+        ),
+     ],
+    cnx: [
+        (src: "src",  dst: "dst",   msg: "crate::tasks::DoraPayload"),
+    ],
+    logging: ( keyframe_interval: 10000,  // wait 10000 cycles to record a keyframe (~every 1/10 second at the observed rate)
+               section_size_mib:  1000,   // We need way bigger sections for 40MB per cycle.
+    ),
+    monitor: (
+           type: "cu_consolemon::CuConsoleMon",
+    )
+)
