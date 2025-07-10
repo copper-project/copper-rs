@@ -25,7 +25,7 @@ impl<'cl, const S: usize> CuSrcTask<'cl> for DoraSource<S> {
 
     fn process(&mut self, clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
         new_msg.metadata.tov = Tov::Time(clock.now());
-        let mut buffer = self.pool.acquire().unwrap();
+        let buffer = self.pool.acquire().unwrap();
         buffer.lock().unwrap()[42] = 42;
         new_msg.set_payload(DoraPayload(buffer));
         Ok(())
@@ -54,8 +54,13 @@ impl<'cl, const S: usize> CuSinkTask<'cl> for DoraSink<S> {
 }
 
 // select a specific case
-pub type FortyMegSrc = DoraSource<{ 40 * 1024 * 1024 }>;
-pub type FortyMegSink = DoraSink<{ 40 * 1024 * 1024 }>;
+const FORTY_MEG: usize = 40 * 1024 * 1024;
+
+#[allow(dead_code)]
+pub type FortyMegSrc = DoraSource<FORTY_MEG>;
+
+#[allow(dead_code)]
+pub type FortyMegSink = DoraSink<FORTY_MEG>;
 
 #[derive(Default, Debug, Clone)]
 pub struct DoraPayload(CuHandle<Vec<u8>>);
@@ -74,7 +79,7 @@ impl Encode for DoraPayload {
 }
 
 impl Serialize for DoraPayload {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
