@@ -5,7 +5,7 @@
 <a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>bincode::{Decode, Encode};
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>std::fmt;
 <a href=#7 id=7 data-nosnippet>7</a>
-<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>cu29_traits::{CopperListTuple, ErasedCuMsg, ErasedCuMsgs};
+<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>cu29_traits::{CopperListTuple, ErasedCuStampedData, ErasedCuStampedDataSet};
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>serde_derive::Serialize;
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>std::fmt::Display;
 <a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>std::iter::{Chain, Rev};
@@ -69,8 +69,8 @@
 <a href=#69 id=69 data-nosnippet>69</a>    }
 <a href=#70 id=70 data-nosnippet>70</a>}
 <a href=#71 id=71 data-nosnippet>71</a>
-<a href=#72 id=72 data-nosnippet>72</a><span class="kw">impl</span>&lt;P: CopperListTuple&gt; ErasedCuMsgs <span class="kw">for </span>CopperList&lt;P&gt; {
-<a href=#73 id=73 data-nosnippet>73</a>    <span class="kw">fn </span>cumsgs(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;<span class="kw-2">&amp;</span><span class="kw">dyn </span>ErasedCuMsg&gt; {
+<a href=#72 id=72 data-nosnippet>72</a><span class="kw">impl</span>&lt;P: CopperListTuple&gt; ErasedCuStampedDataSet <span class="kw">for </span>CopperList&lt;P&gt; {
+<a href=#73 id=73 data-nosnippet>73</a>    <span class="kw">fn </span>cumsgs(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;<span class="kw-2">&amp;</span><span class="kw">dyn </span>ErasedCuStampedData&gt; {
 <a href=#74 id=74 data-nosnippet>74</a>        <span class="self">self</span>.msgs.cumsgs()
 <a href=#75 id=75 data-nosnippet>75</a>    }
 <a href=#76 id=76 data-nosnippet>76</a>}
@@ -253,19 +253,19 @@
 <a href=#253 id=253 data-nosnippet>253</a><span class="attr">#[cfg(test)]
 <a href=#254 id=254 data-nosnippet>254</a></span><span class="kw">mod </span>tests {
 <a href=#255 id=255 data-nosnippet>255</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#256 id=256 data-nosnippet>256</a>    <span class="kw">use </span>cu29_traits::{ErasedCuMsg, ErasedCuMsgs, MatchingTasks};
+<a href=#256 id=256 data-nosnippet>256</a>    <span class="kw">use </span>cu29_traits::{ErasedCuStampedData, ErasedCuStampedDataSet, MatchingTasks};
 <a href=#257 id=257 data-nosnippet>257</a>    <span class="kw">use </span>serde::{Serialize, Serializer};
 <a href=#258 id=258 data-nosnippet>258</a>
 <a href=#259 id=259 data-nosnippet>259</a>    <span class="attr">#[derive(Debug, Encode, Decode, PartialEq, Clone, Copy, Serialize)]
-<a href=#260 id=260 data-nosnippet>260</a>    </span><span class="kw">struct </span>CuMsgs(i32);
+<a href=#260 id=260 data-nosnippet>260</a>    </span><span class="kw">struct </span>CuStampedDataSet(i32);
 <a href=#261 id=261 data-nosnippet>261</a>
-<a href=#262 id=262 data-nosnippet>262</a>    <span class="kw">impl </span>ErasedCuMsgs <span class="kw">for </span>CuMsgs {
-<a href=#263 id=263 data-nosnippet>263</a>        <span class="kw">fn </span>cumsgs(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;<span class="kw-2">&amp;</span><span class="kw">dyn </span>ErasedCuMsg&gt; {
+<a href=#262 id=262 data-nosnippet>262</a>    <span class="kw">impl </span>ErasedCuStampedDataSet <span class="kw">for </span>CuStampedDataSet {
+<a href=#263 id=263 data-nosnippet>263</a>        <span class="kw">fn </span>cumsgs(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;<span class="kw-2">&amp;</span><span class="kw">dyn </span>ErasedCuStampedData&gt; {
 <a href=#264 id=264 data-nosnippet>264</a>            Vec::new()
 <a href=#265 id=265 data-nosnippet>265</a>        }
 <a href=#266 id=266 data-nosnippet>266</a>    }
 <a href=#267 id=267 data-nosnippet>267</a>
-<a href=#268 id=268 data-nosnippet>268</a>    <span class="kw">impl </span>MatchingTasks <span class="kw">for </span>CuMsgs {
+<a href=#268 id=268 data-nosnippet>268</a>    <span class="kw">impl </span>MatchingTasks <span class="kw">for </span>CuStampedDataSet {
 <a href=#269 id=269 data-nosnippet>269</a>        <span class="kw">fn </span>get_all_task_ids() -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>[<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str] {
 <a href=#270 id=270 data-nosnippet>270</a>            <span class="kw-2">&amp;</span>[]
 <a href=#271 id=271 data-nosnippet>271</a>        }
@@ -273,7 +273,7 @@
 <a href=#273 id=273 data-nosnippet>273</a>
 <a href=#274 id=274 data-nosnippet>274</a>    <span class="attr">#[test]
 <a href=#275 id=275 data-nosnippet>275</a>    </span><span class="kw">fn </span>empty_queue() {
-<a href=#276 id=276 data-nosnippet>276</a>        <span class="kw">let </span>q = CuListsManager::&lt;CuMsgs, <span class="number">5</span>&gt;::new();
+<a href=#276 id=276 data-nosnippet>276</a>        <span class="kw">let </span>q = CuListsManager::&lt;CuStampedDataSet, <span class="number">5</span>&gt;::new();
 <a href=#277 id=277 data-nosnippet>277</a>
 <a href=#278 id=278 data-nosnippet>278</a>        <span class="macro">assert!</span>(q.is_empty());
 <a href=#279 id=279 data-nosnippet>279</a>        <span class="macro">assert!</span>(q.iter().next().is_none());
@@ -281,7 +281,7 @@
 <a href=#281 id=281 data-nosnippet>281</a>
 <a href=#282 id=282 data-nosnippet>282</a>    <span class="attr">#[test]
 <a href=#283 id=283 data-nosnippet>283</a>    </span><span class="kw">fn </span>partially_full_queue() {
-<a href=#284 id=284 data-nosnippet>284</a>        <span class="kw">let </span><span class="kw-2">mut </span>q = CuListsManager::&lt;CuMsgs, <span class="number">5</span>&gt;::new();
+<a href=#284 id=284 data-nosnippet>284</a>        <span class="kw">let </span><span class="kw-2">mut </span>q = CuListsManager::&lt;CuStampedDataSet, <span class="number">5</span>&gt;::new();
 <a href=#285 id=285 data-nosnippet>285</a>        q.create().unwrap().msgs.<span class="number">0 </span>= <span class="number">1</span>;
 <a href=#286 id=286 data-nosnippet>286</a>        q.create().unwrap().msgs.<span class="number">0 </span>= <span class="number">2</span>;
 <a href=#287 id=287 data-nosnippet>287</a>        q.create().unwrap().msgs.<span class="number">0 </span>= <span class="number">3</span>;
@@ -295,7 +295,7 @@
 <a href=#295 id=295 data-nosnippet>295</a>
 <a href=#296 id=296 data-nosnippet>296</a>    <span class="attr">#[test]
 <a href=#297 id=297 data-nosnippet>297</a>    </span><span class="kw">fn </span>full_queue() {
-<a href=#298 id=298 data-nosnippet>298</a>        <span class="kw">let </span><span class="kw-2">mut </span>q = CuListsManager::&lt;CuMsgs, <span class="number">5</span>&gt;::new();
+<a href=#298 id=298 data-nosnippet>298</a>        <span class="kw">let </span><span class="kw-2">mut </span>q = CuListsManager::&lt;CuStampedDataSet, <span class="number">5</span>&gt;::new();
 <a href=#299 id=299 data-nosnippet>299</a>        q.create().unwrap().msgs.<span class="number">0 </span>= <span class="number">1</span>;
 <a href=#300 id=300 data-nosnippet>300</a>        q.create().unwrap().msgs.<span class="number">0 </span>= <span class="number">2</span>;
 <a href=#301 id=301 data-nosnippet>301</a>        q.create().unwrap().msgs.<span class="number">0 </span>= <span class="number">3</span>;
@@ -309,7 +309,7 @@
 <a href=#309 id=309 data-nosnippet>309</a>
 <a href=#310 id=310 data-nosnippet>310</a>    <span class="attr">#[test]
 <a href=#311 id=311 data-nosnippet>311</a>    </span><span class="kw">fn </span>over_full_queue() {
-<a href=#312 id=312 data-nosnippet>312</a>        <span class="kw">let </span><span class="kw-2">mut </span>q = CuListsManager::&lt;CuMsgs, <span class="number">5</span>&gt;::new();
+<a href=#312 id=312 data-nosnippet>312</a>        <span class="kw">let </span><span class="kw-2">mut </span>q = CuListsManager::&lt;CuStampedDataSet, <span class="number">5</span>&gt;::new();
 <a href=#313 id=313 data-nosnippet>313</a>        q.create().unwrap().msgs.<span class="number">0 </span>= <span class="number">1</span>;
 <a href=#314 id=314 data-nosnippet>314</a>        q.create().unwrap().msgs.<span class="number">0 </span>= <span class="number">2</span>;
 <a href=#315 id=315 data-nosnippet>315</a>        q.create().unwrap().msgs.<span class="number">0 </span>= <span class="number">3</span>;
@@ -324,7 +324,7 @@
 <a href=#324 id=324 data-nosnippet>324</a>
 <a href=#325 id=325 data-nosnippet>325</a>    <span class="attr">#[test]
 <a href=#326 id=326 data-nosnippet>326</a>    </span><span class="kw">fn </span>clear() {
-<a href=#327 id=327 data-nosnippet>327</a>        <span class="kw">let </span><span class="kw-2">mut </span>q = CuListsManager::&lt;CuMsgs, <span class="number">5</span>&gt;::new();
+<a href=#327 id=327 data-nosnippet>327</a>        <span class="kw">let </span><span class="kw-2">mut </span>q = CuListsManager::&lt;CuStampedDataSet, <span class="number">5</span>&gt;::new();
 <a href=#328 id=328 data-nosnippet>328</a>        q.create().unwrap().msgs.<span class="number">0 </span>= <span class="number">1</span>;
 <a href=#329 id=329 data-nosnippet>329</a>        q.create().unwrap().msgs.<span class="number">0 </span>= <span class="number">2</span>;
 <a href=#330 id=330 data-nosnippet>330</a>        q.create().unwrap().msgs.<span class="number">0 </span>= <span class="number">3</span>;
@@ -350,7 +350,7 @@
 <a href=#350 id=350 data-nosnippet>350</a>
 <a href=#351 id=351 data-nosnippet>351</a>    <span class="attr">#[test]
 <a href=#352 id=352 data-nosnippet>352</a>    </span><span class="kw">fn </span>mutable_iterator() {
-<a href=#353 id=353 data-nosnippet>353</a>        <span class="kw">let </span><span class="kw-2">mut </span>q = CuListsManager::&lt;CuMsgs, <span class="number">5</span>&gt;::new();
+<a href=#353 id=353 data-nosnippet>353</a>        <span class="kw">let </span><span class="kw-2">mut </span>q = CuListsManager::&lt;CuStampedDataSet, <span class="number">5</span>&gt;::new();
 <a href=#354 id=354 data-nosnippet>354</a>        q.create().unwrap().msgs.<span class="number">0 </span>= <span class="number">1</span>;
 <a href=#355 id=355 data-nosnippet>355</a>        q.create().unwrap().msgs.<span class="number">0 </span>= <span class="number">2</span>;
 <a href=#356 id=356 data-nosnippet>356</a>        q.create().unwrap().msgs.<span class="number">0 </span>= <span class="number">3</span>;
@@ -367,7 +367,7 @@
 <a href=#367 id=367 data-nosnippet>367</a>
 <a href=#368 id=368 data-nosnippet>368</a>    <span class="attr">#[test]
 <a href=#369 id=369 data-nosnippet>369</a>    </span><span class="kw">fn </span>test_drop_last() {
-<a href=#370 id=370 data-nosnippet>370</a>        <span class="kw">let </span><span class="kw-2">mut </span>q = CuListsManager::&lt;CuMsgs, <span class="number">5</span>&gt;::new();
+<a href=#370 id=370 data-nosnippet>370</a>        <span class="kw">let </span><span class="kw-2">mut </span>q = CuListsManager::&lt;CuStampedDataSet, <span class="number">5</span>&gt;::new();
 <a href=#371 id=371 data-nosnippet>371</a>        q.create().unwrap().msgs.<span class="number">0 </span>= <span class="number">1</span>;
 <a href=#372 id=372 data-nosnippet>372</a>        q.create().unwrap().msgs.<span class="number">0 </span>= <span class="number">2</span>;
 <a href=#373 id=373 data-nosnippet>373</a>        q.create().unwrap().msgs.<span class="number">0 </span>= <span class="number">3</span>;
@@ -384,7 +384,7 @@
 <a href=#384 id=384 data-nosnippet>384</a>
 <a href=#385 id=385 data-nosnippet>385</a>    <span class="attr">#[test]
 <a href=#386 id=386 data-nosnippet>386</a>    </span><span class="kw">fn </span>test_pop() {
-<a href=#387 id=387 data-nosnippet>387</a>        <span class="kw">let </span><span class="kw-2">mut </span>q = CuListsManager::&lt;CuMsgs, <span class="number">5</span>&gt;::new();
+<a href=#387 id=387 data-nosnippet>387</a>        <span class="kw">let </span><span class="kw-2">mut </span>q = CuListsManager::&lt;CuStampedDataSet, <span class="number">5</span>&gt;::new();
 <a href=#388 id=388 data-nosnippet>388</a>        q.create().unwrap().msgs.<span class="number">0 </span>= <span class="number">1</span>;
 <a href=#389 id=389 data-nosnippet>389</a>        q.create().unwrap().msgs.<span class="number">0 </span>= <span class="number">2</span>;
 <a href=#390 id=390 data-nosnippet>390</a>        q.create().unwrap().msgs.<span class="number">0 </span>= <span class="number">3</span>;
@@ -402,7 +402,7 @@
 <a href=#402 id=402 data-nosnippet>402</a>
 <a href=#403 id=403 data-nosnippet>403</a>    <span class="attr">#[test]
 <a href=#404 id=404 data-nosnippet>404</a>    </span><span class="kw">fn </span>test_peek() {
-<a href=#405 id=405 data-nosnippet>405</a>        <span class="kw">let </span><span class="kw-2">mut </span>q = CuListsManager::&lt;CuMsgs, <span class="number">5</span>&gt;::new();
+<a href=#405 id=405 data-nosnippet>405</a>        <span class="kw">let </span><span class="kw-2">mut </span>q = CuListsManager::&lt;CuStampedDataSet, <span class="number">5</span>&gt;::new();
 <a href=#406 id=406 data-nosnippet>406</a>        q.create().unwrap().msgs.<span class="number">0 </span>= <span class="number">1</span>;
 <a href=#407 id=407 data-nosnippet>407</a>        q.create().unwrap().msgs.<span class="number">0 </span>= <span class="number">2</span>;
 <a href=#408 id=408 data-nosnippet>408</a>        q.create().unwrap().msgs.<span class="number">0 </span>= <span class="number">3</span>;
@@ -423,8 +423,8 @@
 <a href=#423 id=423 data-nosnippet>423</a>        content: [u8; <span class="number">10_000_000</span>],
 <a href=#424 id=424 data-nosnippet>424</a>    }
 <a href=#425 id=425 data-nosnippet>425</a>
-<a href=#426 id=426 data-nosnippet>426</a>    <span class="kw">impl </span>ErasedCuMsgs <span class="kw">for </span>TestStruct {
-<a href=#427 id=427 data-nosnippet>427</a>        <span class="kw">fn </span>cumsgs(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;<span class="kw-2">&amp;</span><span class="kw">dyn </span>ErasedCuMsg&gt; {
+<a href=#426 id=426 data-nosnippet>426</a>    <span class="kw">impl </span>ErasedCuStampedDataSet <span class="kw">for </span>TestStruct {
+<a href=#427 id=427 data-nosnippet>427</a>        <span class="kw">fn </span>cumsgs(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;<span class="kw-2">&amp;</span><span class="kw">dyn </span>ErasedCuStampedData&gt; {
 <a href=#428 id=428 data-nosnippet>428</a>            Vec::new()
 <a href=#429 id=429 data-nosnippet>429</a>        }
 <a href=#430 id=430 data-nosnippet>430</a>    }

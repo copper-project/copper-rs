@@ -109,7 +109,7 @@
 <a href=#109 id=109 data-nosnippet>109</a>                                    <span class="macro">print!</span>(<span class="string">"{}, "</span>, entry.id);
 <a href=#110 id=110 data-nosnippet>110</a>                                }
 <a href=#111 id=111 data-nosnippet>111</a>                                <span class="kw">let </span>metadata = msg.metadata();
-<a href=#112 id=112 data-nosnippet>112</a>                                <span class="macro">print!</span>(<span class="string">"{}, {}, "</span>, metadata.process_time(), metadata.tov());
+<a href=#112 id=112 data-nosnippet>112</a>                                <span class="macro">print!</span>(<span class="string">"{}, {}, "</span>, metadata.process_time(), msg.tov());
 <a href=#113 id=113 data-nosnippet>113</a>                                serde_json::to_writer(std::io::stdout(), payload).unwrap(); <span class="comment">// TODO: escape for CSV
 <a href=#114 id=114 data-nosnippet>114</a>                                </span>first = <span class="bool-val">false</span>;
 <a href=#115 id=115 data-nosnippet>115</a>                            }
@@ -498,8 +498,8 @@
 <a href=#498 id=498 data-nosnippet>498</a>    </span><span class="attr">#[derive(Debug, PartialEq, Clone, Copy, Serialize, Encode, Decode)]
 <a href=#499 id=499 data-nosnippet>499</a>    </span><span class="kw">struct </span>MyMsgs((u8, i32, f32));
 <a href=#500 id=500 data-nosnippet>500</a>
-<a href=#501 id=501 data-nosnippet>501</a>    <span class="kw">impl </span>ErasedCuMsgs <span class="kw">for </span>MyMsgs {
-<a href=#502 id=502 data-nosnippet>502</a>        <span class="kw">fn </span>cumsgs(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;<span class="kw-2">&amp;</span><span class="kw">dyn </span>ErasedCuMsg&gt; {
+<a href=#501 id=501 data-nosnippet>501</a>    <span class="kw">impl </span>ErasedCuStampedDataSet <span class="kw">for </span>MyMsgs {
+<a href=#502 id=502 data-nosnippet>502</a>        <span class="kw">fn </span>cumsgs(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;<span class="kw-2">&amp;</span><span class="kw">dyn </span>ErasedCuStampedData&gt; {
 <a href=#503 id=503 data-nosnippet>503</a>            Vec::new()
 <a href=#504 id=504 data-nosnippet>504</a>        }
 <a href=#505 id=505 data-nosnippet>505</a>    }

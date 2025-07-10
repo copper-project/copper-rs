@@ -42,7 +42,7 @@
 <a href=#42 id=42 data-nosnippet>42</a>
 <a href=#43 id=43 data-nosnippet>43</a><span class="doccomment">/// Generates the CopperList content type from a config.
 <a href=#44 id=44 data-nosnippet>44</a>/// gen_cumsgs!("path/to/config.toml")
-<a href=#45 id=45 data-nosnippet>45</a>/// It will create a new type called CuMsgs you can pass to the log reader for decoding:
+<a href=#45 id=45 data-nosnippet>45</a>/// It will create a new type called CuStampedDataSet you can pass to the log reader for decoding:
 <a href=#46 id=46 data-nosnippet>46</a></span><span class="attr">#[proc_macro]
 <a href=#47 id=47 data-nosnippet>47</a></span><span class="kw">pub fn </span>gen_cumsgs(config_path_lit: TokenStream) -&gt; TokenStream {
 <a href=#48 id=48 data-nosnippet>48</a>    <span class="kw">let </span>config = <span class="macro">parse_macro_input!</span>(config_path_lit <span class="kw">as </span>LitStr).value();
@@ -65,7 +65,7 @@
 <a href=#65 id=65 data-nosnippet>65</a>        <span class="prelude-val">Err</span>(e) =&gt; <span class="kw">return </span>return_error(<span class="macro">format!</span>(<span class="string">"Could not compute runtime plan: {e}"</span>)),
 <a href=#66 id=66 data-nosnippet>66</a>    };
 <a href=#67 id=67 data-nosnippet>67</a>
-<a href=#68 id=68 data-nosnippet>68</a>    <span class="comment">// Give a name compatible with a struct to match the task ids to their output in the CuMsgs tuple.
+<a href=#68 id=68 data-nosnippet>68</a>    <span class="comment">// Give a name compatible with a struct to match the task ids to their output in the CuStampedDataSet tuple.
 <a href=#69 id=69 data-nosnippet>69</a>    </span><span class="kw">let </span>all_tasks_member_ids: Vec&lt;String&gt; = graph
 <a href=#70 id=70 data-nosnippet>70</a>        .get_all_nodes()
 <a href=#71 id=71 data-nosnippet>71</a>        .iter()
@@ -85,7 +85,7 @@
 <a href=#85 id=85 data-nosnippet>85</a>
 <a href=#86 id=86 data-nosnippet>86</a>    <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
 <a href=#87 id=87 data-nosnippet>87</a>    </span><span class="macro">eprintln!</span>(
-<a href=#88 id=88 data-nosnippet>88</a>        <span class="string">"[The CuMsgs matching tasks ids are {:?}]"</span>,
+<a href=#88 id=88 data-nosnippet>88</a>        <span class="string">"[The CuStampedDataSet matching tasks ids are {:?}]"</span>,
 <a href=#89 id=89 data-nosnippet>89</a>        taskid_order
 <a href=#90 id=90 data-nosnippet>90</a>            .iter()
 <a href=#91 id=91 data-nosnippet>91</a>            .map(|i| all_tasks_member_ids[<span class="kw-2">*</span>i].clone())
@@ -104,14 +104,14 @@
 <a href=#104 id=104 data-nosnippet>104</a>            <span class="kw">use </span>cu29::bincode::error::DecodeError;
 <a href=#105 id=105 data-nosnippet>105</a>            <span class="kw">use </span>cu29::copperlist::CopperList;
 <a href=#106 id=106 data-nosnippet>106</a>            <span class="kw">use </span>cu29::cutask::CuMsgMetadata;
-<a href=#107 id=107 data-nosnippet>107</a>            <span class="kw">use </span>cu29::cutask::CuMsg;
-<a href=#108 id=108 data-nosnippet>108</a>            <span class="kw">use </span>cu29::prelude::ErasedCuMsg;
-<a href=#109 id=109 data-nosnippet>109</a>            <span class="kw">use </span>cu29::prelude::ErasedCuMsgs;
+<a href=#107 id=107 data-nosnippet>107</a>            <span class="kw">use </span>cu29::cutask::CuStampedData;
+<a href=#108 id=108 data-nosnippet>108</a>            <span class="kw">use </span>cu29::prelude::ErasedCuStampedData;
+<a href=#109 id=109 data-nosnippet>109</a>            <span class="kw">use </span>cu29::prelude::ErasedCuStampedDataSet;
 <a href=#110 id=110 data-nosnippet>110</a>            <span class="kw">use </span>cu29::prelude::MatchingTasks;
 <a href=#111 id=111 data-nosnippet>111</a>            <span class="kw">use </span>cu29::prelude::Serialize;
 <a href=#112 id=112 data-nosnippet>112</a>            #support
 <a href=#113 id=113 data-nosnippet>113</a>        }
-<a href=#114 id=114 data-nosnippet>114</a>        <span class="kw">use </span>cumsgs::CuMsgs;
+<a href=#114 id=114 data-nosnippet>114</a>        <span class="kw">use </span>cumsgs::CuStampedDataSet;
 <a href=#115 id=115 data-nosnippet>115</a>    };
 <a href=#116 id=116 data-nosnippet>116</a>    with_uses.into()
 <a href=#117 id=117 data-nosnippet>117</a>}
@@ -164,7 +164,7 @@
 <a href=#164 id=164 data-nosnippet>164</a>            <span class="kw">let </span>index = syn::Index::from(<span class="kw-2">*</span>output_position);
 <a href=#165 id=165 data-nosnippet>165</a>            <span class="macro">quote!</span> {
 <a href=#166 id=166 data-nosnippet>166</a>                <span class="attr">#[allow(dead_code)]
-<a href=#167 id=167 data-nosnippet>167</a>                </span><span class="kw">pub fn </span>#fn_name(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>CuMsg&lt;#payload_type&gt; {
+<a href=#167 id=167 data-nosnippet>167</a>                </span><span class="kw">pub fn </span>#fn_name(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>CuStampedData&lt;#payload_type&gt; {
 <a href=#168 id=168 data-nosnippet>168</a>                    <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0.</span>#index
 <a href=#169 id=169 data-nosnippet>169</a>                }
 <a href=#170 id=170 data-nosnippet>170</a>            }
@@ -175,11 +175,11 @@
 <a href=#175 id=175 data-nosnippet>175</a>    </span><span class="macro">quote!</span> {
 <a href=#176 id=176 data-nosnippet>176</a>        #collect_metadata_function
 <a href=#177 id=177 data-nosnippet>177</a>
-<a href=#178 id=178 data-nosnippet>178</a>        <span class="kw">pub struct </span>CuMsgs(<span class="kw">pub </span>#msgs_types_tuple);
+<a href=#178 id=178 data-nosnippet>178</a>        <span class="kw">pub struct </span>CuStampedDataSet(<span class="kw">pub </span>#msgs_types_tuple);
 <a href=#179 id=179 data-nosnippet>179</a>
-<a href=#180 id=180 data-nosnippet>180</a>        <span class="kw">pub type </span>CuList = CopperList&lt;CuMsgs&gt;;
+<a href=#180 id=180 data-nosnippet>180</a>        <span class="kw">pub type </span>CuList = CopperList&lt;CuStampedDataSet&gt;;
 <a href=#181 id=181 data-nosnippet>181</a>
-<a href=#182 id=182 data-nosnippet>182</a>        <span class="kw">impl </span>CuMsgs {
+<a href=#182 id=182 data-nosnippet>182</a>        <span class="kw">impl </span>CuStampedDataSet {
 <a href=#183 id=183 data-nosnippet>183</a>            #(#methods)*
 <a href=#184 id=184 data-nosnippet>184</a>
 <a href=#185 id=185 data-nosnippet>185</a>            <span class="attr">#[allow(dead_code)]
@@ -193,7 +193,7 @@
 <a href=#193 id=193 data-nosnippet>193</a>            </span>}
 <a href=#194 id=194 data-nosnippet>194</a>        }
 <a href=#195 id=195 data-nosnippet>195</a>
-<a href=#196 id=196 data-nosnippet>196</a>        <span class="kw">impl </span>MatchingTasks <span class="kw">for </span>CuMsgs {
+<a href=#196 id=196 data-nosnippet>196</a>        <span class="kw">impl </span>MatchingTasks <span class="kw">for </span>CuStampedDataSet {
 <a href=#197 id=197 data-nosnippet>197</a>            <span class="attr">#[allow(dead_code)]
 <a href=#198 id=198 data-nosnippet>198</a>            </span><span class="kw">fn </span>get_all_task_ids() -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>[<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str] {
 <a href=#199 id=199 data-nosnippet>199</a>                <span class="kw-2">&amp;</span>[#(#all_tasks_as_struct_member_name),<span class="kw-2">*</span>]
@@ -210,7 +210,7 @@
 <a href=#210 id=210 data-nosnippet>210</a>        <span class="comment">// Adds the serialize support
 <a href=#211 id=211 data-nosnippet>211</a>        </span>#msgs_types_tuple_serialize
 <a href=#212 id=212 data-nosnippet>212</a>
-<a href=#213 id=213 data-nosnippet>213</a>        <span class="comment">// Adds the type erased CuMsgs support (to help generic serialized conversions)
+<a href=#213 id=213 data-nosnippet>213</a>        <span class="comment">// Adds the type erased CuStampedDataSet support (to help generic serialized conversions)
 <a href=#214 id=214 data-nosnippet>214</a>        </span>#erasedmsg_trait_impl
 <a href=#215 id=215 data-nosnippet>215</a>    }
 <a href=#216 id=216 data-nosnippet>216</a>}
@@ -228,13 +228,13 @@
 <a href=#228 id=228 data-nosnippet>228</a>                <span class="kw">let </span>inputs: Vec&lt;Type&gt; = step
 <a href=#229 id=229 data-nosnippet>229</a>                    .input_msg_indices_types
 <a href=#230 id=230 data-nosnippet>230</a>                    .iter()
-<a href=#231 id=231 data-nosnippet>231</a>                    .map(|(<span class="kw">_</span>, t)| parse_str::&lt;Type&gt;(<span class="macro">format!</span>(<span class="string">"CuMsg&lt;{t}&gt;"</span>).as_str()).unwrap())
+<a href=#231 id=231 data-nosnippet>231</a>                    .map(|(<span class="kw">_</span>, t)| parse_str::&lt;Type&gt;(<span class="macro">format!</span>(<span class="string">"CuStampedData&lt;{t}&gt;"</span>).as_str()).unwrap())
 <a href=#232 id=232 data-nosnippet>232</a>                    .collect();
 <a href=#233 id=233 data-nosnippet>233</a>                <span class="kw">let </span>output: <span class="prelude-ty">Option</span>&lt;Type&gt; = step
 <a href=#234 id=234 data-nosnippet>234</a>                    .output_msg_index_type
 <a href=#235 id=235 data-nosnippet>235</a>                    .as_ref()
-<a href=#236 id=236 data-nosnippet>236</a>                    .map(|(<span class="kw">_</span>, t)| parse_str::&lt;Type&gt;(<span class="macro">format!</span>(<span class="string">"CuMsg&lt;{t}&gt;"</span>).as_str()).unwrap());
-<a href=#237 id=237 data-nosnippet>237</a>                <span class="kw">let </span>no_output = parse_str::&lt;Type&gt;(<span class="string">"CuMsg&lt;()&gt;"</span>).unwrap();
+<a href=#236 id=236 data-nosnippet>236</a>                    .map(|(<span class="kw">_</span>, t)| parse_str::&lt;Type&gt;(<span class="macro">format!</span>(<span class="string">"CuStampedData&lt;{t}&gt;"</span>).as_str()).unwrap());
+<a href=#237 id=237 data-nosnippet>237</a>                <span class="kw">let </span>no_output = parse_str::&lt;Type&gt;(<span class="string">"CuStampedData&lt;()&gt;"</span>).unwrap();
 <a href=#238 id=238 data-nosnippet>238</a>                <span class="kw">let </span>output = output.as_ref().unwrap_or(<span class="kw-2">&amp;</span>no_output);
 <a href=#239 id=239 data-nosnippet>239</a>
 <a href=#240 id=240 data-nosnippet>240</a>                <span class="kw">let </span>inputs_type = <span class="kw">if </span>inputs.len() == <span class="number">1 </span>{
@@ -338,17 +338,17 @@
 <a href=#338 id=338 data-nosnippet>338</a>        <span class="macro">quote!</span> { NoMonitor }
 <a href=#339 id=339 data-nosnippet>339</a>    };
 <a href=#340 id=340 data-nosnippet>340</a>
-<a href=#341 id=341 data-nosnippet>341</a>    <span class="comment">// This is common for all the mission as it will be inserted in the respective modules with their local CuTasks, CuMsgs etc...
+<a href=#341 id=341 data-nosnippet>341</a>    <span class="comment">// This is common for all the mission as it will be inserted in the respective modules with their local CuTasks, CuStampedDataSet etc...
 <a href=#342 id=342 data-nosnippet>342</a>    </span><span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
 <a href=#343 id=343 data-nosnippet>343</a>    </span><span class="macro">eprintln!</span>(<span class="string">"[build runtime field]"</span>);
 <a href=#344 id=344 data-nosnippet>344</a>    <span class="comment">// add that to a new field
 <a href=#345 id=345 data-nosnippet>345</a>    </span><span class="kw">let </span>runtime_field: Field = <span class="kw">if </span>sim_mode {
 <a href=#346 id=346 data-nosnippet>346</a>        <span class="macro">parse_quote!</span> {
-<a href=#347 id=347 data-nosnippet>347</a>            copper_runtime: cu29::curuntime::CuRuntime&lt;CuSimTasks, CuMsgs, #monitor_type, #DEFAULT_CLNB&gt;
+<a href=#347 id=347 data-nosnippet>347</a>            copper_runtime: cu29::curuntime::CuRuntime&lt;CuSimTasks, CuStampedDataSet, #monitor_type, #DEFAULT_CLNB&gt;
 <a href=#348 id=348 data-nosnippet>348</a>        }
 <a href=#349 id=349 data-nosnippet>349</a>    } <span class="kw">else </span>{
 <a href=#350 id=350 data-nosnippet>350</a>        <span class="macro">parse_quote!</span> {
-<a href=#351 id=351 data-nosnippet>351</a>            copper_runtime: cu29::curuntime::CuRuntime&lt;CuTasks, CuMsgs, #monitor_type, #DEFAULT_CLNB&gt;
+<a href=#351 id=351 data-nosnippet>351</a>            copper_runtime: cu29::curuntime::CuRuntime&lt;CuTasks, CuStampedDataSet, #monitor_type, #DEFAULT_CLNB&gt;
 <a href=#352 id=352 data-nosnippet>352</a>        }
 <a href=#353 id=353 data-nosnippet>353</a>    };
 <a href=#354 id=354 data-nosnippet>354</a>
@@ -979,7 +979,7 @@
 <a href=#979 id=979 data-nosnippet>979</a>        <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
 <a href=#980 id=980 data-nosnippet>980</a>        </span><span class="macro">eprintln!</span>(<span class="string">"[Culist access order:  {taskid_call_order:?}]"</span>);
 <a href=#981 id=981 data-nosnippet>981</a>
-<a href=#982 id=982 data-nosnippet>982</a>        <span class="comment">// Give a name compatible with a struct to match the task ids to their output in the CuMsgs tuple.
+<a href=#982 id=982 data-nosnippet>982</a>        <span class="comment">// Give a name compatible with a struct to match the task ids to their output in the CuStampedDataSet tuple.
 <a href=#983 id=983 data-nosnippet>983</a>        </span><span class="kw">let </span>all_tasks_member_ids: Vec&lt;String&gt; = all_tasks_ids
 <a href=#984 id=984 data-nosnippet>984</a>            .iter()
 <a href=#985 id=985 data-nosnippet>985</a>            .map(|name| utils::config_id_to_struct_member(name.as_str()))
@@ -1210,7 +1210,7 @@
 <a href=#1210 id=1210 data-nosnippet>1210</a>                    </span>);
 <a href=#1211 id=1211 data-nosnippet>1211</a>
 <a href=#1212 id=1212 data-nosnippet>1212</a>                    <span class="kw">let </span>application = <span class="prelude-val">Ok</span>(#application_name {
-<a href=#1213 id=1213 data-nosnippet>1213</a>                        copper_runtime: CuRuntime::&lt;#mission_mod::#tasks_type, #mission_mod::CuMsgs, #monitor_type, #DEFAULT_CLNB&gt;::new(
+<a href=#1213 id=1213 data-nosnippet>1213</a>                        copper_runtime: CuRuntime::&lt;#mission_mod::#tasks_type, #mission_mod::CuStampedDataSet, #monitor_type, #DEFAULT_CLNB&gt;::new(
 <a href=#1214 id=1214 data-nosnippet>1214</a>                            clock,
 <a href=#1215 id=1215 data-nosnippet>1215</a>                            <span class="kw-2">&amp;</span>config,
 <a href=#1216 id=1216 data-nosnippet>1216</a>                            <span class="prelude-val">Some</span>(#mission),
@@ -1377,7 +1377,7 @@
 <a href=#1377 id=1377 data-nosnippet>1377</a>                <span class="kw">use </span>cu29::cutask::CuSrcTask;
 <a href=#1378 id=1378 data-nosnippet>1378</a>                <span class="kw">use </span>cu29::cutask::CuSinkTask;
 <a href=#1379 id=1379 data-nosnippet>1379</a>                <span class="kw">use </span>cu29::cutask::CuTask;
-<a href=#1380 id=1380 data-nosnippet>1380</a>                <span class="kw">use </span>cu29::cutask::CuMsg;
+<a href=#1380 id=1380 data-nosnippet>1380</a>                <span class="kw">use </span>cu29::cutask::CuStampedData;
 <a href=#1381 id=1381 data-nosnippet>1381</a>                <span class="kw">use </span>cu29::cutask::CuMsgMetadata;
 <a href=#1382 id=1382 data-nosnippet>1382</a>                <span class="kw">use </span>cu29::copperlist::CopperList;
 <a href=#1383 id=1383 data-nosnippet>1383</a>                <span class="kw">use </span>cu29::monitoring::CuMonitor; <span class="comment">// Trait import.
@@ -1549,12 +1549,12 @@
 <a href=#1549 id=1549 data-nosnippet>1549</a>        <span class="macro">parse_quote!</span> { () }
 <a href=#1550 id=1550 data-nosnippet>1550</a>    } <span class="kw">else </span>{
 <a href=#1551 id=1551 data-nosnippet>1551</a>        <span class="macro">parse_quote!</span> {
-<a href=#1552 id=1552 data-nosnippet>1552</a>            ( #( CuMsg&lt;#all_msgs_types_in_culist_order&gt; ),* )
+<a href=#1552 id=1552 data-nosnippet>1552</a>            ( #( CuStampedData&lt;#all_msgs_types_in_culist_order&gt; ),* )
 <a href=#1553 id=1553 data-nosnippet>1553</a>        }
 <a href=#1554 id=1554 data-nosnippet>1554</a>    }
 <a href=#1555 id=1555 data-nosnippet>1555</a>}
 <a href=#1556 id=1556 data-nosnippet>1556</a>
-<a href=#1557 id=1557 data-nosnippet>1557</a><span class="doccomment">/// This is the bincode encoding part of the CuMsgs
+<a href=#1557 id=1557 data-nosnippet>1557</a><span class="doccomment">/// This is the bincode encoding part of the CuStampedDataSet
 <a href=#1558 id=1558 data-nosnippet>1558</a></span><span class="kw">fn </span>build_culist_tuple_encode(all_msgs_types_in_culist_order: <span class="kw-2">&amp;</span>[Type]) -&gt; ItemImpl {
 <a href=#1559 id=1559 data-nosnippet>1559</a>    <span class="kw">let </span>indices: Vec&lt;usize&gt; = (<span class="number">0</span>..all_msgs_types_in_culist_order.len()).collect();
 <a href=#1560 id=1560 data-nosnippet>1560</a>
@@ -1568,7 +1568,7 @@
 <a href=#1568 id=1568 data-nosnippet>1568</a>        .collect();
 <a href=#1569 id=1569 data-nosnippet>1569</a>
 <a href=#1570 id=1570 data-nosnippet>1570</a>    <span class="macro">parse_quote!</span> {
-<a href=#1571 id=1571 data-nosnippet>1571</a>        <span class="kw">impl </span>Encode <span class="kw">for </span>CuMsgs {
+<a href=#1571 id=1571 data-nosnippet>1571</a>        <span class="kw">impl </span>Encode <span class="kw">for </span>CuStampedDataSet {
 <a href=#1572 id=1572 data-nosnippet>1572</a>            <span class="kw">fn </span>encode&lt;E: Encoder&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, encoder: <span class="kw-2">&amp;mut </span>E) -&gt; <span class="prelude-ty">Result</span>&lt;(), EncodeError&gt; {
 <a href=#1573 id=1573 data-nosnippet>1573</a>                #(#encode_fields)*
 <a href=#1574 id=1574 data-nosnippet>1574</a>                <span class="prelude-val">Ok</span>(())
@@ -1577,23 +1577,23 @@
 <a href=#1577 id=1577 data-nosnippet>1577</a>    }
 <a href=#1578 id=1578 data-nosnippet>1578</a>}
 <a href=#1579 id=1579 data-nosnippet>1579</a>
-<a href=#1580 id=1580 data-nosnippet>1580</a><span class="doccomment">/// This is the bincode decoding part of the CuMsgs
+<a href=#1580 id=1580 data-nosnippet>1580</a><span class="doccomment">/// This is the bincode decoding part of the CuStampedDataSet
 <a href=#1581 id=1581 data-nosnippet>1581</a></span><span class="kw">fn </span>build_culist_tuple_decode(all_msgs_types_in_culist_order: <span class="kw-2">&amp;</span>[Type]) -&gt; ItemImpl {
 <a href=#1582 id=1582 data-nosnippet>1582</a>    <span class="kw">let </span>indices: Vec&lt;usize&gt; = (<span class="number">0</span>..all_msgs_types_in_culist_order.len()).collect();
 <a href=#1583 id=1583 data-nosnippet>1583</a>
-<a href=#1584 id=1584 data-nosnippet>1584</a>    <span class="comment">// Generate the `CuMsg::&lt;T&gt;::decode(decoder)?` for each tuple index
+<a href=#1584 id=1584 data-nosnippet>1584</a>    <span class="comment">// Generate the `CuStampedData::&lt;T&gt;::decode(decoder)?` for each tuple index
 <a href=#1585 id=1585 data-nosnippet>1585</a>    </span><span class="kw">let </span>decode_fields: Vec&lt;<span class="kw">_</span>&gt; = indices
 <a href=#1586 id=1586 data-nosnippet>1586</a>        .iter()
 <a href=#1587 id=1587 data-nosnippet>1587</a>        .map(|i| {
 <a href=#1588 id=1588 data-nosnippet>1588</a>            <span class="kw">let </span>t = <span class="kw-2">&amp;</span>all_msgs_types_in_culist_order[<span class="kw-2">*</span>i];
-<a href=#1589 id=1589 data-nosnippet>1589</a>            <span class="macro">quote!</span> { CuMsg::&lt;#t&gt;::decode(decoder)<span class="question-mark">? </span>}
+<a href=#1589 id=1589 data-nosnippet>1589</a>            <span class="macro">quote!</span> { CuStampedData::&lt;#t&gt;::decode(decoder)<span class="question-mark">? </span>}
 <a href=#1590 id=1590 data-nosnippet>1590</a>        })
 <a href=#1591 id=1591 data-nosnippet>1591</a>        .collect();
 <a href=#1592 id=1592 data-nosnippet>1592</a>
 <a href=#1593 id=1593 data-nosnippet>1593</a>    <span class="macro">parse_quote!</span> {
-<a href=#1594 id=1594 data-nosnippet>1594</a>        <span class="kw">impl </span>Decode&lt;()&gt; <span class="kw">for </span>CuMsgs {
+<a href=#1594 id=1594 data-nosnippet>1594</a>        <span class="kw">impl </span>Decode&lt;()&gt; <span class="kw">for </span>CuStampedDataSet {
 <a href=#1595 id=1595 data-nosnippet>1595</a>            <span class="kw">fn </span>decode&lt;D: Decoder&lt;Context=()&gt;&gt;(decoder: <span class="kw-2">&amp;mut </span>D) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, DecodeError&gt; {
-<a href=#1596 id=1596 data-nosnippet>1596</a>                <span class="prelude-val">Ok</span>(CuMsgs ((
+<a href=#1596 id=1596 data-nosnippet>1596</a>                <span class="prelude-val">Ok</span>(CuStampedDataSet ((
 <a href=#1597 id=1597 data-nosnippet>1597</a>                    #(#decode_fields),*
 <a href=#1598 id=1598 data-nosnippet>1598</a>                )))
 <a href=#1599 id=1599 data-nosnippet>1599</a>            }
@@ -1607,12 +1607,12 @@
 <a href=#1607 id=1607 data-nosnippet>1607</a>        .iter()
 <a href=#1608 id=1608 data-nosnippet>1608</a>        .map(|i| {
 <a href=#1609 id=1609 data-nosnippet>1609</a>            <span class="kw">let </span>idx = syn::Index::from(<span class="kw-2">*</span>i);
-<a href=#1610 id=1610 data-nosnippet>1610</a>            <span class="macro">quote!</span> { <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0.</span>#idx <span class="kw">as </span><span class="kw-2">&amp;</span><span class="kw">dyn </span>ErasedCuMsg }
+<a href=#1610 id=1610 data-nosnippet>1610</a>            <span class="macro">quote!</span> { <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0.</span>#idx <span class="kw">as </span><span class="kw-2">&amp;</span><span class="kw">dyn </span>ErasedCuStampedData }
 <a href=#1611 id=1611 data-nosnippet>1611</a>        })
 <a href=#1612 id=1612 data-nosnippet>1612</a>        .collect();
 <a href=#1613 id=1613 data-nosnippet>1613</a>    <span class="macro">parse_quote!</span> {
-<a href=#1614 id=1614 data-nosnippet>1614</a>        <span class="kw">impl </span>ErasedCuMsgs <span class="kw">for </span>CuMsgs {
-<a href=#1615 id=1615 data-nosnippet>1615</a>            <span class="kw">fn </span>cumsgs(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;<span class="kw-2">&amp;</span><span class="kw">dyn </span>ErasedCuMsg&gt; {
+<a href=#1614 id=1614 data-nosnippet>1614</a>        <span class="kw">impl </span>ErasedCuStampedDataSet <span class="kw">for </span>CuStampedDataSet {
+<a href=#1615 id=1615 data-nosnippet>1615</a>            <span class="kw">fn </span>cumsgs(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;<span class="kw-2">&amp;</span><span class="kw">dyn </span>ErasedCuStampedData&gt; {
 <a href=#1616 id=1616 data-nosnippet>1616</a>                <span class="macro">vec!</span>[
 <a href=#1617 id=1617 data-nosnippet>1617</a>                    #(#casted_fields),*
 <a href=#1618 id=1618 data-nosnippet>1618</a>                ]
@@ -1633,9 +1633,9 @@
 <a href=#1633 id=1633 data-nosnippet>1633</a>        .collect();
 <a href=#1634 id=1634 data-nosnippet>1634</a>
 <a href=#1635 id=1635 data-nosnippet>1635</a>    <span class="macro">parse_quote!</span> {
-<a href=#1636 id=1636 data-nosnippet>1636</a>        <span class="kw">impl </span>std::fmt::Debug <span class="kw">for </span>CuMsgs {
+<a href=#1636 id=1636 data-nosnippet>1636</a>        <span class="kw">impl </span>std::fmt::Debug <span class="kw">for </span>CuStampedDataSet {
 <a href=#1637 id=1637 data-nosnippet>1637</a>            <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>std::fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; std::fmt::Result {
-<a href=#1638 id=1638 data-nosnippet>1638</a>                f.debug_tuple(<span class="string">"CuMsgs"</span>)
+<a href=#1638 id=1638 data-nosnippet>1638</a>                f.debug_tuple(<span class="string">"CuStampedDataSet"</span>)
 <a href=#1639 id=1639 data-nosnippet>1639</a>                    #(#debug_fields)*
 <a href=#1640 id=1640 data-nosnippet>1640</a>                    .finish()
 <a href=#1641 id=1641 data-nosnippet>1641</a>            }
@@ -1643,7 +1643,7 @@
 <a href=#1643 id=1643 data-nosnippet>1643</a>    }
 <a href=#1644 id=1644 data-nosnippet>1644</a>}
 <a href=#1645 id=1645 data-nosnippet>1645</a>
-<a href=#1646 id=1646 data-nosnippet>1646</a><span class="doccomment">/// This is the serde serialization part of the CuMsgs
+<a href=#1646 id=1646 data-nosnippet>1646</a><span class="doccomment">/// This is the serde serialization part of the CuStampedDataSet
 <a href=#1647 id=1647 data-nosnippet>1647</a></span><span class="kw">fn </span>build_culist_tuple_serialize(all_msgs_types_in_culist_order: <span class="kw-2">&amp;</span>[Type]) -&gt; ItemImpl {
 <a href=#1648 id=1648 data-nosnippet>1648</a>    <span class="kw">let </span>indices: Vec&lt;usize&gt; = (<span class="number">0</span>..all_msgs_types_in_culist_order.len()).collect();
 <a href=#1649 id=1649 data-nosnippet>1649</a>    <span class="kw">let </span>tuple_len = all_msgs_types_in_culist_order.len();
@@ -1658,7 +1658,7 @@
 <a href=#1658 id=1658 data-nosnippet>1658</a>        .collect();
 <a href=#1659 id=1659 data-nosnippet>1659</a>
 <a href=#1660 id=1660 data-nosnippet>1660</a>    <span class="macro">parse_quote!</span> {
-<a href=#1661 id=1661 data-nosnippet>1661</a>        <span class="kw">impl </span>Serialize <span class="kw">for </span>CuMsgs {
+<a href=#1661 id=1661 data-nosnippet>1661</a>        <span class="kw">impl </span>Serialize <span class="kw">for </span>CuStampedDataSet {
 <a href=#1662 id=1662 data-nosnippet>1662</a>            <span class="kw">fn </span>serialize&lt;S&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, serializer: S) -&gt; <span class="prelude-ty">Result</span>&lt;S::Ok, S::Error&gt;
 <a href=#1663 id=1663 data-nosnippet>1663</a>            <span class="kw">where
 <a href=#1664 id=1664 data-nosnippet>1664</a>                </span>S: serde::Serializer,

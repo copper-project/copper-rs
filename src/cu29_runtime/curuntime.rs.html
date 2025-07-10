@@ -590,7 +590,7 @@
 <a href=#590 id=590 data-nosnippet>590</a>    <span class="kw">use </span><span class="kw">crate</span>::cutask::{CuSrcTask, Freezable};
 <a href=#591 id=591 data-nosnippet>591</a>    <span class="kw">use </span><span class="kw">crate</span>::monitoring::NoMonitor;
 <a href=#592 id=592 data-nosnippet>592</a>    <span class="kw">use </span>bincode::Encode;
-<a href=#593 id=593 data-nosnippet>593</a>    <span class="kw">use </span>cu29_traits::{ErasedCuMsg, ErasedCuMsgs, MatchingTasks};
+<a href=#593 id=593 data-nosnippet>593</a>    <span class="kw">use </span>cu29_traits::{ErasedCuStampedData, ErasedCuStampedDataSet, MatchingTasks};
 <a href=#594 id=594 data-nosnippet>594</a>    <span class="kw">use </span>serde_derive::Serialize;
 <a href=#595 id=595 data-nosnippet>595</a>
 <a href=#596 id=596 data-nosnippet>596</a>    <span class="kw">pub struct </span>TestSource {}
@@ -636,8 +636,8 @@
 <a href=#636 id=636 data-nosnippet>636</a>    <span class="attr">#[derive(Debug, Encode, Decode, Serialize)]
 <a href=#637 id=637 data-nosnippet>637</a>    </span><span class="kw">struct </span>Msgs(());
 <a href=#638 id=638 data-nosnippet>638</a>
-<a href=#639 id=639 data-nosnippet>639</a>    <span class="kw">impl </span>ErasedCuMsgs <span class="kw">for </span>Msgs {
-<a href=#640 id=640 data-nosnippet>640</a>        <span class="kw">fn </span>cumsgs(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;<span class="kw-2">&amp;</span><span class="kw">dyn </span>ErasedCuMsg&gt; {
+<a href=#639 id=639 data-nosnippet>639</a>    <span class="kw">impl </span>ErasedCuStampedDataSet <span class="kw">for </span>Msgs {
+<a href=#640 id=640 data-nosnippet>640</a>        <span class="kw">fn </span>cumsgs(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;<span class="kw-2">&amp;</span><span class="kw">dyn </span>ErasedCuStampedData&gt; {
 <a href=#641 id=641 data-nosnippet>641</a>            Vec::new()
 <a href=#642 id=642 data-nosnippet>642</a>        }
 <a href=#643 id=643 data-nosnippet>643</a>    }
