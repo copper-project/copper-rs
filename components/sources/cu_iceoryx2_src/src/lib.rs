@@ -6,7 +6,7 @@ use iceoryx2::prelude::*;
 use iceoryx2::service::port_factory::publish_subscribe::PortFactory;
 
 #[derive(Clone, Debug, Default, Decode, Encode)]
-pub struct IceorixCuMsg<P: CuMsgPayload>(CuMsg<P>);
+pub struct IceorixCuMsg<P: CuMsgPayload>(CuStampedData<P>);
 
 unsafe impl<P: CuMsgPayload> ZeroCopySend for IceorixCuMsg<P> {}
 
@@ -141,7 +141,7 @@ where
                     .clone(),
             );
 
-            new_msg.metadata.tov = icemsg.payload().0.metadata.tov;
+            new_msg.tov = icemsg.payload().0.tov;
         } else {
             debug!(
                 "IceoryxSource({}): No message received.",

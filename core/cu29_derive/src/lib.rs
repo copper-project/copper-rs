@@ -42,7 +42,7 @@ fn return_error(msg: String) -> TokenStream {
 
 /// Generates the CopperList content type from a config.
 /// gen_cumsgs!("path/to/config.toml")
-/// It will create a new type called CuMsgs you can pass to the log reader for decoding:
+/// It will create a new type called CuStampedDataSet you can pass to the log reader for decoding:
 #[proc_macro]
 pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
     let config = parse_macro_input!(config_path_lit as LitStr).value();
@@ -65,7 +65,7 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
         Err(e) => return return_error(format!("Could not compute runtime plan: {e}")),
     };
 
-    // Give a name compatible with a struct to match the task ids to their output in the CuMsgs tuple.
+    // Give a name compatible with a struct to match the task ids to their output in the CuStampedDataSet tuple.
     let all_tasks_member_ids: Vec<String> = graph
         .get_all_nodes()
         .iter()
@@ -85,7 +85,7 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
 
     #[cfg(feature = "macro_debug")]
     eprintln!(
-        "[The CuMsgs matching tasks ids are {:?}]",
+        "[The CuStampedDataSet matching tasks ids are {:?}]",
         taskid_order
             .iter()
             .map(|i| all_tasks_member_ids[*i].clone())
@@ -104,14 +104,14 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
             use cu29::bincode::error::DecodeError;
             use cu29::copperlist::CopperList;
             use cu29::cutask::CuMsgMetadata;
-            use cu29::cutask::CuMsg;
-            use cu29::prelude::ErasedCuMsg;
-            use cu29::prelude::ErasedCuMsgs;
+            use cu29::cutask::CuStampedData;
+            use cu29::prelude::ErasedCuStampedData;
+            use cu29::prelude::ErasedCuStampedDataSet;
             use cu29::prelude::MatchingTasks;
             use cu29::prelude::Serialize;
             #support
         }
-        use cumsgs::CuMsgs;
+        use cumsgs::CuStampedDataSet;
     };
     with_uses.into()
 }
@@ -164,7 +164,7 @@ fn gen_culist_support(
             let index = syn::Index::from(*output_position);
             quote! {
                 #[allow(dead_code)]
-                pub fn #fn_name(&self) -> &CuMsg<#payload_type> {
+                pub fn #fn_name(&self) -> &CuStampedData<#payload_type> {
                     &self.0.#index
                 }
             }
@@ -175,11 +175,11 @@ fn gen_culist_support(
     quote! {
         #collect_metadata_function
 
-        pub struct CuMsgs(pub #msgs_types_tuple);
+        pub struct CuStampedDataSet(pub #msgs_types_tuple);
 
-        pub type CuList = CopperList<CuMsgs>;
+        pub type CuList = CopperList<CuStampedDataSet>;
 
-        impl CuMsgs {
+        impl CuStampedDataSet {
             #(#methods)*
 
             #[allow(dead_code)]
@@ -193,7 +193,7 @@ fn gen_culist_support(
             }
         }
 
-        impl MatchingTasks for CuMsgs {
+        impl MatchingTasks for CuStampedDataSet {
             #[allow(dead_code)]
             fn get_all_task_ids() -> &'static [&'static str] {
                 &[#(#all_tasks_as_struct_member_name),*]
@@ -210,7 +210,7 @@ fn gen_culist_support(
         // Adds the serialize support
         #msgs_types_tuple_serialize
 
-        // Adds the type erased CuMsgs support (to help generic serialized conversions)
+        // Adds the type erased CuStampedDataSet support (to help generic serialized conversions)
         #erasedmsg_trait_impl
     }
 }
@@ -228,13 +228,13 @@ fn gen_sim_support(runtime_plan: &CuExecutionLoop) -> proc_macro2::TokenStream {
                 let inputs: Vec<Type> = step
                     .input_msg_indices_types
                     .iter()
-                    .map(|(_, t)| parse_str::<Type>(format!("CuMsg<{t}>").as_str()).unwrap())
+                    .map(|(_, t)| parse_str::<Type>(format!("CuStampedData<{t}>").as_str()).unwrap())
                     .collect();
                 let output: Option<Type> = step
                     .output_msg_index_type
                     .as_ref()
-                    .map(|(_, t)| parse_str::<Type>(format!("CuMsg<{t}>").as_str()).unwrap());
-                let no_output = parse_str::<Type>("CuMsg<()>").unwrap();
+                    .map(|(_, t)| parse_str::<Type>(format!("CuStampedData<{t}>").as_str()).unwrap());
+                let no_output = parse_str::<Type>("CuStampedData<()>").unwrap();
                 let output = output.as_ref().unwrap_or(&no_output);
 
                 let inputs_type = if inputs.len() == 1 {
@@ -338,17 +338,17 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         quote! { NoMonitor }
     };
 
-    // This is common for all the mission as it will be inserted in the respective modules with their local CuTasks, CuMsgs etc...
+    // This is common for all the mission as it will be inserted in the respective modules with their local CuTasks, CuStampedDataSet etc...
     #[cfg(feature = "macro_debug")]
     eprintln!("[build runtime field]");
     // add that to a new field
     let runtime_field: Field = if sim_mode {
         parse_quote! {
-            copper_runtime: cu29::curuntime::CuRuntime<CuSimTasks, CuMsgs, #monitor_type, #DEFAULT_CLNB>
+            copper_runtime: cu29::curuntime::CuRuntime<CuSimTasks, CuStampedDataSet, #monitor_type, #DEFAULT_CLNB>
         }
     } else {
         parse_quote! {
-            copper_runtime: cu29::curuntime::CuRuntime<CuTasks, CuMsgs, #monitor_type, #DEFAULT_CLNB>
+            copper_runtime: cu29::curuntime::CuRuntime<CuTasks, CuStampedDataSet, #monitor_type, #DEFAULT_CLNB>
         }
     };
 
@@ -979,7 +979,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         #[cfg(feature = "macro_debug")]
         eprintln!("[Culist access order:  {taskid_call_order:?}]");
 
-        // Give a name compatible with a struct to match the task ids to their output in the CuMsgs tuple.
+        // Give a name compatible with a struct to match the task ids to their output in the CuStampedDataSet tuple.
         let all_tasks_member_ids: Vec<String> = all_tasks_ids
             .iter()
             .map(|name| utils::config_id_to_struct_member(name.as_str()))
@@ -1210,7 +1210,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     );
 
                     let application = Ok(#application_name {
-                        copper_runtime: CuRuntime::<#mission_mod::#tasks_type, #mission_mod::CuMsgs, #monitor_type, #DEFAULT_CLNB>::new(
+                        copper_runtime: CuRuntime::<#mission_mod::#tasks_type, #mission_mod::CuStampedDataSet, #monitor_type, #DEFAULT_CLNB>::new(
                             clock,
                             &config,
                             Some(#mission),
@@ -1377,7 +1377,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::cutask::CuSrcTask;
                 use cu29::cutask::CuSinkTask;
                 use cu29::cutask::CuTask;
-                use cu29::cutask::CuMsg;
+                use cu29::cutask::CuStampedData;
                 use cu29::cutask::CuMsgMetadata;
                 use cu29::copperlist::CopperList;
                 use cu29::monitoring::CuMonitor; // Trait import.
@@ -1549,12 +1549,12 @@ fn build_culist_tuple(all_msgs_types_in_culist_order: &[Type]) -> TypeTuple {
         parse_quote! { () }
     } else {
         parse_quote! {
-            ( #( CuMsg<#all_msgs_types_in_culist_order> ),* )
+            ( #( CuStampedData<#all_msgs_types_in_culist_order> ),* )
         }
     }
 }
 
-/// This is the bincode encoding part of the CuMsgs
+/// This is the bincode encoding part of the CuStampedDataSet
 fn build_culist_tuple_encode(all_msgs_types_in_culist_order: &[Type]) -> ItemImpl {
     let indices: Vec<usize> = (0..all_msgs_types_in_culist_order.len()).collect();
 
@@ -1568,7 +1568,7 @@ fn build_culist_tuple_encode(all_msgs_types_in_culist_order: &[Type]) -> ItemImp
         .collect();
 
     parse_quote! {
-        impl Encode for CuMsgs {
+        impl Encode for CuStampedDataSet {
             fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
                 #(#encode_fields)*
                 Ok(())
@@ -1577,23 +1577,23 @@ fn build_culist_tuple_encode(all_msgs_types_in_culist_order: &[Type]) -> ItemImp
     }
 }
 
-/// This is the bincode decoding part of the CuMsgs
+/// This is the bincode decoding part of the CuStampedDataSet
 fn build_culist_tuple_decode(all_msgs_types_in_culist_order: &[Type]) -> ItemImpl {
     let indices: Vec<usize> = (0..all_msgs_types_in_culist_order.len()).collect();
 
-    // Generate the `CuMsg::<T>::decode(decoder)?` for each tuple index
+    // Generate the `CuStampedData::<T>::decode(decoder)?` for each tuple index
     let decode_fields: Vec<_> = indices
         .iter()
         .map(|i| {
             let t = &all_msgs_types_in_culist_order[*i];
-            quote! { CuMsg::<#t>::decode(decoder)? }
+            quote! { CuStampedData::<#t>::decode(decoder)? }
         })
         .collect();
 
     parse_quote! {
-        impl Decode<()> for CuMsgs {
+        impl Decode<()> for CuStampedDataSet {
             fn decode<D: Decoder<Context=()>>(decoder: &mut D) -> Result<Self, DecodeError> {
-                Ok(CuMsgs ((
+                Ok(CuStampedDataSet ((
                     #(#decode_fields),*
                 )))
             }
@@ -1607,12 +1607,12 @@ fn build_culist_erasedcumsgs(all_msgs_types_in_culist_order: &[Type]) -> ItemImp
         .iter()
         .map(|i| {
             let idx = syn::Index::from(*i);
-            quote! { &self.0.#idx as &dyn ErasedCuMsg }
+            quote! { &self.0.#idx as &dyn ErasedCuStampedData }
         })
         .collect();
     parse_quote! {
-        impl ErasedCuMsgs for CuMsgs {
-            fn cumsgs(&self) -> Vec<&dyn ErasedCuMsg> {
+        impl ErasedCuStampedDataSet for CuStampedDataSet {
+            fn cumsgs(&self) -> Vec<&dyn ErasedCuStampedData> {
                 vec![
                     #(#casted_fields),*
                 ]
@@ -1633,9 +1633,9 @@ fn build_culist_tuple_debug(all_msgs_types_in_culist_order: &[Type]) -> ItemImpl
         .collect();
 
     parse_quote! {
-        impl std::fmt::Debug for CuMsgs {
+        impl std::fmt::Debug for CuStampedDataSet {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.debug_tuple("CuMsgs")
+                f.debug_tuple("CuStampedDataSet")
                     #(#debug_fields)*
                     .finish()
             }
@@ -1643,7 +1643,7 @@ fn build_culist_tuple_debug(all_msgs_types_in_culist_order: &[Type]) -> ItemImpl
     }
 }
 
-/// This is the serde serialization part of the CuMsgs
+/// This is the serde serialization part of the CuStampedDataSet
 fn build_culist_tuple_serialize(all_msgs_types_in_culist_order: &[Type]) -> ItemImpl {
     let indices: Vec<usize> = (0..all_msgs_types_in_culist_order.len()).collect();
     let tuple_len = all_msgs_types_in_culist_order.len();
@@ -1658,7 +1658,7 @@ fn build_culist_tuple_serialize(all_msgs_types_in_culist_order: &[Type]) -> Item
         .collect();
 
     parse_quote! {
-        impl Serialize for CuMsgs {
+        impl Serialize for CuStampedDataSet {
             fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
             where
                 S: serde::Serializer,

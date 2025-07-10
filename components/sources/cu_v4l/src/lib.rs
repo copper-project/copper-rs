@@ -240,7 +240,7 @@ mod linux_impl {
                 let cutime = cutime_from_v4ltime(self.v4l_clock_time_offset_ns, meta.timestamp);
                 let image = CuImage::new(self.settled_format, handle.clone());
                 new_msg.set_payload(image);
-                new_msg.metadata.tov = Tov::Time(cutime);
+                new_msg.tov = Tov::Time(cutime);
             } else {
                 debug!("Empty frame received");
             }
@@ -309,7 +309,7 @@ mod linux_impl {
             let mut v4l = V4l::new(Some(&config)).unwrap();
             v4l.start(&clock).unwrap();
 
-            let mut msg = CuMsg::new(None);
+            let mut msg = CuStampedData::new(None);
             // Define the image format
             let format = rerun::components::ImageFormat(ImageFormat {
                 width: IMG_WIDTH as u32,

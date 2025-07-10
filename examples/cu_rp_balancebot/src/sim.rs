@@ -131,7 +131,7 @@ fn run_copper_callback(
                 // Convert the angle from radians to the actual adc value from the sensor
                 let analog_value = (angle_radians / (2.0 * std::f32::consts::PI) * 4096.0) as u16;
                 output.set_payload(ADSReadingPayload { analog_value });
-                output.metadata.tov = robot_clock.clock.now().into();
+                output.tov = robot_clock.clock.now().into();
                 SimOverride::ExecutedBySim
             }
             default::SimStep::Balpos(_) => SimOverride::ExecutedBySim,
@@ -141,7 +141,7 @@ fn run_copper_callback(
                 let (cart_transform, _) = bindings.single().expect("Failed to get cart transform");
                 let ticks = (cart_transform.translation.x * 2000.0) as i32;
                 output.set_payload(EncoderPayload { ticks });
-                output.metadata.tov = robot_clock.clock.now().into();
+                output.tov = robot_clock.clock.now().into();
                 SimOverride::ExecutedBySim
             }
             default::SimStep::Railpos(_) => SimOverride::ExecutedBySim,

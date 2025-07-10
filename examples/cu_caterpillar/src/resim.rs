@@ -19,7 +19,7 @@ fn default_callback(step: default::SimStep) -> SimOverride {
 fn run_one_copperlist(
     copper_app: &mut CaterpillarReSim,
     robot_clock: &mut RobotClockMock,
-    copper_list: CopperList<default::CuMsgs>,
+    copper_list: CopperList<default::CuStampedDataSet>,
 ) {
     // Sync the copper clock to the simulated physics clock.
     let msgs = &copper_list.msgs;
@@ -93,14 +93,14 @@ fn main() {
         };
 
         let mut copperlists = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
-        let cl_iter = copperlists_reader::<default::CuMsgs>(&mut copperlists);
+        let cl_iter = copperlists_reader::<default::CuStampedDataSet>(&mut copperlists);
         for entry in cl_iter {
             println!("{entry:#?}");
             run_one_copperlist(&mut copper_app, &mut robot_clock_mock, entry);
         }
     }
 
-    // let cl_iter = copperlists_reader::<default::CuMsgs>(&mut copperlists_reader);
+    // let cl_iter = copperlists_reader::<default::CuStampedDataSet>(&mut copperlists_reader);
     // for entry in cl_iter {
     //     println!("{entry:#?}");
     //     run_one_copperlist(&mut copper_app, &mut robot_clock_mock, entry);
