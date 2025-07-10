@@ -20,7 +20,7 @@ nalgebra = { version = "0.33.2", optional = true }
 glam = { version = "0.30.3", optional = true }
 
 [features]
-default = []
+default = ["glam"]
 faer = ["dep:faer"]
 nalgebra = ["dep:nalgebra"]
 glam = ["dep:glam"]
