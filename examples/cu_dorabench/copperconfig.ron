@@ -1,0 +1,18 @@
+(
+    tasks: [
+        (
+            id: "src",
+            type: "tasks::FortyMegSrc",
+        ),
+        (
+            id: "dst",
+            type: "tasks::FortyMegSink",
+        ),
+     ],
+    cnx: [
+        (src: "src",  dst: "dst",   msg: "tasks::DoraPayload"),
+    ],
+    // monitor: (
+    //      type: "cu_consolemon::CuConsoleMon",
+    // )
+)

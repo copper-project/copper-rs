@@ -1,0 +1,38 @@
+[package]
+name = "cu-dorabench"
+default-run = "cu-dorabench"
+description = "This is the matching benchmark for https://github.com/dora-rs/dora-benchmark."
+
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[package.metadata.cargo-machete]
+ignored = [
+    "cu29-log",
+    "cu29-log-runtime",
+    "cu29-unifiedlog",
+    "cu-consolemon",
+    "copper-traits",
+] # proc macro and console
+
+[[bin]]
+name = "cu-dorabench"
+path = "src/main.rs"
+
+[[bin]]
+name = "cu-dorabench-logreader"
+path = "src/logreader.rs"
+
+[dependencies]
+bincode = { workspace = true }
+cu29 = { workspace = true, features = ["macro_debug"]  }
+cu29-helpers = { workspace = true }
+cu29-export = { workspace = true, features = ["python"] }
+serde = { workspace = true }
+cu-consolemon = { path = "../../components/monitors/cu_consolemon" }
