@@ -92,7 +92,7 @@ impl MmapStream {
     ) -> Self {
         let section = parent_logger
             .lock()
-            .unwrap()
+            .expect("Could not lock a section at MmapStream creation")
             .add_section(entry_type, minimum_allocation_amount);
         Self {
             entry_type,
@@ -122,22 +122,29 @@ impl<E: Encode> WriteStream<E> for MmapStream {
             }
             Err(e) => match e {
                 EncodeError::UnexpectedEnd => {
-                    let mut logger_guard = self.parent_logger.lock().unwrap();
-                    logger_guard.flush_section(&mut self.current_section);
-                    self.current_section =
-                        logger_guard.add_section(self.entry_type, self.minimum_allocation_amount);
+                    if let Ok(mut logger_guard) = self.parent_logger.lock() {
+                        logger_guard.flush_section(&mut self.current_section);
+                        self.current_section = logger_guard
+                            .add_section(self.entry_type, self.minimum_allocation_amount);
 
-                    let result = encode_into_slice(
-                        obj,
-                        self.current_section.get_user_buffer(),
-                        standard(),
-                    )
-                    .expect(
-                        "Failed to encode object in a newly minted section. Unrecoverable failure.",
-                    ); // If we fail just after creating a section, there is not much we can do, we need to bail.
-                    self.current_position += result;
-                    self.current_section.used += result as u32;
-                    Ok(())
+                        let result = encode_into_slice(
+                            obj,
+                            self.current_section.get_user_buffer(),
+                            standard(),
+                        )
+                            .expect(
+                                "Failed to encode object in a newly minted section. Unrecoverable failure.",
+                            ); // If we fail just after creating a section, there is not much we can do, we need to bail.
+                        self.current_position += result;
+                        self.current_section.used += result as u32;
+                        Ok(())
+                    } else {
+                        // It will retry but at least not completely crash.
+                        Err(
+                            "Logger mutex poisoned while reporting EncodeError::UnexpectedEnd"
+                                .into(),
+                        )
+                    }
                 }
                 _ => {
                     let err =
@@ -152,8 +159,11 @@ impl<E: Encode> WriteStream<E> for MmapStream {
 
 impl Drop for MmapStream {
     fn drop(&mut self) {
-        let mut logger_guard = self.parent_logger.lock().unwrap();
-        logger_guard.flush_section(&mut self.current_section);
+        if let Ok(mut logger_guard) = self.parent_logger.lock() {
+            logger_guard.flush_section(&mut self.current_section);
+        } else if !std::thread::panicking() {
+            eprintln!("⚠️ MmapStream::drop: logger mutex poisoned");
+        }
     }
 }
 
@@ -222,8 +232,11 @@ impl UnifiedLoggerBuilder {
 
         if self.write && self.create {
             let ulw = UnifiedLoggerWrite::new(
-                &self.file_base_name.unwrap(),
-                self.preallocated_size.unwrap(),
+                &self
+                    .file_base_name
+                    .expect("This unified logger has no filename."),
+                self.preallocated_size
+                    .expect("This unified logger has no preallocated size."),
                 page_size,
             );
 
@@ -459,9 +472,13 @@ pub struct UnifiedLoggerWrite {
 
 fn build_slab_path(base_file_path: &Path, slab_index: usize) -> PathBuf {
     let mut file_path = base_file_path.to_path_buf();
-    let file_name = file_path.file_name().unwrap().to_str().unwrap();
+    let file_name = file_path
+        .file_name()
+        .expect("Invalid base file path")
+        .to_str()
+        .expect("Could not translate the filename OsStr to str");
     let mut file_name = file_name.split('.').collect::<Vec<&str>>();
-    let extension = file_name.pop().unwrap();
+    let extension = file_name.pop().expect("Could not find the file extension.");
     let file_name = file_name.join(".");
     let file_name = format!("{file_name}_{slab_index}.{extension}");
     file_path.set_file_name(file_name);
@@ -618,7 +635,7 @@ impl UnifiedLoggerRead {
 
         Ok(Self {
             base_file_path: base_file_path.to_path_buf(),
-            main_header: header.unwrap(),
+            main_header: header.expect("UnifiedLoggerRead needs a header"),
             current_file: file,
             current_mmap_buffer: mmap,
             current_slab_index: 0,
