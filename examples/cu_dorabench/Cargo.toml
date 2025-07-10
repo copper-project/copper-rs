@@ -31,8 +31,20 @@ path = "src/logreader.rs"
 
 [dependencies]
 bincode = { workspace = true }
-cu29 = { workspace = true, features = ["macro_debug"]  }
+cu29 = { workspace = true, features = ["macro_debug"] }
 cu29-helpers = { workspace = true }
 cu29-export = { workspace = true, features = ["python"] }
 serde = { workspace = true }
 cu-consolemon = { path = "../../components/monitors/cu_consolemon" }
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"  # or "debuginfo" or true
+debug = false
+incremental = false
+
+[build]
+rustflags = ["-C", "target-cpu=native", "-C", "link-arg=-s"]

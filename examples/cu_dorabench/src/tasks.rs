@@ -78,6 +78,7 @@ impl Serialize for DoraPayload {
     where
         S: Serializer,
     {
+        // Not needed for this benchmark.
         todo!()
     }
 }

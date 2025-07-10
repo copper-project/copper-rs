@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 #[copper_runtime(config = "copperconfig.ron")]
 struct DoraBench {}
 
+// This will create a torrent of crap so preallocate a lot.
 const SLAB_SIZE: Option<usize> = Some(4096 * 1024 * 1024);
 
 fn main() {
