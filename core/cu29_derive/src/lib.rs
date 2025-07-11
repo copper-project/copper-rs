@@ -112,6 +112,7 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
             #support
         }
         use cumsgs::CuStampedDataSet;
+        type CuMsgs=CuStampedDataSet;
     };
     with_uses.into()
 }
