@@ -87,7 +87,10 @@ impl<'cl> CuTask<'cl> for MergerTask {
         output: Self::Output,
     ) -> CuResult<()> {
         // Put the types explicitly here show the actual underlying type of Self::Input
-        let (i, f): (&CuStampedData<i32>, &CuStampedData<f32>) = input;
+        let (i, f): (
+            &CuStampedData<i32, CuMsgMetadata>,
+            &CuStampedData<f32, CuMsgMetadata>,
+        ) = input;
         let (i, f) = (i.payload().unwrap(), f.payload().unwrap());
         output.set_payload((*i, *f)); // output is a &mut CuMsg<(i32, f32)>
         Ok(())

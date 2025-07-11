@@ -80,9 +80,11 @@ pub enum UnifiedLogType {
     FrozenTasks,       // Log of all frozen state of the tasks.
     LastEntry,         // This is a special entry that is used to signal the end of the log.
 }
+/// Represent the minimum set of traits to be usable as Metadata in Copper.
+pub trait Metadata: Default + Debug + Clone + Encode + Decode<()> + Serialize {}
 
 /// Key metadata piece attached to every message in Copper.
-pub trait CuMetadataTrait {
+pub trait CuMsgMetadataTrait {
     /// The time range used for the processing of this message
     fn process_time(&self) -> PartialCuTimeRange;
 
@@ -94,7 +96,7 @@ pub trait CuMetadataTrait {
 pub trait ErasedCuStampedData {
     fn payload(&self) -> Option<&dyn erased_serde::Serialize>;
     fn tov(&self) -> Tov;
-    fn metadata(&self) -> &dyn CuMetadataTrait;
+    fn metadata(&self) -> &dyn CuMsgMetadataTrait;
 }
 
 /// Trait to get a vector of type-erased CuStampedDataSet
