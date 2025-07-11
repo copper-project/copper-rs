@@ -157,7 +157,7 @@ mod tests {
         let mut xt32 = Xt32::new(Some(&config)).unwrap();
 
         let new_payload = LidarCuMsgPayload::default();
-        let mut new_msg = CuStampedData::<LidarCuMsgPayload>::new(Some(new_payload));
+        let mut new_msg = CuStampedData::<LidarCuMsgPayload, CuMsgMetadata>::new(Some(new_payload));
 
         // Picking a timestamp from the beginning of the pcap file to align the robot clock with the capture + 1s buffer in the past because ref times are negative.
         let datetime = DateTime::parse_from_rfc3339("2024-09-17T15:47:11.684855Z")

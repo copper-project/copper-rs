@@ -83,6 +83,8 @@ pub enum UnifiedLogType {
 /// Represent the minimum set of traits to be usable as Metadata in Copper.
 pub trait Metadata: Default + Debug + Clone + Encode + Decode<()> + Serialize {}
 
+impl Metadata for () {}
+
 /// Key metadata piece attached to every message in Copper.
 pub trait CuMsgMetadataTrait {
     /// The time range used for the processing of this message
