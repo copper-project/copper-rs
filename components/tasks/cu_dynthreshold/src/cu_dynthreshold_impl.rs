@@ -238,7 +238,7 @@ mod tests {
         let gstreamer_buffer = Buffer::from_mut_slice(input_data.clone());
         let cu_gst_buffer = CuGstBuffer(gstreamer_buffer);
         let input_msg = CuStampedData::new(Some(cu_gst_buffer));
-        let mut output_image_msg = CuStampedData::<CuImage<Vec<u8>>>::default();
+        let mut output_image_msg = CuStampedData::<CuImage<Vec<u8>>,CuMsgMetadata>::default();
         let output: <DynThreshold as CuTask>::Output = &mut output_image_msg;
 
         let clock = cu29::clock::RobotClock::new();
