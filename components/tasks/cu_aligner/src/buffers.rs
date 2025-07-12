@@ -1,14 +1,13 @@
 use circular_buffer::CircularBuffer;
-use cu29::clock::{CuTime, Tov};
-use cu29::cutask::{CuMsgPayload, CuStampedData};
-use cu29::{CuError, CuResult};
+use cu29::prelude::*;
 
 /// An augmented circular buffer that allows for time-based operations.
-pub struct TimeboundCircularBuffer<const S: usize, P>
+pub struct TimeboundCircularBuffer<const S: usize, P, M>
 where
     P: CuMsgPayload,
+    M: Metadata,
 {
-    pub inner: CircularBuffer<S, CuStampedData<P>>,
+    pub inner: CircularBuffer<S, CuStampedData<P, M>>,
 }
 
 #[allow(dead_code)]
@@ -28,7 +27,7 @@ fn extract_tov_time_right(tov: &Tov) -> Option<CuTime> {
     }
 }
 
-impl<const S: usize, P> Default for TimeboundCircularBuffer<S, P>
+impl<const S: usize, P> Default for TimeboundCircularBuffer<S, P, CuMsgMetadata>
 where
     P: CuMsgPayload,
 {
@@ -37,14 +36,14 @@ where
     }
 }
 
-impl<const S: usize, P> TimeboundCircularBuffer<S, P>
+impl<const S: usize, P> TimeboundCircularBuffer<S, P, CuMsgMetadata>
 where
     P: CuMsgPayload,
 {
     pub fn new() -> Self {
         TimeboundCircularBuffer {
             // It is assumed to be sorted by time with non overlapping ranges if they are Tov::Range
-            inner: CircularBuffer::<S, CuStampedData<P>>::new(),
+            inner: CircularBuffer::<S, CuStampedData<P, CuMsgMetadata>>::new(),
         }
     }
 
@@ -54,7 +53,7 @@ where
         &self,
         start_time: CuTime,
         end_time: CuTime,
-    ) -> impl Iterator<Item = &CuStampedData<P>> {
+    ) -> impl Iterator<Item = &CuStampedData<P, CuMsgMetadata>> {
         self.inner.iter().filter(move |msg| match msg.tov {
             Tov::Time(time) => time >= start_time && time <= end_time,
             Tov::Range(range) => range.start >= start_time && range.end <= end_time,
@@ -95,18 +94,18 @@ where
     }
 
     /// Push a message into the buffer.
-    pub fn push(&mut self, msg: CuStampedData<P>) {
+    pub fn push(&mut self, msg: CuStampedData<P, CuMsgMetadata>) {
         self.inner.push_back(msg);
     }
 }
 
 #[macro_export]
 macro_rules! alignment_buffers {
-    ($struct_name:ident, $($name:ident: TimeboundCircularBuffer<$size:expr, CuMsg<$payload:ty>>),*) => {
+    ($struct_name:ident, $($name:ident: TimeboundCircularBuffer<$size:expr, CuStampedData<$payload:ty, CuMsgMetadata>>),*) => {
         struct $struct_name {
             target_alignment_window: cu29::clock::CuDuration, // size of the most recent data window to align
             stale_data_horizon: cu29::clock::CuDuration,  // time horizon for purging stale data
-            $(pub $name: $crate::buffers::TimeboundCircularBuffer<$size, $payload>),*
+            $(pub $name: $crate::buffers::TimeboundCircularBuffer<$size, $payload, CuMsgMetadata>),*
         }
 
         impl $struct_name {
@@ -114,7 +113,7 @@ macro_rules! alignment_buffers {
                 Self {
                     target_alignment_window,
                     stale_data_horizon,
-                    $($name: $crate::buffers::TimeboundCircularBuffer::<$size, $payload>::new()),*
+                    $($name: $crate::buffers::TimeboundCircularBuffer::<$size, $payload, CuMsgMetadata>::new()),*
                 }
             }
 
@@ -130,7 +129,7 @@ macro_rules! alignment_buffers {
             #[allow(dead_code)]
             pub fn get_latest_aligned_data(
                 &mut self,
-            ) -> Option<($(impl Iterator<Item = &cu29::cutask::CuStampedData<$payload>>),*)> {
+            ) -> Option<($(impl Iterator<Item = &cu29::cutask::CuStampedData<$payload, CuMsgMetadata>>),*)> {
                 // Now find the min of the max of the last time for all buffers
                 // meaning the most recent time at which all buffers have data
                 let most_recent_time = [
@@ -157,12 +156,12 @@ pub use alignment_buffers;
 #[cfg(test)]
 mod tests {
     use cu29::clock::Tov;
-    use cu29::cutask::CuStampedData;
+    use cu29::cutask::*;
     use std::time::Duration;
 
     #[test]
     fn simple_init_test() {
-        alignment_buffers!(AlignmentBuffers, buffer1: TimeboundCircularBuffer<10, CuMsg<u32>>, buffer2: TimeboundCircularBuffer<12, CuMsg<u64>>);
+        alignment_buffers!(AlignmentBuffers, buffer1: TimeboundCircularBuffer<10, CuStampedData<u32, CuMsgMetadata>>, buffer2: TimeboundCircularBuffer<12, CuStampedData<u64, CuMsgMetadata>>);
 
         let buffers =
             AlignmentBuffers::new(Duration::from_secs(1).into(), Duration::from_secs(2).into());
@@ -172,7 +171,7 @@ mod tests {
 
     #[test]
     fn purge_test() {
-        alignment_buffers!(AlignmentBuffers, buffer1: TimeboundCircularBuffer<10, CuMsg<u32>>, buffer2: TimeboundCircularBuffer<12, CuMsg<u32>>);
+        alignment_buffers!(AlignmentBuffers, buffer1: TimeboundCircularBuffer<10, CuStampedData<u32, CuMsgMetadata>>, buffer2: TimeboundCircularBuffer<12, CuStampedData<u32, CuMsgMetadata>>);
 
         let mut buffers =
             AlignmentBuffers::new(Duration::from_secs(1).into(), Duration::from_secs(2).into());
@@ -195,8 +194,8 @@ mod tests {
     fn empty_buffers_test() {
         alignment_buffers!(
             AlignmentBuffers,
-            buffer1: TimeboundCircularBuffer<10, CuMsg<u32>>,
-            buffer2: TimeboundCircularBuffer<12, CuMsg<u32>>
+            buffer1: TimeboundCircularBuffer<10, CuStampedData<u32, CuMsgMetadata>>,
+            buffer2: TimeboundCircularBuffer<12, CuStampedData<u32, CuMsgMetadata>>
         );
 
         let mut buffers = AlignmentBuffers::new(
@@ -212,8 +211,8 @@ mod tests {
     fn horizon_and_window_alignment_test() {
         alignment_buffers!(
             AlignmentBuffers,
-            buffer1: TimeboundCircularBuffer<10, CuMsg<u32>>,
-            buffer2: TimeboundCircularBuffer<12, CuMsg<u32>>
+            buffer1: TimeboundCircularBuffer<10, CuStampedData<u32, CuMsgMetadata>>,
+            buffer2: TimeboundCircularBuffer<12, CuStampedData<u32, CuMsgMetadata>>
         );
 
         let mut buffers = AlignmentBuffers::new(
