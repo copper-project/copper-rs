@@ -109,7 +109,7 @@
 
 use crate::config::ComponentConfig;
 
-use crate::cutask::{CuMsgPayload, CuSinkTask, CuSrcTask, CuStampedData, Freezable};
+use crate::cutask::{CuMsgMetadata, CuMsgPayload, CuSinkTask, CuSrcTask, CuStampedData, Freezable};
 use crate::{input_msg, output_msg};
 use cu29_clock::RobotClock;
 use cu29_traits::CuResult;

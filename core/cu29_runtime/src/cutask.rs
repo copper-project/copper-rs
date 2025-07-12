@@ -7,7 +7,10 @@ use bincode::enc::{Encode, Encoder};
 use bincode::error::{DecodeError, EncodeError};
 use compact_str::{CompactString, ToCompactString};
 use cu29_clock::{PartialCuTimeRange, RobotClock, Tov};
-use cu29_traits::{CuCompactString, CuResult, ErasedCuStampedData, COMPACT_STRING_CAPACITY};
+use cu29_traits::{
+    CuCompactString, CuMsgMetadataTrait, CuResult, ErasedCuStampedData, Metadata,
+    COMPACT_STRING_CAPACITY,
+};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
@@ -21,22 +24,27 @@ pub trait CuMsgPack<'cl> {}
 impl<T: Default + Debug + Clone + Encode + Decode<()> + Serialize + Sized> CuMsgPayload for T {}
 
 macro_rules! impl_cu_msg_pack {
-    ($(($($ty:ident),*)),*) => {
+    ($( ( $( ($ty:ident, $md:ident) ),* ) ),*) => {
         $(
-            impl<'cl, $($ty: CuMsgPayload + 'cl),*> CuMsgPack<'cl> for ( $( &'cl CuStampedData<$ty>, )* ) {}
+            impl<'cl, $( $ty: CuMsgPayload + 'cl, $md: cu29_traits::Metadata ),*> CuMsgPack<'cl> for (
+                $( &'cl CuStampedData<$ty, $md>, )*
+            ) {}
         )*
     };
 }
 
-impl<'cl, T: CuMsgPayload> CuMsgPack<'cl> for (&'cl CuStampedData<T>,) {}
-impl<'cl, T: CuMsgPayload> CuMsgPack<'cl> for &'cl CuStampedData<T> {}
-impl<'cl, T: CuMsgPayload> CuMsgPack<'cl> for (&'cl mut CuStampedData<T>,) {}
-impl<'cl, T: CuMsgPayload> CuMsgPack<'cl> for &'cl mut CuStampedData<T> {}
+impl<'cl, T: CuMsgPayload, M: Metadata> CuMsgPack<'cl> for (&'cl CuStampedData<T, M>,) {}
+impl<'cl, T: CuMsgPayload, M: Metadata> CuMsgPack<'cl> for &'cl CuStampedData<T, M> {}
+impl<'cl, T: CuMsgPayload, M: Metadata> CuMsgPack<'cl> for (&'cl mut CuStampedData<T, M>,) {}
+impl<'cl, T: CuMsgPayload, M: Metadata> CuMsgPack<'cl> for &'cl mut CuStampedData<T, M> {}
 impl CuMsgPack<'_> for () {}
 
 // Apply the macro to generate implementations for tuple sizes up to 5
 impl_cu_msg_pack! {
-    (T1, T2), (T1, T2, T3), (T1, T2, T3, T4), (T1, T2, T3, T4, T5) // TODO: continue if necessary
+    ((T1, M1), (T2, M2)),
+    ((T1, M1), (T2, M2), (T3, M3)),
+    ((T1, M1), (T2, M2), (T3, M3), (T4, M4)),
+    ((T1, M1), (T2, M2), (T3, M3), (T4, M4), (T5, M5))
 }
 
 // A convenience macro to get from a payload or a list of payloads to a proper CuMsg or CuMsgPack
@@ -44,11 +52,11 @@ impl_cu_msg_pack! {
 #[macro_export]
 macro_rules! input_msg {
     ($lifetime:lifetime, $ty:ty) => {
-        &$lifetime CuStampedData<$ty>
+        &$lifetime CuStampedData<$ty, CuMsgMetadata>
     };
     ($lifetime:lifetime, $($ty:ty),*) => {
         (
-            $( &$lifetime CuStampedData<$ty>, )*
+            $( &$lifetime CuStampedData<$ty, CuMsgMetadata>, )*
         )
     };
 }
@@ -57,7 +65,7 @@ macro_rules! input_msg {
 #[macro_export]
 macro_rules! output_msg {
     ($lifetime:lifetime, $ty:ty) => {
-        &$lifetime mut CuStampedData<$ty>
+        &$lifetime mut CuStampedData<$ty, CuMsgMetadata>
     };
 }
 
@@ -71,13 +79,15 @@ pub struct CuMsgMetadata {
     pub status_txt: CuCompactString,
 }
 
+impl cu29_traits::Metadata for CuMsgMetadata {}
+
 impl CuMsgMetadata {
     pub fn set_status(&mut self, status: impl ToCompactString) {
         self.status_txt = CuCompactString(status.to_compact_string());
     }
 }
 
-impl cu29_traits::CuMetadataTrait for CuMsgMetadata {
+impl cu29_traits::CuMsgMetadataTrait for CuMsgMetadata {
     fn process_time(&self) -> PartialCuTimeRange {
         self.process_time
     }
@@ -99,9 +109,10 @@ impl Display for CuMsgMetadata {
 
 /// CuMsg is the envelope holding the msg payload and the metadata between tasks.
 #[derive(Default, Debug, Clone, bincode::Encode, bincode::Decode, Serialize)]
-pub struct CuStampedData<T>
+pub struct CuStampedData<T, M>
 where
     T: CuMsgPayload,
+    M: cu29_traits::Metadata,
 {
     /// This payload is the actual data exchanged between tasks.
     payload: Option<T>,
@@ -111,7 +122,7 @@ where
     pub tov: Tov,
 
     /// This metadata is the data that is common to all messages.
-    pub metadata: CuMsgMetadata,
+    pub metadata: M,
 }
 
 impl Default for CuMsgMetadata {
@@ -123,15 +134,16 @@ impl Default for CuMsgMetadata {
     }
 }
 
-impl<T> CuStampedData<T>
+impl<T, M> CuStampedData<T, M>
 where
     T: CuMsgPayload,
+    M: Metadata,
 {
     pub fn new(payload: Option<T>) -> Self {
         CuStampedData {
             payload,
             tov: Tov::default(),
-            metadata: CuMsgMetadata::default(),
+            metadata: M::default(),
         }
     }
     pub fn payload(&self) -> Option<&T> {
@@ -151,9 +163,10 @@ where
     }
 }
 
-impl<T> ErasedCuStampedData for CuStampedData<T>
+impl<T, M> ErasedCuStampedData for CuStampedData<T, M>
 where
     T: CuMsgPayload,
+    M: CuMsgMetadataTrait + Metadata,
 {
     fn payload(&self) -> Option<&dyn erased_serde::Serialize> {
         self.payload
@@ -165,7 +178,7 @@ where
         self.tov
     }
 
-    fn metadata(&self) -> &dyn cu29_traits::CuMetadataTrait {
+    fn metadata(&self) -> &dyn CuMsgMetadataTrait {
         &self.metadata
     }
 }
