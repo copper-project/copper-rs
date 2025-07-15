@@ -145,11 +145,7 @@ mod tests {
         let diff = (actual - expected).abs();
         assert!(
             diff <= epsilon,
-            "expected {}, got {}, difference {} exceeds epsilon {}",
-            expected,
-            actual,
-            diff,
-            epsilon
+            "expected {expected}, got {actual}, difference {diff} exceeds epsilon {epsilon}",
         );
     }
     use cu29::clock::CuDuration;

@@ -781,12 +781,7 @@ mod tests {
         let diff = (actual - expected).abs();
         assert!(
             diff <= epsilon,
-            "{}: expected {}, got {}, difference {} exceeds epsilon {}",
-            message,
-            expected,
-            actual,
-            diff,
-            epsilon
+            "{message}: expected {expected}, got {actual}, difference {diff} exceeds epsilon {epsilon}",
         );
     }
 
@@ -1509,9 +1504,9 @@ mod tests {
 
         // Visual inspection might show this difference, but we don't assert on it
         // as it's not deterministic and would make tests flaky
-        println!("First lookup: {:?}", first_lookup_time);
-        println!("Second lookup (cached): {:?}", second_lookup_time);
-        println!("Third lookup (after cache clear): {:?}", third_lookup_time);
+        println!("First lookup: {first_lookup_time:?}");
+        println!("Second lookup (cached): {second_lookup_time:?}");
+        println!("Third lookup (after cache clear): {third_lookup_time:?}");
     }
 
     #[test]
