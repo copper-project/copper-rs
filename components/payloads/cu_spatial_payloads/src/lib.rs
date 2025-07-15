@@ -489,9 +489,9 @@ mod faer_integration {
         fn from(p: &Transform3D<f64>) -> Self {
             let mat_array = p.to_matrix();
             let mut mat: Mat<f64> = Mat::zeros(4, 4);
-            for r in 0..4 {
-                for c in 0..4 {
-                    *mat.get_mut(r, c) = mat_array[r][c];
+            for (r, row) in mat_array.iter().enumerate() {
+                for (c, item) in row.iter().enumerate() {
+                    *mat.get_mut(r, c) = *item;
                 }
             }
             mat
