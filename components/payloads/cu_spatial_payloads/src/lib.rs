@@ -9,7 +9,6 @@ use uom::si::f64::Angle as Angle64;
 use uom::si::f64::Length as Length64;
 use uom::si::length::meter;
 
-use glam::DVec4;
 #[cfg(feature = "glam")]
 use glam::{Affine3A, DAffine3, DMat4, Mat4};
 
@@ -150,13 +149,8 @@ impl<T: Copy + Debug + Default + 'static> TransformInner<T> {
         } else if TypeId::of::<T>() == TypeId::of::<f64>() {
             // Convert to f64 matrix
             let mat_f64: [[f64; 4]; 4] = unsafe { std::mem::transmute_copy(&mat) };
-            let m = mat_f64;
-            let glam_mat = DMat4::from_cols(
-                DVec4::new(m[0][0], m[1][0], m[2][0], m[3][0]),
-                DVec4::new(m[0][1], m[1][1], m[2][1], m[3][1]),
-                DVec4::new(m[0][2], m[1][2], m[2][2], m[3][2]),
-                DVec4::new(m[0][3], m[1][3], m[2][3], m[3][3]),
-            );
+            // let m = mat_f64;
+            let glam_mat = DMat4::from_cols_array_2d(&mat_f64);
             let affine = DAffine3::from_mat4(glam_mat);
             unsafe { std::mem::transmute_copy(&TransformInner::<T>::F64(affine)) }
         } else {
@@ -597,9 +591,9 @@ mod glam_integration {
             transform[2][1] = aff.matrix3.z_axis.y;
             transform[2][2] = aff.matrix3.z_axis.z;
 
-            transform[0][3] = aff.translation.x;
-            transform[1][3] = aff.translation.y;
-            transform[2][3] = aff.translation.z;
+            transform[3][0] = aff.translation.x;
+            transform[3][1] = aff.translation.y;
+            transform[3][2] = aff.translation.z;
             transform[3][3] = 1.0;
 
             Transform3D::from_matrix(transform)
@@ -994,10 +988,10 @@ mod tests {
         use glam::DAffine3;
 
         let pose = Transform3D::from_matrix([
-            [1.0, 0.0, 0.0, 5.0],
-            [0.0, 1.0, 0.0, 6.0],
-            [0.0, 0.0, 1.0, 7.0],
-            [0.0, 0.0, 0.0, 1.0],
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [5.0, 6.0, 7.0, 1.0],
         ]);
         let aff: DAffine3 = pose.into();
         assert_eq!(aff.translation[0], 5.0);

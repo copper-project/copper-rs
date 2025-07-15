@@ -211,10 +211,10 @@ mod tests {
 
         let after: StampedTransform<f64> = StampedTransform {
             transform: Transform3D::from_matrix([
-                [1.0, 0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0, 0.0], // Translation: x=10
                 [0.0, 1.0, 0.0, 0.0],
                 [0.0, 0.0, 1.0, 0.0],
-                [10.0, 0.0, 0.0, 1.0], // Translation: x=10
+                [10.0, 0.0, 0.0, 1.0],
             ]),
             stamp: CuDuration(3000),
             parent_frame: frame_id!("world"),
