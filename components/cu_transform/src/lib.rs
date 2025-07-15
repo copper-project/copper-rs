@@ -3,7 +3,7 @@ pub mod error;
 pub mod frames;
 pub mod interpolation;
 pub mod transform;
-pub mod transform_msg;
+pub mod transform_payload;
 pub mod tree;
 pub mod velocity;
 mod velocity_cache;
@@ -26,7 +26,7 @@ pub use frames::{
 pub use frames::{BaseToRobot, RobotToCamera, RobotToImu, RobotToLidar, WorldToBase, WorldToRobot};
 pub use interpolation::interpolate_transforms;
 pub use transform::{ConstTransformBuffer, StampedTransform, TransformBuffer, TransformStore};
-pub use transform_msg::{TransformPayload, TypedTransformBuffer, TypedTransformMsg};
+pub use transform_payload::{TransformPayload, TypedTransformBuffer, TypedTransformMsg};
 pub use tree::TransformTree;
 pub use velocity::VelocityTransform;
 

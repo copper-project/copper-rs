@@ -1,6 +1,6 @@
 use crate::error::{TransformError, TransformResult};
 use crate::transform::{StampedTransform, TransformStore};
-use crate::transform_msg::TransformPayload;
+use crate::transform_payload::TransformPayload;
 use crate::velocity::VelocityTransform;
 use crate::velocity_cache::VelocityTransformCache;
 use crate::FrameIdString;
