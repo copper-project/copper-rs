@@ -18,13 +18,13 @@ use std::fmt::Debug;
 ///
 /// # Example
 /// ```
-/// use cu_transform::{TransformMsg, Transform3D};
+/// use cu_transform::{TransformPayload, Transform3D};
 /// use cu29::prelude::*;
 /// use cu29::clock::{CuDuration, Tov};
 ///
 /// // Create a transform message
 /// let transform = Transform3D::<f32>::default();
-/// let msg = TransformMsg::new(
+/// let msg = TransformPayload::new(
 ///     transform,
 ///     "world",
 ///     "robot"
@@ -35,7 +35,7 @@ use std::fmt::Debug;
 /// cu_msg.tov = Tov::Time(CuDuration(1000));
 /// ```
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
-pub struct TransformMsg<T: Copy + Debug + Default + Serialize + 'static> {
+pub struct TransformPayload<T: Copy + Debug + Default + Serialize + 'static> {
     /// The actual transform
     pub transform: Transform3D<T>,
     /// Parent frame identifier
@@ -44,7 +44,7 @@ pub struct TransformMsg<T: Copy + Debug + Default + Serialize + 'static> {
     pub child_frame: FrameIdString,
 }
 
-impl<T: Copy + Debug + Default + Serialize + 'static> TransformMsg<T> {
+impl<T: Copy + Debug + Default + Serialize + 'static> TransformPayload<T> {
     /// Create a new transform message
     pub fn new(
         transform: Transform3D<T>,
@@ -73,7 +73,7 @@ impl<T: Copy + Debug + Default + Serialize + 'static> TransformMsg<T> {
 }
 
 // Manual Encode/Decode implementations to work with Transform3D's specific implementations
-impl<T: Copy + Debug + Default + Serialize + 'static> Encode for TransformMsg<T>
+impl<T: Copy + Debug + Default + Serialize + 'static> Encode for TransformPayload<T>
 where
     T: Encode,
 {
@@ -88,7 +88,7 @@ where
     }
 }
 
-impl<T: Copy + Debug + Default + Serialize + 'static> Decode<()> for TransformMsg<T>
+impl<T: Copy + Debug + Default + Serialize + 'static> Decode<()> for TransformPayload<T>
 where
     T: Decode<()>,
 {

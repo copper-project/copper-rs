@@ -2,8 +2,8 @@ use cu29::clock::{CuDuration, Tov};
 use cu29::prelude::CuMsg;
 use cu_spatial_payloads::Transform3D;
 use cu_transform::{
-    ConstTransformBuffer, FrameIdString, RobotFrame, StampedTransform, TransformMsg, TransformTree,
-    TypedTransformBuffer, TypedTransformMsg, WorldFrame,
+    ConstTransformBuffer, FrameIdString, RobotFrame, StampedTransform, TransformPayload,
+    TransformTree, TypedTransformBuffer, TypedTransformMsg, WorldFrame,
 };
 
 fn main() {
@@ -141,7 +141,7 @@ fn main() {
     let mut tree = TransformTree::<f32>::new();
 
     // Create a CuMsg with TransformMsg
-    let transform_msg = TransformMsg::new(
+    let transform_msg = TransformPayload::new(
         transform,
         FrameIdString::from("world").expect("Frame name too long"),
         FrameIdString::from("robot").expect("Frame name too long"),

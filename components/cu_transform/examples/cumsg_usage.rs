@@ -1,7 +1,7 @@
 use cu29::clock::{CuDuration, RobotClock, Tov};
 use cu29::prelude::CuMsg;
 use cu_spatial_payloads::Transform3D;
-use cu_transform::{FrameIdString, TransformMsg, TransformTree};
+use cu_transform::{FrameIdString, TransformPayload, TransformTree};
 
 fn main() {
     println!("Cu Transform - CuMsg Pattern Demo");
@@ -23,7 +23,7 @@ fn main() {
         [1.0, 0.0, 0.0, 1.0], // Translation (1, 0, 0)
     ]);
 
-    let msg1 = TransformMsg::new(
+    let msg1 = TransformPayload::new(
         transform1,
         FrameIdString::from("world").expect("Frame name too long"),
         FrameIdString::from("base").expect("Frame name too long"),
@@ -44,7 +44,7 @@ fn main() {
         [0.5, 0.0, 0.0, 1.0], // Translation (0.5, 0, 0)
     ]);
 
-    let msg2 = TransformMsg::new(
+    let msg2 = TransformPayload::new(
         transform2,
         FrameIdString::from("base").expect("Frame name too long"),
         FrameIdString::from("arm").expect("Frame name too long"),
@@ -75,7 +75,7 @@ fn main() {
             [x_translation, 0.0, 0.0, 1.0],
         ]);
 
-        let msg = TransformMsg::new(
+        let msg = TransformPayload::new(
             transform,
             FrameIdString::from("world").expect("Frame name too long"),
             FrameIdString::from("base").expect("Frame name too long"),

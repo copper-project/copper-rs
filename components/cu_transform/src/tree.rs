@@ -1,6 +1,6 @@
 use crate::error::{TransformError, TransformResult};
 use crate::transform::{StampedTransform, TransformStore};
-use crate::transform_msg::TransformMsg;
+use crate::transform_msg::TransformPayload;
 use crate::velocity::VelocityTransform;
 use crate::velocity_cache::VelocityTransformCache;
 use crate::FrameIdString;
@@ -318,7 +318,7 @@ where
 
     /// Add a transform using the new CuMsg-based approach
     /// This is the preferred method for adding transforms
-    pub fn add_transform_msg(&mut self, msg: &CuMsg<TransformMsg<T>>) -> TransformResult<()>
+    pub fn add_transform_msg(&mut self, msg: &CuMsg<TransformPayload<T>>) -> TransformResult<()>
     where
         T: bincode::Encode + bincode::Decode<()>,
     {
