@@ -909,7 +909,7 @@ mod tests {
         ]);
 
         // Compute &t1 * &t2
-        let result = &t1 * &t2;
+        let result = t1 * t2;
 
         // Expected result
         let expected = Transform3D::<f32>::from_matrix([
@@ -986,20 +986,18 @@ mod tests {
     fn test_pose_glam_conversion() {
         use glam::DAffine3;
 
-        let orig_pose = Transform3D::from_matrix([
+        let pose = Transform3D::from_matrix([
             [1.0, 0.0, 0.0, 5.0],
             [0.0, 1.0, 0.0, 6.0],
             [0.0, 0.0, 1.0, 7.0],
             [0.0, 0.0, 0.0, 1.0],
         ]);
-        let pose = orig_pose.clone();
-        assert_eq!(pose.to_matrix(), orig_pose.to_matrix());
         let aff: DAffine3 = pose.into();
         assert_eq!(aff.translation[0], 5.0);
         let pose_from_aff: Transform3D<f64> = aff.into();
 
         assert_eq!(
-            orig_pose.to_matrix(),
+            pose.to_matrix(),
             pose_from_aff.to_matrix(),
             "Glam conversion should be lossless"
         );
