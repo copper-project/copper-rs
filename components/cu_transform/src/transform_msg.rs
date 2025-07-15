@@ -32,7 +32,7 @@ use std::fmt::Debug;
 ///
 /// // Wrap in CuMsg for timestamp handling
 /// let mut cu_msg = CuMsg::new(Some(msg));
-/// cu_msg.metadata.tov = Tov::Time(CuDuration(1000));
+/// cu_msg.tov = Tov::Time(CuDuration(1000));
 /// ```
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct TransformMsg<T: Copy + Debug + Default + Serialize + 'static> {
@@ -135,7 +135,7 @@ where
     /// Create a new typed transform message
     pub fn new(transform: Transform3D<T>, time: CuTime) -> Self {
         let mut msg = CuMsg::new(Some(transform));
-        msg.metadata.tov = Tov::Time(time);
+        msg.tov = Tov::Time(time);
 
         Self {
             msg,
@@ -150,7 +150,7 @@ where
 
     /// Get the timestamp from the message
     pub fn timestamp(&self) -> Option<CuTime> {
-        match self.msg.metadata.tov {
+        match self.msg.tov {
             Tov::Time(time) => Some(time),
             _ => None,
         }

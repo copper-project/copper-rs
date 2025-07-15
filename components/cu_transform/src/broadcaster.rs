@@ -159,7 +159,7 @@ where
     }
 
     fn process(&mut self, clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
-        new_msg.metadata.tov = Tov::Time(clock.now());
+        new_msg.tov = Tov::Time(clock.now());
         Ok(())
     }
 }
@@ -207,7 +207,7 @@ where
         input: Self::Input,
         output: Self::Output,
     ) -> CuResult<()> {
-        output.metadata.tov = input.metadata.tov;
+        output.tov = input.tov;
         Ok(())
     }
 }

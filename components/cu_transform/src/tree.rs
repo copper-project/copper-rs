@@ -327,7 +327,7 @@ where
         })?;
 
         // Extract timestamp from CuMsg metadata
-        let timestamp = match msg.metadata.tov {
+        let timestamp = match msg.tov {
             Tov::Time(time) => time,
             Tov::Range(range) => range.start, // Use start of range
             _ => {

@@ -148,7 +148,7 @@ fn main() {
     );
 
     let mut cu_msg = CuMsg::new(Some(transform_msg));
-    cu_msg.metadata.tov = Tov::Time(CuDuration(1_000_000_000)); // 1 second
+    cu_msg.tov = Tov::Time(CuDuration(1_000_000_000)); // 1 second
 
     // Add using the new API
     tree.add_transform_msg(&cu_msg)

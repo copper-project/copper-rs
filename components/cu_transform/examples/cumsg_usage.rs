@@ -29,7 +29,7 @@ fn main() {
         FrameIdString::from("base").expect("Frame name too long"),
     );
     let mut cu_msg1 = CuMsg::new(Some(msg1));
-    cu_msg1.metadata.tov = Tov::Time(CuDuration(1_000_000_000)); // 1 second
+    cu_msg1.tov = Tov::Time(CuDuration(1_000_000_000)); // 1 second
 
     // Add to tree using the new API
     tree.add_transform_msg(&cu_msg1)
@@ -50,7 +50,7 @@ fn main() {
         FrameIdString::from("arm").expect("Frame name too long"),
     );
     let mut cu_msg2 = CuMsg::new(Some(msg2));
-    cu_msg2.metadata.tov = Tov::Time(CuDuration(1_000_000_000)); // 1 second
+    cu_msg2.tov = Tov::Time(CuDuration(1_000_000_000)); // 1 second
 
     tree.add_transform_msg(&cu_msg2)
         .expect("Failed to add transform");
@@ -84,12 +84,12 @@ fn main() {
 
         // For a broadcast with multiple transforms, use Range
         if i == 0 {
-            cu_msg.metadata.tov = Tov::Range(cu29::clock::CuTimeRange {
+            cu_msg.tov = Tov::Range(cu29::clock::CuTimeRange {
                 start: times[0],
                 end: *times.last().unwrap(),
             });
         } else {
-            cu_msg.metadata.tov = Tov::Time(time);
+            cu_msg.tov = Tov::Time(time);
         }
 
         tree.add_transform_msg(&cu_msg)

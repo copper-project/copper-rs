@@ -37,7 +37,7 @@ fn main() {
 
         let msg = TransformMsg::new(transform, &parent_str, &child_str);
         let mut cu_msg = CuMsg::new(Some(msg));
-        cu_msg.metadata.tov = Tov::Time(CuDuration(1000));
+        cu_msg.tov = Tov::Time(CuDuration(1000));
 
         tree.add_transform_msg(&cu_msg).unwrap();
     }
