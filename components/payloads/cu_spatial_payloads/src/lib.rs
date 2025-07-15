@@ -158,8 +158,7 @@ impl<T: Copy + Debug + Default + 'static> TransformInner<T> {
                 DVec4::new(m[0][3], m[1][3], m[2][3], m[3][3]),
             );
             let affine = DAffine3::from_mat4(glam_mat);
-            let result = unsafe { std::mem::transmute_copy(&TransformInner::<T>::F64(affine)) };
-            result
+            unsafe { std::mem::transmute_copy(&TransformInner::<T>::F64(affine)) };
         } else {
             panic!("Transform3D only supports f32 and f64 types when using glam feature");
         }
