@@ -1,0 +1,31 @@
+[package]
+name = "cu-transform"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "A coordinate frame transformation library for copper-rs, similar to tf2 in ROS2"
+
+[dependencies]
+cu29 = { workspace = true }
+uom = { workspace = true }
+bincode = { workspace = true }
+serde = { workspace = true }
+smallvec = { workspace = true }
+
+cu-spatial-payloads = { path = "../../payloads/cu_spatial_payloads", version = "0.8.0", features = ["glam"] }
+
+petgraph = "0.8.1"  # For transform tree management
+thiserror = "1.0"   # For error handling
+rand = "0.9.0"      # For random number generation in cache cleanup
+dashmap = "6.1.0"
+num-traits = "0.2.18" # For numeric trait implementations
+glam = { version = "0.24", features = ["serde", "bytemuck"] } # For optimized math operations
+arrayvec = { version = "0.7.6", features = ["serde"] }    # For stack-allocated strings
+
+[features]
+default = []
