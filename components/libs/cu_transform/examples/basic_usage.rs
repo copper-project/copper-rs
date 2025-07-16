@@ -134,8 +134,8 @@ fn main() {
 
     println!("\nThis buffer is stack-allocated with capacity 5 - no heap allocation!");
 
-    // Demonstrate the StampedFrameTransfrom pattern with TransformTree
-    println!("\n\nCuMsg<TransformMsg> Pattern Demo");
+    // Demonstrate the StampedFrameTransform pattern with TransformTree
+    println!("\n\nStampedFrameTransform Pattern Demo");
     println!("================================");
 
     let mut tree = TransformTree::<f32>::new();
