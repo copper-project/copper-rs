@@ -40,7 +40,7 @@ fn main() {
         let mut sft = StampedFrameTransform::new(Some(ft));
         sft.tov = Tov::Time(CuDuration(1000));
 
-        tree.add_transform_msg(&sft).unwrap();
+        tree.add_transform(&sft).unwrap();
     }
 
     // Create a RobotClock for timing

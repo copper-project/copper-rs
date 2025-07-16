@@ -31,8 +31,8 @@ fn tree_lookup() {
     let world_to_robot = StampedTransform {
         transform: Transform3D::default(), // Identity transform
         stamp: CuDuration(1000),
-        parent_frame: "world".to_string(),
-        child_frame: "robot".to_string(),
+        parent_frame: "world".try_into().expect("invalid name"),
+        child_frame: "robot".try_into().expect("invalid name"),
     };
     tree.add_transform(world_to_robot).unwrap();
 

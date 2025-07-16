@@ -112,8 +112,8 @@ fn main() {
     let stamped_transform = StampedTransform {
         transform,
         stamp: CuDuration(1000),
-        parent_frame: FrameIdString::from("world").unwrap(),
-        child_frame: FrameIdString::from("robot").unwrap(),
+        parent_frame: "world".try_into().unwrap(),
+        child_frame: "robot".try_into().unwrap(),
     };
 
     const_buffer.add_transform(stamped_transform);
@@ -151,8 +151,7 @@ fn main() {
     sft.tov = Tov::Time(CuDuration(1_000_000_000)); // 1 second
 
     // Add using the new API
-    tree.add_transform_msg(&sft)
-        .expect("Failed to add transform");
+    tree.add_transform(&sft).expect("Failed to add transform");
     println!("Added transform using CuMsg<TransformMsg> pattern");
 
     // Query the transform

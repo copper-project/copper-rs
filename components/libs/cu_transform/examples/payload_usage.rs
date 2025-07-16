@@ -32,8 +32,7 @@ fn main() {
     sft.tov = Tov::Time(CuDuration(1_000_000_000)); // 1 second
 
     // Add to tree using the new API
-    tree.add_transform_msg(&sft)
-        .expect("Failed to add transform");
+    tree.add_transform(&sft).expect("Failed to add transform");
     println!("  Added world->base transform at t=1s");
 
     // Base to arm transform
@@ -52,8 +51,7 @@ fn main() {
     let mut sft = StampedFrameTransform::new(Some(msg2));
     sft.tov = Tov::Time(CuDuration(1_000_000_000)); // 1 second
 
-    tree.add_transform_msg(&sft)
-        .expect("Failed to add transform");
+    tree.add_transform(&sft).expect("Failed to add transform");
     println!("  Added base->arm transform at t=1s");
 
     // Demonstrate using time ranges for a broadcast
@@ -92,8 +90,7 @@ fn main() {
             sft.tov = Tov::Time(time);
         }
 
-        tree.add_transform_msg(&sft)
-            .expect("Failed to add transform");
+        tree.add_transform(&sft).expect("Failed to add transform");
     }
 
     println!("  Added 3 transforms with time range 2.0s - 2.2s");
