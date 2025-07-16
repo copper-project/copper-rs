@@ -1,11 +1,10 @@
 use crate::error::{TransformError, TransformResult};
 use crate::transform::{StampedTransform, TransformStore};
-use crate::transform_payload::FrameTransform;
+use crate::transform_payload::StampedFrameTransform;
 use crate::velocity::VelocityTransform;
 use crate::velocity_cache::VelocityTransformCache;
 use crate::FrameIdString;
 use cu29::clock::{CuTime, RobotClock, Tov};
-use cu29::prelude::CuMsg;
 use cu_spatial_payloads::Transform3D;
 use dashmap::DashMap;
 use petgraph::algo::dijkstra;
@@ -318,16 +317,15 @@ where
 
     /// Add a transform using the new CuMsg-based approach
     /// This is the preferred method for adding transforms
-    pub fn add_transform_msg(&mut self, msg: &CuMsg<FrameTransform<T>>) -> TransformResult<()>
+    pub fn add_transform_msg(&mut self, sft: &StampedFrameTransform<T>) -> TransformResult<()>
     where
         T: bincode::Encode + bincode::Decode<()>,
     {
-        let transform_msg = msg.payload().ok_or_else(|| {
+        let transform_msg = sft.payload().ok_or_else(|| {
             TransformError::Unknown("Failed to get transform payload".to_string())
         })?;
 
-        // Extract timestamp from CuMsg metadata
-        let timestamp = match msg.tov {
+        let timestamp = match sft.tov {
             Tov::Time(time) => time,
             Tov::Range(range) => range.start, // Use start of range
             _ => {

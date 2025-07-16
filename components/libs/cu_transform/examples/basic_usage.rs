@@ -1,13 +1,13 @@
 use cu29::clock::{CuDuration, Tov};
-use cu29::prelude::CuMsg;
 use cu_spatial_payloads::Transform3D;
+use cu_transform::transform_payload::StampedFrameTransform;
 use cu_transform::{
     ConstTransformBuffer, FrameIdString, FrameTransform, RobotFrame, StampedTransform,
     TransformTree, TypedTransform, TypedTransformBuffer, WorldFrame,
 };
 
 fn main() {
-    // Example using the new typed transform approach
+    // Example using the typed transform approach
     println!("Cu Transform - New Typed Approach Demo");
     println!("=====================================");
 
@@ -102,8 +102,8 @@ fn main() {
         }
     }
 
-    // Demonstrate the new constant-size buffer (no dynamic allocation)
-    println!("\n\nConstant-Size Buffer Demo (Stack Allocated)");
+    // Demonstrate the stringly typed version of the API.
+    println!("\n\nConstant-Size Buffer Demo");
     println!("===========================================");
 
     let mut const_buffer: ConstTransformBuffer<f32, 5> = ConstTransformBuffer::new();
@@ -134,24 +134,24 @@ fn main() {
 
     println!("\nThis buffer is stack-allocated with capacity 5 - no heap allocation!");
 
-    // Demonstrate the new CuMsg pattern with TransformTree
+    // Demonstrate the StampedFrameTransfrom pattern with TransformTree
     println!("\n\nCuMsg<TransformMsg> Pattern Demo");
     println!("================================");
 
     let mut tree = TransformTree::<f32>::new();
 
     // Create a CuMsg with TransformMsg
-    let transform_msg = FrameTransform::new(
+    let frame_transform = FrameTransform::new(
         transform,
         FrameIdString::from("world").expect("Frame name too long"),
         FrameIdString::from("robot").expect("Frame name too long"),
     );
 
-    let mut cu_msg = CuMsg::new(Some(transform_msg));
-    cu_msg.tov = Tov::Time(CuDuration(1_000_000_000)); // 1 second
+    let mut sft = StampedFrameTransform::new(Some(frame_transform));
+    sft.tov = Tov::Time(CuDuration(1_000_000_000)); // 1 second
 
     // Add using the new API
-    tree.add_transform_msg(&cu_msg)
+    tree.add_transform_msg(&sft)
         .expect("Failed to add transform");
     println!("Added transform using CuMsg<TransformMsg> pattern");
 
@@ -169,10 +169,4 @@ fn main() {
         }
         Err(e) => println!("Error: {e}"),
     }
-
-    println!("\nKey benefits of CuMsg pattern:");
-    println!("- Integrates with Copper's message system");
-    println!("- Timestamps handled via Tov (Time of Validity)");
-    println!("- Supports time ranges for broadcasts");
-    println!("- No need for separate StampedTransform");
 }

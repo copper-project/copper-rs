@@ -1,6 +1,6 @@
 use cu29::clock::{CuDuration, RobotClock, Tov};
-use cu29::prelude::CuMsg;
 use cu_spatial_payloads::Transform3D;
+use cu_transform::transform_payload::StampedFrameTransform;
 use cu_transform::{FrameIdString, FrameTransform, TransformTree};
 
 fn main() {
@@ -17,22 +17,22 @@ fn main() {
 
     // World to base transform
     let transform1 = Transform3D::from_matrix([
-        [1.0, 0.0, 0.0, 0.0], // Column-major: each inner array is a column
+        [1.0f32, 0.0, 0.0, 0.0], // Column-major: each inner array is a column
         [0.0, 1.0, 0.0, 0.0],
         [0.0, 0.0, 1.0, 0.0],
         [1.0, 0.0, 0.0, 1.0], // Translation (1, 0, 0)
     ]);
 
-    let msg1 = FrameTransform::new(
+    let frame_transform = FrameTransform::new(
         transform1,
         FrameIdString::from("world").expect("Frame name too long"),
         FrameIdString::from("base").expect("Frame name too long"),
     );
-    let mut cu_msg1 = CuMsg::new(Some(msg1));
-    cu_msg1.tov = Tov::Time(CuDuration(1_000_000_000)); // 1 second
+    let mut sft = StampedFrameTransform::new(Some(frame_transform));
+    sft.tov = Tov::Time(CuDuration(1_000_000_000)); // 1 second
 
     // Add to tree using the new API
-    tree.add_transform_msg(&cu_msg1)
+    tree.add_transform_msg(&sft)
         .expect("Failed to add transform");
     println!("  Added world->base transform at t=1s");
 
@@ -49,10 +49,10 @@ fn main() {
         FrameIdString::from("base").expect("Frame name too long"),
         FrameIdString::from("arm").expect("Frame name too long"),
     );
-    let mut cu_msg2 = CuMsg::new(Some(msg2));
-    cu_msg2.tov = Tov::Time(CuDuration(1_000_000_000)); // 1 second
+    let mut sft = StampedFrameTransform::new(Some(msg2));
+    sft.tov = Tov::Time(CuDuration(1_000_000_000)); // 1 second
 
-    tree.add_transform_msg(&cu_msg2)
+    tree.add_transform_msg(&sft)
         .expect("Failed to add transform");
     println!("  Added base->arm transform at t=1s");
 
@@ -80,19 +80,19 @@ fn main() {
             FrameIdString::from("world").expect("Frame name too long"),
             FrameIdString::from("base").expect("Frame name too long"),
         );
-        let mut cu_msg = CuMsg::new(Some(msg));
+        let mut sft = StampedFrameTransform::new(Some(msg));
 
         // For a broadcast with multiple transforms, use Range
         if i == 0 {
-            cu_msg.tov = Tov::Range(cu29::clock::CuTimeRange {
+            sft.tov = Tov::Range(cu29::clock::CuTimeRange {
                 start: times[0],
                 end: *times.last().unwrap(),
             });
         } else {
-            cu_msg.tov = Tov::Time(time);
+            sft.tov = Tov::Time(time);
         }
 
-        tree.add_transform_msg(&cu_msg)
+        tree.add_transform_msg(&sft)
             .expect("Failed to add transform");
     }
 
