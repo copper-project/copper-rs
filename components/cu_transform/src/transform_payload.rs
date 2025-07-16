@@ -6,36 +6,40 @@ use crate::velocity::VelocityTransform;
 use crate::FrameIdString;
 use bincode::{Decode, Encode};
 use cu29::clock::{CuTime, CuTimeRange, Tov};
-use cu29::prelude::{CuMsg, CuMsgPayload};
+use cu29::cutask::CuStampedData;
+use cu29::prelude::CuMsgPayload;
 use cu_spatial_payloads::Transform3D;
 use num_traits;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
-/// Transform message payload for use with CuMsg
+/// Transforms are timestamped Relative transforms.
+pub type StampedFrameTransform<T> = CuStampedData<FrameTransform<T>, ()>;
+
+/// Transform message useable as a payload for CuStampedData.
 /// This contains just the transform data without timestamps,
-/// as timestamps are handled by CuMsg metadata
+/// as timestamps are handled by CuStampedData
 ///
 /// # Example
 /// ```
-/// use cu_transform::{TransformPayload, Transform3D};
+/// use cu_transform::{FrameTransform, Transform3D};
 /// use cu29::prelude::*;
 /// use cu29::clock::{CuDuration, Tov};
+/// use cu_transform::transform_payload::StampedFrameTransform;
 ///
 /// // Create a transform message
 /// let transform = Transform3D::<f32>::default();
-/// let msg = TransformPayload::new(
+/// let payload = FrameTransform::new(
 ///     transform,
 ///     "world",
 ///     "robot"
 /// );
 ///
-/// // Wrap in CuMsg for timestamp handling
-/// let mut cu_msg = CuMsg::new(Some(msg));
-/// cu_msg.tov = Tov::Time(CuDuration(1000));
+/// let data = StampedFrameTransform::new(Some(payload));
+///
 /// ```
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
-pub struct TransformPayload<T: Copy + Debug + Default + Serialize + 'static> {
+pub struct FrameTransform<T: Copy + Debug + Default + Serialize + 'static> {
     /// The actual transform
     pub transform: Transform3D<T>,
     /// Parent frame identifier
@@ -44,7 +48,7 @@ pub struct TransformPayload<T: Copy + Debug + Default + Serialize + 'static> {
     pub child_frame: FrameIdString,
 }
 
-impl<T: Copy + Debug + Default + Serialize + 'static> TransformPayload<T> {
+impl<T: Copy + Debug + Default + Serialize + 'static> FrameTransform<T> {
     /// Create a new transform message
     pub fn new(
         transform: Transform3D<T>,
@@ -73,7 +77,7 @@ impl<T: Copy + Debug + Default + Serialize + 'static> TransformPayload<T> {
 }
 
 // Manual Encode/Decode implementations to work with Transform3D's specific implementations
-impl<T: Copy + Debug + Default + Serialize + 'static> Encode for TransformPayload<T>
+impl<T: Copy + Debug + Default + Serialize + 'static> Encode for FrameTransform<T>
 where
     T: Encode,
 {
@@ -88,7 +92,7 @@ where
     }
 }
 
-impl<T: Copy + Debug + Default + Serialize + 'static> Decode<()> for TransformPayload<T>
+impl<T: Copy + Debug + Default + Serialize + 'static> Decode<()> for FrameTransform<T>
 where
     T: Decode<()>,
 {
@@ -112,21 +116,24 @@ where
     }
 }
 
+/// Transforms are timestamped Relative transforms.
+pub type TypedStampedFrameTransform<T> = CuStampedData<Transform3D<T>, ()>;
+
 /// A typed transform message that carries frame relationship information at compile time
 #[derive(Debug, Clone)]
-pub struct TypedTransformMsg<T, Parent, Child>
+pub struct TypedTransform<T, Parent, Child>
 where
     T: CuMsgPayload + Copy + Debug + 'static,
     Parent: FrameId,
     Child: FrameId,
 {
     /// The actual transform message
-    pub msg: CuMsg<Transform3D<T>>,
+    pub transform: TypedStampedFrameTransform<T>,
     /// Frame relationship (zero-sized at runtime)
     pub frames: FramePair<Parent, Child>,
 }
 
-impl<T, Parent, Child> TypedTransformMsg<T, Parent, Child>
+impl<T, Parent, Child> TypedTransform<T, Parent, Child>
 where
     T: CuMsgPayload + Copy + Debug + 'static,
     Parent: FrameId,
@@ -134,23 +141,22 @@ where
 {
     /// Create a new typed transform message
     pub fn new(transform: Transform3D<T>, time: CuTime) -> Self {
-        let mut msg = CuMsg::new(Some(transform));
-        msg.tov = Tov::Time(time);
+        let mut transform = TypedStampedFrameTransform::new(Some(transform));
+        transform.tov = Tov::Time(time);
 
-        Self {
-            msg,
-            frames: FramePair::new(),
-        }
+        let frames = FramePair::new();
+
+        Self { transform, frames }
     }
 
     /// Get the transform data
     pub fn transform(&self) -> Option<&Transform3D<T>> {
-        self.msg.payload()
+        self.transform.payload()
     }
 
     /// Get the timestamp from the message
     pub fn timestamp(&self) -> Option<CuTime> {
-        match self.msg.tov {
+        match self.transform.tov {
             Tov::Time(time) => Some(time),
             _ => None,
         }
@@ -187,7 +193,7 @@ where
     Child: FrameId,
 {
     /// Fixed-size array of transform messages
-    transforms: [Option<TypedTransformMsg<T, Parent, Child>>; N],
+    transforms: [Option<TypedTransform<T, Parent, Child>>; N],
     /// Current number of transforms stored
     count: usize,
 }
@@ -207,7 +213,7 @@ where
     }
 
     /// Add a transform to the buffer
-    pub fn add_transform(&mut self, transform_msg: TypedTransformMsg<T, Parent, Child>) {
+    pub fn add_transform(&mut self, transform_msg: TypedTransform<T, Parent, Child>) {
         if self.count < N {
             // Still have space, just add to the end
             self.transforms[self.count] = Some(transform_msg);
@@ -241,7 +247,7 @@ where
         time_indices.sort_by_key(|(time, _)| *time);
 
         // Create a new ordered array
-        let mut new_transforms: [Option<TypedTransformMsg<T, Parent, Child>>; N] =
+        let mut new_transforms: [Option<TypedTransform<T, Parent, Child>>; N] =
             std::array::from_fn(|_| None);
 
         for (idx, (_, old_idx)) in time_indices.iter().enumerate() {
@@ -252,7 +258,7 @@ where
     }
 
     /// Get the latest transform
-    pub fn get_latest_transform(&self) -> Option<&TypedTransformMsg<T, Parent, Child>> {
+    pub fn get_latest_transform(&self) -> Option<&TypedTransform<T, Parent, Child>> {
         if self.count == 0 {
             return None;
         }
@@ -262,10 +268,7 @@ where
     }
 
     /// Get transform closest to specified time
-    pub fn get_closest_transform(
-        &self,
-        time: CuTime,
-    ) -> Option<&TypedTransformMsg<T, Parent, Child>> {
+    pub fn get_closest_transform(&self, time: CuTime) -> Option<&TypedTransform<T, Parent, Child>> {
         if self.count == 0 {
             return None;
         }
@@ -312,8 +315,8 @@ where
         &self,
         time: CuTime,
     ) -> Option<(
-        &TypedTransformMsg<T, Parent, Child>,
-        &TypedTransformMsg<T, Parent, Child>,
+        &TypedTransform<T, Parent, Child>,
+        &TypedTransform<T, Parent, Child>,
     )> {
         if self.count < 2 {
             return None;
@@ -380,7 +383,7 @@ where
 }
 
 /// Velocity computation for typed transforms
-impl<T, Parent, Child> TypedTransformMsg<T, Parent, Child>
+impl<T, Parent, Child> TypedTransform<T, Parent, Child>
 where
     T: CuMsgPayload
         + Copy
@@ -446,7 +449,7 @@ mod tests {
     }
     use cu29::clock::CuDuration;
 
-    type WorldToRobotMsg = TypedTransformMsg<f32, WorldFrame, RobotFrame>;
+    type WorldToRobotFrameTransform = TypedTransform<f32, WorldFrame, RobotFrame>;
     type WorldToRobotBuffer = TypedTransformBuffer<f32, WorldFrame, RobotFrame, 10>;
 
     #[test]
@@ -454,7 +457,7 @@ mod tests {
         let transform = Transform3D::<f32>::default();
         let time = CuDuration(1000);
 
-        let msg = WorldToRobotMsg::new(transform, time);
+        let msg = WorldToRobotFrameTransform::new(transform, time);
 
         assert_eq!(msg.parent_id(), WorldFrame::ID);
         assert_eq!(msg.child_id(), RobotFrame::ID);
@@ -468,10 +471,10 @@ mod tests {
         let mut buffer = WorldToRobotBuffer::new();
 
         let transform1 = Transform3D::<f32>::default();
-        let msg1 = WorldToRobotMsg::new(transform1, CuDuration(1000));
+        let msg1 = WorldToRobotFrameTransform::new(transform1, CuDuration(1000));
 
         let transform2 = Transform3D::<f32>::default();
-        let msg2 = WorldToRobotMsg::new(transform2, CuDuration(2000));
+        let msg2 = WorldToRobotFrameTransform::new(transform2, CuDuration(2000));
 
         buffer.add_transform(msg1);
         buffer.add_transform(msg2);
@@ -489,10 +492,10 @@ mod tests {
         let mut buffer = WorldToRobotBuffer::new();
 
         let transform1 = Transform3D::<f32>::default();
-        let msg1 = WorldToRobotMsg::new(transform1, CuDuration(1000));
+        let msg1 = WorldToRobotFrameTransform::new(transform1, CuDuration(1000));
 
         let transform2 = Transform3D::<f32>::default();
-        let msg2 = WorldToRobotMsg::new(transform2, CuDuration(3000));
+        let msg2 = WorldToRobotFrameTransform::new(transform2, CuDuration(3000));
 
         buffer.add_transform(msg1);
         buffer.add_transform(msg2);
@@ -511,8 +514,8 @@ mod tests {
         let transform1 = translation_transform(0.0f32, 0.0, 0.0);
         let transform2 = translation_transform(1.0f32, 2.0, 0.0);
 
-        let msg1 = WorldToRobotMsg::new(transform1, CuDuration(1_000_000_000)); // 1 second
-        let msg2 = WorldToRobotMsg::new(transform2, CuDuration(2_000_000_000)); // 2 seconds
+        let msg1 = WorldToRobotFrameTransform::new(transform1, CuDuration(1_000_000_000)); // 1 second
+        let msg2 = WorldToRobotFrameTransform::new(transform2, CuDuration(2_000_000_000)); // 2 seconds
 
         let velocity = msg2.compute_velocity(&msg1).unwrap();
 

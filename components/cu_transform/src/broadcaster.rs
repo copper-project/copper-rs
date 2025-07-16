@@ -1,4 +1,4 @@
-use crate::transform_payload::TransformPayload;
+use crate::transform_payload::FrameTransform;
 use cu29::clock::Tov;
 use cu29::prelude::*;
 use std::fmt::Debug;
@@ -11,7 +11,7 @@ pub const MAX_TRANSFORMS_PER_BROADCAST: usize = 10;
 #[derive(Debug, Clone, Serialize)]
 pub struct TransformBroadcast<T: Copy + Debug + Default + Serialize + 'static> {
     /// Fixed-size array of transform messages
-    pub transforms: [Option<TransformPayload<T>>; MAX_TRANSFORMS_PER_BROADCAST],
+    pub transforms: [Option<FrameTransform<T>>; MAX_TRANSFORMS_PER_BROADCAST],
     /// Number of valid transforms in the array
     pub count: usize,
 }
@@ -33,7 +33,7 @@ impl<T: Copy + Debug + Default + Serialize + 'static> TransformBroadcast<T> {
 
     /// Add a transform to the broadcast
     /// Returns false if the broadcast is full
-    pub fn add_transform(&mut self, transform: TransformPayload<T>) -> bool {
+    pub fn add_transform(&mut self, transform: FrameTransform<T>) -> bool {
         if self.count >= MAX_TRANSFORMS_PER_BROADCAST {
             return false;
         }
@@ -52,7 +52,7 @@ impl<T: Copy + Debug + Default + Serialize + 'static> TransformBroadcast<T> {
     }
 
     /// Get an iterator over the transforms
-    pub fn iter(&self) -> impl Iterator<Item = &TransformPayload<T>> {
+    pub fn iter(&self) -> impl Iterator<Item = &FrameTransform<T>> {
         self.transforms[..self.count]
             .iter()
             .filter_map(|t| t.as_ref())
@@ -113,7 +113,7 @@ impl<
 
         // Decode each transform
         for transform in transforms.iter_mut().take(count) {
-            *transform = Some(<TransformPayload<T> as bincode::de::Decode<()>>::decode(
+            *transform = Some(<FrameTransform<T> as bincode::de::Decode<()>>::decode(
                 decoder,
             )?);
         }
@@ -235,7 +235,7 @@ mod tests {
             [0.0, 0.0, 1.0, 4.0],
             [0.0, 0.0, 0.0, 1.0],
         ]);
-        let msg1 = TransformPayload::new(transform1, "world", "robot");
+        let msg1 = FrameTransform::new(transform1, "world", "robot");
 
         let transform2 = Transform3D::from_matrix([
             [0.0, -1.0, 0.0, 5.0],
@@ -243,7 +243,7 @@ mod tests {
             [0.0, 0.0, 1.0, 7.0],
             [0.0, 0.0, 0.0, 1.0],
         ]);
-        let msg2 = TransformPayload::new(transform2, "robot", "camera");
+        let msg2 = FrameTransform::new(transform2, "robot", "camera");
 
         assert!(broadcast.add_transform(msg1.clone()));
         assert!(broadcast.add_transform(msg2.clone()));
@@ -270,7 +270,7 @@ mod tests {
             [0.0, 0.0, 1.0, 4.0],
             [0.0, 0.0, 0.0, 1.0],
         ]);
-        let msg1 = TransformPayload::new(transform1, "world", "robot");
+        let msg1 = FrameTransform::new(transform1, "world", "robot");
         broadcast.add_transform(msg1);
 
         // Encode to bytes

@@ -2,8 +2,8 @@ use cu29::clock::{CuDuration, Tov};
 use cu29::prelude::CuMsg;
 use cu_spatial_payloads::Transform3D;
 use cu_transform::{
-    ConstTransformBuffer, FrameIdString, RobotFrame, StampedTransform, TransformPayload,
-    TransformTree, TypedTransformBuffer, TypedTransformMsg, WorldFrame,
+    ConstTransformBuffer, FrameIdString, FrameTransform, RobotFrame, StampedTransform,
+    TransformTree, TypedTransform, TypedTransformBuffer, WorldFrame,
 };
 
 fn main() {
@@ -23,7 +23,7 @@ fn main() {
         [0.0, 0.0, 0.0, 1.0],
     ]);
 
-    let world_to_robot_msg = TypedTransformMsg::new(transform, CuDuration(1000));
+    let world_to_robot_msg = TypedTransform::new(transform, CuDuration(1000));
 
     println!(
         "Created transform from {} to {}",
@@ -49,7 +49,7 @@ fn main() {
         [0.0, 0.0, 0.0, 1.0],
     ]);
 
-    let world_to_robot_msg2 = TypedTransformMsg::new(transform2, CuDuration(2000));
+    let world_to_robot_msg2 = TypedTransform::new(transform2, CuDuration(2000));
     world_to_robot_buffer.add_transform(world_to_robot_msg2);
 
     // Query the buffer
@@ -141,7 +141,7 @@ fn main() {
     let mut tree = TransformTree::<f32>::new();
 
     // Create a CuMsg with TransformMsg
-    let transform_msg = TransformPayload::new(
+    let transform_msg = FrameTransform::new(
         transform,
         FrameIdString::from("world").expect("Frame name too long"),
         FrameIdString::from("robot").expect("Frame name too long"),

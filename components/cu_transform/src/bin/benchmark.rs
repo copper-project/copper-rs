@@ -1,7 +1,7 @@
 use cu29::clock::{CuDuration, Tov};
 use cu29::prelude::{CuMsg, RobotClock};
 use cu_spatial_payloads::Transform3D;
-use cu_transform::{TransformPayload, TransformTree};
+use cu_transform::{FrameTransform, TransformTree};
 use std::time::Instant;
 
 fn main() {
@@ -35,7 +35,7 @@ fn main() {
             [0.0, 0.0, 0.0, 1.0],
         ]);
 
-        let msg = TransformPayload::new(transform, &parent_str, &child_str);
+        let msg = FrameTransform::new(transform, &parent_str, &child_str);
         let mut cu_msg = CuMsg::new(Some(msg));
         cu_msg.tov = Tov::Time(CuDuration(1000));
 
