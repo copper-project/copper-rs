@@ -309,7 +309,7 @@ mod linux_impl {
             let mut v4l = V4l::new(Some(&config)).unwrap();
             v4l.start(&clock).unwrap();
 
-            let mut msg = CuStampedData::new(None);
+            let mut msg = CuMsg::new(None);
             // Define the image format
             let format = rerun::components::ImageFormat(ImageFormat {
                 width: IMG_WIDTH as u32,

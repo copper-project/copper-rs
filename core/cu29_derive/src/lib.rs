@@ -103,12 +103,12 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
             use cu29::bincode::de::Decoder;
             use cu29::bincode::error::DecodeError;
             use cu29::copperlist::CopperList;
-            use cu29::cutask::CuMsgMetadata;
-            use cu29::cutask::CuStampedData;
             use cu29::prelude::ErasedCuStampedData;
             use cu29::prelude::ErasedCuStampedDataSet;
             use cu29::prelude::MatchingTasks;
             use cu29::prelude::Serialize;
+            use cu29::prelude::CuMsg;
+            use cu29::prelude::CuMsgMetadata;
             #support
         }
         use cumsgs::CuStampedDataSet;
@@ -165,7 +165,7 @@ fn gen_culist_support(
             let index = syn::Index::from(*output_position);
             quote! {
                 #[allow(dead_code)]
-                pub fn #fn_name(&self) -> &CuStampedData<#payload_type, CuMsgMetadata> {
+                pub fn #fn_name(&self) -> &CuMsg<#payload_type> {
                     &self.0.#index
                 }
             }
@@ -229,13 +229,13 @@ fn gen_sim_support(runtime_plan: &CuExecutionLoop) -> proc_macro2::TokenStream {
                 let inputs: Vec<Type> = step
                     .input_msg_indices_types
                     .iter()
-                    .map(|(_, t)| parse_str::<Type>(format!("CuStampedData<{t}, CuMsgMetadata>").as_str()).unwrap())
+                    .map(|(_, t)| parse_str::<Type>(format!("CuMsg<{t}>").as_str()).unwrap())
                     .collect();
                 let output: Option<Type> = step
                     .output_msg_index_type
                     .as_ref()
-                    .map(|(_, t)| parse_str::<Type>(format!("CuStampedData<{t}, CuMsgMetadata>").as_str()).unwrap());
-                let no_output = parse_str::<Type>("CuStampedData<(), CuMsgMetadata>").unwrap();
+                    .map(|(_, t)| parse_str::<Type>(format!("CuMsg<{t}>").as_str()).unwrap());
+                let no_output = parse_str::<Type>("CuMsg<()>").unwrap();
                 let output = output.as_ref().unwrap_or(&no_output);
 
                 let inputs_type = if inputs.len() == 1 {
@@ -1378,7 +1378,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::cutask::CuSrcTask;
                 use cu29::cutask::CuSinkTask;
                 use cu29::cutask::CuTask;
-                use cu29::cutask::CuStampedData;
+                use cu29::cutask::CuMsg;
                 use cu29::cutask::CuMsgMetadata;
                 use cu29::copperlist::CopperList;
                 use cu29::monitoring::CuMonitor; // Trait import.
@@ -1550,7 +1550,7 @@ fn build_culist_tuple(all_msgs_types_in_culist_order: &[Type]) -> TypeTuple {
         parse_quote! { () }
     } else {
         parse_quote! {
-            ( #( CuStampedData<#all_msgs_types_in_culist_order, CuMsgMetadata> ),* )
+            ( #( CuMsg<#all_msgs_types_in_culist_order> ),* )
         }
     }
 }
@@ -1587,7 +1587,7 @@ fn build_culist_tuple_decode(all_msgs_types_in_culist_order: &[Type]) -> ItemImp
         .iter()
         .map(|i| {
             let t = &all_msgs_types_in_culist_order[*i];
-            quote! { CuStampedData::<#t, CuMsgMetadata>::decode(decoder)? }
+            quote! { CuMsg::<#t>::decode(decoder)? }
         })
         .collect();
 
