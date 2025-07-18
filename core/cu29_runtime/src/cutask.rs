@@ -52,11 +52,11 @@ impl_cu_msg_pack! {
 #[macro_export]
 macro_rules! input_msg {
     ($lifetime:lifetime, $ty:ty) => {
-        &$lifetime CuStampedData<$ty, CuMsgMetadata>
+        &$lifetime CuMsg<$ty>
     };
     ($lifetime:lifetime, $($ty:ty),*) => {
         (
-            $( &$lifetime CuStampedData<$ty, CuMsgMetadata>, )*
+            $( &$lifetime CuMsg<$ty>, )*
         )
     };
 }
@@ -65,7 +65,7 @@ macro_rules! input_msg {
 #[macro_export]
 macro_rules! output_msg {
     ($lifetime:lifetime, $ty:ty) => {
-        &$lifetime mut CuStampedData<$ty, CuMsgMetadata>
+        &$lifetime mut CuMsg<$ty>
     };
 }
 

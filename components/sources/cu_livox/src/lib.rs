@@ -92,7 +92,7 @@ mod tests {
     use super::*;
     use crate::parser::LidarFrame;
     use chrono::DateTime;
-    use cu29::cutask::CuStampedData;
+    use cu29::cutask::CuMsg;
     use cu_udp_inject::PcapStreamer;
 
     #[test]
@@ -104,7 +104,7 @@ mod tests {
         let mut tele15 = Tele15::new(Some(&config)).unwrap();
 
         let new_payload = LidarCuMsgPayload::default();
-        let mut new_msg = CuStampedData::<LidarCuMsgPayload, CuMsgMetadata>::new(Some(new_payload));
+        let mut new_msg = CuMsg::<LidarCuMsgPayload>::new(Some(new_payload));
 
         // Picking a timestamp from the beginning of the pcap file to align the robot clock with the capture + 1s buffer in the past because ref times are negative.
         let datetime = DateTime::parse_from_rfc3339("2024-09-17T15:47:11.684855Z")

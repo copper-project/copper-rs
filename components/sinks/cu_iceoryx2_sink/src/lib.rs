@@ -7,7 +7,7 @@ use iceoryx2::prelude::*;
 use iceoryx2::service::port_factory::publish_subscribe::PortFactory;
 
 #[derive(Clone, Debug, Default, Decode, Encode)]
-pub struct IceorixCuMsg<P: CuMsgPayload>(CuStampedData<P, CuMsgMetadata>);
+pub struct IceorixCuMsg<P: CuMsgPayload>(CuMsg<P>);
 
 unsafe impl<P: CuMsgPayload> ZeroCopySend for IceorixCuMsg<P> {}
 /// This is a sink task that sends messages to an iceoryx2 service.
