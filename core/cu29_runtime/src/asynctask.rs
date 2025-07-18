@@ -2,6 +2,7 @@ use crate::config::ComponentConfig;
 use crate::cutask::{CuTask, Freezable};
 use cu29_clock::RobotClock;
 use cu29_traits::CuResult;
+use rayon::ThreadPool;
 use std::marker::PhantomData;
 
 pub struct AsyncTask<'a, T>
@@ -10,17 +11,19 @@ where
 {
     task: T,
     _boo: PhantomData<&'a ()>,
+    tp: ThreadPool,
 }
 
 impl<'cl, T> AsyncTask<'cl, T>
 where
     T: CuTask<'cl>,
 {
-    pub fn from_task(task: T, config: Option<&ComponentConfig>) -> CuResult<Self> {
+    pub fn from_task(task: T, config: Option<&ComponentConfig>, tp: ThreadPool) -> CuResult<Self> {
         let task = T::new(config)?;
         Ok(Self {
             task,
             _boo: PhantomData,
+            tp,
         })
     }
 }
@@ -38,7 +41,7 @@ where
     where
         Self: Sized,
     {
-        todo!()
+        Err("AsyncTask cannot be instantiated directly, use from_task()".into())
     }
 
     fn process(
@@ -47,7 +50,12 @@ where
         input: Self::Input,
         output: Self::Output,
     ) -> CuResult<()> {
-        self.task.process(clock, input, output)
+        self.tp.spawn_fifo({
+            let clock = clock.clone();
+            let input = input.clone();
+            || self.task.process(&clock, input, output).unwrap()
+        });
+        Ok(())
     }
 }
 
@@ -90,10 +98,15 @@ mod tests {
 
     #[test]
     fn test_lifecycle() {
+        let tp = rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .build()
+            .unwrap();
+
         let config = ComponentConfig::default();
         let clock = RobotClock::default();
         let task = TestTask::new(Some(&config)).unwrap();
-        let mut async_task = AsyncTask::from_task(task, None).unwrap();
+        let mut async_task = AsyncTask::from_task(task, None, tp).unwrap();
         let input = CuMsg::new(Some(42u32));
         let mut output = CuMsg::new(None);
 
