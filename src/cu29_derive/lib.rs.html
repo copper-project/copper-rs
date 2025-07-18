@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29_derive/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-aa0817cf.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_derive" data-themes="" data-resource-suffix="" data-rustdoc-version="1.90.0-nightly (3014e79f9 2025-07-15)" data-channel="nightly" data-search-js="search-179e01a3.js" data-settings-js="settings-5514c975.js" ><script src="../../static.files/storage-4e99c027.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-673ee1e0.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-32bb7600.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">cu29_derive/</div>lib.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">extern crate </span>proc_macro;
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29_derive/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-aa0817cf.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_derive" data-themes="" data-resource-suffix="" data-rustdoc-version="1.90.0-nightly (e46629662 2025-07-17)" data-channel="nightly" data-search-js="search-179e01a3.js" data-settings-js="settings-5514c975.js" ><script src="../../static.files/storage-4e99c027.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-673ee1e0.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-32bb7600.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">cu29_derive/</div>lib.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">extern crate </span>proc_macro;
 <a href=#2 id=2 data-nosnippet>2</a>
 <a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>proc_macro::TokenStream;
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>quote::{format_ident, quote};
@@ -103,12 +103,12 @@
 <a href=#103 id=103 data-nosnippet>103</a>            <span class="kw">use </span>cu29::bincode::de::Decoder;
 <a href=#104 id=104 data-nosnippet>104</a>            <span class="kw">use </span>cu29::bincode::error::DecodeError;
 <a href=#105 id=105 data-nosnippet>105</a>            <span class="kw">use </span>cu29::copperlist::CopperList;
-<a href=#106 id=106 data-nosnippet>106</a>            <span class="kw">use </span>cu29::cutask::CuMsgMetadata;
-<a href=#107 id=107 data-nosnippet>107</a>            <span class="kw">use </span>cu29::cutask::CuStampedData;
-<a href=#108 id=108 data-nosnippet>108</a>            <span class="kw">use </span>cu29::prelude::ErasedCuStampedData;
-<a href=#109 id=109 data-nosnippet>109</a>            <span class="kw">use </span>cu29::prelude::ErasedCuStampedDataSet;
-<a href=#110 id=110 data-nosnippet>110</a>            <span class="kw">use </span>cu29::prelude::MatchingTasks;
-<a href=#111 id=111 data-nosnippet>111</a>            <span class="kw">use </span>cu29::prelude::Serialize;
+<a href=#106 id=106 data-nosnippet>106</a>            <span class="kw">use </span>cu29::prelude::ErasedCuStampedData;
+<a href=#107 id=107 data-nosnippet>107</a>            <span class="kw">use </span>cu29::prelude::ErasedCuStampedDataSet;
+<a href=#108 id=108 data-nosnippet>108</a>            <span class="kw">use </span>cu29::prelude::MatchingTasks;
+<a href=#109 id=109 data-nosnippet>109</a>            <span class="kw">use </span>cu29::prelude::Serialize;
+<a href=#110 id=110 data-nosnippet>110</a>            <span class="kw">use </span>cu29::prelude::CuMsg;
+<a href=#111 id=111 data-nosnippet>111</a>            <span class="kw">use </span>cu29::prelude::CuMsgMetadata;
 <a href=#112 id=112 data-nosnippet>112</a>            #support
 <a href=#113 id=113 data-nosnippet>113</a>        }
 <a href=#114 id=114 data-nosnippet>114</a>        <span class="kw">use </span>cumsgs::CuStampedDataSet;
@@ -165,7 +165,7 @@
 <a href=#165 id=165 data-nosnippet>165</a>            <span class="kw">let </span>index = syn::Index::from(<span class="kw-2">*</span>output_position);
 <a href=#166 id=166 data-nosnippet>166</a>            <span class="macro">quote!</span> {
 <a href=#167 id=167 data-nosnippet>167</a>                <span class="attr">#[allow(dead_code)]
-<a href=#168 id=168 data-nosnippet>168</a>                </span><span class="kw">pub fn </span>#fn_name(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>CuStampedData&lt;#payload_type, CuMsgMetadata&gt; {
+<a href=#168 id=168 data-nosnippet>168</a>                </span><span class="kw">pub fn </span>#fn_name(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>CuMsg&lt;#payload_type&gt; {
 <a href=#169 id=169 data-nosnippet>169</a>                    <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="number">0.</span>#index
 <a href=#170 id=170 data-nosnippet>170</a>                }
 <a href=#171 id=171 data-nosnippet>171</a>            }
@@ -229,13 +229,13 @@
 <a href=#229 id=229 data-nosnippet>229</a>                <span class="kw">let </span>inputs: Vec&lt;Type&gt; = step
 <a href=#230 id=230 data-nosnippet>230</a>                    .input_msg_indices_types
 <a href=#231 id=231 data-nosnippet>231</a>                    .iter()
-<a href=#232 id=232 data-nosnippet>232</a>                    .map(|(<span class="kw">_</span>, t)| parse_str::&lt;Type&gt;(<span class="macro">format!</span>(<span class="string">"CuStampedData&lt;{t}, CuMsgMetadata&gt;"</span>).as_str()).unwrap())
+<a href=#232 id=232 data-nosnippet>232</a>                    .map(|(<span class="kw">_</span>, t)| parse_str::&lt;Type&gt;(<span class="macro">format!</span>(<span class="string">"CuMsg&lt;{t}&gt;"</span>).as_str()).unwrap())
 <a href=#233 id=233 data-nosnippet>233</a>                    .collect();
 <a href=#234 id=234 data-nosnippet>234</a>                <span class="kw">let </span>output: <span class="prelude-ty">Option</span>&lt;Type&gt; = step
 <a href=#235 id=235 data-nosnippet>235</a>                    .output_msg_index_type
 <a href=#236 id=236 data-nosnippet>236</a>                    .as_ref()
-<a href=#237 id=237 data-nosnippet>237</a>                    .map(|(<span class="kw">_</span>, t)| parse_str::&lt;Type&gt;(<span class="macro">format!</span>(<span class="string">"CuStampedData&lt;{t}, CuMsgMetadata&gt;"</span>).as_str()).unwrap());
-<a href=#238 id=238 data-nosnippet>238</a>                <span class="kw">let </span>no_output = parse_str::&lt;Type&gt;(<span class="string">"CuStampedData&lt;(), CuMsgMetadata&gt;"</span>).unwrap();
+<a href=#237 id=237 data-nosnippet>237</a>                    .map(|(<span class="kw">_</span>, t)| parse_str::&lt;Type&gt;(<span class="macro">format!</span>(<span class="string">"CuMsg&lt;{t}&gt;"</span>).as_str()).unwrap());
+<a href=#238 id=238 data-nosnippet>238</a>                <span class="kw">let </span>no_output = parse_str::&lt;Type&gt;(<span class="string">"CuMsg&lt;()&gt;"</span>).unwrap();
 <a href=#239 id=239 data-nosnippet>239</a>                <span class="kw">let </span>output = output.as_ref().unwrap_or(<span class="kw-2">&amp;</span>no_output);
 <a href=#240 id=240 data-nosnippet>240</a>
 <a href=#241 id=241 data-nosnippet>241</a>                <span class="kw">let </span>inputs_type = <span class="kw">if </span>inputs.len() == <span class="number">1 </span>{
@@ -1378,7 +1378,7 @@
 <a href=#1378 id=1378 data-nosnippet>1378</a>                <span class="kw">use </span>cu29::cutask::CuSrcTask;
 <a href=#1379 id=1379 data-nosnippet>1379</a>                <span class="kw">use </span>cu29::cutask::CuSinkTask;
 <a href=#1380 id=1380 data-nosnippet>1380</a>                <span class="kw">use </span>cu29::cutask::CuTask;
-<a href=#1381 id=1381 data-nosnippet>1381</a>                <span class="kw">use </span>cu29::cutask::CuStampedData;
+<a href=#1381 id=1381 data-nosnippet>1381</a>                <span class="kw">use </span>cu29::cutask::CuMsg;
 <a href=#1382 id=1382 data-nosnippet>1382</a>                <span class="kw">use </span>cu29::cutask::CuMsgMetadata;
 <a href=#1383 id=1383 data-nosnippet>1383</a>                <span class="kw">use </span>cu29::copperlist::CopperList;
 <a href=#1384 id=1384 data-nosnippet>1384</a>                <span class="kw">use </span>cu29::monitoring::CuMonitor; <span class="comment">// Trait import.
@@ -1550,7 +1550,7 @@
 <a href=#1550 id=1550 data-nosnippet>1550</a>        <span class="macro">parse_quote!</span> { () }
 <a href=#1551 id=1551 data-nosnippet>1551</a>    } <span class="kw">else </span>{
 <a href=#1552 id=1552 data-nosnippet>1552</a>        <span class="macro">parse_quote!</span> {
-<a href=#1553 id=1553 data-nosnippet>1553</a>            ( #( CuStampedData&lt;#all_msgs_types_in_culist_order, CuMsgMetadata&gt; ),* )
+<a href=#1553 id=1553 data-nosnippet>1553</a>            ( #( CuMsg&lt;#all_msgs_types_in_culist_order&gt; ),* )
 <a href=#1554 id=1554 data-nosnippet>1554</a>        }
 <a href=#1555 id=1555 data-nosnippet>1555</a>    }
 <a href=#1556 id=1556 data-nosnippet>1556</a>}
@@ -1587,7 +1587,7 @@
 <a href=#1587 id=1587 data-nosnippet>1587</a>        .iter()
 <a href=#1588 id=1588 data-nosnippet>1588</a>        .map(|i| {
 <a href=#1589 id=1589 data-nosnippet>1589</a>            <span class="kw">let </span>t = <span class="kw-2">&amp;</span>all_msgs_types_in_culist_order[<span class="kw-2">*</span>i];
-<a href=#1590 id=1590 data-nosnippet>1590</a>            <span class="macro">quote!</span> { CuStampedData::&lt;#t, CuMsgMetadata&gt;::decode(decoder)<span class="question-mark">? </span>}
+<a href=#1590 id=1590 data-nosnippet>1590</a>            <span class="macro">quote!</span> { CuMsg::&lt;#t&gt;::decode(decoder)<span class="question-mark">? </span>}
 <a href=#1591 id=1591 data-nosnippet>1591</a>        })
 <a href=#1592 id=1592 data-nosnippet>1592</a>        .collect();
 <a href=#1593 id=1593 data-nosnippet>1593</a>
