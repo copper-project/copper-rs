@@ -1,6 +1,7 @@
 #![doc = include_str!("../README.md")]
 
 pub mod app;
+mod asynctask;
 pub mod config;
 pub mod copperlist;
 pub mod curuntime;
