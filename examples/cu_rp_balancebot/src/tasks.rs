@@ -13,7 +13,7 @@ impl Freezable for PIDMerger {}
 
 impl<'cl> CuTask<'cl> for PIDMerger {
     type Input = input_msg!('cl, PIDControlOutputPayload, PIDControlOutputPayload);
-    type Output = output_msg!('cl, MotorPayload);
+    type Output = output_msg!(MotorPayload);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -26,7 +26,7 @@ impl<'cl> CuTask<'cl> for PIDMerger {
         &mut self,
         _clock: &RobotClock,
         input: Self::Input,
-        output: Self::Output,
+        output: &mut Self::Output,
     ) -> CuResult<()> {
         let (bal_pid_msg, pos_pid_msg) = input;
         let bal_pid = match bal_pid_msg.payload() {

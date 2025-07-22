@@ -606,7 +606,7 @@ mod tests {
             Ok(Self {})
         }
 
-        fn process(&mut self, _clock: &RobotClock, _empty_msg: Self::Output) -> CuResult<()> {
+        fn process(&mut self, _clock: &RobotClock, _empty_msg: &mut Self::Output) -> CuResult<()> {
             Ok(())
         }
     }

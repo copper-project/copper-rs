@@ -16,7 +16,7 @@ pub mod tasks {
     impl Freezable for ExampleSrc {}
 
     impl<'cl> CuSrcTask<'cl> for ExampleSrc {
-        type Output = output_msg!('cl, i8);
+        type Output = output_msg!(i8);
 
         fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
         where
@@ -25,7 +25,7 @@ pub mod tasks {
             Ok(Self {})
         }
 
-        fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
+        fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output) -> CuResult<()> {
             std::thread::sleep(Duration::from_secs(1));
             debug!("Sending message to ROS");
             new_msg.set_payload(42);

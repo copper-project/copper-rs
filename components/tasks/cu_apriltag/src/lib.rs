@@ -185,7 +185,7 @@ impl<'cl> CuTask<'cl> for AprilTags {
 #[cfg(not(windows))]
 impl<'cl> CuTask<'cl> for AprilTags {
     type Input = input_msg!('cl, CuImage<Vec<u8>>);
-    type Output = output_msg!('cl, AprilTagDetections);
+    type Output = output_msg!(AprilTagDetections);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -236,7 +236,7 @@ impl<'cl> CuTask<'cl> for AprilTags {
         &mut self,
         _clock: &RobotClock,
         input: Self::Input,
-        output: Self::Output,
+        output: &mut Self::Output,
     ) -> CuResult<()> {
         let mut result = AprilTagDetections::new();
         if let Some(payload) = input.payload() {

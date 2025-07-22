@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 pub struct AsyncTask<'cl, T, O>
 where
-    T: CuTask<'cl, Output = &'cl mut CuMsg<O>> + Send + 'static,
+    T: CuTask<'cl, Output = CuMsg<O>> + Send + 'static,
     O: CuMsgPayload + 'cl + Send + 'static,
 {
     task: Arc<Mutex<T>>,
@@ -20,7 +20,7 @@ where
 
 impl<'cl, T, O> AsyncTask<'cl, T, O>
 where
-    T: CuTask<'cl, Output = &'cl mut CuMsg<O>> + Send + 'static,
+    T: CuTask<'cl, Output = CuMsg<O>> + Send + 'static,
     O: CuMsgPayload + 'cl + Send + 'static,
 {
     pub fn new(config: Option<&ComponentConfig>, tp: ThreadPool) -> CuResult<Self> {
@@ -38,16 +38,16 @@ where
 
 impl<'cl, T, O> Freezable for AsyncTask<'cl, T, O>
 where
-    T: CuTask<'cl, Output = &'cl mut CuMsg<O>> + Send + 'static,
+    T: CuTask<'cl, Output = CuMsg<O>> + Send + 'static,
     O: CuMsgPayload + 'cl + Send + 'static,
 {
 }
 
 impl<'cl, T, I, O> CuTask<'cl> for AsyncTask<'cl, T, O>
 where
-    T: CuTask<'cl, Input = &'cl CuMsg<I>, Output = &'cl mut CuMsg<O>> + Send + 'static,
+    T: CuTask<'cl, Input = &'cl CuMsg<I>, Output = CuMsg<O>> + Send + 'static,
     I: CuMsgPayload + 'cl + Send + Sync + 'static,
-    O: CuMsgPayload + 'cl + Send + 'static,
+    O: CuMsgPayload + Send + 'static,
 {
     type Input = T::Input;
     type Output = T::Output;
@@ -63,7 +63,7 @@ where
         &mut self,
         clock: &RobotClock,
         input: Self::Input,
-        real_output: Self::Output,
+        real_output: &mut Self::Output,
     ) -> CuResult<()> {
         let mut processing = self.processing.lock().unwrap();
         if *processing {
@@ -118,7 +118,7 @@ mod tests {
 
     impl<'cl> CuTask<'cl> for TestTask {
         type Input = input_msg!('cl, u32);
-        type Output = output_msg!('cl, u32);
+        type Output = output_msg!(u32);
 
         fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
         where
@@ -131,7 +131,7 @@ mod tests {
             &mut self,
             _clock: &RobotClock,
             input: Self::Input,
-            output: Self::Output,
+            output: &mut Self::Output,
         ) -> CuResult<()> {
             output.borrow_mut().set_payload(*input.payload().unwrap());
             Ok(())
@@ -151,8 +151,16 @@ mod tests {
         let input = CuMsg::new(Some(42u32));
         let mut output = CuMsg::new(None);
 
-        async_task.process(&clock, &input, &mut output).unwrap();
-        let result = *output.payload().unwrap();
-        assert_eq!(result, 42u32);
+        loop {
+            {
+                let output_ref: &mut CuMsg<u32> = &mut output;
+                async_task.process(&clock, &input, output_ref).unwrap();
+            }
+
+            if let Some(val) = output.payload() {
+                assert_eq!(*val, 42u32);
+                break;
+            }
+        }
     }
 }

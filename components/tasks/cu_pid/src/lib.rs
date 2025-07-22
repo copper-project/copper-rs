@@ -142,7 +142,7 @@ where
     I: CuMsgPayload + 'cl,
 {
     type Input = input_msg!('cl, I);
-    type Output = output_msg!('cl, PIDControlOutputPayload);
+    type Output = output_msg!(PIDControlOutputPayload);
 
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -211,7 +211,7 @@ where
         &mut self,
         _clock: &RobotClock,
         input: Self::Input,
-        output: Self::Output,
+        output: &mut Self::Output,
     ) -> CuResult<()> {
         match input.payload() {
             Some(payload) => {

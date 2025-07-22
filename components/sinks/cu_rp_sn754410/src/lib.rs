@@ -224,13 +224,13 @@ pub mod test_support {
     impl Freezable for SN754410TestSrc {}
 
     impl<'cl> CuSrcTask<'cl> for SN754410TestSrc {
-        type Output = output_msg!('cl, MotorPayload);
+        type Output = output_msg!(MotorPayload);
 
         fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
             Ok(Self {})
         }
 
-        fn process(&mut self, _clock: &RobotClock, _new_msg: Self::Output) -> CuResult<()> {
+        fn process(&mut self, _clock: &RobotClock, _new_msg: &mut Self::Output) -> CuResult<()> {
             todo!()
         }
     }

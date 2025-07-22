@@ -61,8 +61,8 @@ macro_rules! input_msg {
 // A convenience macro to get from a payload to a proper CuMsg used as output.
 #[macro_export]
 macro_rules! output_msg {
-    ($lifetime:lifetime, $ty:ty) => {
-        &$lifetime mut CuMsg<$ty>
+    ($ty:ty) => {
+        CuMsg<$ty>
     };
 }
 
@@ -216,7 +216,7 @@ impl<'a, T: Freezable + ?Sized> Encode for BincodeAdapter<'a, T> {
 /// To set the frequency of the pulls and align them to any hw, see the runtime configuration.
 /// Note: A source has the privilege to have a clock passed to it vs a frozen clock.
 pub trait CuSrcTask<'cl>: Freezable {
-    type Output: CuMsgPack<'cl>;
+    type Output: CuMsgPayload;
 
     /// Here you need to initialize everything your task will need for the duration of its lifetime.
     /// The config allows you to access the configuration of the task.
@@ -239,7 +239,7 @@ pub trait CuSrcTask<'cl>: Freezable {
     /// Process is the most critical execution of the task.
     /// The goal will be to produce the output message as soon as possible.
     /// Use preprocess to prepare the task to make this method as short as possible.
-    fn process(&mut self, clock: &RobotClock, new_msg: Self::Output) -> CuResult<()>;
+    fn process(&mut self, clock: &RobotClock, new_msg: &mut Self::Output) -> CuResult<()>;
 
     /// This is a method called by the runtime after "process". It is best effort a chance for
     /// the task to update some state after process is out of the way.
@@ -257,7 +257,7 @@ pub trait CuSrcTask<'cl>: Freezable {
 /// This is the most generic Task of copper. It is a "transform" task deriving an output from an input.
 pub trait CuTask<'cl>: Freezable {
     type Input: CuMsgPack<'cl>;
-    type Output: CuMsgPack<'cl>;
+    type Output: CuMsgPayload;
 
     /// Here you need to initialize everything your task will need for the duration of its lifetime.
     /// The config allows you to access the configuration of the task.
@@ -284,7 +284,7 @@ pub trait CuTask<'cl>: Freezable {
         &mut self,
         _clock: &RobotClock,
         input: Self::Input,
-        output: Self::Output,
+        output: &mut Self::Output,
     ) -> CuResult<()>;
 
     /// This is a method called by the runtime after "process". It is best effort a chance for

@@ -90,7 +90,7 @@ fn read_adc(spi: &mut Spidev) -> std::io::Result<u16> {
 use mock::read_adc;
 
 impl<'cl> CuSrcTask<'cl> for ADS7883 {
-    type Output = output_msg!('cl, ADSReadingPayload);
+    type Output = output_msg!(ADSReadingPayload);
 
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -140,7 +140,7 @@ impl<'cl> CuSrcTask<'cl> for ADS7883 {
         self.integrated_value *= INTEGRATION_FACTOR;
         Ok(())
     }
-    fn process(&mut self, clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
+    fn process(&mut self, clock: &RobotClock, new_msg: &mut Self::Output) -> CuResult<()> {
         let bf = clock.now();
         let analog_value = read_adc(&mut self.spi).map_err(|e| {
             CuError::new_with_cause("Could not read the ADC value from the ADS7883", e)

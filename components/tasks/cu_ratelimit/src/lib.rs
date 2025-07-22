@@ -33,7 +33,7 @@ where
     T: CuMsgPayload + 'cl,
 {
     type Input = input_msg!('cl, T);
-    type Output = output_msg!('cl, T);
+    type Output = output_msg!(T);
 
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self> {
         let hz = config
@@ -51,7 +51,7 @@ where
         &mut self,
         _clock: &RobotClock,
         input: Self::Input,
-        output: Self::Output,
+        output: &mut Self::Output,
     ) -> CuResult<()> {
         let tov = match input.tov {
             Tov::Time(ts) => ts,

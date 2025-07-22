@@ -157,7 +157,7 @@ pub struct CuSimSrcTask<T> {
 impl<T> Freezable for CuSimSrcTask<T> {}
 
 impl<'cl, T: CuMsgPayload + 'cl> CuSrcTask<'cl> for CuSimSrcTask<T> {
-    type Output = output_msg!('cl, T);
+    type Output = output_msg!(T);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -166,7 +166,7 @@ impl<'cl, T: CuMsgPayload + 'cl> CuSrcTask<'cl> for CuSimSrcTask<T> {
         Ok(Self { boo: PhantomData })
     }
 
-    fn process(&mut self, _clock: &RobotClock, _new_msg: Self::Output) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, _new_msg: &mut Self::Output) -> CuResult<()> {
         unimplemented!("A placeholder for sim was called for a source, you need answer SimOverride to ExecutedBySim for the Process step.")
     }
 }

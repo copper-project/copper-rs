@@ -13,7 +13,7 @@ pub struct DoraSource<const S: usize> {
 impl<const S: usize> Freezable for DoraSource<S> {}
 
 impl<'cl, const S: usize> CuSrcTask<'cl> for DoraSource<S> {
-    type Output = output_msg!('cl, DoraPayload );
+    type Output = output_msg!(DoraPayload);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -23,7 +23,7 @@ impl<'cl, const S: usize> CuSrcTask<'cl> for DoraSource<S> {
         Ok(Self { pool })
     }
 
-    fn process(&mut self, clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
+    fn process(&mut self, clock: &RobotClock, new_msg: &mut Self::Output) -> CuResult<()> {
         new_msg.tov = Tov::Time(clock.now());
         let buffer = self.pool.acquire().unwrap();
         buffer.lock().unwrap()[42] = 42;
