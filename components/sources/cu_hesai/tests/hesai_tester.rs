@@ -12,7 +12,7 @@ struct HesaiTestSink {}
 impl Freezable for HesaiTestSink {}
 
 impl<'cl> CuSinkTask<'cl> for HesaiTestSink {
-    type Input = input_msg!('cl, LidarCuMsgPayload);
+    type Input = input_msg!(LidarCuMsgPayload);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -21,7 +21,7 @@ impl<'cl> CuSinkTask<'cl> for HesaiTestSink {
         Ok(Self {})
     }
 
-    fn process(&mut self, _clock: &RobotClock, new_msg: Self::Input) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, new_msg: &Self::Input) -> CuResult<()> {
         match &new_msg.payload() {
             None => {
                 debug!("Received Nothing.");

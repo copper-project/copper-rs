@@ -53,7 +53,7 @@ impl<'cl> CuSinkTask<'cl> for MergingSinkTask {
         Ok(Self {})
     }
 
-    fn process(&mut self, _clock: &RobotClock, input: Self::Input) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, input: &Self::Input) -> CuResult<()> {
         let (i, f) = input;
         println!(
             "SinkTask1 received: {}, {}",
@@ -83,11 +83,11 @@ impl<'cl> CuTask<'cl> for MergerTask {
     fn process(
         &mut self,
         _clock: &RobotClock,
-        input: Self::Input,
+        input: &Self::Input,
         output: &mut Self::Output,
     ) -> CuResult<()> {
         // Put the types explicitly here show the actual underlying type of Self::Input
-        let (i, f): (&CuMsg<i32>, &CuMsg<f32>) = input;
+        let (i, f): (&CuMsg<i32>, &CuMsg<f32>) = *input;
         let (i, f) = (i.payload().unwrap(), f.payload().unwrap());
         output.set_payload((*i, *f)); // output is a &mut CuMsg<(i32, f32)>
         Ok(())
@@ -100,13 +100,13 @@ pub struct MergedSinkTask {}
 impl Freezable for MergedSinkTask {}
 
 impl<'cl> CuSinkTask<'cl> for MergedSinkTask {
-    type Input = input_msg!('cl, (i32, f32));
+    type Input = input_msg!((i32, f32));
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
         Ok(Self {})
     }
 
-    fn process(&mut self, _clock: &RobotClock, input: Self::Input) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, input: &Self::Input) -> CuResult<()> {
         println!("SinkTask2 received: {:?}", input.payload().unwrap());
         Ok(())
     }

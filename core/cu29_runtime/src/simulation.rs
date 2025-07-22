@@ -180,7 +180,7 @@ pub struct CuSimSinkTask<T> {
 impl<T: CuMsgPayload> Freezable for CuSimSinkTask<T> {}
 
 impl<'cl, T: CuMsgPayload + 'cl> CuSinkTask<'cl> for CuSimSinkTask<T> {
-    type Input = input_msg!('cl, T);
+    type Input = input_msg!(T);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -189,7 +189,7 @@ impl<'cl, T: CuMsgPayload + 'cl> CuSinkTask<'cl> for CuSimSinkTask<T> {
         Ok(Self { boo: PhantomData })
     }
 
-    fn process(&mut self, _clock: &RobotClock, _input: Self::Input) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, _input: &Self::Input) -> CuResult<()> {
         unimplemented!("A placeholder for sim was called for a sink, you need answer SimOverride to ExecutedBySim for the Process step.")
     }
 }

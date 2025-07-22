@@ -29,7 +29,7 @@ impl<'cl, P> CuSinkTask<'cl> for IceoryxSink<P>
 where
     P: CuMsgPayload + 'cl + 'static,
 {
-    type Input = input_msg!('cl, P);
+    type Input = input_msg!(P);
 
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -97,7 +97,7 @@ where
         Ok(())
     }
 
-    fn process(&mut self, _clock: &RobotClock, input: Self::Input) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, input: &Self::Input) -> CuResult<()> {
         let publisher = self.publisher.as_mut().ok_or_else(|| {
             CuError::from(
                 format!("IceoryxSink({}): Publisher not found.", self.service_name).as_str(),

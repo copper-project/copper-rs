@@ -52,7 +52,7 @@ pub struct MSPSink {
 impl Freezable for MSPSink {}
 
 impl<'cl> CuSinkTask<'cl> for MSPSink {
-    type Input = input_msg!('cl, MspRequestBatch);
+    type Input = input_msg!(MspRequestBatch);
 
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -88,7 +88,7 @@ impl<'cl> CuSinkTask<'cl> for MSPSink {
         })
     }
 
-    fn process(&mut self, _clock: &RobotClock, input: Self::Input) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, input: &Self::Input) -> CuResult<()> {
         if let Some(batch) = input.payload() {
             let MspRequestBatch(ref batch) = batch;
             for req in batch {

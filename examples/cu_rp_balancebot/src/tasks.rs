@@ -25,7 +25,7 @@ impl<'cl> CuTask<'cl> for PIDMerger {
     fn process(
         &mut self,
         _clock: &RobotClock,
-        input: Self::Input,
+        input: &Self::Input,
         output: &mut Self::Output,
     ) -> CuResult<()> {
         let (bal_pid_msg, pos_pid_msg) = input;

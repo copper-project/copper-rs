@@ -37,7 +37,7 @@ pub struct DoraSink<const S: usize> {}
 impl<const S: usize> Freezable for DoraSink<S> {}
 
 impl<'cl, const S: usize> CuSinkTask<'cl> for DoraSink<S> {
-    type Input = input_msg!('cl, DoraPayload);
+    type Input = input_msg!(DoraPayload);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -46,7 +46,7 @@ impl<'cl, const S: usize> CuSinkTask<'cl> for DoraSink<S> {
         Ok(Self {})
     }
 
-    fn process(&mut self, _clock: &RobotClock, input: Self::Input) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, input: &Self::Input) -> CuResult<()> {
         let incoming = input.payload().unwrap();
         assert_eq!(incoming.0.lock().unwrap()[42], 42);
         Ok(())

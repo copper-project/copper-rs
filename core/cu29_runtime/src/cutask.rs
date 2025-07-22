@@ -18,25 +18,24 @@ use std::fmt::{Debug, Display, Formatter};
 // Everything that is stateful in copper for zero copy constraints need to be restricted to this trait.
 pub trait CuMsgPayload: Default + Debug + Clone + Encode + Decode<()> + Serialize + Sized {}
 
-pub trait CuMsgPack<'cl> {}
+pub trait CuMsgPack {}
 
 // Also anything that follows this contract can be a payload (blanket implementation)
 impl<T: Default + Debug + Clone + Encode + Decode<()> + Serialize + Sized> CuMsgPayload for T {}
 
 macro_rules! impl_cu_msg_pack {
     ($($name:ident),+) => {
-        impl<'cl, $($name),+> CuMsgPack<'cl> for ($(&'cl CuMsg<$name>,)+)
+        impl<'cl, $($name),+> CuMsgPack for ($(&CuMsg<$name>,)+)
         where
-            $($name: CuMsgPayload + 'cl),+
+            $($name: CuMsgPayload),+
         {}
     };
 }
 
-impl<'cl, T: CuMsgPayload> CuMsgPack<'cl> for (&'cl CuMsg<T>,) {}
-impl<'cl, T: CuMsgPayload> CuMsgPack<'cl> for &'cl CuMsg<T> {}
-impl<'cl, T: CuMsgPayload> CuMsgPack<'cl> for (&'cl mut CuMsg<T>,) {}
-impl<'cl, T: CuMsgPayload> CuMsgPack<'cl> for &'cl mut CuMsg<T> {}
-impl CuMsgPack<'_> for () {}
+impl<T: CuMsgPayload> CuMsgPack for CuMsg<T> {}
+impl<T: CuMsgPayload> CuMsgPack for &CuMsg<T> {}
+impl<T: CuMsgPayload> CuMsgPack for (&CuMsg<T>,) {}
+impl CuMsgPack for () {}
 
 // Apply the macro to generate implementations for tuple sizes up to 5
 impl_cu_msg_pack!(T1, T2);
@@ -48,13 +47,11 @@ impl_cu_msg_pack!(T1, T2, T3, T4, T5);
 // declaration for your tasks used for input messages.
 #[macro_export]
 macro_rules! input_msg {
-    ($lifetime:lifetime, $ty:ty) => {
-        &$lifetime CuMsg<$ty>
+    ($lt:lifetime, $($ty:ty),+) => {
+        ( $( & $lt CuMsg<$ty> ),+ )
     };
-    ($lifetime:lifetime, $($ty:ty),*) => {
-        (
-            $( &$lifetime CuMsg<$ty>, )*
-        )
+    ($ty:ty) => {
+        CuMsg<$ty>
     };
 }
 
@@ -256,7 +253,7 @@ pub trait CuSrcTask<'cl>: Freezable {
 
 /// This is the most generic Task of copper. It is a "transform" task deriving an output from an input.
 pub trait CuTask<'cl>: Freezable {
-    type Input: CuMsgPack<'cl>;
+    type Input: CuMsgPack;
     type Output: CuMsgPayload;
 
     /// Here you need to initialize everything your task will need for the duration of its lifetime.
@@ -283,7 +280,7 @@ pub trait CuTask<'cl>: Freezable {
     fn process(
         &mut self,
         _clock: &RobotClock,
-        input: Self::Input,
+        input: &Self::Input,
         output: &mut Self::Output,
     ) -> CuResult<()>;
 
@@ -302,7 +299,7 @@ pub trait CuTask<'cl>: Freezable {
 
 /// A Sink Task is a task that only consumes messages. For example drivers for actuators are Sink Tasks.
 pub trait CuSinkTask<'cl>: Freezable {
-    type Input: CuMsgPack<'cl>;
+    type Input: CuMsgPack;
 
     /// Here you need to initialize everything your task will need for the duration of its lifetime.
     /// The config allows you to access the configuration of the task.
@@ -325,7 +322,7 @@ pub trait CuSinkTask<'cl>: Freezable {
     /// Process is the most critical execution of the task.
     /// The goal will be to produce the output message as soon as possible.
     /// Use preprocess to prepare the task to make this method as short as possible.
-    fn process(&mut self, _clock: &RobotClock, input: Self::Input) -> CuResult<()>;
+    fn process(&mut self, _clock: &RobotClock, input: &Self::Input) -> CuResult<()>;
 
     /// This is a method called by the runtime after "process". It is best effort a chance for
     /// the task to update some state after process is out of the way.

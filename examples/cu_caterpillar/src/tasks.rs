@@ -46,7 +46,7 @@ pub struct CaterpillarTask {}
 impl Freezable for CaterpillarTask {}
 
 impl<'cl> CuTask<'cl> for CaterpillarTask {
-    type Input = input_msg!('cl, RPGpioPayload);
+    type Input = input_msg!(RPGpioPayload);
     type Output = output_msg!(RPGpioPayload);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
@@ -59,7 +59,7 @@ impl<'cl> CuTask<'cl> for CaterpillarTask {
     fn process(
         &mut self,
         _clock: &RobotClock,
-        input: Self::Input,
+        input: &Self::Input,
         output: &mut Self::Output,
     ) -> CuResult<()> {
         // forward the state to the next task

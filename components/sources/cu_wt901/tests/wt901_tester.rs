@@ -10,7 +10,7 @@ struct WT910TestSink {}
 impl Freezable for WT910TestSink {}
 
 impl<'cl> CuSinkTask<'cl> for WT910TestSink {
-    type Input = input_msg!('cl, PositionalReadingsPayload);
+    type Input = input_msg!(PositionalReadingsPayload);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -19,7 +19,7 @@ impl<'cl> CuSinkTask<'cl> for WT910TestSink {
         Ok(Self {})
     }
 
-    fn process(&mut self, _clock: &RobotClock, new_msg: Self::Input) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, new_msg: &Self::Input) -> CuResult<()> {
         debug!("Received: {}", &new_msg.payload());
         Ok(())
     }

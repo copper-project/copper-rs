@@ -45,7 +45,7 @@ where
 
 impl<'cl, T, I, O> CuTask<'cl> for AsyncTask<'cl, T, O>
 where
-    T: CuTask<'cl, Input = &'cl CuMsg<I>, Output = CuMsg<O>> + Send + 'static,
+    T: CuTask<'cl, Input = CuMsg<I>, Output = CuMsg<O>> + Send + 'static,
     I: CuMsgPayload + 'cl + Send + Sync + 'static,
     O: CuMsgPayload + Send + 'static,
 {
@@ -62,7 +62,7 @@ where
     fn process(
         &mut self,
         clock: &RobotClock,
-        input: Self::Input,
+        input: &Self::Input,
         real_output: &mut Self::Output,
     ) -> CuResult<()> {
         let mut processing = self.processing.lock().unwrap();
@@ -117,7 +117,7 @@ mod tests {
     impl Freezable for TestTask {}
 
     impl<'cl> CuTask<'cl> for TestTask {
-        type Input = input_msg!('cl, u32);
+        type Input = input_msg!(u32);
         type Output = output_msg!(u32);
 
         fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
@@ -130,7 +130,7 @@ mod tests {
         fn process(
             &mut self,
             _clock: &RobotClock,
-            input: Self::Input,
+            input: &Self::Input,
             output: &mut Self::Output,
         ) -> CuResult<()> {
             output.borrow_mut().set_payload(*input.payload().unwrap());

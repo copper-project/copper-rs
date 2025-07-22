@@ -32,7 +32,7 @@ impl<'cl, T> CuTask<'cl> for CuRateLimit<T>
 where
     T: CuMsgPayload + 'cl,
 {
-    type Input = input_msg!('cl, T);
+    type Input = input_msg!(T);
     type Output = output_msg!(T);
 
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self> {
@@ -50,7 +50,7 @@ where
     fn process(
         &mut self,
         _clock: &RobotClock,
-        input: Self::Input,
+        input: &Self::Input,
         output: &mut Self::Output,
     ) -> CuResult<()> {
         let tov = match input.tov {

@@ -52,7 +52,7 @@ macro_rules! define_task {
             fn process(
                 &mut self,
                 _clock: &cu29::clock::RobotClock,
-                input: Self::Input,
+                input: &Self::Input,
                 output: &mut Self::Output,
             ) -> CuResult<()> {
                 // add the incoming data into the buffers
@@ -110,7 +110,7 @@ mod tests {
         let mut output: <AlignerTask as CuTask>::Output = m3;
 
         let clock = cu29::clock::RobotClock::new();
-        let result = aligner.process(&clock, input, &mut output);
+        let result = aligner.process(&clock, &input, &mut output);
         assert!(result.is_ok());
     }
 }

@@ -43,7 +43,7 @@ impl<'cl, P> CuSinkTask<'cl> for ZenohSink<P>
 where
     P: CuMsgPayload + 'cl + 'static,
 {
-    type Input = input_msg!('cl, P);
+    type Input = input_msg!(P);
 
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -88,7 +88,7 @@ where
         Ok(())
     }
 
-    fn process(&mut self, _clock: &RobotClock, input: Self::Input) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, input: &Self::Input) -> CuResult<()> {
         let ctx = self
             .ctx
             .as_mut()

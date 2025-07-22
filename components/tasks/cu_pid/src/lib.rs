@@ -141,7 +141,7 @@ where
     f32: for<'a> From<&'a I>,
     I: CuMsgPayload + 'cl,
 {
-    type Input = input_msg!('cl, I);
+    type Input = input_msg!(I);
     type Output = output_msg!(PIDControlOutputPayload);
 
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
@@ -210,7 +210,7 @@ where
     fn process(
         &mut self,
         _clock: &RobotClock,
-        input: Self::Input,
+        input: &Self::Input,
         output: &mut Self::Output,
     ) -> CuResult<()> {
         match input.payload() {

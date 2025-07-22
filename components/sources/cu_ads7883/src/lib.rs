@@ -173,13 +173,13 @@ pub mod test_support {
     impl Freezable for ADS78883TestSink {}
 
     impl<'cl> CuSinkTask<'cl> for ADS78883TestSink {
-        type Input = input_msg!('cl, ADSReadingPayload);
+        type Input = input_msg!(ADSReadingPayload);
 
         fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
             Ok(Self {})
         }
 
-        fn process(&mut self, _clock: &RobotClock, new_msg: Self::Input) -> CuResult<()> {
+        fn process(&mut self, _clock: &RobotClock, new_msg: &Self::Input) -> CuResult<()> {
             debug!("Received: {}", &new_msg.payload());
             Ok(())
         }

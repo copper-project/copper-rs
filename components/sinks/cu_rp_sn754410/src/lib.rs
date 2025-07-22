@@ -130,7 +130,7 @@ impl Freezable for SN754410 {
 }
 
 impl<'cl> CuSinkTask<'cl> for SN754410 {
-    type Input = input_msg!('cl, MotorPayload);
+    type Input = input_msg!(MotorPayload);
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
@@ -166,7 +166,7 @@ impl<'cl> CuSinkTask<'cl> for SN754410 {
         debug!("Enabling SN754410.");
         self.enable_pwms()
     }
-    fn process(&mut self, clock: &RobotClock, input: Self::Input) -> CuResult<()> {
+    fn process(&mut self, clock: &RobotClock, input: &Self::Input) -> CuResult<()> {
         if let Some(power) = input.payload() {
             if self.dryrun {
                 debug!(
