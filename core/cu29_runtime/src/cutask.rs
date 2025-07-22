@@ -24,28 +24,25 @@ pub trait CuMsgPack<'cl> {}
 impl<T: Default + Debug + Clone + Encode + Decode<()> + Serialize + Sized> CuMsgPayload for T {}
 
 macro_rules! impl_cu_msg_pack {
-    ($( ( $( ($ty:ident, $md:ident) ),* ) ),*) => {
-        $(
-            impl<'cl, $( $ty: CuMsgPayload + 'cl, $md: cu29_traits::Metadata ),*> CuMsgPack<'cl> for (
-                $( &'cl CuStampedData<$ty, $md>, )*
-            ) {}
-        )*
+    ($($name:ident),+) => {
+        impl<'cl, $($name),+> CuMsgPack<'cl> for ($(&'cl CuMsg<$name>,)+)
+        where
+            $($name: CuMsgPayload + 'cl),+
+        {}
     };
 }
 
-impl<'cl, T: CuMsgPayload, M: Metadata> CuMsgPack<'cl> for (&'cl CuStampedData<T, M>,) {}
-impl<'cl, T: CuMsgPayload, M: Metadata> CuMsgPack<'cl> for &'cl CuStampedData<T, M> {}
-impl<'cl, T: CuMsgPayload, M: Metadata> CuMsgPack<'cl> for (&'cl mut CuStampedData<T, M>,) {}
-impl<'cl, T: CuMsgPayload, M: Metadata> CuMsgPack<'cl> for &'cl mut CuStampedData<T, M> {}
+impl<'cl, T: CuMsgPayload> CuMsgPack<'cl> for (&'cl CuMsg<T>,) {}
+impl<'cl, T: CuMsgPayload> CuMsgPack<'cl> for &'cl CuMsg<T> {}
+impl<'cl, T: CuMsgPayload> CuMsgPack<'cl> for (&'cl mut CuMsg<T>,) {}
+impl<'cl, T: CuMsgPayload> CuMsgPack<'cl> for &'cl mut CuMsg<T> {}
 impl CuMsgPack<'_> for () {}
 
 // Apply the macro to generate implementations for tuple sizes up to 5
-impl_cu_msg_pack! {
-    ((T1, M1), (T2, M2)),
-    ((T1, M1), (T2, M2), (T3, M3)),
-    ((T1, M1), (T2, M2), (T3, M3), (T4, M4)),
-    ((T1, M1), (T2, M2), (T3, M3), (T4, M4), (T5, M5))
-}
+impl_cu_msg_pack!(T1, T2);
+impl_cu_msg_pack!(T1, T2, T3);
+impl_cu_msg_pack!(T1, T2, T3, T4);
+impl_cu_msg_pack!(T1, T2, T3, T4, T5);
 
 // A convenience macro to get from a payload or a list of payloads to a proper CuMsg or CuMsgPack
 // declaration for your tasks used for input messages.
