@@ -47,11 +47,14 @@ impl_cu_msg_pack!(T1, T2, T3, T4, T5);
 // declaration for your tasks used for input messages.
 #[macro_export]
 macro_rules! input_msg {
-    ($lt:lifetime, $($ty:ty),+) => {
-        ( $( & $lt CuMsg<$ty> ),+ )
-    };
     ($ty:ty) => {
         CuMsg<$ty>
+    };
+    ($lt:lifetime, $ty:ty) => {
+        CuMsg<$ty>   // This is for backward compatibility
+    };
+    ($lt:lifetime, $first:ty, $($rest:ty),+) => {
+        ( & $lt CuMsg<$first>, $( & $lt CuMsg<$rest> ),+ )
     };
 }
 
@@ -60,6 +63,9 @@ macro_rules! input_msg {
 macro_rules! output_msg {
     ($ty:ty) => {
         CuMsg<$ty>
+    };
+    ($lt:lifetime, $ty:ty) => {
+        CuMsg<$ty>  // This is for backward compatibility
     };
 }
 
