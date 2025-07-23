@@ -77,6 +77,10 @@ pub struct CuMsgMetadata {
     /// A small string for real time feedback purposes.
     /// This is useful for to display on the field when the tasks are operating correctly.
     pub status_txt: CuCompactString,
+    /// The ID of the task that generated this message (index into TASKS_IDS)
+    pub task_id: u16,
+    /// The name of the task that generated this message
+    pub task_name: CuCompactString,
 }
 
 impl cu29_traits::Metadata for CuMsgMetadata {}
@@ -94,6 +98,14 @@ impl cu29_traits::CuMsgMetadataTrait for CuMsgMetadata {
 
     fn status_txt(&self) -> &CuCompactString {
         &self.status_txt
+    }
+
+    fn task_id(&self) -> u16 {
+        self.task_id
+    }
+
+    fn task_name(&self) -> &CuCompactString {
+        &self.task_name
     }
 }
 
@@ -130,6 +142,8 @@ impl Default for CuMsgMetadata {
         CuMsgMetadata {
             process_time: PartialCuTimeRange::default(),
             status_txt: CuCompactString(CompactString::with_capacity(COMPACT_STRING_CAPACITY)),
+            task_id: 0,
+            task_name: CuCompactString(CompactString::with_capacity(COMPACT_STRING_CAPACITY)),
         }
     }
 }
@@ -180,6 +194,10 @@ where
 
     fn metadata(&self) -> &dyn CuMsgMetadataTrait {
         &self.metadata
+    }
+
+    fn clear_payload(&mut self) {
+        self.payload = None;
     }
 }
 

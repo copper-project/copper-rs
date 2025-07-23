@@ -73,6 +73,9 @@ impl<P: CopperListTuple> ErasedCuStampedDataSet for CopperList<P> {
     fn cumsgs(&self) -> Vec<&dyn ErasedCuStampedData> {
         self.msgs.cumsgs()
     }
+    fn cumsgs_mut(&mut self) -> Vec<&mut dyn ErasedCuStampedData> {
+        self.msgs.cumsgs_mut()
+    }
 }
 
 /// This structure maintains the entire memory needed by Copper for one loop for the inter tasks communication within a process.
@@ -263,6 +266,9 @@ mod tests {
         fn cumsgs(&self) -> Vec<&dyn ErasedCuStampedData> {
             Vec::new()
         }
+        fn cumsgs_mut(&mut self) -> Vec<&mut dyn ErasedCuStampedData> {
+            Vec::new()
+        }
     }
 
     impl MatchingTasks for CuStampedDataSet {
@@ -425,6 +431,9 @@ mod tests {
 
     impl ErasedCuStampedDataSet for TestStruct {
         fn cumsgs(&self) -> Vec<&dyn ErasedCuStampedData> {
+            Vec::new()
+        }
+        fn cumsgs_mut(&mut self) -> Vec<&mut dyn ErasedCuStampedData> {
             Vec::new()
         }
     }

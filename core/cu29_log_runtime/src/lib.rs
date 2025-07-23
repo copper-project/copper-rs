@@ -108,6 +108,7 @@ impl Drop for LoggerRuntime {
 /// It moves entry by design, it will be absorbed in the queue.
 #[inline(always)]
 pub fn log(entry: &mut CuLogEntry) -> CuResult<()> {
+    println!("logging to a file");
     let d = WRITER.get().map(|(writer, clock)| (writer, clock));
     if d.is_none() {
         return Err("Logger not initialized.".into());

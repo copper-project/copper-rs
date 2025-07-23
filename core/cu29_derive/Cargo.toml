@@ -37,4 +37,3 @@ serde = { workspace = true } # needed for compile_fail tests
 default = []
 # enables a more verbose build log showing the code generation.
 macro_debug = ["cu29-runtime/macro_debug"]
-

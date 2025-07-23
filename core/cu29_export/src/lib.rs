@@ -502,6 +502,9 @@ mod tests {
         fn cumsgs(&self) -> Vec<&dyn ErasedCuStampedData> {
             Vec::new()
         }
+        fn cumsgs_mut(&mut self) -> Vec<&mut dyn ErasedCuStampedData> {
+            Vec::new()
+        }
     }
 
     impl MatchingTasks for MyMsgs {

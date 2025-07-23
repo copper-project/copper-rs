@@ -92,6 +92,12 @@ pub trait CuMsgMetadataTrait {
 
     /// Small status text for user UI to get the realtime state of task (max 24 chrs)
     fn status_txt(&self) -> &CuCompactString;
+
+    /// The ID of the task that generated this message
+    fn task_id(&self) -> u16;
+
+    /// The name of the task that generated this message
+    fn task_name(&self) -> &CuCompactString;
 }
 
 /// A generic trait to expose the generated CuStampedDataSet from the task graph.
@@ -99,12 +105,14 @@ pub trait ErasedCuStampedData {
     fn payload(&self) -> Option<&dyn erased_serde::Serialize>;
     fn tov(&self) -> Tov;
     fn metadata(&self) -> &dyn CuMsgMetadataTrait;
+    fn clear_payload(&mut self);
 }
 
 /// Trait to get a vector of type-erased CuStampedDataSet
 /// This is used for generic serialization of the copperlists
 pub trait ErasedCuStampedDataSet {
     fn cumsgs(&self) -> Vec<&dyn ErasedCuStampedData>;
+    fn cumsgs_mut(&mut self) -> Vec<&mut dyn ErasedCuStampedData>;
 }
 
 /// Trait to trace back from the CopperList the origin of the messages
