@@ -191,19 +191,27 @@ impl Display for Value {
 /// A node represents a Task in the system Graph.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Node {
+    /// Unique node identifier.
     id: String,
 
+    /// Task rust struct underlying type, e.g. "mymodule::Sensor", etc.
     #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
     type_: Option<String>,
 
+    /// Config passed to the task.
     #[serde(skip_serializing_if = "Option::is_none")]
     config: Option<ComponentConfig>,
 
+    /// Missions for which this task is run.
     missions: Option<Vec<String>>,
+
+    /// Run this task in the background:
+    /// ie. Will be set to run on a background thread and until it is finished `CuTask::process` will return None.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    background: Option<bool>,
 }
 
 impl Node {
-    #[allow(dead_code)]
     pub fn new(id: &str, ptype: &str) -> Self {
         Node {
             id: id.to_string(),
@@ -211,31 +219,31 @@ impl Node {
             // base_period_ns: None,
             config: None,
             missions: None,
+            background: None,
         }
     }
 
-    #[allow(dead_code)]
     pub fn get_id(&self) -> String {
         self.id.clone()
     }
 
-    #[allow(dead_code)]
+    pub fn get_type(&self) -> &str {
+        self.type_.as_ref().unwrap()
+    }
+
     pub fn set_type(mut self, name: Option<String>) -> Self {
         self.type_ = name;
         self
     }
 
-    #[allow(dead_code)]
-    pub fn get_type(&self) -> &str {
-        self.type_.as_ref().unwrap()
+    pub fn is_background(&self) -> bool {
+        self.background.unwrap_or(false)
     }
 
-    #[allow(dead_code)]
     pub fn get_instance_config(&self) -> Option<&ComponentConfig> {
         self.config.as_ref()
     }
 
-    #[allow(dead_code)]
     pub fn get_param<T: From<Value>>(&self, key: &str) -> Option<T> {
         let pc = self.config.as_ref()?;
         let ComponentConfig(pc) = pc;
@@ -243,7 +251,6 @@ impl Node {
         Some(T::from(v.clone()))
     }
 
-    #[allow(dead_code)]
     pub fn set_param<T: Into<Value>>(&mut self, key: &str, value: T) {
         if self.config.is_none() {
             self.config = Some(ComponentConfig(HashMap::new()));
