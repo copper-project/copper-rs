@@ -65,7 +65,7 @@ mod linux_impl {
         ((duration.as_nanos() as i64 + offset_ns) as u64).into()
     }
 
-    impl<'cl> CuSrcTask<'cl> for V4l {
+    impl CuSrcTask for V4l {
         type Output = output_msg!(CuImage<Vec<u8>>);
 
         fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>

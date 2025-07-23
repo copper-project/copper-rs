@@ -25,11 +25,11 @@ where
 
 impl<P> Freezable for IceoryxSink<P> where P: CuMsgPayload {}
 
-impl<'cl, P> CuSinkTask<'cl> for IceoryxSink<P>
+impl<P> CuSinkTask for IceoryxSink<P>
 where
-    P: CuMsgPayload + 'cl + 'static,
+    P: CuMsgPayload + 'static,
 {
-    type Input = input_msg!(P);
+    type Input<'m> = input_msg!(P);
 
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -97,7 +97,7 @@ where
         Ok(())
     }
 
-    fn process(&mut self, _clock: &RobotClock, input: &Self::Input) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
         let publisher = self.publisher.as_mut().ok_or_else(|| {
             CuError::from(
                 format!("IceoryxSink({}): Publisher not found.", self.service_name).as_str(),

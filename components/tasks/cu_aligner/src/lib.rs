@@ -23,8 +23,8 @@ macro_rules! define_task {
 
         impl Freezable for $name {}
 
-        impl<'cl> CuTask<'cl> for $name {
-            type Input = input_msg!('cl, $($p),*);
+        impl CuTask for $name {
+            type Input<'m> = input_msg!('m, $($p),*);
             type Output = output_msg!(($(
                 cu29::payload::CuArray<$p, { $mos }>
             ),*));
@@ -52,7 +52,7 @@ macro_rules! define_task {
             fn process(
                 &mut self,
                 _clock: &cu29::clock::RobotClock,
-                input: &Self::Input,
+                input: &Self::Input<'_>,
                 output: &mut Self::Output,
             ) -> CuResult<()> {
                 // add the incoming data into the buffers
@@ -105,7 +105,7 @@ mod tests {
         let mut aligner = AlignerTask::new(Some(&config)).unwrap();
         let m1 = CuStampedData::<f32, CuMsgMetadata>::default();
         let m2 = CuStampedData::<i32, CuMsgMetadata>::default();
-        let input: <AlignerTask as CuTask>::Input = (&m1, &m2);
+        let input: <AlignerTask as CuTask>::Input<'_> = (&m1, &m2);
         let m3 = CuStampedData::<(CuArray<f32, 5>, CuArray<i32, 10>), CuMsgMetadata>::default();
         let mut output: <AlignerTask as CuTask>::Output = m3;
 

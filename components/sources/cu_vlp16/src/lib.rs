@@ -18,7 +18,7 @@ pub struct Vlp16 {
 
 impl Freezable for Vlp16 {}
 
-impl<'cl> CuSrcTask<'cl> for Vlp16 {
+impl CuSrcTask for Vlp16 {
     type Output = output_msg!(PointCloudSoa<10000>);
 
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>

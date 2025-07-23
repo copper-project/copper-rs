@@ -54,7 +54,7 @@ impl Freezable for Encoder {
     // pin is derived from the config, so we keep the default implementation.
 }
 
-impl<'cl> CuSrcTask<'cl> for Encoder {
+impl CuSrcTask for Encoder {
     type Output = output_msg!(EncoderPayload);
 
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>

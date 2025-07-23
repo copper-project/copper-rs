@@ -10,8 +10,8 @@ struct LivoxTestSink {}
 
 impl Freezable for LivoxTestSink {}
 
-impl<'cl> CuSinkTask<'cl> for LivoxTestSink {
-    type Input = input_msg!(LidarCuMsgPayload);
+impl CuSinkTask for LivoxTestSink {
+    type Input<'m> = input_msg!(LidarCuMsgPayload);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -20,7 +20,7 @@ impl<'cl> CuSinkTask<'cl> for LivoxTestSink {
         Ok(Self {})
     }
 
-    fn process(&mut self, _clock: &RobotClock, new_msg: &Self::Input) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, new_msg: &Self::Input<'_>) -> CuResult<()> {
         match &new_msg.payload() {
             None => {
                 debug!("Received Nothing.");

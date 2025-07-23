@@ -58,7 +58,7 @@ fn channel_time(t6: CuTime, i: u64) -> CuTime {
     }
 }
 
-impl<'cl> CuSrcTask<'cl> for Xt32 {
+impl CuSrcTask for Xt32 {
     type Output = output_msg!(LidarCuMsgPayload);
 
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>

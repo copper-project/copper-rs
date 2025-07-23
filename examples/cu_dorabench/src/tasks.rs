@@ -12,7 +12,7 @@ pub struct DoraSource<const S: usize> {
 
 impl<const S: usize> Freezable for DoraSource<S> {}
 
-impl<'cl, const S: usize> CuSrcTask<'cl> for DoraSource<S> {
+impl<const S: usize> CuSrcTask for DoraSource<S> {
     type Output = output_msg!(DoraPayload);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
@@ -36,8 +36,8 @@ pub struct DoraSink<const S: usize> {}
 
 impl<const S: usize> Freezable for DoraSink<S> {}
 
-impl<'cl, const S: usize> CuSinkTask<'cl> for DoraSink<S> {
-    type Input = input_msg!(DoraPayload);
+impl<const S: usize> CuSinkTask for DoraSink<S> {
+    type Input<'m> = input_msg!(DoraPayload);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -46,7 +46,7 @@ impl<'cl, const S: usize> CuSinkTask<'cl> for DoraSink<S> {
         Ok(Self {})
     }
 
-    fn process(&mut self, _clock: &RobotClock, input: &Self::Input) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
         let incoming = input.payload().unwrap();
         assert_eq!(incoming.0.lock().unwrap()[42], 42);
         Ok(())

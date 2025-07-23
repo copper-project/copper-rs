@@ -27,7 +27,7 @@ const PUBLISHER_ID: u32 = NODE_ID + 1;
 
 /// This is a sink task that sends ROS-compatible messages to a Zenoh topic.
 /// P is the payload type of the messages, which must be convertible to ROS format.
-/// Hence the payload type must implement the `RosMsgAdapter` trait.
+/// Hence, the payload type must implement the `RosMsgAdapter` trait.
 pub struct ZenohRosSink<P>
 where
     P: CuMsgPayload + RosMsgAdapter<'static>,
@@ -38,7 +38,7 @@ where
 }
 
 pub struct ZenohRosConfig {
-    session: zenoh::Config,
+    session: Config,
     domain_id: u32,
     namespace: String,
     node: String,
@@ -58,11 +58,11 @@ pub struct ZenohRosContext {
 
 impl<P> Freezable for ZenohRosSink<P> where P: CuMsgPayload + RosMsgAdapter<'static> {}
 
-impl<'cl, P> CuSinkTask<'cl> for ZenohRosSink<P>
+impl<P> CuSinkTask for ZenohRosSink<P>
 where
-    P: CuMsgPayload + RosMsgAdapter<'static> + 'cl,
+    P: CuMsgPayload + RosMsgAdapter<'static>,
 {
-    type Input = input_msg!(P);
+    type Input<'m> = input_msg!(P);
 
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -73,8 +73,8 @@ where
         // Get json zenoh config
         let session_config = config.get::<String>("zenoh_config_json").map_or(
             // Or default zenoh config otherwise
-            CuResult::Ok(Config::default()),
-            |s| -> CuResult<zenoh::Config> {
+            Ok(Config::default()),
+            |s| -> CuResult<Config> {
                 Config::from_json5(&s)
                     .map_err(cu_error_map("ZenohRosSink: Failed to create zenoh config"))
             },
@@ -140,7 +140,7 @@ where
         Ok(())
     }
 
-    fn process(&mut self, clock: &RobotClock, input: &Self::Input) -> CuResult<()> {
+    fn process(&mut self, clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
         let ctx = self
             .ctx
             .as_mut()

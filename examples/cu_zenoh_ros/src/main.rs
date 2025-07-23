@@ -15,7 +15,7 @@ pub mod tasks {
 
     impl Freezable for ExampleSrc {}
 
-    impl<'cl> CuSrcTask<'cl> for ExampleSrc {
+    impl CuSrcTask for ExampleSrc {
         type Output = output_msg!(i8);
 
         fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>

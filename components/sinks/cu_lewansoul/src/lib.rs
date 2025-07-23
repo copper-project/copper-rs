@@ -196,8 +196,8 @@ impl Decode<()> for ServoPositionsPayload {
     }
 }
 
-impl<'cl> CuSinkTask<'cl> for Lewansoul {
-    type Input = input_msg!(ServoPositionsPayload);
+impl CuSinkTask for Lewansoul {
+    type Input<'m> = input_msg!(ServoPositionsPayload);
 
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -241,7 +241,7 @@ impl<'cl> CuSinkTask<'cl> for Lewansoul {
         Ok(Lewansoul { port, ids })
     }
 
-    fn process(&mut self, _clock: &RobotClock, _input: &Self::Input) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, _input: &Self::Input<'_>) -> CuResult<()> {
         todo!()
     }
 }

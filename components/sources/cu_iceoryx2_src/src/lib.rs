@@ -30,9 +30,9 @@ where
 {
 }
 
-impl<'cl, P> CuSrcTask<'cl> for IceoryxSrc<P>
+impl<P> CuSrcTask for IceoryxSrc<P>
 where
-    P: CuMsgPayload + 'cl + 'static,
+    P: CuMsgPayload + 'static,
     IceorixCuMsg<P>: iceoryx2::prelude::ZeroCopySend,
 {
     type Output = output_msg!(P);

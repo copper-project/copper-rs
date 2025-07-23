@@ -3,25 +3,23 @@ use crate::cutask::{CuMsg, CuMsgPayload, CuTask, Freezable};
 use cu29_clock::RobotClock;
 use cu29_traits::CuResult;
 use rayon::ThreadPool;
-use std::marker::PhantomData;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-pub struct AsyncTask<'cl, T, O>
+pub struct AsyncTask<T, O>
 where
-    T: CuTask<'cl, Output = CuMsg<O>> + Send + 'static,
-    O: CuMsgPayload + 'cl + Send + 'static,
+    T: CuTask<Output = CuMsg<O>> + Send + 'static,
+    O: CuMsgPayload + Send + 'static,
 {
     task: Arc<Mutex<T>>,
     output: Arc<Mutex<CuMsg<O>>>,
     processing: Arc<Mutex<bool>>,
-    _boo: PhantomData<&'cl ()>,
     tp: ThreadPool,
 }
 
-impl<'cl, T, O> AsyncTask<'cl, T, O>
+impl<T, O> AsyncTask<T, O>
 where
-    T: CuTask<'cl, Output = CuMsg<O>> + Send + 'static,
-    O: CuMsgPayload + 'cl + Send + 'static,
+    T: CuTask<Output = CuMsg<O>> + Send + 'static,
+    O: CuMsgPayload + Send + 'static,
 {
     pub fn new(config: Option<&ComponentConfig>, tp: ThreadPool) -> CuResult<Self> {
         let task = Arc::new(Mutex::new(T::new(config)?));
@@ -30,26 +28,25 @@ where
             task,
             output,
             processing: Arc::new(Mutex::new(false)),
-            _boo: PhantomData,
             tp,
         })
     }
 }
 
-impl<'cl, T, O> Freezable for AsyncTask<'cl, T, O>
+impl<T, O> Freezable for AsyncTask<T, O>
 where
-    T: CuTask<'cl, Output = CuMsg<O>> + Send + 'static,
-    O: CuMsgPayload + 'cl + Send + 'static,
+    T: CuTask<Output = CuMsg<O>> + Send + 'static,
+    O: CuMsgPayload + Send + 'static,
 {
 }
 
-impl<'cl, T, I, O> CuTask<'cl> for AsyncTask<'cl, T, O>
+impl<T, I, O> CuTask for AsyncTask<T, O>
 where
-    T: CuTask<'cl, Input = CuMsg<I>, Output = CuMsg<O>> + Send + 'static,
-    I: CuMsgPayload + 'cl + Send + Sync + 'static,
+    T: for<'m> CuTask<Input<'m> = CuMsg<I>, Output = CuMsg<O>> + Send + 'static,
+    I: CuMsgPayload + Send + Sync + 'static,
     O: CuMsgPayload + Send + 'static,
 {
-    type Input = T::Input;
+    type Input<'m> = T::Input<'m>;
     type Output = T::Output;
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
@@ -59,10 +56,10 @@ where
         Err("AsyncTask cannot be instantiated directly, use from_task()".into())
     }
 
-    fn process(
+    fn process<'m>(
         &mut self,
         clock: &RobotClock,
-        input: &Self::Input,
+        input: &Self::Input<'m>,
         real_output: &mut Self::Output,
     ) -> CuResult<()> {
         let mut processing = self.processing.lock().unwrap();
@@ -87,8 +84,8 @@ where
                 let mut output: MutexGuard<CuMsg<O>> = output.lock().unwrap();
 
                 // Safety: because copied the input and output, their lifetime are bound to the task and we control its lifetime.
-                let input_ref: &'cl CuMsg<I> = unsafe { std::mem::transmute(input_ref) };
-                let output_ref: &'cl mut MutexGuard<CuMsg<O>> =
+                let input_ref: &CuMsg<I> = unsafe { std::mem::transmute(input_ref) };
+                let output_ref: &mut MutexGuard<CuMsg<O>> =
                     unsafe { std::mem::transmute(&mut output) };
                 task.lock()
                     .unwrap()
@@ -116,8 +113,8 @@ mod tests {
 
     impl Freezable for TestTask {}
 
-    impl<'cl> CuTask<'cl> for TestTask {
-        type Input = input_msg!(u32);
+    impl CuTask for TestTask {
+        type Input<'m> = input_msg!(u32);
         type Output = output_msg!(u32);
 
         fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
@@ -127,10 +124,10 @@ mod tests {
             Ok(Self {})
         }
 
-        fn process(
+        fn process<'m>(
             &mut self,
             _clock: &RobotClock,
-            input: &Self::Input,
+            input: &Self::Input<'m>,
             output: &mut Self::Output,
         ) -> CuResult<()> {
             output.borrow_mut().set_payload(*input.payload().unwrap());

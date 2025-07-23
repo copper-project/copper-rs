@@ -597,7 +597,7 @@ mod tests {
 
     impl Freezable for TestSource {}
 
-    impl CuSrcTask<'_> for TestSource {
+    impl CuSrcTask for TestSource {
         type Output = ();
         fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
         where
@@ -615,8 +615,8 @@ mod tests {
 
     impl Freezable for TestSink {}
 
-    impl CuSinkTask<'_> for TestSink {
-        type Input = ();
+    impl CuSinkTask for TestSink {
+        type Input<'m> = ();
 
         fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
         where
@@ -625,7 +625,7 @@ mod tests {
             Ok(Self {})
         }
 
-        fn process(&mut self, _clock: &RobotClock, _input: &Self::Input) -> CuResult<()> {
+        fn process(&mut self, _clock: &RobotClock, _input: &Self::Input<'_>) -> CuResult<()> {
             Ok(())
         }
     }

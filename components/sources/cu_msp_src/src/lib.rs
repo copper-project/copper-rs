@@ -64,7 +64,7 @@ pub struct MSPSrc {
 
 impl Freezable for MSPSrc {}
 
-impl<'cl> CuSrcTask<'cl> for MSPSrc {
+impl CuSrcTask for MSPSrc {
     type Output = output_msg!(MspResponseBatch);
 
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>

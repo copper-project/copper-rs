@@ -213,7 +213,7 @@ impl Freezable for WT901 {
     // WT901 has no internal state, we can leave the default implementation.
 }
 
-impl<'cl> CuSrcTask<'cl> for WT901 {
+impl CuSrcTask for WT901 {
     type Output = output_msg!(PositionalReadingsPayload);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
