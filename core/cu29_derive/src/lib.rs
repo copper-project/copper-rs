@@ -387,8 +387,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         #[cfg(feature = "macro_debug")]
         eprintln!("[extract tasks ids & types]");
-        let (all_tasks_ids, all_tasks_cutype, all_tasks_types_names, all_tasks_types) =
-            extract_tasks_types(graph);
+        let (
+            all_tasks_ids,
+            all_tasks_cutype,
+            all_tasks_background,
+            all_tasks_types_names,
+            all_tasks_types,
+        ) = extract_tasks_types(graph);
 
         let all_sim_tasks_types: Vec<Type> = all_tasks_ids
             .iter()
@@ -1496,7 +1501,15 @@ fn config_full_path(config_file: &str) -> String {
 }
 
 /// Extract all the tasks types in their index order and their ids.
-fn extract_tasks_types(graph: &CuGraph) -> (Vec<String>, Vec<CuTaskType>, Vec<String>, Vec<Type>) {
+fn extract_tasks_types(
+    graph: &CuGraph,
+) -> (
+    Vec<String>,
+    Vec<CuTaskType>,
+    Vec<bool>,
+    Vec<String>,
+    Vec<Type>,
+) {
     let all_id_nodes = graph.get_all_nodes();
 
     // Get all the tasks Ids
@@ -1508,6 +1521,11 @@ fn extract_tasks_types(graph: &CuGraph) -> (Vec<String>, Vec<CuTaskType>, Vec<St
     let all_task_cutype: Vec<CuTaskType> = all_id_nodes
         .iter()
         .map(|(id, _)| find_task_type_for_id(graph, *id))
+        .collect();
+
+    let all_task_background: Vec<bool> = all_id_nodes
+        .iter()
+        .map(|(_, node)| node.is_background())
         .collect();
 
     // Collect all the type names used by our configs.
@@ -1524,7 +1542,13 @@ fn extract_tasks_types(graph: &CuGraph) -> (Vec<String>, Vec<CuTaskType>, Vec<St
                 .unwrap_or_else(|_| panic!("Could not transform {name} into a Task Rust type."))
         })
         .collect();
-    (all_tasks_ids, all_task_cutype, all_types_names, all_types)
+    (
+        all_tasks_ids,
+        all_task_cutype,
+        all_task_background,
+        all_types_names,
+        all_types,
+    )
 }
 
 fn extract_msg_types(runtime_plan: &CuExecutionLoop) -> Vec<Type> {
