@@ -21,6 +21,7 @@ where
     T: CuTask<Output = CuMsg<O>> + Send + 'static,
     O: CuMsgPayload + Send + 'static,
 {
+    #[allow(unused)]
     pub fn new(config: Option<&ComponentConfig>, tp: ThreadPool) -> CuResult<Self> {
         let task = Arc::new(Mutex::new(T::new(config)?));
         let output = Arc::new(Mutex::new(CuMsg::default()));

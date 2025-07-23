@@ -238,7 +238,7 @@ fn gen_sim_support(runtime_plan: &CuExecutionLoop) -> proc_macro2::TokenStream {
                 let no_output = parse_str::<Type>("CuMsg<()>").unwrap();
                 let output = output.as_ref().unwrap_or(&no_output);
 
-                let inputs_type = if inputs.len() == 0 {
+                let inputs_type = if inputs.is_empty() {
                     quote! { () }
                 } else if inputs.len() == 1 {
                     let input = inputs.first().unwrap();

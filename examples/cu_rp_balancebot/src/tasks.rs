@@ -11,7 +11,7 @@ pub struct PIDMerger {}
 
 impl Freezable for PIDMerger {}
 
-impl<'cl> CuTask for PIDMerger {
+impl CuTask for PIDMerger {
     type Input<'m> = input_msg!('m, PIDControlOutputPayload, PIDControlOutputPayload);
     type Output = output_msg!(MotorPayload);
 
