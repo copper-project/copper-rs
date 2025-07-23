@@ -212,38 +212,44 @@ pub struct Node {
 }
 
 impl Node {
+    #[allow(dead_code)]
     pub fn new(id: &str, ptype: &str) -> Self {
         Node {
             id: id.to_string(),
             type_: Some(ptype.to_string()),
-            // base_period_ns: None,
             config: None,
             missions: None,
             background: None,
         }
     }
 
+    #[allow(dead_code)]
     pub fn get_id(&self) -> String {
         self.id.clone()
     }
 
+    #[allow(dead_code)]
     pub fn get_type(&self) -> &str {
         self.type_.as_ref().unwrap()
     }
 
+    #[allow(dead_code)]
     pub fn set_type(mut self, name: Option<String>) -> Self {
         self.type_ = name;
         self
     }
 
+    #[allow(dead_code)]
     pub fn is_background(&self) -> bool {
         self.background.unwrap_or(false)
     }
 
+    #[allow(dead_code)]
     pub fn get_instance_config(&self) -> Option<&ComponentConfig> {
         self.config.as_ref()
     }
 
+    #[allow(dead_code)]
     pub fn get_param<T: From<Value>>(&self, key: &str) -> Option<T> {
         let pc = self.config.as_ref()?;
         let ComponentConfig(pc) = pc;
@@ -251,6 +257,7 @@ impl Node {
         Some(T::from(v.clone()))
     }
 
+    #[allow(dead_code)]
     pub fn set_param<T: Into<Value>>(&mut self, key: &str, value: T) {
         if self.config.is_none() {
             self.config = Some(ComponentConfig(HashMap::new()));

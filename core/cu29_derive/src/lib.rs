@@ -439,29 +439,32 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         }).collect::<Vec<_>>();
 
+        let task_instances_init_code = all_tasks_types.iter().enumerate().map(|(index, ty)| {
+            let additional_error_info = format!(
+                "Failed to get create instance for {}, instance index {}.",
+                all_tasks_types_names[index], index
+            );
+
+            quote! {
+            <#ty>::new(all_instances_configs[#index]).map_err(|e| e.add_cause(#additional_error_info))?
+            }
+        }).collect::<Vec<_>>();
+
         // Generate the code to create instances of the nodes
         // It maps the types to their index
-        let (task_instances_init_code,
+        let (
             task_restore_code,
             start_calls,
             stop_calls,
             preprocess_calls,
-            postprocess_calls): (Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>) = itertools::multiunzip(all_tasks_types
-            .iter()
-            .enumerate()
-            .map(|(index, ty)| {
+            postprocess_calls): (Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>) = itertools::multiunzip(
+            (0..all_tasks_types.len())
+            .map(|index| {
                 let task_index = int2sliceindex(index as u32);
                 let task_tuple_index = syn::Index::from(index);
                 let task_enum_name = config_id_to_enum(&all_tasks_ids[index]);
-                let enum_name = Ident::new(&task_enum_name, proc_macro2::Span::call_site());
-                let additional_error_info = format!(
-                    "Failed to get create instance for {}, instance index {}.",
-                    all_tasks_types_names[index], index
-                );
-                (   // Task instances initialization
-                    quote! {
-                        #ty::new(all_instances_configs[#index]).map_err(|e| e.add_cause(#additional_error_info))?
-                    },
+                let enum_name = Ident::new(&task_enum_name, Span::call_site());
+                (
                     // Tasks keyframe restore code
                     quote! {
                         tasks.#task_tuple_index.thaw(&mut decoder).map_err(|e| CuError::new_with_cause("Failed to thaw", e))?
