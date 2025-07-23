@@ -79,10 +79,10 @@ impl CuTask for MergerTask {
         Ok(Self {})
     }
 
-    fn process<'m>(
+    fn process(
         &mut self,
         _clock: &RobotClock,
-        input: &Self::Input<'m>,
+        input: &Self::Input<'_>,
         output: &mut Self::Output,
     ) -> CuResult<()> {
         // Put the types explicitly here show the actual underlying type of Self::Input
