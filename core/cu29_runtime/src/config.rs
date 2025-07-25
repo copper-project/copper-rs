@@ -375,7 +375,7 @@ impl CuGraph {
                     .map(|edge| edge.id().index())
                     .collect();
                 if edges.is_empty() {
-                    panic!("A CuSrcTask is configured with no task connected to it.")
+                    return None;
                 }
                 let cnx = self
                     .0

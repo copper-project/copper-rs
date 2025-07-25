@@ -5,24 +5,24 @@ use cu29_traits::CuResult;
 use rayon::ThreadPool;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-pub struct AsyncTask<T, O>
+pub struct CuAsyncTask<T, O>
 where
     T: CuTask<Output = CuMsg<O>> + Send + 'static,
     O: CuMsgPayload + Send + 'static,
 {
     task: Arc<Mutex<T>>,
     output: Arc<Mutex<CuMsg<O>>>,
-    processing: Arc<Mutex<bool>>,
-    tp: ThreadPool,
+    processing: Arc<Mutex<bool>>, // TODO: an atomic should be enough.
+    tp: Arc<ThreadPool>,
 }
 
-impl<T, O> AsyncTask<T, O>
+impl<T, O> CuAsyncTask<T, O>
 where
     T: CuTask<Output = CuMsg<O>> + Send + 'static,
     O: CuMsgPayload + Send + 'static,
 {
     #[allow(unused)]
-    pub fn new(config: Option<&ComponentConfig>, tp: ThreadPool) -> CuResult<Self> {
+    pub fn new(config: Option<&ComponentConfig>, tp: Arc<ThreadPool>) -> CuResult<Self> {
         let task = Arc::new(Mutex::new(T::new(config)?));
         let output = Arc::new(Mutex::new(CuMsg::default()));
         Ok(Self {
@@ -34,14 +34,14 @@ where
     }
 }
 
-impl<T, O> Freezable for AsyncTask<T, O>
+impl<'a, T, O> Freezable for CuAsyncTask<T, O>
 where
     T: CuTask<Output = CuMsg<O>> + Send + 'static,
     O: CuMsgPayload + Send + 'static,
 {
 }
 
-impl<T, I, O> CuTask for AsyncTask<T, O>
+impl<'a, T, I, O> CuTask for CuAsyncTask<T, O>
 where
     T: for<'m> CuTask<Input<'m> = CuMsg<I>, Output = CuMsg<O>> + Send + 'static,
     I: CuMsgPayload + Send + Sync + 'static,
@@ -54,7 +54,7 @@ where
     where
         Self: Sized,
     {
-        Err("AsyncTask cannot be instantiated directly, use from_task()".into())
+        Err("AsyncTask cannot be instantiated directly, use Async_task::new()".into())
     }
 
     fn process<'m>(
@@ -138,14 +138,17 @@ mod tests {
 
     #[test]
     fn test_lifecycle() {
-        let tp = rayon::ThreadPoolBuilder::new()
-            .num_threads(1)
-            .build()
-            .unwrap();
+        let tp = Arc::new(
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(1)
+                .build()
+                .unwrap(),
+        );
 
         let config = ComponentConfig::default();
         let clock = RobotClock::default();
-        let mut async_task: AsyncTask<TestTask, u32> = AsyncTask::new(Some(&config), tp).unwrap();
+        let mut async_task: CuAsyncTask<TestTask, u32> =
+            CuAsyncTask::new(Some(&config), tp).unwrap();
         let input = CuMsg::new(Some(42u32));
         let mut output = CuMsg::new(None);
 

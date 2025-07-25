@@ -10,6 +10,8 @@ use syn::{
     TypeTuple,
 };
 
+#[cfg(feature = "macro_debug")]
+use crate::format::rustfmt_generated_code;
 use crate::utils::config_id_to_enum;
 use cu29_runtime::config::CuConfig;
 use cu29_runtime::config::{read_configuration, CuGraph};
@@ -18,9 +20,7 @@ use cu29_runtime::curuntime::{
 };
 use cu29_traits::CuResult;
 use proc_macro2::{Ident, Span};
-
-#[cfg(feature = "macro_debug")]
-use crate::format::rustfmt_generated_code;
+use syn::__private::parse_quote;
 
 mod format;
 mod utils;
@@ -225,7 +225,7 @@ fn gen_sim_support(runtime_plan: &CuExecutionLoop) -> proc_macro2::TokenStream {
         .map(|unit| match unit {
             CuExecutionUnit::Step(step) => {
                 let enum_entry_name = config_id_to_enum(step.node.get_id().as_str());
-                let enum_ident = Ident::new(&enum_entry_name, proc_macro2::Span::call_site());
+                let enum_ident = Ident::new(&enum_entry_name, Span::call_site());
                 let inputs: Vec<Type> = step
                     .input_msg_indices_types
                     .iter()
@@ -273,6 +273,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     #[cfg(feature = "macro_debug")]
     eprintln!("[entry]");
     let mut application_struct = parse_macro_input!(input as ItemStruct);
+
     let application_name = &application_struct.ident;
     let builder_name = format_ident!("{}Builder", application_name);
 
@@ -377,46 +378,64 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             .expect("Could not make an identifier of the mission name");
 
         #[cfg(feature = "macro_debug")]
-        eprintln!("[runtime plan for mission {mission}]");
-        let runtime_plan: CuExecutionLoop = match compute_runtime_plan(graph) {
-            Ok(plan) => plan,
-            Err(e) => return return_error(format!("Could not compute runtime plan: {e}")),
-        };
-        #[cfg(feature = "macro_debug")]
-        eprintln!("{runtime_plan:?}");
-
-        #[cfg(feature = "macro_debug")]
         eprintln!("[extract tasks ids & types]");
+
         let (
             all_tasks_ids,
             all_tasks_cutype,
             all_tasks_background,
             all_tasks_types_names,
             all_tasks_types,
+            all_tasks_instantiation_types,
+            all_sim_tasks_types,
+            _all_tasks_output_msg_types,
         ) = extract_tasks_types(graph);
+
+        #[cfg(feature = "macro_debug")]
+        eprintln!("[runtime plan for mission {mission}]");
+        let runtime_plan: CuExecutionLoop = match compute_runtime_plan(graph) {
+            Ok(plan) => plan,
+            Err(e) => return return_error(format!("Could not compute runtime plan: {e}")),
+        };
+
+        #[cfg(feature = "macro_debug")]
+        eprintln!("{runtime_plan:?}");
 
         let all_sim_tasks_types: Vec<Type> = all_tasks_ids
             .iter()
             .zip(&all_tasks_cutype)
-            .zip(&all_tasks_types)
-            .map(|((task_id, cutype), stype)| match cutype {
-                CuTaskType::Source => {
-                    let msg_type = graph
-                        .get_node_output_msg_type(task_id.as_str())
-                        .unwrap_or_else(|| panic!("CuSrcTask {task_id} should have an outgoing connection with a valid output msg type"));
-                    let sim_task_name = format!("cu29::simulation::CuSimSrcTask<{msg_type}>");
-                    parse_str(sim_task_name.as_str()).unwrap_or_else(|_| panic!("Could not build the placeholder for simulation: {sim_task_name}"))
+            .zip(&all_sim_tasks_types)
+            .zip(&all_tasks_background)
+            .map(|(((task_id, cutype), stype), background)| {
+                let background = *background;
+                match cutype {
+                    CuTaskType::Source => {
+                        if background {
+                            panic!("CuSrcTask {task_id} cannot be a background task, it should be a regular task.");
+                        }
+                        let msg_type = graph
+                            .get_node_output_msg_type(task_id.as_str())
+                            .unwrap_or_else(|| panic!("CuSrcTask {task_id} should have an outgoing connection with a valid output msg type"));
+                        let sim_task_name = format!("cu29::simulation::CuSimSrcTask<{msg_type}>");
+                        parse_str(sim_task_name.as_str()).unwrap_or_else(|_| panic!("Could not build the placeholder for simulation: {sim_task_name}"))
+                    }
+                    CuTaskType::Regular => {
+                        // TODO: wrap that correctly in a background task if background is true.
+                        stype.clone()
+                    },
+                    CuTaskType::Sink => {
+                        if background {
+                            panic!("CuSinkTask {task_id} cannot be a background task, it should be a regular task.");
+                        }
+                        let msg_type = graph
+                            .get_node_input_msg_type(task_id.as_str())
+                            .unwrap_or_else(|| panic!("CuSinkTask {task_id} should have an incoming connection with a valid input msg type"));
+                        let sim_task_name = format!("cu29::simulation::CuSimSinkTask<{msg_type}>");
+                        parse_str(sim_task_name.as_str()).unwrap_or_else(|_| panic!("Could not build the placeholder for simulation: {sim_task_name}"))
+                    }
                 }
-                CuTaskType::Regular => stype.clone(),
-                CuTaskType::Sink => {
-                    let msg_type = graph
-                        .get_node_input_msg_type(task_id.as_str())
-                        .unwrap_or_else(|| panic!("CuSinkTask {task_id} should have an incoming connection with a valid input msg type"));
-                    let sim_task_name = format!("cu29::simulation::CuSimSinkTask<{msg_type}>");
-                    parse_str(sim_task_name.as_str()).unwrap_or_else(|_| panic!("Could not build the placeholder for simulation: {sim_task_name}"))
-                }
-            })
-            .collect();
+    })
+    .collect();
 
         #[cfg(feature = "macro_debug")]
         eprintln!("[build task tuples]");
@@ -432,7 +451,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         #[cfg(feature = "macro_debug")]
         eprintln!("[gen instances]");
-
+        // FIXME: implement here the threadpool emulation.
         let task_sim_instances_init_code = all_sim_tasks_types.iter().enumerate().map(|(index, ty)| {
             let additional_error_info = format!(
                 "Failed to get create instance for {}, instance index {}.",
@@ -444,14 +463,19 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         }).collect::<Vec<_>>();
 
-        let task_instances_init_code = all_tasks_types.iter().enumerate().map(|(index, ty)| {
+        let task_instances_init_code = all_tasks_instantiation_types.iter().zip(all_tasks_background).enumerate().map(|(index, (task_type, background))| {
             let additional_error_info = format!(
                 "Failed to get create instance for {}, instance index {}.",
                 all_tasks_types_names[index], index
             );
-
-            quote! {
-            <#ty>::new(all_instances_configs[#index]).map_err(|e| e.add_cause(#additional_error_info))?
+            if background {
+                quote! {
+                    #task_type::new(all_instances_configs[#index], threadpool).map_err(|e| e.add_cause(#additional_error_info))?
+                }
+            } else {
+                quote! {
+                    #task_type::new(all_instances_configs[#index]).map_err(|e| e.add_cause(#additional_error_info))?
+                }
             }
         }).collect::<Vec<_>>();
 
@@ -1158,7 +1182,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote!(CuTasks)
         };
 
-        let tasks_instanciator = if sim_mode {
+        let tasks_instanciator_fn = if sim_mode {
             quote!(tasks_instanciator_sim)
         } else {
             quote!(tasks_instanciator)
@@ -1221,12 +1245,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         1024 * 1024 * 10, // 10 MiB
                     );
 
+
                     let application = Ok(#application_name {
                         copper_runtime: CuRuntime::<#mission_mod::#tasks_type, #mission_mod::CuStampedDataSet, #monitor_type, #DEFAULT_CLNB>::new(
                             clock,
                             &config,
                             Some(#mission),
-                            #mission_mod::#tasks_instanciator,
+                            #mission_mod::#tasks_instanciator_fn,
                             #mission_mod::monitor_instanciator,
                             copperlist_stream,
                             keyframes_stream)?, // FIXME: gbin
@@ -1378,9 +1403,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::bincode::de::Decoder;
                 use cu29::bincode::de::DecoderImpl;
                 use cu29::bincode::error::DecodeError;
+                use cu29::rayon::ThreadPool;
                 use cu29::clock::RobotClock;
                 use cu29::config::CuConfig;
                 use cu29::config::ComponentConfig;
+                use cu29::cuasynctask::CuAsyncTask;
                 use cu29::curuntime::CuRuntime;
                 use cu29::curuntime::KeyFrame;
                 use cu29::curuntime::CopperContext;
@@ -1428,12 +1455,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 #sim_support
 
-                pub fn tasks_instanciator(all_instances_configs: Vec<Option<&ComponentConfig>>) -> CuResult<CuTasks> {
+                pub fn tasks_instanciator<'c>(all_instances_configs: Vec<Option<&'c ComponentConfig>>, threadpool: Arc<ThreadPool>) -> CuResult<CuTasks> {
                     Ok(( #(#task_instances_init_code),*, ))
                 }
 
                 #[allow(dead_code)]
-                pub fn tasks_instanciator_sim(all_instances_configs: Vec<Option<&ComponentConfig>>) -> CuResult<CuSimTasks> {
+                pub fn tasks_instanciator_sim(all_instances_configs: Vec<Option<&ComponentConfig>>, _threadpool: &ThreadPool) -> CuResult<CuSimTasks> {
                     Ok(( #(#task_sim_instances_init_code),*, ))
                 }
 
@@ -1500,6 +1527,30 @@ fn config_full_path(config_file: &str) -> String {
     filename.to_string()
 }
 
+fn extract_tasks_output_types(graph: &CuGraph) -> Vec<Option<Type>> {
+    eprintln!("Extracting tasks output types...");
+    let result = graph
+        .get_all_nodes()
+        .iter()
+        .map(|(_, node)| {
+            let id = node.get_id();
+            let type_str = graph.get_node_output_msg_type(id.as_str());
+            eprintln!("Output type for task {id}: {type_str:?}");
+            let result = type_str.map(|type_str| {
+                eprintln!("{type_str:?} ??");
+                let result = parse_str::<Type>(type_str.as_str())
+                    .expect("Could not parse output message type.");
+                eprintln!("OKI: {result:?}");
+                result
+            });
+            eprintln!("OK: {result:?}");
+            result
+        })
+        .collect();
+    eprintln!("Extracting tasks output types... node");
+    result
+}
+
 /// Extract all the tasks types in their index order and their ids.
 fn extract_tasks_types(
     graph: &CuGraph,
@@ -1509,6 +1560,9 @@ fn extract_tasks_types(
     Vec<bool>,
     Vec<String>,
     Vec<Type>,
+    Vec<Type>,
+    Vec<Type>,
+    Vec<Option<Type>>,
 ) {
     let all_id_nodes = graph.get_all_nodes();
 
@@ -1518,36 +1572,95 @@ fn extract_tasks_types(
         .map(|(_, node)| node.get_id().to_string())
         .collect();
 
+    // cutype as Source / Tasks / Sink
     let all_task_cutype: Vec<CuTaskType> = all_id_nodes
         .iter()
         .map(|(id, _)| find_task_type_for_id(graph, *id))
         .collect();
 
+    // true/false is the task is a background
     let all_task_background: Vec<bool> = all_id_nodes
         .iter()
         .map(|(_, node)| node.is_background())
         .collect();
 
     // Collect all the type names used by our configs.
-    let all_types_names: Vec<String> = all_id_nodes
+    let all_task_types_names: Vec<String> = all_id_nodes
         .iter()
         .map(|(_, node)| node.get_type().to_string())
         .collect();
 
+    let all_tasks_output_types = extract_tasks_output_types(graph);
     // Transform them as Rust types
-    let all_types: Vec<Type> = all_types_names
+    let all_tasks_types: Vec<Type> = all_task_types_names
         .iter()
-        .map(|name| {
-            parse_str(name)
-                .unwrap_or_else(|_| panic!("Could not transform {name} into a Task Rust type."))
+        .zip(all_task_background.iter())
+        .zip(all_tasks_output_types.iter())
+        .map(|((name, &background), output_type)| {
+            let name_type = parse_str::<Type>(name)
+                .map_err(|error| {
+                    panic!("Could not transform {name} into a Task Rust type: {error}");
+                })
+                .unwrap();
+            if background {
+                if let Some(output_type) = output_type {
+                    parse_quote::<Type>(quote! {
+                            cu29::cuasynctask::CuAsyncTask<#name_type, #output_type>
+                    })
+                } else {
+                    panic!("{name}: If a task is background, it has to have an output");
+                }
+            } else {
+                name_type
+            }
         })
         .collect();
+
+    let all_tasks_instantiation_types: Vec<Type> = all_task_types_names
+        .iter()
+        .zip(all_task_background.iter())
+        .zip(all_tasks_output_types.iter())
+        .map(|((name, &background), output_type)| {
+            let name_type = parse_str::<Type>(name)
+                .map_err(|error| {
+                    panic!("Could not transform {name} into a Task Rust type: {error}");
+                })
+                .unwrap();
+            if background {
+                if let Some(output_type) = output_type {
+                    parse_quote::<Type>(quote! {
+                            cu29::cuasynctask::CuAsyncTask::<#name_type, #output_type>
+                    })
+                } else {
+                    panic!("{name}: If a task is background, it has to have an output");
+                }
+            } else {
+                name_type
+            }
+        })
+        .collect();
+
+    let all_sim_tasks_types: Vec<Type> = all_task_types_names
+        .iter()
+        .map(|name| {
+            parse_str::<Type>(name)
+                .map_err(|err| {
+                    eprintln!("Could not transform {name} into a Task Rust type.");
+                    err
+                })
+                .unwrap()
+        })
+        .collect();
+
     (
         all_tasks_ids,
         all_task_cutype,
         all_task_background,
-        all_types_names,
-        all_types,
+        all_task_types_names,
+        all_tasks_types,
+        all_tasks_instantiation_types,
+        all_sim_tasks_types,
+        all_tasks_output_types,
     )
 }
 
