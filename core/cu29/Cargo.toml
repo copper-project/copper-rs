@@ -24,6 +24,7 @@ cu29-value = { workspace = true }
 cu29-intern-strs = { workspace = true }
 bincode = { workspace = true }
 serde = { workspace = true }
+rayon = "1.7.0"
 ctrlc = "3.4.7"
 
 [features]

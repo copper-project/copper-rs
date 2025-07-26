@@ -38,8 +38,7 @@ hdrhistogram = "7.5.4"
 petgraph = { version = "0.8.1", features = ["serde", "serde-1", "serde_derive"] }
 object-pool = "0.6.0"
 html-escape = "0.2"
-threadpool = "1.8.1"
-crossbeam = "0.8.4"
+rayon = { version = "*" }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 cudarc = { version = "0.16.4", optional = true, features = ["cuda-version-from-build-system"] }

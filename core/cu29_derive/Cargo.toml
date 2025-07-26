@@ -25,6 +25,8 @@ syn = { workspace = true }
 syntect = "5.2.0"
 walkdir = "2.5.0"
 
+proc-macro-error = "*"
+
 [build-dependencies]
 cu29-unifiedlog = { workspace = true }  # needed
 

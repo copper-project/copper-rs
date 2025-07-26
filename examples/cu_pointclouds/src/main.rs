@@ -17,8 +17,8 @@ struct RerunPlyViz {
 
 impl Freezable for RerunPlyViz {}
 
-impl<'cl> CuSinkTask<'cl> for RerunPlyViz {
-    type Input = input_msg!('cl, LidarCuMsgPayload);
+impl CuSinkTask for RerunPlyViz {
+    type Input<'m> = input_msg!(LidarCuMsgPayload);
 
     fn new(_config: Option<&ComponentConfig>) -> Result<Self, CuError>
     where
@@ -31,7 +31,7 @@ impl<'cl> CuSinkTask<'cl> for RerunPlyViz {
         })
     }
 
-    fn process(&mut self, _clock: &RobotClock, input: Self::Input) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
         let payload = input.payload();
         if payload.is_none() {
             // Depending on the race condition, we might get an empty payload.

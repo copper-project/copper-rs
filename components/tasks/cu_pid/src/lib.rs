@@ -136,13 +136,13 @@ where
     cutoff: f32,
 }
 
-impl<'cl, I> CuTask<'cl> for GenericPIDTask<I>
+impl<I> CuTask for GenericPIDTask<I>
 where
     f32: for<'a> From<&'a I>,
-    I: CuMsgPayload + 'cl,
+    I: CuMsgPayload,
 {
-    type Input = input_msg!('cl, I);
-    type Output = output_msg!('cl, PIDControlOutputPayload);
+    type Input<'m> = input_msg!(I);
+    type Output = output_msg!(PIDControlOutputPayload);
 
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -207,11 +207,11 @@ where
         }
     }
 
-    fn process(
+    fn process<'m>(
         &mut self,
         _clock: &RobotClock,
-        input: Self::Input,
-        output: Self::Output,
+        input: &Self::Input<'m>,
+        output: &mut Self::Output,
     ) -> CuResult<()> {
         match input.payload() {
             Some(payload) => {
