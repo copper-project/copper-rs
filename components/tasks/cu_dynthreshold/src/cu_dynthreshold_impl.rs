@@ -143,7 +143,7 @@ impl CuTask for DynThreshold {
     fn process(
         &mut self,
         _clock: &RobotClock,
-        input: &Self::Input,
+        input: &Self::Input<'_>,
         output: &mut Self::Output,
     ) -> CuResult<()> {
         if input.payload().is_none() {
