@@ -13,8 +13,8 @@ mod tests {
 
     impl Freezable for GStreamerTester {}
 
-    impl<'cl> CuSinkTask<'cl> for GStreamerTester {
-        type Input = input_msg!('cl, CuGstBuffer);
+    impl CuSinkTask for GStreamerTester {
+        type Input<'m> = input_msg!(CuGstBuffer);
 
         fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
         where
@@ -26,7 +26,7 @@ mod tests {
             Ok(Self { rec })
         }
 
-        fn process(&mut self, _clock: &RobotClock, msg: Self::Input) -> CuResult<()> {
+        fn process(&mut self, _clock: &RobotClock, msg: &Self::Input<'_>) -> CuResult<()> {
             if msg.payload().is_none() {
                 debug!("Skipped");
                 return Ok(());

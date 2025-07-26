@@ -114,9 +114,9 @@ pub struct DynThreshold {
 
 impl Freezable for DynThreshold {}
 
-impl<'cl> CuTask<'cl> for DynThreshold {
-    type Input = input_msg!('cl, CuGstBuffer);
-    type Output = output_msg!('cl, CuImage<Vec<u8>>);
+impl CuTask for DynThreshold {
+    type Input<'m> = input_msg!(CuGstBuffer);
+    type Output = output_msg!(CuImage<Vec<u8>>);
 
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -143,8 +143,8 @@ impl<'cl> CuTask<'cl> for DynThreshold {
     fn process(
         &mut self,
         _clock: &RobotClock,
-        input: Self::Input,
-        output: Self::Output,
+        input: &Self::Input,
+        output: &mut Self::Output,
     ) -> CuResult<()> {
         if input.payload().is_none() {
             debug!("DynThreshold: No payload in input message, skipping.");

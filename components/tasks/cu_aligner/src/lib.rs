@@ -56,7 +56,7 @@ macro_rules! define_task {
                 output: &mut Self::Output,
             ) -> CuResult<()> {
                 // add the incoming data into the buffers
-                // input is a tuple of &'cl CuMsg<T> for each T in the input
+                // input is a tuple of &CuMsg<T> for each T in the input
                 paste::paste! {
                     $(
                         self.aligner.[<buffer $index>].push(input.$index.clone());
