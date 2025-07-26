@@ -1,0 +1,19 @@
+[package]
+name = "cu-background-task"
+description = "This is an example for the Copper project to show how to set up a background (ie non blocking) task."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+bincode = { workspace = true }
+cu29 = { workspace = true, features = ["macro_debug"] }
+# cu29 = { workspace = true }
+cu29-helpers = { workspace = true }
+tempfile = { workspace = true }
+serde = { workspace = true }
