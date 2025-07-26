@@ -1528,26 +1528,20 @@ fn config_full_path(config_file: &str) -> String {
 }
 
 fn extract_tasks_output_types(graph: &CuGraph) -> Vec<Option<Type>> {
-    eprintln!("Extracting tasks output types...");
     let result = graph
         .get_all_nodes()
         .iter()
         .map(|(_, node)| {
             let id = node.get_id();
             let type_str = graph.get_node_output_msg_type(id.as_str());
-            eprintln!("Output type for task {id}: {type_str:?}");
             let result = type_str.map(|type_str| {
-                eprintln!("{type_str:?} ??");
                 let result = parse_str::<Type>(type_str.as_str())
                     .expect("Could not parse output message type.");
-                eprintln!("OKI: {result:?}");
                 result
             });
-            eprintln!("OK: {result:?}");
             result
         })
         .collect();
-    eprintln!("Extracting tasks output types... node");
     result
 }
 
