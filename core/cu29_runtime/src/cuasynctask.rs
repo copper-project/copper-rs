@@ -34,14 +34,14 @@ where
     }
 }
 
-impl<'a, T, O> Freezable for CuAsyncTask<T, O>
+impl<T, O> Freezable for CuAsyncTask<T, O>
 where
     T: CuTask<Output = CuMsg<O>> + Send + 'static,
     O: CuMsgPayload + Send + 'static,
 {
 }
 
-impl<'a, T, I, O> CuTask for CuAsyncTask<T, O>
+impl<T, I, O> CuTask for CuAsyncTask<T, O>
 where
     T: for<'m> CuTask<Input<'m> = CuMsg<I>, Output = CuMsg<O>> + Send + 'static,
     I: CuMsgPayload + Send + Sync + 'static,

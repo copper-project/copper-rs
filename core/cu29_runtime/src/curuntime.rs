@@ -695,10 +695,6 @@ mod tests {
         graph.add_node(Node::new("a", "TestSource")).unwrap();
         graph.add_node(Node::new("b", "TestSink")).unwrap();
         graph.connect(0, 1, "()").unwrap();
-        let tp = rayon::ThreadPoolBuilder::new()
-            .num_threads(1)
-            .build()
-            .unwrap();
         let runtime = CuRuntime::<Tasks, Msgs, NoMonitor, 2>::new(
             RobotClock::default(),
             &config,
@@ -719,10 +715,6 @@ mod tests {
         graph.add_node(Node::new("b", "TestSink")).unwrap();
         graph.connect(0, 1, "()").unwrap();
 
-        let tp = rayon::ThreadPoolBuilder::new()
-            .num_threads(1)
-            .build()
-            .unwrap();
         let mut runtime = CuRuntime::<Tasks, Msgs, NoMonitor, 2>::new(
             RobotClock::default(),
             &config,
