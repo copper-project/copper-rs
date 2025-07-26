@@ -1,5 +1,3 @@
-extern crate proc_macro;
-
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use std::fs::read_to_string;
@@ -20,7 +18,6 @@ use cu29_runtime::curuntime::{
 };
 use cu29_traits::CuResult;
 use proc_macro2::{Ident, Span};
-use syn::__private::parse_quote;
 
 mod format;
 mod utils;
@@ -379,17 +376,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         #[cfg(feature = "macro_debug")]
         eprintln!("[extract tasks ids & types]");
-
-        let (
-            all_tasks_ids,
-            all_tasks_cutype,
-            all_tasks_background,
-            all_tasks_types_names,
-            all_tasks_types,
-            all_tasks_instantiation_types,
-            all_sim_tasks_types,
-            _all_tasks_output_msg_types,
-        ) = extract_tasks_types(graph);
+        let task_specs = CuTaskSpecSet::from_graph(graph);
 
         #[cfg(feature = "macro_debug")]
         eprintln!("[runtime plan for mission {mission}]");
@@ -401,11 +388,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         #[cfg(feature = "macro_debug")]
         eprintln!("{runtime_plan:?}");
 
-        let all_sim_tasks_types: Vec<Type> = all_tasks_ids
+        let all_sim_tasks_types: Vec<Type> = task_specs.ids
             .iter()
-            .zip(&all_tasks_cutype)
-            .zip(&all_sim_tasks_types)
-            .zip(&all_tasks_background)
+            .zip(&task_specs.cutypes)
+            .zip(&task_specs.sim_task_types)
+            .zip(&task_specs.background_flags)
             .map(|(((task_id, cutype), stype), background)| {
                 let background = *background;
                 match cutype {
@@ -439,10 +426,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         #[cfg(feature = "macro_debug")]
         eprintln!("[build task tuples]");
+
+        let task_types = &task_specs.task_types;
         // Build the tuple of all those types
         // note the extraneous, at the end is to make the tuple work even if this is only one element
         let task_types_tuple: TypeTuple = parse_quote! {
-            (#(#all_tasks_types),*,)
+            (#(#task_types),*,)
         };
 
         let task_types_tuple_sim: TypeTuple = parse_quote! {
@@ -455,7 +444,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let task_sim_instances_init_code = all_sim_tasks_types.iter().enumerate().map(|(index, ty)| {
             let additional_error_info = format!(
                 "Failed to get create instance for {}, instance index {}.",
-                all_tasks_types_names[index], index
+                task_specs.type_names[index], index
             );
 
             quote! {
@@ -463,10 +452,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         }).collect::<Vec<_>>();
 
-        let task_instances_init_code = all_tasks_instantiation_types.iter().zip(all_tasks_background).enumerate().map(|(index, (task_type, background))| {
+        let task_instances_init_code = task_specs.instantiation_types.iter().zip(task_specs.background_flags).enumerate().map(|(index, (task_type, background))| {
             let additional_error_info = format!(
                 "Failed to get create instance for {}, instance index {}.",
-                all_tasks_types_names[index], index
+                task_specs.type_names[index], index
             );
             if background {
                 quote! {
@@ -487,11 +476,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             stop_calls,
             preprocess_calls,
             postprocess_calls): (Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>) = itertools::multiunzip(
-            (0..all_tasks_types.len())
+            (0..task_specs.task_types.len())
             .map(|index| {
                 let task_index = int2sliceindex(index as u32);
                 let task_tuple_index = syn::Index::from(index);
-                let task_enum_name = config_id_to_enum(&all_tasks_ids[index]);
+                let task_enum_name = config_id_to_enum(&task_specs.ids[index]);
                 let enum_name = Ident::new(&task_enum_name, Span::call_site());
                 (
                     // Tasks keyframe restore code
@@ -740,7 +729,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         let tid = step.node_id as usize;
                         taskid_call_order.push(tid);
 
-                        let task_enum_name = config_id_to_enum(&all_tasks_ids[tid]);
+                        let task_enum_name = config_id_to_enum(&task_specs.ids[tid]);
                         let enum_name = Ident::new(&task_enum_name, proc_macro2::Span::call_site());
 
                         let process_call = match step.task_type {
@@ -1016,7 +1005,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         eprintln!("[Culist access order:  {taskid_call_order:?}]");
 
         // Give a name compatible with a struct to match the task ids to their output in the CuStampedDataSet tuple.
-        let all_tasks_member_ids: Vec<String> = all_tasks_ids
+        let all_tasks_member_ids: Vec<String> = task_specs
+            .ids
             .iter()
             .map(|name| utils::config_id_to_struct_member(name.as_str()))
             .collect();
@@ -1074,7 +1064,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             None
         };
 
-        let sim_callback_on_new_calls = all_tasks_ids.iter().enumerate().map(|(i, id)| {
+        let sim_callback_on_new_calls = task_specs.ids.iter().enumerate().map(|(i, id)| {
             let enum_name = config_id_to_enum(id);
             let enum_ident = Ident::new(&enum_name, Span::call_site());
             quote! {
@@ -1391,6 +1381,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         };
 
+        let ids = &task_specs.ids;
         // Convert the modified struct back into a TokenStream
         let mission_mod_tokens = quote! {
             mod #mission_mod {
@@ -1449,7 +1440,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #[allow(dead_code)]
                 pub type CuSimTasks = #task_types_tuple_sim;
 
-                pub const TASKS_IDS: &'static [&'static str] = &[#( #all_tasks_ids ),*];
+                pub const TASKS_IDS: &'static [&'static str] = &[#( #ids ),*];
 
                 #culist_support
 
@@ -1545,117 +1536,105 @@ fn extract_tasks_output_types(graph: &CuGraph) -> Vec<Option<Type>> {
     result
 }
 
-/// Extract all the tasks types in their index order and their ids.
-fn extract_tasks_types(
-    graph: &CuGraph,
-) -> (
-    Vec<String>,
-    Vec<CuTaskType>,
-    Vec<bool>,
-    Vec<String>,
-    Vec<Type>,
-    Vec<Type>,
-    Vec<Type>,
-    Vec<Option<Type>>,
-) {
-    let all_id_nodes = graph.get_all_nodes();
+struct CuTaskSpecSet {
+    pub ids: Vec<String>,
+    pub cutypes: Vec<CuTaskType>,
+    pub background_flags: Vec<bool>,
+    pub type_names: Vec<String>,
+    pub task_types: Vec<Type>,
+    pub instantiation_types: Vec<Type>,
+    pub sim_task_types: Vec<Type>,
+    #[allow(dead_code)]
+    pub output_types: Vec<Option<Type>>,
+}
 
-    // Get all the tasks Ids
-    let all_tasks_ids: Vec<String> = all_id_nodes
-        .iter()
-        .map(|(_, node)| node.get_id().to_string())
-        .collect();
+impl CuTaskSpecSet {
+    pub fn from_graph(graph: &CuGraph) -> Self {
+        let all_id_nodes = graph.get_all_nodes();
 
-    // cutype as Source / Tasks / Sink
-    let all_task_cutype: Vec<CuTaskType> = all_id_nodes
-        .iter()
-        .map(|(id, _)| find_task_type_for_id(graph, *id))
-        .collect();
+        let ids = all_id_nodes
+            .iter()
+            .map(|(_, node)| node.get_id().to_string())
+            .collect();
 
-    // true/false is the task is a background
-    let all_task_background: Vec<bool> = all_id_nodes
-        .iter()
-        .map(|(_, node)| node.is_background())
-        .collect();
+        let cutypes = all_id_nodes
+            .iter()
+            .map(|(id, _)| find_task_type_for_id(graph, *id))
+            .collect();
 
-    // Collect all the type names used by our configs.
-    let all_task_types_names: Vec<String> = all_id_nodes
-        .iter()
-        .map(|(_, node)| node.get_type().to_string())
-        .collect();
+        let background_flags: Vec<bool> = all_id_nodes
+            .iter()
+            .map(|(_, node)| node.is_background())
+            .collect();
 
-    let all_tasks_output_types = extract_tasks_output_types(graph);
-    // Transform them as Rust types
-    let all_tasks_types: Vec<Type> = all_task_types_names
-        .iter()
-        .zip(all_task_background.iter())
-        .zip(all_tasks_output_types.iter())
-        .map(|((name, &background), output_type)| {
-            let name_type = parse_str::<Type>(name)
-                .map_err(|error| {
+        let type_names: Vec<String> = all_id_nodes
+            .iter()
+            .map(|(_, node)| node.get_type().to_string())
+            .collect();
+
+        let output_types = extract_tasks_output_types(graph);
+
+        let task_types = type_names
+            .iter()
+            .zip(background_flags.iter())
+            .zip(output_types.iter())
+            .map(|((name, &background), output_type)| {
+                let name_type = parse_str::<Type>(name).unwrap_or_else(|error| {
                     panic!("Could not transform {name} into a Task Rust type: {error}");
-                })
-                .unwrap();
-            if background {
-                if let Some(output_type) = output_type {
-                    parse_quote::<Type>(quote! {
-                            cu29::cuasynctask::CuAsyncTask<#name_type, #output_type>
-                    })
+                });
+                if background {
+                    if let Some(output_type) = output_type {
+                        parse_quote!(cu29::cuasynctask::CuAsyncTask<#name_type, #output_type>)
+                    } else {
+                        panic!("{name}: If a task is background, it has to have an output");
+                    }
                 } else {
-                    panic!("{name}: If a task is background, it has to have an output");
+                    name_type
                 }
-            } else {
-                name_type
-            }
-        })
-        .collect();
+            })
+            .collect();
 
-    let all_tasks_instantiation_types: Vec<Type> = all_task_types_names
-        .iter()
-        .zip(all_task_background.iter())
-        .zip(all_tasks_output_types.iter())
-        .map(|((name, &background), output_type)| {
-            let name_type = parse_str::<Type>(name)
-                .map_err(|error| {
+        let instantiation_types = type_names
+            .iter()
+            .zip(background_flags.iter())
+            .zip(output_types.iter())
+            .map(|((name, &background), output_type)| {
+                let name_type = parse_str::<Type>(name).unwrap_or_else(|error| {
                     panic!("Could not transform {name} into a Task Rust type: {error}");
-                })
-                .unwrap();
-            if background {
-                if let Some(output_type) = output_type {
-                    parse_quote::<Type>(quote! {
-                            cu29::cuasynctask::CuAsyncTask::<#name_type, #output_type>
-                    })
+                });
+                if background {
+                    if let Some(output_type) = output_type {
+                        parse_quote!(cu29::cuasynctask::CuAsyncTask::<#name_type, #output_type>)
+                    } else {
+                        panic!("{name}: If a task is background, it has to have an output");
+                    }
                 } else {
-                    panic!("{name}: If a task is background, it has to have an output");
+                    name_type
                 }
-            } else {
-                name_type
-            }
-        })
-        .collect();
+            })
+            .collect();
 
-    let all_sim_tasks_types: Vec<Type> = all_task_types_names
-        .iter()
-        .map(|name| {
-            parse_str::<Type>(name)
-                .map_err(|err| {
+        let sim_task_types = type_names
+            .iter()
+            .map(|name| {
+                parse_str::<Type>(name).unwrap_or_else(|err| {
                     eprintln!("Could not transform {name} into a Task Rust type.");
-                    err
+                    panic!("{err}")
                 })
-                .unwrap()
-        })
-        .collect();
+            })
+            .collect();
 
-    (
-        all_tasks_ids,
-        all_task_cutype,
-        all_task_background,
-        all_task_types_names,
-        all_tasks_types,
-        all_tasks_instantiation_types,
-        all_sim_tasks_types,
-        all_tasks_output_types,
-    )
+        Self {
+            ids,
+            cutypes,
+            background_flags,
+            type_names,
+            task_types,
+            instantiation_types,
+            sim_task_types,
+            output_types,
+        }
+    }
 }
 
 fn extract_msg_types(runtime_plan: &CuExecutionLoop) -> Vec<Type> {
