@@ -238,14 +238,13 @@ mod tests {
         let gstreamer_buffer = Buffer::from_mut_slice(input_data.clone());
         let cu_gst_buffer = CuGstBuffer(gstreamer_buffer);
         let input_msg = CuMsg::new(Some(cu_gst_buffer));
-        let mut output_image_msg = CuMsg::<CuImage<Vec<u8>>>::default();
-        let output: <DynThreshold as CuTask>::Output = &mut output_image_msg;
+        let mut output: <DynThreshold as CuTask>::Output = CuMsg::<CuImage<Vec<u8>>>::default();
 
         let clock = cu29::clock::RobotClock::new();
-        let result = dynthresh.process(&clock, &input_msg, output);
+        let result = dynthresh.process(&clock, &input_msg, &mut output);
         assert!(result.is_ok());
 
-        let output_image = output_image_msg.payload().unwrap();
+        let output_image = output.payload().unwrap();
         let hold = output_image.buffer_handle.lock().unwrap();
         let output_data = hold.deref().deref();
 
