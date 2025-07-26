@@ -1460,7 +1460,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 }
 
                 #[allow(dead_code)]
-                pub fn tasks_instanciator_sim(all_instances_configs: Vec<Option<&ComponentConfig>>, _threadpool: &ThreadPool) -> CuResult<CuSimTasks> {
+                pub fn tasks_instanciator_sim(all_instances_configs: Vec<Option<&ComponentConfig>>, _threadpool: Arc<ThreadPool>) -> CuResult<CuSimTasks> {
                     Ok(( #(#task_sim_instances_init_code),*, ))
                 }
 
