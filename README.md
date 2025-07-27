@@ -303,7 +303,7 @@ impl CuSrcTask for FlippingSource {
     // 1. the reference to a monotonic clock
     // 2. a mutable reference to the output message (so no need to allocate of copy anything)
     // 3. a CuResult to handle errors
-    fn process(&mut self, clock: &RobotClock, &mut output: Self::Output<'_>) -> CuResult<()> {
+    fn process(&mut self, clock: &RobotClock, output: &mut Self::Output<'_>) -> CuResult<()> {
         self.state = !self.state;   // Flip our internal state and send the message in our output.
         output.set_payload(RPGpioPayload {
             on: self.state,
