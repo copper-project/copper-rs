@@ -12,7 +12,7 @@ mod empty_impl {
     impl Freezable for V4l {}
 
     impl CuSrcTask for V4l {
-        type Output = output_msg!(CuImage<Vec<u8>>);
+        type Output<'m> = output_msg!(CuImage<Vec<u8>>);
 
         fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
         where
@@ -21,7 +21,7 @@ mod empty_impl {
             Ok(Self {})
         }
 
-        fn process(&mut self, _clock: &RobotClock, _new_msg: &mut Self::Output) -> CuResult<()> {
+        fn process(&mut self, _clock: &RobotClock, _new_msg: &mut Self::Output<'_>) -> CuResult<()> {
             Ok(())
         }
     }

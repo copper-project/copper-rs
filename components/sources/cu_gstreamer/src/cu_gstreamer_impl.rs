@@ -75,7 +75,7 @@ pub struct CuGStreamer<const N: usize> {
 impl<const N: usize> Freezable for CuGStreamer<N> {}
 
 impl<const N: usize> CuSrcTask for CuGStreamer<N> {
-    type Output = output_msg!(CuGstBuffer);
+    type Output<'m> = output_msg!(CuGstBuffer);
 
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -161,7 +161,7 @@ impl<const N: usize> CuSrcTask for CuGStreamer<N> {
         Ok(())
     }
 
-    fn process(&mut self, clock: &RobotClock, new_msg: &mut Self::Output) -> CuResult<()> {
+    fn process(&mut self, clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
         let mut circular_buffer = self.circular_buffer.lock().unwrap();
         if let Some(buffer) = circular_buffer.pop_front() {
             // TODO: do precise timing metadata from gstreamer

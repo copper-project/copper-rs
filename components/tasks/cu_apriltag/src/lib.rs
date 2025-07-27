@@ -163,7 +163,7 @@ impl Freezable for AprilTags {}
 #[cfg(windows)]
 impl CuTask for AprilTags {
     type Input<'m> = input_msg!(CuImage<Vec<u8>>);
-    type Output = output_msg!(AprilTagDetections);
+    type Output<'m> = output_msg!(AprilTagDetections);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -176,7 +176,7 @@ impl CuTask for AprilTags {
         &mut self,
         _clock: &RobotClock,
         _input: &Self::Input<'_>,
-        _output: &mut Self::Output,
+        _output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
         Ok(())
     }
