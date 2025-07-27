@@ -65,7 +65,7 @@ pub struct MSPSrc {
 impl Freezable for MSPSrc {}
 
 impl CuSrcTask for MSPSrc {
-    type Output = output_msg!(MspResponseBatch);
+    type Output<'m> = output_msg!(MspResponseBatch);
 
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -105,7 +105,7 @@ impl CuSrcTask for MSPSrc {
         })
     }
 
-    fn process(&mut self, _clock: &RobotClock, output: &mut Self::Output) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, output: &mut Self::Output<'_>) -> CuResult<()> {
         self.buffer.clear();
         self.buffer.resize(512, 0);
         #[cfg(unix)]

@@ -22,7 +22,7 @@ impl Freezable for CaterpillarSource {
 }
 
 impl CuSrcTask for CaterpillarSource {
-    type Output = output_msg!(RPGpioPayload);
+    type Output<'m> = output_msg!(RPGpioPayload);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -31,7 +31,7 @@ impl CuSrcTask for CaterpillarSource {
         Ok(Self { state: true })
     }
 
-    fn process(&mut self, clock: &RobotClock, output: &mut Self::Output) -> CuResult<()> {
+    fn process(&mut self, clock: &RobotClock, output: &mut Self::Output<'_>) -> CuResult<()> {
         // forward the state to the next task
         self.state = !self.state;
         output.set_payload(RPGpioPayload { on: self.state });
@@ -47,7 +47,7 @@ impl Freezable for CaterpillarTask {}
 
 impl CuTask for CaterpillarTask {
     type Input<'m> = input_msg!(RPGpioPayload);
-    type Output = output_msg!(RPGpioPayload);
+    type Output<'m> = output_msg!(RPGpioPayload);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -56,11 +56,11 @@ impl CuTask for CaterpillarTask {
         Ok(Self {})
     }
 
-    fn process<'m>(
+    fn process(
         &mut self,
         _clock: &RobotClock,
-        input: &Self::Input<'m>,
-        output: &mut Self::Output,
+        input: &Self::Input<'_>,
+        output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
         // forward the state to the next task
         let incoming = *input.payload().unwrap();

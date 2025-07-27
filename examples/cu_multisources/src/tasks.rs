@@ -8,12 +8,12 @@ pub struct IntegerSrcTask {
 impl Freezable for IntegerSrcTask {}
 
 impl CuSrcTask for IntegerSrcTask {
-    type Output = output_msg!(i32);
+    type Output<'m> = output_msg!(i32);
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
         Ok(Self { value: 42 })
     }
 
-    fn process(&mut self, _clock: &RobotClock, output: &mut Self::Output) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, output: &mut Self::Output<'_>) -> CuResult<()> {
         self.value += 1;
         output.set_payload(self.value);
         Ok(())
@@ -28,12 +28,12 @@ pub struct FloatSrcTask {
 impl Freezable for FloatSrcTask {}
 
 impl CuSrcTask for FloatSrcTask {
-    type Output = output_msg!(f32);
+    type Output<'m> = output_msg!(f32);
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
         Ok(Self { value: 24.0 })
     }
 
-    fn process(&mut self, _clock: &RobotClock, output: &mut Self::Output) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, output: &mut Self::Output<'_>) -> CuResult<()> {
         self.value += 1.0;
         output.set_payload(self.value);
         Ok(())
@@ -73,7 +73,7 @@ impl CuTask for MergerTask {
     type Input<'m> = input_msg!('m, i32, f32);
 
     /// The output is a tuple of i32 and f32.
-    type Output = output_msg!((i32, f32));
+    type Output<'m> = output_msg!((i32, f32));
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
         Ok(Self {})
@@ -83,7 +83,7 @@ impl CuTask for MergerTask {
         &mut self,
         _clock: &RobotClock,
         input: &Self::Input<'_>,
-        output: &mut Self::Output,
+        output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
         // Put the types explicitly here show the actual underlying type of Self::Input
         let (i, f): (&CuMsg<i32>, &CuMsg<f32>) = *input;

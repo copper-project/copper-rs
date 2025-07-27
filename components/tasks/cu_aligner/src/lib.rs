@@ -25,7 +25,7 @@ macro_rules! define_task {
 
         impl CuTask for $name {
             type Input<'m> = input_msg!('m, $($p),*);
-            type Output = output_msg!(($(
+            type Output<'m> = output_msg!(($(
                 cu29::payload::CuArray<$p, { $mos }>
             ),*));
 
@@ -53,7 +53,7 @@ macro_rules! define_task {
                 &mut self,
                 _clock: &cu29::clock::RobotClock,
                 input: &Self::Input<'_>,
-                output: &mut Self::Output,
+                output: &mut Self::Output<'_>,
             ) -> CuResult<()> {
                 // add the incoming data into the buffers
                 // input is a tuple of &CuMsg<T> for each T in the input
@@ -107,7 +107,7 @@ mod tests {
         let m2 = CuStampedData::<i32, CuMsgMetadata>::default();
         let input: <AlignerTask as CuTask>::Input<'_> = (&m1, &m2);
         let m3 = CuStampedData::<(CuArray<f32, 5>, CuArray<i32, 10>), CuMsgMetadata>::default();
-        let mut output: <AlignerTask as CuTask>::Output = m3;
+        let mut output: <AlignerTask as CuTask>::Output<'_> = m3;
 
         let clock = cu29::clock::RobotClock::new();
         let result = aligner.process(&clock, &input, &mut output);

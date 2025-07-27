@@ -66,7 +66,7 @@ mod linux_impl {
     }
 
     impl CuSrcTask for V4l {
-        type Output = output_msg!(CuImage<Vec<u8>>);
+        type Output<'m> = output_msg!(CuImage<Vec<u8>>);
 
         fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
         where
@@ -231,7 +231,7 @@ mod linux_impl {
                 .map_err(|e| CuError::new_with_cause("could not start stream", e))
         }
 
-        fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output) -> CuResult<()> {
+        fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
             let (handle, meta) = self
                 .stream
                 .next()

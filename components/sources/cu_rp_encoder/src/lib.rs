@@ -55,7 +55,7 @@ impl Freezable for Encoder {
 }
 
 impl CuSrcTask for Encoder {
-    type Output = output_msg!(EncoderPayload);
+    type Output<'m> = output_msg!(EncoderPayload);
 
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -102,7 +102,7 @@ impl CuSrcTask for Encoder {
         Ok(())
     }
 
-    fn process(&mut self, clock: &RobotClock, new_msg: &mut Self::Output) -> CuResult<()> {
+    fn process(&mut self, clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
         let idata = self.data_from_interrupts.lock().unwrap();
         new_msg.tov = Some(clock.now()).into();
         new_msg.metadata.set_status(idata.ticks);

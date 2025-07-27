@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 pub struct CuAsyncTask<T, O>
 where
-    T: CuTask<Output = CuMsg<O>> + Send + 'static,
+    T: for<'m> CuTask<Output<'m> = CuMsg<O>> + Send + 'static,
     O: CuMsgPayload + Send + 'static,
 {
     task: Arc<Mutex<T>>,
@@ -18,7 +18,7 @@ where
 
 impl<T, O> CuAsyncTask<T, O>
 where
-    T: CuTask<Output = CuMsg<O>> + Send + 'static,
+    T: for<'m> CuTask<Output<'m> = CuMsg<O>> + Send + 'static,
     O: CuMsgPayload + Send + 'static,
 {
     #[allow(unused)]
@@ -36,19 +36,19 @@ where
 
 impl<T, O> Freezable for CuAsyncTask<T, O>
 where
-    T: CuTask<Output = CuMsg<O>> + Send + 'static,
+    T: for<'m> CuTask<Output<'m> = CuMsg<O>> + Send + 'static,
     O: CuMsgPayload + Send + 'static,
 {
 }
 
 impl<T, I, O> CuTask for CuAsyncTask<T, O>
 where
-    T: for<'m> CuTask<Input<'m> = CuMsg<I>, Output = CuMsg<O>> + Send + 'static,
+    T: for<'i, 'o> CuTask<Input<'i> = CuMsg<I>, Output<'o> = CuMsg<O>> + Send + 'static,
     I: CuMsgPayload + Send + Sync + 'static,
     O: CuMsgPayload + Send + 'static,
 {
     type Input<'m> = T::Input<'m>;
-    type Output = T::Output;
+    type Output<'m> = T::Output<'m>;
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -57,11 +57,11 @@ where
         Err("AsyncTask cannot be instantiated directly, use Async_task::new()".into())
     }
 
-    fn process<'m>(
+    fn process<'i, 'o>(
         &mut self,
         clock: &RobotClock,
-        input: &Self::Input<'m>,
-        real_output: &mut Self::Output,
+        input: &Self::Input<'i>,
+        real_output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
         let mut processing = self.processing.lock().unwrap();
         if *processing {
@@ -116,7 +116,7 @@ mod tests {
 
     impl CuTask for TestTask {
         type Input<'m> = input_msg!(u32);
-        type Output = output_msg!(u32);
+        type Output<'m> = output_msg!(u32);
 
         fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
         where
@@ -125,11 +125,11 @@ mod tests {
             Ok(Self {})
         }
 
-        fn process<'m>(
+        fn process(
             &mut self,
             _clock: &RobotClock,
-            input: &Self::Input<'m>,
-            output: &mut Self::Output,
+            input: &Self::Input<'_>,
+            output: &mut Self::Output<'_>,
         ) -> CuResult<()> {
             output.borrow_mut().set_payload(*input.payload().unwrap());
             Ok(())

@@ -79,7 +79,7 @@ pub struct CuMsgMetadata {
     pub status_txt: CuCompactString,
 }
 
-impl cu29_traits::Metadata for CuMsgMetadata {}
+impl Metadata for CuMsgMetadata {}
 
 impl CuMsgMetadata {
     pub fn set_status(&mut self, status: impl ToCompactString) {
@@ -87,7 +87,7 @@ impl CuMsgMetadata {
     }
 }
 
-impl cu29_traits::CuMsgMetadataTrait for CuMsgMetadata {
+impl CuMsgMetadataTrait for CuMsgMetadata {
     fn process_time(&self) -> PartialCuTimeRange {
         self.process_time
     }
@@ -219,7 +219,7 @@ impl<'a, T: Freezable + ?Sized> Encode for BincodeAdapter<'a, T> {
 /// To set the frequency of the pulls and align them to any hw, see the runtime configuration.
 /// Note: A source has the privilege to have a clock passed to it vs a frozen clock.
 pub trait CuSrcTask: Freezable {
-    type Output: CuMsgPayload;
+    type Output<'m>: CuMsgPayload;
 
     /// Here you need to initialize everything your task will need for the duration of its lifetime.
     /// The config allows you to access the configuration of the task.
@@ -242,7 +242,7 @@ pub trait CuSrcTask: Freezable {
     /// Process is the most critical execution of the task.
     /// The goal will be to produce the output message as soon as possible.
     /// Use preprocess to prepare the task to make this method as short as possible.
-    fn process(&mut self, clock: &RobotClock, new_msg: &mut Self::Output) -> CuResult<()>;
+    fn process<'o>(&mut self, clock: &RobotClock, new_msg: &mut Self::Output<'o>) -> CuResult<()>;
 
     /// This is a method called by the runtime after "process". It is best effort a chance for
     /// the task to update some state after process is out of the way.
@@ -260,7 +260,7 @@ pub trait CuSrcTask: Freezable {
 /// This is the most generic Task of copper. It is a "transform" task deriving an output from an input.
 pub trait CuTask: Freezable {
     type Input<'m>: CuMsgPack;
-    type Output: CuMsgPayload;
+    type Output<'m>: CuMsgPayload;
 
     /// Here you need to initialize everything your task will need for the duration of its lifetime.
     /// The config allows you to access the configuration of the task.
@@ -283,11 +283,11 @@ pub trait CuTask: Freezable {
     /// Process is the most critical execution of the task.
     /// The goal will be to produce the output message as soon as possible.
     /// Use preprocess to prepare the task to make this method as short as possible.
-    fn process<'m>(
+    fn process<'i, 'o>(
         &mut self,
         _clock: &RobotClock,
-        input: &Self::Input<'m>,
-        output: &mut Self::Output,
+        input: &Self::Input<'i>,
+        output: &mut Self::Output<'o>,
     ) -> CuResult<()>;
 
     /// This is a method called by the runtime after "process". It is best effort a chance for
@@ -328,7 +328,7 @@ pub trait CuSinkTask: Freezable {
     /// Process is the most critical execution of the task.
     /// The goal will be to produce the output message as soon as possible.
     /// Use preprocess to prepare the task to make this method as short as possible.
-    fn process<'m>(&mut self, _clock: &RobotClock, input: &Self::Input<'m>) -> CuResult<()>;
+    fn process<'i>(&mut self, _clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()>;
 
     /// This is a method called by the runtime after "process". It is best effort a chance for
     /// the task to update some state after process is out of the way.

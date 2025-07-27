@@ -214,7 +214,7 @@ impl Freezable for WT901 {
 }
 
 impl CuSrcTask for WT901 {
-    type Output = output_msg!(PositionalReadingsPayload);
+    type Output<'m> = output_msg!(PositionalReadingsPayload);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -230,7 +230,7 @@ impl CuSrcTask for WT901 {
         })
     }
 
-    fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
         let mut pos = PositionalReadingsPayload::default();
         self.bulk_position_read(&mut pos)?;
         new_msg.set_payload(pos);

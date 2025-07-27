@@ -59,7 +59,7 @@ fn channel_time(t6: CuTime, i: u64) -> CuTime {
 }
 
 impl CuSrcTask for Xt32 {
-    type Output = output_msg!(LidarCuMsgPayload);
+    type Output<'m> = output_msg!(LidarCuMsgPayload);
 
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -88,7 +88,7 @@ impl CuSrcTask for Xt32 {
         self.sync(robot_clock);
         Ok(())
     }
-    fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
         let payload = new_msg.payload_mut().insert(LidarCuMsgPayload::default());
         let mut buf = [0u8; 1500];
         match self.socket.read(&mut buf) {

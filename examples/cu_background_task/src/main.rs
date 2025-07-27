@@ -12,7 +12,7 @@ pub mod tasks {
     impl Freezable for ExampleSrc {}
 
     impl CuSrcTask for ExampleSrc {
-        type Output = output_msg!(i32);
+        type Output<'m> = output_msg!(i32);
 
         fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
         where
@@ -21,7 +21,7 @@ pub mod tasks {
             Ok(Self {})
         }
 
-        fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output) -> CuResult<()> {
+        fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
             new_msg.set_payload(42);
             Ok(())
         }
@@ -33,7 +33,7 @@ pub mod tasks {
 
     impl CuTask for ExampleTask {
         type Input<'m> = input_msg!(i32);
-        type Output = output_msg!(i32);
+        type Output<'m> = output_msg!(i32);
 
         fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
         where
@@ -46,7 +46,7 @@ pub mod tasks {
             &mut self,
             _clock: &RobotClock,
             input: &Self::Input<'_>,
-            output: &mut Self::Output,
+            output: &mut Self::Output<'_>,
         ) -> CuResult<()> {
             let payload = input.payload().unwrap();
             // Emulate a long-running task

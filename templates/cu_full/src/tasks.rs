@@ -15,7 +15,7 @@ pub struct MySource {}
 impl Freezable for MySource {}
 
 impl CuSrcTask for MySource {
-    type Output = output_msg!(MyPayload);
+    type Output<'m> = output_msg!(MyPayload);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -26,7 +26,7 @@ impl CuSrcTask for MySource {
 
     // don't forget the other lifecycle methods if you need them: start, stop, preprocess, postprocess
 
-    fn process(&mut self, _clock: &RobotClock, output: &mut Self::Output) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, output: &mut Self::Output<'_>) -> CuResult<()> {
         // Generated a 42 message.
         output.set_payload(MyPayload { value: 42 });
         Ok(())
@@ -43,7 +43,7 @@ impl Freezable for MyTask {}
 
 impl CuTask for MyTask {
     type Input<'m> = input_msg!(MyPayload);
-    type Output = output_msg!(MyPayload);
+    type Output<'m> = output_msg!(MyPayload);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -59,7 +59,7 @@ impl CuTask for MyTask {
         &mut self,
         _clock: &RobotClock,
         input: &Self::Input<'_>,
-        output: &mut Self::Output,
+        output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
         debug!("Received message: {}", input.payload().unwrap().value);
         output.set_payload(MyPayload { value: 43 });
