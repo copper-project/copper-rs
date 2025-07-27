@@ -21,7 +21,11 @@ mod empty_impl {
             Ok(Self {})
         }
 
-        fn process(&mut self, _clock: &RobotClock, _new_msg: &mut Self::Output<'_>) -> CuResult<()> {
+        fn process(
+            &mut self,
+            _clock: &RobotClock,
+            _new_msg: &mut Self::Output<'_>,
+        ) -> CuResult<()> {
             Ok(())
         }
     }
