@@ -20,7 +20,7 @@ where
 }
 
 pub struct ZenohConfig {
-    config: zenoh::Config,
+    config: Config,
     topic: String,
 }
 
@@ -39,11 +39,11 @@ fn cu_error_map(msg: &str) -> impl FnOnce(ZenohError) -> CuError + '_ {
 
 impl<P> Freezable for ZenohSink<P> where P: CuMsgPayload {}
 
-impl<'cl, P> CuSinkTask<'cl> for ZenohSink<P>
+impl<P> CuSinkTask for ZenohSink<P>
 where
-    P: CuMsgPayload + 'cl + 'static,
+    P: CuMsgPayload + 'static,
 {
-    type Input = input_msg!('cl, P);
+    type Input<'m> = input_msg!(P);
 
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -54,8 +54,8 @@ where
         // Get json zenoh config
         let session_config = config.get::<String>("zenoh_config_file").map_or(
             // Or default zenoh config otherwise
-            CuResult::Ok(Config::default()),
-            |s| -> CuResult<zenoh::Config> {
+            Ok(Config::default()),
+            |s| -> CuResult<Config> {
                 Config::from_file(&s)
                     .map_err(cu_error_map("ZenohSink: Failed to create zenoh config"))
             },
@@ -88,7 +88,7 @@ where
         Ok(())
     }
 
-    fn process(&mut self, _clock: &RobotClock, input: Self::Input) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
         let ctx = self
             .ctx
             .as_mut()

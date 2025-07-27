@@ -156,8 +156,8 @@ pub struct CuSimSrcTask<T> {
 
 impl<T> Freezable for CuSimSrcTask<T> {}
 
-impl<'cl, T: CuMsgPayload + 'cl> CuSrcTask<'cl> for CuSimSrcTask<T> {
-    type Output = output_msg!('cl, T);
+impl<T: CuMsgPayload> CuSrcTask for CuSimSrcTask<T> {
+    type Output<'m> = output_msg!(T);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -166,7 +166,7 @@ impl<'cl, T: CuMsgPayload + 'cl> CuSrcTask<'cl> for CuSimSrcTask<T> {
         Ok(Self { boo: PhantomData })
     }
 
-    fn process(&mut self, _clock: &RobotClock, _new_msg: Self::Output) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, _new_msg: &mut Self::Output<'_>) -> CuResult<()> {
         unimplemented!("A placeholder for sim was called for a source, you need answer SimOverride to ExecutedBySim for the Process step.")
     }
 }
@@ -179,8 +179,8 @@ pub struct CuSimSinkTask<T> {
 
 impl<T: CuMsgPayload> Freezable for CuSimSinkTask<T> {}
 
-impl<'cl, T: CuMsgPayload + 'cl> CuSinkTask<'cl> for CuSimSinkTask<T> {
-    type Input = input_msg!('cl, T);
+impl<T: CuMsgPayload> CuSinkTask for CuSimSinkTask<T> {
+    type Input<'m> = input_msg!(T);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -189,7 +189,7 @@ impl<'cl, T: CuMsgPayload + 'cl> CuSinkTask<'cl> for CuSimSinkTask<T> {
         Ok(Self { boo: PhantomData })
     }
 
-    fn process(&mut self, _clock: &RobotClock, _input: Self::Input) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, _input: &Self::Input<'_>) -> CuResult<()> {
         unimplemented!("A placeholder for sim was called for a sink, you need answer SimOverride to ExecutedBySim for the Process step.")
     }
 }

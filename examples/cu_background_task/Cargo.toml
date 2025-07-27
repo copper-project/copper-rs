@@ -1,6 +1,6 @@
 [package]
-name = "cu-logging-size"
-description = "This is an example for the Copper project to show how to set custom logging parameters."
+name = "cu-background-task"
+description = "This is an example for the Copper project to show how to set up a background (ie non blocking) task."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

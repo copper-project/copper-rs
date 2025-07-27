@@ -61,8 +61,8 @@ impl From<RPGpioPayload> for Level {
 
 impl Freezable for RPGpio {}
 
-impl<'cl> CuSinkTask<'cl> for RPGpio {
-    type Input = input_msg!('cl, RPGpioPayload);
+impl CuSinkTask for RPGpio {
+    type Input<'m> = input_msg!(RPGpioPayload);
 
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -87,7 +87,7 @@ impl<'cl> CuSinkTask<'cl> for RPGpio {
         Ok(Self { pin })
     }
 
-    fn process(&mut self, _clock: &RobotClock, msg: Self::Input) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, msg: &Self::Input<'_>) -> CuResult<()> {
         #[cfg(hardware)]
         self.pin.write((*msg.payload().unwrap()).into());
 

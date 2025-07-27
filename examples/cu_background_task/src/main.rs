@@ -1,8 +1,11 @@
 use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 pub mod tasks {
     use cu29::prelude::*;
+    use std::thread::sleep;
 
     pub struct ExampleSrc {}
 
@@ -45,7 +48,12 @@ pub mod tasks {
             input: &Self::Input<'_>,
             output: &mut Self::Output<'_>,
         ) -> CuResult<()> {
-            output.set_payload(input.payload().unwrap() + 1);
+            let payload = input.payload().unwrap();
+            // Emulate a long-running task
+            debug!("Task is tasking a long time to process input: {}", &payload);
+            sleep(std::time::Duration::from_millis(1000));
+            debug!("Task done");
+            output.set_payload(payload + 1);
             Ok(())
         }
     }
@@ -70,70 +78,33 @@ pub mod tasks {
     }
 }
 
-struct ExampleMonitor {
-    tasks: &'static [&'static str],
-}
-
 #[copper_runtime(config = "copperconfig.ron")]
 struct App {}
 
-impl CuMonitor for ExampleMonitor {
-    fn new(_config: &CuConfig, taskids: &'static [&str]) -> CuResult<Self> {
-        debug!("Monitoring: created: {}", taskids);
-        Ok(ExampleMonitor { tasks: taskids })
-    }
-
-    fn start(&mut self, clock: &RobotClock) -> CuResult<()> {
-        debug!("Monitoring: started: {}", clock.now());
-        Ok(())
-    }
-
-    fn process_copperlist(&self, msgs: &[&CuMsgMetadata]) -> CuResult<()> {
-        debug!("Monitoring: Processing copperlist...");
-        for t in msgs.iter().enumerate() {
-            let (taskid, metadata) = t;
-            debug!("Task: {} -> {}", taskid, metadata);
-        }
-        Ok(())
-    }
-
-    fn process_error(&self, taskid: usize, step: CuTaskState, error: &CuError) -> Decision {
-        debug!(
-            "Monitoring: Processing error task: {} step: {} error: {}",
-            self.tasks[taskid], step, error
-        );
-        Decision::Ignore
-    }
-
-    fn stop(&mut self, clock: &RobotClock) -> CuResult<()> {
-        debug!("Monitoring: stopped: {}", clock.now());
-        Ok(())
-    }
-}
-const SLAB_SIZE: Option<usize> = Some(1024 * 1024);
+const SLAB_SIZE: Option<usize> = Some(150 * 1024 * 1024);
 fn main() {
-    let tmp_dir = tempfile::TempDir::new().expect("could not create a tmp dir");
-    let logger_path = tmp_dir.path().join("monitor.copper");
+    let logger_path = "logs/background.copper";
+    if let Some(parent) = Path::new(logger_path).parent() {
+        if !parent.exists() {
+            fs::create_dir_all(parent).expect("Failed to create logs directory");
+        }
+    }
+    let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), SLAB_SIZE, true, None)
+        .expect("Failed to setup logger.");
 
-    let copper_ctx =
-        basic_copper_setup(&logger_path, SLAB_SIZE, true, None).expect("Failed to setup logger.");
-    debug!("Logger created at {}.", path = logger_path);
-    debug!("Creating application... ");
-    let mut application = AppBuilder::new()
-        .with_context(&copper_ctx)
-        .build()
-        .expect("Failed to create runtime");
-
+    debug!("Logger created at {}.", path = &logger_path);
     let clock = copper_ctx.clock;
+    debug!("Creating application... ");
+    let mut application = App::new(clock.clone(), copper_ctx.unified_logger.clone(), None)
+        .expect("Failed to create application.");
     debug!("Running... starting clock: {}.", clock.now());
     application
         .start_all_tasks()
         .expect("Failed to start application.");
-    application
-        .run_one_iteration()
-        .expect("Failed to run application.");
+    application.run().expect("Failed to run application.");
     application
         .stop_all_tasks()
         .expect("Failed to stop application.");
     debug!("End of program: {}.", clock.now());
+    // check if the logger file is at least 1 section in length
 }

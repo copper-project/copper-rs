@@ -11,8 +11,8 @@ mod empty_impl {
 
     impl Freezable for V4l {}
 
-    impl<'cl> CuSrcTask<'cl> for V4l {
-        type Output = output_msg!('cl, CuImage<Vec<u8>>);
+    impl CuSrcTask for V4l {
+        type Output<'m> = output_msg!(CuImage<Vec<u8>>);
 
         fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
         where
@@ -21,7 +21,11 @@ mod empty_impl {
             Ok(Self {})
         }
 
-        fn process(&mut self, _clock: &RobotClock, _new_msg: Self::Output) -> CuResult<()> {
+        fn process(
+            &mut self,
+            _clock: &RobotClock,
+            _new_msg: &mut Self::Output<'_>,
+        ) -> CuResult<()> {
             Ok(())
         }
     }
@@ -65,8 +69,8 @@ mod linux_impl {
         ((duration.as_nanos() as i64 + offset_ns) as u64).into()
     }
 
-    impl<'cl> CuSrcTask<'cl> for V4l {
-        type Output = output_msg!('cl, CuImage<Vec<u8>>);
+    impl CuSrcTask for V4l {
+        type Output<'m> = output_msg!(CuImage<Vec<u8>>);
 
         fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
         where
@@ -231,7 +235,7 @@ mod linux_impl {
                 .map_err(|e| CuError::new_with_cause("could not start stream", e))
         }
 
-        fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
+        fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
             let (handle, meta) = self
                 .stream
                 .next()

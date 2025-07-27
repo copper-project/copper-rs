@@ -54,8 +54,8 @@ impl Freezable for Encoder {
     // pin is derived from the config, so we keep the default implementation.
 }
 
-impl<'cl> CuSrcTask<'cl> for Encoder {
-    type Output = output_msg!('cl, EncoderPayload);
+impl CuSrcTask for Encoder {
+    type Output<'m> = output_msg!(EncoderPayload);
 
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -102,7 +102,7 @@ impl<'cl> CuSrcTask<'cl> for Encoder {
         Ok(())
     }
 
-    fn process(&mut self, clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
+    fn process(&mut self, clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
         let idata = self.data_from_interrupts.lock().unwrap();
         new_msg.tov = Some(clock.now()).into();
         new_msg.metadata.set_status(idata.ticks);

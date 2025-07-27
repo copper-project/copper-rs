@@ -28,12 +28,12 @@ where
     }
 }
 
-impl<'cl, T> CuTask<'cl> for CuRateLimit<T>
+impl<T> CuTask for CuRateLimit<T>
 where
-    T: CuMsgPayload + 'cl,
+    T: CuMsgPayload,
 {
-    type Input = input_msg!('cl, T);
-    type Output = output_msg!('cl, T);
+    type Input<'m> = input_msg!(T);
+    type Output<'m> = output_msg!(T);
 
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self> {
         let hz = config
@@ -47,11 +47,11 @@ where
         })
     }
 
-    fn process(
+    fn process<'m>(
         &mut self,
         _clock: &RobotClock,
-        input: Self::Input,
-        output: Self::Output,
+        input: &Self::Input<'m>,
+        output: &mut Self::Output<'m>,
     ) -> CuResult<()> {
         let tov = match input.tov {
             Tov::Time(ts) => ts,

@@ -4,8 +4,8 @@ pub struct ExampleSrc {}
 
 impl Freezable for ExampleSrc {}
 
-impl<'cl> CuSrcTask<'cl> for ExampleSrc {
-    type Output = output_msg!('cl, i32);
+impl CuSrcTask for ExampleSrc {
+    type Output<'m> = output_msg!(i32);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -14,7 +14,7 @@ impl<'cl> CuSrcTask<'cl> for ExampleSrc {
         Ok(Self {})
     }
 
-    fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
         new_msg.set_payload(42);
         Ok(())
     }
@@ -24,9 +24,9 @@ pub struct ExampleTaskA {}
 
 impl Freezable for ExampleTaskA {}
 
-impl<'cl> CuTask<'cl> for ExampleTaskA {
-    type Input = input_msg!('cl, i32);
-    type Output = output_msg!('cl, i32);
+impl CuTask for ExampleTaskA {
+    type Input<'m> = input_msg!(i32);
+    type Output<'m> = output_msg!(i32);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -38,8 +38,8 @@ impl<'cl> CuTask<'cl> for ExampleTaskA {
     fn process(
         &mut self,
         _clock: &RobotClock,
-        input: Self::Input,
-        output: Self::Output,
+        input: &Self::Input<'_>,
+        output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
         debug!("Processing from Mission A.");
         output.set_payload(input.payload().unwrap() + 1);
@@ -51,9 +51,9 @@ pub struct ExampleTaskB {}
 
 impl Freezable for ExampleTaskB {}
 
-impl<'cl> CuTask<'cl> for ExampleTaskB {
-    type Input = input_msg!('cl, i32);
-    type Output = output_msg!('cl, i32);
+impl CuTask for ExampleTaskB {
+    type Input<'m> = input_msg!(i32);
+    type Output<'m> = output_msg!(i32);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -65,8 +65,8 @@ impl<'cl> CuTask<'cl> for ExampleTaskB {
     fn process(
         &mut self,
         _clock: &RobotClock,
-        input: Self::Input,
-        output: Self::Output,
+        input: &Self::Input<'_>,
+        output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
         debug!("Processing from Mission B.");
         output.set_payload(input.payload().unwrap() + 1);
@@ -78,8 +78,8 @@ pub struct ExampleSink {}
 
 impl Freezable for ExampleSink {}
 
-impl<'cl> CuSinkTask<'cl> for ExampleSink {
-    type Input = input_msg!('cl, i32);
+impl CuSinkTask for ExampleSink {
+    type Input<'m> = input_msg!(i32);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -88,7 +88,7 @@ impl<'cl> CuSinkTask<'cl> for ExampleSink {
         Ok(Self {})
     }
 
-    fn process(&mut self, _clock: &RobotClock, _input: Self::Input) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, _input: &Self::Input<'_>) -> CuResult<()> {
         Ok(())
     }
 }

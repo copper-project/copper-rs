@@ -14,8 +14,8 @@ pub struct MySource {}
 // Needs to be fully implemented if you want to have a stateful task.
 impl Freezable for MySource {}
 
-impl<'cl> CuSrcTask<'cl> for MySource {
-    type Output = output_msg!('cl, MyPayload);
+impl CuSrcTask for MySource {
+    type Output<'m> = output_msg!(MyPayload);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -26,7 +26,7 @@ impl<'cl> CuSrcTask<'cl> for MySource {
 
     // don't forget the other lifecycle methods if you need them: start, stop, preprocess, postprocess
 
-    fn process(&mut self, _clock: &RobotClock, output: Self::Output) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, output: &mut Self::Output<'_>) -> CuResult<()> {
         // Generated a 42 message.
         output.set_payload(MyPayload { value: 42 });
         Ok(())
@@ -41,9 +41,9 @@ pub struct MyTask {
 // Needs to be fully implemented if you want to have a stateful task.
 impl Freezable for MyTask {}
 
-impl<'cl> CuTask<'cl> for MyTask {
-    type Input = input_msg!('cl, MyPayload);
-    type Output = output_msg!('cl, MyPayload);
+impl CuTask for MyTask {
+    type Input<'m> = input_msg!(MyPayload);
+    type Output<'m> = output_msg!(MyPayload);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -58,8 +58,8 @@ impl<'cl> CuTask<'cl> for MyTask {
     fn process(
         &mut self,
         _clock: &RobotClock,
-        input: Self::Input,
-        output: Self::Output,
+        input: &Self::Input<'_>,
+        output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
         debug!("Received message: {}", input.payload().unwrap().value);
         output.set_payload(MyPayload { value: 43 });
@@ -74,8 +74,8 @@ pub struct MySink {}
 // Needs to be fully implemented if you want to have a stateful task.
 impl Freezable for MySink {}
 
-impl<'cl> CuSinkTask<'cl> for MySink {
-    type Input = input_msg!('cl, MyPayload);
+impl CuSinkTask for MySink {
+    type Input<'m> = input_msg!(MyPayload);
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -85,7 +85,7 @@ impl<'cl> CuSinkTask<'cl> for MySink {
     }
     // don't forget the other lifecycle methods if you need them: start, stop, preprocess, postprocess
 
-    fn process(&mut self, _clock: &RobotClock, input: Self::Input) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
         debug!("Sink Received message: {}", input.payload().unwrap().value);
         Ok(())
     }

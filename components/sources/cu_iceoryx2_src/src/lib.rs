@@ -30,12 +30,12 @@ where
 {
 }
 
-impl<'cl, P> CuSrcTask<'cl> for IceoryxSrc<P>
+impl<P> CuSrcTask for IceoryxSrc<P>
 where
-    P: CuMsgPayload + 'cl + 'static,
+    P: CuMsgPayload + 'static,
     IceorixCuMsg<P>: iceoryx2::prelude::ZeroCopySend,
 {
-    type Output = output_msg!('cl, P);
+    type Output<'m> = output_msg!(P);
 
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -105,7 +105,7 @@ where
         Ok(())
     }
 
-    fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
         let sub = self.subscriber.as_ref().ok_or_else(|| {
             CuError::from(
                 format!(

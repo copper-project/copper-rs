@@ -1,8 +1,8 @@
 #![doc = include_str!("../README.md")]
 
-// backward compatibility
 pub use cu29_runtime::config;
 pub use cu29_runtime::copperlist;
+pub use cu29_runtime::cuasynctask;
 pub use cu29_runtime::curuntime;
 pub use cu29_runtime::cutask;
 pub use cu29_runtime::input_msg;
@@ -15,6 +15,7 @@ pub use bincode;
 pub use cu29_clock as clock;
 pub use cu29_runtime::config::read_configuration;
 pub use cu29_traits::*;
+pub use rayon;
 
 pub mod prelude {
     pub use ctrlc;

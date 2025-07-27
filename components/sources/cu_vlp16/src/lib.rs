@@ -18,8 +18,8 @@ pub struct Vlp16 {
 
 impl Freezable for Vlp16 {}
 
-impl<'cl> CuSrcTask<'cl> for Vlp16 {
-    type Output = output_msg!('cl, PointCloudSoa<10000>);
+impl CuSrcTask for Vlp16 {
+    type Output<'m> = output_msg!(PointCloudSoa<10000>);
 
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -56,7 +56,7 @@ impl<'cl> CuSrcTask<'cl> for Vlp16 {
         Ok(())
     }
 
-    fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
         let socket = self.socket.as_ref().unwrap();
         let mut packet = [0u8; size_of::<DataPacket>()];
         let (read_size, _peer_addr) = socket.recv_from(&mut packet).unwrap();

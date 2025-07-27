@@ -9,8 +9,8 @@ pub struct ADS78883TestSink {}
 
 impl Freezable for ADS78883TestSink {}
 
-impl<'cl> CuSinkTask<'cl> for ADS78883TestSink {
-    type Input = input_msg!('cl, ADSReadingPayload);
+impl CuSinkTask for ADS78883TestSink {
+    type Input<'m> = input_msg!(ADSReadingPayload);
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
         Self: Sized,
@@ -18,7 +18,7 @@ impl<'cl> CuSinkTask<'cl> for ADS78883TestSink {
         Ok(Self {})
     }
 
-    fn process(&mut self, _clock: &RobotClock, new_msg: Self::Input) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, new_msg: &Self::Input<'_>) -> CuResult<()> {
         debug!("Received: {}", &new_msg.payload());
         Ok(())
     }

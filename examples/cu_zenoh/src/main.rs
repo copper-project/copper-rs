@@ -15,8 +15,8 @@ pub mod tasks {
 
     impl Freezable for ExampleSrc {}
 
-    impl<'cl> CuSrcTask<'cl> for ExampleSrc {
-        type Output = output_msg!('cl, i32);
+    impl CuSrcTask for ExampleSrc {
+        type Output<'m> = output_msg!(i32);
 
         fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
         where
@@ -25,7 +25,7 @@ pub mod tasks {
             Ok(Self {})
         }
 
-        fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
+        fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
             std::thread::sleep(Duration::from_secs(1));
             debug!("Sending value");
             new_msg.set_payload(42);

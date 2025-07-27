@@ -23,9 +23,9 @@ macro_rules! define_task {
 
         impl Freezable for $name {}
 
-        impl<'cl> CuTask<'cl> for $name {
-            type Input = input_msg!('cl, $($p),*);
-            type Output = output_msg!('cl, ($(
+        impl CuTask for $name {
+            type Input<'m> = input_msg!('m, $($p),*);
+            type Output<'m> = output_msg!(($(
                 cu29::payload::CuArray<$p, { $mos }>
             ),*));
 
@@ -52,11 +52,11 @@ macro_rules! define_task {
             fn process(
                 &mut self,
                 _clock: &cu29::clock::RobotClock,
-                input: Self::Input,
-                output: Self::Output,
+                input: &Self::Input<'_>,
+                output: &mut Self::Output<'_>,
             ) -> CuResult<()> {
                 // add the incoming data into the buffers
-                // input is a tuple of &'cl CuMsg<T> for each T in the input
+                // input is a tuple of &CuMsg<T> for each T in the input
                 paste::paste! {
                     $(
                         self.aligner.[<buffer $index>].push(input.$index.clone());
@@ -105,12 +105,12 @@ mod tests {
         let mut aligner = AlignerTask::new(Some(&config)).unwrap();
         let m1 = CuStampedData::<f32, CuMsgMetadata>::default();
         let m2 = CuStampedData::<i32, CuMsgMetadata>::default();
-        let input: <AlignerTask as CuTask>::Input = (&m1, &m2);
-        let mut m3 = CuStampedData::<(CuArray<f32, 5>, CuArray<i32, 10>), CuMsgMetadata>::default();
-        let output: <AlignerTask as CuTask>::Output = &mut m3;
+        let input: <AlignerTask as CuTask>::Input<'_> = (&m1, &m2);
+        let m3 = CuStampedData::<(CuArray<f32, 5>, CuArray<i32, 10>), CuMsgMetadata>::default();
+        let mut output: <AlignerTask as CuTask>::Output<'_> = m3;
 
         let clock = cu29::clock::RobotClock::new();
-        let result = aligner.process(&clock, input, output);
+        let result = aligner.process(&clock, &input, &mut output);
         assert!(result.is_ok());
     }
 }

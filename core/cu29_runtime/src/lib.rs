@@ -3,6 +3,7 @@
 pub mod app;
 pub mod config;
 pub mod copperlist;
+pub mod cuasynctask;
 pub mod curuntime;
 pub mod cutask;
 pub(crate) mod log;

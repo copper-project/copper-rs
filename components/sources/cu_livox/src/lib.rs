@@ -27,8 +27,8 @@ const MAX_POINTS: usize = 100;
 
 pub type LidarCuMsgPayload = PointCloudSoa<MAX_POINTS>;
 
-impl<'cl> CuSrcTask<'cl> for Tele15 {
-    type Output = output_msg!('cl, LidarCuMsgPayload);
+impl CuSrcTask for Tele15 {
+    type Output<'m> = output_msg!(LidarCuMsgPayload);
 
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
     where
@@ -56,7 +56,7 @@ impl<'cl> CuSrcTask<'cl> for Tele15 {
         self.sync(robot_clock);
         Ok(())
     }
-    fn process(&mut self, _clock: &RobotClock, new_msg: Self::Output) -> CuResult<()> {
+    fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
         let payload = new_msg.payload_mut().insert(LidarCuMsgPayload::default());
         let mut buf = [0u8; 1500];
         match self.socket.read(&mut buf) {
