@@ -284,8 +284,8 @@ pub struct FlippingSource {
 }
 
 // We implement the CuSrcTask trait for our task as it is a source / driver (with no internal input from Copper itself).
-impl<'cl> CuSrcTask<'cl> for FlippingSource {
-    type Output = output_msg!('cl, RPGpioPayload);
+impl CuSrcTask for FlippingSource {
+    type Output<'m> = output_msg!(RPGpioPayload);
 
     // You need to provide at least "new" out of the lifecycle methods.
     // But you have other hooks in to the Lifecycle you can leverage to maximize your opportunity 
@@ -303,7 +303,7 @@ impl<'cl> CuSrcTask<'cl> for FlippingSource {
     // 1. the reference to a monotonic clock
     // 2. a mutable reference to the output message (so no need to allocate of copy anything)
     // 3. a CuResult to handle errors
-    fn process(&mut self, clock: &RobotClock, output: Self::Output) -> CuResult<()> {
+    fn process(&mut self, clock: &RobotClock, &mut output: Self::Output<'_>) -> CuResult<()> {
         self.state = !self.state;   // Flip our internal state and send the message in our output.
         output.set_payload(RPGpioPayload {
             on: self.state,
