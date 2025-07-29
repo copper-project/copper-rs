@@ -141,21 +141,46 @@ impl Encode for CuCompactString {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         let CuCompactString(ref compact_string) = self;
         let bytes = compact_string.as_bytes();
-        bytes.encode(encoder)
+        let filtered_len = bytes.iter().filter(|&&b| b != 0).count();
+        filtered_len.encode(encoder)?;
+        for &byte in bytes.iter().filter(|&&b| b != 0) {
+            byte.encode(encoder)?;
+        }
+        Ok(())
     }
 }
 
+
 impl<Context> Decode<Context> for CuCompactString {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let bytes = <Vec<u8> as Decode<D::Context>>::decode(decoder)?; // Decode into a byte buffer
-        let compact_string =
-            CompactString::from_utf8(bytes).map_err(|e| DecodeError::Utf8 { inner: e })?;
-        Ok(CuCompactString(compact_string))
+        let len = usize::decode(decoder)?;
+        
+        let mut bytes = Vec::with_capacity(len);
+        for _ in 0..len {
+            let byte = u8::decode(decoder)?;
+            bytes.push(byte);
+        }
+        
+        Ok(CuCompactString(CompactString::from_utf8_lossy(&bytes)))
     }
 }
 
 impl<'de, Context> BorrowDecode<'de, Context> for CuCompactString {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         CuCompactString::decode(decoder)
+    }
+}
+
+mod tests {
+    use super::*;
+    use bincode::config::standard;
+
+    #[test]
+    fn test_removes_null_bytes() {
+        let compact_string = CuCompactString(CompactString::new("\0\0\0\0\0\0"));
+        let encoded = bincode::encode_to_vec(&compact_string, standard()).unwrap();
+        assert_eq!(encoded.len(), 1); // Only the length byte should be present
+        let decoded: CuCompactString = bincode::decode_from_slice(&encoded, standard()).unwrap().0;
+        assert_eq!(decoded.0, CompactString::new(""));
     }
 }
