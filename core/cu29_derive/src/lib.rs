@@ -388,16 +388,15 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         #[cfg(feature = "macro_debug")]
         eprintln!("{runtime_plan:?}");
 
-        let all_sim_tasks_types: Vec<Type> = (&task_specs).ids
+        let all_sim_tasks_types: Vec<Type> = task_specs.ids
             .iter()
             .zip(&task_specs.cutypes)
             .zip(&task_specs.sim_task_types)
             .zip(&task_specs.background_flags)
             .map(|(((task_id, cutype), stype), background)| {
-                let background = *background;
                 match cutype {
                     CuTaskType::Source => {
-                        if background {
+                        if *background {
                             panic!("CuSrcTask {task_id} cannot be a background task, it should be a regular task.");
                         }
                         let msg_type = graph
@@ -411,7 +410,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         stype.clone()
                     },
                     CuTaskType::Sink => {
-                        if background {
+                        if *background {
                             panic!("CuSinkTask {task_id} cannot be a background task, it should be a regular task.");
                         }
                         let msg_type = graph
@@ -452,12 +451,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         }).collect::<Vec<_>>();
 
-        let task_instances_init_code = (&task_specs).instantiation_types.iter().zip((&task_specs).background_flags.clone()).enumerate().map(|(index, (task_type, background))| {
+        let task_instances_init_code = task_specs.instantiation_types.iter().zip(&task_specs.background_flags).enumerate().map(|(index, (task_type, background))| {
             let additional_error_info = format!(
                 "Failed to get create instance for {}, instance index {}.",
                 task_specs.type_names[index], index
             );
-            if background {
+            if *background {
                 quote! {
                     #task_type::new(all_instances_configs[#index], threadpool).map_err(|e| e.add_cause(#additional_error_info))?
                 }
@@ -805,7 +804,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                             }
                                         }
                                     }, {  // logging preprocess
-                                        if (&task_specs).logging_enabled[*index as usize] {
+                                        if task_specs.logging_enabled[*index as usize] {
 
                                             #[cfg(feature = "macro_debug")]
                                             eprintln!(
@@ -1021,7 +1020,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         }
                                     }, {
 
-                                    if (&task_specs).logging_enabled[*output_index as usize] {
+                                    if task_specs.logging_enabled[*output_index as usize] {
                                         #[cfg(feature = "macro_debug")]
                                         eprintln!(
                                             "{} -> Logging Disabled",
@@ -1058,7 +1057,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         eprintln!("[Culist access order:  {taskid_call_order:?}]");
 
         // Give a name compatible with a struct to match the task ids to their output in the CuStampedDataSet tuple.
-        let all_tasks_member_ids: Vec<String> = (&task_specs)
+        let all_tasks_member_ids: Vec<String> = task_specs
             .ids
             .iter()
             .map(|name| utils::config_id_to_struct_member(name.as_str()))
@@ -1451,7 +1450,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         };
 
-        let ids = &task_specs.ids;
+        let ids = task_specs.ids;
         // Convert the modified struct back into a TokenStream
         let mission_mod_tokens = quote! {
             mod #mission_mod {
