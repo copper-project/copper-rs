@@ -404,10 +404,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             .zip(&task_specs.sim_task_types)
             .zip(&task_specs.background_flags)
             .map(|(((task_id, cutype), stype), background)| {
-                let background = *background;
                 match cutype {
                     CuTaskType::Source => {
-                        if background {
+                        if *background {
                             panic!("CuSrcTask {task_id} cannot be a background task, it should be a regular task.");
                         }
                         let msg_type = graph
@@ -421,7 +420,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         stype.clone()
                     },
                     CuTaskType::Sink => {
-                        if background {
+                        if *background {
                             panic!("CuSinkTask {task_id} cannot be a background task, it should be a regular task.");
                         }
                         let msg_type = graph
@@ -458,16 +457,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             );
 
             quote! {
-            <#ty>::new(all_instances_configs[#index]).map_err(|e| e.add_cause(#additional_error_info))?
+                <#ty>::new(all_instances_configs[#index]).map_err(|e| e.add_cause(#additional_error_info))?
             }
         }).collect::<Vec<_>>();
 
-        let task_instances_init_code = task_specs.instantiation_types.iter().zip(task_specs.background_flags).enumerate().map(|(index, (task_type, background))| {
+        let task_instances_init_code = task_specs.instantiation_types.iter().zip(&task_specs.background_flags).enumerate().map(|(index, (task_type, background))| {
             let additional_error_info = format!(
                 "Failed to get create instance for {}, instance index {}.",
                 task_specs.type_names[index], index
             );
-            if background {
+            if *background {
                 quote! {
                     #task_type::new(all_instances_configs[#index], threadpool).map_err(|e| e.add_cause(#additional_error_info))?
                 }
@@ -485,7 +484,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             start_calls,
             stop_calls,
             preprocess_calls,
-            postprocess_calls): (Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>) = itertools::multiunzip(
+            postprocess_calls,
+            ): (Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>) = itertools::multiunzip(
             (0..task_specs.task_types.len())
             .map(|index| {
                 let task_index = int2sliceindex(index as u32);
@@ -704,7 +704,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         // This records the task ids in call order.
         let mut taskid_call_order: Vec<usize> = Vec::new();
 
-        let runtime_plan_code: Vec<proc_macro2::TokenStream> = runtime_plan.steps
+        let runtime_plan_code_and_logging: Vec<(proc_macro2::TokenStream, proc_macro2::TokenStream)> = runtime_plan.steps
             .iter()
             .map(|unit| {
                 match unit {
@@ -742,10 +742,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         let task_enum_name = config_id_to_enum(&task_specs.ids[tid]);
                         let enum_name = Ident::new(&task_enum_name, proc_macro2::Span::call_site());
 
-                        let process_call = match step.task_type {
+                        let (process_call, preprocess_logging) = match step.task_type {
                             CuTaskType::Source => {
-                                if let Some((index, _)) = &step.output_msg_index_type {
-                                    let output_culist_index = int2sliceindex(*index);
+                                if let Some((output_index, _)) = &step.output_msg_index_type {
+                                    let output_culist_index = int2sliceindex(*output_index);
 
                                     let monitoring_action = quote! {
                                         debug!("Task {}: Error during process: {}", #mission_mod::TASKS_IDS[#tid], &error);
@@ -793,7 +793,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                        }
                                     };
 
-                                    quote! {
+                                    (quote! {  // process call
                                         {
                                             #comment_tokens
                                             {
@@ -813,7 +813,31 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                                 }
                                             }
                                         }
+                                    }, {  // logging preprocess
+                                        if !task_specs.logging_enabled[*output_index as usize] {
+
+                                            #[cfg(feature = "macro_debug")]
+                                            eprintln!(
+                                                "{} -> Logging Disabled",
+                                                step.node.get_id(),
+                                            );
+
+
+                                            let output_culist_index = int2sliceindex(*output_index);
+                                            quote! {
+                                                let mut cumsg_output = &mut culist.msgs.0.#output_culist_index;
+                                                cumsg_output.clear_payload();
+                                            }
+                                        } else {
+                                            #[cfg(feature = "macro_debug")]
+                                            eprintln!(
+                                                "{} -> Logging Enabled",
+                                                step.node.get_id(),
+                                            );
+                                            quote!() // do nothing
+                                        }
                                     }
+                                    )
                                 } else {
                                     panic!("Source task should have an output message index.");
                                 }
@@ -892,7 +916,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         quote! { (#(&msgs.#indices),*) }
                                     };
 
-                                    quote! {
+                                    (quote! {
                                         {
                                             #comment_tokens
                                             // Maybe freeze the task if this is a "key frame"
@@ -908,7 +932,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                                 #monitoring_action
                                             }
                                         }
-                                    }
+                                    }, {
+                                        quote!() // do nothing for logging
+                                    })
                                 } else {
                                     panic!("Sink tasks should have a virtual output message index.");
                                 }
@@ -984,7 +1010,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         // A tuple for multiple inputs
                                         quote! { (#(&msgs.#indices),*) }
                                     };
-                                    quote! {
+
+                                    (quote! {
                                         {
                                             #comment_tokens
                                             // Maybe freeze the task if this is a "key frame"
@@ -999,14 +1026,35 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                                 #monitoring_action
                                             }
                                         }
-                                    }
+                                    }, {
+
+                                    if !task_specs.logging_enabled[*output_index as usize] {
+                                        #[cfg(feature = "macro_debug")]
+                                        eprintln!(
+                                            "{} -> Logging Disabled",
+                                            step.node.get_id(),
+                                        );
+                                        let output_culist_index = int2sliceindex(*output_index);
+                                        quote! {
+                                                let mut cumsg_output = &mut culist.msgs.0.#output_culist_index;
+                                                cumsg_output.clear_payload();
+                                            }
+                                   } else {
+                                        #[cfg(feature = "macro_debug")]
+                                        eprintln!(
+                                            "{} -> Logging Enabled",
+                                            step.node.get_id(),
+                                        );
+                                         quote!() // do nothing logging is enabled
+                                   }
+                                })
                                 } else {
                                     panic!("Regular task should have an output message index.");
                                 }
                             }
                         };
 
-                        process_call
+                        (process_call, preprocess_logging)
                     }
                     CuExecutionUnit::Loop(_) => todo!("Needs to be implemented"),
                 }
@@ -1097,6 +1145,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             None
         };
 
+        let (runtime_plan_code, preprocess_logging_calls): (Vec<_>, Vec<_>) =
+            itertools::multiunzip(runtime_plan_code_and_logging);
+
         #[cfg(feature = "macro_debug")]
         eprintln!("[build the run methods]");
         let run_methods = quote! {
@@ -1123,6 +1174,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     #(#runtime_plan_code)*
                 } // drop(msgs);
                 monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
+
+                // here drop the payloads if we don't want them to be logged.
+                #(#preprocess_logging_calls)*
+
                 cl_manager.end_of_processing(clid)?;
                 kf_manager.end_of_processing(clid)?;
 
@@ -1391,7 +1446,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         };
 
-        let ids = &task_specs.ids;
+        let ids = task_specs.ids;
         // Convert the modified struct back into a TokenStream
         let mission_mod_tokens = quote! {
             mod #mission_mod {
@@ -1491,7 +1546,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         use default::#application_name;
         }
     } else {
-        quote! {}
+        quote!() // do nothing
     };
 
     let result: proc_macro2::TokenStream = quote! {
@@ -1550,6 +1605,7 @@ struct CuTaskSpecSet {
     pub ids: Vec<String>,
     pub cutypes: Vec<CuTaskType>,
     pub background_flags: Vec<bool>,
+    pub logging_enabled: Vec<bool>,
     pub type_names: Vec<String>,
     pub task_types: Vec<Type>,
     pub instantiation_types: Vec<Type>,
@@ -1575,6 +1631,11 @@ impl CuTaskSpecSet {
         let background_flags: Vec<bool> = all_id_nodes
             .iter()
             .map(|(_, node)| node.is_background())
+            .collect();
+
+        let logging_enabled: Vec<bool> = all_id_nodes
+            .iter()
+            .map(|(_, node)| node.is_logging_enabled())
             .collect();
 
         let type_names: Vec<String> = all_id_nodes
@@ -1638,6 +1699,7 @@ impl CuTaskSpecSet {
             ids,
             cutypes,
             background_flags,
+            logging_enabled,
             type_names,
             task_types,
             instantiation_types,
