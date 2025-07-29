@@ -50,7 +50,7 @@ pub struct CopperList<P: CopperListTuple> {
     pub msgs: P, // This is generated from the runtime.
 }
 
-impl<P: CopperListTuple + Default> Default for CopperList<P> {
+impl<P: CopperListTuple> Default for CopperList<P> {
     fn default() -> Self {
         CopperList {
             id: 0,
@@ -111,13 +111,13 @@ pub type IterMut<'a, T> = Chain<Rev<SliceIterMut<'a, T>>, Rev<SliceIterMut<'a, T
 pub type AscIter<'a, T> = Chain<SliceIter<'a, T>, SliceIter<'a, T>>;
 pub type AscIterMut<'a, T> = Chain<SliceIterMut<'a, T>, SliceIterMut<'a, T>>;
 
-impl<P: CopperListTuple + Default, const N: usize> Default for CuListsManager<P, N> {
+impl<P: CopperListTuple, const N: usize> Default for CuListsManager<P, N> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<P: CopperListTuple + Default, const N: usize> CuListsManager<P, N> {
+impl<P: CopperListTuple, const N: usize> CuListsManager<P, N> {
     pub fn new() -> Self {
         let data = Box::new(std::array::from_fn(|_| CopperList::<P>::default()));
         CuListsManager {

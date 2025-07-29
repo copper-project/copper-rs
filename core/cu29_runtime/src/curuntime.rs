@@ -116,7 +116,7 @@ impl KeyFramesManager {
 /// This is the main structure that will be injected as a member of the Application struct.
 /// CT is the tuple of all the tasks in order of execution.
 /// CL is the type of the copper list, representing the input/output messages for all the tasks.
-pub struct CuRuntime<CT, P: CopperListTuple + Default, M: CuMonitor, const NBCL: usize> {
+pub struct CuRuntime<CT, P: CopperListTuple, M: CuMonitor, const NBCL: usize> {
     /// The base clock the runtime will be using to record time.
     pub clock: RobotClock, // TODO: remove public at some point
 
