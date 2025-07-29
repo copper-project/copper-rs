@@ -734,8 +734,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                         let (process_call, preprocess_logging) = match step.task_type {
                             CuTaskType::Source => {
-                                if let Some((index, _)) = &step.output_msg_index_type {
-                                    let output_culist_index = int2sliceindex(*index);
+                                if let Some((output_index, _)) = &step.output_msg_index_type {
+                                    let output_culist_index = int2sliceindex(*output_index);
 
                                     let monitoring_action = quote! {
                                         debug!("Task {}: Error during process: {}", #mission_mod::TASKS_IDS[#tid], &error);
@@ -804,7 +804,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                             }
                                         }
                                     }, {  // logging preprocess
-                                        if task_specs.logging_enabled[*index as usize] {
+                                        if !task_specs.logging_enabled[*output_index as usize] {
 
                                             #[cfg(feature = "macro_debug")]
                                             eprintln!(
@@ -812,9 +812,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                                 step.node.get_id(),
                                             );
 
-                                            let output_culist_index = int2sliceindex(*index);
+
+                                            let output_culist_index = int2sliceindex(*output_index);
                                             quote! {
-                                                let cumsg_output = &mut msgs.#output_culist_index;
+                                                let mut cumsg_output = &mut culist.msgs.0.#output_culist_index;
                                                 cumsg_output.clear_payload();
                                             }
                                         } else {
@@ -1020,7 +1021,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         }
                                     }, {
 
-                                    if task_specs.logging_enabled[*output_index as usize] {
+                                    if !task_specs.logging_enabled[*output_index as usize] {
                                         #[cfg(feature = "macro_debug")]
                                         eprintln!(
                                             "{} -> Logging Disabled",
@@ -1028,9 +1029,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         );
                                         let output_culist_index = int2sliceindex(*output_index);
                                         quote! {
-                                                let cumsg_output = &mut msgs.#output_culist_index;
+                                                let mut cumsg_output = &mut culist.msgs.0.#output_culist_index;
                                                 cumsg_output.clear_payload();
-                                       }
+                                            }
                                    } else {
                                         #[cfg(feature = "macro_debug")]
                                         eprintln!(

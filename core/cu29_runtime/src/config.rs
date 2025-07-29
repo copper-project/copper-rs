@@ -265,7 +265,7 @@ impl Node {
         if let Some(logging) = &self.logging {
             logging.enabled
         } else {
-            false
+            true
         }
     }
 
