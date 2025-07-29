@@ -50,6 +50,16 @@ pub struct CopperList<P: CopperListTuple> {
     pub msgs: P, // This is generated from the runtime.
 }
 
+impl<P: CopperListTuple + Default> Default for CopperList<P> {
+    fn default() -> Self {
+        CopperList {
+            id: 0,
+            state: CopperListState::Free,
+            msgs: P::default(),
+        }
+    }
+}
+
 impl<P: CopperListTuple> CopperList<P> {
     // This is not the usual way to create a CopperList, this is just for testing.
     pub fn new(id: u32, msgs: P) -> Self {
@@ -101,19 +111,15 @@ pub type IterMut<'a, T> = Chain<Rev<SliceIterMut<'a, T>>, Rev<SliceIterMut<'a, T
 pub type AscIter<'a, T> = Chain<SliceIter<'a, T>, SliceIter<'a, T>>;
 pub type AscIterMut<'a, T> = Chain<SliceIterMut<'a, T>, SliceIterMut<'a, T>>;
 
-impl<P: CopperListTuple, const N: usize> Default for CuListsManager<P, N> {
+impl<P: CopperListTuple + Default, const N: usize> Default for CuListsManager<P, N> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<P: CopperListTuple, const N: usize> CuListsManager<P, N> {
+impl<P: CopperListTuple + Default, const N: usize> CuListsManager<P, N> {
     pub fn new() -> Self {
-        let data = unsafe {
-            let layout = std::alloc::Layout::new::<[CopperList<P>; N]>();
-            let ptr = std::alloc::alloc_zeroed(layout) as *mut [CopperList<P>; N];
-            Box::from_raw(ptr)
-        };
+        let data = Box::new(std::array::from_fn(|_| CopperList::<P>::default()));
         CuListsManager {
             data,
             length: 0,
@@ -256,7 +262,7 @@ mod tests {
     use cu29_traits::{ErasedCuStampedData, ErasedCuStampedDataSet, MatchingTasks};
     use serde::{Serialize, Serializer};
 
-    #[derive(Debug, Encode, Decode, PartialEq, Clone, Copy, Serialize)]
+    #[derive(Debug, Encode, Decode, PartialEq, Clone, Copy, Serialize, Default)]
     struct CuStampedDataSet(i32);
 
     impl ErasedCuStampedDataSet for CuStampedDataSet {
@@ -421,6 +427,14 @@ mod tests {
     #[derive(Decode, Encode, Debug, PartialEq, Clone, Copy)]
     struct TestStruct {
         content: [u8; 10_000_000],
+    }
+
+    impl Default for TestStruct {
+        fn default() -> Self {
+            TestStruct {
+                content: [0; 10_000_000],
+            }
+        }
     }
 
     impl ErasedCuStampedDataSet for TestStruct {
