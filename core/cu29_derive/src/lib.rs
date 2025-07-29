@@ -1804,7 +1804,7 @@ fn build_culist_tuple_default(all_msgs_types_in_culist_order: &[Type]) -> ItemIm
     // Generate the serialization for each tuple field
     let default_fields: Vec<_> = all_msgs_types_in_culist_order
         .iter()
-        .map(|typ| quote! { CuStampedData::<#typ, CuMsgMetadata>::default() })
+        .map(|msg_type| quote! { CuStampedData::<#msg_type, CuMsgMetadata>::default() })
         .collect();
 
     parse_quote! {
