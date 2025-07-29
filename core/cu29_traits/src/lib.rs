@@ -192,7 +192,7 @@ mod tests {
         let cstr = CuCompactString(CompactString::from("test"));
         let config = config::standard();
         let encoded = encode_to_vec(&cstr, config).expect("Encoding failed");
-        assert_eq!(encoded.len(), 5); // This encodes the usize 0 in variable encoding so 1 byte which is 0.
+        assert_eq!(encoded.len(), 5); // This encodes a 4-byte string "test" plus 1 byte for the length prefix.
         let (decoded, _): (CuCompactString, usize) =
             decode_from_slice(&encoded, config).expect("Decoding failed");
         assert_eq!(cstr.0, decoded.0);
