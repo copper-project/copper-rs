@@ -100,6 +100,7 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
             use cu29::bincode::de::Decoder;
             use cu29::bincode::error::DecodeError;
             use cu29::copperlist::CopperList;
+            use cu29::prelude::CuStampedData;
             use cu29::prelude::ErasedCuStampedData;
             use cu29::prelude::ErasedCuStampedDataSet;
             use cu29::prelude::MatchingTasks;
