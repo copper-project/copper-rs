@@ -153,14 +153,7 @@ impl Encode for CuCompactString {
 
 impl<Context> Decode<Context> for CuCompactString {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let len = usize::decode(decoder)?;
-        
-        let mut bytes = Vec::with_capacity(len);
-        for _ in 0..len {
-            let byte = u8::decode(decoder)?;
-            bytes.push(byte);
-        }
-        
+        let bytes = Vec::<u8>::decode(decoder)?;
         Ok(CuCompactString(CompactString::from_utf8_lossy(&bytes)))
     }
 }
