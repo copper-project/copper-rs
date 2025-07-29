@@ -134,14 +134,24 @@ impl<T> CopperListTuple for T where
 // which is the maximum size for inline allocation (no heap)
 pub const COMPACT_STRING_CAPACITY: usize = size_of::<String>();
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CuCompactString(pub CompactString);
 
 impl Encode for CuCompactString {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        let length = self.0.len();
         let CuCompactString(ref compact_string) = self;
-        let bytes = compact_string.as_bytes();
+        let bytes = &compact_string.as_bytes()[0..length];
         bytes.encode(encoder)
+    }
+}
+
+impl Debug for CuCompactString {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.0.is_empty() {
+            return write!(f, "CuCompactString(Empty)");
+        }
+        write!(f, "CuCompactString({})", self.0)
     }
 }
 
@@ -157,5 +167,34 @@ impl<Context> Decode<Context> for CuCompactString {
 impl<'de, Context> BorrowDecode<'de, Context> for CuCompactString {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         CuCompactString::decode(decoder)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::CuCompactString;
+    use bincode::{config, decode_from_slice, encode_to_vec};
+    use compact_str::CompactString;
+
+    #[test]
+    fn test_cucompactstr_encode_decode_empty() {
+        let cstr = CuCompactString(CompactString::from(""));
+        let config = config::standard();
+        let encoded = encode_to_vec(&cstr, config).expect("Encoding failed");
+        assert_eq!(encoded.len(), 1); // This encodes the usize 0 in variable encoding so 1 byte which is 0.
+        let (decoded, _): (CuCompactString, usize) =
+            decode_from_slice(&encoded, config).expect("Decoding failed");
+        assert_eq!(cstr.0, decoded.0);
+    }
+
+    #[test]
+    fn test_cucompactstr_encode_decode_small() {
+        let cstr = CuCompactString(CompactString::from("test"));
+        let config = config::standard();
+        let encoded = encode_to_vec(&cstr, config).expect("Encoding failed");
+        assert_eq!(encoded.len(), 5); // This encodes the usize 0 in variable encoding so 1 byte which is 0.
+        let (decoded, _): (CuCompactString, usize) =
+            decode_from_slice(&encoded, config).expect("Decoding failed");
+        assert_eq!(cstr.0, decoded.0);
     }
 }
