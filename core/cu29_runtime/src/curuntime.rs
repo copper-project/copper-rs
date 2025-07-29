@@ -181,7 +181,9 @@ impl KeyFrame {
     }
 }
 
-impl<CT, P: CopperListTuple + Default + 'static, M: CuMonitor, const NBCL: usize> CuRuntime<CT, P, M, NBCL> {
+impl<CT, P: CopperListTuple + Default + 'static, M: CuMonitor, const NBCL: usize>
+    CuRuntime<CT, P, M, NBCL>
+{
     pub fn new(
         clock: RobotClock,
         config: &CuConfig,
