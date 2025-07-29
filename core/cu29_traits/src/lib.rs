@@ -134,7 +134,7 @@ impl<T> CopperListTuple for T where
 // which is the maximum size for inline allocation (no heap)
 pub const COMPACT_STRING_CAPACITY: usize = size_of::<String>();
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CuCompactString(pub CompactString);
 
 impl Encode for CuCompactString {
@@ -147,6 +147,15 @@ impl Encode for CuCompactString {
             byte.encode(encoder)?;
         }
         Ok(())
+    }
+}
+
+impl Debug for CuCompactString {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.0.is_empty() {
+            return write!(f, "CuCompactString(Empty)");
+        }
+        write!(f, "CuCompactString({})", self.0)
     }
 }
 
