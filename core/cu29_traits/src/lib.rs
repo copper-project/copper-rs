@@ -150,7 +150,6 @@ impl Encode for CuCompactString {
     }
 }
 
-
 impl<Context> Decode<Context> for CuCompactString {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let bytes = Vec::<u8>::decode(decoder)?;
@@ -164,9 +163,12 @@ impl<'de, Context> BorrowDecode<'de, Context> for CuCompactString {
     }
 }
 
+#[cfg(test)]
 mod tests {
-    use super::*;
     use bincode::config::standard;
+    use compact_str::CompactString;
+
+    use crate::CuCompactString;
 
     #[test]
     fn test_removes_null_bytes() {
