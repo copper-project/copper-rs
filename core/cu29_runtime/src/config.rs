@@ -189,7 +189,7 @@ impl Display for Value {
 
 /// Configuration for logging in the node.
 #[derive(Serialize, Deserialize, Debug, Clone)]
-struct NodeLogging {
+pub struct NodeLogging {
     enabled: bool,
 }
 

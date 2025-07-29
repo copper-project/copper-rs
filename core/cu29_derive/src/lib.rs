@@ -447,7 +447,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             );
 
             quote! {
-            <#ty>::new(all_instances_configs[#index]).map_err(|e| e.add_cause(#additional_error_info))?
+                <#ty>::new(all_instances_configs[#index]).map_err(|e| e.add_cause(#additional_error_info))?
             }
         }).collect::<Vec<_>>();
 
@@ -824,8 +824,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                                 "{} -> Logging Enabled",
                                                 step.node.get_id(),
                                             );
-                                            quote!{
-                                            }
+                                            quote!() // do nothing
                                         }
                                     }
                                     )
@@ -924,9 +923,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                             }
                                         }
                                     }, {
-                                        // no payload for sinks do nothing to do for logging
-                                        quote!{
-                                        }
+                                        quote!() // do nothing for logging
                                     })
                                 } else {
                                     panic!("Sink tasks should have a virtual output message index.");
@@ -1038,9 +1035,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                             "{} -> Logging Enabled",
                                             step.node.get_id(),
                                         );
-                                         // Logging enabled
-                                         quote!{
-                                            }
+                                         quote!() // do nothing logging is enabled
                                    }
                                 })
                                 } else {
@@ -1142,16 +1137,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         let (runtime_plan_code, preprocess_logging_calls): (Vec<_>, Vec<_>) =
             itertools::multiunzip(runtime_plan_code_and_logging);
-
-        //let runtime_plan_code: Vec<proc_macro2::TokenStream> = runtime_plan_code_and_logging
-        //    .iter()
-        //    .map(|(code, _)| code.clone())
-        //    .collect();
-
-        //let preprocess_logging_calls: Vec<proc_macro2::TokenStream> = runtime_plan_code_and_logging
-        //    .iter()
-        //    .map(|(_, logging)| logging.clone())
-        //    .collect();
 
         #[cfg(feature = "macro_debug")]
         eprintln!("[build the run methods]");
@@ -1551,7 +1536,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         use default::#application_name;
         }
     } else {
-        quote! {}
+        quote!() // do nothing
     };
 
     let result: proc_macro2::TokenStream = quote! {
