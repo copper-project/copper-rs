@@ -187,6 +187,12 @@ impl Display for Value {
     }
 }
 
+/// Configuration for logging in the node.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct NodeLogging {
+    enabled: bool,
+}
+
 /// A node in the configuration graph.
 /// A node represents a Task in the system Graph.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -209,6 +215,10 @@ pub struct Node {
     /// ie. Will be set to run on a background thread and until it is finished `CuTask::process` will return None.
     #[serde(skip_serializing_if = "Option::is_none")]
     background: Option<bool>,
+
+    /// Config passed to the task.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    logging: Option<NodeLogging>,
 }
 
 impl Node {
@@ -220,6 +230,7 @@ impl Node {
             config: None,
             missions: None,
             background: None,
+            logging: None,
         }
     }
 
@@ -247,6 +258,15 @@ impl Node {
     #[allow(dead_code)]
     pub fn get_instance_config(&self) -> Option<&ComponentConfig> {
         self.config.as_ref()
+    }
+
+    #[allow(dead_code)]
+    pub fn is_logging_enabled(&self) -> bool {
+        if let Some(logging) = &self.logging {
+            logging.enabled
+        } else {
+            false
+        }
     }
 
     #[allow(dead_code)]
