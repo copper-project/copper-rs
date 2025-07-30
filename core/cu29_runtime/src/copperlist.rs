@@ -50,6 +50,16 @@ pub struct CopperList<P: CopperListTuple> {
     pub msgs: P, // This is generated from the runtime.
 }
 
+impl<P: CopperListTuple> Default for CopperList<P> {
+    fn default() -> Self {
+        CopperList {
+            id: 0,
+            state: CopperListState::Free,
+            msgs: P::default(),
+        }
+    }
+}
+
 impl<P: CopperListTuple> CopperList<P> {
     // This is not the usual way to create a CopperList, this is just for testing.
     pub fn new(id: u32, msgs: P) -> Self {
@@ -101,25 +111,45 @@ pub type IterMut<'a, T> = Chain<Rev<SliceIterMut<'a, T>>, Rev<SliceIterMut<'a, T
 pub type AscIter<'a, T> = Chain<SliceIter<'a, T>, SliceIter<'a, T>>;
 pub type AscIterMut<'a, T> = Chain<SliceIterMut<'a, T>, SliceIterMut<'a, T>>;
 
-impl<P: CopperListTuple, const N: usize> Default for CuListsManager<P, N> {
+/// Initializes fields that cannot be zeroed after allocating a zeroed
+/// [`CopperList`].
+pub trait CuListZeroedInit: CopperListTuple {
+    /// Fixes up a zero-initialized copper list so that all internal fields are
+    /// in a valid state.
+    fn init_zeroed(&mut self);
+}
+
+impl<P: CopperListTuple + CuListZeroedInit, const N: usize> Default for CuListsManager<P, N> {
     fn default() -> Self {
         Self::new()
     }
 }
 
 impl<P: CopperListTuple, const N: usize> CuListsManager<P, N> {
-    pub fn new() -> Self {
+    pub fn new() -> Self
+    where
+        P: CuListZeroedInit,
+    {
         let data = unsafe {
             let layout = std::alloc::Layout::new::<[CopperList<P>; N]>();
             let ptr = std::alloc::alloc_zeroed(layout) as *mut [CopperList<P>; N];
+            if ptr.is_null() {
+                std::alloc::handle_alloc_error(layout);
+            }
             Box::from_raw(ptr)
         };
-        CuListsManager {
+        let mut manager = CuListsManager {
             data,
             length: 0,
             insertion_index: 0,
             current_cl_id: 0,
+        };
+
+        for cl in manager.data.iter_mut() {
+            cl.msgs.init_zeroed();
         }
+
+        manager
     }
 
     /// Returns the current number of elements in the queue.
@@ -256,7 +286,7 @@ mod tests {
     use cu29_traits::{ErasedCuStampedData, ErasedCuStampedDataSet, MatchingTasks};
     use serde::{Serialize, Serializer};
 
-    #[derive(Debug, Encode, Decode, PartialEq, Clone, Copy, Serialize)]
+    #[derive(Debug, Encode, Decode, PartialEq, Clone, Copy, Serialize, Default)]
     struct CuStampedDataSet(i32);
 
     impl ErasedCuStampedDataSet for CuStampedDataSet {
@@ -269,6 +299,10 @@ mod tests {
         fn get_all_task_ids() -> &'static [&'static str] {
             &[]
         }
+    }
+
+    impl CuListZeroedInit for CuStampedDataSet {
+        fn init_zeroed(&mut self) {}
     }
 
     #[test]
@@ -423,6 +457,14 @@ mod tests {
         content: [u8; 10_000_000],
     }
 
+    impl Default for TestStruct {
+        fn default() -> Self {
+            TestStruct {
+                content: [0; 10_000_000],
+            }
+        }
+    }
+
     impl ErasedCuStampedDataSet for TestStruct {
         fn cumsgs(&self) -> Vec<&dyn ErasedCuStampedData> {
             Vec::new()
@@ -442,6 +484,10 @@ mod tests {
         fn get_all_task_ids() -> &'static [&'static str] {
             &[]
         }
+    }
+
+    impl CuListZeroedInit for TestStruct {
+        fn init_zeroed(&mut self) {}
     }
 
     #[test]

@@ -100,12 +100,15 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
             use cu29::bincode::de::Decoder;
             use cu29::bincode::error::DecodeError;
             use cu29::copperlist::CopperList;
+            use cu29::prelude::CuStampedData;
             use cu29::prelude::ErasedCuStampedData;
             use cu29::prelude::ErasedCuStampedDataSet;
             use cu29::prelude::MatchingTasks;
             use cu29::prelude::Serialize;
             use cu29::prelude::CuMsg;
             use cu29::prelude::CuMsgMetadata;
+            use cu29::prelude::CuListZeroedInit;
+            use cu29::prelude::CuCompactString;
             #support
         }
         use cumsgs::CuStampedDataSet;
@@ -146,6 +149,13 @@ fn gen_culist_support(
     #[cfg(feature = "macro_debug")]
     eprintln!("[build the copperlist tuple serialize support]");
     let msgs_types_tuple_serialize = build_culist_tuple_serialize(&all_msgs_types_in_culist_order);
+
+    #[cfg(feature = "macro_debug")]
+    eprintln!("[build the default tuple support]");
+    let msgs_types_tuple_default = build_culist_tuple_default(&all_msgs_types_in_culist_order);
+
+    #[cfg(feature = "macro_debug")]
+    eprintln!("[build erasedcumsgs]");
 
     let erasedmsg_trait_impl = build_culist_erasedcumsgs(&all_msgs_types_in_culist_order);
 
@@ -205,11 +215,20 @@ fn gen_culist_support(
         // Adds the debug support
         #msgs_types_tuple_debug
 
-        // Adds the serialize support
+        // Adds the serialization support
         #msgs_types_tuple_serialize
+
+        // Adds the default support
+        #msgs_types_tuple_default
 
         // Adds the type erased CuStampedDataSet support (to help generic serialized conversions)
         #erasedmsg_trait_impl
+
+        impl CuListZeroedInit for CuStampedDataSet {
+            fn init_zeroed(&mut self) {
+                #(self.0.#task_indices.metadata.status_txt = CuCompactString::default();)*
+            }
+        }
     }
 }
 
@@ -1159,6 +1178,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let clid = culist.id;
                 kf_manager.reset(clid, clock); // beginning of processing, we empty the serialized frozen states of the tasks.
                 culist.change_state(cu29::copperlist::CopperListState::Processing);
+                culist.msgs.init_zeroed();
                 {
                     let msgs = &mut culist.msgs.0;
                     #(#runtime_plan_code)*
@@ -1855,6 +1875,26 @@ fn build_culist_tuple_serialize(all_msgs_types_in_culist_order: &[Type]) -> Item
                 let mut tuple = serializer.serialize_tuple(#tuple_len)?;
                 #(tuple.serialize_element(#serialize_fields)?;)*
                 tuple.end()
+            }
+        }
+    }
+}
+
+/// This is the default implementation for CuStampedDataSet
+fn build_culist_tuple_default(all_msgs_types_in_culist_order: &[Type]) -> ItemImpl {
+    // Generate the serialization for each tuple field
+    let default_fields: Vec<_> = all_msgs_types_in_culist_order
+        .iter()
+        .map(|msg_type| quote! { CuStampedData::<#msg_type, CuMsgMetadata>::default() })
+        .collect();
+
+    parse_quote! {
+        impl Default for CuStampedDataSet {
+            fn default() -> CuStampedDataSet
+            {
+                CuStampedDataSet((
+                    #(#default_fields),*
+                ))
             }
         }
     }

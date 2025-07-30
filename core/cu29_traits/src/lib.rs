@@ -114,7 +114,13 @@ pub trait MatchingTasks {
 
 /// A CopperListTuple needs to be encodable, decodable and fixed size in memory.
 pub trait CopperListTuple:
-    bincode::Encode + bincode::Decode<()> + Debug + Serialize + ErasedCuStampedDataSet + MatchingTasks
+    bincode::Encode
+    + bincode::Decode<()>
+    + Debug
+    + Serialize
+    + ErasedCuStampedDataSet
+    + MatchingTasks
+    + Default
 {
 } // Decode forces Sized already
 
@@ -126,6 +132,7 @@ impl<T> CopperListTuple for T where
         + Serialize
         + ErasedCuStampedDataSet
         + MatchingTasks
+        + Default
 {
 }
 
