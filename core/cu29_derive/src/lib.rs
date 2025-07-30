@@ -107,6 +107,8 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
             use cu29::prelude::Serialize;
             use cu29::prelude::CuMsg;
             use cu29::prelude::CuMsgMetadata;
+            use cu29::prelude::CuListZeroedInit;
+            use cu29::prelude::CuCompactString;
             #support
         }
         use cumsgs::CuStampedDataSet;
@@ -221,6 +223,12 @@ fn gen_culist_support(
 
         // Adds the type erased CuStampedDataSet support (to help generic serialized conversions)
         #erasedmsg_trait_impl
+
+        impl CuListZeroedInit for CuStampedDataSet {
+            fn init_zeroed(&mut self) {
+                #(self.0.#task_indices.metadata.status_txt = CuCompactString::default();)*
+            }
+        }
     }
 }
 
@@ -1170,6 +1178,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let clid = culist.id;
                 kf_manager.reset(clid, clock); // beginning of processing, we empty the serialized frozen states of the tasks.
                 culist.change_state(cu29::copperlist::CopperListState::Processing);
+                culist.msgs.init_zeroed();
                 {
                     let msgs = &mut culist.msgs.0;
                     #(#runtime_plan_code)*

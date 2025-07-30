@@ -111,21 +111,45 @@ pub type IterMut<'a, T> = Chain<Rev<SliceIterMut<'a, T>>, Rev<SliceIterMut<'a, T
 pub type AscIter<'a, T> = Chain<SliceIter<'a, T>, SliceIter<'a, T>>;
 pub type AscIterMut<'a, T> = Chain<SliceIterMut<'a, T>, SliceIterMut<'a, T>>;
 
-impl<P: CopperListTuple, const N: usize> Default for CuListsManager<P, N> {
+/// Initializes fields that cannot be zeroed after allocating a zeroed
+/// [`CopperList`].
+pub trait CuListZeroedInit: CopperListTuple {
+    /// Fixes up a zero-initialized copper list so that all internal fields are
+    /// in a valid state.
+    fn init_zeroed(&mut self);
+}
+
+impl<P: CopperListTuple + CuListZeroedInit, const N: usize> Default for CuListsManager<P, N> {
     fn default() -> Self {
         Self::new()
     }
 }
 
 impl<P: CopperListTuple, const N: usize> CuListsManager<P, N> {
-    pub fn new() -> Self {
-        let data = Box::new(std::array::from_fn(|_| CopperList::<P>::default()));
-        CuListsManager {
+    pub fn new() -> Self
+    where
+        P: CuListZeroedInit,
+    {
+        let data = unsafe {
+            let layout = std::alloc::Layout::new::<[CopperList<P>; N]>();
+            let ptr = std::alloc::alloc_zeroed(layout) as *mut [CopperList<P>; N];
+            if ptr.is_null() {
+                std::alloc::handle_alloc_error(layout);
+            }
+            Box::from_raw(ptr)
+        };
+        let mut manager = CuListsManager {
             data,
             length: 0,
             insertion_index: 0,
             current_cl_id: 0,
+        };
+
+        for cl in manager.data.iter_mut() {
+            cl.msgs.init_zeroed();
         }
+
+        manager
     }
 
     /// Returns the current number of elements in the queue.
@@ -275,6 +299,10 @@ mod tests {
         fn get_all_task_ids() -> &'static [&'static str] {
             &[]
         }
+    }
+
+    impl CuListZeroedInit for CuStampedDataSet {
+        fn init_zeroed(&mut self) {}
     }
 
     #[test]
@@ -456,6 +484,10 @@ mod tests {
         fn get_all_task_ids() -> &'static [&'static str] {
             &[]
         }
+    }
+
+    impl CuListZeroedInit for TestStruct {
+        fn init_zeroed(&mut self) {}
     }
 
     #[test]

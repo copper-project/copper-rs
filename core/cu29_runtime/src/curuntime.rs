@@ -4,7 +4,7 @@
 
 use crate::config::{ComponentConfig, Node, DEFAULT_KEYFRAME_INTERVAL};
 use crate::config::{CuConfig, CuGraph, NodeId};
-use crate::copperlist::{CopperList, CopperListState, CuListsManager};
+use crate::copperlist::{CopperList, CopperListState, CuListZeroedInit, CuListsManager};
 use crate::cutask::{BincodeAdapter, Freezable};
 use crate::monitoring::CuMonitor;
 use cu29_clock::{ClockProvider, CuTime, RobotClock};
@@ -137,8 +137,8 @@ pub struct CuRuntime<CT, P: CopperListTuple, M: CuMonitor, const NBCL: usize> {
 }
 
 /// To be able to share the clock we make the runtime a clock provider.
-impl<CT, P: CopperListTuple + Default, M: CuMonitor, const NBCL: usize> ClockProvider
-    for CuRuntime<CT, P, M, NBCL>
+impl<CT, P: CopperListTuple + CuListZeroedInit + Default, M: CuMonitor, const NBCL: usize>
+    ClockProvider for CuRuntime<CT, P, M, NBCL>
 {
     fn get_clock(&self) -> RobotClock {
         self.clock.clone()
@@ -181,8 +181,12 @@ impl KeyFrame {
     }
 }
 
-impl<CT, P: CopperListTuple + Default + 'static, M: CuMonitor, const NBCL: usize>
-    CuRuntime<CT, P, M, NBCL>
+impl<
+        CT,
+        P: CopperListTuple + CuListZeroedInit + Default + 'static,
+        M: CuMonitor,
+        const NBCL: usize,
+    > CuRuntime<CT, P, M, NBCL>
 {
     pub fn new(
         clock: RobotClock,
@@ -669,6 +673,10 @@ mod tests {
         fn get_all_task_ids() -> &'static [&'static str] {
             &[]
         }
+    }
+
+    impl CuListZeroedInit for Msgs {
+        fn init_zeroed(&mut self) {}
     }
 
     fn tasks_instanciator(
