@@ -301,9 +301,6 @@ pub struct Cnx {
 
     /// Restrict this connection for this list of missions.
     pub missions: Option<Vec<String>>,
-
-    /// Tells Copper if it needs to log the messages.
-    pub store: Option<bool>,
 }
 
 #[derive(Default, Debug, Clone)]
@@ -331,7 +328,6 @@ impl CuGraph {
         source: NodeId,
         target: NodeId,
         msg_type: &str,
-        store: Option<bool>,
         missions: Option<Vec<String>>,
     ) -> CuResult<()> {
         let (src_id, dst_id) = (
@@ -355,7 +351,6 @@ impl CuGraph {
                 dst: dst_id,
                 msg: msg_type.to_string(),
                 missions,
-                store,
             },
         );
         Ok(())
@@ -458,7 +453,7 @@ impl CuGraph {
     /// msg_type is the type of message exchanged between the two nodes/tasks.
     #[allow(dead_code)]
     pub fn connect(&mut self, source: NodeId, target: NodeId, msg_type: &str) -> CuResult<()> {
-        self.connect_ext(source, target, msg_type, None, None)
+        self.connect_ext(source, target, msg_type, None)
     }
 }
 
@@ -733,7 +728,6 @@ where
                                     src.index() as NodeId,
                                     dst.index() as NodeId,
                                     &c.msg,
-                                    c.store,
                                     Some(cnx_missions.clone()),
                                 )
                                 .map_err(|e| E::from(e.to_string()))?;
@@ -753,13 +747,7 @@ where
                                 E::from(format!("Destination node not found: {}", c.dst))
                             })?;
                         graph
-                            .connect_ext(
-                                src.index() as NodeId,
-                                dst.index() as NodeId,
-                                &c.msg,
-                                c.store,
-                                None,
-                            )
+                            .connect_ext(src.index() as NodeId, dst.index() as NodeId, &c.msg, None)
                             .map_err(|e| E::from(e.to_string()))?;
                     }
                 }
@@ -791,13 +779,7 @@ where
                     .find(|i| graph.get_node(i.index() as NodeId).unwrap().id == c.dst)
                     .ok_or_else(|| E::from(format!("Destination node not found: {}", c.dst)))?;
                 graph
-                    .connect_ext(
-                        src.index() as NodeId,
-                        dst.index() as NodeId,
-                        &c.msg,
-                        c.store,
-                        None,
-                    )
+                    .connect_ext(src.index() as NodeId, dst.index() as NodeId, &c.msg, None)
                     .map_err(|e| E::from(e.to_string()))?;
             }
         }
