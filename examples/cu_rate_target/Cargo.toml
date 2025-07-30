@@ -1,0 +1,25 @@
+[package]
+name = "cu-rate-target"
+description = "Example showing how to set a runtime rate target for the Copper application."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+default-run = "rate-target"
+
+[dependencies]
+# cu29 = { workspace = true, features = ["macro_debug"] }
+cu29 = { workspace = true }
+cu29-helpers = { workspace = true }
+serde = { workspace = true }  # Keep
+cu29-export = { workspace = true }  # Keep
+
+
+[[bin]]
+name = "rate-target"
+path = "src/main.rs"
+

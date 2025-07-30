@@ -3,7 +3,7 @@
 //!
 
 use crate::config::{ComponentConfig, Node, DEFAULT_KEYFRAME_INTERVAL};
-use crate::config::{CuConfig, CuGraph, NodeId};
+use crate::config::{CuConfig, CuGraph, NodeId, RuntimeConfig};
 use crate::copperlist::{CopperList, CopperListState, CuListsManager};
 use crate::cutask::{BincodeAdapter, Freezable};
 use crate::monitoring::CuMonitor;
@@ -134,6 +134,9 @@ pub struct CuRuntime<CT, P: CopperListTuple, M: CuMonitor, const NBCL: usize> {
 
     /// The logger for the state of the tasks (frozen tasks)
     pub keyframes_manager: KeyFramesManager,
+
+    /// The runtime configuration controlling the behavior of the run loop
+    pub runtime_config: RuntimeConfig,
 }
 
 /// To be able to share the clock we make the runtime a clock provider.
@@ -239,6 +242,8 @@ impl<CT, P: CopperListTuple + 'static, M: CuMonitor, const NBCL: usize> CuRuntim
             keyframe_interval,
         };
 
+        let runtime_config = config.runtime.clone().unwrap_or_default();
+
         let runtime = Self {
             tasks,
             threadpool,
@@ -246,6 +251,7 @@ impl<CT, P: CopperListTuple + 'static, M: CuMonitor, const NBCL: usize> CuRuntim
             clock,
             copperlists_manager,
             keyframes_manager,
+            runtime_config,
         };
 
         Ok(runtime)
