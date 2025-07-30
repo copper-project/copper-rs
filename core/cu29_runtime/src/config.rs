@@ -577,6 +577,8 @@ pub struct CuConfig {
     pub monitor: Option<MonitorConfig>,
     /// Optional logging configuration
     pub logging: Option<LoggingConfig>,
+    /// Optional runtime configuration
+    pub runtime: Option<RuntimeConfig>,
     /// Graph structure - either a single graph or multiple mission-specific graphs
     pub graphs: ConfigGraphs,
 }
@@ -633,6 +635,17 @@ pub struct LoggingConfig {
     pub keyframe_interval: Option<u32>,
 }
 
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+pub struct RuntimeConfig {
+    /// Set a CopperList execution rate target in Hz
+    /// It will act as a rate limiter: if the execution is slower than this rate,
+    /// it will continue to execute at "best effort".
+    ///
+    /// The main usecase is to not waste cycles when the system doesn't need an unbounded execution rate.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rate_target_hz: Option<u64>,
+}
+
 /// Missions are used to generate alternative DAGs within the same configuration.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MissionsConfig {
@@ -654,6 +667,7 @@ struct CuConfigRepresentation {
     cnx: Option<Vec<Cnx>>,
     monitor: Option<MonitorConfig>,
     logging: Option<LoggingConfig>,
+    runtime: Option<RuntimeConfig>,
     missions: Option<Vec<MissionsConfig>>,
     includes: Option<Vec<IncludesConfig>>,
 }
@@ -792,6 +806,7 @@ where
 
     cuconfig.monitor = representation.monitor.clone();
     cuconfig.logging = representation.logging.clone();
+    cuconfig.runtime = representation.runtime.clone();
 
     Ok(cuconfig)
 }
@@ -838,6 +853,7 @@ impl Serialize for CuConfig {
                     cnx: Some(cnx),
                     monitor: self.monitor.clone(),
                     logging: self.logging.clone(),
+                    runtime: self.runtime.clone(),
                     missions: None,
                     includes: None,
                 }
@@ -878,6 +894,7 @@ impl Serialize for CuConfig {
                     cnx: Some(cnx),
                     monitor: self.monitor.clone(),
                     logging: self.logging.clone(),
+                    runtime: self.runtime.clone(),
                     missions: Some(missions),
                     includes: None,
                 }
@@ -893,6 +910,7 @@ impl Default for CuConfig {
             graphs: Simple(CuGraph(StableDiGraph::new())),
             monitor: None,
             logging: None,
+            runtime: None,
         }
     }
 }
@@ -911,6 +929,7 @@ impl CuConfig {
             graphs: Missions(HashMap::new()),
             monitor: None,
             logging: None,
+            runtime: None,
         }
     }
 
@@ -1049,6 +1068,11 @@ impl CuConfig {
         self.monitor.as_ref()
     }
 
+    #[allow(dead_code)]
+    pub fn get_runtime_config(&self) -> Option<&RuntimeConfig> {
+        self.runtime.as_ref()
+    }
+
     /// Validate the logging configuration to ensure section pre-allocation sizes do not exceed slab sizes.
     /// This method is wrapper around [LoggingConfig::validate]
     pub fn validate_logging_config(&self) -> CuResult<()> {
@@ -1172,6 +1196,10 @@ fn process_includes(
 
             if result.logging.is_none() {
                 result.logging = included_representation.logging;
+            }
+
+            if result.runtime.is_none() {
+                result.runtime = included_representation.runtime;
             }
 
             if let Some(included_missions) = included_representation.missions {

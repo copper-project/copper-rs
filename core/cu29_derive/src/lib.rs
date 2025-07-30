@@ -1227,7 +1227,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 self.start_all_tasks(#sim_callback_arg)?;
                 let result = loop  {
+                    let iter_start = self.copper_runtime.clock.now();
                     let result = self.run_one_iteration(#sim_callback_arg);
+
+                    if let Some(rate) = self.copper_runtime.runtime_config.rate_target_hz {
+                        let period = 1_000_000_000u64 / rate;
+                        let elapsed = self.copper_runtime.clock.now() - iter_start;
+                        if elapsed.as_nanos() < period {
+                            std::thread::sleep(std::time::Duration::from_nanos(period - elapsed.as_nanos()));
+                        }
+                    }
 
                     if STOP_FLAG.load(Ordering::SeqCst) || result.is_err() {
                         break result;
