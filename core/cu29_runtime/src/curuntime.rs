@@ -3,8 +3,8 @@
 //!
 
 use crate::config::{ComponentConfig, Node, DEFAULT_KEYFRAME_INTERVAL};
-use crate::copperlist::{CopperList, CopperListState, CuListZeroedInit, CuListsManager};
 use crate::config::{CuConfig, CuGraph, NodeId, RuntimeConfig};
+use crate::copperlist::{CopperList, CopperListState, CuListZeroedInit, CuListsManager};
 use crate::cutask::{BincodeAdapter, Freezable};
 use crate::monitoring::CuMonitor;
 use cu29_clock::{ClockProvider, CuTime, RobotClock};
