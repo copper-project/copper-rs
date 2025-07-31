@@ -1,5 +1,6 @@
 [package]
 name = "cu29-base-derive"
+description = "Procedural macros for creating CuError instances"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
