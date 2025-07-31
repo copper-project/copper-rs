@@ -1,0 +1,26 @@
+(
+    // Example of a pure 1 mission, 1 file, 1 dag mapping
+    missions: [
+        (id: "A"),
+        (id: "B"),
+        (id: "C"),
+    ],
+    templates: [
+        (
+          file: "missionA.ron",
+          params: {"instance": 1, "threshold": 20},
+          mission: ["A"],
+        ),
+        (
+          file: "missionB.ron",
+          mission: ["B"],
+        ),
+        (
+          file: "missionC.ron",
+          mission: ["C"],
+        )
+    ],
+    // As those should encompass the entire dag, there is nothing else defined at that level
+)
+
+

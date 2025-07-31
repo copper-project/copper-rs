@@ -1,0 +1,8 @@
+(
+    tasks: [
+        (
+            id: "bottom{{instance}}",
+            type: "tasks::MyTask",
+            config: {"threshold": {{threshold}} },
+        ),
+)
