@@ -857,9 +857,6 @@ impl CuMonitor for CuConsoleMon {
             for (i, msg) in msgs.iter().enumerate() {
                 let CuCompactString(status_txt) = &msg.status_txt;
                 task_statuses[i].status_txt = status_txt.clone();
-                if task_statuses[i].status_txt.as_bytes()[0] == 0 {
-                    task_statuses[i].status_txt = "".to_compact_string();
-                }
             }
         }
 
