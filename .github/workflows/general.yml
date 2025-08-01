@@ -133,10 +133,10 @@ jobs:
 
 
       - name: Install CUDA
-        uses: Jimver/cuda-toolkit@v0.2.26
+        uses: Jimver/cuda-toolkit@master
         if: runner.os != 'macOS' && matrix.mode == 'cuda-release'
         with:
-          cuda: 12.6.1
+          cuda: 12.9.1
           log-file-suffix: '${{ matrix.os }}-${{ matrix.mode }}-cuda.txt'
 
       - name: Set build mode (Linux / MacOS)
