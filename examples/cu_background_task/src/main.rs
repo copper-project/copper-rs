@@ -27,53 +27,22 @@ pub mod tasks {
         }
     }
 
-    pub struct ExampleTaskSlower {}
-
-    impl Freezable for ExampleTaskSlower {}
-
-    impl CuTask for ExampleTaskSlower {
-        type Input<'m> = input_msg!(i32);
-        type Output<'m> = output_msg!(i32);
-
-        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
-        where
-            Self: Sized,
-        {
-            Ok(Self {})
-        }
-
-        fn process(
-            &mut self,
-            _clock: &RobotClock,
-            input: &Self::Input<'_>,
-            output: &mut Self::Output<'_>,
-        ) -> CuResult<()> {
-            let payload = input.payload().unwrap();
-            // Emulate a long-running task
-            debug!(
-                "Slower task is tasking a long time to process input: {}",
-                &payload
-            );
-            sleep(std::time::Duration::from_millis(1000));
-            debug!("Slower Task done.");
-            output.set_payload(payload + 1);
-            Ok(())
-        }
+    pub struct ExampleTask {
+        sleep_duration_ms: u64,
     }
 
-    pub struct ExampleTaskSlow {}
+    impl Freezable for ExampleTask {}
 
-    impl Freezable for ExampleTaskSlow {}
-
-    impl CuTask for ExampleTaskSlow {
+    impl CuTask for ExampleTask {
         type Input<'m> = input_msg!(i32);
         type Output<'m> = output_msg!(i32);
 
-        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+        fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
         where
             Self: Sized,
         {
-            Ok(Self {})
+            let sleep_duration_ms: u64 = config.unwrap().get("sleep_duration_ms").unwrap();
+            Ok(Self { sleep_duration_ms })
         }
 
         fn process(
@@ -85,13 +54,13 @@ pub mod tasks {
             let Some(payload) = input.payload() else {
                 return Ok(());
             };
-            // Emulate a slow-running task
+            // Emulate a long-running task
             debug!(
-                "Slow task is tasking a long time to process input: {}",
-                &payload
+                "Task is tasking a {}ms time to process input: {}",
+                self.sleep_duration_ms, &payload
             );
-            sleep(std::time::Duration::from_millis(101));
-            debug!("Slow task done.");
+            sleep(std::time::Duration::from_millis(self.sleep_duration_ms));
+            debug!("Task ({}ms) done.", self.sleep_duration_ms);
             output.set_payload(payload + 1);
             Ok(())
         }

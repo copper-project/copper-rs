@@ -6,13 +6,19 @@
         ),
         (
             id: "task1",
-            type: "tasks::ExampleTaskSlower",
+            type: "tasks::ExampleTask",
             background: true,
+            config: {
+                "sleep_duration_ms": 1000
+            }
         ),
         (
             id: "task2",
-            type: "tasks::ExampleTaskSlow",
+            type: "tasks::ExampleTask",
             background: true,
+            config: {
+                "sleep_duration_ms": 250
+            }
         ),
         (
             id: "task3",
