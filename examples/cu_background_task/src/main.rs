@@ -27,7 +27,9 @@ pub mod tasks {
         }
     }
 
-    pub struct ExampleTask {}
+    pub struct ExampleTask {
+        sleep_duration_ms: u64,
+    }
 
     impl Freezable for ExampleTask {}
 
@@ -35,11 +37,12 @@ pub mod tasks {
         type Input<'m> = input_msg!(i32);
         type Output<'m> = output_msg!(i32);
 
-        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+        fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
         where
             Self: Sized,
         {
-            Ok(Self {})
+            let sleep_duration_ms: u64 = config.unwrap().get("sleep_duration_ms").unwrap();
+            Ok(Self { sleep_duration_ms })
         }
 
         fn process(
@@ -48,11 +51,16 @@ pub mod tasks {
             input: &Self::Input<'_>,
             output: &mut Self::Output<'_>,
         ) -> CuResult<()> {
-            let payload = input.payload().unwrap();
+            let Some(payload) = input.payload() else {
+                return Ok(());
+            };
             // Emulate a long-running task
-            debug!("Task is tasking a long time to process input: {}", &payload);
-            sleep(std::time::Duration::from_millis(1000));
-            debug!("Task done");
+            debug!(
+                "Task is tasking a {}ms time to process input: {}",
+                self.sleep_duration_ms, &payload
+            );
+            sleep(std::time::Duration::from_millis(self.sleep_duration_ms));
+            debug!("Task ({}ms) done.", self.sleep_duration_ms);
             output.set_payload(payload + 1);
             Ok(())
         }

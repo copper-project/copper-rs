@@ -8,14 +8,26 @@
             id: "task1",
             type: "tasks::ExampleTask",
             background: true,
+            config: {
+                "sleep_duration_ms": 1000
+            }
         ),
         (
             id: "task2",
+            type: "tasks::ExampleTask",
+            background: true,
+            config: {
+                "sleep_duration_ms": 250
+            }
+        ),
+        (
+            id: "task3",
             type: "tasks::ExampleSink",
         ),
      ],
     cnx: [
         (src: "task0", dst: "task1", msg: "i32"),
         (src: "task1", dst: "task2", msg: "i32"),
+        (src: "task2", dst: "task3", msg: "i32"),
     ],
 )
