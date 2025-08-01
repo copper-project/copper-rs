@@ -50,7 +50,10 @@ pub mod tasks {
         ) -> CuResult<()> {
             let payload = input.payload().unwrap();
             // Emulate a long-running task
-            debug!("Task is tasking a long time to process input: {}", &payload);
+            debug!(
+                "Slower task is tasking a long time to process input: {}",
+                &payload
+            );
             sleep(std::time::Duration::from_millis(1000));
             debug!("Slower Task done.");
             output.set_payload(payload + 1);
@@ -83,7 +86,10 @@ pub mod tasks {
                 return Ok(());
             };
             // Emulate a slow-running task
-            debug!("Task is tasking a long time to process input: {}", &payload);
+            debug!(
+                "Slow task is tasking a long time to process input: {}",
+                &payload
+            );
             sleep(std::time::Duration::from_millis(101));
             debug!("Slow task done.");
             output.set_payload(payload + 1);
