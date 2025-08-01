@@ -477,7 +477,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             );
             if *background {
                 quote! {
-                    #task_type::new(all_instances_configs[#index], threadpool).map_err(|e| e.add_cause(#additional_error_info))?
+                    #task_type::new(all_instances_configs[#index], threadpool.clone()).map_err(|e| e.add_cause(#additional_error_info))?
                 }
             } else {
                 quote! {
