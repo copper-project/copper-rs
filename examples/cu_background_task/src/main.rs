@@ -27,11 +27,11 @@ pub mod tasks {
         }
     }
 
-    pub struct ExampleTask {}
+    pub struct ExampleTaskSlower {}
 
-    impl Freezable for ExampleTask {}
+    impl Freezable for ExampleTaskSlower {}
 
-    impl CuTask for ExampleTask {
+    impl CuTask for ExampleTaskSlower {
         type Input<'m> = input_msg!(i32);
         type Output<'m> = output_msg!(i32);
 
@@ -52,7 +52,40 @@ pub mod tasks {
             // Emulate a long-running task
             debug!("Task is tasking a long time to process input: {}", &payload);
             sleep(std::time::Duration::from_millis(1000));
-            debug!("Task done");
+            debug!("Slower Task done.");
+            output.set_payload(payload + 1);
+            Ok(())
+        }
+    }
+
+    pub struct ExampleTaskSlow {}
+
+    impl Freezable for ExampleTaskSlow {}
+
+    impl CuTask for ExampleTaskSlow {
+        type Input<'m> = input_msg!(i32);
+        type Output<'m> = output_msg!(i32);
+
+        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+        where
+            Self: Sized,
+        {
+            Ok(Self {})
+        }
+
+        fn process(
+            &mut self,
+            _clock: &RobotClock,
+            input: &Self::Input<'_>,
+            output: &mut Self::Output<'_>,
+        ) -> CuResult<()> {
+            let Some(payload) = input.payload() else {
+                return Ok(());
+            };
+            // Emulate a slow-running task
+            debug!("Task is tasking a long time to process input: {}", &payload);
+            sleep(std::time::Duration::from_millis(101));
+            debug!("Slow task done.");
             output.set_payload(payload + 1);
             Ok(())
         }

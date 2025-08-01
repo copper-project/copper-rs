@@ -6,16 +6,22 @@
         ),
         (
             id: "task1",
-            type: "tasks::ExampleTask",
+            type: "tasks::ExampleTaskSlower",
             background: true,
         ),
         (
             id: "task2",
+            type: "tasks::ExampleTaskSlow",
+            background: true,
+        ),
+        (
+            id: "task3",
             type: "tasks::ExampleSink",
         ),
      ],
     cnx: [
         (src: "task0", dst: "task1", msg: "i32"),
         (src: "task1", dst: "task2", msg: "i32"),
+        (src: "task2", dst: "task3", msg: "i32"),
     ],
 )
