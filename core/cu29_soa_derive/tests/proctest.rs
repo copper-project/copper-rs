@@ -177,4 +177,97 @@ mod tests {
         assert!(color_json.contains("\"g\":"));
         assert!(color_json.contains("\"b\":"));
     }
+
+    #[test]
+    fn test_both_soa() {
+        let mut point_cloud = BothSoa::<1000>::default();
+
+        // Add sample 3D points with colors
+        for i in 0..100 {
+            let angle = i as f32 * 0.1;
+            point_cloud.push(Both {
+                xyz: Xyz {
+                    x: angle.cos() * 10.0,
+                    y: angle.sin() * 10.0,
+                    z: i as f32 * 0.1,
+                    i,
+                },
+                color: Color {
+                    r: (i as f32 / 100.0),
+                    g: 0.5,
+                    b: 1.0 - (i as f32 / 100.0),
+                },
+            });
+        }
+
+        assert_eq!(point_cloud.len(), 100);
+
+        // Spatial-only operations without loading color data
+        // Calculate distances from origin using only xyz data (cache-efficient)
+        let xyz_data = point_cloud.xyz();
+        let distances: Vec<f32> = xyz_data[..point_cloud.len()]
+            .iter()
+            .map(|point| (point.x.powi(2) + point.y.powi(2) + point.z.powi(2)).sqrt())
+            .collect();
+
+        assert_eq!(distances.len(), 100);
+        assert!(distances[0] > 0.0);
+
+        // Color-only operations without loading spatial data
+        // Calculate average brightness using only color data
+        let color_data = point_cloud.color();
+        let avg_brightness: f32 = color_data[..point_cloud.len()]
+            .iter()
+            .map(|color| (color.r + color.g + color.b) / 3.0)
+            .sum::<f32>()
+            / point_cloud.len() as f32;
+
+        assert!(avg_brightness > 0.0 && avg_brightness < 1.0);
+
+        // Bulk transformations using apply() method
+        // Transform all points by scaling xyz and adjusting color brightness
+        point_cloud.apply(|mut xyz, mut color| {
+            xyz.x *= 2.0;
+            xyz.y *= 2.0;
+            xyz.z *= 2.0;
+
+            color.r = (color.r * 1.2).min(1.0);
+            color.g = (color.g * 1.2).min(1.0);
+            color.b = (color.b * 1.2).min(1.0);
+
+            (xyz, color)
+        });
+
+        // Verify transformations applied correctly
+        let first_point = point_cloud.get(1);
+        let expected_x = (1_f32 * 0.1).cos() * 10.0 * 2.0; // angle=1*0.1, radius=10, scale=2
+        assert!((first_point.xyz.x - expected_x).abs() < 0.001);
+        assert!(first_point.color.g > 0.5); // Should be brighter
+
+        // Range operations for processing subsets
+        // Process only points 10-20 using range accessors
+        let xyz_subset = point_cloud.xyz_range(10..20);
+        let subset_centroid_x: f32 = xyz_subset.iter().map(|p| p.x).sum::<f32>() / 10.0;
+        assert!(subset_centroid_x != 0.0);
+
+        // Independent field mutations
+        // Modify only colors without affecting spatial data
+        let len = point_cloud.len();
+        let color_data_mut = point_cloud.color_mut();
+        for color in &mut color_data_mut[..len] {
+            color.r *= 0.8; // Reduce red component
+        }
+
+        // Verify only colors changed, not spatial data
+        let point_after = point_cloud.get(1);
+        assert_eq!(point_after.xyz.x, expected_x); // Spatial unchanged
+        assert!(point_after.color.r < first_point.color.r); // Color changed
+
+        // Test serialization works with realistic data
+        let json_result = serde_json::to_string(&point_cloud);
+        assert!(
+            json_result.is_ok(),
+            "Failed to serialize realistic point cloud"
+        );
+    }
 }
