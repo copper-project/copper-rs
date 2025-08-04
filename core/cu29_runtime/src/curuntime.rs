@@ -81,7 +81,7 @@ pub struct KeyFramesManager {
 
 impl KeyFramesManager {
     fn is_keyframe(&self, culistid: u32) -> bool {
-        self.logger.is_some() && culistid % self.keyframe_interval == 0
+        self.logger.is_some() && culistid.is_multiple_of(self.keyframe_interval)
     }
 
     pub fn reset(&mut self, culistid: u32, clock: &RobotClock) {

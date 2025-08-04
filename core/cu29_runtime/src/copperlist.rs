@@ -244,7 +244,7 @@ impl<P: CopperListTuple, const N: usize> CuListsManager<P, N> {
     /// The iterator goes from the most recently pushed items to the oldest ones.
     ///
     #[inline]
-    pub fn iter(&self) -> Iter<CopperList<P>> {
+    pub fn iter(&self) -> Iter<'_, CopperList<P>> {
         let (a, b) = self.data[0..self.length].split_at(self.insertion_index);
         a.iter().rev().chain(b.iter().rev())
     }
@@ -254,7 +254,7 @@ impl<P: CopperListTuple, const N: usize> CuListsManager<P, N> {
     /// The iterator goes from the most recently pushed items to the oldest ones.
     ///
     #[inline]
-    pub fn iter_mut(&mut self) -> IterMut<CopperList<P>> {
+    pub fn iter_mut(&mut self) -> IterMut<'_, CopperList<P>> {
         let (a, b) = self.data.split_at_mut(self.insertion_index);
         a.iter_mut().rev().chain(b.iter_mut().rev())
     }
@@ -264,7 +264,7 @@ impl<P: CopperListTuple, const N: usize> CuListsManager<P, N> {
     /// The iterator goes from the least recently pushed items to the newest ones.
     ///
     #[inline]
-    pub fn asc_iter(&self) -> AscIter<CopperList<P>> {
+    pub fn asc_iter(&self) -> AscIter<'_, CopperList<P>> {
         let (a, b) = self.data.split_at(self.insertion_index);
         b.iter().chain(a.iter())
     }
@@ -274,7 +274,7 @@ impl<P: CopperListTuple, const N: usize> CuListsManager<P, N> {
     /// The iterator goes from the least recently pushed items to the newest ones.
     ///
     #[inline]
-    pub fn asc_iter_mut(&mut self) -> AscIterMut<CopperList<P>> {
+    pub fn asc_iter_mut(&mut self) -> AscIterMut<'_, CopperList<P>> {
         let (a, b) = self.data.split_at_mut(self.insertion_index);
         b.iter_mut().chain(a.iter_mut())
     }

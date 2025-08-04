@@ -218,7 +218,7 @@ impl Value {
         }
     }
 
-    fn unexpected(&self) -> serde::de::Unexpected {
+    fn unexpected(&self) -> serde::de::Unexpected<'_> {
         match *self {
             Value::Bool(b) => serde::de::Unexpected::Bool(b),
             Value::U8(n) => serde::de::Unexpected::Unsigned(n as u64),
