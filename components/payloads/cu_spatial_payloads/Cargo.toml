@@ -16,7 +16,7 @@ uom = { workspace = true }
 serde = { workspace = true }
 
 faer = { version = "0.22.6", optional = true }
-nalgebra = { version = "0.33.2", optional = true }
+nalgebra = { version = "0.34.0", optional = true }
 glam = { version = "0.30.3", optional = true }
 
 [features]
