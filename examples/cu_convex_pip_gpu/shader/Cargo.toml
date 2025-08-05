@@ -1,0 +1,15 @@
+[package]
+name = "cu_convex_pip_gpu-shader"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["lib", "spirv"]
+path = "src/lib.rs"
+
+[dependencies]
+spirv-std = { git = "https://github.com/rust-gpu/rust-gpu", rev = "e56cc4d48a695d8d0c23bf1de671fd6e3a248420", features = ["glam"] }
+
+[workspace]
+members = []
+
