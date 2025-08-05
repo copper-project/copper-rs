@@ -1,8 +1,9 @@
 #![cfg_attr(target_arch = "spirv", no_std)]
 #![allow(unused_attributes)]
 
-use spirv_std::glam::{Vec2, UVec3};
+use spirv_std::glam::{UVec3, Vec2};
 use spirv_std::num_traits::Float;
+use spirv_std::spirv;
 
 pub const MAX_VERTS: usize = 64;
 
@@ -18,7 +19,7 @@ pub fn point_in_polygon_kernel(
     #[spirv(storage_buffer, descriptor_set = 0, binding = 0)] polygon: &[Vec2],
     #[spirv(storage_buffer, descriptor_set = 0, binding = 1)] points: &[Vec2],
     #[spirv(storage_buffer, descriptor_set = 0, binding = 2)] results: &mut [u32],
-    #[spirv(push_constant)] params: &Params,
+    #[spirv(storage_buffer, descriptor_set = 0, binding = 3)] params: &Params,
 ) {
     let idx = id.x as usize;
     if idx >= points.len() {
@@ -26,7 +27,9 @@ pub fn point_in_polygon_kernel(
     }
     let p = points[idx];
     let len = params.polygon_len as usize;
-    if len < 3 { return; }
+    if len < 3 {
+        return;
+    }
     let mut prev = 0.0f32;
     let mut inside = true;
     let mut i = 0;

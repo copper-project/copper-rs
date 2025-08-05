@@ -4,10 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-wgpu = { version = "0.19", default-features = false, features = ["wgsl"] }
+wgpu = { version = "0.19", default-features = false, features = ["wgsl", "spirv"] }
 pollster = "0.4"
 bytemuck = { version = "1.14", features = ["derive"] }
 cu_geometry = { path = "../../components/libs/cu_geometry" }
+futures-intrusive = "0.5.0"
 
 [build-dependencies]
 spirv-builder = { git = "https://github.com/rust-gpu/rust-gpu", rev = "e56cc4d48a695d8d0c23bf1de671fd6e3a248420" }

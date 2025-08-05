@@ -50,7 +50,7 @@ async fn run() {
 
     // load shader
     let shader_spv = wgpu::util::make_spirv(include_bytes!(env!("KERNEL_SPV")));
-    let shader_module = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+    let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("pip"),
         source: shader_spv,
     });
@@ -88,16 +88,23 @@ async fn run() {
                 },
                 count: None,
             },
+            wgpu::BindGroupLayoutEntry {
+                binding: 3,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true }, // MATCH storage_buffer + &Params
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
         ],
     });
 
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("pip_pl"),
         bind_group_layouts: &[&bind_group_layout],
-        push_constant_ranges: &[wgpu::PushConstantRange {
-            stages: wgpu::ShaderStages::COMPUTE,
-            range: 0..std::mem::size_of::<Params>() as u32,
-        }],
+        push_constant_ranges: &[],
     });
 
     let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -145,6 +152,14 @@ async fn run() {
                 usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
                 mapped_at_creation: false,
             });
+            let params = Params {
+                polygon_len: polygon.len() as u32,
+            };
+            let params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("params"),
+                contents: bytemuck::bytes_of(&params),
+                usage: wgpu::BufferUsages::STORAGE,
+            });
 
             let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("pip_bg"),
@@ -162,6 +177,10 @@ async fn run() {
                         binding: 2,
                         resource: result_buffer.as_entire_binding(),
                     },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: params_buffer.as_entire_binding(),
+                    },
                 ],
             });
 
@@ -171,13 +190,13 @@ async fn run() {
             {
                 let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                     label: Some("pip_pass"),
+                    timestamp_writes: None,
                 });
                 cpass.set_pipeline(&pipeline);
                 cpass.set_bind_group(0, &bind_group, &[]);
                 let params = Params {
                     polygon_len: polygon.len() as u32,
                 };
-                cpass.set_push_constants(0, bytemuck::bytes_of(&params));
                 cpass.dispatch_workgroups(
                     ((num_points as u32) + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE,
                     1,
