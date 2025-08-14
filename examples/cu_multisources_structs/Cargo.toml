@@ -1,0 +1,26 @@
+[package]
+name = "cu-multisources-structs"
+version = "0.1.0"
+edition = "2021"
+default-run = "sim-test"
+
+[[bin]]
+name = "sim-test"
+path = "src/main.rs"
+
+[[bin]]
+name = "sim-test-logreader"
+path = "src/logreader.rs"
+required-features = ["logreader"]
+
+[features]
+default = []
+logreader = ["dep:cu29-export"]
+
+[dependencies]
+cu29 = { workspace=true, features = ["macro_debug"] }
+bincode = { workspace=true, features = ["derive"] }
+serde = { workspace=true, features = ["derive"] }
+cu29-helpers = { workspace=true  }
+cu29-export = { workspace=true, optional = true }
+
