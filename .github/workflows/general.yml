@@ -28,7 +28,7 @@ jobs:
             mode: cuda-release
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
@@ -204,7 +204,7 @@ jobs:
     name: Typos Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: crate-ci/typos@master
         with:
           config: ./.config/_typos.toml
