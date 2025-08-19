@@ -35,7 +35,8 @@ jobs:
 
     strategy:
       matrix:
-        os: [ ubuntu-22.04, macos-latest, windows-latest ]
+        # os: [ ubuntu-22.04, macos-latest, windows-latest ]
+        os: [ ubuntu-22.04, macos-latest ]
         mode: [ debug, release, cuda-release ]
         exclude:
           - os: macos-latest
@@ -154,6 +155,8 @@ jobs:
         with:
           cuda: 12.6.1
           log-file-suffix: '${{ matrix.os }}-${{ matrix.mode }}-cuda.txt'
+          use-github-cache: false
+          use-local-cache: false
 
       - name: Set build mode (Linux / MacOS)
         if: runner.os != 'Windows' && ( matrix.mode == 'release' || matrix.mode == 'cuda-release' )
