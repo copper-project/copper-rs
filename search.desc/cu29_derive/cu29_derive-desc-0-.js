@@ -1,1 +1,0 @@
-searchState.loadedDescShard("cu29_derive", 0, "Adds #[copper_runtime(config = “path”, sim_mode = …\nGenerates the CopperList content type from a config. …")

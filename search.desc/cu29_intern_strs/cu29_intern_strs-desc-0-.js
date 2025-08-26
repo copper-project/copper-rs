@@ -1,1 +1,0 @@
-searchState.loadedDescShard("cu29_intern_strs", 0, "Convenience function to returns the default path for the …\nReads all interned strings from the index at the specified …")

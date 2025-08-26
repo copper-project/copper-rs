@@ -1,1 +1,0 @@
-searchState.loadedDescShard("cu29_soa_derive", 0, "Build a fixed sized SoA (Structure of Arrays) from a …")
