@@ -33,7 +33,7 @@ clap = { workspace = true }
 tempfile = { workspace = true }
 arrayvec = { version = "0.7.6", features = ["serde"] }
 smallvec = { workspace = true }
-ron = "0.10.1"
+ron = "0.11.0"
 hdrhistogram = "7.5.4"
 petgraph = { version = "0.8.1", features = ["serde", "serde-1", "serde_derive"] }
 object-pool = "0.6.0"
