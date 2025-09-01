@@ -114,7 +114,7 @@ macro_rules! impl_from_value_for_int {
                             Number::U16(n) => n as $target,
                             Number::U32(n) => n as $target,
                             Number::U64(n) => n as $target,
-                            Number::F32(_) | Number::F64(_) => {
+                            Number::F32(_) | Number::F64(_) | Number::__NonExhaustive(_) => {
                                 panic!("Expected an integer Number variant but got {num:?}")
                             }
                         }
@@ -935,10 +935,7 @@ impl CuConfig {
             Ok(representation) => Self::deserialize_impl(representation).unwrap_or_else(|e| {
                 panic!("Error deserializing configuration: {e}");
             }),
-            Err(e) => panic!(
-                "Syntax Error in config: {} at position {}",
-                e.code, e.position
-            ),
+            Err(e) => panic!("Syntax Error in config: {} at position {}", e.code, e.span),
         }
     }
 
@@ -1133,7 +1130,7 @@ fn process_includes(
                 Err(e) => {
                     return Err(CuError::from(format!(
                         "Failed to parse include file: {} - Error: {} at position {}",
-                        include_path, e.code, e.position
+                        include_path, e.code, e.span
                     )));
                 }
             };
@@ -1227,7 +1224,7 @@ fn parse_config_string(content: &str) -> CuResult<CuConfigRepresentation> {
         .map_err(|e| {
             CuError::from(format!(
                 "Failed to parse configuration: Error: {} at position {}",
-                e.code, e.position
+                e.code, e.span
             ))
         })
 }
