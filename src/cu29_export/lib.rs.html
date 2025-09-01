@@ -356,7 +356,7 @@
 <a href=#356 id=356 data-nosnippet>356</a>        }
 <a href=#357 id=357 data-nosnippet>357</a>
 <a href=#358 id=358 data-nosnippet>358</a>        <span class="doccomment">/// Returns the parameters of this log line
-<a href=#359 id=359 data-nosnippet>359</a>        </span><span class="kw">pub fn </span>params(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;PyObject&gt; {
+<a href=#359 id=359 data-nosnippet>359</a>        </span><span class="kw">pub fn </span>params(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;Py&lt;PyAny&gt;&gt; {
 <a href=#360 id=360 data-nosnippet>360</a>            <span class="self">self</span>.inner.params.iter().map(value_to_py).collect()
 <a href=#361 id=361 data-nosnippet>361</a>        }
 <a href=#362 id=362 data-nosnippet>362</a>    }
@@ -371,40 +371,40 @@
 <a href=#371 id=371 data-nosnippet>371</a>        <span class="prelude-val">Ok</span>(())
 <a href=#372 id=372 data-nosnippet>372</a>    }
 <a href=#373 id=373 data-nosnippet>373</a>
-<a href=#374 id=374 data-nosnippet>374</a>    <span class="kw">fn </span>value_to_py(value: <span class="kw-2">&amp;</span>cu29::prelude::Value) -&gt; PyObject {
+<a href=#374 id=374 data-nosnippet>374</a>    <span class="kw">fn </span>value_to_py(value: <span class="kw-2">&amp;</span>cu29::prelude::Value) -&gt; Py&lt;PyAny&gt; {
 <a href=#375 id=375 data-nosnippet>375</a>        <span class="kw">match </span>value {
-<a href=#376 id=376 data-nosnippet>376</a>            Value::String(s) =&gt; Python::with_gil(|py| s.into_pyobject(py).unwrap().into()),
-<a href=#377 id=377 data-nosnippet>377</a>            Value::U64(u) =&gt; Python::with_gil(|py| u.into_pyobject(py).unwrap().into()),
-<a href=#378 id=378 data-nosnippet>378</a>            Value::I64(i) =&gt; Python::with_gil(|py| i.into_pyobject(py).unwrap().into()),
-<a href=#379 id=379 data-nosnippet>379</a>            Value::F64(f) =&gt; Python::with_gil(|py| f.into_pyobject(py).unwrap().into()),
-<a href=#380 id=380 data-nosnippet>380</a>            Value::Bool(b) =&gt; Python::with_gil(|py| b.into_pyobject(py).unwrap().to_owned().into()),
-<a href=#381 id=381 data-nosnippet>381</a>            Value::CuTime(t) =&gt; Python::with_gil(|py| t.<span class="number">0</span>.into_pyobject(py).unwrap().into()),
-<a href=#382 id=382 data-nosnippet>382</a>            Value::Bytes(b) =&gt; Python::with_gil(|py| b.into_pyobject(py).unwrap().into()),
-<a href=#383 id=383 data-nosnippet>383</a>            Value::Char(c) =&gt; Python::with_gil(|py| c.into_pyobject(py).unwrap().into()),
-<a href=#384 id=384 data-nosnippet>384</a>            Value::I8(i) =&gt; Python::with_gil(|py| i.into_pyobject(py).unwrap().into()),
-<a href=#385 id=385 data-nosnippet>385</a>            Value::U8(u) =&gt; Python::with_gil(|py| u.into_pyobject(py).unwrap().into()),
-<a href=#386 id=386 data-nosnippet>386</a>            Value::I16(i) =&gt; Python::with_gil(|py| i.into_pyobject(py).unwrap().into()),
-<a href=#387 id=387 data-nosnippet>387</a>            Value::U16(u) =&gt; Python::with_gil(|py| u.into_pyobject(py).unwrap().into()),
-<a href=#388 id=388 data-nosnippet>388</a>            Value::I32(i) =&gt; Python::with_gil(|py| i.into_pyobject(py).unwrap().into()),
-<a href=#389 id=389 data-nosnippet>389</a>            Value::U32(u) =&gt; Python::with_gil(|py| u.into_pyobject(py).unwrap().into()),
-<a href=#390 id=390 data-nosnippet>390</a>            Value::Map(m) =&gt; Python::with_gil(|py| {
+<a href=#376 id=376 data-nosnippet>376</a>            Value::String(s) =&gt; Python::attach(|py| s.into_pyobject(py).unwrap().into()),
+<a href=#377 id=377 data-nosnippet>377</a>            Value::U64(u) =&gt; Python::attach(|py| u.into_pyobject(py).unwrap().into()),
+<a href=#378 id=378 data-nosnippet>378</a>            Value::I64(i) =&gt; Python::attach(|py| i.into_pyobject(py).unwrap().into()),
+<a href=#379 id=379 data-nosnippet>379</a>            Value::F64(f) =&gt; Python::attach(|py| f.into_pyobject(py).unwrap().into()),
+<a href=#380 id=380 data-nosnippet>380</a>            Value::Bool(b) =&gt; Python::attach(|py| b.into_pyobject(py).unwrap().to_owned().into()),
+<a href=#381 id=381 data-nosnippet>381</a>            Value::CuTime(t) =&gt; Python::attach(|py| t.<span class="number">0</span>.into_pyobject(py).unwrap().into()),
+<a href=#382 id=382 data-nosnippet>382</a>            Value::Bytes(b) =&gt; Python::attach(|py| b.into_pyobject(py).unwrap().into()),
+<a href=#383 id=383 data-nosnippet>383</a>            Value::Char(c) =&gt; Python::attach(|py| c.into_pyobject(py).unwrap().into()),
+<a href=#384 id=384 data-nosnippet>384</a>            Value::I8(i) =&gt; Python::attach(|py| i.into_pyobject(py).unwrap().into()),
+<a href=#385 id=385 data-nosnippet>385</a>            Value::U8(u) =&gt; Python::attach(|py| u.into_pyobject(py).unwrap().into()),
+<a href=#386 id=386 data-nosnippet>386</a>            Value::I16(i) =&gt; Python::attach(|py| i.into_pyobject(py).unwrap().into()),
+<a href=#387 id=387 data-nosnippet>387</a>            Value::U16(u) =&gt; Python::attach(|py| u.into_pyobject(py).unwrap().into()),
+<a href=#388 id=388 data-nosnippet>388</a>            Value::I32(i) =&gt; Python::attach(|py| i.into_pyobject(py).unwrap().into()),
+<a href=#389 id=389 data-nosnippet>389</a>            Value::U32(u) =&gt; Python::attach(|py| u.into_pyobject(py).unwrap().into()),
+<a href=#390 id=390 data-nosnippet>390</a>            Value::Map(m) =&gt; Python::attach(|py| {
 <a href=#391 id=391 data-nosnippet>391</a>                <span class="kw">let </span>dict = PyDict::new(py);
 <a href=#392 id=392 data-nosnippet>392</a>                <span class="kw">for </span>(k, v) <span class="kw">in </span>m.iter() {
 <a href=#393 id=393 data-nosnippet>393</a>                    dict.set_item(value_to_py(k), value_to_py(v)).unwrap();
 <a href=#394 id=394 data-nosnippet>394</a>                }
 <a href=#395 id=395 data-nosnippet>395</a>                dict.into_pyobject(py).unwrap().into()
 <a href=#396 id=396 data-nosnippet>396</a>            }),
-<a href=#397 id=397 data-nosnippet>397</a>            Value::F32(f) =&gt; Python::with_gil(|py| f.into_pyobject(py).unwrap().into()),
-<a href=#398 id=398 data-nosnippet>398</a>            Value::Option(o) =&gt; Python::with_gil(|py| {
+<a href=#397 id=397 data-nosnippet>397</a>            Value::F32(f) =&gt; Python::attach(|py| f.into_pyobject(py).unwrap().into()),
+<a href=#398 id=398 data-nosnippet>398</a>            Value::Option(o) =&gt; Python::attach(|py| {
 <a href=#399 id=399 data-nosnippet>399</a>                <span class="kw">if </span>o.is_none() {
 <a href=#400 id=400 data-nosnippet>400</a>                    py.<span class="prelude-val">None</span>()
 <a href=#401 id=401 data-nosnippet>401</a>                } <span class="kw">else </span>{
 <a href=#402 id=402 data-nosnippet>402</a>                    o.clone().map(|v| value_to_py(<span class="kw-2">&amp;</span>v)).unwrap()
 <a href=#403 id=403 data-nosnippet>403</a>                }
 <a href=#404 id=404 data-nosnippet>404</a>            }),
-<a href=#405 id=405 data-nosnippet>405</a>            Value::Unit =&gt; Python::with_gil(|py| py.<span class="prelude-val">None</span>()),
+<a href=#405 id=405 data-nosnippet>405</a>            Value::Unit =&gt; Python::attach(|py| py.<span class="prelude-val">None</span>()),
 <a href=#406 id=406 data-nosnippet>406</a>            Value::Newtype(v) =&gt; value_to_py(v),
-<a href=#407 id=407 data-nosnippet>407</a>            Value::Seq(s) =&gt; Python::with_gil(|py| {
+<a href=#407 id=407 data-nosnippet>407</a>            Value::Seq(s) =&gt; Python::attach(|py| {
 <a href=#408 id=408 data-nosnippet>408</a>                <span class="kw">let </span>list = PyList::new(py, s.iter().map(value_to_py)).unwrap();
 <a href=#409 id=409 data-nosnippet>409</a>                list.into_pyobject(py).unwrap().into()
 <a href=#410 id=410 data-nosnippet>410</a>            }),
