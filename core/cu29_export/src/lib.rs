@@ -356,7 +356,7 @@ mod python {
         }
 
         /// Returns the parameters of this log line
-        pub fn params(&self) -> Vec<PyObject> {
+        pub fn params(&self) -> Vec<Py<PyAny>> {
             self.inner.params.iter().map(value_to_py).collect()
         }
     }
@@ -371,40 +371,40 @@ mod python {
         Ok(())
     }
 
-    fn value_to_py(value: &cu29::prelude::Value) -> PyObject {
+    fn value_to_py(value: &cu29::prelude::Value) -> Py<PyAny> {
         match value {
-            Value::String(s) => Python::with_gil(|py| s.into_pyobject(py).unwrap().into()),
-            Value::U64(u) => Python::with_gil(|py| u.into_pyobject(py).unwrap().into()),
-            Value::I64(i) => Python::with_gil(|py| i.into_pyobject(py).unwrap().into()),
-            Value::F64(f) => Python::with_gil(|py| f.into_pyobject(py).unwrap().into()),
-            Value::Bool(b) => Python::with_gil(|py| b.into_pyobject(py).unwrap().to_owned().into()),
-            Value::CuTime(t) => Python::with_gil(|py| t.0.into_pyobject(py).unwrap().into()),
-            Value::Bytes(b) => Python::with_gil(|py| b.into_pyobject(py).unwrap().into()),
-            Value::Char(c) => Python::with_gil(|py| c.into_pyobject(py).unwrap().into()),
-            Value::I8(i) => Python::with_gil(|py| i.into_pyobject(py).unwrap().into()),
-            Value::U8(u) => Python::with_gil(|py| u.into_pyobject(py).unwrap().into()),
-            Value::I16(i) => Python::with_gil(|py| i.into_pyobject(py).unwrap().into()),
-            Value::U16(u) => Python::with_gil(|py| u.into_pyobject(py).unwrap().into()),
-            Value::I32(i) => Python::with_gil(|py| i.into_pyobject(py).unwrap().into()),
-            Value::U32(u) => Python::with_gil(|py| u.into_pyobject(py).unwrap().into()),
-            Value::Map(m) => Python::with_gil(|py| {
+            Value::String(s) => Python::attach(|py| s.into_pyobject(py).unwrap().into()),
+            Value::U64(u) => Python::attach(|py| u.into_pyobject(py).unwrap().into()),
+            Value::I64(i) => Python::attach(|py| i.into_pyobject(py).unwrap().into()),
+            Value::F64(f) => Python::attach(|py| f.into_pyobject(py).unwrap().into()),
+            Value::Bool(b) => Python::attach(|py| b.into_pyobject(py).unwrap().to_owned().into()),
+            Value::CuTime(t) => Python::attach(|py| t.0.into_pyobject(py).unwrap().into()),
+            Value::Bytes(b) => Python::attach(|py| b.into_pyobject(py).unwrap().into()),
+            Value::Char(c) => Python::attach(|py| c.into_pyobject(py).unwrap().into()),
+            Value::I8(i) => Python::attach(|py| i.into_pyobject(py).unwrap().into()),
+            Value::U8(u) => Python::attach(|py| u.into_pyobject(py).unwrap().into()),
+            Value::I16(i) => Python::attach(|py| i.into_pyobject(py).unwrap().into()),
+            Value::U16(u) => Python::attach(|py| u.into_pyobject(py).unwrap().into()),
+            Value::I32(i) => Python::attach(|py| i.into_pyobject(py).unwrap().into()),
+            Value::U32(u) => Python::attach(|py| u.into_pyobject(py).unwrap().into()),
+            Value::Map(m) => Python::attach(|py| {
                 let dict = PyDict::new(py);
                 for (k, v) in m.iter() {
                     dict.set_item(value_to_py(k), value_to_py(v)).unwrap();
                 }
                 dict.into_pyobject(py).unwrap().into()
             }),
-            Value::F32(f) => Python::with_gil(|py| f.into_pyobject(py).unwrap().into()),
-            Value::Option(o) => Python::with_gil(|py| {
+            Value::F32(f) => Python::attach(|py| f.into_pyobject(py).unwrap().into()),
+            Value::Option(o) => Python::attach(|py| {
                 if o.is_none() {
                     py.None()
                 } else {
                     o.clone().map(|v| value_to_py(&v)).unwrap()
                 }
             }),
-            Value::Unit => Python::with_gil(|py| py.None()),
+            Value::Unit => Python::attach(|py| py.None()),
             Value::Newtype(v) => value_to_py(v),
-            Value::Seq(s) => Python::with_gil(|py| {
+            Value::Seq(s) => Python::attach(|py| {
                 let list = PyList::new(py, s.iter().map(value_to_py)).unwrap();
                 list.into_pyobject(py).unwrap().into()
             }),

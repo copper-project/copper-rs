@@ -28,7 +28,7 @@ jobs:
             mode: cuda-release
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
@@ -134,11 +134,13 @@ jobs:
 
 
       - name: Install CUDA
-        uses: Jimver/cuda-toolkit@v0.2.26
+        uses: Jimver/cuda-toolkit@v0.2.27
         if: runner.os != 'macOS' && matrix.mode == 'cuda-release'
         with:
           cuda: 12.6.1
           log-file-suffix: '${{ matrix.os }}-${{ matrix.mode }}-cuda.txt'
+          use-github-cache: false
+          use-local-cache: false
 
       - name: Set build mode (Linux / MacOS)
         if: runner.os != 'Windows' && ( matrix.mode == 'release' || matrix.mode == 'cuda-release' )
@@ -204,7 +206,7 @@ jobs:
     name: Typos Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: crate-ci/typos@master
         with:
           config: ./.config/_typos.toml
