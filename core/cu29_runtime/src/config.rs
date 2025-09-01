@@ -1303,7 +1303,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Syntax Error in config: Expected opening `[` at position 1:10")]
+    #[should_panic(expected = "Syntax Error in config: Expected opening `[` at position 1:9-1:10")]
     fn test_deserialization_error() {
         // Task needs to be an array, but provided tuple wrongfully
         let txt = r#"( tasks: (), cnx: [], monitor: (type: "ExampleMonitor", ) ) "#;

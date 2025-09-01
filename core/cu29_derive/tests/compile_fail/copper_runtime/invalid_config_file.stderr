@@ -1,4 +1,4 @@
-error: Failed to parse configuration: Error: Expected opening `[` at position 2:12
+error: Failed to parse configuration: Error: Expected opening `[` at position 2:11-2:12
           context:None
  --> tests/compile_fail/copper_runtime/invalid_config_file.rs:3:1
   |
