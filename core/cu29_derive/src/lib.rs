@@ -165,19 +165,27 @@ fn gen_culist_support(
         }
     };
 
-    let methods = itertools::multizip((all_tasks_as_struct_member_name, taskid_call_order)).map(
-        |(name, output_position)| {
+    let methods = all_tasks_as_struct_member_name
+        .iter()
+        .enumerate()
+        .map(|(task_id, name)| {
+            let output_position = taskid_call_order
+                .iter()
+                .position(|&id| id == task_id)
+                .unwrap_or_else(|| {
+                    panic!("Task {name} (id: {task_id}) not found in execution order")
+                });
+
             let fn_name = format_ident!("get_{}_output", name);
-            let payload_type = all_msgs_types_in_culist_order[*output_position].clone();
-            let index = syn::Index::from(*output_position);
+            let payload_type = all_msgs_types_in_culist_order[output_position].clone();
+            let index = syn::Index::from(output_position);
             quote! {
                 #[allow(dead_code)]
                 pub fn #fn_name(&self) -> &CuMsg<#payload_type> {
                     &self.0.#index
                 }
             }
-        },
-    );
+        });
 
     // This generates a way to get the metadata of every single message of a culist at low cost
     quote! {
@@ -823,7 +831,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                             }
                                         }
                                     }, {  // logging preprocess
-                                        if !task_specs.logging_enabled[*output_index as usize] {
+                                        if !task_specs.logging_enabled[step.node_id as usize] {
 
                                             #[cfg(feature = "macro_debug")]
                                             eprintln!(
@@ -1037,7 +1045,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         }
                                     }, {
 
-                                    if !task_specs.logging_enabled[*output_index as usize] {
+                                    if !task_specs.logging_enabled[step.node_id as usize] {
                                         #[cfg(feature = "macro_debug")]
                                         eprintln!(
                                             "{} -> Logging Disabled",
