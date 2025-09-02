@@ -823,7 +823,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                             }
                                         }
                                     }, {  // logging preprocess
-                                        if !task_specs.logging_enabled[*output_index as usize] {
+                                        if !task_specs.logging_enabled[step.node_id as usize] {
 
                                             #[cfg(feature = "macro_debug")]
                                             eprintln!(
@@ -1037,7 +1037,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         }
                                     }, {
 
-                                    if !task_specs.logging_enabled[*output_index as usize] {
+                                    if !task_specs.logging_enabled[step.node_id as usize] {
                                         #[cfg(feature = "macro_debug")]
                                         eprintln!(
                                             "{} -> Logging Disabled",
