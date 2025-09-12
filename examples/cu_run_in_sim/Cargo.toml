@@ -1,0 +1,16 @@
+[package]
+name = "cu-run-in-sim"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+cu29 = { workspace = true }
+cu29-helpers = { workspace = true }
+serde = { workspace = true }
+bincode = { workspace = true }
