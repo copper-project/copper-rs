@@ -1,5 +1,5 @@
 (function() {
-    var implementors = Object.fromEntries([["cu29_log_runtime",[["impl <a class=\"trait\" href=\"https://docs.rs/log/0.4.27/log/trait.Log.html\" title=\"trait log::Log\">Log</a> for <a class=\"struct\" href=\"cu29_log_runtime/struct.NullLog.html\" title=\"struct cu29_log_runtime::NullLog\">NullLog</a>"]]]]);
+    var implementors = Object.fromEntries([["cu29_log_runtime",[["impl <a class=\"trait\" href=\"https://docs.rs/log/0.4.28/log/trait.Log.html\" title=\"trait log::Log\">Log</a> for <a class=\"struct\" href=\"cu29_log_runtime/struct.NullLog.html\" title=\"struct cu29_log_runtime::NullLog\">NullLog</a>"]]]]);
     if (window.register_implementors) {
         window.register_implementors(implementors);
     } else {
