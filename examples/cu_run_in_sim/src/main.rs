@@ -27,9 +27,9 @@ impl CuSrcTask for MySource {
         // Real source just increments. In this demo, the sim will bypass this when run_in_sim = false.
         self.next += 1;
         out.set_payload(MyMsg { value: self.next });
-        // To show that this task is actually fully stubbed in sim and doesn't run at all.
+        // To show that this task is actually fully stubbed in sim and is not compiled in nor run at all.
         panic!("This source should never be called from the sim");
-        Ok(())
+        // Ok(())
     }
 }
 
