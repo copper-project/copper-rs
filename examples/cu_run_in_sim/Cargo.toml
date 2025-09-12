@@ -1,5 +1,6 @@
 [package]
 name = "cu-run-in-sim"
+description = "Example for forcing Copper to compile in and run a source or a sink in simulation mode"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
