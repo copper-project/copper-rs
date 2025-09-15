@@ -97,7 +97,7 @@ fn setup_copper(mut commands: Commands) {
 #[allow(clippy::type_complexity)]
 fn run_copper_callback(
     mut query_set: ParamSet<(
-        Query<(&mut Transform, &mut ExternalForce), With<Cart>>,
+        Query<(&Transform, &mut ExternalForce), With<Cart>>,
         Query<&Transform, With<Rod>>,
     )>,
     physics_time: Res<Time<Physics>>,
@@ -116,8 +116,8 @@ fn run_copper_callback(
     let mut sim_callback = move |step: default::SimStep| -> SimOverride {
         match step {
             default::SimStep::Balpos(CuTaskCallbackState::Process(_, output)) => {
-                // so here we jump when the balpos source (the adc giving the rod position) is called
-                // we get the physical state of the work and inject back to copper what would the sensor read
+                // we run this code when the balpos source (the adc giving the rod position) is called
+                // we get the physical state of the world and inject what the sensor would read back to copper
                 let bindings = query_set.p1();
                 let rod_transform = bindings.single().expect("Failed to get rod transform");
 
