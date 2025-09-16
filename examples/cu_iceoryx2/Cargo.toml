@@ -14,7 +14,7 @@ description = "Copper example to use Iceoryx2 as a middleware."
 ignored = ["bincode", "cu-caterpillar", "cu-consolemon"]
 
 [dependencies]
-iceoryx2-bb-log = { version = "0.6.1" }
+iceoryx2-bb-log = { version = "0.7.0" }
 cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
 bincode = { workspace = true }  # needed

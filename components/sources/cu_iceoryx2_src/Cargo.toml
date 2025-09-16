@@ -11,6 +11,6 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-iceoryx2 = { version = "0.6.1" }
+iceoryx2 = { version = "0.7.0" }
 cu29 = { workspace = true }
 bincode = { workspace = true }
