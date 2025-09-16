@@ -428,13 +428,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             panic!("CuSrcTask {task_id} cannot be a background task, it should be a regular task.");
                         }
                         if *run_in_sim {
+                            sim_type.clone()
+                        } else {
                             let msg_type = graph
                                 .get_node_output_msg_type(task_id.as_str())
                                 .unwrap_or_else(|| panic!("CuSrcTask {task_id} should have an outgoing connection with a valid output msg type"));
                             let sim_task_name = format!("cu29::simulation::CuSimSrcTask<{msg_type}>");
                             parse_str(sim_task_name.as_str()).unwrap_or_else(|_| panic!("Could not build the placeholder for simulation: {sim_task_name}"))
-                        } else {
-                            sim_type.clone()
                         }
                     }
                     CuTaskType::Regular => {
