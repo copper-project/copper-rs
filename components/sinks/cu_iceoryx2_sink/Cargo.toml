@@ -11,6 +11,6 @@ repository.workspace = true
 description = "Copper sink task for Iceoryx2."
 
 [dependencies]
-iceoryx2 = { version = "0.6.1" }
+iceoryx2 = { version = "0.7.0" }
 cu29 = { workspace = true }
 bincode = { workspace = true }
