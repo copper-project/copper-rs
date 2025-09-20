@@ -1,0 +1,17 @@
+(
+  tasks: [
+    // Here we set run_in_sim = false, sim will automatically stub it and run your *simulated input*. (this is the default behavior if you omit run_in_sim)
+    (id: "src",  type: "MySource", run_in_sim: false),
+
+    // Regular task: run_in_sim is ignored; real code is always used in sim
+    (id: "proc", type: "Doubler"),
+
+    // Here we set run_in_sim = true, sim will NOT stub it and run your *real code*.
+    (id: "sink", type: "MySink", run_in_sim: true),
+  ],
+
+  cnx: [
+    (src: "src",  dst: "proc", msg: "MyMsg"),
+    (src: "proc", dst: "sink", msg: "MyMsg"),
+  ],
+)

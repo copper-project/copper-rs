@@ -60,7 +60,7 @@ members = [
     "examples/cu_rp_balancebot",
     "examples/cu_standalone_structlog",
     "examples/cu_zenoh",
-    "examples/cu_zenoh_ros",
+    "examples/cu_zenoh_ros", "examples/cu_run_in_sim",
 ]
 
 # put only the core crates here that are not platform specific
@@ -83,7 +83,7 @@ default-members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.9.0"
+version = "0.9.1"
 authors = ["Guillaume Binet <gbin@gootz.net>"]
 edition = "2021"
 license = "Apache-2.0"
