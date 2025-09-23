@@ -277,6 +277,7 @@ where
     let mut transformed_angular = [T::default(); 3];
 
     // Angular velocity transforms as: ω_b = R * ω_a
+    #[allow(clippy::needless_range_loop)]
     for i in 0..3 {
         for j in 0..3 {
             transformed_angular[i] = transformed_angular[i] + rot[i][j] * velocity.angular[j];
@@ -286,6 +287,7 @@ where
     // Next, transform the linear velocity
     // First part: v'_linear = R * v_linear
     let mut transformed_linear = [T::default(); 3];
+    #[allow(clippy::needless_range_loop)]
     for i in 0..3 {
         for j in 0..3 {
             transformed_linear[i] = transformed_linear[i] + rot[i][j] * velocity.linear[j];
