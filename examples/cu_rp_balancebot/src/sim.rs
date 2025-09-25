@@ -219,7 +219,7 @@ pub fn make_world(headless: bool) -> App {
                 unapproved_path_mode: UnapprovedPathMode::Allow,
                 ..default()
             },
-            ScenePlugin::default(),
+            ScenePlugin,
             ImagePlugin::default(),
         ));
     } else {
