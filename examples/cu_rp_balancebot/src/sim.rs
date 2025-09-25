@@ -7,6 +7,7 @@ use avian3d::prelude::{ExternalForce, Physics};
 use bevy::asset::UnapprovedPathMode;
 use bevy::prelude::*;
 use bevy::render::RenderPlugin;
+use bevy::scene::ScenePlugin;
 // disembiguation as there is also a bevy::prelude::debug
 use cu29::prelude::debug;
 #[allow(unused_imports)]
@@ -188,7 +189,7 @@ fn stop_copper_on_exit(mut exit_events: EventReader<AppExit>, mut copper_ctx: Re
     }
 }
 
-fn main() {
+pub fn make_world(headless: bool) -> App {
     let mut world = App::new();
     #[cfg(target_os = "macos")]
     let render_plugin = RenderPlugin::default(); // This let macos pick their own backend.
@@ -204,29 +205,52 @@ fn main() {
         ..Default::default()
     };
 
-    let default_plugins = DefaultPlugins
-        .set(render_plugin)
-        .set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "Copper Simulator".into(),
+    let default_plugins = if headless {
+        MinimalPlugins.build()
+    } else {
+        DefaultPlugins
+            .set(render_plugin)
+            .set(WindowPlugin {
+                primary_window: Some(Window {
+                    title: "Copper Simulator".into(),
+                    ..default()
+                }),
                 ..default()
-            }),
-            ..default()
-        })
-        .set(AssetPlugin {
-            unapproved_path_mode: UnapprovedPathMode::Allow,
-            ..default()
-        });
+            })
+            .set(AssetPlugin {
+                unapproved_path_mode: UnapprovedPathMode::Allow,
+                ..default()
+            })
+    };
 
     world.add_plugins(default_plugins);
 
-    // setup everything that is simulation specific.
-    let simulation = world::build_world(&mut world);
+    if headless {
+        world.insert_resource(Assets::<Mesh>::default());
+        world.insert_resource(SceneSpawner::default());
+        world.insert_resource(Assets::<StandardMaterial>::default());
+        world.add_plugins((
+            AssetPlugin {
+                unapproved_path_mode: UnapprovedPathMode::Allow,
+                ..default()
+            },
+            ScenePlugin::default(),
+            ImagePlugin::default(),
+        ));
+    }
 
-    // setup all the systems related to copper and the glue logic.
+    // set up everything that is simulation specific.
+    let simulation = world::build_world(&mut world, headless);
+
+    // set up all the systems related to copper and the glue logic.
     simulation.add_systems(Startup, setup_copper);
     simulation.add_systems(Update, run_copper_callback);
     simulation.add_systems(PostUpdate, stop_copper_on_exit);
+    world
+}
+
+fn main() {
+    let mut world = make_world(false);
     world.run();
 }
 
@@ -235,23 +259,7 @@ mod tests {
     use super::*;
     #[test]
     fn test_balancebot_runs() {
-        let mut world = App::new();
-
-        world.add_plugins((
-            AssetPlugin {
-                unapproved_path_mode: UnapprovedPathMode::Allow,
-                ..default()
-            },
-            MinimalPlugins,
-        ));
-
-        // setup everything that is simulation specific.
-        let simulation = world::build_world(&mut world);
-
-        // setup all the systems related to copper and the glue logic.
-        // simulation.add_systems(Startup, setup_copper);
-        // simulation.add_systems(Update, run_copper_callback);
-        // simulation.add_systems(PostUpdate, stop_copper_on_exit);
+        let mut world = make_world(true);
         world.update();
     }
 }
