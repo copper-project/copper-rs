@@ -205,31 +205,13 @@ pub fn make_world(headless: bool) -> App {
         ..Default::default()
     };
 
-    let default_plugins = if headless {
-        MinimalPlugins.build()
-    } else {
-        DefaultPlugins
-            .set(render_plugin)
-            .set(WindowPlugin {
-                primary_window: Some(Window {
-                    title: "Copper Simulator".into(),
-                    ..default()
-                }),
-                ..default()
-            })
-            .set(AssetPlugin {
-                unapproved_path_mode: UnapprovedPathMode::Allow,
-                ..default()
-            })
-    };
-
-    world.add_plugins(default_plugins);
-
     if headless {
+        // these are not in the minimal plugins but are needed for the integration test
         world.insert_resource(Assets::<Mesh>::default());
         world.insert_resource(SceneSpawner::default());
         world.insert_resource(Assets::<StandardMaterial>::default());
         world.add_plugins((
+            MinimalPlugins,
             AssetPlugin {
                 unapproved_path_mode: UnapprovedPathMode::Allow,
                 ..default()
@@ -237,7 +219,23 @@ pub fn make_world(headless: bool) -> App {
             ScenePlugin::default(),
             ImagePlugin::default(),
         ));
-    }
+    } else {
+        world.add_plugins(
+            DefaultPlugins
+                .set(render_plugin)
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        title: "Copper Simulator".into(),
+                        ..default()
+                    }),
+                    ..default()
+                })
+                .set(AssetPlugin {
+                    unapproved_path_mode: UnapprovedPathMode::Allow,
+                    ..default()
+                }),
+        );
+    };
 
     // set up everything that is simulation specific.
     let simulation = world::build_world(&mut world, headless);
