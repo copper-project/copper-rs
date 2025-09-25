@@ -30,6 +30,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustc,cargo,rust-std,rustfmt,clippy
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
         with:
