@@ -209,6 +209,7 @@ pub fn make_world(headless: bool) -> App {
     if headless {
         // these are not added in the minimal plugins but are needed for the integration test to run
         world.insert_resource(Assets::<Mesh>::default());
+        world.insert_resource(Assets::<Font>::default());
         world.insert_resource(SceneSpawner::default());
         world.insert_resource(Assets::<StandardMaterial>::default());
 
