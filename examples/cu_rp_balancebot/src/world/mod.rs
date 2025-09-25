@@ -1,4 +1,5 @@
 use avian3d::prelude::*;
+use bevy::color::palettes::css::RED;
 use bevy::core_pipeline::fxaa::Fxaa;
 use bevy::core_pipeline::Skybox;
 use bevy::input::{
@@ -494,14 +495,47 @@ fn setup_entities(
     setup_completed.0 = true; // Mark as completed
 }
 
-fn on_drag_transform(drag: Trigger<Pointer<Drag>>, mut transforms: Query<&mut Transform>) {
+fn on_drag_transform(
+    drag: Trigger<Pointer<Drag>>,
+    camera_query: Option<Single<&Transform, With<Camera>>>,
+    mut external_force: Query<(&mut ExternalForce, &RigidBody)>,
+    window_query_maybe: Option<Single<&Window>>,
+    time: Res<Time<Physics>>,
+    mut gizmos: Gizmos,
+) {
     if drag.button != PointerButton::Primary {
         return;
     }
-    if let Ok(mut transform) = transforms.get_mut(drag.target) {
-        let pivot_world =
-            transform.translation + transform.rotation * Vec3::new(0.0, -ROD_HEIGHT / 2.0, 0.0);
-        transform.rotate_around(pivot_world, Quat::from_rotation_z(-drag.delta.x / 50.0));
+    if time.is_paused() {
+        // don't let dragging happen when physics is paused
+        return;
+    }
+    let camera_transform = if let Some(camera_query) = camera_query {
+        camera_query.into_inner()
+    } else {
+        return;
+    };
+    // only apply forces to dynamic rigid bodies (i.e. the cart and the pole, in this case)
+    if let Ok((mut external_force, RigidBody::Dynamic)) = external_force.get_mut(drag.target) {
+        // calculate world X-direction drag from screenspace drag
+        // drag.delta.y should basically never contribute (as long as camera isn't rolled), but scaling by camera_transform.right() will feel more natural when dragging from a steep visual angle
+        let drag_delta_world =
+            drag.distance.x * camera_transform.right() + drag.distance.y * camera_transform.down();
+
+        // apply a force to that object based on the world length and direction of the mouse drag
+        let applied_force = drag_delta_world.clamp_length_max(10.0);
+        external_force.apply_force(applied_force);
+
+        let window_query = if let Some(window_query) = window_query_maybe {
+            window_query.into_inner()
+        } else {
+            return;
+        };
+        if let Some(cursor_position) = window_query.cursor_position() {
+            let start = cursor_position - drag.distance;
+            // draw a gizmo to show the force applied
+            gizmos.line_2d(start, cursor_position, RED);
+        }
     }
 }
 
@@ -564,7 +598,8 @@ fn camera_control_system(
     mut scroll_evr: EventReader<MouseWheel>,
     mut mouse_motion: EventReader<MouseMotion>,
     mut query: Query<&mut Transform, With<Camera>>,
-    time: Res<Time>,
+    // use real time to scale camera movement in case physics time is paused
+    time: Res<Time<Real>>,
     mouse_button_input: Res<ButtonInput<MouseButton>>,
 ) {
     let mut camera_transform = query.single_mut().expect("Failed to get camera transform");
