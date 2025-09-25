@@ -58,9 +58,8 @@ pub struct Cart;
 #[derive(Component)]
 pub struct Rod;
 
-pub fn build_world(app: &mut App) -> &mut App {
+pub fn build_world(app: &mut App, headless: bool) -> &mut App {
     let app = app
-        .add_plugins(MeshPickingPlugin)
         .add_plugins(PhysicsPlugins::default().with_length_unit(1000.0))
         // we want Bevy to measure these values for us:
         .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default())
@@ -77,11 +76,16 @@ pub fn build_world(app: &mut App) -> &mut App {
         .add_systems(Startup, setup_scene)
         .add_systems(Startup, setup_ui)
         .add_systems(Update, setup_entities) // Wait for the cart entity to be loaded
-        .add_systems(Update, toggle_simulation_state)
-        .add_systems(Update, camera_control_system)
-        .add_systems(Update, update_physics)
-        .add_systems(Update, global_cart_drag_listener)
-        .add_systems(PostUpdate, reset_sim);
+        .add_systems(Update, update_physics);
+
+    // these will make a headless app crash, so only add them if we aren't headless
+    if !headless {
+        app.add_plugins(MeshPickingPlugin);
+        app.add_systems(Update, toggle_simulation_state)
+            .add_systems(Update, camera_control_system)
+            .add_systems(Update, global_cart_drag_listener)
+            .add_systems(PostUpdate, reset_sim);
+    }
 
     #[cfg(feature = "perf-ui")]
     app.add_plugins(PerfUiPlugin);

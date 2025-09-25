@@ -7,6 +7,7 @@ use avian3d::prelude::{ExternalForce, Physics};
 use bevy::asset::UnapprovedPathMode;
 use bevy::prelude::*;
 use bevy::render::RenderPlugin;
+use bevy::scene::ScenePlugin;
 // disembiguation as there is also a bevy::prelude::debug
 use cu29::prelude::debug;
 #[allow(unused_imports)]
@@ -49,7 +50,7 @@ fn default_callback(step: default::SimStep) -> SimOverride {
     }
 }
 
-// a system callback from bevy to setup the copper part of the house.
+// a system callback from bevy to set up the copper part of the house.
 fn setup_copper(mut commands: Commands) {
     #[allow(clippy::identity_op)]
     const LOG_SLAB_SIZE: Option<usize> = Some(1 * 1024 * 1024 * 1024);
@@ -97,7 +98,7 @@ fn setup_copper(mut commands: Commands) {
 #[allow(clippy::type_complexity)]
 fn run_copper_callback(
     mut query_set: ParamSet<(
-        Query<(&mut Transform, &mut ExternalForce), With<Cart>>,
+        Query<(&Transform, &mut ExternalForce), With<Cart>>,
         Query<&Transform, With<Rod>>,
     )>,
     physics_time: Res<Time<Physics>>,
@@ -116,8 +117,8 @@ fn run_copper_callback(
     let mut sim_callback = move |step: default::SimStep| -> SimOverride {
         match step {
             default::SimStep::Balpos(CuTaskCallbackState::Process(_, output)) => {
-                // so here we jump when the balpos source (the adc giving the rod position) is called
-                // we get the physical state of the work and inject back to copper what would the sensor read
+                // we run this code when the balpos source (the adc giving the rod position) is called
+                // we get the physical state of the world and inject what the sensor would read back to copper
                 let bindings = query_set.p1();
                 let rod_transform = bindings.single().expect("Failed to get rod transform");
 
@@ -188,9 +189,9 @@ fn stop_copper_on_exit(mut exit_events: EventReader<AppExit>, mut copper_ctx: Re
     }
 }
 
-fn main() {
+// this function creates the bevy::App used in both the integration test and the simulation
+pub fn make_world(headless: bool) -> App {
     let mut world = App::new();
-
     #[cfg(target_os = "macos")]
     let render_plugin = RenderPlugin::default(); // This let macos pick their own backend.
 
@@ -205,28 +206,63 @@ fn main() {
         ..Default::default()
     };
 
-    let default_plugin = DefaultPlugins
-        .set(render_plugin)
-        .set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "Copper Simulator".into(),
+    if headless {
+        // these are not added in the minimal plugins but are needed for the integration test to run
+        world.insert_resource(Assets::<Mesh>::default());
+        world.insert_resource(Assets::<Font>::default());
+        world.insert_resource(SceneSpawner::default());
+        world.insert_resource(Assets::<StandardMaterial>::default());
+
+        // add the minimal plugins as well as others needed for our simulation to run
+        world.add_plugins((
+            MinimalPlugins,
+            AssetPlugin {
+                unapproved_path_mode: UnapprovedPathMode::Allow,
                 ..default()
-            }),
-            ..default()
-        })
-        .set(AssetPlugin {
-            unapproved_path_mode: UnapprovedPathMode::Allow,
-            ..default()
-        });
+            },
+            ScenePlugin,
+            ImagePlugin::default(),
+        ));
+    } else {
+        world.add_plugins(
+            DefaultPlugins
+                .set(render_plugin)
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        title: "Copper Simulator".into(),
+                        ..default()
+                    }),
+                    ..default()
+                })
+                .set(AssetPlugin {
+                    unapproved_path_mode: UnapprovedPathMode::Allow,
+                    ..default()
+                }),
+        );
+    };
 
-    world.add_plugins(default_plugin);
+    // set up everything that is simulation specific.
+    // this adds systems on the bevy side of things to handle things like the UI, keyboard inputs, etc.
+    let simulation = world::build_world(&mut world, headless);
 
-    // setup everything that is simulation specific.
-    let world = world::build_world(&mut world);
+    // set up all the systems related to copper and the glue logic.
+    simulation.add_systems(Startup, setup_copper);
+    simulation.add_systems(Update, run_copper_callback);
+    simulation.add_systems(PostUpdate, stop_copper_on_exit);
+    world
+}
 
-    // setup all the systems related to copper and the glue logic.
-    world.add_systems(Startup, setup_copper);
-    world.add_systems(Update, run_copper_callback);
-    world.add_systems(PostUpdate, stop_copper_on_exit);
+fn main() {
+    let mut world = make_world(false);
     world.run();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_balancebot_runs() {
+        let mut world = make_world(true);
+        world.update();
+    }
 }
