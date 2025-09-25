@@ -50,7 +50,7 @@ fn default_callback(step: default::SimStep) -> SimOverride {
     }
 }
 
-// a system callback from bevy to setup the copper part of the house.
+// a system callback from bevy to set up the copper part of the house.
 fn setup_copper(mut commands: Commands) {
     #[allow(clippy::identity_op)]
     const LOG_SLAB_SIZE: Option<usize> = Some(1 * 1024 * 1024 * 1024);
@@ -189,6 +189,7 @@ fn stop_copper_on_exit(mut exit_events: EventReader<AppExit>, mut copper_ctx: Re
     }
 }
 
+// this function creates the bevy::App used in both the integration test and the simulation
 pub fn make_world(headless: bool) -> App {
     let mut world = App::new();
     #[cfg(target_os = "macos")]
@@ -206,10 +207,12 @@ pub fn make_world(headless: bool) -> App {
     };
 
     if headless {
-        // these are not in the minimal plugins but are needed for the integration test
+        // these are not added in the minimal plugins but are needed for the integration test to run
         world.insert_resource(Assets::<Mesh>::default());
         world.insert_resource(SceneSpawner::default());
         world.insert_resource(Assets::<StandardMaterial>::default());
+
+        // add the minimal plugins as well as others needed for our simulation to run
         world.add_plugins((
             MinimalPlugins,
             AssetPlugin {
@@ -238,6 +241,7 @@ pub fn make_world(headless: bool) -> App {
     };
 
     // set up everything that is simulation specific.
+    // this adds systems on the bevy side of things to handle things like the UI, keyboard inputs, etc.
     let simulation = world::build_world(&mut world, headless);
 
     // set up all the systems related to copper and the glue logic.

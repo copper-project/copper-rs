@@ -93,6 +93,7 @@ pub fn build_world(app: &mut App, headless: bool) -> &mut App {
         app.add_plugins(MeshPickingPlugin);
         app.add_systems(Update, toggle_simulation_state)
             .add_systems(Update, camera_control_system)
+            .add_systems(Update, external_force_display)
             .add_systems(PostUpdate, reset_sim);
     }
 
@@ -293,9 +294,9 @@ fn setup_scene(
 
 fn setup_ui(mut commands: Commands) {
     #[cfg(target_os = "macos")]
-    let instructions = "WASD / QE\nControl-Click + Drag\nClick + Drag\nScrolling\nSpace\nR";
+    let instructions = "WASD / QE\nControl-Click + Drag\nClick + Drag\nScrolling\nSpace\nR\nF";
     #[cfg(not(target_os = "macos"))]
-    let instructions = "WASD / QE\nMiddle-Click + Drag\nClick + Drag\nScroll Wheel\nSpace\nR";
+    let instructions = "WASD / QE\nMiddle-Click + Drag\nClick + Drag\nScroll Wheel\nSpace\nR\nF";
 
     commands
         .spawn((
@@ -318,7 +319,7 @@ fn setup_ui(mut commands: Commands) {
         .with_children(|parent| {
             // Left column
             parent.spawn((
-                Text::new("Move\nNavigation\nInteract\nZoom\nPause/Resume\nReset"),
+                Text::new("Move\nNavigation\nInteract\nZoom\nPause/Resume\nReset\nShow Forces"),
                 TextFont {
                     font_size: 12.0,
                     ..default()
@@ -506,19 +507,47 @@ fn on_drag_end(
     }
 }
 
+pub fn external_force_display(
+    external_force: Query<(Entity, &Position, &ExternalForce)>,
+    cart: Query<(), With<Cart>>,
+    rod: Query<(), With<Rod>>,
+    mut gizmos: Gizmos,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut should_display: Local<bool>,
+) {
+    if keys.just_pressed(KeyCode::KeyF) {
+        *should_display = !*should_display;
+    }
+    if *should_display {
+        external_force
+            .iter()
+            .filter(|(entity, _, _)| {
+                // only display external forces for the cart or the rod
+                cart.get(*entity).is_ok() || rod.get(*entity).is_ok()
+            })
+            .for_each(|(_, position, external_force)| {
+                gizmos.arrow(
+                    **position,
+                    **position + (**external_force).clamp_length_max(10.),
+                    RED,
+                );
+            });
+    }
+}
+
 fn on_drag(
     drag: Trigger<Pointer<Drag>>,
     camera_query: Option<Single<&Transform, With<Camera>>>,
     parents: Query<(&ChildOf, Option<&Cart>, Option<&Rod>)>,
     mut external_force: Query<&mut ExternalForce>,
-    time: Res<Time<Physics>>,
+    time: Res<Time<Virtual>>,
     drag_control: Res<DragControl>,
 ) {
     if drag.button != PointerButton::Primary {
         return;
     }
     if time.is_paused() {
-        // don't let dragging happen when physics is paused
+        // don't let dragging happen when game time is paused
         return;
     }
     let camera_transform = if let Some(camera_query) = camera_query {
@@ -546,7 +575,8 @@ fn on_drag(
             drag.distance.x * camera_transform.right() + drag.distance.y * camera_transform.down();
 
         // apply a force to that object based on the world length and direction of the mouse drag
-        let applied_force = (drag_delta_world / drag_control.pixels_per_newton).clamp_length_max(drag_control.max_force);
+        let applied_force = (drag_delta_world / drag_control.pixels_per_newton)
+            .clamp_length_max(drag_control.max_force);
         external_force.apply_force(applied_force);
     }
 }
@@ -557,7 +587,7 @@ fn reset_sim(
     mut query: Query<(
         Option<&Rod>,
         Option<&Cart>,
-        Option<&mut Transform>, // Ensure transform is mutable
+        Option<&mut Transform>,
         Option<&mut ExternalForce>,
         Option<&mut LinearVelocity>,
         Option<&mut AngularVelocity>,
