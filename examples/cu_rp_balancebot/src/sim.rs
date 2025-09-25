@@ -190,7 +190,6 @@ fn stop_copper_on_exit(mut exit_events: EventReader<AppExit>, mut copper_ctx: Re
 
 fn main() {
     let mut world = App::new();
-
     #[cfg(target_os = "macos")]
     let render_plugin = RenderPlugin::default(); // This let macos pick their own backend.
 
@@ -205,7 +204,7 @@ fn main() {
         ..Default::default()
     };
 
-    let default_plugin = DefaultPlugins
+    let default_plugins = DefaultPlugins
         .set(render_plugin)
         .set(WindowPlugin {
             primary_window: Some(Window {
@@ -219,14 +218,40 @@ fn main() {
             ..default()
         });
 
-    world.add_plugins(default_plugin);
+    world.add_plugins(default_plugins);
 
     // setup everything that is simulation specific.
-    let world = world::build_world(&mut world);
+    let simulation = world::build_world(&mut world);
 
     // setup all the systems related to copper and the glue logic.
-    world.add_systems(Startup, setup_copper);
-    world.add_systems(Update, run_copper_callback);
-    world.add_systems(PostUpdate, stop_copper_on_exit);
+    simulation.add_systems(Startup, setup_copper);
+    simulation.add_systems(Update, run_copper_callback);
+    simulation.add_systems(PostUpdate, stop_copper_on_exit);
     world.run();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_balancebot_runs() {
+        let mut world = App::new();
+
+        world.add_plugins((
+            AssetPlugin {
+                unapproved_path_mode: UnapprovedPathMode::Allow,
+                ..default()
+            },
+            MinimalPlugins,
+        ));
+
+        // setup everything that is simulation specific.
+        let simulation = world::build_world(&mut world);
+
+        // setup all the systems related to copper and the glue logic.
+        // simulation.add_systems(Startup, setup_copper);
+        // simulation.add_systems(Update, run_copper_callback);
+        // simulation.add_systems(PostUpdate, stop_copper_on_exit);
+        world.update();
+    }
 }
