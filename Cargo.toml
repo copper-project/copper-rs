@@ -142,7 +142,7 @@ derive_more = { version = "2.0.1", features = ["full"] }
 tempfile = "3.20.0"
 
 # rerun
-rerun = { version = "0.24.0", default-features = false, features = ["sdk", "server", "log"] }
+rerun = { version = "0.25.1", default-features = false, features = ["sdk", "server", "log"] }
 
 # smallvec to avoid heap allocations
 smallvec = { version = "1.15.0", features = ["serde"] }
