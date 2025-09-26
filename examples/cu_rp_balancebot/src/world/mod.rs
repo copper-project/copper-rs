@@ -483,23 +483,66 @@ fn setup_entities(
     setup_completed.0 = true; // Mark as completed
 }
 
+fn get_rigid_body_entity(
+    mut drag_target: Entity,
+    parents: &Query<(&ChildOf, Option<&RigidBody>)>,
+) -> Entity {
+    // get a rigid body entity (the drag event may target a descendant of them)
+    while let Ok((parent, maybe_rigid_body)) = parents.get(drag_target) {
+        if maybe_rigid_body.is_some() {
+            break;
+        }
+        drag_target = parent.parent();
+    }
+
+    // this will return the highest ancestor if no rigid body is found, which is fine
+    drag_target
+}
+
+fn on_drag(
+    drag: Trigger<Pointer<Drag>>,
+    camera_query: Option<Single<&Transform, With<Camera>>>,
+    parents: Query<(&ChildOf, Option<&RigidBody>)>,
+    mut external_force: Query<&mut ExternalForce>,
+    drag_control: Res<DragControl>,
+) {
+    if drag.button != PointerButton::Primary {
+        return;
+    }
+    let camera_transform = if let Some(camera_query) = camera_query {
+        camera_query.into_inner()
+    } else {
+        return;
+    };
+
+    let target_entity = get_rigid_body_entity(drag.target, &parents);
+
+    if let Ok(mut external_force) = external_force.get_mut(target_entity) {
+        // clear any previously applied forces (they persist by default)
+        external_force.clear();
+
+        // calculate world X-direction drag from screenspace drag
+        // drag.delta.y should basically never contribute (as long as camera isn't rolled), but scaling by camera_transform.right() will feel more natural when dragging from a steep visual angle
+        let drag_delta_world =
+            drag.distance.x * camera_transform.right() + drag.distance.y * camera_transform.down();
+
+        // apply a force to that object based on the world length and direction of the mouse drag
+        let applied_force = (drag_delta_world / drag_control.pixels_per_newton)
+            .clamp_length_max(drag_control.max_force);
+        external_force.apply_force(applied_force);
+    }
+}
+
 fn on_drag_end(
     drag: Trigger<Pointer<DragEnd>>,
-    parents: Query<(&ChildOf, Option<&Cart>, Option<&Rod>)>,
+    parents: Query<(&ChildOf, Option<&RigidBody>)>,
     mut external_force: Query<&mut ExternalForce>,
 ) {
     if drag.button != PointerButton::Primary {
         return;
     }
 
-    // get either the cart or the pole entity (the drag event may target a descendant of them)
-    let mut target_entity = drag.target;
-    while let Ok((parent, maybe_cart, maybe_pole)) = parents.get(target_entity) {
-        if maybe_cart.is_some() || maybe_pole.is_some() {
-            break;
-        }
-        target_entity = parent.parent();
-    }
+    let target_entity = get_rigid_body_entity(drag.target, &parents);
 
     if let Ok(mut external_force) = external_force.get_mut(target_entity) {
         // the drag ended, so clear the applied forces
@@ -532,47 +575,6 @@ pub fn external_force_display(
                     RED,
                 );
             });
-    }
-}
-
-fn on_drag(
-    drag: Trigger<Pointer<Drag>>,
-    camera_query: Option<Single<&Transform, With<Camera>>>,
-    parents: Query<(&ChildOf, Option<&Cart>, Option<&Rod>)>,
-    mut external_force: Query<&mut ExternalForce>,
-    drag_control: Res<DragControl>,
-) {
-    if drag.button != PointerButton::Primary {
-        return;
-    }
-    let camera_transform = if let Some(camera_query) = camera_query {
-        camera_query.into_inner()
-    } else {
-        return;
-    };
-
-    // get either the cart or the pole entity (the drag event may target a descendant of them)
-    let mut target_entity = drag.target;
-    while let Ok((parent, maybe_cart, maybe_pole)) = parents.get(target_entity) {
-        if maybe_cart.is_some() || maybe_pole.is_some() {
-            break;
-        }
-        target_entity = parent.parent();
-    }
-
-    if let Ok(mut external_force) = external_force.get_mut(target_entity) {
-        // clear any previously applied forces (they persist by default)
-        external_force.clear();
-
-        // calculate world X-direction drag from screenspace drag
-        // drag.delta.y should basically never contribute (as long as camera isn't rolled), but scaling by camera_transform.right() will feel more natural when dragging from a steep visual angle
-        let drag_delta_world =
-            drag.distance.x * camera_transform.right() + drag.distance.y * camera_transform.down();
-
-        // apply a force to that object based on the world length and direction of the mouse drag
-        let applied_force = (drag_delta_world / drag_control.pixels_per_newton)
-            .clamp_length_max(drag_control.max_force);
-        external_force.apply_force(applied_force);
     }
 }
 
