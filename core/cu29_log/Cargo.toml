@@ -19,3 +19,7 @@ cu29-traits = { workspace = true }
 cu29-clock = { workspace = true }
 strfmt = "0.2.4"
 smallvec = { workspace = true }
+
+[features]
+default = ["std"]
+std = []

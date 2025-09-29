@@ -1,4 +1,7 @@
 #![doc(html_root_url = "https://docs.rs/serde-value/0.7.0/")]
+#![cfg_attr(not(feature = "std"), no_std)]
+#[cfg(not(feature = "std"))]
+extern crate alloc;
 
 use cu29_clock::{CuDuration, CuTime};
 use ordered_float::OrderedFloat;

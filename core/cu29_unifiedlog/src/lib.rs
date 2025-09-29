@@ -1,3 +1,7 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+
 use memmap2::{Mmap, MmapMut};
 use std::fmt::{Debug, Display, Formatter};
 use std::fs::{File, OpenOptions};

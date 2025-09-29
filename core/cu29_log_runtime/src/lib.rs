@@ -1,3 +1,7 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+
 use bincode::config::Configuration;
 use bincode::enc::write::Writer;
 use bincode::enc::Encode;

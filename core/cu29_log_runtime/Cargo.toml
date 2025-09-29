@@ -24,3 +24,8 @@ log = "0.4.27"
 
 [dev-dependencies]
 cu29-value = { workspace = true }
+
+[features]
+default = ["std"]
+std = []
+
