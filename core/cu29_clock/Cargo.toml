@@ -18,3 +18,7 @@ serde = { workspace = true }
 
 [dev-dependencies]
 approx = "0.5.1"
+
+[features]
+default = ["std"]
+std = []
