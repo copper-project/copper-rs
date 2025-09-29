@@ -12,12 +12,12 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-quanta = "0.12.5"
+quanta = "0.12"
 bincode = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]
-approx = "0.5.1"
+approx = "0.5"
 
 [features]
 default = ["std"]

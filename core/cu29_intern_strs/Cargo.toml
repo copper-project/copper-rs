@@ -12,9 +12,9 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-anyhow = "1.0.98"
-rkv = { version = "0.19.0", features = ["lmdb"] }
-byteorder = "1.5.0"
+anyhow = "1.0"
+rkv = { version = "0.19", features = ["lmdb"] }
+byteorder = "1.5"
 
 [features]
 # enables a more verbose build log showing the index generation.

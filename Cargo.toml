@@ -117,36 +117,41 @@ cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads", version 
 cu-ros-payloads = { path = "components/payloads/cu_ros_payloads", version = "0.9.0" }
 
 # External serialization
-bincode = { version = "2.0.1", features = ["derive"] }
-serde = { version = "1.0.219", features = ["derive"] }
-serde_derive = { version = "1.0.219", features = ["default"] }
+bincode = { version = "2.0", features = ["derive"] }
+
+erased-serde = "0.4"
+
+serde = { version = "1.0", features = ["derive"] }
+serde_derive = { version = "1.0", features = ["default"] }
 
 # External CLI
-clap = { version = "4.5.38", features = ["derive"] }
+clap = { version = "4.5", features = ["derive"] }
 
 # External proc macros
-proc-macro2 = { version = "1.0.95" }
-quote = "1.0.40"                                  # proc macros
-syn = { version = "2.0.101", features = ["full"] } # proc macros
+proc-macro2 = { version = "1.0" }
+quote = "1.0"                                  # proc macros
+syn = { version = "2.0", features = ["full"] } # proc macros
 
 # Unit of measure to be consistent across the project
-uom = { version = "0.37.0", features = ["serde"] }
+uom = { version = "0.37", features = ["serde"] }
 
 # Compact strings support
-compact_str = { version = "0.9.0", features = ["serde"] }
+compact_str = { version = "0.9", features = ["serde"] }
 
-# The derive patterns happens a lot across the codebase, this is a helper for that.
-derive_more = { version = "2.0.1", features = ["full"] }
+# The derive pattern happens a lot across the codebase, this is a helper for that.
+derive_more = { version = "2.0", features = ["full"] }
 
 # used across testing
-tempfile = "3.20.0"
+tempfile = "3.23"
 
 # rerun
-rerun = { version = "0.25.1", default-features = false, features = ["sdk", "server", "log"] }
+rerun = { version = "0.25", default-features = false, features = ["sdk", "server", "log"] }
 
 # smallvec to avoid heap allocations
-smallvec = { version = "1.15.0", features = ["serde"] }
+smallvec = { version = "1.15", features = ["serde"] }
 
+# rayon for thread pools and such.
+rayon = "1.11"
 
 [profile.screaming]
 inherits = "release"

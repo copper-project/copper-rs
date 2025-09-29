@@ -18,9 +18,7 @@ path = "src/rendercfg.rs"
 
 [dependencies]
 bincode = { workspace = true }
-serde = { workspace = true }
-erased-serde = "0.4.6"
-serde_derive = { workspace = true }
+clap = { workspace = true }
 compact_str = { workspace = true }
 cu29-traits = { workspace = true }
 cu29-log = { workspace = true }
@@ -29,19 +27,22 @@ cu29-log-runtime = { workspace = true }  # needed
 cu29-unifiedlog = { workspace = true }
 cu29-value = { workspace = true }
 cu29-clock = { workspace = true }
-clap = { workspace = true }
-tempfile = { workspace = true }
-arrayvec = { version = "0.7.6", features = ["serde"] }
+erased-serde = { workspace = true }
+rayon = { workspace = true }
+serde_derive = { workspace = true }
+serde = { workspace = true }
 smallvec = { workspace = true }
-ron = "0.11.0"
-hdrhistogram = "7.5.4"
-petgraph = { version = "0.8.1", features = ["serde", "serde-1", "serde_derive"] }
-object-pool = "0.6.0"
+tempfile = { workspace = true }
+
+arrayvec = { version = "0.7", features = ["serde"] }
+ron = "0.11"
+hdrhistogram = "7.5"
 html-escape = "0.2"
-rayon = "1.7.0"
+object-pool = "0.6"
+petgraph = { version = "0.8", features = ["serde", "serde-1", "serde_derive"] }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
-cudarc = { version = "0.17.0", optional = true, features = ["cuda-version-from-build-system"] }
+cudarc = { version = "0.17", optional = true, features = ["cuda-version-from-build-system"] }
 
 [features]
 default = ["std"]
