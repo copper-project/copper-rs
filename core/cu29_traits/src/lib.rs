@@ -1,3 +1,24 @@
+//! Common copper traits and types for robotics systems.
+//!
+//! This crate is no_std compatible by default. Enable the "std" feature for additional
+//! functionality like implementing `std::error::Error` for `CuError` and the
+//! `new_with_cause` method that accepts types implementing `std::error::Error`.
+//!
+//! # Features
+//!
+//! - `std` (default): Enables standard library support
+//!   - Implements `std::error::Error` for `CuError`
+//!   - Adds `CuError::new_with_cause()` method for interop with std error types
+//!
+//! # no_std Usage
+//!
+//! To use without the standard library:
+//!
+//! ```toml
+//! [dependencies]
+//! cu29-traits = { version = "0.9", default-features = false }
+//! ```
+
 #![cfg_attr(not(feature = "std"), no_std)]
 #[cfg(not(feature = "std"))]
 extern crate alloc;
@@ -9,8 +30,18 @@ use bincode::{BorrowDecode, Decode as dDecode, Decode, Encode, Encode as dEncode
 use compact_str::CompactString;
 use cu29_clock::{PartialCuTimeRange, Tov};
 use serde::{Deserialize, Serialize};
+
+#[cfg(feature = "std")]
 use std::error::Error;
+#[cfg(feature = "std")]
 use std::fmt::{Debug, Display, Formatter};
+
+#[cfg(not(feature = "std"))]
+use alloc::string::{String, ToString};
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
+#[cfg(not(feature = "std"))]
+use core::fmt::{Debug, Display, Formatter};
 
 /// Common copper Error type.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,7 +51,7 @@ pub struct CuError {
 }
 
 impl Display for CuError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         let context_str = match &self.cause {
             Some(c) => c.to_string(),
             None => "None".to_string(),
@@ -30,6 +61,7 @@ impl Display for CuError {
     }
 }
 
+#[cfg(feature = "std")]
 impl Error for CuError {}
 
 impl From<&str> for CuError {
@@ -51,6 +83,7 @@ impl From<String> for CuError {
 }
 
 impl CuError {
+    #[cfg(feature = "std")]
     pub fn new_with_cause(message: &str, cause: impl Error) -> CuError {
         CuError {
             message: message.to_string(),
@@ -157,7 +190,7 @@ impl Encode for CuCompactString {
 }
 
 impl Debug for CuCompactString {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         if self.0.is_empty() {
             return write!(f, "CuCompactString(Empty)");
         }
