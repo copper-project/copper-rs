@@ -3,13 +3,26 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
+#[cfg(not(feature = "std"))]
+mod imp {
+    pub use alloc::boxed::Box;
+    pub use alloc::collections::BTreeMap;
+    pub use alloc::string::String;
+    pub use alloc::vec::Vec;
+}
+#[cfg(feature = "std")]
+mod imp {
+    pub use std::collections::BTreeMap;
+}
+
+use imp::*;
+
+use core::cmp::Ordering;
+use core::fmt::{Display, Formatter};
+use core::hash::{Hash, Hasher};
 use cu29_clock::{CuDuration, CuTime};
 use ordered_float::OrderedFloat;
 use serde::Deserialize;
-use std::cmp::Ordering;
-use std::collections::BTreeMap;
-use std::fmt::{Display, Formatter};
-use std::hash::{Hash, Hasher};
 
 mod bdec;
 mod benc;
@@ -49,7 +62,7 @@ pub enum Value {
 }
 
 impl Display for Value {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
             Value::Bool(v) => write!(f, "{v}"),
             Value::U8(v) => write!(f, "{v}"),
@@ -264,12 +277,17 @@ impl PartialOrd for Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(not(feature = "std"))]
+    use alloc::borrow::ToOwned;
+    #[cfg(not(feature = "std"))]
+    use alloc::string::ToString;
+    #[cfg(not(feature = "std"))]
+    use alloc::vec;
+
     use bincode::{config::standard, decode_from_slice, encode_to_vec};
+    use core::time::Duration;
     use cu29_clock::{CuDuration, CuTime, RobotClock};
     use serde_derive::{Deserialize, Serialize};
-    use std::collections::{hash_map::DefaultHasher, BTreeMap};
-    use std::hash::{Hash, Hasher};
-    use std::time::Duration;
 
     #[test]
     fn de_smoke_test() {
@@ -734,7 +752,11 @@ mod tests {
 
     /// Test hash consistency for various value types
     #[test]
+    #[cfg(feature = "std")]
     fn test_value_hashing() {
+        use core::hash::Hasher;
+        use std::collections::hash_map::DefaultHasher;
+
         let values = [
             Value::Bool(true),
             Value::I32(42),

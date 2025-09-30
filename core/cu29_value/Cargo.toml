@@ -20,11 +20,11 @@ bincode = { workspace = true, default-features = false, features = ["alloc"] }
 serde = { workspace = true, default-features = false, features = ["derive", "alloc"] }
 
 cu29-clock = { workspace = true }
-ordered-float = "5.0.0"
+ordered-float = { version = "5.1", default-features = false }
 
 [dev-dependencies]
 serde_derive = { workspace = true }
 
 [features]
 default = ["std"]
-std = ["cu29-clock/std"]
+std = ["ordered-float/std", "cu29-clock/std"]
