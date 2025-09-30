@@ -18,6 +18,7 @@ documentation = "https://docs.rs/cu29-value"
 [dependencies]
 bincode = { workspace = true, default-features = false, features = ["alloc"] }
 serde = { workspace = true, default-features = false, features = ["derive", "alloc"] }
+
 cu29-clock = { workspace = true }
 ordered-float = { version = "5.1", default-features = false }
 
@@ -26,4 +27,4 @@ serde_derive = { workspace = true }
 
 [features]
 default = ["std"]
-std = ["ordered-float/std"]
+std = ["ordered-float/std", "cu29-clock/std"]

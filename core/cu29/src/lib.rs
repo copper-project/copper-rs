@@ -18,9 +18,12 @@ pub use bincode;
 pub use cu29_clock as clock;
 pub use cu29_runtime::config::read_configuration;
 pub use cu29_traits::*;
+
+#[cfg(feature = "std")]
 pub use rayon;
 
 pub mod prelude {
+    #[cfg(feature = "std")]
     pub use ctrlc;
     pub use cu29_clock::*;
     pub use cu29_derive::*;
