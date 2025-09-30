@@ -16,8 +16,9 @@ license = "MIT"
 documentation = "https://docs.rs/cu29-value"
 
 [dependencies]
-bincode = { workspace = true }
-serde = { workspace = true }
+bincode = { workspace = true, default-features = false, features = ["alloc"] }
+serde = { workspace = true, default-features = false, features = ["derive", "alloc"] }
+
 cu29-clock = { workspace = true }
 ordered-float = "5.0.0"
 
@@ -26,4 +27,4 @@ serde_derive = { workspace = true }
 
 [features]
 default = ["std"]
-std = []
+std = ["cu29-clock/std"]

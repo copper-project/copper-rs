@@ -119,7 +119,7 @@ cu-ros-payloads = { path = "components/payloads/cu_ros_payloads", version = "0.9
 # External serialization
 bincode = { version = "2.0", default-features = false, features = ["derive"] }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
-erased-serde = "0.4"
+erased-serde = { version = "0.4", default-features = false }
 serde_derive = { version = "1.0", features = ["default"] }
 
 # External CLI
@@ -134,7 +134,7 @@ syn = { version = "2.0", features = ["full"] } # proc macros
 uom = { version = "0.37", features = ["serde"] }
 
 # Compact strings support
-compact_str = { version = "0.9", features = ["serde"] }
+compact_str = { version = "0.9", default-features = false, features = ["serde"] }
 
 # The derive pattern happens a lot across the codebase, this is a helper for that.
 derive_more = { version = "2.0", features = ["full"] }
