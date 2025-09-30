@@ -1,15 +1,32 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #[cfg(not(feature = "std"))]
 extern crate alloc;
+extern crate core;
 
 use bincode::{Decode, Encode};
 use cu29_clock::CuTime;
-use cu29_traits::{CuError, CuResult};
 use cu29_value::Value;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
-use std::collections::HashMap;
-use std::fmt::Display;
+
+#[cfg(not(feature = "std"))]
+mod imp {
+    pub use core::fmt::Display;
+    pub use core::fmt::Formatter;
+    pub use core::fmt::Result as FmtResult;
+}
+#[cfg(feature = "std")]
+mod imp {
+    pub use core::fmt::Display;
+    pub use cu29_traits::{CuError, CuResult};
+    pub use std::collections::HashMap;
+    pub use std::fmt::Formatter;
+    pub use std::fmt::Result as FmtResult;
+}
+
+use imp::*;
+
+#[cfg(feature = "std")]
 use strfmt::strfmt;
 
 /// Log levels for Copper.
@@ -126,7 +143,7 @@ impl<Context> Decode<Context> for CuLogEntry {
 
 // This is for internal debug purposes.
 impl Display for CuLogEntry {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(
             f,
             "CuLogEntry {{ level: {:?}, msg_index: {}, paramname_indexes: {:?}, params: {:?} }}",
@@ -157,6 +174,8 @@ impl CuLogEntry {
 }
 
 /// Text log line formatter.
+/// Only available on std. TODO(gbin): Maybe reconsider that at some point
+#[cfg(feature = "std")]
 #[inline]
 pub fn format_logline(
     time: CuTime,
@@ -187,6 +206,7 @@ pub fn format_logline(
 
 /// Rebuild a log line from the interned strings and the CuLogEntry.
 /// This basically translates the world of copper logs to text logs.
+#[cfg(feature = "std")]
 pub fn rebuild_logline(all_interned_strings: &[String], entry: &CuLogEntry) -> CuResult<String> {
     let format_string = &all_interned_strings[entry.msg_index as usize];
     let mut anon_params: Vec<String> = Vec::new();
