@@ -126,7 +126,8 @@ mod platform {
             let time_diff_ns = end_time.saturating_sub(start_time);
 
             if counter_diff > 0 {
-                let freq_ns = (counter_diff * 1_000_000_000) / time_diff_ns;
+                let freq_ns =
+                    ((counter_diff as u128 * 1_000_000_000) / time_diff_ns as u128) as u64;
                 FREQUENCY_NS.store(freq_ns, Ordering::Relaxed);
                 INIT_COUNTER.store(start_counter, Ordering::Relaxed);
                 INIT_TIME_NS.store(start_time, Ordering::Relaxed);
@@ -157,7 +158,7 @@ mod platform {
         let init_time_ns = INIT_TIME_NS.load(Ordering::Relaxed);
         let counter_diff = counter.saturating_sub(init_counter);
 
-        init_time_ns + (counter_diff * 1_000_000_000) / freq
+        init_time_ns.saturating_add(((counter_diff as u128 * 1_000_000_000) / freq as u128) as u64)
     }
 }
 
@@ -740,6 +741,7 @@ pub trait ClockProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use approx::assert_relative_eq;
 
     #[test]
     fn test_cuduration_comparison_operators() {
@@ -788,5 +790,248 @@ mod tests {
 
         mock.set_value(1_000_000_000); // 1 second
         assert_eq!(clock1.now(), clock2.now());
+    }
+
+    #[test]
+    fn test_from_ref_time() {
+        let tolerance_ms = 10f64;
+        let clock = RobotClock::from_ref_time(1_000_000_000);
+        assert_relative_eq!(
+            <CuDuration as Into<Duration>>::into(clock.now()).as_millis() as f64,
+            Duration::from_secs(1).as_millis() as f64,
+            epsilon = tolerance_ms
+        );
+    }
+
+    #[test]
+    fn longest_duration() {
+        let maxcu = CuDuration(u64::MAX);
+        let maxd: Duration = maxcu.into();
+        assert_eq!(maxd.as_nanos(), u64::MAX as u128);
+        let s = maxd.as_secs();
+        let y = s / 60 / 60 / 24 / 365;
+        assert!(y >= 584); // 584 years of robot uptime, we should be good.
+    }
+
+    #[test]
+    fn test_some_time_arithmetics() {
+        let a: CuDuration = 10.into();
+        let b: CuDuration = 20.into();
+        let c = a + b;
+        assert_eq!(c.0, 30);
+        let d = b - a;
+        assert_eq!(d.0, 10);
+    }
+
+    #[test]
+    fn test_build_range_from_slice() {
+        let range = CuTimeRange::from(&[20.into(), 10.into(), 30.into()][..]);
+        assert_eq!(range.start, 10.into());
+        assert_eq!(range.end, 30.into());
+    }
+
+    #[test]
+    fn test_time_range_operations() {
+        // Test creating a time range and checking its properties
+        let start = CuTime::from(100u64);
+        let end = CuTime::from(200u64);
+        let range = CuTimeRange { start, end };
+
+        assert_eq!(range.start, start);
+        assert_eq!(range.end, end);
+
+        // Test creating from a slice
+        let times = [
+            CuTime::from(150u64),
+            CuTime::from(120u64),
+            CuTime::from(180u64),
+        ];
+        let range_from_slice = CuTimeRange::from(&times[..]);
+
+        // Range should capture min and max values
+        assert_eq!(range_from_slice.start, CuTime::from(120u64));
+        assert_eq!(range_from_slice.end, CuTime::from(180u64));
+    }
+
+    #[test]
+    fn test_partial_time_range() {
+        // Test creating a partial time range with defined start/end
+        let start = CuTime::from(100u64);
+        let end = CuTime::from(200u64);
+
+        let partial_range = PartialCuTimeRange {
+            start: OptionCuTime::from(start),
+            end: OptionCuTime::from(end),
+        };
+
+        // Test converting to Option
+        let opt_start: Option<CuTime> = partial_range.start.into();
+        let opt_end: Option<CuTime> = partial_range.end.into();
+
+        assert_eq!(opt_start, Some(start));
+        assert_eq!(opt_end, Some(end));
+
+        // Test partial range with undefined values
+        let partial_undefined = PartialCuTimeRange::default();
+        assert!(partial_undefined.start.is_none());
+        assert!(partial_undefined.end.is_none());
+    }
+
+    #[test]
+    fn test_tov_conversions() {
+        // Test different Time of Validity (Tov) variants
+        let time = CuTime::from(100u64);
+
+        // Test conversion from CuTime
+        let tov_time: Tov = time.into();
+        assert!(matches!(tov_time, Tov::Time(_)));
+
+        if let Tov::Time(t) = tov_time {
+            assert_eq!(t, time);
+        }
+
+        // Test conversion from Option<CuTime>
+        let some_time = Some(time);
+        let tov_some: Tov = some_time.into();
+        assert!(matches!(tov_some, Tov::Time(_)));
+
+        let none_time: Option<CuDuration> = None;
+        let tov_none: Tov = none_time.into();
+        assert!(matches!(tov_none, Tov::None));
+
+        // Test range
+        let start = CuTime::from(100u64);
+        let end = CuTime::from(200u64);
+        let range = CuTimeRange { start, end };
+        let tov_range = Tov::Range(range);
+
+        assert!(matches!(tov_range, Tov::Range(_)));
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_cuduration_display() {
+        // Test the display implementation for different magnitudes
+        let nano = CuDuration(42);
+        assert_eq!(nano.to_string(), "42 ns");
+
+        let micro = CuDuration(42_000);
+        assert_eq!(micro.to_string(), "42.000 µs");
+
+        let milli = CuDuration(42_000_000);
+        assert_eq!(milli.to_string(), "42.000 ms");
+
+        let sec = CuDuration(1_500_000_000);
+        assert_eq!(sec.to_string(), "1.500 s");
+
+        let min = CuDuration(90_000_000_000);
+        assert_eq!(min.to_string(), "1.500 m");
+
+        let hour = CuDuration(3_600_000_000_000);
+        assert_eq!(hour.to_string(), "1.000 h");
+
+        let day = CuDuration(86_400_000_000_000);
+        assert_eq!(day.to_string(), "1.000 d");
+    }
+
+    #[test]
+    fn test_robot_clock_precision() {
+        // Test that RobotClock::now() and RobotClock::recent() return different values
+        // and that recent() is always <= now()
+        let clock = RobotClock::new();
+
+        // We can't guarantee the exact values, but we can check relationships
+        let recent = clock.recent();
+        let now = clock.now();
+
+        // recent() should be less than or equal to now()
+        assert!(recent <= now);
+
+        // Test precision of from_ref_time
+        let ref_time_ns = 1_000_000_000; // 1 second
+        let clock = RobotClock::from_ref_time(ref_time_ns);
+
+        // Clock should start at approximately ref_time_ns
+        let now = clock.now();
+        let now_ns: u64 = now.into();
+
+        // Allow reasonable tolerance for clock initialization time
+        let tolerance_ns = 50_000_000; // 50ms tolerance
+        assert!(now_ns >= ref_time_ns);
+        assert!(now_ns < ref_time_ns + tolerance_ns);
+    }
+
+    #[test]
+    fn test_mock_clock_advanced_operations() {
+        // Test more complex operations with the mock clock
+        let (clock, mock) = RobotClock::mock();
+
+        // Test initial state
+        assert_eq!(clock.now(), CuDuration(0));
+
+        // Test increment
+        mock.increment(Duration::from_secs(10));
+        assert_eq!(clock.now(), Duration::from_secs(10).into());
+
+        // Test decrement (unusual but supported)
+        mock.decrement(Duration::from_secs(5));
+        assert_eq!(clock.now(), Duration::from_secs(5).into());
+
+        // Test setting absolute value
+        mock.set_value(30_000_000_000); // 30 seconds in ns
+        assert_eq!(clock.now(), Duration::from_secs(30).into());
+
+        // Test that getting the time from the mock directly works
+        assert_eq!(mock.now(), Duration::from_secs(30).into());
+        assert_eq!(mock.value(), 30_000_000_000);
+    }
+
+    #[test]
+    fn test_cuduration_min_max() {
+        // Test MIN and MAX constants
+        assert_eq!(CuDuration::MIN, CuDuration(0));
+
+        // Test min/max methods
+        let a = CuDuration(100);
+        let b = CuDuration(200);
+
+        assert_eq!(a.min(b), a);
+        assert_eq!(a.max(b), b);
+        assert_eq!(b.min(a), a);
+        assert_eq!(b.max(a), b);
+
+        // Edge cases
+        assert_eq!(a.min(a), a);
+        assert_eq!(a.max(a), a);
+
+        // Test with MIN/MAX constants
+        assert_eq!(a.min(CuDuration::MIN), CuDuration::MIN);
+        assert_eq!(a.max(CuDuration::MAX), CuDuration::MAX);
+    }
+
+    #[test]
+    fn test_clock_provider_trait() {
+        // Test implementing the ClockProvider trait
+        struct TestClockProvider {
+            clock: RobotClock,
+        }
+
+        impl ClockProvider for TestClockProvider {
+            fn get_clock(&self) -> RobotClock {
+                self.clock.clone()
+            }
+        }
+
+        // Create a provider with a mock clock
+        let (clock, mock) = RobotClock::mock();
+        let provider = TestClockProvider { clock };
+
+        // Test that provider returns a clock synchronized with the original
+        let provider_clock = provider.get_clock();
+        assert_eq!(provider_clock.now(), CuDuration(0));
+
+        // Advance the mock clock and check that provider's clock also advances
+        mock.increment(Duration::from_secs(5));
+        assert_eq!(provider_clock.now(), Duration::from_secs(5).into());
     }
 }
