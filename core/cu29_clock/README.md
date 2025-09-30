@@ -38,7 +38,7 @@ let recent = clock.recent();
 
 // Clock is cloneable and all clones share the same time reference
 let clock_clone = clock.clone();
-assert_eq!(clock.now(), clock_clone.now());
+assert_eq!(clock.now(), clock_clone.now()); // more or less :)
 
 // Create a clock with a specific reference time
 let ref_time_ns = 1_000_000_000; // 1 second
