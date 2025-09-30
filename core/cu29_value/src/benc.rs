@@ -4,6 +4,9 @@ use bincode::enc::Encode;
 use bincode::enc::Encoder;
 use bincode::error::EncodeError;
 
+#[cfg(not(feature = "std"))]
+use alloc::borrow::ToOwned;
+
 impl Encode for Value {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         let discriminant = self.discriminant() as u8;

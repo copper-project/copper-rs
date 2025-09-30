@@ -1,10 +1,25 @@
 use crate::Value;
+use core::error::Error;
+use core::fmt;
+use core::marker::PhantomData;
 use cu29_clock::CuDuration;
 use serde::{de, forward_to_deserialize_any};
-use std::collections::BTreeMap;
-use std::error::Error;
-use std::fmt;
-use std::marker::PhantomData;
+
+#[cfg(not(feature = "std"))]
+mod imp {
+    pub use alloc::borrow::ToOwned;
+    pub use alloc::boxed::Box;
+    pub use alloc::collections::BTreeMap;
+    pub use alloc::string::String;
+    pub use alloc::string::ToString;
+    pub use alloc::vec::Vec;
+}
+#[cfg(feature = "std")]
+mod imp {
+    pub use std::collections::BTreeMap;
+}
+
+use imp::*;
 
 #[derive(Debug)]
 pub enum Unexpected {
