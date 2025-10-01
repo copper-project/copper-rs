@@ -18,14 +18,14 @@ ignored = ["simplelog"]  # Used from conditional compilation
 cu29-log = { workspace = true }
 cu29-traits = { workspace = true }
 cu29-clock = { workspace = true }
-bincode = { workspace = true, features = ["derive", "std"] }
+bincode = { workspace = true, default-features = false, features = ["alloc"] }
 smallvec = { workspace = true }
-log = "0.4"
+log = { version = "0.4", default-features = false }
+spin = { version = "0.10" } # should be removed when std is on but cargo is bad at negative features
 
 [dev-dependencies]
 cu29-value = { workspace = true }
 
 [features]
 default = ["std"]
-std = []
-
+std = ["cu29-log/std", "cu29-traits/std", "cu29-clock/std", "log/std", "bincode/std"]
