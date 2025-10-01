@@ -13,8 +13,8 @@ repository.workspace = true
 
 [dependencies]
 cu29-traits = { workspace = true }
-bincode = { workspace = true }
-memmap2 = "0.9.5"
+bincode = { workspace = true, default-features = false, features = ["alloc"] }
+memmap2 = { version = "0.9", optional = true }
 page_size = "0.6.0"
 
 [dev-dependencies]
@@ -22,4 +22,4 @@ tempfile = { workspace = true }
 
 [features]
 default = ["std"]
-std = []
+std = ["dep:memmap2"]

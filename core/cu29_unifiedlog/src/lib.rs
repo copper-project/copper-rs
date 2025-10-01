@@ -8,8 +8,23 @@ mod memmap;
 
 use core::mem;
 
+#[cfg(feature = "std")]
+mod compat {
+    // backward compatibility for the std implementation
+    pub use crate::memmap::mmap_stream_write as stream_write;
+    pub use crate::memmap::MmapUnifiedLogger as UnifiedLogger;
+    pub use crate::memmap::MmapUnifiedLoggerBuilder as UnifiedLoggerBuilder;
+    pub use crate::memmap::MmapUnifiedLoggerRead as UnifiedLoggerRead;
+    pub use crate::memmap::MmapUnifiedLoggerWrite as UnifiedLoggerWrite;
+    pub use crate::memmap::UnifiedLoggerIOReader;
+}
+
+#[cfg(feature = "std")]
+pub use compat::*;
+
 #[cfg(not(feature = "std"))]
 mod imp {
+    pub use alloc::vec::Vec;
     pub use core::fmt::Display;
     pub use core::fmt::Formatter;
     pub use core::fmt::Result as FmtResult;
@@ -25,7 +40,7 @@ mod imp {
 use imp::*;
 
 use bincode::{Decode, Encode};
-use cu29_traits::UnifiedLogType;
+use cu29_traits::{CuResult, UnifiedLogType};
 
 #[allow(dead_code)] // TODO(gbin): Can be removed once no-std implementation is done.
 const MAIN_MAGIC: [u8; 4] = [0xB4, 0xA5, 0x50, 0xFF];
@@ -139,16 +154,43 @@ impl SectionHandle {
     }
 }
 
-#[cfg(feature = "std")]
-mod compat {
-    // backward compatibility for the std implementation
-    pub use crate::memmap::mmap_stream_write as stream_write;
-    pub use crate::memmap::MmapUnifiedLogger as UnifiedLogger;
-    pub use crate::memmap::MmapUnifiedLoggerBuilder as UnifiedLoggerBuilder;
-    pub use crate::memmap::MmapUnifiedLoggerRead as UnifiedLoggerRead;
-    pub use crate::memmap::MmapUnifiedLoggerWrite as UnifiedLoggerWrite;
-    pub use crate::memmap::UnifiedLoggerIOReader;
+/// Basic statistics for the unified logger.
+/// Note: the total_allocated_space might grow for the std implementation
+pub struct UnifiedLogStatus {
+    pub total_used_space: usize,
+    pub total_allocated_space: usize,
 }
 
-#[cfg(feature = "std")]
-pub use compat::*;
+/// The writing interface to the unified logger.
+/// Writing is "almost" linear as various streams can allocate sections and track them until
+/// they drop them.
+pub trait UnifiedLogWrite {
+    /// A section is a contiguous chunk of memory that can be used to write data.
+    /// It can store various types of data as specified by the entry_type.
+    /// The requested_section_size is the size of the section to allocate.
+    /// It returns a handle to the section that can be used to write data until
+    /// it is flushed with flush_section, it is then considered unmutable.
+    fn add_section(
+        &mut self,
+        entry_type: UnifiedLogType,
+        requested_section_size: usize,
+    ) -> SectionHandle;
+
+    /// Flush the given section to the underlying storage.
+    fn flush_section(&mut self, section: &mut SectionHandle);
+
+    /// Returns the current status of the unified logger.
+    fn status(&self) -> UnifiedLogStatus;
+}
+
+/// Read back a unified log linearly.
+pub trait UnifiedLogRead {
+    /// Read through the unified logger until it reaches the UnifiedLogType given in datalogtype.
+    /// It will return the byte array of the section if found.
+    fn read_next_section_type(&mut self, datalogtype: UnifiedLogType) -> CuResult<Option<Vec<u8>>>;
+
+    /// Read through the next section entry regardless of its type.
+    /// It will return the header and the byte array of the section.
+    /// Note the last Entry should be of UnifiedLogType::LastEntry if the log is not corrupted.
+    fn raw_read_section(&mut self) -> CuResult<(SectionHeader, Vec<u8>)>;
+}
