@@ -2,8 +2,8 @@
 //! It is std only.
 
 use crate::{
-    AllocatedSection, MainHeader, SectionHandle, SectionHeader, MAIN_MAGIC, MAX_HEADER_SIZE,
-    SECTION_MAGIC,
+    AllocatedSection, MainHeader, SectionHandle, SectionHeader, UnifiedLogRead, UnifiedLogStatus,
+    UnifiedLogWrite, MAIN_MAGIC, MAX_HEADER_SIZE, SECTION_MAGIC,
 };
 use bincode::config::standard;
 use bincode::error::EncodeError;
@@ -197,16 +197,6 @@ impl MmapUnifiedLoggerBuilder {
     }
 }
 
-/// A read side of the datalogger.
-pub struct MmapUnifiedLoggerRead {
-    base_file_path: PathBuf,
-    main_header: MainHeader,
-    current_mmap_buffer: Mmap,
-    current_file: File,
-    current_slab_index: usize,
-    current_reading_position: usize,
-}
-
 struct SlabEntry {
     file: File,
     mmap_buffer: ManuallyDrop<MmapMut>,
@@ -394,6 +384,57 @@ fn make_slab_file(base_file_path: &Path, slab_size: usize, slab_suffix: usize) -
     file
 }
 
+impl UnifiedLogWrite for MmapUnifiedLoggerWrite {
+    /// The returned slice is section_size or greater.
+    fn add_section(
+        &mut self,
+        entry_type: UnifiedLogType,
+        requested_section_size: usize,
+    ) -> SectionHandle {
+        self.garbage_collect_backslabs(); // Take the opportunity to keep up and close stale back slabs.
+        let maybe_section = self
+            .front_slab
+            .add_section(entry_type, requested_section_size);
+
+        match maybe_section {
+            AllocatedSection::NoMoreSpace => {
+                // move the front slab to the back slab.
+                let new_slab = SlabEntry::new(self.next_slab(), self.front_slab.page_size);
+                // keep the slab until all its sections has been flushed.
+                self.back_slabs
+                    .push(mem::replace(&mut self.front_slab, new_slab));
+                match self
+                    .front_slab
+                    .add_section(entry_type, requested_section_size)
+                {
+                    AllocatedSection::NoMoreSpace => {
+                        panic!("Failed to allocate a section in a new slab");
+                    }
+                    Section(section) => section,
+                }
+            }
+            Section(section) => section,
+        }
+    }
+
+    fn flush_section(&mut self, section: &mut SectionHandle) {
+        for slab in self.back_slabs.iter_mut() {
+            if slab.is_it_my_section(section) {
+                slab.flush_section(section);
+                return;
+            }
+        }
+        self.front_slab.flush_section(section);
+    }
+
+    fn status(&self) -> UnifiedLogStatus {
+        UnifiedLogStatus {
+            total_used_space: self.front_slab.current_global_position,
+            total_allocated_space: self.slab_size * self.front_slab_suffix,
+        }
+    }
+}
+
 impl MmapUnifiedLoggerWrite {
     fn next_slab(&mut self) -> File {
         self.front_slab_suffix += 1;
@@ -425,51 +466,9 @@ impl MmapUnifiedLoggerWrite {
         }
     }
 
-    pub fn flush_section(&mut self, section: &mut SectionHandle) {
-        for slab in self.back_slabs.iter_mut() {
-            if slab.is_it_my_section(section) {
-                slab.flush_section(section);
-                return;
-            }
-        }
-        self.front_slab.flush_section(section);
-    }
-
     fn garbage_collect_backslabs(&mut self) {
         self.back_slabs
             .retain_mut(|slab| !slab.sections_offsets_in_flight.is_empty());
-    }
-
-    /// The returned slice is section_size or greater.
-    fn add_section(
-        &mut self,
-        entry_type: UnifiedLogType,
-        requested_section_size: usize,
-    ) -> SectionHandle {
-        self.garbage_collect_backslabs(); // Take the opportunity to keep up and close stale back slabs.
-        let maybe_section = self
-            .front_slab
-            .add_section(entry_type, requested_section_size);
-
-        match maybe_section {
-            AllocatedSection::NoMoreSpace => {
-                // move the front slab to the back slab.
-                let new_slab = SlabEntry::new(self.next_slab(), self.front_slab.page_size);
-                // keep the slab until all its sections has been flushed.
-                self.back_slabs
-                    .push(mem::replace(&mut self.front_slab, new_slab));
-                match self
-                    .front_slab
-                    .add_section(entry_type, requested_section_size)
-                {
-                    AllocatedSection::NoMoreSpace => {
-                        panic!("Failed to allocate a section in a new slab");
-                    }
-                    Section(section) => section,
-                }
-            }
-            Section(section) => section,
-        }
     }
 
     pub fn stats(&self) -> (usize, Vec<usize>, usize) {
@@ -524,34 +523,18 @@ fn open_slab_index(
     Ok((file, mmap, prolog, maybe_main_header))
 }
 
-impl MmapUnifiedLoggerRead {
-    pub fn new(base_file_path: &Path) -> io::Result<Self> {
-        let (file, mmap, prolog, header) = open_slab_index(base_file_path, 0)?;
+/// A read side of the memory map based unified logger.
+pub struct MmapUnifiedLoggerRead {
+    base_file_path: PathBuf,
+    main_header: MainHeader,
+    current_mmap_buffer: Mmap,
+    current_file: File,
+    current_slab_index: usize,
+    current_reading_position: usize,
+}
 
-        Ok(Self {
-            base_file_path: base_file_path.to_path_buf(),
-            main_header: header.expect("UnifiedLoggerRead needs a header"),
-            current_file: file,
-            current_mmap_buffer: mmap,
-            current_slab_index: 0,
-            current_reading_position: prolog as usize,
-        })
-    }
-
-    fn next_slab(&mut self) -> io::Result<()> {
-        self.current_slab_index += 1;
-        let (file, mmap, prolog, _) =
-            open_slab_index(&self.base_file_path, self.current_slab_index)?;
-        self.current_file = file;
-        self.current_mmap_buffer = mmap;
-        self.current_reading_position = prolog as usize;
-        Ok(())
-    }
-
-    pub fn read_next_section_type(
-        &mut self,
-        datalogtype: UnifiedLogType,
-    ) -> CuResult<Option<Vec<u8>>> {
+impl UnifiedLogRead for MmapUnifiedLoggerRead {
+    fn read_next_section_type(&mut self, datalogtype: UnifiedLogType) -> CuResult<Option<Vec<u8>>> {
         // TODO: eventually implement a 0 copy of this too.
         loop {
             if self.current_reading_position >= self.current_mmap_buffer.len() {
@@ -590,12 +573,8 @@ impl MmapUnifiedLoggerRead {
         }
     }
 
-    pub fn raw_main_header(&self) -> &MainHeader {
-        &self.main_header
-    }
-
     /// Reads the section from the section header pos.
-    pub fn raw_read_section(&mut self) -> CuResult<(SectionHeader, Vec<u8>)> {
+    fn raw_read_section(&mut self) -> CuResult<(SectionHeader, Vec<u8>)> {
         if self.current_reading_position >= self.current_mmap_buffer.len() {
             self.next_slab().map_err(|e| {
                 CuError::new_with_cause("Failed to read next slab, is the log complete?", e)
@@ -620,6 +599,35 @@ impl MmapUnifiedLoggerRead {
                 Ok((header, data))
             }
         }
+    }
+}
+
+impl MmapUnifiedLoggerRead {
+    pub fn new(base_file_path: &Path) -> io::Result<Self> {
+        let (file, mmap, prolog, header) = open_slab_index(base_file_path, 0)?;
+
+        Ok(Self {
+            base_file_path: base_file_path.to_path_buf(),
+            main_header: header.expect("UnifiedLoggerRead needs a header"),
+            current_file: file,
+            current_mmap_buffer: mmap,
+            current_slab_index: 0,
+            current_reading_position: prolog as usize,
+        })
+    }
+
+    fn next_slab(&mut self) -> io::Result<()> {
+        self.current_slab_index += 1;
+        let (file, mmap, prolog, _) =
+            open_slab_index(&self.base_file_path, self.current_slab_index)?;
+        self.current_file = file;
+        self.current_mmap_buffer = mmap;
+        self.current_reading_position = prolog as usize;
+        Ok(())
+    }
+
+    pub fn raw_main_header(&self) -> &MainHeader {
+        &self.main_header
     }
 
     /// Reads the section content from the section header pos.
@@ -703,8 +711,8 @@ impl Read for UnifiedLoggerIOReader {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bincode::de::read::SliceReader;
     use bincode::{decode_from_reader, Decode};
-    use std::io::BufReader;
     use std::path::PathBuf;
     use tempfile::TempDir;
 
@@ -909,8 +917,7 @@ mod tests {
             .expect("Failed to read section");
         assert!(section.is_some());
         let section = section.unwrap();
-
-        let mut reader = BufReader::new(&section[..]);
+        let mut reader = SliceReader::new(&section[..]);
         let v1: u32 = decode_from_reader(&mut reader, standard()).unwrap();
         let v2: u32 = decode_from_reader(&mut reader, standard()).unwrap();
         let v3: u32 = decode_from_reader(&mut reader, standard()).unwrap();
@@ -966,7 +973,7 @@ mod tests {
         assert!(section.is_some());
         let section = section.unwrap();
 
-        let mut reader = BufReader::new(&section[..]);
+        let mut reader = SliceReader::new(&section[..]);
         let cl0: CopperList<(u32, u32, u32)> = decode_from_reader(&mut reader, standard()).unwrap();
         let cl1: CopperList<(u32, u32, u32)> = decode_from_reader(&mut reader, standard()).unwrap();
         assert_eq!(cl0.payload.1, 2);
@@ -1009,7 +1016,7 @@ mod tests {
             }
             let section = section.unwrap();
 
-            let mut reader = BufReader::new(&section[..]);
+            let mut reader = SliceReader::new(&section[..]);
             loop {
                 let maybe_cl: Result<CopperList<(u32, u32, u32)>, _> =
                     decode_from_reader(&mut reader, standard());
