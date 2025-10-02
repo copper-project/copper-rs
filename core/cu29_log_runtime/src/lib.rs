@@ -48,7 +48,7 @@ impl WriteStream<CuLogEntry> for DummyWriteStream {
         Ok(())
     }
 }
-type LogWriter = Box<dyn WriteStream<CuLogEntry>>;
+type LogWriter = Box<dyn WriteStream<CuLogEntry> + Send + 'static>;
 type WriterPair = (Mutex<LogWriter>, RobotClock);
 
 static WRITER: OnceLock<WriterPair> = OnceLock::new();

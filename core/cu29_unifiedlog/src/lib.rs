@@ -164,7 +164,7 @@ pub struct UnifiedLogStatus {
 /// The writing interface to the unified logger.
 /// Writing is "almost" linear as various streams can allocate sections and track them until
 /// they drop them.
-pub trait UnifiedLogWrite {
+pub trait UnifiedLogWrite: Send + Sync {
     /// A section is a contiguous chunk of memory that can be used to write data.
     /// It can store various types of data as specified by the entry_type.
     /// The requested_section_size is the size of the section to allocate.

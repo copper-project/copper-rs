@@ -27,7 +27,7 @@ use imp::*;
 /// including configuration management, initialization, task execution, and runtime control. It is meant to be
 /// implemented by types that represent specific applications, providing them with unified control and execution features.
 ///
-pub trait CuApplication {
+pub trait CuApplication<L: UnifiedLogWrite + 'static> {
     /// Returns the original configuration as a string, typically loaded from a RON file.
     /// This configuration represents the default settings for the application before any overrides.
     fn get_original_config() -> String;
@@ -50,7 +50,7 @@ pub trait CuApplication {
     ///
     fn new(
         clock: RobotClock,
-        unified_logger: Arc<Mutex<impl UnifiedLogWrite>>,
+        unified_logger: Arc<Mutex<L>>,
         #[cfg(feature = "std")] config_override: Option<CuConfig>, // No config override in no-std, the bundled config is always the config
     ) -> CuResult<Self>
     where
@@ -106,7 +106,7 @@ pub trait CuApplication {
 /// The `CuSimApplication` trait outlines the necessary functions required for managing an application lifecycle
 /// in simulation mode, including configuration management, initialization, task execution, and runtime control.
 #[cfg(feature = "std")]
-pub trait CuSimApplication {
+pub trait CuSimApplication<L: UnifiedLogWrite + 'static> {
     /// The type representing a simulation step that can be overridden
     type Step<'z>;
 
@@ -133,7 +133,7 @@ pub trait CuSimApplication {
     /// - A `CuResult` error in case of failure during initialization.
     fn new(
         clock: RobotClock,
-        unified_logger: Arc<Mutex<impl UnifiedLogWrite>>,
+        unified_logger: Arc<Mutex<L>>,
         config_override: Option<CuConfig>,
         sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
     ) -> CuResult<Self>

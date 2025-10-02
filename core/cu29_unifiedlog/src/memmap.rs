@@ -22,18 +22,18 @@ use std::{io, mem};
 use AllocatedSection::Section;
 
 /// A wrapper around a memory mapped file to write to.
-struct MmapStream {
+struct MmapStream<L: UnifiedLogWrite> {
     entry_type: UnifiedLogType,
-    parent_logger: Arc<Mutex<MmapUnifiedLoggerWrite>>,
+    parent_logger: Arc<Mutex<L>>,
     current_section: SectionHandle,
     current_position: usize,
     minimum_allocation_amount: usize,
 }
 
-impl MmapStream {
+impl<L: UnifiedLogWrite> MmapStream<L> {
     fn new(
         entry_type: UnifiedLogType,
-        parent_logger: Arc<Mutex<MmapUnifiedLoggerWrite>>,
+        parent_logger: Arc<Mutex<L>>,
         minimum_allocation_amount: usize,
     ) -> Self {
         let section = parent_logger
@@ -50,13 +50,13 @@ impl MmapStream {
     }
 }
 
-impl Debug for MmapStream {
+impl<L: UnifiedLogWrite> Debug for MmapStream<L> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "MmapStream {{ entry_type: {:?}, current_position: {}, minimum_allocation_amount: {} }}", self.entry_type, self.current_position, self.minimum_allocation_amount)
     }
 }
 
-impl<E: Encode> WriteStream<E> for MmapStream {
+impl<E: Encode, L: UnifiedLogWrite> WriteStream<E> for MmapStream<L> {
     fn log(&mut self, obj: &E) -> CuResult<()> {
         let dst = self.current_section.get_user_buffer();
         let result = encode_into_slice(obj, dst, standard());
@@ -103,7 +103,7 @@ impl<E: Encode> WriteStream<E> for MmapStream {
     }
 }
 
-impl Drop for MmapStream {
+impl<L: UnifiedLogWrite> Drop for MmapStream<L> {
     fn drop(&mut self) {
         if let Ok(mut logger_guard) = self.parent_logger.lock() {
             logger_guard.flush_section(&mut self.current_section);
