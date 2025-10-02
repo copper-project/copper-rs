@@ -13,15 +13,28 @@ use cu29_traits::CuResult;
 use cu29_traits::WriteStream;
 use cu29_traits::{CopperListTuple, CuError};
 use cu29_unifiedlog::UnifiedLoggerWrite;
-use std::sync::{Arc, Mutex};
 
 use bincode::error::EncodeError;
 use bincode::{encode_into_std_write, Decode, Encode};
+use core::fmt::Debug;
 use petgraph::prelude::*;
 use petgraph::visit::VisitMap;
 use petgraph::visit::Visitable;
-use rayon::ThreadPool;
-use std::fmt::Debug;
+
+#[cfg(not(feature = "std"))]
+mod imp {
+    pub use alloc::string::String;
+    pub use alloc::sync::Arc;
+    pub use spin::Mutex;
+}
+
+#[cfg(feature = "std")]
+mod imp {
+    pub use rayon::ThreadPool;
+    pub use std::sync::{Arc, Mutex};
+}
+
+use imp::*;
 
 /// Just a simple struct to hold the various bits needed to run a Copper application.
 pub struct CopperContext {

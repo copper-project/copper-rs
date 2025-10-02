@@ -1285,9 +1285,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         };
 
         let app_impl_decl = if sim_mode {
-            quote!(impl CuSimApplication for #application_name)
+            quote!(impl CuSimApplication<UnifiedLoggerWrite> for #application_name)
         } else {
-            quote!(impl CuApplication for #application_name)
+            quote!(impl CuApplication<UnifiedLoggerWrite> for #application_name)
         };
         let simstep_type_decl = if sim_mode {
             quote!(

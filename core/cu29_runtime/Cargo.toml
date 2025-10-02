@@ -17,8 +17,8 @@ name = "cu29-rendercfg"
 path = "src/rendercfg.rs"
 
 [dependencies]
-bincode = { workspace = true }
-clap = { workspace = true }
+bincode = { workspace = true, default-features = false, features = ["alloc"] }
+clap = { workspace = true, optional = true }
 compact_str = { workspace = true }
 cu29-traits = { workspace = true }
 cu29-log = { workspace = true }
@@ -28,7 +28,7 @@ cu29-unifiedlog = { workspace = true }
 cu29-value = { workspace = true }
 cu29-clock = { workspace = true }
 erased-serde = { workspace = true }
-rayon = { workspace = true }
+rayon = { workspace = true, optional = true }
 serde_derive = { workspace = true }
 serde = { workspace = true }
 smallvec = { workspace = true }
@@ -40,6 +40,7 @@ hdrhistogram = "7.5"
 html-escape = "0.2"
 object-pool = "0.6"
 petgraph = { version = "0.8", features = ["serde", "serde-1", "serde_derive"] }
+spin = { version = "0.10" } # should be removed when std is on but cargo is bad at negative features
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 cudarc = { version = "0.17", optional = true, features = ["cuda-version-from-build-system"] }
@@ -48,4 +49,4 @@ cudarc = { version = "0.17", optional = true, features = ["cuda-version-from-bui
 default = ["std"]
 cuda = ["dep:cudarc"]
 macro_debug = []
-std = []
+std = ["dep:clap", "dep:rayon"]

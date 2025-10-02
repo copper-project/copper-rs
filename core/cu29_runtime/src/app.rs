@@ -1,10 +1,23 @@
-use crate::config::CuConfig;
 use crate::curuntime::KeyFrame;
-use crate::simulation::SimOverride;
 use cu29_clock::RobotClock;
 use cu29_traits::CuResult;
-use cu29_unifiedlog::UnifiedLoggerWrite;
-use std::sync::{Arc, Mutex};
+use cu29_unifiedlog::UnifiedLogWrite;
+
+#[cfg(not(feature = "std"))]
+mod imp {
+    pub use alloc::string::String;
+    pub use alloc::sync::Arc;
+    pub use spin::Mutex;
+}
+
+#[cfg(feature = "std")]
+mod imp {
+    pub use crate::config::CuConfig;
+    pub use crate::simulation::SimOverride;
+    pub use std::sync::{Arc, Mutex};
+}
+
+use imp::*;
 
 /// A trait that defines the structure and behavior of a CuApplication.
 ///
@@ -14,7 +27,7 @@ use std::sync::{Arc, Mutex};
 /// including configuration management, initialization, task execution, and runtime control. It is meant to be
 /// implemented by types that represent specific applications, providing them with unified control and execution features.
 ///
-pub trait CuApplication {
+pub trait CuApplication<L: UnifiedLogWrite + 'static> {
     /// Returns the original configuration as a string, typically loaded from a RON file.
     /// This configuration represents the default settings for the application before any overrides.
     fn get_original_config() -> String;
@@ -37,8 +50,8 @@ pub trait CuApplication {
     ///
     fn new(
         clock: RobotClock,
-        unified_logger: Arc<Mutex<UnifiedLoggerWrite>>,
-        config_override: Option<CuConfig>,
+        unified_logger: Arc<Mutex<L>>,
+        #[cfg(feature = "std")] config_override: Option<CuConfig>, // No config override in no-std, the bundled config is always the config
     ) -> CuResult<Self>
     where
         Self: Sized;
@@ -92,7 +105,8 @@ pub trait CuApplication {
 ///
 /// The `CuSimApplication` trait outlines the necessary functions required for managing an application lifecycle
 /// in simulation mode, including configuration management, initialization, task execution, and runtime control.
-pub trait CuSimApplication {
+#[cfg(feature = "std")]
+pub trait CuSimApplication<L: UnifiedLogWrite + 'static> {
     /// The type representing a simulation step that can be overridden
     type Step<'z>;
 
@@ -119,7 +133,7 @@ pub trait CuSimApplication {
     /// - A `CuResult` error in case of failure during initialization.
     fn new(
         clock: RobotClock,
-        unified_logger: Arc<Mutex<UnifiedLoggerWrite>>,
+        unified_logger: Arc<Mutex<L>>,
         config_override: Option<CuConfig>,
         sim_callback: &mut impl for<'z> FnMut(Self::Step<'z>) -> SimOverride,
     ) -> CuResult<Self>

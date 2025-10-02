@@ -6,11 +6,14 @@ extern crate alloc;
 pub mod app;
 pub mod config;
 pub mod copperlist;
-pub mod cuasynctask;
+#[cfg(feature = "std")]
+pub mod cuasynctask; // no no-std version yet
 pub mod curuntime;
 pub mod cutask;
 pub(crate) mod log;
 pub mod monitoring;
 pub mod payload;
+#[cfg(feature = "std")]
 pub mod pool;
+#[cfg(feature = "std")]
 pub mod simulation;

@@ -3,8 +3,28 @@
 //! The configuration is serialized in the RON format.
 //! The configuration is used to generate the runtime code at compile time.
 
+#[cfg(not(feature = "std"))]
+mod imp {
+    pub use alloc::borrow::ToOwned;
+    pub use alloc::format;
+    pub use alloc::string::String;
+    pub use alloc::sync::Arc;
+    pub use alloc::vec::Vec;
+    pub use spin::Mutex;
+}
+
+#[cfg(feature = "std")]
+mod imp {
+    pub use html_escape::encode_text;
+    pub use std::collections::HashMap;
+    pub use std::fs::read_to_string;
+}
+
+use imp::*;
+
+use core::fmt;
+use core::fmt::Display;
 use cu29_traits::{CuError, CuResult};
-use html_escape::encode_text;
 use petgraph::stable_graph::{EdgeIndex, NodeIndex, StableDiGraph};
 use petgraph::visit::EdgeRef;
 pub use petgraph::Direction::Incoming;
@@ -13,10 +33,6 @@ use ron::extensions::Extensions;
 use ron::value::Value as RonValue;
 use ron::{Number, Options};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::collections::HashMap;
-use std::fmt;
-use std::fmt::Display;
-use std::fs::read_to_string;
 use ConfigGraphs::{Missions, Simple};
 
 /// NodeId is the unique identifier of a node in the configuration graph for petgraph
@@ -473,7 +489,7 @@ impl CuGraph {
     }
 }
 
-impl std::ops::Index<NodeIndex> for CuGraph {
+impl core::ops::Index<NodeIndex> for CuGraph {
     type Output = Node;
 
     fn index(&self, index: NodeIndex) -> &Self::Output {
@@ -960,6 +976,7 @@ impl CuConfig {
     }
 
     /// Render the configuration graph in the dot format.
+    #[cfg(feature = "std")]
     pub fn render(
         &self,
         output: &mut dyn std::io::Write,
@@ -1105,6 +1122,7 @@ fn substitute_parameters(content: &str, params: &HashMap<String, Value>) -> Stri
 }
 
 /// Returns a merged CuConfigRepresentation.
+#[cfg(feature = "std")]
 fn process_includes(
     file_path: &str,
     base_representation: CuConfigRepresentation,
@@ -1217,6 +1235,7 @@ fn process_includes(
 }
 
 /// Read a copper configuration from a file.
+#[cfg(feature = "std")]
 pub fn read_configuration(config_filename: &str) -> CuResult<CuConfig> {
     let config_content = read_to_string(config_filename).map_err(|e| {
         CuError::from(format!(
@@ -1264,14 +1283,16 @@ pub fn read_configuration_str(
     let representation = parse_config_string(&config_content)?;
 
     // Process includes and generate a merged configuration if a file path is provided
-    let processed_representation = if let Some(path) = file_path {
+    // includes are only available with std.
+    #[cfg(feature = "std")]
+    let representation = if let Some(path) = file_path {
         process_includes(path, representation, &mut Vec::new())?
     } else {
         representation
     };
 
     // Convert the representation to a CuConfig and validate
-    config_representation_to_config(processed_representation)
+    config_representation_to_config(representation)
 }
 
 // tests
