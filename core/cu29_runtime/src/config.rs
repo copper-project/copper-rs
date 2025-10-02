@@ -26,7 +26,7 @@ use core::fmt;
 use core::fmt::Display;
 use cu29_traits::{CuError, CuResult};
 use petgraph::stable_graph::{EdgeIndex, NodeIndex, StableDiGraph};
-use petgraph::visit::{EdgeRef, Walker};
+use petgraph::visit::EdgeRef;
 pub use petgraph::Direction::Incoming;
 pub use petgraph::Direction::Outgoing;
 use ron::extensions::Extensions;
