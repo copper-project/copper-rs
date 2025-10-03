@@ -12,9 +12,8 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-bincode = { workspace = true, default-features = false, features = ["alloc"] }
-hashbrown = { workspace = true }
-serde = { workspace = true, default-features = false, features = ["derive", "alloc"] }
+bincode = { workspace = true }
+serde = { workspace = true }
 cu29-value = { workspace = true }
 cu29-traits = { workspace = true }
 cu29-clock = { workspace = true }

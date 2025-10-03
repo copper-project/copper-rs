@@ -23,8 +23,8 @@ cu29-traits = { workspace = true }
 cu29-unifiedlog = { workspace = true }
 cu29-value = { workspace = true }
 
-bincode = { workspace = true, default-features = false, features = ["alloc"] }
-serde = { workspace = true, default-features = false, features = ["derive", "alloc"] }
+bincode = { workspace = true }
+serde = { workspace = true }
 
 # only std
 rayon = { workspace = true, optional = true }

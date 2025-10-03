@@ -18,20 +18,20 @@ path = "src/rendercfg.rs"
 required-features = ["std"]
 
 [dependencies]
-bincode = { workspace = true, default-features = false, features = ["alloc"] }
-compact_str = { workspace = true }
-cu29-traits = { workspace = true }
+cu29-clock = { workspace = true }
 cu29-log = { workspace = true }
 cu29-log-derive = { workspace = true }
 cu29-log-runtime = { workspace = true }  # needed
+cu29-traits = { workspace = true }
 cu29-unifiedlog = { workspace = true }
 cu29-value = { workspace = true }
-cu29-clock = { workspace = true }
+
+bincode = { workspace = true }
+compact_str = { workspace = true }
 erased-serde = { workspace = true }
 serde_derive = { workspace = true }
-serde = { workspace = true, default-features = false, features = ["alloc"] }
-smallvec = { workspace = true, default-features = false }
-
+serde = { workspace = true }
+smallvec = { workspace = true }
 arrayvec = { version = "0.7", default-features = false, features = ["serde"] }
 html-escape = { version = "0.2", default-features = false }
 petgraph = { version = "0.8", features = ["serde", "serde-1", "serde_derive"] }
@@ -54,5 +54,5 @@ cudarc = { version = "0.17", optional = true, features = ["cuda-version-from-bui
 default = ["std"]
 cuda = ["dep:cudarc"]
 macro_debug = []
-std = ["dep:clap", "dep:rayon", "dep:tempfile", "dep:object-pool", "ron/std"]
+std = ["dep:clap", "dep:rayon", "dep:tempfile", "dep:object-pool", "ron/std", "cu29-clock/std", "cu29-log/std", "cu29-log-runtime/std", "cu29-traits/std", "cu29-unifiedlog/std", "cu29-value/std"]
 memory_monitoring = []
