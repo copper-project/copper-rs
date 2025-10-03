@@ -19,15 +19,15 @@
 <a href=#19 id=19 data-nosnippet>19</a></span><span class="kw">mod </span>imp {
 <a href=#20 id=20 data-nosnippet>20</a>    <span class="kw">pub use </span>core::fmt::Display;
 <a href=#21 id=21 data-nosnippet>21</a>    <span class="kw">pub use </span>cu29_traits::{CuError, CuResult};
-<a href=#22 id=22 data-nosnippet>22</a>    <span class="kw">pub use </span>std::collections::HashMap;
-<a href=#23 id=23 data-nosnippet>23</a>    <span class="kw">pub use </span>std::fmt::Formatter;
-<a href=#24 id=24 data-nosnippet>24</a>    <span class="kw">pub use </span>std::fmt::Result <span class="kw">as </span>FmtResult;
-<a href=#25 id=25 data-nosnippet>25</a>}
-<a href=#26 id=26 data-nosnippet>26</a>
-<a href=#27 id=27 data-nosnippet>27</a><span class="kw">use </span>imp::<span class="kw-2">*</span>;
-<a href=#28 id=28 data-nosnippet>28</a>
-<a href=#29 id=29 data-nosnippet>29</a><span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
-<a href=#30 id=30 data-nosnippet>30</a></span><span class="kw">use </span>strfmt::strfmt;
+<a href=#22 id=22 data-nosnippet>22</a>    <span class="comment">// strfmt forces hashmap from std
+<a href=#23 id=23 data-nosnippet>23</a>    </span><span class="kw">pub use </span>std::collections::HashMap;
+<a href=#24 id=24 data-nosnippet>24</a>    <span class="kw">pub use </span>std::fmt::Formatter;
+<a href=#25 id=25 data-nosnippet>25</a>    <span class="kw">pub use </span>std::fmt::Result <span class="kw">as </span>FmtResult;
+<a href=#26 id=26 data-nosnippet>26</a>    <span class="comment">// This is a blocker for no_std, so no live logging in no_std for now.
+<a href=#27 id=27 data-nosnippet>27</a>    </span><span class="kw">pub use </span>strfmt::strfmt;
+<a href=#28 id=28 data-nosnippet>28</a>}
+<a href=#29 id=29 data-nosnippet>29</a>
+<a href=#30 id=30 data-nosnippet>30</a><span class="kw">use </span>imp::<span class="kw-2">*</span>;
 <a href=#31 id=31 data-nosnippet>31</a>
 <a href=#32 id=32 data-nosnippet>32</a><span class="doccomment">/// Log levels for Copper.
 <a href=#33 id=33 data-nosnippet>33</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -175,8 +175,8 @@
 <a href=#175 id=175 data-nosnippet>175</a>
 <a href=#176 id=176 data-nosnippet>176</a><span class="doccomment">/// Text log line formatter.
 <a href=#177 id=177 data-nosnippet>177</a>/// Only available on std. TODO(gbin): Maybe reconsider that at some point
-<a href=#178 id=178 data-nosnippet>178</a></span><span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
-<a href=#179 id=179 data-nosnippet>179</a>#[inline]
+<a href=#178 id=178 data-nosnippet>178</a></span><span class="attr">#[inline]
+<a href=#179 id=179 data-nosnippet>179</a>#[cfg(feature = <span class="string">"std"</span>)]
 <a href=#180 id=180 data-nosnippet>180</a></span><span class="kw">pub fn </span>format_logline(
 <a href=#181 id=181 data-nosnippet>181</a>    time: CuTime,
 <a href=#182 id=182 data-nosnippet>182</a>    level: CuLogLevel,
