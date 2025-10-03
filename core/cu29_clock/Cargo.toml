@@ -12,8 +12,8 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-bincode = { workspace = true, default-features = false, features = ["alloc"] }
-serde = { workspace = true, default-features = false, features = ["derive", "alloc"] }
+bincode = { workspace = true }
+serde = { workspace = true }
 
 [dev-dependencies]
 approx = "0.5"

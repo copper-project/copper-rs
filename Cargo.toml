@@ -51,15 +51,17 @@ members = [
     "examples/cu_iceoryx2",
     "examples/cu_logging_size",
     "examples/cu_monitoring",
+    "examples/cu_min_nostd",
     "examples/cu_missions",
     "examples/cu_multisources",
     "examples/cu_nologging_tasks",
     "examples/cu_rate_target",
     "examples/cu_pointclouds",
     "examples/cu_rp_balancebot",
+    "examples/cu_run_in_sim",
     "examples/cu_standalone_structlog",
     "examples/cu_zenoh",
-    "examples/cu_zenoh_ros", "examples/cu_run_in_sim",
+    "examples/cu_zenoh_ros",
 ]
 
 # put only the core crates here that are not platform specific
@@ -98,27 +100,27 @@ no_individual_tags = true
 
 # Copper Core
 cu29 = { path = "core/cu29", version = "0.9.0" }
-cu29-clock = { path = "core/cu29_clock", version = "0.9.0" }
+cu29-clock = { path = "core/cu29_clock", default-features = false, version = "0.9.0" }
 cu29-derive = { path = "core/cu29_derive", version = "0.9.0" }
 cu29-export = { path = "core/cu29_export", version = "0.9.0" }
 cu29-helpers = { path = "core/cu29_helpers", version = "0.9.0" }
 cu29-intern-strs = { path = "core/cu29_intern_strs", version = "0.9.0" }
-cu29-log = { path = "core/cu29_log", version = "0.9.0" }
+cu29-log = { path = "core/cu29_log", default-features = false, version = "0.9.0" }
 cu29-log-derive = { path = "core/cu29_log_derive", version = "0.9.0" }
-cu29-log-runtime = { path = "core/cu29_log_runtime", version = "0.9.0" }
+cu29-log-runtime = { path = "core/cu29_log_runtime", default-features = false, version = "0.9.0" }
 cu29-runtime = { path = "core/cu29_runtime", version = "0.9.0" }
 cu29-soa-derive = { path = "core/cu29_soa_derive", version = "0.9.0" }
-cu29-traits = { path = "core/cu29_traits", version = "0.9.0" }
-cu29-unifiedlog = { path = "core/cu29_unifiedlog", version = "0.9.0" }
-cu29-value = { path = "core/cu29_value", version = "0.9.0" }
+cu29-traits = { path = "core/cu29_traits", default-features = false, version = "0.9.0" }
+cu29-unifiedlog = { path = "core/cu29_unifiedlog", default-features = false, version = "0.9.0" }
+cu29-value = { path = "core/cu29_value", default-features = false, version = "0.9.0" }
 
 # Payload definitions
 cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads", version = "0.9.0" }
 cu-ros-payloads = { path = "components/payloads/cu_ros_payloads", version = "0.9.0" }
 
 # External serialization
-bincode = { version = "2.0", default-features = false, features = ["derive"] }
-serde = { version = "1.0", default-features = false, features = ["derive"] }
+bincode = { version = "2.0", default-features = false, features = ["derive", "alloc"] }
+serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
 erased-serde = { version = "0.4", default-features = false }
 serde_derive = { version = "1.0", features = ["default"] }
 
@@ -146,7 +148,7 @@ tempfile = "3.23"
 rerun = { version = "0.25", default-features = false, features = ["sdk", "server", "log"] }
 
 # smallvec to avoid heap allocations
-smallvec = { version = "1.15", features = ["serde"] }
+smallvec = { version = "1.15", default-features = false, features = ["serde"] }
 
 # rayon for thread pools and such.
 rayon = "1.11"
