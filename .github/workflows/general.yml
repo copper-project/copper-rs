@@ -223,7 +223,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustc,rustfmt
+      - name: Install latest nextest
+        uses: taiki-e/install-action@nextest
       - name: Check compilation with no-std
         run: cargo +stable build --no-default-features
       - name: Unit tests with no-std
-        run: cargo +stable test --no-default-features
+        run: cargo +stable nextest run --no-default-features
