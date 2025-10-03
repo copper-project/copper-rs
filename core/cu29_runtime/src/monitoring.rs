@@ -11,14 +11,21 @@ use serde_derive::{Deserialize, Serialize};
 
 #[cfg(not(feature = "std"))]
 mod imp {
-    pub use alloc::{GlobalAlloc, Layout, System};
+    pub use alloc::alloc::{GlobalAlloc, Layout};
     pub use core::sync::atomic::{AtomicUsize, Ordering};
 }
 
 #[cfg(feature = "std")]
 mod imp {
-    pub use std::alloc::{GlobalAlloc, Layout, System};
+    #[cfg(feature = "memory_monitoring")]
+    use super::CountingAlloc;
+    #[cfg(feature = "memory_monitoring")]
+    pub use std::alloc::System;
+    pub use std::alloc::{GlobalAlloc, Layout};
     pub use std::sync::atomic::{AtomicUsize, Ordering};
+    #[cfg(feature = "memory_monitoring")]
+    #[global_allocator]
+    pub static GLOBAL: CountingAlloc<System> = CountingAlloc::new(System);
 }
 
 use imp::*;
@@ -82,34 +89,27 @@ impl CuMonitor for NoMonitor {
     }
 }
 
-#[global_allocator]
-pub static GLOBAL: CountingAllocator = CountingAllocator::new();
-
 /// A simple allocator that counts the number of bytes allocated and deallocated.
-pub struct CountingAllocator {
+pub struct CountingAlloc<A: GlobalAlloc> {
+    inner: A,
     allocated: AtomicUsize,
     deallocated: AtomicUsize,
 }
 
-impl Default for CountingAllocator {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl CountingAllocator {
-    pub const fn new() -> Self {
-        CountingAllocator {
+impl<A: GlobalAlloc> CountingAlloc<A> {
+    pub const fn new(inner: A) -> Self {
+        CountingAlloc {
+            inner,
             allocated: AtomicUsize::new(0),
             deallocated: AtomicUsize::new(0),
         }
     }
 
-    pub fn get_allocated(&self) -> usize {
+    pub fn allocated(&self) -> usize {
         self.allocated.load(Ordering::SeqCst)
     }
 
-    pub fn get_deallocated(&self) -> usize {
+    pub fn deallocated(&self) -> usize {
         self.deallocated.load(Ordering::SeqCst)
     }
 
@@ -119,38 +119,41 @@ impl CountingAllocator {
     }
 }
 
-unsafe impl GlobalAlloc for CountingAllocator {
+unsafe impl<A: GlobalAlloc> GlobalAlloc for CountingAlloc<A> {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let ptr = System.alloc(layout);
-        if !ptr.is_null() {
+        let p = self.inner.alloc(layout);
+        if !p.is_null() {
             self.allocated.fetch_add(layout.size(), Ordering::SeqCst);
         }
-        ptr
+        p
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        System.dealloc(ptr, layout);
+        self.inner.dealloc(ptr, layout);
         self.deallocated.fetch_add(layout.size(), Ordering::SeqCst);
     }
 }
 
 /// A simple struct that counts the number of bytes allocated and deallocated in a scope.
+#[cfg(feature = "memory_monitoring")]
 pub struct ScopedAllocCounter {
     bf_allocated: usize,
     bf_deallocated: usize,
 }
 
+#[cfg(feature = "memory_monitoring")]
 impl Default for ScopedAllocCounter {
     fn default() -> Self {
         Self::new()
     }
 }
 
+#[cfg(feature = "memory_monitoring")]
 impl ScopedAllocCounter {
     pub fn new() -> Self {
         ScopedAllocCounter {
-            bf_allocated: GLOBAL.get_allocated(),
-            bf_deallocated: GLOBAL.get_deallocated(),
+            bf_allocated: GLOBAL.allocated(),
+            bf_deallocated: GLOBAL.deallocated(),
         }
     }
 
@@ -187,6 +190,7 @@ impl ScopedAllocCounter {
 }
 
 /// Build a difference between the number of bytes allocated and deallocated in the scope at drop time.
+#[cfg(feature = "memory_monitoring")]
 impl Drop for ScopedAllocCounter {
     fn drop(&mut self) {
         let _allocated = GLOBAL.get_allocated() - self.bf_allocated;
