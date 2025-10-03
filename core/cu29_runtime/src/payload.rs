@@ -9,7 +9,6 @@ use bincode::BorrowDecode;
 use bincode::{Decode, Encode};
 use serde_derive::{Deserialize, Serialize};
 
-
 #[cfg(not(feature = "std"))]
 pub use alloc::format;
 
