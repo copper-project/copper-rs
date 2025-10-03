@@ -23,6 +23,7 @@ use petgraph::visit::Visitable;
 
 #[cfg(not(feature = "std"))]
 mod imp {
+    pub use alloc::format;
     pub use alloc::string::String;
     pub use alloc::sync::Arc;
     pub use spin::Mutex;

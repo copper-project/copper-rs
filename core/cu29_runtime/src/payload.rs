@@ -9,6 +9,10 @@ use bincode::BorrowDecode;
 use bincode::{Decode, Encode};
 use serde_derive::{Deserialize, Serialize};
 
+
+#[cfg(not(feature = "std"))]
+pub use alloc::format;
+
 /// Copper friendly wrapper for a fixed size array.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct CuArray<T, const N: usize> {
@@ -73,13 +77,11 @@ impl<T, const N: usize> Decode<()> for CuArray<T, N>
 where
     T: Decode<()>,
 {
-    fn decode<D: bincode::de::Decoder<Context = ()>>(
-        decoder: &mut D,
-    ) -> Result<Self, bincode::error::DecodeError> {
+    fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
         // Decode the length first
         let len = u32::decode(decoder)? as usize;
         if len > N {
-            return Err(bincode::error::DecodeError::OtherString(format!(
+            return Err(DecodeError::OtherString(format!(
                 "Decoded length {len} exceeds maximum capacity {N}"
             )));
         }
