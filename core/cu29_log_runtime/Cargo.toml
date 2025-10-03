@@ -21,7 +21,7 @@ cu29-clock = { workspace = true }
 bincode = { workspace = true, default-features = false, features = ["alloc"] }
 smallvec = { workspace = true }
 log = { version = "0.4", default-features = false }
-spin = { version = "0.10" } # should be removed when std is on but cargo is bad at negative features
+spin = { version = "0.10" } # should be removed when std is on, but cargo is bad at negative features
 
 [dev-dependencies]
 cu29-value = { workspace = true }

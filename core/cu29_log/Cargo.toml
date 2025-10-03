@@ -13,6 +13,7 @@ repository.workspace = true
 
 [dependencies]
 bincode = { workspace = true, default-features = false, features = ["alloc"] }
+hashbrown = { workspace = true }
 serde = { workspace = true, default-features = false, features = ["derive", "alloc"] }
 cu29-value = { workspace = true }
 cu29-traits = { workspace = true }

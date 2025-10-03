@@ -35,7 +35,7 @@ arrayvec = { version = "0.7", default-features = false, features = ["serde"] }
 html-escape = { version = "0.2", default-features = false }
 petgraph = { version = "0.8", features = ["serde", "serde-1", "serde_derive"] }
 ron = { version = "0.11", default-features = false }
-
+hashbrown = { workspace = true }
 
 # std only dependencies
 clap = { workspace = true, optional = true }             # CLI
@@ -44,7 +44,7 @@ tempfile = { workspace = true, optional = true }         # only used in CLI for 
 object-pool = { version = "0.6", optional = true }  # used for large object pooling, this will never happen in no-std
 
 # no std only dependencies
-spin = { version = "0.10" } # should be removed when std is on but cargo is bad at negative features
+spin = { version = "0.10" } # should be removed when std is on, but cargo is bad at negative features
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 cudarc = { version = "0.17", optional = true, features = ["cuda-version-from-build-system"] }
