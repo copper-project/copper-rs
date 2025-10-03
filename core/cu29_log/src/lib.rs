@@ -19,15 +19,15 @@ mod imp {
 mod imp {
     pub use core::fmt::Display;
     pub use cu29_traits::{CuError, CuResult};
+    // strfmt forces hashmap from std
     pub use std::collections::HashMap;
     pub use std::fmt::Formatter;
     pub use std::fmt::Result as FmtResult;
+    // This is a blocker for no_std, so no live logging in no_std for now.
+    pub use strfmt::strfmt;
 }
 
 use imp::*;
-
-#[cfg(feature = "std")]
-use strfmt::strfmt;
 
 /// Log levels for Copper.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -175,8 +175,8 @@ impl CuLogEntry {
 
 /// Text log line formatter.
 /// Only available on std. TODO(gbin): Maybe reconsider that at some point
-#[cfg(feature = "std")]
 #[inline]
+#[cfg(feature = "std")]
 pub fn format_logline(
     time: CuTime,
     level: CuLogLevel,

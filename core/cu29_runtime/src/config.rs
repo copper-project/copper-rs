@@ -16,7 +16,6 @@ mod imp {
 #[cfg(feature = "std")]
 mod imp {
     pub use html_escape::encode_text;
-    pub use std::collections::HashMap;
     pub use std::fs::read_to_string;
 }
 
@@ -25,6 +24,7 @@ use imp::*;
 use core::fmt;
 use core::fmt::Display;
 use cu29_traits::{CuError, CuResult};
+use hashbrown::HashMap;
 use petgraph::stable_graph::{EdgeIndex, NodeIndex, StableDiGraph};
 use petgraph::visit::EdgeRef;
 pub use petgraph::Direction::Incoming;
