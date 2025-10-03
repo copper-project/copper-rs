@@ -18,7 +18,6 @@ path = "src/rendercfg.rs"
 
 [dependencies]
 bincode = { workspace = true, default-features = false, features = ["alloc"] }
-clap = { workspace = true, optional = true }
 compact_str = { workspace = true }
 cu29-traits = { workspace = true }
 cu29-log = { workspace = true }
@@ -28,18 +27,25 @@ cu29-unifiedlog = { workspace = true }
 cu29-value = { workspace = true }
 cu29-clock = { workspace = true }
 erased-serde = { workspace = true }
-rayon = { workspace = true, optional = true }
 serde_derive = { workspace = true }
-serde = { workspace = true }
-smallvec = { workspace = true }
-tempfile = { workspace = true }
+serde = { workspace = true, default-features = false, features = ["alloc"] }
+smallvec = { workspace = true, default-features = false }
 
-arrayvec = { version = "0.7", features = ["serde"] }
-ron = "0.11"
-hdrhistogram = "7.5"
-html-escape = "0.2"
-object-pool = "0.6"
+arrayvec = { version = "0.7", default-features = false, features = ["serde"] }
+html-escape = { version = "0.2", default-features = false }
 petgraph = { version = "0.8", features = ["serde", "serde-1", "serde_derive"] }
+ron = { version = "0.11", default-features = false }
+
+
+# std only dependencies
+clap = { workspace = true, optional = true }             # CLI
+rayon = { workspace = true, optional = true }            # Used for async tasks
+tempfile = { workspace = true, optional = true }         # only used in CLI for svg generation
+object-pool = { version = "0.6", optional = true }  # used for large object pooling, this will never happen in no-std
+
+hdrhistogram = "7.5"
+
+# no std only dependencies
 spin = { version = "0.10" } # should be removed when std is on but cargo is bad at negative features
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
@@ -49,4 +55,4 @@ cudarc = { version = "0.17", optional = true, features = ["cuda-version-from-bui
 default = ["std"]
 cuda = ["dep:cudarc"]
 macro_debug = []
-std = ["dep:clap", "dep:rayon"]
+std = ["dep:clap", "dep:rayon", "dep:tempfile", "dep:object-pool", "ron/std"]
