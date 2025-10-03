@@ -239,13 +239,6 @@ impl LiveStatistics {
     /// - `count`: The total number of data points, initialized to zero.
     /// - `max_value`: The maximum allowable value for data points, set to the provided `max_value`.
     ///
-    /// # Example
-    /// ```rust
-    /// use your_crate::LiveStatistics;
-    ///
-    /// let stats = LiveStatistics::new_with_max(1000);
-    /// // `stats` is now ready to track data with each value not exceeding 1000.
-    /// ```
     pub fn new_with_max(max_value: u64) -> Self {
         LiveStatistics {
             buckets: [0; BUCKET_COUNT],
