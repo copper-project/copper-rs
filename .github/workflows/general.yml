@@ -47,9 +47,6 @@ jobs:
         if: runner.os == 'Windows'
         uses: Cyberboss/install-winget@v1
 
-      - name: Check formatting
-        run: cargo +stable fmt --all -- --check
-
       - name: Free Disk Space (Ubuntu)
         if: runner.os == 'Linux'
         uses: jlumbroso/free-disk-space@main
@@ -212,3 +209,8 @@ jobs:
       - uses: crate-ci/typos@master
         with:
           config: ./.config/_typos.toml
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Check formatting
+        run: cargo +stable fmt --all -- --check
