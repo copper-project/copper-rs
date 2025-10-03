@@ -168,8 +168,8 @@ impl ScopedAllocCounter {
     /// let _vec = vec![0u8; 1024];
     /// println!("Bytes allocated: {}", counter.get_allocated());
     /// ```
-    pub fn get_allocated(&self) -> usize {
-        GLOBAL.get_allocated() - self.bf_allocated
+    pub fn allocated(&self) -> usize {
+        GLOBAL.allocated() - self.bf_allocated
     }
 
     /// Returns the total number of bytes deallocated in the current scope
@@ -184,8 +184,8 @@ impl ScopedAllocCounter {
     /// drop(_vec);
     /// println!("Bytes deallocated: {}", counter.get_deallocated());
     /// ```
-    pub fn get_deallocated(&self) -> usize {
-        GLOBAL.get_deallocated() - self.bf_deallocated
+    pub fn deallocated(&self) -> usize {
+        GLOBAL.deallocated() - self.bf_deallocated
     }
 }
 
@@ -193,8 +193,8 @@ impl ScopedAllocCounter {
 #[cfg(feature = "memory_monitoring")]
 impl Drop for ScopedAllocCounter {
     fn drop(&mut self) {
-        let _allocated = GLOBAL.get_allocated() - self.bf_allocated;
-        let _deallocated = GLOBAL.get_deallocated() - self.bf_deallocated;
+        let _allocated = GLOBAL.allocated() - self.bf_allocated;
+        let _deallocated = GLOBAL.deallocated() - self.bf_deallocated;
         // TODO(gbin): Fix this when the logger is ready.
         // debug!(
         //     "Allocations: +{}B -{}B",
