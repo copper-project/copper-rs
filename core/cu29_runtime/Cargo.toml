@@ -43,8 +43,6 @@ rayon = { workspace = true, optional = true }            # Used for async tasks
 tempfile = { workspace = true, optional = true }         # only used in CLI for svg generation
 object-pool = { version = "0.6", optional = true }  # used for large object pooling, this will never happen in no-std
 
-hdrhistogram = "7.5"
-
 # no std only dependencies
 spin = { version = "0.10" } # should be removed when std is on but cargo is bad at negative features
 
