@@ -1,8 +1,10 @@
-use cu29_runtime::config::{read_configuration, Outgoing};
-use petgraph::visit::EdgeRef;
-use std::fs::{create_dir_all, write};
-use tempfile::tempdir;
+// no modular config is supported in no_std, only the materialized config FROM a modular config
+// is.
 
+#[cfg(feature = "std")]
+use cu29_runtime::config::{read_configuration, Outgoing};
+
+#[cfg(feature = "std")]
 #[test]
 fn test_modular_config_basic() {
     let temp_dir = tempdir().unwrap();
@@ -174,6 +176,7 @@ fn test_modular_config_basic() {
     );
 }
 
+#[cfg(feature = "std")]
 #[test]
 fn test_modular_config_nested() {
     let temp_dir = tempdir().unwrap();
@@ -408,6 +411,7 @@ fn test_modular_config_nested() {
     );
 }
 
+#[cfg(feature = "std")]
 #[test]
 fn test_modular_config_override() {
     let temp_dir = tempdir().unwrap();
@@ -567,6 +571,7 @@ fn test_modular_config_override() {
     // The custom logic was removed to focus on what's essential for testing
 }
 
+#[cfg(feature = "std")]
 #[test]
 fn test_modular_config_error_handling() {
     let temp_dir = tempdir().unwrap();

@@ -1,9 +1,9 @@
+// no-std has no file system so no include. Only the materialized config from includes are used.
+#[cfg(feature = "std")]
 use cu29_runtime::config::{read_configuration, Outgoing};
-use petgraph::visit::EdgeRef;
-use std::fs::{create_dir_all, write};
-use tempfile::tempdir;
 
 #[test]
+#[cfg(feature = "std")]
 fn test_basic_include() {
     let temp_dir = tempdir().unwrap();
     let base_path = temp_dir.path();
@@ -58,6 +58,7 @@ fn test_basic_include() {
     assert!(task_ids.contains(&"included_task".to_string()));
 }
 
+#[cfg(feature = "std")]
 #[test]
 fn test_parameter_substitution() {
     let temp_dir = tempdir().unwrap();
@@ -112,6 +113,7 @@ fn test_parameter_substitution() {
     assert_eq!(node.get_param::<i32>("param_value").unwrap(), 100);
 }
 
+#[cfg(feature = "std")]
 #[test]
 fn test_nested_includes() {
     let temp_dir = tempdir().unwrap();
@@ -188,6 +190,7 @@ fn test_nested_includes() {
     assert!(task_ids.contains(&"nested_task".to_string()));
 }
 
+#[cfg(feature = "std")]
 #[test]
 fn test_override_behavior() {
     let temp_dir = tempdir().unwrap();
@@ -278,6 +281,7 @@ fn test_override_behavior() {
     );
 }
 
+#[cfg(feature = "std")]
 #[test]
 fn test_error_handling() {
     let temp_dir = tempdir().unwrap();
@@ -335,6 +339,7 @@ fn test_error_handling() {
     assert!(result.is_err());
 }
 
+#[cfg(feature = "std")]
 #[test]
 fn test_multiple_parameterized_includes() {
     let temp_dir = tempdir().unwrap();

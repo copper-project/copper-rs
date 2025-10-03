@@ -15,6 +15,7 @@ repository.workspace = true
 [[bin]]
 name = "cu29-rendercfg"
 path = "src/rendercfg.rs"
+required-features = ["std"]
 
 [dependencies]
 bincode = { workspace = true, default-features = false, features = ["alloc"] }
