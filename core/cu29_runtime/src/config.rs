@@ -2,24 +2,8 @@
 //! The configuration is a directed graph where nodes are tasks and edges are connections between tasks.
 //! The configuration is serialized in the RON format.
 //! The configuration is used to generate the runtime code at compile time.
-
 #[cfg(not(feature = "std"))]
-mod imp {
-    pub use alloc::borrow::ToOwned;
-    pub use alloc::format;
-    pub use alloc::string::String;
-    pub use alloc::sync::Arc;
-    pub use alloc::vec::Vec;
-    pub use spin::Mutex;
-}
-
-#[cfg(feature = "std")]
-mod imp {
-    pub use html_escape::encode_text;
-    pub use std::fs::read_to_string;
-}
-
-use imp::*;
+extern crate alloc;
 
 use core::fmt;
 use core::fmt::Display;
@@ -34,6 +18,23 @@ use ron::value::Value as RonValue;
 use ron::{Number, Options};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ConfigGraphs::{Missions, Simple};
+
+#[cfg(not(feature = "std"))]
+mod imp {
+    pub use alloc::borrow::ToOwned;
+    pub use alloc::format;
+    pub use alloc::string::String;
+    pub use alloc::string::ToString;
+    pub use alloc::vec::Vec;
+}
+
+#[cfg(feature = "std")]
+mod imp {
+    pub use html_escape::encode_text;
+    pub use std::fs::read_to_string;
+}
+
+use imp::*;
 
 /// NodeId is the unique identifier of a node in the configuration graph for petgraph
 /// and the code generation.
@@ -1110,6 +1111,7 @@ impl LoggingConfig {
     }
 }
 
+#[allow(dead_code)] // dead in no-std
 fn substitute_parameters(content: &str, params: &HashMap<String, Value>) -> String {
     let mut result = content.to_string();
 
@@ -1275,6 +1277,7 @@ fn config_representation_to_config(representation: CuConfigRepresentation) -> Cu
     Ok(cuconfig)
 }
 
+#[allow(unused_variables)]
 pub fn read_configuration_str(
     config_content: String,
     file_path: Option<&str>,
@@ -1299,6 +1302,8 @@ pub fn read_configuration_str(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(not(feature = "std"))]
+    use alloc::vec;
 
     #[test]
     fn test_plain_serialize() {

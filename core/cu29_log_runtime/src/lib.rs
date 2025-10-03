@@ -334,6 +334,9 @@ mod tests {
     use cu29_value::Value;
     use smallvec::smallvec;
 
+    #[cfg(not(feature = "std"))]
+    use alloc::string::ToString;
+
     #[test]
     fn test_encode_decode_structured_log() {
         let log_entry = CuLogEntry {

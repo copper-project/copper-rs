@@ -11,6 +11,8 @@ use serde_derive::{Deserialize, Serialize};
 
 #[cfg(not(feature = "std"))]
 pub use alloc::format;
+#[cfg(not(feature = "std"))]
+pub use alloc::vec::Vec;
 
 /// Copper friendly wrapper for a fixed size array.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -56,10 +58,7 @@ impl<T, const N: usize> Encode for CuArray<T, N>
 where
     T: Encode,
 {
-    fn encode<E: bincode::enc::Encoder>(
-        &self,
-        encoder: &mut E,
-    ) -> Result<(), bincode::error::EncodeError> {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         // Encode the length first
         (self.inner.len() as u32).encode(encoder)?;
 
