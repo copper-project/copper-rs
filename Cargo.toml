@@ -70,7 +70,6 @@ default-members = [
     "core/cu29_clock",
     "core/cu29_derive",
     "core/cu29_export",
-    "core/cu29_helpers",
     "core/cu29_intern_strs",
     "core/cu29_log",
     "core/cu29_log_derive",
