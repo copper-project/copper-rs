@@ -1,2 +1,2 @@
-window.ALL_CRATES = ["cu29","cu29_clock","cu29_derive","cu29_export","cu29_helpers","cu29_intern_strs","cu29_log","cu29_log_derive","cu29_log_runtime","cu29_rendercfg","cu29_runtime","cu29_soa_derive","cu29_traits","cu29_unifiedlog"];
-//{"start":21,"fragment_lengths":[6,13,14,14,15,19,11,18,19,17,15,18,14,18]}
+window.ALL_CRATES = ["cu29","cu29_clock","cu29_derive","cu29_export","cu29_intern_strs","cu29_log","cu29_log_derive","cu29_log_runtime","cu29_rendercfg","cu29_runtime","cu29_soa_derive","cu29_traits","cu29_unifiedlog"];
+//{"start":21,"fragment_lengths":[6,13,14,14,19,11,18,19,17,15,18,14,18]}
