@@ -28,11 +28,11 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode as dDecode, Decode, Encode, Encode as dEncode};
 use compact_str::CompactString;
+#[cfg(not(feature = "std"))]
+use core::error::Error as CoreError;
 use cu29_clock::{PartialCuTimeRange, Tov};
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "std")]
-use std::error::Error;
 #[cfg(feature = "std")]
 use std::fmt::{Debug, Display, Formatter};
 
@@ -42,6 +42,8 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 #[cfg(not(feature = "std"))]
 use core::fmt::{Debug, Display, Formatter};
+#[cfg(feature = "std")]
+use std::error::Error;
 
 /// Common copper Error type.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,6 +62,9 @@ impl Display for CuError {
         Ok(())
     }
 }
+
+#[cfg(not(feature = "std"))]
+impl CoreError for CuError {}
 
 #[cfg(feature = "std")]
 impl Error for CuError {}
@@ -83,8 +88,7 @@ impl From<String> for CuError {
 }
 
 impl CuError {
-    #[cfg(feature = "std")]
-    pub fn new_with_cause(message: &str, cause: impl Error) -> CuError {
+    pub fn new_with_cause(message: &str, cause: impl Display) -> CuError {
         CuError {
             message: message.to_string(),
             cause: Some(cause.to_string()),

@@ -272,7 +272,7 @@ fn gen_sim_support(runtime_plan: &CuExecutionLoop) -> proc_macro2::TokenStream {
                 };
 
                 quote! {
-                    #enum_ident(cu29::simulation::CuTaskCallbackState<#inputs_type, &'a mut #output>)
+                    #enum_ident(CuTaskCallbackState<#inputs_type, &'a mut #output>)
                 }
             }
             CuExecutionUnit::Loop(_) => {
@@ -304,6 +304,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     let mut config_file: Option<LitStr> = None;
     let mut sim_mode = false;
 
+    #[cfg(feature = "std")]
+    let std = true;
+
+    #[cfg(not(feature = "std"))]
+    let std = false;
+
     // Custom parser for the attribute arguments
     let attribute_config_parser = parser(|meta| {
         if meta.path.is_ident("config") {
@@ -330,6 +336,15 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     eprintln!("[parse]");
     // Parse the provided args with the custom parser
     parse_macro_input!(args with attribute_config_parser);
+
+    // Adds the generic parameter for the UnifiedLogger if this is a real application (not sim)
+    // This allows to adapt either to the no-std (custom impl) and std (default file based one)
+    // if !sim_mode {
+    //     application_struct
+    //         .generics
+    //         .params
+    //         .push(syn::parse_quote!(L: UnifiedLogWrite + 'static));
+    // }
 
     // Check if the config file was provided
     let config_file = match config_file {
@@ -433,7 +448,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             let msg_type = graph
                                 .get_node_output_msg_type(task_id.as_str())
                                 .unwrap_or_else(|| panic!("CuSrcTask {task_id} should have an outgoing connection with a valid output msg type"));
-                            let sim_task_name = format!("cu29::simulation::CuSimSrcTask<{msg_type}>");
+                            let sim_task_name = format!("CuSimSrcTask<{msg_type}>");
                             parse_str(sim_task_name.as_str()).unwrap_or_else(|_| panic!("Could not build the placeholder for simulation: {sim_task_name}"))
                         }
                     }
@@ -456,7 +471,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             let msg_type = graph
                                 .get_node_input_msg_type(task_id.as_str())
                                 .unwrap_or_else(|| panic!("CuSinkTask {task_id} should have an incoming connection with a valid input msg type"));
-                            let sim_task_name = format!("cu29::simulation::CuSimSinkTask<{msg_type}>");
+                            let sim_task_name = format!("CuSimSinkTask<{msg_type}>");
                             parse_str(sim_task_name.as_str()).unwrap_or_else(|_| panic!("Could not build the placeholder for simulation: {sim_task_name}"))
                         }
                     }
@@ -553,15 +568,15 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         let call_sim_callback = if sim_mode {
                             quote! {
                                 // Ask the sim if this task should be executed or overridden by the sim.
-                                let ovr = sim_callback(SimStep::#enum_name(cu29::simulation::CuTaskCallbackState::Start));
+                                let ovr = sim_callback(SimStep::#enum_name(CuTaskCallbackState::Start));
 
-                                let doit = if let cu29::simulation::SimOverride::Errored(reason) = ovr  {
+                                let doit = if let SimOverride::Errored(reason) = ovr  {
                                     let error: CuError = reason.into();
                                     #monitoring_action
                                     false
                                }
                                else {
-                                    ovr == cu29::simulation::SimOverride::ExecuteByRuntime
+                                    ovr == SimOverride::ExecuteByRuntime
                                };
                             }
                         } else {
@@ -605,15 +620,15 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         let call_sim_callback = if sim_mode {
                             quote! {
                                 // Ask the sim if this task should be executed or overridden by the sim.
-                                let ovr = sim_callback(SimStep::#enum_name(cu29::simulation::CuTaskCallbackState::Stop));
+                                let ovr = sim_callback(SimStep::#enum_name(CuTaskCallbackState::Stop));
 
-                                let doit = if let cu29::simulation::SimOverride::Errored(reason) = ovr  {
+                                let doit = if let SimOverride::Errored(reason) = ovr  {
                                     let error: CuError = reason.into();
                                     #monitoring_action
                                     false
                                }
                                else {
-                                    ovr == cu29::simulation::SimOverride::ExecuteByRuntime
+                                    ovr == SimOverride::ExecuteByRuntime
                                };
                             }
                         } else {
@@ -655,14 +670,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         let call_sim_callback = if sim_mode {
                             quote! {
                                 // Ask the sim if this task should be executed or overridden by the sim.
-                                let ovr = sim_callback(SimStep::#enum_name(cu29::simulation::CuTaskCallbackState::Preprocess));
+                                let ovr = sim_callback(SimStep::#enum_name(CuTaskCallbackState::Preprocess));
 
-                                let doit = if let cu29::simulation::SimOverride::Errored(reason) = ovr  {
+                                let doit = if let SimOverride::Errored(reason) = ovr  {
                                     let error: CuError = reason.into();
                                     #monitoring_action
                                     false
                                 } else {
-                                    ovr == cu29::simulation::SimOverride::ExecuteByRuntime
+                                    ovr == SimOverride::ExecuteByRuntime
                                 };
                             }
                         } else {
@@ -703,14 +718,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         let call_sim_callback = if sim_mode {
                             quote! {
                                 // Ask the sim if this task should be executed or overridden by the sim.
-                                let ovr = sim_callback(SimStep::#enum_name(cu29::simulation::CuTaskCallbackState::Postprocess));
+                                let ovr = sim_callback(SimStep::#enum_name(CuTaskCallbackState::Postprocess));
 
-                                let doit = if let cu29::simulation::SimOverride::Errored(reason) = ovr  {
+                                let doit = if let SimOverride::Errored(reason) = ovr  {
                                     let error: CuError = reason.into();
                                     #monitoring_action
                                     false
                                 } else {
-                                    ovr == cu29::simulation::SimOverride::ExecuteByRuntime
+                                    ovr == SimOverride::ExecuteByRuntime
                                 };
                             }
                         } else {
@@ -807,14 +822,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         quote! {
                                             let doit = {
                                                 let cumsg_output = &mut msgs.#output_culist_index;
-                                                let state = cu29::simulation::CuTaskCallbackState::Process((), cumsg_output);
+                                                let state = CuTaskCallbackState::Process((), cumsg_output);
                                                 let ovr = sim_callback(SimStep::#enum_name(state));
-                                                if let cu29::simulation::SimOverride::Errored(reason) = ovr  {
+                                                if let SimOverride::Errored(reason) = ovr  {
                                                     let error: CuError = reason.into();
                                                     #monitoring_action
                                                     false
                                                 } else {
-                                                    ovr == cu29::simulation::SimOverride::ExecuteByRuntime
+                                                    ovr == SimOverride::ExecuteByRuntime
                                                 }
                                             };
                                          }
@@ -919,15 +934,15 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                                 let cumsg_input = &#inputs_type;
                                                 // This is the virtual output for the sink
                                                 let cumsg_output = &mut msgs.#output_culist_index;
-                                                let state = cu29::simulation::CuTaskCallbackState::Process(cumsg_input, cumsg_output);
+                                                let state = CuTaskCallbackState::Process(cumsg_input, cumsg_output);
                                                 let ovr = sim_callback(SimStep::#enum_name(state));
 
-                                                if let cu29::simulation::SimOverride::Errored(reason) = ovr  {
+                                                if let SimOverride::Errored(reason) = ovr  {
                                                     let error: CuError = reason.into();
                                                     #monitoring_action
                                                     false
                                                 } else {
-                                                    ovr == cu29::simulation::SimOverride::ExecuteByRuntime
+                                                    ovr == SimOverride::ExecuteByRuntime
                                                 }
                                             };
                                          }
@@ -1014,16 +1029,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                             let doit = {
                                                 let cumsg_input = &#inputs_type;
                                                 let cumsg_output = &mut msgs.#output_culist_index;
-                                                let state = cu29::simulation::CuTaskCallbackState::Process(cumsg_input, cumsg_output);
+                                                let state = CuTaskCallbackState::Process(cumsg_input, cumsg_output);
                                                 let ovr = sim_callback(SimStep::#enum_name(state));
 
-                                                if let cu29::simulation::SimOverride::Errored(reason) = ovr  {
+                                                if let SimOverride::Errored(reason) = ovr  {
                                                     let error: CuError = reason.into();
                                                     #monitoring_action
                                                     false
                                                 }
                                                 else {
-                                                    ovr == cu29::simulation::SimOverride::ExecuteByRuntime
+                                                    ovr == SimOverride::ExecuteByRuntime
                                                 }
                                             };
                                          }
@@ -1107,30 +1122,41 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         #[cfg(feature = "macro_debug")]
         eprintln!("[build the sim support]");
-        let sim_support: proc_macro2::TokenStream = gen_sim_support(&runtime_plan);
+        let sim_support = if sim_mode {
+            Some(gen_sim_support(&runtime_plan))
+        } else {
+            None
+        };
 
         let (new, run_one_iteration, start_all_tasks, stop_all_tasks, run) = if sim_mode {
             (
                 quote! {
-                    fn new(clock:RobotClock, unified_logger: Arc<Mutex<UnifiedLoggerWrite>>, config_override: Option<CuConfig>, sim_callback: &mut impl FnMut(SimStep) -> cu29::simulation::SimOverride) -> CuResult<Self>
+                    fn new(clock:RobotClock, unified_logger: Arc<Mutex<L>>, config_override: Option<CuConfig>, sim_callback: &mut impl FnMut(SimStep) -> SimOverride) -> CuResult<Self>
                 },
                 quote! {
-                    fn run_one_iteration(&mut self, sim_callback: &mut impl FnMut(SimStep) -> cu29::simulation::SimOverride) -> CuResult<()>
+                    fn run_one_iteration(&mut self, sim_callback: &mut impl FnMut(SimStep) -> SimOverride) -> CuResult<()>
                 },
                 quote! {
-                    fn start_all_tasks(&mut self, sim_callback: &mut impl FnMut(SimStep) -> cu29::simulation::SimOverride) -> CuResult<()>
+                    fn start_all_tasks(&mut self, sim_callback: &mut impl FnMut(SimStep) -> SimOverride) -> CuResult<()>
                 },
                 quote! {
-                    fn stop_all_tasks(&mut self, sim_callback: &mut impl FnMut(SimStep) -> cu29::simulation::SimOverride) -> CuResult<()>
+                    fn stop_all_tasks(&mut self, sim_callback: &mut impl FnMut(SimStep) -> SimOverride) -> CuResult<()>
                 },
                 quote! {
-                    fn run(&mut self, sim_callback: &mut impl FnMut(SimStep) -> cu29::simulation::SimOverride) -> CuResult<()>
+                    fn run(&mut self, sim_callback: &mut impl FnMut(SimStep) -> SimOverride) -> CuResult<()>
                 },
             )
         } else {
             (
-                quote! {
-                    fn new(clock:RobotClock, unified_logger: Arc<Mutex<UnifiedLoggerWrite>>, config_override: Option<CuConfig>) -> CuResult<Self>
+                if std {
+                    quote! {
+                        fn new(clock:RobotClock, unified_logger: Arc<Mutex<L>>, config_override: Option<CuConfig>) -> CuResult<Self>
+                    }
+                } else {
+                    quote! {
+                        // no config override is possible in no-std
+                        fn new(clock:RobotClock, unified_logger: Arc<Mutex<L>>) -> CuResult<Self>
+                    }
                 },
                 quote! {
                     fn run_one_iteration(&mut self) -> CuResult<()>
@@ -1158,7 +1184,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             let enum_ident = Ident::new(&enum_name, Span::call_site());
             quote! {
                 // the answer is ignored, we have to instantiate the tasks anyway.
-                sim_callback(SimStep::#enum_ident(cu29::simulation::CuTaskCallbackState::New(all_instances_configs[#i].cloned())));
+                sim_callback(SimStep::#enum_ident(CuTaskCallbackState::New(all_instances_configs[#i].cloned())));
             }
         });
 
@@ -1178,6 +1204,40 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         let (runtime_plan_code, preprocess_logging_calls): (Vec<_>, Vec<_>) =
             itertools::multiunzip(runtime_plan_code_and_logging);
+
+        let config_load_stmt = if std {
+            quote! {
+                let config = if let Some(overridden_config) = config_override {
+                    debug!("CuConfig: Overridden programmatically: {}", overridden_config.serialize_ron());
+                    overridden_config
+                } else if ::std::path::Path::new(config_filename).exists() {
+                    debug!("CuConfig: Reading configuration from file: {}", config_filename);
+                    cu29::config::read_configuration(config_filename)?
+                } else {
+                    let original_config = Self::get_original_config();
+                    debug!("CuConfig: Using the original configuration the project was compiled with: {}", original_config);
+                    cu29::config::read_configuration_str(original_config, None)?
+                };
+            }
+        } else {
+            quote! {
+                // Only the original config is available in no-std
+                // let original_config = Self::get_original_config();
+                let original_config = <Self as CuApplication<L>>::get_original_config();
+                debug!("CuConfig: Using the original configuration the project was compiled with: {}", &original_config);
+                let config = cu29::config::read_configuration_str(original_config, None)?;
+            }
+        };
+
+        let kill_handler = if std {
+            Some(quote! {
+                ctrlc::set_handler(move || {
+                    STOP_FLAG.store(true, Ordering::SeqCst);
+                }).expect("Error setting Ctrl-C handler");
+            })
+        } else {
+            None
+        };
 
         #[cfg(feature = "macro_debug")]
         eprintln!("[build the run methods]");
@@ -1243,14 +1303,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
             #run {
                 static STOP_FLAG: AtomicBool = AtomicBool::new(false);
-                ctrlc::set_handler(move || {
-                    STOP_FLAG.store(true, Ordering::SeqCst);
-                }).expect("Error setting Ctrl-C handler");
 
-                self.start_all_tasks(#sim_callback_arg)?;
+                #kill_handler
+
+                <Self as CuApplication<L>>::start_all_tasks(self, #sim_callback_arg)?;
                 let result = loop  {
                     let iter_start = self.copper_runtime.clock.now();
-                    let result = self.run_one_iteration(#sim_callback_arg);
+                    let result = <Self as CuApplication<L>>::run_one_iteration(self, #sim_callback_arg);
 
                     if let Some(rate) = self.copper_runtime.runtime_config.rate_target_hz {
                         let period = 1_000_000_000u64 / rate;
@@ -1267,7 +1326,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 if result.is_err() {
                     error!("A task errored out: {}", &result);
                 }
-                self.stop_all_tasks(#sim_callback_arg)?;
+                <Self as CuApplication<L>>::stop_all_tasks(self, #sim_callback_arg)?;
                 result
             }
         };
@@ -1287,7 +1346,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let app_impl_decl = if sim_mode {
             quote!(impl CuSimApplication<UnifiedLoggerWrite> for #application_name)
         } else {
-            quote!(impl CuApplication<UnifiedLoggerWrite> for #application_name)
+            quote!(impl<L: UnifiedLogWrite + 'static> CuApplication<L> for #application_name)
         };
         let simstep_type_decl = if sim_mode {
             quote!(
@@ -1297,6 +1356,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote!()
         };
 
+        #[cfg(feature = "std")]
         #[cfg(feature = "macro_debug")]
         eprintln!("[build result]");
         let application_impl = quote! {
@@ -1305,18 +1365,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 #new {
                     let config_filename = #config_file;
-                    let config = if config_override.is_some() {
-                        let overridden_config = config_override.unwrap();
-                        debug!("CuConfig: Overridden programmatically: {}", &overridden_config.serialize_ron());
-                        overridden_config
-                    } else if std::path::Path::new(config_filename).exists() {
-                        debug!("CuConfig: Reading configuration from file: {}", config_filename);
-                        cu29::config::read_configuration(config_filename)?
-                    } else {
-                        let original_config = Self::get_original_config();
-                        debug!("CuConfig: Using the original configuration the project was compiled with: {}", &original_config);
-                        cu29::config::read_configuration_str(original_config, None)?
-                    };
+
+                    #config_load_stmt
 
                     // For simple cases we can say the section is just a bunch of Copper Lists.
                     // But we can now have allocations outside of it so we can override it from the config.
@@ -1397,7 +1447,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 quote! {
                     impl<'a, F> #builder_name <'a, F>
                     where
-                        F: FnMut(SimStep) -> cu29::simulation::SimOverride,
+                        F: FnMut(SimStep) -> SimOverride,
                 },
                 Some(quote! {
                     pub fn with_sim_callback(mut self, sim_callback: &'a mut F) -> Self
@@ -1439,55 +1489,146 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             )
         };
 
-        let application_builder = quote! {
-            #builder_struct
-
-            #builder_impl
-            {
-                #builder_new
-
-                #[allow(dead_code)]
-                pub fn with_clock(mut self, clock: RobotClock) -> Self {
-                    self.clock = Some(clock);
-                    self
+        // backward compat on std non-parameterized impl.
+        let std_application_impl = if std {
+            Some(quote! {
+                        impl #application_name {
+                pub fn start_all_tasks(&mut self) -> CuResult<()> {
+                    <Self as CuApplication<UnifiedLoggerWrite>>::start_all_tasks(self)
                 }
-
-                #[allow(dead_code)]
-                pub fn with_unified_logger(mut self, unified_logger: Arc<Mutex<UnifiedLoggerWrite>>) -> Self {
-                    self.unified_logger = Some(unified_logger);
-                    self
+                pub fn run_one_iteration(&mut self) -> CuResult<()> {
+                    <Self as CuApplication<UnifiedLoggerWrite>>::run_one_iteration(self)
                 }
-
-                #[allow(dead_code)]
-                pub fn with_context(mut self, copper_ctx: &CopperContext) -> Self {
-                    self.clock = Some(copper_ctx.clock.clone());
-                    self.unified_logger = Some(copper_ctx.unified_logger.clone());
-                    self
+                pub fn run(&mut self) -> CuResult<()> {
+                    <Self as CuApplication<UnifiedLoggerWrite>>::run(self)
                 }
+                pub fn stop_all_tasks(&mut self) -> CuResult<()> {
+                    <Self as CuApplication<UnifiedLoggerWrite>>::stop_all_tasks(self)
+                }
+            }})
+        } else {
+            None
+        };
 
-                #[allow(dead_code)]
-                pub fn with_config(mut self, config_override: CuConfig) -> Self {
-                        self.config_override = Some(config_override);
+        let application_builder = if std {
+            Some(quote! {
+                #builder_struct
+
+                #builder_impl
+                {
+                    #builder_new
+
+                    #[allow(dead_code)]
+                    pub fn with_clock(mut self, clock: RobotClock) -> Self {
+                        self.clock = Some(clock);
                         self
+                    }
+
+                    #[allow(dead_code)]
+                    pub fn with_unified_logger(mut self, unified_logger: Arc<Mutex<UnifiedLoggerWrite>>) -> Self {
+                        self.unified_logger = Some(unified_logger);
+                        self
+                    }
+
+                    #[allow(dead_code)]
+                    pub fn with_context(mut self, copper_ctx: &CopperContext) -> Self {
+                        self.clock = Some(copper_ctx.clock.clone());
+                        self.unified_logger = Some(copper_ctx.unified_logger.clone());
+                        self
+                    }
+
+                    #[allow(dead_code)]
+                    pub fn with_config(mut self, config_override: CuConfig) -> Self {
+                            self.config_override = Some(config_override);
+                            self
+                    }
+
+                    #builder_sim_callback_method
+
+                    #[allow(dead_code)]
+                    pub fn build(self) -> CuResult<#application_name> {
+                        #application_name::new(
+                            self.clock
+                                .ok_or(CuError::from("Clock missing from builder"))?,
+                            self.unified_logger
+                                .ok_or(CuError::from("Unified logger missing from builder"))?,
+                            self.config_override,
+                            #builder_build_sim_callback_arg
+                        )
+                    }
                 }
+            })
+        } else {
+            // in no-std the user has to contruct that manually anyway so don't make any helper here.
+            None
+        };
 
-                #builder_sim_callback_method
+        let ids = task_specs.ids;
 
-                #[allow(dead_code)]
-                pub fn build(self) -> CuResult<#application_name> {
-                    #application_name::new(
-                        self.clock
-                            .ok_or(CuError::from("Clock missing from builder"))?,
-                        self.unified_logger
-                            .ok_or(CuError::from("Unified logger missing from builder"))?,
-                        self.config_override,
-                        #builder_build_sim_callback_arg
-                    )
+        let sim_imports = if sim_mode {
+            Some(quote! {
+                use cu29::simulation::SimOverride;
+                use cu29::simulation::CuTaskCallbackState;
+                use cu29::simulation::CuSimSrcTask;
+                use cu29::simulation::CuSimSinkTask;
+                use cu29::simulation::CuSimTask;
+                use cu29::prelude::app::CuSimApplication;
+            })
+        } else {
+            None
+        };
+
+        let sim_tasks = if sim_mode {
+            Some(quote! {
+                // This is the variation with stubs for the sources and sinks in simulation mode.
+                // Not used if the used doesn't generate Sim.
+                pub type CuSimTasks = #task_types_tuple_sim;
+            })
+        } else {
+            None
+        };
+
+        let sim_tasks_instanciator = if sim_mode {
+            Some(quote! {
+                pub fn tasks_instanciator_sim(all_instances_configs: Vec<Option<&ComponentConfig>>, _threadpool: Arc<ThreadPool>) -> CuResult<CuSimTasks> {
+                    Ok(( #(#task_sim_instances_init_code),*, ))
+            }})
+        } else {
+            None
+        };
+
+        let tasks_instanciator = if std {
+            quote! {
+                pub fn tasks_instanciator<'c>(all_instances_configs: Vec<Option<&'c ComponentConfig>>, threadpool: Arc<ThreadPool>) -> CuResult<CuTasks> {
+                    Ok(( #(#task_instances_init_code),*, ))
+                }
+            }
+        } else {
+            // no thread pool in the no-std impl
+            quote! {
+                pub fn tasks_instanciator<'c>(all_instances_configs: Vec<Option<&'c ComponentConfig>>) -> CuResult<CuTasks> {
+                    Ok(( #(#task_instances_init_code),*, ))
                 }
             }
         };
 
-        let ids = task_specs.ids;
+        let std_dep_imports = if std {
+            quote! {
+                 use cu29::rayon::ThreadPool;
+                 use std::sync::Arc;
+                 use std::sync::Mutex;
+                 use cu29::cuasynctask::CuAsyncTask;
+                 use cu29::curuntime::CopperContext;
+                 use cu29::prelude::UnifiedLoggerWrite;
+            }
+        } else {
+            quote! {
+                use alloc::sync::Arc;
+                use core::sync::atomic::{AtomicBool, Ordering};
+                use spin::Mutex;
+            }
+        };
+
         // Convert the modified struct back into a TokenStream
         let mission_mod_tokens = quote! {
             mod #mission_mod {
@@ -1500,14 +1641,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::bincode::de::Decoder;
                 use cu29::bincode::de::DecoderImpl;
                 use cu29::bincode::error::DecodeError;
-                use cu29::rayon::ThreadPool;
                 use cu29::clock::RobotClock;
                 use cu29::config::CuConfig;
                 use cu29::config::ComponentConfig;
-                use cu29::cuasynctask::CuAsyncTask;
                 use cu29::curuntime::CuRuntime;
                 use cu29::curuntime::KeyFrame;
-                use cu29::curuntime::CopperContext;
                 use cu29::CuResult;
                 use cu29::CuError;
                 use cu29::cutask::CuSrcTask;
@@ -1522,15 +1660,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::prelude::app::CuApplication;
                 use cu29::prelude::debug;
                 use cu29::prelude::stream_write;
-                use cu29::prelude::UnifiedLoggerWrite;
                 use cu29::prelude::UnifiedLogType;
-                use std::sync::Arc;
-                use std::sync::Mutex;
-                use std::sync::atomic::{AtomicBool, Ordering};
+                use cu29::prelude::UnifiedLogWrite;
 
-                // Not used if the used doesn't generate Sim.
-                #[allow(unused_imports)]
-                use cu29::prelude::app::CuSimApplication;
+                #std_dep_imports
+
+                #sim_imports
 
                 // Not used if a monitor is present
                 #[allow(unused_imports)]
@@ -1541,25 +1676,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 // CuList is a CopperList with the list of all the messages types as msgs.
                 pub type CuTasks = #task_types_tuple;
 
-                // This is the variation with stubs for the sources and sinks in simulation mode.
-                // Not used if the used doesn't generate Sim.
-                #[allow(dead_code)]
-                pub type CuSimTasks = #task_types_tuple_sim;
+                #sim_tasks
+                #sim_support
+                #sim_tasks_instanciator
 
                 pub const TASKS_IDS: &'static [&'static str] = &[#( #ids ),*];
 
                 #culist_support
-
-                #sim_support
-
-                pub fn tasks_instanciator<'c>(all_instances_configs: Vec<Option<&'c ComponentConfig>>, threadpool: Arc<ThreadPool>) -> CuResult<CuTasks> {
-                    Ok(( #(#task_instances_init_code),*, ))
-                }
-
-                #[allow(dead_code)]
-                pub fn tasks_instanciator_sim(all_instances_configs: Vec<Option<&ComponentConfig>>, _threadpool: Arc<ThreadPool>) -> CuResult<CuSimTasks> {
-                    Ok(( #(#task_sim_instances_init_code),*, ))
-                }
+                #tasks_instanciator
 
                 pub fn monitor_instanciator(config: &CuConfig) -> #monitor_type {
                     #monitor_type::new(config, #mission_mod::TASKS_IDS).expect("Failed to create the given monitor.")
@@ -1570,6 +1694,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 #application_impl
 
+                #std_application_impl
+
                 #application_builder
             }
 
@@ -1578,13 +1704,20 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     }
 
     let default_application_tokens = if all_missions.contains_key("default") {
+        let default_builder = if std {
+            Some(quote! {
+                // you can bypass the builder and not use it
+                #[allow(unused_imports)]
+                use default::#builder_name;
+            })
+        } else {
+            None
+        };
         quote! {
-        // you can bypass the builder and not use it
-        #[allow(unused_imports)]
-        use default::#builder_name;
+            #default_builder
 
-        #[allow(unused_imports)]
-        use default::#application_name;
+            #[allow(unused_imports)]
+            use default::#application_name;
         }
     } else {
         quote!() // do nothing
@@ -1697,7 +1830,7 @@ impl CuTaskSpecSet {
                 });
                 if background {
                     if let Some(output_type) = output_type {
-                        parse_quote!(cu29::cuasynctask::CuAsyncTask<#name_type, #output_type>)
+                        parse_quote!(CuAsyncTask<#name_type, #output_type>)
                     } else {
                         panic!("{name}: If a task is background, it has to have an output");
                     }
@@ -1717,7 +1850,7 @@ impl CuTaskSpecSet {
                 });
                 if background {
                     if let Some(output_type) = output_type {
-                        parse_quote!(cu29::cuasynctask::CuAsyncTask::<#name_type, #output_type>)
+                        parse_quote!(CuAsyncTask::<#name_type, #output_type>)
                     } else {
                         panic!("{name}: If a task is background, it has to have an output");
                     }

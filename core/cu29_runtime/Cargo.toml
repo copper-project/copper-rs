@@ -45,7 +45,7 @@ tempfile = { workspace = true, optional = true }         # only used in CLI for 
 object-pool = { version = "0.6", optional = true }  # used for large object pooling, this will never happen in no-std
 
 # no std only dependencies
-spin = { version = "0.10" } # should be removed when std is on, but cargo is bad at negative features
+spin = { workspace = true } # should be removed when std is on, but cargo is bad at negative features
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 cudarc = { version = "0.17", optional = true, features = ["cuda-version-from-build-system"] }

@@ -15,7 +15,7 @@ repository.workspace = true
 proc-macro = true
 
 [dependencies]
-cu29-runtime = { workspace = true }
+cu29-runtime = { workspace = true, features = ["std"] }
 cu29-traits = { workspace = true }
 convert_case = "0.8"
 itertools = "0.14"
@@ -34,7 +34,8 @@ cu29 = { workspace = true } # needed for compile_fail tests
 serde = { workspace = true } # needed for compile_fail tests
 
 [features]
-default = []
+default = ["std"]
 # enables a more verbose build log showing the code generation.
 macro_debug = ["cu29-runtime/macro_debug"]
+std = ["cu29-traits/std", "cu29-unifiedlog/std"]
 

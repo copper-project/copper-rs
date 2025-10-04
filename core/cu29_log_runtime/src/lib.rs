@@ -170,18 +170,27 @@ pub fn log(entry: &mut CuLogEntry) -> CuResult<()> {
 /// This version of log is only compiled in debug mode
 /// This allows a normal logging framework to be bridged.
 #[cfg(debug_assertions)]
-#[cfg(feature = "std")]
 pub fn log_debug_mode(
     entry: &mut CuLogEntry,
-    format_str: &str, // this is the missing info at runtime.
-    param_names: &[&str],
+    _format_str: &str, // this is the missing info at runtime.
+    _param_names: &[&str],
 ) -> CuResult<()> {
     log(entry)?;
 
+    // and the bridging is only available in std.
+    #[cfg(feature = "std")]
+    extra_log(entry, _format_str, _param_names)?;
+
+    Ok(())
+}
+
+#[cfg(feature = "std")]
+fn extra_log(entry: &mut CuLogEntry, format_str: &str, param_names: &[&str]) -> CuResult<()> {
     let guarded_logger = EXTRA_TEXT_LOGGER.read().unwrap();
     if guarded_logger.is_none() {
         return Ok(());
     }
+
     if let Some(logger) = guarded_logger.as_ref() {
         let fstr = format_str.to_string();
         // transform the slice into a hashmap
@@ -229,7 +238,6 @@ pub fn log_debug_mode(
     }
     Ok(())
 }
-
 // This is an adaptation of the Iowriter from bincode.
 
 #[cfg(feature = "std")]
