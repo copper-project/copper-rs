@@ -47,9 +47,6 @@ jobs:
         if: runner.os == 'Windows'
         uses: Cyberboss/install-winget@v1
 
-      - name: Check formatting
-        run: cargo +stable fmt --all -- --check
-
       - name: Free Disk Space (Ubuntu)
         if: runner.os == 'Linux'
         uses: jlumbroso/free-disk-space@main
@@ -205,10 +202,30 @@ jobs:
           cd templates/test_project
           cargo +stable build
   typos:
-    name: Typos Check
+    name: Typos & Format Check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: crate-ci/typos@master
         with:
           config: ./.config/_typos.toml
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Check formatting
+        run: cargo +stable fmt --all -- --check
+
+  embedded:
+    name: CI for embeddded targets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustc,rustfmt
+      - name: Install latest nextest
+        uses: taiki-e/install-action@nextest
+      - name: Check compilation with no-std
+        run: cargo +stable build --no-default-features
+      - name: Unit tests with no-std
+        run: cargo +stable nextest run --no-default-features
