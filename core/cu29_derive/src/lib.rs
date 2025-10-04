@@ -1179,6 +1179,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             None
         };
 
+        let app_trait = if sim_mode {
+            quote!(CuSimApplication)
+        } else {
+            quote!(CuApplication)
+        };
+
         let sim_callback_on_new_calls = task_specs.ids.iter().enumerate().map(|(i, id)| {
             let enum_name = config_id_to_enum(id);
             let enum_ident = Ident::new(&enum_name, Span::call_site());
@@ -1214,16 +1220,15 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     debug!("CuConfig: Reading configuration from file: {}", config_filename);
                     cu29::config::read_configuration(config_filename)?
                 } else {
-                    let original_config = Self::get_original_config();
-                    debug!("CuConfig: Using the original configuration the project was compiled with: {}", original_config);
+                    let original_config = <Self as #app_trait<L>>::get_original_config();
+                    debug!("CuConfig: Using the original configuration the project was compiled with: {}", &original_config);
                     cu29::config::read_configuration_str(original_config, None)?
                 };
             }
         } else {
             quote! {
                 // Only the original config is available in no-std
-                // let original_config = Self::get_original_config();
-                let original_config = <Self as CuApplication<L>>::get_original_config();
+                let original_config = <Self as #app_trait<L>>::get_original_config();
                 debug!("CuConfig: Using the original configuration the project was compiled with: {}", &original_config);
                 let config = cu29::config::read_configuration_str(original_config, None)?;
             }
@@ -1306,10 +1311,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 #kill_handler
 
-                <Self as CuApplication<L>>::start_all_tasks(self, #sim_callback_arg)?;
+                <Self as #app_trait<L>>::start_all_tasks(self, #sim_callback_arg)?;
                 let result = loop  {
                     let iter_start = self.copper_runtime.clock.now();
-                    let result = <Self as CuApplication<L>>::run_one_iteration(self, #sim_callback_arg);
+                    let result = <Self as #app_trait<L>>::run_one_iteration(self, #sim_callback_arg);
 
                     if let Some(rate) = self.copper_runtime.runtime_config.rate_target_hz {
                         let period = 1_000_000_000u64 / rate;
@@ -1326,7 +1331,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 if result.is_err() {
                     error!("A task errored out: {}", &result);
                 }
-                <Self as CuApplication<L>>::stop_all_tasks(self, #sim_callback_arg)?;
+                <Self as #app_trait<L>>::stop_all_tasks(self, #sim_callback_arg)?;
                 result
             }
         };
@@ -1344,7 +1349,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         };
 
         let app_impl_decl = if sim_mode {
-            quote!(impl CuSimApplication<UnifiedLoggerWrite> for #application_name)
+            quote!(impl<L: UnifiedLogWrite + 'static> CuSimApplication<L> for #application_name)
         } else {
             quote!(impl<L: UnifiedLogWrite + 'static> CuApplication<L> for #application_name)
         };
@@ -1490,24 +1495,42 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         };
 
         // backward compat on std non-parameterized impl.
-        let std_application_impl = if std {
+        let std_application_impl = if sim_mode {
+            // sim mode
             Some(quote! {
                         impl #application_name {
-                pub fn start_all_tasks(&mut self) -> CuResult<()> {
-                    <Self as CuApplication<UnifiedLoggerWrite>>::start_all_tasks(self)
-                }
-                pub fn run_one_iteration(&mut self) -> CuResult<()> {
-                    <Self as CuApplication<UnifiedLoggerWrite>>::run_one_iteration(self)
-                }
-                pub fn run(&mut self) -> CuResult<()> {
-                    <Self as CuApplication<UnifiedLoggerWrite>>::run(self)
-                }
-                pub fn stop_all_tasks(&mut self) -> CuResult<()> {
-                    <Self as CuApplication<UnifiedLoggerWrite>>::stop_all_tasks(self)
-                }
-            }})
+                            pub fn start_all_tasks(&mut self, sim_callback: &mut impl FnMut(SimStep) -> SimOverride) -> CuResult<()> {
+                                <Self as #app_trait<UnifiedLoggerWrite>>::start_all_tasks(self, sim_callback)
+                            }
+                            pub fn run_one_iteration(&mut self, sim_callback: &mut impl FnMut(SimStep) -> SimOverride) -> CuResult<()> {
+                                <Self as #app_trait<UnifiedLoggerWrite>>::run_one_iteration(self, sim_callback)
+                            }
+                            pub fn run(&mut self, sim_callback: &mut impl FnMut(SimStep) -> SimOverride) -> CuResult<()> {
+                                <Self as #app_trait<UnifiedLoggerWrite>>::run(self, sim_callback)
+                            }
+                            pub fn stop_all_tasks(&mut self, sim_callback: &mut impl FnMut(SimStep) -> SimOverride) -> CuResult<()> {
+                                <Self as #app_trait<UnifiedLoggerWrite>>::stop_all_tasks(self, sim_callback)
+                            }
+                        }
+            })
         } else {
-            None
+            // std, no-std and normal mode
+            Some(quote! {
+                        impl #application_name {
+                            pub fn start_all_tasks(&mut self) -> CuResult<()> {
+                                <Self as #app_trait<UnifiedLoggerWrite>>::start_all_tasks(self)
+                            }
+                            pub fn run_one_iteration(&mut self) -> CuResult<()> {
+                                <Self as #app_trait<UnifiedLoggerWrite>>::run_one_iteration(self)
+                            }
+                            pub fn run(&mut self) -> CuResult<()> {
+                                <Self as #app_trait<UnifiedLoggerWrite>>::run(self)
+                            }
+                            pub fn stop_all_tasks(&mut self) -> CuResult<()> {
+                                <Self as #app_trait<UnifiedLoggerWrite>>::stop_all_tasks(self)
+                            }
+                        }
+            })
         };
 
         let application_builder = if std {
@@ -1571,7 +1594,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::simulation::CuTaskCallbackState;
                 use cu29::simulation::CuSimSrcTask;
                 use cu29::simulation::CuSimSinkTask;
-                use cu29::simulation::CuSimTask;
                 use cu29::prelude::app::CuSimApplication;
             })
         } else {
@@ -1620,6 +1642,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                  use cu29::cuasynctask::CuAsyncTask;
                  use cu29::curuntime::CopperContext;
                  use cu29::prelude::UnifiedLoggerWrite;
+                 use std::sync::atomic::{AtomicBool, Ordering};
             }
         } else {
             quote! {
