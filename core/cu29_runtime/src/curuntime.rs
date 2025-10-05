@@ -12,8 +12,10 @@ use cu29_traits::CuResult;
 use cu29_traits::WriteStream;
 use cu29_traits::{CopperListTuple, CuError};
 
+use bincode::enc::write::{SizeWriter, SliceWriter};
+use bincode::enc::EncoderImpl;
 use bincode::error::EncodeError;
-use bincode::{encode_into_slice, Decode, Encode};
+use bincode::{Decode, Encode};
 use core::fmt::{Debug, Formatter};
 use petgraph::prelude::*;
 use petgraph::visit::VisitMap;
@@ -200,8 +202,17 @@ impl KeyFrame {
 
     /// We need to be able to accumulate tasks to the serialization as they are executed after the step.
     fn add_frozen_task(&mut self, task: &impl Freezable) -> Result<usize, EncodeError> {
-        let config = bincode::config::standard();
-        encode_into_slice(BincodeAdapter(task), &mut self.serialized_tasks, config)
+        let cfg = bincode::config::standard();
+        let mut sizer = EncoderImpl::<_, _>::new(SizeWriter::default(), cfg);
+        BincodeAdapter(task).encode(&mut sizer)?;
+        let need = sizer.into_writer().bytes_written as usize;
+
+        let start = self.serialized_tasks.len();
+        self.serialized_tasks.resize(start + need, 0);
+        let mut enc =
+            EncoderImpl::<_, _>::new(SliceWriter::new(&mut self.serialized_tasks[start..]), cfg);
+        BincodeAdapter(task).encode(&mut enc)?;
+        Ok(need)
     }
 }
 
