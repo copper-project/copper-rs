@@ -1630,7 +1630,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 }
             })
         } else {
-            // in no-std the user has to contruct that manually anyway so don't make any helper here.
+            // in no-std the user has to construct that manually anyway so don't make any helper here.
             None
         };
 
