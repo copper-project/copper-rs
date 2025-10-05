@@ -216,7 +216,7 @@ jobs:
         run: cargo +stable fmt --all -- --check
 
   embedded:
-    name: CI for embeddded targets
+    name: CI for embedded targets
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

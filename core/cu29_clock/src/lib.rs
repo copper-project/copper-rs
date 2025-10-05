@@ -652,14 +652,14 @@ pub struct RobotClockMock(Arc<AtomicU64>);
 impl RobotClockMock {
     pub fn increment(&self, amount: CuDuration) {
         let Self(mock_state) = self;
-        mock_state.fetch_add(amount.as_nanos() as u64, Ordering::Relaxed);
+        mock_state.fetch_add(amount.as_nanos(), Ordering::Relaxed);
     }
 
     /// Decrements the time by the given amount.
     /// Be careful this breaks the monotonicity of the clock.
     pub fn decrement(&self, amount: CuDuration) {
         let Self(mock_state) = self;
-        mock_state.fetch_sub(amount.as_nanos() as u64, Ordering::Relaxed);
+        mock_state.fetch_sub(amount.as_nanos(), Ordering::Relaxed);
     }
 
     /// Gets the current value of time.
