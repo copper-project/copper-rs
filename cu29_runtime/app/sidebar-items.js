@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"trait":["CuApplication","CuSimApplication"]};
+window.SIDEBAR_ITEMS = {"trait":["CuApplication","CuSimApplication","CuStdApplication"]};
