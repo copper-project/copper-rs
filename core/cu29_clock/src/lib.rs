@@ -974,18 +974,18 @@ mod tests {
 
         // Test increment
         mock.increment(CuDuration::from_secs(10));
-        assert_eq!(clock.now(), CuDuration::from_secs(10).into());
+        assert_eq!(clock.now(), CuDuration::from_secs(10));
 
         // Test decrement (unusual but supported)
         mock.decrement(CuDuration::from_secs(5));
-        assert_eq!(clock.now(), CuDuration::from_secs(5).into());
+        assert_eq!(clock.now(), CuDuration::from_secs(5));
 
         // Test setting absolute value
         mock.set_value(30_000_000_000); // 30 seconds in ns
-        assert_eq!(clock.now(), CuDuration::from_secs(30).into());
+        assert_eq!(clock.now(), CuDuration::from_secs(30));
 
         // Test that getting the time from the mock directly works
-        assert_eq!(mock.now(), CuDuration::from_secs(30).into());
+        assert_eq!(mock.now(), CuDuration::from_secs(30));
         assert_eq!(mock.value(), 30_000_000_000);
     }
 
@@ -1035,6 +1035,6 @@ mod tests {
 
         // Advance the mock clock and check that the provider's clock also advances
         mock.increment(CuDuration::from_secs(5));
-        assert_eq!(provider_clock.now(), CuDuration::from_secs(5).into());
+        assert_eq!(provider_clock.now(), CuDuration::from_secs(5));
     }
 }

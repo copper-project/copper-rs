@@ -30,6 +30,7 @@ mod imp {
     pub use std::io::{BufWriter, Write};
     pub use std::path::PathBuf;
     pub use std::sync::{Mutex, OnceLock};
+
     #[cfg(debug_assertions)]
     pub use {cu29_log::format_logline, std::collections::HashMap, std::sync::RwLock};
 }
@@ -54,6 +55,7 @@ type WriterPair = (Mutex<LogWriter>, RobotClock);
 static WRITER: OnceLock<WriterPair> = OnceLock::new();
 
 #[cfg(debug_assertions)]
+#[cfg(feature = "std")]
 pub static EXTRA_TEXT_LOGGER: RwLock<Option<Box<dyn Log + 'static>>> = RwLock::new(None);
 
 pub struct NullLog;
@@ -184,6 +186,7 @@ pub fn log_debug_mode(
     Ok(())
 }
 
+#[cfg(debug_assertions)]
 #[cfg(feature = "std")]
 fn extra_log(entry: &mut CuLogEntry, format_str: &str, param_names: &[&str]) -> CuResult<()> {
     let guarded_logger = EXTRA_TEXT_LOGGER.read().unwrap();
