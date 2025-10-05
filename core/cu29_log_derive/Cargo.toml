@@ -23,9 +23,12 @@ syn = { workspace = true }
 quote = { workspace = true }
 
 [features]
-default = []
+default = ["std"]
+std = ["cu29-log/std"]
+
 # enables a more verbose build log showing the index generation.
 macro_debug = ["cu29-intern-strs/macro_debug"]
+
 # Log level features to control compile-time log level filtering
 log-level-debug = []
 log-level-info = []

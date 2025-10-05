@@ -1,7 +1,7 @@
 [package]
 name = "cu-min-nostd"
 default-run = "cu-min-nostd"
-description = "This is a minimal example of a no_std application using cu29."
+description = "This is a minimal example/smoke test of a no_std application using cu29."
 
 version.workspace = true
 authors.workspace = true
@@ -12,15 +12,6 @@ categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
-[package.metadata.cargo-machete]
-ignored = [
-    "cu29-log",
-    "cu29-log-runtime",
-    "cu29-unifiedlog",
-    "cu-consolemon",
-    "copper-traits",
-]
-
 [[bin]]
 name = "cu-min-nostd"
 path = "src/main.rs"
@@ -28,10 +19,25 @@ path = "src/main.rs"
 [[bin]]
 name = "cu-min-nostd-logreader"
 path = "src/logreader.rs"
+required-features = ["std"]
 
 [dependencies]
+
 bincode = { workspace = true }
-cu29 = { workspace = true }
-cu29-helpers = { workspace = true }
-cu29-export = { workspace = true, features = ["python"] }
+# cu29 = { path = "../../core/cu29", default-features = false, features = ["macro_debug"] }  # needed for cargo-cubuild
+cu29 = { path = "../../core/cu29", default-features = false }  # default-features = false -> enables no-std for all cu29 dependencies
+cu29-helpers = { workspace = true, optional = true } # std only
 serde = { workspace = true }
+spin = { workspace = true }
+
+# host only
+cu29-export = { workspace = true, features = ["python"], optional = true }
+
+[features]
+default = ["std"]   # Compile with --no-default-features to target no_std
+std = [
+    "dep:cu29-helpers",
+    "dep:cu29-export",
+    "bincode/std",
+    "serde/std",
+]

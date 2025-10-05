@@ -19,6 +19,13 @@ mod imp {
 
 use imp::*;
 
+/// Convenience trait for CuApplication when it is just a std App
+#[cfg(feature = "std")]
+pub trait CuStdApplication: CuApplication<cu29_unifiedlog::UnifiedLoggerWrite> {}
+
+#[cfg(feature = "std")]
+impl<T> CuStdApplication for T where T: CuApplication<cu29_unifiedlog::UnifiedLoggerWrite> {}
+
 /// A trait that defines the structure and behavior of a CuApplication.
 ///
 /// CuApplication is the normal, running on robot version of an application and its runtime.
@@ -27,6 +34,7 @@ use imp::*;
 /// including configuration management, initialization, task execution, and runtime control. It is meant to be
 /// implemented by types that represent specific applications, providing them with unified control and execution features.
 ///
+/// This is the more generic version that allows you to specify a custom unified logger.
 pub trait CuApplication<L: UnifiedLogWrite + 'static> {
     /// Returns the original configuration as a string, typically loaded from a RON file.
     /// This configuration represents the default settings for the application before any overrides.

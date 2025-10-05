@@ -57,6 +57,12 @@ fn create_log_entry(input: TokenStream, level: CuLogLevel) -> TokenStream {
 
     let mut exprs_iter = exprs.iter();
 
+    #[cfg(not(feature = "std"))]
+    const STD: bool = false;
+
+    #[cfg(feature = "std")]
+    const STD: bool = true;
+
     let msg_expr = exprs_iter.next().expect("Expected at least one expression");
     let (index, _msg) = if let Expr::Lit(ExprLit {
         lit: Lit::Str(msg), ..
@@ -126,13 +132,21 @@ fn create_log_entry(input: TokenStream, level: CuLogLevel) -> TokenStream {
         }
     };
 
+    let error_handling = if STD {
+        Some(quote! {
+            if let Err(e) = r {
+                eprintln!("Warning: Failed to log: {}", e);
+                let backtrace = std::backtrace::Backtrace::capture();
+                eprintln!("{:?}", backtrace);
+            }
+        })
+    } else {
+        None
+    };
+
     let postfix = quote! {
         #log_stmt
-        if let Err(e) = r {
-            eprintln!("Warning: Failed to log: {}", e);
-            let backtrace = std::backtrace::Backtrace::capture();
-            eprintln!("{:?}", backtrace);
-        }
+        #error_handling
     };
 
     let expanded = quote! {

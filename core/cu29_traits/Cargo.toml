@@ -23,6 +23,5 @@ default = ["std"]
 std = [
     "cu29-clock/std",
     "compact_str/std",
-    "erased-serde/std",
     "serde/std"
 ]

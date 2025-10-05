@@ -216,7 +216,7 @@ jobs:
         run: cargo +stable fmt --all -- --check
 
   embedded:
-    name: CI for embeddded targets
+    name: CI for embedded targets
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -225,7 +225,12 @@ jobs:
           components: rustc,rustfmt
       - name: Install latest nextest
         uses: taiki-e/install-action@nextest
-      - name: Check compilation with no-std
+      - name: Check compilation of core with no-std
         run: cargo +stable build --no-default-features
-      - name: Unit tests with no-std
+      - name: Unit tests of core with no-std
         run: cargo +stable nextest run --no-default-features
+      - name: Compile an actual no-std example from Copper
+        run: cargo +stable build -p cu-min-nostd --no-default-features
+      - name: Clippy a no-std example
+        run: cargo +stable clippy -p cu-min-nostd --no-default-features
+

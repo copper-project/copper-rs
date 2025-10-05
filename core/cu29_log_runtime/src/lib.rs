@@ -14,7 +14,6 @@ mod imp {
     pub use alloc::boxed::Box;
     pub use spin::once::Once as OnceLock;
     pub use spin::Mutex;
-    pub use spin::RwLock;
 }
 
 #[cfg(feature = "std")]
@@ -30,6 +29,7 @@ mod imp {
     pub use std::io::{BufWriter, Write};
     pub use std::path::PathBuf;
     pub use std::sync::{Mutex, OnceLock};
+
     #[cfg(debug_assertions)]
     pub use {cu29_log::format_logline, std::collections::HashMap, std::sync::RwLock};
 }
@@ -54,6 +54,7 @@ type WriterPair = (Mutex<LogWriter>, RobotClock);
 static WRITER: OnceLock<WriterPair> = OnceLock::new();
 
 #[cfg(debug_assertions)]
+#[cfg(feature = "std")]
 pub static EXTRA_TEXT_LOGGER: RwLock<Option<Box<dyn Log + 'static>>> = RwLock::new(None);
 
 pub struct NullLog;
@@ -96,10 +97,8 @@ impl LoggerRuntime {
                 .unwrap();
         }
         #[cfg(debug_assertions)]
+        #[cfg(feature = "std")]
         if let Some(logger) = extra_text_logger {
-            #[cfg(not(feature = "std"))]
-            let mut extra_text_logger = EXTRA_TEXT_LOGGER.write();
-            #[cfg(feature = "std")]
             let mut extra_text_logger = EXTRA_TEXT_LOGGER.write().unwrap();
             *extra_text_logger = Some(Box::new(logger) as Box<dyn Log>);
         }
@@ -170,18 +169,28 @@ pub fn log(entry: &mut CuLogEntry) -> CuResult<()> {
 /// This version of log is only compiled in debug mode
 /// This allows a normal logging framework to be bridged.
 #[cfg(debug_assertions)]
-#[cfg(feature = "std")]
 pub fn log_debug_mode(
     entry: &mut CuLogEntry,
-    format_str: &str, // this is the missing info at runtime.
-    param_names: &[&str],
+    _format_str: &str, // this is the missing info at runtime.
+    _param_names: &[&str],
 ) -> CuResult<()> {
     log(entry)?;
 
+    // and the bridging is only available in std.
+    #[cfg(feature = "std")]
+    extra_log(entry, _format_str, _param_names)?;
+
+    Ok(())
+}
+
+#[cfg(debug_assertions)]
+#[cfg(feature = "std")]
+fn extra_log(entry: &mut CuLogEntry, format_str: &str, param_names: &[&str]) -> CuResult<()> {
     let guarded_logger = EXTRA_TEXT_LOGGER.read().unwrap();
     if guarded_logger.is_none() {
         return Ok(());
     }
+
     if let Some(logger) = guarded_logger.as_ref() {
         let fstr = format_str.to_string();
         // transform the slice into a hashmap
@@ -229,7 +238,6 @@ pub fn log_debug_mode(
     }
     Ok(())
 }
-
 // This is an adaptation of the Iowriter from bincode.
 
 #[cfg(feature = "std")]

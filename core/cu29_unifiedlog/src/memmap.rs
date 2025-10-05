@@ -6,121 +6,16 @@ use crate::{
     UnifiedLogWrite, MAIN_MAGIC, MAX_HEADER_SIZE, SECTION_MAGIC,
 };
 use bincode::config::standard;
-use bincode::error::EncodeError;
-use bincode::{decode_from_slice, encode_into_slice, Encode};
-use core::fmt::Formatter;
+use bincode::{decode_from_slice, encode_into_slice};
 use core::slice::from_raw_parts_mut;
-use cu29_traits::{CuError, CuResult, UnifiedLogType, WriteStream};
+use cu29_traits::{CuError, CuResult, UnifiedLogType};
 use memmap2::{Mmap, MmapMut};
-use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
 use std::io::Read;
 use std::mem::ManuallyDrop;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
 use std::{io, mem};
 use AllocatedSection::Section;
-
-/// A wrapper around a memory mapped file to write to.
-struct MmapStream<L: UnifiedLogWrite> {
-    entry_type: UnifiedLogType,
-    parent_logger: Arc<Mutex<L>>,
-    current_section: SectionHandle,
-    current_position: usize,
-    minimum_allocation_amount: usize,
-}
-
-impl<L: UnifiedLogWrite> MmapStream<L> {
-    fn new(
-        entry_type: UnifiedLogType,
-        parent_logger: Arc<Mutex<L>>,
-        minimum_allocation_amount: usize,
-    ) -> Self {
-        let section = parent_logger
-            .lock()
-            .expect("Could not lock a section at MmapStream creation")
-            .add_section(entry_type, minimum_allocation_amount);
-        Self {
-            entry_type,
-            parent_logger,
-            current_section: section,
-            current_position: 0,
-            minimum_allocation_amount,
-        }
-    }
-}
-
-impl<L: UnifiedLogWrite> Debug for MmapStream<L> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "MmapStream {{ entry_type: {:?}, current_position: {}, minimum_allocation_amount: {} }}", self.entry_type, self.current_position, self.minimum_allocation_amount)
-    }
-}
-
-impl<E: Encode, L: UnifiedLogWrite> WriteStream<E> for MmapStream<L> {
-    fn log(&mut self, obj: &E) -> CuResult<()> {
-        let dst = self.current_section.get_user_buffer();
-        let result = encode_into_slice(obj, dst, standard());
-        match result {
-            Ok(nb_bytes) => {
-                self.current_position += nb_bytes;
-                self.current_section.used += nb_bytes as u32;
-                Ok(())
-            }
-            Err(e) => match e {
-                EncodeError::UnexpectedEnd => {
-                    if let Ok(mut logger_guard) = self.parent_logger.lock() {
-                        logger_guard.flush_section(&mut self.current_section);
-                        self.current_section = logger_guard
-                            .add_section(self.entry_type, self.minimum_allocation_amount);
-
-                        let result = encode_into_slice(
-                            obj,
-                            self.current_section.get_user_buffer(),
-                            standard(),
-                        )
-                            .expect(
-                                "Failed to encode object in a newly minted section. Unrecoverable failure.",
-                            ); // If we fail just after creating a section, there is not much we can do, we need to bail.
-                        self.current_position += result;
-                        self.current_section.used += result as u32;
-                        Ok(())
-                    } else {
-                        // It will retry but at least not completely crash.
-                        Err(
-                            "Logger mutex poisoned while reporting EncodeError::UnexpectedEnd"
-                                .into(),
-                        )
-                    }
-                }
-                _ => {
-                    let err =
-                        <&str as Into<CuError>>::into("Unexpected error while encoding object.")
-                            .add_cause(e.to_string().as_str());
-                    Err(err)
-                }
-            },
-        }
-    }
-}
-
-impl<L: UnifiedLogWrite> Drop for MmapStream<L> {
-    fn drop(&mut self) {
-        if let Ok(mut logger_guard) = self.parent_logger.lock() {
-            logger_guard.flush_section(&mut self.current_section);
-        } else if !std::thread::panicking() {
-            eprintln!("⚠️ MmapStream::drop: logger mutex poisoned");
-        }
-    }
-}
-
-/// Create a new stream to write to the unifiedlogger.
-pub fn mmap_stream_write<E: Encode>(
-    logger: Arc<Mutex<MmapUnifiedLoggerWrite>>,
-    entry_type: UnifiedLogType,
-    minimum_allocation_amount: usize,
-) -> impl WriteStream<E> {
-    MmapStream::new(entry_type, logger.clone(), minimum_allocation_amount)
-}
 
 /// Holds the read or write side of the datalogger.
 pub enum MmapUnifiedLogger {
@@ -708,12 +603,16 @@ impl Read for UnifiedLoggerIOReader {
     }
 }
 
+#[cfg(feature = "std")]
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::stream_write;
     use bincode::de::read::SliceReader;
-    use bincode::{decode_from_reader, Decode};
+    use bincode::{decode_from_reader, Decode, Encode};
+    use cu29_traits::WriteStream;
     use std::path::PathBuf;
+    use std::sync::{Arc, Mutex};
     use tempfile::TempDir;
 
     const LARGE_SLAB: usize = 100 * 1024; // 100KB
@@ -780,7 +679,7 @@ mod tests {
         let (logger, _) = make_a_logger(&tmp_dir, LARGE_SLAB);
         {
             let _stream =
-                mmap_stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
+                stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
             assert_eq!(
                 logger
                     .lock()
@@ -811,7 +710,7 @@ mod tests {
     fn test_two_sections_self_cleaning_in_order() {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let (logger, _) = make_a_logger(&tmp_dir, LARGE_SLAB);
-        let s1 = mmap_stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
+        let s1 = stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
         assert_eq!(
             logger
                 .lock()
@@ -821,7 +720,7 @@ mod tests {
                 .len(),
             1
         );
-        let s2 = mmap_stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
+        let s2 = stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
         assert_eq!(
             logger
                 .lock()
@@ -854,7 +753,7 @@ mod tests {
     fn test_two_sections_self_cleaning_out_of_order() {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let (logger, _) = make_a_logger(&tmp_dir, LARGE_SLAB);
-        let s1 = mmap_stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
+        let s1 = stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
         assert_eq!(
             logger
                 .lock()
@@ -864,7 +763,7 @@ mod tests {
                 .len(),
             1
         );
-        let s2 = mmap_stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
+        let s2 = stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
         assert_eq!(
             logger
                 .lock()
@@ -898,8 +797,7 @@ mod tests {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let (logger, f) = make_a_logger(&tmp_dir, LARGE_SLAB);
         {
-            let mut stream =
-                mmap_stream_write(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
+            let mut stream = stream_write(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
             stream.log(&1u32).unwrap();
             stream.log(&2u32).unwrap();
             stream.log(&3u32).unwrap();
@@ -946,7 +844,7 @@ mod tests {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let (logger, f) = make_a_logger(&tmp_dir, LARGE_SLAB);
         {
-            let mut stream = mmap_stream_write(logger.clone(), UnifiedLogType::CopperList, 1024);
+            let mut stream = stream_write(logger.clone(), UnifiedLogType::CopperList, 1024);
             let cl0 = CopperList {
                 state: CopperListStateMock::Free,
                 payload: (1u32, 2u32, 3u32),
@@ -985,7 +883,7 @@ mod tests {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let (logger, f) = make_a_logger(&tmp_dir, SMALL_SLAB);
         {
-            let mut stream = mmap_stream_write(logger.clone(), UnifiedLogType::CopperList, 1024);
+            let mut stream = stream_write(logger.clone(), UnifiedLogType::CopperList, 1024);
             let cl0 = CopperList {
                 state: CopperListStateMock::Free,
                 payload: (1u32, 2u32, 3u32),
