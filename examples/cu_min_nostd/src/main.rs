@@ -1,21 +1,33 @@
-#!no_std
+#![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(not(feature = "std"))]
 extern crate alloc;
 
 pub mod tasks;
 
-use alloc::sync::Arc;
-use bincode::config::standard;
-use bincode::encode_into_slice;
 use cu29::prelude::*;
-use spin::Mutex;
+
+#[cfg(not(feature = "std"))]
+mod imp {
+    pub use alloc::boxed::Box;
+    pub use alloc::sync::Arc;
+    pub use alloc::vec;
+    pub use bincode::config::standard;
+    pub use bincode::encode_into_slice;
+    pub use spin::Mutex;
+}
+
+#[cfg(not(feature = "std"))]
+use imp::*;
 
 #[copper_runtime(config = "copperconfig.ron")]
 struct MinimalNoStdApp {}
 
 // This needs to be implemented depending on the embedded platform (emmc, sdcard, etc ...)
+#[cfg(not(feature = "std"))]
 struct MyEmbeddedLogger {}
 
+#[cfg(not(feature = "std"))]
 impl UnifiedLogWrite for MyEmbeddedLogger {
     fn add_section(
         &mut self,
@@ -54,9 +66,43 @@ impl UnifiedLogWrite for MyEmbeddedLogger {
     }
 }
 
+#[cfg(not(feature = "std"))]
 fn main() {
+    // the no std version
     let clock = RobotClock::new();
     let writer = Arc::new(Mutex::new(MyEmbeddedLogger {}));
     let mut app = MinimalNoStdApp::new(clock, writer).unwrap();
     let _ = <MinimalNoStdApp as CuApplication<MyEmbeddedLogger>>::run(&mut app);
+}
+
+#[cfg(feature = "std")]
+fn main() {
+    // the standard version
+    use cu29_helpers::basic_copper_setup;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    const SLAB_SIZE: Option<usize> = Some(4096 * 1024 * 1024);
+
+    let logger_path = "logs/nostd.copper";
+    if let Some(parent) = Path::new(logger_path).parent() {
+        if !parent.exists() {
+            fs::create_dir_all(parent).expect("Failed to create logs directory");
+        }
+    }
+
+    let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), SLAB_SIZE, true, None)
+        .expect("Failed to setup logger.");
+    let mut application = MinimalNoStdAppBuilder::new()
+        .with_context(&copper_ctx)
+        .build()
+        .expect("Failed to create application.");
+
+    let outcome = application.run();
+    match outcome {
+        Ok(_result) => {}
+        Err(error) => {
+            debug!("Application Ended: {}", error)
+        }
+    }
 }

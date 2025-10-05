@@ -42,6 +42,12 @@ fn return_error(msg: String) -> TokenStream {
 /// It will create a new type called CuStampedDataSet you can pass to the log reader for decoding:
 #[proc_macro]
 pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
+    #[cfg(feature = "std")]
+    let std = true;
+
+    #[cfg(not(feature = "std"))]
+    let std = false;
+
     let config = parse_macro_input!(config_path_lit as LitStr).value();
     if !std::path::Path::new(&config_full_path(&config)).exists() {
         return return_error(format!(
@@ -91,6 +97,20 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
 
     let support = gen_culist_support(&runtime_plan, &taskid_order, &all_tasks_member_ids);
 
+    let extra_imports = if !std {
+        quote! {
+            use core::fmt::Debug;
+            use core::fmt::Formatter;
+            use core::fmt::Result as FmtResult;
+        }
+    } else {
+        quote! {
+            use std::fmt::Debug;
+            use std::fmt::Formatter;
+            use std::fmt::Result as FmtResult;
+        }
+    };
+
     let with_uses = quote! {
         mod cumsgs {
             use cu29::bincode::Encode;
@@ -109,6 +129,7 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
             use cu29::prelude::CuMsgMetadata;
             use cu29::prelude::CuListZeroedInit;
             use cu29::prelude::CuCompactString;
+            #extra_imports
             #support
         }
         use cumsgs::CuStampedDataSet;
@@ -1244,6 +1265,45 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             None
         };
 
+        let run_loop = if std {
+            quote! {
+                loop  {
+                    let iter_start = self.copper_runtime.clock.now();
+                    let result = <Self as #app_trait<L>>::run_one_iteration(self, #sim_callback_arg);
+
+                    if let Some(rate) = self.copper_runtime.runtime_config.rate_target_hz {
+                        let period: CuDuration = (1_000_000_000u64 / rate).into();
+                        let elapsed = self.copper_runtime.clock.now() - iter_start;
+                        if elapsed < period {
+                            std::thread::sleep(std::time::Duration::from_nanos(period.as_nanos() - elapsed.as_nanos()));
+                        }
+                    }
+
+                    if STOP_FLAG.load(Ordering::SeqCst) || result.is_err() {
+                        break result;
+                    }
+                }
+            }
+        } else {
+            quote! {
+                loop  {
+                    let iter_start = self.copper_runtime.clock.now();
+                    let result = <Self as #app_trait<L>>::run_one_iteration(self, #sim_callback_arg);
+                    if let Some(rate) = self.copper_runtime.runtime_config.rate_target_hz {
+                        let period: CuDuration = (1_000_000_000u64 / rate).into();
+                        let elapsed = self.copper_runtime.clock.now() - iter_start;
+                        if elapsed < period {
+                            busy_wait_for(period - elapsed);
+                        }
+                    }
+
+                    if STOP_FLAG.load(Ordering::SeqCst) || result.is_err() {
+                        break result;
+                    }
+                }
+            }
+        };
+
         #[cfg(feature = "macro_debug")]
         eprintln!("[build the run methods]");
         let run_methods = quote! {
@@ -1312,22 +1372,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #kill_handler
 
                 <Self as #app_trait<L>>::start_all_tasks(self, #sim_callback_arg)?;
-                let result = loop  {
-                    let iter_start = self.copper_runtime.clock.now();
-                    let result = <Self as #app_trait<L>>::run_one_iteration(self, #sim_callback_arg);
+                let result = #run_loop;
 
-                    if let Some(rate) = self.copper_runtime.runtime_config.rate_target_hz {
-                        let period = 1_000_000_000u64 / rate;
-                        let elapsed = self.copper_runtime.clock.now() - iter_start;
-                        if elapsed.as_nanos() < period {
-                            std::thread::sleep(std::time::Duration::from_nanos(period - elapsed.as_nanos()));
-                        }
-                    }
-
-                    if STOP_FLAG.load(Ordering::SeqCst) || result.is_err() {
-                        break result;
-                    }
-                };
                 if result.is_err() {
                     error!("A task errored out: {}", &result);
                 }
@@ -1375,7 +1421,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                     // For simple cases we can say the section is just a bunch of Copper Lists.
                     // But we can now have allocations outside of it so we can override it from the config.
-                    let mut default_section_size = std::mem::size_of::<super::#mission_mod::CuList>() * 64;
+                    let mut default_section_size = size_of::<super::#mission_mod::CuList>() * 64;
                     // Check if there is a logging configuration with section_size_mib
                     if let Some(section_size_mib) = config.logging.as_ref().and_then(|l| l.section_size_mib) {
                         // Convert MiB to bytes
@@ -1513,8 +1559,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             }
                         }
             })
-        } else {
-            // std, no-std and normal mode
+        } else if std {
+            // std and normal mode
             Some(quote! {
                         impl #application_name {
                             pub fn start_all_tasks(&mut self) -> CuResult<()> {
@@ -1531,6 +1577,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             }
                         }
             })
+        } else {
+            None // if no-std, let the user figure our the correct logger type they need to provide anyway.
         };
 
         let application_builder = if std {
@@ -1634,20 +1682,28 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         };
 
-        let std_dep_imports = if std {
+        let imports = if std {
             quote! {
-                 use cu29::rayon::ThreadPool;
-                 use std::sync::Arc;
-                 use std::sync::Mutex;
-                 use cu29::cuasynctask::CuAsyncTask;
-                 use cu29::curuntime::CopperContext;
-                 use cu29::prelude::UnifiedLoggerWrite;
-                 use std::sync::atomic::{AtomicBool, Ordering};
+                use cu29::rayon::ThreadPool;
+                use cu29::cuasynctask::CuAsyncTask;
+                use cu29::curuntime::CopperContext;
+                use cu29::prelude::UnifiedLoggerWrite;
+                use std::fmt::{Debug, Formatter};
+                use std::fmt::Result as FmtResult;
+                use std::mem::size_of;
+                use std::sync::Arc;
+                use std::sync::atomic::{AtomicBool, Ordering};
+                use std::sync::Mutex;
             }
         } else {
             quote! {
                 use alloc::sync::Arc;
+                use alloc::string::String;
+                use alloc::string::ToString;
                 use core::sync::atomic::{AtomicBool, Ordering};
+                use core::fmt::{Debug, Formatter};
+                use core::fmt::Result as FmtResult;
+                use core::mem::size_of;
                 use spin::Mutex;
             }
         };
@@ -1686,7 +1742,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::prelude::UnifiedLogType;
                 use cu29::prelude::UnifiedLogWrite;
 
-                #std_dep_imports
+                #imports
 
                 #sim_imports
 
@@ -2026,8 +2082,8 @@ fn build_culist_tuple_debug(all_msgs_types_in_culist_order: &[Type]) -> ItemImpl
         .collect();
 
     parse_quote! {
-        impl std::fmt::Debug for CuStampedDataSet {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        impl Debug for CuStampedDataSet {
+            fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
                 f.debug_tuple("CuStampedDataSet")
                     #(#debug_fields)*
                     .finish()

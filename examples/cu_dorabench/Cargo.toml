@@ -31,7 +31,8 @@ path = "src/logreader.rs"
 
 [dependencies]
 bincode = { workspace = true }
-cu29 = { workspace = true, features = ["macro_debug"] }
+# cu29 = { workspace = true, features = ["macro_debug"] } # needed for cargo cubuild
+cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
 cu29-export = { workspace = true, features = ["python"] }
 serde = { workspace = true }

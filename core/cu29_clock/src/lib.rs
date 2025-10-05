@@ -22,8 +22,6 @@ use std::ops::{AddAssign, Div, Mul, SubAssign};
 use std::sync::atomic::{AtomicU64, Ordering};
 #[cfg(feature = "std")]
 use std::sync::Arc;
-#[cfg(feature = "std")]
-use std::time::Duration;
 
 #[cfg(not(feature = "std"))]
 use alloc::format;
@@ -164,12 +162,14 @@ mod platform {
 
 /// High-precision instant in time, represented as nanoseconds since an arbitrary epoch
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Instant(u64);
+pub struct CuInstant(u64);
 
-impl Instant {
+pub type Instant = CuInstant; // Backward compatibility
+
+impl CuInstant {
     pub fn now() -> Self {
         let raw_counter = platform::read_raw_counter();
-        Instant(platform::counter_to_nanos(raw_counter))
+        CuInstant(platform::counter_to_nanos(raw_counter))
     }
 
     pub fn as_nanos(&self) -> u64 {
@@ -177,79 +177,27 @@ impl Instant {
     }
 }
 
-impl Sub for Instant {
-    type Output = Duration;
+impl Sub for CuInstant {
+    type Output = CuDuration;
 
-    fn sub(self, other: Instant) -> Duration {
-        Duration::from_nanos(self.0.saturating_sub(other.0))
+    fn sub(self, other: CuInstant) -> CuDuration {
+        CuDuration(self.0.saturating_sub(other.0))
     }
 }
 
-impl Sub<Duration> for Instant {
-    type Output = Instant;
+impl Sub<CuDuration> for CuInstant {
+    type Output = CuInstant;
 
-    fn sub(self, duration: Duration) -> Instant {
-        Instant(self.0.saturating_sub(duration.as_nanos() as u64))
+    fn sub(self, duration: CuDuration) -> CuInstant {
+        CuInstant(self.0.saturating_sub(duration.as_nanos()))
     }
 }
 
-impl Add<Duration> for Instant {
-    type Output = Instant;
+impl Add<CuDuration> for CuInstant {
+    type Output = CuInstant;
 
-    fn add(self, duration: Duration) -> Instant {
-        Instant(self.0.saturating_add(duration.as_nanos() as u64))
-    }
-}
-
-// Duration type for no-std compatibility
-#[cfg(not(feature = "std"))]
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Duration {
-    nanos: u64,
-}
-
-#[cfg(not(feature = "std"))]
-impl Duration {
-    pub const fn from_nanos(nanos: u64) -> Self {
-        Duration { nanos }
-    }
-
-    pub const fn from_millis(millis: u64) -> Self {
-        Duration::from_nanos(millis * 1_000_000)
-    }
-
-    pub const fn from_secs(secs: u64) -> Self {
-        Duration::from_nanos(secs * 1_000_000_000)
-    }
-
-    pub const fn as_nanos(&self) -> u128 {
-        self.nanos as u128
-    }
-
-    pub const fn as_millis(&self) -> u128 {
-        (self.nanos / 1_000_000) as u128
-    }
-
-    pub const fn as_secs(&self) -> u64 {
-        self.nanos / 1_000_000_000
-    }
-}
-
-#[cfg(not(feature = "std"))]
-impl Add for Duration {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        Duration::from_nanos(self.nanos + rhs.nanos)
-    }
-}
-
-#[cfg(not(feature = "std"))]
-impl Sub for Duration {
-    type Output = Self;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        Duration::from_nanos(self.nanos.saturating_sub(rhs.nanos))
+    fn add(self, duration: CuDuration) -> CuInstant {
+        CuInstant(self.0.saturating_add(duration.as_nanos()))
     }
 }
 
@@ -280,19 +228,59 @@ impl CuDuration {
         let Self(nanos) = self;
         *nanos
     }
+
+    pub fn as_micros(&self) -> u64 {
+        let Self(nanos) = self;
+        nanos / 1_000
+    }
+
+    pub fn as_millis(&self) -> u64 {
+        let Self(nanos) = self;
+        nanos / 1_000_000
+    }
+
+    pub fn as_secs(&self) -> u64 {
+        let Self(nanos) = self;
+        nanos / 1_000_000_000
+    }
+
+    pub fn from_nanos(nanos: u64) -> Self {
+        CuDuration(nanos)
+    }
+
+    pub fn from_micros(micros: u64) -> Self {
+        CuDuration(micros * 1_000)
+    }
+
+    pub fn from_millis(millis: u64) -> Self {
+        CuDuration(millis * 1_000_000)
+    }
+
+    pub fn from_secs(secs: u64) -> Self {
+        CuDuration(secs * 1_000_000_000)
+    }
 }
 
 /// bridge the API with standard Durations.
-impl From<Duration> for CuDuration {
-    fn from(duration: Duration) -> Self {
+#[cfg(feature = "std")]
+impl From<std::time::Duration> for CuDuration {
+    fn from(duration: std::time::Duration) -> Self {
         CuDuration(duration.as_nanos() as u64)
     }
 }
 
-impl From<CuDuration> for Duration {
+#[cfg(not(feature = "std"))]
+impl From<core::time::Duration> for CuDuration {
+    fn from(duration: core::time::Duration) -> Self {
+        CuDuration(duration.as_nanos() as u64)
+    }
+}
+
+#[cfg(feature = "std")]
+impl From<CuDuration> for std::time::Duration {
     fn from(val: CuDuration) -> Self {
         let CuDuration(nanos) = val;
-        Duration::from_nanos(nanos)
+        std::time::Duration::from_nanos(nanos)
     }
 }
 
@@ -445,6 +433,22 @@ impl Display for CuDuration {
 
 /// A robot time is just a duration from a fixed point in time.
 pub type CuTime = CuDuration;
+
+/// A busy looping function based on this clock for a duration.
+/// Mainly useful for embedded to spinlocking.
+#[inline(always)]
+pub fn busy_wait_for(duration: CuDuration) {
+    busy_wait_until(CuInstant::now() + duration);
+}
+
+/// A busy looping function based on this until a specific time.
+/// Mainly useful for embedded to spinlocking.
+#[inline(always)]
+pub fn busy_wait_until(time: CuInstant) {
+    while CuInstant::now() < time {
+        core::hint::spin_loop();
+    }
+}
 
 /// Homebrewed `Option<CuDuration>` to avoid using 128bits just to represent an Option.
 #[derive(Copy, Clone, Debug, PartialEq, Encode, Decode, Serialize, Deserialize)]
@@ -617,15 +621,15 @@ impl InternalClock {
         (clock, mock_state)
     }
 
-    fn now(&self) -> Instant {
+    fn now(&self) -> CuInstant {
         if let Some(ref mock_state) = self.mock_state {
-            Instant(mock_state.load(Ordering::Relaxed))
+            CuInstant(mock_state.load(Ordering::Relaxed))
         } else {
-            Instant::now()
+            CuInstant::now()
         }
     }
 
-    fn recent(&self) -> Instant {
+    fn recent(&self) -> CuInstant {
         // For simplicity, we use the same implementation as now()
         // In a more sophisticated implementation, this could use a cached value
         self.now()
@@ -638,7 +642,7 @@ impl InternalClock {
 #[derive(Clone, Debug)]
 pub struct RobotClock {
     inner: InternalClock,
-    ref_time: Instant,
+    ref_time: CuInstant,
 }
 
 /// A mock clock that can be controlled by the user.
@@ -646,14 +650,14 @@ pub struct RobotClock {
 pub struct RobotClockMock(Arc<AtomicU64>);
 
 impl RobotClockMock {
-    pub fn increment(&self, amount: Duration) {
+    pub fn increment(&self, amount: CuDuration) {
         let Self(mock_state) = self;
         mock_state.fetch_add(amount.as_nanos() as u64, Ordering::Relaxed);
     }
 
     /// Decrements the time by the given amount.
     /// Be careful this breaks the monotonicity of the clock.
-    pub fn decrement(&self, amount: Duration) {
+    pub fn decrement(&self, amount: CuDuration) {
         let Self(mock_state) = self;
         mock_state.fetch_sub(amount.as_nanos() as u64, Ordering::Relaxed);
     }
@@ -692,7 +696,7 @@ impl RobotClock {
     /// Builds a monotonic clock starting at the given reference time.
     pub fn from_ref_time(ref_time_ns: u64) -> Self {
         let clock = InternalClock::new();
-        let ref_time = clock.now() - Duration::from_nanos(ref_time_ns);
+        let ref_time = clock.now() - CuDuration(ref_time_ns);
         RobotClock {
             inner: clock,
             ref_time,
@@ -717,13 +721,13 @@ impl RobotClock {
     /// It is a monotonically increasing value.
     #[inline]
     pub fn now(&self) -> CuTime {
-        (self.inner.now() - self.ref_time).into()
+        self.inner.now() - self.ref_time
     }
 
     /// A less precise but quicker time
     #[inline]
     pub fn recent(&self) -> CuTime {
-        (self.inner.recent() - self.ref_time).into()
+        self.inner.recent() - self.ref_time
     }
 }
 
@@ -777,7 +781,7 @@ mod tests {
     fn test_robot_clock_mock() {
         let (clock, mock) = RobotClock::mock();
         let t1 = clock.now();
-        mock.increment(Duration::from_millis(100));
+        mock.increment(CuDuration::from_millis(100));
         let t2 = clock.now();
         assert!(t2 > t1);
         assert_eq!(t2 - t1, CuDuration(100_000_000)); // 100ms in nanoseconds
@@ -797,8 +801,8 @@ mod tests {
         let tolerance_ms = 10f64;
         let clock = RobotClock::from_ref_time(1_000_000_000);
         assert_relative_eq!(
-            <CuDuration as Into<Duration>>::into(clock.now()).as_millis() as f64,
-            Duration::from_secs(1).as_millis() as f64,
+            clock.now().as_millis() as f64,
+            CuDuration::from_secs(1).as_millis() as f64,
             epsilon = tolerance_ms
         );
     }
@@ -806,9 +810,8 @@ mod tests {
     #[test]
     fn longest_duration() {
         let maxcu = CuDuration(u64::MAX);
-        let maxd: Duration = maxcu.into();
-        assert_eq!(maxd.as_nanos(), u64::MAX as u128);
-        let s = maxd.as_secs();
+        assert_eq!(maxcu.as_nanos(), u64::MAX);
+        let s = maxcu.as_secs();
         let y = s / 60 / 60 / 24 / 365;
         assert!(y >= 584); // 584 years of robot uptime, we should be good.
     }
@@ -970,19 +973,19 @@ mod tests {
         assert_eq!(clock.now(), CuDuration(0));
 
         // Test increment
-        mock.increment(Duration::from_secs(10));
-        assert_eq!(clock.now(), Duration::from_secs(10).into());
+        mock.increment(CuDuration::from_secs(10));
+        assert_eq!(clock.now(), CuDuration::from_secs(10).into());
 
         // Test decrement (unusual but supported)
-        mock.decrement(Duration::from_secs(5));
-        assert_eq!(clock.now(), Duration::from_secs(5).into());
+        mock.decrement(CuDuration::from_secs(5));
+        assert_eq!(clock.now(), CuDuration::from_secs(5).into());
 
         // Test setting absolute value
         mock.set_value(30_000_000_000); // 30 seconds in ns
-        assert_eq!(clock.now(), Duration::from_secs(30).into());
+        assert_eq!(clock.now(), CuDuration::from_secs(30).into());
 
         // Test that getting the time from the mock directly works
-        assert_eq!(mock.now(), Duration::from_secs(30).into());
+        assert_eq!(mock.now(), CuDuration::from_secs(30).into());
         assert_eq!(mock.value(), 30_000_000_000);
     }
 
@@ -1030,8 +1033,8 @@ mod tests {
         let provider_clock = provider.get_clock();
         assert_eq!(provider_clock.now(), CuDuration(0));
 
-        // Advance the mock clock and check that provider's clock also advances
-        mock.increment(Duration::from_secs(5));
-        assert_eq!(provider_clock.now(), Duration::from_secs(5).into());
+        // Advance the mock clock and check that the provider's clock also advances
+        mock.increment(CuDuration::from_secs(5));
+        assert_eq!(provider_clock.now(), CuDuration::from_secs(5).into());
     }
 }

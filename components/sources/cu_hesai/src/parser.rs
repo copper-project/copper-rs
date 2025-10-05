@@ -504,6 +504,7 @@ pub fn generate_default_elevation_calibration() -> [Angle; 32] {
 #[cfg(test)]
 mod tests {
     use crate::parser::{parse_packet, Packet, RefTime};
+    use cu29::clock::CuDuration;
     use cu29::prelude::RobotClock;
 
     #[test]
@@ -595,7 +596,7 @@ mod tests {
 
         let (robot_clock, mock) = RobotClock::mock();
         // push the time by 1s because the first emulated test packet could end up in negative time.
-        mock.increment(std::time::Duration::new(1, 0));
+        mock.increment(CuDuration::from_secs(1));
 
         let udp_header_size = 0x2A;
         if packet.len() < udp_header_size + size_of::<Packet>() {
