@@ -424,22 +424,23 @@ their robots without duplicating their entire RON file.</li>
 <li><input disabled="" type="checkbox" checked=""/>
 <strong>ROS2/DDS interfacing</strong>: Build a pair of sink and source to connect to existing <a href="https://github.com/ros2">ROS2</a>
 systems, helping users migrate their stack bit by bit.</li>
-<li><input disabled="" type="checkbox"/>
-<strong>Log Compression &amp; Selection</strong>: Implement a pluggable compression system for logs and its resim counterpart.
-For example to encode video from images. Selection is about NOT logging something if it is not needed.</li>
-<li><input disabled="" type="checkbox"/>
-<strong>Microcontroller and RTOS support</strong>: Modify all necessary Copper code packages to remove dependencies on the
+<li><input disabled="" type="checkbox" checked=""/>
+<strong>Microcontroller support</strong>: Modify all necessary Copper code packages to remove dependencies on the
 standard library (std) to support “no_std” (#![no_std])
 to support running the code on bare-metal on microcontrollers. This will allow a seamless environment for high level
 calls on a standard kernel (ML inference etc…)
 and low level tasks on MCUs (control, HW interfacing…).</li>
 <li><input disabled="" type="checkbox"/>
+<strong>Log Compression &amp; Selection</strong>: Implement a pluggable compression system for logs and its resim counterpart.
+For example to encode video from images. Selection is about NOT logging something if it is not needed.</li>
+<li><input disabled="" type="checkbox"/>
 <strong>Parallel Copper Lists</strong>: allow Copper lists to be executed in a staggered and parallel way to improve
-throughput.</li>
+throughput. Status: We built a background tasks that helps with this.</li>
 <li><input disabled="" type="checkbox"/>
 <strong>Extensible scheduling</strong>: Enable a way to give hints to Copper to better schedule workloads at compile time.</li>
 <li><input disabled="" type="checkbox"/>
-<strong>Swarm support</strong>: Implement Zenoh to allow a swarm of robots powered by Copper to cooperate.</li>
+<strong>Swarm support</strong>: Implement Zenoh to allow a swarm of robots powered by Copper to cooperate. Status: Sink done,
+needs a Source.</li>
 <li><input disabled="" type="checkbox"/>
 <strong>MCAP support</strong>: Allow the interfacing of Foxglove and <a href="https://github.com/ros">ROS</a> ecosystems at the logging
 level.</li>
