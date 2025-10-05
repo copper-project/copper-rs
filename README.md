@@ -482,16 +482,17 @@ on any of those, please let us know!:
   their robots without duplicating their entire RON file.
 - [x] **ROS2/DDS interfacing**: Build a pair of sink and source to connect to existing [ROS2](https://github.com/ros2)
   systems, helping users migrate their stack bit by bit.
-- [ ] **Log Compression & Selection**: Implement a pluggable compression system for logs and its resim counterpart.
-  For example to encode video from images. Selection is about NOT logging something if it is not needed.
-- [ ] **Microcontroller and RTOS support**: Modify all necessary Copper code packages to remove dependencies on the
+- [x] **Microcontroller support**: Modify all necessary Copper code packages to remove dependencies on the
   standard library (std) to support "no_std" (#![no_std])
   to support running the code on bare-metal on microcontrollers. This will allow a seamless environment for high level
   calls on a standard kernel (ML inference etc...)
   and low level tasks on MCUs (control, HW interfacing...).
+- [ ] **Log Compression & Selection**: Implement a pluggable compression system for logs and its resim counterpart.
+  For example to encode video from images. Selection is about NOT logging something if it is not needed.
 - [ ] **Parallel Copper Lists**: allow Copper lists to be executed in a staggered and parallel way to improve
-  throughput.
+  throughput. Status: We built a background tasks that helps with this.
 - [ ] **Extensible scheduling**: Enable a way to give hints to Copper to better schedule workloads at compile time.
-- [ ] **Swarm support**: Implement Zenoh to allow a swarm of robots powered by Copper to cooperate.
+- [ ] **Swarm support**: Implement Zenoh to allow a swarm of robots powered by Copper to cooperate. Status: Sink done,
+  needs a Source.
 - [ ] **MCAP support**: Allow the interfacing of Foxglove and [ROS](https://github.com/ros) ecosystems at the logging
   level.
