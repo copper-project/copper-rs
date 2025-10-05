@@ -19,7 +19,7 @@ path = "src/main.rs"
 [[bin]]
 name = "cu-min-nostd-logreader"
 path = "src/logreader.rs"
-required-features = ["host"]
+required-features = ["std"]
 
 [dependencies]
 
