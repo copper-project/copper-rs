@@ -14,7 +14,6 @@ mod imp {
     pub use alloc::boxed::Box;
     pub use spin::once::Once as OnceLock;
     pub use spin::Mutex;
-    pub use spin::RwLock;
 }
 
 #[cfg(feature = "std")]
@@ -98,10 +97,8 @@ impl LoggerRuntime {
                 .unwrap();
         }
         #[cfg(debug_assertions)]
+        #[cfg(feature = "std")]
         if let Some(logger) = extra_text_logger {
-            #[cfg(not(feature = "std"))]
-            let mut extra_text_logger = EXTRA_TEXT_LOGGER.write();
-            #[cfg(feature = "std")]
             let mut extra_text_logger = EXTRA_TEXT_LOGGER.write().unwrap();
             *extra_text_logger = Some(Box::new(logger) as Box<dyn Log>);
         }
