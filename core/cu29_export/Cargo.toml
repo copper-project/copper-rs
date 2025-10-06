@@ -18,6 +18,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 cu29 = { workspace = true }
+cu29-intern-strs = { workspace = true }
 clap = { workspace = true }
 bincode = { workspace = true }
 serde = { workspace = true }

@@ -34,7 +34,7 @@ serde = { workspace = true }
 smallvec = { workspace = true }
 arrayvec = { version = "0.7", default-features = false, features = ["serde"] }
 html-escape = { version = "0.2", default-features = false }
-petgraph = { version = "0.8", features = ["serde", "serde-1", "serde_derive"] }
+petgraph = { version = "0.8", default-features = false, features = ["serde", "serde-1", "serde_derive", "stable_graph"] }
 ron = { version = "0.11", default-features = false }
 hashbrown = { workspace = true }
 
@@ -46,6 +46,7 @@ object-pool = { version = "0.6", optional = true }  # used for large object pool
 
 # no std only dependencies
 spin = { workspace = true } # should be removed when std is on, but cargo is bad at negative features
+libm = { version = "0.2" } # f64 math for 32 bit platforms
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 cudarc = { version = "0.17", optional = true, features = ["cuda-version-from-build-system"] }
@@ -54,5 +55,5 @@ cudarc = { version = "0.17", optional = true, features = ["cuda-version-from-bui
 default = ["std"]
 cuda = ["dep:cudarc"]
 macro_debug = []
-std = ["dep:clap", "dep:rayon", "dep:tempfile", "dep:object-pool", "ron/std", "cu29-clock/std", "cu29-log/std", "cu29-log-runtime/std", "cu29-traits/std", "cu29-unifiedlog/std", "cu29-value/std"]
+std = ["dep:clap", "dep:rayon", "dep:tempfile", "dep:object-pool", "ron/std", "cu29-clock/std", "cu29-log/std", "cu29-log-runtime/std", "cu29-traits/std", "cu29-unifiedlog/std", "cu29-value/std", "petgraph/std"]
 memory_monitoring = []

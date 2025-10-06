@@ -30,7 +30,6 @@ pub mod prelude {
     pub use ctrlc;
     pub use cu29_clock::*;
     pub use cu29_derive::*;
-    pub use cu29_intern_strs::*;
     pub use cu29_log::*;
     pub use cu29_log_derive::*;
     pub use cu29_log_runtime::*;

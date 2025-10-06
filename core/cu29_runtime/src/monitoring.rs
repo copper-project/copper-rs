@@ -13,6 +13,7 @@ use serde_derive::{Deserialize, Serialize};
 mod imp {
     pub use alloc::alloc::{GlobalAlloc, Layout};
     pub use core::sync::atomic::{AtomicUsize, Ordering};
+    pub use libm::sqrt;
 }
 
 #[cfg(feature = "std")]
@@ -291,10 +292,12 @@ impl LiveStatistics {
         let mean = self.mean();
         let variance = (self.sum_sq as f64 / self.count as f64) - (mean * mean);
         if variance < 0.0 {
-            0.0
-        } else {
-            variance.sqrt()
+            return 0.0;
         }
+        #[cfg(feature = "std")]
+        return variance.sqrt();
+        #[cfg(not(feature = "std"))]
+        return sqrt(variance);
     }
 
     #[inline]
