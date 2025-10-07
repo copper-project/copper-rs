@@ -1,4 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(not(feature = "std"), no_main)]
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;
@@ -20,6 +21,13 @@ mod imp {
 #[cfg(not(feature = "std"))]
 use imp::*;
 
+#[cfg(not(feature = "std"))]
+use embedded_alloc::LlffHeap as Heap;
+
+#[cfg(not(feature = "std"))]
+#[global_allocator]
+static ALLOC: Heap = Heap::empty();
+
 #[copper_runtime(config = "copperconfig.ron")]
 struct MinimalNoStdApp {}
 
@@ -28,12 +36,27 @@ struct MinimalNoStdApp {}
 struct MyEmbeddedLogger {}
 
 #[cfg(not(feature = "std"))]
+use core::panic::PanicInfo;
+
+#[cfg(not(feature = "std"))]
+use core::ptr::addr_of_mut;
+
+#[cfg(not(feature = "std"))]
+#[panic_handler]
+fn panic(_: &PanicInfo) -> ! {
+    loop {
+        core::hint::spin_loop()
+    }
+}
+
+#[cfg(not(feature = "std"))]
 impl UnifiedLogWrite for MyEmbeddedLogger {
     fn add_section(
         &mut self,
         entry_type: UnifiedLogType,
         requested_section_size: usize,
     ) -> SectionHandle {
+        use alloc::vec::Vec;
         // FIXME(gbin): this is just a hack to make it compile, it needs to be correctly implemented.
         // It minimalistically mimic the std implementation over the mmap file but with a memory leak.
         let buf: Vec<u8> = vec![0u8; requested_section_size];
@@ -67,8 +90,20 @@ impl UnifiedLogWrite for MyEmbeddedLogger {
 }
 
 #[cfg(not(feature = "std"))]
-fn main() {
+const HEAP_SIZE: usize = 128 * 1024;
+
+#[cfg(not(feature = "std"))]
+#[no_mangle]
+pub extern "C" fn main() {
     // the no std version
+
+    #[link_section = ".bss.heap"]
+    static mut HEAP: [u8; HEAP_SIZE] = [0; HEAP_SIZE];
+
+    unsafe {
+        ALLOC.init(addr_of_mut!(HEAP) as usize, HEAP_SIZE);
+    }
+
     let clock = RobotClock::new();
     let writer = Arc::new(Mutex::new(MyEmbeddedLogger {}));
     let mut app = MinimalNoStdApp::new(clock, writer).unwrap();

@@ -1,9 +1,17 @@
+#[cfg(not(feature = "std"))]
+extern crate alloc;
 use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29::prelude::*;
 use serde::Serializer;
+
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
+
+#[cfg(not(feature = "std"))]
+use core::prelude::rust_2024::*;
 
 pub struct DoraSource<const S: usize> {}
 
@@ -44,7 +52,9 @@ impl<const S: usize> CuSinkTask for DoraSink<S> {
 
     fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
         let incoming = input.payload().unwrap();
-        assert_eq!(incoming.0[42], 42);
+        if incoming.0[42] != 42 {
+            return Err("Something is wrong: 42 expected".into());
+        }
         Ok(())
     }
 }
@@ -78,6 +88,6 @@ impl Serialize for DoraPayload {
         S: Serializer,
     {
         // Not needed for this benchmark.
-        todo!()
+        Ok(_serializer.serialize_bytes(&self.0)?)
     }
 }
