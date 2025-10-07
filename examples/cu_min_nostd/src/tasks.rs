@@ -88,6 +88,6 @@ impl Serialize for DoraPayload {
         S: Serializer,
     {
         // Not needed for this benchmark.
-        Ok(_serializer.serialize_bytes(&self.0)?)
+        _serializer.serialize_bytes(&self.0)
     }
 }
