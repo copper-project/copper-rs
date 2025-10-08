@@ -1,6 +1,10 @@
 #![no_std]
 #![no_main]
 
+extern crate alloc;
+
+use alloc::boxed::Box;
+use alloc::sync::Arc;
 use cortex_m_rt::entry;
 use embedded_hal::delay::DelayNs;
 use embedded_hal::pwm::SetDutyCycle;
@@ -16,14 +20,68 @@ use hal::{
 use rp235x_hal as hal;
 use static_cell::StaticCell;
 
+use cu29::prelude::*;
 use defmt_serial as _;
-// pulls in #[global_logger]
+use embedded_alloc::LlffHeap as Heap;
 use hal::gpio;
 use panic_probe as _;
 use rp235x_hal::clocks::ClockSource;
 use rp235x_hal::uart::{Enabled, UartConfig, UartPeripheral};
-// pulls in #[panic_handler]
 
+use alloc::vec;
+
+// --- Copper runtime
+pub mod tasks;
+#[copper_runtime(config = "copperconfig.ron")]
+struct EmbeddedApp {}
+
+// This needs to be implemented depending on the embedded platform (emmc, sdcard, etc ...)
+struct MyEmbeddedLogger {}
+
+use bincode::config::standard;
+use bincode::encode_into_slice;
+use spin::Mutex;
+
+impl UnifiedLogWrite for MyEmbeddedLogger {
+    fn add_section(
+        &mut self,
+        entry_type: UnifiedLogType,
+        requested_section_size: usize,
+    ) -> SectionHandle {
+        use alloc::vec::Vec;
+        // FIXME(gbin): this is just a hack to make it compile, it needs to be correctly implemented.
+        // It minimalistically mimic the std implementation over the mmap file but with a memory leak.
+        let buf: Vec<u8> = vec![0u8; requested_section_size];
+        let boxed: Box<[u8]> = buf.into_boxed_slice();
+        let slice_static: &'static mut [u8] = Box::leak(boxed);
+
+        let section_header = SectionHeader {
+            magic: SECTION_MAGIC,
+            entry_type,
+            section_size: requested_section_size as u32,
+            filled_size: 0u32,
+        };
+
+        encode_into_slice(&section_header, slice_static, standard())
+            .expect("Failed to encode section header");
+
+        SectionHandle::create(section_header, slice_static)
+    }
+
+    fn flush_section(&mut self, _section: &mut SectionHandle) {
+        // no op for now
+    }
+
+    fn status(&self) -> UnifiedLogStatus {
+        // no op for now
+        UnifiedLogStatus {
+            total_used_space: 0,
+            total_allocated_space: 0,
+        }
+    }
+}
+
+// --- embedded setup
 const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
 
 #[unsafe(link_section = ".start_block")]
@@ -32,7 +90,6 @@ pub static IMAGE_DEF: hal::block::ImageDef = hal::block::ImageDef::secure_exe();
 
 const HEAP_SIZE: usize = 128 * 1024;
 
-use embedded_alloc::Heap;
 #[global_allocator]
 static ALLOC: Heap = Heap::empty();
 
@@ -112,34 +169,20 @@ fn main() -> ! {
         bch.set_duty_cycle((bv as u16) << 8).unwrap();
     };
 
-    let one_s: u32 = 1_000_000_000;
-    let two_s: u32 = 2 * one_s;
+    // some signs of life
+    defmt::debug!("Embedded setup done.");
+    // set the RGB led to green.
+    set_rgb8(0, 255, 0);
 
+    // start copper
+    let clock = RobotClock::new();
+    let writer = Arc::new(Mutex::new(MyEmbeddedLogger {}));
+    let mut app = EmbeddedApp::new(clock, writer).unwrap();
+    defmt::debug!("Starting Copper.");
+    let _ = <EmbeddedApp as CuApplication<MyEmbeddedLogger>>::run(&mut app);
     loop {
-        defmt::debug!("1");
+        // if copper crashed, blink fast red
         set_rgb8(255, 0, 0);
-        timer.delay_ns(one_s);
-        defmt::debug!("2");
-        set_rgb8(0, 255, 0);
-        timer.delay_ns(one_s);
-        defmt::info!("3");
-        set_rgb8(0, 0, 255);
-        timer.delay_ns(one_s);
-        defmt::info!("4");
-        set_rgb8(255, 255, 255);
-        timer.delay_ns(two_s);
-        defmt::info!("5");
-
-        set_rgb8(255, 255, 0);
-        timer.delay_ns(one_s);
-        defmt::info!("6");
-        set_rgb8(0, 255, 255);
-        timer.delay_ns(one_s);
-        defmt::info!("7");
-        set_rgb8(255, 0, 255);
-        timer.delay_ns(one_s);
-        defmt::info!("8");
-        set_rgb8(255, 255, 255);
-        timer.delay_ns(two_s);
+        timer.delay_ns(100_000_000);
     }
 }

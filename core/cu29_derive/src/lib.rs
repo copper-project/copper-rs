@@ -102,6 +102,7 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
             use core::fmt::Debug;
             use core::fmt::Formatter;
             use core::fmt::Result as FmtResult;
+            use alloc::vec;
         }
     } else {
         quote! {

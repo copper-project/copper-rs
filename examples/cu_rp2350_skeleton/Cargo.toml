@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+bincode = { workspace = true }
+serde = { workspace = true }
 cu29 = { path = "../../core/cu29", default-features = false } # pick it up directly to build it no-std
 rp235x-hal = { version = "0.3", features = ["rt", "critical-section-impl"] }
 embedded-hal = "1.0"
@@ -12,4 +14,8 @@ defmt = "1.0"
 defmt-serial = "0.10"
 static_cell = "2.1"
 panic-probe = { version = "1.0", features = ["print-defmt"] }
-embedded-alloc = "0.5"
+embedded-alloc = "0.6"
+spin = { workspace = true }
+
+[features]
+std = []
