@@ -186,3 +186,9 @@ fn main() -> ! {
         timer.delay_ns(100_000_000);
     }
 }
+
+// tests
+#[cfg(test)]
+mod tests {
+
+}
