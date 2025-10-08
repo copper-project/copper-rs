@@ -14,7 +14,6 @@ repository.workspace = true
 [dependencies]
 anyhow = "1.0"
 rkv = { version = "0.19", features = ["lmdb"] }
-byteorder = "1.5"
 
 [features]
 # enables a more verbose build log showing the index generation.

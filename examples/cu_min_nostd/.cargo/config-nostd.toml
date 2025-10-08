@@ -1,0 +1,3 @@
+[build]
+target = "aarch64-unknown-none"  # This is for the Cortex-M33 in the RP2350
+

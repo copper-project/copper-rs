@@ -29,6 +29,7 @@ cu29 = { path = "../../core/cu29", default-features = false }  # default-feature
 cu29-helpers = { workspace = true, optional = true } # std only
 serde = { workspace = true }
 spin = { workspace = true }
+embedded-alloc = "0.6"
 
 # host only
 cu29-export = { workspace = true, features = ["python"], optional = true }

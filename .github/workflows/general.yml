@@ -222,6 +222,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
+          targets: aarch64-unknown-none,thumbv8m.main-none-eabihf,riscv32imac-unknown-none-elf
           components: rustc,rustfmt
       - name: Install latest nextest
         uses: taiki-e/install-action@nextest
@@ -230,7 +231,7 @@ jobs:
       - name: Unit tests of core with no-std
         run: cargo +stable nextest run --no-default-features
       - name: Compile an actual no-std example from Copper
-        run: cargo +stable build -p cu-min-nostd --no-default-features
+        run: cargo +stable build -p cu-min-nostd --no-default-features --config examples/cu_min_nostd/.cargo/config-nostd.toml
       - name: Clippy a no-std example
-        run: cargo +stable clippy -p cu-min-nostd --no-default-features
+        run: cargo +stable clippy -p cu-min-nostd --no-default-features --config examples/cu_min_nostd/.cargo/config-nostd.toml
 

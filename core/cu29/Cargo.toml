@@ -14,7 +14,6 @@ repository.workspace = true
 [dependencies]
 cu29-clock = { workspace = true }
 cu29-derive = { workspace = true }
-cu29-intern-strs = { workspace = true }
 cu29-log = { workspace = true }
 cu29-log-derive = { workspace = true }
 cu29-log-runtime = { workspace = true }
@@ -29,6 +28,9 @@ serde = { workspace = true }
 # only std
 rayon = { workspace = true, optional = true }
 ctrlc = { version = "3.5", optional = true }
+
+[build-dependencies]
+cu29-intern-strs = { workspace = true }
 
 [features]
 default = ["std"]

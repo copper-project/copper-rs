@@ -14,6 +14,7 @@ repository.workspace = true
 [dependencies]
 bincode = { workspace = true }
 serde = { workspace = true }
+portable-atomic = { version = "1.11" }
 
 [dev-dependencies]
 approx = "0.5"
