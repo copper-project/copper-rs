@@ -1,4 +1,3 @@
-#[cfg(not(feature = "std"))]
 extern crate alloc;
 use bincode::de::Decoder;
 use bincode::enc::Encoder;
@@ -7,10 +6,8 @@ use bincode::{Decode, Encode};
 use cu29::prelude::*;
 use serde::Serializer;
 
-#[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 
-#[cfg(not(feature = "std"))]
 use core::prelude::rust_2024::*;
 
 pub struct DoraSource<const S: usize> {}
@@ -61,10 +58,8 @@ impl<const S: usize> CuSinkTask for DoraSink<S> {
 
 const FORTY_K: usize = 40 * 1024;
 
-#[allow(dead_code)]
 pub type FortyKSrc = DoraSource<FORTY_K>;
 
-#[allow(dead_code)]
 pub type FortyKSink = DoraSink<FORTY_K>;
 
 #[derive(Default, Debug, Clone)]

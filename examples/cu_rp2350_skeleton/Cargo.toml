@@ -2,6 +2,7 @@
 name = "cu-rp2350-skeleton"
 version = "0.1.0"
 edition = "2024"
+description = "A minimal example of using Copper on a RP2350 microcontroller"
 
 [dependencies]
 bincode = { version = "2.0", default-features = false, features = ["derive", "alloc"] }                                                                                                       
@@ -15,9 +16,13 @@ defmt-serial = "0.10"
 static_cell = "2.1"
 panic-probe = { version = "1.0", features = ["print-defmt"] }
 embedded-alloc = "0.6"
-spin = { version = "0.10" } 
+spin = { version = "0.10" }
 
-[features]
-std = []
+[[bin]]
+name = "cu-blinky"
+path = "src/main.rs"
+test = false
+doctest = false
+bench = false
 
 [workspace]
