@@ -9,8 +9,8 @@ run-arm = "run --target=thumbv8m.main-none-eabihf"
 run-riscv = "run --target=riscv32imac-unknown-none-elf"
 
 [build]
-
 target = "thumbv8m.main-none-eabihf"  # This is for the Cortex-M33 in the RP2350
+profile = "dev"  # to make the debugger behave better
 
 [target.thumbv8m.main-none-eabihf]
 rustflags = [
@@ -20,13 +20,11 @@ rustflags = [
     "-C", "target-cpu=cortex-m33",
 ]
 
-# custom debug script to use picotool + get the debug console from the serial port
-runner = ".cargo/debug.sh"
-
-# Use picotool for loading.
-# Load an elf, skipping unchanged flash sectors, verify it, and execute it
+# With no probe you can use the bootsel mode over the USB port
 # runner = "picotool load -u -v -x -t elf"
 
+# With a cmsis-dap probe you can use probe-rs
+runner = "probe-rs run --chip RP235x --protocol swd"
 
 # The RiskV cores in the rp2350 do not have hardware floating point.
 [target.riscv32imac-unknown-none-elf]
@@ -36,6 +34,9 @@ rustflags = [
     "-C", "link-arg=-Tdefmt.x",
 ]
 
-# Use picotool for loading.
-# Load an elf, skipping unchanged flash sectors, verify it, and execute it
-runner = "picotool load -u -v -x -t elf"
+# With no probe you can use the bootsel mode over the USB port
+# runner = "picotool load -u -v -x -t elf"
+
+# With a cmsis-dap probe you can use probe-rs
+runner = "probe-rs run --chip RP235x --protocol swd"
+
