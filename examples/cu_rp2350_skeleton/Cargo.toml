@@ -17,6 +17,7 @@ static_cell = "2.1"
 panic-probe = { version = "1.0", features = ["print-defmt"] }
 embedded-alloc = "0.6"
 spin = { version = "0.10" }
+defmt-rtt = "1.0"
 
 [[bin]]
 name = "cu-blinky"
@@ -26,3 +27,10 @@ doctest = false
 bench = false
 
 [workspace]
+
+# make it easy for gdb to find its own position
+[profile.dev]
+opt-level = 0
+debug = 2
+debug-assertions = true
+overflow-checks = true
