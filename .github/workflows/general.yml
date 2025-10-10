@@ -231,9 +231,9 @@ jobs:
       - name: Unit tests of core with no-std
         run: cargo +stable nextest run --no-default-features
       - name: Clippy a no-std example
-        run: cargo +stable clippy -p cu-min-nostd --no-default-features --config examples/cu_min_nostd/.cargo/config-nostd.toml
+        run: cargo +stable clippy -p cu-min-baremetal --no-default-features --config examples/cu_min_baremetal/.cargo/config-nostd.toml
       - name: Compile a no-std example from Copper
-        run: cargo +stable build -p cu-min-nostd --no-default-features --config examples/cu_min_nostd/.cargo/config-nostd.toml
+        run: cargo +stable build -p cu-min-baremetal --no-default-features --config examples/cu_min_baremetal/.cargo/config-nostd.toml
       - name: Clippy an rp2350 example
         working-directory: examples/cu_rp2350_skeleton
         run: cargo +stable clippy
