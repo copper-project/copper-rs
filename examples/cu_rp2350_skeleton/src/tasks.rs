@@ -1,4 +1,6 @@
 extern crate alloc;
+
+use alloc::boxed::Box;
 use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
@@ -7,82 +9,74 @@ use cu29::prelude::*;
 use serde::Serializer;
 
 use alloc::vec::Vec;
+use embedded_hal::digital::OutputPin;
+use spin::{Mutex, Once};
 
-use core::prelude::rust_2024::*;
+pub trait LedPin: Send {
+    fn set(&mut self, on: bool);
+}
 
-pub struct DoraSource<const S: usize> {}
-
-impl<const S: usize> Freezable for DoraSource<S> {}
-
-impl<const S: usize> CuSrcTask for DoraSource<S> {
-    type Output<'m> = output_msg!(DoraPayload);
-
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
-    where
-        Self: Sized,
-    {
-        Ok(Self {})
-    }
-
-    fn process(&mut self, clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
-        new_msg.tov = Tov::Time(clock.now());
-        let DoraPayload(v) = new_msg.payload_mut().as_mut().unwrap();
-        v.resize(FORTY_K, 0);
-        v[42] = 42;
-        Ok(())
+struct LedWrap<P: OutputPin + Send>(P);
+impl<P: OutputPin + Send> LedPin for LedWrap<P> {
+    fn set(&mut self, on: bool) {
+        if on {
+            let _ = self.0.set_high();
+        } else {
+            let _ = self.0.set_low();
+        }
     }
 }
 
-pub struct DoraSink<const S: usize> {}
+static LED: Once<Mutex<Box<dyn LedPin>>> = Once::new();
 
-impl<const S: usize> Freezable for DoraSink<S> {}
+pub fn register_led<P>(p: P)
+where
+    P: OutputPin + Send + 'static,
+{
+    LED.call_once(|| Mutex::new(Box::new(LedWrap(p))));
+}
 
-impl<const S: usize> CuSinkTask for DoraSink<S> {
-    type Input<'m> = input_msg!(DoraPayload);
-
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
-    where
-        Self: Sized,
-    {
-        Ok(Self {})
+fn set_led(on: bool) {
+    if let Some(m) = LED.get() {
+        // info!("LED on: {}", on);
+        let mut g = m.lock();
+        g.set(on);
     }
+}
 
-    fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
-        let incoming = input.payload().unwrap();
-        if incoming.0[42] != 42 {
-            return Err("Something is wrong: 42 expected".into());
+pub struct BooleanSource {
+    state: bool,
+}
+impl Freezable for BooleanSource {}
+impl CuSrcTask for BooleanSource {
+    type Output<'m> = output_msg!(bool);
+    fn new(_: Option<&ComponentConfig>) -> CuResult<Self> {
+        Ok(Self { state: false })
+    }
+    fn process(&mut self, clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
+        self.state = !self.state;
+        new_msg.tov = Tov::Time(clock.now());
+        *new_msg.payload_mut().as_mut().unwrap() = self.state;
+        let end = clock.now() + CuDuration::from_millis(200);
+        while clock.now() < end {
+            core::hint::spin_loop();
         }
         Ok(())
     }
 }
 
-const FORTY_K: usize = 40 * 1024;
-
-pub type FortyKSrc = DoraSource<FORTY_K>;
-
-pub type FortyKSink = DoraSink<FORTY_K>;
-
-#[derive(Default, Debug, Clone)]
-pub struct DoraPayload(Vec<u8>);
-
-impl Decode<()> for DoraPayload {
-    fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        Ok(DoraPayload(Vec::<u8>::decode(decoder)?))
+pub struct LEDSink;
+impl Freezable for LEDSink {}
+impl CuSinkTask for LEDSink {
+    type Input<'m> = input_msg!(bool);
+    fn new(_: Option<&ComponentConfig>) -> CuResult<Self> {
+        Ok(Self)
     }
-}
-
-impl Encode for DoraPayload {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        self.0.encode(encoder)
-    }
-}
-
-impl Serialize for DoraPayload {
-    fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        // Not needed for this benchmark.
-        _serializer.serialize_bytes(&self.0)
+    fn process(&mut self, _: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
+        if let Some(&v) = input.payload().as_ref() {
+            set_led(*v);
+        }
+        info!("LEDSink got: {:?}", input.payload());
+        Ok(())
     }
 }
