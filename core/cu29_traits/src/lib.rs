@@ -217,6 +217,36 @@ impl<'de, Context> BorrowDecode<'de, Context> for CuCompactString {
     }
 }
 
+#[cfg(feature = "defmt")]
+impl defmt::Format for CuError {
+    fn format(&self, f: defmt::Formatter) {
+        match &self.cause {
+            Some(c) => defmt::write!(
+                f,
+                "CuError {{ message: {}, cause: {} }}",
+                defmt::Display2Format(&self.message),
+                defmt::Display2Format(c),
+            ),
+            None => defmt::write!(
+                f,
+                "CuError {{ message: {}, cause: None }}",
+                defmt::Display2Format(&self.message),
+            ),
+        }
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for CuCompactString {
+    fn format(&self, f: defmt::Formatter) {
+        if self.0.is_empty() {
+            defmt::write!(f, "CuCompactString(Empty)");
+        } else {
+            defmt::write!(f, "CuCompactString({})", defmt::Display2Format(&self.0));
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::CuCompactString;

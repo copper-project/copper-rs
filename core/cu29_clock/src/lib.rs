@@ -43,6 +43,38 @@ mod platform {
         unsafe { core::arch::x86_64::_rdtsc() }
     }
 
+    // --- Cortex-M (bare-metal)
+    #[cfg(all(target_os = "none", target_arch = "arm"))]
+    pub mod cm_dwt_counter {
+        use core::ptr::{read_volatile, write_volatile};
+
+        const DEMCR: *mut u32 = 0xE000_EDFC as *mut u32;
+        const DWT_CTRL: *mut u32 = 0xE000_1000 as *mut u32;
+        const DWT_CYCCNT: *mut u32 = 0xE000_1004 as *mut u32;
+
+        #[inline(always)]
+        pub fn enable() {
+            unsafe {
+                // Enable trace
+                write_volatile(DEMCR, read_volatile(DEMCR) | (1 << 24)); // TRCENA
+                                                                         // Reset and enable cycle counter
+                write_volatile(DWT_CYCCNT, 0);
+                write_volatile(DWT_CTRL, read_volatile(DWT_CTRL) | 1); // CYCCNTENA
+            }
+        }
+
+        #[inline(always)]
+        pub fn read() -> u64 {
+            unsafe { read_volatile(DWT_CYCCNT) as u64 }
+        }
+    }
+
+    // --- Cortex-M (bare-metal)
+    #[cfg(all(target_os = "none", target_arch = "arm"))]
+    pub fn read_raw_counter() -> u64 {
+        cm_dwt_counter::read()
+    }
+
     #[cfg(target_arch = "aarch64")]
     pub fn read_raw_counter() -> u64 {
         let mut counter: u64;
@@ -52,7 +84,7 @@ mod platform {
         counter
     }
 
-    #[cfg(target_arch = "arm")]
+    #[cfg(all(not(target_os = "none"), target_arch = "arm"))]
     pub fn read_raw_counter() -> u64 {
         let mut counter_lo: u32;
         let mut counter_hi: u32;
@@ -608,6 +640,10 @@ struct InternalClock {
 
 impl InternalClock {
     fn new() -> Self {
+        // --- Cortex-M (bare-metal)
+        #[cfg(all(target_os = "none", target_arch = "arm"))]
+        platform::cm_dwt_counter::enable();
+
         // Initialize the frequency calibration
         platform::initialize_frequency();
         InternalClock { mock_state: None }

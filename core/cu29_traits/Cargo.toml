@@ -17,6 +17,7 @@ bincode = { workspace = true }
 serde = { workspace = true }
 compact_str = { workspace = true }
 erased-serde = { workspace = true }
+defmt = { version = "1", optional = true, default-features = false, features = ["alloc"] }
 
 [features]
 default = ["std"]
@@ -25,3 +26,4 @@ std = [
     "compact_str/std",
     "serde/std"
 ]
+defmt = ["dep:defmt"]  # this is only used for baremetal text logging

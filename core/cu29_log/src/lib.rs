@@ -15,6 +15,10 @@ mod imp {
     pub use core::fmt::Formatter;
     pub use core::fmt::Result as FmtResult;
 }
+
+#[cfg(feature = "defmt")]
+pub use defmt;
+
 #[cfg(feature = "std")]
 mod imp {
     pub use core::fmt::Display;
@@ -230,6 +234,43 @@ pub fn rebuild_logline(all_interned_strings: &[String], entry: &CuLogEntry) -> C
         &anon_params,
         &named_params,
     )
+}
+
+// ---- defmt shims, selected at cu29-log compile time ----
+#[cfg(all(feature = "defmt", not(feature = "std")))]
+#[macro_export]
+macro_rules! __cu29_defmt_debug { ($fmt:literal $(, $arg:expr)* $(,)?) => { defmt::debug!($fmt $(, $arg)*); } }
+#[cfg(not(all(feature = "defmt", not(feature = "std"))))]
+#[macro_export]
+macro_rules! __cu29_defmt_debug {
+    ($($tt:tt)*) => {{}};
+}
+
+#[cfg(all(feature = "defmt", not(feature = "std")))]
+#[macro_export]
+macro_rules! __cu29_defmt_info  { ($fmt:literal $(, $arg:expr)* $(,)?) => { defmt::info! ($fmt $(, $arg)*); } }
+#[cfg(not(all(feature = "defmt", not(feature = "std"))))]
+#[macro_export]
+macro_rules! __cu29_defmt_info {
+    ($($tt:tt)*) => {{}};
+}
+
+#[cfg(all(feature = "defmt", not(feature = "std")))]
+#[macro_export]
+macro_rules! __cu29_defmt_warn  { ($fmt:literal $(, $arg:expr)* $(,)?) => { defmt::warn! ($fmt $(, $arg)*); } }
+#[cfg(not(all(feature = "defmt", not(feature = "std"))))]
+#[macro_export]
+macro_rules! __cu29_defmt_warn {
+    ($($tt:tt)*) => {{}};
+}
+
+#[cfg(all(feature = "defmt", not(feature = "std")))]
+#[macro_export]
+macro_rules! __cu29_defmt_error { ($fmt:literal $(, $arg:expr)* $(,)?) => { defmt::error!($fmt $(, $arg)*); } }
+#[cfg(not(all(feature = "defmt", not(feature = "std"))))]
+#[macro_export]
+macro_rules! __cu29_defmt_error {
+    ($($tt:tt)*) => {{}};
 }
 
 #[cfg(test)]

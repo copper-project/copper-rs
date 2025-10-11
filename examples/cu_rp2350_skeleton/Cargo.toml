@@ -5,18 +5,23 @@ edition = "2024"
 description = "A minimal example of using Copper on a RP2350 microcontroller"
 
 [dependencies]
-bincode = { version = "2.0", default-features = false, features = ["derive", "alloc"] }                                                                                                       
-serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }                                                                                                         
-cu29 = { path = "../../core/cu29", default-features = false } # pick it up directly to build it no-std
-rp235x-hal = { version = "0.3", features = ["rt", "critical-section-impl"] }
-embedded-hal = "1.0"
+cu29 = { path = "../../core/cu29", default-features = false, features = ["defmt", "log-level-debug"] } # pick it up directly to build it no-std
+bincode = { version = "2.0", default-features = false, features = ["derive", "alloc"] }
+cortex-m = "0.7"
 cortex-m-rt = "0.7"
-defmt = "1.0"
-defmt-serial = "0.10"
-static_cell = "2.1"
-panic-probe = { version = "1.0", features = ["print-defmt"] }
+defmt-rtt = "1.0"  # RTT logging backend for defmt (ie through a probe)
 embedded-alloc = "0.6"
+buddy_system_allocator = "0.11"
+embedded-hal = "1.0"
+panic-probe = { version = "1.0", features = ["defmt", "print-defmt"] }
+rp235x-hal = { version = "0.3", features = ["rt", "critical-section-impl"] }
+serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
+portable-atomic = { version = "1.11", default-features = false, features = ["require-cas", "float", "fallback"] }
+
 spin = { version = "0.10" }
+embedded-sdmmc = { version = "0.9", features = [
+    # "defmt-log",
+], default-features = false }
 
 [[bin]]
 name = "cu-blinky"
@@ -26,3 +31,10 @@ doctest = false
 bench = false
 
 [workspace]
+
+# A safe development profile for remote debugging.
+[profile.dev]
+opt-level = 0
+debug = 2
+debug-assertions = true
+overflow-checks = true

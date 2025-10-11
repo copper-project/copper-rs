@@ -2,15 +2,20 @@ MEMORY {
     /*
      * The RP2350 has either external or internal flash.
      *
-     * 2 MiB is a safe default here, although a Pico 2 has 4 MiB.
+     * This is for the Pimodori Pico 2W which has 16MB of flash.
      */
-    FLASH : ORIGIN = 0x10000000, LENGTH = 2048K
+    FLASH : ORIGIN = 0x10000000, LENGTH = 16M
+
     /*
      * RAM consists of 8 banks, SRAM0-SRAM7, with a striped mapping.
      * This is usually good for performance, as it distributes load on
      * those banks evenly.
      */
     RAM : ORIGIN = 0x20000000, LENGTH = 512K
+
+    /* 8MB External PSRAM (if present) */
+    PSRAM(rwx) : ORIGIN = 0x11000000, LENGTH = 8M
+
     /*
      * RAM banks 8 and 9 use a direct mapping. They can be used to have
      * memory areas dedicated for some specific job, improving predictability
@@ -70,6 +75,15 @@ SECTIONS {
         __flash_binary_end = .;
     } > FLASH
 
+} INSERT AFTER .uninit;
+
+/* ### Reserve the PSRAM for heap use and export the symbols */
+SECTIONS {
+  .psram_heap (NOLOAD) :
+  {
+    __psram_heap_start__ = ORIGIN(PSRAM);
+    __psram_heap_end__   = ORIGIN(PSRAM) + LENGTH(PSRAM);
+  } > PSRAM
 } INSERT AFTER .uninit;
 
 PROVIDE(start_to_end = __end_block_addr - __start_block_addr);
