@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["ANONYMOUS","MAX_LOG_PARAMS_ON_STACK"],"enum":["CuLogLevel"],"fn":["format_logline","rebuild_logline"],"struct":["CuLogEntry"]};
+window.SIDEBAR_ITEMS = {"constant":["ANONYMOUS","MAX_LOG_PARAMS_ON_STACK"],"enum":["CuLogLevel"],"fn":["format_logline","rebuild_logline"],"macro":["__cu29_defmt_debug","__cu29_defmt_error","__cu29_defmt_info","__cu29_defmt_warn"],"struct":["CuLogEntry"]};
