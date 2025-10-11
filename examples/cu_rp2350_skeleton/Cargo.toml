@@ -6,7 +6,6 @@ description = "A minimal example of using Copper on a RP2350 microcontroller"
 
 [dependencies]
 cu29 = { path = "../../core/cu29", default-features = false, features = ["defmt", "log-level-debug"] } # pick it up directly to build it no-std
-cu29-log = { path = "../../core/cu29_log", default-features = false, features = ["defmt"] } # needed for the logger backend
 bincode = { version = "2.0", default-features = false, features = ["derive", "alloc"] }
 cortex-m = "0.7"
 cortex-m-rt = "0.7"

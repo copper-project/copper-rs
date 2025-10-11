@@ -170,13 +170,29 @@ fn create_log_entry(input: TokenStream, level: CuLogLevel) -> TokenStream {
         None
     };
 
+    #[cfg(debug_assertions)]
     let defmt_macro: TokenStream2 = match level {
-        CuLogLevel::Debug => quote! { ::cu29_log::__cu29_defmt_debug },
-        CuLogLevel::Info => quote! { ::cu29_log::__cu29_defmt_info  },
-        CuLogLevel::Warning => quote! { ::cu29_log::__cu29_defmt_warn  },
-        CuLogLevel::Error => quote! { ::cu29_log::__cu29_defmt_error },
-        CuLogLevel::Critical => quote! { ::cu29_log::__cu29_defmt_error },
+        CuLogLevel::Debug => quote! { ::cu29::prelude::__cu29_defmt_debug },
+        CuLogLevel::Info => quote! { ::cu29::prelude::__cu29_defmt_info  },
+        CuLogLevel::Warning => quote! { ::cu29::prelude::__cu29_defmt_warn  },
+        CuLogLevel::Error => quote! { ::cu29::prelude::__cu29_defmt_error },
+        CuLogLevel::Critical => quote! { ::cu29::prelude::__cu29_defmt_error },
     };
+
+    #[cfg(debug_assertions)]
+    let maybe_inject_defmt: Option<TokenStream2> = if STD {
+        None // defmt never exist in std mode ...
+    } else {
+        Some(quote! {
+             #[cfg(debug_assertions)]
+             {
+                 #defmt_macro!(#defmt_fmt_lit, #(#defmt_args_unnamed_ts,)* #(#defmt_args_named_ts,)*);
+             }
+        })
+    };
+
+    #[cfg(not(debug_assertions))]
+    let maybe_inject_defmt: Option<TokenStream2> = None; // ... neither in release mode
 
     // Emit both: defmt (conditionally) + Copper structured logging
     quote! {{
@@ -184,10 +200,7 @@ fn create_log_entry(input: TokenStream, level: CuLogLevel) -> TokenStream {
         #(#unnamed_prints)*
         #(#named_prints)*
 
-        #[cfg(debug_assertions)]
-        {
-            #defmt_macro!(#defmt_fmt_lit, #(#defmt_args_unnamed_ts,)* #(#defmt_args_named_ts,)*);
-        }
+        #maybe_inject_defmt
 
         #log_stmt
         #error_handling
