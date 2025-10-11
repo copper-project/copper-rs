@@ -221,7 +221,7 @@ fn create_log_entry(input: TokenStream, level: CuLogLevel) -> TokenStream {
 #[cfg(any(feature = "log-level-debug", cu29_default_log_level_debug))]
 #[proc_macro]
 pub fn debug(input: TokenStream) -> TokenStream {
-    create_log_entry(input, CuLogLevel::Debug).into()
+    create_log_entry(input, CuLogLevel::Debug)
 }
 
 /// This macro is used to log an info message with parameters.

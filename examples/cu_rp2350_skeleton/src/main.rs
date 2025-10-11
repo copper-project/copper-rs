@@ -9,7 +9,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use bincode::config::standard;
 use bincode::encode_into_slice;
-use cortex_m_rt::{entry, ExceptionFrame};
+use cortex_m_rt::entry;
 use hal::{clocks::init_clocks_and_plls, gpio::Pins, pac, sio::Sio, watchdog::Watchdog};
 use rp235x_hal as hal;
 
@@ -142,7 +142,7 @@ fn main() -> ! {
     let sio = Sio::new(p.SIO);
     let pins = Pins::new(p.IO_BANK0, p.PADS_BANK0, sio.gpio_bank0, &mut p.RESETS);
 
-    // Now we have a confortable heap to play with.
+    // Now we have a comfortable heap to play with.
     init_psram_and_allocator(pins.gpio47);
     quick_memory_test();
 

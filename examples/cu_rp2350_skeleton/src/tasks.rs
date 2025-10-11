@@ -1,14 +1,8 @@
 extern crate alloc;
 
 use alloc::boxed::Box;
-use bincode::de::Decoder;
-use bincode::enc::Encoder;
-use bincode::error::{DecodeError, EncodeError};
-use bincode::{Decode, Encode};
 use cu29::prelude::*;
-use serde::Serializer;
 
-use alloc::vec::Vec;
 use embedded_hal::digital::OutputPin;
 use spin::{Mutex, Once};
 
