@@ -34,6 +34,7 @@ cu29-intern-strs = { workspace = true }
 
 [features]
 default = ["std"]
+defmt = ["cu29-log/defmt", "cu29-traits/defmt"]  # for baremetal text logging
 macro_debug = ["cu29-derive/macro_debug", "cu29-log-derive/macro_debug"]
 log-level-debug = ["cu29-log-derive/log-level-debug"]
 log-level-info = ["cu29-log-derive/log-level-info"]

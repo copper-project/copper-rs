@@ -14,11 +14,11 @@ repository.workspace = true
 [dependencies]
 bincode = { workspace = true }
 serde = { workspace = true }
-portable-atomic = { version = "1.11" }
+portable-atomic = { version = "1.11", default-features = false, features = ["require-cas"] }
 
 [dev-dependencies]
 approx = "0.5"
 
 [features]
 default = ["std"]
-std = []
+std = ["portable-atomic/std"]
