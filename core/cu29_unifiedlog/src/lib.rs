@@ -7,8 +7,6 @@ extern crate core;
 #[cfg(feature = "std")]
 mod memmap;
 
-use core::mem;
-
 #[cfg(feature = "std")]
 mod compat {
     // backward compatibility for the std implementation
@@ -58,6 +56,8 @@ pub const MAIN_MAGIC: [u8; 4] = [0xB4, 0xA5, 0x50, 0xFF]; // BRASS OFF
 /// ID to spot a section of Copper Log
 pub const SECTION_MAGIC: [u8; 2] = [0xFA, 0x57]; // FAST
 
+pub const SECTION_HEADER_COMPACT_SIZE: u16 = 512; // Usual minimum size for a disk sector.
+
 /// The main file header of the datalogger.
 #[derive(Encode, Decode, Debug)]
 pub struct MainHeader {
@@ -83,13 +83,12 @@ impl Display for MainHeader {
 /// The entry type is used to identify the type of data in the section.
 #[derive(Encode, Decode, Debug)]
 pub struct SectionHeader {
-    pub magic: [u8; 2], // Magic number to identify the section.
+    pub magic: [u8; 2],  // Magic number to identify the section.
+    pub block_size: u16, // IMPORTANT: we assume this header fits in this block size.
     pub entry_type: UnifiedLogType,
-    pub section_size: u32, // offset from the first byte of this header to the first byte of the next header (MAGIC to MAGIC).
-    pub filled_size: u32,  // how much of the section is filled.
+    pub offset_to_next_section: u32, // offset from the first byte of this header to the first byte of the next header (MAGIC to MAGIC).
+    pub used: u32,                   // how much of the section is filled.
 }
-
-const MAX_HEADER_SIZE: usize = mem::size_of::<SectionHeader>() + 3usize; // 3 == additional worse case scenario for the 3 int variable encoding
 
 impl Display for SectionHeader {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
@@ -98,7 +97,7 @@ impl Display for SectionHeader {
         write!(
             f,
             "    use  -> {} / {}",
-            self.filled_size, self.section_size
+            self.used, self.offset_to_next_section
         )
     }
 }
@@ -107,9 +106,10 @@ impl Default for SectionHeader {
     fn default() -> Self {
         Self {
             magic: SECTION_MAGIC,
+            block_size: 512,
             entry_type: UnifiedLogType::Empty,
-            section_size: 0,
-            filled_size: 0,
+            offset_to_next_section: 0,
+            used: 0,
         }
     }
 }
@@ -120,48 +120,34 @@ pub enum AllocatedSection {
 }
 
 /// A SectionHandle is a handle to a section in the datalogger.
-/// It allows to track the lifecycle of a section of the datalogger.
+/// It allows tracking the lifecycle of the section.
 #[derive(Default)]
 pub struct SectionHandle {
-    section_header: SectionHeader,
-    buffer: &'static mut [u8], // This includes the encoded header for end of section patching.
-    used: u32,                 // this is the size of the used part of the buffer.
+    header: SectionHeader,     // keep a copy of the header as metadata
+    buffer: &'static mut [u8], // This includes the encoded header for end-of-section patching.
 }
 
 // This is for a placeholder to unsure an orderly cleanup as we dodge the borrow checker.
 
 impl SectionHandle {
     // The buffer is considered static as it is a dedicated piece for the section.
-    pub fn create(section_header: SectionHeader, buffer: &'static mut [u8]) -> Self {
-        // here we assume with are passed a valid section.
+    pub fn create(header: SectionHeader, buffer: &'static mut [u8]) -> Self {
+        // here we assume the buffer contains a valid header already.
         if buffer[0] != SECTION_MAGIC[0] || buffer[1] != SECTION_MAGIC[1] {
             panic!("Invalid section buffer, magic number not found");
         }
 
-        if buffer.len() < MAX_HEADER_SIZE {
+        if buffer.len() < header.block_size as usize {
             panic!(
                 "Invalid section buffer, too small: {}, it needs to be > {}",
                 buffer.len(),
-                MAX_HEADER_SIZE
+                header.block_size
             );
         }
-
-        Self {
-            section_header,
-            buffer,
-            used: 0,
-        }
+        Self { header, buffer }
     }
     pub fn get_user_buffer(&mut self) -> &mut [u8] {
-        &mut self.buffer[MAX_HEADER_SIZE + self.used as usize..]
-    }
-
-    pub fn update_header(&mut self) {
-        // no need to do anything if we never used the section.
-        if self.section_header.entry_type == UnifiedLogType::Empty || self.used == 0 {
-            return;
-        }
-        self.section_header.filled_size = self.used;
+        &mut self.buffer[self.header.block_size as usize + self.header.used as usize..]
     }
 }
 
@@ -264,7 +250,7 @@ impl<E: Encode, L: UnifiedLogWrite> WriteStream<E> for LogStream<L> {
         match result {
             Ok(nb_bytes) => {
                 self.current_position += nb_bytes;
-                self.current_section.used += nb_bytes as u32;
+                self.current_section.header.used += nb_bytes as u32;
                 Ok(())
             }
             Err(e) => match e {
@@ -298,7 +284,7 @@ impl<E: Encode, L: UnifiedLogWrite> WriteStream<E> for LogStream<L> {
                         "Failed to encode object in a newly minted section. Unrecoverable failure.",
                     ); // If we fail just after creating a section, there is not much we can do, we need to bail.
                     self.current_position += result;
-                    self.current_section.used += result as u32;
+                    self.current_section.header.used += result as u32;
                     Ok(())
                 }
                 _ => {

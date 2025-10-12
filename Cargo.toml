@@ -110,7 +110,7 @@ cu29-log-runtime = { path = "core/cu29_log_runtime", default-features = false, v
 cu29-runtime = { path = "core/cu29_runtime", default-features = false, version = "0.9.0" }
 cu29-soa-derive = { path = "core/cu29_soa_derive", default-features = false, version = "0.9.0" }
 cu29-traits = { path = "core/cu29_traits", default-features = false, version = "0.9.0" }
-cu29-unifiedlog = { path = "core/cu29_unifiedlog", default-features = false, version = "0.9.0" }
+cu29-unifiedlog = { path = "core/cu29_unifiedlog", default-features = false, features = ["compact"], version = "0.9.0" }
 cu29-value = { path = "core/cu29_value", default-features = false, version = "0.9.0" }
 
 # Payload definitions

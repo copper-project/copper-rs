@@ -3,8 +3,12 @@
 
 use crate::{
     AllocatedSection, MainHeader, SectionHandle, SectionHeader, UnifiedLogRead, UnifiedLogStatus,
-    UnifiedLogWrite, MAIN_MAGIC, MAX_HEADER_SIZE, SECTION_MAGIC,
+    UnifiedLogWrite, MAIN_MAGIC, SECTION_MAGIC,
 };
+
+#[cfg(feature = "compact")]
+use crate::SECTION_HEADER_COMPACT_SIZE;
+
 use bincode::config::standard;
 use bincode::{decode_from_slice, encode_into_slice};
 use core::slice::from_raw_parts_mut;
@@ -160,10 +164,7 @@ impl SlabEntry {
             panic!("Invalid section buffer, not in the slab");
         }
 
-        // Be sure that the header reflects the actual size of the section.
-        section.update_header();
-
-        let _sz = encode_into_slice(&section.section_header, section.buffer, standard())
+        let _sz = encode_into_slice(&section.header, section.buffer, standard())
             .expect("Failed to encode section header");
 
         let base = self.mmap_buffer.as_ptr() as usize;
@@ -200,11 +201,18 @@ impl SlabEntry {
             return AllocatedSection::NoMoreSpace;
         }
 
+        #[cfg(feature = "compact")]
+        let block_size = SECTION_HEADER_COMPACT_SIZE;
+
+        #[cfg(not(feature = "compact"))]
+        let block_size = self.page_size as u16;
+
         let section_header = SectionHeader {
             magic: SECTION_MAGIC,
+            block_size,
             entry_type,
-            section_size,
-            filled_size: 0u32,
+            offset_to_next_section: section_size,
+            used: 0u32,
         };
 
         let nb_bytes = encode_into_slice(
@@ -380,7 +388,10 @@ impl Drop for MmapUnifiedLoggerWrite {
         #[cfg(debug_assertions)]
         eprintln!("Flushing the unified Logger ... "); // Note this cannot be a structured log writing in this log.
 
-        let mut section = self.add_section(UnifiedLogType::LastEntry, 80); // TODO: determine that exactly
+        let mut section = self.add_section(
+            UnifiedLogType::LastEntry,
+            SECTION_HEADER_COMPACT_SIZE as usize, // this is the absolute minimum size of a section.
+        );
         self.front_slab.flush_section(&mut section);
         self.garbage_collect_backslabs();
 
@@ -459,12 +470,12 @@ impl UnifiedLogRead for MmapUnifiedLoggerRead {
             // Found a section of the requested type
             if header.entry_type == datalogtype {
                 let result = Some(self.read_section_content(&header)?);
-                self.current_reading_position += header.section_size as usize;
+                self.current_reading_position += header.offset_to_next_section as usize;
                 return Ok(result);
             }
 
             // Keep reading until we find the requested type
-            self.current_reading_position += header.section_size as usize;
+            self.current_reading_position += header.offset_to_next_section as usize;
         }
     }
 
@@ -490,7 +501,7 @@ impl UnifiedLogRead for MmapUnifiedLoggerRead {
             )),
             Ok(header) => {
                 let data = self.read_section_content(&header)?;
-                self.current_reading_position += header.section_size as usize;
+                self.current_reading_position += header.offset_to_next_section as usize;
                 Ok((header, data))
             }
         }
@@ -528,10 +539,10 @@ impl MmapUnifiedLoggerRead {
     /// Reads the section content from the section header pos.
     fn read_section_content(&mut self, header: &SectionHeader) -> CuResult<Vec<u8>> {
         // TODO: we could optimize by asking the buffer to fill
-        let mut section = vec![0; header.filled_size as usize];
-        let start_of_data = self.current_reading_position + MAX_HEADER_SIZE;
+        let mut section = vec![0; header.used as usize];
+        let start_of_data = self.current_reading_position + header.block_size as usize;
         section.copy_from_slice(
-            &self.current_mmap_buffer[start_of_data..start_of_data + header.filled_size as usize],
+            &self.current_mmap_buffer[start_of_data..start_of_data + header.used as usize],
         );
 
         Ok(section)
