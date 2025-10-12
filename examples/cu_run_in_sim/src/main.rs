@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use cu29::bincode::{Decode, Encode};
 use cu29::clock::RobotClock;
 use cu29::prelude::app::CuSimApplication;
+use cu29::prelude::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
 use cu29::prelude::*;
 use cu29::simulation::{CuTaskCallbackState, SimOverride};
 use serde::{Deserialize, Serialize};
@@ -90,34 +91,37 @@ fn main() -> CuResult<()> {
     let mut sim_counter: u32 = 0;
 
     // The generated SimStep enum gives you the per-task callback points.
-    let mut sim_callback =
-        move |step: <App as CuSimApplication<UnifiedLoggerWrite>>::Step<'_>| -> SimOverride {
-            match step {
-                // New: just demonstrate you can see config if needed
-                default::SimStep::Src(CuTaskCallbackState::New(_)) => SimOverride::ExecuteByRuntime,
+    let mut sim_callback = move |step: <App as CuSimApplication<
+        MmapSectionStorage,
+        MmapUnifiedLoggerWrite,
+    >>::Step<'_>|
+          -> SimOverride {
+        match step {
+            // New: just demonstrate you can see config if needed
+            default::SimStep::Src(CuTaskCallbackState::New(_)) => SimOverride::ExecuteByRuntime,
 
-                // For the source’s Process: we must feed the sim placeholder with a payload
-                default::SimStep::Src(CuTaskCallbackState::Process((), out)) => {
-                    // Since the source has run_in_sim = false, runtime uses a CuSimSrcTask which requires us
-                    // to set the payload here (ExecutedBySim).
-                    sim_counter += 1;
-                    out.set_payload(MyMsg { value: sim_counter });
-                    SimOverride::ExecutedBySim
-                }
-
-                // Let Doubler and Sink run normally
-                default::SimStep::Proc(CuTaskCallbackState::Process(_, _)) => {
-                    SimOverride::ExecuteByRuntime
-                }
-                default::SimStep::Sink(CuTaskCallbackState::Process(_, _)) => {
-                    // Here the sink has run_in_sim = true, so we want the real code to compile AND run.
-                    SimOverride::ExecuteByRuntime
-                }
-
-                // Start/Stop/Pre/Post: just defer to runtime
-                _ => SimOverride::ExecuteByRuntime,
+            // For the source’s Process: we must feed the sim placeholder with a payload
+            default::SimStep::Src(CuTaskCallbackState::Process((), out)) => {
+                // Since the source has run_in_sim = false, runtime uses a CuSimSrcTask which requires us
+                // to set the payload here (ExecutedBySim).
+                sim_counter += 1;
+                out.set_payload(MyMsg { value: sim_counter });
+                SimOverride::ExecutedBySim
             }
-        };
+
+            // Let Doubler and Sink run normally
+            default::SimStep::Proc(CuTaskCallbackState::Process(_, _)) => {
+                SimOverride::ExecuteByRuntime
+            }
+            default::SimStep::Sink(CuTaskCallbackState::Process(_, _)) => {
+                // Here the sink has run_in_sim = true, so we want the real code to compile AND run.
+                SimOverride::ExecuteByRuntime
+            }
+
+            // Start/Stop/Pre/Post: just defer to runtime
+            _ => SimOverride::ExecuteByRuntime,
+        }
+    };
 
     #[allow(clippy::identity_op)]
     const LOG_SLAB_SIZE: Option<usize> = Some(1 * 1024 * 1024 * 1024);

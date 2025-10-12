@@ -1242,7 +1242,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     debug!("CuConfig: Reading configuration from file: {}", config_filename);
                     cu29::config::read_configuration(config_filename)?
                 } else {
-                    let original_config = <Self as #app_trait<L>>::get_original_config();
+                    let original_config = <Self as #app_trait<S, L>>::get_original_config();
                     debug!("CuConfig: Using the original configuration the project was compiled with: {}", &original_config);
                     cu29::config::read_configuration_str(original_config, None)?
                 };
@@ -1250,7 +1250,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         } else {
             quote! {
                 // Only the original config is available in no-std
-                let original_config = <Self as #app_trait<L>>::get_original_config();
+                let original_config = <Self as #app_trait<S, L>>::get_original_config();
                 debug!("CuConfig: Using the original configuration the project was compiled with: {}", &original_config);
                 let config = cu29::config::read_configuration_str(original_config, None)?;
             }
@@ -1270,7 +1270,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! {
                 loop  {
                     let iter_start = self.copper_runtime.clock.now();
-                    let result = <Self as #app_trait<L>>::run_one_iteration(self, #sim_callback_arg);
+                    let result = <Self as #app_trait<S, L>>::run_one_iteration(self, #sim_callback_arg);
 
                     if let Some(rate) = self.copper_runtime.runtime_config.rate_target_hz {
                         let period: CuDuration = (1_000_000_000u64 / rate).into();
@@ -1289,7 +1289,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! {
                 loop  {
                     let iter_start = self.copper_runtime.clock.now();
-                    let result = <Self as #app_trait<L>>::run_one_iteration(self, #sim_callback_arg);
+                    let result = <Self as #app_trait<S, L>>::run_one_iteration(self, #sim_callback_arg);
                     if let Some(rate) = self.copper_runtime.runtime_config.rate_target_hz {
                         let period: CuDuration = (1_000_000_000u64 / rate).into();
                         let elapsed = self.copper_runtime.clock.now() - iter_start;
@@ -1372,13 +1372,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 #kill_handler
 
-                <Self as #app_trait<L>>::start_all_tasks(self, #sim_callback_arg)?;
+                <Self as #app_trait<S, L>>::start_all_tasks(self, #sim_callback_arg)?;
                 let result = #run_loop;
 
                 if result.is_err() {
                     error!("A task errored out: {}", &result);
                 }
-                <Self as #app_trait<L>>::stop_all_tasks(self, #sim_callback_arg)?;
+                <Self as #app_trait<S, L>>::stop_all_tasks(self, #sim_callback_arg)?;
                 result
             }
         };
@@ -1396,10 +1396,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         };
 
         let app_impl_decl = if sim_mode {
-            quote!(impl<L: UnifiedLogWrite + 'static> CuSimApplication<L> for #application_name)
+            quote!(impl<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static> CuSimApplication<S, L> for #application_name)
         } else {
-            quote!(impl<L: UnifiedLogWrite + 'static> CuApplication<L> for #application_name)
+            quote!(impl<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static> CuApplication<S, L> for #application_name)
         };
+
         let simstep_type_decl = if sim_mode {
             quote!(
                 type Step<'z> = SimStep<'z>;
@@ -1428,7 +1429,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         // Convert MiB to bytes
                         default_section_size = section_size_mib as usize * 1024usize * 1024usize;
                     }
-                    let copperlist_stream = stream_write::<#mission_mod::CuList>(
+                    let copperlist_stream = stream_write::<#mission_mod::CuList, S>(
                         unified_logger.clone(),
                         UnifiedLogType::CopperList,
                         default_section_size,
@@ -1437,7 +1438,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         // This is to be sure we have the size of at least a Culist and some.
                     );
 
-                    let keyframes_stream = stream_write::<KeyFrame>(
+                    let keyframes_stream = stream_write::<KeyFrame, S>(
                         unified_logger.clone(),
                         UnifiedLogType::FrozenTasks,
                         1024 * 1024 * 10, // 10 MiB
@@ -1547,34 +1548,34 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             Some(quote! {
                         impl #application_name {
                             pub fn start_all_tasks(&mut self, sim_callback: &mut impl FnMut(SimStep) -> SimOverride) -> CuResult<()> {
-                                <Self as #app_trait<UnifiedLoggerWrite>>::start_all_tasks(self, sim_callback)
+                                <Self as #app_trait<MmapSectionStorage, UnifiedLoggerWrite>>::start_all_tasks(self, sim_callback)
                             }
                             pub fn run_one_iteration(&mut self, sim_callback: &mut impl FnMut(SimStep) -> SimOverride) -> CuResult<()> {
-                                <Self as #app_trait<UnifiedLoggerWrite>>::run_one_iteration(self, sim_callback)
+                                <Self as #app_trait<MmapSectionStorage, UnifiedLoggerWrite>>::run_one_iteration(self, sim_callback)
                             }
                             pub fn run(&mut self, sim_callback: &mut impl FnMut(SimStep) -> SimOverride) -> CuResult<()> {
-                                <Self as #app_trait<UnifiedLoggerWrite>>::run(self, sim_callback)
+                                <Self as #app_trait<MmapSectionStorage, UnifiedLoggerWrite>>::run(self, sim_callback)
                             }
                             pub fn stop_all_tasks(&mut self, sim_callback: &mut impl FnMut(SimStep) -> SimOverride) -> CuResult<()> {
-                                <Self as #app_trait<UnifiedLoggerWrite>>::stop_all_tasks(self, sim_callback)
+                                <Self as #app_trait<MmapSectionStorage, UnifiedLoggerWrite>>::stop_all_tasks(self, sim_callback)
                             }
                         }
             })
         } else if std {
-            // std and normal mode
+            // std and normal mode, we use the memory mapped starage for those
             Some(quote! {
                         impl #application_name {
                             pub fn start_all_tasks(&mut self) -> CuResult<()> {
-                                <Self as #app_trait<UnifiedLoggerWrite>>::start_all_tasks(self)
+                                <Self as #app_trait<MmapSectionStorage, UnifiedLoggerWrite>>::start_all_tasks(self)
                             }
                             pub fn run_one_iteration(&mut self) -> CuResult<()> {
-                                <Self as #app_trait<UnifiedLoggerWrite>>::run_one_iteration(self)
+                                <Self as #app_trait<MmapSectionStorage, UnifiedLoggerWrite>>::run_one_iteration(self)
                             }
                             pub fn run(&mut self) -> CuResult<()> {
-                                <Self as #app_trait<UnifiedLoggerWrite>>::run(self)
+                                <Self as #app_trait<MmapSectionStorage, UnifiedLoggerWrite>>::run(self)
                             }
                             pub fn stop_all_tasks(&mut self) -> CuResult<()> {
-                                <Self as #app_trait<UnifiedLoggerWrite>>::stop_all_tasks(self)
+                                <Self as #app_trait<MmapSectionStorage, UnifiedLoggerWrite>>::stop_all_tasks(self)
                             }
                         }
             })
@@ -1689,6 +1690,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::cuasynctask::CuAsyncTask;
                 use cu29::curuntime::CopperContext;
                 use cu29::prelude::UnifiedLoggerWrite;
+                use cu29::prelude::memmap::MmapSectionStorage;
                 use std::fmt::{Debug, Formatter};
                 use std::fmt::Result as FmtResult;
                 use std::mem::size_of;

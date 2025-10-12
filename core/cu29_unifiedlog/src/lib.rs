@@ -5,7 +5,7 @@ extern crate alloc;
 extern crate core;
 
 #[cfg(feature = "std")]
-mod memmap;
+pub mod memmap;
 
 #[cfg(feature = "std")]
 mod compat {
@@ -44,9 +44,8 @@ mod imp {
 
 use imp::*;
 
-use bincode::config::standard;
 use bincode::error::EncodeError;
-use bincode::{encode_into_slice, Decode, Encode};
+use bincode::{Decode, Encode};
 use cu29_traits::{CuError, CuResult, UnifiedLogType, WriteStream};
 
 /// ID to spot the beginning of a Copper Log
@@ -114,40 +113,45 @@ impl Default for SectionHeader {
     }
 }
 
-pub enum AllocatedSection {
+pub enum AllocatedSection<S: SectionStorage> {
     NoMoreSpace,
-    Section(SectionHandle),
+    Section(SectionHandle<S>),
+}
+
+/// A Storage is an append-only structure that can update a header section.
+pub trait SectionStorage: Send + Sync {
+    fn update_header<E: Encode>(&mut self, header: &E) -> Result<usize, EncodeError>;
+    fn append<E: Encode>(&mut self, entry: &E) -> Result<usize, EncodeError>;
+    fn flush(&mut self) -> CuResult<usize>;
 }
 
 /// A SectionHandle is a handle to a section in the datalogger.
 /// It allows tracking the lifecycle of the section.
 #[derive(Default)]
-pub struct SectionHandle {
-    header: SectionHeader,     // keep a copy of the header as metadata
-    buffer: &'static mut [u8], // This includes the encoded header for end-of-section patching.
+pub struct SectionHandle<S: SectionStorage> {
+    header: SectionHeader, // keep a copy of the header as metadata
+    storage: S,
 }
 
 // This is for a placeholder to unsure an orderly cleanup as we dodge the borrow checker.
 
-impl SectionHandle {
+impl<S: SectionStorage> SectionHandle<S> {
     // The buffer is considered static as it is a dedicated piece for the section.
-    pub fn create(header: SectionHeader, buffer: &'static mut [u8]) -> Self {
-        // here we assume the buffer contains a valid header already.
-        if buffer[0] != SECTION_MAGIC[0] || buffer[1] != SECTION_MAGIC[1] {
-            panic!("Invalid section buffer, magic number not found");
-        }
-
-        if buffer.len() < header.block_size as usize {
-            panic!(
-                "Invalid section buffer, too small: {}, it needs to be > {}",
-                buffer.len(),
-                header.block_size
-            );
-        }
-        Self { header, buffer }
+    pub fn create(header: SectionHeader, mut storage: S) -> CuResult<Self> {
+        // Write the first version of the header.
+        let _ = storage.update_header(&header).map_err(|e| e.to_string())?;
+        Ok(Self { header, storage })
     }
-    pub fn get_user_buffer(&mut self) -> &mut [u8] {
-        &mut self.buffer[self.header.block_size as usize + self.header.used as usize..]
+    pub fn append<E: Encode>(&mut self, entry: E) -> Result<usize, EncodeError> {
+        self.storage.append(&entry)
+    }
+
+    pub fn get_storage(&self) -> &S {
+        &self.storage
+    }
+
+    pub fn update_header(&mut self) -> Result<usize, EncodeError> {
+        self.storage.update_header(&self.header)
     }
 }
 
@@ -161,7 +165,7 @@ pub struct UnifiedLogStatus {
 /// The writing interface to the unified logger.
 /// Writing is "almost" linear as various streams can allocate sections and track them until
 /// they drop them.
-pub trait UnifiedLogWrite: Send + Sync {
+pub trait UnifiedLogWrite<S: SectionStorage>: Send + Sync {
     /// A section is a contiguous chunk of memory that can be used to write data.
     /// It can store various types of data as specified by the entry_type.
     /// The requested_section_size is the size of the section to allocate.
@@ -171,10 +175,10 @@ pub trait UnifiedLogWrite: Send + Sync {
         &mut self,
         entry_type: UnifiedLogType,
         requested_section_size: usize,
-    ) -> SectionHandle;
+    ) -> SectionHandle<S>;
 
     /// Flush the given section to the underlying storage.
-    fn flush_section(&mut self, section: &mut SectionHandle);
+    fn flush_section(&mut self, section: &mut SectionHandle<S>);
 
     /// Returns the current status of the unified logger.
     fn status(&self) -> UnifiedLogStatus;
@@ -193,8 +197,8 @@ pub trait UnifiedLogRead {
 }
 
 /// Create a new stream to write to the unifiedlogger.
-pub fn stream_write<E: Encode>(
-    logger: Arc<Mutex<impl UnifiedLogWrite>>,
+pub fn stream_write<E: Encode, S: SectionStorage>(
+    logger: Arc<Mutex<impl UnifiedLogWrite<S>>>,
     entry_type: UnifiedLogType,
     minimum_allocation_amount: usize,
 ) -> impl WriteStream<E> {
@@ -202,15 +206,15 @@ pub fn stream_write<E: Encode>(
 }
 
 /// A wrapper around the unifiedlogger that implements the Write trait.
-struct LogStream<L: UnifiedLogWrite> {
+struct LogStream<S: SectionStorage, L: UnifiedLogWrite<S>> {
     entry_type: UnifiedLogType,
     parent_logger: Arc<Mutex<L>>,
-    current_section: SectionHandle,
+    current_section: SectionHandle<S>,
     current_position: usize,
     minimum_allocation_amount: usize,
 }
 
-impl<L: UnifiedLogWrite> LogStream<L> {
+impl<S: SectionStorage, L: UnifiedLogWrite<S>> LogStream<S, L> {
     fn new(
         entry_type: UnifiedLogType,
         parent_logger: Arc<Mutex<L>>,
@@ -237,16 +241,17 @@ impl<L: UnifiedLogWrite> LogStream<L> {
     }
 }
 
-impl<L: UnifiedLogWrite> Debug for LogStream<L> {
+impl<S: SectionStorage, L: UnifiedLogWrite<S>> Debug for LogStream<S, L> {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "MmapStream {{ entry_type: {:?}, current_position: {}, minimum_allocation_amount: {} }}", self.entry_type, self.current_position, self.minimum_allocation_amount)
     }
 }
 
-impl<E: Encode, L: UnifiedLogWrite> WriteStream<E> for LogStream<L> {
+impl<E: Encode, S: SectionStorage, L: UnifiedLogWrite<S>> WriteStream<E> for LogStream<S, L> {
     fn log(&mut self, obj: &E) -> CuResult<()> {
-        let dst = self.current_section.get_user_buffer();
-        let result = encode_into_slice(obj, dst, standard());
+        //let dst = self.current_section.get_user_buffer();
+        // let result = encode_into_slice(obj, dst, standard());
+        let result = self.current_section.append(obj);
         match result {
             Ok(nb_bytes) => {
                 self.current_position += nb_bytes;
@@ -275,14 +280,10 @@ impl<E: Encode, L: UnifiedLogWrite> WriteStream<E> for LogStream<L> {
                     self.current_section =
                         logger_guard.add_section(self.entry_type, self.minimum_allocation_amount);
 
-                    let result = encode_into_slice(
-                        obj,
-                        self.current_section.get_user_buffer(),
-                        standard(),
-                    )
-                    .expect(
+                    let result = self.current_section.append(obj).expect(
                         "Failed to encode object in a newly minted section. Unrecoverable failure.",
                     ); // If we fail just after creating a section, there is not much we can do, we need to bail.
+
                     self.current_position += result;
                     self.current_section.header.used += result as u32;
                     Ok(())
@@ -298,7 +299,7 @@ impl<E: Encode, L: UnifiedLogWrite> WriteStream<E> for LogStream<L> {
     }
 }
 
-impl<L: UnifiedLogWrite> Drop for LogStream<L> {
+impl<S: SectionStorage, L: UnifiedLogWrite<S>> Drop for LogStream<S, L> {
     fn drop(&mut self) {
         #[cfg(feature = "std")]
         let logger_guard = self.parent_logger.lock();
