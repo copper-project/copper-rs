@@ -568,13 +568,13 @@ impl MmapUnifiedLoggerRead {
     /// Reads the section content from the section header pos.
     fn read_section_content(&mut self, header: &SectionHeader) -> CuResult<Vec<u8>> {
         // TODO: we could optimize by asking the buffer to fill
-        let mut section = vec![0; header.used as usize];
+        let mut section_data = vec![0; header.used as usize];
         let start_of_data = self.current_reading_position + header.block_size as usize;
-        section.copy_from_slice(
+        section_data.copy_from_slice(
             &self.current_mmap_buffer[start_of_data..start_of_data + header.used as usize],
         );
 
-        Ok(section)
+        Ok(section_data)
     }
 
     fn read_section_header(&mut self) -> CuResult<SectionHeader> {
