@@ -25,11 +25,16 @@ use AllocatedSection::Section;
 pub struct MmapSectionStorage {
     buffer: &'static mut [u8],
     offset: usize,
+    block_size: usize,
 }
 
 impl MmapSectionStorage {
-    pub fn new(buffer: &'static mut [u8]) -> Self {
-        Self { buffer, offset: 0 }
+    pub fn new(buffer: &'static mut [u8], block_size: usize) -> Self {
+        Self {
+            buffer,
+            offset: 0,
+            block_size,
+        }
     }
 
     pub fn buffer_ptr(&self) -> *const u8 {
@@ -38,7 +43,13 @@ impl MmapSectionStorage {
 }
 
 impl SectionStorage for MmapSectionStorage {
-    fn update_header<E: Encode>(&mut self, header: &E) -> Result<usize, EncodeError> {
+    fn initialize<E: Encode>(&mut self, header: &E) -> Result<usize, EncodeError> {
+        self.post_update_header(header)?;
+        self.offset = self.block_size;
+        Ok(self.offset)
+    }
+
+    fn post_update_header<E: Encode>(&mut self, header: &E) -> Result<usize, EncodeError> {
         encode_into_slice(header, &mut self.buffer[0..], standard())
     }
 
@@ -192,7 +203,7 @@ impl SlabEntry {
     /// the flushing is permanent and the section is considered closed.
     fn flush_section(&mut self, section: &mut SectionHandle<MmapSectionStorage>) {
         section
-            .update_header()
+            .post_update_header()
             .expect("Failed to update section header");
 
         let storage = section.get_storage();
@@ -260,7 +271,7 @@ impl SlabEntry {
         // here we have the guarantee for exclusive access to that memory for the lifetime of the handle, the borrow checker cannot understand that ever.
         let handle_buffer =
             unsafe { from_raw_parts_mut(user_buffer.as_mut_ptr(), user_buffer.len()) };
-        let storage = MmapSectionStorage::new(handle_buffer);
+        let storage = MmapSectionStorage::new(handle_buffer, block_size as usize);
 
         self.current_global_position = end_of_section;
 

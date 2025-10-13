@@ -120,8 +120,13 @@ pub enum AllocatedSection<S: SectionStorage> {
 
 /// A Storage is an append-only structure that can update a header section.
 pub trait SectionStorage: Send + Sync {
-    fn update_header<E: Encode>(&mut self, header: &E) -> Result<usize, EncodeError>;
+    /// This rewinds the storage, serialize the header and jumps to the beginning of the user data storage.
+    fn initialize<E: Encode>(&mut self, header: &E) -> Result<usize, EncodeError>;
+    /// This updates the header leaving the position to the end of the user data storage.
+    fn post_update_header<E: Encode>(&mut self, header: &E) -> Result<usize, EncodeError>;
+    /// Appends the entry to the user data storage.
     fn append<E: Encode>(&mut self, entry: &E) -> Result<usize, EncodeError>;
+    /// Flushes the section to the underlying storage
     fn flush(&mut self) -> CuResult<usize>;
 }
 
@@ -139,7 +144,7 @@ impl<S: SectionStorage> SectionHandle<S> {
     // The buffer is considered static as it is a dedicated piece for the section.
     pub fn create(header: SectionHeader, mut storage: S) -> CuResult<Self> {
         // Write the first version of the header.
-        let _ = storage.update_header(&header).map_err(|e| e.to_string())?;
+        let _ = storage.initialize(&header).map_err(|e| e.to_string())?;
         Ok(Self { header, storage })
     }
     pub fn append<E: Encode>(&mut self, entry: E) -> Result<usize, EncodeError> {
@@ -150,8 +155,8 @@ impl<S: SectionStorage> SectionHandle<S> {
         &self.storage
     }
 
-    pub fn update_header(&mut self) -> Result<usize, EncodeError> {
-        self.storage.update_header(&self.header)
+    pub fn post_update_header(&mut self) -> Result<usize, EncodeError> {
+        self.storage.post_update_header(&self.header)
     }
 }
 
