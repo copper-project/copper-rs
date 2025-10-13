@@ -10,12 +10,12 @@ use cu29::prelude::*;
 
 #[cfg(not(feature = "std"))]
 mod imp {
-    pub use alloc::boxed::Box;
     pub use alloc::sync::Arc;
-    pub use alloc::vec;
-    pub use bincode::config::standard;
-    pub use bincode::encode_into_slice;
     pub use spin::Mutex;
+    pub use core::ptr::addr_of_mut;
+    pub use bincode::Encode;
+    pub use bincode::error::EncodeError;
+    pub use alloc::vec;
 }
 
 #[cfg(not(feature = "std"))]
@@ -39,9 +39,6 @@ struct MyEmbeddedLogger {}
 use core::panic::PanicInfo;
 
 #[cfg(not(feature = "std"))]
-use core::ptr::addr_of_mut;
-
-#[cfg(not(feature = "std"))]
 #[panic_handler]
 fn panic(_: &PanicInfo) -> ! {
     loop {
@@ -50,33 +47,50 @@ fn panic(_: &PanicInfo) -> ! {
 }
 
 #[cfg(not(feature = "std"))]
-impl UnifiedLogWrite for MyEmbeddedLogger {
+struct MySectionStorage;
+
+#[cfg(not(feature = "std"))]
+impl SectionStorage for MySectionStorage {
+    // Just mock the behavior for now.
+    fn initialize<E: Encode>(&mut self, _header: &E) -> Result<usize, EncodeError> {
+        Ok(80)
+    }
+
+    fn post_update_header<E: Encode>(&mut self, _header: &E) -> Result<usize, EncodeError> {
+        Ok(80)
+    }
+
+    fn append<E: Encode>(&mut self, _entry: &E) -> Result<usize, EncodeError> {
+        Ok(300)
+    }
+
+    fn flush(&mut self) -> CuResult<usize> {
+        Ok(1000)
+    }
+}
+
+#[cfg(not(feature = "std"))]
+impl UnifiedLogWrite<MySectionStorage> for MyEmbeddedLogger {
     fn add_section(
         &mut self,
         entry_type: UnifiedLogType,
-        requested_section_size: usize,
-    ) -> SectionHandle {
-        use alloc::vec::Vec;
-        // FIXME(gbin): this is just a hack to make it compile, it needs to be correctly implemented.
-        // It minimalistically mimic the std implementation over the mmap file but with a memory leak.
-        let buf: Vec<u8> = vec![0u8; requested_section_size];
-        let boxed: Box<[u8]> = buf.into_boxed_slice();
-        let slice_static: &'static mut [u8] = Box::leak(boxed);
-
+        _requested_section_size: usize,
+    ) -> SectionHandle<MySectionStorage> {
+        // Just mock the behavior for now.
         let section_header = SectionHeader {
             magic: SECTION_MAGIC,
+            block_size: 512,
             entry_type,
-            section_size: requested_section_size as u32,
-            filled_size: 0u32,
+            offset_to_next_section: 10000,
+            used: 0,
         };
 
-        encode_into_slice(&section_header, slice_static, standard())
-            .expect("Failed to encode section header");
-
-        SectionHandle::create(section_header, slice_static)
+        let mut storage: MySectionStorage = MySectionStorage {};
+        storage.initialize(&section_header).unwrap();
+        SectionHandle::create(section_header, storage).unwrap()
     }
 
-    fn flush_section(&mut self, _section: &mut SectionHandle) {
+    fn flush_section(&mut self, _section: &mut SectionHandle<MySectionStorage>) {
         // no op for now
     }
 
@@ -90,7 +104,7 @@ impl UnifiedLogWrite for MyEmbeddedLogger {
 }
 
 #[cfg(not(feature = "std"))]
-const HEAP_SIZE: usize = 128 * 1024;
+const HEAP_SIZE: usize = 128usize * 1024usize;
 
 #[cfg(not(feature = "std"))]
 #[no_mangle]
@@ -107,7 +121,7 @@ pub extern "C" fn main() {
     let clock = RobotClock::new();
     let writer = Arc::new(Mutex::new(MyEmbeddedLogger {}));
     let mut app = MinimalNoStdApp::new(clock, writer).unwrap();
-    let _ = <MinimalNoStdApp as CuApplication<MyEmbeddedLogger>>::run(&mut app);
+    let _ = <MinimalNoStdApp as CuApplication<MySectionStorage, MyEmbeddedLogger>>::run(&mut app);
 }
 
 #[cfg(feature = "std")]
