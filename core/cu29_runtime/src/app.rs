@@ -1,7 +1,7 @@
 use crate::curuntime::KeyFrame;
 use cu29_clock::RobotClock;
 use cu29_traits::CuResult;
-use cu29_unifiedlog::UnifiedLogWrite;
+use cu29_unifiedlog::{SectionStorage, UnifiedLogWrite};
 
 #[cfg(not(feature = "std"))]
 mod imp {
@@ -14,6 +14,7 @@ mod imp {
 mod imp {
     pub use crate::config::CuConfig;
     pub use crate::simulation::SimOverride;
+    pub use cu29_unifiedlog::memmap::MmapSectionStorage;
     pub use std::sync::{Arc, Mutex};
 }
 
@@ -21,10 +22,16 @@ use imp::*;
 
 /// Convenience trait for CuApplication when it is just a std App
 #[cfg(feature = "std")]
-pub trait CuStdApplication: CuApplication<cu29_unifiedlog::UnifiedLoggerWrite> {}
+pub trait CuStdApplication:
+    CuApplication<MmapSectionStorage, cu29_unifiedlog::UnifiedLoggerWrite>
+{
+}
 
 #[cfg(feature = "std")]
-impl<T> CuStdApplication for T where T: CuApplication<cu29_unifiedlog::UnifiedLoggerWrite> {}
+impl<T> CuStdApplication for T where
+    T: CuApplication<MmapSectionStorage, cu29_unifiedlog::UnifiedLoggerWrite>
+{
+}
 
 /// A trait that defines the structure and behavior of a CuApplication.
 ///
@@ -35,7 +42,7 @@ impl<T> CuStdApplication for T where T: CuApplication<cu29_unifiedlog::UnifiedLo
 /// implemented by types that represent specific applications, providing them with unified control and execution features.
 ///
 /// This is the more generic version that allows you to specify a custom unified logger.
-pub trait CuApplication<L: UnifiedLogWrite + 'static> {
+pub trait CuApplication<S: SectionStorage, L: UnifiedLogWrite<S> + 'static> {
     /// Returns the original configuration as a string, typically loaded from a RON file.
     /// This configuration represents the default settings for the application before any overrides.
     fn get_original_config() -> String;
@@ -114,7 +121,7 @@ pub trait CuApplication<L: UnifiedLogWrite + 'static> {
 /// The `CuSimApplication` trait outlines the necessary functions required for managing an application lifecycle
 /// in simulation mode, including configuration management, initialization, task execution, and runtime control.
 #[cfg(feature = "std")]
-pub trait CuSimApplication<L: UnifiedLogWrite + 'static> {
+pub trait CuSimApplication<S: SectionStorage, L: UnifiedLogWrite<S> + 'static> {
     /// The type representing a simulation step that can be overridden
     type Step<'z>;
 

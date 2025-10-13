@@ -3,12 +3,11 @@
 
 extern crate alloc;
 
-use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
-use bincode::config::standard;
-use bincode::encode_into_slice;
+use bincode::error::EncodeError;
+use bincode::Encode;
 use cortex_m_rt::entry;
 use hal::{clocks::init_clocks_and_plls, gpio::Pins, pac, sio::Sio, watchdog::Watchdog};
 use rp235x_hal as hal;
@@ -84,33 +83,48 @@ fn quick_memory_test() {
     defmt::info!("Memory test passed.");
 }
 
-impl UnifiedLogWrite for MyEmbeddedLogger {
+struct MySectionStorage;
+
+impl SectionStorage for MySectionStorage {
+    // Just mock the behavior for now.
+    fn initialize<E: Encode>(&mut self, _header: &E) -> Result<usize, EncodeError> {
+        Ok(80)
+    }
+
+    fn post_update_header<E: Encode>(&mut self, _header: &E) -> Result<usize, EncodeError> {
+        Ok(80)
+    }
+
+    fn append<E: Encode>(&mut self, _entry: &E) -> Result<usize, EncodeError> {
+        Ok(300)
+    }
+
+    fn flush(&mut self) -> CuResult<usize> {
+        Ok(1000)
+    }
+}
+
+impl UnifiedLogWrite<MySectionStorage> for MyEmbeddedLogger {
     fn add_section(
         &mut self,
         entry_type: UnifiedLogType,
         _requested_section_size: usize,
-    ) -> SectionHandle {
-        use alloc::vec::Vec;
-        // FIXME(gbin): this is just a hack to make it compile, it needs to be correctly implemented.
-        // It minimalistically mimic the std implementation over the mmap file but with a memory leak.
-        let buf: Vec<u8> = vec![0u8; 10000];
-        let boxed: Box<[u8]> = buf.into_boxed_slice();
-        let slice_static: &'static mut [u8] = Box::leak(boxed);
-
+    ) -> SectionHandle<MySectionStorage> {
+        // Just mock the behavior for now.
         let section_header = SectionHeader {
             magic: SECTION_MAGIC,
+            block_size: 512,
             entry_type,
-            section_size: 10000u32,
-            filled_size: 0u32,
+            offset_to_next_section: 10000,
+            used: 0,
         };
 
-        encode_into_slice(&section_header, slice_static, standard())
-            .expect("Failed to encode section header");
-
-        SectionHandle::create(section_header, slice_static)
+        let mut storage: MySectionStorage = MySectionStorage {};
+        storage.initialize(&section_header).unwrap();
+        SectionHandle::create(section_header, storage).unwrap()
     }
 
-    fn flush_section(&mut self, _section: &mut SectionHandle) {
+    fn flush_section(&mut self, _section: &mut SectionHandle<MySectionStorage>) {
         // no op for now
     }
 
@@ -158,7 +172,7 @@ fn main() -> ! {
     let mut app = EmbeddedApp::new(clock, writer).unwrap();
     info!("Starting Copper...");
 
-    let _ = <EmbeddedApp as CuApplication<MyEmbeddedLogger>>::run(&mut app);
+    let _ = <EmbeddedApp as CuApplication<MySectionStorage, MyEmbeddedLogger>>::run(&mut app);
     defmt::error!("Copper crashed.");
     loop {}
 }

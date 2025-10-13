@@ -2,11 +2,16 @@
 //! It is std only.
 
 use crate::{
-    AllocatedSection, MainHeader, SectionHandle, SectionHeader, UnifiedLogRead, UnifiedLogStatus,
-    UnifiedLogWrite, MAIN_MAGIC, MAX_HEADER_SIZE, SECTION_MAGIC,
+    AllocatedSection, MainHeader, SectionHandle, SectionHeader, SectionStorage, UnifiedLogRead,
+    UnifiedLogStatus, UnifiedLogWrite, MAIN_MAGIC, SECTION_MAGIC,
 };
+
+#[cfg(feature = "compact")]
+use crate::SECTION_HEADER_COMPACT_SIZE;
+
 use bincode::config::standard;
-use bincode::{decode_from_slice, encode_into_slice};
+use bincode::error::EncodeError;
+use bincode::{decode_from_slice, encode_into_slice, Encode};
 use core::slice::from_raw_parts_mut;
 use cu29_traits::{CuError, CuResult, UnifiedLogType};
 use memmap2::{Mmap, MmapMut};
@@ -16,6 +21,48 @@ use std::mem::ManuallyDrop;
 use std::path::{Path, PathBuf};
 use std::{io, mem};
 use AllocatedSection::Section;
+
+pub struct MmapSectionStorage {
+    buffer: &'static mut [u8],
+    offset: usize,
+    block_size: usize,
+}
+
+impl MmapSectionStorage {
+    pub fn new(buffer: &'static mut [u8], block_size: usize) -> Self {
+        Self {
+            buffer,
+            offset: 0,
+            block_size,
+        }
+    }
+
+    pub fn buffer_ptr(&self) -> *const u8 {
+        &self.buffer[0] as *const u8
+    }
+}
+
+impl SectionStorage for MmapSectionStorage {
+    fn initialize<E: Encode>(&mut self, header: &E) -> Result<usize, EncodeError> {
+        self.post_update_header(header)?;
+        self.offset = self.block_size;
+        Ok(self.offset)
+    }
+
+    fn post_update_header<E: Encode>(&mut self, header: &E) -> Result<usize, EncodeError> {
+        encode_into_slice(header, &mut self.buffer[0..], standard())
+    }
+
+    fn append<E: Encode>(&mut self, entry: &E) -> Result<usize, EncodeError> {
+        let size = encode_into_slice(entry, &mut self.buffer[self.offset..], standard())?;
+        self.offset += size;
+        Ok(size)
+    }
+
+    fn flush(&mut self) -> CuResult<usize> {
+        todo!()
+    }
+}
 
 /// Holds the read or write side of the datalogger.
 pub enum MmapUnifiedLogger {
@@ -144,32 +191,33 @@ impl SlabEntry {
         self.flushed_until_offset = until_position;
     }
 
-    fn is_it_my_section(&self, section: &SectionHandle) -> bool {
-        (section.buffer.as_ptr() >= self.mmap_buffer.as_ptr())
-            && (section.buffer.as_ptr() as usize)
+    fn is_it_my_section(&self, section: &SectionHandle<MmapSectionStorage>) -> bool {
+        let storage = section.get_storage();
+        let ptr = storage.buffer_ptr();
+        (ptr >= self.mmap_buffer.as_ptr())
+            && (ptr as usize)
                 < (self.mmap_buffer.as_ref().as_ptr() as usize + self.mmap_buffer.as_ref().len())
     }
 
     /// Flush the section to disk.
     /// the flushing is permanent and the section is considered closed.
-    fn flush_section(&mut self, section: &mut SectionHandle) {
-        if section.buffer.as_ptr() < self.mmap_buffer.as_ptr()
-            || section.buffer.as_ptr() as usize
-                > self.mmap_buffer.as_ptr() as usize + self.mmap_buffer.len()
+    fn flush_section(&mut self, section: &mut SectionHandle<MmapSectionStorage>) {
+        section
+            .post_update_header()
+            .expect("Failed to update section header");
+
+        let storage = section.get_storage();
+        let ptr = storage.buffer_ptr();
+
+        if ptr < self.mmap_buffer.as_ptr()
+            || ptr as usize > self.mmap_buffer.as_ptr() as usize + self.mmap_buffer.len()
         {
             panic!("Invalid section buffer, not in the slab");
         }
 
-        // Be sure that the header reflects the actual size of the section.
-        section.update_header();
-
-        let _sz = encode_into_slice(&section.section_header, section.buffer, standard())
-            .expect("Failed to encode section header");
-
         let base = self.mmap_buffer.as_ptr() as usize;
-        let section_buffer_addr = section.buffer.as_ptr() as usize;
         self.sections_offsets_in_flight
-            .retain(|&x| x != section_buffer_addr - base);
+            .retain(|&x| x != ptr as usize - base);
 
         if self.sections_offsets_in_flight.is_empty() {
             self.flush_until(self.current_global_position);
@@ -190,7 +238,7 @@ impl SlabEntry {
         &mut self,
         entry_type: UnifiedLogType,
         requested_section_size: usize,
-    ) -> AllocatedSection {
+    ) -> AllocatedSection<MmapSectionStorage> {
         // align current_position to the next page
         self.current_global_position = self.align_to_next_page(self.current_global_position);
         let section_size = self.align_to_next_page(requested_section_size) as u32;
@@ -200,20 +248,19 @@ impl SlabEntry {
             return AllocatedSection::NoMoreSpace;
         }
 
+        #[cfg(feature = "compact")]
+        let block_size = SECTION_HEADER_COMPACT_SIZE;
+
+        #[cfg(not(feature = "compact"))]
+        let block_size = self.page_size as u16;
+
         let section_header = SectionHeader {
             magic: SECTION_MAGIC,
+            block_size,
             entry_type,
-            section_size,
-            filled_size: 0u32,
+            offset_to_next_section: section_size,
+            used: 0u32,
         };
-
-        let nb_bytes = encode_into_slice(
-            &section_header,
-            &mut self.mmap_buffer[self.current_global_position..],
-            standard(),
-        )
-        .expect("Failed to encode section header");
-        assert!(nb_bytes < self.page_size);
 
         // save the position to keep track for in flight sections
         self.sections_offsets_in_flight
@@ -224,10 +271,11 @@ impl SlabEntry {
         // here we have the guarantee for exclusive access to that memory for the lifetime of the handle, the borrow checker cannot understand that ever.
         let handle_buffer =
             unsafe { from_raw_parts_mut(user_buffer.as_mut_ptr(), user_buffer.len()) };
+        let storage = MmapSectionStorage::new(handle_buffer, block_size as usize);
 
         self.current_global_position = end_of_section;
 
-        Section(SectionHandle::create(section_header, handle_buffer))
+        Section(SectionHandle::create(section_header, storage).expect("Failed to create section"))
     }
 
     #[cfg(test)]
@@ -279,13 +327,13 @@ fn make_slab_file(base_file_path: &Path, slab_size: usize, slab_suffix: usize) -
     file
 }
 
-impl UnifiedLogWrite for MmapUnifiedLoggerWrite {
+impl UnifiedLogWrite<MmapSectionStorage> for MmapUnifiedLoggerWrite {
     /// The returned slice is section_size or greater.
     fn add_section(
         &mut self,
         entry_type: UnifiedLogType,
         requested_section_size: usize,
-    ) -> SectionHandle {
+    ) -> SectionHandle<MmapSectionStorage> {
         self.garbage_collect_backslabs(); // Take the opportunity to keep up and close stale back slabs.
         let maybe_section = self
             .front_slab
@@ -312,7 +360,7 @@ impl UnifiedLogWrite for MmapUnifiedLoggerWrite {
         }
     }
 
-    fn flush_section(&mut self, section: &mut SectionHandle) {
+    fn flush_section(&mut self, section: &mut SectionHandle<MmapSectionStorage>) {
         for slab in self.back_slabs.iter_mut() {
             if slab.is_it_my_section(section) {
                 slab.flush_section(section);
@@ -380,7 +428,10 @@ impl Drop for MmapUnifiedLoggerWrite {
         #[cfg(debug_assertions)]
         eprintln!("Flushing the unified Logger ... "); // Note this cannot be a structured log writing in this log.
 
-        let mut section = self.add_section(UnifiedLogType::LastEntry, 80); // TODO: determine that exactly
+        let mut section = self.add_section(
+            UnifiedLogType::LastEntry,
+            SECTION_HEADER_COMPACT_SIZE as usize, // this is the absolute minimum size of a section.
+        );
         self.front_slab.flush_section(&mut section);
         self.garbage_collect_backslabs();
 
@@ -459,12 +510,12 @@ impl UnifiedLogRead for MmapUnifiedLoggerRead {
             // Found a section of the requested type
             if header.entry_type == datalogtype {
                 let result = Some(self.read_section_content(&header)?);
-                self.current_reading_position += header.section_size as usize;
+                self.current_reading_position += header.offset_to_next_section as usize;
                 return Ok(result);
             }
 
             // Keep reading until we find the requested type
-            self.current_reading_position += header.section_size as usize;
+            self.current_reading_position += header.offset_to_next_section as usize;
         }
     }
 
@@ -490,7 +541,7 @@ impl UnifiedLogRead for MmapUnifiedLoggerRead {
             )),
             Ok(header) => {
                 let data = self.read_section_content(&header)?;
-                self.current_reading_position += header.section_size as usize;
+                self.current_reading_position += header.offset_to_next_section as usize;
                 Ok((header, data))
             }
         }
@@ -528,13 +579,13 @@ impl MmapUnifiedLoggerRead {
     /// Reads the section content from the section header pos.
     fn read_section_content(&mut self, header: &SectionHeader) -> CuResult<Vec<u8>> {
         // TODO: we could optimize by asking the buffer to fill
-        let mut section = vec![0; header.filled_size as usize];
-        let start_of_data = self.current_reading_position + MAX_HEADER_SIZE;
-        section.copy_from_slice(
-            &self.current_mmap_buffer[start_of_data..start_of_data + header.filled_size as usize],
+        let mut section_data = vec![0; header.used as usize];
+        let start_of_data = self.current_reading_position + header.block_size as usize;
+        section_data.copy_from_slice(
+            &self.current_mmap_buffer[start_of_data..start_of_data + header.used as usize],
         );
 
-        Ok(section)
+        Ok(section_data)
     }
 
     fn read_section_header(&mut self) -> CuResult<SectionHeader> {
@@ -678,8 +729,11 @@ mod tests {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let (logger, _) = make_a_logger(&tmp_dir, LARGE_SLAB);
         {
-            let _stream =
-                stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
+            let _stream = stream_write::<(), MmapSectionStorage>(
+                logger.clone(),
+                UnifiedLogType::StructuredLogLine,
+                1024,
+            );
             assert_eq!(
                 logger
                     .lock()
@@ -710,7 +764,11 @@ mod tests {
     fn test_two_sections_self_cleaning_in_order() {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let (logger, _) = make_a_logger(&tmp_dir, LARGE_SLAB);
-        let s1 = stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
+        let s1 = stream_write::<(), MmapSectionStorage>(
+            logger.clone(),
+            UnifiedLogType::StructuredLogLine,
+            1024,
+        );
         assert_eq!(
             logger
                 .lock()
@@ -720,7 +778,11 @@ mod tests {
                 .len(),
             1
         );
-        let s2 = stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
+        let s2 = stream_write::<(), MmapSectionStorage>(
+            logger.clone(),
+            UnifiedLogType::StructuredLogLine,
+            1024,
+        );
         assert_eq!(
             logger
                 .lock()
@@ -753,7 +815,11 @@ mod tests {
     fn test_two_sections_self_cleaning_out_of_order() {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let (logger, _) = make_a_logger(&tmp_dir, LARGE_SLAB);
-        let s1 = stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
+        let s1 = stream_write::<(), MmapSectionStorage>(
+            logger.clone(),
+            UnifiedLogType::StructuredLogLine,
+            1024,
+        );
         assert_eq!(
             logger
                 .lock()
@@ -763,7 +829,11 @@ mod tests {
                 .len(),
             1
         );
-        let s2 = stream_write::<()>(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
+        let s2 = stream_write::<(), MmapSectionStorage>(
+            logger.clone(),
+            UnifiedLogType::StructuredLogLine,
+            1024,
+        );
         assert_eq!(
             logger
                 .lock()
