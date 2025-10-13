@@ -11,6 +11,7 @@ cortex-m = "0.7"
 cortex-m-rt = "0.7"
 defmt-rtt = "1.0"  # RTT logging backend for defmt (ie through a probe)
 embedded-alloc = "0.6"
+embedded-hal-bus = "0.3"
 buddy_system_allocator = "0.11"
 embedded-hal = "1.0"
 panic-probe = { version = "1.0", features = ["defmt", "print-defmt"] }
@@ -20,7 +21,7 @@ portable-atomic = { version = "1.11", default-features = false, features = ["req
 
 spin = { version = "0.10" }
 embedded-sdmmc = { version = "0.9", features = [
-    # "defmt-log",
+    "defmt-log",
 ], default-features = false }
 
 [[bin]]

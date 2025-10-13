@@ -3,6 +3,7 @@
 
 extern crate alloc;
 
+use rp235x_hal::gpio::bank0::{Gpio15, Gpio16, Gpio17, Gpio18, Gpio19};
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec;
@@ -16,18 +17,27 @@ use rp235x_hal as hal;
 use buddy_system_allocator::LockedHeap as Heap;
 use cu29::prelude::*;
 use defmt_rtt as _;
+use embedded_hal::spi::MODE_0;
+use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
+use embedded_sdmmc::{Block, BlockIdx, SdCard};
 use panic_probe as _;
-use rp235x_hal::gpio::{Function, FunctionXipCs1, Pin, PinId, PullType, ValidFunction};
+use rp235x_hal::gpio::{Function, FunctionSio, FunctionSpi, FunctionXipCs1, Pin, PinId, PullDown, PullNone, PullType, PullUp, SioInput, SioOutput, ValidFunction};
+use rp235x_hal::{spi, Spi, Timer};
+use rp235x_hal::spi::{Enabled, FrameFormat};
 use spin::Mutex;
+use rp235x_hal::fugit::RateExtU32;
+use rp235x_hal::Clock;
+use embedded_sdmmc::BlockDevice;
+use rp235x_hal::pac::SPI0;
+use rp235x_hal::timer::{CopyableTimer0, CopyableTimer1};
+use bmlogger::EMMCLogger;
 
 // --- Copper runtime
 pub mod tasks;
-#[copper_runtime(config = "copperconfig.ron")]
-struct EmbeddedApp {}
+mod bmlogger;
 
-// FIXME(gbin): Actually implement the SDCARD logger.
-// this is just a placeholder.
-struct MyEmbeddedLogger {}
+#[copper_runtime(config = "copperconfig.ron")]
+struct BlinkyApp {}
 
 // --- embedded setup
 const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
@@ -84,50 +94,30 @@ fn quick_memory_test() {
     defmt::info!("Memory test passed.");
 }
 
-impl UnifiedLogWrite for MyEmbeddedLogger {
-    fn add_section(
-        &mut self,
-        entry_type: UnifiedLogType,
-        _requested_section_size: usize,
-    ) -> SectionHandle {
-        use alloc::vec::Vec;
-        // FIXME(gbin): this is just a hack to make it compile, it needs to be correctly implemented.
-        // It minimalistically mimic the std implementation over the mmap file but with a memory leak.
-        let buf: Vec<u8> = vec![0u8; 10000];
-        let boxed: Box<[u8]> = buf.into_boxed_slice();
-        let slice_static: &'static mut [u8] = Box::leak(boxed);
+// Types to bind to the Pimodori pico plus SDCard Cowbell.
+// I am not sure why embedded does that to us.
+// Pinout
+type Mosi = Pin<Gpio19, FunctionSpi, PullDown>;
+type Miso = Pin<Gpio16, FunctionSpi, PullDown>;
+type Sck = Pin<Gpio18, FunctionSpi, PullDown>;
+type Cs = Pin<Gpio17, FunctionSio<SioOutput>, PullDown>;
+type Det = Pin<Gpio15, FunctionSio<SioInput>, PullUp>;
 
-        let section_header = SectionHeader {
-            magic: SECTION_MAGIC,
-            entry_type,
-            section_size: 10000u32,
-            filled_size: 0u32,
-        };
+// Timers
+type Timer0 = Timer<CopyableTimer0>;
+type Timer1 = Timer<CopyableTimer1>;
 
-        encode_into_slice(&section_header, slice_static, standard())
-            .expect("Failed to encode section header");
+// Buses
+type Spi0 = Spi<Enabled, SPI0, (Mosi, Miso, Sck)>;
 
-        SectionHandle::create(section_header, slice_static)
-    }
-
-    fn flush_section(&mut self, _section: &mut SectionHandle) {
-        // no op for now
-    }
-
-    fn status(&self) -> UnifiedLogStatus {
-        // no op for now
-        UnifiedLogStatus {
-            total_used_space: 0,
-            total_allocated_space: 0,
-        }
-    }
-}
+type SdDev = ExclusiveDevice<Spi0, Cs, Timer0>;
+type PimodoriSdCard =  SdCard<SdDev, Timer1>;
 
 #[entry]
 fn main() -> ! {
     let mut p = pac::Peripherals::take().unwrap();
     let mut watchdog = Watchdog::new(p.WATCHDOG);
-    let _clocks = init_clocks_and_plls(
+    let clocks = init_clocks_and_plls(
         XOSC_CRYSTAL_FREQ,
         p.XOSC,
         p.CLOCKS,
@@ -137,7 +127,8 @@ fn main() -> ! {
         &mut watchdog,
     )
     .unwrap();
-    // let timer: Timer<CopyableTimer0> = Timer::new_timer0(p.TIMER0, &mut p.RESETS, &clocks);
+
+    let timer: Timer0 = Timer::new_timer0(p.TIMER0, &mut p.RESETS, &clocks);
 
     let sio = Sio::new(p.SIO);
     let pins = Pins::new(p.IO_BANK0, p.PADS_BANK0, sio.gpio_bank0, &mut p.RESETS);
@@ -146,6 +137,38 @@ fn main() -> ! {
     init_psram_and_allocator(pins.gpio47);
     quick_memory_test();
 
+    // Set up the SD card
+    info!("Setting up the SDCard...");
+
+    let miso: Miso  = pins.gpio16.into_function();
+    let cs:Cs   = pins.gpio17.into_push_pull_output();
+    let sck: Sck  = pins.gpio18.into_function();
+    let mosi: Mosi = pins.gpio19.into_function();
+    let det: Det = pins.gpio15.into_pull_up_input();
+
+    let sd_spi: Spi0 = Spi::<_, _, _, 8>::new(p.SPI0, (mosi, miso, sck)).init(
+        &mut p.RESETS,
+        clocks.peripheral_clock.freq(),
+        16_000_000u32.Hz(),
+        FrameFormat::MotorolaSpi(MODE_0),
+    );
+    let sd_dev: SdDev = ExclusiveDevice::new(sd_spi, cs, timer).unwrap();
+    let _sd_det = Some(det);
+    let delay1: Timer1 = Timer::new_timer1(p.TIMER1, &mut p.RESETS, &clocks);
+    let sd: PimodoriSdCard = SdCard::new(sd_dev, delay1);
+
+    if let Err(e) = sd.num_bytes() {
+        defmt::panic!("SD Card error: {}", e);
+    }
+
+    let mut boot = Block::new();
+    sd.read(core::slice::from_mut(&mut boot), BlockIdx(0)).unwrap();
+
+    let sig = u16::from_le_bytes([boot.contents[510], boot.contents[511]]);
+    if sig != 0xAA55 {
+        defmt::panic!("Invalid SDCard. Could not find the Master Boot Record signature at index 510. (0xAA55)");
+    }
+
     info!("Setting up Copper...");
 
     let led = pins.gpio20.into_push_pull_output();
@@ -153,12 +176,12 @@ fn main() -> ! {
 
     // start copper
     let clock = RobotClock::new();
-    let writer = Arc::new(Mutex::new(MyEmbeddedLogger {}));
+    let writer = Arc::new(Mutex::new(EMMCLogger::new(sd)));
 
-    let mut app = EmbeddedApp::new(clock, writer).unwrap();
+    let mut app = BlinkyApp::new(clock, writer).unwrap();
     info!("Starting Copper...");
 
-    let _ = <EmbeddedApp as CuApplication<MyEmbeddedLogger>>::run(&mut app);
+    let _ = <BlinkyApp as CuApplication<EMMCLogger<PimodoriSdCard>>>::run(&mut app);
     defmt::error!("Copper crashed.");
     loop {}
 }

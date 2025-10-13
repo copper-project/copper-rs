@@ -66,8 +66,8 @@ impl UnifiedLogWrite for MyEmbeddedLogger {
         let section_header = SectionHeader {
             magic: SECTION_MAGIC,
             entry_type,
-            section_size: requested_section_size as u32,
-            filled_size: 0u32,
+            offset_to_next_section: requested_section_size as u32,
+            used: 0u32,
         };
 
         encode_into_slice(&section_header, slice_static, standard())
