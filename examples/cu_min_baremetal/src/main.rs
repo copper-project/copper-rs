@@ -11,11 +11,11 @@ use cu29::prelude::*;
 #[cfg(not(feature = "std"))]
 mod imp {
     pub use alloc::sync::Arc;
-    pub use spin::Mutex;
-    pub use core::ptr::addr_of_mut;
-    pub use bincode::Encode;
-    pub use bincode::error::EncodeError;
     pub use alloc::vec;
+    pub use bincode::error::EncodeError;
+    pub use bincode::Encode;
+    pub use core::ptr::addr_of_mut;
+    pub use spin::Mutex;
 }
 
 #[cfg(not(feature = "std"))]
