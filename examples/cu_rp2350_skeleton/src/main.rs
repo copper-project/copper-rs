@@ -4,12 +4,9 @@
 extern crate alloc;
 
 use rp235x_hal::gpio::bank0::{Gpio15, Gpio16, Gpio17, Gpio18, Gpio19};
-use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
-use bincode::config::standard;
-use bincode::encode_into_slice;
 use cortex_m_rt::entry;
 use hal::{clocks::init_clocks_and_plls, gpio::Pins, pac, sio::Sio, watchdog::Watchdog};
 use rp235x_hal as hal;
@@ -152,6 +149,7 @@ fn main() -> ! {
         16_000_000u32.Hz(),
         FrameFormat::MotorolaSpi(MODE_0),
     );
+
     let sd_dev: SdDev = ExclusiveDevice::new(sd_spi, cs, timer).unwrap();
     let _sd_det = Some(det);
     let delay1: Timer1 = Timer::new_timer1(p.TIMER1, &mut p.RESETS, &clocks);
