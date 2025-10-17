@@ -334,7 +334,7 @@ impl UnifiedLogWrite<MmapSectionStorage> for MmapUnifiedLoggerWrite {
         &mut self,
         entry_type: UnifiedLogType,
         requested_section_size: usize,
-    ) -> SectionHandle<MmapSectionStorage> {
+    ) -> CuResult<SectionHandle<MmapSectionStorage>> {
         self.garbage_collect_backslabs(); // Take the opportunity to keep up and close stale back slabs.
         let maybe_section = self
             .front_slab
@@ -351,13 +351,11 @@ impl UnifiedLogWrite<MmapSectionStorage> for MmapUnifiedLoggerWrite {
                     .front_slab
                     .add_section(entry_type, requested_section_size)
                 {
-                    AllocatedSection::NoMoreSpace => {
-                        panic!("Failed to allocate a section in a new slab");
-                    }
-                    Section(section) => section,
+                    AllocatedSection::NoMoreSpace => Err(CuError::from("out of space")),
+                    Section(section) => Ok(section),
                 }
             }
-            Section(section) => section,
+            Section(section) => Ok(section),
         }
     }
 
@@ -429,15 +427,21 @@ impl Drop for MmapUnifiedLoggerWrite {
         #[cfg(debug_assertions)]
         eprintln!("Flushing the unified Logger ... "); // Note this cannot be a structured log writing in this log.
 
-        let mut section = self.add_section(
+        let section = self.add_section(
             UnifiedLogType::LastEntry,
             SECTION_HEADER_COMPACT_SIZE as usize, // this is the absolute minimum size of a section.
         );
-        self.front_slab.flush_section(&mut section);
-        self.garbage_collect_backslabs();
-
-        #[cfg(debug_assertions)]
-        eprintln!("Unified Logger flushed."); // Note this cannot be a structured log writing in this log.
+        match section {
+            Ok(mut section) => {
+                self.front_slab.flush_section(&mut section);
+                self.garbage_collect_backslabs();
+                #[cfg(debug_assertions)]
+                eprintln!("Unified Logger flushed."); // Note this cannot be a structured log writing in this log.
+            }
+            Err(e) => {
+                panic!("Failed to flush the unified logger: {}", e);
+            }
+        }
     }
 }
 
@@ -704,8 +708,12 @@ mod tests {
             else {
                 panic!("Failed to create logger")
             };
-            logger.add_section(UnifiedLogType::StructuredLogLine, 1024);
-            logger.add_section(UnifiedLogType::CopperList, 2048);
+            logger
+                .add_section(UnifiedLogType::StructuredLogLine, 1024)
+                .unwrap();
+            logger
+                .add_section(UnifiedLogType::CopperList, 2048)
+                .unwrap();
             let used = logger.front_slab.used();
             assert!(used < 4 * page_size::get()); // ie. 3 headers, 1 page max per
                                                   // logger drops
@@ -868,7 +876,8 @@ mod tests {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let (logger, f) = make_a_logger(&tmp_dir, LARGE_SLAB);
         {
-            let mut stream = stream_write(logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
+            let mut stream =
+                stream_write(logger.clone(), UnifiedLogType::StructuredLogLine, 1024).unwrap();
             stream.log(&1u32).unwrap();
             stream.log(&2u32).unwrap();
             stream.log(&3u32).unwrap();
@@ -915,7 +924,8 @@ mod tests {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let (logger, f) = make_a_logger(&tmp_dir, LARGE_SLAB);
         {
-            let mut stream = stream_write(logger.clone(), UnifiedLogType::CopperList, 1024);
+            let mut stream =
+                stream_write(logger.clone(), UnifiedLogType::CopperList, 1024).unwrap();
             let cl0 = CopperList {
                 state: CopperListStateMock::Free,
                 payload: (1u32, 2u32, 3u32),
@@ -954,7 +964,8 @@ mod tests {
         let tmp_dir = TempDir::new().expect("could not create a tmp dir");
         let (logger, f) = make_a_logger(&tmp_dir, SMALL_SLAB);
         {
-            let mut stream = stream_write(logger.clone(), UnifiedLogType::CopperList, 1024);
+            let mut stream =
+                stream_write(logger.clone(), UnifiedLogType::CopperList, 1024).unwrap();
             let cl0 = CopperList {
                 state: CopperListStateMock::Free,
                 payload: (1u32, 2u32, 3u32),

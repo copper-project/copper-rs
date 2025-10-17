@@ -463,7 +463,8 @@ mod tests {
                 panic!("Failed to create logger")
             };
             let data_logger = Arc::new(Mutex::new(logger));
-            let stream = stream_write(data_logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
+            let stream = stream_write(data_logger.clone(), UnifiedLogType::StructuredLogLine, 1024)
+                .expect("Failed to create stream");
             let rt = LoggerRuntime::init(RobotClock::default(), stream, None::<NullLog>);
 
             let mut entry = CuLogEntry::new(4, CuLogLevel::Info); // this is a "Just a String {}" log line

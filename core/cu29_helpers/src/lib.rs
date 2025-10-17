@@ -49,7 +49,7 @@ pub fn basic_copper_setup(
         unified_logger.clone(),
         UnifiedLogType::StructuredLogLine,
         4096 * 10,
-    );
+    )?;
 
     #[cfg(debug_assertions)]
     let extra: Option<TermLogger> = if _text_log {
