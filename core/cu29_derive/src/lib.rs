@@ -1436,13 +1436,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         // the 2 sizes are not directly related as we encode the CuList but we can
                         // assume the encoded size is close or lower than the non encoded one
                         // This is to be sure we have the size of at least a Culist and some.
-                    );
+                    )?;
 
                     let keyframes_stream = stream_write::<KeyFrame, S>(
                         unified_logger.clone(),
                         UnifiedLogType::FrozenTasks,
                         1024 * 1024 * 10, // 10 MiB
-                    );
+                    )?;
 
 
                     let application = Ok(#application_name {

@@ -71,14 +71,14 @@ fn quick_memory_test() {
 
     mem_stats();
     let mut v: Vec<u8> = vec![0u8; 4 * 1024];
-    for i in 0..v.len() {
-        v[i] = (i % 256) as u8;
+    for (i, item) in v.iter_mut().enumerate() {
+        *item = (i % 256) as u8;
     }
 
     defmt::info!("After 1 4kB allocation... ");
     mem_stats();
-    for i in 0..v.len() {
-        assert_eq!(v[i], (i % 256) as u8);
+        for (i, item) in v.iter().enumerate() {
+        assert_eq!(*item, (i % 256) as u8);
     }
     defmt::info!("Memory test passed.");
 }
@@ -109,7 +109,7 @@ impl UnifiedLogWrite<MySectionStorage> for MyEmbeddedLogger {
         &mut self,
         entry_type: UnifiedLogType,
         _requested_section_size: usize,
-    ) -> SectionHandle<MySectionStorage> {
+    ) -> CuResult<SectionHandle<MySectionStorage>> {
         // Just mock the behavior for now.
         let section_header = SectionHeader {
             magic: SECTION_MAGIC,
@@ -121,7 +121,7 @@ impl UnifiedLogWrite<MySectionStorage> for MyEmbeddedLogger {
 
         let mut storage: MySectionStorage = MySectionStorage {};
         storage.initialize(&section_header).unwrap();
-        SectionHandle::create(section_header, storage).unwrap()
+        SectionHandle::create(section_header, storage)
     }
 
     fn flush_section(&mut self, _section: &mut SectionHandle<MySectionStorage>) {
@@ -136,7 +136,7 @@ impl UnifiedLogWrite<MySectionStorage> for MyEmbeddedLogger {
         }
     }
 }
-
+#[allow(clippy::empty_loop)]
 #[entry]
 fn main() -> ! {
     let mut p = pac::Peripherals::take().unwrap();

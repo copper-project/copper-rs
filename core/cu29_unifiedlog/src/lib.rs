@@ -138,10 +138,7 @@ pub struct SectionHandle<S: SectionStorage> {
     storage: S,
 }
 
-// This is for a placeholder to unsure an orderly cleanup as we dodge the borrow checker.
-
 impl<S: SectionStorage> SectionHandle<S> {
-    // The buffer is considered static as it is a dedicated piece for the section.
     pub fn create(header: SectionHeader, mut storage: S) -> CuResult<Self> {
         // Write the first version of the header.
         let _ = storage.initialize(&header).map_err(|e| e.to_string())?;
@@ -153,6 +150,10 @@ impl<S: SectionStorage> SectionHandle<S> {
 
     pub fn get_storage(&self) -> &S {
         &self.storage
+    }
+
+    pub fn get_storage_mut(&mut self) -> &mut S {
+        &mut self.storage
     }
 
     pub fn post_update_header(&mut self) -> Result<usize, EncodeError> {
@@ -180,7 +181,7 @@ pub trait UnifiedLogWrite<S: SectionStorage>: Send + Sync {
         &mut self,
         entry_type: UnifiedLogType,
         requested_section_size: usize,
-    ) -> SectionHandle<S>;
+    ) -> CuResult<SectionHandle<S>>;
 
     /// Flush the given section to the underlying storage.
     fn flush_section(&mut self, section: &mut SectionHandle<S>);
@@ -206,8 +207,8 @@ pub fn stream_write<E: Encode, S: SectionStorage>(
     logger: Arc<Mutex<impl UnifiedLogWrite<S>>>,
     entry_type: UnifiedLogType,
     minimum_allocation_amount: usize,
-) -> impl WriteStream<E> {
-    LogStream::new(entry_type, logger.clone(), minimum_allocation_amount)
+) -> CuResult<impl WriteStream<E>> {
+    LogStream::new(entry_type, logger, minimum_allocation_amount)
 }
 
 /// A wrapper around the unifiedlogger that implements the Write trait.
@@ -224,25 +225,25 @@ impl<S: SectionStorage, L: UnifiedLogWrite<S>> LogStream<S, L> {
         entry_type: UnifiedLogType,
         parent_logger: Arc<Mutex<L>>,
         minimum_allocation_amount: usize,
-    ) -> Self {
+    ) -> CuResult<Self> {
         #[cfg(feature = "std")]
         let section = parent_logger
             .lock()
             .expect("Could not lock a section at MmapStream creation")
-            .add_section(entry_type, minimum_allocation_amount);
+            .add_section(entry_type, minimum_allocation_amount)?;
 
         #[cfg(not(feature = "std"))]
         let section = parent_logger
             .lock()
-            .add_section(entry_type, minimum_allocation_amount);
+            .add_section(entry_type, minimum_allocation_amount)?;
 
-        Self {
+        Ok(Self {
             entry_type,
             parent_logger,
             current_section: section,
             current_position: 0,
             minimum_allocation_amount,
-        }
+        })
     }
 }
 
@@ -282,8 +283,8 @@ impl<E: Encode, S: SectionStorage, L: UnifiedLogWrite<S>> WriteStream<E> for Log
                         };
 
                     logger_guard.flush_section(&mut self.current_section);
-                    self.current_section =
-                        logger_guard.add_section(self.entry_type, self.minimum_allocation_amount);
+                    self.current_section = logger_guard
+                        .add_section(self.entry_type, self.minimum_allocation_amount)?;
 
                     let result = self.current_section.append(obj).expect(
                         "Failed to encode object in a newly minted section. Unrecoverable failure.",

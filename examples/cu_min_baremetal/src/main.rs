@@ -75,7 +75,7 @@ impl UnifiedLogWrite<MySectionStorage> for MyEmbeddedLogger {
         &mut self,
         entry_type: UnifiedLogType,
         _requested_section_size: usize,
-    ) -> SectionHandle<MySectionStorage> {
+    ) -> CuResult<SectionHandle<MySectionStorage>> {
         // Just mock the behavior for now.
         let section_header = SectionHeader {
             magic: SECTION_MAGIC,
@@ -86,8 +86,10 @@ impl UnifiedLogWrite<MySectionStorage> for MyEmbeddedLogger {
         };
 
         let mut storage: MySectionStorage = MySectionStorage {};
-        storage.initialize(&section_header).unwrap();
-        SectionHandle::create(section_header, storage).unwrap()
+        storage
+            .initialize(&section_header)
+            .map_err(|_| CuError::from("Error initializing storage"))?;
+        Ok(SectionHandle::create(section_header, storage).unwrap())
     }
 
     fn flush_section(&mut self, _section: &mut SectionHandle<MySectionStorage>) {
