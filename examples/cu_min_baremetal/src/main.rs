@@ -86,7 +86,9 @@ impl UnifiedLogWrite<MySectionStorage> for MyEmbeddedLogger {
         };
 
         let mut storage: MySectionStorage = MySectionStorage {};
-        storage.initialize(&section_header).map_err(|_| CuError::from("Error initializing storage"))?;
+        storage
+            .initialize(&section_header)
+            .map_err(|_| CuError::from("Error initializing storage"))?;
         Ok(SectionHandle::create(section_header, storage).unwrap())
     }
 
