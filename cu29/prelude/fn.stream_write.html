@@ -2,7 +2,7 @@
     logger: <a class="struct" href="https://doc.rust-lang.org/nightly/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;<a class="struct" href="https://doc.rust-lang.org/nightly/std/sync/poison/mutex/struct.Mutex.html" title="struct std::sync::poison::mutex::Mutex">Mutex</a>&lt;impl <a class="trait" href="trait.UnifiedLogWrite.html" title="trait cu29::prelude::UnifiedLogWrite">UnifiedLogWrite</a>&lt;S&gt;&gt;&gt;,
     entry_type: <a class="enum" href="../enum.UnifiedLogType.html" title="enum cu29::UnifiedLogType">UnifiedLogType</a>,
     minimum_allocation_amount: <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.usize.html">usize</a>,
-) -&gt; impl <a class="trait" href="../trait.WriteStream.html" title="trait cu29::WriteStream">WriteStream</a>&lt;E&gt;<div class="where">where
+) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;impl <a class="trait" href="../trait.WriteStream.html" title="trait cu29::WriteStream">WriteStream</a>&lt;E&gt;, <a class="struct" href="../struct.CuError.html" title="struct cu29::CuError">CuError</a>&gt;<div class="where">where
     E: <a class="trait" href="https://docs.rs/bincode/2.0.1/bincode/enc/trait.Encode.html" title="trait bincode::enc::Encode">Encode</a>,
     S: <a class="trait" href="trait.SectionStorage.html" title="trait cu29::prelude::SectionStorage">SectionStorage</a>,</div></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Create a new stream to write to the unifiedlogger.</p>
 </div></details></section></div></main></body></html>
