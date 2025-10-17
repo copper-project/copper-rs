@@ -20,15 +20,15 @@ use embedded_hal::spi::MODE_0;
 use embedded_hal_bus::spi::ExclusiveDevice;
 use embedded_sdmmc::SdCard;
 use panic_probe as _;
+use rp235x_hal::Clock;
 use rp235x_hal::fugit::RateExtU32;
 use rp235x_hal::gpio::{
-    Function, FunctionSio, FunctionSpi, FunctionXipCs1, Pin, PinId, PullDown, PullType,
-    PullUp, SioInput, SioOutput, ValidFunction,
+    Function, FunctionSio, FunctionSpi, FunctionXipCs1, Pin, PinId, PullDown, PullType, PullUp,
+    SioInput, SioOutput, ValidFunction,
 };
 use rp235x_hal::pac::SPI0;
 use rp235x_hal::spi::{Enabled, FrameFormat};
 use rp235x_hal::timer::{CopyableTimer0, CopyableTimer1};
-use rp235x_hal::Clock;
 use rp235x_hal::{Spi, Timer};
 use spin::Mutex;
 
@@ -82,12 +82,13 @@ fn quick_memory_test() {
 
     mem_stats();
     let mut v: Vec<u8> = vec![0u8; 4 * 1024];
-    for (i , item) in v.iter_mut().enumerate() {
+    for (i, item) in v.iter_mut().enumerate() {
         *item = (i % 256) as u8;
     }
 
     defmt::info!("After 1 4kB allocation... ");
     mem_stats();
+
     for (i, item) in v.iter().enumerate() {
         assert_eq!(*item, (i % 256) as u8);
     }
@@ -174,7 +175,9 @@ fn main() -> ! {
     let clock = RobotClock::new();
 
     let Ok(Some((blk_id, blk_len))) = bmlogger::find_copper_partition(&sd) else {
-        panic!("Could not find the copper partition on the SDCard. Be sure to format the sdcard with the Copper formatting script.");
+        panic!(
+            "Could not find the copper partition on the SDCard. Be sure to format the sdcard with the Copper formatting script."
+        );
     };
 
     info!(

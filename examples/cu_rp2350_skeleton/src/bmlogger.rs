@@ -2,7 +2,7 @@ use alloc::sync::Arc;
 use bincode::config::standard;
 use bincode::enc::write::Writer as BincodeWriter;
 use bincode::error::EncodeError;
-use bincode::{encode_into_slice, encode_into_writer, Encode};
+use bincode::{Encode, encode_into_slice, encode_into_writer};
 use core::cell::UnsafeCell;
 use cu29::prelude::*;
 use embedded_sdmmc::{Block, BlockCount, BlockDevice, BlockIdx};
@@ -124,7 +124,7 @@ pub struct SdBlockWriter<BD: BlockDevice> {
     current_blk: BlockIdx, // absolute block number for payload
     position_blk: usize,   // 0..512
     capacity_bytes: usize, // payload capacity for this section
-    written: usize,    // payload bytes written so far
+    written: usize,        // payload bytes written so far
     buffer: Block,         // RMW buffer for current block
 }
 
