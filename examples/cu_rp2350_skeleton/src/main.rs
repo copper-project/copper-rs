@@ -28,6 +28,7 @@ use embedded_sdmmc::BlockDevice;
 use rp235x_hal::pac::SPI0;
 use rp235x_hal::timer::{CopyableTimer0, CopyableTimer1};
 use bmlogger::EMMCLogger;
+use crate::bmlogger::EMMCSectionStorage;
 
 // --- Copper runtime
 pub mod tasks;
@@ -179,7 +180,7 @@ fn main() -> ! {
     let mut app = BlinkyApp::new(clock, writer).unwrap();
     info!("Starting Copper...");
 
-    let _ = <BlinkyApp as CuApplication<EMMCLogger<PimodoriSdCard>>>::run(&mut app);
+    let _ = <BlinkyApp as CuApplication<EMMCSectionStorage<PimodoriSdCard>, EMMCLogger<PimodoriSdCard>>>::run(&mut app);
     defmt::error!("Copper crashed.");
     loop {}
 }
