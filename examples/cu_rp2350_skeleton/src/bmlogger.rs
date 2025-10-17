@@ -65,7 +65,7 @@ pub fn find_copper_partition<D: BlockDevice>(
             debug!("checking entry {:?}", e);
 
             // Compare full 16-byte type GUID instead of e[0] == 0x29
-            if &e[0..16] == CU29_TYPE_GUID_ONDISK {
+            if e[0..16] == CU29_TYPE_GUID_ONDISK {
                 let first = le64(&e[32..40]) as u32;
                 let last = le64(&e[40..48]) as u32;
                 if last >= first {
@@ -123,7 +123,7 @@ pub struct SdBlockWriter<BD: BlockDevice> {
     current_blk: BlockIdx, // absolute block number for payload
     position_blk: usize,   // 0..512
     capacity_bytes: usize, // payload capacity for this section
-    pub written: usize,    // payload bytes written so far
+    written: usize,    // payload bytes written so far
     buffer: Block,         // RMW buffer for current block
 }
 
@@ -143,9 +143,12 @@ impl<BD: BlockDevice> SdBlockWriter<BD> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn bytes_written(&self) -> usize {
         self.written
     }
+
+    #[allow(dead_code)]
     pub fn capacity_left(&self) -> usize {
         self.capacity_bytes.saturating_sub(self.written)
     }
@@ -162,12 +165,13 @@ impl<BD: BlockDevice> SdBlockWriter<BD> {
     }
 
     /// Force-flush the current tail block if partially filled.
+    #[allow(dead_code)]
     pub fn flush_tail(&mut self) -> Result<(), EncodeError> {
         if self.position_blk != 0 {
             self.bd
                 .write(core::slice::from_ref(&self.buffer), self.current_blk)
                 .expect("write failed on flush");
-            // Advance to next block, start fresh at boundary
+            // Advance to the next block, start fresh at the boundary
             self.current_blk += BlockCount(1);
             self.position_blk = 0;
             self.buffer = Block::new();

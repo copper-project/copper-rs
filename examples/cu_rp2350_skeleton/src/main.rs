@@ -17,20 +17,19 @@ use buddy_system_allocator::LockedHeap as Heap;
 use cu29::prelude::*;
 use defmt_rtt as _;
 use embedded_hal::spi::MODE_0;
-use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
-use embedded_sdmmc::BlockDevice;
-use embedded_sdmmc::{Block, BlockIdx, SdCard};
+use embedded_hal_bus::spi::ExclusiveDevice;
+use embedded_sdmmc::SdCard;
 use panic_probe as _;
 use rp235x_hal::fugit::RateExtU32;
 use rp235x_hal::gpio::{
-    Function, FunctionSio, FunctionSpi, FunctionXipCs1, Pin, PinId, PullDown, PullNone, PullType,
+    Function, FunctionSio, FunctionSpi, FunctionXipCs1, Pin, PinId, PullDown, PullType,
     PullUp, SioInput, SioOutput, ValidFunction,
 };
 use rp235x_hal::pac::SPI0;
 use rp235x_hal::spi::{Enabled, FrameFormat};
 use rp235x_hal::timer::{CopyableTimer0, CopyableTimer1};
 use rp235x_hal::Clock;
-use rp235x_hal::{spi, Spi, Timer};
+use rp235x_hal::{Spi, Timer};
 use spin::Mutex;
 
 // --- Copper runtime
