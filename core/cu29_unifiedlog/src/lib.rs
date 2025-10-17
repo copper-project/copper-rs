@@ -118,7 +118,6 @@ pub enum AllocatedSection<S: SectionStorage> {
     Section(SectionHandle<S>),
 }
 
-
 /// A Storage is an append-only structure that can update a header section.
 pub trait SectionStorage: Send + Sync {
     /// This rewinds the storage, serialize the header and jumps to the beginning of the user data storage.
