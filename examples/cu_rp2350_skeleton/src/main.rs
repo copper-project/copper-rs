@@ -82,14 +82,14 @@ fn quick_memory_test() {
 
     mem_stats();
     let mut v: Vec<u8> = vec![0u8; 4 * 1024];
-    for i in 0..v.len() {
-        v[i] = (i % 256) as u8;
+    for (i , item) in v.iter_mut().enumerate() {
+        *item = (i % 256) as u8;
     }
 
     defmt::info!("After 1 4kB allocation... ");
     mem_stats();
-    for i in 0..v.len() {
-        assert_eq!(v[i], (i % 256) as u8);
+    for (i, item) in v.iter().enumerate() {
+        assert_eq!(*item, (i % 256) as u8);
     }
     defmt::info!("Memory test passed.");
 }
@@ -194,6 +194,7 @@ fn main() -> ! {
         EMMCLogger<TSPimodoriSdCard>,
     >>::run(&mut app);
     defmt::error!("Copper crashed.");
+    #[allow(clippy::empty_loop)]
     loop {}
 }
 

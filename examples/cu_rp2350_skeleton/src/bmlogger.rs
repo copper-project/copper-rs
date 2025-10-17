@@ -95,6 +95,7 @@ impl<T> ForceSyncSend<T> {
         unsafe { &*self.0.get() }
     }
     #[inline]
+    #[allow(clippy::mut_from_ref)]
     fn inner_mut(&self) -> &mut T {
         unsafe { &mut *self.0.get() }
     }
@@ -185,7 +186,7 @@ impl<BD: BlockDevice> BincodeWriter for SdBlockWriter<BD> {
         if self
             .written
             .checked_add(bytes.len())
-            .map_or(true, |w| w > self.capacity_bytes)
+            .is_none_or(|w| w > self.capacity_bytes)
         {
             return Err(EncodeError::UnexpectedEnd);
         }
@@ -359,7 +360,7 @@ where
         );
 
         // create handle (this will call storage.initialize(header))
-        Ok(SectionHandle::create(section_header, storage)?)
+        SectionHandle::create(section_header, storage)
     }
 
     fn flush_section(&mut self, section: &mut SectionHandle<EMMCSectionStorage<BD>>) {
