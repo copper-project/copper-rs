@@ -13,6 +13,6 @@
         (src: "src",  dst: "dst",   msg: "bool"),
     ],
     logging: ( keyframe_interval: 10000, 
-               section_size_mib:  0,  // 1 MiB sections oO
+               section_size_mib:  1,
     ),
 )

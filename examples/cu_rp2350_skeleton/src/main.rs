@@ -3,36 +3,39 @@
 
 extern crate alloc;
 
-use rp235x_hal::gpio::bank0::{Gpio15, Gpio16, Gpio17, Gpio18, Gpio19};
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 use cortex_m_rt::entry;
 use hal::{clocks::init_clocks_and_plls, gpio::Pins, pac, sio::Sio, watchdog::Watchdog};
 use rp235x_hal as hal;
+use rp235x_hal::gpio::bank0::{Gpio15, Gpio16, Gpio17, Gpio18, Gpio19};
 
+use crate::bmlogger::{EMMCSectionStorage, ForceSyncSend};
+use bmlogger::EMMCLogger;
 use buddy_system_allocator::LockedHeap as Heap;
 use cu29::prelude::*;
 use defmt_rtt as _;
 use embedded_hal::spi::MODE_0;
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
+use embedded_sdmmc::BlockDevice;
 use embedded_sdmmc::{Block, BlockIdx, SdCard};
 use panic_probe as _;
-use rp235x_hal::gpio::{Function, FunctionSio, FunctionSpi, FunctionXipCs1, Pin, PinId, PullDown, PullNone, PullType, PullUp, SioInput, SioOutput, ValidFunction};
-use rp235x_hal::{spi, Spi, Timer};
-use rp235x_hal::spi::{Enabled, FrameFormat};
-use spin::Mutex;
 use rp235x_hal::fugit::RateExtU32;
-use rp235x_hal::Clock;
-use embedded_sdmmc::BlockDevice;
+use rp235x_hal::gpio::{
+    Function, FunctionSio, FunctionSpi, FunctionXipCs1, Pin, PinId, PullDown, PullNone, PullType,
+    PullUp, SioInput, SioOutput, ValidFunction,
+};
 use rp235x_hal::pac::SPI0;
+use rp235x_hal::spi::{Enabled, FrameFormat};
 use rp235x_hal::timer::{CopyableTimer0, CopyableTimer1};
-use bmlogger::EMMCLogger;
-use crate::bmlogger::EMMCSectionStorage;
+use rp235x_hal::Clock;
+use rp235x_hal::{spi, Spi, Timer};
+use spin::Mutex;
 
 // --- Copper runtime
-pub mod tasks;
 mod bmlogger;
+pub mod tasks;
 
 #[copper_runtime(config = "copperconfig.ron")]
 struct BlinkyApp {}
@@ -109,7 +112,8 @@ type Timer1 = Timer<CopyableTimer1>;
 type Spi0 = Spi<Enabled, SPI0, (Mosi, Miso, Sck)>;
 
 type SdDev = ExclusiveDevice<Spi0, Cs, Timer0>;
-type PimodoriSdCard =  SdCard<SdDev, Timer1>;
+type PimodoriSdCard = SdCard<SdDev, Timer1>;
+type TSPimodoriSdCard = ForceSyncSend<SdCard<SdDev, Timer1>>;
 
 #[entry]
 fn main() -> ! {
@@ -138,9 +142,9 @@ fn main() -> ! {
     // Set up the SD card
     info!("Setting up the SDCard...");
 
-    let miso: Miso  = pins.gpio16.into_function();
-    let cs:Cs   = pins.gpio17.into_push_pull_output();
-    let sck: Sck  = pins.gpio18.into_function();
+    let miso: Miso = pins.gpio16.into_function();
+    let cs: Cs = pins.gpio17.into_push_pull_output();
+    let sck: Sck = pins.gpio18.into_function();
     let mosi: Mosi = pins.gpio19.into_function();
     let det: Det = pins.gpio15.into_pull_up_input();
 
@@ -160,13 +164,7 @@ fn main() -> ! {
         defmt::panic!("SD Card error: {}", e);
     }
 
-    let mut boot = Block::new();
-    sd.read(core::slice::from_mut(&mut boot), BlockIdx(0)).unwrap();
-
-    let sig = u16::from_le_bytes([boot.contents[510], boot.contents[511]]);
-    if sig != 0xAA55 {
-        defmt::panic!("Invalid SDCard. Could not find the Master Boot Record signature at index 510. (0xAA55)");
-    }
+    let sd = TSPimodoriSdCard::new(sd);
 
     info!("Setting up Copper...");
 
@@ -175,12 +173,27 @@ fn main() -> ! {
 
     // start copper
     let clock = RobotClock::new();
-    let writer = Arc::new(Mutex::new(EMMCLogger::new(sd)));
+
+    let Ok(Some((blk_id, blk_len))) = bmlogger::find_copper_partition(&sd) else {
+        panic!("Could not find the copper partition on the SDCard. Be sure to format the sdcard with the Copper formatting script.");
+    };
+
+    info!(
+        "Found copper partition at block {} with length {}",
+        blk_id.0, blk_len.0
+    );
+
+    let writer = Arc::new(Mutex::new(
+        EMMCLogger::new(sd, blk_id, blk_len).expect("Could not create EMMCLogger"),
+    ));
 
     let mut app = BlinkyApp::new(clock, writer).unwrap();
     info!("Starting Copper...");
 
-    let _ = <BlinkyApp as CuApplication<EMMCSectionStorage<PimodoriSdCard>, EMMCLogger<PimodoriSdCard>>>::run(&mut app);
+    let _ = <BlinkyApp as CuApplication<
+        EMMCSectionStorage<TSPimodoriSdCard>,
+        EMMCLogger<TSPimodoriSdCard>,
+    >>::run(&mut app);
     defmt::error!("Copper crashed.");
     loop {}
 }
