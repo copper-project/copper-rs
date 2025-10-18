@@ -5,13 +5,10 @@ DEFMT_LOG = "debug"
 [alias]
 build-logreader = "build --no-default-features --features host --bin blinky-logreader"
 build-arm = "build --target=thumbv8m.main-none-eabihf --bin cu-blinky --features firmware"
-build-riscv = "build --target=riscv32imac-unknown-none-elf --bin cu-blinky --features firmware"
+# TODO(gbin): riscv needs some more work
+# build-riscv = "build --target=riscv32imac-unknown-none-elf --bin cu-blinky --features firmware"
 run-arm = "run --target=thumbv8m.main-none-eabihf --bin cu-blinky --features firmware"
-run-riscv = "run --target=riscv32imac-unknown-none-elf --bin cu-blinky --features firmware"
-
-# Defaults build the firmware for the ARM target
-#[build]
-#target = "thumbv8m.main-none-eabihf"
+# run-riscv = "run --target=riscv32imac-unknown-none-elf --bin cu-blinky --features firmware"
 
 [target.thumbv8m.main-none-eabihf]
 rustflags = [
