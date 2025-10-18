@@ -599,10 +599,21 @@ impl MmapUnifiedLoggerRead {
             &self.current_mmap_buffer[self.current_reading_position..],
             standard(),
         )
-        .expect("Failed to decode section header");
+        .map_err(|e| {
+            CuError::new_with_cause(
+                &format!(
+                    "Could not read a sections header: {}/{}:{}",
+                    self.base_file_path.as_os_str().to_string_lossy(),
+                    self.current_slab_index,
+                    self.current_reading_position,
+                ),
+                e,
+            )
+        })?;
         if section_header.magic != SECTION_MAGIC {
             return Err("Invalid magic number in section header".into());
         }
+
         Ok(section_header)
     }
 }
