@@ -3,13 +3,15 @@ DEFMT_LOG = "debug"
 
 # Some convienience aliases.
 [alias]
-build-arm = "build --target=thumbv8m.main-none-eabihf"
-build-riscv = "build --target=riscv32imac-unknown-none-elf"
-run-arm = "run --target=thumbv8m.main-none-eabihf"
-run-riscv = "run --target=riscv32imac-unknown-none-elf"
+build-logreader = "build --no-default-features --features host --bin blinky-logreader"
+run-logreader = "run --no-default-features --features host --bin blinky-logreader"
 
-[build]
-target = "thumbv8m.main-none-eabihf"  # This is for the Cortex-M33 in the RP2350
+build-arm = "build --target=thumbv8m.main-none-eabihf --bin cu-blinky --features firmware"
+run-arm = "run --target=thumbv8m.main-none-eabihf --bin cu-blinky --features firmware"
+
+# TODO(gbin): riscv needs some more work
+# build-riscv = "build --target=riscv32imac-unknown-none-elf --bin cu-blinky --features firmware"
+# run-riscv = "run --target=riscv32imac-unknown-none-elf --bin cu-blinky --features firmware"
 
 [target.thumbv8m.main-none-eabihf]
 rustflags = [

@@ -248,7 +248,10 @@ jobs:
       - name: Clippy an rp2350 example
         working-directory: examples/cu_rp2350_skeleton
         run: cargo +stable clippy
-      - name: Cross compile an rp2350 example
+      - name: Cross compile an rp2350 example with Arm
         working-directory: examples/cu_rp2350_skeleton
-        run: cargo +stable build 
+        run: cargo +stable build-arm
+      - name: Compile the logreader for the rp2350 example (host)
+        working-directory: examples/cu_rp2350_skeleton
+        run: cargo +stable build-logreader
 
