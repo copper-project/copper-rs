@@ -64,6 +64,7 @@ impl SectionStorage for MmapSectionStorage {
     }
 }
 
+///
 /// Holds the read or write side of the datalogger.
 pub enum MmapUnifiedLogger {
     Read(MmapUnifiedLoggerRead),

@@ -6,27 +6,38 @@ extern crate alloc;
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
-use bincode::error::EncodeError;
-use bincode::Encode;
 use cortex_m_rt::entry;
 use hal::{clocks::init_clocks_and_plls, gpio::Pins, pac, sio::Sio, watchdog::Watchdog};
 use rp235x_hal as hal;
+use rp235x_hal::gpio::bank0::{Gpio15, Gpio16, Gpio17, Gpio18, Gpio19};
 
+use crate::bmlogger::{EMMCSectionStorage, ForceSyncSend};
+use bmlogger::EMMCLogger;
 use buddy_system_allocator::LockedHeap as Heap;
 use cu29::prelude::*;
 use defmt_rtt as _;
+use embedded_hal::spi::MODE_0;
+use embedded_hal_bus::spi::ExclusiveDevice;
+use embedded_sdmmc::SdCard;
 use panic_probe as _;
-use rp235x_hal::gpio::{Function, FunctionXipCs1, Pin, PinId, PullType, ValidFunction};
+use rp235x_hal::Clock;
+use rp235x_hal::fugit::RateExtU32;
+use rp235x_hal::gpio::{
+    Function, FunctionSio, FunctionSpi, FunctionXipCs1, Pin, PinId, PullDown, PullType, PullUp,
+    SioInput, SioOutput, ValidFunction,
+};
+use rp235x_hal::pac::SPI0;
+use rp235x_hal::spi::{Enabled, FrameFormat};
+use rp235x_hal::timer::{CopyableTimer0, CopyableTimer1};
+use rp235x_hal::{Spi, Timer};
 use spin::Mutex;
 
 // --- Copper runtime
+mod bmlogger;
 pub mod tasks;
-#[copper_runtime(config = "copperconfig.ron")]
-struct EmbeddedApp {}
 
-// FIXME(gbin): Actually implement the SDCARD logger.
-// this is just a placeholder.
-struct MyEmbeddedLogger {}
+#[copper_runtime(config = "copperconfig.ron")]
+struct BlinkyApp {}
 
 // --- embedded setup
 const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
@@ -77,71 +88,38 @@ fn quick_memory_test() {
 
     defmt::info!("After 1 4kB allocation... ");
     mem_stats();
-        for (i, item) in v.iter().enumerate() {
+
+    for (i, item) in v.iter().enumerate() {
         assert_eq!(*item, (i % 256) as u8);
     }
     defmt::info!("Memory test passed.");
 }
 
-struct MySectionStorage;
+// Types to bind to the Pimodori pico plus SDCard Cowbell.
+// I am not sure why embedded does that to us.
+// Pinout
+type Mosi = Pin<Gpio19, FunctionSpi, PullDown>;
+type Miso = Pin<Gpio16, FunctionSpi, PullDown>;
+type Sck = Pin<Gpio18, FunctionSpi, PullDown>;
+type Cs = Pin<Gpio17, FunctionSio<SioOutput>, PullDown>;
+type Det = Pin<Gpio15, FunctionSio<SioInput>, PullUp>;
 
-impl SectionStorage for MySectionStorage {
-    // Just mock the behavior for now.
-    fn initialize<E: Encode>(&mut self, _header: &E) -> Result<usize, EncodeError> {
-        Ok(80)
-    }
+// Timers
+type Timer0 = Timer<CopyableTimer0>;
+type Timer1 = Timer<CopyableTimer1>;
 
-    fn post_update_header<E: Encode>(&mut self, _header: &E) -> Result<usize, EncodeError> {
-        Ok(80)
-    }
+// Buses
+type Spi0 = Spi<Enabled, SPI0, (Mosi, Miso, Sck)>;
 
-    fn append<E: Encode>(&mut self, _entry: &E) -> Result<usize, EncodeError> {
-        Ok(300)
-    }
+type SdDev = ExclusiveDevice<Spi0, Cs, Timer0>;
+type PimodoriSdCard = SdCard<SdDev, Timer1>;
+type TSPimodoriSdCard = ForceSyncSend<SdCard<SdDev, Timer1>>;
 
-    fn flush(&mut self) -> CuResult<usize> {
-        Ok(1000)
-    }
-}
-
-impl UnifiedLogWrite<MySectionStorage> for MyEmbeddedLogger {
-    fn add_section(
-        &mut self,
-        entry_type: UnifiedLogType,
-        _requested_section_size: usize,
-    ) -> CuResult<SectionHandle<MySectionStorage>> {
-        // Just mock the behavior for now.
-        let section_header = SectionHeader {
-            magic: SECTION_MAGIC,
-            block_size: 512,
-            entry_type,
-            offset_to_next_section: 10000,
-            used: 0,
-        };
-
-        let mut storage: MySectionStorage = MySectionStorage {};
-        storage.initialize(&section_header).unwrap();
-        SectionHandle::create(section_header, storage)
-    }
-
-    fn flush_section(&mut self, _section: &mut SectionHandle<MySectionStorage>) {
-        // no op for now
-    }
-
-    fn status(&self) -> UnifiedLogStatus {
-        // no op for now
-        UnifiedLogStatus {
-            total_used_space: 0,
-            total_allocated_space: 0,
-        }
-    }
-}
-#[allow(clippy::empty_loop)]
 #[entry]
 fn main() -> ! {
     let mut p = pac::Peripherals::take().unwrap();
     let mut watchdog = Watchdog::new(p.WATCHDOG);
-    let _clocks = init_clocks_and_plls(
+    let clocks = init_clocks_and_plls(
         XOSC_CRYSTAL_FREQ,
         p.XOSC,
         p.CLOCKS,
@@ -151,7 +129,8 @@ fn main() -> ! {
         &mut watchdog,
     )
     .unwrap();
-    // let timer: Timer<CopyableTimer0> = Timer::new_timer0(p.TIMER0, &mut p.RESETS, &clocks);
+
+    let timer: Timer0 = Timer::new_timer0(p.TIMER0, &mut p.RESETS, &clocks);
 
     let sio = Sio::new(p.SIO);
     let pins = Pins::new(p.IO_BANK0, p.PADS_BANK0, sio.gpio_bank0, &mut p.RESETS);
@@ -160,6 +139,33 @@ fn main() -> ! {
     init_psram_and_allocator(pins.gpio47);
     quick_memory_test();
 
+    // Set up the SD card
+    info!("Setting up the SDCard...");
+
+    let miso: Miso = pins.gpio16.into_function();
+    let cs: Cs = pins.gpio17.into_push_pull_output();
+    let sck: Sck = pins.gpio18.into_function();
+    let mosi: Mosi = pins.gpio19.into_function();
+    let det: Det = pins.gpio15.into_pull_up_input();
+
+    let sd_spi: Spi0 = Spi::<_, _, _, 8>::new(p.SPI0, (mosi, miso, sck)).init(
+        &mut p.RESETS,
+        clocks.peripheral_clock.freq(),
+        16_000_000u32.Hz(),
+        FrameFormat::MotorolaSpi(MODE_0),
+    );
+
+    let sd_dev: SdDev = ExclusiveDevice::new(sd_spi, cs, timer).unwrap();
+    let _sd_det = Some(det);
+    let delay1: Timer1 = Timer::new_timer1(p.TIMER1, &mut p.RESETS, &clocks);
+    let sd: PimodoriSdCard = SdCard::new(sd_dev, delay1);
+
+    if let Err(e) = sd.num_bytes() {
+        defmt::panic!("SD Card error: {}", e);
+    }
+
+    let sd = TSPimodoriSdCard::new(sd);
+
     info!("Setting up Copper...");
 
     let led = pins.gpio20.into_push_pull_output();
@@ -167,13 +173,31 @@ fn main() -> ! {
 
     // start copper
     let clock = RobotClock::new();
-    let writer = Arc::new(Mutex::new(MyEmbeddedLogger {}));
 
-    let mut app = EmbeddedApp::new(clock, writer).unwrap();
+    let Ok(Some((blk_id, blk_len))) = bmlogger::find_copper_partition(&sd) else {
+        panic!(
+            "Could not find the copper partition on the SDCard. Be sure to format the sdcard with the Copper formatting script."
+        );
+    };
+
+    info!(
+        "Found copper partition at block {} with length {}",
+        blk_id.0, blk_len.0
+    );
+
+    let writer = Arc::new(Mutex::new(
+        EMMCLogger::new(sd, blk_id, blk_len).expect("Could not create EMMCLogger"),
+    ));
+
+    let mut app = BlinkyApp::new(clock, writer).unwrap();
     info!("Starting Copper...");
 
-    let _ = <EmbeddedApp as CuApplication<MySectionStorage, MyEmbeddedLogger>>::run(&mut app);
+    let _ = <BlinkyApp as CuApplication<
+        EMMCSectionStorage<TSPimodoriSdCard>,
+        EMMCLogger<TSPimodoriSdCard>,
+    >>::run(&mut app);
     defmt::error!("Copper crashed.");
+    #[allow(clippy::empty_loop)]
     loop {}
 }
 
