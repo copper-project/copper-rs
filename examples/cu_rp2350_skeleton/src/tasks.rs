@@ -1,42 +1,55 @@
+#[cfg(feature = "firmware")]
 extern crate alloc;
 
-use alloc::boxed::Box;
 use cu29::prelude::*;
 
-use embedded_hal::digital::OutputPin;
-use spin::{Mutex, Once};
+#[cfg(feature = "firmware")]
+mod imp {
+    pub use alloc::boxed::Box;
+    pub use embedded_hal::digital::OutputPin;
+    pub use spin::{Mutex, Once};
 
-pub trait LedPin: Send {
-    fn set(&mut self, on: bool);
-}
+    pub trait LedPin: Send {
+        fn set(&mut self, on: bool);
+    }
 
-struct LedWrap<P: OutputPin + Send>(P);
-impl<P: OutputPin + Send> LedPin for LedWrap<P> {
-    fn set(&mut self, on: bool) {
-        if on {
-            let _ = self.0.set_high();
-        } else {
-            let _ = self.0.set_low();
+    pub struct LedWrap<P: OutputPin + Send>(P);
+
+    impl<P: OutputPin + Send> LedPin for LedWrap<P> {
+        fn set(&mut self, on: bool) {
+            if on {
+                let _ = self.0.set_high();
+            } else {
+                let _ = self.0.set_low();
+            }
+        }
+    }
+
+    pub static LED: Once<Mutex<Box<dyn LedPin>>> = Once::new();
+    pub fn register_led<P>(p: P)
+    where
+        P: OutputPin + Send + 'static,
+    {
+        LED.call_once(|| Mutex::new(Box::new(LedWrap(p))));
+    }
+
+    pub fn set_led(on: bool) {
+        if let Some(m) = LED.get() {
+            // info!("LED on: {}", on);
+            let mut g = m.lock();
+            g.set(on);
         }
     }
 }
 
-static LED: Once<Mutex<Box<dyn LedPin>>> = Once::new();
-
-pub fn register_led<P>(p: P)
-where
-    P: OutputPin + Send + 'static,
-{
-    LED.call_once(|| Mutex::new(Box::new(LedWrap(p))));
-}
-
-fn set_led(on: bool) {
-    if let Some(m) = LED.get() {
-        // info!("LED on: {}", on);
-        let mut g = m.lock();
-        g.set(on);
+#[cfg(feature = "host")]
+mod imp {
+    pub fn set_led(on: bool) {
+        println!("LED set to: {}", on);
     }
 }
+
+pub use imp::*;
 
 pub struct BooleanSource {
     state: bool,
