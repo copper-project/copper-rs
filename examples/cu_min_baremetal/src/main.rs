@@ -120,7 +120,21 @@ pub extern "C" fn main() {
         ALLOC.init(addr_of_mut!(HEAP) as usize, HEAP_SIZE);
     }
 
-    let clock = RobotClock::new();
+    // this is a kind of platform independent compilation test, we really don't have a RTC here
+    let clock = RobotClock::new_with_rtc(
+        {
+            // fake just use the CPU clock as clock
+            move || read_raw_counter()
+        },
+        {
+            move |ns| {
+                // fake busy wait
+                for _ in 0..ns {
+                    core::hint::spin_loop();
+                }
+            }
+        },
+    );
     let writer = Arc::new(Mutex::new(MyEmbeddedLogger {}));
     let mut app = MinimalNoStdApp::new(clock, writer).unwrap();
     let _ = <MinimalNoStdApp as CuApplication<MySectionStorage, MyEmbeddedLogger>>::run(&mut app);
