@@ -1,8 +1,27 @@
 #![cfg_attr(not(feature = "std"), no_std)]
+
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 #[cfg(test)]
 extern crate approx;
+
+mod calibration;
+#[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
+#[cfg_attr(all(target_os = "none", target_arch = "arm"), path = "cortexm.rs")]
+#[cfg_attr(target_arch = "riscv64", path = "riscv64.rs")]
+#[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
+#[cfg_attr(
+    not(any(
+        target_arch = "x86_64",
+        target_arch = "aarch64",
+        all(target_os = "none", target_arch = "arm"),
+        target_arch = "riscv64"
+    )),
+    path = "fallback.rs"
+)]
+mod raw_counter;
+
+use raw_counter::*;
 
 use bincode::de::BorrowDecoder;
 use bincode::de::Decoder;
@@ -34,164 +53,6 @@ mod imp {
 
 use imp::*;
 
-// Platform-specific high-precision timer implementations
-mod platform {
-    use super::{AtomicU64, Ordering};
-
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-    pub fn read_raw_counter() -> u64 {
-        unsafe { core::arch::x86_64::_rdtsc() }
-    }
-
-    // --- Cortex-M (bare-metal)
-    #[cfg(all(target_os = "none", target_arch = "arm"))]
-    pub mod cm_dwt_counter {
-        use core::ptr::{read_volatile, write_volatile};
-
-        const DEMCR: *mut u32 = 0xE000_EDFC as *mut u32;
-        const DWT_CTRL: *mut u32 = 0xE000_1000 as *mut u32;
-        const DWT_CYCCNT: *mut u32 = 0xE000_1004 as *mut u32;
-
-        #[inline(always)]
-        pub fn enable() {
-            unsafe {
-                // Enable trace
-                write_volatile(DEMCR, read_volatile(DEMCR) | (1 << 24)); // TRCENA
-                                                                         // Reset and enable cycle counter
-                write_volatile(DWT_CYCCNT, 0);
-                write_volatile(DWT_CTRL, read_volatile(DWT_CTRL) | 1); // CYCCNTENA
-            }
-        }
-
-        #[inline(always)]
-        pub fn read() -> u64 {
-            unsafe { read_volatile(DWT_CYCCNT) as u64 }
-        }
-    }
-
-    // --- Cortex-M (bare-metal)
-    #[cfg(all(target_os = "none", target_arch = "arm"))]
-    pub fn read_raw_counter() -> u64 {
-        cm_dwt_counter::read()
-    }
-
-    #[cfg(target_arch = "aarch64")]
-    pub fn read_raw_counter() -> u64 {
-        let mut counter: u64;
-        unsafe {
-            core::arch::asm!("mrs {}, cntvct_el0", out(reg) counter);
-        }
-        counter
-    }
-
-    #[cfg(all(not(target_os = "none"), target_arch = "arm"))]
-    pub fn read_raw_counter() -> u64 {
-        let mut counter_lo: u32;
-        let mut counter_hi: u32;
-        unsafe {
-            core::arch::asm!(
-                "mrrc p15, 1, {0}, {1}, c14",
-                out(reg) counter_lo,
-                out(reg) counter_hi,
-            );
-        }
-        ((counter_hi as u64) << 32) | (counter_lo as u64)
-    }
-
-    #[cfg(target_arch = "riscv64")]
-    pub fn read_raw_counter() -> u64 {
-        let counter: u64;
-        unsafe {
-            core::arch::asm!("rdcycle {}", out(reg) counter);
-        }
-        counter
-    }
-
-    #[cfg(not(any(
-        target_arch = "x86",
-        target_arch = "x86_64",
-        target_arch = "aarch64",
-        target_arch = "arm",
-        target_arch = "riscv64"
-    )))]
-    pub fn read_raw_counter() -> u64 {
-        // Fallback implementation for unsupported architectures
-        #[cfg(feature = "std")]
-        {
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos() as u64
-        }
-        #[cfg(not(feature = "std"))]
-        {
-            // For no-std environments on unsupported platforms, we need a compile-time error
-            compile_error!("Unsupported target architecture for high-precision timing");
-        }
-    }
-
-    // Frequency estimation for converting raw counter values to nanoseconds
-    static FREQUENCY_NS: AtomicU64 = AtomicU64::new(0);
-    static INIT_COUNTER: AtomicU64 = AtomicU64::new(0);
-    static INIT_TIME_NS: AtomicU64 = AtomicU64::new(0);
-
-    pub fn initialize_frequency() {
-        #[cfg(feature = "std")]
-        {
-            let start_counter = read_raw_counter();
-            let start_time = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos() as u64;
-
-            std::thread::sleep(std::time::Duration::from_millis(10));
-
-            let end_counter = read_raw_counter();
-            let end_time = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos() as u64;
-
-            let counter_diff = end_counter.saturating_sub(start_counter);
-            let time_diff_ns = end_time.saturating_sub(start_time);
-
-            if counter_diff > 0 {
-                let freq_ns =
-                    ((counter_diff as u128 * 1_000_000_000) / time_diff_ns as u128) as u64;
-                FREQUENCY_NS.store(freq_ns, Ordering::Relaxed);
-                INIT_COUNTER.store(start_counter, Ordering::Relaxed);
-                INIT_TIME_NS.store(start_time, Ordering::Relaxed);
-            }
-        }
-        #[cfg(not(feature = "std"))]
-        {
-            // In no-std environments, we can't do runtime frequency calibration
-            // Use a reasonable default frequency (e.g., 1GHz = 1 tick per nanosecond)
-            // This is a simplification and may not be accurate for all platforms
-            FREQUENCY_NS.store(1_000_000_000, Ordering::Relaxed);
-            INIT_COUNTER.store(0, Ordering::Relaxed);
-            INIT_TIME_NS.store(0, Ordering::Relaxed);
-        }
-    }
-
-    pub fn counter_to_nanos(counter: u64) -> u64 {
-        let freq = FREQUENCY_NS.load(Ordering::Relaxed);
-        if freq == 0 {
-            initialize_frequency();
-            let freq = FREQUENCY_NS.load(Ordering::Relaxed);
-            if freq == 0 {
-                return counter; // Fallback if frequency estimation fails
-            }
-        }
-
-        let init_counter = INIT_COUNTER.load(Ordering::Relaxed);
-        let init_time_ns = INIT_TIME_NS.load(Ordering::Relaxed);
-        let counter_diff = counter.saturating_sub(init_counter);
-
-        init_time_ns.saturating_add(((counter_diff as u128 * 1_000_000_000) / freq as u128) as u64)
-    }
-}
-
 /// High-precision instant in time, represented as nanoseconds since an arbitrary epoch
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CuInstant(u64);
@@ -200,8 +61,7 @@ pub type Instant = CuInstant; // Backward compatibility
 
 impl CuInstant {
     pub fn now() -> Self {
-        let raw_counter = platform::read_raw_counter();
-        CuInstant(platform::counter_to_nanos(raw_counter))
+        CuInstant(calibration::counter_to_nanos(read_raw_counter))
     }
 
     pub fn as_nanos(&self) -> u64 {
@@ -638,14 +498,31 @@ struct InternalClock {
     mock_state: Option<Arc<AtomicU64>>,
 }
 
+// Implements the std version of the RTC clock
+#[cfg(feature = "std")]
+#[inline(always)]
+fn read_rtc_ns() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as u64
+}
+
+#[cfg(feature = "std")]
+#[inline(always)]
+fn sleep_ns(ns: u64) {
+    std::thread::sleep(std::time::Duration::from_nanos(ns));
+}
+
 impl InternalClock {
-    fn new() -> Self {
-        // --- Cortex-M (bare-metal)
-        #[cfg(all(target_os = "none", target_arch = "arm"))]
-        platform::cm_dwt_counter::enable();
+    fn new(
+        read_rtc_ns: impl Fn() -> u64 + Send + Sync + 'static,
+        sleep_ns: impl Fn(u64) + Send + Sync + 'static,
+    ) -> Self {
+        initialize();
 
         // Initialize the frequency calibration
-        platform::initialize_frequency();
+        calibration::calibrate(read_raw_counter, read_rtc_ns, sleep_ns);
         InternalClock { mock_state: None }
     }
 
@@ -720,8 +597,24 @@ impl RobotClockMock {
 impl RobotClock {
     /// Creates a RobotClock using now as its reference time.
     /// It will start at 0ns incrementing monotonically.
+    /// This uses the std System Time as a reference clock.
+    #[cfg(feature = "std")]
     pub fn new() -> Self {
-        let clock = InternalClock::new();
+        let clock = InternalClock::new(read_rtc_ns, sleep_ns);
+        let ref_time = clock.now();
+        RobotClock {
+            inner: clock,
+            ref_time,
+        }
+    }
+
+    /// Builds a RobotClock using a reference RTC clock to calibrate with.
+    /// This is mandatory to use with the no-std platforms as we have no idea where to find a reference clock.
+    pub fn new_with_rtc(
+        read_rtc_ns: impl Fn() -> u64 + Send + Sync + 'static,
+        sleep_ns: impl Fn(u64) + Send + Sync + 'static,
+    ) -> Self {
+        let clock = InternalClock::new(read_rtc_ns, sleep_ns);
         let ref_time = clock.now();
         RobotClock {
             inner: clock,
@@ -730,8 +623,23 @@ impl RobotClock {
     }
 
     /// Builds a monotonic clock starting at the given reference time.
+    #[cfg(feature = "std")]
     pub fn from_ref_time(ref_time_ns: u64) -> Self {
-        let clock = InternalClock::new();
+        let clock = InternalClock::new(read_rtc_ns, sleep_ns);
+        let ref_time = clock.now() - CuDuration(ref_time_ns);
+        RobotClock {
+            inner: clock,
+            ref_time,
+        }
+    }
+
+    /// Overrides the RTC with a custom implementation, should be the same as the new_with_rtc.
+    pub fn from_ref_time_with_rtc(
+        read_rtc_ns: fn() -> u64,
+        sleep_ns: fn(u64),
+        ref_time_ns: u64,
+    ) -> Self {
+        let clock = InternalClock::new(read_rtc_ns, sleep_ns);
         let ref_time = clock.now() - CuDuration(ref_time_ns);
         RobotClock {
             inner: clock,
@@ -767,6 +675,9 @@ impl RobotClock {
     }
 }
 
+/// We cannot build a default RobotClock on no-std because we don't know how to find a reference clock.
+/// Use RobotClock::new_with_rtc instead on no-std.
+#[cfg(feature = "std")]
 impl Default for RobotClock {
     fn default() -> Self {
         Self::new()

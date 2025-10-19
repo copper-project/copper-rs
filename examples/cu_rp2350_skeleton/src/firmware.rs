@@ -6,6 +6,7 @@ extern crate alloc;
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
+use core::ops::Sub;
 use cortex_m_rt::entry;
 use hal::{clocks::init_clocks_and_plls, gpio::Pins, pac, sio::Sio, watchdog::Watchdog};
 use rp235x_hal as hal;
@@ -20,7 +21,6 @@ use embedded_hal::spi::MODE_0;
 use embedded_hal_bus::spi::ExclusiveDevice;
 use embedded_sdmmc::SdCard;
 use panic_probe as _;
-use rp235x_hal::Clock;
 use rp235x_hal::fugit::RateExtU32;
 use rp235x_hal::gpio::{
     Function, FunctionSio, FunctionSpi, FunctionXipCs1, Pin, PinId, PullDown, PullType, PullUp,
@@ -29,6 +29,7 @@ use rp235x_hal::gpio::{
 use rp235x_hal::pac::SPI0;
 use rp235x_hal::spi::{Enabled, FrameFormat};
 use rp235x_hal::timer::{CopyableTimer0, CopyableTimer1};
+use rp235x_hal::Clock;
 use rp235x_hal::{Spi, Timer};
 use spin::Mutex;
 
@@ -172,7 +173,24 @@ fn main() -> ! {
     tasks::register_led(led);
 
     // start copper
-    let clock = RobotClock::new();
+
+    let clock = RobotClock::new_with_rtc(
+        {
+            let timer = timer.clone();
+            move || timer.get_counter().ticks() * 1_000
+        },
+        {
+            let timer = timer.clone();
+            move |ns| {
+                // implements a simple busy sleep, we don't need anything fancy here.
+                let start = timer.get_counter().ticks(); // microseconds
+                let wait_us = ns / 1_000;
+                while timer.get_counter().ticks().wrapping_sub(start) < wait_us {
+                    core::hint::spin_loop();
+                }
+            }
+        },
+    );
 
     let Ok(Some((blk_id, blk_len))) = bmlogger::find_copper_partition(&sd) else {
         panic!(
