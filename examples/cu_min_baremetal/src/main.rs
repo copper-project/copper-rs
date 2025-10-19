@@ -124,7 +124,7 @@ pub extern "C" fn main() {
     let clock = RobotClock::new_with_rtc(
         {
             // fake just use the CPU clock as clock
-            move || cu29_clock::read_raw_counter()
+            move || read_raw_counter()
         },
         {
             move |ns| {
