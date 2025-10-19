@@ -21,7 +21,7 @@ mod calibration;
 )]
 mod raw_counter;
 
-use raw_counter::*;
+pub use raw_counter::*;
 
 use bincode::de::BorrowDecoder;
 use bincode::de::Decoder;
