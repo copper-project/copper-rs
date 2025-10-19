@@ -18,4 +18,4 @@ bincode = { workspace = true }
 serde = { workspace = true }
 serialport = "4.7.2"
 cu-msp-lib = { path = "../../libs/cu_msp_lib", version = "0.9.0" }
-cu-msp-src = { path = "../../sources/cu_msp_src", version = "0.9.0" }  # Keep
+cu-msp-src = { path = "../../sources/cu_msp_src", version = "0.10.0" }  # Keep
