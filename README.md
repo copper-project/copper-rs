@@ -20,7 +20,7 @@
 <p><strong style="color: #b87333;">🛡️ Reliable</strong>: Copper leverages Rust's ownership, type system, and concurrency model to minimize bugs and ensure thread safety.</p>
 <p><strong style="color: #b87333;">📦 Built to ship</strong>: Copper aims to avoid late-stage infra integration issues by generating a very predictable runtime.</p>
 
-Copper has been tested on:
+Copper can be deployed on:
 <table style="color: white; background-color: black; font-family: sans-serif;">
   <tr>
     <td style="text-align: center; padding: 12px;">
