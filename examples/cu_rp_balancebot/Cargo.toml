@@ -20,11 +20,11 @@ ignored = ["cu-consolemon", "cu29-log", "cu29-log-runtime", "cu29-unifiedlog", "
 cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
 serde = { workspace = true }
-cu-ads7883-new = { path = "../../components/sources/cu_ads7883", version = "0.9.0" }
-cu-rp-sn754410-new = { path = "../../components/sinks/cu_rp_sn754410", version = "0.9.0" }
-cu-rp-encoder = { path = "../../components/sources/cu_rp_encoder", version = "0.9.0" }
-cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.9.0" } # needed
-cu-pid = { path = "../../components/tasks/cu_pid", version = "0.9.0" }
+cu-ads7883-new = { path = "../../components/sources/cu_ads7883", version = "0.10.0" }
+cu-rp-sn754410-new = { path = "../../components/sinks/cu_rp_sn754410", version = "0.10.0" }
+cu-rp-encoder = { path = "../../components/sources/cu_rp_encoder", version = "0.10.0" }
+cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.10.0" } # needed
+cu-pid = { path = "../../components/tasks/cu_pid", version = "0.10.0" }
 
 # Log reader depencies
 cu29-export = { workspace = true, optional = true }

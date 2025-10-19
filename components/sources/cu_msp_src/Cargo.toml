@@ -12,7 +12,7 @@ repository.workspace = true
 
 [dependencies]
 cu29 = { workspace = true }
-cu-msp-lib = { path = "../../libs/cu_msp_lib", version = "0.9.0" }
+cu-msp-lib = { path = "../../libs/cu_msp_lib", version = "0.10.0" }
 serialport = "4.7.2"
 serde = { workspace = true }
 smallvec = { workspace = true }
