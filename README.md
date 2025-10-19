@@ -52,6 +52,10 @@ Copper has been tested on:
   </tr>
 </table>
 
+But can ALSO run baremetal on microcontrollers. Here it is on our reference platform based on the RP2350, see 
+[![Copper baremetal development](https://github.com/copper-project/copper-rs/wiki/Baremetal-Development) if you are interested to deploy Copper as an actual Operating System.
+<img align="left" width="800" src="https://github.com/copper-project/copper-rs/wiki/imgs/baremetal-w-camera.jpg" alt="graph"/>
+
 ### Technical Overview
 
 Copper is a deterministic and data-oriented Robot SDK with these key components:
