@@ -129,7 +129,7 @@ pub extern "C" fn main() {
         {
             move |ns| {
                 // fake busy wait
-                for _ in 0..ns{
+                for _ in 0..ns {
                     core::hint::spin_loop();
                 }
             }
