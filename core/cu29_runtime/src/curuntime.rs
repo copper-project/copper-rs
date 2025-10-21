@@ -711,7 +711,7 @@ pub fn compute_runtime_plan(graph: &CuGraph) -> CuResult<CuExecutionLoop> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::Node;
+    use crate::config::{Flavor, Node};
     use crate::cutask::CuSinkTask;
     use crate::cutask::{CuSrcTask, Freezable};
     use crate::monitoring::NoMonitor;
@@ -818,8 +818,12 @@ mod tests {
     fn test_runtime_instantiation() {
         let mut config = CuConfig::default();
         let graph = config.get_graph_mut(None).unwrap();
-        graph.add_node(Node::new("a", "TestSource")).unwrap();
-        graph.add_node(Node::new("b", "TestSink")).unwrap();
+        graph
+            .add_node(Node::new("a", "TestSource", Flavor::Task))
+            .unwrap();
+        graph
+            .add_node(Node::new("b", "TestSink", Flavor::Task))
+            .unwrap();
         graph.connect(0, 1, "()").unwrap();
         let runtime = CuRuntime::<Tasks, Msgs, NoMonitor, 2>::new(
             RobotClock::default(),
@@ -837,8 +841,12 @@ mod tests {
     fn test_copperlists_manager_lifecycle() {
         let mut config = CuConfig::default();
         let graph = config.get_graph_mut(None).unwrap();
-        graph.add_node(Node::new("a", "TestSource")).unwrap();
-        graph.add_node(Node::new("b", "TestSink")).unwrap();
+        graph
+            .add_node(Node::new("a", "TestSource", Flavor::Task))
+            .unwrap();
+        graph
+            .add_node(Node::new("b", "TestSink", Flavor::Task))
+            .unwrap();
         graph.connect(0, 1, "()").unwrap();
 
         let mut runtime = CuRuntime::<Tasks, Msgs, NoMonitor, 2>::new(
@@ -916,9 +924,15 @@ mod tests {
     fn test_runtime_task_input_order() {
         let mut config = CuConfig::default();
         let graph = config.get_graph_mut(None).unwrap();
-        let src1_id = graph.add_node(Node::new("a", "Source1")).unwrap();
-        let src2_id = graph.add_node(Node::new("b", "Source2")).unwrap();
-        let sink_id = graph.add_node(Node::new("c", "Sink")).unwrap();
+        let src1_id = graph
+            .add_node(Node::new("a", "Source1", Flavor::Task))
+            .unwrap();
+        let src2_id = graph
+            .add_node(Node::new("b", "Source2", Flavor::Task))
+            .unwrap();
+        let sink_id = graph
+            .add_node(Node::new("c", "Sink", Flavor::Task))
+            .unwrap();
 
         assert_eq!(src1_id, 0);
         assert_eq!(src2_id, 1);
@@ -958,13 +972,17 @@ mod tests {
         let mut config = CuConfig::default();
         let graph = config.get_graph_mut(None).unwrap();
         let cam0_id = graph
-            .add_node(Node::new("cam0", "tasks::IntegerSrcTask"))
+            .add_node(Node::new("cam0", "tasks::IntegerSrcTask", Flavor::Task))
             .unwrap();
         let inf0_id = graph
-            .add_node(Node::new("inf0", "tasks::Integer2FloatTask"))
+            .add_node(Node::new("inf0", "tasks::Integer2FloatTask", Flavor::Task))
             .unwrap();
         let broadcast_id = graph
-            .add_node(Node::new("broadcast", "tasks::MergingSinkTask"))
+            .add_node(Node::new(
+                "broadcast",
+                "tasks::MergingSinkTask",
+                Flavor::Task,
+            ))
             .unwrap();
 
         // case 1 order
@@ -998,13 +1016,17 @@ mod tests {
         let mut config = CuConfig::default();
         let graph = config.get_graph_mut(None).unwrap();
         let cam0_id = graph
-            .add_node(Node::new("cam0", "tasks::IntegerSrcTask"))
+            .add_node(Node::new("cam0", "tasks::IntegerSrcTask", Flavor::Task))
             .unwrap();
         let inf0_id = graph
-            .add_node(Node::new("inf0", "tasks::Integer2FloatTask"))
+            .add_node(Node::new("inf0", "tasks::Integer2FloatTask", Flavor::Task))
             .unwrap();
         let broadcast_id = graph
-            .add_node(Node::new("broadcast", "tasks::MergingSinkTask"))
+            .add_node(Node::new(
+                "broadcast",
+                "tasks::MergingSinkTask",
+                Flavor::Task,
+            ))
             .unwrap();
 
         // case 2 order

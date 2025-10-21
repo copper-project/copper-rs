@@ -17,6 +17,7 @@ use ron::extensions::Extensions;
 use ron::value::Value as RonValue;
 use ron::{Number, Options};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::cmp::PartialEq;
 use ConfigGraphs::{Missions, Simple};
 
 #[cfg(not(feature = "std"))]
@@ -210,6 +211,13 @@ pub struct NodeLogging {
     enabled: bool,
 }
 
+#[derive(Serialize, Default, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub enum Flavor {
+    #[default]
+    Task,
+    Bridge,
+}
+
 /// A node in the configuration graph.
 /// A node represents a Task in the system Graph.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -217,9 +225,13 @@ pub struct Node {
     /// Unique node identifier.
     id: String,
 
-    /// Task rust struct underlying type, e.g. "mymodule::Sensor", etc.
+    /// Task underlying Rust type, e.g. "mymodule::Sensor", etc.
     #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
     type_: Option<String>,
+
+    /// Task flavor, e.g. "task" or "bridge". It is deduced from the section of the config.
+    #[serde(skip)]
+    flavor: Flavor,
 
     /// Config passed to the task.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -248,10 +260,11 @@ pub struct Node {
 
 impl Node {
     #[allow(dead_code)]
-    pub fn new(id: &str, ptype: &str) -> Self {
+    pub fn new(id: &str, ptype: &str, flavor: Flavor) -> Self {
         Node {
             id: id.to_string(),
             type_: Some(ptype.to_string()),
+            flavor,
             config: None,
             missions: None,
             background: None,
@@ -597,7 +610,7 @@ impl ConfigGraphs {
 /// CuConfig is the programmatic representation of the configuration graph.
 /// It is a directed graph where nodes are tasks and edges are connections between tasks.
 ///
-/// The core of CuConfig is its `graphs` field which can be either a simple graph
+/// The core of CuConfig is its `graphs` field, which can be either a simple graph
 /// or a collection of mission-specific graphs. The graph structure is based on petgraph.
 #[derive(Debug, Clone)]
 pub struct CuConfig {
@@ -692,6 +705,7 @@ pub struct IncludesConfig {
 #[derive(Serialize, Deserialize, Default)]
 struct CuConfigRepresentation {
     tasks: Option<Vec<Node>>,
+    bridges: Option<Vec<Node>>,
     cnx: Option<Vec<Cnx>>,
     monitor: Option<MonitorConfig>,
     logging: Option<LoggingConfig>,
@@ -724,15 +738,35 @@ where
                     if let Some(task_missions) = &task.missions {
                         // if there is a filter by mission on the task, only add the task to the mission if it matches the filter.
                         if task_missions.contains(&mission_id.to_owned()) {
-                            graph
-                                .add_node(task.clone())
-                                .map_err(|e| E::from(e.to_string()))?;
+                            let mut task = task.clone();
+                            task.flavor = Flavor::Task;
+                            graph.add_node(task).map_err(|e| E::from(e.to_string()))?;
                         }
                     } else {
                         // if there is no filter by mission on the task, add the task to the mission.
+                        let mut task = task.clone();
+                        task.flavor = Flavor::Task;
                         graph
                             .add_node(task.clone())
                             .map_err(|e| E::from(e.to_string()))?;
+                    }
+                }
+            }
+
+            if let Some(bridges) = &representation.bridges {
+                for bridge in bridges {
+                    if let Some(bridge_missions) = &bridge.missions {
+                        // if there is a filter by mission on the task, only add the task to the mission if it matches the filter.
+                        if bridge_missions.contains(&mission_id.to_owned()) {
+                            let mut bridge = bridge.clone();
+                            bridge.flavor = Flavor::Bridge;
+                            graph.add_node(bridge).map_err(|e| E::from(e.to_string()))?;
+                        }
+                    } else {
+                        // if there is no filter by mission on the task, add the task to the mission.
+                        let mut bridge = bridge.clone();
+                        bridge.flavor = Flavor::Bridge;
+                        graph.add_node(bridge).map_err(|e| E::from(e.to_string()))?;
                     }
                 }
             }
@@ -793,9 +827,17 @@ where
 
         if let Some(tasks) = &representation.tasks {
             for task in tasks {
-                graph
-                    .add_node(task.clone())
-                    .map_err(|e| E::from(e.to_string()))?;
+                let mut task = task.clone();
+                task.flavor = Flavor::Task;
+                graph.add_node(task).map_err(|e| E::from(e.to_string()))?;
+            }
+        }
+
+        if let Some(bridges) = &representation.bridges {
+            for bridge in bridges {
+                let mut bridge = bridge.clone();
+                bridge.flavor = Flavor::Task;
+                graph.add_node(bridge).map_err(|e| E::from(e.to_string()))?;
             }
         }
 
@@ -855,6 +897,14 @@ impl Serialize for CuConfig {
                     .0
                     .node_indices()
                     .map(|idx| graph.0[idx].clone())
+                    .filter(|n| n.flavor == Flavor::Task)
+                    .collect();
+
+                let bridges: Vec<Node> = graph
+                    .0
+                    .node_indices()
+                    .map(|idx| graph.0[idx].clone())
+                    .filter(|n| n.flavor == Flavor::Bridge)
                     .collect();
 
                 let cnx: Vec<Cnx> = graph
@@ -865,6 +915,7 @@ impl Serialize for CuConfig {
 
                 CuConfigRepresentation {
                     tasks: Some(tasks),
+                    bridges: Some(bridges),
                     cnx: Some(cnx),
                     monitor: self.monitor.clone(),
                     logging: self.logging.clone(),
@@ -882,6 +933,7 @@ impl Serialize for CuConfig {
 
                 // Collect all unique tasks across missions
                 let mut tasks = Vec::new();
+                let mut bridges = Vec::new();
                 let mut cnx = Vec::new();
 
                 for graph in graphs.values() {
@@ -889,7 +941,14 @@ impl Serialize for CuConfig {
                     for node_idx in graph.node_indices() {
                         let node = &graph[node_idx];
                         if !tasks.iter().any(|n: &Node| n.id == node.id) {
-                            tasks.push(node.clone());
+                            match node.flavor {
+                                Flavor::Task => {
+                                    tasks.push(node.clone());
+                                }
+                                Flavor::Bridge => {
+                                    bridges.push(node.clone());
+                                }
+                            }
                         }
                     }
 
@@ -906,6 +965,7 @@ impl Serialize for CuConfig {
 
                 CuConfigRepresentation {
                     tasks: Some(tasks),
+                    bridges: Some(bridges),
                     cnx: Some(cnx),
                     monitor: self.monitor.clone(),
                     logging: self.logging.clone(),
@@ -1310,10 +1370,10 @@ mod tests {
         let mut config = CuConfig::default();
         let graph = config.get_graph_mut(None).unwrap();
         let n1 = graph
-            .add_node(Node::new("test1", "package::Plugin1"))
+            .add_node(Node::new("test1", "package::Plugin1", Flavor::Task))
             .unwrap();
         let n2 = graph
-            .add_node(Node::new("test2", "package::Plugin2"))
+            .add_node(Node::new("test2", "package::Plugin2", Flavor::Bridge))
             .unwrap();
         graph.connect(n1, n2, "msgpkg::MsgType").unwrap();
         let serialized = config.serialize_ron();
@@ -1328,7 +1388,7 @@ mod tests {
     fn test_serialize_with_params() {
         let mut config = CuConfig::default();
         let graph = config.get_graph_mut(None).unwrap();
-        let mut camera = Node::new("copper-camera", "camerapkg::Camera");
+        let mut camera = Node::new("copper-camera", "camerapkg::Camera", Flavor::Task);
         camera.set_param::<Value>("resolution-height", 1080.into());
         graph.add_node(camera).unwrap();
         let serialized = config.serialize_ron();
