@@ -10,7 +10,7 @@
 <blockquote>
 🤖&nbsp&nbsp&nbsp&nbsp
   <em style="font-size: 1.2em;">
-    **Copper is to robots what a game engine is to games - build, run, and replay your entire robot deterministically.**
+    Copper is to robots what a game engine is to games - build, run, and replay your entire robot deterministically.
   </em>
 </blockquote>
 
