@@ -5,6 +5,7 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
+use core::cmp::PartialEq;
 use core::fmt;
 use core::fmt::Display;
 use cu29_traits::{CuError, CuResult};
@@ -17,7 +18,6 @@ use ron::extensions::Extensions;
 use ron::value::Value as RonValue;
 use ron::{Number, Options};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::cmp::PartialEq;
 use ConfigGraphs::{Missions, Simple};
 
 #[cfg(not(feature = "std"))]
