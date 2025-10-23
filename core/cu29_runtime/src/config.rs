@@ -332,6 +332,7 @@ impl Node {
         config.insert(key.to_string(), value.into());
     }
 
+    #[allow(dead_code)]
     pub fn get_flavor(&self) -> Flavor {
         self.flavor
     }

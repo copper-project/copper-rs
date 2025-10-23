@@ -774,7 +774,7 @@ pub fn compute_runtime_plan(graph: &CuGraph) -> CuResult<CuExecutionLoop> {
                 CuTaskType::Source => true,
                 CuTaskType::Bridge => {
                     // Only add bridges that have outgoing edges (act as sources)
-                    graph.get_src_edges(node_id).unwrap_or_default().len() > 0
+                    !graph.get_src_edges(node_id).unwrap_or_default().is_empty()
                 }
                 _ => false,
             }
@@ -810,7 +810,7 @@ pub fn compute_runtime_plan(graph: &CuGraph) -> CuResult<CuExecutionLoop> {
                     .count();
 
                 // Check if this bridge has both incoming and outgoing edges
-                let has_outgoing = graph.get_src_edges(node_id).unwrap_or_default().len() > 0;
+                let has_outgoing = !graph.get_src_edges(node_id).unwrap_or_default().is_empty();
                 let has_incoming = graph.0.neighbors_directed(node_id.into(), Incoming).count() > 0;
 
                 if has_outgoing && has_incoming {
@@ -1296,13 +1296,13 @@ mod tests {
         assert_eq!(step.task_type, CuTaskType::Regular);
 
         let (idx, typ) = &step.input_msg_indices_types[0];
-        assert_eq!(*idx, 0);  // Reads from bridge output at index 0
+        assert_eq!(*idx, 0); // Reads from bridge output at index 0
         assert_eq!(typ, "IncomingMsg");
 
         let Some((idx, typ)) = &step.output_msg_index_type else {
             panic!("Expected an output msg index");
         };
-        assert_eq!(*idx, 1);  // Outputs to index 1
+        assert_eq!(*idx, 1); // Outputs to index 1
         assert_eq!(typ, "OutgoingMsg");
 
         // Step 2: Bridge sink side
@@ -1312,13 +1312,13 @@ mod tests {
         assert_eq!(step.task_type, CuTaskType::Bridge);
 
         let (idx, typ) = &step.input_msg_indices_types[0];
-        assert_eq!(*idx, 1);  // Reads from task output at index 1
+        assert_eq!(*idx, 1); // Reads from task output at index 1
         assert_eq!(typ, "OutgoingMsg");
 
         let Some((idx, typ)) = &step.output_msg_index_type else {
             panic!("Expected an output msg index");
         };
-        assert_eq!(*idx, 2);  // Bridge sink outputs () at index 2
+        assert_eq!(*idx, 2); // Bridge sink outputs () at index 2
         assert_eq!(typ, "()");
     }
 
