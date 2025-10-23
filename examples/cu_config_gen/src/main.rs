@@ -1,6 +1,7 @@
 use cu29::config::CuConfig;
 use cu29::config::Node;
 use cu29::config::Value;
+use cu29::config::Flavor;
 
 /// This is a small example to show how to programmatically generate a configuration.
 /// This is useful for making variations of your robot more easily.
@@ -8,10 +9,10 @@ fn main() {
     // Generate a config
     let mut copperconfig = CuConfig::default();
     let graph = copperconfig.get_graph_mut(None).unwrap();
-    let mut camera = Node::new("camera", "camerapkg::Camera");
+    let mut camera = Node::new("camera", "camerapkg::Camera", Flavor::Task);
     camera.set_param::<Value>("resolution-height", 1080.into());
-    let isp = Node::new("copper-isp", "isppkg::Isp");
-    let algo = Node::new("copper-algo", "algopkg::Algo");
+    let isp = Node::new("copper-isp", "isppkg::Isp", Flavor::Task);
+    let algo = Node::new("copper-algo", "algopkg::Algo", Flavor::Task);
     let n1 = graph.add_node(isp).unwrap();
     let n2 = graph.add_node(camera).unwrap();
     let n3 = graph.add_node(algo).unwrap();
