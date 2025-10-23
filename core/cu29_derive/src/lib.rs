@@ -497,6 +497,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             parse_str(sim_task_name.as_str()).unwrap_or_else(|_| panic!("Could not build the placeholder for simulation: {sim_task_name}"))
                         }
                     }
+                    CuTaskType::Bridge => {
+                        // Bridges are treated like regular tasks in simulation mode
+                        // They always run their actual code
+                        sim_type.clone()
+                    }
                 }
     })
     .collect();
@@ -1005,6 +1010,192 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                     })
                                 } else {
                                     panic!("Sink tasks should have a virtual output message index.");
+                                }
+                            }
+                            CuTaskType::Bridge => {
+                                // A bridge can act as a source (no inputs) or as a sink (has inputs)
+                                // We differentiate based on whether it has input messages
+                                if step.input_msg_indices_types.is_empty() {
+                                    // Bridge acting as source side
+                                    if let Some((output_index, _)) = &step.output_msg_index_type {
+                                        let output_culist_index = int2sliceindex(*output_index);
+
+                                        let monitoring_action = quote! {
+                                            debug!("Task {}: Error during process: {}", #mission_mod::TASKS_IDS[#tid], &error);
+                                            let decision = monitor.process_error(#tid, CuTaskState::Process, &error);
+                                            match decision {
+                                                Decision::Abort => {
+                                                    debug!("Process: ABORT decision from monitoring. Task '{}' errored out \
+                                                during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#tid], clid);
+                                                    monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
+                                                    cl_manager.end_of_processing(clid)?;
+                                                    return Ok(()); // this returns early from the one iteration call.
+
+                                                }
+                                                Decision::Ignore => {
+                                                    debug!("Process: IGNORE decision from monitoring. Task '{}' errored out \
+                                                during process. The runtime will continue with a forced empty message.", #mission_mod::TASKS_IDS[#tid]);
+                                                    let cumsg_output = &mut msgs.#output_culist_index;
+                                                    cumsg_output.clear_payload();
+                                                }
+                                                Decision::Shutdown => {
+                                                    debug!("Process: SHUTDOWN decision from monitoring. Task '{}' errored out \
+                                                during process. The runtime cannot continue.", #mission_mod::TASKS_IDS[#tid]);
+                                                    return Err(CuError::new_with_cause("Task errored out during process.", error));
+                                                }
+                                            }
+                                        };
+                                        let call_sim_callback = if sim_mode {
+                                            quote! {
+                                                let doit = {
+                                                    let cumsg_output = &mut msgs.#output_culist_index;
+                                                    let state = CuTaskCallbackState::Process((), cumsg_output);
+                                                    let ovr = sim_callback(SimStep::#enum_name(state));
+                                                    if let SimOverride::Errored(reason) = ovr  {
+                                                        let error: CuError = reason.into();
+                                                        #monitoring_action
+                                                        false
+                                                    } else {
+                                                        ovr == SimOverride::ExecuteByRuntime
+                                                    }
+                                                };
+                                             }
+                                        } else {
+                                            quote! {
+                                                let  doit = true;  // in normal mode always execute the steps in the runtime.
+                                           }
+                                        };
+
+                                        (quote! {  // process call
+                                            {
+                                                #comment_tokens
+                                                {
+                                                    // Maybe freeze the task if this is a "key frame"
+                                                    kf_manager.freeze_task(clid, &#task_instance)?;
+                                                    #call_sim_callback
+                                                    let cumsg_output = &mut msgs.#output_culist_index;
+                                                    cumsg_output.metadata.process_time.start = clock.now().into();
+                                                    let maybe_error = if doit {
+                                                        #task_instance.process(clock, cumsg_output)
+                                                    } else {
+                                                        Ok(())
+                                                    };
+                                                    cumsg_output.metadata.process_time.end = clock.now().into();
+                                                    if let Err(error) = maybe_error {
+                                                        #monitoring_action
+                                                    }
+                                                }
+                                            }
+                                        }, {  // logging preprocess
+                                            if !task_specs.logging_enabled[step.node_id as usize] {
+                                                let output_culist_index = int2sliceindex(*output_index);
+                                                quote! {
+                                                    let mut cumsg_output = &mut culist.msgs.0.#output_culist_index;
+                                                    cumsg_output.clear_payload();
+                                                }
+                                            } else {
+                                                quote!() // do nothing
+                                            }
+                                        })
+                                    } else {
+                                        panic!("Bridge source side should have an output message index.");
+                                    }
+                                } else {
+                                    // Bridge acting as sink side
+                                    let indices = step.input_msg_indices_types.iter().map(|(index, _)| int2sliceindex(*index));
+                                    if let Some((output_index, _)) = &step.output_msg_index_type {
+                                        let output_culist_index = int2sliceindex(*output_index);
+
+                                        let monitoring_action = quote! {
+                                            debug!("Task {}: Error during process: {}", #mission_mod::TASKS_IDS[#tid], &error);
+                                            let decision = monitor.process_error(#tid, CuTaskState::Process, &error);
+                                            match decision {
+                                                Decision::Abort => {
+                                                    debug!("Process: ABORT decision from monitoring. Task '{}' errored out \
+                                                during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#tid], clid);
+                                                    monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
+                                                    cl_manager.end_of_processing(clid)?;
+                                                    return Ok(()); // this returns early from the one iteration call.
+
+                                                }
+                                                Decision::Ignore => {
+                                                    debug!("Process: IGNORE decision from monitoring. Task '{}' errored out \
+                                                during process. The runtime will continue with a forced empty message.", #mission_mod::TASKS_IDS[#tid]);
+                                                    let cumsg_output = &mut msgs.#output_culist_index;
+                                                    cumsg_output.clear_payload();
+                                                }
+                                                Decision::Shutdown => {
+                                                    debug!("Process: SHUTDOWN decision from monitoring. Task '{}' errored out \
+                                                during process. The runtime cannot continue.", #mission_mod::TASKS_IDS[#tid]);
+                                                    return Err(CuError::new_with_cause("Task errored out during process.", error));
+                                                }
+                                            }
+                                        };
+
+                                        let call_sim_callback = if sim_mode {
+                                            let inputs_type = if indices.len() == 1 {
+                                                // Not a tuple for a single input
+                                                quote! { #(msgs.#indices)* }
+                                            } else {
+                                                // A tuple for multiple inputs
+                                                quote! { (#(&msgs.#indices),*) }
+                                            };
+
+                                            quote! {
+                                                let doit = {
+                                                    let cumsg_input = &#inputs_type;
+                                                    // This is the virtual output for the sink side
+                                                    let cumsg_output = &mut msgs.#output_culist_index;
+                                                    let state = CuTaskCallbackState::Process(cumsg_input, cumsg_output);
+                                                    let ovr = sim_callback(SimStep::#enum_name(state));
+
+                                                    if let SimOverride::Errored(reason) = ovr  {
+                                                        let error: CuError = reason.into();
+                                                        #monitoring_action
+                                                        false
+                                                    } else {
+                                                        ovr == SimOverride::ExecuteByRuntime
+                                                    }
+                                                };
+                                             }
+                                        } else {
+                                            quote! {
+                                                let doit = true;  // in normal mode always execute the steps in the runtime.
+                                           }
+                                        };
+
+                                        let indices = step.input_msg_indices_types.iter().map(|(index, _)| int2sliceindex(*index));
+
+                                        let inputs_type = if indices.len() == 1 {
+                                            // Not a tuple for a single input
+                                            quote! { #(msgs.#indices)* }
+                                        } else {
+                                            // A tuple for multiple inputs
+                                            quote! { (#(&msgs.#indices),*) }
+                                        };
+
+                                        (quote! {
+                                            {
+                                                #comment_tokens
+                                                // Maybe freeze the task if this is a "key frame"
+                                                kf_manager.freeze_task(clid, &#task_instance)?;
+                                                #call_sim_callback
+                                                let cumsg_input = &#inputs_type;
+                                                // This is the virtual output for the sink side
+                                                let cumsg_output = &mut msgs.#output_culist_index;
+                                                cumsg_output.metadata.process_time.start = clock.now().into();
+                                                let maybe_error = if doit {#task_instance.process(clock, cumsg_input)} else {Ok(())};
+                                                cumsg_output.metadata.process_time.end = clock.now().into();
+                                                if let Err(error) = maybe_error {
+                                                    #monitoring_action
+                                                }
+                                            }
+                                        }, {
+                                            quote!() // do nothing for logging
+                                        })
+                                    } else {
+                                        panic!("Bridge sink side should have a virtual output message index.");
+                                    }
                                 }
                             }
                             CuTaskType::Regular => {

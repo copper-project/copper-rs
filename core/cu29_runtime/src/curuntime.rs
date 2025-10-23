@@ -580,42 +580,95 @@ fn plan_tasks_tree_branch(
                 next_culist_output_index += 1;
             }
             CuTaskType::Bridge => {
-                // here we need to test if we didn't already add the "source" side of the bridge
-                // if the source side is already in the plan, we don't need to add it again
-                if find_output_index_type_from_nodeid(id, plan).is_none() {
-                    #[cfg(all(feature = "std", feature = "macro_debug"))]
-                    eprintln!("    → Bridge node, assign output index {next_culist_output_index}");
-                    output_msg_index_type = Some((
-                        next_culist_output_index,
-                        graph
-                            .0
-                            .edge_weight(EdgeIndex::new(graph.get_src_edges(id).unwrap()[0]))
-                            .unwrap() // FIXME(gbin): Error handling
-                            .msg
-                            .clone(),
-                    ));
-                    next_culist_output_index += 1;
-                    resched = Some(id); // signal we need to schedule the sink side for the same bridge
-                } else {
-                    // Now that the input side of the bridge is done, we are sure that it will
-                    // unlock until we need to take care of the Sink-like part
-                    let parents: Vec<NodeIndex> =
-                        graph.0.neighbors_directed(id.into(), Incoming).collect();
-                    #[cfg(all(feature = "std", feature = "macro_debug"))]
-                    eprintln!("    → Bridge with parents: {parents:?}");
-                    for parent in &parents {
-                        let pid = parent.index() as NodeId;
-                        let index_type = find_output_index_type_from_nodeid(pid, plan);
-                        if let Some(index_type) = index_type {
+                // A bridge acts as both a source and a sink.
+                // We need to check if we've already scheduled the source side.
+                // Source side: no inputs, produces output
+                // Sink side: has inputs, produces ()
+
+                let parents: Vec<NodeIndex> =
+                    graph.0.neighbors_directed(id.into(), Incoming).collect();
+
+                // Check if all parent outputs are ready in the plan
+                let mut all_parents_ready = true;
+                for parent in &parents {
+                    let pid = parent.index() as NodeId;
+                    if find_output_index_type_from_nodeid(pid, plan).is_none() {
+                        all_parents_ready = false;
+                        break;
+                    }
+                }
+
+                // Determine if this is the source side or sink side visit
+                let is_source_side = find_output_index_type_from_nodeid(id, plan).is_none();
+
+                if is_source_side {
+                    // Source side: produce output for downstream tasks
+                    // But only if this bridge has outgoing edges
+                    let src_edges = graph.get_src_edges(id).unwrap_or_default();
+                    if !src_edges.is_empty() {
+                        #[cfg(all(feature = "std", feature = "macro_debug"))]
+                        eprintln!("    → Bridge node (source side), assign output index {next_culist_output_index}");
+                        output_msg_index_type = Some((
+                            next_culist_output_index,
+                            graph
+                                .0
+                                .edge_weight(EdgeIndex::new(src_edges[0]))
+                                .unwrap() // FIXME(gbin): Error handling
+                                .msg
+                                .clone(),
+                        ));
+                        next_culist_output_index += 1;
+
+                        // If this bridge has incoming connections, we need to schedule the sink side later
+                        if !parents.is_empty() {
+                            resched = Some(id);
+                        }
+                    } else {
+                        // This bridge has no outgoing edges, so it's sink-only
+                        // Even though is_source_side is true (no output in plan yet),
+                        // we should treat it as a sink
+                        #[cfg(all(feature = "std", feature = "macro_debug"))]
+                        eprintln!("    → Bridge node (sink-only, no outgoing edges)");
+
+                        if !all_parents_ready {
+                            #[cfg(all(feature = "std", feature = "macro_debug"))]
+                            eprintln!("      ✗ Not all inputs ready, returning");
+                            return (next_culist_output_index, handled, resched);
+                        }
+
+                        // Collect inputs
+                        for parent in &parents {
+                            let pid = parent.index() as NodeId;
+                            let index_type = find_output_index_type_from_nodeid(pid, plan).unwrap();
                             #[cfg(all(feature = "std", feature = "macro_debug"))]
                             eprintln!("      ✓ Input from {pid} ready: {index_type:?}");
                             input_msg_indices_types.push(index_type);
-                        } else {
-                            #[cfg(all(feature = "std", feature = "macro_debug"))]
-                            eprintln!("      ✗ Input from {pid} not ready, returning");
-                            return (next_culist_output_index, handled, resched);
                         }
+
+                        output_msg_index_type = Some((next_culist_output_index, "()".to_string()));
+                        next_culist_output_index += 1;
                     }
+                } else {
+                    // Sink side: consume inputs from upstream tasks
+                    #[cfg(all(feature = "std", feature = "macro_debug"))]
+                    eprintln!("    → Bridge node (sink side) with parents: {parents:?}");
+
+                    // Check if all inputs are ready
+                    if !all_parents_ready {
+                        #[cfg(all(feature = "std", feature = "macro_debug"))]
+                        eprintln!("      ✗ Not all inputs ready, returning");
+                        return (next_culist_output_index, handled, resched);
+                    }
+
+                    // Collect inputs
+                    for parent in &parents {
+                        let pid = parent.index() as NodeId;
+                        let index_type = find_output_index_type_from_nodeid(pid, plan).unwrap();
+                        #[cfg(all(feature = "std", feature = "macro_debug"))]
+                        eprintln!("      ✓ Input from {pid} ready: {index_type:?}");
+                        input_msg_indices_types.push(index_type);
+                    }
+
                     output_msg_index_type = Some((next_culist_output_index, "()".to_string()));
                     next_culist_output_index += 1;
                 }
@@ -654,20 +707,37 @@ fn plan_tasks_tree_branch(
 
         sort_inputs_by_cnx_id(&mut input_msg_indices_types, plan, graph, id);
 
-        if let Some(pos) = plan
-            .iter()
-            .position(|step| matches!(step, CuExecutionUnit::Step(s) if s.node_id == id && s.task_type != CuTaskType::Bridge))
-        {
-            #[cfg(all(feature = "std", feature = "macro_debug"))]
-            eprintln!("    → Already in plan, modifying existing step");
-            let mut step = plan.remove(pos);
-            if let CuExecutionUnit::Step(ref mut s) = step {
-                s.input_msg_indices_types = input_msg_indices_types;
+        // For bridges, we allow the same node to appear twice (source side + sink side)
+        // For other task types, we update existing entries
+        let should_update_existing = task_type != CuTaskType::Bridge;
+
+        if should_update_existing {
+            if let Some(pos) = plan
+                .iter()
+                .position(|step| matches!(step, CuExecutionUnit::Step(s) if s.node_id == id))
+            {
+                #[cfg(all(feature = "std", feature = "macro_debug"))]
+                eprintln!("    → Already in plan at position {pos}, modifying in place");
+                // Update in place to preserve ordering
+                if let CuExecutionUnit::Step(ref mut s) = plan[pos] {
+                    s.input_msg_indices_types = input_msg_indices_types;
+                }
+            } else {
+                #[cfg(all(feature = "std", feature = "macro_debug"))]
+                eprintln!("    → New step added to plan");
+                let step = CuExecutionStep {
+                    node_id: id,
+                    node: node_ref.clone(),
+                    task_type,
+                    input_msg_indices_types,
+                    output_msg_index_type,
+                };
+                plan.push(CuExecutionUnit::Step(step));
             }
-            plan.push(step);
         } else {
+            // Bridge: always add a new step
             #[cfg(all(feature = "std", feature = "macro_debug"))]
-            eprintln!("    → New step added to plan");
+            eprintln!("    → New bridge step added to plan");
             let step = CuExecutionStep {
                 node_id: id,
                 node: node_ref.clone(),
@@ -698,12 +768,17 @@ pub fn compute_runtime_plan(graph: &CuGraph) -> CuResult<CuExecutionLoop> {
     let mut queue: VecDeque<NodeId> = graph
         .node_indices()
         .iter()
-        .filter(
-            |&node| match find_task_type_for_id(graph, node.index() as NodeId) {
-                CuTaskType::Source | CuTaskType::Bridge => true,
+        .filter(|&node| {
+            let node_id = node.index() as NodeId;
+            match find_task_type_for_id(graph, node_id) {
+                CuTaskType::Source => true,
+                CuTaskType::Bridge => {
+                    // Only add bridges that have outgoing edges (act as sources)
+                    graph.get_src_edges(node_id).unwrap_or_default().len() > 0
+                }
                 _ => false,
-            },
-        )
+            }
+        })
         .map(|node| node.index() as NodeId)
         .collect();
 
@@ -723,9 +798,33 @@ pub fn compute_runtime_plan(graph: &CuGraph) -> CuResult<CuExecutionLoop> {
 
         while let Some(node_index) = bfs.next(&graph.0) {
             let node_id = node_index.index() as NodeId;
-            let already_in_plan = plan
-                .iter()
-                .any(|unit| matches!(unit, CuExecutionUnit::Step(s) if s.node_id == node_id && s.task_type != CuTaskType::Bridge));
+            let task_type = find_task_type_for_id(graph, node_id);
+
+            // For bridges, we need to check if BOTH sides are already in the plan
+            // For other tasks, we check if they're in the plan at all
+            let already_in_plan = if task_type == CuTaskType::Bridge {
+                // Count how many times this bridge appears in the plan
+                let bridge_count = plan
+                    .iter()
+                    .filter(|unit| matches!(unit, CuExecutionUnit::Step(s) if s.node_id == node_id))
+                    .count();
+
+                // Check if this bridge has both incoming and outgoing edges
+                let has_outgoing = graph.get_src_edges(node_id).unwrap_or_default().len() > 0;
+                let has_incoming = graph.0.neighbors_directed(node_id.into(), Incoming).count() > 0;
+
+                if has_outgoing && has_incoming {
+                    // Bridge can appear twice (source + sink)
+                    bridge_count >= 2
+                } else {
+                    // Bridge is source-only or sink-only, can appear once
+                    bridge_count >= 1
+                }
+            } else {
+                plan.iter()
+                    .any(|unit| matches!(unit, CuExecutionUnit::Step(s) if s.node_id == node_id))
+            };
+
             if already_in_plan {
                 #[cfg(all(feature = "std", feature = "macro_debug"))]
                 eprintln!("    → Node {node_id} already planned, skipping");
@@ -1193,17 +1292,211 @@ mod tests {
         let CuExecutionUnit::Step(step) = &steps[1] else {
             panic!("Expected a step");
         };
-        // Src side
+        // Task (middle step)
         assert_eq!(step.task_type, CuTaskType::Regular);
 
         let (idx, typ) = &step.input_msg_indices_types[0];
-        assert_eq!(*idx, 1);
+        assert_eq!(*idx, 0);  // Reads from bridge output at index 0
         assert_eq!(typ, "IncomingMsg");
 
         let Some((idx, typ)) = &step.output_msg_index_type else {
             panic!("Expected an output msg index");
         };
-        assert_eq!(*idx, 1);
+        assert_eq!(*idx, 1);  // Outputs to index 1
         assert_eq!(typ, "OutgoingMsg");
+
+        // Step 2: Bridge sink side
+        let CuExecutionUnit::Step(step) = &steps[2] else {
+            panic!("Expected a step");
+        };
+        assert_eq!(step.task_type, CuTaskType::Bridge);
+
+        let (idx, typ) = &step.input_msg_indices_types[0];
+        assert_eq!(*idx, 1);  // Reads from task output at index 1
+        assert_eq!(typ, "OutgoingMsg");
+
+        let Some((idx, typ)) = &step.output_msg_index_type else {
+            panic!("Expected an output msg index");
+        };
+        assert_eq!(*idx, 2);  // Bridge sink outputs () at index 2
+        assert_eq!(typ, "()");
+    }
+
+    #[test]
+    fn test_bridge_with_multiple_tasks() {
+        // Test: Bridge -> Task1 -> Task2 -> Bridge
+        // This tests a bridge with a longer pipeline between source and sink
+        let mut config = CuConfig::default();
+        let graph = config.get_graph_mut(None).unwrap();
+        let brg_id = graph
+            .add_node(Node::new("bridge", "Bridge", Flavor::Bridge))
+            .unwrap();
+        let tsk1_id = graph
+            .add_node(Node::new("task1", "Task1", Flavor::Task))
+            .unwrap();
+        let tsk2_id = graph
+            .add_node(Node::new("task2", "Task2", Flavor::Task))
+            .unwrap();
+
+        graph.connect(brg_id, tsk1_id, "InputMsg").unwrap();
+        graph.connect(tsk1_id, tsk2_id, "IntermediateMsg").unwrap();
+        graph.connect(tsk2_id, brg_id, "OutputMsg").unwrap();
+
+        let runtime = compute_runtime_plan(graph).unwrap();
+        let steps = runtime.steps;
+
+        assert_eq!(steps.len(), 4);
+
+        // Step 0: Bridge source
+        let CuExecutionUnit::Step(step) = &steps[0] else {
+            panic!("Expected a step");
+        };
+        assert_eq!(step.task_type, CuTaskType::Bridge);
+        assert_eq!(step.output_msg_index_type.as_ref().unwrap().0, 0);
+        assert_eq!(step.output_msg_index_type.as_ref().unwrap().1, "InputMsg");
+
+        // Step 1: Task1
+        let CuExecutionUnit::Step(step) = &steps[1] else {
+            panic!("Expected a step");
+        };
+        assert_eq!(step.task_type, CuTaskType::Regular);
+        assert_eq!(step.input_msg_indices_types[0].0, 0);
+        assert_eq!(step.output_msg_index_type.as_ref().unwrap().0, 1);
+
+        // Step 2: Task2
+        let CuExecutionUnit::Step(step) = &steps[2] else {
+            panic!("Expected a step");
+        };
+        assert_eq!(step.task_type, CuTaskType::Regular);
+        assert_eq!(step.input_msg_indices_types[0].0, 1);
+        assert_eq!(step.output_msg_index_type.as_ref().unwrap().0, 2);
+
+        // Step 3: Bridge sink
+        let CuExecutionUnit::Step(step) = &steps[3] else {
+            panic!("Expected a step");
+        };
+        assert_eq!(step.task_type, CuTaskType::Bridge);
+        assert_eq!(step.input_msg_indices_types[0].0, 2);
+        assert_eq!(step.output_msg_index_type.as_ref().unwrap().0, 3);
+    }
+
+    #[test]
+    fn test_two_bridges_in_series() {
+        // Test: Bridge1 -> Task -> Bridge2
+        // This tests two separate bridges in a pipeline
+        let mut config = CuConfig::default();
+        let graph = config.get_graph_mut(None).unwrap();
+        let brg1_id = graph
+            .add_node(Node::new("bridge1", "Bridge1", Flavor::Bridge))
+            .unwrap();
+        let tsk_id = graph
+            .add_node(Node::new("task", "Task", Flavor::Task))
+            .unwrap();
+        let brg2_id = graph
+            .add_node(Node::new("bridge2", "Bridge2", Flavor::Bridge))
+            .unwrap();
+
+        graph.connect(brg1_id, tsk_id, "Msg1").unwrap();
+        graph.connect(tsk_id, brg2_id, "Msg2").unwrap();
+
+        let runtime = compute_runtime_plan(graph).unwrap();
+        let steps = runtime.steps;
+
+        // Expected: Bridge1_src -> Task -> Bridge1_sink -> Bridge2_src -> Bridge2_sink
+        // But wait, Bridge1 has no inputs, so no sink side!
+        // And Bridge2 has no outputs, so it's only sink side!
+        // Actually: Bridge1_src -> Task -> Bridge2_sink
+        assert_eq!(steps.len(), 3);
+
+        // Step 0: Bridge1 source only (no feedback)
+        let CuExecutionUnit::Step(step) = &steps[0] else {
+            panic!("Expected a step");
+        };
+        assert_eq!(step.task_type, CuTaskType::Bridge);
+        assert_eq!(step.output_msg_index_type.as_ref().unwrap().0, 0);
+        assert_eq!(step.output_msg_index_type.as_ref().unwrap().1, "Msg1");
+
+        // Step 1: Task
+        let CuExecutionUnit::Step(step) = &steps[1] else {
+            panic!("Expected a step");
+        };
+        assert_eq!(step.task_type, CuTaskType::Regular);
+        assert_eq!(step.input_msg_indices_types[0].0, 0);
+        assert_eq!(step.output_msg_index_type.as_ref().unwrap().0, 1);
+
+        // Step 2: Bridge2 sink only (no outputs to graph)
+        let CuExecutionUnit::Step(step) = &steps[2] else {
+            panic!("Expected a step");
+        };
+        assert_eq!(step.task_type, CuTaskType::Bridge);
+        assert_eq!(step.input_msg_indices_types[0].0, 1);
+        assert_eq!(step.output_msg_index_type.as_ref().unwrap().0, 2);
+        assert_eq!(step.output_msg_index_type.as_ref().unwrap().1, "()");
+    }
+
+    #[test]
+    fn test_bridge_diamond_pattern() {
+        // Test: Bridge -> Task1 -> Task3
+        //                     \-> Task2 -/
+        //                               -> Bridge (sink)
+        // This tests a bridge with a diamond pattern in between
+        let mut config = CuConfig::default();
+        let graph = config.get_graph_mut(None).unwrap();
+        let brg_id = graph
+            .add_node(Node::new("bridge", "Bridge", Flavor::Bridge))
+            .unwrap();
+        let tsk1_id = graph
+            .add_node(Node::new("task1", "Task1", Flavor::Task))
+            .unwrap();
+        let tsk2_id = graph
+            .add_node(Node::new("task2", "Task2", Flavor::Task))
+            .unwrap();
+        let tsk3_id = graph
+            .add_node(Node::new("task3", "Task3", Flavor::Task))
+            .unwrap();
+
+        graph.connect(brg_id, tsk1_id, "InputMsg").unwrap();
+        graph.connect(brg_id, tsk2_id, "InputMsg").unwrap();
+        graph.connect(tsk1_id, tsk3_id, "Msg1").unwrap();
+        graph.connect(tsk2_id, tsk3_id, "Msg2").unwrap();
+        graph.connect(tsk3_id, brg_id, "OutputMsg").unwrap();
+
+        let runtime = compute_runtime_plan(graph).unwrap();
+        let steps = runtime.steps;
+
+        assert_eq!(steps.len(), 5);
+
+        // Step 0: Bridge source
+        let CuExecutionUnit::Step(step) = &steps[0] else {
+            panic!("Expected a step");
+        };
+        assert_eq!(step.task_type, CuTaskType::Bridge);
+        assert_eq!(step.output_msg_index_type.as_ref().unwrap().0, 0);
+
+        // Steps 1 & 2: Task1 and Task2 (order may vary)
+        // Both should read from index 0
+        for i in 1..=2 {
+            let CuExecutionUnit::Step(step) = &steps[i] else {
+                panic!("Expected a step");
+            };
+            assert_eq!(step.task_type, CuTaskType::Regular);
+            assert_eq!(step.input_msg_indices_types[0].0, 0);
+        }
+
+        // Step 3: Task3 (merging task)
+        let CuExecutionUnit::Step(step) = &steps[3] else {
+            panic!("Expected a step");
+        };
+        assert_eq!(step.task_type, CuTaskType::Regular);
+        assert_eq!(step.input_msg_indices_types.len(), 2); // Two inputs
+        assert_eq!(step.output_msg_index_type.as_ref().unwrap().1, "OutputMsg");
+
+        // Step 4: Bridge sink
+        let CuExecutionUnit::Step(step) = &steps[4] else {
+            panic!("Expected a step");
+        };
+        assert_eq!(step.task_type, CuTaskType::Bridge);
+        assert_eq!(step.input_msg_indices_types[0].1, "OutputMsg");
+        assert_eq!(step.output_msg_index_type.as_ref().unwrap().1, "()");
     }
 }

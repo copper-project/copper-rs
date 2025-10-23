@@ -840,7 +840,7 @@ where
         if let Some(bridges) = &representation.bridges {
             for bridge in bridges {
                 let mut bridge = bridge.clone();
-                bridge.flavor = Flavor::Task;
+                bridge.flavor = Flavor::Bridge;
                 graph.add_node(bridge).map_err(|e| E::from(e.to_string()))?;
             }
         }
