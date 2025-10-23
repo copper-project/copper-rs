@@ -211,7 +211,7 @@ pub struct NodeLogging {
     enabled: bool,
 }
 
-#[derive(Serialize, Default, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Default, Deserialize, Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Flavor {
     #[default]
     Task,
@@ -330,6 +330,10 @@ impl Node {
         }
         let ComponentConfig(config) = self.config.as_mut().unwrap();
         config.insert(key.to_string(), value.into());
+    }
+
+    pub fn get_flavor(&self) -> Flavor {
+        self.flavor
     }
 }
 

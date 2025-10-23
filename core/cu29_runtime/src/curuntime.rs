@@ -2,7 +2,7 @@
 //! It is exposed to the user via the `copper_runtime` macro injecting it as a field in their application struct.
 //!
 
-use crate::config::{ComponentConfig, Node, DEFAULT_KEYFRAME_INTERVAL};
+use crate::config::{ComponentConfig, Flavor, Node, DEFAULT_KEYFRAME_INTERVAL};
 use crate::config::{CuConfig, CuGraph, NodeId, RuntimeConfig};
 use crate::copperlist::{CopperList, CopperListState, CuListZeroedInit, CuListsManager};
 use crate::cutask::{BincodeAdapter, Freezable};
@@ -361,15 +361,17 @@ impl<
     }
 }
 
-/// Copper tasks can be of 3 types:
+/// Copper tasks can be of 4 types:
 /// - Source: only producing output messages (usually used for drivers)
 /// - Regular: processing input messages and producing output messages, more like compute nodes.
 /// - Sink: only consuming input messages (usually used for actuators)
+/// - Bridge: Like a regular task but gets conceptually "split" into a Source and a Sink
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum CuTaskType {
     Source,
     Regular,
     Sink,
+    Bridge,
 }
 
 /// This structure represents a step in the execution plan.
@@ -464,6 +466,10 @@ fn find_output_index_type_from_nodeid(
 }
 
 pub fn find_task_type_for_id(graph: &CuGraph, node_id: NodeId) -> CuTaskType {
+    let node = graph.get_node(node_id).unwrap();
+    if node.get_flavor() == Flavor::Bridge {
+        return CuTaskType::Bridge;
+    }
     if graph.0.neighbors_directed(node_id.into(), Incoming).count() == 0 {
         CuTaskType::Source
     } else if graph.0.neighbors_directed(node_id.into(), Outgoing).count() == 0 {
@@ -484,9 +490,11 @@ fn find_edge_with_plan_input_id(
     let input_node = plan
         .get(plan_id as usize)
         .expect("Input step should've been added to plan before the step that receives the input");
+
     let CuExecutionUnit::Step(input_step) = input_node else {
         panic!("Expected input to be from a step, not a loop");
     };
+
     let input_node_id = input_step.node_id;
 
     graph
@@ -517,12 +525,13 @@ fn plan_tasks_tree_branch(
     mut next_culist_output_index: u32,
     starting_point: NodeId,
     plan: &mut Vec<CuExecutionUnit>,
-) -> (u32, bool) {
+) -> (u32, bool, Option<NodeId>) {
     #[cfg(all(feature = "std", feature = "macro_debug"))]
     eprintln!("-- starting branch from node {starting_point}");
 
     let mut visitor = Bfs::new(&graph.0, starting_point.into());
     let mut handled = false;
+    let mut resched: Option<NodeId> = None;
 
     while let Some(node) = visitor.next(&graph.0) {
         let id = node.index() as NodeId;
@@ -564,12 +573,54 @@ fn plan_tasks_tree_branch(
                     } else {
                         #[cfg(all(feature = "std", feature = "macro_debug"))]
                         eprintln!("      ✗ Input from {pid} not ready, returning");
-                        return (next_culist_output_index, handled);
+                        return (next_culist_output_index, handled, resched);
                     }
                 }
                 output_msg_index_type = Some((next_culist_output_index, "()".to_string()));
                 next_culist_output_index += 1;
             }
+            CuTaskType::Bridge => {
+                // here we need to test if we didn't already add the "source" side of the bridge
+                // if the source side is already in the plan, we don't need to add it again
+                if find_output_index_type_from_nodeid(id, plan).is_none() {
+                    #[cfg(all(feature = "std", feature = "macro_debug"))]
+                    eprintln!("    → Bridge node, assign output index {next_culist_output_index}");
+                    output_msg_index_type = Some((
+                        next_culist_output_index,
+                        graph
+                            .0
+                            .edge_weight(EdgeIndex::new(graph.get_src_edges(id).unwrap()[0]))
+                            .unwrap() // FIXME(gbin): Error handling
+                            .msg
+                            .clone(),
+                    ));
+                    next_culist_output_index += 1;
+                    resched = Some(id); // signal we need to schedule the sink side for the same bridge
+                } else {
+                    // Now that the input side of the bridge is done, we are sure that it will
+                    // unlock until we need to take care of the Sink-like part
+                    let parents: Vec<NodeIndex> =
+                        graph.0.neighbors_directed(id.into(), Incoming).collect();
+                    #[cfg(all(feature = "std", feature = "macro_debug"))]
+                    eprintln!("    → Bridge with parents: {parents:?}");
+                    for parent in &parents {
+                        let pid = parent.index() as NodeId;
+                        let index_type = find_output_index_type_from_nodeid(pid, plan);
+                        if let Some(index_type) = index_type {
+                            #[cfg(all(feature = "std", feature = "macro_debug"))]
+                            eprintln!("      ✓ Input from {pid} ready: {index_type:?}");
+                            input_msg_indices_types.push(index_type);
+                        } else {
+                            #[cfg(all(feature = "std", feature = "macro_debug"))]
+                            eprintln!("      ✗ Input from {pid} not ready, returning");
+                            return (next_culist_output_index, handled, resched);
+                        }
+                    }
+                    output_msg_index_type = Some((next_culist_output_index, "()".to_string()));
+                    next_culist_output_index += 1;
+                }
+            }
+
             CuTaskType::Regular => {
                 let parents: Vec<NodeIndex> =
                     graph.0.neighbors_directed(id.into(), Incoming).collect();
@@ -585,7 +636,7 @@ fn plan_tasks_tree_branch(
                     } else {
                         #[cfg(all(feature = "std", feature = "macro_debug"))]
                         eprintln!("      ✗ Input from {pid} not ready, returning");
-                        return (next_culist_output_index, handled);
+                        return (next_culist_output_index, handled, resched);
                     }
                 }
                 output_msg_index_type = Some((
@@ -605,7 +656,7 @@ fn plan_tasks_tree_branch(
 
         if let Some(pos) = plan
             .iter()
-            .position(|step| matches!(step, CuExecutionUnit::Step(s) if s.node_id == id))
+            .position(|step| matches!(step, CuExecutionUnit::Step(s) if s.node_id == id && s.task_type != CuTaskType::Bridge))
         {
             #[cfg(all(feature = "std", feature = "macro_debug"))]
             eprintln!("    → Already in plan, modifying existing step");
@@ -631,8 +682,8 @@ fn plan_tasks_tree_branch(
     }
 
     #[cfg(all(feature = "std", feature = "macro_debug"))]
-    eprintln!("-- finished branch from node {starting_point} with handled={handled}");
-    (next_culist_output_index, handled)
+    eprintln!("-- finished branch from node {starting_point} with handled={handled} and resched={resched:?}");
+    (next_culist_output_index, handled, resched)
 }
 
 /// This is the main heuristics to compute an execution plan at compilation time.
@@ -647,7 +698,12 @@ pub fn compute_runtime_plan(graph: &CuGraph) -> CuResult<CuExecutionLoop> {
     let mut queue: VecDeque<NodeId> = graph
         .node_indices()
         .iter()
-        .filter(|&node| find_task_type_for_id(graph, node.index() as NodeId) == CuTaskType::Source)
+        .filter(
+            |&node| match find_task_type_for_id(graph, node.index() as NodeId) {
+                CuTaskType::Source | CuTaskType::Bridge => true,
+                _ => false,
+            },
+        )
         .map(|node| node.index() as NodeId)
         .collect();
 
@@ -669,7 +725,7 @@ pub fn compute_runtime_plan(graph: &CuGraph) -> CuResult<CuExecutionLoop> {
             let node_id = node_index.index() as NodeId;
             let already_in_plan = plan
                 .iter()
-                .any(|unit| matches!(unit, CuExecutionUnit::Step(s) if s.node_id == node_id));
+                .any(|unit| matches!(unit, CuExecutionUnit::Step(s) if s.node_id == node_id && s.task_type != CuTaskType::Bridge));
             if already_in_plan {
                 #[cfg(all(feature = "std", feature = "macro_debug"))]
                 eprintln!("    → Node {node_id} already planned, skipping");
@@ -678,7 +734,7 @@ pub fn compute_runtime_plan(graph: &CuGraph) -> CuResult<CuExecutionLoop> {
 
             #[cfg(all(feature = "std", feature = "macro_debug"))]
             eprintln!("    Planning from node {node_id}");
-            let (new_index, handled) =
+            let (new_index, handled, resched) =
                 plan_tasks_tree_branch(graph, next_culist_output_index, node_id, &mut plan);
             next_culist_output_index = new_index;
 
@@ -688,11 +744,22 @@ pub fn compute_runtime_plan(graph: &CuGraph) -> CuResult<CuExecutionLoop> {
                 continue;
             }
 
+            if let Some(resched_node) = resched {
+                #[cfg(all(feature = "std", feature = "macro_debug"))]
+                eprintln!("    → Rescheduling node {resched_node}");
+                queue.push_back(resched_node);
+            }
+
             #[cfg(all(feature = "std", feature = "macro_debug"))]
             eprintln!("    ✓ Node {node_id} handled successfully, enqueueing neighbors");
             for neighbor in graph.0.neighbors(node_index) {
                 if !visited.is_visited(&neighbor) {
                     let nid = neighbor.index() as NodeId;
+                    if nid == start_node {
+                        #[cfg(all(feature = "std", feature = "macro_debug"))]
+                        eprintln!("      → Don't enqueue the starting node again {nid}");
+                        continue;
+                    }
                     #[cfg(all(feature = "std", feature = "macro_debug"))]
                     eprintln!("      → Enqueueing neighbor {nid}");
                     queue.push_back(nid);
@@ -1052,5 +1119,91 @@ mod tests {
 
         assert_eq!(broadcast_step.input_msg_indices_types[0].1, "i32");
         assert_eq!(broadcast_step.input_msg_indices_types[1].1, "f32");
+    }
+
+    #[test]
+    fn test_degenerated_bridge_bridge_case() {
+        let mut config = CuConfig::default();
+        let graph = config.get_graph_mut(None).unwrap();
+        let brg_id = graph
+            .add_node(Node::new("a", "Bridge", Flavor::Bridge))
+            .unwrap();
+
+        graph.connect(brg_id, brg_id, "MyType").unwrap();
+
+        let runtime = compute_runtime_plan(graph).unwrap();
+        let steps: Vec<CuExecutionUnit> = runtime.steps;
+
+        assert_eq!(steps.len(), 2);
+        let CuExecutionUnit::Step(step) = &steps[0] else {
+            panic!("Expected a step");
+        };
+        // Src side
+        assert_eq!(step.task_type, CuTaskType::Bridge);
+        let Some((idx, typ)) = &step.output_msg_index_type else {
+            panic!("Expected an output msg index");
+        };
+        assert_eq!(*idx, 0);
+        assert_eq!(typ, "MyType");
+        let CuExecutionUnit::Step(step) = &steps[1] else {
+            panic!("Expected a step");
+        };
+        // Sink side
+        assert_eq!(step.task_type, CuTaskType::Bridge);
+        let (idx, typ) = &step.input_msg_indices_types[0];
+        assert_eq!(*idx, 0);
+        assert_eq!(typ, "MyType");
+        let Some((idx, typ)) = &step.output_msg_index_type else {
+            panic!("Expected an output msg index");
+        };
+        assert_eq!(*idx, 1);
+        assert_eq!(typ, "()");
+    }
+
+    #[test]
+    fn test_bridge_task_bridge_case() {
+        let mut config = CuConfig::default();
+        let graph = config.get_graph_mut(None).unwrap();
+        let brg_id = graph
+            .add_node(Node::new("b", "Bridge", Flavor::Bridge))
+            .unwrap();
+        let tsk_id = graph
+            .add_node(Node::new("t", "Task", Flavor::Task))
+            .unwrap();
+
+        graph.connect(brg_id, tsk_id, "IncomingMsg").unwrap();
+        graph.connect(tsk_id, brg_id, "OutgoingMsg").unwrap();
+
+        let runtime = compute_runtime_plan(graph).unwrap();
+        let steps = runtime.steps;
+
+        assert_eq!(steps.len(), 3);
+
+        let CuExecutionUnit::Step(step) = &steps[0] else {
+            panic!("Expected a step");
+        };
+        // Src side
+        assert_eq!(step.task_type, CuTaskType::Bridge);
+        let Some((idx, typ)) = &step.output_msg_index_type else {
+            panic!("Expected an output msg index");
+        };
+        assert_eq!(*idx, 0);
+        assert_eq!(typ, "IncomingMsg");
+
+        let CuExecutionUnit::Step(step) = &steps[1] else {
+            panic!("Expected a step");
+        };
+        // Src side
+        assert_eq!(step.task_type, CuTaskType::Regular);
+
+        let (idx, typ) = &step.input_msg_indices_types[0];
+        assert_eq!(*idx, 1);
+        assert_eq!(typ, "IncomingMsg");
+
+        let Some((idx, typ)) = &step.output_msg_index_type else {
+            panic!("Expected an output msg index");
+        };
+        assert_eq!(*idx, 1);
+        assert_eq!(typ, "OutgoingMsg");
     }
 }
