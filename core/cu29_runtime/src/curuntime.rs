@@ -1475,8 +1475,8 @@ mod tests {
 
         // Steps 1 & 2: Task1 and Task2 (order may vary)
         // Both should read from index 0
-        for i in 1..=2 {
-            let CuExecutionUnit::Step(step) = &steps[i] else {
+        for step in steps.iter().take(2 + 1).skip(1){
+            let CuExecutionUnit::Step(step) = step else {
                 panic!("Expected a step");
             };
             assert_eq!(step.task_type, CuTaskType::Regular);
