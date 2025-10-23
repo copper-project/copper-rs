@@ -1,7 +1,7 @@
 use cu29::config::CuConfig;
+use cu29::config::Flavor;
 use cu29::config::Node;
 use cu29::config::Value;
-use cu29::config::Flavor;
 
 /// This is a small example to show how to programmatically generate a configuration.
 /// This is useful for making variations of your robot more easily.
