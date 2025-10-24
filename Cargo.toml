@@ -44,6 +44,7 @@ members = [
     "components/tasks/cu_ratelimit",
     "components/testing/cu_udp_inject",
     "examples/cu_background_task",
+    "examples/cu_bridges",
     "examples/cu_caterpillar",
     "examples/cu_config_gen",
     "examples/cu_config_variation",
@@ -61,7 +62,7 @@ members = [
     "examples/cu_run_in_sim",
     "examples/cu_standalone_structlog",
     "examples/cu_zenoh",
-    "examples/cu_zenoh_ros", "examples/cu_bridges",
+    "examples/cu_zenoh_ros", 
 ]
 
 # put only the core crates here that are not platform specific
