@@ -10,15 +10,18 @@
 <blockquote>
 🤖&nbsp&nbsp&nbsp&nbsp
   <em style="font-size: 1.2em;">
-    Copper is to robots  what a game engine is to games.
+    Copper is to robots what a game engine is to games - build, run, and replay your entire robot deterministically.
   </em>
 </blockquote>
 
-<p><strong style="color: #b87333;">🦀 User Friendly</strong>: Copper offers a high-level configuration system and a natural Rust-first API.</p>
-<p><strong style="color: #b87333;">🚀 Fast</strong>: Copper uses Rust's zero-cost abstractions and a data-oriented approach to achieve sub-microsecond latency on commodity hardware, avoiding heap allocation during execution.</p>
-<p><strong style="color: #b87333;">⏱️ Deterministic</strong>: When you replay a log, Copper will execute the same code with the same data in the same order, ensuring that your robot behaves consistently every time. <strong>No more test datasets that are flip flopping between runs!</strong></p>
-<p><strong style="color: #b87333;">🛡️ Reliable</strong>: Copper leverages Rust's ownership, type system, and concurrency model to minimize bugs and ensure thread safety.</p>
-<p><strong style="color: #b87333;">📦 Built to ship</strong>: Copper aims to avoid late-stage infra integration issues by generating a very predictable runtime.</p>
+### Why Copper
+
+<p><strong style="color: #b87333;">🦀 Rust-first</strong> – ergonomic, safe, no C++ bindings  
+<p><strong style="color: #b87333;">⚡ Sub-microsecond latency</strong> – zero-alloc, data-oriented runtime  
+<p><strong style="color: #b87333;">⏱️ Deterministic replay</strong> – every run, bit-for-bit identical  
+<p><strong style="color: #b87333;">🧠 Interoperable with ROS2</strong> – bridges via Zenoh opening the path for a progressive migration.  
+<p><strong style="color: #b87333;">🪶 Runs anywhere</strong> – from Linux servers to bare-metal RP2350  
+<p><strong style="color: #b87333;">📦 Built to ship</strong> – one stack from simulation to production
 
 Copper can be deployed on:
 <table style="color: white; background-color: black; font-family: sans-serif;">
