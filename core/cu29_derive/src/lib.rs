@@ -1076,7 +1076,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                                     let cumsg_output = &mut msgs.#output_culist_index;
                                                     cumsg_output.metadata.process_time.start = clock.now().into();
                                                     let maybe_error = if doit {
-                                                        #task_instance.process(clock, cumsg_output)
+                                                        #task_instance.receive(clock, cumsg_output)
                                                     } else {
                                                         Ok(())
                                                     };
@@ -1184,7 +1184,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                                 // This is the virtual output for the sink side
                                                 let cumsg_output = &mut msgs.#output_culist_index;
                                                 cumsg_output.metadata.process_time.start = clock.now().into();
-                                                let maybe_error = if doit {#task_instance.process(clock, cumsg_input)} else {Ok(())};
+                                                let maybe_error = if doit {#task_instance.send(clock, cumsg_input)} else {Ok(())};
                                                 cumsg_output.metadata.process_time.end = clock.now().into();
                                                 if let Err(error) = maybe_error {
                                                     #monitoring_action

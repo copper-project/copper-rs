@@ -379,11 +379,25 @@ pub trait CuBridge: Freezable {
         Ok(())
     }
 
+    /// This is a method called by the runtime before send and receive. This is scheduled on a
+    /// "best effort" basis, as soon as possible call to give a chance for the task to do some
+    /// work before to prepare to make "process" as short as possible.
+    fn preprocess(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        Ok(())
+    }
+
     /// Send a message through the bridge
     fn send<'i>(&mut self, clock: &RobotClock, msg: &Self::Input<'i>) -> CuResult<()>;
 
     /// Receive a message through the bridge
     fn receive<'o>(&mut self, clock: &RobotClock, msg: &mut Self::Output<'o>) -> CuResult<()>;
+
+    /// This is a method called by the runtime after send and receive. It is a "best effort" scheduling
+    /// for the bridge to update some state after the I/O is out of the way.
+    /// It can be use for example to maintain statistics etc. that are not time-critical for the robot.
+    fn postprocess(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        Ok(())
+    }
 
     /// Called to stop the daemon. It signals that the *process method won't be called until start is called again.
     fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
