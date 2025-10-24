@@ -752,7 +752,7 @@ where
                         let mut task = task.clone();
                         task.flavor = Flavor::Task;
                         graph
-                            .add_node(task.clone())
+                            .add_node(task)
                             .map_err(|e| E::from(e.to_string()))?;
                     }
                 }
