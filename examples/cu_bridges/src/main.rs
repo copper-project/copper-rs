@@ -4,7 +4,9 @@ use cu29_helpers::basic_copper_setup;
 pub mod tasks {
     use cu29::prelude::*;
 
-    pub struct ExampleSrc {}
+    pub struct ExampleSrc {
+        counter: i32,
+    }
 
     impl Freezable for ExampleSrc {}
 
@@ -15,17 +17,23 @@ pub mod tasks {
         where
             Self: Sized,
         {
-            Ok(Self {})
+            Ok(Self { counter: 0 })
         }
 
-        fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
-            new_msg.set_payload(42);
+        fn process(&mut self, clock: &RobotClock, msg: &mut Self::Output<'_>) -> CuResult<()> {
+            msg.set_payload(self.counter);
+            self.counter += 1;
+            debug!(
+                "SOURCE ({}): Emitting {}",
+                clock.now(),
+                msg.payload().unwrap(),
+            );
             Ok(())
         }
     }
 
     pub struct ExampleBridge {
-        counter: i32,
+        counter: Option<i32>,
     }
 
     impl Freezable for ExampleBridge {}
@@ -38,26 +46,28 @@ pub mod tasks {
         where
             Self: Sized,
         {
-            Ok(Self { counter: 0 })
+            Ok(Self { counter: None })
         }
 
         fn send<'i>(&mut self, clock: &RobotClock, msg: &Self::Input<'i>) -> CuResult<()> {
             debug!(
-                "Sending through the bridge {} at {}",
-                msg.payload(),
-                clock.now()
+                "BRIDGE ({}): Sending through the bridge {}",
+                clock.now(),
+                msg.payload().unwrap(),
             );
+            self.counter = msg.payload().cloned();
             Ok(())
         }
 
         fn receive<'o>(&mut self, clock: &RobotClock, msg: &mut Self::Output<'o>) -> CuResult<()> {
-            self.counter += 1;
-            msg.set_payload(self.counter);
+            if self.counter.is_some() {
+                msg.set_payload(self.counter.unwrap());
+            }
             msg.tov = clock.now().into();
             debug!(
-                "Receiving from the bridge {} at {}",
+                "BRIDGE ({}): Receiving through the bridge {}",
+                clock.now(),
                 msg.payload(),
-                clock.now()
             );
             Ok(())
         }
@@ -77,7 +87,8 @@ pub mod tasks {
             Ok(Self {})
         }
 
-        fn process(&mut self, _clock: &RobotClock, _input: &Self::Input<'_>) -> CuResult<()> {
+        fn process(&mut self, clock: &RobotClock, msg: &Self::Input<'_>) -> CuResult<()> {
+            debug!("SINK ({}): Received {}", clock.now(), msg.payload(),);
             Ok(())
         }
     }
@@ -98,12 +109,12 @@ fn main() {
     application
         .start_all_tasks()
         .expect("Failed to start application.");
-    application
-        .run_one_iteration()
-        .expect("Failed to run application.");
-    application
-        .run_one_iteration()
-        .expect("Failed to run application.");
+
+    for _ in 0..10 {
+        application
+            .run_one_iteration()
+            .expect("Failed to run application.");
+    }
     application
         .stop_all_tasks()
         .expect("Failed to stop application.");
