@@ -1,0 +1,18 @@
+[package]
+name = "cu-bridges"
+dependencies = "Copper example to demonstrate bridges"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+# cu29 = { workspace = true, features = ["macro_debug"]}
+cu29 = { workspace = true }
+cu29-helpers = { workspace = true }
+serde = { workspace = true }
+tempfile = "3.23.0"

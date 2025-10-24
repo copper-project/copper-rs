@@ -1,0 +1,23 @@
+(
+  tasks: [
+  (
+      id: "task0",
+      type: "tasks::ExampleSrc",
+    ),
+  (
+      id: "task1",
+      type: "tasks::ExampleSink",
+    ),
+  ],
+  bridges: [
+  (
+      id: "bridge0",
+      type: "tasks::ExampleBridge",
+    ),
+
+  ],
+  cnx: [
+  (src: "task0", dst: "bridge0", msg: "i32"),
+  (src: "bridge0", dst: "task1", msg: "i32"),
+  ],
+)
