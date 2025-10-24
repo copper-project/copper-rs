@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use byteorder::{ByteOrder, LittleEndian};
 use rkv::backend::{Lmdb, LmdbDatabase, LmdbEnvironment, LmdbRwTransaction};
 use rkv::{MultiStore, Rkv, SingleStore, StoreOptions, Value, Writer};
 use std::fs;
@@ -29,6 +28,13 @@ pub fn default_log_index_dir() -> PathBuf {
     parent_n_times(outdir_path, 3).unwrap().join(INDEX_DIR_NAME)
 }
 
+// This is to remove the byteorder dependency.
+#[inline(always)]
+fn read_u32_le(bytes: &[u8]) -> u32 {
+    let b = <[u8; 4]>::try_from(bytes).unwrap();
+    u32::from_le_bytes(b)
+}
+
 /// Reads all interned strings from the index at the specified path.
 /// The index is created at compile time within your project output directory.
 pub fn read_interned_strings(index: &Path) -> Result<Vec<String>> {
@@ -44,7 +50,7 @@ pub fn read_interned_strings(index: &Path) -> Result<Vec<String>> {
     let mut i = ri.expect("Failed to start iterator");
     while let Some(Ok(v)) = i.next() {
         let (k, v) = v;
-        let index = LittleEndian::read_u32(k) as usize;
+        let index = read_u32_le(k) as usize;
 
         if let rkv::Value::Str(s) = v {
             if all_strings.len() <= index {

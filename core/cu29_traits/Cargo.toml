@@ -12,8 +12,18 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-bincode = { workspace = true }
 cu29-clock = { workspace = true }
+bincode = { workspace = true }
 serde = { workspace = true }
 compact_str = { workspace = true }
-erased-serde = "0.4.6"
+erased-serde = { workspace = true }
+defmt = { version = "1", optional = true, default-features = false, features = ["alloc"] }
+
+[features]
+default = ["std"]
+std = [
+    "cu29-clock/std",
+    "compact_str/std",
+    "serde/std"
+]
+defmt = ["dep:defmt"]  # this is only used for baremetal text logging

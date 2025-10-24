@@ -12,25 +12,33 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-cu29-runtime = { workspace = true }
-cu29-traits = { workspace = true }
+cu29-clock = { workspace = true }
 cu29-derive = { workspace = true }
 cu29-log = { workspace = true }
 cu29-log-derive = { workspace = true }
 cu29-log-runtime = { workspace = true }
+cu29-runtime = { workspace = true }
+cu29-traits = { workspace = true }
 cu29-unifiedlog = { workspace = true }
-cu29-clock = { workspace = true }
 cu29-value = { workspace = true }
-cu29-intern-strs = { workspace = true }
+
 bincode = { workspace = true }
 serde = { workspace = true }
-rayon = "1.7.0"
-ctrlc = "3.4.7"
+
+# only std
+rayon = { workspace = true, optional = true }
+ctrlc = { version = "3.5", optional = true }
+
+[build-dependencies]
+cu29-intern-strs = { workspace = true }
 
 [features]
+default = ["std"]
+defmt = ["cu29-log/defmt", "cu29-traits/defmt"]  # for baremetal text logging
 macro_debug = ["cu29-derive/macro_debug", "cu29-log-derive/macro_debug"]
 log-level-debug = ["cu29-log-derive/log-level-debug"]
 log-level-info = ["cu29-log-derive/log-level-info"]
 log-level-warning = ["cu29-log-derive/log-level-warning"]
 log-level-error = ["cu29-log-derive/log-level-error"]
 log-level-critical = ["cu29-log-derive/log-level-critical"]
+std = ["rayon", "ctrlc", "cu29-clock/std", "cu29-derive/std", "cu29-log/std", "cu29-log-runtime/std", "cu29-runtime/std", "cu29-traits/std", "cu29-unifiedlog/std", "cu29-value/std"]

@@ -10,17 +10,20 @@
 <blockquote>
 🤖&nbsp&nbsp&nbsp&nbsp
   <em style="font-size: 1.2em;">
-    Copper is to robots  what a game engine is to games.
+    Copper is to robots what a game engine is to games - build, run, and replay your entire robot deterministically.
   </em>
 </blockquote>
 
-<p><strong style="color: #b87333;">🦀 User Friendly</strong>: Copper offers a high-level configuration system and a natural Rust-first API.</p>
-<p><strong style="color: #b87333;">🚀 Fast</strong>: Copper uses Rust's zero-cost abstractions and a data-oriented approach to achieve sub-microsecond latency on commodity hardware, avoiding heap allocation during execution.</p>
-<p><strong style="color: #b87333;">⏱️ Deterministic</strong>: When you replay a log, Copper will execute the same code with the same data in the same order, ensuring that your robot behaves consistently every time. <strong>No more test datasets that are flip flopping between runs!</strong></p>
-<p><strong style="color: #b87333;">🛡️ Reliable</strong>: Copper leverages Rust's ownership, type system, and concurrency model to minimize bugs and ensure thread safety.</p>
-<p><strong style="color: #b87333;">📦 Built to ship</strong>: Copper aims to avoid late-stage infra integration issues by generating a very predictable runtime.</p>
+### Why Copper
 
-Copper has been tested on:
+<p><strong style="color: #b87333;">🦀 Rust-first</strong> – ergonomic, safe, no C++ bindings  
+<p><strong style="color: #b87333;">⚡ Sub-microsecond latency</strong> – zero-alloc, data-oriented runtime  
+<p><strong style="color: #b87333;">⏱️ Deterministic replay</strong> – every run, bit-for-bit identical  
+<p><strong style="color: #b87333;">🧠 Interoperable with ROS2</strong> – bridges via Zenoh opening the path for a progressive migration.  
+<p><strong style="color: #b87333;">🪶 Runs anywhere</strong> – from Linux servers to bare-metal RP2350  
+<p><strong style="color: #b87333;">📦 Built to ship</strong> – one stack from simulation to production
+
+Copper can be deployed on:
 <table style="color: white; background-color: black; font-family: sans-serif;">
   <tr>
     <td style="text-align: center; padding: 12px;">
@@ -51,6 +54,11 @@ Copper has been tested on:
     <td style="text-align: right; padding-left: 10px;">arm64</td>
   </tr>
 </table>
+
+But can ALSO run baremetal on microcontrollers. Here it is on our reference platform based on the RP2350, see 
+[Copper baremetal development](https://github.com/copper-project/copper-rs/wiki/Baremetal-Development) if you are interested to deploy Copper as an actual Operating System.
+
+<img width="500" src="https://github.com/copper-project/copper-rs/wiki/imgs/baremetal-w-camera.jpg" alt="graph"/>
 
 ### Technical Overview
 
@@ -482,16 +490,17 @@ on any of those, please let us know!:
   their robots without duplicating their entire RON file.
 - [x] **ROS2/DDS interfacing**: Build a pair of sink and source to connect to existing [ROS2](https://github.com/ros2)
   systems, helping users migrate their stack bit by bit.
-- [ ] **Log Compression & Selection**: Implement a pluggable compression system for logs and its resim counterpart.
-  For example to encode video from images. Selection is about NOT logging something if it is not needed.
-- [ ] **Microcontroller and RTOS support**: Modify all necessary Copper code packages to remove dependencies on the
+- [x] **Microcontroller support**: Modify all necessary Copper code packages to remove dependencies on the
   standard library (std) to support "no_std" (#![no_std])
   to support running the code on bare-metal on microcontrollers. This will allow a seamless environment for high level
   calls on a standard kernel (ML inference etc...)
   and low level tasks on MCUs (control, HW interfacing...).
+- [ ] **Log Compression & Selection**: Implement a pluggable compression system for logs and its resim counterpart.
+  For example to encode video from images. Selection is about NOT logging something if it is not needed.
 - [ ] **Parallel Copper Lists**: allow Copper lists to be executed in a staggered and parallel way to improve
-  throughput.
+  throughput. Status: We built a background tasks that helps with this.
 - [ ] **Extensible scheduling**: Enable a way to give hints to Copper to better schedule workloads at compile time.
-- [ ] **Swarm support**: Implement Zenoh to allow a swarm of robots powered by Copper to cooperate.
+- [ ] **Swarm support**: Implement Zenoh to allow a swarm of robots powered by Copper to cooperate. Status: Sink done,
+  needs a Source.
 - [ ] **MCAP support**: Allow the interfacing of Foxglove and [ROS](https://github.com/ros) ecosystems at the logging
   level.

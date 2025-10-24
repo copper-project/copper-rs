@@ -1,4 +1,5 @@
 use avian3d::prelude::*;
+use bevy::color::palettes::css::RED;
 use bevy::core_pipeline::fxaa::Fxaa;
 use bevy::core_pipeline::Skybox;
 use bevy::input::{
@@ -40,6 +41,11 @@ const ALUMINUM_DENSITY: f32 = 2700.0; // kg/m^3
 const ROD_VOLUME: f32 = ROD_WIDTH * ROD_HEIGHT * ROD_DEPTH;
 
 #[derive(Resource)]
+struct DragControl {
+    pixels_per_newton: f32,
+    max_force: f32, // newtons
+}
+#[derive(Resource)]
 struct CameraControl {
     rotate_sensitivity: f32,
     zoom_sensitivity: f32,
@@ -58,9 +64,8 @@ pub struct Cart;
 #[derive(Component)]
 pub struct Rod;
 
-pub fn build_world(app: &mut App) -> &mut App {
+pub fn build_world(app: &mut App, headless: bool) -> &mut App {
     let app = app
-        .add_plugins(MeshPickingPlugin)
         .add_plugins(PhysicsPlugins::default().with_length_unit(1000.0))
         // we want Bevy to measure these values for us:
         .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default())
@@ -70,18 +75,27 @@ pub fn build_world(app: &mut App) -> &mut App {
         .insert_resource(CameraControl {
             rotate_sensitivity: 0.05,
             zoom_sensitivity: 3.5,
-            move_sensitivity: 0.01,
+            move_sensitivity: 0.05,
+        })
+        .insert_resource(DragControl {
+            pixels_per_newton: 100.,
+            max_force: 10.,
         })
         .insert_resource(Gravity::default())
         .insert_resource(Time::<Physics>::default())
         .add_systems(Startup, setup_scene)
         .add_systems(Startup, setup_ui)
         .add_systems(Update, setup_entities) // Wait for the cart entity to be loaded
-        .add_systems(Update, toggle_simulation_state)
-        .add_systems(Update, camera_control_system)
-        .add_systems(Update, update_physics)
-        .add_systems(Update, global_cart_drag_listener)
-        .add_systems(PostUpdate, reset_sim);
+        .add_systems(Update, update_physics);
+
+    // these will make a headless app crash, so only add them if we aren't headless
+    if !headless {
+        app.add_plugins(MeshPickingPlugin);
+        app.add_systems(Update, toggle_simulation_state)
+            .add_systems(Update, camera_control_system)
+            .add_systems(Update, external_force_display)
+            .add_systems(PostUpdate, reset_sim);
+    }
 
     #[cfg(feature = "perf-ui")]
     app.add_plugins(PerfUiPlugin);
@@ -280,9 +294,9 @@ fn setup_scene(
 
 fn setup_ui(mut commands: Commands) {
     #[cfg(target_os = "macos")]
-    let instructions = "WASD / QE\nControl-Click + Drag\nClick + Drag\nScrolling\nSpace\nR";
+    let instructions = "WASD / QE\nControl-Click + Drag\nClick + Drag\nScrolling\nSpace\nR\nF";
     #[cfg(not(target_os = "macos"))]
-    let instructions = "WASD / QE\nMiddle-Click + Drag\nClick + Drag\nScroll Wheel\nSpace\nR";
+    let instructions = "WASD / QE\nMiddle-Click + Drag\nClick + Drag\nScroll Wheel\nSpace\nR\nF";
 
     commands
         .spawn((
@@ -305,7 +319,7 @@ fn setup_ui(mut commands: Commands) {
         .with_children(|parent| {
             // Left column
             parent.spawn((
-                Text::new("Move\nNavigation\nInteract\nZoom\nPause/Resume\nReset"),
+                Text::new("Move\nNavigation\nInteract\nZoom\nPause/Resume\nReset\nShow Forces"),
                 TextFont {
                     font_size: 12.0,
                     ..default()
@@ -339,35 +353,6 @@ fn try_to_find_cart_entity(query: Query<(Entity, &Name), Without<Cart>>) -> Opti
         return Some(cart_entity);
     }
     None
-}
-
-// This is a global drag listener that will move the cart when dragged.
-// It is a bit of a hack, but it tries to find back the cart entity parent from any of the possible clickable children
-fn global_cart_drag_listener(
-    mut drag_events: EventReader<Pointer<Drag>>,
-    parents: Query<(&ChildOf, Option<&Cart>)>,
-    mut transforms: Query<&mut Transform, With<Cart>>,
-    camera_query: Query<&Transform, (With<Camera>, Without<Cart>)>, // Add Without<Cart> to prevent conflicts
-) {
-    for drag in drag_events.read() {
-        if drag.button != PointerButton::Primary {
-            continue;
-        }
-        let mut entity = drag.target;
-        while let Ok((parent, maybe_cart)) = parents.get(entity) {
-            if maybe_cart.is_some() {
-                break;
-            }
-            entity = parent.parent();
-        }
-
-        if let Ok(mut root_transform) = transforms.get_mut(entity) {
-            let direction_multiplier = camera_query.iter().next().map_or(1.0, |camera_transform| {
-                -camera_transform.forward().z.signum()
-            });
-            root_transform.translation.x += direction_multiplier * drag.delta.x / 500.0;
-        }
-    }
 }
 
 #[derive(Resource)]
@@ -418,6 +403,12 @@ fn setup_entities(
             .lock_rotation_z(),
     });
 
+    // let the cart be dragged too
+    commands
+        .entity(cart_entity)
+        .observe(on_drag)
+        .observe(on_drag_end);
+
     let rail_entity = commands
         .spawn((
             RigidBody::Static, // The rail doesn't move
@@ -463,7 +454,8 @@ fn setup_entities(
                 .lock_rotation_y()
                 .lock_rotation_x(),
         ))
-        .observe(on_drag_transform)
+        .observe(on_drag)
+        .observe(on_drag_end)
         .id();
     commands.spawn(
         RevoluteJoint::new(cart_entity, rod_entity)
@@ -491,14 +483,98 @@ fn setup_entities(
     setup_completed.0 = true; // Mark as completed
 }
 
-fn on_drag_transform(drag: Trigger<Pointer<Drag>>, mut transforms: Query<&mut Transform>) {
+fn get_rigid_body_entity(
+    mut drag_target: Entity,
+    parents: &Query<(&ChildOf, Option<&RigidBody>)>,
+) -> Entity {
+    // get a rigid body entity (the drag event may target a descendant of them)
+    while let Ok((parent, maybe_rigid_body)) = parents.get(drag_target) {
+        if maybe_rigid_body.is_some() {
+            break;
+        }
+        drag_target = parent.parent();
+    }
+
+    // this will return the highest ancestor if no rigid body is found, which is fine
+    drag_target
+}
+
+fn on_drag(
+    drag: Trigger<Pointer<Drag>>,
+    camera_query: Option<Single<&Transform, With<Camera>>>,
+    parents: Query<(&ChildOf, Option<&RigidBody>)>,
+    mut external_force: Query<&mut ExternalForce>,
+    drag_control: Res<DragControl>,
+) {
     if drag.button != PointerButton::Primary {
         return;
     }
-    if let Ok(mut transform) = transforms.get_mut(drag.target) {
-        let pivot_world =
-            transform.translation + transform.rotation * Vec3::new(0.0, -ROD_HEIGHT / 2.0, 0.0);
-        transform.rotate_around(pivot_world, Quat::from_rotation_z(-drag.delta.x / 50.0));
+    let camera_transform = if let Some(camera_query) = camera_query {
+        camera_query.into_inner()
+    } else {
+        return;
+    };
+
+    let target_entity = get_rigid_body_entity(drag.target, &parents);
+
+    if let Ok(mut external_force) = external_force.get_mut(target_entity) {
+        // clear any previously applied forces (they persist by default)
+        external_force.clear();
+
+        // calculate world X-direction drag from screenspace drag
+        // drag.delta.y should basically never contribute (as long as camera isn't rolled), but scaling by camera_transform.right() will feel more natural when dragging from a steep visual angle
+        let drag_delta_world =
+            drag.distance.x * camera_transform.right() + drag.distance.y * camera_transform.down();
+
+        // apply a force to that object based on the world length and direction of the mouse drag
+        let applied_force = (drag_delta_world / drag_control.pixels_per_newton)
+            .clamp_length_max(drag_control.max_force);
+        external_force.apply_force(applied_force);
+    }
+}
+
+fn on_drag_end(
+    drag: Trigger<Pointer<DragEnd>>,
+    parents: Query<(&ChildOf, Option<&RigidBody>)>,
+    mut external_force: Query<&mut ExternalForce>,
+) {
+    if drag.button != PointerButton::Primary {
+        return;
+    }
+
+    let target_entity = get_rigid_body_entity(drag.target, &parents);
+
+    if let Ok(mut external_force) = external_force.get_mut(target_entity) {
+        // the drag ended, so clear the applied forces
+        external_force.clear();
+    }
+}
+
+pub fn external_force_display(
+    external_force: Query<(Entity, &Position, &ExternalForce)>,
+    cart: Query<(), With<Cart>>,
+    rod: Query<(), With<Rod>>,
+    mut gizmos: Gizmos,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut should_display: Local<bool>,
+) {
+    if keys.just_pressed(KeyCode::KeyF) {
+        *should_display = !*should_display;
+    }
+    if *should_display {
+        external_force
+            .iter()
+            .filter(|(entity, _, _)| {
+                // only display external forces for the cart or the rod
+                cart.get(*entity).is_ok() || rod.get(*entity).is_ok()
+            })
+            .for_each(|(_, position, external_force)| {
+                gizmos.arrow(
+                    **position,
+                    **position + (**external_force).clamp_length_max(10.),
+                    RED,
+                );
+            });
     }
 }
 
@@ -508,7 +584,7 @@ fn reset_sim(
     mut query: Query<(
         Option<&Rod>,
         Option<&Cart>,
-        Option<&mut Transform>, // Ensure transform is mutable
+        Option<&mut Transform>,
         Option<&mut ExternalForce>,
         Option<&mut LinearVelocity>,
         Option<&mut AngularVelocity>,
@@ -556,12 +632,13 @@ fn reset_sim(
 
 /// Winged some type of orbital camera to explore around the robot.
 fn camera_control_system(
-    control: Res<CameraControl>,
+    camera_control: Res<CameraControl>,
     keys: Res<ButtonInput<KeyCode>>,
     mut scroll_evr: EventReader<MouseWheel>,
     mut mouse_motion: EventReader<MouseMotion>,
     mut query: Query<&mut Transform, With<Camera>>,
-    time: Res<Time>,
+    // use real time to scale camera movement in case physics time is paused
+    time: Res<Time<Real>>,
     mouse_button_input: Res<ButtonInput<MouseButton>>,
 ) {
     let mut camera_transform = query.single_mut().expect("Failed to get camera transform");
@@ -574,15 +651,15 @@ fn camera_control_system(
     // Zoom with scroll
     for ev in scroll_evr.read() {
         let forward = camera_transform.forward(); // Store forward vector in a variable
-        let zoom_amount = ev.y * control.zoom_sensitivity * time.delta_secs();
+        let zoom_amount = ev.y * camera_control.zoom_sensitivity * time.delta_secs();
         camera_transform.translation += forward * zoom_amount;
     }
 
     // Rotate camera around the focal point with right mouse button + drag
     if mouse_button_input.pressed(MouseButton::Middle) {
         for ev in mouse_motion.read() {
-            let yaw = Quat::from_rotation_y(-ev.delta.x * control.rotate_sensitivity);
-            let pitch = Quat::from_rotation_x(-ev.delta.y * control.rotate_sensitivity);
+            let yaw = Quat::from_rotation_y(-ev.delta.x * camera_control.rotate_sensitivity);
+            let pitch = Quat::from_rotation_x(-ev.delta.y * camera_control.rotate_sensitivity);
 
             // Apply the rotation to the direction vector
             let new_direction = yaw * pitch * direction;
@@ -604,36 +681,39 @@ fn camera_control_system(
         for ev in mouse_motion.read() {
             let right = camera_transform.right();
             let up = camera_transform.up();
-            camera_transform.translation += right * -ev.delta.x * control.move_sensitivity;
-            camera_transform.translation += up * ev.delta.y * control.move_sensitivity;
+            camera_transform.translation += right * -ev.delta.x * camera_control.move_sensitivity;
+            camera_transform.translation += up * ev.delta.y * camera_control.move_sensitivity;
         }
     }
 
     let forward = if keys.pressed(KeyCode::KeyW) {
-        camera_transform.forward() * control.move_sensitivity
+        camera_transform.forward() * camera_control.move_sensitivity
     } else if keys.pressed(KeyCode::KeyS) {
-        camera_transform.back() * control.move_sensitivity
+        camera_transform.back() * camera_control.move_sensitivity
     } else {
         Vec3::ZERO
     };
 
     let strafe = if keys.pressed(KeyCode::KeyA) {
-        camera_transform.left() * control.move_sensitivity
+        camera_transform.left() * camera_control.move_sensitivity
     } else if keys.pressed(KeyCode::KeyD) {
-        camera_transform.right() * control.move_sensitivity
+        camera_transform.right() * camera_control.move_sensitivity
     } else {
         Vec3::ZERO
     };
 
     let vertical = if keys.pressed(KeyCode::KeyQ) {
-        Vec3::Y * control.move_sensitivity
+        Vec3::Y * camera_control.move_sensitivity
     } else if keys.pressed(KeyCode::KeyE) {
-        Vec3::NEG_Y * control.move_sensitivity
+        Vec3::NEG_Y * camera_control.move_sensitivity
     } else {
         Vec3::ZERO
     };
 
     camera_transform.translation += forward + strafe + vertical;
+
+    // make camera look at cart again after any movement
+    camera_transform.look_at(Vec3::ZERO, Vec3::Y);
 }
 
 // Space to start / stop the simulation

@@ -1,0 +1,63 @@
+[package]
+name = "cu-rp2350-skeleton"
+version = "0.1.0"
+edition = "2024"
+description = "A minimal example of using Copper on a RP2350 microcontroller"
+default-run = "main"
+
+# To build the firmware:
+# cargo build-arm
+# cargo build-riscv
+
+# To run the firmware (requires a connected probe):
+# cargo run-arm
+# cargo run-riscv
+
+# To build the log reader host tool:
+# cargo build-logreader
+
+[dependencies]
+cu29 = { path = "../../core/cu29", version="0.10.0", default-features = false, features = ["log-level-debug"] } # pick it up directly to build it no-std
+cu29-export = { path = "../../core/cu29_export", version="0.10.0", optional = true, default-features = false }
+bincode = { version = "2.0", default-features = false, features = ["derive"] }
+serde = { version = "1.0", default-features = false, features = ["derive"] }
+
+# embedded stuff
+cortex-m-rt = { version = "0.7", optional = true }
+defmt-rtt = { version = "1.0", optional = true }  # RTT logging backend for defmt (ie through a probe)
+embedded-hal-bus = { version = "0.3", optional = true }
+buddy_system_allocator = { version = "0.11", optional = true }
+embedded-hal = { version = "1.0", optional = true }
+panic-probe = { version = "1.0", optional = true, features = ["defmt", "print-defmt"] }
+rp235x-hal = { version = "0.3", optional = true, features = ["rt", "critical-section-impl"] }
+portable-atomic = { version = "1.11", optional = true, default-features = false, features = ["require-cas", "float", "fallback"] } # required
+spin = { version = "0.10", optional = true }
+embedded-sdmmc = { version = "0.9", optional = true, features = ["defmt-log", ], default-features = false }
+
+[[bin]]
+name = "cu-blinky"
+path = "src/firmware.rs"
+required-features = ["firmware"]
+
+[[bin]]
+name = "blinky-logreader"
+path = "src/logreader.rs"
+required-features = ["host"]
+
+[[bin]]
+name = "main"
+path = "src/main.rs"
+
+[workspace]
+
+# A safe development profile for remote debugging.
+[profile.dev]
+opt-level = 0
+debug = 2
+debug-assertions = true
+overflow-checks = true
+
+[features]
+default = []
+firmware = ["cu29/defmt", "bincode/alloc", "serde/alloc", "dep:cortex-m-rt", "dep:defmt-rtt", "dep:embedded-hal-bus", "dep:buddy_system_allocator", "dep:embedded-hal", "dep:panic-probe", "dep:rp235x-hal", "dep:portable-atomic", "dep:spin", "dep:embedded-sdmmc"]
+host = ["dep:cu29-export", "cu29/std", "bincode/std", "serde/std"]

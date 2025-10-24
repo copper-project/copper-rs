@@ -1,9 +1,25 @@
 use crate::Value;
+use core::error::Error;
+use core::fmt;
 use cu29_clock::CuTime;
 use serde::ser;
-use std::collections::BTreeMap;
-use std::error::Error;
-use std::fmt;
+
+#[cfg(not(feature = "std"))]
+mod imp {
+    pub use alloc::boxed::Box;
+    pub use alloc::collections::BTreeMap;
+    pub use alloc::string::String;
+    pub use alloc::string::ToString;
+    pub use alloc::vec;
+    pub use alloc::vec::Vec;
+}
+
+#[cfg(feature = "std")]
+mod imp {
+    pub use std::collections::BTreeMap;
+}
+
+use imp::*;
 
 #[derive(Debug)]
 pub enum SerializerError {

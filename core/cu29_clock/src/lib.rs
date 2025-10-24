@@ -1,6 +1,28 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+
+#[cfg(not(feature = "std"))]
+extern crate alloc;
 #[cfg(test)]
-#[macro_use]
 extern crate approx;
+
+mod calibration;
+#[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
+#[cfg_attr(all(target_os = "none", target_arch = "arm"), path = "cortexm.rs")]
+#[cfg_attr(target_arch = "riscv64", path = "riscv64.rs")]
+#[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
+#[cfg_attr(
+    not(any(
+        target_arch = "x86_64",
+        target_arch = "aarch64",
+        all(target_os = "none", target_arch = "arm"),
+        target_arch = "riscv64"
+    )),
+    path = "fallback.rs"
+)]
+mod raw_counter;
+
+pub use raw_counter::*;
+
 use bincode::de::BorrowDecoder;
 use bincode::de::Decoder;
 use bincode::enc::Encoder;
@@ -8,14 +30,68 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::BorrowDecode;
 use bincode::{Decode, Encode};
 use core::ops::{Add, Sub};
-pub use quanta::Instant;
-use quanta::{Clock, Mock};
 use serde::{Deserialize, Serialize};
-use std::convert::Into;
-use std::fmt::{Display, Formatter};
-use std::ops::{AddAssign, Div, Mul, SubAssign};
-use std::sync::Arc;
-use std::time::Duration;
+
+// We use this to be able to support embedded 32bit platforms
+use portable_atomic::{AtomicU64, Ordering};
+
+#[cfg(not(feature = "std"))]
+mod imp {
+    pub use alloc::format;
+    pub use alloc::sync::Arc;
+    pub use core::fmt::{Display, Formatter};
+    pub use core::ops::{AddAssign, Div, Mul, SubAssign};
+}
+
+#[cfg(feature = "std")]
+mod imp {
+    pub use std::convert::Into;
+    pub use std::fmt::{Display, Formatter};
+    pub use std::ops::{AddAssign, Div, Mul, SubAssign};
+    pub use std::sync::Arc;
+}
+
+use imp::*;
+
+/// High-precision instant in time, represented as nanoseconds since an arbitrary epoch
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct CuInstant(u64);
+
+pub type Instant = CuInstant; // Backward compatibility
+
+impl CuInstant {
+    pub fn now() -> Self {
+        CuInstant(calibration::counter_to_nanos(read_raw_counter))
+    }
+
+    pub fn as_nanos(&self) -> u64 {
+        self.0
+    }
+}
+
+impl Sub for CuInstant {
+    type Output = CuDuration;
+
+    fn sub(self, other: CuInstant) -> CuDuration {
+        CuDuration(self.0.saturating_sub(other.0))
+    }
+}
+
+impl Sub<CuDuration> for CuInstant {
+    type Output = CuInstant;
+
+    fn sub(self, duration: CuDuration) -> CuInstant {
+        CuInstant(self.0.saturating_sub(duration.as_nanos()))
+    }
+}
+
+impl Add<CuDuration> for CuInstant {
+    type Output = CuInstant;
+
+    fn add(self, duration: CuDuration) -> CuInstant {
+        CuInstant(self.0.saturating_add(duration.as_nanos()))
+    }
+}
 
 /// For Robot times, the underlying type is a u64 representing nanoseconds.
 /// It is always positive to simplify the reasoning on the user side.
@@ -27,6 +103,7 @@ impl CuDuration {
     pub const MIN: CuDuration = CuDuration(0u64);
     // Highest value a CuDuration can have reserving the max value for None.
     pub const MAX: CuDuration = CuDuration(NONE_VALUE - 1);
+
     pub fn max(self, other: CuDuration) -> CuDuration {
         let Self(lhs) = self;
         let Self(rhs) = other;
@@ -43,19 +120,59 @@ impl CuDuration {
         let Self(nanos) = self;
         *nanos
     }
+
+    pub fn as_micros(&self) -> u64 {
+        let Self(nanos) = self;
+        nanos / 1_000
+    }
+
+    pub fn as_millis(&self) -> u64 {
+        let Self(nanos) = self;
+        nanos / 1_000_000
+    }
+
+    pub fn as_secs(&self) -> u64 {
+        let Self(nanos) = self;
+        nanos / 1_000_000_000
+    }
+
+    pub fn from_nanos(nanos: u64) -> Self {
+        CuDuration(nanos)
+    }
+
+    pub fn from_micros(micros: u64) -> Self {
+        CuDuration(micros * 1_000)
+    }
+
+    pub fn from_millis(millis: u64) -> Self {
+        CuDuration(millis * 1_000_000)
+    }
+
+    pub fn from_secs(secs: u64) -> Self {
+        CuDuration(secs * 1_000_000_000)
+    }
 }
 
 /// bridge the API with standard Durations.
-impl From<Duration> for CuDuration {
-    fn from(duration: Duration) -> Self {
+#[cfg(feature = "std")]
+impl From<std::time::Duration> for CuDuration {
+    fn from(duration: std::time::Duration) -> Self {
         CuDuration(duration.as_nanos() as u64)
     }
 }
 
-impl From<CuDuration> for Duration {
+#[cfg(not(feature = "std"))]
+impl From<core::time::Duration> for CuDuration {
+    fn from(duration: core::time::Duration) -> Self {
+        CuDuration(duration.as_nanos() as u64)
+    }
+}
+
+#[cfg(feature = "std")]
+impl From<CuDuration> for std::time::Duration {
     fn from(val: CuDuration) -> Self {
         let CuDuration(nanos) = val;
-        Duration::from_nanos(nanos)
+        std::time::Duration::from_nanos(nanos)
     }
 }
 
@@ -120,7 +237,7 @@ where
         CuDuration(lhs / rhs.into())
     }
 }
-//
+
 // a way to multiply a duration by a scalar.
 // useful to compute offsets for example.
 // CuDuration * scalar
@@ -186,7 +303,7 @@ impl<'de, Context> BorrowDecode<'de, Context> for CuDuration {
 }
 
 impl Display for CuDuration {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         let Self(nanos) = *self;
         if nanos >= 86_400_000_000_000 {
             write!(f, "{:.3} d", nanos as f64 / 86_400_000_000_000.0)
@@ -208,6 +325,22 @@ impl Display for CuDuration {
 
 /// A robot time is just a duration from a fixed point in time.
 pub type CuTime = CuDuration;
+
+/// A busy looping function based on this clock for a duration.
+/// Mainly useful for embedded to spinlocking.
+#[inline(always)]
+pub fn busy_wait_for(duration: CuDuration) {
+    busy_wait_until(CuInstant::now() + duration);
+}
+
+/// A busy looping function based on this until a specific time.
+/// Mainly useful for embedded to spinlocking.
+#[inline(always)]
+pub fn busy_wait_until(time: CuInstant) {
+    while CuInstant::now() < time {
+        core::hint::spin_loop();
+    }
+}
 
 /// Homebrewed `Option<CuDuration>` to avoid using 128bits just to represent an Option.
 #[derive(Copy, Clone, Debug, PartialEq, Encode, Decode, Serialize, Deserialize)]
@@ -237,7 +370,7 @@ impl OptionCuTime {
 }
 
 impl Display for OptionCuTime {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         if self.is_none() {
             write!(f, "None")
         } else {
@@ -307,7 +440,7 @@ pub struct PartialCuTimeRange {
 }
 
 impl Display for PartialCuTimeRange {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         let start = if self.start.is_none() {
             "…"
         } else {
@@ -333,7 +466,7 @@ pub enum Tov {
 }
 
 impl Display for Tov {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
             Tov::None => write!(f, "None"),
             Tov::Time(t) => write!(f, "{t}"),
@@ -357,62 +490,131 @@ impl From<CuDuration> for Tov {
     }
 }
 
+/// Internal clock implementation that provides high-precision timing
+#[derive(Clone, Debug)]
+struct InternalClock {
+    // For real clocks, this stores the initialization time
+    // For mock clocks, this references the mock state
+    mock_state: Option<Arc<AtomicU64>>,
+}
+
+// Implements the std version of the RTC clock
+#[cfg(feature = "std")]
+#[inline(always)]
+fn read_rtc_ns() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as u64
+}
+
+#[cfg(feature = "std")]
+#[inline(always)]
+fn sleep_ns(ns: u64) {
+    std::thread::sleep(std::time::Duration::from_nanos(ns));
+}
+
+impl InternalClock {
+    fn new(
+        read_rtc_ns: impl Fn() -> u64 + Send + Sync + 'static,
+        sleep_ns: impl Fn(u64) + Send + Sync + 'static,
+    ) -> Self {
+        initialize();
+
+        // Initialize the frequency calibration
+        calibration::calibrate(read_raw_counter, read_rtc_ns, sleep_ns);
+        InternalClock { mock_state: None }
+    }
+
+    fn mock() -> (Self, Arc<AtomicU64>) {
+        let mock_state = Arc::new(AtomicU64::new(0));
+        let clock = InternalClock {
+            mock_state: Some(Arc::clone(&mock_state)),
+        };
+        (clock, mock_state)
+    }
+
+    fn now(&self) -> CuInstant {
+        if let Some(ref mock_state) = self.mock_state {
+            CuInstant(mock_state.load(Ordering::Relaxed))
+        } else {
+            CuInstant::now()
+        }
+    }
+
+    fn recent(&self) -> CuInstant {
+        // For simplicity, we use the same implementation as now()
+        // In a more sophisticated implementation, this could use a cached value
+        self.now()
+    }
+}
+
 /// A running Robot clock.
 /// The clock is a monotonic clock that starts at an arbitrary reference time.
 /// It is clone resilient, ie a clone will be the same clock, even when mocked.
 #[derive(Clone, Debug)]
 pub struct RobotClock {
-    inner: Clock,      // This is a wrapper on quanta::Clock today.
-    ref_time: Instant, // The reference instant on which this clock is based.
+    inner: InternalClock,
+    ref_time: CuInstant,
 }
 
 /// A mock clock that can be controlled by the user.
 #[derive(Debug, Clone)]
-pub struct RobotClockMock(Arc<Mock>); // wraps the Mock from quanta today.
+pub struct RobotClockMock(Arc<AtomicU64>);
 
 impl RobotClockMock {
-    pub fn increment(&self, amount: Duration) {
-        let Self(mock) = self;
-        mock.increment(amount);
+    pub fn increment(&self, amount: CuDuration) {
+        let Self(mock_state) = self;
+        mock_state.fetch_add(amount.as_nanos(), Ordering::Relaxed);
     }
 
     /// Decrements the time by the given amount.
-    /// Be careful this brakes the monotonicity of the clock.
-    pub fn decrement(&self, amount: Duration) {
-        let Self(mock) = self;
-        mock.decrement(amount);
+    /// Be careful this breaks the monotonicity of the clock.
+    pub fn decrement(&self, amount: CuDuration) {
+        let Self(mock_state) = self;
+        mock_state.fetch_sub(amount.as_nanos(), Ordering::Relaxed);
     }
 
     /// Gets the current value of time.
     pub fn value(&self) -> u64 {
-        let Self(mock) = self;
-        mock.value()
+        let Self(mock_state) = self;
+        mock_state.load(Ordering::Relaxed)
     }
 
     /// A convenient way to get the current time from the mocking side.
     pub fn now(&self) -> CuTime {
-        let Self(mock) = self;
-        mock.value().into()
+        let Self(mock_state) = self;
+        CuDuration(mock_state.load(Ordering::Relaxed))
     }
 
     /// Sets the absolute value of the time.
     pub fn set_value(&self, value: u64) {
-        let Self(mock) = self;
-        let v = mock.value();
-        // had to work around the quata API here.
-        if v < value {
-            self.increment(Duration::from_nanos(value) - Duration::from_nanos(v));
-        } else {
-            self.decrement(Duration::from_nanos(v) - Duration::from_nanos(value));
-        }
+        let Self(mock_state) = self;
+        mock_state.store(value, Ordering::Relaxed);
     }
 }
 
 impl RobotClock {
     /// Creates a RobotClock using now as its reference time.
-    /// It will start a 0ns incrementing monotonically.
+    /// It will start at 0ns incrementing monotonically.
+    /// This uses the std System Time as a reference clock.
+    #[cfg(feature = "std")]
     pub fn new() -> Self {
-        let clock = Clock::new();
+        let clock = InternalClock::new(read_rtc_ns, sleep_ns);
+        let ref_time = clock.now();
+        RobotClock {
+            inner: clock,
+            ref_time,
+        }
+    }
+
+    /// Builds a RobotClock using a reference RTC clock to calibrate with.
+    /// This is mandatory to use with the no-std platforms as we have no idea where to find a reference clock.
+    pub fn new_with_rtc(
+        read_rtc_ns: impl Fn() -> u64 + Send + Sync + 'static,
+        sleep_ns: impl Fn(u64) + Send + Sync + 'static,
+    ) -> Self {
+        let clock = InternalClock::new(read_rtc_ns, sleep_ns);
         let ref_time = clock.now();
         RobotClock {
             inner: clock,
@@ -421,11 +623,26 @@ impl RobotClock {
     }
 
     /// Builds a monotonic clock starting at the given reference time.
+    #[cfg(feature = "std")]
     pub fn from_ref_time(ref_time_ns: u64) -> Self {
-        let clock = Clock::new();
-        let ref_time = clock.now() - Duration::from_nanos(ref_time_ns);
+        let clock = InternalClock::new(read_rtc_ns, sleep_ns);
+        let ref_time = clock.now() - CuDuration(ref_time_ns);
         RobotClock {
-            inner: Clock::new(),
+            inner: clock,
+            ref_time,
+        }
+    }
+
+    /// Overrides the RTC with a custom implementation, should be the same as the new_with_rtc.
+    pub fn from_ref_time_with_rtc(
+        read_rtc_ns: fn() -> u64,
+        sleep_ns: fn(u64),
+        ref_time_ns: u64,
+    ) -> Self {
+        let clock = InternalClock::new(read_rtc_ns, sleep_ns);
+        let ref_time = clock.now() - CuDuration(ref_time_ns);
+        RobotClock {
+            inner: clock,
             ref_time,
         }
     }
@@ -433,33 +650,34 @@ impl RobotClock {
     /// Build a fake clock with a reference time of 0.
     /// The RobotMock interface enables you to control all the clones of the clock given.
     pub fn mock() -> (Self, RobotClockMock) {
-        let (clock, mock) = Clock::mock();
+        let (clock, mock_state) = InternalClock::mock();
         let ref_time = clock.now();
         (
             RobotClock {
                 inner: clock,
                 ref_time,
             },
-            RobotClockMock(mock),
+            RobotClockMock(mock_state),
         )
     }
 
-    // Now returns the time that passed since the reference time, usually the start time.
-    // It is a monotonically increasing value.
+    /// Now returns the time that passed since the reference time, usually the start time.
+    /// It is a monotonically increasing value.
     #[inline]
     pub fn now(&self) -> CuTime {
-        // TODO: this could be further optimized to avoid this constant conversion from 2 fields to one under the hood.
-        // Let's say this is the default implementation.
-        (self.inner.now() - self.ref_time).into()
+        self.inner.now() - self.ref_time
     }
 
-    // A less precise but quicker time
+    /// A less precise but quicker time
     #[inline]
     pub fn recent(&self) -> CuTime {
-        (self.inner.recent() - self.ref_time).into()
+        self.inner.recent() - self.ref_time
     }
 }
 
+/// We cannot build a default RobotClock on no-std because we don't know how to find a reference clock.
+/// Use RobotClock::new_with_rtc instead on no-std.
+#[cfg(feature = "std")]
 impl Default for RobotClock {
     fn default() -> Self {
         Self::new()
@@ -474,6 +692,8 @@ pub trait ClockProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use approx::assert_relative_eq;
+
     #[test]
     fn test_cuduration_comparison_operators() {
         let a = CuDuration(100);
@@ -497,69 +717,48 @@ mod tests {
     }
 
     #[test]
-    fn test_option_cutime_handling() {
-        let some_time = OptionCuTime::from(Some(CuTime::from(100u64)));
-        let none_time = OptionCuTime::none();
-
-        assert!(!some_time.is_none());
-        assert!(none_time.is_none());
-        assert_eq!(some_time.unwrap(), CuTime::from(100u64));
-        assert_eq!(
-            Option::<CuTime>::from(some_time),
-            Some(CuTime::from(100u64))
-        );
-        assert_eq!(Option::<CuTime>::from(none_time), None);
+    fn test_robot_clock_monotonic() {
+        let clock = RobotClock::new();
+        let t1 = clock.now();
+        let t2 = clock.now();
+        assert!(t2 >= t1);
     }
 
     #[test]
-    fn test_mock() {
+    fn test_robot_clock_mock() {
         let (clock, mock) = RobotClock::mock();
-        assert_eq!(clock.now(), Duration::from_secs(0).into());
-        mock.increment(Duration::from_secs(1));
-        assert_eq!(clock.now(), Duration::from_secs(1).into());
+        let t1 = clock.now();
+        mock.increment(CuDuration::from_millis(100));
+        let t2 = clock.now();
+        assert!(t2 > t1);
+        assert_eq!(t2 - t1, CuDuration(100_000_000)); // 100ms in nanoseconds
     }
 
     #[test]
-    fn test_mock_clone() {
-        let (clock, mock) = RobotClock::mock();
-        assert_eq!(clock.now(), Duration::from_secs(0).into());
-        let clock_clone = clock.clone();
-        mock.increment(Duration::from_secs(1));
-        assert_eq!(clock_clone.now(), Duration::from_secs(1).into());
-    }
-
-    #[test]
-    fn test_robot_clock_synchronization() {
-        // Test that multiple clocks created from the same mock stay synchronized
+    fn test_robot_clock_clone_consistency() {
         let (clock1, mock) = RobotClock::mock();
         let clock2 = clock1.clone();
 
-        assert_eq!(clock1.now(), CuDuration(0));
-        assert_eq!(clock2.now(), CuDuration(0));
-
-        mock.increment(Duration::from_secs(5));
-
-        assert_eq!(clock1.now(), Duration::from_secs(5).into());
-        assert_eq!(clock2.now(), Duration::from_secs(5).into());
+        mock.set_value(1_000_000_000); // 1 second
+        assert_eq!(clock1.now(), clock2.now());
     }
 
     #[test]
     fn test_from_ref_time() {
-        let tolerance_ms = 10;
+        let tolerance_ms = 10f64;
         let clock = RobotClock::from_ref_time(1_000_000_000);
         assert_relative_eq!(
-            <CuDuration as Into<Duration>>::into(clock.now()).as_millis() as f64,
-            Duration::from_secs(1).as_millis() as f64,
-            epsilon = tolerance_ms as f64
+            clock.now().as_millis() as f64,
+            CuDuration::from_secs(1).as_millis() as f64,
+            epsilon = tolerance_ms
         );
     }
 
     #[test]
     fn longest_duration() {
         let maxcu = CuDuration(u64::MAX);
-        let maxd: Duration = maxcu.into();
-        assert_eq!(maxd.as_nanos(), u64::MAX as u128);
-        let s = maxd.as_secs();
+        assert_eq!(maxcu.as_nanos(), u64::MAX);
+        let s = maxcu.as_secs();
         let y = s / 60 / 60 / 24 / 365;
         assert!(y >= 584); // 584 years of robot uptime, we should be good.
     }
@@ -659,6 +858,7 @@ mod tests {
         assert!(matches!(tov_range, Tov::Range(_)));
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn test_cuduration_display() {
         // Test the display implementation for different magnitudes
@@ -720,19 +920,19 @@ mod tests {
         assert_eq!(clock.now(), CuDuration(0));
 
         // Test increment
-        mock.increment(Duration::from_secs(10));
-        assert_eq!(clock.now(), Duration::from_secs(10).into());
+        mock.increment(CuDuration::from_secs(10));
+        assert_eq!(clock.now(), CuDuration::from_secs(10));
 
         // Test decrement (unusual but supported)
-        mock.decrement(Duration::from_secs(5));
-        assert_eq!(clock.now(), Duration::from_secs(5).into());
+        mock.decrement(CuDuration::from_secs(5));
+        assert_eq!(clock.now(), CuDuration::from_secs(5));
 
         // Test setting absolute value
         mock.set_value(30_000_000_000); // 30 seconds in ns
-        assert_eq!(clock.now(), Duration::from_secs(30).into());
+        assert_eq!(clock.now(), CuDuration::from_secs(30));
 
         // Test that getting the time from the mock directly works
-        assert_eq!(mock.now(), Duration::from_secs(30).into());
+        assert_eq!(mock.now(), CuDuration::from_secs(30));
         assert_eq!(mock.value(), 30_000_000_000);
     }
 
@@ -780,8 +980,8 @@ mod tests {
         let provider_clock = provider.get_clock();
         assert_eq!(provider_clock.now(), CuDuration(0));
 
-        // Advance the mock clock and check that provider's clock also advances
-        mock.increment(Duration::from_secs(5));
-        assert_eq!(provider_clock.now(), Duration::from_secs(5).into());
+        // Advance the mock clock and check that the provider's clock also advances
+        mock.increment(CuDuration::from_secs(5));
+        assert_eq!(provider_clock.now(), CuDuration::from_secs(5));
     }
 }

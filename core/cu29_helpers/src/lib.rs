@@ -1,3 +1,7 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+
 use cu29_clock::RobotClock;
 use cu29_log_runtime::LoggerRuntime;
 use cu29_runtime::curuntime::CopperContext;
@@ -45,7 +49,7 @@ pub fn basic_copper_setup(
         unified_logger.clone(),
         UnifiedLogType::StructuredLogLine,
         4096 * 10,
-    );
+    )?;
 
     #[cfg(debug_assertions)]
     let extra: Option<TermLogger> = if _text_log {

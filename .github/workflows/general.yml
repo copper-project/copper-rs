@@ -17,6 +17,7 @@ jobs:
 
     env:
       DYLD_LIBRARY_PATH: /Library/Frameworks/GStreamer.framework/Versions/Current/lib:$DYLD_LIBRARY_PATH
+      BASE_FEATURES: macro_debug,mock,perf-ui,image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
 
     strategy:
       matrix:
@@ -30,6 +31,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustc,cargo,rust-std,rustfmt,clippy
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -44,9 +47,6 @@ jobs:
       - name: Install winget
         if: runner.os == 'Windows'
         uses: Cyberboss/install-winget@v1
-
-      - name: Check formatting
-        run: cargo +stable fmt --all -- --check
 
       - name: Free Disk Space (Ubuntu)
         if: runner.os == 'Linux'
@@ -134,7 +134,7 @@ jobs:
 
 
       - name: Install CUDA
-        uses: Jimver/cuda-toolkit@v0.2.27
+        uses: Jimver/cuda-toolkit@v0.2.28
         if: runner.os != 'macOS' && matrix.mode == 'cuda-release'
         with:
           cuda: 12.6.1
@@ -153,17 +153,27 @@ jobs:
 
       - name: Set features (Linux)
         if: runner.os == 'Linux'
-        run: echo "FEATURES_FLAG=$([[ '${{ matrix.mode }}' == 'cuda-release' ]] && echo '--all-features' || echo '--features macro_debug,mock,perf-ui,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug')" >> $GITHUB_ENV
+        run: |
+          if [[ '${{ matrix.mode }}' == 'cuda-release' ]]; then
+            echo "FEATURES_FLAG=--features $BASE_FEATURES,python,cuda" >> $GITHUB_ENV
+          else
+            echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
+          fi
 
       - name: Set features (MacOS)
         if: runner.os == 'macOS'
-        run: echo "FEATURES_FLAG=$([[ '${{ matrix.mode }}' == 'cuda-release' ]] && echo '--all-features' || echo '--features macro_debug,mock,perf-ui,image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug')" >> $GITHUB_ENV
+        run: |
+          if [[ '${{ matrix.mode }}' == 'cuda-release' ]]; then
+            echo "FEATURES_FLAG=--features $BASE_FEATURES,cuda" >> $GITHUB_ENV
+          else
+            echo "FEATURES_FLAG=--features $BASE_FEATURES" >> $GITHUB_ENV
+          fi
 
       - name: Set features (Windows)
         if: runner.os == 'Windows'
         run: |
           $features = if ($env:matrix_mode -eq 'cuda-release') {
-            '--all-features'
+            '--features macro_debug,mock,perf-ui,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode,cuda'
           } else {
             '--features macro_debug,mock,perf-ui,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode'
           }
@@ -203,10 +213,45 @@ jobs:
           cd templates/test_project
           cargo +stable build
   typos:
-    name: Typos Check
+    name: Typos & Format Check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: crate-ci/typos@master
         with:
           config: ./.config/_typos.toml
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Check formatting
+        run: cargo +stable fmt --all -- --check
+
+  embedded:
+    name: CI for embedded targets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-none,thumbv8m.main-none-eabihf,riscv32imac-unknown-none-elf
+          components: rustc,rustfmt
+      - name: Install latest nextest
+        uses: taiki-e/install-action@nextest
+      - name: Check compilation of core with no-std
+        run: cargo +stable build --no-default-features
+      - name: Unit tests of core with no-std
+        run: cargo +stable nextest run --no-default-features
+      - name: Clippy a no-std example
+        run: cargo +stable clippy -p cu-min-baremetal --no-default-features --config examples/cu_min_baremetal/.cargo/config-nostd.toml
+      - name: Compile a no-std example from Copper
+        run: cargo +stable build -p cu-min-baremetal --no-default-features --config examples/cu_min_baremetal/.cargo/config-nostd.toml
+      - name: Clippy an rp2350 example
+        working-directory: examples/cu_rp2350_skeleton
+        run: cargo +stable clippy
+      - name: Cross compile an rp2350 example with Arm
+        working-directory: examples/cu_rp2350_skeleton
+        run: cargo +stable build-arm
+      - name: Compile the logreader for the rp2350 example (host)
+        working-directory: examples/cu_rp2350_skeleton
+        run: cargo +stable build-logreader
+

@@ -1,15 +1,33 @@
 //! CopperList is the main data structure used by Copper to communicate between tasks.
 //! It is a queue that can be used to store preallocated messages between tasks in memory order.
+#[cfg(not(feature = "std"))]
 extern crate alloc;
 
-use bincode::{Decode, Encode};
-use std::fmt;
+#[cfg(not(feature = "std"))]
+mod imp {
+    pub use alloc::alloc::alloc_zeroed;
+    pub use alloc::alloc::handle_alloc_error;
+    pub use alloc::boxed::Box;
+    pub use alloc::vec::Vec;
+}
 
+#[cfg(feature = "std")]
+mod imp {
+    pub use std::alloc::alloc_zeroed;
+    pub use std::alloc::handle_alloc_error;
+}
+
+use core::alloc::Layout;
+use imp::*;
+
+use bincode::{Decode, Encode};
+use core::fmt;
+
+use core::fmt::Display;
+use core::iter::{Chain, Rev};
+use core::slice::{Iter as SliceIter, IterMut as SliceIterMut};
 use cu29_traits::{CopperListTuple, ErasedCuStampedData, ErasedCuStampedDataSet};
 use serde_derive::Serialize;
-use std::fmt::Display;
-use std::iter::{Chain, Rev};
-use std::slice::{Iter as SliceIter, IterMut as SliceIterMut};
 
 const MAX_TASKS: usize = 512;
 
@@ -131,10 +149,10 @@ impl<P: CopperListTuple, const N: usize> CuListsManager<P, N> {
         P: CuListZeroedInit,
     {
         let data = unsafe {
-            let layout = std::alloc::Layout::new::<[CopperList<P>; N]>();
-            let ptr = std::alloc::alloc_zeroed(layout) as *mut [CopperList<P>; N];
+            let layout = Layout::new::<[CopperList<P>; N]>();
+            let ptr = alloc_zeroed(layout) as *mut [CopperList<P>; N];
             if ptr.is_null() {
-                std::alloc::handle_alloc_error(layout);
+                handle_alloc_error(layout);
             }
             Box::from_raw(ptr)
         };

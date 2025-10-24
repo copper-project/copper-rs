@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use cu29::bincode::{Decode, Encode};
 use cu29::clock::RobotClock;
 use cu29::prelude::app::CuSimApplication;
+use cu29::prelude::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
 use cu29::prelude::*;
 use cu29::simulation::{CuTaskCallbackState, SimOverride};
 use serde::{Deserialize, Serialize};
@@ -90,7 +91,11 @@ fn main() -> CuResult<()> {
     let mut sim_counter: u32 = 0;
 
     // The generated SimStep enum gives you the per-task callback points.
-    let mut sim_callback = move |step: <App as CuSimApplication>::Step<'_>| -> SimOverride {
+    let mut sim_callback = move |step: <App as CuSimApplication<
+        MmapSectionStorage,
+        MmapUnifiedLoggerWrite,
+    >>::Step<'_>|
+          -> SimOverride {
         match step {
             // New: just demonstrate you can see config if needed
             default::SimStep::Src(CuTaskCallbackState::New(_)) => SimOverride::ExecuteByRuntime,

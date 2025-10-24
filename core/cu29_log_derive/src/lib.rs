@@ -3,12 +3,12 @@ extern crate proc_macro;
 use cu29_intern_strs::intern_string;
 use cu29_log::CuLogLevel;
 use proc_macro::TokenStream;
+use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::parse::Parser;
-#[cfg(debug_assertions)]
 use syn::spanned::Spanned;
 use syn::Token;
-use syn::{Expr, ExprAssign, ExprLit, Lit};
+use syn::{Expr, ExprLit, Lit};
 
 /// Create reference of unused_variables to avoid warnings
 /// ex: let _ = &tmp;
@@ -43,7 +43,7 @@ fn reference_unused_variables(input: TokenStream) -> TokenStream {
 
     // Fallback: if parsing fails for some reason, return an empty TokenStream.
     // This might still lead to warnings if parsing failed but is better than panicking.
-    proc_macro::TokenStream::new()
+    TokenStream::new()
 }
 
 /// Create a log entry at the specified log level.
@@ -52,35 +52,41 @@ fn reference_unused_variables(input: TokenStream) -> TokenStream {
 /// Users should use the public-facing macros: `debug!`, `info!`, `warning!`, `error!`, or `critical!`.
 #[allow(unused)]
 fn create_log_entry(input: TokenStream, level: CuLogLevel) -> TokenStream {
+    use quote::quote;
+    use syn::{Expr, ExprAssign, ExprLit, Lit, Token};
+
     let parser = syn::punctuated::Punctuated::<Expr, Token![,]>::parse_terminated;
     let exprs = parser.parse(input).expect("Failed to parse input");
-
     let mut exprs_iter = exprs.iter();
 
+    #[cfg(not(feature = "std"))]
+    const STD: bool = false;
+    #[cfg(feature = "std")]
+    const STD: bool = true;
+
     let msg_expr = exprs_iter.next().expect("Expected at least one expression");
-    let (index, _msg) = if let Expr::Lit(ExprLit {
+    let (index, msg_str) = if let Expr::Lit(ExprLit {
         lit: Lit::Str(msg), ..
     }) = msg_expr
     {
-        let msg = msg.value();
-        let index = intern_string(&msg).expect("Failed to insert log string.");
-        (index, msg)
+        let s = msg.value();
+        let index = intern_string(&s).expect("Failed to insert log string.");
+        (index, s)
     } else {
         panic!("The first parameter of the argument needs to be a string literal.");
     };
-    let level_str = match level {
+
+    let level_ident = match level {
         CuLogLevel::Debug => quote! { Debug },
         CuLogLevel::Info => quote! { Info },
         CuLogLevel::Warning => quote! { Warning },
         CuLogLevel::Error => quote! { Error },
         CuLogLevel::Critical => quote! { Critical },
     };
-    let prefix = quote! {
-        let mut log_entry = CuLogEntry::new(#index, CuLogLevel::#level_str);
-    };
 
-    let mut unnamed_params = vec![];
-    let mut named_params = vec![];
+    // Partition unnamed vs named args (a = b treated as named)
+    let mut unnamed_params = Vec::<&Expr>::new();
+    let mut named_params = Vec::<(&Expr, &Expr)>::new();
 
     for expr in exprs_iter {
         if let Expr::Assign(ExprAssign { left, right, .. }) = expr {
@@ -90,6 +96,7 @@ fn create_log_entry(input: TokenStream, level: CuLogLevel) -> TokenStream {
         }
     }
 
+    // Build the CuLogEntry population tokens
     let unnamed_prints = unnamed_params.iter().map(|value| {
         quote! {
             let param = to_value(#value).expect("Failed to convert a parameter to a Value");
@@ -98,53 +105,107 @@ fn create_log_entry(input: TokenStream, level: CuLogLevel) -> TokenStream {
     });
 
     let named_prints = named_params.iter().map(|(name, value)| {
-        let index = intern_string(quote!(#name).to_string().as_str())
+        let idx = intern_string(quote!(#name).to_string().as_str())
             .expect("Failed to insert log string.");
         quote! {
             let param = to_value(#value).expect("Failed to convert a parameter to a Value");
-            log_entry.add_param(#index, param);
+            log_entry.add_param(#idx, param);
         }
     });
 
-    #[cfg(not(debug_assertions))]
-    let log_stmt = quote! {
-        let r = log(&mut log_entry);
+    // ---------- For baremetal: build a defmt format literal and arg list ----------
+    // defmt line: "<msg> | a={:?}, b={:?}, arg0={:?} ..."
+    let defmt_fmt_lit = {
+        let mut s = msg_str.clone();
+        if !unnamed_params.is_empty() || !named_params.is_empty() {
+            s.push_str(" |");
+        }
+        for (i, _) in unnamed_params.iter().enumerate() {
+            use std::fmt::Write as _;
+            let _ = write!(&mut s, " arg{}={:?}", i, ());
+        }
+        for (name, _) in named_params.iter() {
+            let name_str = quote!(#name).to_string();
+            s.push(' ');
+            s.push_str(&name_str);
+            s.push_str("={:?}");
+        }
+        syn::LitStr::new(&s, msg_expr.span())
     };
 
+    let defmt_args_unnamed_ts: Vec<TokenStream2> =
+        unnamed_params.iter().map(|e| quote! { #e }).collect();
+    let defmt_args_named_ts: Vec<TokenStream2> = named_params
+        .iter()
+        .map(|(_, rhs)| quote! { #rhs })
+        .collect();
+
+    // Runtime logging path (unchanged)
+    #[cfg(not(debug_assertions))]
+    let log_stmt = quote! { let r = log(&mut log_entry); };
+
     #[cfg(debug_assertions)]
-    let log_stmt = {
+    let log_stmt: TokenStream2 = {
         let keys: Vec<_> = named_params
             .iter()
             .map(|(name, _)| {
-                let name_str = quote!(#name).to_string(); // Convert the expression to a token stream, then to a string
-                let lit_str = syn::LitStr::new(&name_str, name.span()); // Create a string literal with the original span
-                quote!(#lit_str)
+                let name_str = quote!(#name).to_string();
+                syn::LitStr::new(&name_str, name.span())
             })
             .collect();
         quote! {
-            let r = log_debug_mode(&mut log_entry, #_msg, &[#(#keys),*]);
+            let r = log_debug_mode(&mut log_entry, #msg_str, &[#(#keys),*]);
         }
     };
 
-    let postfix = quote! {
+    let error_handling: Option<TokenStream2> = if STD {
+        Some(quote! {
+            if let Err(e) = r {
+                eprintln!("Warning: Failed to log: {}", e);
+                let backtrace = std::backtrace::Backtrace::capture();
+                eprintln!("{:?}", backtrace);
+            }
+        })
+    } else {
+        None
+    };
+
+    #[cfg(debug_assertions)]
+    let defmt_macro: TokenStream2 = match level {
+        CuLogLevel::Debug => quote! { ::cu29::prelude::__cu29_defmt_debug },
+        CuLogLevel::Info => quote! { ::cu29::prelude::__cu29_defmt_info  },
+        CuLogLevel::Warning => quote! { ::cu29::prelude::__cu29_defmt_warn  },
+        CuLogLevel::Error => quote! { ::cu29::prelude::__cu29_defmt_error },
+        CuLogLevel::Critical => quote! { ::cu29::prelude::__cu29_defmt_error },
+    };
+
+    #[cfg(debug_assertions)]
+    let maybe_inject_defmt: Option<TokenStream2> = if STD {
+        None // defmt never exist in std mode ...
+    } else {
+        Some(quote! {
+             #[cfg(debug_assertions)]
+             {
+                 #defmt_macro!(#defmt_fmt_lit, #(#defmt_args_unnamed_ts,)* #(#defmt_args_named_ts,)*);
+             }
+        })
+    };
+
+    #[cfg(not(debug_assertions))]
+    let maybe_inject_defmt: Option<TokenStream2> = None; // ... neither in release mode
+
+    // Emit both: defmt (conditionally) + Copper structured logging
+    quote! {{
+        let mut log_entry = CuLogEntry::new(#index, CuLogLevel::#level_ident);
+        #(#unnamed_prints)*
+        #(#named_prints)*
+
+        #maybe_inject_defmt
+
         #log_stmt
-        if let Err(e) = r {
-            eprintln!("Warning: Failed to log: {}", e);
-            let backtrace = std::backtrace::Backtrace::capture();
-            eprintln!("{:?}", backtrace);
-        }
-    };
-
-    let expanded = quote! {
-        {
-            #prefix
-            #(#unnamed_prints)*
-            #(#named_prints)*
-            #postfix
-        }
-    };
-
-    expanded.into()
+        #error_handling
+    }}
+    .into()
 }
 
 /// This macro is used to log a debug message with parameters.

@@ -12,9 +12,22 @@ use cu29_traits::{
     COMPACT_STRING_CAPACITY,
 };
 use serde::{Deserialize, Serialize};
-use std::fmt;
-use std::fmt::{Debug, Display, Formatter};
 
+#[cfg(not(feature = "std"))]
+mod imp {
+    pub use alloc::fmt::Result as FmtResult;
+    pub use alloc::fmt::{Debug, Display, Formatter};
+}
+
+#[cfg(feature = "std")]
+mod imp {
+    pub use std::fmt::Result as FmtResult;
+    pub use std::fmt::{Debug, Display, Formatter};
+}
+
+use imp::*;
+
+/// The state of a task.
 // Everything that is stateful in copper for zero copy constraints need to be restricted to this trait.
 pub trait CuMsgPayload: Default + Debug + Clone + Encode + Decode<()> + Serialize + Sized {}
 
@@ -98,7 +111,7 @@ impl CuMsgMetadataTrait for CuMsgMetadata {
 }
 
 impl Display for CuMsgMetadata {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(
             f,
             "process_time start: {}, process_time end: {}",

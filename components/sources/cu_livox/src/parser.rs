@@ -311,13 +311,13 @@ pub fn parse_frame(data: &[u8]) -> Result<&LidarFrame, LivoxError> {
 mod tests {
     use crate::parser::{parse_frame, LidarFrame, RefTime};
     use chrono::prelude::*;
-    use cu29::prelude::RobotClock;
+    use cu29::prelude::{CuDuration, RobotClock};
 
     #[test]
     fn test_tele15_packet() {
         let (robot_clock, mock) = RobotClock::mock();
         // push the time by 1s because the first emulated test packet could end up in negative time.
-        mock.increment(std::time::Duration::new(1, 0));
+        mock.increment(CuDuration::from_secs(1));
 
         let packet_data: [u8; 1362] = [
             0x05, 0x01, 0x01, 0x00, 0x40, 0x68, 0x00, 0x40, 0x01, 0x02, 0x8B, 0x06, 0xAE, 0xE5,

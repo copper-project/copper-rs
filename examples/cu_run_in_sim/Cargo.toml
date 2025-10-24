@@ -1,5 +1,6 @@
 [package]
 name = "cu-run-in-sim"
+description = "Example for forcing Copper to compile in and run a source or a sink in simulation mode"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -10,6 +11,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
+# cu29 = { workspace = true, features = ["macro_debug"] }  # needed for cargo cubuild
 cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
 serde = { workspace = true }

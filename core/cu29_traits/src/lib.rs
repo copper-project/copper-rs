@@ -1,12 +1,49 @@
+//! Common copper traits and types for robotics systems.
+//!
+//! This crate is no_std compatible by default. Enable the "std" feature for additional
+//! functionality like implementing `std::error::Error` for `CuError` and the
+//! `new_with_cause` method that accepts types implementing `std::error::Error`.
+//!
+//! # Features
+//!
+//! - `std` (default): Enables standard library support
+//!   - Implements `std::error::Error` for `CuError`
+//!   - Adds `CuError::new_with_cause()` method for interop with std error types
+//!
+//! # no_std Usage
+//!
+//! To use without the standard library:
+//!
+//! ```toml
+//! [dependencies]
+//! cu29-traits = { version = "0.9", default-features = false }
+//! ```
+
+#![cfg_attr(not(feature = "std"), no_std)]
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+
 use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode as dDecode, Decode, Encode, Encode as dEncode};
 use compact_str::CompactString;
+#[cfg(not(feature = "std"))]
+use core::error::Error as CoreError;
 use cu29_clock::{PartialCuTimeRange, Tov};
 use serde::{Deserialize, Serialize};
-use std::error::Error;
+
+#[cfg(feature = "std")]
 use std::fmt::{Debug, Display, Formatter};
+
+#[cfg(not(feature = "std"))]
+use alloc::string::{String, ToString};
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
+#[cfg(not(feature = "std"))]
+use core::fmt::{Debug, Display, Formatter};
+#[cfg(feature = "std")]
+use std::error::Error;
 
 /// Common copper Error type.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -16,7 +53,7 @@ pub struct CuError {
 }
 
 impl Display for CuError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         let context_str = match &self.cause {
             Some(c) => c.to_string(),
             None => "None".to_string(),
@@ -26,6 +63,10 @@ impl Display for CuError {
     }
 }
 
+#[cfg(not(feature = "std"))]
+impl CoreError for CuError {}
+
+#[cfg(feature = "std")]
 impl Error for CuError {}
 
 impl From<&str> for CuError {
@@ -47,7 +88,7 @@ impl From<String> for CuError {
 }
 
 impl CuError {
-    pub fn new_with_cause(message: &str, cause: impl Error) -> CuError {
+    pub fn new_with_cause(message: &str, cause: impl Display) -> CuError {
         CuError {
             message: message.to_string(),
             cause: Some(cause.to_string()),
@@ -64,7 +105,7 @@ impl CuError {
 pub type CuResult<T> = Result<T, CuError>;
 
 /// Defines a basic write, append only stream trait to be able to log or send serializable objects.
-pub trait WriteStream<E: Encode>: Sync + Send + Debug {
+pub trait WriteStream<E: Encode>: Debug + Send + Sync {
     fn log(&mut self, obj: &E) -> CuResult<()>;
     fn flush(&mut self) -> CuResult<()> {
         Ok(())
@@ -153,7 +194,7 @@ impl Encode for CuCompactString {
 }
 
 impl Debug for CuCompactString {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         if self.0.is_empty() {
             return write!(f, "CuCompactString(Empty)");
         }
@@ -173,6 +214,36 @@ impl<Context> Decode<Context> for CuCompactString {
 impl<'de, Context> BorrowDecode<'de, Context> for CuCompactString {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         CuCompactString::decode(decoder)
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for CuError {
+    fn format(&self, f: defmt::Formatter) {
+        match &self.cause {
+            Some(c) => defmt::write!(
+                f,
+                "CuError {{ message: {}, cause: {} }}",
+                defmt::Display2Format(&self.message),
+                defmt::Display2Format(c),
+            ),
+            None => defmt::write!(
+                f,
+                "CuError {{ message: {}, cause: None }}",
+                defmt::Display2Format(&self.message),
+            ),
+        }
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for CuCompactString {
+    fn format(&self, f: defmt::Formatter) {
+        if self.0.is_empty() {
+            defmt::write!(f, "CuCompactString(Empty)");
+        } else {
+            defmt::write!(f, "CuCompactString({})", defmt::Display2Format(&self.0));
+        }
     }
 }
 

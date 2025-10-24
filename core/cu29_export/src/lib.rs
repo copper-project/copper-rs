@@ -6,6 +6,7 @@ use bincode::error::DecodeError;
 use clap::{Parser, Subcommand, ValueEnum};
 use cu29::prelude::*;
 use cu29::UnifiedLogType;
+use cu29_intern_strs::read_interned_strings;
 use fsck::check;
 use std::fmt::{Display, Formatter};
 use std::io::Read;
@@ -241,6 +242,7 @@ mod python {
     use bincode::decode_from_std_read;
     use bincode::error::DecodeError;
     use cu29::prelude::*;
+    use cu29_intern_strs::read_interned_strings;
     use pyo3::exceptions::PyIOError;
     use pyo3::prelude::*;
     use pyo3::types::{PyDelta, PyDict, PyList};
@@ -461,7 +463,8 @@ mod tests {
                 panic!("Failed to create logger")
             };
             let data_logger = Arc::new(Mutex::new(logger));
-            let stream = stream_write(data_logger.clone(), UnifiedLogType::StructuredLogLine, 1024);
+            let stream = stream_write(data_logger.clone(), UnifiedLogType::StructuredLogLine, 1024)
+                .expect("Failed to create stream");
             let rt = LoggerRuntime::init(RobotClock::default(), stream, None::<NullLog>);
 
             let mut entry = CuLogEntry::new(4, CuLogLevel::Info); // this is a "Just a String {}" log line

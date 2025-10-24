@@ -1,5 +1,5 @@
+.idea
 /target
-/.idea
 /cu29_export.so
 
 *.copper
@@ -13,6 +13,10 @@ Cargo.lock
 /examples/ros_zenoh_caterpillar/log
 /examples/ros_zenoh_caterpillar/install
 /examples/cu_rp_balancebot/cu29_log_index
+
+# independent project from the workspace
+/examples/cu_rp2350_skeleton/.idea/                                                                                                                                                    
+/examples/cu_rp2350_skeleton/target/ 
 
 # Test generation project
 /templates/test_project
