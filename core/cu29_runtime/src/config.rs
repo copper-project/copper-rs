@@ -751,9 +751,7 @@ where
                         // if there is no filter by mission on the task, add the task to the mission.
                         let mut task = task.clone();
                         task.flavor = Flavor::Task;
-                        graph
-                            .add_node(task)
-                            .map_err(|e| E::from(e.to_string()))?;
+                        graph.add_node(task).map_err(|e| E::from(e.to_string()))?;
                     }
                 }
             }
