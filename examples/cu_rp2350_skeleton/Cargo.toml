@@ -17,8 +17,8 @@ default-run = "main"
 # cargo build-logreader
 
 [dependencies]
-cu29 = { path = "../../core/cu29", default-features = false, features = ["log-level-debug"] } # pick it up directly to build it no-std
-cu29-export = { path = "../../core/cu29_export", optional = true, default-features = false }
+cu29 = { path = "../../core/cu29", version="0.10.0", default-features = false, features = ["log-level-debug"] } # pick it up directly to build it no-std
+cu29-export = { path = "../../core/cu29_export", version="0.10.0", optional = true, default-features = false }
 bincode = { version = "2.0", default-features = false, features = ["derive"] }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 
