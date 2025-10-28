@@ -23,42 +23,9 @@
 <p><strong style="color: #b87333;">🪶 Runs anywhere</strong> – from Linux servers to bare-metal RP2350  
 <p><strong style="color: #b87333;">📦 Built to ship</strong> – one stack from simulation to production
 
-Copper can be deployed on:
-<table style="color: white; background-color: black; font-family: sans-serif;">
-  <tr>
-    <td style="text-align: center; padding: 12px;">
-      <img src="https://upload.wikimedia.org/wikipedia/commons/3/35/Tux.svg" width="50"/>
-    </td>
-    <td style="font-weight: bold; text-align: center;">Linux</td>
-    <td style="text-align: right; padding-left: 10px;">x86_64<br>armv7<br>aarch64<br>riscv64</td>
-  </tr>
-  <tr>
-    <td style="text-align: center; padding: 12px;">
-      <img src="https://upload.wikimedia.org/wikipedia/commons/3/31/Apple_logo_white.svg" width="50"/>
-    </td>
-    <td style="font-weight: bold; text-align: center;">macOS</td>
-    <td style="text-align: right; padding-left: 10px;">arm64</td>
-  </tr>
-  <tr>
-    <td style="text-align: center; padding: 12px;">
-      <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Windows_logo_-_2021_%28White%29.svg/768px-Windows_logo_-_2021_%28White%29.svg.png?20230326181935" width="50"/>
-    </td>
-    <td style="font-weight: bold; text-align: center;">Windows</td>
-    <td style="text-align: right; padding-left: 10px;">x86_64</td>
-  </tr>
-  <tr>
-    <td style="text-align: center; padding: 12px;">
-      <img src="https://upload.wikimedia.org/wikipedia/commons/d/d7/Android_robot.svg" width="50"/>
-    </td>
-    <td style="font-weight: bold; text-align: center;">Android</td>
-    <td style="text-align: right; padding-left: 10px;">arm64</td>
-  </tr>
-</table>
+Copper can be deployed on a variety of traditional OSes and baremetal MCU:
 
-But can ALSO run baremetal on microcontrollers. Here it is on our reference platform based on the RP2350, see 
-[Copper baremetal development](https://github.com/copper-project/copper-rs/wiki/Baremetal-Development) if you are interested to deploy Copper as an actual Operating System.
-
-<img width="500" src="https://github.com/copper-project/copper-rs/wiki/imgs/baremetal-w-camera.jpg" alt="graph"/>
+      <img src="https://upload.wikimedia.org/wikipedia/commons/3/35/Tux.svg" width="50"/>&nbsp;<img src="https://upload.wikimedia.org/wikipedia/commons/3/31/Apple_logo_white.svg" width="50"/>&nbsp;<img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Windows_logo_-_2021_%28White%29.svg/768px-Windows_logo_-_2021_%28White%29.svg.png?20230326181935" width="50"/>&nbsp;<img src="https://upload.wikimedia.org/wikipedia/commons/d/d7/Android_robot.svg" width="50"/>
 
 ### Technical Overview
 
@@ -114,123 +81,7 @@ The source code for this demo is available in the [examples/cu_rp_balancebot](ex
 7. **Simulation**: We have a simple simulation environment to test your robot. Test your robot before the hardware is
    built and try out your robot the first time without risking a real crash.
 
-### Growing list of readily available Components
-
-<table style="border-collapse:collapse; width:100%;">
-  <thead style="background:#1f3f1f; color:white;">
-    <tr>
-      <th style="padding:8px; border:1px solid #444;">Category</th>
-      <th style="padding:8px; border:1px solid #444;">Type</th>
-      <th style="padding:8px; border:1px solid #444;"> </th>
-      <th style="padding:8px; border:1px solid #444;">Description</th>
-      <th style="padding:8px; border:1px solid #444;">Crate Name</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr style="background:#111;">
-      <td rowspan="7" style="padding:8px; border:1px solid #444;">Sensors</td>
-      <td style="padding:8px; border:1px solid #444;">Lidar</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_vlp16/doc/vlp16.jpg?raw=true"/></td>
-      <td style="padding:8px; border:1px solid #444;"><a href="components/sources/cu_vlp16">Velodyne/Ouster VLP16</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-vlp16</code></td>
-    </tr>
-    <tr style="background:#1a1a1a;">
-      <td style="padding:8px; border:1px solid #444;">Lidar</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_hesai/doc/XT32-16.png?raw=true"/></td>
-      <td style="padding:8px; border:1px solid #444;"><a href="components/sources/cu_hesai">Hesai/XT32</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-hesai</code></td>
-    </tr>
-    <tr style="background:#111;">
-      <td style="padding:8px; border:1px solid #444;">Video Camera</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_v4l/doc/camera.png?raw=true"/></td>
-      <td style="padding:8px; border:1px solid #444;"><a href="components/sources/cu_v4l">Video4Linux</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-v4l</code></td>
-    </tr>
-    <tr style="background:#1a1a1a;">
-      <td style="padding:8px; border:1px solid #444;">Video Camera</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://gstreamer.freedesktop.org/data/images/artwork/gstreamer-logo-75.png"/></td>
-      <td style="padding:8px; border:1px solid #444;"><a href="components/sources/cu_v4l">Video4Linux</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-v4l</code></td>
-    </tr>
-    <tr style="background:#111;">
-      <td style="padding:8px; border:1px solid #444;">IMU</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_wt901/doc/wt901.jpg?raw=true"/></td>
-      <td style="padding:8px; border:1px solid #444;"><a href="components/sources/cu_wt901">WitMotion WT901</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-wt901</code></td>
-    </tr>
-    <tr style="background:#1a1a1a;">
-      <td style="padding:8px; border:1px solid #444;">ADC/Position</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_ads7883/doc/ads7883-scale.jpg?raw=true"/></td>
-      <td style="padding:8px; border:1px solid #444;"><a href="components/sources/cu_ads7883">ADS 7883 3MPSPS SPI ADC</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-ads7883</code></td>
-    </tr>
-    <tr style="background:#111;">
-      <td style="padding:8px; border:1px solid #444;">Encoder</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_rp_encoder/doc/encoder.jpg?raw=true"/></td>
-      <td style="padding:8px; border:1px solid #444;"><a href="components/sources/cu_rp_encoder">Generic Directional Wheel encoder</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-rp-encoder</code></td>
-    </tr>
-    <tr style="background:#1a1a1a;">
-      <td rowspan="3" style="padding:8px; border:1px solid #444;">Actuators</td>
-      <td style="padding:8px; border:1px solid #444;">GPIO</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://github.com/copper-project/copper-rs/blob/master/components/sinks/cu_rp_gpio/doc/rp.jpg?raw=true"/></td>
-      <td style="padding:8px; border:1px solid #444;"><a href="components/sinks/cu_rp_gpio">Raspberry Pi</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-rp-gpio</code></td>
-    </tr>
-    <tr style="background:#111;">
-      <td style="padding:8px; border:1px solid #444;">Servo</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://github.com/copper-project/copper-rs/blob/master/components/sinks/cu_lewansoul/doc/lewansoul.jpg?raw=true"/></td>
-      <td style="padding:8px; border:1px solid #444;"><a href="components/sinks/cu_lewansoul">Lewansoul Servo Bus (LX-16A, etc.)</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-lewansoul</code></td>
-    </tr>
-    <tr style="background:#1a1a1a;">
-      <td style="padding:8px; border:1px solid #444;">DC Motor Driver</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://github.com/copper-project/copper-rs/blob/master/components/sinks/cu_rp_sn754410/doc/sn754410.jpeg?raw=true"/></td>
-      <td style="padding:8px; border:1px solid #444;"><a href="components/sinks/cu_rp_sn754410">Half-H Driver for CD Motors</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-rp-sn754410</code></td>
-    </tr>
-    <tr style="background:#1a1a1a;">
-      <td>Algorithms</td>
-      <td style="padding:8px; border:1px solid #444;">PID Controller</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://github.com/copper-project/copper-rs/blob/master/components/tasks/cu_pid/doc/pid.png?raw=true"/></td>
-      <td style="padding:8px; border:1px solid #444;"><a href="components/tasks/cu_pid">PID Controller</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-pid</code></td>
-    </tr>
-    <tr style="background:#111;">
-      <td>Monitors</td>
-      <td style="padding:8px; border:1px solid #444;">TUI Monitor</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="300" src="https://github.com/copper-project/copper-rs/blob/master/components/monitors/cu_consolemon/doc/tasks.png?raw=true"/></td>
-      <td style="padding:8px; border:1px solid #444;"><a href="components/monitors/cu_consolemon">Console based monitor</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-consolemon</code></td>
-    </tr>
-    <tr style="background:#111;">
-      <td rowspan="3">Middleware</td>
-      <td style="padding:8px; border:1px solid #444;">IPC</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://zenoh.io/img/zenoh-dragon-bg-150x163.png"/></td>
-      <td style="padding:8px; border:1px solid #444;">Zenoh<br/><a href="components/sinks/cu_msp_sink">sink</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-zenoh-sink</code></td>
-    </tr>
-    <tr style="background:#111;">
-      <td style="padding:8px; border:1px solid #444;">IPC</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://user-images.githubusercontent.com/8661268/114321508-64a6b000-9b1b-11eb-95ef-b84c91387cff.png"/></td>
-      <td style="padding:8px; border:1px solid #444;">Iceroryx2<br/><a href="components/sources/cu_iceoryx2_src">source</a><br/><a href="components/sinks/cu_iceoryx2_sink">sink</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-iceoryx2-src</code><br/><code>cu-iceoryx2-sink</code></td>
-    </tr>
-    <tr style="background:#1a1a1a;">
-      <td style="padding:8px; border:1px solid #444;">Flight Controller (Drones)</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_msp_src/doc/fc.webp?raw=true"/></td>
-      <td style="padding:8px; border:1px solid #444;">Multiwii Serial Protocol (MSP)<br/><a href="components/sources/cu_msp_src">source</a><br/><a href="components/sinks/cu_msp_sink">sink</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-msp-src</code><br/><code>cu-msp-sink</code></td>
-    </tr>
-    <tr style="background:#111;">
-      <td rowspan="1">Bridges</td>
-      <td style="padding:8px; border:1px solid #444;">ROS2 (Humble+)</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://github.com/copper-project/copper-rs/blob/master/components/sinks/cu_zenoh_ros_sink/doc/ROS2.png?raw=true"/></td>
-      <td style="padding:8px; border:1px solid #444;">ROS2 Bridge (over Zenoh)<br/><a href="components/sinks/cu_zenoh_ros_sink">sink</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-zenoh-ros-sink</code></td>
-    </tr>
-  </tbody>
-</table>
+With a growing list of readily available [Components](https://github.com/copper-project/copper-rs/wiki/List-of-Available-Copper-Tasks-(HW,-Middleware,-Algorithms-etc...) 
 
 ### Kickstarting a Copper project for the impatient
 
