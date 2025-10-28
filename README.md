@@ -23,6 +23,11 @@
 <p><strong style="color: #b87333;">🪶 Runs anywhere</strong> – from Linux servers to bare-metal RP2350  
 <p><strong style="color: #b87333;">📦 Built to ship</strong> – one stack from simulation to production
 
+### Example Applications
+
+| Flying | Driving | Swimming | Space Fairing |
+|:--:|:--:|:--:|:--:|
+| <img width="200" alt="copper-drone" src="https://github.com/user-attachments/assets/31096307-fe1b-4315-b876-0f7237d69fa4" /> | <img width="200" alt="copper-driving" src="https://github.com/user-attachments/assets/1f051359-1ff4-45c6-838b-44442dc06ac4" /> | <img width="200" alt="copper-swimming" src="https://github.com/user-attachments/assets/5a0d0279-da98-4d4d-b5e1-e0cd8890a368" /> | <img width="200" alt="copper-space" src="https://github.com/user-attachments/assets/c535413e-014f-4846-ab06-a49e1151e42e" /> |
 
 ### Technical Overview
 
@@ -41,10 +46,6 @@ Copper is a deterministic and data-oriented Robot SDK with these key components:
 
 * **Fast Structured Logging**: Interns and indexes logging strings at compile time, avoiding runtime string construction
   and ensuring high-speed textual logging.
-
-### Blazing Fast
-
-Our latency numbers are expressed in **nanoseconds (ns)** on commodity hardware.
 
 ### You don't have a real robot yet? Try it in our minimalistic sim environment!
 
