@@ -66,7 +66,22 @@ $ balancebot-sim
 
 The source code for this demo is available in the [examples/cu_rp_balancebot](examples/cu_rp_balancebot) directory.
 
-### Features
+### Supported Platforms
+
+You can deploy and run Copper on those platforms:
+
+<img src="https://upload.wikimedia.org/wikipedia/commons/3/35/Tux.svg" width="50"/>&nbsp;&nbsp;<img src="https://upload.wikimedia.org/wikipedia/commons/3/31/Apple_logo_white.svg" width="50"/>&nbsp;&nbsp;<img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Windows_logo_-_2021_%28White%29.svg/768px-Windows_logo_-_2021_%28White%29.svg.png?20230326181935" width="50"/>&nbsp;&nbsp;<img src="https://upload.wikimedia.org/wikipedia/commons/d/d7/Android_robot.svg" width="50"/>
+
+### ... but we also support baremetal!
+
+On the embedded side, we do have a reference platform you can create from readily available components or you can get from us already made, feel free to inquire: info@copper-robotics.com
+
+<img src="https://github.com/copper-project/copper-rs/wiki/imgs/baremetal-w-camera.jpg" width="200"/>
+
+More info about baremetal development with Copper [here](https://github.com/copper-project/copper-rs/wiki/Baremetal-Development)
+
+
+### Features provided with the SDK
 
 1. **Task interface and Lifecycle**: Traits you can use to implement new algorithms, sensors, and actuators.
 2. **Runtime generation**: Generates a scheduling at compile time for your robot.
@@ -79,13 +94,12 @@ The source code for this demo is available in the [examples/cu_rp_balancebot](ex
 7. **Simulation**: We have a simple simulation environment to test your robot. Test your robot before the hardware is
    built and try out your robot the first time without risking a real crash.
 
-With a growing list of readily available [Components](https://github.com/copper-project/copper-rs/wiki/List-of-Available-Copper-Tasks-\(HW,-Middleware,-Algorithms-etc...) 
+With a growing list of readily available [Components](https://github.com/copper-project/copper-rs/wiki/Available-Components).
 
-### Supported Platforms
 
-<img src="https://upload.wikimedia.org/wikipedia/commons/3/35/Tux.svg" width="50"/>&nbsp;&nbsp;<img src="https://upload.wikimedia.org/wikipedia/commons/3/31/Apple_logo_white.svg" width="50"/>&nbsp;&nbsp;<img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Windows_logo_-_2021_%28White%29.svg/768px-Windows_logo_-_2021_%28White%29.svg.png?20230326181935" width="50"/>&nbsp;&nbsp;<img src="https://upload.wikimedia.org/wikipedia/commons/d/d7/Android_robot.svg" width="50"/> and baremetal MCU
+## Get Started
 
-### Kickstarting a Copper project for the impatient
+### Kickstarting a Copper project for the impatients
 
 You can generate a project from one of Copper's templates.
 The generator will ask you the name for your new project interactively:
@@ -100,7 +114,7 @@ cargo cunew [path_where_you_want_your_project_created]
 
 Check out [copper-templates](templates/README.md) for more info.
 
-### What does a Copper application look like?
+### Overview of a Copper Application
 
 Here is a simple example of a Task Graph in RON:
 
@@ -278,21 +292,22 @@ You can parameterize your included configurations using template variables:
 
 For more details on modular configuration, see the [Modular Configuration documentation](doc/modular_config.md).
 
-## Deployment of the application
+### Deployment of the application
 
 Check out the [deployment](doc/deploy.md) page for more information.
 
-## How is Copper better or different from the ROS (Robot Operating System)?
+## FAQ
+
+### How is Copper better or different from the ROS (Robot Operating System)?
 
 As explained above, Copper is a "user-friendly runtime engine" written in Rust which manages task execution, data flow,
 logging, and more.
 
 In contrast, the [ROS](https://github.com/ros) is an open-source set of software libraries and tools primarily written
-in C++ and Python.
+for C++ and Python.
 
-Let's talk about some of the benefits and differences between the two.
 
-### 🚀 Performance
+### 🚀 Is it *that* more performant?
 
 In the example directory, we have 2 equivalent applications. One written in C++ for ROS and a port in Rust with Copper.
 
@@ -308,23 +323,24 @@ Copper has been designed for performance first. Not unlike a game engine,
 we use a data-oriented approach to minimize latency
 and maximize throughput.
 
-### Safety
+### What about the safety considerations?
 
-As Copper is written in Rust, it is memory safe and thread safe by design. It is also designed to be easy to use and
+Copper is fully deterministic, it means that you can have a provable match between your stack when it replays the data captured by the robot and your stack actual behavior running on your robot.
+
+Also Copper is written in Rust, it is memory safe and thread safe by design. It is also designed to be easy to use and
 avoid common pitfalls.
 
-As we progress on this project we plan on implementing more and more early warnings to help you avoid "the death by a
-thousand cuts" that can happen in a complex system.
+## Project
+
+> [!NOTE]
+> We are looking for contributors to help us build the best robotics framework possible. If you are interested, please
+> join us on [Discord](https://discord.gg/VkCG7Sb9Kw) or open an issue.
 
 ### Release Notes
 
 You can find the full release notes [here](https://github.com/copper-project/copper-rs/wiki/Copper-Release-Log).
 
 ### Roadmap
-
-> [!NOTE]
-> We are looking for contributors to help us build the best robotics framework possible. If you are interested, please
-> join us on [Discord](https://discord.gg/VkCG7Sb9Kw) or open an issue.
 
 Here are some of the features we just release and some we plan to implement next, if you are interested in contributing
 on any of those, please let us know!:
