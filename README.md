@@ -23,9 +23,6 @@
 <p><strong style="color: #b87333;">🪶 Runs anywhere</strong> – from Linux servers to bare-metal RP2350  
 <p><strong style="color: #b87333;">📦 Built to ship</strong> – one stack from simulation to production
 
-Copper can be deployed on a variety of traditional OSes and baremetal MCU:
-
-      <img src="https://upload.wikimedia.org/wikipedia/commons/3/35/Tux.svg" width="50"/>&nbsp;<img src="https://upload.wikimedia.org/wikipedia/commons/3/31/Apple_logo_white.svg" width="50"/>&nbsp;<img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Windows_logo_-_2021_%28White%29.svg/768px-Windows_logo_-_2021_%28White%29.svg.png?20230326181935" width="50"/>&nbsp;<img src="https://upload.wikimedia.org/wikipedia/commons/d/d7/Android_robot.svg" width="50"/>
 
 ### Technical Overview
 
@@ -82,6 +79,10 @@ The source code for this demo is available in the [examples/cu_rp_balancebot](ex
    built and try out your robot the first time without risking a real crash.
 
 With a growing list of readily available [Components](https://github.com/copper-project/copper-rs/wiki/List-of-Available-Copper-Tasks-(HW,-Middleware,-Algorithms-etc...) 
+
+### Supported Platforms
+
+<img src="https://upload.wikimedia.org/wikipedia/commons/3/35/Tux.svg" width="50"/>&nbsp;&nbsp;<img src="https://upload.wikimedia.org/wikipedia/commons/3/31/Apple_logo_white.svg" width="50"/>&nbsp;&nbsp;<img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Windows_logo_-_2021_%28White%29.svg/768px-Windows_logo_-_2021_%28White%29.svg.png?20230326181935" width="50"/>&nbsp;&nbsp;<img src="https://upload.wikimedia.org/wikipedia/commons/d/d7/Android_robot.svg" width="50"/> and baremetal MCU
 
 ### Kickstarting a Copper project for the impatient
 
