@@ -25,7 +25,7 @@
 
 ### Example Applications
 
-| Flying | Driving | Swimming | Space Fairing |
+| Flying | Driving | Swimming | Spacefaring |
 |:--:|:--:|:--:|:--:|
 | <img width="200" alt="copper-drone" src="https://github.com/user-attachments/assets/31096307-fe1b-4315-b876-0f7237d69fa4" /> | <img width="200" alt="copper-driving" src="https://github.com/user-attachments/assets/1f051359-1ff4-45c6-838b-44442dc06ac4" /> | <img width="200" alt="copper-swimming" src="https://github.com/user-attachments/assets/5a0d0279-da98-4d4d-b5e1-e0cd8890a368" /> | <img width="200" alt="copper-space" src="https://github.com/user-attachments/assets/c535413e-014f-4846-ab06-a49e1151e42e" /> |
 
