@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="copper GitHub last commit  dependency status License Discord"><title>cu29 - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="cu29" data-themes="" data-resource-suffix="" data-rustdoc-version="1.92.0-nightly (695857bc3 2025-10-21)" data-channel="nightly" data-search-js="search-d69d8955.js" data-stringdex-js="stringdex-c3e638e9.js" data-settings-js="settings-c38705f0.js" ><script src="../static.files/storage-e2aeef58.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-ce535bd0.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Crate cu29</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../cu29/index.html">cu29</a><span class="version">0.10.0</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#why-copper" title="Why Copper">Why Copper</a></li><li><a href="#technical-overview" title="Technical Overview">Technical Overview</a></li><li><a href="#blazing-fast" title="Blazing Fast">Blazing Fast</a></li><li><a href="#you-dont-have-a-real-robot-yet-try-it-in-our-minimalistic-sim-environment" title="You don’t have a real robot yet? Try it in our minimalistic sim environment!">You don’t have a real robot yet? Try it in our minimalistic sim environment!</a></li><li><a href="#features" title="Features">Features</a></li><li><a href="#growing-list-of-readily-available-components" title="Growing list of readily available Components">Growing list of readily available Components</a></li><li><a href="#kickstarting-a-copper-project-for-the-impatient" title="Kickstarting a Copper project for the impatient">Kickstarting a Copper project for the impatient</a></li><li><a href="#what-does-a-copper-application-look-like" title="What does a Copper application look like?">What does a Copper application look like?</a></li><li><a href="#modular-configuration" title="Modular Configuration">Modular Configuration</a><ul><li><a href="#including-configuration-files" title="Including Configuration Files">Including Configuration Files</a></li><li><a href="#parameter-substitution" title="Parameter Substitution">Parameter Substitution</a></li><li><a href="#use-cases" title="Use Cases">Use Cases</a></li></ul></li><li><a href="#deployment-of-the-application" title="Deployment of the application">Deployment of the application</a></li><li><a href="#how-is-copper-better-or-different-from-the-ros-robot-operating-system" title="How is Copper better or different from the ROS (Robot Operating System)?">How is Copper better or different from the ROS (Robot Operating System)?</a><ul><li><a href="#-performance" title="🚀 Performance">🚀 Performance</a></li><li><a href="#safety" title="Safety">Safety</a></li><li><a href="#release-notes" title="Release Notes">Release Notes</a></li><li><a href="#roadmap" title="Roadmap">Roadmap</a></li></ul></li></ul><h3><a href="#reexports">Crate Items</a></h3><ul class="block"><li><a href="#reexports" title="Re-exports">Re-exports</a></li><li><a href="#modules" title="Modules">Modules</a></li><li><a href="#macros" title="Macros">Macros</a></li><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li><li><a href="#constants" title="Constants">Constants</a></li><li><a href="#traits" title="Traits">Traits</a></li><li><a href="#functions" title="Functions">Functions</a></li><li><a href="#types" title="Type Aliases">Type Aliases</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><h1>Crate <span>cu29</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/cu29/lib.rs.html#1-55">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h1 style="color: #b87333;"><img src="https://github.com/copper-project/copper-rs/blob/master/doc/static/cu29.png?raw=true" width="60" /> &nbsp;&nbsp;&nbsp;&nbsp; Copper Runtime & SDK</h1>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="copper GitHub last commit  dependency status License Discord"><title>cu29 - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="cu29" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0-nightly (adaa83897 2025-10-27)" data-channel="nightly" data-search-js="search-d69d8955.js" data-stringdex-js="stringdex-c3e638e9.js" data-settings-js="settings-c38705f0.js" ><script src="../static.files/storage-e2aeef58.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-ce535bd0.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Crate cu29</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../cu29/index.html">cu29</a><span class="version">0.10.0</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#why-copper" title="Why Copper">Why Copper</a></li><li><a href="#technical-overview" title="Technical Overview">Technical Overview</a></li><li><a href="#blazing-fast" title="Blazing Fast">Blazing Fast</a></li><li><a href="#you-dont-have-a-real-robot-yet-try-it-in-our-minimalistic-sim-environment" title="You don’t have a real robot yet? Try it in our minimalistic sim environment!">You don’t have a real robot yet? Try it in our minimalistic sim environment!</a></li><li><a href="#features" title="Features">Features</a></li><li><a href="#kickstarting-a-copper-project-for-the-impatient" title="Kickstarting a Copper project for the impatient">Kickstarting a Copper project for the impatient</a></li><li><a href="#what-does-a-copper-application-look-like" title="What does a Copper application look like?">What does a Copper application look like?</a></li><li><a href="#modular-configuration" title="Modular Configuration">Modular Configuration</a><ul><li><a href="#including-configuration-files" title="Including Configuration Files">Including Configuration Files</a></li><li><a href="#parameter-substitution" title="Parameter Substitution">Parameter Substitution</a></li><li><a href="#use-cases" title="Use Cases">Use Cases</a></li></ul></li><li><a href="#deployment-of-the-application" title="Deployment of the application">Deployment of the application</a></li><li><a href="#how-is-copper-better-or-different-from-the-ros-robot-operating-system" title="How is Copper better or different from the ROS (Robot Operating System)?">How is Copper better or different from the ROS (Robot Operating System)?</a><ul><li><a href="#-performance" title="🚀 Performance">🚀 Performance</a></li><li><a href="#safety" title="Safety">Safety</a></li><li><a href="#release-notes" title="Release Notes">Release Notes</a></li><li><a href="#roadmap" title="Roadmap">Roadmap</a></li></ul></li></ul><h3><a href="#reexports">Crate Items</a></h3><ul class="block"><li><a href="#reexports" title="Re-exports">Re-exports</a></li><li><a href="#modules" title="Modules">Modules</a></li><li><a href="#macros" title="Macros">Macros</a></li><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li><li><a href="#constants" title="Constants">Constants</a></li><li><a href="#traits" title="Traits">Traits</a></li><li><a href="#functions" title="Functions">Functions</a></li><li><a href="#types" title="Type Aliases">Type Aliases</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><h1>Crate <span>cu29</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/cu29/lib.rs.html#1-55">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h1 style="color: #b87333;"><img src="https://github.com/copper-project/copper-rs/blob/master/doc/static/cu29.png?raw=true" width="60" /> &nbsp;&nbsp;&nbsp;&nbsp; Copper Runtime & SDK</h1>
 <p><a href="https://github.com/gbin/copper-project/actions/workflows/general.yml"><img src="https://github.com/gbin/copper-project/actions/workflows/general.yml/badge.svg" alt="copper" /></a>
 <img src="https://img.shields.io/github/last-commit/copper-project/copper-rs" alt="GitHub last commit" />
 <img src="https://img.shields.io/badge/Rust-1.80+-orange.svg" alt="" />
@@ -17,41 +17,9 @@
 <p><strong style="color: #b87333;">🧠 Interoperable with ROS2</strong> – bridges via Zenoh opening the path for a progressive migration.  
 <p><strong style="color: #b87333;">🪶 Runs anywhere</strong> – from Linux servers to bare-metal RP2350  
 <p><strong style="color: #b87333;">📦 Built to ship</strong> – one stack from simulation to production
-<p>Copper can be deployed on:</p>
-<table style="color: white; background-color: black; font-family: sans-serif;">
-  <tr>
-    <td style="text-align: center; padding: 12px;">
-      <img src="https://upload.wikimedia.org/wikipedia/commons/3/35/Tux.svg" width="50"/>
-    </td>
-    <td style="font-weight: bold; text-align: center;">Linux</td>
-    <td style="text-align: right; padding-left: 10px;">x86_64<br>armv7<br>aarch64<br>riscv64</td>
-  </tr>
-  <tr>
-    <td style="text-align: center; padding: 12px;">
-      <img src="https://upload.wikimedia.org/wikipedia/commons/3/31/Apple_logo_white.svg" width="50"/>
-    </td>
-    <td style="font-weight: bold; text-align: center;">macOS</td>
-    <td style="text-align: right; padding-left: 10px;">arm64</td>
-  </tr>
-  <tr>
-    <td style="text-align: center; padding: 12px;">
-      <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Windows_logo_-_2021_%28White%29.svg/768px-Windows_logo_-_2021_%28White%29.svg.png?20230326181935" width="50"/>
-    </td>
-    <td style="font-weight: bold; text-align: center;">Windows</td>
-    <td style="text-align: right; padding-left: 10px;">x86_64</td>
-  </tr>
-  <tr>
-    <td style="text-align: center; padding: 12px;">
-      <img src="https://upload.wikimedia.org/wikipedia/commons/d/d7/Android_robot.svg" width="50"/>
-    </td>
-    <td style="font-weight: bold; text-align: center;">Android</td>
-    <td style="text-align: right; padding-left: 10px;">arm64</td>
-  </tr>
-</table>
-<p>But can ALSO run baremetal on microcontrollers. Here it is on our reference platform based on the RP2350, see
-<a href="https://github.com/copper-project/copper-rs/wiki/Baremetal-Development">Copper baremetal development</a> if you are interested to deploy Copper as an actual Operating System.</p>
-<img width="500" src="https://github.com/copper-project/copper-rs/wiki/imgs/baremetal-w-camera.jpg" alt="graph"/>
-<h4 id="technical-overview"><a class="doc-anchor" href="#technical-overview">§</a>Technical Overview</h4>
+<p>Copper can be deployed on a variety of traditional OSes and baremetal MCU:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code>  &lt;img src=<span class="string">"https://upload.wikimedia.org/wikipedia/commons/3/35/Tux.svg" </span>width=<span class="string">"50"</span>/&gt;<span class="kw-2">&amp;</span>nbsp;&lt;img src=<span class="string">"https://upload.wikimedia.org/wikipedia/commons/3/31/Apple_logo_white.svg" </span>width=<span class="string">"50"</span>/&gt;<span class="kw-2">&amp;</span>nbsp;&lt;img src=<span class="string">"https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Windows_logo_-_2021_%28White%29.svg/768px-Windows_logo_-_2021_%28White%29.svg.png?20230326181935" </span>width=<span class="string">"50"</span>/&gt;<span class="kw-2">&amp;</span>nbsp;&lt;img src=<span class="string">"https://upload.wikimedia.org/wikipedia/commons/d/d7/Android_robot.svg" </span>width=<span class="string">"50"</span>/&gt;</code></pre></div><h4 id="technical-overview"><a class="doc-anchor" href="#technical-overview">§</a>Technical Overview</h4>
 <p>Copper is a deterministic and data-oriented Robot SDK with these key components:</p>
 <ul>
 <li>
@@ -98,121 +66,7 @@ as a real log on the robot or from the sim.</li>
 <li><strong>Simulation</strong>: We have a simple simulation environment to test your robot. Test your robot before the hardware is
 built and try out your robot the first time without risking a real crash.</li>
 </ol>
-<h4 id="growing-list-of-readily-available-components"><a class="doc-anchor" href="#growing-list-of-readily-available-components">§</a>Growing list of readily available Components</h4><table style="border-collapse:collapse; width:100%;">
-  <thead style="background:#1f3f1f; color:white;">
-    <tr>
-      <th style="padding:8px; border:1px solid #444;">Category</th>
-      <th style="padding:8px; border:1px solid #444;">Type</th>
-      <th style="padding:8px; border:1px solid #444;"> </th>
-      <th style="padding:8px; border:1px solid #444;">Description</th>
-      <th style="padding:8px; border:1px solid #444;">Crate Name</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr style="background:#111;">
-      <td rowspan="7" style="padding:8px; border:1px solid #444;">Sensors</td>
-      <td style="padding:8px; border:1px solid #444;">Lidar</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_vlp16/doc/vlp16.jpg?raw=true"/></td>
-      <td style="padding:8px; border:1px solid #444;"><a href="components/sources/cu_vlp16">Velodyne/Ouster VLP16</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-vlp16</code></td>
-    </tr>
-    <tr style="background:#1a1a1a;">
-      <td style="padding:8px; border:1px solid #444;">Lidar</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_hesai/doc/XT32-16.png?raw=true"/></td>
-      <td style="padding:8px; border:1px solid #444;"><a href="components/sources/cu_hesai">Hesai/XT32</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-hesai</code></td>
-    </tr>
-    <tr style="background:#111;">
-      <td style="padding:8px; border:1px solid #444;">Video Camera</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_v4l/doc/camera.png?raw=true"/></td>
-      <td style="padding:8px; border:1px solid #444;"><a href="components/sources/cu_v4l">Video4Linux</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-v4l</code></td>
-    </tr>
-    <tr style="background:#1a1a1a;">
-      <td style="padding:8px; border:1px solid #444;">Video Camera</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://gstreamer.freedesktop.org/data/images/artwork/gstreamer-logo-75.png"/></td>
-      <td style="padding:8px; border:1px solid #444;"><a href="components/sources/cu_v4l">Video4Linux</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-v4l</code></td>
-    </tr>
-    <tr style="background:#111;">
-      <td style="padding:8px; border:1px solid #444;">IMU</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_wt901/doc/wt901.jpg?raw=true"/></td>
-      <td style="padding:8px; border:1px solid #444;"><a href="components/sources/cu_wt901">WitMotion WT901</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-wt901</code></td>
-    </tr>
-    <tr style="background:#1a1a1a;">
-      <td style="padding:8px; border:1px solid #444;">ADC/Position</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_ads7883/doc/ads7883-scale.jpg?raw=true"/></td>
-      <td style="padding:8px; border:1px solid #444;"><a href="components/sources/cu_ads7883">ADS 7883 3MPSPS SPI ADC</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-ads7883</code></td>
-    </tr>
-    <tr style="background:#111;">
-      <td style="padding:8px; border:1px solid #444;">Encoder</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_rp_encoder/doc/encoder.jpg?raw=true"/></td>
-      <td style="padding:8px; border:1px solid #444;"><a href="components/sources/cu_rp_encoder">Generic Directional Wheel encoder</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-rp-encoder</code></td>
-    </tr>
-    <tr style="background:#1a1a1a;">
-      <td rowspan="3" style="padding:8px; border:1px solid #444;">Actuators</td>
-      <td style="padding:8px; border:1px solid #444;">GPIO</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://github.com/copper-project/copper-rs/blob/master/components/sinks/cu_rp_gpio/doc/rp.jpg?raw=true"/></td>
-      <td style="padding:8px; border:1px solid #444;"><a href="components/sinks/cu_rp_gpio">Raspberry Pi</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-rp-gpio</code></td>
-    </tr>
-    <tr style="background:#111;">
-      <td style="padding:8px; border:1px solid #444;">Servo</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://github.com/copper-project/copper-rs/blob/master/components/sinks/cu_lewansoul/doc/lewansoul.jpg?raw=true"/></td>
-      <td style="padding:8px; border:1px solid #444;"><a href="components/sinks/cu_lewansoul">Lewansoul Servo Bus (LX-16A, etc.)</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-lewansoul</code></td>
-    </tr>
-    <tr style="background:#1a1a1a;">
-      <td style="padding:8px; border:1px solid #444;">DC Motor Driver</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://github.com/copper-project/copper-rs/blob/master/components/sinks/cu_rp_sn754410/doc/sn754410.jpeg?raw=true"/></td>
-      <td style="padding:8px; border:1px solid #444;"><a href="components/sinks/cu_rp_sn754410">Half-H Driver for CD Motors</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-rp-sn754410</code></td>
-    </tr>
-    <tr style="background:#1a1a1a;">
-      <td>Algorithms</td>
-      <td style="padding:8px; border:1px solid #444;">PID Controller</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://github.com/copper-project/copper-rs/blob/master/components/tasks/cu_pid/doc/pid.png?raw=true"/></td>
-      <td style="padding:8px; border:1px solid #444;"><a href="components/tasks/cu_pid">PID Controller</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-pid</code></td>
-    </tr>
-    <tr style="background:#111;">
-      <td>Monitors</td>
-      <td style="padding:8px; border:1px solid #444;">TUI Monitor</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="300" src="https://github.com/copper-project/copper-rs/blob/master/components/monitors/cu_consolemon/doc/tasks.png?raw=true"/></td>
-      <td style="padding:8px; border:1px solid #444;"><a href="components/monitors/cu_consolemon">Console based monitor</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-consolemon</code></td>
-    </tr>
-    <tr style="background:#111;">
-      <td rowspan="3">Middleware</td>
-      <td style="padding:8px; border:1px solid #444;">IPC</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://zenoh.io/img/zenoh-dragon-bg-150x163.png"/></td>
-      <td style="padding:8px; border:1px solid #444;">Zenoh<br/><a href="components/sinks/cu_msp_sink">sink</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-zenoh-sink</code></td>
-    </tr>
-    <tr style="background:#111;">
-      <td style="padding:8px; border:1px solid #444;">IPC</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://user-images.githubusercontent.com/8661268/114321508-64a6b000-9b1b-11eb-95ef-b84c91387cff.png"/></td>
-      <td style="padding:8px; border:1px solid #444;">Iceroryx2<br/><a href="components/sources/cu_iceoryx2_src">source</a><br/><a href="components/sinks/cu_iceoryx2_sink">sink</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-iceoryx2-src</code><br/><code>cu-iceoryx2-sink</code></td>
-    </tr>
-    <tr style="background:#1a1a1a;">
-      <td style="padding:8px; border:1px solid #444;">Flight Controller (Drones)</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_msp_src/doc/fc.webp?raw=true"/></td>
-      <td style="padding:8px; border:1px solid #444;">Multiwii Serial Protocol (MSP)<br/><a href="components/sources/cu_msp_src">source</a><br/><a href="components/sinks/cu_msp_sink">sink</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-msp-src</code><br/><code>cu-msp-sink</code></td>
-    </tr>
-    <tr style="background:#111;">
-      <td rowspan="1">Bridges</td>
-      <td style="padding:8px; border:1px solid #444;">ROS2 (Humble+)</td>
-      <td style="padding:8px; border:1px solid #444; text-align:center;"><img width="200" src="https://github.com/copper-project/copper-rs/blob/master/components/sinks/cu_zenoh_ros_sink/doc/ROS2.png?raw=true"/></td>
-      <td style="padding:8px; border:1px solid #444;">ROS2 Bridge (over Zenoh)<br/><a href="components/sinks/cu_zenoh_ros_sink">sink</a></td>
-      <td style="padding:8px; border:1px solid #444;"><code>cu-zenoh-ros-sink</code></td>
-    </tr>
-  </tbody>
-</table>
+<p>With a growing list of readily available [Components](https://github.com/copper-project/copper-rs/wiki/List-of-Available-Copper-Tasks-(HW,-Middleware,-Algorithms-etc…)</p>
 <h4 id="kickstarting-a-copper-project-for-the-impatient"><a class="doc-anchor" href="#kickstarting-a-copper-project-for-the-impatient">§</a>Kickstarting a Copper project for the impatient</h4>
 <p>You can generate a project from one of Copper’s templates.
 The generator will ask you the name for your new project interactively:</p>

@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29_derive/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_derive" data-themes="" data-resource-suffix="" data-rustdoc-version="1.92.0-nightly (695857bc3 2025-10-21)" data-channel="nightly" data-search-js="search-d69d8955.js" data-stringdex-js="stringdex-c3e638e9.js" data-settings-js="settings-c38705f0.js" ><script src="../../static.files/storage-e2aeef58.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-ce535bd0.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">cu29_derive/</div>lib.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>proc_macro::TokenStream;
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29_derive/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_derive" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0-nightly (adaa83897 2025-10-27)" data-channel="nightly" data-search-js="search-d69d8955.js" data-stringdex-js="stringdex-c3e638e9.js" data-settings-js="settings-c38705f0.js" ><script src="../../static.files/storage-e2aeef58.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-ce535bd0.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">cu29_derive/</div>lib.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>proc_macro::TokenStream;
 <a href=#2 id=2 data-nosnippet>2</a><span class="kw">use </span>quote::{format_ident, quote};
 <a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>std::fs::read_to_string;
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>syn::meta::parser;
@@ -49,7 +49,7 @@
 <a href=#49 id=49 data-nosnippet>49</a>    </span><span class="kw">let </span>std = <span class="bool-val">false</span>;
 <a href=#50 id=50 data-nosnippet>50</a>
 <a href=#51 id=51 data-nosnippet>51</a>    <span class="kw">let </span>config = <span class="macro">parse_macro_input!</span>(config_path_lit <span class="kw">as </span>LitStr).value();
-<a href=#52 id=52 data-nosnippet>52</a>    <span class="kw">if </span>!std::path::Path::new(<span class="kw-2">&amp;</span>config_full_path(<span class="kw-2">&amp;</span>config)).exists() {
+<a href=#52 id=52 data-nosnippet>52</a>    <span class="macro">if !</span>std::path::Path::new(<span class="kw-2">&amp;</span>config_full_path(<span class="kw-2">&amp;</span>config)).exists() {
 <a href=#53 id=53 data-nosnippet>53</a>        <span class="kw">return </span>return_error(<span class="macro">format!</span>(
 <a href=#54 id=54 data-nosnippet>54</a>            <span class="string">"The configuration file `{config}` does not exist. Please provide a valid path."
 <a href=#55 id=55 data-nosnippet>55</a>        </span>));
@@ -97,7 +97,7 @@
 <a href=#97 id=97 data-nosnippet>97</a>
 <a href=#98 id=98 data-nosnippet>98</a>    <span class="kw">let </span>support = gen_culist_support(<span class="kw-2">&amp;</span>runtime_plan, <span class="kw-2">&amp;</span>taskid_order, <span class="kw-2">&amp;</span>all_tasks_member_ids);
 <a href=#99 id=99 data-nosnippet>99</a>
-<a href=#100 id=100 data-nosnippet>100</a>    <span class="kw">let </span>extra_imports = <span class="kw">if </span>!std {
+<a href=#100 id=100 data-nosnippet>100</a>    <span class="kw">let </span>extra_imports = <span class="macro">if !</span>std {
 <a href=#101 id=101 data-nosnippet>101</a>        <span class="macro">quote!</span> {
 <a href=#102 id=102 data-nosnippet>102</a>            <span class="kw">use </span>core::fmt::Debug;
 <a href=#103 id=103 data-nosnippet>103</a>            <span class="kw">use </span>core::fmt::Formatter;
@@ -379,7 +379,7 @@
 <a href=#379 id=379 data-nosnippet>379</a>        }
 <a href=#380 id=380 data-nosnippet>380</a>    };
 <a href=#381 id=381 data-nosnippet>381</a>
-<a href=#382 id=382 data-nosnippet>382</a>    <span class="kw">if </span>!std::path::Path::new(<span class="kw-2">&amp;</span>config_full_path(<span class="kw-2">&amp;</span>config_file)).exists() {
+<a href=#382 id=382 data-nosnippet>382</a>    <span class="macro">if !</span>std::path::Path::new(<span class="kw-2">&amp;</span>config_full_path(<span class="kw-2">&amp;</span>config_file)).exists() {
 <a href=#383 id=383 data-nosnippet>383</a>        <span class="kw">return </span>return_error(<span class="macro">format!</span>(
 <a href=#384 id=384 data-nosnippet>384</a>            <span class="string">"The configuration file `{config_file}` does not exist. Please provide a valid path."
 <a href=#385 id=385 data-nosnippet>385</a>        </span>));
@@ -882,7 +882,7 @@
 <a href=#882 id=882 data-nosnippet>882</a>                                            }
 <a href=#883 id=883 data-nosnippet>883</a>                                        }
 <a href=#884 id=884 data-nosnippet>884</a>                                    }, {  <span class="comment">// logging preprocess
-<a href=#885 id=885 data-nosnippet>885</a>                                        </span><span class="kw">if </span>!task_specs.logging_enabled[step.node_id <span class="kw">as </span>usize] {
+<a href=#885 id=885 data-nosnippet>885</a>                                        </span><span class="macro">if !</span>task_specs.logging_enabled[step.node_id <span class="kw">as </span>usize] {
 <a href=#886 id=886 data-nosnippet>886</a>
 <a href=#887 id=887 data-nosnippet>887</a>                                            <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
 <a href=#888 id=888 data-nosnippet>888</a>                                            </span><span class="macro">eprintln!</span>(
@@ -1096,7 +1096,7 @@
 <a href=#1096 id=1096 data-nosnippet>1096</a>                                        }
 <a href=#1097 id=1097 data-nosnippet>1097</a>                                    }, {
 <a href=#1098 id=1098 data-nosnippet>1098</a>
-<a href=#1099 id=1099 data-nosnippet>1099</a>                                    <span class="kw">if </span>!task_specs.logging_enabled[step.node_id <span class="kw">as </span>usize] {
+<a href=#1099 id=1099 data-nosnippet>1099</a>                                    <span class="macro">if !</span>task_specs.logging_enabled[step.node_id <span class="kw">as </span>usize] {
 <a href=#1100 id=1100 data-nosnippet>1100</a>                                        <span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
 <a href=#1101 id=1101 data-nosnippet>1101</a>                                        </span><span class="macro">eprintln!</span>(
 <a href=#1102 id=1102 data-nosnippet>1102</a>                                            <span class="string">"{} -&gt; Logging Disabled"</span>,
@@ -2152,4 +2152,5 @@
 <a href=#2152 id=2152 data-nosnippet>2152</a>        <span class="kw">let </span>t = trybuild::TestCases::new();
 <a href=#2153 id=2153 data-nosnippet>2153</a>        t.compile_fail(<span class="string">"tests/compile_fail/*/*.rs"</span>);
 <a href=#2154 id=2154 data-nosnippet>2154</a>    }
-<a href=#2155 id=2155 data-nosnippet>2155</a>}</code></pre></div></section></main></body></html>
+<a href=#2155 id=2155 data-nosnippet>2155</a>}
+</code></pre></div></section></main></body></html>
