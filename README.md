@@ -79,7 +79,7 @@ The source code for this demo is available in the [examples/cu_rp_balancebot](ex
 7. **Simulation**: We have a simple simulation environment to test your robot. Test your robot before the hardware is
    built and try out your robot the first time without risking a real crash.
 
-With a growing list of readily available [Components](https://github.com/copper-project/copper-rs/wiki/List-of-Available-Copper-Tasks-(HW,-Middleware,-Algorithms-etc...) 
+With a growing list of readily available [Components](https://github.com/copper-project/copper-rs/wiki/List-of-Available-Copper-Tasks-\(HW,-Middleware,-Algorithms-etc...) 
 
 ### Supported Platforms
 
@@ -275,12 +275,6 @@ You can parameterize your included configurations using template variables:
     ],
 )
 ```
-
-#### Use Cases
-
-1. **Sharing common components** across multiple robot configurations
-2. **Creating environment-specific configurations** (development, testing, production)
-3. **Reusing task templates** with different parameters (e.g., multiple motors with different pins)
 
 For more details on modular configuration, see the [Modular Configuration documentation](doc/modular_config.md).
 
