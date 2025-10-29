@@ -71,7 +71,7 @@ macro_rules! input_msg {
     };
 }
 
-// A convenience macro to get from a payload to a proper CuMsg used as output.
+/// A convenience macro to get from a payload to a proper CuMsg used as output.
 #[macro_export]
 macro_rules! output_msg {
     ($ty:ty) => {
@@ -80,6 +80,50 @@ macro_rules! output_msg {
     ($lt:lifetime, $ty:ty) => {
         CuMsg<$ty>  // This is for backward compatibility
     };
+}
+
+/// A convenience macro to get a message set as an enum.
+/// It allows you to create a quick protocol based on a simple enum type.
+///
+/// For example:
+/// cu_msg_set!(pub myset {
+///     msgs::MotorCmd => MotorCmd,
+///     msgs::GimbalSetpoint => GimbalSetpoint,
+///     msgs::ImuSample => ImuSample,
+///     msgs::BatteryState => BatteryState
+/// });
+///
+/// use myset::Payload as MyTaggedPayload;
+/// use myset::Msg as MyCuMsgWithTaggedPayload;
+///
+#[macro_export]
+macro_rules! cu_msg_set {
+    (
+        $(#[$meta:meta])*
+        $vis:vis $modname:ident {
+            $( $ty:path => $Var:ident ),+ $(,)?
+        }
+    ) => {
+        $vis mod $modname {
+            use super::*;
+            $(#[$meta])*
+            #[derive(Default, Debug, Clone, bincode::Encode, bincode::Decode, serde::Serialize)]
+            pub enum Set {
+                #[default]
+                __Unit,
+                $( $Var($ty) ),+
+            }
+
+            impl CuMsgPayload for Set {}
+
+            $( impl From<$ty> for Set {
+                fn from(v: $ty) -> Self { Set::$Var(v) }
+            })+
+
+            pub type Payload = Set;
+            pub type Msg = CuMsg<Payload>;
+        }
+    }
 }
 
 /// CuMsgMetadata is a structure that contains metadata common to all CuStampedDataSet.

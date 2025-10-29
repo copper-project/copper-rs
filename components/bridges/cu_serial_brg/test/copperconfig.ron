@@ -1,0 +1,37 @@
+    (
+    tasks: [
+        (
+            id: "alice",
+            type: "::NullModem",
+            config: {
+                port: "/dev/ttyUSB0",
+                baud_rate: 115200,
+            },
+        ),
+        (
+            id: "bob",
+            type: "::NullModem",
+            config: {
+                port: "/dev/ttyUSB0",
+                baud_rate: 115200,
+            },
+        )
+    ],
+    bridges: [
+        (
+            id: "alice_serial",
+            type: "cu_serial_brg::CuSerialBridge<::MyMsg, ::MyMsg>",
+        ),
+        // Those 2 are connected externally through a pty
+        (
+            id: "bob_serial",
+            type: "cu_serial_brg::CuSerialBridge<::MyMsg, ::MyMsg>",
+        ),
+     ],
+    cnx: [
+        (src: "alice",  dst: "alice_serial",   msg: "::MyMsg"),
+        (src: "alice_serial",  dst: "alice",   msg: "::MyMsg"),
+        (src: "bob",  dst: "bob_serial",   msg: "::MyMsg"),
+        (src: "bob_serial",  dst: "bobe",   msg: "::MyMsg"),
+    ],
+)
