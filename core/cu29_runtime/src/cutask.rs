@@ -356,6 +356,55 @@ pub trait CuSinkTask: Freezable {
     }
 }
 
+/// A Bridge behaves like a pair of Sink and Src tasks but holds common resources.
+/// It is usually used to connect a duplex external entity to the copper framework.
+/// For example, some message-passing middleware, a CAN bus or a serial port.
+///
+/// It is called twice per cycle, once to optionally send a message
+/// and once to optionally receive a message.
+///
+/// In the Copper graph, you need to connect it exactly like a CuSrcTask AND a CuSinkTask.
+pub trait CuBridge: Freezable {
+    type Input<'m>: CuMsgPayload;
+    type Output<'m>: CuMsgPayload;
+
+    /// Here you need to initialize everything your task will need for the duration of its lifetime.
+    /// The config allows you to access the configuration of the task.
+    fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
+    where
+        Self: Sized;
+
+    /// Start is called between the creation of the daemon and the first call to pre/process.
+    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        Ok(())
+    }
+
+    /// This is a method called by the runtime before send and receive. This is scheduled on a
+    /// "best effort" basis, as soon as possible call to give a chance for the task to do some
+    /// work before to prepare to make "process" as short as possible.
+    fn preprocess(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        Ok(())
+    }
+
+    /// Send a message through the bridge
+    fn send<'i>(&mut self, clock: &RobotClock, msg: &Self::Input<'i>) -> CuResult<()>;
+
+    /// Receive a message through the bridge
+    fn receive<'o>(&mut self, clock: &RobotClock, msg: &mut Self::Output<'o>) -> CuResult<()>;
+
+    /// This is a method called by the runtime after send and receive. It is a "best effort" scheduling
+    /// for the bridge to update some state after the I/O is out of the way.
+    /// It can be use for example to maintain statistics etc. that are not time-critical for the robot.
+    fn postprocess(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        Ok(())
+    }
+
+    /// Called to stop the daemon. It signals that the *process method won't be called until start is called again.
+    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
