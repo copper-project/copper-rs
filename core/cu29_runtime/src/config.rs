@@ -336,6 +336,21 @@ pub struct Cnx {
     pub missions: Option<Vec<String>>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CuDirection {
+    Outgoing,
+    Incoming,
+}
+
+impl From<CuDirection> for petgraph::Direction {
+    fn from(dir: CuDirection) -> Self {
+        match dir {
+            CuDirection::Outgoing => petgraph::Direction::Outgoing,
+            CuDirection::Incoming => petgraph::Direction::Incoming,
+        }
+    }
+}
+
 #[derive(Default, Debug, Clone)]
 pub struct CuGraph(pub StableDiGraph<Node, Cnx, NodeId>);
 
@@ -348,12 +363,35 @@ impl CuGraph {
             .collect()
     }
 
+    #[allow(dead_code)]
+    pub fn get_neighbor_ids(&self, node_id: NodeId, dir: CuDirection) -> Vec<NodeId> {
+        self.0
+            .neighbors_directed(node_id.into(), dir.into()) // .into() 한 방으로 깔끔하게 변환!
+            .map(|petgraph_index| petgraph_index.index() as NodeId)
+            .collect()
+    }
+
+    #[allow(dead_code)]
+    pub fn incoming_neighbor_count(&self, node_id: NodeId) -> usize {
+        self.0.neighbors_directed(node_id.into(), Incoming).count()
+    }
+
+    #[allow(dead_code)]
+    pub fn outgoing_neighbor_count(&self, node_id: NodeId) -> usize {
+        self.0.neighbors_directed(node_id.into(), Outgoing).count()
+    }
+
     pub fn node_indices(&self) -> Vec<petgraph::stable_graph::NodeIndex> {
         self.0.node_indices().collect()
     }
 
     pub fn add_node(&mut self, node: Node) -> CuResult<NodeId> {
         Ok(self.0.add_node(node).index() as NodeId)
+    }
+
+    #[allow(dead_code)]
+    pub fn connection_exists(&self, source: NodeId, target: NodeId) -> bool {
+        self.0.find_edge(source.into(), target.into()).is_some()
     }
 
     pub fn connect_ext(
@@ -391,6 +429,7 @@ impl CuGraph {
     /// Get the node with the given id.
     /// If mission_id is provided, get the node from that mission's graph.
     /// Otherwise get the node from the simple graph.
+    #[allow(dead_code)]
     pub fn get_node(&self, node_id: NodeId) -> Option<&Node> {
         self.0.node_weight(node_id.into())
     }
@@ -403,6 +442,14 @@ impl CuGraph {
     #[allow(dead_code)]
     pub fn get_node_mut(&mut self, node_id: NodeId) -> Option<&mut Node> {
         self.0.node_weight_mut(node_id.into())
+    }
+
+    pub fn get_node_id_by_name(&self, name: &str) -> Option<NodeId> {
+        self.0
+            .node_indices()
+            .into_iter()
+            .find(|idx| self.0[*idx].get_id() == name)
+            .map(|i| i.index() as NodeId)
     }
 
     #[allow(dead_code)]
@@ -460,6 +507,13 @@ impl CuGraph {
         })
     }
 
+    #[allow(dead_code)]
+    pub fn get_connection_msg_type(&self, source: NodeId, target: NodeId) -> Option<&str> {
+        self.0
+            .find_edge(source.into(), target.into())
+            .map(|edge_index| self.0[edge_index].msg.as_str())
+    }
+
     /// Get the list of edges that are connected to the given node as a source.
     fn get_edges_by_direction(
         &self,
@@ -480,6 +534,16 @@ impl CuGraph {
     /// Get the list of edges that are connected to the given node as a destination.
     pub fn get_dst_edges(&self, node_id: NodeId) -> CuResult<Vec<usize>> {
         self.get_edges_by_direction(node_id, Incoming)
+    }
+
+    #[allow(dead_code)]
+    pub fn node_count(&self) -> usize {
+        self.0.node_count()
+    }
+
+    #[allow(dead_code)]
+    pub fn edge_count(&self) -> usize {
+        self.0.edge_count()
     }
 
     /// Adds an edge between two nodes/tasks in the configuration graph.
@@ -742,45 +806,28 @@ where
                     if let Some(cnx_missions) = &c.missions {
                         // if there is a filter by mission on the connection, only add the connection to the mission if it matches the filter.
                         if cnx_missions.contains(&mission_id.to_owned()) {
-                            let src = graph
-                                .node_indices()
-                                .into_iter()
-                                .find(|i| graph.get_node(i.index() as NodeId).unwrap().id == c.src)
-                                .ok_or_else(|| {
+                            let src =
+                                graph.get_node_id_by_name(c.src.as_str()).ok_or_else(|| {
                                     E::from(format!("Source node not found: {}", c.src))
                                 })?;
-                            let dst = graph
-                                .node_indices()
-                                .into_iter()
-                                .find(|i| graph.get_node(i.index() as NodeId).unwrap().id == c.dst)
-                                .ok_or_else(|| {
+                            let dst =
+                                graph.get_node_id_by_name(c.dst.as_str()).ok_or_else(|| {
                                     E::from(format!("Destination node not found: {}", c.dst))
                                 })?;
                             graph
-                                .connect_ext(
-                                    src.index() as NodeId,
-                                    dst.index() as NodeId,
-                                    &c.msg,
-                                    Some(cnx_missions.clone()),
-                                )
+                                .connect_ext(src, dst, &c.msg, Some(cnx_missions.clone()))
                                 .map_err(|e| E::from(e.to_string()))?;
                         }
                     } else {
                         // if there is no filter by mission on the connection, add the connection to the mission.
                         let src = graph
-                            .node_indices()
-                            .into_iter()
-                            .find(|i| graph.get_node(i.index() as NodeId).unwrap().id == c.src)
+                            .get_node_id_by_name(c.src.as_str())
                             .ok_or_else(|| E::from(format!("Source node not found: {}", c.src)))?;
-                        let dst = graph
-                            .node_indices()
-                            .into_iter()
-                            .find(|i| graph.get_node(i.index() as NodeId).unwrap().id == c.dst)
-                            .ok_or_else(|| {
-                                E::from(format!("Destination node not found: {}", c.dst))
-                            })?;
+                        let dst = graph.get_node_id_by_name(c.dst.as_str()).ok_or_else(|| {
+                            E::from(format!("Destination node not found: {}", c.dst))
+                        })?;
                         graph
-                            .connect_ext(src.index() as NodeId, dst.index() as NodeId, &c.msg, None)
+                            .connect_ext(src, dst, &c.msg, None)
                             .map_err(|e| E::from(e.to_string()))?;
                     }
                 }
@@ -802,17 +849,13 @@ where
         if let Some(cnx) = &representation.cnx {
             for c in cnx {
                 let src = graph
-                    .node_indices()
-                    .into_iter()
-                    .find(|i| graph.get_node(i.index() as NodeId).unwrap().id == c.src)
+                    .get_node_id_by_name(c.src.as_str())
                     .ok_or_else(|| E::from(format!("Source node not found: {}", c.src)))?;
                 let dst = graph
-                    .node_indices()
-                    .into_iter()
-                    .find(|i| graph.get_node(i.index() as NodeId).unwrap().id == c.dst)
+                    .get_node_id_by_name(c.dst.as_str())
                     .ok_or_else(|| E::from(format!("Destination node not found: {}", c.dst)))?;
                 graph
-                    .connect_ext(src.index() as NodeId, dst.index() as NodeId, &c.msg, None)
+                    .connect_ext(src, dst, &c.msg, None)
                     .map_err(|e| E::from(e.to_string()))?;
             }
         }
@@ -1320,8 +1363,8 @@ mod tests {
         let deserialized = CuConfig::deserialize_ron(&serialized);
         let graph = config.graphs.get_graph(None).unwrap();
         let deserialized_graph = deserialized.graphs.get_graph(None).unwrap();
-        assert_eq!(graph.0.node_count(), deserialized_graph.0.node_count());
-        assert_eq!(graph.0.edge_count(), deserialized_graph.0.edge_count());
+        assert_eq!(graph.node_count(), deserialized_graph.node_count());
+        assert_eq!(graph.edge_count(), deserialized_graph.edge_count());
     }
 
     #[test]
@@ -1356,9 +1399,9 @@ mod tests {
         let txt = r#"( missions: [ (id: "data_collection"), (id: "autonomous")])"#;
         let config = CuConfig::deserialize_ron(txt);
         let graph = config.graphs.get_graph(Some("data_collection")).unwrap();
-        assert!(graph.0.node_count() == 0);
+        assert!(graph.node_count() == 0);
         let graph = config.graphs.get_graph(Some("autonomous")).unwrap();
-        assert!(graph.0.node_count() == 0);
+        assert!(graph.node_count() == 0);
     }
 
     #[test]
@@ -1461,10 +1504,10 @@ mod tests {
 
         let config = CuConfig::deserialize_ron(txt);
         let m1_graph = config.graphs.get_graph(Some("m1")).unwrap();
-        assert_eq!(m1_graph.0.edge_count(), 1);
-        assert_eq!(m1_graph.0.node_count(), 2);
-        let index = EdgeIndex::new(0);
-        let cnx = m1_graph.0.edge_weight(index).unwrap();
+        assert_eq!(m1_graph.edge_count(), 1);
+        assert_eq!(m1_graph.node_count(), 2);
+        let index = 0;
+        let cnx = m1_graph.get_edge_weight(index).unwrap();
 
         assert_eq!(cnx.src, "src1");
         assert_eq!(cnx.dst, "sink");
@@ -1472,10 +1515,10 @@ mod tests {
         assert_eq!(cnx.missions, Some(vec!["m1".to_string()]));
 
         let m2_graph = config.graphs.get_graph(Some("m2")).unwrap();
-        assert_eq!(m2_graph.0.edge_count(), 1);
-        assert_eq!(m2_graph.0.node_count(), 2);
-        let index = EdgeIndex::new(0);
-        let cnx = m2_graph.0.edge_weight(index).unwrap();
+        assert_eq!(m2_graph.edge_count(), 1);
+        assert_eq!(m2_graph.node_count(), 2);
+        let index = 0;
+        let cnx = m2_graph.get_edge_weight(index).unwrap();
         assert_eq!(cnx.src, "src2");
         assert_eq!(cnx.dst, "sink");
         assert_eq!(cnx.msg, "u32");
@@ -1503,10 +1546,10 @@ mod tests {
         let serialized = config.serialize_ron();
         let deserialized = CuConfig::deserialize_ron(&serialized);
         let m1_graph = deserialized.graphs.get_graph(Some("m1")).unwrap();
-        assert_eq!(m1_graph.0.edge_count(), 1);
-        assert_eq!(m1_graph.0.node_count(), 2);
-        let index = EdgeIndex::new(0);
-        let cnx = m1_graph.0.edge_weight(index).unwrap();
+        assert_eq!(m1_graph.edge_count(), 1);
+        assert_eq!(m1_graph.node_count(), 2);
+        let index = 0;
+        let cnx = m1_graph.get_edge_weight(index).unwrap();
         assert_eq!(cnx.src, "src1");
         assert_eq!(cnx.dst, "sink");
         assert_eq!(cnx.msg, "u32");

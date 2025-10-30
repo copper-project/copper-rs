@@ -1,7 +1,6 @@
 #[cfg(all(test, feature = "std"))]
 mod tests {
-    use cu29_runtime::config::{read_configuration, Outgoing};
-    use petgraph::visit::EdgeRef;
+    use cu29_runtime::config::read_configuration;
     use std::fs::{create_dir_all, write};
     use tempfile::tempdir;
 
@@ -137,37 +136,21 @@ mod tests {
         let graph = config.graphs.get_graph(None).unwrap();
 
         // Find node indices for verification
-        let indices = graph.node_indices();
-        let source_idx = indices
-            .iter()
-            .find(|idx| graph.0.node_weight(**idx).unwrap().get_id() == "source")
-            .unwrap();
-
-        let motor_left_idx = indices
-            .iter()
-            .find(|idx| graph.0.node_weight(**idx).unwrap().get_id() == "motor_left")
-            .unwrap();
-
-        let motor_right_idx = indices
-            .iter()
-            .find(|idx| graph.0.node_weight(**idx).unwrap().get_id() == "motor_right")
-            .unwrap();
+        let source_idx = graph.get_node_id_by_name("source").unwrap();
+        let motor_left_idx = graph.get_node_id_by_name("motor_left").unwrap();
+        let motor_right_idx = graph.get_node_id_by_name("motor_right").unwrap();
 
         // Verify source to left motor connection exists
         let left_connection = graph
-            .0
-            .edges_directed(*source_idx, Outgoing)
-            .find(|edge| edge.target() == *motor_left_idx)
-            .unwrap();
-        assert_eq!(left_connection.weight().msg, "tasks::GPIOPayload");
+            .get_connection_msg_type(source_idx, motor_left_idx)
+            .expect("Connection from source to motor_left_idx not found");
+        assert_eq!(left_connection, "tasks::GPIOPayload");
 
         // Verify source to right motor connection exists
         let right_connection = graph
-            .0
-            .edges_directed(*source_idx, Outgoing)
-            .find(|edge| edge.target() == *motor_right_idx)
-            .unwrap();
-        assert_eq!(right_connection.weight().msg, "tasks::GPIOPayload");
+            .get_connection_msg_type(source_idx, motor_right_idx)
+            .expect("Connection from source to motor_right_idx not found");
+        assert_eq!(right_connection, "tasks::GPIOPayload");
 
         // Verify monitor
         assert_eq!(
@@ -343,67 +326,38 @@ mod tests {
 
         // Get the graph and verify connections
         let graph = config.graphs.get_graph(None).unwrap();
-        let indices = graph.node_indices();
 
         // Find the node indices
-        let controller_idx = *indices
-            .iter()
-            .find(|idx| graph.0.node_weight(**idx).unwrap().get_id() == "controller")
-            .unwrap();
-
-        let sensor_front_idx = *indices
-            .iter()
-            .find(|idx| graph.0.node_weight(**idx).unwrap().get_id() == "sensor_front")
-            .unwrap();
-
-        let sensor_rear_idx = *indices
-            .iter()
-            .find(|idx| graph.0.node_weight(**idx).unwrap().get_id() == "sensor_rear")
-            .unwrap();
-
-        let processor_front_idx = *indices
-            .iter()
-            .find(|idx| graph.0.node_weight(**idx).unwrap().get_id() == "processor_front")
-            .unwrap();
-
-        let processor_rear_idx = *indices
-            .iter()
-            .find(|idx| graph.0.node_weight(**idx).unwrap().get_id() == "processor_rear")
-            .unwrap();
+        let controller_idx = graph.get_node_id_by_name("controller").unwrap();
+        let sensor_front_idx = graph.get_node_id_by_name("sensor_front").unwrap();
+        let sensor_rear_idx = graph.get_node_id_by_name("sensor_rear").unwrap();
+        let processor_front_idx = graph.get_node_id_by_name("processor_front").unwrap();
+        let processor_rear_idx = graph.get_node_id_by_name("processor_rear").unwrap();
 
         // Verify sensor to processor connections
-        let sensor_front_to_processor = graph
-            .0
-            .edges_directed(sensor_front_idx, Outgoing)
-            .any(|edge| edge.target() == processor_front_idx);
+        let sensor_front_to_processor =
+            graph.connection_exists(sensor_front_idx, processor_front_idx);
         assert!(
             sensor_front_to_processor,
             "Connection from sensor_front to processor_front not found"
         );
 
-        let sensor_rear_to_processor = graph
-            .0
-            .edges_directed(sensor_rear_idx, Outgoing)
-            .any(|edge| edge.target() == processor_rear_idx);
+        let sensor_rear_to_processor = graph.connection_exists(sensor_rear_idx, processor_rear_idx);
         assert!(
             sensor_rear_to_processor,
             "Connection from sensor_rear to processor_rear not found"
         );
 
         // Verify processor to controller connections
-        let processor_front_to_controller = graph
-            .0
-            .edges_directed(processor_front_idx, Outgoing)
-            .any(|edge| edge.target() == controller_idx);
+        let processor_front_to_controller =
+            graph.connection_exists(processor_front_idx, controller_idx);
         assert!(
             processor_front_to_controller,
             "Connection from processor_front to controller not found"
         );
 
-        let processor_rear_to_controller = graph
-            .0
-            .edges_directed(processor_rear_idx, Outgoing)
-            .any(|edge| edge.target() == controller_idx);
+        let processor_rear_to_controller =
+            graph.connection_exists(processor_rear_idx, controller_idx);
         assert!(
             processor_rear_to_controller,
             "Connection from processor_rear to controller not found"
@@ -519,39 +473,21 @@ mod tests {
 
         // Get the graph and verify connections
         let graph = config.graphs.get_graph(None).unwrap();
-        let indices = graph.node_indices();
 
         // Find node indices
-        let source_idx = *indices
-            .iter()
-            .find(|idx| graph.0.node_weight(**idx).unwrap().get_id() == "source")
-            .unwrap();
-
-        let processor_idx = *indices
-            .iter()
-            .find(|idx| graph.0.node_weight(**idx).unwrap().get_id() == "processor")
-            .unwrap();
-
-        let sink_idx = *indices
-            .iter()
-            .find(|idx| graph.0.node_weight(**idx).unwrap().get_id() == "sink")
-            .unwrap();
+        let source_idx = graph.get_node_id_by_name("source").unwrap();
+        let processor_idx = graph.get_node_id_by_name("processor").unwrap();
+        let sink_idx = graph.get_node_id_by_name("sink").unwrap();
 
         // Verify source to processor connection
-        let source_to_processor = graph
-            .0
-            .edges_directed(source_idx, Outgoing)
-            .any(|edge| edge.target() == processor_idx);
+        let source_to_processor = graph.connection_exists(source_idx, processor_idx);
         assert!(
             source_to_processor,
             "Connection from source to processor not found"
         );
 
         // Verify processor to sink connection
-        let processor_to_sink = graph
-            .0
-            .edges_directed(processor_idx, Outgoing)
-            .any(|edge| edge.target() == sink_idx);
+        let processor_to_sink = graph.connection_exists(processor_idx, sink_idx);
         assert!(
             processor_to_sink,
             "Connection from processor to sink not found"
