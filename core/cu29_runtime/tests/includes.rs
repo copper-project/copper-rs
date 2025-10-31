@@ -1,7 +1,6 @@
 #[cfg(all(test, feature = "std"))]
 mod tests {
-    use cu29_runtime::config::{read_configuration, Outgoing};
-    use petgraph::visit::EdgeRef;
+    use cu29_runtime::config::{read_configuration, NodeId};
     use std::fs::{create_dir_all, write};
     use tempfile::tempdir;
 
@@ -456,7 +455,8 @@ mod tests {
         let mut octopus_node_id = None;
 
         for idx in graph.node_indices() {
-            let node = graph.0.node_weight(idx).unwrap();
+            let node_index = idx.index() as u32;
+            let node = graph.get_node_weight(node_index).unwrap();
             let id = node.get_id();
 
             if id == "octopus" {
@@ -472,29 +472,14 @@ mod tests {
         for id in 0..3 {
             let camera_id = format!("camera{id}");
             let detect_id = format!("detect{id}");
-
-            let camera_idx = camera_node_ids
-                .iter()
-                .find(|(id, _)| *id == camera_id)
-                .unwrap()
-                .1;
-            let detector_idx = detector_node_ids
-                .iter()
-                .find(|(id, _)| *id == detect_id)
-                .unwrap()
-                .1;
+            let camera_idx = graph.get_node_id_by_name(camera_id.as_str()).unwrap();
+            let detector_idx = graph.get_node_id_by_name(detect_id.as_str()).unwrap();
 
             // Check if there's an edge from camera to detector
-            let has_connection = graph.0.edges_directed(camera_idx, Outgoing).any(|edge| {
-                let target = edge.target();
-                let cnx = edge.weight();
-                target == detector_idx && cnx.msg == "cu_camera::CameraPayload"
-            });
-
-            assert!(
-                has_connection,
-                "Connection from {camera_id} to {detect_id} not found"
-            );
+            let has_connection = graph
+                .get_connection_msg_type(camera_idx, detector_idx)
+                .unwrap();
+            assert_eq!(has_connection, "cu_camera::CameraPayload");
         }
 
         // Verify detector-to-octopus connections (defined in main.ron)
@@ -509,16 +494,13 @@ mod tests {
                 .1;
 
             // Check if there's an edge from detector to octopus
-            let has_connection = graph.0.edges_directed(detector_idx, Outgoing).any(|edge| {
-                let target = edge.target();
-                let cnx = edge.weight();
-                target == octopus_idx && cnx.msg == "cu_detect::DetectionPayload"
-            });
-
-            assert!(
-                has_connection,
-                "Connection from {detect_id} to octopus not found"
-            );
+            let has_connection = graph
+                .get_connection_msg_type(
+                    detector_idx.index() as NodeId,
+                    octopus_idx.index() as NodeId,
+                )
+                .unwrap();
+            assert_eq!(has_connection, "cu_detect::DetectionPayload");
         }
 
         // Verify monitor
