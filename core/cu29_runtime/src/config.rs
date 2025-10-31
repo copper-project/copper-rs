@@ -336,6 +336,8 @@ pub struct Cnx {
     pub missions: Option<Vec<String>>,
 }
 
+/// A simple wrapper enum for `petgraph::Direction`,
+/// designed to be converted *into* it via the `From` trait.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CuDirection {
     Outgoing,
@@ -366,7 +368,7 @@ impl CuGraph {
     #[allow(dead_code)]
     pub fn get_neighbor_ids(&self, node_id: NodeId, dir: CuDirection) -> Vec<NodeId> {
         self.0
-            .neighbors_directed(node_id.into(), dir.into()) // .into() 한 방으로 깔끔하게 변환!
+            .neighbors_directed(node_id.into(), dir.into())
             .map(|petgraph_index| petgraph_index.index() as NodeId)
             .collect()
     }
