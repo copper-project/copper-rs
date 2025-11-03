@@ -2,7 +2,7 @@
 //! It is exposed to the user via the `copper_runtime` macro injecting it as a field in their application struct.
 //!
 
-use crate::config::{ComponentConfig, Node, DEFAULT_KEYFRAME_INTERVAL};
+use crate::config::{ComponentConfig, CuDirection, Node, DEFAULT_KEYFRAME_INTERVAL};
 use crate::config::{CuConfig, CuGraph, NodeId, RuntimeConfig};
 use crate::copperlist::{CopperList, CopperListState, CuListZeroedInit, CuListsManager};
 use crate::cutask::{BincodeAdapter, Freezable};
@@ -464,9 +464,9 @@ fn find_output_index_type_from_nodeid(
 }
 
 pub fn find_task_type_for_id(graph: &CuGraph, node_id: NodeId) -> CuTaskType {
-    if graph.0.neighbors_directed(node_id.into(), Incoming).count() == 0 {
+    if graph.incoming_neighbor_count(node_id) == 0 {
         CuTaskType::Source
-    } else if graph.0.neighbors_directed(node_id.into(), Outgoing).count() == 0 {
+    } else if graph.outgoing_neighbor_count(node_id) == 0 {
         CuTaskType::Sink
     } else {
         CuTaskType::Regular
@@ -550,12 +550,11 @@ fn plan_tasks_tree_branch(
                 next_culist_output_index += 1;
             }
             CuTaskType::Sink => {
-                let parents: Vec<NodeIndex> =
-                    graph.0.neighbors_directed(id.into(), Incoming).collect();
+                let parents: Vec<NodeId> = graph.get_neighbor_ids(id, CuDirection::Incoming);
                 #[cfg(all(feature = "std", feature = "macro_debug"))]
                 eprintln!("    → Sink with parents: {parents:?}");
-                for parent in &parents {
-                    let pid = parent.index() as NodeId;
+                for parent in parents {
+                    let pid = parent;
                     let index_type = find_output_index_type_from_nodeid(pid, plan);
                     if let Some(index_type) = index_type {
                         #[cfg(all(feature = "std", feature = "macro_debug"))]
@@ -571,12 +570,11 @@ fn plan_tasks_tree_branch(
                 next_culist_output_index += 1;
             }
             CuTaskType::Regular => {
-                let parents: Vec<NodeIndex> =
-                    graph.0.neighbors_directed(id.into(), Incoming).collect();
+                let parents: Vec<NodeId> = graph.get_neighbor_ids(id, CuDirection::Incoming);
                 #[cfg(all(feature = "std", feature = "macro_debug"))]
                 eprintln!("    → Regular task with parents: {parents:?}");
-                for parent in &parents {
-                    let pid = parent.index() as NodeId;
+                for parent in parents {
+                    let pid = parent;
                     let index_type = find_output_index_type_from_nodeid(pid, plan);
                     if let Some(index_type) = index_type {
                         #[cfg(all(feature = "std", feature = "macro_debug"))]
