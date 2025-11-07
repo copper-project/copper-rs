@@ -441,10 +441,7 @@ impl BridgeConfig {
 }
 
 fn insert_bridge_node(graph: &mut CuGraph, bridge: &BridgeConfig) -> Result<(), String> {
-    if graph
-        .get_node_id_by_name(bridge.id.as_str())
-        .is_some()
-    {
+    if graph.get_node_id_by_name(bridge.id.as_str()).is_some() {
         return Err(format!(
             "Bridge '{}' reuses an existing node id. Bridge ids must be unique.",
             bridge.id
@@ -1039,12 +1036,18 @@ where
                             let (dst_name, dst_channel) =
                                 parse_endpoint(&c.dst, EndpointRole::Destination, &bridge_lookup)
                                     .map_err(E::from)?;
-                            let src = graph.get_node_id_by_name(src_name.as_str()).ok_or_else(|| {
-                                E::from(format!("Source node not found: {}", c.src))
-                            })?;
-                            let dst = graph.get_node_id_by_name(dst_name.as_str()).ok_or_else(|| {
-                                E::from(format!("Destination node not found: {}", c.dst))
-                            })?;
+                            let src =
+                                graph
+                                    .get_node_id_by_name(src_name.as_str())
+                                    .ok_or_else(|| {
+                                        E::from(format!("Source node not found: {}", c.src))
+                                    })?;
+                            let dst =
+                                graph
+                                    .get_node_id_by_name(dst_name.as_str())
+                                    .ok_or_else(|| {
+                                        E::from(format!("Destination node not found: {}", c.dst))
+                                    })?;
                             graph
                                 .connect_ext(
                                     src,
@@ -1064,12 +1067,15 @@ where
                         let (dst_name, dst_channel) =
                             parse_endpoint(&c.dst, EndpointRole::Destination, &bridge_lookup)
                                 .map_err(E::from)?;
-                        let src = graph.get_node_id_by_name(src_name.as_str()).ok_or_else(|| {
-                            E::from(format!("Source node not found: {}", c.src))
-                        })?;
-                        let dst = graph.get_node_id_by_name(dst_name.as_str()).ok_or_else(|| {
-                            E::from(format!("Destination node not found: {}", c.dst))
-                        })?;
+                        let src = graph
+                            .get_node_id_by_name(src_name.as_str())
+                            .ok_or_else(|| E::from(format!("Source node not found: {}", c.src)))?;
+                        let dst =
+                            graph
+                                .get_node_id_by_name(dst_name.as_str())
+                                .ok_or_else(|| {
+                                    E::from(format!("Destination node not found: {}", c.dst))
+                                })?;
                         graph
                             .connect_ext(src, dst, &c.msg, None, src_channel, dst_channel)
                             .map_err(|e| E::from(e.to_string()))?;
@@ -1207,7 +1213,9 @@ impl Serialize for CuConfig {
                         let edge = &graph.0[edge_idx];
                         let serialized = SerializedCnx::from(edge);
                         if !cnx.iter().any(|c: &SerializedCnx| {
-                            c.src == serialized.src && c.dst == serialized.dst && c.msg == serialized.msg
+                            c.src == serialized.src
+                                && c.dst == serialized.dst
+                                && c.msg == serialized.msg
                         }) {
                             cnx.push(serialized);
                         }
@@ -1772,7 +1780,9 @@ mod tests {
             _ => panic!("expected Tx channel"),
         }
         let graph = config.graphs.get_graph(None).unwrap();
-        let bridge_id = graph.get_node_id_by_name("radio").expect("bridge node missing");
+        let bridge_id = graph
+            .get_node_id_by_name("radio")
+            .expect("bridge node missing");
         let bridge_node = graph.get_node(bridge_id).unwrap();
         assert_eq!(bridge_node.get_flavor(), Flavor::Bridge);
 
