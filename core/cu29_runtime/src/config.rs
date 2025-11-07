@@ -523,9 +523,7 @@ fn parse_endpoint(
     Ok((endpoint.to_string(), None))
 }
 
-fn build_bridge_lookup(
-    bridges: Option<&Vec<BridgeConfig>>,
-) -> HashMap<&str, &BridgeConfig> {
+fn build_bridge_lookup(bridges: Option<&Vec<BridgeConfig>>) -> HashMap<&str, &BridgeConfig> {
     let mut map = HashMap::new();
     if let Some(bridges) = bridges {
         for bridge in bridges {
