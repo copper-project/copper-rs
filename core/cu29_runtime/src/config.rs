@@ -210,6 +210,8 @@ pub struct NodeLogging {
     enabled: bool,
 }
 
+/// Distinguishes regular tasks from bridge nodes so downstream stages can apply
+/// bridge-specific instantiation rules.
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Flavor {
     #[default]
@@ -252,6 +254,7 @@ pub struct Node {
     #[serde(skip_serializing_if = "Option::is_none")]
     logging: Option<NodeLogging>,
 
+    /// Node role in the runtime graph (normal task or bridge endpoint).
     #[serde(skip, default)]
     flavor: Flavor,
 }
@@ -337,11 +340,13 @@ impl Node {
         config.insert(key.to_string(), value.into());
     }
 
+    /// Returns whether this node is treated as a normal task or as a bridge.
     #[allow(dead_code)]
     pub fn get_flavor(&self) -> Flavor {
         self.flavor
     }
 
+    /// Overrides the node flavor; primarily used when injecting bridge nodes.
     #[allow(dead_code)]
     pub fn set_flavor(&mut self, flavor: Flavor) {
         self.flavor = flavor;
@@ -354,20 +359,25 @@ pub enum BridgeChannel {
     /// Channel that receives data from the bridge into the graph.
     Rx {
         id: String,
+        /// Transport/topic identifier specific to the bridge backend.
         route: String,
+        /// Optional per-channel configuration forwarded to the bridge implementation.
         #[serde(skip_serializing_if = "Option::is_none")]
         config: Option<ComponentConfig>,
     },
     /// Channel that transmits data from the graph into the bridge.
     Tx {
         id: String,
+        /// Transport/topic identifier specific to the bridge backend.
         route: String,
+        /// Optional per-channel configuration forwarded to the bridge implementation.
         #[serde(skip_serializing_if = "Option::is_none")]
         config: Option<ComponentConfig>,
     },
 }
 
 impl BridgeChannel {
+    /// Stable logical identifier to reference this channel in connections.
     #[allow(dead_code)]
     pub fn id(&self) -> &str {
         match self {
@@ -375,6 +385,7 @@ impl BridgeChannel {
         }
     }
 
+    /// Bridge-specific transport path (topic, route, path...) describing this channel.
     #[allow(dead_code)]
     pub fn route(&self) -> &str {
         match self {
@@ -428,6 +439,7 @@ pub struct BridgeConfig {
     pub config: Option<ComponentConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub missions: Option<Vec<String>>,
+    /// List of logical endpoints exposed by this bridge.
     pub channels: Vec<BridgeChannel>,
 }
 
