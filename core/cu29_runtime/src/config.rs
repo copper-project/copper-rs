@@ -1843,6 +1843,47 @@ mod tests {
     }
 
     #[test]
+    fn test_bridge_channel_config() {
+        let txt = r#"
+        (
+            tasks: [],
+            bridges: [
+                (
+                    id: "radio",
+                    type: "tasks::SerialBridge",
+                    channels: [
+                        Rx ( id: "status", route: "sys/status", config: { "filter": "fast" } ),
+                        Tx ( id: "imu", route: "telemetry/imu", config: { "rate": 100 } ),
+                    ],
+                ),
+            ],
+            cnx: [],
+        )
+        "#;
+
+        let config = CuConfig::deserialize_ron(txt);
+        let bridge = &config.bridges[0];
+        match &bridge.channels[0] {
+            BridgeChannel::Rx {
+                config: Some(cfg), ..
+            } => {
+                let val: String = cfg.get("filter").expect("filter missing");
+                assert_eq!(val, "fast");
+            }
+            _ => panic!("expected Rx channel with config"),
+        }
+        match &bridge.channels[1] {
+            BridgeChannel::Tx {
+                config: Some(cfg), ..
+            } => {
+                let rate: i32 = cfg.get("rate").expect("rate missing");
+                assert_eq!(rate, 100);
+            }
+            _ => panic!("expected Tx channel with config"),
+        }
+    }
+
+    #[test]
     #[should_panic(expected = "channel 'motor' is Tx and cannot act as a source")]
     fn test_bridge_tx_cannot_be_source() {
         let txt = r#"
