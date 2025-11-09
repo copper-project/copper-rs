@@ -111,7 +111,10 @@ where
     }
 
     #[cfg(feature = "kornia")]
-    pub fn as_kornia_image<T: Clone, const C: usize,K: ImageAllocator>(&self, k: K) -> CuResult<Image<T, C, K>> {
+    pub fn as_kornia_image<T: Clone, const C: usize, K: ImageAllocator>(
+        &self,
+        k: K,
+    ) -> CuResult<Image<T, C, K>> {
         let width = self.format.width as usize;
         let height = self.format.height as usize;
 
