@@ -291,7 +291,7 @@ mod tests {
     // In real Copper builds the generated glue would call the typed `handle_*` entry points
     // directly, so bridge authors never see these unsafe casts. They are only present in this
     // sample to keep the implementation compact while still demonstrating per-channel logic.
-    fn cast_msg<'a, From, To>(msg: &'a CuMsg<From>) -> &'a CuMsg<To>
+    fn cast_msg<From, To>(msg: &CuMsg<From>) -> &CuMsg<To>
     where
         From: CuMsgPayload,
         To: CuMsgPayload,
