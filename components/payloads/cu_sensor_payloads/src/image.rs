@@ -8,6 +8,7 @@ use std::fmt::Debug;
 
 #[cfg(feature = "image")]
 use image::{ImageBuffer, Pixel};
+#[cfg(feature = "kornia")]
 use kornia::image::allocator::ImageAllocator;
 #[cfg(feature = "kornia")]
 use kornia::image::Image;
