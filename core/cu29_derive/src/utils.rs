@@ -34,6 +34,23 @@ pub(crate) fn config_id_to_struct_member(id: &str) -> String {
     candidate
 }
 
+/// Converts a configuration identifier into a SCREAMING_SNAKE_CASE name suitable
+/// for referencing bridge channel constants.
+pub(crate) fn config_id_to_bridge_const(id: &str) -> String {
+    let mut candidate = id
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '_' })
+        .collect::<String>();
+
+    candidate = candidate.to_case(Case::UpperSnake);
+
+    if candidate.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+        candidate.insert(0, '_');
+    }
+
+    candidate
+}
+
 // Lifted this HORROR but it works.
 pub fn caller_crate_root() -> PathBuf {
     let crate_name =

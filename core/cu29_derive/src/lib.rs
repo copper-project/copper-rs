@@ -1,5 +1,6 @@
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
+use std::collections::HashMap;
 use std::fs::read_to_string;
 use syn::meta::parser;
 use syn::Fields::{Named, Unnamed};
@@ -10,13 +11,13 @@ use syn::{
 
 #[cfg(feature = "macro_debug")]
 use crate::format::rustfmt_generated_code;
-use crate::utils::config_id_to_enum;
+use crate::utils::{config_id_to_bridge_const, config_id_to_enum, config_id_to_struct_member};
 use cu29_runtime::config::CuConfig;
-use cu29_runtime::config::{read_configuration, CuGraph};
+use cu29_runtime::config::{read_configuration, BridgeChannel, CuGraph, Flavor, Node, NodeId};
 use cu29_runtime::curuntime::{
     compute_runtime_plan, find_task_type_for_id, CuExecutionLoop, CuExecutionUnit, CuTaskType,
 };
-use cu29_traits::CuResult;
+use cu29_traits::{CuError, CuResult};
 use proc_macro2::{Ident, Span};
 
 mod format;
@@ -63,39 +64,34 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
     let graph = cuconfig
         .get_graph(None) // FIXME(gbin): Multimission
         .expect("Could not find the specified mission for gen_cumsgs");
-    let runtime_plan: CuExecutionLoop = match compute_runtime_plan(graph) {
-        Ok(plan) => plan,
-        Err(e) => return return_error(format!("Could not compute runtime plan: {e}")),
-    };
-
-    // Give a name compatible with a struct to match the task ids to their output in the CuStampedDataSet tuple.
-    let all_tasks_member_ids: Vec<String> = graph
-        .get_all_nodes()
-        .iter()
-        .map(|(_, node)| utils::config_id_to_struct_member(node.get_id().as_str()))
-        .collect();
-
-    // All accesses are linear on the culist but the id of the tasks is random (determined by the Ron declaration order).
-    // This records the task ids in call order.
-    let taskid_order: Vec<usize> = runtime_plan
-        .steps
-        .iter()
-        .filter_map(|unit| match unit {
-            CuExecutionUnit::Step(step) => Some(step.node_id as usize),
-            _ => None,
-        })
-        .collect();
+    let task_specs = CuTaskSpecSet::from_graph(graph);
+    let channel_usage = collect_bridge_channel_usage(graph);
+    let mut bridge_specs = build_bridge_specs(&cuconfig, graph, &channel_usage);
+    let (culist_plan, exec_entities, plan_to_original) =
+        match build_execution_plan(graph, &task_specs, &mut bridge_specs) {
+            Ok(plan) => plan,
+            Err(e) => return return_error(format!("Could not compute copperlist plan: {e}")),
+        };
+    let task_member_names = collect_task_member_names(graph);
+    let (culist_order, node_output_positions) = collect_culist_metadata(
+        &culist_plan,
+        &exec_entities,
+        &mut bridge_specs,
+        &plan_to_original,
+    );
 
     #[cfg(feature = "macro_debug")]
     eprintln!(
         "[The CuStampedDataSet matching tasks ids are {:?}]",
-        taskid_order
-            .iter()
-            .map(|i| all_tasks_member_ids[*i].clone())
-            .collect::<Vec<_>>()
+        culist_order
     );
 
-    let support = gen_culist_support(&runtime_plan, &taskid_order, &all_tasks_member_ids);
+    let support = gen_culist_support(
+        &culist_plan,
+        &culist_order,
+        &node_output_positions,
+        &task_member_names,
+    );
 
     let extra_imports = if !std {
         quote! {
@@ -142,15 +138,16 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
 /// Build the inner support of the copper list.
 fn gen_culist_support(
     runtime_plan: &CuExecutionLoop,
-    taskid_call_order: &[usize],
-    all_tasks_as_struct_member_name: &Vec<String>,
+    culist_indices_in_plan_order: &[usize],
+    node_output_positions: &HashMap<NodeId, usize>,
+    task_member_names: &[(NodeId, String)],
 ) -> proc_macro2::TokenStream {
     #[cfg(feature = "macro_debug")]
     eprintln!("[Extract msgs types]");
     let all_msgs_types_in_culist_order = extract_msg_types(runtime_plan);
 
     let culist_size = all_msgs_types_in_culist_order.len();
-    let task_indices: Vec<_> = taskid_call_order
+    let task_indices: Vec<_> = culist_indices_in_plan_order
         .iter()
         .map(|i| syn::Index::from(*i))
         .collect();
@@ -187,27 +184,26 @@ fn gen_culist_support(
         }
     };
 
-    let methods = all_tasks_as_struct_member_name
+    let task_name_literals: Vec<String> = task_member_names
         .iter()
-        .enumerate()
-        .map(|(task_id, name)| {
-            let output_position = taskid_call_order
-                .iter()
-                .position(|&id| id == task_id)
-                .unwrap_or_else(|| {
-                    panic!("Task {name} (id: {task_id}) not found in execution order")
-                });
+        .map(|(_, name)| name.clone())
+        .collect();
 
-            let fn_name = format_ident!("get_{}_output", name);
-            let payload_type = all_msgs_types_in_culist_order[output_position].clone();
-            let index = syn::Index::from(output_position);
-            quote! {
-                #[allow(dead_code)]
-                pub fn #fn_name(&self) -> &CuMsg<#payload_type> {
-                    &self.0.#index
-                }
+    let methods = task_member_names.iter().map(|(node_id, name)| {
+        let output_position = node_output_positions
+            .get(node_id)
+            .unwrap_or_else(|| panic!("Task {name} (id: {node_id}) not found in execution order"));
+
+        let fn_name = format_ident!("get_{}_output", name);
+        let payload_type = all_msgs_types_in_culist_order[*output_position].clone();
+        let index = syn::Index::from(*output_position);
+        quote! {
+            #[allow(dead_code)]
+            pub fn #fn_name(&self) -> &CuMsg<#payload_type> {
+                &self.0.#index
             }
-        });
+        }
+    });
 
     // This generates a way to get the metadata of every single message of a culist at low cost
     quote! {
@@ -234,7 +230,7 @@ fn gen_culist_support(
         impl MatchingTasks for CuStampedDataSet {
             #[allow(dead_code)]
             fn get_all_task_ids() -> &'static [&'static str] {
-                &[#(#all_tasks_as_struct_member_name),*]
+                &[#(#task_name_literals),*]
             }
         }
 
@@ -451,6 +447,22 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         #[cfg(feature = "macro_debug")]
         eprintln!("{runtime_plan:?}");
+
+        let culist_channel_usage = collect_bridge_channel_usage(graph);
+        let mut culist_bridge_specs =
+            build_bridge_specs(&copper_config, graph, &culist_channel_usage);
+        let (culist_plan, culist_exec_entities, culist_plan_to_original) =
+            match build_execution_plan(graph, &task_specs, &mut culist_bridge_specs) {
+                Ok(plan) => plan,
+                Err(e) => return return_error(format!("Could not compute copperlist plan: {e}")),
+            };
+        let task_member_names = collect_task_member_names(graph);
+        let (culist_call_order, node_output_positions) = collect_culist_metadata(
+            &culist_plan,
+            &culist_exec_entities,
+            &mut culist_bridge_specs,
+            &culist_plan_to_original,
+        );
 
         let all_sim_tasks_types: Vec<Type> = task_specs.ids
             .iter()
@@ -1128,19 +1140,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 }
             }).collect();
         #[cfg(feature = "macro_debug")]
-        eprintln!("[Culist access order:  {taskid_call_order:?}]");
-
-        // Give a name compatible with a struct to match the task ids to their output in the CuStampedDataSet tuple.
-        let all_tasks_member_ids: Vec<String> = task_specs
-            .ids
-            .iter()
-            .map(|name| utils::config_id_to_struct_member(name.as_str()))
-            .collect();
+        eprintln!("[Culist access order:  {culist_call_order:?}]");
 
         #[cfg(feature = "macro_debug")]
         eprintln!("[build the copperlist support]");
-        let culist_support: proc_macro2::TokenStream =
-            gen_culist_support(&runtime_plan, &taskid_call_order, &all_tasks_member_ids);
+        let culist_support: proc_macro2::TokenStream = gen_culist_support(
+            &culist_plan,
+            &culist_call_order,
+            &node_output_positions,
+            &task_member_names,
+        );
 
         #[cfg(feature = "macro_debug")]
         eprintln!("[build the sim support]");
@@ -1869,6 +1878,7 @@ struct CuTaskSpecSet {
     pub run_in_sim_flags: Vec<bool>,
     #[allow(dead_code)]
     pub output_types: Vec<Option<Type>>,
+    pub node_id_to_task_index: Vec<Option<usize>>,
 }
 
 impl CuTaskSpecSet {
@@ -1957,6 +1967,11 @@ impl CuTaskSpecSet {
             .map(|(_, node)| node.is_run_in_sim())
             .collect();
 
+        let mut node_id_to_task_index = vec![None; graph.node_count()];
+        for (index, (node_id, _)) in all_id_nodes.iter().enumerate() {
+            node_id_to_task_index[*node_id as usize] = Some(index);
+        }
+
         Self {
             ids,
             cutypes,
@@ -1968,6 +1983,7 @@ impl CuTaskSpecSet {
             sim_task_types,
             run_in_sim_flags,
             output_types,
+            node_id_to_task_index,
         }
     }
 }
@@ -2144,6 +2160,367 @@ fn build_culist_tuple_default(all_msgs_types_in_culist_order: &[Type]) -> ItemIm
     }
 }
 
+fn collect_bridge_channel_usage(graph: &CuGraph) -> HashMap<BridgeChannelKey, String> {
+    let mut usage = HashMap::new();
+    for edge_idx in graph.0.edge_indices() {
+        let cnx = graph
+            .0
+            .edge_weight(edge_idx)
+            .expect("Edge should exist while collecting bridge usage")
+            .clone();
+        if let Some(channel) = &cnx.src_channel {
+            let key = BridgeChannelKey {
+                bridge_id: cnx.src.clone(),
+                channel_id: channel.clone(),
+                direction: BridgeChannelDirection::Rx,
+            };
+            usage
+                .entry(key)
+                .and_modify(|msg| {
+                    if msg != &cnx.msg {
+                        panic!(
+                            "Bridge '{}' channel '{}' is used with incompatible message types: {} vs {}",
+                            cnx.src, channel, msg, cnx.msg
+                        );
+                    }
+                })
+                .or_insert(cnx.msg.clone());
+        }
+        if let Some(channel) = &cnx.dst_channel {
+            let key = BridgeChannelKey {
+                bridge_id: cnx.dst.clone(),
+                channel_id: channel.clone(),
+                direction: BridgeChannelDirection::Tx,
+            };
+            usage
+                .entry(key)
+                .and_modify(|msg| {
+                    if msg != &cnx.msg {
+                        panic!(
+                            "Bridge '{}' channel '{}' is used with incompatible message types: {} vs {}",
+                            cnx.dst, channel, msg, cnx.msg
+                        );
+                    }
+                })
+                .or_insert(cnx.msg.clone());
+        }
+    }
+    usage
+}
+
+fn build_bridge_specs(
+    config: &CuConfig,
+    graph: &CuGraph,
+    channel_usage: &HashMap<BridgeChannelKey, String>,
+) -> Vec<BridgeSpec> {
+    let mut specs = Vec::new();
+    for (bridge_index, bridge_cfg) in config.bridges.iter().enumerate() {
+        if graph.get_node_id_by_name(bridge_cfg.id.as_str()).is_none() {
+            continue;
+        }
+
+        let type_path = parse_str::<Type>(bridge_cfg.type_.as_str()).unwrap_or_else(|err| {
+            panic!(
+                "Could not parse bridge type '{}' for '{}': {err}",
+                bridge_cfg.type_, bridge_cfg.id
+            )
+        });
+
+        let mut rx_channels = Vec::new();
+        let mut tx_channels = Vec::new();
+
+        for (channel_index, channel) in bridge_cfg.channels.iter().enumerate() {
+            match channel {
+                BridgeChannel::Rx { id, .. } => {
+                    let key = BridgeChannelKey {
+                        bridge_id: bridge_cfg.id.clone(),
+                        channel_id: id.clone(),
+                        direction: BridgeChannelDirection::Rx,
+                    };
+                    if let Some(msg_type) = channel_usage.get(&key) {
+                        let msg_type = parse_str::<Type>(msg_type).unwrap_or_else(|err| {
+                            panic!(
+                                "Could not parse message type '{msg_type}' for bridge '{}' channel '{}': {err}",
+                                bridge_cfg.id, id
+                            )
+                        });
+                        let const_ident =
+                            Ident::new(&config_id_to_bridge_const(id.as_str()), Span::call_site());
+                        rx_channels.push(BridgeChannelSpec {
+                            id: id.clone(),
+                            const_ident,
+                            msg_type,
+                            config_index: channel_index,
+                            plan_node_id: None,
+                            culist_index: None,
+                            monitor_index: None,
+                        });
+                    }
+                }
+                BridgeChannel::Tx { id, .. } => {
+                    let key = BridgeChannelKey {
+                        bridge_id: bridge_cfg.id.clone(),
+                        channel_id: id.clone(),
+                        direction: BridgeChannelDirection::Tx,
+                    };
+                    if let Some(msg_type) = channel_usage.get(&key) {
+                        let msg_type = parse_str::<Type>(msg_type).unwrap_or_else(|err| {
+                            panic!(
+                                "Could not parse message type '{msg_type}' for bridge '{}' channel '{}': {err}",
+                                bridge_cfg.id, id
+                            )
+                        });
+                        let const_ident =
+                            Ident::new(&config_id_to_bridge_const(id.as_str()), Span::call_site());
+                        tx_channels.push(BridgeChannelSpec {
+                            id: id.clone(),
+                            const_ident,
+                            msg_type,
+                            config_index: channel_index,
+                            plan_node_id: None,
+                            culist_index: None,
+                            monitor_index: None,
+                        });
+                    }
+                }
+            }
+        }
+
+        if rx_channels.is_empty() && tx_channels.is_empty() {
+            continue;
+        }
+
+        specs.push(BridgeSpec {
+            id: bridge_cfg.id.clone(),
+            type_path,
+            config_index: bridge_index,
+            tuple_index: 0,
+            monitor_index: None,
+            rx_channels,
+            tx_channels,
+        });
+    }
+
+    for (tuple_index, spec) in specs.iter_mut().enumerate() {
+        spec.tuple_index = tuple_index;
+    }
+
+    specs
+}
+
+fn collect_task_member_names(graph: &CuGraph) -> Vec<(NodeId, String)> {
+    graph
+        .get_all_nodes()
+        .iter()
+        .filter(|(_, node)| node.get_flavor() == Flavor::Task)
+        .map(|(node_id, node)| (*node_id, config_id_to_struct_member(node.get_id().as_str())))
+        .collect()
+}
+
+fn build_execution_plan(
+    graph: &CuGraph,
+    task_specs: &CuTaskSpecSet,
+    bridge_specs: &mut [BridgeSpec],
+) -> CuResult<(
+    CuExecutionLoop,
+    Vec<ExecutionEntity>,
+    HashMap<NodeId, NodeId>,
+)> {
+    let mut plan_graph = CuGraph::default();
+    let mut exec_entities = Vec::new();
+    let mut original_to_plan = HashMap::new();
+    let mut plan_to_original = HashMap::new();
+    let mut name_to_original = HashMap::new();
+    let mut channel_nodes = HashMap::new();
+
+    for (node_id, node) in graph.get_all_nodes() {
+        name_to_original.insert(node.get_id(), node_id);
+        if node.get_flavor() != Flavor::Task {
+            continue;
+        }
+        let plan_node_id = plan_graph.add_node(node.clone())?;
+        let task_index = task_specs.node_id_to_task_index[node_id as usize]
+            .expect("Task missing from specifications");
+        plan_to_original.insert(plan_node_id, node_id);
+        original_to_plan.insert(node_id, plan_node_id);
+        if plan_node_id as usize != exec_entities.len() {
+            panic!("Unexpected node ordering while mirroring tasks in plan graph");
+        }
+        exec_entities.push(ExecutionEntity {
+            kind: ExecutionEntityKind::Task { task_index },
+        });
+    }
+
+    for (bridge_index, spec) in bridge_specs.iter_mut().enumerate() {
+        for (channel_index, channel_spec) in spec.rx_channels.iter_mut().enumerate() {
+            let mut node = Node::new(
+                format!("{}::rx::{}", spec.id, channel_spec.id).as_str(),
+                "__CuBridgeRxChannel",
+            );
+            node.set_flavor(Flavor::Bridge);
+            let plan_node_id = plan_graph.add_node(node)?;
+            if plan_node_id as usize != exec_entities.len() {
+                panic!("Unexpected node ordering while inserting bridge rx channel");
+            }
+            channel_spec.plan_node_id = Some(plan_node_id);
+            exec_entities.push(ExecutionEntity {
+                kind: ExecutionEntityKind::BridgeRx {
+                    bridge_index,
+                    channel_index,
+                },
+            });
+            channel_nodes.insert(
+                BridgeChannelKey {
+                    bridge_id: spec.id.clone(),
+                    channel_id: channel_spec.id.clone(),
+                    direction: BridgeChannelDirection::Rx,
+                },
+                plan_node_id,
+            );
+        }
+
+        for (channel_index, channel_spec) in spec.tx_channels.iter_mut().enumerate() {
+            let mut node = Node::new(
+                format!("{}::tx::{}", spec.id, channel_spec.id).as_str(),
+                "__CuBridgeTxChannel",
+            );
+            node.set_flavor(Flavor::Bridge);
+            let plan_node_id = plan_graph.add_node(node)?;
+            if plan_node_id as usize != exec_entities.len() {
+                panic!("Unexpected node ordering while inserting bridge tx channel");
+            }
+            channel_spec.plan_node_id = Some(plan_node_id);
+            exec_entities.push(ExecutionEntity {
+                kind: ExecutionEntityKind::BridgeTx {
+                    bridge_index,
+                    channel_index,
+                },
+            });
+            channel_nodes.insert(
+                BridgeChannelKey {
+                    bridge_id: spec.id.clone(),
+                    channel_id: channel_spec.id.clone(),
+                    direction: BridgeChannelDirection::Tx,
+                },
+                plan_node_id,
+            );
+        }
+    }
+
+    for edge_idx in graph.0.edge_indices() {
+        let cnx = graph
+            .0
+            .edge_weight(edge_idx)
+            .expect("Edge should exist while building plan")
+            .clone();
+
+        let src_plan = if let Some(channel) = &cnx.src_channel {
+            let key = BridgeChannelKey {
+                bridge_id: cnx.src.clone(),
+                channel_id: channel.clone(),
+                direction: BridgeChannelDirection::Rx,
+            };
+            *channel_nodes
+                .get(&key)
+                .unwrap_or_else(|| panic!("Bridge source {:?} missing from plan graph", key))
+        } else {
+            let node_id = name_to_original
+                .get(&cnx.src)
+                .copied()
+                .unwrap_or_else(|| panic!("Unknown source node '{}'", cnx.src));
+            *original_to_plan
+                .get(&node_id)
+                .unwrap_or_else(|| panic!("Source node '{}' missing from plan", cnx.src))
+        };
+
+        let dst_plan = if let Some(channel) = &cnx.dst_channel {
+            let key = BridgeChannelKey {
+                bridge_id: cnx.dst.clone(),
+                channel_id: channel.clone(),
+                direction: BridgeChannelDirection::Tx,
+            };
+            *channel_nodes
+                .get(&key)
+                .unwrap_or_else(|| panic!("Bridge destination {:?} missing from plan graph", key))
+        } else {
+            let node_id = name_to_original
+                .get(&cnx.dst)
+                .copied()
+                .unwrap_or_else(|| panic!("Unknown destination node '{}'", cnx.dst));
+            *original_to_plan
+                .get(&node_id)
+                .unwrap_or_else(|| panic!("Destination node '{}' missing from plan", cnx.dst))
+        };
+
+        plan_graph
+            .connect_ext(
+                src_plan,
+                dst_plan,
+                &cnx.msg,
+                cnx.missions.clone(),
+                None,
+                None,
+            )
+            .map_err(|e| CuError::from(e.to_string()))?;
+    }
+
+    let runtime_plan = compute_runtime_plan(&plan_graph)?;
+    Ok((runtime_plan, exec_entities, plan_to_original))
+}
+
+fn collect_culist_metadata(
+    runtime_plan: &CuExecutionLoop,
+    exec_entities: &[ExecutionEntity],
+    bridge_specs: &mut [BridgeSpec],
+    plan_to_original: &HashMap<NodeId, NodeId>,
+) -> (Vec<usize>, HashMap<NodeId, usize>) {
+    let mut culist_order = Vec::new();
+    let mut node_output_positions = HashMap::new();
+
+    for unit in &runtime_plan.steps {
+        if let CuExecutionUnit::Step(step) = unit {
+            if let Some((output_idx, _)) = &step.output_msg_index_type {
+                culist_order.push(*output_idx as usize);
+                match &exec_entities[step.node_id as usize].kind {
+                    ExecutionEntityKind::Task { .. } => {
+                        if let Some(original_node_id) = plan_to_original.get(&step.node_id) {
+                            node_output_positions.insert(*original_node_id, *output_idx as usize);
+                        }
+                    }
+                    ExecutionEntityKind::BridgeRx {
+                        bridge_index,
+                        channel_index,
+                    } => {
+                        bridge_specs[*bridge_index].rx_channels[*channel_index].culist_index =
+                            Some(*output_idx as usize);
+                    }
+                    ExecutionEntityKind::BridgeTx { .. } => {}
+                }
+            }
+        }
+    }
+
+    (culist_order, node_output_positions)
+}
+
+#[allow(dead_code)]
+fn build_monitored_ids(task_ids: &[String], bridge_specs: &mut [BridgeSpec]) -> Vec<String> {
+    let mut names = task_ids.to_vec();
+    for spec in bridge_specs.iter_mut() {
+        spec.monitor_index = Some(names.len());
+        names.push(format!("bridge::{}", spec.id));
+        for channel in spec.rx_channels.iter_mut() {
+            channel.monitor_index = Some(names.len());
+            names.push(format!("bridge::{}::rx::{}", spec.id, channel.id));
+        }
+        for channel in spec.tx_channels.iter_mut() {
+            channel.monitor_index = Some(names.len());
+            names.push(format!("bridge::{}::tx::{}", spec.id, channel.id));
+        }
+    }
+    names
+}
+
 #[cfg(test)]
 mod tests {
     // See tests/compile_file directory for more information
@@ -2152,4 +2529,58 @@ mod tests {
         let t = trybuild::TestCases::new();
         t.compile_fail("tests/compile_fail/*/*.rs");
     }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum BridgeChannelDirection {
+    Rx,
+    Tx,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct BridgeChannelKey {
+    bridge_id: String,
+    channel_id: String,
+    direction: BridgeChannelDirection,
+}
+
+#[derive(Clone)]
+struct BridgeChannelSpec {
+    id: String,
+    const_ident: Ident,
+    msg_type: Type,
+    config_index: usize,
+    plan_node_id: Option<NodeId>,
+    culist_index: Option<usize>,
+    monitor_index: Option<usize>,
+}
+
+#[derive(Clone)]
+struct BridgeSpec {
+    id: String,
+    type_path: Type,
+    config_index: usize,
+    tuple_index: usize,
+    monitor_index: Option<usize>,
+    rx_channels: Vec<BridgeChannelSpec>,
+    tx_channels: Vec<BridgeChannelSpec>,
+}
+
+#[derive(Clone)]
+struct ExecutionEntity {
+    kind: ExecutionEntityKind,
+}
+
+#[derive(Clone)]
+enum ExecutionEntityKind {
+    Task {
+        task_index: usize,
+    },
+    BridgeRx {
+        bridge_index: usize,
+        channel_index: usize,
+    },
+    BridgeTx {
+        bridge_index: usize,
+        channel_index: usize,
+    },
 }
