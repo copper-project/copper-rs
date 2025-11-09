@@ -8,6 +8,7 @@ use std::fmt::Debug;
 
 #[cfg(feature = "image")]
 use image::{ImageBuffer, Pixel};
+use kornia::image::allocator::ImageAllocator;
 #[cfg(feature = "kornia")]
 use kornia::image::Image;
 use serde::{Serialize, Serializer};
@@ -110,7 +111,7 @@ where
     }
 
     #[cfg(feature = "kornia")]
-    pub fn as_kornia_image<T: Clone, const C: usize>(&self) -> CuResult<Image<T, C>> {
+    pub fn as_kornia_image<T: Clone, const C: usize,K: ImageAllocator>(&self, k: K) -> CuResult<Image<T, C, K>> {
         let width = self.format.width as usize;
         let height = self.format.height as usize;
 
@@ -128,7 +129,7 @@ where
             )
         });
 
-        unsafe { Image::from_raw_parts([height, width].into(), raw_pixels.as_ptr(), size) }
+        unsafe { Image::from_raw_parts([height, width].into(), raw_pixels.as_ptr(), size, k) }
             .map_err(|e| CuError::new_with_cause("Could not create a Kornia Image", e))
     }
 }
