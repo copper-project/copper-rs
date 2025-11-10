@@ -3,7 +3,7 @@ use crate::messages::{EscCommand, EscTelemetry};
 use cu29::cubridge::{
     BridgeChannel, BridgeChannelConfig, BridgeChannelInfo, BridgeChannelSet, CuBridge,
 };
-use cu29::prelude::{CuError, CuMsg, CuMsgPayload, CuResult, Freezable, RobotClock};
+use cu29::prelude::{info, CuError, CuMsg, CuMsgPayload, CuResult, Freezable, RobotClock};
 use serde::{Deserialize, Serialize};
 
 pub trait BdshotBoardProvider {
@@ -99,16 +99,14 @@ impl<P: BdshotBoardProvider> CuBdshotBridge<P> {
         }
     }
 
-    unsafe fn msg_as_command<'a, Payload>(msg: &'a CuMsg<Payload>) -> &'a CuMsg<EscCommand>
+    unsafe fn msg_as_command<Payload>(msg: &CuMsg<Payload>) -> &CuMsg<EscCommand>
     where
         Payload: CuMsgPayload,
     {
         &*(msg as *const CuMsg<Payload> as *const CuMsg<EscCommand>)
     }
 
-    unsafe fn msg_as_telemetry<'a, Payload>(
-        msg: &'a mut CuMsg<Payload>,
-    ) -> &'a mut CuMsg<EscTelemetry>
+    unsafe fn msg_as_telemetry<Payload>(msg: &mut CuMsg<Payload>) -> &mut CuMsg<EscTelemetry>
     where
         Payload: CuMsgPayload,
     {
@@ -157,6 +155,7 @@ impl<P: BdshotBoardProvider> CuBridge for CuBdshotBridge<P> {
                 if !self.active_channels[idx] {
                     continue;
                 }
+                info!("Sending disarm frames {}", idx);
                 self.board.delay(200);
                 if let Some(sample) = self.board.exchange(idx, idle_frame) {
                     self.telemetry_cache[idx] = Some(EscTelemetry {
@@ -181,6 +180,7 @@ impl<P: BdshotBoardProvider> CuBridge for CuBdshotBridge<P> {
                 if !self.active_channels[idx] {
                     continue;
                 }
+                info!("Sending telemetry on frames {}", idx);
                 self.board.delay(200);
                 let _ = self.board.exchange(idx, telemetry_frame);
             }

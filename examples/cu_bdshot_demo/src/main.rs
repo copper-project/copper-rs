@@ -125,15 +125,17 @@ fn main() -> ! {
 
     let sd_dev: SdDev = ExclusiveDevice::new(sd_spi, cs, timer0).unwrap();
     let delay1: Timer1 = Timer::new_timer1(p.TIMER1, &mut p.RESETS, &clocks);
+    defmt::info!("Creating Sdcard...");
     let sd: PimodoriSdCard = SdCard::new(sd_dev, delay1);
 
     if let Err(e) = sd.num_bytes() {
         defmt::panic!("SD Card error: {}", e);
     }
 
+    defmt::info!("Creating TSPimodoriSdCard...");
     let sd = TSPimodoriSdCard::new(sd);
 
-    info!("Setting up Copper...");
+    defmt::info!("Setting up Copper...");
 
     let clock = build_clock(timer_for_clock);
 
@@ -143,7 +145,7 @@ fn main() -> ! {
         );
     };
 
-    info!(
+    defmt::info!(
         "Found copper partition at block {} with length {}",
         blk_id.0, blk_len.0
     );
@@ -153,7 +155,7 @@ fn main() -> ! {
     ));
 
     let mut app = BdshotDemoApp::new(clock, writer).unwrap();
-    info!("Starting cu-bdshot-demo...");
+    defmt::info!("Starting cu-bdshot-demo...");
 
     let _ = <BdshotDemoApp as CuApplication<
         EMMCSectionStorage<TSPimodoriSdCard>,
