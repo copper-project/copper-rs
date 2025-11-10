@@ -22,15 +22,12 @@ telemetry immediately after arming.
 
 ## Building & flashing
 
-```
-cargo build -p cu-bdshot-demo --release --target thumbv8m.main-none-eabihf
-```
-
-The resulting ELF is located under
-`target/thumbv8m.main-none-eabihf/release/cu-bdshot-demo`. Flash it with your
-preferred RP2350 loader (e.g., `elf2uf2-rs` + drag-and-drop, probe-rs, etc.).
-The default logging backend is `defmt-rtt` so you can monitor throttle updates
-and telemetry with `probe-rs defmt`.
+`cargo run -p cu-bdshot-demo --release`  
+The `.cargo/config.toml` in this example already targets `thumbv8m.main-none-eabihf`
+and configures `probe-rs` with the onboard CMSIS-DAP probe, so `cargo run`
+builds and flashes the firmware automatically.  
+After flashing, use `probe-rs defmt` (or your RTT client of choice) to see the
+throttle ramps and telemetry logs.
 
 ## What it demonstrates
 
