@@ -410,4 +410,32 @@ mod tests {
             vec!["alpha.rx.chain", "passthrough_chain.process", "alpha.tx.chain"],
         );
     }
+
+    #[test]
+    fn missions_can_switch_bridge_topologies() {
+        let _guard = TEST_MUTEX.lock().unwrap();
+        let temp_dir = TempDir::new().expect("temp dir");
+        let log_path = temp_dir.path().join("bridge_sched_switch.copper");
+        let ctx =
+            basic_copper_setup(&log_path, Some(32 * 1024 * 1024), false, None).expect("context");
+
+        events::reset();
+        {
+            let mut app = BridgeOnlyBuilder::new().with_context(&ctx).build().unwrap();
+            app.start_all_tasks().unwrap();
+            app.run_one_iteration().unwrap();
+            app.stop_all_tasks().unwrap();
+        }
+        let first = events::take();
+        assert_eq!(first, vec!["alpha.rx.ingress", "beta.tx.egress"]);
+
+        {
+            let mut app = BridgeLoopbackBuilder::new().with_context(&ctx).build().unwrap();
+            app.start_all_tasks().unwrap();
+            app.run_one_iteration().unwrap();
+            app.stop_all_tasks().unwrap();
+        }
+        let second = events::take();
+        assert_eq!(second, vec!["alpha.rx.loop", "alpha.tx.loop"]);
+    }
 }
