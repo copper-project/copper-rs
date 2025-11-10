@@ -16,7 +16,7 @@
 
 ### Why Copper
 
-<p><strong style="color: #b87333;">🦀 Rust-first</strong> – ergonomic, safe, no C++ bindings  
+<p><strong style="color: #b87333;">🦀 Rust-first</strong> – ergonomic & safe  
 <p><strong style="color: #b87333;">⚡ Sub-microsecond latency</strong> – zero-alloc, data-oriented runtime  
 <p><strong style="color: #b87333;">⏱️ Deterministic replay</strong> – every run, bit-for-bit identical  
 <p><strong style="color: #b87333;">🧠 Interoperable with ROS2</strong> – bridges via Zenoh opening the path for a progressive migration.  
