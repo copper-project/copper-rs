@@ -23,6 +23,7 @@ critical-section = "1.1"
 serde = { workspace = true, default-features = false, features = ["derive"] }
 bincode = { workspace = true }
 log = "0.4.28"
+spin = { workspace = true }
 
 [features]
 default = []

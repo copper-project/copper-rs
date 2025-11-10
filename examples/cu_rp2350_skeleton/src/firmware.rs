@@ -12,8 +12,7 @@ use hal::{clocks::init_clocks_and_plls, gpio::Pins, pac, sio::Sio, watchdog::Wat
 use rp235x_hal as hal;
 use rp235x_hal::gpio::bank0::{Gpio15, Gpio16, Gpio17, Gpio18, Gpio19};
 
-use crate::bmlogger::{EMMCSectionStorage, ForceSyncSend};
-use bmlogger::EMMCLogger;
+use cu_sdlogger::{find_copper_partition, EMMCLogger, EMMCSectionStorage, ForceSyncSend};
 use buddy_system_allocator::LockedHeap as Heap;
 use cu29::prelude::*;
 use defmt_rtt as _;
@@ -34,7 +33,6 @@ use rp235x_hal::{Spi, Timer};
 use spin::Mutex;
 
 // --- Copper runtime
-mod bmlogger;
 pub mod tasks;
 
 #[copper_runtime(config = "copperconfig.ron")]
@@ -192,7 +190,7 @@ fn main() -> ! {
         },
     );
 
-    let Ok(Some((blk_id, blk_len))) = bmlogger::find_copper_partition(&sd) else {
+    let Ok(Some((blk_id, blk_len))) = find_copper_partition(&sd) else {
         panic!(
             "Could not find the copper partition on the SDCard. Be sure to format the sdcard with the Copper formatting script."
         );

@@ -18,6 +18,7 @@ default-run = "main"
 
 [dependencies]
 cu29 = { path = "../../core/cu29", version="0.10.0", default-features = false, features = ["log-level-debug"] } # pick it up directly to build it no-std
+cu-sdlogger = { path = "../../components/libs/cu_sdlogger", optional = true }
 cu29-export = { path = "../../core/cu29_export", version="0.10.0", optional = true, default-features = false }
 bincode = { version = "2.0", default-features = false, features = ["derive"] }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
@@ -59,5 +60,5 @@ overflow-checks = true
 
 [features]
 default = []
-firmware = ["cu29/defmt", "bincode/alloc", "serde/alloc", "dep:cortex-m-rt", "dep:defmt-rtt", "dep:embedded-hal-bus", "dep:buddy_system_allocator", "dep:embedded-hal", "dep:panic-probe", "dep:rp235x-hal", "dep:portable-atomic", "dep:spin", "dep:embedded-sdmmc"]
+firmware = ["cu29/defmt", "bincode/alloc", "serde/alloc", "dep:cortex-m-rt", "dep:defmt-rtt", "dep:embedded-hal-bus", "dep:buddy_system_allocator", "dep:embedded-hal", "dep:panic-probe", "dep:rp235x-hal", "dep:portable-atomic", "dep:spin", "dep:embedded-sdmmc", "dep:cu-sdlogger"]
 host = ["dep:cu29-export", "cu29/std", "bincode/std", "serde/std"]

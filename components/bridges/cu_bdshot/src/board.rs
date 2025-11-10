@@ -1,107 +1,139 @@
 use crate::decode::{decode_telemetry_packet, extract_telemetry_payload_with_crc_test, fold_gcr};
 use crate::esc_channel::EscChannel;
 use crate::messages::{DShotTelemetry, EscCommand};
+use cortex_m::asm;
+use cu29::prelude::CuError;
 use cu29::CuResult;
-use fugit::MicrosDurationU64;
-use hal::clocks::init_clocks_and_plls;
-use hal::gpio::bank0::Pins;
-use hal::gpio::FunctionPio0;
-use hal::gpio::PullNone;
-use hal::pio::PIOBuilder;
-use hal::pio::PIOExt;
-use hal::timer::{CopyableTimer0, Timer, TimerDevice};
-use hal::{pac, Clock, Sio, Watchdog};
-use nb::block;
+use hal::dma::Word;
+use hal::pac;
+use hal::pio::{PIOBuilder, StateMachineIndex, ValidStateMachine};
 use pio_proc::pio_file;
 use rp235x_hal as hal;
+use spin::Mutex;
 
-#[unsafe(link_section = ".start_block")]
-#[used]
-pub static IMAGE_DEF: hal::block::ImageDef = hal::block::ImageDef::secure_exe();
+use crate::bridge::BdshotBoardProvider;
 
 pub trait BdshotBoard {
     const CHANNEL_COUNT: usize;
 
-    fn init() -> CuResult<Self>
-    where
-        Self: Sized;
-
     fn exchange(&mut self, channel: usize, frame: u32) -> Option<DShotTelemetry>;
 
-    fn delay(&mut self, micros: u64);
+    fn delay(&mut self, micros: u32);
 }
 
 pub struct Rp2350Board {
-    timer: Timer<CopyableTimer0>,
-    channels: [EscChannel<
-        hal::pio::PIO0,
-        hal::pio::SM0,
-        hal::dma::SingleBuffering,
-        hal::dma::SingleBuffering,
-    >; 4],
+    cycles_per_micro: u32,
+    ch0: EscChannel<pac::PIO0, hal::pio::SM0, Word, Word>,
+    ch1: EscChannel<pac::PIO0, hal::pio::SM1, Word, Word>,
+    ch2: EscChannel<pac::PIO0, hal::pio::SM2, Word, Word>,
+    ch3: EscChannel<pac::PIO0, hal::pio::SM3, Word, Word>,
+}
+
+#[derive(Clone, Copy)]
+pub struct Rp2350BoardConfig {
+    pub pins: [u8; 4],
+    pub target_pio_clock_hz: u32,
+}
+
+impl Default for Rp2350BoardConfig {
+    fn default() -> Self {
+        Self {
+            pins: [6, 7, 8, 9],
+            target_pio_clock_hz: 15_300_000,
+        }
+    }
+}
+
+pub struct Rp2350BoardResources {
+    pub pio: hal::pio::PIO<pac::PIO0>,
+    pub sm0: hal::pio::UninitStateMachine<(pac::PIO0, hal::pio::SM0)>,
+    pub sm1: hal::pio::UninitStateMachine<(pac::PIO0, hal::pio::SM1)>,
+    pub sm2: hal::pio::UninitStateMachine<(pac::PIO0, hal::pio::SM2)>,
+    pub sm3: hal::pio::UninitStateMachine<(pac::PIO0, hal::pio::SM3)>,
+}
+
+impl Rp2350BoardResources {
+    pub fn new(
+        pio: hal::pio::PIO<pac::PIO0>,
+        sm0: hal::pio::UninitStateMachine<(pac::PIO0, hal::pio::SM0)>,
+        sm1: hal::pio::UninitStateMachine<(pac::PIO0, hal::pio::SM1)>,
+        sm2: hal::pio::UninitStateMachine<(pac::PIO0, hal::pio::SM2)>,
+        sm3: hal::pio::UninitStateMachine<(pac::PIO0, hal::pio::SM3)>,
+    ) -> Self {
+        Self {
+            pio,
+            sm0,
+            sm1,
+            sm2,
+            sm3,
+        }
+    }
+}
+
+impl Rp2350Board {
+    pub fn new(
+        resources: Rp2350BoardResources,
+        system_clock_hz: u32,
+        config: Rp2350BoardConfig,
+    ) -> CuResult<Self> {
+        let Rp2350BoardResources {
+            mut pio,
+            sm0,
+            sm1,
+            sm2,
+            sm3,
+        } = resources;
+        let pins = config.pins;
+        let (div_int, div_frac) = pio_clkdiv_8p8(system_clock_hz, config.target_pio_clock_hz);
+        let program = pio_file!("src/dshot.pio", select_program("bdshot_300"));
+        let installed = pio
+            .install(&program.program)
+            .map_err(|_| CuError::from("Failed to install BDShot PIO program"))?;
+
+        let ch0 = crate::build_ch!(installed, sm0, pins[0], div_int, div_frac);
+        let ch1 = crate::build_ch!(installed, sm1, pins[1], div_int, div_frac);
+        let ch2 = crate::build_ch!(installed, sm2, pins[2], div_int, div_frac);
+        let ch3 = crate::build_ch!(installed, sm3, pins[3], div_int, div_frac);
+
+        Ok(Self {
+            cycles_per_micro: system_clock_hz / 1_000_000,
+            ch0,
+            ch1,
+            ch2,
+            ch3,
+        })
+    }
 }
 
 impl BdshotBoard for Rp2350Board {
     const CHANNEL_COUNT: usize = 4;
 
-    fn init() -> CuResult<Self> {
-        let mut p = pac::Peripherals::take().ok_or_else(|| cu29::CuError::from("PAC busy"))?;
-        let mut watchdog = Watchdog::new(p.WATCHDOG);
-        let clocks = init_clocks_and_plls(
-            XOSC_CRYSTAL_FREQ,
-            p.XOSC,
-            p.CLOCKS,
-            p.PLL_SYS,
-            p.PLL_USB,
-            &mut p.RESETS,
-            &mut watchdog,
-        )
-        .map_err(|_| cu29::CuError::from("Clock init failed"))?;
-
-        let sys_hz = clocks.system_clock.freq().to_Hz();
-        let sio = Sio::new(p.SIO);
-        let pins = Pins::new(p.IO_BANK0, p.PADS_BANK0, sio.gpio_bank0, &mut p.RESETS);
-
-        let _gp6 = pins
-            .gpio6
-            .into_pull_type::<PullNone>()
-            .into_function::<FunctionPio0>();
-        let _gp7 = pins
-            .gpio7
-            .into_pull_type::<PullNone>()
-            .into_function::<FunctionPio0>();
-        let _gp8 = pins
-            .gpio8
-            .into_pull_type::<PullNone>()
-            .into_function::<FunctionPio0>();
-        let _gp9 = pins
-            .gpio9
-            .into_pull_type::<PullNone>()
-            .into_function::<FunctionPio0>();
-
-        let timer0 = Timer::<CopyableTimer0>::new_timer0(p.TIMER0, &mut p.RESETS, &clocks);
-        const TARGET_PIO_CLOCK: u64 = 15_300_000;
-        let (d, f) = pio_clkdiv_8p8(sys_hz, TARGET_PIO_CLOCK as u32);
-        let pio_normal_prg = pio_proc::pio_file!("src/dshot.pio", select_program("bdshot_300"));
-        let (mut pio0, sm0, sm1, sm2, sm3) = p.PIO0.split(&mut p.RESETS);
-        let bdshot_prg = pio0.install(&pio_normal_prg.program).unwrap();
-
-        let ch0 = crate::build_ch!(bdshot_prg, sm0, 6, d, f);
-        let ch1 = crate::build_ch!(bdshot_prg, sm1, 7, d, f);
-        let ch2 = crate::build_ch!(bdshot_prg, sm2, 8, d, f);
-        let ch3 = crate::build_ch!(bdshot_prg, sm3, 9, d, f);
-
-        Ok(Self {
-            timer: timer0,
-            channels: [ch0, ch1, ch2, ch3],
-        })
+    fn exchange(&mut self, channel: usize, frame: u32) -> Option<DShotTelemetry> {
+        let cycles = self.cycles_per_micro;
+        match channel {
+            0 => Self::exchange_impl(cycles, &mut self.ch0, frame),
+            1 => Self::exchange_impl(cycles, &mut self.ch1, frame),
+            2 => Self::exchange_impl(cycles, &mut self.ch2, frame),
+            3 => Self::exchange_impl(cycles, &mut self.ch3, frame),
+            _ => None,
+        }
     }
 
-    fn exchange(&mut self, channel: usize, frame: u32) -> Option<DShotTelemetry> {
-        let ch = match self.channels.get_mut(channel) {
-            Some(ch) => ch,
-            None => return None,
-        };
+    fn delay(&mut self, micros: u32) {
+        Self::delay_ticks(self.cycles_per_micro, micros as u64);
+    }
+}
+
+impl Rp2350Board {
+    fn exchange_impl<SM>(
+        cycles_per_micro: u32,
+        ch: &mut EscChannel<pac::PIO0, SM, Word, Word>,
+        frame: u32,
+    ) -> Option<DShotTelemetry>
+    where
+        SM: StateMachineIndex,
+        (pac::PIO0, SM): ValidStateMachine,
+    {
         if ch.is_full() {
             return None;
         }
@@ -112,26 +144,20 @@ impl BdshotBoard for Rp2350Board {
             let payload = extract_telemetry_payload_with_crc_test(data)?;
             return Some(decode_telemetry_packet(payload));
         }
-        delay_us(&self.timer, 150);
+        Self::delay_ticks(cycles_per_micro, 150);
         ch.restart();
         None
     }
 
-    fn delay(&mut self, micros: u64) {
-        delay_us(&self.timer, micros);
+    fn delay_ticks(cycles_per_micro: u32, mut micros: u64) {
+        let cycles = cycles_per_micro.max(1) as u64;
+        while micros > 0 {
+            let chunk = micros.min(1000);
+            let total = cycles * chunk;
+            asm::delay(total as u32);
+            micros -= chunk;
+        }
     }
-}
-
-const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
-
-fn delay_us<D: TimerDevice>(timer: &Timer<D>, us: u64) {
-    let mut cd = timer.count_down();
-    cd.start(MicrosDurationU64::micros(us));
-    let _ = block!(cd.wait());
-}
-
-fn gcr_to_16bit(raw20: u32) -> Option<u16> {
-    crate::decode::gcr_to_16bit(raw20)
 }
 
 fn pio_clkdiv_8p8(sys_hz: u32, target_hz: u32) -> (u16, u8) {
@@ -146,33 +172,34 @@ fn bdshot_frame(payload: u16) -> u32 {
     !((d << 4) | crc) as u32
 }
 
-#[macro_export]
-macro_rules! build_ch {
-    ($prog:expr, $sm:ident, $pin:expr, $d:expr, $f:expr) => {{
-        let (sm, rx, tx) = PIOBuilder::from_installed_program(unsafe { $prog.share() })
-            .set_pins($pin, 1)
-            .out_pins($pin, 1)
-            .out_shift_direction(hal::pio::ShiftDirection::Left)
-            .in_shift_direction(hal::pio::ShiftDirection::Left)
-            .in_pin_base($pin)
-            .jmp_pin($pin)
-            .clock_divisor_fixed_point($d, $f)
-            .autopush(true)
-            .push_threshold(21)
-            .side_set_pin_base($pin)
-            .build($sm);
-        EscChannel {
-            tx,
-            rx,
-            run: sm.start(),
-        }
-    }};
-}
-
 pub fn encode_frame(command: EscCommand) -> u32 {
     let mut bits = (command.throttle & 0x07FF) << 1;
     if command.request_telemetry {
         bits |= 0x01;
     }
     bdshot_frame(bits)
+}
+
+static RP_BOARD_SLOT: Mutex<Option<Rp2350Board>> = Mutex::new(None);
+
+pub fn register_rp2350_board(board: Rp2350Board) -> CuResult<()> {
+    let mut slot = RP_BOARD_SLOT.lock();
+    if slot.is_some() {
+        return Err(CuError::from("RP2350 BDShot board already registered"));
+    }
+    *slot = Some(board);
+    Ok(())
+}
+
+pub struct Rp2350BoardProvider;
+
+impl BdshotBoardProvider for Rp2350BoardProvider {
+    type Board = Rp2350Board;
+
+    fn create_board() -> CuResult<Self::Board> {
+        RP_BOARD_SLOT
+            .lock()
+            .take()
+            .ok_or_else(|| CuError::from("No RP2350 BDShot board registered"))
+    }
 }

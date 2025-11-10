@@ -1,6 +1,3 @@
-[env]
-DEFMT_LOG = "debug"
-
 # Some convienience aliases.
 [alias]
 build-logreader = "build --no-default-features --features host --bin blinky-logreader"
@@ -40,4 +37,3 @@ rustflags = [
 
 # With a cmsis-dap probe you can use probe-rs
 runner = "probe-rs run --chip RP235x --protocol swd"
-

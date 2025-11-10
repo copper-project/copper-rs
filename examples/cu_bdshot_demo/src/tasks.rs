@@ -10,6 +10,8 @@ pub struct ThrottleSource<const ESC: usize> {
     ascending: bool,
 }
 
+impl<const ESC: usize> Freezable for ThrottleSource<ESC> {}
+
 impl<const ESC: usize> Default for ThrottleSource<ESC> {
     fn default() -> Self {
         Self {
@@ -55,6 +57,8 @@ pub struct TelemetrySink<const ESC: usize> {
     _marker: PhantomData<EscTelemetry>,
 }
 
+impl<const ESC: usize> Freezable for TelemetrySink<ESC> {}
+
 impl<const ESC: usize> Default for TelemetrySink<ESC> {
     fn default() -> Self {
         Self {
@@ -64,7 +68,7 @@ impl<const ESC: usize> Default for TelemetrySink<ESC> {
 }
 
 impl<const ESC: usize> CuSinkTask for TelemetrySink<ESC> {
-    type Input<'m> = &'m CuMsg<EscTelemetry>;
+    type Input<'m> = CuMsg<EscTelemetry>;
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
         Ok(Self::default())
@@ -74,7 +78,7 @@ impl<const ESC: usize> CuSinkTask for TelemetrySink<ESC> {
         if let Some(payload) = input.payload().and_then(|t| t.sample) {
             match payload {
                 DShotTelemetry::EncodingError => {
-                    warn!("ESC{} telemetry encoding error", ESC)
+                    info!("ESC{} telemetry encoding error", ESC)
                 }
                 DShotTelemetry::Erpm(v) => info!("ESC{} eRPM {}", ESC, v),
                 DShotTelemetry::Temp(v) => info!("ESC{} temp {}C", ESC, v),

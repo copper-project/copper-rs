@@ -25,7 +25,10 @@ telemetry immediately after arming.
 `cargo run -p cu-bdshot-demo --release`  
 The `.cargo/config.toml` in this example already targets `thumbv8m.main-none-eabihf`
 and configures `probe-rs` with the onboard CMSIS-DAP probe, so `cargo run`
-builds and flashes the firmware automatically.  
+builds and flashes the firmware automatically. The firmware configures the PIO0
+state machines and then registers the resulting board via
+`cu_bdshot::register_rp2350_board`, so you can swap pins/clocks by updating the
+board construction before launching Copper.  
 After flashing, use `probe-rs defmt` (or your RTT client of choice) to see the
 throttle ramps and telemetry logs.
 
@@ -34,6 +37,9 @@ throttle ramps and telemetry logs.
 - `cu_bdshot::RpBdshotBridge` encapsulates the RP2350 PIO program, DMA and timer
   handling needed to speak BDShot, exposing four static channels to the Copper
   runtime.
+- The shared `cu_sdlogger` crate writes Copper logs to the SD/eMMC partition,
+  so `cargo run` + the onboard CMSIS-DAP probe are sufficient to flash and
+  capture telemetry without extra setup.
 - Four `ThrottleSource` tasks feed commands into the bridge; the commands ramp up
   and down to exercise the ESCs deterministically.
 - Four `TelemetrySink` tasks consume the bridge telemetry channels, logging the
