@@ -138,12 +138,15 @@ impl KeyFramesManager {
 /// This is the main structure that will be injected as a member of the Application struct.
 /// CT is the tuple of all the tasks in order of execution.
 /// CL is the type of the copper list, representing the input/output messages for all the tasks.
-pub struct CuRuntime<CT, P: CopperListTuple, M: CuMonitor, const NBCL: usize> {
+pub struct CuRuntime<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize> {
     /// The base clock the runtime will be using to record time.
     pub clock: RobotClock, // TODO: remove public at some point
 
     /// The tuple of all the tasks in order of execution.
     pub tasks: CT,
+
+    /// Tuple of all instantiated bridges.
+    pub bridges: CB,
 
     /// For backgrounded tasks.
     #[cfg(feature = "std")]
@@ -163,8 +166,8 @@ pub struct CuRuntime<CT, P: CopperListTuple, M: CuMonitor, const NBCL: usize> {
 }
 
 /// To be able to share the clock we make the runtime a clock provider.
-impl<CT, P: CopperListTuple + CuListZeroedInit + Default, M: CuMonitor, const NBCL: usize>
-    ClockProvider for CuRuntime<CT, P, M, NBCL>
+impl<CT, CB, P: CopperListTuple + CuListZeroedInit + Default, M: CuMonitor, const NBCL: usize>
+    ClockProvider for CuRuntime<CT, CB, P, M, NBCL>
 {
     fn get_clock(&self) -> RobotClock {
         self.clock.clone()
@@ -218,12 +221,14 @@ impl KeyFrame {
 
 impl<
         CT,
+        CB,
         P: CopperListTuple + CuListZeroedInit + Default + 'static,
         M: CuMonitor,
         const NBCL: usize,
-    > CuRuntime<CT, P, M, NBCL>
+    > CuRuntime<CT, CB, P, M, NBCL>
 {
     // FIXME(gbin): this became REALLY ugly with no-std
+    #[allow(clippy::too_many_arguments)]
     #[cfg(feature = "std")]
     pub fn new(
         clock: RobotClock,
@@ -234,6 +239,7 @@ impl<
             Arc<ThreadPool>,
         ) -> CuResult<CT>,
         monitor_instanciator: impl Fn(&CuConfig) -> M,
+        bridges_instanciator: impl Fn(&CuConfig) -> CuResult<CB>,
         copperlists_logger: impl WriteStream<CopperList<P>> + 'static,
         keyframes_logger: impl WriteStream<KeyFrame> + 'static,
     ) -> CuResult<Self> {
@@ -255,6 +261,7 @@ impl<
 
         let tasks = tasks_instanciator(all_instances_configs, threadpool.clone())?;
         let monitor = monitor_instanciator(config);
+        let bridges = bridges_instanciator(config)?;
 
         let (copperlists_logger, keyframes_logger, keyframe_interval) = match &config.logging {
             Some(logging_config) if logging_config.enable_task_logging => (
@@ -286,6 +293,7 @@ impl<
 
         let runtime = Self {
             tasks,
+            bridges,
             threadpool,
             monitor,
             clock,
@@ -304,6 +312,7 @@ impl<
         mission: Option<&str>,
         tasks_instanciator: impl for<'c> Fn(Vec<Option<&'c ComponentConfig>>) -> CuResult<CT>,
         monitor_instanciator: impl Fn(&CuConfig) -> M,
+        bridges_instanciator: impl Fn(&CuConfig) -> CuResult<CB>,
         copperlists_logger: impl WriteStream<CopperList<P>> + 'static,
         keyframes_logger: impl WriteStream<KeyFrame> + 'static,
     ) -> CuResult<Self> {
@@ -317,6 +326,7 @@ impl<
         let tasks = tasks_instanciator(all_instances_configs)?;
 
         let monitor = monitor_instanciator(config);
+        let bridges = bridges_instanciator(config)?;
 
         let (copperlists_logger, keyframes_logger, keyframe_interval) = match &config.logging {
             Some(logging_config) if logging_config.enable_task_logging => (
@@ -348,6 +358,7 @@ impl<
 
         let runtime = Self {
             tasks,
+            bridges,
             #[cfg(feature = "std")]
             threadpool,
             monitor,
@@ -803,6 +814,10 @@ mod tests {
         NoMonitor {}
     }
 
+    fn bridges_instanciator(_config: &CuConfig) -> CuResult<()> {
+        Ok(())
+    }
+
     #[derive(Debug)]
     struct FakeWriter {}
 
@@ -819,12 +834,13 @@ mod tests {
         graph.add_node(Node::new("a", "TestSource")).unwrap();
         graph.add_node(Node::new("b", "TestSink")).unwrap();
         graph.connect(0, 1, "()").unwrap();
-        let runtime = CuRuntime::<Tasks, Msgs, NoMonitor, 2>::new(
+        let runtime = CuRuntime::<Tasks, (), Msgs, NoMonitor, 2>::new(
             RobotClock::default(),
             &config,
             None,
             tasks_instanciator,
             monitor_instanciator,
+            bridges_instanciator,
             FakeWriter {},
             FakeWriter {},
         );
@@ -839,12 +855,13 @@ mod tests {
         graph.add_node(Node::new("b", "TestSink")).unwrap();
         graph.connect(0, 1, "()").unwrap();
 
-        let mut runtime = CuRuntime::<Tasks, Msgs, NoMonitor, 2>::new(
+        let mut runtime = CuRuntime::<Tasks, (), Msgs, NoMonitor, 2>::new(
             RobotClock::default(),
             &config,
             None,
             tasks_instanciator,
             monitor_instanciator,
+            bridges_instanciator,
             FakeWriter {},
             FakeWriter {},
         )
