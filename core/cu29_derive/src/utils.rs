@@ -27,6 +27,28 @@ pub(crate) fn config_id_to_struct_member(id: &str) -> String {
 
     candidate = candidate.to_case(Case::Snake);
 
+    let starts_with_invalid = id
+        .chars()
+        .next()
+        .is_some_and(|c| !c.is_alphanumeric() && c != '_');
+    let ends_with_invalid = id
+        .chars()
+        .rev()
+        .next()
+        .is_some_and(|c| !c.is_alphanumeric() && c != '_');
+
+    if starts_with_invalid {
+        candidate = candidate.trim_start_matches('_').to_string();
+    }
+
+    if ends_with_invalid {
+        candidate = candidate.trim_end_matches('_').to_string();
+    }
+
+    if candidate.is_empty() {
+        candidate.push('_');
+    }
+
     if candidate.chars().next().is_some_and(|c| c.is_ascii_digit()) {
         candidate.insert(0, '_');
     }
