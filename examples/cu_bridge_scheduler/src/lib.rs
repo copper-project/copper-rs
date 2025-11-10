@@ -209,7 +209,7 @@ pub mod bridges {
         where
             Self: Sized,
         {
-            Ok(Self::default())
+            Ok(Self)
         }
 
         fn receive<'a, Payload>(
@@ -299,7 +299,7 @@ pub mod bridges {
         where
             Self: Sized,
         {
-            Ok(Self::default())
+            Ok(Self)
         }
 
         fn receive<'a, Payload>(
