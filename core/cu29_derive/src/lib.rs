@@ -1035,57 +1035,59 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let mut postprocess_calls = task_postprocess_calls;
         postprocess_calls.extend(bridge_postprocess_calls);
 
-        let runtime_plan_code_and_logging: Vec<(proc_macro2::TokenStream, proc_macro2::TokenStream)> =
-            culist_plan
-                .steps
-                .iter()
-                .map(|unit| match unit {
-                    CuExecutionUnit::Step(step) => {
-                        #[cfg(feature = "macro_debug")]
-                        eprintln!(
-                            "{} -> {} as {:?}. task_id: {} Input={:?}, Output={:?}",
-                            step.node.get_id(),
-                            step.node.get_type(),
-                            step.task_type,
-                            step.node_id,
-                            step.input_msg_indices_types,
-                            step.output_msg_index_type
-                        );
+        let runtime_plan_code_and_logging: Vec<(
+            proc_macro2::TokenStream,
+            proc_macro2::TokenStream,
+        )> = culist_plan
+            .steps
+            .iter()
+            .map(|unit| match unit {
+                CuExecutionUnit::Step(step) => {
+                    #[cfg(feature = "macro_debug")]
+                    eprintln!(
+                        "{} -> {} as {:?}. task_id: {} Input={:?}, Output={:?}",
+                        step.node.get_id(),
+                        step.node.get_type(),
+                        step.task_type,
+                        step.node_id,
+                        step.input_msg_indices_types,
+                        step.output_msg_index_type
+                    );
 
-                        match &culist_exec_entities[step.node_id as usize].kind {
-                            ExecutionEntityKind::Task { task_index } => {
-                                generate_task_execution_tokens(
-                                    step,
-                                    *task_index,
-                                    &task_specs,
-                                    sim_mode,
-                                    &mission_mod,
-                                )
-                            }
-                            ExecutionEntityKind::BridgeRx { bridge_index, channel_index } => {
-                                let spec = &culist_bridge_specs[*bridge_index];
-                                generate_bridge_rx_execution_tokens(
-                                    spec,
-                                    *channel_index,
-                                    &mission_mod,
-                                )
-                            }
-                            ExecutionEntityKind::BridgeTx { bridge_index, channel_index } => {
-                                let spec = &culist_bridge_specs[*bridge_index];
-                                generate_bridge_tx_execution_tokens(
-                                    step,
-                                    spec,
-                                    *channel_index,
-                                    &mission_mod,
-                                )
-                            }
+                    match &culist_exec_entities[step.node_id as usize].kind {
+                        ExecutionEntityKind::Task { task_index } => generate_task_execution_tokens(
+                            step,
+                            *task_index,
+                            &task_specs,
+                            sim_mode,
+                            &mission_mod,
+                        ),
+                        ExecutionEntityKind::BridgeRx {
+                            bridge_index,
+                            channel_index,
+                        } => {
+                            let spec = &culist_bridge_specs[*bridge_index];
+                            generate_bridge_rx_execution_tokens(spec, *channel_index, &mission_mod)
+                        }
+                        ExecutionEntityKind::BridgeTx {
+                            bridge_index,
+                            channel_index,
+                        } => {
+                            let spec = &culist_bridge_specs[*bridge_index];
+                            generate_bridge_tx_execution_tokens(
+                                step,
+                                spec,
+                                *channel_index,
+                                &mission_mod,
+                            )
                         }
                     }
-                    CuExecutionUnit::Loop(_) => {
-                        panic!("Execution loops are not supported in runtime generation");
-                    }
-                })
-                .collect();
+                }
+                CuExecutionUnit::Loop(_) => {
+                    panic!("Execution loops are not supported in runtime generation");
+                }
+            })
+            .collect();
 
         let sim_support = if sim_mode {
             Some(gen_sim_support(&culist_plan, &culist_exec_entities))
