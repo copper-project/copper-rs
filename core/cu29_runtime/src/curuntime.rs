@@ -228,6 +228,7 @@ impl<
     > CuRuntime<CT, CB, P, M, NBCL>
 {
     // FIXME(gbin): this became REALLY ugly with no-std
+    #[allow(clippy::too_many_arguments)]
     #[cfg(feature = "std")]
     pub fn new(
         clock: RobotClock,

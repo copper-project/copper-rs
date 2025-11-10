@@ -301,7 +301,7 @@ mod tests {
         unsafe { &*(msg as *const CuMsg<From> as *const CuMsg<To>) }
     }
 
-    fn cast_msg_mut<'a, From, To>(msg: &'a mut CuMsg<From>) -> &'a mut CuMsg<To>
+    fn cast_msg_mut<From, To>(msg: &mut CuMsg<From>) -> &mut CuMsg<To>
     where
         From: CuMsgPayload,
         To: CuMsgPayload,
