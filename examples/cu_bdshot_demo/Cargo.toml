@@ -1,0 +1,33 @@
+[package]
+name = "cu-bdshot-demo"
+description = "Example Copper mission driving BDShot ESCs on the RP2350 reference board."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+cu29 = { path = "../../core/cu29", default-features = false }
+cu_bdshot = { path = "../../components/bridges/cu_bdshot" }
+embedded-alloc = "0.5"
+panic-probe = { version = "0.3", features = ["print-defmt"] }
+defmt = { version = "0.3", features = ["alloc"] }
+defmt-rtt = "0.4"
+spin = "0.10"
+bincode = { workspace = true }
+
+[features]
+default = []
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = "s"
+panic = "abort"
+
+[profile.dev]
+panic = "abort"

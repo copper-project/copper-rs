@@ -1,0 +1,63 @@
+use bincode::{Decode, Encode};
+use serde::{Deserialize, Serialize};
+
+/// Telemetry payload decoded from a DSHOT ESC.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
+pub enum DShotTelemetry {
+    EncodingError,
+    Erpm(u16),
+    Temp(u8),
+    Voltage(u8),
+    Amps(u8),
+    Debug1(u8),
+    Debug2(u8),
+    Debug3(u8),
+    Event(u8),
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for DShotTelemetry {
+    fn format(&self, fmt: defmt::Formatter) {
+        match self {
+            Self::EncodingError => defmt::write!(fmt, "Encoding Error"),
+            Self::Erpm(v) => defmt::write!(fmt, "eRPM: {}", v),
+            Self::Amps(v) => defmt::write!(fmt, "Amps: {}", v),
+            Self::Temp(v) => defmt::write!(fmt, "Temp: {}", v),
+            Self::Voltage(v) => defmt::write!(fmt, "Voltage: {}", v),
+            Self::Debug1(v) => defmt::write!(fmt, "Debug 1: {}", v),
+            Self::Debug2(v) => defmt::write!(fmt, "Debug 2: {}", v),
+            Self::Debug3(v) => defmt::write!(fmt, "Debug 3: {}", v),
+            Self::Event(v) => defmt::write!(fmt, "Event: {}", v),
+        }
+    }
+}
+
+/// Command sent from Copper into the ESC bridge.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
+pub struct EscCommand {
+    /// Raw throttle value (0 - 2047). Values >= 48 arm the ESC per DSHOT spec.
+    pub throttle: u16,
+    /// Whether the bridge should request telemetry for this frame.
+    pub request_telemetry: bool,
+}
+
+impl Default for EscCommand {
+    fn default() -> Self {
+        Self {
+            throttle: 0,
+            request_telemetry: true,
+        }
+    }
+}
+
+impl EscCommand {
+    pub fn disarm() -> Self {
+        Self::default()
+    }
+}
+
+/// Telemetry sample received from the ESC bridge.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
+pub struct EscTelemetry {
+    pub sample: Option<DShotTelemetry>,
+}

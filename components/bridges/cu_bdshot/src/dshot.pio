@@ -1,0 +1,92 @@
+; Bidirectional dshot at 300kbits/s
+
+; This should be run with a target PIO Clock of 15_300_000 Hz
+; It means one clock cycle (inst) or [wait] is 0.06536458us
+; One bit at 300kbit/s is 3.33us so very close to 51 cycles.
+; A complete frame is 106.72µs
+;
+; There is a 16 bit request make in long/short bit encoding
+; a 30µs break where you need to release the line (459 cycles)
+; then a 300kbits straight 16bit response
+.program bdshot_300
+.wrap_target
+entry:
+    ;pull  block
+    set   pindirs, 1
+    pull   block
+    out    null, 16
+
+bit:
+    set pins, 0 [16]
+    out pins, 1 [16]  ; depending on the value of the bit we either shorten or make it longer
+    set pins, 1 [13]
+    jmp !osre bit
+
+    ; We are done transmitting, switch the pins to reception
+    set  pindirs, 0
+    mov  isr, null
+
+    ; one bit takes 32 PIO cycles, so after 16 PIO cycles we begin to count it as a bit. After 32 more cycles the second bit etc.
+    ; That means we round the cycle count to the nearest multiple of 32 and then divide by 32 to get the bit count.
+
+    ; prepare reading of ERPM, this is a 21 bit long sequence
+    set x, 21
+
+    ; x = counter of bits remaining to be read
+    mov osr, ~null
+    ; osr full of 1s (0xFFFFFFFF), so we have access to 1s each time we read a 1 (without relying on the pin still being a 1)
+    ; y = counter of loops remaining to be counted for the current bit
+
+    ; now the response is encoded with 2.2us bits so 37 cycles
+
+wait_for_pin:
+    jmp pin, wait_for_pin [1]; wait for the pin to go low
+
+new_zero:
+    set y, 6          ;  half a bit -> 6 x 2 ticks per loop + 4 ticks to get to the loop = 18 ticks
+    jmp meas_zero
+
+another_zero:
+    set y, 15 [2]     ;  full bit -> 15 x 2 ticks per loop + 4 ticks to get to the loop + 2 = 36 ticks
+
+meas_zero:
+    jmp pin new_one
+    jmp y-- meas_zero
+    in null, 1
+    jmp x-- another_zero
+    jmp entry; stop, as we have read all bits, autopush will take care of the rest
+
+new_one:
+    set y, 6 [1]
+    jmp meas_one
+
+another_one:
+    set y, 15 [2]
+
+meas_one:
+    jmp pin cont_meas_one
+    jmp new_zero
+
+cont_meas_one:
+    jmp y-- meas_one
+    in osr, 1; read the bit (always 1 because osr = 0xFFFFFFFF)
+    jmp x-- another_one
+    ; we have read all bits, autopush will take care of the rest
+.wrap
+
+; This is a pure dshot variant (not waiting for the telemetry)
+.program dshot_300
+.wrap_target
+entry:
+    set  pindirs, 0       ; high-Z
+    pull  block           ; get 32-bit frame in OSR
+    set   pindirs, 1      ; drive the pin as output
+    out    null, 16       ; align OSR as in bdshot_300
+
+bit:
+    set pins, 0 [16]
+    out pins, 1 [16]
+    set pins, 1 [13]
+    jmp !osre bit         ; loop until 16 bits consumed
+    jmp entry
+.wrap
