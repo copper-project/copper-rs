@@ -14,7 +14,7 @@ repository.workspace = true
 buddy_system_allocator = { version = "0.11", default-features = false, features = ["use_spin"] }
 cu29 = { path = "../../core/cu29", default-features = false, features = ["defmt"] }
 cu-bdshot = { path = "../../components/bridges/cu_bdshot" }
-cu-sdlogger = { path = "../../components/libs/cu_sdlogger", package = "cu-sdlogger" }
+cu-sdlogger = { path = "../../components/libs/cu_sdlogger" }
 cortex-m-rt = "0.7"
 defmt-rtt = "1.0"
 embedded-hal = "1.0"
@@ -30,11 +30,16 @@ serde = { workspace = true }
 [features]
 default = []
 
+# A safe development profile for remote debugging.
+[profile.dev]
+opt-level = 0
+debug = 2
+debug-assertions = true
+overflow-checks = true
+
 [profile.release]
 lto = true
 codegen-units = 1
 opt-level = "s"
 panic = "abort"
 
-[profile.dev]
-panic = "abort"

@@ -38,15 +38,15 @@ impl<const ESC: usize> CuSrcTask for ThrottleSource<ESC> {
         if self.ascending {
             self.value = (self.value + STEP).min(MAX_THROTTLE);
             if self.value >= MAX_THROTTLE {
+                info!("ESC {} MAXED OUT", ESC);
                 self.ascending = false;
             }
+        } else if self.value > STEP {
+            self.value -= STEP;
         } else {
-            if self.value > STEP {
-                self.value -= STEP;
-            } else {
-                self.value = 0;
-                self.ascending = true;
-            }
+            info!("ESC {} MINED OUT", ESC);
+            self.value = 0;
+            self.ascending = true;
         }
 
         Ok(())
@@ -89,6 +89,8 @@ impl<const ESC: usize> CuSinkTask for TelemetrySink<ESC> {
                 DShotTelemetry::Debug3(v) => info!("ESC{} dbg3 {}", ESC, v),
                 DShotTelemetry::Event(v) => info!("ESC{} event {}", ESC, v),
             }
+        } else {
+            info!("No Telemetry {}", ESC);
         }
         Ok(())
     }
