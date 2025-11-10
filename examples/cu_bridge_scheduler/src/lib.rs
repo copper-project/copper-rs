@@ -121,7 +121,10 @@ pub mod tasks {
 
         fn process<'i>(&mut self, _clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
             events::record("sink_from_bridge.process");
-            assert!(input.payload().is_some(), "sink should receive payloads from bridge");
+            assert!(
+                input.payload().is_some(),
+                "sink should receive payloads from bridge"
+            );
             Ok(())
         }
     }
@@ -344,8 +347,8 @@ mod tests {
     use std::sync::Mutex;
     use tempfile::TempDir;
 
-    use super::BridgeOnlyAB::BridgeSchedulerAppBuilder as BridgeOnlyBuilder;
     use super::BridgeLoopback::BridgeSchedulerAppBuilder as BridgeLoopbackBuilder;
+    use super::BridgeOnlyAB::BridgeSchedulerAppBuilder as BridgeOnlyBuilder;
     use super::BridgeTaskSame::BridgeSchedulerAppBuilder as BridgeTaskBuilder;
     use super::BridgeToSink::BridgeSchedulerAppBuilder as BridgeToSinkBuilder;
     use super::SourceToBridge::BridgeSchedulerAppBuilder as SourceToBridgeBuilder;
@@ -407,7 +410,11 @@ mod tests {
         let events = run_mission(|ctx| BridgeTaskBuilder::new().with_context(ctx).build());
         assert_eq!(
             events,
-            vec!["alpha.rx.chain", "passthrough_chain.process", "alpha.tx.chain"],
+            vec![
+                "alpha.rx.chain",
+                "passthrough_chain.process",
+                "alpha.tx.chain"
+            ],
         );
     }
 
@@ -430,7 +437,10 @@ mod tests {
         assert_eq!(first, vec!["alpha.rx.ingress", "beta.tx.egress"]);
 
         {
-            let mut app = BridgeLoopbackBuilder::new().with_context(&ctx).build().unwrap();
+            let mut app = BridgeLoopbackBuilder::new()
+                .with_context(&ctx)
+                .build()
+                .unwrap();
             app.start_all_tasks().unwrap();
             app.run_one_iteration().unwrap();
             app.stop_all_tasks().unwrap();
