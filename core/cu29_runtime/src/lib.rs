@@ -9,6 +9,7 @@ pub mod config;
 pub mod copperlist;
 #[cfg(feature = "std")]
 pub mod cuasynctask; // no no-std version yet
+pub mod cubridge;
 pub mod curuntime;
 pub mod cutask;
 pub(crate) mod log;
