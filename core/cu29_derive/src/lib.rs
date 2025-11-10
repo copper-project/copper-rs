@@ -547,10 +547,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             .get(#config_index)
                             .unwrap_or_else(|| panic!("Bridge '{}' missing from configuration", #bridge_name));
                         let tx_channels: &[cu29::cubridge::BridgeChannelConfig<
-                            <#bridge_type as cu29::cubridge::CuBridge>::Tx::Id,
+                            <<#bridge_type as cu29::cubridge::CuBridge>::Tx as cu29::cubridge::BridgeChannelSet>::Id,
                         >] = &[#(#tx_configs),*];
                         let rx_channels: &[cu29::cubridge::BridgeChannelConfig<
-                            <#bridge_type as cu29::cubridge::CuBridge>::Rx::Id,
+                            <<#bridge_type as cu29::cubridge::CuBridge>::Rx as cu29::cubridge::BridgeChannelSet>::Id,
                         >] = &[#(#rx_configs),*];
                         <#bridge_type as cu29::cubridge::CuBridge>::new(
                             bridge_cfg.config.as_ref(),
@@ -633,12 +633,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let task_types = &task_specs.task_types;
         // Build the tuple of all those types
         // note the extraneous, at the end is to make the tuple work even if this is only one element
-        let task_types_tuple: TypeTuple = parse_quote! {
-            (#(#task_types),*,)
+        let task_types_tuple: TypeTuple = if task_types.is_empty() {
+            parse_quote! { () }
+        } else {
+            parse_quote! { (#(#task_types),*,) }
         };
 
-        let task_types_tuple_sim: TypeTuple = parse_quote! {
-            (#(#all_sim_tasks_types),*,)
+        let task_types_tuple_sim: TypeTuple = if all_sim_tasks_types.is_empty() {
+            parse_quote! { () }
+        } else {
+            parse_quote! { (#(#all_sim_tasks_types),*,) }
         };
 
         #[cfg(feature = "macro_debug")]
@@ -1599,26 +1603,47 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             None
         };
 
+        let sim_inst_body = if task_sim_instances_init_code.is_empty() {
+            quote! { Ok(()) }
+        } else {
+            quote! { Ok(( #(#task_sim_instances_init_code),*, )) }
+        };
+
         let sim_tasks_instanciator = if sim_mode {
             Some(quote! {
                 pub fn tasks_instanciator_sim(all_instances_configs: Vec<Option<&ComponentConfig>>, _threadpool: Arc<ThreadPool>) -> CuResult<CuSimTasks> {
-                    Ok(( #(#task_sim_instances_init_code),*, ))
+                    #sim_inst_body
             }})
         } else {
             None
         };
 
+        let tasks_inst_body_std = if task_instances_init_code.is_empty() {
+            quote! {
+                let _ = threadpool;
+                Ok(())
+            }
+        } else {
+            quote! { Ok(( #(#task_instances_init_code),*, )) }
+        };
+
+        let tasks_inst_body_nostd = if task_instances_init_code.is_empty() {
+            quote! { Ok(()) }
+        } else {
+            quote! { Ok(( #(#task_instances_init_code),*, )) }
+        };
+
         let tasks_instanciator = if std {
             quote! {
                 pub fn tasks_instanciator<'c>(all_instances_configs: Vec<Option<&'c ComponentConfig>>, threadpool: Arc<ThreadPool>) -> CuResult<CuTasks> {
-                    Ok(( #(#task_instances_init_code),*, ))
+                    #tasks_inst_body_std
                 }
             }
         } else {
             // no thread pool in the no-std impl
             quote! {
                 pub fn tasks_instanciator<'c>(all_instances_configs: Vec<Option<&'c ComponentConfig>>) -> CuResult<CuTasks> {
-                    Ok(( #(#task_instances_init_code),*, ))
+                    #tasks_inst_body_nostd
                 }
             }
         };
@@ -1815,7 +1840,11 @@ struct CuTaskSpecSet {
 
 impl CuTaskSpecSet {
     pub fn from_graph(graph: &CuGraph) -> Self {
-        let all_id_nodes = graph.get_all_nodes();
+        let all_id_nodes: Vec<(NodeId, &Node)> = graph
+            .get_all_nodes()
+            .into_iter()
+            .filter(|(_, node)| node.get_flavor() == Flavor::Task)
+            .collect();
 
         let ids = all_id_nodes
             .iter()

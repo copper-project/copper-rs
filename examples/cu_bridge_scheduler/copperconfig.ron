@@ -1,0 +1,86 @@
+(
+    missions: [
+        (id: "BridgeOnlyAB"),
+        (id: "BridgeLoopback"),
+        (id: "SourceToBridge"),
+        (id: "BridgeToSink"),
+        (id: "BridgeTaskSame"),
+    ],
+    tasks: [
+        (
+            id: "src_to_bridge",
+            type: "tasks::SourceToBridge",
+            missions: ["SourceToBridge"],
+        ),
+        (
+            id: "passthrough",
+            type: "tasks::PassthroughChain",
+            missions: ["BridgeTaskSame"],
+        ),
+        (
+            id: "sink_from_bridge",
+            type: "tasks::SinkFromBridge",
+            missions: ["BridgeToSink"],
+        ),
+    ],
+    bridges: [
+        (
+            id: "alpha",
+            type: "bridges::AlphaBridge",
+            channels: [
+                Rx ( id: "ingress", route: "alpha/ingress" ),
+                Rx ( id: "loop_in", route: "alpha/loop_in" ),
+                Rx ( id: "to_sink", route: "alpha/to_sink" ),
+                Rx ( id: "chain_in", route: "alpha/chain_in" ),
+                Tx ( id: "loop_out", route: "alpha/loop_out" ),
+                Tx ( id: "chain_out", route: "alpha/chain_out" ),
+            ],
+        ),
+        (
+            id: "beta",
+            type: "bridges::BetaBridge",
+            channels: [
+                Tx ( id: "egress", route: "beta/egress" ),
+                Tx ( id: "from_src", route: "beta/from_src" ),
+            ],
+        ),
+    ],
+    cnx: [
+        (
+            src: "alpha/ingress",
+            dst: "beta/egress",
+            msg: "messages::IngressMsg",
+            missions: ["BridgeOnlyAB"],
+        ),
+        (
+            src: "alpha/loop_in",
+            dst: "alpha/loop_out",
+            msg: "messages::LoopbackMsg",
+            missions: ["BridgeLoopback"],
+        ),
+        (
+            src: "src_to_bridge",
+            dst: "beta/from_src",
+            msg: "messages::FromSource",
+            missions: ["SourceToBridge"],
+        ),
+        (
+            src: "alpha/to_sink",
+            dst: "sink_from_bridge",
+            msg: "messages::SinkPayload",
+            missions: ["BridgeToSink"],
+        ),
+        (
+            src: "alpha/chain_in",
+            dst: "passthrough",
+            msg: "messages::ChainPayload",
+            missions: ["BridgeTaskSame"],
+        ),
+        (
+            src: "passthrough",
+            dst: "alpha/chain_out",
+            msg: "messages::ChainPayload",
+            missions: ["BridgeTaskSame"],
+        ),
+    ],
+)
