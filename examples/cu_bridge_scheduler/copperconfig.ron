@@ -27,6 +27,7 @@
         (
             id: "alpha",
             type: "bridges::AlphaBridge",
+            missions: ["BridgeOnlyAB", "BridgeLoopback", "BridgeToSink", "BridgeTaskSame"],
             channels: [
                 Rx ( id: "ingress", route: "alpha/ingress" ),
                 Rx ( id: "loop_in", route: "alpha/loop_in" ),
@@ -39,6 +40,7 @@
         (
             id: "beta",
             type: "bridges::BetaBridge",
+            missions: ["BridgeOnlyAB", "SourceToBridge"],
             channels: [
                 Tx ( id: "egress", route: "beta/egress" ),
                 Tx ( id: "from_src", route: "beta/from_src" ),
