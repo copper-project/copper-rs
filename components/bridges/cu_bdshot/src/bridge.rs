@@ -3,12 +3,17 @@ use crate::messages::{EscCommand, EscTelemetry};
 use cu29::cubridge::{
     BridgeChannel, BridgeChannelConfig, BridgeChannelInfo, BridgeChannelSet, CuBridge,
 };
-use cu29::prelude::{CuError, CuMsg, CuResult, RobotClock};
-use cu29::CuOther;
+use cu29::prelude::{CuError, CuMsg, CuMsgPayload, CuResult, Freezable, RobotClock};
+use serde::{Deserialize, Serialize};
 
-const MAX_ESC_CHANNELS: usize = 4;
+pub trait BdshotBoardProvider {
+    type Board: BdshotBoard;
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+    fn create_board() -> CuResult<Self::Board>;
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum TxId {
     Esc0,
     Esc1,
@@ -19,50 +24,63 @@ pub enum TxId {
 pub struct TxChannels;
 
 impl TxChannels {
-    pub const ESC0: BridgeChannel<TxId, EscCommand> = BridgeChannel::new(TxId::Esc0, "esc0");
-    pub const ESC1: BridgeChannel<TxId, EscCommand> = BridgeChannel::new(TxId::Esc1, "esc1");
-    pub const ESC2: BridgeChannel<TxId, EscCommand> = BridgeChannel::new(TxId::Esc2, "esc2");
-    pub const ESC3: BridgeChannel<TxId, EscCommand> = BridgeChannel::new(TxId::Esc3, "esc3");
+    pub const ESC_0: BridgeChannel<TxId, EscCommand> = BridgeChannel::new(TxId::Esc0, "esc0");
+    pub const ESC_1: BridgeChannel<TxId, EscCommand> = BridgeChannel::new(TxId::Esc1, "esc1");
+    pub const ESC_2: BridgeChannel<TxId, EscCommand> = BridgeChannel::new(TxId::Esc2, "esc2");
+    pub const ESC_3: BridgeChannel<TxId, EscCommand> = BridgeChannel::new(TxId::Esc3, "esc3");
 }
 
 impl BridgeChannelSet for TxChannels {
     type Id = TxId;
 
     const STATIC_CHANNELS: &'static [&'static dyn BridgeChannelInfo<Self::Id>] =
-        &[&Self::ESC0, &Self::ESC1, &Self::ESC2, &Self::ESC3];
+        &[&Self::ESC_0, &Self::ESC_1, &Self::ESC_2, &Self::ESC_3];
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum RxId {
-    Esc0,
-    Esc1,
-    Esc2,
-    Esc3,
+    Esc0Rx,
+    Esc1Rx,
+    Esc2Rx,
+    Esc3Rx,
 }
 
 pub struct RxChannels;
 
 impl RxChannels {
-    pub const ESC0: BridgeChannel<RxId, EscTelemetry> = BridgeChannel::new(RxId::Esc0, "esc0");
-    pub const ESC1: BridgeChannel<RxId, EscTelemetry> = BridgeChannel::new(RxId::Esc1, "esc1");
-    pub const ESC2: BridgeChannel<RxId, EscTelemetry> = BridgeChannel::new(RxId::Esc2, "esc2");
-    pub const ESC3: BridgeChannel<RxId, EscTelemetry> = BridgeChannel::new(RxId::Esc3, "esc3");
+    pub const ESC_0_RX: BridgeChannel<RxId, EscTelemetry> =
+        BridgeChannel::new(RxId::Esc0Rx, "esc0_rx");
+    pub const ESC_1_RX: BridgeChannel<RxId, EscTelemetry> =
+        BridgeChannel::new(RxId::Esc1Rx, "esc1_rx");
+    pub const ESC_2_RX: BridgeChannel<RxId, EscTelemetry> =
+        BridgeChannel::new(RxId::Esc2Rx, "esc2_rx");
+    pub const ESC_3_RX: BridgeChannel<RxId, EscTelemetry> =
+        BridgeChannel::new(RxId::Esc3Rx, "esc3_rx");
 }
 
 impl BridgeChannelSet for RxChannels {
     type Id = RxId;
 
-    const STATIC_CHANNELS: &'static [&'static dyn BridgeChannelInfo<Self::Id>] =
-        &[&Self::ESC0, &Self::ESC1, &Self::ESC2, &Self::ESC3];
+    const STATIC_CHANNELS: &'static [&'static dyn BridgeChannelInfo<Self::Id>] = &[
+        &Self::ESC_0_RX,
+        &Self::ESC_1_RX,
+        &Self::ESC_2_RX,
+        &Self::ESC_3_RX,
+    ];
 }
 
-pub struct CuBdshotBridge<B: BdshotBoard> {
-    board: B,
+const MAX_ESC_CHANNELS: usize = 4;
+
+pub struct CuBdshotBridge<P: BdshotBoardProvider> {
+    board: P::Board,
     telemetry_cache: [Option<EscTelemetry>; MAX_ESC_CHANNELS],
     active_channels: [bool; MAX_ESC_CHANNELS],
 }
 
-impl<B: BdshotBoard> CuBdshotBridge<B> {
+impl<P: BdshotBoardProvider> Freezable for CuBdshotBridge<P> {}
+
+impl<P: BdshotBoardProvider> CuBdshotBridge<P> {
     fn channel_index(id: TxId) -> usize {
         match id {
             TxId::Esc0 => 0,
@@ -74,15 +92,31 @@ impl<B: BdshotBoard> CuBdshotBridge<B> {
 
     fn rx_index(id: RxId) -> usize {
         match id {
-            RxId::Esc0 => 0,
-            RxId::Esc1 => 1,
-            RxId::Esc2 => 2,
-            RxId::Esc3 => 3,
+            RxId::Esc0Rx => 0,
+            RxId::Esc1Rx => 1,
+            RxId::Esc2Rx => 2,
+            RxId::Esc3Rx => 3,
         }
+    }
+
+    unsafe fn msg_as_command<'a, Payload>(msg: &'a CuMsg<Payload>) -> &'a CuMsg<EscCommand>
+    where
+        Payload: CuMsgPayload,
+    {
+        &*(msg as *const CuMsg<Payload> as *const CuMsg<EscCommand>)
+    }
+
+    unsafe fn msg_as_telemetry<'a, Payload>(
+        msg: &'a mut CuMsg<Payload>,
+    ) -> &'a mut CuMsg<EscTelemetry>
+    where
+        Payload: CuMsgPayload,
+    {
+        &mut *(msg as *mut CuMsg<Payload> as *mut CuMsg<EscTelemetry>)
     }
 }
 
-impl<B: BdshotBoard> CuBridge for CuBdshotBridge<B> {
+impl<P: BdshotBoardProvider> CuBridge for CuBdshotBridge<P> {
     type Tx = TxChannels;
     type Rx = RxChannels;
 
@@ -94,8 +128,13 @@ impl<B: BdshotBoard> CuBridge for CuBdshotBridge<B> {
     where
         Self: Sized,
     {
-        let board = B::init()?;
-        if tx.len() > B::CHANNEL_COUNT {
+        let board = P::create_board()?;
+        if P::Board::CHANNEL_COUNT > MAX_ESC_CHANNELS {
+            return Err(CuError::from(
+                "BDShot board exposes more channels than supported",
+            ));
+        }
+        if tx.len() > P::Board::CHANNEL_COUNT {
             return Err(CuError::from("Too many Tx channels for board"));
         }
         let mut active = [false; MAX_ESC_CHANNELS];
@@ -114,7 +153,7 @@ impl<B: BdshotBoard> CuBridge for CuBdshotBridge<B> {
         let idle_frame = encode_frame(EscCommand::disarm());
         for _ in 0..64 {
             let mut ready = true;
-            for idx in 0..B::CHANNEL_COUNT {
+            for idx in 0..P::Board::CHANNEL_COUNT {
                 if !self.active_channels[idx] {
                     continue;
                 }
@@ -138,7 +177,7 @@ impl<B: BdshotBoard> CuBridge for CuBdshotBridge<B> {
         };
         let telemetry_frame = encode_frame(telemetry_cmd);
         for _ in 0..6 {
-            for idx in 0..B::CHANNEL_COUNT {
+            for idx in 0..P::Board::CHANNEL_COUNT {
                 if !self.active_channels[idx] {
                     continue;
                 }
@@ -150,20 +189,24 @@ impl<B: BdshotBoard> CuBridge for CuBdshotBridge<B> {
         Ok(())
     }
 
-    fn send(
+    fn send<'a, Payload>(
         &mut self,
         _clock: &RobotClock,
-        channel: &'static BridgeChannel<<Self::Tx as BridgeChannelSet>::Id, CuMsg<EscCommand>>,
-        msg: &CuMsg<EscCommand>,
-    ) -> CuResult<()> {
+        channel: &'static BridgeChannel<<Self::Tx as BridgeChannelSet>::Id, Payload>,
+        msg: &CuMsg<Payload>,
+    ) -> CuResult<()>
+    where
+        Payload: CuMsgPayload + 'a,
+    {
         let idx = Self::channel_index(channel.id());
-        if idx >= B::CHANNEL_COUNT {
+        if idx >= P::Board::CHANNEL_COUNT {
             return Err(CuError::from("Channel not supported by board"));
         }
         if !self.active_channels[idx] {
             return Ok(());
         }
-        let command = msg.payload().copied().unwrap_or_default();
+        let payload = unsafe { Self::msg_as_command(msg) };
+        let command = payload.payload().cloned().unwrap_or_default();
         let frame = encode_frame(command);
         if let Some(telemetry) = self.board.exchange(idx, frame) {
             self.telemetry_cache[idx] = Some(EscTelemetry {
@@ -173,14 +216,17 @@ impl<B: BdshotBoard> CuBridge for CuBdshotBridge<B> {
         Ok(())
     }
 
-    fn receive(
+    fn receive<'a, Payload>(
         &mut self,
         _clock: &RobotClock,
-        channel: &'static BridgeChannel<<Self::Rx as BridgeChannelSet>::Id, CuMsg<EscTelemetry>>,
-        msg: &mut CuMsg<EscTelemetry>,
-    ) -> CuResult<()> {
+        channel: &'static BridgeChannel<<Self::Rx as BridgeChannelSet>::Id, Payload>,
+        msg: &mut CuMsg<Payload>,
+    ) -> CuResult<()>
+    where
+        Payload: CuMsgPayload + 'a,
+    {
         let idx = Self::rx_index(channel.id());
-        if idx >= B::CHANNEL_COUNT {
+        if idx >= P::Board::CHANNEL_COUNT {
             msg.clear_payload();
             return Ok(());
         }
@@ -188,10 +234,11 @@ impl<B: BdshotBoard> CuBridge for CuBdshotBridge<B> {
             msg.clear_payload();
             return Ok(());
         }
+        let telemetry_msg = unsafe { Self::msg_as_telemetry(msg) };
         if let Some(sample) = self.telemetry_cache[idx].take() {
-            msg.set_payload(sample);
+            telemetry_msg.set_payload(sample);
         } else {
-            msg.clear_payload();
+            telemetry_msg.clear_payload();
         }
         Ok(())
     }
