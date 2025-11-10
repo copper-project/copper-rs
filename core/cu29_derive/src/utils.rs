@@ -2,6 +2,10 @@ use convert_case::{Case, Casing};
 use std::path::PathBuf;
 use walkdir::WalkDir;
 
+fn is_struct_member_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
+}
+
 /// Small tool to create a valid enum entry from an identifier.
 pub(crate) fn config_id_to_enum(id: &str) -> String {
     let mut candidate = id
@@ -21,29 +25,13 @@ pub(crate) fn config_id_to_enum(id: &str) -> String {
 /// Same as config_id_to_enum but for a struct member name
 pub(crate) fn config_id_to_struct_member(id: &str) -> String {
     let mut candidate = id
+        .trim_start_matches(|c| !is_struct_member_char(c))
+        .trim_end_matches(|c| !is_struct_member_char(c))
         .chars()
-        .map(|c| if c.is_alphanumeric() { c } else { '_' })
+        .map(|c| if is_struct_member_char(c) { c } else { '_' })
         .collect::<String>();
 
     candidate = candidate.to_case(Case::Snake);
-
-    let starts_with_invalid = id
-        .chars()
-        .next()
-        .is_some_and(|c| !c.is_alphanumeric() && c != '_');
-    let ends_with_invalid = id
-        .chars()
-        .rev()
-        .next()
-        .is_some_and(|c| !c.is_alphanumeric() && c != '_');
-
-    if starts_with_invalid {
-        candidate = candidate.trim_start_matches('_').to_string();
-    }
-
-    if ends_with_invalid {
-        candidate = candidate.trim_end_matches('_').to_string();
-    }
 
     if candidate.is_empty() {
         candidate.push('_');
