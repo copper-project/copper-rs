@@ -12,14 +12,13 @@ repository.workspace = true
 
 [dependencies]
 cu29 = { path = "../../../core/cu29", default-features = false }
-rp235x-hal = { version = "0.3", features = ["rt", "critical-section-impl", "defmt"] }
+rp235x-hal = { version = "0.3", features = ["critical-section-impl"] }
 embedded-hal = "*"
 pio = "=0.2.1"
 pio-proc = "=0.2.1"
 fugit = "*"
 nb = "1"
 cortex-m = "0.7.7"
-defmt = "=0.3.100"
 critical-section = "1.1"
 serde = { workspace = true, default-features = false, features = ["derive"] }
 bincode = { workspace = true }

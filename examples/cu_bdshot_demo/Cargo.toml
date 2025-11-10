@@ -15,8 +15,6 @@ cu29 = { path = "../../core/cu29", default-features = false }
 cu_bdshot = { path = "../../components/bridges/cu_bdshot" }
 embedded-alloc = "0.5"
 panic-probe = { version = "0.3", features = ["print-defmt"] }
-defmt = { version = "0.3", features = ["alloc"] }
-defmt-rtt = "0.4"
 spin = "0.10"
 bincode = { workspace = true }
 
