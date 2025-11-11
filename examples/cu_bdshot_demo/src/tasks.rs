@@ -46,7 +46,7 @@ impl<const ESC: usize> CuSrcTask for ThrottleSource<ESC> {
         } else if self.value > STEP {
             self.value -= STEP;
         } else {
-            info!("ESC {} MINED OUT", ESC);
+            info!("ESC {} ZEROED", ESC);
             self.value = 0;
             self.ascending = true;
         }
