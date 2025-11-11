@@ -15,7 +15,6 @@ pub enum DShotTelemetry {
     Event(u8),
 }
 
-#[cfg(feature = "defmt")]
 impl defmt::Format for DShotTelemetry {
     fn format(&self, fmt: defmt::Formatter) {
         match self {

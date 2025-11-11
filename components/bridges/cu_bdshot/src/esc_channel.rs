@@ -46,6 +46,7 @@ where
 #[macro_export]
 macro_rules! build_ch {
     ($prog:expr, $sm:ident, $pin:expr, $d:expr, $f:expr) => {{
+        #[allow(clippy::macro_metavars_in_unsafe)]
         let (sm, rx, tx) = PIOBuilder::from_installed_program(unsafe { $prog.share() })
             .set_pins($pin, 1)
             .out_pins($pin, 1)
