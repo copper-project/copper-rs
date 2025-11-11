@@ -76,7 +76,7 @@ fn main() -> ! {
     .unwrap();
 
     let timer0: Timer0 = Timer::new_timer0(p.TIMER0, &mut p.RESETS, &clocks);
-    let timer_for_clock = timer0.clone();
+    let timer_for_clock = timer0;
 
     let sio = Sio::new(p.SIO);
     let pins = hal::gpio::Pins::new(p.IO_BANK0, p.PADS_BANK0, sio.gpio_bank0, &mut p.RESETS);
@@ -169,15 +169,20 @@ fn main() -> ! {
 fn build_clock(timer: Timer0) -> RobotClock {
     RobotClock::new_with_rtc(
         {
-            let timer = timer.clone();
-            move || timer.get_counter().ticks() * 1_000
+            let timer_for_counter = timer;
+            move || timer_for_counter.get_counter().ticks() * 1_000
         },
         {
-            let timer = timer.clone();
+            let timer_for_wait = timer;
             move |ns| {
-                let start = timer.get_counter().ticks();
+                let start = timer_for_wait.get_counter().ticks();
                 let wait_us = ns / 1_000;
-                while timer.get_counter().ticks().wrapping_sub(start) < wait_us {
+                while timer_for_wait
+                    .get_counter()
+                    .ticks()
+                    .wrapping_sub(start)
+                    < wait_us
+                {
                     core::hint::spin_loop();
                 }
             }
