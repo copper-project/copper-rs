@@ -1,4 +1,5 @@
 [env]
+# The debug log level is kept here for easy switching during development.
 # DEFMT_LOG = "debug"
 DEFMT_LOG = "info"
 
