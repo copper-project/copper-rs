@@ -177,12 +177,7 @@ fn build_clock(timer: Timer0) -> RobotClock {
             move |ns| {
                 let start = timer_for_wait.get_counter().ticks();
                 let wait_us = ns / 1_000;
-                while timer_for_wait
-                    .get_counter()
-                    .ticks()
-                    .wrapping_sub(start)
-                    < wait_us
-                {
+                while timer_for_wait.get_counter().ticks().wrapping_sub(start) < wait_us {
                     core::hint::spin_loop();
                 }
             }
