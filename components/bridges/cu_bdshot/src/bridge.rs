@@ -149,8 +149,9 @@ impl<P: BdshotBoardProvider> CuBridge for CuBdshotBridge<P> {
 
     fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
         let idle_frame = encode_frame(EscCommand::disarm());
-        for _ in 0..64 {
-            let mut ready = true;
+
+        let mut ready = true;
+        for i in 0..1024 {
             for idx in 0..P::Board::CHANNEL_COUNT {
                 if !self.active_channels[idx] {
                     continue;
@@ -168,6 +169,12 @@ impl<P: BdshotBoardProvider> CuBridge for CuBdshotBridge<P> {
             if ready {
                 break;
             }
+            info!("waiting {}...", i);
+        }
+
+        if !ready {
+            error!("ESC TIMEOUT");
+            return Err(CuError::from("Timeout waiting for ESC to start up"));
         }
 
         let telemetry_cmd = EscCommand {
