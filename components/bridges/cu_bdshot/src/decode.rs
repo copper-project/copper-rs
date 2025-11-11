@@ -51,7 +51,7 @@ pub fn gcr_to_16bit(raw20: u32) -> Option<u16> {
     let s1 = GCR_LUT[((raw20 >> 10) & 0x1F) as usize];
     let s2 = GCR_LUT[((raw20 >> 5) & 0x1F) as usize];
     let s3 = GCR_LUT[(raw20 & 0x1F) as usize];
-    if (s0 | s1 | s2 | s3) == INVALID_GCR_ENTRY {
+    if s0 == INVALID_GCR_ENTRY || s1 == INVALID_GCR_ENTRY || s2 == INVALID_GCR_ENTRY || s3 == INVALID_GCR_ENTRY {
         return None;
     }
     Some(((s0 as u16) << 12) | ((s1 as u16) << 8) | ((s2 as u16) << 4) | s3 as u16)
