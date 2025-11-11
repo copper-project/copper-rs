@@ -305,6 +305,7 @@ impl<
         Ok(runtime)
     }
 
+    #[allow(clippy::too_many_arguments)]
     #[cfg(not(feature = "std"))]
     pub fn new(
         clock: RobotClock,

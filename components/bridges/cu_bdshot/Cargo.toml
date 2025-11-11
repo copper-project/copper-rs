@@ -24,7 +24,7 @@ serde = { workspace = true, default-features = false, features = ["derive"] }
 bincode = { workspace = true }
 log = "0.4.28"
 spin = { workspace = true }
+defmt = "1.0.1"
 
 [features]
 default = []
-defmt = []
