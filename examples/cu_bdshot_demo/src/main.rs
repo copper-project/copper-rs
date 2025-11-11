@@ -29,6 +29,8 @@ use rp235x_hal::spi::{Enabled, FrameFormat};
 use rp235x_hal::timer::{CopyableTimer0, CopyableTimer1};
 use rp235x_hal::{clocks::init_clocks_and_plls, pac, sio::Sio, watchdog::Watchdog, Spi, Timer};
 use spin::Mutex;
+use panic_probe as _;  
+use defmt_rtt as _;
 
 mod tasks;
 
