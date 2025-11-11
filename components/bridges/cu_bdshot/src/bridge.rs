@@ -151,7 +151,8 @@ impl<P: BdshotBoardProvider> CuBridge for CuBdshotBridge<P> {
         let idle_frame = encode_frame(EscCommand::disarm());
 
         let mut ready = true;
-        for i in 0..1024 {
+        for i in 0..2048 {
+            // Arbitrary long, TODO(gbin): move that to the config
             for idx in 0..P::Board::CHANNEL_COUNT {
                 if !self.active_channels[idx] {
                     continue;
@@ -169,7 +170,7 @@ impl<P: BdshotBoardProvider> CuBridge for CuBdshotBridge<P> {
             if ready {
                 break;
             }
-            info!("waiting {}...", i);
+            info!("Waiting for ESCs startup {}...", i);
         }
 
         if !ready {
@@ -187,7 +188,6 @@ impl<P: BdshotBoardProvider> CuBridge for CuBdshotBridge<P> {
                 if !self.active_channels[idx] {
                     continue;
                 }
-                debug!("Sending telemetry on frames {}", idx);
                 self.board.delay(200);
                 let _ = self.board.exchange(idx, telemetry_frame);
             }
