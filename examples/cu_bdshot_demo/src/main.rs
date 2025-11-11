@@ -12,9 +12,11 @@ use cu29::cubridge::CuBridge;
 use cu29::prelude::*;
 use cu_bdshot::{register_rp2350_board, Rp2350Board, Rp2350BoardConfig, Rp2350BoardResources};
 use cu_sdlogger::{find_copper_partition, EMMCLogger, EMMCSectionStorage, ForceSyncSend};
+use defmt_rtt as _;
 use embedded_hal::spi::MODE_0;
 use embedded_hal_bus::spi::ExclusiveDevice;
 use embedded_sdmmc::SdCard;
+use panic_probe as _;
 use rp235x_hal as hal;
 use rp235x_hal::clocks::Clock;
 use rp235x_hal::fugit::RateExtU32;
@@ -29,8 +31,6 @@ use rp235x_hal::spi::{Enabled, FrameFormat};
 use rp235x_hal::timer::{CopyableTimer0, CopyableTimer1};
 use rp235x_hal::{clocks::init_clocks_and_plls, pac, sio::Sio, watchdog::Watchdog, Spi, Timer};
 use spin::Mutex;
-use panic_probe as _;  
-use defmt_rtt as _;
 
 mod tasks;
 

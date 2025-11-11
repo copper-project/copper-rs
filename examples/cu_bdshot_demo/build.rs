@@ -18,5 +18,4 @@ fn main() {
     f.write_all(memory_x).unwrap();
     println!("cargo:rerun-if-changed=memory.x");
     println!("cargo:rerun-if-changed=build.rs");
-
 }
