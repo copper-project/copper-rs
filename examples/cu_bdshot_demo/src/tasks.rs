@@ -30,10 +30,12 @@ impl<const ESC: usize> CuSrcTask for ThrottleSource<ESC> {
 
     fn process<'o>(&mut self, _clock: &RobotClock, output: &mut CuMsg<EscCommand>) -> CuResult<()> {
         let throttle = self.value;
-        output.set_payload(EscCommand {
+        let command = EscCommand {
             throttle,
             request_telemetry: true,
-        });
+        };
+        info!("Sending throttle {}.", throttle);
+        output.set_payload(command);
 
         if self.ascending {
             self.value = (self.value + STEP).min(MAX_THROTTLE);
