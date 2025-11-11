@@ -28,12 +28,3 @@ spin = { workspace = true }
 [features]
 default = []
 defmt = []
-
-[profile.release]
-lto = true
-codegen-units = 1
-opt-level = "s"
-panic = "abort"
-
-[profile.dev]
-panic = "abort"

@@ -12,11 +12,9 @@ use cu29::cubridge::CuBridge;
 use cu29::prelude::*;
 use cu_bdshot::{register_rp2350_board, Rp2350Board, Rp2350BoardConfig, Rp2350BoardResources};
 use cu_sdlogger::{find_copper_partition, EMMCLogger, EMMCSectionStorage, ForceSyncSend};
-use defmt_rtt as _;
 use embedded_hal::spi::MODE_0;
 use embedded_hal_bus::spi::ExclusiveDevice;
 use embedded_sdmmc::SdCard;
-use panic_probe as _;
 use rp235x_hal as hal;
 use rp235x_hal::clocks::Clock;
 use rp235x_hal::fugit::RateExtU32;
@@ -108,7 +106,7 @@ fn main() -> ! {
     init_psram_and_allocator(pins.gpio47);
     quick_memory_test();
 
-    defmt::info!("Setting up the SDCard...");
+    info!("Setting up the SDCard...");
 
     let miso: Miso = pins.gpio16.into_function();
     let cs: Cs = pins.gpio17.into_push_pull_output();
@@ -125,17 +123,17 @@ fn main() -> ! {
 
     let sd_dev: SdDev = ExclusiveDevice::new(sd_spi, cs, timer0).unwrap();
     let delay1: Timer1 = Timer::new_timer1(p.TIMER1, &mut p.RESETS, &clocks);
-    defmt::info!("Creating Sdcard...");
+    info!("Creating Sdcard...");
     let sd: PimodoriSdCard = SdCard::new(sd_dev, delay1);
 
     if let Err(e) = sd.num_bytes() {
         defmt::panic!("SD Card error: {}", e);
     }
 
-    defmt::info!("Creating TSPimodoriSdCard...");
+    info!("Creating TSPimodoriSdCard...");
     let sd = TSPimodoriSdCard::new(sd);
 
-    defmt::info!("Setting up Copper...");
+    info!("Setting up Copper...");
 
     let clock = build_clock(timer_for_clock);
 
@@ -145,7 +143,7 @@ fn main() -> ! {
         );
     };
 
-    defmt::info!(
+    info!(
         "Found copper partition at block {} with length {}",
         blk_id.0, blk_len.0
     );
@@ -155,13 +153,13 @@ fn main() -> ! {
     ));
 
     let mut app = BdshotDemoApp::new(clock, writer).unwrap();
-    defmt::info!("Starting cu-bdshot-demo...");
+    info!("Starting cu-bdshot-demo...");
 
     let _ = <BdshotDemoApp as CuApplication<
         EMMCSectionStorage<TSPimodoriSdCard>,
         EMMCLogger<TSPimodoriSdCard>,
     >>::run(&mut app);
-    defmt::error!("Copper crashed.");
+    error!("Copper crashed.");
     #[allow(clippy::empty_loop)]
     loop {}
 }
@@ -209,23 +207,23 @@ where
 }
 
 fn quick_memory_test() {
-    defmt::info!("Testing Memory...");
+    info!("Testing Memory...");
     mem_stats();
     let mut v: Vec<u8> = vec![0u8; 4 * 1024];
     for (i, item) in v.iter_mut().enumerate() {
         *item = (i % 256) as u8;
     }
-    defmt::info!("After 4kB allocation...");
+    info!("After 4kB allocation...");
     mem_stats();
     for (i, item) in v.iter().enumerate() {
         assert_eq!(*item, (i % 256) as u8);
     }
-    defmt::info!("Memory test passed.");
+    info!("Memory test passed.");
 }
 
 fn mem_stats() {
     let current = ALLOC.lock().stats_alloc_actual();
     let total = ALLOC.lock().stats_total_bytes();
-    defmt::info!("heap: current={}", current);
-    defmt::info!("heap: total={}", total);
+    info!("heap: current={}", current);
+    info!("heap: total={}", total);
 }
