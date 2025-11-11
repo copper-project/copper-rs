@@ -170,3 +170,9 @@ panic = "abort"
 strip = "symbols"  # or "debuginfo" or true
 debug = false
 incremental = false
+
+[profile.dev]
+opt-level = 0
+debug = 2
+debug-assertions = true
+overflow-checks = true
