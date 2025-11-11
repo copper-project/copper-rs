@@ -29,17 +29,3 @@ serde = { workspace = true }
 
 [features]
 default = []
-
-# A safe development profile for remote debugging.
-[profile.dev]
-opt-level = 0
-debug = 2
-debug-assertions = true
-overflow-checks = true
-
-[profile.release]
-lto = true
-codegen-units = 1
-opt-level = "s"
-panic = "abort"
-
