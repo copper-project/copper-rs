@@ -10,6 +10,11 @@ categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
+[package.metadata.copper]
+embedded_only = true
+embedded_config = "examples/cu_bdshot_demo/.cargo/config.toml"
+embedded_target = "thumbv8m.main-none-eabihf"
+
 [dependencies]
 buddy_system_allocator = { version = "0.11", default-features = false, features = ["use_spin"] }
 cu29 = { path = "../../core/cu29", default-features = false, features = ["defmt", "log-level-debug"] }
