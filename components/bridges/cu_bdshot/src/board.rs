@@ -125,6 +125,7 @@ impl BdshotBoard for Rp2350Board {
 }
 
 impl Rp2350Board {
+    /// Basic DSHOT transaction, sending a frame and attempting to read a telemetry response.
     fn exchange_impl<SM>(
         cycles_per_micro: u32,
         ch: &mut EscChannel<pac::PIO0, SM, Word, Word>,
@@ -138,9 +139,13 @@ impl Rp2350Board {
             return None;
         }
         ch.write(frame);
+        // the frame needs to go through several layers of decoding before becoming useful
         if let Some(resp) = ch.read() {
+            // first the 21 bit GCR needs to be folded down to 20 bits
             let raw20 = fold_gcr(resp);
+            // then decode the 20 bits to 16 bits according to the GCR encoding
             let data = crate::decode::gcr_to_16bit(raw20)?;
+            // We finally extract the actual payload and check for any corruption with the CRC
             let payload = extract_telemetry_payload_with_crc_test(data)?;
             return Some(decode_telemetry_packet(payload));
         }
@@ -160,11 +165,13 @@ impl Rp2350Board {
     }
 }
 
+/// Math to compute the PIO clock divider from the system clock and target PIO clock
 fn pio_clkdiv_8p8(sys_hz: u32, target_hz: u32) -> (u16, u8) {
     let div_fixed = ((sys_hz as f32 / target_hz as f32) * 256.0 + 0.5) as u32;
     ((div_fixed >> 8) as u16, (div_fixed & 0xFF) as u8)
 }
 
+/// Construct an encoded DSHOT frame from payload (MCU -> ESC)
 fn bdshot_frame(payload: u16) -> u32 {
     let d = ((payload & 0x07FF) << 1) | 1;
     let inv = (!d) & 0x0FFF;
@@ -172,6 +179,7 @@ fn bdshot_frame(payload: u16) -> u32 {
     !((d << 4) | crc) as u32
 }
 
+/// Encodes a throttle command and telemetry request into a DSHOT frame
 pub fn encode_frame(command: EscCommand) -> u32 {
     let mut bits = (command.throttle & 0x07FF) << 1;
     if command.request_telemetry {
@@ -180,8 +188,10 @@ pub fn encode_frame(command: EscCommand) -> u32 {
     bdshot_frame(bits)
 }
 
+/// Global to be able to send the actual HW interface to the bridge
 static RP_BOARD_SLOT: Mutex<Option<Rp2350Board>> = Mutex::new(None);
 
+/// Global to be able to send the actual HW interface to the bridge
 pub fn register_rp2350_board(board: Rp2350Board) -> CuResult<()> {
     let mut slot = RP_BOARD_SLOT.lock();
     if slot.is_some() {
