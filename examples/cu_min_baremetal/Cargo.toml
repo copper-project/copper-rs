@@ -12,6 +12,12 @@ categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
+[package.metadata.copper]
+embedded_only = true
+embedded_config = "examples/cu_min_baremetal/.cargo/config-nostd.toml"
+embedded_target = "aarch64-unknown-none"
+embedded_no_default_features = true
+
 [[bin]]
 name = "cu-min-baremetal"
 path = "src/main.rs"
