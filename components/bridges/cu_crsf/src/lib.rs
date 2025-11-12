@@ -233,7 +233,7 @@ where
                                 }
                             }
                             _ => {
-                                info!("CRSF: Received other packet: {}", packet);
+                                info!("CRSF: Received other packet");
                             }
                         }
                     }
