@@ -1,5 +1,5 @@
 [package]
-name = "cu_bridge_scheduler"
+name = "cu-bridge-scheduler"
 description = "Mini test app to validate bridge scheduling semantics"
 version.workspace = true
 authors.workspace = true
