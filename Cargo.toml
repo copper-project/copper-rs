@@ -14,6 +14,7 @@ members = [
     "core/cu29_soa_derive",
     "core/cu29_traits",
     "core/cu29_unifiedlog",
+    "components/bridges/cu_crsf",
     "components/libs/cu_msp_lib",
     "components/libs/cu_transform",
     "components/monitors/cu_consolemon",
