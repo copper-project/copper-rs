@@ -40,13 +40,14 @@ impl<B: BlockDevice> BlockDevice for ForceSyncSend<B> {
     }
 }
 
+/// Implements a bincode `Writer` for linear logging over a block device.
 pub struct SdBlockWriter<BD: BlockDevice> {
     bd: Arc<ForceSyncSend<BD>>,
-    current_blk: BlockIdx,
-    position_blk: usize,
-    capacity_bytes: usize,
-    written: usize,
-    buffer: Block,
+    current_blk: BlockIdx, // absolute block number for payload
+    position_blk: usize,   // 0..512
+    capacity_bytes: usize, // payload capacity for this section
+    written: usize,        // payload bytes written so far
+    buffer: Block,         // RMW buffer for current block
 }
 
 impl<BD: BlockDevice> SdBlockWriter<BD> {
@@ -72,11 +73,13 @@ impl<BD: BlockDevice> SdBlockWriter<BD> {
         Ok(())
     }
 
+    /// Force-flush the current tail block if partially filled.
     pub fn flush_tail(&mut self) -> Result<(), EncodeError> {
         if self.position_blk != 0 {
             self.bd
                 .write(core::slice::from_ref(&self.buffer), self.current_blk)
                 .expect("write failed on flush");
+            // Advance to the next block, start fresh at the boundary.
             self.current_blk += BlockCount(1);
             self.position_blk = 0;
             self.buffer = Block::new();
@@ -140,8 +143,9 @@ pub struct EMMCSectionStorage<BD: BlockDevice> {
 
 impl<BD: BlockDevice> EMMCSectionStorage<BD> {
     fn new(bd: Arc<ForceSyncSend<BD>>, start_block: BlockIdx, data_capacity: usize) -> Self {
+        // data_capacity is the space left in that section minus the header.
         let content_writer =
-            SdBlockWriter::new(bd.clone(), start_block + BlockCount(1), data_capacity);
+            SdBlockWriter::new(bd.clone(), start_block + BlockCount(1), data_capacity); // +1 to skip the header
         Self {
             bd,
             start_block,
@@ -157,6 +161,7 @@ impl<BD: BlockDevice> SectionStorage for EMMCSectionStorage<BD> {
     }
 
     fn post_update_header<E: Encode>(&mut self, header: &E) -> Result<usize, EncodeError> {
+        // Re-encode header and write again to header blocks.
         let mut block = Block::new();
         let wrote = encode_into_slice(header, block.as_mut(), standard())?;
         self.bd
@@ -202,7 +207,7 @@ impl<BD: BlockDevice> EMMCLogger<BD> {
         bd.write(&[block], start)
             .map_err(|_| CuError::from("Could not write main header"))?;
 
-        let next_block = start + BlockCount(1);
+        let next_block = start + BlockCount(1); // +1 to skip the main header
         let last_block = start + size;
 
         Ok(Self {
@@ -212,6 +217,7 @@ impl<BD: BlockDevice> EMMCLogger<BD> {
         })
     }
 
+    // Allocate a section in this logger and return the start block index.
     fn alloc_section(&mut self, size: BlockCount) -> CuResult<BlockIdx> {
         let start = self.next_block;
         self.next_block += size;
@@ -231,7 +237,7 @@ where
         entry_type: UnifiedLogType,
         requested_section_size: usize,
     ) -> CuResult<SectionHandle<EMMCSectionStorage<BD>>> {
-        let block_size = SECTION_HEADER_COMPACT_SIZE;
+        let block_size = SECTION_HEADER_COMPACT_SIZE; // 512
         if block_size != 512 {
             panic!("EMMC: only 512 byte blocks supported");
         }
@@ -244,7 +250,7 @@ where
             used: 0,
         };
 
-        let section_size_in_blks: u32 = (requested_section_size / block_size as usize) as u32 + 1;
+        let section_size_in_blks: u32 = (requested_section_size / block_size as usize) as u32 + 1; // always round up
         let start_block = self.alloc_section(BlockCount(section_size_in_blks))?;
 
         let storage = EMMCSectionStorage::new(
@@ -253,14 +259,17 @@ where
             ((section_size_in_blks - 1) * block_size as u32) as usize,
         );
 
+        // Create handle (this will call `storage.initialize(header)`).
         SectionHandle::create(section_header, storage)
     }
 
     fn flush_section(&mut self, section: &mut SectionHandle<EMMCSectionStorage<BD>>) {
+        // and the end of the stream is ok.
         section
             .get_storage_mut()
             .flush()
             .expect("EMMC: flush failed");
+        // and be sure the header is up-to-date
         section
             .post_update_header()
             .expect("EMMC: post update header failed");
