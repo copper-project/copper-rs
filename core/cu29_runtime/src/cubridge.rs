@@ -59,6 +59,21 @@ impl<Id, Payload> BridgeChannel<Id, Payload> {
             _payload: PhantomData,
         }
     }
+
+    /// Declares a channel with a default backend route.
+    pub const fn with_channel(id: Id, route: &'static str) -> Self {
+        Self {
+            id,
+            default_route: Some(route),
+            _payload: PhantomData,
+        }
+    }
+
+    /// Backward-compatibility helper for older code; prefer [`BridgeChannel::with_channel`].
+    #[deprecated(since = "0.11.0", note = "Use BridgeChannel::with_channel instead")]
+    pub const fn with_default_route(id: Id, route: &'static str) -> Self {
+        Self::with_channel(id, route)
+    }
 }
 
 impl<Id: Debug, Payload> Debug for BridgeChannel<Id, Payload> {
