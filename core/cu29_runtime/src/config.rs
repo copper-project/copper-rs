@@ -359,8 +359,9 @@ pub enum BridgeChannel {
     /// Channel that receives data from the bridge into the graph.
     Rx {
         id: String,
-        /// Transport/topic identifier specific to the bridge backend.
-        route: String,
+        /// Optional transport/topic identifier specific to the bridge backend.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        route: Option<String>,
         /// Optional per-channel configuration forwarded to the bridge implementation.
         #[serde(skip_serializing_if = "Option::is_none")]
         config: Option<ComponentConfig>,
@@ -368,8 +369,9 @@ pub enum BridgeChannel {
     /// Channel that transmits data from the graph into the bridge.
     Tx {
         id: String,
-        /// Transport/topic identifier specific to the bridge backend.
-        route: String,
+        /// Optional transport/topic identifier specific to the bridge backend.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        route: Option<String>,
         /// Optional per-channel configuration forwarded to the bridge implementation.
         #[serde(skip_serializing_if = "Option::is_none")]
         config: Option<ComponentConfig>,
@@ -387,9 +389,9 @@ impl BridgeChannel {
 
     /// Bridge-specific transport path (topic, route, path...) describing this channel.
     #[allow(dead_code)]
-    pub fn route(&self) -> &str {
+    pub fn route(&self) -> Option<&str> {
         match self {
-            BridgeChannel::Rx { route, .. } | BridgeChannel::Tx { route, .. } => route,
+            BridgeChannel::Rx { route, .. } | BridgeChannel::Tx { route, .. } => route.as_deref(),
         }
     }
 }
@@ -1778,14 +1780,14 @@ mod tests {
         match &bridge.channels[0] {
             BridgeChannel::Rx { id, route, .. } => {
                 assert_eq!(id, "status");
-                assert_eq!(route, "sys/status");
+                assert_eq!(route.as_deref(), Some("sys/status"));
             }
             _ => panic!("expected Rx channel"),
         }
         match &bridge.channels[1] {
             BridgeChannel::Tx { id, route, .. } => {
                 assert_eq!(id, "motor");
-                assert_eq!(route, "motor/cmd");
+                assert_eq!(route.as_deref(), Some("motor/cmd"));
             }
             _ => panic!("expected Tx channel"),
         }
@@ -1828,12 +1830,12 @@ mod tests {
             channels: vec![
                 BridgeChannel::Rx {
                     id: "status".to_string(),
-                    route: "sys/status".to_string(),
+                    route: Some("sys/status".to_string()),
                     config: None,
                 },
                 BridgeChannel::Tx {
                     id: "motor".to_string(),
-                    route: "motor/cmd".to_string(),
+                    route: Some("motor/cmd".to_string()),
                     config: None,
                 },
             ],
