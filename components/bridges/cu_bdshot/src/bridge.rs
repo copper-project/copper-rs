@@ -24,10 +24,10 @@ pub enum TxId {
 pub struct TxChannels;
 
 impl TxChannels {
-    pub const ESC_0: BridgeChannel<TxId, EscCommand> = BridgeChannel::new(TxId::Esc0, "esc0");
-    pub const ESC_1: BridgeChannel<TxId, EscCommand> = BridgeChannel::new(TxId::Esc1, "esc1");
-    pub const ESC_2: BridgeChannel<TxId, EscCommand> = BridgeChannel::new(TxId::Esc2, "esc2");
-    pub const ESC_3: BridgeChannel<TxId, EscCommand> = BridgeChannel::new(TxId::Esc3, "esc3");
+    pub const ESC_0: BridgeChannel<TxId, EscCommand> = BridgeChannel::new(TxId::Esc0);
+    pub const ESC_1: BridgeChannel<TxId, EscCommand> = BridgeChannel::new(TxId::Esc1);
+    pub const ESC_2: BridgeChannel<TxId, EscCommand> = BridgeChannel::new(TxId::Esc2);
+    pub const ESC_3: BridgeChannel<TxId, EscCommand> = BridgeChannel::new(TxId::Esc3);
 }
 
 impl BridgeChannelSet for TxChannels {
@@ -49,14 +49,10 @@ pub enum RxId {
 pub struct RxChannels;
 
 impl RxChannels {
-    pub const ESC_0_RX: BridgeChannel<RxId, EscTelemetry> =
-        BridgeChannel::new(RxId::Esc0Rx, "esc0_rx");
-    pub const ESC_1_RX: BridgeChannel<RxId, EscTelemetry> =
-        BridgeChannel::new(RxId::Esc1Rx, "esc1_rx");
-    pub const ESC_2_RX: BridgeChannel<RxId, EscTelemetry> =
-        BridgeChannel::new(RxId::Esc2Rx, "esc2_rx");
-    pub const ESC_3_RX: BridgeChannel<RxId, EscTelemetry> =
-        BridgeChannel::new(RxId::Esc3Rx, "esc3_rx");
+    pub const ESC_0_RX: BridgeChannel<RxId, EscTelemetry> = BridgeChannel::new(RxId::Esc0Rx);
+    pub const ESC_1_RX: BridgeChannel<RxId, EscTelemetry> = BridgeChannel::new(RxId::Esc1Rx);
+    pub const ESC_2_RX: BridgeChannel<RxId, EscTelemetry> = BridgeChannel::new(RxId::Esc2Rx);
+    pub const ESC_3_RX: BridgeChannel<RxId, EscTelemetry> = BridgeChannel::new(RxId::Esc3Rx);
 }
 
 impl BridgeChannelSet for RxChannels {
