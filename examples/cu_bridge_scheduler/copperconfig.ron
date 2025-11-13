@@ -33,7 +33,7 @@
                 Rx ( id: "loop_in", route: "alpha/loop_in" ),
                 Rx ( id: "to_sink", route: "alpha/to_sink" ),
                 Rx ( id: "chain_in", route: "alpha/chain_in" ),
-                Tx ( id: "loop_out", route: "alpha/loop_out" ),
+                Tx ( id: "loop_out", route: "alpha/loop_out" ), // overrides macro default
                 Tx ( id: "chain_out", route: "alpha/chain_out" ),
             ],
         ),
@@ -43,7 +43,7 @@
             missions: ["BridgeOnlyAB", "SourceToBridge"],
             channels: [
                 Tx ( id: "egress", route: "beta/egress" ),
-                Tx ( id: "from_src", route: "beta/from_src" ),
+                Tx ( id: "from_src", route: "beta/from_src" ), // overrides macro default
             ],
         ),
     ],

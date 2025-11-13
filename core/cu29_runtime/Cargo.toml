@@ -37,6 +37,7 @@ html-escape = { version = "0.2", default-features = false }
 petgraph = { version = "0.8", default-features = false, features = ["serde", "serde-1", "serde_derive", "stable_graph"] }
 ron = { version = "0.11", default-features = false }
 hashbrown = { workspace = true }
+paste = { version = "1.0", default-features = false }
 
 # std only dependencies
 clap = { workspace = true, optional = true }             # CLI

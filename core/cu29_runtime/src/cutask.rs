@@ -6,9 +6,10 @@ use bincode::de::{Decode, Decoder};
 use bincode::enc::{Encode, Encoder};
 use bincode::error::{DecodeError, EncodeError};
 use compact_str::{CompactString, ToCompactString};
+use core::any::{type_name, TypeId};
 use cu29_clock::{PartialCuTimeRange, RobotClock, Tov};
 use cu29_traits::{
-    CuCompactString, CuMsgMetadataTrait, CuResult, ErasedCuStampedData, Metadata,
+    CuCompactString, CuError, CuMsgMetadataTrait, CuResult, ErasedCuStampedData, Metadata,
     COMPACT_STRING_CAPACITY,
 };
 use serde::{Deserialize, Serialize};
@@ -17,6 +18,7 @@ use serde::{Deserialize, Serialize};
 mod imp {
     pub use alloc::fmt::Result as FmtResult;
     pub use alloc::fmt::{Debug, Display, Formatter};
+    pub use alloc::format;
 }
 
 #[cfg(feature = "std")]
@@ -199,6 +201,57 @@ where
 /// This is the robotics message type for Copper with the correct Metadata type
 /// that will be used by the runtime.
 pub type CuMsg<T> = CuStampedData<T, CuMsgMetadata>;
+
+impl<T: CuMsgPayload> CuStampedData<T, CuMsgMetadata> {
+    /// Reinterprets the payload type carried by this message.
+    ///
+    /// # Safety
+    ///
+    /// The caller must guarantee that the message really contains a payload of type `U`. Failing
+    /// to do so is undefined behaviour.
+    pub unsafe fn assume_payload<U: CuMsgPayload>(&self) -> &CuMsg<U> {
+        &*(self as *const CuMsg<T> as *const CuMsg<U>)
+    }
+
+    /// Mutable variant of [`assume_payload`](Self::assume_payload).
+    ///
+    /// # Safety
+    ///
+    /// The caller must guarantee that mutating the returned message is sound for the actual
+    /// payload type stored in the buffer.
+    pub unsafe fn assume_payload_mut<U: CuMsgPayload>(&mut self) -> &mut CuMsg<U> {
+        &mut *(self as *mut CuMsg<T> as *mut CuMsg<U>)
+    }
+}
+
+impl<T: CuMsgPayload + 'static> CuStampedData<T, CuMsgMetadata> {
+    fn downcast_err<U: CuMsgPayload + 'static>() -> CuError {
+        CuError::from(format!(
+            "CuMsg payload mismatch: {} cannot be reinterpreted as {}",
+            type_name::<T>(),
+            type_name::<U>()
+        ))
+    }
+
+    /// Attempts to view this message as carrying payload `U`.
+    pub fn downcast_ref<U: CuMsgPayload + 'static>(&self) -> CuResult<&CuMsg<U>> {
+        if TypeId::of::<T>() == TypeId::of::<U>() {
+            // Safety: we just proved that T == U.
+            Ok(unsafe { self.assume_payload::<U>() })
+        } else {
+            Err(Self::downcast_err::<U>())
+        }
+    }
+
+    /// Mutable variant of [`downcast_ref`](Self::downcast_ref).
+    pub fn downcast_mut<U: CuMsgPayload + 'static>(&mut self) -> CuResult<&mut CuMsg<U>> {
+        if TypeId::of::<T>() == TypeId::of::<U>() {
+            Ok(unsafe { self.assume_payload_mut::<U>() })
+        } else {
+            Err(Self::downcast_err::<U>())
+        }
+    }
+}
 
 /// The internal state of a task needs to be serializable
 /// so the framework can take a snapshot of the task graph.

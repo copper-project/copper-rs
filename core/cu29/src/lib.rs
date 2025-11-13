@@ -14,8 +14,10 @@ pub use cu29_runtime::input_msg;
 pub use cu29_runtime::monitoring;
 pub use cu29_runtime::output_msg;
 pub use cu29_runtime::payload;
+pub use cu29_runtime::rx_channels;
 #[cfg(feature = "std")]
 pub use cu29_runtime::simulation;
+pub use cu29_runtime::tx_channels;
 
 pub use bincode;
 pub use cu29_clock as clock;
@@ -37,14 +39,17 @@ pub mod prelude {
     pub use cu29_runtime::app::*;
     pub use cu29_runtime::config::*;
     pub use cu29_runtime::copperlist::*;
+    pub use cu29_runtime::cubridge::*;
     pub use cu29_runtime::curuntime::*;
     pub use cu29_runtime::cutask::*;
     pub use cu29_runtime::input_msg;
     pub use cu29_runtime::monitoring::*;
     pub use cu29_runtime::output_msg;
     pub use cu29_runtime::payload::*;
+    pub use cu29_runtime::rx_channels;
     #[cfg(feature = "std")]
     pub use cu29_runtime::simulation::*;
+    pub use cu29_runtime::tx_channels;
     pub use cu29_runtime::*;
     pub use cu29_traits::*;
     pub use cu29_unifiedlog::*;
