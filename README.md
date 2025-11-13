@@ -16,7 +16,7 @@
 
 ### Why Copper
 
-<p><strong style="color: #b87333;">🦀 Rust-first</strong> – ergonomic, safe, no C++ bindings  
+<p><strong style="color: #b87333;">🦀 Rust-first</strong> – ergonomic & safe  
 <p><strong style="color: #b87333;">⚡ Sub-microsecond latency</strong> – zero-alloc, data-oriented runtime  
 <p><strong style="color: #b87333;">⏱️ Deterministic replay</strong> – every run, bit-for-bit identical  
 <p><strong style="color: #b87333;">🧠 Interoperable with ROS2</strong> – bridges via Zenoh opening the path for a progressive migration.  
@@ -223,7 +223,7 @@ fn main() {
 
 ```
 
-But this is a very minimal example for a task; please see [lifecycle](doc/lifecycle.md) for a more complete explanation
+But this is a very minimal example for a task; please see [lifecycle](https://github.com/copper-project/copper-rs/wiki/Task-Lifecycle) for a more complete explanation
 of a task lifecycle.
 
 ### Modular Configuration
@@ -290,11 +290,11 @@ You can parameterize your included configurations using template variables:
 )
 ```
 
-For more details on modular configuration, see the [Modular Configuration documentation](doc/modular_config.md).
+For more details on modular configuration, see the [Modular Configuration documentation](https://github.com/copper-project/copper-rs/wiki/Modular-Configuration).
 
 ### Deployment of the application
 
-Check out the [deployment](doc/deploy.md) page for more information.
+Check out the [deployment](https://github.com/copper-project/copper-rs/wiki/Build-and-Deploy-a-Copper-Application) page for more information.
 
 ## FAQ
 

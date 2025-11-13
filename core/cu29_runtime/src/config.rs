@@ -210,6 +210,15 @@ pub struct NodeLogging {
     enabled: bool,
 }
 
+/// Distinguishes regular tasks from bridge nodes so downstream stages can apply
+/// bridge-specific instantiation rules.
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
+pub enum Flavor {
+    #[default]
+    Task,
+    Bridge,
+}
+
 /// A node in the configuration graph.
 /// A node represents a Task in the system Graph.
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -244,6 +253,10 @@ pub struct Node {
     /// Config passed to the task.
     #[serde(skip_serializing_if = "Option::is_none")]
     logging: Option<NodeLogging>,
+
+    /// Node role in the runtime graph (normal task or bridge endpoint).
+    #[serde(skip, default)]
+    flavor: Flavor,
 }
 
 impl Node {
@@ -257,7 +270,15 @@ impl Node {
             background: None,
             run_in_sim: None,
             logging: None,
+            flavor: Flavor::Task,
         }
+    }
+
+    #[allow(dead_code)]
+    pub fn new_with_flavor(id: &str, ptype: &str, flavor: Flavor) -> Self {
+        let mut node = Self::new(id, ptype);
+        node.flavor = flavor;
+        node
     }
 
     #[allow(dead_code)]
@@ -318,22 +339,236 @@ impl Node {
         let ComponentConfig(config) = self.config.as_mut().unwrap();
         config.insert(key.to_string(), value.into());
     }
+
+    /// Returns whether this node is treated as a normal task or as a bridge.
+    #[allow(dead_code)]
+    pub fn get_flavor(&self) -> Flavor {
+        self.flavor
+    }
+
+    /// Overrides the node flavor; primarily used when injecting bridge nodes.
+    #[allow(dead_code)]
+    pub fn set_flavor(&mut self, flavor: Flavor) {
+        self.flavor = flavor;
+    }
+}
+
+/// Directional mapping for bridge channels.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum BridgeChannel {
+    /// Channel that receives data from the bridge into the graph.
+    Rx {
+        id: String,
+        /// Optional transport/topic identifier specific to the bridge backend.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        route: Option<String>,
+        /// Optional per-channel configuration forwarded to the bridge implementation.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        config: Option<ComponentConfig>,
+    },
+    /// Channel that transmits data from the graph into the bridge.
+    Tx {
+        id: String,
+        /// Optional transport/topic identifier specific to the bridge backend.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        route: Option<String>,
+        /// Optional per-channel configuration forwarded to the bridge implementation.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        config: Option<ComponentConfig>,
+    },
+}
+
+impl BridgeChannel {
+    /// Stable logical identifier to reference this channel in connections.
+    #[allow(dead_code)]
+    pub fn id(&self) -> &str {
+        match self {
+            BridgeChannel::Rx { id, .. } | BridgeChannel::Tx { id, .. } => id,
+        }
+    }
+
+    /// Bridge-specific transport path (topic, route, path...) describing this channel.
+    #[allow(dead_code)]
+    pub fn route(&self) -> Option<&str> {
+        match self {
+            BridgeChannel::Rx { route, .. } | BridgeChannel::Tx { route, .. } => route.as_deref(),
+        }
+    }
+}
+
+enum EndpointRole {
+    Source,
+    Destination,
+}
+
+fn validate_bridge_channel(
+    bridge: &BridgeConfig,
+    channel_id: &str,
+    role: EndpointRole,
+) -> Result<(), String> {
+    let channel = bridge
+        .channels
+        .iter()
+        .find(|ch| ch.id() == channel_id)
+        .ok_or_else(|| {
+            format!(
+                "Bridge '{}' does not declare a channel named '{}'",
+                bridge.id, channel_id
+            )
+        })?;
+
+    match (role, channel) {
+        (EndpointRole::Source, BridgeChannel::Rx { .. }) => Ok(()),
+        (EndpointRole::Destination, BridgeChannel::Tx { .. }) => Ok(()),
+        (EndpointRole::Source, BridgeChannel::Tx { .. }) => Err(format!(
+            "Bridge '{}' channel '{}' is Tx and cannot act as a source",
+            bridge.id, channel_id
+        )),
+        (EndpointRole::Destination, BridgeChannel::Rx { .. }) => Err(format!(
+            "Bridge '{}' channel '{}' is Rx and cannot act as a destination",
+            bridge.id, channel_id
+        )),
+    }
+}
+
+/// Declarative definition of a bridge component with a list of channels.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct BridgeConfig {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub type_: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub config: Option<ComponentConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub missions: Option<Vec<String>>,
+    /// List of logical endpoints exposed by this bridge.
+    pub channels: Vec<BridgeChannel>,
+}
+
+impl BridgeConfig {
+    fn to_node(&self) -> Node {
+        let mut node = Node::new_with_flavor(&self.id, &self.type_, Flavor::Bridge);
+        node.config = self.config.clone();
+        node.missions = self.missions.clone();
+        node
+    }
+}
+
+fn insert_bridge_node(graph: &mut CuGraph, bridge: &BridgeConfig) -> Result<(), String> {
+    if graph.get_node_id_by_name(bridge.id.as_str()).is_some() {
+        return Err(format!(
+            "Bridge '{}' reuses an existing node id. Bridge ids must be unique.",
+            bridge.id
+        ));
+    }
+    graph
+        .add_node(bridge.to_node())
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+/// Serialized representation of a connection used for the RON config.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct SerializedCnx {
+    src: String,
+    dst: String,
+    msg: String,
+    missions: Option<Vec<String>>,
 }
 
 /// This represents a connection between 2 tasks (nodes) in the configuration graph.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct Cnx {
     /// Source node id.
-    src: String,
-
-    // Destination node id.
-    dst: String,
-
+    pub src: String,
+    /// Destination node id.
+    pub dst: String,
     /// Message type exchanged between src and dst.
     pub msg: String,
-
     /// Restrict this connection for this list of missions.
     pub missions: Option<Vec<String>>,
+    /// Optional channel id when the source endpoint is a bridge.
+    pub src_channel: Option<String>,
+    /// Optional channel id when the destination endpoint is a bridge.
+    pub dst_channel: Option<String>,
+}
+
+impl From<&Cnx> for SerializedCnx {
+    fn from(cnx: &Cnx) -> Self {
+        SerializedCnx {
+            src: format_endpoint(&cnx.src, cnx.src_channel.as_deref()),
+            dst: format_endpoint(&cnx.dst, cnx.dst_channel.as_deref()),
+            msg: cnx.msg.clone(),
+            missions: cnx.missions.clone(),
+        }
+    }
+}
+
+fn format_endpoint(node: &str, channel: Option<&str>) -> String {
+    match channel {
+        Some(ch) => format!("{node}/{ch}"),
+        None => node.to_string(),
+    }
+}
+
+fn parse_endpoint(
+    endpoint: &str,
+    role: EndpointRole,
+    bridges: &HashMap<&str, &BridgeConfig>,
+) -> Result<(String, Option<String>), String> {
+    if let Some((node, channel)) = endpoint.split_once('/') {
+        if let Some(bridge) = bridges.get(node) {
+            validate_bridge_channel(bridge, channel, role)?;
+            return Ok((node.to_string(), Some(channel.to_string())));
+        } else {
+            return Err(format!(
+                "Endpoint '{endpoint}' references an unknown bridge '{node}'"
+            ));
+        }
+    }
+
+    if let Some(bridge) = bridges.get(endpoint) {
+        return Err(format!(
+            "Bridge '{}' connections must reference a channel using '{}/<channel>'",
+            bridge.id, bridge.id
+        ));
+    }
+
+    Ok((endpoint.to_string(), None))
+}
+
+fn build_bridge_lookup(bridges: Option<&Vec<BridgeConfig>>) -> HashMap<&str, &BridgeConfig> {
+    let mut map = HashMap::new();
+    if let Some(bridges) = bridges {
+        for bridge in bridges {
+            map.insert(bridge.id.as_str(), bridge);
+        }
+    }
+    map
+}
+
+fn mission_applies(missions: &Option<Vec<String>>, mission_id: &str) -> bool {
+    missions
+        .as_ref()
+        .map(|mission_list| mission_list.iter().any(|m| m == mission_id))
+        .unwrap_or(true)
+}
+
+/// A simple wrapper enum for `petgraph::Direction`,
+/// designed to be converted *into* it via the `From` trait.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CuDirection {
+    Outgoing,
+    Incoming,
+}
+
+impl From<CuDirection> for petgraph::Direction {
+    fn from(dir: CuDirection) -> Self {
+        match dir {
+            CuDirection::Outgoing => petgraph::Direction::Outgoing,
+            CuDirection::Incoming => petgraph::Direction::Incoming,
+        }
+    }
 }
 
 #[derive(Default, Debug, Clone)]
@@ -348,6 +583,24 @@ impl CuGraph {
             .collect()
     }
 
+    #[allow(dead_code)]
+    pub fn get_neighbor_ids(&self, node_id: NodeId, dir: CuDirection) -> Vec<NodeId> {
+        self.0
+            .neighbors_directed(node_id.into(), dir.into())
+            .map(|petgraph_index| petgraph_index.index() as NodeId)
+            .collect()
+    }
+
+    #[allow(dead_code)]
+    pub fn incoming_neighbor_count(&self, node_id: NodeId) -> usize {
+        self.0.neighbors_directed(node_id.into(), Incoming).count()
+    }
+
+    #[allow(dead_code)]
+    pub fn outgoing_neighbor_count(&self, node_id: NodeId) -> usize {
+        self.0.neighbors_directed(node_id.into(), Outgoing).count()
+    }
+
     pub fn node_indices(&self) -> Vec<petgraph::stable_graph::NodeIndex> {
         self.0.node_indices().collect()
     }
@@ -356,12 +609,19 @@ impl CuGraph {
         Ok(self.0.add_node(node).index() as NodeId)
     }
 
+    #[allow(dead_code)]
+    pub fn connection_exists(&self, source: NodeId, target: NodeId) -> bool {
+        self.0.find_edge(source.into(), target.into()).is_some()
+    }
+
     pub fn connect_ext(
         &mut self,
         source: NodeId,
         target: NodeId,
         msg_type: &str,
         missions: Option<Vec<String>>,
+        src_channel: Option<String>,
+        dst_channel: Option<String>,
     ) -> CuResult<()> {
         let (src_id, dst_id) = (
             self.0
@@ -384,6 +644,8 @@ impl CuGraph {
                 dst: dst_id,
                 msg: msg_type.to_string(),
                 missions,
+                src_channel,
+                dst_channel,
             },
         );
         Ok(())
@@ -391,6 +653,7 @@ impl CuGraph {
     /// Get the node with the given id.
     /// If mission_id is provided, get the node from that mission's graph.
     /// Otherwise get the node from the simple graph.
+    #[allow(dead_code)]
     pub fn get_node(&self, node_id: NodeId) -> Option<&Node> {
         self.0.node_weight(node_id.into())
     }
@@ -403,6 +666,14 @@ impl CuGraph {
     #[allow(dead_code)]
     pub fn get_node_mut(&mut self, node_id: NodeId) -> Option<&mut Node> {
         self.0.node_weight_mut(node_id.into())
+    }
+
+    pub fn get_node_id_by_name(&self, name: &str) -> Option<NodeId> {
+        self.0
+            .node_indices()
+            .into_iter()
+            .find(|idx| self.0[*idx].get_id() == name)
+            .map(|i| i.index() as NodeId)
     }
 
     #[allow(dead_code)]
@@ -460,6 +731,13 @@ impl CuGraph {
         })
     }
 
+    #[allow(dead_code)]
+    pub fn get_connection_msg_type(&self, source: NodeId, target: NodeId) -> Option<&str> {
+        self.0
+            .find_edge(source.into(), target.into())
+            .map(|edge_index| self.0[edge_index].msg.as_str())
+    }
+
     /// Get the list of edges that are connected to the given node as a source.
     fn get_edges_by_direction(
         &self,
@@ -482,11 +760,21 @@ impl CuGraph {
         self.get_edges_by_direction(node_id, Incoming)
     }
 
+    #[allow(dead_code)]
+    pub fn node_count(&self) -> usize {
+        self.0.node_count()
+    }
+
+    #[allow(dead_code)]
+    pub fn edge_count(&self) -> usize {
+        self.0.edge_count()
+    }
+
     /// Adds an edge between two nodes/tasks in the configuration graph.
     /// msg_type is the type of message exchanged between the two nodes/tasks.
     #[allow(dead_code)]
     pub fn connect(&mut self, source: NodeId, target: NodeId, msg_type: &str) -> CuResult<()> {
-        self.connect_ext(source, target, msg_type, None)
+        self.connect_ext(source, target, msg_type, None, None, None)
     }
 }
 
@@ -607,6 +895,8 @@ pub struct CuConfig {
     pub logging: Option<LoggingConfig>,
     /// Optional runtime configuration
     pub runtime: Option<RuntimeConfig>,
+    /// Declarative bridge definitions that are yet to be expanded into the graph
+    pub bridges: Vec<BridgeConfig>,
     /// Graph structure - either a single graph or multiple mission-specific graphs
     pub graphs: ConfigGraphs,
 }
@@ -692,7 +982,8 @@ pub struct IncludesConfig {
 #[derive(Serialize, Deserialize, Default)]
 struct CuConfigRepresentation {
     tasks: Option<Vec<Node>>,
-    cnx: Option<Vec<Cnx>>,
+    bridges: Option<Vec<BridgeConfig>>,
+    cnx: Option<Vec<SerializedCnx>>,
     monitor: Option<MonitorConfig>,
     logging: Option<LoggingConfig>,
     runtime: Option<RuntimeConfig>,
@@ -708,6 +999,7 @@ where
     E: From<String>,
 {
     let mut cuconfig = CuConfig::default();
+    let bridge_lookup = build_bridge_lookup(representation.bridges.as_ref());
 
     if let Some(mission_configs) = &representation.missions {
         // This is the multi-mission case
@@ -737,50 +1029,67 @@ where
                 }
             }
 
+            if let Some(bridges) = &representation.bridges {
+                for bridge in bridges {
+                    if mission_applies(&bridge.missions, mission_id) {
+                        insert_bridge_node(graph, bridge).map_err(E::from)?;
+                    }
+                }
+            }
+
             if let Some(cnx) = &representation.cnx {
                 for c in cnx {
                     if let Some(cnx_missions) = &c.missions {
                         // if there is a filter by mission on the connection, only add the connection to the mission if it matches the filter.
                         if cnx_missions.contains(&mission_id.to_owned()) {
-                            let src = graph
-                                .node_indices()
-                                .into_iter()
-                                .find(|i| graph.get_node(i.index() as NodeId).unwrap().id == c.src)
-                                .ok_or_else(|| {
-                                    E::from(format!("Source node not found: {}", c.src))
-                                })?;
-                            let dst = graph
-                                .node_indices()
-                                .into_iter()
-                                .find(|i| graph.get_node(i.index() as NodeId).unwrap().id == c.dst)
-                                .ok_or_else(|| {
-                                    E::from(format!("Destination node not found: {}", c.dst))
-                                })?;
+                            let (src_name, src_channel) =
+                                parse_endpoint(&c.src, EndpointRole::Source, &bridge_lookup)
+                                    .map_err(E::from)?;
+                            let (dst_name, dst_channel) =
+                                parse_endpoint(&c.dst, EndpointRole::Destination, &bridge_lookup)
+                                    .map_err(E::from)?;
+                            let src =
+                                graph
+                                    .get_node_id_by_name(src_name.as_str())
+                                    .ok_or_else(|| {
+                                        E::from(format!("Source node not found: {}", c.src))
+                                    })?;
+                            let dst =
+                                graph
+                                    .get_node_id_by_name(dst_name.as_str())
+                                    .ok_or_else(|| {
+                                        E::from(format!("Destination node not found: {}", c.dst))
+                                    })?;
                             graph
                                 .connect_ext(
-                                    src.index() as NodeId,
-                                    dst.index() as NodeId,
+                                    src,
+                                    dst,
                                     &c.msg,
                                     Some(cnx_missions.clone()),
+                                    src_channel,
+                                    dst_channel,
                                 )
                                 .map_err(|e| E::from(e.to_string()))?;
                         }
                     } else {
                         // if there is no filter by mission on the connection, add the connection to the mission.
+                        let (src_name, src_channel) =
+                            parse_endpoint(&c.src, EndpointRole::Source, &bridge_lookup)
+                                .map_err(E::from)?;
+                        let (dst_name, dst_channel) =
+                            parse_endpoint(&c.dst, EndpointRole::Destination, &bridge_lookup)
+                                .map_err(E::from)?;
                         let src = graph
-                            .node_indices()
-                            .into_iter()
-                            .find(|i| graph.get_node(i.index() as NodeId).unwrap().id == c.src)
+                            .get_node_id_by_name(src_name.as_str())
                             .ok_or_else(|| E::from(format!("Source node not found: {}", c.src)))?;
-                        let dst = graph
-                            .node_indices()
-                            .into_iter()
-                            .find(|i| graph.get_node(i.index() as NodeId).unwrap().id == c.dst)
-                            .ok_or_else(|| {
-                                E::from(format!("Destination node not found: {}", c.dst))
-                            })?;
+                        let dst =
+                            graph
+                                .get_node_id_by_name(dst_name.as_str())
+                                .ok_or_else(|| {
+                                    E::from(format!("Destination node not found: {}", c.dst))
+                                })?;
                         graph
-                            .connect_ext(src.index() as NodeId, dst.index() as NodeId, &c.msg, None)
+                            .connect_ext(src, dst, &c.msg, None, src_channel, dst_channel)
                             .map_err(|e| E::from(e.to_string()))?;
                     }
                 }
@@ -799,20 +1108,28 @@ where
             }
         }
 
+        if let Some(bridges) = &representation.bridges {
+            for bridge in bridges {
+                insert_bridge_node(&mut graph, bridge).map_err(E::from)?;
+            }
+        }
+
         if let Some(cnx) = &representation.cnx {
             for c in cnx {
+                let (src_name, src_channel) =
+                    parse_endpoint(&c.src, EndpointRole::Source, &bridge_lookup)
+                        .map_err(E::from)?;
+                let (dst_name, dst_channel) =
+                    parse_endpoint(&c.dst, EndpointRole::Destination, &bridge_lookup)
+                        .map_err(E::from)?;
                 let src = graph
-                    .node_indices()
-                    .into_iter()
-                    .find(|i| graph.get_node(i.index() as NodeId).unwrap().id == c.src)
+                    .get_node_id_by_name(src_name.as_str())
                     .ok_or_else(|| E::from(format!("Source node not found: {}", c.src)))?;
                 let dst = graph
-                    .node_indices()
-                    .into_iter()
-                    .find(|i| graph.get_node(i.index() as NodeId).unwrap().id == c.dst)
+                    .get_node_id_by_name(dst_name.as_str())
                     .ok_or_else(|| E::from(format!("Destination node not found: {}", c.dst)))?;
                 graph
-                    .connect_ext(src.index() as NodeId, dst.index() as NodeId, &c.msg, None)
+                    .connect_ext(src, dst, &c.msg, None, src_channel, dst_channel)
                     .map_err(|e| E::from(e.to_string()))?;
             }
         }
@@ -822,6 +1139,7 @@ where
     cuconfig.monitor = representation.monitor.clone();
     cuconfig.logging = representation.logging.clone();
     cuconfig.runtime = representation.runtime.clone();
+    cuconfig.bridges = representation.bridges.clone().unwrap_or_default();
 
     Ok(cuconfig)
 }
@@ -849,22 +1167,29 @@ impl Serialize for CuConfig {
     where
         S: Serializer,
     {
+        let bridges = if self.bridges.is_empty() {
+            None
+        } else {
+            Some(self.bridges.clone())
+        };
         match &self.graphs {
             Simple(graph) => {
                 let tasks: Vec<Node> = graph
                     .0
                     .node_indices()
                     .map(|idx| graph.0[idx].clone())
+                    .filter(|node| node.get_flavor() == Flavor::Task)
                     .collect();
 
-                let cnx: Vec<Cnx> = graph
+                let cnx: Vec<SerializedCnx> = graph
                     .0
                     .edge_indices()
-                    .map(|edge| graph.0[edge].clone())
+                    .map(|edge| SerializedCnx::from(&graph.0[edge]))
                     .collect();
 
                 CuConfigRepresentation {
                     tasks: Some(tasks),
+                    bridges: bridges.clone(),
                     cnx: Some(cnx),
                     monitor: self.monitor.clone(),
                     logging: self.logging.clone(),
@@ -888,7 +1213,9 @@ impl Serialize for CuConfig {
                     // Add all nodes from this mission
                     for node_idx in graph.node_indices() {
                         let node = &graph[node_idx];
-                        if !tasks.iter().any(|n: &Node| n.id == node.id) {
+                        if node.get_flavor() == Flavor::Task
+                            && !tasks.iter().any(|n: &Node| n.id == node.id)
+                        {
                             tasks.push(node.clone());
                         }
                     }
@@ -896,16 +1223,20 @@ impl Serialize for CuConfig {
                     // Add all edges from this mission
                     for edge_idx in graph.0.edge_indices() {
                         let edge = &graph.0[edge_idx];
-                        if !cnx.iter().any(|c: &Cnx| {
-                            c.src == edge.src && c.dst == edge.dst && c.msg == edge.msg
+                        let serialized = SerializedCnx::from(edge);
+                        if !cnx.iter().any(|c: &SerializedCnx| {
+                            c.src == serialized.src
+                                && c.dst == serialized.dst
+                                && c.msg == serialized.msg
                         }) {
-                            cnx.push(edge.clone());
+                            cnx.push(serialized);
                         }
                     }
                 }
 
                 CuConfigRepresentation {
                     tasks: Some(tasks),
+                    bridges,
                     cnx: Some(cnx),
                     monitor: self.monitor.clone(),
                     logging: self.logging.clone(),
@@ -926,6 +1257,7 @@ impl Default for CuConfig {
             monitor: None,
             logging: None,
             runtime: None,
+            bridges: Vec::new(),
         }
     }
 }
@@ -945,6 +1277,7 @@ impl CuConfig {
             monitor: None,
             logging: None,
             runtime: None,
+            bridges: Vec::new(),
         }
     }
 
@@ -1188,6 +1521,20 @@ fn process_includes(
                 }
             }
 
+            if let Some(included_bridges) = included_representation.bridges {
+                if result.bridges.is_none() {
+                    result.bridges = Some(included_bridges);
+                } else {
+                    let mut bridges = result.bridges.take().unwrap();
+                    for included_bridge in included_bridges {
+                        if !bridges.iter().any(|b| b.id == included_bridge.id) {
+                            bridges.push(included_bridge);
+                        }
+                    }
+                    result.bridges = Some(bridges);
+                }
+            }
+
             if let Some(included_cnx) = included_representation.cnx {
                 if result.cnx.is_none() {
                     result.cnx = Some(included_cnx);
@@ -1320,8 +1667,8 @@ mod tests {
         let deserialized = CuConfig::deserialize_ron(&serialized);
         let graph = config.graphs.get_graph(None).unwrap();
         let deserialized_graph = deserialized.graphs.get_graph(None).unwrap();
-        assert_eq!(graph.0.node_count(), deserialized_graph.0.node_count());
-        assert_eq!(graph.0.edge_count(), deserialized_graph.0.edge_count());
+        assert_eq!(graph.node_count(), deserialized_graph.node_count());
+        assert_eq!(graph.edge_count(), deserialized_graph.edge_count());
     }
 
     #[test]
@@ -1356,9 +1703,9 @@ mod tests {
         let txt = r#"( missions: [ (id: "data_collection"), (id: "autonomous")])"#;
         let config = CuConfig::deserialize_ron(txt);
         let graph = config.graphs.get_graph(Some("data_collection")).unwrap();
-        assert!(graph.0.node_count() == 0);
+        assert!(graph.node_count() == 0);
         let graph = config.graphs.get_graph(Some("autonomous")).unwrap();
-        assert!(graph.0.node_count() == 0);
+        assert!(graph.node_count() == 0);
     }
 
     #[test]
@@ -1397,6 +1744,207 @@ mod tests {
         assert_eq!(logging_config.slab_size_mib.unwrap(), 1024);
         assert_eq!(logging_config.section_size_mib.unwrap(), 100);
         assert!(logging_config.enable_task_logging);
+    }
+
+    #[test]
+    fn test_bridge_parsing() {
+        let txt = r#"
+        (
+            tasks: [
+                (id: "dst", type: "tasks::Destination"),
+                (id: "src", type: "tasks::Source"),
+            ],
+            bridges: [
+                (
+                    id: "radio",
+                    type: "tasks::SerialBridge",
+                    config: { "path": "/dev/ttyACM0", "baud": 921600 },
+                    channels: [
+                        Rx ( id: "status", route: "sys/status" ),
+                        Tx ( id: "motor", route: "motor/cmd" ),
+                    ],
+                ),
+            ],
+            cnx: [
+                (src: "radio/status", dst: "dst", msg: "mymsgs::Status"),
+                (src: "src", dst: "radio/motor", msg: "mymsgs::MotorCmd"),
+            ],
+        )
+        "#;
+
+        let config = CuConfig::deserialize_ron(txt);
+        assert_eq!(config.bridges.len(), 1);
+        let bridge = &config.bridges[0];
+        assert_eq!(bridge.id, "radio");
+        assert_eq!(bridge.channels.len(), 2);
+        match &bridge.channels[0] {
+            BridgeChannel::Rx { id, route, .. } => {
+                assert_eq!(id, "status");
+                assert_eq!(route.as_deref(), Some("sys/status"));
+            }
+            _ => panic!("expected Rx channel"),
+        }
+        match &bridge.channels[1] {
+            BridgeChannel::Tx { id, route, .. } => {
+                assert_eq!(id, "motor");
+                assert_eq!(route.as_deref(), Some("motor/cmd"));
+            }
+            _ => panic!("expected Tx channel"),
+        }
+        let graph = config.graphs.get_graph(None).unwrap();
+        let bridge_id = graph
+            .get_node_id_by_name("radio")
+            .expect("bridge node missing");
+        let bridge_node = graph.get_node(bridge_id).unwrap();
+        assert_eq!(bridge_node.get_flavor(), Flavor::Bridge);
+
+        // Edges should retain channel metadata.
+        let mut edges = Vec::new();
+        for edge_idx in graph.0.edge_indices() {
+            edges.push(graph.0[edge_idx].clone());
+        }
+        assert_eq!(edges.len(), 2);
+        let status_edge = edges
+            .iter()
+            .find(|e| e.dst == "dst")
+            .expect("status edge missing");
+        assert_eq!(status_edge.src_channel.as_deref(), Some("status"));
+        assert!(status_edge.dst_channel.is_none());
+        let motor_edge = edges
+            .iter()
+            .find(|e| e.dst_channel.is_some())
+            .expect("motor edge missing");
+        assert_eq!(motor_edge.dst_channel.as_deref(), Some("motor"));
+    }
+
+    #[test]
+    fn test_bridge_roundtrip() {
+        let mut config = CuConfig::default();
+        let mut bridge_config = ComponentConfig::default();
+        bridge_config.set("port", "/dev/ttyACM0".to_string());
+        config.bridges.push(BridgeConfig {
+            id: "radio".to_string(),
+            type_: "tasks::SerialBridge".to_string(),
+            config: Some(bridge_config),
+            missions: None,
+            channels: vec![
+                BridgeChannel::Rx {
+                    id: "status".to_string(),
+                    route: Some("sys/status".to_string()),
+                    config: None,
+                },
+                BridgeChannel::Tx {
+                    id: "motor".to_string(),
+                    route: Some("motor/cmd".to_string()),
+                    config: None,
+                },
+            ],
+        });
+
+        let serialized = config.serialize_ron();
+        assert!(
+            serialized.contains("bridges"),
+            "bridges section missing from serialized config"
+        );
+        let deserialized = CuConfig::deserialize_ron(&serialized);
+        assert_eq!(deserialized.bridges.len(), 1);
+        let bridge = &deserialized.bridges[0];
+        assert_eq!(bridge.channels.len(), 2);
+        assert!(matches!(bridge.channels[0], BridgeChannel::Rx { .. }));
+        assert!(matches!(bridge.channels[1], BridgeChannel::Tx { .. }));
+    }
+
+    #[test]
+    fn test_bridge_channel_config() {
+        let txt = r#"
+        (
+            tasks: [],
+            bridges: [
+                (
+                    id: "radio",
+                    type: "tasks::SerialBridge",
+                    channels: [
+                        Rx ( id: "status", route: "sys/status", config: { "filter": "fast" } ),
+                        Tx ( id: "imu", route: "telemetry/imu", config: { "rate": 100 } ),
+                    ],
+                ),
+            ],
+            cnx: [],
+        )
+        "#;
+
+        let config = CuConfig::deserialize_ron(txt);
+        let bridge = &config.bridges[0];
+        match &bridge.channels[0] {
+            BridgeChannel::Rx {
+                config: Some(cfg), ..
+            } => {
+                let val: String = cfg.get("filter").expect("filter missing");
+                assert_eq!(val, "fast");
+            }
+            _ => panic!("expected Rx channel with config"),
+        }
+        match &bridge.channels[1] {
+            BridgeChannel::Tx {
+                config: Some(cfg), ..
+            } => {
+                let rate: i32 = cfg.get("rate").expect("rate missing");
+                assert_eq!(rate, 100);
+            }
+            _ => panic!("expected Tx channel with config"),
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "channel 'motor' is Tx and cannot act as a source")]
+    fn test_bridge_tx_cannot_be_source() {
+        let txt = r#"
+        (
+            tasks: [
+                (id: "dst", type: "tasks::Destination"),
+            ],
+            bridges: [
+                (
+                    id: "radio",
+                    type: "tasks::SerialBridge",
+                    channels: [
+                        Tx ( id: "motor", route: "motor/cmd" ),
+                    ],
+                ),
+            ],
+            cnx: [
+                (src: "radio/motor", dst: "dst", msg: "mymsgs::MotorCmd"),
+            ],
+        )
+        "#;
+
+        CuConfig::deserialize_ron(txt);
+    }
+
+    #[test]
+    #[should_panic(expected = "channel 'status' is Rx and cannot act as a destination")]
+    fn test_bridge_rx_cannot_be_destination() {
+        let txt = r#"
+        (
+            tasks: [
+                (id: "src", type: "tasks::Source"),
+            ],
+            bridges: [
+                (
+                    id: "radio",
+                    type: "tasks::SerialBridge",
+                    channels: [
+                        Rx ( id: "status", route: "sys/status" ),
+                    ],
+                ),
+            ],
+            cnx: [
+                (src: "src", dst: "radio/status", msg: "mymsgs::Status"),
+            ],
+        )
+        "#;
+
+        CuConfig::deserialize_ron(txt);
     }
 
     #[test]
@@ -1461,10 +2009,10 @@ mod tests {
 
         let config = CuConfig::deserialize_ron(txt);
         let m1_graph = config.graphs.get_graph(Some("m1")).unwrap();
-        assert_eq!(m1_graph.0.edge_count(), 1);
-        assert_eq!(m1_graph.0.node_count(), 2);
-        let index = EdgeIndex::new(0);
-        let cnx = m1_graph.0.edge_weight(index).unwrap();
+        assert_eq!(m1_graph.edge_count(), 1);
+        assert_eq!(m1_graph.node_count(), 2);
+        let index = 0;
+        let cnx = m1_graph.get_edge_weight(index).unwrap();
 
         assert_eq!(cnx.src, "src1");
         assert_eq!(cnx.dst, "sink");
@@ -1472,10 +2020,10 @@ mod tests {
         assert_eq!(cnx.missions, Some(vec!["m1".to_string()]));
 
         let m2_graph = config.graphs.get_graph(Some("m2")).unwrap();
-        assert_eq!(m2_graph.0.edge_count(), 1);
-        assert_eq!(m2_graph.0.node_count(), 2);
-        let index = EdgeIndex::new(0);
-        let cnx = m2_graph.0.edge_weight(index).unwrap();
+        assert_eq!(m2_graph.edge_count(), 1);
+        assert_eq!(m2_graph.node_count(), 2);
+        let index = 0;
+        let cnx = m2_graph.get_edge_weight(index).unwrap();
         assert_eq!(cnx.src, "src2");
         assert_eq!(cnx.dst, "sink");
         assert_eq!(cnx.msg, "u32");
@@ -1503,10 +2051,10 @@ mod tests {
         let serialized = config.serialize_ron();
         let deserialized = CuConfig::deserialize_ron(&serialized);
         let m1_graph = deserialized.graphs.get_graph(Some("m1")).unwrap();
-        assert_eq!(m1_graph.0.edge_count(), 1);
-        assert_eq!(m1_graph.0.node_count(), 2);
-        let index = EdgeIndex::new(0);
-        let cnx = m1_graph.0.edge_weight(index).unwrap();
+        assert_eq!(m1_graph.edge_count(), 1);
+        assert_eq!(m1_graph.node_count(), 2);
+        let index = 0;
+        let cnx = m1_graph.get_edge_weight(index).unwrap();
         assert_eq!(cnx.src, "src1");
         assert_eq!(cnx.dst, "sink");
         assert_eq!(cnx.msg, "u32");

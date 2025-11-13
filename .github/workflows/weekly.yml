@@ -24,6 +24,8 @@ jobs:
         run: cargo deny check sources -c .config/deny.toml
       - name: Run deny advisories
         run: cargo deny check advisories -c .config/deny.toml
+      - name: Check formatting
+        run: cargo +beta fmt --all -- --check
 
   Unit-Tests:
     name: Unit Tests
@@ -32,6 +34,7 @@ jobs:
 
     env:
       DYLD_LIBRARY_PATH: /Library/Frameworks/GStreamer.framework/Versions/Current/lib:$DYLD_LIBRARY_PATH
+      BASE_FEATURES: macro_debug,mock,perf-ui,image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
 
     strategy:
       matrix:
@@ -45,7 +48,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@beta
         with:
-          components: clippy, rustfmt
+          components: rustc,cargo,rust-std,rustfmt,clippy
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -56,9 +59,6 @@ jobs:
           cache-bin: "false"
       - name: Install latest nextest
         uses: taiki-e/install-action@nextest
-
-      - name: Check formatting
-        run: cargo +beta fmt --all -- --check
 
       - name: Free Disk Space (Ubuntu)
         if: runner.os == 'Linux'
@@ -165,17 +165,27 @@ jobs:
 
       - name: Set features (Linux)
         if: runner.os == 'Linux'
-        run: echo "FEATURES_FLAG=$([[ '${{ matrix.mode }}' == 'cuda-release' ]] && echo '--all-features' || echo '--features macro_debug,mock,perf-ui,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug')" >> $GITHUB_ENV
+        run: |
+          if [[ '${{ matrix.mode }}' == 'cuda-release' ]]; then
+            echo "FEATURES_FLAG=--features $BASE_FEATURES,python,cuda" >> $GITHUB_ENV
+          else
+            echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
+          fi
 
       - name: Set features (MacOS)
         if: runner.os == 'macOS'
-        run: echo "FEATURES_FLAG=$([[ '${{ matrix.mode }}' == 'cuda-release' ]] && echo '--all-features' || echo '--features macro_debug,mock,perf-ui,image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug')" >> $GITHUB_ENV
+        run: |
+          if [[ '${{ matrix.mode }}' == 'cuda-release' ]]; then
+            echo "FEATURES_FLAG=--features $BASE_FEATURES,cuda" >> $GITHUB_ENV
+          else
+            echo "FEATURES_FLAG=--features $BASE_FEATURES" >> $GITHUB_ENV
+          fi
 
       - name: Set features (Windows)
         if: runner.os == 'Windows'
         run: |
           $features = if ($env:matrix_mode -eq 'cuda-release') {
-            '--all-features'
+            '--features macro_debug,mock,perf-ui,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode,cuda'
           } else {
             '--features macro_debug,mock,perf-ui,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode'
           }
@@ -215,3 +225,32 @@ jobs:
         run: |
           cd templates/test_project
           cargo +beta build
+
+  embedded:
+    name: CI for embedded targets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@beta
+        with:
+          targets: aarch64-unknown-none,thumbv8m.main-none-eabihf,riscv32imac-unknown-none-elf
+          components: rustc,cargo,rust-std,rustfmt,clippy
+      - name: Install latest nextest
+        uses: taiki-e/install-action@nextest
+      - name: Check compilation of core with no-std
+        run: cargo +beta build --no-default-features
+      - name: Unit tests of core with no-std
+        run: cargo +beta nextest run --no-default-features
+      - name: Clippy a no-std example
+        run: cargo +beta clippy -p cu-min-baremetal --no-default-features --config examples/cu_min_baremetal/.cargo/config-nostd.toml
+      - name: Compile a no-std example from Copper
+        run: cargo +beta build -p cu-min-baremetal --no-default-features --config examples/cu_min_baremetal/.cargo/config-nostd.toml
+      - name: Clippy an rp2350 example
+        working-directory: examples/cu_rp2350_skeleton
+        run: cargo +beta clippy
+      - name: Cross compile an rp2350 example with Arm
+        working-directory: examples/cu_rp2350_skeleton
+        run: cargo +beta build-arm
+      - name: Compile the logreader for the rp2350 example (host)
+        working-directory: examples/cu_rp2350_skeleton
+        run: cargo +beta build-logreader
