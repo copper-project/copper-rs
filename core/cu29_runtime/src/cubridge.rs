@@ -17,6 +17,7 @@ use std::borrow::Cow;
 #[cfg(not(feature = "std"))]
 mod imp {
     pub use alloc::fmt::{Debug, Formatter};
+    pub use alloc::string::String;
 }
 
 #[cfg(feature = "std")]
@@ -145,7 +146,7 @@ impl<Id: Copy> BridgeChannelConfig<Id> {
         if let Some(route) = &self.route {
             Some(Cow::Borrowed(route.as_str()))
         } else {
-            self.channel.default_route.map(|route| Cow::Borrowed(route))
+            self.channel.default_route.map(Cow::Borrowed)
         }
     }
 }
