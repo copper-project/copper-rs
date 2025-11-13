@@ -134,62 +134,22 @@ pub mod bridges {
     use super::events;
     use super::messages;
     use cu29::prelude::*;
-    use cu29_runtime::cubridge::{
-        BridgeChannel, BridgeChannelConfig, BridgeChannelInfo, BridgeChannelSet, CuBridge,
-    };
 
-    #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-    pub enum AlphaTxId {
-        LoopOut,
-        ChainOut,
+    // `loop_out` ships with an inline default route while `chain_out` lets the config decide.
+    tx_channels! {
+        pub struct AlphaTxChannels : AlphaTxId {
+            loop_out => messages::LoopbackMsg = "alpha/default_loop_out",
+            chain_out => messages::ChainPayload,
+        }
     }
 
-    #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-    pub enum AlphaRxId {
-        Ingress,
-        LoopIn,
-        ToSink,
-        ChainIn,
-    }
-
-    pub struct AlphaTxChannels;
-
-    impl AlphaTxChannels {
-        pub const LOOP_OUT: BridgeChannel<AlphaTxId, messages::LoopbackMsg> =
-            BridgeChannel::with_channel(AlphaTxId::LoopOut, "alpha/loop_out");
-        pub const CHAIN_OUT: BridgeChannel<AlphaTxId, messages::ChainPayload> =
-            BridgeChannel::with_channel(AlphaTxId::ChainOut, "alpha/chain_out");
-    }
-
-    impl BridgeChannelSet for AlphaTxChannels {
-        type Id = AlphaTxId;
-
-        const STATIC_CHANNELS: &'static [&'static dyn BridgeChannelInfo<Self::Id>] =
-            &[&Self::LOOP_OUT, &Self::CHAIN_OUT];
-    }
-
-    pub struct AlphaRxChannels;
-
-    impl AlphaRxChannels {
-        pub const INGRESS: BridgeChannel<AlphaRxId, messages::IngressMsg> =
-            BridgeChannel::with_channel(AlphaRxId::Ingress, "alpha/ingress");
-        pub const LOOP_IN: BridgeChannel<AlphaRxId, messages::LoopbackMsg> =
-            BridgeChannel::with_channel(AlphaRxId::LoopIn, "alpha/loop_in");
-        pub const TO_SINK: BridgeChannel<AlphaRxId, messages::SinkPayload> =
-            BridgeChannel::with_channel(AlphaRxId::ToSink, "alpha/to_sink");
-        pub const CHAIN_IN: BridgeChannel<AlphaRxId, messages::ChainPayload> =
-            BridgeChannel::with_channel(AlphaRxId::ChainIn, "alpha/chain_in");
-    }
-
-    impl BridgeChannelSet for AlphaRxChannels {
-        type Id = AlphaRxId;
-
-        const STATIC_CHANNELS: &'static [&'static dyn BridgeChannelInfo<Self::Id>] = &[
-            &Self::INGRESS,
-            &Self::LOOP_IN,
-            &Self::TO_SINK,
-            &Self::CHAIN_IN,
-        ];
+    rx_channels! {
+        pub struct AlphaRxChannels : AlphaRxId {
+            ingress => messages::IngressMsg = "alpha/ingress",
+            loop_in => messages::LoopbackMsg,
+            to_sink => messages::SinkPayload = "alpha/to_sink",
+            chain_in => messages::ChainPayload,
+        }
     }
 
     #[derive(Default)]
@@ -249,30 +209,15 @@ pub mod bridges {
         }
     }
 
-    #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-    pub enum BetaTxId {
-        Egress,
-        FromSource,
+    tx_channels! {
+        pub struct BetaTxChannels : BetaTxId {
+            egress => messages::IngressMsg,
+            from_src => messages::FromSource = "beta/default_from_src",
+        }
     }
 
     #[derive(Copy, Clone, Debug, Eq, PartialEq)]
     pub enum BetaRxId {}
-
-    pub struct BetaTxChannels;
-
-    impl BetaTxChannels {
-        pub const EGRESS: BridgeChannel<BetaTxId, messages::IngressMsg> =
-            BridgeChannel::with_channel(BetaTxId::Egress, "beta/egress");
-        pub const FROM_SRC: BridgeChannel<BetaTxId, messages::FromSource> =
-            BridgeChannel::with_channel(BetaTxId::FromSource, "beta/from_src");
-    }
-
-    impl BridgeChannelSet for BetaTxChannels {
-        type Id = BetaTxId;
-
-        const STATIC_CHANNELS: &'static [&'static dyn BridgeChannelInfo<Self::Id>] =
-            &[&Self::EGRESS, &Self::FROM_SRC];
-    }
 
     pub struct BetaRxChannels;
 
@@ -325,7 +270,7 @@ pub mod bridges {
         {
             match channel.id() {
                 BetaTxId::Egress => events::record("beta.tx.egress"),
-                BetaTxId::FromSource => events::record("beta.tx.from_src"),
+                BetaTxId::FromSrc => events::record("beta.tx.from_src"),
             }
             assert!(msg.payload().is_some(), "beta bridge tx expects payloads");
             Ok(())

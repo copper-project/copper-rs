@@ -355,7 +355,7 @@ impl Node {
 
 /// Directional mapping for bridge channels.
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum BridgeChannel {
+pub enum BridgeChannelConfigRepresentation {
     /// Channel that receives data from the bridge into the graph.
     Rx {
         id: String,
@@ -378,12 +378,13 @@ pub enum BridgeChannel {
     },
 }
 
-impl BridgeChannel {
+impl BridgeChannelConfigRepresentation {
     /// Stable logical identifier to reference this channel in connections.
     #[allow(dead_code)]
     pub fn id(&self) -> &str {
         match self {
-            BridgeChannel::Rx { id, .. } | BridgeChannel::Tx { id, .. } => id,
+            BridgeChannelConfigRepresentation::Rx { id, .. }
+            | BridgeChannelConfigRepresentation::Tx { id, .. } => id,
         }
     }
 
@@ -391,7 +392,8 @@ impl BridgeChannel {
     #[allow(dead_code)]
     pub fn route(&self) -> Option<&str> {
         match self {
-            BridgeChannel::Rx { route, .. } | BridgeChannel::Tx { route, .. } => route.as_deref(),
+            BridgeChannelConfigRepresentation::Rx { route, .. }
+            | BridgeChannelConfigRepresentation::Tx { route, .. } => route.as_deref(),
         }
     }
 }
@@ -418,13 +420,13 @@ fn validate_bridge_channel(
         })?;
 
     match (role, channel) {
-        (EndpointRole::Source, BridgeChannel::Rx { .. }) => Ok(()),
-        (EndpointRole::Destination, BridgeChannel::Tx { .. }) => Ok(()),
-        (EndpointRole::Source, BridgeChannel::Tx { .. }) => Err(format!(
+        (EndpointRole::Source, BridgeChannelConfigRepresentation::Rx { .. }) => Ok(()),
+        (EndpointRole::Destination, BridgeChannelConfigRepresentation::Tx { .. }) => Ok(()),
+        (EndpointRole::Source, BridgeChannelConfigRepresentation::Tx { .. }) => Err(format!(
             "Bridge '{}' channel '{}' is Tx and cannot act as a source",
             bridge.id, channel_id
         )),
-        (EndpointRole::Destination, BridgeChannel::Rx { .. }) => Err(format!(
+        (EndpointRole::Destination, BridgeChannelConfigRepresentation::Rx { .. }) => Err(format!(
             "Bridge '{}' channel '{}' is Rx and cannot act as a destination",
             bridge.id, channel_id
         )),
@@ -442,7 +444,7 @@ pub struct BridgeConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub missions: Option<Vec<String>>,
     /// List of logical endpoints exposed by this bridge.
-    pub channels: Vec<BridgeChannel>,
+    pub channels: Vec<BridgeChannelConfigRepresentation>,
 }
 
 impl BridgeConfig {
@@ -1778,14 +1780,14 @@ mod tests {
         assert_eq!(bridge.id, "radio");
         assert_eq!(bridge.channels.len(), 2);
         match &bridge.channels[0] {
-            BridgeChannel::Rx { id, route, .. } => {
+            BridgeChannelConfigRepresentation::Rx { id, route, .. } => {
                 assert_eq!(id, "status");
                 assert_eq!(route.as_deref(), Some("sys/status"));
             }
             _ => panic!("expected Rx channel"),
         }
         match &bridge.channels[1] {
-            BridgeChannel::Tx { id, route, .. } => {
+            BridgeChannelConfigRepresentation::Tx { id, route, .. } => {
                 assert_eq!(id, "motor");
                 assert_eq!(route.as_deref(), Some("motor/cmd"));
             }
@@ -1828,12 +1830,12 @@ mod tests {
             config: Some(bridge_config),
             missions: None,
             channels: vec![
-                BridgeChannel::Rx {
+                BridgeChannelConfigRepresentation::Rx {
                     id: "status".to_string(),
                     route: Some("sys/status".to_string()),
                     config: None,
                 },
-                BridgeChannel::Tx {
+                BridgeChannelConfigRepresentation::Tx {
                     id: "motor".to_string(),
                     route: Some("motor/cmd".to_string()),
                     config: None,
@@ -1850,8 +1852,14 @@ mod tests {
         assert_eq!(deserialized.bridges.len(), 1);
         let bridge = &deserialized.bridges[0];
         assert_eq!(bridge.channels.len(), 2);
-        assert!(matches!(bridge.channels[0], BridgeChannel::Rx { .. }));
-        assert!(matches!(bridge.channels[1], BridgeChannel::Tx { .. }));
+        assert!(matches!(
+            bridge.channels[0],
+            BridgeChannelConfigRepresentation::Rx { .. }
+        ));
+        assert!(matches!(
+            bridge.channels[1],
+            BridgeChannelConfigRepresentation::Tx { .. }
+        ));
     }
 
     #[test]
@@ -1876,7 +1884,7 @@ mod tests {
         let config = CuConfig::deserialize_ron(txt);
         let bridge = &config.bridges[0];
         match &bridge.channels[0] {
-            BridgeChannel::Rx {
+            BridgeChannelConfigRepresentation::Rx {
                 config: Some(cfg), ..
             } => {
                 let val: String = cfg.get("filter").expect("filter missing");
@@ -1885,7 +1893,7 @@ mod tests {
             _ => panic!("expected Rx channel with config"),
         }
         match &bridge.channels[1] {
-            BridgeChannel::Tx {
+            BridgeChannelConfigRepresentation::Tx {
                 config: Some(cfg), ..
             } => {
                 let rate: i32 = cfg.get("rate").expect("rate missing");
