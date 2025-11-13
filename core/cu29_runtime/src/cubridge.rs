@@ -9,8 +9,15 @@ use cu29_clock::RobotClock;
 use cu29_traits::CuResult;
 
 #[cfg(not(feature = "std"))]
+use alloc::borrow::Cow;
+
+#[cfg(feature = "std")]
+use std::borrow::Cow;
+
+#[cfg(not(feature = "std"))]
 mod imp {
     pub use alloc::fmt::{Debug, Formatter};
+    pub use alloc::string::String;
 }
 
 #[cfg(feature = "std")]
@@ -22,23 +29,33 @@ use imp::*;
 
 /// Compile-time description of a single bridge channel, including the message type carried on it.
 ///
-/// This links its identifier to the backend-specific route/topic/path the bridge should bind to,
-/// and associates it with a payload type enforced at compile time.
+/// This links its identifier to a payload type enforced at compile time and optionally provides a
+/// backend-specific default route/topic/path suggestion. Missions can override that default (or
+/// leave it unset) via the bridge configuration file.
 #[derive(Copy, Clone)]
 pub struct BridgeChannel<Id, Payload> {
     /// Strongly typed identifier used to select this channel.
     pub id: Id,
-    /// Backend-specific route/topic/path the bridge should bind to.
-    pub route: &'static str,
+    /// Backend-specific route/topic/path default the bridge should bind to, if any.
+    pub default_route: Option<&'static str>,
     _payload: PhantomData<fn() -> Payload>,
 }
 
 impl<Id, Payload> BridgeChannel<Id, Payload> {
-    /// Convenience constructor for const contexts.
-    pub const fn new(id: Id, route: &'static str) -> Self {
+    /// Declares a channel that leaves the route unspecified and entirely configuration-driven.
+    pub const fn new(id: Id) -> Self {
         Self {
             id,
-            route,
+            default_route: None,
+            _payload: PhantomData,
+        }
+    }
+
+    /// Declares a channel with a default backend route.
+    pub const fn with_channel(id: Id, route: &'static str) -> Self {
+        Self {
+            id,
+            default_route: Some(route),
             _payload: PhantomData,
         }
     }
@@ -48,7 +65,7 @@ impl<Id: Debug, Payload> Debug for BridgeChannel<Id, Payload> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("BridgeChannel")
             .field("id", &self.id)
-            .field("route", &self.route)
+            .field("default_route", &self.default_route)
             .finish()
     }
 }
@@ -57,8 +74,8 @@ impl<Id: Debug, Payload> Debug for BridgeChannel<Id, Payload> {
 pub trait BridgeChannelInfo<Id: Copy> {
     /// Logical identifier referencing this channel inside the graph.
     fn id(&self) -> Id;
-    /// Backend-specific route/topic/path the bridge should bind to.
-    fn route(&self) -> &'static str;
+    /// Default backend-specific route/topic/path the bridge recommends binding to.
+    fn default_route(&self) -> Option<&'static str>;
 }
 
 impl<Id: Copy, Payload> BridgeChannelInfo<Id> for BridgeChannel<Id, Payload> {
@@ -66,8 +83,8 @@ impl<Id: Copy, Payload> BridgeChannelInfo<Id> for BridgeChannel<Id, Payload> {
         self.id
     }
 
-    fn route(&self) -> &'static str {
-        self.route
+    fn default_route(&self) -> Option<&'static str> {
+        self.default_route
     }
 }
 
@@ -77,13 +94,13 @@ impl<Id: Copy, Payload> BridgeChannelInfo<Id> for BridgeChannel<Id, Payload> {
 pub struct BridgeChannelDescriptor<Id: Copy> {
     /// Strongly typed identifier used to select this channel.
     pub id: Id,
-    /// Backend-specific route/topic/path the bridge should bind to.
-    pub route: &'static str,
+    /// Backend-specific default route/topic/path the bridge suggests binding to.
+    pub default_route: Option<&'static str>,
 }
 
 impl<Id: Copy> BridgeChannelDescriptor<Id> {
-    pub const fn new(id: Id, route: &'static str) -> Self {
-        Self { id, route }
+    pub const fn new(id: Id, default_route: Option<&'static str>) -> Self {
+        Self { id, default_route }
     }
 }
 
@@ -92,7 +109,7 @@ where
     T: BridgeChannelInfo<Id> + ?Sized,
 {
     fn from(channel: &T) -> Self {
-        BridgeChannelDescriptor::new(channel.id(), channel.route())
+        BridgeChannelDescriptor::new(channel.id(), channel.default_route())
     }
 }
 
@@ -101,19 +118,35 @@ where
 pub struct BridgeChannelConfig<Id: Copy> {
     /// Static metadata describing this channel.
     pub channel: BridgeChannelDescriptor<Id>,
+    /// Optional route override supplied by the mission configuration.
+    pub route: Option<String>,
     /// Optional configuration block defined for this channel.
     pub config: Option<ComponentConfig>,
 }
 
 impl<Id: Copy> BridgeChannelConfig<Id> {
     /// Creates a descriptor by combining the static metadata and the parsed configuration.
-    pub fn from_static<T>(channel: &'static T, config: Option<ComponentConfig>) -> Self
+    pub fn from_static<T>(
+        channel: &'static T,
+        route: Option<String>,
+        config: Option<ComponentConfig>,
+    ) -> Self
     where
         T: BridgeChannelInfo<Id> + ?Sized,
     {
         Self {
             channel: channel.into(),
+            route,
             config,
+        }
+    }
+
+    /// Returns the route active for this channel (configuration override wins over defaults).
+    pub fn effective_route(&self) -> Option<Cow<'_, str>> {
+        if let Some(route) = &self.route {
+            Some(Cow::Borrowed(route.as_str()))
+        } else {
+            self.channel.default_route.map(Cow::Borrowed)
         }
     }
 }
@@ -248,9 +281,10 @@ mod tests {
     struct TxChannels;
 
     impl TxChannels {
-        pub const IMU: BridgeChannel<TxId, ImuMsg> = BridgeChannel::new(TxId::Imu, "telemetry/imu");
+        pub const IMU: BridgeChannel<TxId, ImuMsg> =
+            BridgeChannel::with_channel(TxId::Imu, "telemetry/imu");
         pub const MOTOR: BridgeChannel<TxId, MotorCmd> =
-            BridgeChannel::new(TxId::Motor, "motor/cmd");
+            BridgeChannel::with_channel(TxId::Motor, "motor/cmd");
     }
 
     impl BridgeChannelSet for TxChannels {
@@ -264,9 +298,9 @@ mod tests {
 
     impl RxChannels {
         pub const STATUS: BridgeChannel<RxId, StatusMsg> =
-            BridgeChannel::new(RxId::Status, "sys/status");
+            BridgeChannel::with_channel(RxId::Status, "sys/status");
         pub const ALERT: BridgeChannel<RxId, AlertMsg> =
-            BridgeChannel::new(RxId::Alert, "sys/alert");
+            BridgeChannel::with_channel(RxId::Alert, "sys/alert");
     }
 
     impl BridgeChannelSet for RxChannels {
@@ -395,13 +429,35 @@ mod tests {
         bridge_cfg.set("port", "ttyUSB0".to_string());
 
         let tx_descriptors = [
-            BridgeChannelConfig::from_static(&TxChannels::IMU, None),
-            BridgeChannelConfig::from_static(&TxChannels::MOTOR, None),
+            BridgeChannelConfig::from_static(&TxChannels::IMU, None, None),
+            BridgeChannelConfig::from_static(&TxChannels::MOTOR, None, None),
         ];
         let rx_descriptors = [
-            BridgeChannelConfig::from_static(&RxChannels::STATUS, None),
-            BridgeChannelConfig::from_static(&RxChannels::ALERT, None),
+            BridgeChannelConfig::from_static(&RxChannels::STATUS, None, None),
+            BridgeChannelConfig::from_static(&RxChannels::ALERT, None, None),
         ];
+
+        assert_eq!(
+            tx_descriptors[0]
+                .effective_route()
+                .map(|route| route.into_owned()),
+            Some("telemetry/imu".to_string())
+        );
+        assert_eq!(
+            tx_descriptors[1]
+                .effective_route()
+                .map(|route| route.into_owned()),
+            Some("motor/cmd".to_string())
+        );
+        let overridden = BridgeChannelConfig::from_static(
+            &TxChannels::MOTOR,
+            Some("custom/motor".to_string()),
+            None,
+        );
+        assert_eq!(
+            overridden.effective_route().map(|route| route.into_owned()),
+            Some("custom/motor".to_string())
+        );
 
         let mut bridge = ExampleBridge::new(Some(&bridge_cfg), &tx_descriptors, &rx_descriptors)
             .expect("bridge should build");

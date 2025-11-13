@@ -512,13 +512,23 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         let channel_name = channel.id.clone();
                         let channel_config_index = syn::Index::from(channel.config_index);
                         quote! {
-                            cu29::cubridge::BridgeChannelConfig::from_static(
-                                &<#bridge_type as cu29::cubridge::CuBridge>::Tx::#const_ident,
-                                match &bridge_cfg.channels[#channel_config_index] {
-                                    cu29::config::BridgeChannel::Tx { config, .. } => config.clone(),
-                                    _ => panic!("Bridge '{}' channel '{}' expected to be Tx", #bridge_name, #channel_name),
-                                },
-                            )
+                            {
+                                let (channel_route, channel_config) = match &bridge_cfg.channels[#channel_config_index] {
+                                    cu29::config::BridgeChannel::Tx { route, config, .. } => {
+                                        (route.clone(), config.clone())
+                                    }
+                                    _ => panic!(
+                                        "Bridge '{}' channel '{}' expected to be Tx",
+                                        #bridge_name,
+                                        #channel_name
+                                    ),
+                                };
+                                cu29::cubridge::BridgeChannelConfig::from_static(
+                                    &<#bridge_type as cu29::cubridge::CuBridge>::Tx::#const_ident,
+                                    channel_route,
+                                    channel_config,
+                                )
+                            }
                         }
                     })
                     .collect();
@@ -530,13 +540,23 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         let channel_name = channel.id.clone();
                         let channel_config_index = syn::Index::from(channel.config_index);
                         quote! {
-                            cu29::cubridge::BridgeChannelConfig::from_static(
-                                &<#bridge_type as cu29::cubridge::CuBridge>::Rx::#const_ident,
-                                match &bridge_cfg.channels[#channel_config_index] {
-                                    cu29::config::BridgeChannel::Rx { config, .. } => config.clone(),
-                                    _ => panic!("Bridge '{}' channel '{}' expected to be Rx", #bridge_name, #channel_name),
-                                },
-                            )
+                            {
+                                let (channel_route, channel_config) = match &bridge_cfg.channels[#channel_config_index] {
+                                    cu29::config::BridgeChannel::Rx { route, config, .. } => {
+                                        (route.clone(), config.clone())
+                                    }
+                                    _ => panic!(
+                                        "Bridge '{}' channel '{}' expected to be Rx",
+                                        #bridge_name,
+                                        #channel_name
+                                    ),
+                                };
+                                cu29::cubridge::BridgeChannelConfig::from_static(
+                                    &<#bridge_type as cu29::cubridge::CuBridge>::Rx::#const_ident,
+                                    channel_route,
+                                    channel_config,
+                                )
+                            }
                         }
                     })
                     .collect();

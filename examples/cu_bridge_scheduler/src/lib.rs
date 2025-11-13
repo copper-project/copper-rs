@@ -156,9 +156,9 @@ pub mod bridges {
 
     impl AlphaTxChannels {
         pub const LOOP_OUT: BridgeChannel<AlphaTxId, messages::LoopbackMsg> =
-            BridgeChannel::new(AlphaTxId::LoopOut, "alpha/loop_out");
+            BridgeChannel::with_channel(AlphaTxId::LoopOut, "alpha/loop_out");
         pub const CHAIN_OUT: BridgeChannel<AlphaTxId, messages::ChainPayload> =
-            BridgeChannel::new(AlphaTxId::ChainOut, "alpha/chain_out");
+            BridgeChannel::with_channel(AlphaTxId::ChainOut, "alpha/chain_out");
     }
 
     impl BridgeChannelSet for AlphaTxChannels {
@@ -172,13 +172,13 @@ pub mod bridges {
 
     impl AlphaRxChannels {
         pub const INGRESS: BridgeChannel<AlphaRxId, messages::IngressMsg> =
-            BridgeChannel::new(AlphaRxId::Ingress, "alpha/ingress");
+            BridgeChannel::with_channel(AlphaRxId::Ingress, "alpha/ingress");
         pub const LOOP_IN: BridgeChannel<AlphaRxId, messages::LoopbackMsg> =
-            BridgeChannel::new(AlphaRxId::LoopIn, "alpha/loop_in");
+            BridgeChannel::with_channel(AlphaRxId::LoopIn, "alpha/loop_in");
         pub const TO_SINK: BridgeChannel<AlphaRxId, messages::SinkPayload> =
-            BridgeChannel::new(AlphaRxId::ToSink, "alpha/to_sink");
+            BridgeChannel::with_channel(AlphaRxId::ToSink, "alpha/to_sink");
         pub const CHAIN_IN: BridgeChannel<AlphaRxId, messages::ChainPayload> =
-            BridgeChannel::new(AlphaRxId::ChainIn, "alpha/chain_in");
+            BridgeChannel::with_channel(AlphaRxId::ChainIn, "alpha/chain_in");
     }
 
     impl BridgeChannelSet for AlphaRxChannels {
@@ -262,9 +262,9 @@ pub mod bridges {
 
     impl BetaTxChannels {
         pub const EGRESS: BridgeChannel<BetaTxId, messages::IngressMsg> =
-            BridgeChannel::new(BetaTxId::Egress, "beta/egress");
+            BridgeChannel::with_channel(BetaTxId::Egress, "beta/egress");
         pub const FROM_SRC: BridgeChannel<BetaTxId, messages::FromSource> =
-            BridgeChannel::new(BetaTxId::FromSource, "beta/from_src");
+            BridgeChannel::with_channel(BetaTxId::FromSource, "beta/from_src");
     }
 
     impl BridgeChannelSet for BetaTxChannels {
