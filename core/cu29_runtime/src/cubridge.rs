@@ -58,12 +58,6 @@ impl<Id, Payload> BridgeChannel<Id, Payload> {
             _payload: PhantomData,
         }
     }
-
-    /// Backward-compatibility helper for older code; prefer [`BridgeChannel::with_channel`].
-    #[deprecated(since = "0.11.0", note = "Use BridgeChannel::with_channel instead")]
-    pub const fn with_default_route(id: Id, route: &'static str) -> Self {
-        Self::with_channel(id, route)
-    }
 }
 
 impl<Id: Debug, Payload> Debug for BridgeChannel<Id, Payload> {
