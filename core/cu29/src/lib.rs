@@ -7,6 +7,7 @@ pub use cu29_runtime::config;
 pub use cu29_runtime::copperlist;
 #[cfg(feature = "std")]
 pub use cu29_runtime::cuasynctask;
+pub use cu29_runtime::cubridge;
 pub use cu29_runtime::curuntime;
 pub use cu29_runtime::cutask;
 pub use cu29_runtime::input_msg;

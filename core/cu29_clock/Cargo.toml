@@ -14,7 +14,7 @@ repository.workspace = true
 [dependencies]
 bincode = { workspace = true }
 serde = { workspace = true }
-portable-atomic = { version = "1.11", default-features = false, features = ["require-cas"] }
+portable-atomic = { version = "1.11", default-features = false, features = ["fallback"] }
 
 [target.'cfg(all(target_arch = "arm", target_os = "none"))'.dependencies]
 cortex-m = { version = "0.7", features = ["critical-section"] }
@@ -24,4 +24,4 @@ approx = "0.5"
 
 [features]
 default = ["std"]
-std = ["portable-atomic/std"]
+std = ["portable-atomic/std", "portable-atomic/require-cas"]

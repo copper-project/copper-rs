@@ -13,15 +13,12 @@ macro_rules! format_keyexpr_raw {
     }};
 }
 
-pub use format_keyexpr_raw;
-
 #[macro_export]
 macro_rules! format_keyexpr {
     ($first:expr, $($arg:expr),*) => {{
 
         use $crate::keyexpr::normalize_chunk;
-        use $crate::keyexpr::format_keyexpr_raw;
-        format_keyexpr_raw!(normalize_chunk($first), $(normalize_chunk($arg)), *)
+        $crate::format_keyexpr_raw!(normalize_chunk($first), $(normalize_chunk($arg)), *)
     }};
 }
 
@@ -31,8 +28,7 @@ macro_rules! format_liveliness_keyexpr {
     ($first:expr, $($arg:expr),*) => {{
 
         use $crate::keyexpr::mangle_chunk;
-        use $crate::keyexpr::format_keyexpr_raw;
-        format_keyexpr_raw!(mangle_chunk($first), $(mangle_chunk($arg)), *)
+        $crate::format_keyexpr_raw!(mangle_chunk($first), $(mangle_chunk($arg)), *)
     }};
 }
 
