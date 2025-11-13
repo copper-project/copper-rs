@@ -157,8 +157,8 @@ where
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RxId {
-    LinkQuality,
-    RCChannels, // only support those for now, there are a bunch of others
+    LQ,
+    RC, // only support those for now, there are a bunch of others
 }
 
 pub struct CrsfRx;
@@ -179,8 +179,8 @@ impl BridgeChannelSet for CrsfRx {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TxId {
-    LinkQuality,
-    RCChannels, // only support those for now, there are a bunch of others
+    LQ,
+    RC, // only support those for now, there are a bunch of others
 }
 
 pub struct CrsfTx;

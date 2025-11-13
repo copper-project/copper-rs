@@ -10,6 +10,13 @@
         (id: "tele3", type: "tasks::TelemetrySink3"),
     ],
     bridges: [
+        (  id: "crsf",
+           type: "cu_crsf::CrsfBridge"
+            channels: [
+                Tx ( id: "rc", route: "rc_tx" ),
+                Rx ( id: "lq", route: "lq_rx" ),
+            ],
+        ),
         (
             id: "bdshot",
             type: "cu_bdshot::RpBdshotBridge",
