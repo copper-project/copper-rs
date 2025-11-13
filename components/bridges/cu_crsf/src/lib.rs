@@ -17,7 +17,6 @@ use cu29::cubridge::{
 use cu29::prelude::debug;
 use cu29::prelude::*;
 use embedded_io::{Read, Write};
-use serde::Deserialize;
 #[cfg(feature = "std")]
 use std::string::String;
 
@@ -143,6 +142,17 @@ impl SerialFactory<std::io::Error> for std_serial::StdSerial {
     }
 }
 
+rx_channels! {
+    lq_rx => LinkStatisticsPayload,
+    rc_rx => RcChannelsPayload
+    // TODO(gbin): add other types
+}
+
+tx_channels! {
+    lq_tx => LinkStatisticsPayload,
+    rc_tx => RcChannelsPayload
+}
+
 /// Crossfire bridge for Copper-rs.
 pub struct CuCrsfBridge<S, E>
 where
@@ -152,49 +162,6 @@ where
     parser: PacketParser<PARSER_BUFFER_SIZE>,
     last_lq: Option<LinkStatistics>,
     last_rc: Option<RcChannels>,
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum RxId {
-    LQ,
-    RC, // only support those for now, there are a bunch of others
-}
-
-pub struct CrsfRx;
-
-impl CrsfRx {
-    pub const LQ: BridgeChannel<RxId, LinkStatisticsPayload> =
-        BridgeChannel::new(RxId::LinkQuality, "lqrx");
-    pub const RC_CHANNELS: BridgeChannel<RxId, RcChannelsPayload> =
-        BridgeChannel::new(RxId::RCChannels, "rcrx");
-}
-impl BridgeChannelSet for CrsfRx {
-    type Id = RxId;
-
-    const STATIC_CHANNELS: &'static [&'static dyn BridgeChannelInfo<Self::Id>] =
-        &[&Self::LQ, &Self::RC_CHANNELS];
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum TxId {
-    LQ,
-    RC, // only support those for now, there are a bunch of others
-}
-
-pub struct CrsfTx;
-impl CrsfTx {
-    pub const LQ: BridgeChannel<TxId, LinkStatisticsPayload> =
-        BridgeChannel::new(TxId::LinkQuality, "lqtx");
-    pub const RC_CHANNELS: BridgeChannel<TxId, RcChannelsPayload> =
-        BridgeChannel::new(TxId::RCChannels, "rctx");
-}
-impl BridgeChannelSet for CrsfTx {
-    type Id = TxId;
-
-    const STATIC_CHANNELS: &'static [&'static dyn BridgeChannelInfo<Self::Id>] =
-        &[&Self::LQ, &Self::RC_CHANNELS];
 }
 
 impl<S, E> CuCrsfBridge<S, E>
@@ -245,38 +212,6 @@ where
         }
         Ok(())
     }
-
-    fn payload_as_lq_mut<Payload>(p: &mut Payload) -> &mut LinkStatisticsPayload
-    where
-        Payload: CuMsgPayload,
-    {
-        // ok because we only call it on the channel of the bridge where we already know the type
-        unsafe { &mut *(p as *mut Payload as *mut LinkStatisticsPayload) }
-    }
-
-    fn payload_as_rc_mut<Payload>(p: &mut Payload) -> &mut RcChannelsPayload
-    where
-        Payload: CuMsgPayload,
-    {
-        // ok because we only call it on the channel of the bridge where we already know the type
-        unsafe { &mut *(p as *mut Payload as *mut RcChannelsPayload) }
-    }
-
-    fn payload_as_lq<Payload>(p: &Payload) -> &LinkStatisticsPayload
-    where
-        Payload: CuMsgPayload,
-    {
-        // ok because we only call it on the channel of the bridge where we already know the type
-        unsafe { &*(p as *const Payload as *const LinkStatisticsPayload) }
-    }
-
-    fn payload_as_rc<Payload>(p: &Payload) -> &RcChannelsPayload
-    where
-        Payload: CuMsgPayload,
-    {
-        // ok because we only call it on the channel of the bridge where we already know the type
-        unsafe { &*(p as *const Payload as *const RcChannelsPayload) }
-    }
 }
 
 #[cfg(not(feature = "std"))]
@@ -295,8 +230,8 @@ impl<S, E> CuBridge for CuCrsfBridge<S, E>
 where
     S: SerialFactory<E>,
 {
-    type Tx = CrsfTx;
-    type Rx = CrsfRx;
+    type Tx = TxChannels;
+    type Rx = RxChannels;
 
     fn new(
         config: Option<&ComponentConfig>,
@@ -321,26 +256,28 @@ where
     where
         Payload: CuMsgPayload + 'a,
     {
-        if let Some(payload) = msg.payload() {
-            match channel.id() {
-                TxId::LinkQuality => {
-                    let lsi = Self::payload_as_lq(payload).inner().clone();
+        match channel.id() {
+            TxId::LqTx => {
+                let lsi: &CuMsg<LinkStatisticsPayload> = msg.downcast_ref()?;
+                if let Some(lq) = lsi.payload() {
                     debug!(
                         "CRSF: Sent LinkStatistics: Downlink LQ:{}",
-                        lsi.downlink_link_quality
+                        lq.0.downlink_link_quality
                     );
-                    let ls = Packet::LinkStatistics(lsi);
+                    let ls = Packet::LinkStatistics(lq.0.clone());
                     let raw_packet = ls.into_raw(PacketAddress::Transmitter);
                     self.serial_port
                         .write_all(raw_packet.data())
                         .map_err(|_| CuError::from("CRSF: Serial port write error"))?;
                 }
-                TxId::RCChannels => {
-                    let rc = Self::payload_as_rc(payload).inner().clone();
-                    for (i, value) in rc.iter().enumerate() {
+            }
+            TxId::RcTx => {
+                let rccs: &CuMsg<RcChannelsPayload> = msg.downcast_ref()?;
+                if let Some(rc) = rccs.payload() {
+                    for (i, value) in rc.0.iter().enumerate() {
                         debug!("Sending RC Channel {}: {}", i, value);
                     }
-                    let rc = Packet::RcChannels(rc);
+                    let rc = Packet::RcChannels(rc.0.clone());
                     let raw_packet = rc.into_raw(PacketAddress::Transmitter);
                     self.serial_port
                         .write_all(raw_packet.data())
@@ -362,16 +299,18 @@ where
     {
         self.update()?;
         match channel.id() {
-            RxId::LinkQuality => {
+            RxId::LqRx => {
                 if let Some(lq) = self.last_lq.as_ref() {
                     let lqp = LinkStatisticsPayload::from(lq.clone());
-                    *Self::payload_as_lq_mut(msg.payload_mut().as_mut().unwrap()) = lqp;
+                    let lq_msg: &mut CuMsg<LinkStatisticsPayload> = msg.downcast_mut()?;
+                    lq_msg.set_payload(lqp);
                 }
             }
-            RxId::RCChannels => {
+            RxId::RcRx => {
                 if let Some(rc) = self.last_rc.as_ref() {
                     let rc = RcChannelsPayload::from(rc.clone());
-                    *Self::payload_as_rc_mut(msg.payload_mut().as_mut().unwrap()) = rc;
+                    let rc_msg: &mut CuMsg<RcChannelsPayload> = msg.downcast_mut()?;
+                    rc_msg.set_payload(rc);
                 }
             }
         }
