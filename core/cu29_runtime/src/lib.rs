@@ -4,6 +4,9 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
+#[doc(hidden)]
+pub use paste::paste as __cu29_paste;
+
 pub mod app;
 pub mod config;
 pub mod copperlist;
