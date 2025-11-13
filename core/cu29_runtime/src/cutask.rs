@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 mod imp {
     pub use alloc::fmt::Result as FmtResult;
     pub use alloc::fmt::{Debug, Display, Formatter};
+    pub use alloc::format;
 }
 
 #[cfg(feature = "std")]
