@@ -11,17 +11,17 @@ pub trait BdshotBoardProvider {
 
 // channel mappings generation
 tx_channels! {
-    esc0 => EscCommand,
-    esc1 => EscCommand,
-    esc2 => EscCommand,
-    esc3 => EscCommand,
+    esc0_tx => EscCommand,
+    esc1_tx => EscCommand,
+    esc2_tx => EscCommand,
+    esc3_tx => EscCommand,
 }
 
 rx_channels! {
-    esc0 => EscTelemetry,
-    esc1 => EscTelemetry,
-    esc2 => EscTelemetry,
-    esc3 => EscTelemetry,
+    esc0_rx => EscTelemetry,
+    esc1_rx => EscTelemetry,
+    esc2_rx => EscTelemetry,
+    esc3_rx => EscTelemetry,
 }
 
 const MAX_ESC_CHANNELS: usize = 4;
