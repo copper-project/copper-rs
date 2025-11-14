@@ -23,7 +23,7 @@ use rp235x_hal::gpio::{
     Function, FunctionPio0, FunctionSio, FunctionSpi, FunctionUart, FunctionXipCs1, Pin, PinId,
     PullDown, PullNone, PullType, PullUp, SioInput, SioOutput, ValidFunction,
 };
-use rp235x_hal::pac::SPI0;
+use rp235x_hal::pac::{SPI0, UART0};
 use rp235x_hal::pio::PIOExt;
 use rp235x_hal::spi::{Enabled, FrameFormat};
 use rp235x_hal::timer::{CopyableTimer0, CopyableTimer1};
@@ -67,9 +67,11 @@ type TSPimodoriSdCard = ForceSyncSend<SdCard<SdDev, Timer1>>;
 type Timer0 = Timer<CopyableTimer0>;
 type Timer1 = Timer<CopyableTimer1>;
 
-// Serial port
+// Associated types for serial port
+type ElrsTx = Pin<Gpio12, FunctionUart, PullDown>;
 type ElrsRx = Pin<Gpio13, FunctionUart, PullUp>;
-type ElrsTx = Pin<Gpio12, FunctionUart, PullNone>;
+type SerialPort = UartPeripheral<rp235x_hal::uart::Enabled, UART0, (ElrsTx, ElrsRx)>;
+type SerialPortError = rp235x_hal::uart::ReadErrorType;
 
 #[entry]
 fn main() -> ! {
@@ -163,7 +165,7 @@ fn main() -> ! {
     // CrossFire is spec at 418_000 but all implementations use 420_000.
     let csrf_uart_cfg = UartConfig::new(420_000.Hz(), DataBits::Eight, None, StopBits::One);
 
-    let csrf_uart = UartPeripheral::new(p.UART0, (tx, rx), &mut p.RESETS)
+    let csrf_uart: SerialPort = UartPeripheral::new(p.UART0, (tx, rx), &mut p.RESETS)
         .enable(csrf_uart_cfg, clocks.peripheral_clock.freq())
         .expect("Could not create UART peripheral");
 

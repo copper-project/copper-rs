@@ -1,9 +1,6 @@
 (
     tasks: [
-        (id: "thr0", type: "tasks::ThrottleSource0"),
-        (id: "thr1", type: "tasks::ThrottleSource1"),
-        (id: "thr2", type: "tasks::ThrottleSource2"),
-        (id: "thr3", type: "tasks::ThrottleSource3"),
+        (id: "thr", type: "tasks::ThrottleControl"),
         (id: "tele0", type: "tasks::TelemetrySink0"),
         (id: "tele1", type: "tasks::TelemetrySink1"),
         (id: "tele2", type: "tasks::TelemetrySink2"),
@@ -11,11 +8,11 @@
     ],
     bridges: [
         (  id: "crsf",
-           type: "cu_crsf::CrsfBridge",
+           type: "cu_crsf::CrsfBridge<SerialPort, SerialPortError>",
            //  config: {"serial_port_index": 0} is default
            channels: [
-                Rx ( id: "rc" ),  // receiving RC Channels
-                Tx ( id: "lq" ),  // Sending LineQuality back
+                Rx ( id: "rc_rx" ),  // receiving RC Channels
+                Tx ( id: "lq_tx" ),  // Sending LineQuality back
             ],
         ),
         (
@@ -34,10 +31,11 @@
         ),
     ],
     cnx: [
-        (src: "thr0", dst: "bdshot/esc0_tx", msg: "cu_bdshot::EscCommand"),
-        (src: "thr1", dst: "bdshot/esc1_tx", msg: "cu_bdshot::EscCommand"),
-        (src: "thr2", dst: "bdshot/esc2_tx", msg: "cu_bdshot::EscCommand"),
-        (src: "thr3", dst: "bdshot/esc3_tx", msg: "cu_bdshot::EscCommand"),
+        (src: "crsf/rc_rx", dst: "thr", msg: "cu_crsf::messages::RcChannelsPayload"),
+        (src: "thr", dst: "bdshot/esc0_tx", msg: "cu_bdshot::EscCommand"),
+        (src: "thr", dst: "bdshot/esc1_tx", msg: "cu_bdshot::EscCommand"),
+        (src: "thr", dst: "bdshot/esc2_tx", msg: "cu_bdshot::EscCommand"),
+        (src: "thr", dst: "bdshot/esc3_tx", msg: "cu_bdshot::EscCommand"),
         (src: "bdshot/esc0_rx", dst: "tele0", msg: "cu_bdshot::EscTelemetry"),
         (src: "bdshot/esc1_rx", dst: "tele1", msg: "cu_bdshot::EscTelemetry"),
         (src: "bdshot/esc2_rx", dst: "tele2", msg: "cu_bdshot::EscTelemetry"),

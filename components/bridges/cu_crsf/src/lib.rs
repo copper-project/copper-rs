@@ -3,7 +3,7 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
-mod messages;
+pub mod messages;
 
 pub use spin::{Mutex, Once};
 
@@ -154,7 +154,7 @@ tx_channels! {
 }
 
 /// Crossfire bridge for Copper-rs.
-pub struct CuCrsfBridge<S, E>
+pub struct CrsfBridge<S, E>
 where
     S: Write<Error = E> + Read<Error = E>,
 {
@@ -164,7 +164,7 @@ where
     last_rc: Option<RcChannels>,
 }
 
-impl<S, E> CuCrsfBridge<S, E>
+impl<S, E> CrsfBridge<S, E>
 where
     S: Write<Error = E> + Read<Error = E>,
 {
@@ -215,7 +215,7 @@ where
 }
 
 #[cfg(not(feature = "std"))]
-impl<S, E> CuCrsfBridge<S, E>
+impl<S, E> CrsfBridge<S, E>
 where
     S: SerialFactory<E>,
 {
@@ -224,9 +224,9 @@ where
     }
 }
 
-impl<S, E> Freezable for CuCrsfBridge<S, E> where S: Write<Error = E> + Read<Error = E> {}
+impl<S, E> Freezable for CrsfBridge<S, E> where S: Write<Error = E> + Read<Error = E> {}
 
-impl<S, E> CuBridge for CuCrsfBridge<S, E>
+impl<S, E> CuBridge for CrsfBridge<S, E>
 where
     S: SerialFactory<E>,
 {

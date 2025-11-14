@@ -1,54 +1,37 @@
 use core::marker::PhantomData;
 use cu29::prelude::*;
 use cu_bdshot::{DShotTelemetry, EscCommand, EscTelemetry};
+use cu_crsf::messages::RcChannelsPayload;
 
-const MAX_THROTTLE: u16 = 600;
-const STEP: u16 = 10;
+const CRSF_THROTTLE_INDEX: usize = 2; // 0 is aileron, 1, elevator, 2 is throttle, 3 is rudder
 
-pub struct ThrottleSource<const ESC: usize> {
-    value: u16,
-    ascending: bool,
-}
+#[derive(Default)]
+pub struct ThrottleControl {}
 
-impl<const ESC: usize> Freezable for ThrottleSource<ESC> {}
+impl Freezable for ThrottleControl {}
 
-impl<const ESC: usize> Default for ThrottleSource<ESC> {
-    fn default() -> Self {
-        Self {
-            value: 0,
-            ascending: true,
-        }
-    }
-}
-
-impl<const ESC: usize> CuSrcTask for ThrottleSource<ESC> {
+impl CuTask for ThrottleControl {
+    type Input<'m> = CuMsg<RcChannelsPayload>;
     type Output<'m> = CuMsg<EscCommand>;
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
         Ok(Self::default())
     }
 
-    fn process<'o>(&mut self, _clock: &RobotClock, output: &mut CuMsg<EscCommand>) -> CuResult<()> {
-        let throttle = self.value;
-        let command = EscCommand {
-            throttle,
-            request_telemetry: true,
-        };
-        info!("Sending throttle {}.", throttle);
-        output.set_payload(command);
-
-        if self.ascending {
-            self.value = (self.value + STEP).min(MAX_THROTTLE);
-            if self.value >= MAX_THROTTLE {
-                info!("ESC {} MAXED OUT", ESC);
-                self.ascending = false;
-            }
-        } else if self.value > STEP {
-            self.value -= STEP;
-        } else {
-            info!("ESC {} ZEROED", ESC);
-            self.value = 0;
-            self.ascending = true;
+    fn process<'i, 'o>(
+        &mut self,
+        _clock: &RobotClock,
+        input: &Self::Input<'i>,
+        output: &mut Self::Output<'o>,
+    ) -> CuResult<()> {
+        if let Some(channels) = input.payload() {
+            let throttle = channels.inner()[CRSF_THROTTLE_INDEX];
+            let command = EscCommand {
+                throttle,
+                request_telemetry: true,
+            };
+            info!("Sending throttle {}.", throttle);
+            output.set_payload(command);
         }
 
         Ok(())
@@ -97,11 +80,6 @@ impl<const ESC: usize> CuSinkTask for TelemetrySink<ESC> {
         Ok(())
     }
 }
-
-pub type ThrottleSource0 = ThrottleSource<0>;
-pub type ThrottleSource1 = ThrottleSource<1>;
-pub type ThrottleSource2 = ThrottleSource<2>;
-pub type ThrottleSource3 = ThrottleSource<3>;
 
 pub type TelemetrySink0 = TelemetrySink<0>;
 pub type TelemetrySink1 = TelemetrySink<1>;
