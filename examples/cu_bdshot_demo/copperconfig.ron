@@ -11,10 +11,11 @@
     ],
     bridges: [
         (  id: "crsf",
-           type: "cu_crsf::CrsfBridge"
-            channels: [
-                Tx ( id: "rc", route: "rc_tx" ),
-                Rx ( id: "lq", route: "lq_rx" ),
+           type: "cu_crsf::CrsfBridge",
+           //  config: {"serial_port_index": 0} is default
+           channels: [
+                Rx ( id: "rc" ),  // receiving RC Channels
+                Tx ( id: "lq" ),  // Sending LineQuality back
             ],
         ),
         (

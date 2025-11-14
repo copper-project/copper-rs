@@ -33,7 +33,7 @@ const SERIAL_TIMEOUT_KEY: &str = "timeout_ms";
 const SERIAL_INDEX_KEY: &str = "serial_port_index";
 
 #[cfg(not(feature = "std"))]
-mod serial_registry {
+pub mod serial_registry {
     use super::*;
     use alloc::boxed::Box;
     use core::any::{Any, TypeId};

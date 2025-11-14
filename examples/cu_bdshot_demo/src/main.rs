@@ -31,6 +31,11 @@ use rp235x_hal::uart::{DataBits, StopBits, UartConfig, UartPeripheral};
 use rp235x_hal::{clocks::init_clocks_and_plls, pac, sio::Sio, watchdog::Watchdog, Spi, Timer};
 use spin::Mutex;
 
+#[allow(unused_imports)]
+use defmt_rtt as _;
+#[allow(unused_imports)]
+use panic_probe as _;
+
 mod tasks;
 
 #[copper_runtime(config = "copperconfig.ron")]
@@ -158,8 +163,12 @@ fn main() -> ! {
     // CrossFire is spec at 418_000 but all implementations use 420_000.
     let csrf_uart_cfg = UartConfig::new(420_000.Hz(), DataBits::Eight, None, StopBits::One);
 
-    let csrf_uart = UartPeripheral::new(p.UART0, (tx, rx), clocks.peripheral_clock.freq())
-        .enable(uart_cfg)
+    let csrf_uart = UartPeripheral::new(p.UART0, (tx, rx), &mut p.RESETS)
+        .enable(csrf_uart_cfg, clocks.peripheral_clock.freq())
+        .expect("Could not create UART peripheral");
+
+    cu_crsf::serial_registry::register(0, csrf_uart)
+        .expect("Failed to register UART as CRSF serial port");
 
     info!("Setting up Copper...");
 

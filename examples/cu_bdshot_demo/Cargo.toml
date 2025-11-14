@@ -30,8 +30,9 @@ panic-probe = { version = "1.0", features = ["defmt", "print-defmt"] }
 portable-atomic = { version = "1.11", default-features = false, features = ["require-cas", "float", "fallback"] }
 rp235x-hal = { version = "0.3", features = ["rt", "critical-section-impl"] }
 spin = { workspace = true }
-bincode = { workspace = true }
+bincode = { workspace = true, default-features = false, features = ["alloc", "derive"] }
 serde = { workspace = true }
+embedded-io = { version = "0.6.1", default-features = false, features = ["alloc", "defmt-03"] } # rp2350 is lagging in version
 
 [features]
 default = []
