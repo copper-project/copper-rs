@@ -16,7 +16,7 @@
 //! It will generate a minimal Copper robot project at `/path/to/my_robot`. `cargo build` should
 //! compile it out of the box.
 //!
-//! ## Concepts behing Copper
+//! ## Concepts behind Copper
 //!
 //! Check out the [Copper Wiki](https://github.com/copper-project/copper-rs/wiki) to understand the
 //! deployments concepts, task lifecycle, available components, etc ...
