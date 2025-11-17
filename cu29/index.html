@@ -1,308 +1,33 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="copper GitHub last commit  dependency status License Discord"><title>cu29 - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="cu29" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0-nightly (01867557c 2025-11-12)" data-channel="nightly" data-search-js="search-8e3fad08.js" data-stringdex-js="stringdex-c3e638e9.js" data-settings-js="settings-c38705f0.js" ><script src="../static.files/storage-e2aeef58.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Crate cu29</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../cu29/index.html">cu29</a><span class="version">0.10.0</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#why-copper" title="Why Copper">Why Copper</a></li><li><a href="#example-applications" title="Example Applications">Example Applications</a></li><li><a href="#technical-overview" title="Technical Overview">Technical Overview</a></li><li><a href="#you-dont-have-a-real-robot-yet-try-it-in-our-minimalistic-sim-environment" title="You don’t have a real robot yet? Try it in our minimalistic sim environment!">You don’t have a real robot yet? Try it in our minimalistic sim environment!</a></li><li><a href="#supported-platforms" title="Supported Platforms">Supported Platforms</a></li><li><a href="#-but-we-also-support-baremetal" title="… but we also support baremetal!">… but we also support baremetal!</a></li><li><a href="#features-provided-with-the-sdk" title="Features provided with the SDK">Features provided with the SDK</a></li><li><a href="#get-started" title="Get Started">Get Started</a><ul><li><a href="#kickstarting-a-copper-project-for-the-impatients" title="Kickstarting a Copper project for the impatients">Kickstarting a Copper project for the impatients</a></li><li><a href="#overview-of-a-copper-application" title="Overview of a Copper Application">Overview of a Copper Application</a></li><li><a href="#modular-configuration" title="Modular Configuration">Modular Configuration</a></li><li><a href="#deployment-of-the-application" title="Deployment of the application">Deployment of the application</a></li></ul></li><li><a href="#faq" title="FAQ">FAQ</a><ul><li><a href="#how-is-copper-better-or-different-from-the-ros-robot-operating-system" title="How is Copper better or different from the ROS (Robot Operating System)?">How is Copper better or different from the ROS (Robot Operating System)?</a></li><li><a href="#-is-it-that-more-performant" title="🚀 Is it that more performant?">🚀 Is it that more performant?</a></li><li><a href="#what-about-the-safety-considerations" title="What about the safety considerations?">What about the safety considerations?</a></li></ul></li><li><a href="#project" title="Project">Project</a><ul><li><a href="#release-notes" title="Release Notes">Release Notes</a></li><li><a href="#roadmap" title="Roadmap">Roadmap</a></li></ul></li></ul><h3><a href="#reexports">Crate Items</a></h3><ul class="block"><li><a href="#reexports" title="Re-exports">Re-exports</a></li><li><a href="#modules" title="Modules">Modules</a></li><li><a href="#macros" title="Macros">Macros</a></li><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li><li><a href="#constants" title="Constants">Constants</a></li><li><a href="#traits" title="Traits">Traits</a></li><li><a href="#functions" title="Functions">Functions</a></li><li><a href="#types" title="Type Aliases">Type Aliases</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><h1>Crate <span>cu29</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/cu29/lib.rs.html#1-61">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h1 style="color: #b87333;"><img src="https://github.com/copper-project/copper-rs/blob/master/doc/static/cu29.png?raw=true" width="60" /> &nbsp;&nbsp;&nbsp;&nbsp; Copper Runtime & SDK</h1>
-<p><a href="https://github.com/gbin/copper-project/actions/workflows/general.yml"><img src="https://github.com/gbin/copper-project/actions/workflows/general.yml/badge.svg" alt="copper" /></a>
-<img src="https://img.shields.io/github/last-commit/copper-project/copper-rs" alt="GitHub last commit" />
-<img src="https://img.shields.io/badge/Rust-1.80+-orange.svg" alt="" />
-<a href="https://deps.rs/repo/github/copper-project/copper-rs"><img src="https://deps.rs/repo/github/copper-project/copper-rs/status.svg" alt="dependency status" /></a>
-<a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License" /></a>
-<a href="https://discord.gg/VkCG7Sb9Kw"><img src="https://img.shields.io/discord/1305916875741597826?logo=discord" alt="Discord" /></a></p>
-<blockquote>
-🤖&nbsp&nbsp&nbsp&nbsp
-  <em style="font-size: 1.2em;">
-    Copper is to robots what a game engine is to games - build, run, and replay your entire robot deterministically.
-  </em>
-</blockquote>
-<h4 id="why-copper"><a class="doc-anchor" href="#why-copper">§</a>Why Copper</h4><p><strong style="color: #b87333;">🦀 Rust-first</strong> – ergonomic & safe  
-<p><strong style="color: #b87333;">⚡ Sub-microsecond latency</strong> – zero-alloc, data-oriented runtime  
-<p><strong style="color: #b87333;">⏱️ Deterministic replay</strong> – every run, bit-for-bit identical  
-<p><strong style="color: #b87333;">🧠 Interoperable with ROS2</strong> – bridges via Zenoh opening the path for a progressive migration.  
-<p><strong style="color: #b87333;">🪶 Runs anywhere</strong> – from Linux servers to bare-metal RP2350  
-<p><strong style="color: #b87333;">📦 Built to ship</strong> – one stack from simulation to production
-<h4 id="example-applications"><a class="doc-anchor" href="#example-applications">§</a>Example Applications</h4><div><table><thead><tr><th style="text-align: center">Flying</th><th style="text-align: center">Driving</th><th style="text-align: center">Swimming</th><th style="text-align: center">Spacefaring</th></tr></thead><tbody>
-<tr><td style="text-align: center"><img width="200" alt="copper-drone" src="https://github.com/user-attachments/assets/31096307-fe1b-4315-b876-0f7237d69fa4" /></td><td style="text-align: center"><img width="200" alt="copper-driving" src="https://github.com/user-attachments/assets/1f051359-1ff4-45c6-838b-44442dc06ac4" /></td><td style="text-align: center"><img width="200" alt="copper-swimming" src="https://github.com/user-attachments/assets/5a0d0279-da98-4d4d-b5e1-e0cd8890a368" /></td><td style="text-align: center"><img width="200" alt="copper-space" src="https://github.com/user-attachments/assets/c535413e-014f-4846-ab06-a49e1151e42e" /></td></tr>
-</tbody></table>
-</div><h4 id="technical-overview"><a class="doc-anchor" href="#technical-overview">§</a>Technical Overview</h4>
-<p>Copper is a deterministic and data-oriented Robot SDK with these key components:</p>
-<ul>
-<li>
-<p><strong>Task Graph</strong>:
-<img align="right" width="100" src="https://github.com/copper-project/copper-rs/blob/master/doc/graph.png?raw=true" alt="graph"/>
-Configures the system’s topology, specifies inter-task communication paths, and sets types for nodes and messages. The
-Task Graph is generated in <a href="https://github.com/ron-rs/ron">RON</a>,</p>
-</li>
-<li>
-<p><strong>Runtime Generator</strong>: Creates an execution plan based on the Task Graph’s metadata. It preallocates a
-“Copper List” to maximize sequential memory access during execution.</p>
-</li>
-<li>
-<p><strong>Zero-Copy Data Logging</strong>: Records all messages between tasks without copying data, ensuring efficient logging and
-perfect determinism.</p>
-</li>
-<li>
-<p><strong>Fast Structured Logging</strong>: Interns and indexes logging strings at compile time, avoiding runtime string construction
-and ensuring high-speed textual logging.</p>
-</li>
-</ul>
-<h4 id="you-dont-have-a-real-robot-yet-try-it-in-our-minimalistic-sim-environment"><a class="doc-anchor" href="#you-dont-have-a-real-robot-yet-try-it-in-our-minimalistic-sim-environment">§</a>You don’t have a real robot yet? Try it in our minimalistic sim environment!</h4>
-<p><a href="https://youtu.be/kC6sGRZUxLE"><img src="https://img.youtube.com/vi/kC6sGRZUxLE/maxresdefault.jpg" alt="Copper in virtual action" /></a></p>
-<p>Here is a Copper-based robot in action in a Bevy simulation environment!<br />
-The realistic sim is created using <a href="https://crates.io/crates/bevy">Bevy</a> (A Rust Game Engine)
-and <a href="https://crates.io/crates/avian3d">Avian3d</a> (Physics Engine in Rust).</p>
-<p>On your mac or linux machine (x86-64 or Arm) just run …</p>
-<div class="example-wrap"><pre class="language-bash"><code>$ cargo install cu-rp-balancebot
-$ balancebot-sim </code></pre></div>
-<p>… to try it locally.</p>
-<p>The source code for this demo is available in the <a href="examples/cu_rp_balancebot">examples/cu_rp_balancebot</a> directory.</p>
-<h4 id="supported-platforms"><a class="doc-anchor" href="#supported-platforms">§</a>Supported Platforms</h4>
-<p>You can deploy and run Copper on those platforms:</p>
-<p><img src="https://upload.wikimedia.org/wikipedia/commons/3/35/Tux.svg" width="50"/>  <img src="https://upload.wikimedia.org/wikipedia/commons/3/31/Apple_logo_white.svg" width="50"/>  <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Windows_logo_-_2021_%28White%29.svg/768px-Windows_logo_-_2021_%28White%29.svg.png?20230326181935" width="50"/>  <img src="https://upload.wikimedia.org/wikipedia/commons/d/d7/Android_robot.svg" width="50"/></p>
-<h4 id="-but-we-also-support-baremetal"><a class="doc-anchor" href="#-but-we-also-support-baremetal">§</a>… but we also support baremetal!</h4>
-<p>On the embedded side, we do have a reference platform you can create from readily available components or you can get from us already made, feel free to inquire: info@copper-robotics.com</p>
-<img src="https://github.com/copper-project/copper-rs/wiki/imgs/baremetal-w-camera.jpg" width="200"/>
-<p>More info about baremetal development with Copper <a href="https://github.com/copper-project/copper-rs/wiki/Baremetal-Development">here</a></p>
-<h4 id="features-provided-with-the-sdk"><a class="doc-anchor" href="#features-provided-with-the-sdk">§</a>Features provided with the SDK</h4>
-<ol>
-<li><strong>Task interface and Lifecycle</strong>: Traits you can use to implement new algorithms, sensors, and actuators.</li>
-<li><strong>Runtime generation</strong>: Generates a scheduling at compile time for your robot.</li>
-<li><strong>Log reader</strong>: You can export the logs generated by Copper to any format supported by Rust Serde.</li>
-<li><strong>Structured log reader</strong>: Debug logs are indexed and string interned at compile time for maximum efficiency.</li>
-<li><strong>Components</strong>: We have a growing number of drivers, algorithms and standard interfaces. If you have implemented a
-new component, ping us and we will add it to the list below!</li>
-<li><strong>log replay / resim</strong>: You can deterministically replay/resim a log. You will get the exact same result
-as a real log on the robot or from the sim.</li>
-<li><strong>Simulation</strong>: We have a simple simulation environment to test your robot. Test your robot before the hardware is
-built and try out your robot the first time without risking a real crash.</li>
-</ol>
-<p>With a growing list of readily available <a href="https://github.com/copper-project/copper-rs/wiki/Available-Components">Components</a>.</p>
-<h3 id="get-started"><a class="doc-anchor" href="#get-started">§</a>Get Started</h3><h4 id="kickstarting-a-copper-project-for-the-impatients"><a class="doc-anchor" href="#kickstarting-a-copper-project-for-the-impatients">§</a>Kickstarting a Copper project for the impatients</h4>
-<p>You can generate a project from one of Copper’s templates.
-The generator will ask you the name for your new project interactively:</p>
-<div class="example-wrap"><pre class="language-bash"><code>cargo install cargo-generate
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Copper Runtime &#38; SDK"><title>cu29 - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-ca0dd0c4.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="cu29" data-themes="" data-resource-suffix="" data-rustdoc-version="1.93.0-nightly (518b42830 2025-11-16)" data-channel="nightly" data-search-js="search-680b2199.js" data-stringdex-js="stringdex-c3e638e9.js" data-settings-js="settings-c38705f0.js" ><script src="../static.files/storage-e2aeef58.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-a410ff4d.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Crate cu29</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../cu29/index.html">cu29</a><span class="version">0.10.0</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#copper-runtime--sdk" title="Copper Runtime &#38; SDK">Copper Runtime &amp; SDK</a><ul><li><a href="#quick-start" title="Quick start">Quick start</a></li><li><a href="#concepts-behind-copper" title="Concepts behind Copper">Concepts behind Copper</a></li><li><a href="#more-examples-to-get-you-started" title="More examples to get you started">More examples to get you started</a></li><li><a href="#key-traits-and-structs-to-check-out" title="Key traits and structs to check out">Key traits and structs to check out</a></li></ul></li></ul><h3><a href="#reexports">Crate Items</a></h3><ul class="block"><li><a href="#reexports" title="Re-exports">Re-exports</a></li><li><a href="#modules" title="Modules">Modules</a></li><li><a href="#macros" title="Macros">Macros</a></li><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li><li><a href="#constants" title="Constants">Constants</a></li><li><a href="#traits" title="Traits">Traits</a></li><li><a href="#functions" title="Functions">Functions</a></li><li><a href="#types" title="Type Aliases">Type Aliases</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><h1>Crate <span>cu29</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/cu29/lib.rs.html#1-102">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="copper-runtime--sdk"><a class="doc-anchor" href="#copper-runtime--sdk">§</a>Copper Runtime &amp; SDK</h2>
+<p>Think of Copper as a robotics game engine: define a task graph, compile once,
+and get deterministic execution, unified logging, and sub-microsecond
+latency from Linux workstations all the way down to bare-metal MPU builds.</p>
+<h3 id="quick-start"><a class="doc-anchor" href="#quick-start">§</a>Quick start</h3><div class="example-wrap"><pre class="language-bash"><code>cargo install cargo-generate
 git clone https://github.com/copper-project/copper-rs
 cd copper-rs/templates
-cargo cunew [path_where_you_want_your_project_created]
-    🤷   Project Name:</code></pre></div>
-<p>Check out <a href="templates/README.md">copper-templates</a> for more info.</p>
-<h4 id="overview-of-a-copper-application"><a class="doc-anchor" href="#overview-of-a-copper-application">§</a>Overview of a Copper Application</h4>
-<p>Here is a simple example of a Task Graph in RON:</p>
-<div class="example-wrap"><pre class="language-RON"><code>(
-    tasks: [
-        (
-            id: &quot;src&quot;,                   // this is a friendly name
-            type: &quot;FlippingSource&quot;,      // This is a Rust struct name for this task see main below
-        ),
-        (
-            id: &quot;gpio&quot;,                  // another task, another name
-            type: &quot;cu_rp_gpio::RPGpio&quot;,  // This is the Rust struct name from another crate
-            config: {                    // You can attach config elements to your task
-                &quot;pin&quot;: 4,
-            },
-        ),
-    ],
-     cnx: [
-        // Here we simply connect the tasks telling to the framework what type of messages we want to use. 
-        (src: &quot;src&quot;,  dst: &quot;gpio&quot;,   msg: &quot;cu_rp_gpio::RPGpioMsg&quot;),
-    ],    </code></pre></div>
-<p>Then, on your main.rs:</p>
-
-<div class="example-wrap ignore"><a href="#" class="tooltip" title="This example is not tested">ⓘ</a><pre class="rust rust-example-rendered"><code>
-<span class="comment">// Import the prelude to get all the macros and traits you need.
-</span><span class="kw">use </span>cu29::prelude::<span class="kw-2">*</span>;
-
-<span class="comment">// Your application will be a struct that will hold the runtime, loggers etc.
-// This proc macro is where all the runtime generation happens. If you are curious about what code is generated by this macro
-// you can activate the feature macro_debug and it will display it at compile time.
-</span><span class="attr">#[copper_runtime(config = <span class="string">"copperconfig.ron"</span>)]  </span><span class="comment">// this is the ron config we just created.
-</span><span class="kw">struct </span>MyApplication {}
-
-<span class="comment">// Here we define our own Copper Task
-// It will be a source flipping a boolean
-</span><span class="kw">pub struct </span>FlippingSource {
-    state: bool,
-}
-
-<span class="comment">// We implement the CuSrcTask trait for our task as it is a source / driver (with no internal input from Copper itself).
-</span><span class="kw">impl </span>CuSrcTask <span class="kw">for </span>FlippingSource {
-    <span class="kw">type </span>Output&lt;<span class="lifetime">'m</span>&gt; = <span class="macro">output_msg!</span>(RPGpioPayload);
-
-    <span class="comment">// You need to provide at least "new" out of the lifecycle methods.
-    // But you have other hooks in to the Lifecycle you can leverage to maximize your opportunity 
-    // to not use resources outside of the critical execution path: for example start, stop, 
-    // pre_process, post_process etc...
-    </span><span class="kw">fn </span>new(config: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>copper::config::ComponentConfig&gt;) -&gt; CuResult&lt;<span class="self">Self</span>&gt;
-    <span class="kw">where
-        </span><span class="self">Self</span>: Sized,
-    {
-        <span class="comment">// the config is passed from the RON config file as a Map.
-        </span><span class="prelude-val">Ok</span>(<span class="self">Self </span>{ state: <span class="bool-val">true </span>})
-    }
-    
-    <span class="comment">// Process is called by the runtime at each cycle. It will give:
-    // 1. the reference to a monotonic clock
-    // 2. a mutable reference to the output message (so no need to allocate of copy anything)
-    // 3. a CuResult to handle errors
-    </span><span class="kw">fn </span>process(<span class="kw-2">&amp;mut </span><span class="self">self</span>, clock: <span class="kw-2">&amp;</span>RobotClock, output: <span class="kw-2">&amp;mut </span><span class="self">Self</span>::Output&lt;<span class="lifetime">'_</span>&gt;) -&gt; CuResult&lt;()&gt; {
-        <span class="self">self</span>.state = !<span class="self">self</span>.state;   <span class="comment">// Flip our internal state and send the message in our output.
-        </span>output.set_payload(RPGpioPayload {
-            on: <span class="self">self</span>.state,
-            creation: <span class="prelude-val">Some</span>(clock.now()).into(),
-            actuation: <span class="prelude-val">Some</span>(clock.now()).into(),
-        });
-        <span class="prelude-val">Ok</span>(())
-    }
-}
-
-
-<span class="kw">fn </span>main() {
-
-    <span class="comment">// Copper uses a special log format called "unified logger" that is optimized for writing. It stores the messages between tasks 
-    // but also the structured logs and telemetry.
-    // A log reader can be generated at the same time as the application to convert this format for post processing.
-  
-    </span><span class="kw">let </span>logger_path = <span class="string">"/tmp/mylogfile.copper"</span>;
-    
-    <span class="comment">// This basic setup is a shortcut to get you running. If needed you can check out the content of it and customize it. 
-    </span><span class="kw">let </span>copper_ctx =
-        basic_copper_setup(<span class="kw-2">&amp;</span>PathBuf::from(logger_path), <span class="bool-val">true</span>).expect(<span class="string">"Failed to setup logger."</span>);
-        
-    <span class="comment">// This is the struct logging implementation tailored for Copper.
-    // It will store the string away from the application in an index format at compile time.
-    // and will store the parameter as an actual field.
-    // You can even name those: debug!("This string will not be constructed at runtime at all: my_parameter: {} &lt;- but this will be logged as 1 byte.", my_parameter = 42);  
-    </span><span class="macro">debug!</span>(<span class="string">"Logger created at {}."</span>, logger_path); 
-    
-    <span class="comment">// A high precision monotonic clock is provided. It can be mocked for testing. 
-    // Cloning the clock is cheap and gives you the exact same clock.
-    </span><span class="kw">let </span>clock = copper_ctx.clock;  
-    
-    <span class="macro">debug!</span>(<span class="string">"Creating application... "</span>);
-    <span class="kw">let </span><span class="kw-2">mut </span>application =
-        MyApplication::new(clock.clone(), copper_ctx.unified_logger.clone())
-            .expect(<span class="string">"Failed to create runtime."</span>);
-    <span class="macro">debug!</span>(<span class="string">"Running... starting clock: {}."</span>, clock.now());  <span class="comment">// The clock will be displayed with units etc. 
-    </span>application.run().expect(<span class="string">"Failed to run application."</span>);
-    <span class="macro">debug!</span>(<span class="string">"End of program: {}."</span>, clock.now());
-}
-</code></pre></div>
-<p>But this is a very minimal example for a task; please see <a href="https://github.com/copper-project/copper-rs/wiki/Task-Lifecycle">lifecycle</a> for a more complete explanation
-of a task lifecycle.</p>
-<h4 id="modular-configuration"><a class="doc-anchor" href="#modular-configuration">§</a>Modular Configuration</h4>
-<p>Copper supports modular configuration through file includes and parameter substitution, allowing you to:</p>
-<ol>
-<li>Split large configurations into manageable, reusable chunks</li>
-<li>Create configuration variations without duplicating the entire RON file</li>
-<li>Parameterize configurations for different deployment environments</li>
-</ol>
-<h5 id="including-configuration-files"><a class="doc-anchor" href="#including-configuration-files">§</a>Including Configuration Files</h5>
-<p>You can include other RON configuration files using the <code>includes</code> section:</p>
-<div class="example-wrap"><pre class="language-ron"><code>(
-    tasks: [
-        // Your main configuration tasks...
-    ],
-    cnx: [
-        // Your main configuration connections...
-    ],
-    includes: [
-        (
-            path: &quot;path/to/included_config.ron&quot;,
-            params: {}, // Optional parameter substitutions
-        ),
-    ],
-)</code></pre></div><h5 id="parameter-substitution"><a class="doc-anchor" href="#parameter-substitution">§</a>Parameter Substitution</h5>
-<p>You can parameterize your included configurations using template variables:</p>
-<div class="example-wrap"><pre class="language-ron"><code>// included_config.ron
-(
-    tasks: [
-        (
-            id: &quot;task_{{instance_id}}&quot;, // Will be replaced with the provided instance_id
-            type: &quot;tasks::Task{{instance_id}}&quot;,
-            config: {
-                &quot;param_value&quot;: {{param_value}}, // Will be replaced with the provided param_value
-            },
-        ),
-    ],
-    cnx: [],
-)
-
-// main_config.ron
-(
-    tasks: [],
-    cnx: [],
-    includes: [
-        (
-            path: &quot;included_config.ron&quot;,
-            params: {
-                &quot;instance_id&quot;: &quot;42&quot;, // Replaces {{instance_id}} with &quot;42&quot;
-                &quot;param_value&quot;: 100,  // Replaces {{param_value}} with 100
-            },
-        ),
-    ],
-)</code></pre></div>
-<p>For more details on modular configuration, see the <a href="https://github.com/copper-project/copper-rs/wiki/Modular-Configuration">Modular Configuration documentation</a>.</p>
-<h4 id="deployment-of-the-application"><a class="doc-anchor" href="#deployment-of-the-application">§</a>Deployment of the application</h4>
-<p>Check out the <a href="https://github.com/copper-project/copper-rs/wiki/Build-and-Deploy-a-Copper-Application">deployment</a> page for more information.</p>
-<h3 id="faq"><a class="doc-anchor" href="#faq">§</a>FAQ</h3><h4 id="how-is-copper-better-or-different-from-the-ros-robot-operating-system"><a class="doc-anchor" href="#how-is-copper-better-or-different-from-the-ros-robot-operating-system">§</a>How is Copper better or different from the ROS (Robot Operating System)?</h4>
-<p>As explained above, Copper is a “user-friendly runtime engine” written in Rust which manages task execution, data flow,
-logging, and more.</p>
-<p>In contrast, the <a href="https://github.com/ros">ROS</a> is an open-source set of software libraries and tools primarily written
-for C++ and Python.</p>
-<h4 id="-is-it-that-more-performant"><a class="doc-anchor" href="#-is-it-that-more-performant">§</a>🚀 Is it <em>that</em> more performant?</h4>
-<p>In the example directory, we have 2 equivalent applications. One written in C++ for ROS and a port in Rust with Copper.</p>
-<div class="example-wrap"><pre class="language-bash"><code>examples/cu_caterpillar
-examples/ros_caterpillar</code></pre></div>
-<p>You can try them out by either just logging onto a desktop, or with GPIOs on a RPi.
-You should see a couple order of magnitude difference in performance.</p>
-<p>Copper has been designed for performance first. Not unlike a game engine,
-we use a data-oriented approach to minimize latency
-and maximize throughput.</p>
-<h4 id="what-about-the-safety-considerations"><a class="doc-anchor" href="#what-about-the-safety-considerations">§</a>What about the safety considerations?</h4>
-<p>Copper is fully deterministic, it means that you can have a provable match between your stack when it replays the data captured by the robot and your stack actual behavior running on your robot.</p>
-<p>Also Copper is written in Rust, it is memory safe and thread safe by design. It is also designed to be easy to use and
-avoid common pitfalls.</p>
-<h3 id="project"><a class="doc-anchor" href="#project">§</a>Project</h3>
-<blockquote>
-<p>[!NOTE]
-We are looking for contributors to help us build the best robotics framework possible. If you are interested, please
-join us on <a href="https://discord.gg/VkCG7Sb9Kw">Discord</a> or open an issue.</p>
-</blockquote>
-<h4 id="release-notes"><a class="doc-anchor" href="#release-notes">§</a>Release Notes</h4>
-<p>You can find the full release notes <a href="https://github.com/copper-project/copper-rs/wiki/Copper-Release-Log">here</a>.</p>
-<h4 id="roadmap"><a class="doc-anchor" href="#roadmap">§</a>Roadmap</h4>
-<p>Here are some of the features we just release and some we plan to implement next, if you are interested in contributing
-on any of those, please let us know!:</p>
+cargo cunew /path/to/my_robot   # scaffolds a full Copper project</code></pre></div>
+<p>It will generate a minimal Copper robot project at <code>/path/to/my_robot</code>. <code>cargo build</code> should
+compile it out of the box.</p>
+<h3 id="concepts-behind-copper"><a class="doc-anchor" href="#concepts-behind-copper">§</a>Concepts behind Copper</h3>
+<p>Check out the <a href="https://github.com/copper-project/copper-rs/wiki">Copper Wiki</a> to understand the
+deployments concepts, task lifecycle, available components, etc …</p>
+<h3 id="more-examples-to-get-you-started"><a class="doc-anchor" href="#more-examples-to-get-you-started">§</a>More examples to get you started</h3>
 <ul>
-<li><input disabled="" type="checkbox" checked=""/>
-<strong>Buffer Pools</strong>: Implement a large buffer (Host or Device/GPU) pools for 0 copy large inter-task transfers.</li>
-<li><input disabled="" type="checkbox" checked=""/>
-<strong>Missions</strong>: Implement a way to have multiple DAGS in the RON configuration file and have a centralized way to
-switch from one to another. This is useful for running the stack for a specific mission: for example Data acquisition
-missiom, Full autonomy mission, Charging, etc.</li>
-<li><input disabled="" type="checkbox" checked=""/>
-<strong>Modular Configuration</strong>: As robots built with Copper gain complexity, users will need to build “variations” of
-their robots without duplicating their entire RON file.</li>
-<li><input disabled="" type="checkbox" checked=""/>
-<strong>ROS2/DDS interfacing</strong>: Build a pair of sink and source to connect to existing <a href="https://github.com/ros2">ROS2</a>
-systems, helping users migrate their stack bit by bit.</li>
-<li><input disabled="" type="checkbox" checked=""/>
-<strong>Microcontroller support</strong>: Modify all necessary Copper code packages to remove dependencies on the
-standard library (std) to support “no_std” (#![no_std])
-to support running the code on bare-metal on microcontrollers. This will allow a seamless environment for high level
-calls on a standard kernel (ML inference etc…)
-and low level tasks on MCUs (control, HW interfacing…).</li>
-<li><input disabled="" type="checkbox"/>
-<strong>Log Compression &amp; Selection</strong>: Implement a pluggable compression system for logs and its resim counterpart.
-For example to encode video from images. Selection is about NOT logging something if it is not needed.</li>
-<li><input disabled="" type="checkbox"/>
-<strong>Parallel Copper Lists</strong>: allow Copper lists to be executed in a staggered and parallel way to improve
-throughput. Status: We built a background tasks that helps with this.</li>
-<li><input disabled="" type="checkbox"/>
-<strong>Extensible scheduling</strong>: Enable a way to give hints to Copper to better schedule workloads at compile time.</li>
-<li><input disabled="" type="checkbox"/>
-<strong>Swarm support</strong>: Implement Zenoh to allow a swarm of robots powered by Copper to cooperate. Status: Sink done,
-needs a Source.</li>
-<li><input disabled="" type="checkbox"/>
-<strong>MCAP support</strong>: Allow the interfacing of Foxglove and <a href="https://github.com/ros">ROS</a> ecosystems at the logging
-level.</li>
+<li><code>examples/cu_caterpillar</code>: a minimal running example passing around booleans.</li>
+<li><code>examples/cu_rp_balancebot</code>: a more complete example try Copper without hardware via
+<code>cargo install cu-rp-balancebot</code> + <code>balancebot-sim</code> (Bevy + Avian3d).</li>
 </ul>
+<h3 id="key-traits-and-structs-to-check-out"><a class="doc-anchor" href="#key-traits-and-structs-to-check-out">§</a>Key traits and structs to check out</h3>
+<ul>
+<li><code>cu29_runtime::app::CuApp</code>: the main trait the copper runtime will expose to run your application. (when run() etc .. is coming from)</li>
+<li><code>cu29_runtime::config::CuConfig</code>: the configuration of your runtime</li>
+<li><code>cu29_runtime::cutask::CuTask</code>: the core trait and helpers to implement your own tasks.</li>
+<li><code>cu29_runtime::cubridge::CuBridge</code>: the trait to implement bridges to hardware or other software.</li>
+<li><code>cu29_runtime::curuntime::CuRuntime</code>: the runtime that manages task execution.</li>
+<li><code>cu29_runtime::simulation</code>: This will explain how to hook up your tasks to a simulation environment.</li>
+</ul>
+<p>Need help or want to show what you’re building? Join
+<a href="https://discord.gg/VkCG7Sb9Kw">Discord</a> and hop into the #general channel.</p>
 </div></details><h2 id="reexports" class="section-header">Re-exports<a href="#reexports" class="anchor">§</a></h2><dl class="item-table reexports"><dt id="reexport.bincode"><code>pub use <a class="mod" href="https://docs.rs/bincode/2.0.1/bincode/index.html" title="mod bincode">bincode</a>;</code></dt><dt id="reexport.clock"><code>pub use cu29_clock as clock;</code></dt><dt id="reexport.rayon"><code>pub use rayon;</code></dt></dl><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="config/index.html" title="mod cu29::config">config</a></dt><dd>This module defines the configuration of the copper runtime.
 The configuration is a directed graph where nodes are tasks and edges are connections between tasks.
 The configuration is serialized in the RON format.
