@@ -14,7 +14,7 @@ repository.workspace = true
 cu29 = { path = "../../../core/cu29", default-features = false }
 crsf = "2.0.1"
 embedded-io = { version = "0.6.1", default-features = false }  # hal is locked to 0.6
-embedded-io-adapters = { version = "0.7.0", optional = true }
+embedded-io-adapters = { version = "0.6.1", optional = true }
 serialport = { version = "4.8.1", optional = true }
 serde = { workspace = true, features = ["derive"] }
 bincode = { workspace = true, default-features = false, features = ["alloc", "derive"] }
