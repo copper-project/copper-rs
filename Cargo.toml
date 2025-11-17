@@ -150,7 +150,7 @@ tempfile = "3.23"
 spin = { version = "0.10" } # should be removed when std is on, but cargo is bad at negative features
 
 # rerun
-rerun = { version = "0.26", default-features = false, features = ["sdk", "server", "log"] }
+rerun = { version = "0.27", default-features = false, features = ["sdk", "server", "log"] }
 
 # smallvec to avoid heap allocations
 smallvec = { version = "1.15", default-features = false, features = ["serde"] }
