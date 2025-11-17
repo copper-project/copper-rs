@@ -50,7 +50,7 @@ spin = { workspace = true } # should be removed when std is on, but cargo is bad
 libm = { version = "0.2" } # f64 math for 32 bit platforms
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
-cudarc = { version = "0.17", optional = true, features = ["cuda-version-from-build-system"] }
+cudarc = { version = "0.18", optional = true, features = ["cuda-version-from-build-system"] }
 
 [features]
 default = ["std"]
