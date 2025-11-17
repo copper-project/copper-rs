@@ -12,7 +12,7 @@ repository.workspace = true
 
 [package.metadata.copper]
 embedded_only = true
-embedded_config = "examples/cu_bdshot_demo/.cargo/config.toml"
+embedded_config = "examples/cu_elrs_bdshot_demo/.cargo/config.toml"
 embedded_target = "thumbv8m.main-none-eabihf"
 
 [dependencies]
