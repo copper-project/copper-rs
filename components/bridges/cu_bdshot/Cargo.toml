@@ -17,13 +17,9 @@ embedded_target = "thumbv8m.main-none-eabihf"
 [dependencies]
 cu29 = { path = "../../../core/cu29", default-features = false }
 rp235x-hal = { version = "0.3", features = ["critical-section-impl"] }
-embedded-hal = "1.0.0"
-pio = "=0.2.1"
+pio = "=0.2.1"  # Needed
 pio-proc = "=0.2.1"
-fugit = "0.3.9"
-nb = "1"
 cortex-m = "0.7.7"
-critical-section = "1.2"
 serde = { workspace = true, default-features = false, features = ["derive"] }
 bincode = { workspace = true, default-features = false, features = ["alloc"] }
 spin = { workspace = true }
