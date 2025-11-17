@@ -1,5 +1,5 @@
 [package]
-name = "cu-bridge-scheduler"
+name = "cu-bridge-test"
 description = "Mini test app to validate bridge scheduling semantics"
 version.workspace = true
 authors.workspace = true
@@ -13,10 +13,9 @@ repository.workspace = true
 [dependencies]
 cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
-cu29-runtime = { workspace = true }
 cu29-unifiedlog = { workspace = true }
 bincode = { workspace = true }
-once_cell = "1.19"
+once_cell = "1.21"
 serde = { workspace = true }
 tempfile = { workspace = true }
 
