@@ -18,7 +18,7 @@ embedded_target = "thumbv8m.main-none-eabihf"
 cu29 = { path = "../../../core/cu29", default-features = false }
 rp235x-hal = { version = "0.3", features = ["critical-section-impl"] }
 embedded-hal = "*"
-pio = "=0.2.1"
+pio = "=0.3.0"
 pio-proc = "=0.2.1"
 fugit = "0.3.9"
 nb = "1"
