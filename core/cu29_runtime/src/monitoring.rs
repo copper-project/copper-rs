@@ -1,8 +1,8 @@
 //! Some basic internal monitoring tooling Copper uses to monitor itself and the tasks it is running.
 //!
 
-use crate::config::CuConfig;
 use crate::config::{BridgeChannelConfigRepresentation, BridgeConfig, Flavor};
+use crate::config::CuConfig;
 use crate::cutask::CuMsgMetadata;
 use cu29_clock::{CuDuration, RobotClock};
 #[allow(unused_imports)]
@@ -10,7 +10,27 @@ use cu29_log::CuLogLevel;
 use cu29_traits::{CuError, CuResult};
 use petgraph::visit::IntoEdgeReferences;
 use serde_derive::{Deserialize, Serialize};
-use std::collections::HashMap;
+
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+
+#[cfg(feature = "std")]
+use std::{
+    collections::HashMap as Map,
+    format,
+    string::String,
+    string::ToString,
+    vec::Vec,
+};
+
+#[cfg(not(feature = "std"))]
+use alloc::{
+    collections::BTreeMap as Map,
+    format,
+    string::String,
+    string::ToString,
+    vec::Vec,
+};
 
 #[cfg(not(feature = "std"))]
 mod imp {
@@ -90,9 +110,9 @@ pub fn build_monitor_topology(
     mission: Option<&str>,
 ) -> CuResult<MonitorTopology> {
     let graph = config.get_graph(mission)?;
-    let mut nodes: HashMap<String, MonitorNode> = HashMap::new();
+    let mut nodes: Map<String, MonitorNode> = Map::new();
 
-    let mut bridge_lookup: HashMap<&str, &BridgeConfig> = HashMap::new();
+    let mut bridge_lookup: Map<&str, &BridgeConfig> = Map::new();
     for bridge in &config.bridges {
         bridge_lookup.insert(bridge.id.as_str(), bridge);
     }
