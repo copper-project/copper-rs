@@ -4,5 +4,6 @@ ignore = [
 "RUSTSEC-2024-0388", # derivative is unmaintained. https://rustsec.org/advisories/RUSTSEC-2024-0388.html
 "RUSTSEC-2024-0436", # paste is no longer maintaind. https://rustsec.org/advisories/RUSTSEC-2024-0436.html
 "RUSTSEC-2023-0071", # rsa 0.9.8 has Vulnerability of Marvin Attack. Zenoh-transport depends on it. https://rustsec.org/advisories/RUSTSEC-2023-0071
+"RUSTSEC-2024-0370", # proc-macro-error is unmaintained. https://rustsec.org/advisories/RUSTSEC-2024-0370.html
 ]
 
