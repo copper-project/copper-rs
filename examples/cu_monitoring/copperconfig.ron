@@ -18,7 +18,7 @@
         (src: "task1", dst: "task2", msg: "i32"),
     ],
     monitor: (
-        type: "cu_consolemon::CuConsoleMon",
-        // type: "ExampleMonitor",
+        // type: "cu_consolemon::CuConsoleMon",
+        type: "ExampleMonitor",
     )
 )
