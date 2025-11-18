@@ -2,15 +2,15 @@
 //!
 
 use crate::config::CuConfig;
-use crate::cutask::CuMsgMetadata;
 use crate::config::{BridgeChannelConfigRepresentation, BridgeConfig, Flavor};
+use crate::cutask::CuMsgMetadata;
 use cu29_clock::{CuDuration, RobotClock};
 #[allow(unused_imports)]
 use cu29_log::CuLogLevel;
 use cu29_traits::{CuError, CuResult};
+use petgraph::visit::IntoEdgeReferences;
 use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;
-use petgraph::visit::IntoEdgeReferences;
 
 #[cfg(not(feature = "std"))]
 mod imp {
@@ -85,7 +85,10 @@ pub struct MonitorTopology {
 }
 
 /// Derive a monitor-friendly topology from the runtime configuration.
-pub fn build_monitor_topology(config: &CuConfig, mission: Option<&str>) -> CuResult<MonitorTopology> {
+pub fn build_monitor_topology(
+    config: &CuConfig,
+    mission: Option<&str>,
+) -> CuResult<MonitorTopology> {
     let graph = config.get_graph(mission)?;
     let mut nodes: HashMap<String, MonitorNode> = HashMap::new();
 
@@ -108,7 +111,9 @@ pub fn build_monitor_topology(config: &CuConfig, mission: Option<&str>) -> CuRes
                 for ch in &bridge.channels {
                     match ch {
                         BridgeChannelConfigRepresentation::Rx { id, .. } => inputs.push(id.clone()),
-                        BridgeChannelConfigRepresentation::Tx { id, .. } => outputs.push(id.clone()),
+                        BridgeChannelConfigRepresentation::Tx { id, .. } => {
+                            outputs.push(id.clone())
+                        }
                     }
                 }
             }

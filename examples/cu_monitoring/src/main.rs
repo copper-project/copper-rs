@@ -129,9 +129,7 @@ fn main() {
     application
         .start_all_tasks()
         .expect("Failed to start application.");
-    application
-        .run()
-        .expect("Failed to run application.");
+    application.run().expect("Failed to run application.");
     application
         .stop_all_tasks()
         .expect("Failed to stop application.");
