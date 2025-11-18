@@ -12,25 +12,29 @@ use cu29::cubridge::CuBridge;
 use cu29::prelude::*;
 use cu_bdshot::{register_rp2350_board, Rp2350Board, Rp2350BoardConfig, Rp2350BoardResources};
 use cu_sdlogger::{find_copper_partition, EMMCLogger, EMMCSectionStorage, ForceSyncSend};
-use defmt_rtt as _;
 use embedded_hal::spi::MODE_0;
 use embedded_hal_bus::spi::ExclusiveDevice;
 use embedded_sdmmc::SdCard;
-use panic_probe as _;
 use rp235x_hal as hal;
 use rp235x_hal::clocks::Clock;
 use rp235x_hal::fugit::RateExtU32;
-use rp235x_hal::gpio::bank0::{Gpio15, Gpio16, Gpio17, Gpio18, Gpio19};
+use rp235x_hal::gpio::bank0::{Gpio12, Gpio13, Gpio15, Gpio16, Gpio17, Gpio18, Gpio19};
 use rp235x_hal::gpio::{
-    Function, FunctionPio0, FunctionSio, FunctionSpi, FunctionXipCs1, Pin, PinId, PullDown,
-    PullNone, PullType, PullUp, SioInput, SioOutput, ValidFunction,
+    Function, FunctionPio0, FunctionSio, FunctionSpi, FunctionUart, FunctionXipCs1, Pin, PinId,
+    PullDown, PullNone, PullType, PullUp, SioInput, SioOutput, ValidFunction,
 };
-use rp235x_hal::pac::SPI0;
+use rp235x_hal::pac::{SPI0, UART0};
 use rp235x_hal::pio::PIOExt;
 use rp235x_hal::spi::{Enabled, FrameFormat};
 use rp235x_hal::timer::{CopyableTimer0, CopyableTimer1};
+use rp235x_hal::uart::{DataBits, StopBits, UartConfig, UartPeripheral};
 use rp235x_hal::{clocks::init_clocks_and_plls, pac, sio::Sio, watchdog::Watchdog, Spi, Timer};
 use spin::Mutex;
+
+#[allow(unused_imports)]
+use defmt_rtt as _;
+#[allow(unused_imports)]
+use panic_probe as _;
 
 mod tasks;
 
@@ -46,19 +50,28 @@ static ALLOC: Heap<32> = Heap::empty();
 
 const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
 
+// SDCard Pins
 type Mosi = Pin<Gpio19, FunctionSpi, PullDown>;
 type Miso = Pin<Gpio16, FunctionSpi, PullDown>;
 type Sck = Pin<Gpio18, FunctionSpi, PullDown>;
 type Cs = Pin<Gpio17, FunctionSio<SioOutput>, PullDown>;
 type Det = Pin<Gpio15, FunctionSio<SioInput>, PullUp>;
 
-type Timer0 = Timer<CopyableTimer0>;
-type Timer1 = Timer<CopyableTimer1>;
-
+// SDCard types
 type Spi0 = Spi<Enabled, SPI0, (Mosi, Miso, Sck)>;
 type SdDev = ExclusiveDevice<Spi0, Cs, Timer0>;
 type PimodoriSdCard = SdCard<SdDev, Timer1>;
 type TSPimodoriSdCard = ForceSyncSend<SdCard<SdDev, Timer1>>;
+
+// Timers
+type Timer0 = Timer<CopyableTimer0>;
+type Timer1 = Timer<CopyableTimer1>;
+
+// Associated types for serial port
+type ElrsTx = Pin<Gpio12, FunctionUart, PullDown>;
+type ElrsRx = Pin<Gpio13, FunctionUart, PullUp>;
+type SerialPort = UartPeripheral<rp235x_hal::uart::Enabled, UART0, (ElrsTx, ElrsRx)>;
+type SerialPortError = rp235x_hal::uart::ReadErrorType;
 
 #[entry]
 fn main() -> ! {
@@ -75,9 +88,11 @@ fn main() -> ! {
     )
     .unwrap();
 
+    // Init Timers
     let timer0: Timer0 = Timer::new_timer0(p.TIMER0, &mut p.RESETS, &clocks);
     let timer_for_clock = timer0;
 
+    // Init SDCard Pins
     let sio = Sio::new(p.SIO);
     let pins = hal::gpio::Pins::new(p.IO_BANK0, p.PADS_BANK0, sio.gpio_bank0, &mut p.RESETS);
     let (pio, sm0, sm1, sm2, sm3) = p.PIO0.split(&mut p.RESETS);
@@ -99,6 +114,17 @@ fn main() -> ! {
         .into_pull_type::<PullNone>()
         .into_function::<FunctionPio0>();
 
+    // Init Serial Port pins
+    let tx = pins
+        .gpio12
+        .into_push_pull_output()
+        .into_function::<FunctionUart>();
+    let rx = pins
+        .gpio13
+        .into_pull_up_input()
+        .into_function::<FunctionUart>();
+
+    // Init PIOs
     let resources = Rp2350BoardResources::new(pio, sm0, sm1, sm2, sm3);
     let board_cfg = Rp2350BoardConfig::default();
     let board = Rp2350Board::new(resources, clocks.system_clock.freq().to_Hz(), board_cfg)
@@ -134,6 +160,17 @@ fn main() -> ! {
 
     info!("Creating TSPimodoriSdCard...");
     let sd = TSPimodoriSdCard::new(sd);
+
+    // Init Serial
+    // CrossFire is spec at 418_000 but all implementations use 420_000.
+    let csrf_uart_cfg = UartConfig::new(420_000.Hz(), DataBits::Eight, None, StopBits::One);
+
+    let csrf_uart: SerialPort = UartPeripheral::new(p.UART0, (tx, rx), &mut p.RESETS)
+        .enable(csrf_uart_cfg, clocks.peripheral_clock.freq())
+        .expect("Could not create UART peripheral");
+
+    cu_crsf::serial_registry::register(0, csrf_uart)
+        .expect("Failed to register UART as CRSF serial port");
 
     info!("Setting up Copper...");
 
