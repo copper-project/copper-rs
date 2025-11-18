@@ -1,8 +1,8 @@
 //! Some basic internal monitoring tooling Copper uses to monitor itself and the tasks it is running.
 //!
 
-use crate::config::{BridgeChannelConfigRepresentation, BridgeConfig, Flavor};
 use crate::config::CuConfig;
+use crate::config::{BridgeChannelConfigRepresentation, BridgeConfig, Flavor};
 use crate::cutask::CuMsgMetadata;
 use cu29_clock::{CuDuration, RobotClock};
 #[allow(unused_imports)]
@@ -15,22 +15,10 @@ use serde_derive::{Deserialize, Serialize};
 extern crate alloc;
 
 #[cfg(feature = "std")]
-use std::{
-    collections::HashMap as Map,
-    format,
-    string::String,
-    string::ToString,
-    vec::Vec,
-};
+use std::{collections::HashMap as Map, format, string::String, string::ToString, vec::Vec};
 
 #[cfg(not(feature = "std"))]
-use alloc::{
-    collections::BTreeMap as Map,
-    format,
-    string::String,
-    string::ToString,
-    vec::Vec,
-};
+use alloc::{collections::BTreeMap as Map, format, string::String, string::ToString, vec::Vec};
 
 #[cfg(not(feature = "std"))]
 mod imp {
