@@ -142,10 +142,9 @@ pub fn build_monitor_topology(
 
         // ensure ports exist for tasks if bridges did not predeclare them.
         if let Some(node) = nodes.get_mut(&src) {
-            if node.kind == ComponentKind::Task && src_port.is_none()
-                && node.outputs.is_empty() {
-                    node.outputs.push("out0".to_string());
-                }
+            if node.kind == ComponentKind::Task && src_port.is_none() && node.outputs.is_empty() {
+                node.outputs.push("out0".to_string());
+            }
         }
         if let Some(node) = nodes.get_mut(&dst) {
             if node.kind == ComponentKind::Task && dst_port.is_none() {
