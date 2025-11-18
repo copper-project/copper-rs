@@ -172,6 +172,23 @@ pub mod bridges {
             Ok(Self)
         }
 
+        fn send<'a, Payload>(
+            &mut self,
+            _clock: &RobotClock,
+            channel: &'static BridgeChannel<AlphaTxId, Payload>,
+            msg: &CuMsg<Payload>,
+        ) -> CuResult<()>
+        where
+            Payload: CuMsgPayload + 'a,
+        {
+            match channel.id() {
+                AlphaTxId::LoopOut => events::record("alpha.tx.loop"),
+                AlphaTxId::ChainOut => events::record("alpha.tx.chain"),
+            }
+            assert!(msg.payload().is_some(), "alpha bridge tx expects payloads");
+            Ok(())
+        }
+
         fn receive<'a, Payload>(
             &mut self,
             _clock: &RobotClock,
@@ -188,23 +205,6 @@ pub mod bridges {
                 AlphaRxId::ChainIn => events::record("alpha.rx.chain"),
             }
             msg.set_payload(Payload::default());
-            Ok(())
-        }
-
-        fn send<'a, Payload>(
-            &mut self,
-            _clock: &RobotClock,
-            channel: &'static BridgeChannel<AlphaTxId, Payload>,
-            msg: &CuMsg<Payload>,
-        ) -> CuResult<()>
-        where
-            Payload: CuMsgPayload + 'a,
-        {
-            match channel.id() {
-                AlphaTxId::LoopOut => events::record("alpha.tx.loop"),
-                AlphaTxId::ChainOut => events::record("alpha.tx.chain"),
-            }
-            assert!(msg.payload().is_some(), "alpha bridge tx expects payloads");
             Ok(())
         }
     }
@@ -247,18 +247,6 @@ pub mod bridges {
             Ok(Self)
         }
 
-        fn receive<'a, Payload>(
-            &mut self,
-            _clock: &RobotClock,
-            _channel: &'static BridgeChannel<BetaRxId, Payload>,
-            _msg: &mut CuMsg<Payload>,
-        ) -> CuResult<()>
-        where
-            Payload: CuMsgPayload + 'a,
-        {
-            Ok(())
-        }
-
         fn send<'a, Payload>(
             &mut self,
             _clock: &RobotClock,
@@ -275,11 +263,30 @@ pub mod bridges {
             assert!(msg.payload().is_some(), "beta bridge tx expects payloads");
             Ok(())
         }
+
+        fn receive<'a, Payload>(
+            &mut self,
+            _clock: &RobotClock,
+            _channel: &'static BridgeChannel<BetaRxId, Payload>,
+            _msg: &mut CuMsg<Payload>,
+        ) -> CuResult<()>
+        where
+            Payload: CuMsgPayload + 'a,
+        {
+            Ok(())
+        }
     }
 }
 
 #[copper_runtime(config = "copperconfig.ron")]
 struct BridgeSchedulerApp {}
+
+// Expose builders for the generated mission runtimes to external callers.
+pub type BridgeLoopbackBuilder = BridgeLoopback::BridgeSchedulerAppBuilder;
+pub type BridgeOnlyABBuilder = BridgeOnlyAB::BridgeSchedulerAppBuilder;
+pub type BridgeTaskSameBuilder = BridgeTaskSame::BridgeSchedulerAppBuilder;
+pub type BridgeToSinkBuilder = BridgeToSink::BridgeSchedulerAppBuilder;
+pub type SourceToBridgeBuilder = SourceToBridge::BridgeSchedulerAppBuilder;
 
 #[cfg(test)]
 mod tests {
