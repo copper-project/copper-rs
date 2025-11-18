@@ -2869,11 +2869,13 @@ fn generate_bridge_tx_execution_tokens(
         quote! {
             {
                 let bridge = &mut bridges.#bridge_tuple_index;
-                let cumsg_input = &msgs.#input_index;
+                let cumsg_input = &mut msgs.#input_index;
+                // Stamp timing so monitors see consistent ranges for bridge Tx as well.
+                cumsg_input.metadata.process_time.start = clock.now().into();
                 if let Err(error) = bridge.send(
                     clock,
                     &<#bridge_type as cu29::cubridge::CuBridge>::Tx::#const_ident,
-                    cumsg_input,
+                    &*cumsg_input,
                 ) {
                     let decision = monitor.process_error(#monitor_index, CuTaskState::Process, &error);
                     match decision {
@@ -2892,6 +2894,7 @@ fn generate_bridge_tx_execution_tokens(
                         }
                     }
                 }
+                cumsg_input.metadata.process_time.end = clock.now().into();
             }
         },
         quote! {},

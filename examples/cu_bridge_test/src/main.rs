@@ -16,7 +16,7 @@ where
     App: CuApplication<MmapSectionStorage, UnifiedLoggerWrite>,
 {
     app.start_all_tasks()?;
-    app.run_one_iteration()?;
+    app.run()?;
     app.stop_all_tasks()?;
     Ok(())
 }

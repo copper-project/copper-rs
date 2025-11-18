@@ -9,6 +9,7 @@ mod events {
     pub static EVENT_LOG: Lazy<Mutex<Vec<&'static str>>> = Lazy::new(|| Mutex::new(Vec::new()));
 
     pub fn record(event: &'static str) {
+        // debug!("Event: {}", event);
         EVENT_LOG.lock().unwrap().push(event);
     }
     #[cfg(test)]

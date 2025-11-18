@@ -3,11 +3,14 @@
 
 use crate::config::CuConfig;
 use crate::cutask::CuMsgMetadata;
+use crate::config::{BridgeChannelConfigRepresentation, BridgeConfig, Flavor};
 use cu29_clock::{CuDuration, RobotClock};
 #[allow(unused_imports)]
 use cu29_log::CuLogLevel;
 use cu29_traits::{CuError, CuResult};
 use serde_derive::{Deserialize, Serialize};
+use std::collections::HashMap;
+use petgraph::visit::IntoEdgeReferences;
 
 #[cfg(not(feature = "std"))]
 mod imp {
@@ -49,11 +52,126 @@ pub enum Decision {
     Shutdown, // This is a fatal error, shutdown the copper as cleanly as possible.
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ComponentKind {
+    Task,
+    Bridge,
+}
+
+#[derive(Debug, Clone)]
+pub struct MonitorNode {
+    pub id: String,
+    pub type_name: Option<String>,
+    pub kind: ComponentKind,
+    /// Ordered list of input port identifiers.
+    pub inputs: Vec<String>,
+    /// Ordered list of output port identifiers.
+    pub outputs: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct MonitorConnection {
+    pub src: String,
+    pub src_port: Option<String>,
+    pub dst: String,
+    pub dst_port: Option<String>,
+    pub msg: String,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct MonitorTopology {
+    pub nodes: Vec<MonitorNode>,
+    pub connections: Vec<MonitorConnection>,
+}
+
+/// Derive a monitor-friendly topology from the runtime configuration.
+pub fn build_monitor_topology(config: &CuConfig, mission: Option<&str>) -> CuResult<MonitorTopology> {
+    let graph = config.get_graph(mission)?;
+    let mut nodes: HashMap<String, MonitorNode> = HashMap::new();
+
+    let mut bridge_lookup: HashMap<&str, &BridgeConfig> = HashMap::new();
+    for bridge in &config.bridges {
+        bridge_lookup.insert(bridge.id.as_str(), bridge);
+    }
+
+    for (_, node) in graph.get_all_nodes() {
+        let kind = match node.get_flavor() {
+            Flavor::Bridge => ComponentKind::Bridge,
+            _ => ComponentKind::Task,
+        };
+        let node_id = node.get_id();
+
+        let mut inputs = Vec::new();
+        let mut outputs = Vec::new();
+        if kind == ComponentKind::Bridge {
+            if let Some(bridge) = bridge_lookup.get(node_id.as_str()) {
+                for ch in &bridge.channels {
+                    match ch {
+                        BridgeChannelConfigRepresentation::Rx { id, .. } => inputs.push(id.clone()),
+                        BridgeChannelConfigRepresentation::Tx { id, .. } => outputs.push(id.clone()),
+                    }
+                }
+            }
+        }
+
+        nodes.insert(
+            node_id.clone(),
+            MonitorNode {
+                id: node_id,
+                type_name: Some(node.get_type().to_string()),
+                kind,
+                inputs,
+                outputs,
+            },
+        );
+    }
+
+    let mut connections = Vec::new();
+    for edge in graph.0.edge_references() {
+        let cnx = edge.weight();
+        let src = cnx.src.clone();
+        let dst = cnx.dst.clone();
+
+        let src_port = cnx.src_channel.clone();
+        let dst_port = cnx.dst_channel.clone();
+
+        // ensure ports exist for tasks if bridges did not predeclare them.
+        if let Some(node) = nodes.get_mut(&src) {
+            if node.kind == ComponentKind::Task && src_port.is_none() {
+                if node.outputs.is_empty() {
+                    node.outputs.push("out0".to_string());
+                }
+            }
+        }
+        if let Some(node) = nodes.get_mut(&dst) {
+            if node.kind == ComponentKind::Task && dst_port.is_none() {
+                let next = format!("in{}", node.inputs.len());
+                node.inputs.push(next);
+            }
+        }
+
+        connections.push(MonitorConnection {
+            src,
+            src_port,
+            dst,
+            dst_port,
+            msg: cnx.msg.clone(),
+        });
+    }
+
+    Ok(MonitorTopology {
+        nodes: nodes.into_values().collect(),
+        connections,
+    })
+}
+
 /// Trait to implement a monitoring task.
 pub trait CuMonitor: Sized {
     fn new(config: &CuConfig, taskids: &'static [&'static str]) -> CuResult<Self>
     where
         Self: Sized;
+
+    fn set_topology(&mut self, _topology: MonitorTopology) {}
 
     fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
         Ok(())
