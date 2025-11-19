@@ -134,9 +134,7 @@ pub fn build_monitor_topology(
                         BridgeChannelConfigRepresentation::Rx { id, .. } => {
                             outputs.push(id.clone())
                         }
-                        BridgeChannelConfigRepresentation::Tx { id, .. } => {
-                            inputs.push(id.clone())
-                        }
+                        BridgeChannelConfigRepresentation::Tx { id, .. } => inputs.push(id.clone()),
                     }
                 }
             }
