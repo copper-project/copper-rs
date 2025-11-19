@@ -26,7 +26,7 @@ use ratatui::layout::{Alignment, Constraint, Direction, Layout, Size};
 use ratatui::prelude::{Backend, Rect};
 use ratatui::prelude::{Stylize, Widget};
 use ratatui::style::{Color, Modifier, Style};
-use ratatui::text::{Line, Text};
+use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, StatefulWidget, Table};
 use ratatui::{Frame, Terminal};
 use std::fmt::{Display, Formatter};
@@ -241,25 +241,14 @@ impl NodesScrollableWidgetState {
             .collect();
 
         for node in topology.nodes.iter() {
-            let ports_in = if node.inputs.is_empty() {
-                vec!["in0".to_string()]
-            } else {
-                node.inputs.clone()
-            };
-            let ports_out = if node.outputs.is_empty() {
-                vec!["out0".to_string()]
-            } else {
-                node.outputs.clone()
-            };
-
             let node_type = match node.kind {
                 ComponentKind::Bridge => NodeType::Bridge,
                 ComponentKind::Task => {
                     let mut role = NodeType::Unknown;
-                    if !ports_in.is_empty() {
+                    if !node.inputs.is_empty() {
                         role = role.add_incoming();
                     }
-                    if !ports_out.is_empty() {
+                    if !node.outputs.is_empty() {
                         role = role.add_outgoing();
                     }
                     role
@@ -273,8 +262,8 @@ impl NodesScrollableWidgetState {
                     .clone()
                     .unwrap_or_else(|| "unknown".to_string()),
                 node_type,
-                inputs: ports_in,
-                outputs: ports_out,
+                inputs: node.inputs.clone(),
+                outputs: node.outputs.clone(),
             });
             let idx = display_nodes.len() - 1;
             node_lookup.insert(node.id.clone(), idx);
@@ -294,11 +283,6 @@ impl NodesScrollableWidgetState {
             let Some(&dst_idx) = node_lookup.get(&cnx.dst) else {
                 continue;
             };
-            if src_idx == dst_idx {
-                // Self-loops confuse the layout root detection; skip drawing them for now.
-                continue;
-            }
-
             let src_node = &display_nodes[src_idx];
             let dst_node = &display_nodes[dst_idx];
             let src_port = cnx
@@ -312,7 +296,12 @@ impl NodesScrollableWidgetState {
                 .and_then(|p| dst_node.inputs.iter().position(|name| name == p))
                 .unwrap_or(0);
 
-            connections.push(Connection::new(src_idx, src_port, dst_idx, dst_port));
+            connections.push(Connection::new(
+                src_idx,
+                src_port + NODE_PORT_ROW_OFFSET,
+                dst_idx,
+                dst_port + NODE_PORT_ROW_OFFSET,
+            ));
         }
 
         // tui-nodes drops all nodes when every node has an outgoing edge (no roots).
@@ -360,6 +349,25 @@ const NODE_WIDTH: u16 = 29;
 const NODE_WIDTH_CONTENT: u16 = NODE_WIDTH - 2;
 
 const NODE_HEIGHT: u16 = 5;
+const NODE_META_LINES: usize = 4;
+const NODE_PORT_ROW_OFFSET: usize = NODE_META_LINES;
+
+fn clip_tail(value: &str, max_chars: usize) -> String {
+    if max_chars == 0 {
+        return String::new();
+    }
+    let char_count = value.chars().count();
+    if char_count <= max_chars {
+        return value.to_string();
+    }
+    let skip = char_count.saturating_sub(max_chars);
+    let start = value
+        .char_indices()
+        .nth(skip)
+        .map(|(idx, _)| idx)
+        .unwrap_or(value.len());
+    value[start..].to_string()
+}
 
 #[allow(dead_code)]
 const NODE_HEIGHT_CONTENT: u16 = NODE_HEIGHT - 2;
@@ -379,12 +387,22 @@ impl StatefulWidget for NodesScrollableWidget<'_> {
             .zip(node_ids.iter())
             .map(|(node, node_id)| {
                 let ports = node.inputs.len().max(node.outputs.len());
-                let height = (ports as u16).saturating_add(2).max(NODE_HEIGHT);
+                let content_rows = ports + NODE_PORT_ROW_OFFSET;
+                let height = (content_rows as u16).saturating_add(2).max(NODE_HEIGHT);
                 NodeLayout::new((NODE_WIDTH, height)).with_title(node_id.as_str())
             })
             .collect();
 
-        let content_size = Size::new(200, 100);
+        let node_count = state.display_nodes.len().max(1);
+        let content_width = ((node_count as u16) * (NODE_WIDTH + 12)).max(200);
+        let max_ports = state
+            .display_nodes
+            .iter()
+            .map(|node| node.inputs.len().max(node.outputs.len()))
+            .max()
+            .unwrap_or_default();
+        let content_height = (((max_ports + NODE_PORT_ROW_OFFSET) as u16) * 4).max(100);
+        let content_size = Size::new(content_width, content_height);
         let mut scroll_view = ScrollView::new(content_size);
         let mut graph = NodeGraph::new(
             node_layouts,
@@ -420,18 +438,60 @@ impl StatefulWidget for NodesScrollableWidget<'_> {
                     format!("✓ {}", status.status_txt)
                 };
 
-                let txt = format!(
-                    " {}\n {}\n {}",
-                    state.display_nodes[idx].node_type,
-                    &s[s.len().saturating_sub(NODE_WIDTH_CONTENT as usize - 2)..],
-                    status_line,
-                );
-                let paragraph = Paragraph::new(txt);
-                let paragraph = if status.is_error {
-                    paragraph.red()
+                let label_width = (NODE_WIDTH_CONTENT as usize).saturating_sub(2);
+                let type_label = clip_tail(s, label_width);
+                let status_text = clip_tail(&status_line, label_width);
+                let base_style = if status.is_error {
+                    Style::default().fg(Color::Red)
                 } else {
-                    paragraph.green()
+                    Style::default().fg(Color::Green)
                 };
+                let mut lines: Vec<Line> = Vec::new();
+                lines.push(Line::styled(
+                    format!(" {}", state.display_nodes[idx].node_type),
+                    base_style,
+                ));
+                lines.push(Line::styled(format!(" {}", type_label), base_style));
+                lines.push(Line::styled(format!(" {}", status_text), base_style));
+                lines.push(Line::raw(""));
+
+                let max_ports = state.display_nodes[idx]
+                    .inputs
+                    .len()
+                    .max(state.display_nodes[idx].outputs.len());
+                if max_ports > 0 {
+                    let left_width = (NODE_WIDTH_CONTENT as usize - 2) / 2;
+                    let right_width = NODE_WIDTH_CONTENT as usize - 2 - left_width;
+                    let input_style = Style::default().fg(Color::Yellow);
+                    let output_style = Style::default().fg(Color::Cyan);
+                    let dotted_style = Style::default().fg(Color::DarkGray);
+                    for port_idx in 0..max_ports {
+                        let input = state.display_nodes[idx]
+                            .inputs
+                            .get(port_idx)
+                            .map(|label| clip_tail(label, left_width))
+                            .unwrap_or_default();
+                        let output = state.display_nodes[idx]
+                            .outputs
+                            .get(port_idx)
+                            .map(|label| clip_tail(label, right_width))
+                            .unwrap_or_default();
+                        let mut port_line = Line::default();
+                        port_line.spans.push(Span::styled(
+                            format!(" {:<left_width$}", input, left_width = left_width),
+                            input_style,
+                        ));
+                        port_line.spans.push(Span::styled("┆", dotted_style));
+                        port_line.spans.push(Span::styled(
+                            format!("{:>right_width$}", output, right_width = right_width),
+                            output_style,
+                        ));
+                        lines.push(port_line);
+                    }
+                }
+
+                let txt = Text::from(lines);
+                let paragraph = Paragraph::new(txt);
                 status.is_error = false; // reset if it was displayed
                 scroll_view.render_widget(paragraph, ea_zone);
             }

@@ -214,6 +214,10 @@ pub mod bridges {
         pub struct BetaTxChannels : BetaTxId {
             egress => messages::IngressMsg,
             from_src => messages::FromSource = "beta/default_from_src",
+            from_alpha_ingress => messages::IngressMsg = "beta/from_alpha_ingress",
+            from_alpha_loop => messages::LoopbackMsg = "beta/from_alpha_loop",
+            from_alpha_sink => messages::SinkPayload = "beta/from_alpha_sink",
+            from_alpha_chain => messages::ChainPayload = "beta/from_alpha_chain",
         }
     }
 
@@ -260,6 +264,10 @@ pub mod bridges {
             match channel.id() {
                 BetaTxId::Egress => events::record("beta.tx.egress"),
                 BetaTxId::FromSrc => events::record("beta.tx.from_src"),
+                BetaTxId::FromAlphaIngress => events::record("beta.tx.from_alpha_ingress"),
+                BetaTxId::FromAlphaLoop => events::record("beta.tx.from_alpha_loop"),
+                BetaTxId::FromAlphaSink => events::record("beta.tx.from_alpha_sink"),
+                BetaTxId::FromAlphaChain => events::record("beta.tx.from_alpha_chain"),
             }
             assert!(msg.payload().is_some(), "beta bridge tx expects payloads");
             Ok(())
@@ -288,6 +296,7 @@ pub type BridgeOnlyABBuilder = BridgeOnlyAB::BridgeSchedulerAppBuilder;
 pub type BridgeTaskSameBuilder = BridgeTaskSame::BridgeSchedulerAppBuilder;
 pub type BridgeToSinkBuilder = BridgeToSink::BridgeSchedulerAppBuilder;
 pub type SourceToBridgeBuilder = SourceToBridge::BridgeSchedulerAppBuilder;
+pub type BridgeFanoutBuilder = BridgeFanout::BridgeSchedulerAppBuilder;
 
 #[cfg(test)]
 mod tests {
