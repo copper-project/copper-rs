@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["CuTaskState","Decision"],"struct":["CountingAlloc","CuDurationStatistics","LiveStatistics","NoMonitor"],"trait":["CuMonitor"]};
+window.SIDEBAR_ITEMS = {"enum":["ComponentKind","CuTaskState","Decision"],"fn":["build_monitor_topology"],"struct":["CountingAlloc","CuDurationStatistics","LiveStatistics","MonitorConnection","MonitorNode","MonitorTopology","NoMonitor"],"trait":["CuMonitor"]};
