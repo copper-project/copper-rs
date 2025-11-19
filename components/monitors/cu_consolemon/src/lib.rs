@@ -6,10 +6,12 @@ use ansi_to_tui::IntoText;
 use color_eyre::config::HookBuilder;
 use compact_str::{CompactString, ToCompactString};
 use cu29::clock::{CuDuration, RobotClock};
-use cu29::config::{CuConfig, Node};
+use cu29::config::CuConfig;
 use cu29::cutask::CuMsgMetadata;
-use cu29::monitoring::{CuDurationStatistics, CuMonitor, CuTaskState, Decision};
-use cu29::prelude::{pool, CuCompactString};
+use cu29::monitoring::{
+    ComponentKind, CuDurationStatistics, CuMonitor, CuTaskState, Decision, MonitorTopology,
+};
+use cu29::prelude::{pool, CuCompactString, CuTime};
 use cu29::{CuError, CuResult};
 #[cfg(feature = "debug_pane")]
 use debug_pane::UIExt;
@@ -33,7 +35,7 @@ use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use std::{io, thread};
+use std::{collections::HashMap, io, panic, thread};
 use tui_nodes::{Connection, NodeGraph, NodeLayout};
 use tui_widgets::scrollview::{ScrollView, ScrollViewState};
 
@@ -133,9 +135,19 @@ impl PoolStats {
         self.total_size = total_size;
     }
 }
+
 fn compute_end_to_end_latency(msgs: &[&CuMsgMetadata]) -> CuDuration {
-    msgs.last().unwrap().process_time.end.unwrap()
-        - msgs.first().unwrap().process_time.start.unwrap()
+    let start = msgs.first().map(|m| m.process_time.start);
+    let end = msgs.last().map(|m| m.process_time.end);
+
+    match (start, end) {
+        (Some(s), Some(e)) => match (Option::<CuTime>::from(s), Option::<CuTime>::from(e)) {
+            (Some(s), Some(e)) if e >= s => e - s,
+            (Some(_), Some(_)) => CuDuration::MIN,
+            _ => CuDuration::MIN,
+        },
+        _ => CuDuration::MIN,
+    }
 }
 
 // This is kind of terrible.
@@ -145,6 +157,7 @@ enum NodeType {
     Source,
     Sink,
     Task,
+    Bridge,
 }
 
 impl Display for NodeType {
@@ -154,6 +167,7 @@ impl Display for NodeType {
             Self::Source => write!(f, "⏩"),
             Self::Task => write!(f, "⚡"),
             Self::Sink => write!(f, "🏁"),
+            Self::Bridge => write!(f, "🔗"),
         }
     }
 }
@@ -165,6 +179,7 @@ impl NodeType {
             Self::Source => Self::Task,
             Self::Sink => Self::Sink,
             Self::Task => Self::Task,
+            Self::Bridge => Self::Bridge,
         }
     }
 
@@ -174,6 +189,7 @@ impl NodeType {
             Self::Source => Self::Source,
             Self::Sink => Self::Task,
             Self::Task => Self::Task,
+            Self::Bridge => Self::Bridge,
         }
     }
 }
@@ -185,57 +201,140 @@ struct TaskStatus {
     error: CompactString,
 }
 
+#[derive(Clone)]
+struct DisplayNode {
+    id: String,
+    type_label: String,
+    node_type: NodeType,
+    inputs: Vec<String>,
+    outputs: Vec<String>,
+}
+
 struct NodesScrollableWidgetState {
-    config_nodes: Vec<Node>,
-    node_types: Vec<NodeType>,
+    display_nodes: Vec<DisplayNode>,
     connections: Vec<Connection>,
     statuses: Arc<Mutex<Vec<TaskStatus>>>,
+    status_index_map: Vec<Option<usize>>,
+    task_count: usize,
     nodes_scrollable_state: ScrollViewState,
 }
 
 impl NodesScrollableWidgetState {
-    fn new(config: &CuConfig, errors: Arc<Mutex<Vec<TaskStatus>>>, mission: Option<&str>) -> Self {
-        let mut config_nodes: Vec<Node> = Vec::new();
-        let mut node_types: Vec<NodeType> = Vec::new();
+    fn new(
+        config: &CuConfig,
+        errors: Arc<Mutex<Vec<TaskStatus>>>,
+        mission: Option<&str>,
+        task_ids: &'static [&'static str],
+        topology: Option<MonitorTopology>,
+    ) -> Self {
+        let topology = topology
+            .or_else(|| cu29::monitoring::build_monitor_topology(config, mission).ok())
+            .unwrap_or_default();
 
-        let graph = config
-            .get_graph(mission)
-            .expect("Only supported for simple config");
+        let mut display_nodes: Vec<DisplayNode> = Vec::new();
+        let mut status_index_map = Vec::new();
+        let mut node_lookup = HashMap::new();
+        let task_index_lookup: HashMap<&str, usize> = task_ids
+            .iter()
+            .enumerate()
+            .map(|(i, id)| (*id, i))
+            .collect();
 
-        for (_, node) in graph.get_all_nodes() {
-            // FIXME(gbin): Multimission
-            config_nodes.push(node.clone());
-            node_types.push(NodeType::Unknown);
-        }
-        let mut connections: Vec<Connection> = Vec::with_capacity(graph.0.edge_count());
+        for node in topology.nodes.iter() {
+            let ports_in = if node.inputs.is_empty() {
+                vec!["in0".to_string()]
+            } else {
+                node.inputs.clone()
+            };
+            let ports_out = if node.outputs.is_empty() {
+                vec!["out0".to_string()]
+            } else {
+                node.outputs.clone()
+            };
 
-        // Keep track if we already used a port.
-        for (dst_index, dst_node) in config_nodes.iter().enumerate() {
-            let node_incoming_edges = graph
-                .get_dst_edges(dst_index as u32)
-                .expect("Error getting edges");
-            for (dst_port, edge_id) in node_incoming_edges.iter().enumerate() {
-                if let Some((src_index, dst_index)) =
-                    graph.0.edge_endpoints((*edge_id as u32).into())
-                {
-                    let (src_index, dst_index) = (src_index.index(), dst_index.index());
-                    connections.push(Connection::new(
-                        src_index, 0, // There is only one output per task today
-                        dst_index, dst_port,
-                    ));
-                    node_types[dst_index] = node_types[dst_index].add_incoming(); // 🤮
-                    node_types[src_index] = node_types[src_index].add_outgoing();
-                } else {
-                    panic!("Can't find back srcs for {}", dst_node.get_id());
+            let node_type = match node.kind {
+                ComponentKind::Bridge => NodeType::Bridge,
+                ComponentKind::Task => {
+                    let mut role = NodeType::Unknown;
+                    if !ports_in.is_empty() {
+                        role = role.add_incoming();
+                    }
+                    if !ports_out.is_empty() {
+                        role = role.add_outgoing();
+                    }
+                    role
                 }
+            };
+
+            display_nodes.push(DisplayNode {
+                id: node.id.clone(),
+                type_label: node
+                    .type_name
+                    .clone()
+                    .unwrap_or_else(|| "unknown".to_string()),
+                node_type,
+                inputs: ports_in,
+                outputs: ports_out,
+            });
+            let idx = display_nodes.len() - 1;
+            node_lookup.insert(node.id.clone(), idx);
+
+            let status_idx = match node.kind {
+                ComponentKind::Task => task_index_lookup.get(node.id.as_str()).cloned(),
+                ComponentKind::Bridge => None,
+            };
+            status_index_map.push(status_idx);
+        }
+
+        let mut connections: Vec<Connection> = Vec::with_capacity(topology.connections.len());
+        for cnx in topology.connections.iter() {
+            let Some(&src_idx) = node_lookup.get(&cnx.src) else {
+                continue;
+            };
+            let Some(&dst_idx) = node_lookup.get(&cnx.dst) else {
+                continue;
+            };
+            if src_idx == dst_idx {
+                // Self-loops confuse the layout root detection; skip drawing them for now.
+                continue;
+            }
+
+            let src_node = &display_nodes[src_idx];
+            let dst_node = &display_nodes[dst_idx];
+            let src_port = cnx
+                .src_port
+                .as_ref()
+                .and_then(|p| src_node.outputs.iter().position(|name| name == p))
+                .unwrap_or(0);
+            let dst_port = cnx
+                .dst_port
+                .as_ref()
+                .and_then(|p| dst_node.inputs.iter().position(|name| name == p))
+                .unwrap_or(0);
+
+            connections.push(Connection::new(src_idx, src_port, dst_idx, dst_port));
+        }
+
+        // tui-nodes drops all nodes when every node has an outgoing edge (no roots).
+        // If that happens, drop the outgoing edges for the first node so at least one root exists.
+        if !display_nodes.is_empty() {
+            let mut from_set = std::collections::HashSet::new();
+            for conn in &connections {
+                from_set.insert(conn.from_node);
+            }
+            if from_set.len() == display_nodes.len() {
+                let root_idx = 0;
+                connections.retain(|c| c.from_node != root_idx);
             }
         }
+
         NodesScrollableWidgetState {
-            config_nodes,
-            node_types,
+            display_nodes,
             connections,
             nodes_scrollable_state: ScrollViewState::default(),
             statuses: errors,
+            status_index_map,
+            task_count: task_ids.len(),
         }
     }
 }
@@ -270,16 +369,18 @@ impl StatefulWidget for NodesScrollableWidget<'_> {
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let node_ids: Vec<String> = state
-            .config_nodes
+            .display_nodes
             .iter()
-            .map(|node| format!(" {} ", node.get_id()))
+            .map(|node| format!(" {} ", node.id))
             .collect();
         let node_layouts = state
-            .config_nodes
+            .display_nodes
             .iter()
             .zip(node_ids.iter())
-            .map(|(_, node_id)| {
-                NodeLayout::new((NODE_WIDTH, NODE_HEIGHT)).with_title(node_id.as_str())
+            .map(|(node, node_id)| {
+                let ports = node.inputs.len().max(node.outputs.len());
+                let height = (ports as u16).saturating_add(2).max(NODE_HEIGHT);
+                NodeLayout::new((NODE_WIDTH, height)).with_title(node_id.as_str())
             })
             .collect();
 
@@ -296,9 +397,23 @@ impl StatefulWidget for NodesScrollableWidget<'_> {
 
         {
             let mut statuses = state.statuses.lock().unwrap();
+            if statuses.len() <= state.task_count {
+                statuses.resize(state.task_count + 1, TaskStatus::default());
+            }
             for (idx, ea_zone) in zones.into_iter().enumerate() {
-                let s = state.config_nodes[idx].get_type();
-                let status = &mut statuses[idx];
+                let fallback_idx = state.task_count;
+                let status_idx = state
+                    .status_index_map
+                    .get(idx)
+                    .and_then(|opt| *opt)
+                    .unwrap_or(fallback_idx);
+                let safe_index = if status_idx < statuses.len() {
+                    status_idx
+                } else {
+                    statuses.len() - 1
+                };
+                let status = &mut statuses[safe_index];
+                let s = &state.display_nodes[idx].type_label;
                 let status_line = if status.is_error {
                     format!("❌ {}", status.error)
                 } else {
@@ -307,7 +422,7 @@ impl StatefulWidget for NodesScrollableWidget<'_> {
 
                 let txt = format!(
                     " {}\n {}\n {}",
-                    state.node_types[idx],
+                    state.display_nodes[idx].node_type,
                     &s[s.len().saturating_sub(NODE_WIDTH_CONTENT as usize - 2)..],
                     status_line,
                 );
@@ -343,6 +458,7 @@ pub struct CuConsoleMon {
     task_statuses: Arc<Mutex<Vec<TaskStatus>>>,
     pool_stats: Arc<Mutex<Vec<PoolStats>>>,
     quitting: Arc<AtomicBool>,
+    topology: Option<MonitorTopology>,
 }
 
 struct UI {
@@ -370,10 +486,16 @@ impl UI {
         error_redirect: gag::BufferRedirect,
         debug_output: Option<debug_pane::DebugLog>,
         pool_stats: Arc<Mutex<Vec<PoolStats>>>,
+        topology: Option<MonitorTopology>,
     ) -> UI {
         init_error_hooks();
-        let nodes_scrollable_widget_state =
-            NodesScrollableWidgetState::new(&config, task_statuses.clone(), mission);
+        let nodes_scrollable_widget_state = NodesScrollableWidgetState::new(
+            &config,
+            task_statuses.clone(),
+            mission,
+            task_ids,
+            topology.clone(),
+        );
 
         Self {
             task_ids,
@@ -394,10 +516,16 @@ impl UI {
         task_stats: Arc<Mutex<TaskStats>>,
         task_statuses: Arc<Mutex<Vec<TaskStatus>>>,
         pool_stats: Arc<Mutex<Vec<PoolStats>>>,
+        topology: Option<MonitorTopology>,
     ) -> UI {
         init_error_hooks();
-        let nodes_scrollable_widget_state =
-            NodesScrollableWidgetState::new(&config, task_statuses.clone());
+        let nodes_scrollable_widget_state = NodesScrollableWidgetState::new(
+            &config,
+            task_statuses.clone(),
+            None,
+            task_ids,
+            topology.clone(),
+        );
 
         Self {
             task_ids,
@@ -761,7 +889,11 @@ impl CuMonitor for CuConsoleMon {
             task_statuses: Arc::new(Mutex::new(vec![TaskStatus::default(); taskids.len()])),
             quitting: Arc::new(AtomicBool::new(false)),
             pool_stats: Arc::new(Mutex::new(Vec::new())),
+            topology: None,
         })
+    }
+    fn set_topology(&mut self, topology: MonitorTopology) {
+        self.topology = Some(topology);
     }
 
     fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
@@ -772,10 +904,18 @@ impl CuMonitor for CuConsoleMon {
         let error_states = self.task_statuses.clone();
         let pool_stats_ui = self.pool_stats.clone();
         let quitting = self.quitting.clone();
+        let topology = self.topology.clone();
 
         // Start the main UI loop
         thread::spawn(move || {
             let backend = CrosstermBackend::new(stdout());
+
+            // Ensure the terminal is restored if a panic occurs while the TUI is active.
+            let prev_hook = panic::take_hook();
+            panic::set_hook(Box::new(move |info| {
+                restore_terminal();
+                prev_hook(info);
+            }));
 
             setup_terminal();
 
@@ -796,6 +936,7 @@ impl CuMonitor for CuConsoleMon {
                     error_redirect,
                     None,
                     pool_stats_ui,
+                    topology.clone(),
                 );
 
                 // Override the cu29-log-runtime Log Subscriber
@@ -833,6 +974,7 @@ impl CuMonitor for CuConsoleMon {
                     task_stats_ui,
                     error_states,
                     pool_stats_ui,
+                    topology,
                 );
                 ui.run_app(&mut terminal).expect("Failed to run app");
 
