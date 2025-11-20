@@ -140,10 +140,10 @@ pub fn build_monitor_topology(
             }
         } else {
             let usage = io_usage.get(node_id.as_str()).cloned().unwrap_or_default();
-            if usage.has_incoming || (!usage.has_incoming && !usage.has_outgoing) {
+            if usage.has_incoming || !usage.has_outgoing {
                 inputs.push("in".to_string());
             }
-            if usage.has_outgoing || (!usage.has_incoming && !usage.has_outgoing) {
+            if usage.has_outgoing || !usage.has_incoming {
                 outputs.push("out".to_string());
             }
         }
