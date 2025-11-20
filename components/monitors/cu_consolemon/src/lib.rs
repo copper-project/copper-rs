@@ -164,10 +164,10 @@ impl Display for NodeType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Unknown => write!(f, "?"),
-            Self::Source => write!(f, "⏩"),
-            Self::Task => write!(f, "⚡"),
-            Self::Sink => write!(f, "🏁"),
-            Self::Bridge => write!(f, "🔗"),
+            Self::Source => write!(f, "◈"),
+            Self::Task => write!(f, "⚙"),
+            Self::Sink => write!(f, "⭳"),
+            Self::Bridge => write!(f, "⇆"),
         }
     }
 }
@@ -190,6 +190,16 @@ impl NodeType {
             Self::Sink => Self::Task,
             Self::Task => Self::Task,
             Self::Bridge => Self::Bridge,
+        }
+    }
+
+    fn color(self) -> Color {
+        match self {
+            Self::Unknown => Color::Gray,
+            Self::Source => Color::Rgb(255, 191, 0),
+            Self::Sink => Color::Rgb(255, 102, 204),
+            Self::Task => Color::White,
+            Self::Bridge => Color::Rgb(204, 153, 255),
         }
     }
 }
@@ -349,7 +359,7 @@ const NODE_WIDTH: u16 = 29;
 const NODE_WIDTH_CONTENT: u16 = NODE_WIDTH - 2;
 
 const NODE_HEIGHT: u16 = 5;
-const NODE_META_LINES: usize = 4;
+const NODE_META_LINES: usize = 2;
 const NODE_PORT_ROW_OFFSET: usize = NODE_META_LINES;
 
 fn clip_tail(value: &str, max_chars: usize) -> String {
@@ -376,20 +386,23 @@ impl StatefulWidget for NodesScrollableWidget<'_> {
     type State = NodesScrollableWidgetState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        let node_ids: Vec<String> = state
-            .display_nodes
-            .iter()
-            .map(|node| format!(" {} ", node.id))
-            .collect();
         let node_layouts = state
             .display_nodes
             .iter()
-            .zip(node_ids.iter())
-            .map(|(node, node_id)| {
+            .map(|node| {
                 let ports = node.inputs.len().max(node.outputs.len());
                 let content_rows = ports + NODE_PORT_ROW_OFFSET;
                 let height = (content_rows as u16).saturating_add(2).max(NODE_HEIGHT);
-                NodeLayout::new((NODE_WIDTH, height)).with_title(node_id.as_str())
+                let mut title_line = Line::default();
+                title_line.spans.push(Span::styled(
+                    format!(" {}", node.node_type),
+                    Style::default().fg(node.node_type.color()),
+                ));
+                title_line.spans.push(Span::styled(
+                    format!(" {} ", node.id),
+                    Style::default().fg(Color::White),
+                ));
+                NodeLayout::new((NODE_WIDTH, height)).with_title_line(title_line)
             })
             .collect();
 
@@ -447,13 +460,8 @@ impl StatefulWidget for NodesScrollableWidget<'_> {
                     Style::default().fg(Color::Green)
                 };
                 let mut lines: Vec<Line> = Vec::new();
-                lines.push(Line::styled(
-                    format!(" {}", state.display_nodes[idx].node_type),
-                    base_style,
-                ));
                 lines.push(Line::styled(format!(" {}", type_label), base_style));
                 lines.push(Line::styled(format!(" {}", status_text), base_style));
-                lines.push(Line::raw(""));
 
                 let max_ports = state.display_nodes[idx]
                     .inputs

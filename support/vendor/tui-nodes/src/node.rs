@@ -1,5 +1,6 @@
 use ratatui::{
 	style::Style,
+	text::Line,
 	widgets::{Block, BorderType, Borders},
 };
 
@@ -9,7 +10,7 @@ pub struct NodeLayout<'a> {
 	// minimum size of contents (TODO: doc: including borders?)
 	pub size: (u16, u16),
 	border_type: BorderType,
-	title: &'a str,
+	title: Line<'a>,
 	border_style: Style,
 	//	in_ports: Vec<PortLayout>,
 	//	out_ports: Vec<PortLayout>,
@@ -20,18 +21,19 @@ impl<'a> NodeLayout<'a> {
 		Self {
 			size,
 			border_type: BorderType::Plain,
-			title: "",
+			title: Line::default(),
 			border_style: Style::default(),
 		}
 	}
 
 	pub fn with_title(mut self, title: &'a str) -> Self {
-		self.title = title;
+		self.title = Line::from(title);
 		self
 	}
 
-	pub fn title(&self) -> &str {
-		self.title
+	pub fn with_title_line(mut self, title: Line<'a>) -> Self {
+		self.title = title;
+		self
 	}
 
 	pub fn with_border_type(mut self, border: BorderType) -> Self {
@@ -53,6 +55,6 @@ impl<'a> NodeLayout<'a> {
 			.borders(Borders::ALL)
 			.border_type(self.border_type)
 			.border_style(self.border_style)
-			.title(self.title)
+			.title(self.title.clone())
 	}
 }
