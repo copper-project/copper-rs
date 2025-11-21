@@ -10,7 +10,9 @@ use core::fmt::Display;
 use cu29_traits::{CuError, CuResult};
 use hashbrown::HashMap;
 use petgraph::stable_graph::{EdgeIndex, NodeIndex, StableDiGraph};
-use petgraph::visit::{EdgeRef, IntoEdgeReferences};
+use petgraph::visit::EdgeRef;
+#[cfg(feature = "std")]
+use petgraph::visit::IntoEdgeReferences;
 pub use petgraph::Direction::Incoming;
 pub use petgraph::Direction::Outgoing;
 use ron::extensions::Extensions;
@@ -1432,6 +1434,7 @@ struct RenderTopology {
     connections: Vec<RenderConnection>,
 }
 
+#[cfg(feature = "std")]
 struct RenderSection<'a> {
     label: Option<String>,
     graph: &'a CuGraph,
