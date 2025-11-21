@@ -5,6 +5,7 @@
         (id: "SourceToBridge"),
         (id: "BridgeToSink"),
         (id: "BridgeTaskSame"),
+        (id: "BridgeFanout"),
     ],
     tasks: [
         (
@@ -27,7 +28,7 @@
         (
             id: "alpha",
             type: "bridges::AlphaBridge",
-            missions: ["BridgeOnlyAB", "BridgeLoopback", "BridgeToSink", "BridgeTaskSame"],
+            missions: ["BridgeOnlyAB", "BridgeLoopback", "BridgeToSink", "BridgeTaskSame", "BridgeFanout"],
             channels: [
                 Rx ( id: "ingress", route: "alpha/ingress" ),
                 Rx ( id: "loop_in", route: "alpha/loop_in" ),
@@ -40,10 +41,14 @@
         (
             id: "beta",
             type: "bridges::BetaBridge",
-            missions: ["BridgeOnlyAB", "SourceToBridge"],
+            missions: ["BridgeOnlyAB", "SourceToBridge", "BridgeFanout"],
             channels: [
                 Tx ( id: "egress", route: "beta/egress" ),
                 Tx ( id: "from_src", route: "beta/from_src" ), // overrides macro default
+                Tx ( id: "from_alpha_ingress", route: "beta/from_alpha_ingress" ),
+                Tx ( id: "from_alpha_loop", route: "beta/from_alpha_loop" ),
+                Tx ( id: "from_alpha_sink", route: "beta/from_alpha_sink" ),
+                Tx ( id: "from_alpha_chain", route: "beta/from_alpha_chain" ),
             ],
         ),
     ],
@@ -83,6 +88,30 @@
             dst: "alpha/chain_out",
             msg: "messages::ChainPayload",
             missions: ["BridgeTaskSame"],
+        ),
+        (
+            src: "alpha/ingress",
+            dst: "beta/from_alpha_ingress",
+            msg: "messages::IngressMsg",
+            missions: ["BridgeFanout"],
+        ),
+        (
+            src: "alpha/loop_in",
+            dst: "beta/from_alpha_loop",
+            msg: "messages::LoopbackMsg",
+            missions: ["BridgeFanout"],
+        ),
+        (
+            src: "alpha/to_sink",
+            dst: "beta/from_alpha_sink",
+            msg: "messages::SinkPayload",
+            missions: ["BridgeFanout"],
+        ),
+        (
+            src: "alpha/chain_in",
+            dst: "beta/from_alpha_chain",
+            msg: "messages::ChainPayload",
+            missions: ["BridgeFanout"],
         ),
     ],
     monitor: (

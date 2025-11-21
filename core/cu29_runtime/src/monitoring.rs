@@ -15,10 +15,10 @@ use serde_derive::{Deserialize, Serialize};
 extern crate alloc;
 
 #[cfg(feature = "std")]
-use std::{collections::HashMap as Map, format, string::String, string::ToString, vec::Vec};
+use std::{collections::HashMap as Map, string::String, string::ToString, vec::Vec};
 
 #[cfg(not(feature = "std"))]
-use alloc::{collections::BTreeMap as Map, format, string::String, string::ToString, vec::Vec};
+use alloc::{collections::BTreeMap as Map, string::String, string::ToString, vec::Vec};
 
 #[cfg(not(feature = "std"))]
 mod imp {
@@ -92,6 +92,12 @@ pub struct MonitorTopology {
     pub connections: Vec<MonitorConnection>,
 }
 
+#[derive(Default, Debug, Clone, Copy)]
+struct NodeIoUsage {
+    has_incoming: bool,
+    has_outgoing: bool,
+}
+
 /// Derive a monitor-friendly topology from the runtime configuration.
 pub fn build_monitor_topology(
     config: &CuConfig,
@@ -99,10 +105,17 @@ pub fn build_monitor_topology(
 ) -> CuResult<MonitorTopology> {
     let graph = config.get_graph(mission)?;
     let mut nodes: Map<String, MonitorNode> = Map::new();
+    let mut io_usage: Map<String, NodeIoUsage> = Map::new();
 
     let mut bridge_lookup: Map<&str, &BridgeConfig> = Map::new();
     for bridge in &config.bridges {
         bridge_lookup.insert(bridge.id.as_str(), bridge);
+    }
+
+    for edge in graph.0.edge_references() {
+        let cnx = edge.weight();
+        io_usage.entry(cnx.src.clone()).or_default().has_outgoing = true;
+        io_usage.entry(cnx.dst.clone()).or_default().has_incoming = true;
     }
 
     for (_, node) in graph.get_all_nodes() {
@@ -118,12 +131,20 @@ pub fn build_monitor_topology(
             if let Some(bridge) = bridge_lookup.get(node_id.as_str()) {
                 for ch in &bridge.channels {
                     match ch {
-                        BridgeChannelConfigRepresentation::Rx { id, .. } => inputs.push(id.clone()),
-                        BridgeChannelConfigRepresentation::Tx { id, .. } => {
+                        BridgeChannelConfigRepresentation::Rx { id, .. } => {
                             outputs.push(id.clone())
                         }
+                        BridgeChannelConfigRepresentation::Tx { id, .. } => inputs.push(id.clone()),
                     }
                 }
+            }
+        } else {
+            let usage = io_usage.get(node_id.as_str()).cloned().unwrap_or_default();
+            if usage.has_incoming || !usage.has_outgoing {
+                inputs.push("in".to_string());
+            }
+            if usage.has_outgoing || !usage.has_incoming {
+                outputs.push("out".to_string());
             }
         }
 
@@ -145,21 +166,16 @@ pub fn build_monitor_topology(
         let src = cnx.src.clone();
         let dst = cnx.dst.clone();
 
-        let src_port = cnx.src_channel.clone();
-        let dst_port = cnx.dst_channel.clone();
-
-        // ensure ports exist for tasks if bridges did not predeclare them.
-        if let Some(node) = nodes.get_mut(&src) {
-            if node.kind == ComponentKind::Task && src_port.is_none() && node.outputs.is_empty() {
-                node.outputs.push("out0".to_string());
-            }
-        }
-        if let Some(node) = nodes.get_mut(&dst) {
-            if node.kind == ComponentKind::Task && dst_port.is_none() {
-                let next = format!("in{}", node.inputs.len());
-                node.inputs.push(next);
-            }
-        }
+        let src_port = cnx.src_channel.clone().or_else(|| {
+            nodes
+                .get(&src)
+                .and_then(|node| node.outputs.first().cloned())
+        });
+        let dst_port = cnx.dst_channel.clone().or_else(|| {
+            nodes
+                .get(&dst)
+                .and_then(|node| node.inputs.first().cloned())
+        });
 
         connections.push(MonitorConnection {
             src,

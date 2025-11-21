@@ -1,15 +1,39 @@
+use clap::{Parser, ValueEnum};
 use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
 use cu29_unifiedlog::{memmap::MmapSectionStorage, UnifiedLoggerWrite};
-use std::{env, fs, path::PathBuf};
+use std::{fs, path::PathBuf};
 
 use cu_bridge_test::{
-    BridgeLoopbackBuilder, BridgeOnlyABBuilder, BridgeTaskSameBuilder, BridgeToSinkBuilder,
-    SourceToBridgeBuilder,
+    BridgeFanoutBuilder, BridgeLoopbackBuilder, BridgeOnlyABBuilder, BridgeTaskSameBuilder,
+    BridgeToSinkBuilder, SourceToBridgeBuilder,
 };
 
 const SLAB_SIZE: Option<usize> = Some(32 * 1024 * 1024);
-const DEFAULT_MISSION: &str = "BridgeOnlyAB";
+
+#[derive(Parser)]
+#[command(author, version, about = "Run bridge scheduling examples", long_about = None)]
+struct Cli {
+    /// Mission graph to run
+    #[arg(value_enum, default_value_t = MissionArg::BridgeOnlyAb, value_name = "MISSION")]
+    mission: MissionArg,
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum)]
+enum MissionArg {
+    #[value(name = "BridgeOnlyAB")]
+    BridgeOnlyAb,
+    #[value(name = "BridgeLoopback")]
+    BridgeLoopback,
+    #[value(name = "SourceToBridge")]
+    SourceToBridge,
+    #[value(name = "BridgeToSink")]
+    BridgeToSink,
+    #[value(name = "BridgeTaskSame")]
+    BridgeTaskSame,
+    #[value(name = "BridgeFanout")]
+    BridgeFanout,
+}
 
 fn run_once<App>(app: &mut App) -> CuResult<()>
 where
@@ -29,9 +53,7 @@ fn main() {
 }
 
 fn drive() -> CuResult<()> {
-    let mission = env::args()
-        .nth(1)
-        .unwrap_or_else(|| DEFAULT_MISSION.to_string());
+    let args = Cli::parse();
 
     let logger_path = PathBuf::from("logs/cu_bridge_test.copper");
     if let Some(parent) = logger_path.parent() {
@@ -45,32 +67,30 @@ fn drive() -> CuResult<()> {
 
     let ctx = basic_copper_setup(&logger_path, SLAB_SIZE, true, None)?;
 
-    match mission.as_str() {
-        "BridgeOnlyAB" => {
+    match args.mission {
+        MissionArg::BridgeOnlyAb => {
             let mut app = BridgeOnlyABBuilder::new().with_context(&ctx).build()?;
             run_once(&mut app)?;
         }
-        "BridgeLoopback" => {
+        MissionArg::BridgeLoopback => {
             let mut app = BridgeLoopbackBuilder::new().with_context(&ctx).build()?;
             run_once(&mut app)?;
         }
-        "SourceToBridge" => {
+        MissionArg::SourceToBridge => {
             let mut app = SourceToBridgeBuilder::new().with_context(&ctx).build()?;
             run_once(&mut app)?;
         }
-        "BridgeToSink" => {
+        MissionArg::BridgeToSink => {
             let mut app = BridgeToSinkBuilder::new().with_context(&ctx).build()?;
             run_once(&mut app)?;
         }
-        "BridgeTaskSame" => {
+        MissionArg::BridgeTaskSame => {
             let mut app = BridgeTaskSameBuilder::new().with_context(&ctx).build()?;
             run_once(&mut app)?;
         }
-        unknown => {
-            eprintln!(
-                "Unknown mission '{unknown}'. Choose one of: BridgeOnlyAB, BridgeLoopback, SourceToBridge, BridgeToSink, BridgeTaskSame."
-            );
-            std::process::exit(2);
+        MissionArg::BridgeFanout => {
+            let mut app = BridgeFanoutBuilder::new().with_context(&ctx).build()?;
+            run_once(&mut app)?;
         }
     }
 
