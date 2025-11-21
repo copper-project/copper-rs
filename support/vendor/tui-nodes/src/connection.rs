@@ -183,6 +183,7 @@ pub struct ConnectionsLayout {
 	ports: Map<(bool, usize, usize), (usize, usize)>, // (x,y)
 	connections: Vec<(Connection, usize)>,            // ((from, to), class)
 	edge_field: Betweens<Edge>,
+	edge_targets: Betweens<Option<(bool, usize, usize)>>,
 	width: usize,
 	height: usize,
 	pub alias_connections: Map<(bool, usize, usize), &'static str>,
@@ -196,6 +197,7 @@ impl ConnectionsLayout {
 			ports: Map::new(),
 			connections: Vec::new(),
 			edge_field: Betweens::new(width, height),
+			edge_targets: Betweens::new(width, height),
 			width,
 			height,
 			alias_connections: Map::new(),
@@ -239,7 +241,10 @@ impl ConnectionsLayout {
 		}
 	}
 
-	pub fn block_port(&mut self, coord: (usize, usize)) {
+	pub fn block_port(&mut self, coord: (usize, usize), is_input: bool) {
+		if is_input {
+			return;
+		}
 		self.edge_field[(coord, Direction::North).into()] = Edge::Blocked;
 		self.edge_field[(coord, Direction::South).into()] = Edge::Blocked;
 	}
@@ -281,9 +286,14 @@ impl ConnectionsLayout {
 					let ea_edge = ea_nei.into();
 					let current_cost = cost[current.into()];
 					//println!("{current_cost}");
-					let new_cost = current_cost.saturating_add(
-						self.calc_cost(current, ea_nei, start.0, goal.0, ea_conn.1),
-					);
+					let new_cost = current_cost.saturating_add(self.calc_cost(
+						current,
+						ea_nei,
+						start.0,
+						goal.0,
+						(true, ea_conn.0.to_node, ea_conn.0.to_port),
+						ea_conn.1,
+					));
 					if came_from[ea_edge].is_none() || new_cost < cost[ea_edge] {
 						let prio = (-new_cost, -Self::heuristic(ea_nei.0, goal.0));
 						if new_cost != isize::MAX {
@@ -353,6 +363,8 @@ impl ConnectionsLayout {
 					break;
 				}
 				self.edge_field[next.into()] = Edge::Connection(ea_conn.1);
+				self.edge_targets[next.into()] =
+					Some((true, ea_conn.0.to_node, ea_conn.0.to_port));
 				next = came_from[next.into()].unwrap();
 			}
 		}
@@ -387,6 +399,19 @@ impl ConnectionsLayout {
 			} else {
 				Style::default()
 			}
+		};
+		let is_conn = |edge: Edge| matches!(edge, Edge::Connection(_));
+		let pick_style = |edges: &[Edge]| {
+			edges
+				.iter()
+				.find_map(|edge| {
+					if let Edge::Connection(idx) = edge {
+						Some(self.line_styles[&idx])
+					} else {
+						None
+					}
+				})
+				.unwrap_or_default()
 		};
 		for y in 0..self.height {
 			for x in 0..self.width {
@@ -427,6 +452,18 @@ impl ConnectionsLayout {
 					(n, s, e, w) if n == s && n == e && n == w => (bor(n).cross, get_line_style(n)),
 					// intersections should just be verticals
 					(n, s, e, w) if n == s && e == w && n != E && e != E => (bor(n).vertical, get_line_style(n)),
+					(n, s, e, w) if is_conn(n) && is_conn(s) && is_conn(e) && !is_conn(w) => {
+						(bor(n).vertical_right, pick_style(&[n, s, e]))
+					}
+					(n, s, e, w) if is_conn(n) && is_conn(s) && !is_conn(e) && is_conn(w) => {
+						(bor(n).vertical_left, pick_style(&[n, s, w]))
+					}
+					(n, s, e, w) if is_conn(n) && !is_conn(s) && is_conn(e) && is_conn(w) => {
+						(bor(e).horizontal_up, pick_style(&[n, e, w]))
+					}
+					(n, s, e, w) if !is_conn(n) && is_conn(s) && is_conn(e) && is_conn(w) => {
+						(bor(e).horizontal_down, pick_style(&[s, e, w]))
+					}
 					(_, _, _, _) => ("?", Style::default()),
 				};
 
@@ -452,6 +489,7 @@ impl ConnectionsLayout {
 		neigh: ((usize, usize), Direction),
 		start: (usize, usize),
 		end: (usize, usize),
+		goal: (bool, usize, usize),
 		conn_t: usize,
 	) -> isize {
 		let conn_t = Edge::Connection(conn_t);
@@ -470,6 +508,14 @@ impl ConnectionsLayout {
 		if out_dir == conn_t {
 			// already exists
 			1
+		} else if let Edge::Connection(_) = out_dir {
+			if self.edge_targets[neigh.into()]
+				.is_some_and(|target| target == goal && goal.0)
+			{
+				3
+			} else {
+				isize::MAX
+			}
 		} else if out_dir == Edge::Empty {
 			if north == conn_t || south == conn_t || east == conn_t || west == conn_t {
 				// intersecting with an existing connection
