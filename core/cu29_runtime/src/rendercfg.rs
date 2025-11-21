@@ -94,10 +94,7 @@ fn main() -> std::io::Result<()> {
     Ok(())
 }
 
-fn resolve_mission(
-    config: &config::CuConfig,
-    requested: Option<&str>,
-) -> CuResult<Option<String>> {
+fn resolve_mission(config: &config::CuConfig, requested: Option<&str>) -> CuResult<Option<String>> {
     match (&config.graphs, requested) {
         (ConfigGraphs::Simple(_), None) => Ok(None),
         (ConfigGraphs::Simple(_), Some(id)) if id == "default" => Ok(None),

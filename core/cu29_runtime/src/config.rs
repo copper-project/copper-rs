@@ -1328,9 +1328,12 @@ impl CuConfig {
         let graph = self.get_graph(mission_id)?;
         let mut topology = build_render_topology(graph, &self.bridges);
         topology.nodes.sort_by(|a, b| a.id.cmp(&b.id));
-        topology
-            .connections
-            .sort_by(|a, b| a.src.cmp(&b.src).then(a.dst.cmp(&b.dst)).then(a.msg.cmp(&b.msg)));
+        topology.connections.sort_by(|a, b| {
+            a.src
+                .cmp(&b.src)
+                .then(a.dst.cmp(&b.dst))
+                .then(a.msg.cmp(&b.msg))
+        });
 
         let mut port_lookup: HashMap<String, PortLookup> = HashMap::new();
 
@@ -1527,9 +1530,7 @@ fn build_render_topology(graph: &CuGraph, bridges: &[BridgeConfig]) -> RenderTop
                             outputs.push(id.clone())
                         }
                         // Tx consumes data from the graph heading into the bridge, so show it on the input side.
-                        BridgeChannelConfigRepresentation::Tx { id, .. } => {
-                            inputs.push(id.clone())
-                        }
+                        BridgeChannelConfigRepresentation::Tx { id, .. } => inputs.push(id.clone()),
                     }
                 }
             }
@@ -1551,8 +1552,7 @@ fn build_render_topology(graph: &CuGraph, bridges: &[BridgeConfig]) -> RenderTop
     for edge in graph.0.edge_references() {
         let cnx = edge.weight();
         if let Some(node) = nodes.get_mut(&cnx.src) {
-            if node.flavor == Flavor::Task && cnx.src_channel.is_none() && node.outputs.is_empty()
-            {
+            if node.flavor == Flavor::Task && cnx.src_channel.is_none() && node.outputs.is_empty() {
                 node.outputs.push("out0".to_string());
             }
         }
@@ -1628,12 +1628,7 @@ fn build_port_table(
         html.push_str("<TR><TD ALIGN=\"LEFT\"><FONT COLOR=\"lightgray\">&mdash;</FONT></TD></TR>");
     } else {
         for (idx, name) in names.iter().enumerate() {
-            let port_id = format!(
-                "{}_{}_{}",
-                sanitize_identifier(node_id),
-                prefix,
-                idx
-            );
+            let port_id = format!("{}_{}_{}", sanitize_identifier(node_id), prefix, idx);
             write!(
                 html,
                 "<TR><TD PORT=\"{port_id}\" ALIGN=\"LEFT\">{}</TD></TR>",
