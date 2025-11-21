@@ -1,0 +1,11 @@
+hard_tabs = true
+max_width = 90
+use_small_heuristics = "Off"
+#trailing_semicolon = false
+
+#fn_single_line = true
+#control_brace_style = "AlwaysSameLine"
+single_line_if_else_max_width = 90
+single_line_let_else_max_width = 90
+reorder_modules = false
+struct_lit_width = 50

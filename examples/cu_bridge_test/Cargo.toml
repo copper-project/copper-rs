@@ -15,6 +15,7 @@ name = "cu-bridge-test"
 path = "src/main.rs"
 
 [dependencies]
+clap = { workspace = true }
 cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
 cu29-unifiedlog = { workspace = true }
