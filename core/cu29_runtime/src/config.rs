@@ -1324,10 +1324,7 @@ impl CuConfig {
         writeln!(output, "    edge [fontname=\"Noto Sans\"];").unwrap();
 
         let sections = match (&self.graphs, mission_id) {
-            (Simple(graph), _) => vec![RenderSection {
-                label: None,
-                graph,
-            }],
+            (Simple(graph), _) => vec![RenderSection { label: None, graph }],
             (Missions(graphs), Some(id)) => {
                 let graph = graphs
                     .get(id)
@@ -1351,11 +1348,7 @@ impl CuConfig {
         };
 
         for section in sections {
-            self.render_section(
-                output,
-                section.graph,
-                section.label.as_deref(),
-            )?;
+            self.render_section(output, section.graph, section.label.as_deref())?;
         }
 
         writeln!(output, "}}").unwrap();
@@ -1478,7 +1471,11 @@ impl CuConfig {
             )
             .unwrap();
         }
-        let indent = if cluster_id.is_some() { "        " } else { "    " };
+        let indent = if cluster_id.is_some() {
+            "        "
+        } else {
+            "    "
+        };
         let node_prefix = label
             .map(|lbl| format!("{}__", sanitize_identifier(lbl)))
             .unwrap_or_default();
