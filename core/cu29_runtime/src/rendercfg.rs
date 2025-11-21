@@ -14,7 +14,7 @@ struct Args {
     /// Config file name
     #[clap(value_parser)]
     config: PathBuf,
-    /// Mission id to render (required when configuration declares multiple missions)
+    /// Mission id to render (omit to render every mission)
     #[clap(long)]
     mission: Option<String>,
     /// List missions contained in the configuration and exit
@@ -38,7 +38,7 @@ fn main() -> std::io::Result<()> {
         return Ok(());
     }
 
-    let mission = match resolve_mission(&config, args.mission.as_deref()) {
+    let mission = match validate_mission_arg(&config, args.mission.as_deref()) {
         Ok(mission) => mission,
         Err(err) => {
             eprintln!("{err}");
@@ -94,7 +94,10 @@ fn main() -> std::io::Result<()> {
     Ok(())
 }
 
-fn resolve_mission(config: &config::CuConfig, requested: Option<&str>) -> CuResult<Option<String>> {
+fn validate_mission_arg(
+    config: &config::CuConfig,
+    requested: Option<&str>,
+) -> CuResult<Option<String>> {
     match (&config.graphs, requested) {
         (ConfigGraphs::Simple(_), None) => Ok(None),
         (ConfigGraphs::Simple(_), Some(id)) if id == "default" => Ok(None),
@@ -111,16 +114,7 @@ fn resolve_mission(config: &config::CuConfig, requested: Option<&str>) -> CuResu
                 )))
             }
         }
-        (ConfigGraphs::Missions(graphs), None) => {
-            if graphs.len() == 1 {
-                Ok(graphs.keys().next().cloned())
-            } else {
-                Err(CuError::from(format!(
-                    "Mission ID required. Available missions: {}",
-                    format_mission_list(graphs)
-                )))
-            }
-        }
+        (ConfigGraphs::Missions(_), None) => Ok(None),
     }
 }
 

@@ -1318,114 +1318,44 @@ impl CuConfig {
         output: &mut dyn std::io::Write,
         mission_id: Option<&str>,
     ) -> CuResult<()> {
-        use std::fmt::Write as FmtWrite;
-
         writeln!(output, "digraph G {{").unwrap();
         writeln!(output, "    graph [rankdir=LR, nodesep=0.8, ranksep=1.2];").unwrap();
         writeln!(output, "    node [shape=plain, fontname=\"Noto Sans\"];").unwrap();
         writeln!(output, "    edge [fontname=\"Noto Sans\"];").unwrap();
 
-        let graph = self.get_graph(mission_id)?;
-        let mut topology = build_render_topology(graph, &self.bridges);
-        topology.nodes.sort_by(|a, b| a.id.cmp(&b.id));
-        topology.connections.sort_by(|a, b| {
-            a.src
-                .cmp(&b.src)
-                .then(a.dst.cmp(&b.dst))
-                .then(a.msg.cmp(&b.msg))
-        });
-
-        let mut port_lookup: HashMap<String, PortLookup> = HashMap::new();
-
-        for node in &topology.nodes {
-            let node_idx = graph
-                .get_node_id_by_name(node.id.as_str())
-                .ok_or_else(|| CuError::from(format!("Node '{}' missing from graph", node.id)))?;
-            let node_weight = graph
-                .get_node(node_idx)
-                .ok_or_else(|| CuError::from(format!("Node '{}' missing weight", node.id)))?;
-
-            let is_src = graph.get_dst_edges(node_idx).unwrap_or_default().is_empty();
-            let is_sink = graph.get_src_edges(node_idx).unwrap_or_default().is_empty();
-
-            let fillcolor = match node.flavor {
-                Flavor::Bridge => "#faedcd",
-                Flavor::Task if is_src => "#ddefc7",
-                Flavor::Task if is_sink => "#cce0ff",
-                _ => "#f2f2f2",
-            };
-
-            let (inputs_table, input_map, default_input) =
-                build_port_table("Inputs", &node.inputs, &node.id, "in");
-            let (outputs_table, output_map, default_output) =
-                build_port_table("Outputs", &node.outputs, &node.id, "out");
-            let config_html = node_weight
-                .config
-                .as_ref()
-                .and_then(|config| build_config_table(config));
-
-            let mut label = String::new();
-            write!(
-                label,
-                "<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\" CELLPADDING=\"6\" COLOR=\"gray\" BGCOLOR=\"white\">"
-            )
-            .unwrap();
-            write!(
-                label,
-                "<TR><TD COLSPAN=\"2\" ALIGN=\"LEFT\" BGCOLOR=\"{fillcolor}\"><FONT POINT-SIZE=\"12\"><B>{}</B></FONT><BR/><FONT COLOR=\"dimgray\">[{}]</FONT></TD></TR>",
-                encode_text(&node.id),
-                encode_text(&node.type_name)
-            )
-            .unwrap();
-            write!(
-                label,
-                "<TR><TD ALIGN=\"LEFT\" VALIGN=\"TOP\">{inputs_table}</TD><TD ALIGN=\"LEFT\" VALIGN=\"TOP\">{outputs_table}</TD></TR>"
-            )
-            .unwrap();
-
-            if let Some(config_html) = config_html {
-                write!(
-                    label,
-                    "<TR><TD COLSPAN=\"2\" ALIGN=\"LEFT\">{config_html}</TD></TR>"
-                )
-                .unwrap();
+        let sections = match (&self.graphs, mission_id) {
+            (Simple(graph), _) => vec![RenderSection {
+                label: None,
+                graph,
+            }],
+            (Missions(graphs), Some(id)) => {
+                let graph = graphs
+                    .get(id)
+                    .ok_or_else(|| CuError::from(format!("Mission {id} not found")))?;
+                vec![RenderSection {
+                    label: Some(id.to_string()),
+                    graph,
+                }]
             }
+            (Missions(graphs), None) => {
+                let mut missions: Vec<_> = graphs.iter().collect();
+                missions.sort_by(|a, b| a.0.cmp(b.0));
+                missions
+                    .into_iter()
+                    .map(|(label, graph)| RenderSection {
+                        label: Some(label.clone()),
+                        graph,
+                    })
+                    .collect()
+            }
+        };
 
-            label.push_str("</TABLE>");
-
-            let identifier = escape_dot_id(&node.id);
-            writeln!(output, "    \"{identifier}\" [label=<{label}>];").unwrap();
-
-            port_lookup.insert(
-                node.id.clone(),
-                PortLookup {
-                    inputs: input_map,
-                    outputs: output_map,
-                    default_input,
-                    default_output,
-                },
-            );
-        }
-
-        for cnx in &topology.connections {
-            let src = escape_dot_id(&cnx.src);
-            let dst = escape_dot_id(&cnx.dst);
-            let src_suffix = port_lookup
-                .get(&cnx.src)
-                .and_then(|lookup| lookup.resolve_output(cnx.src_port.as_deref()))
-                .map(|port| format!(":\"{port}\":e"))
-                .unwrap_or_default();
-            let dst_suffix = port_lookup
-                .get(&cnx.dst)
-                .and_then(|lookup| lookup.resolve_input(cnx.dst_port.as_deref()))
-                .map(|port| format!(":\"{port}\":w"))
-                .unwrap_or_default();
-            let msg = encode_text(&cnx.msg);
-            writeln!(
+        for section in sections {
+            self.render_section(
                 output,
-                "    \"{src}\"{src_suffix} -> \"{dst}\"{dst_suffix} [label=< <B><FONT COLOR=\"gray\">{msg}</FONT></B> >];"
-            )
-            .unwrap();
+                section.graph,
+                section.label.as_deref(),
+            )?;
         }
 
         writeln!(output, "}}").unwrap();
@@ -1507,6 +1437,163 @@ struct RenderConnection {
 struct RenderTopology {
     nodes: Vec<RenderNode>,
     connections: Vec<RenderConnection>,
+}
+
+struct RenderSection<'a> {
+    label: Option<String>,
+    graph: &'a CuGraph,
+}
+
+#[cfg(feature = "std")]
+impl CuConfig {
+    fn render_section(
+        &self,
+        output: &mut dyn std::io::Write,
+        graph: &CuGraph,
+        label: Option<&str>,
+    ) -> CuResult<()> {
+        use std::fmt::Write as FmtWrite;
+
+        let mut topology = build_render_topology(graph, &self.bridges);
+        topology.nodes.sort_by(|a, b| a.id.cmp(&b.id));
+        topology.connections.sort_by(|a, b| {
+            a.src
+                .cmp(&b.src)
+                .then(a.dst.cmp(&b.dst))
+                .then(a.msg.cmp(&b.msg))
+        });
+
+        let cluster_id = label.map(|lbl| format!("cluster_{}", sanitize_identifier(lbl)));
+        if let Some(ref cluster_id) = cluster_id {
+            writeln!(output, "    subgraph \"{cluster_id}\" {{").unwrap();
+            writeln!(
+                output,
+                "        label=<<B>Mission: {}</B>>;",
+                encode_text(label.unwrap())
+            )
+            .unwrap();
+            writeln!(
+                output,
+                "        labelloc=t; labeljust=l; color=\"#bbbbbb\"; style=\"rounded\"; margin=20;"
+            )
+            .unwrap();
+        }
+        let indent = if cluster_id.is_some() { "        " } else { "    " };
+        let node_prefix = label
+            .map(|lbl| format!("{}__", sanitize_identifier(lbl)))
+            .unwrap_or_default();
+
+        let mut port_lookup: HashMap<String, PortLookup> = HashMap::new();
+        let mut id_lookup: HashMap<String, String> = HashMap::new();
+
+        for node in &topology.nodes {
+            let node_idx = graph
+                .get_node_id_by_name(node.id.as_str())
+                .ok_or_else(|| CuError::from(format!("Node '{}' missing from graph", node.id)))?;
+            let node_weight = graph
+                .get_node(node_idx)
+                .ok_or_else(|| CuError::from(format!("Node '{}' missing weight", node.id)))?;
+
+            let is_src = graph.get_dst_edges(node_idx).unwrap_or_default().is_empty();
+            let is_sink = graph.get_src_edges(node_idx).unwrap_or_default().is_empty();
+
+            let fillcolor = match node.flavor {
+                Flavor::Bridge => "#faedcd",
+                Flavor::Task if is_src => "#ddefc7",
+                Flavor::Task if is_sink => "#cce0ff",
+                _ => "#f2f2f2",
+            };
+
+            let port_base = format!("{}{}", node_prefix, sanitize_identifier(&node.id));
+            let (inputs_table, input_map, default_input) =
+                build_port_table("Inputs", &node.inputs, &port_base, "in");
+            let (outputs_table, output_map, default_output) =
+                build_port_table("Outputs", &node.outputs, &port_base, "out");
+            let config_html = node_weight
+                .config
+                .as_ref()
+                .and_then(|config| build_config_table(config));
+
+            let mut label_html = String::new();
+            write!(
+                label_html,
+                "<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\" CELLPADDING=\"6\" COLOR=\"gray\" BGCOLOR=\"white\">"
+            )
+            .unwrap();
+            write!(
+                label_html,
+                "<TR><TD COLSPAN=\"2\" ALIGN=\"LEFT\" BGCOLOR=\"{fillcolor}\"><FONT POINT-SIZE=\"12\"><B>{}</B></FONT><BR/><FONT COLOR=\"dimgray\">[{}]</FONT></TD></TR>",
+                encode_text(&node.id),
+                encode_text(&node.type_name)
+            )
+            .unwrap();
+            write!(
+                label_html,
+                "<TR><TD ALIGN=\"LEFT\" VALIGN=\"TOP\">{inputs_table}</TD><TD ALIGN=\"LEFT\" VALIGN=\"TOP\">{outputs_table}</TD></TR>"
+            )
+            .unwrap();
+
+            if let Some(config_html) = config_html {
+                write!(
+                    label_html,
+                    "<TR><TD COLSPAN=\"2\" ALIGN=\"LEFT\">{config_html}</TD></TR>"
+                )
+                .unwrap();
+            }
+
+            label_html.push_str("</TABLE>");
+
+            let identifier_raw = if node_prefix.is_empty() {
+                node.id.clone()
+            } else {
+                format!("{node_prefix}{}", node.id)
+            };
+            let identifier = escape_dot_id(&identifier_raw);
+            writeln!(output, "{indent}\"{identifier}\" [label=<{label_html}>];").unwrap();
+
+            id_lookup.insert(node.id.clone(), identifier);
+            port_lookup.insert(
+                node.id.clone(),
+                PortLookup {
+                    inputs: input_map,
+                    outputs: output_map,
+                    default_input,
+                    default_output,
+                },
+            );
+        }
+
+        for cnx in &topology.connections {
+            let src_id = id_lookup
+                .get(&cnx.src)
+                .ok_or_else(|| CuError::from(format!("Unknown node '{}'", cnx.src)))?;
+            let dst_id = id_lookup
+                .get(&cnx.dst)
+                .ok_or_else(|| CuError::from(format!("Unknown node '{}'", cnx.dst)))?;
+            let src_suffix = port_lookup
+                .get(&cnx.src)
+                .and_then(|lookup| lookup.resolve_output(cnx.src_port.as_deref()))
+                .map(|port| format!(":\"{port}\":e"))
+                .unwrap_or_default();
+            let dst_suffix = port_lookup
+                .get(&cnx.dst)
+                .and_then(|lookup| lookup.resolve_input(cnx.dst_port.as_deref()))
+                .map(|port| format!(":\"{port}\":w"))
+                .unwrap_or_default();
+            let msg = encode_text(&cnx.msg);
+            writeln!(
+                output,
+                "{indent}\"{src_id}\"{src_suffix} -> \"{dst_id}\"{dst_suffix} [label=< <B><FONT COLOR=\"gray\">{msg}</FONT></B> >];"
+            )
+            .unwrap();
+        }
+
+        if cluster_id.is_some() {
+            writeln!(output, "    }}").unwrap();
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(feature = "std")]
@@ -1603,7 +1690,7 @@ impl PortLookup {
 fn build_port_table(
     title: &str,
     names: &[String],
-    node_id: &str,
+    base_id: &str,
     prefix: &str,
 ) -> (String, HashMap<String, String>, Option<String>) {
     use std::fmt::Write as FmtWrite;
@@ -1628,7 +1715,7 @@ fn build_port_table(
         html.push_str("<TR><TD ALIGN=\"LEFT\"><FONT COLOR=\"lightgray\">&mdash;</FONT></TD></TR>");
     } else {
         for (idx, name) in names.iter().enumerate() {
-            let port_id = format!("{}_{}_{}", sanitize_identifier(node_id), prefix, idx);
+            let port_id = format!("{base_id}_{prefix}_{idx}");
             write!(
                 html,
                 "<TR><TD PORT=\"{port_id}\" ALIGN=\"LEFT\">{}</TD></TR>",
