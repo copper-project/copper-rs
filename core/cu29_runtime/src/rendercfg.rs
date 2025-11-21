@@ -1,6 +1,6 @@
 mod config;
 use clap::Parser;
-use config::read_configuration;
+use config::{read_configuration, ConfigGraphs};
 pub use cu29_traits::*;
 use std::io::Cursor;
 use std::io::Write;
@@ -14,6 +14,12 @@ struct Args {
     /// Config file name
     #[clap(value_parser)]
     config: PathBuf,
+    /// Mission id to render (required when configuration declares multiple missions)
+    #[clap(long)]
+    mission: Option<String>,
+    /// List missions contained in the configuration and exit
+    #[clap(long, action)]
+    list_missions: bool,
     /// Open the SVG in the default system viewer
     #[clap(long)]
     open: bool,
@@ -26,10 +32,24 @@ fn main() -> std::io::Result<()> {
 
     let config = read_configuration(args.config.to_str().unwrap())
         .expect("Failed to read configuration file");
+
+    if args.list_missions {
+        print_mission_list(&config);
+        return Ok(());
+    }
+
+    let mission = match resolve_mission(&config, args.mission.as_deref()) {
+        Ok(mission) => mission,
+        Err(err) => {
+            eprintln!("{err}");
+            std::process::exit(1);
+        }
+    };
+
     let mut content = Vec::<u8>::new();
     {
         let mut cursor = Cursor::new(&mut content);
-        config.render(&mut cursor, None).unwrap();
+        config.render(&mut cursor, mission.as_deref()).unwrap();
     }
 
     // Generate SVG from DOT
@@ -72,4 +92,56 @@ fn main() -> std::io::Result<()> {
         svg_file.write_all(graph_svg.as_slice())?;
     }
     Ok(())
+}
+
+fn resolve_mission(
+    config: &config::CuConfig,
+    requested: Option<&str>,
+) -> CuResult<Option<String>> {
+    match (&config.graphs, requested) {
+        (ConfigGraphs::Simple(_), None) => Ok(None),
+        (ConfigGraphs::Simple(_), Some(id)) if id == "default" => Ok(None),
+        (ConfigGraphs::Simple(_), Some(id)) => Err(CuError::from(format!(
+            "Config is not mission-based; remove --mission (received '{id}')"
+        ))),
+        (ConfigGraphs::Missions(graphs), Some(id)) => {
+            if graphs.contains_key(id) {
+                Ok(Some(id.to_string()))
+            } else {
+                Err(CuError::from(format!(
+                    "Mission '{id}' not found. Available missions: {}",
+                    format_mission_list(graphs)
+                )))
+            }
+        }
+        (ConfigGraphs::Missions(graphs), None) => {
+            if graphs.len() == 1 {
+                Ok(graphs.keys().next().cloned())
+            } else {
+                Err(CuError::from(format!(
+                    "Mission ID required. Available missions: {}",
+                    format_mission_list(graphs)
+                )))
+            }
+        }
+    }
+}
+
+fn print_mission_list(config: &config::CuConfig) {
+    match &config.graphs {
+        ConfigGraphs::Simple(_) => println!("default"),
+        ConfigGraphs::Missions(graphs) => {
+            let mut missions: Vec<_> = graphs.keys().cloned().collect();
+            missions.sort();
+            for mission in missions {
+                println!("{mission}");
+            }
+        }
+    }
+}
+
+fn format_mission_list(graphs: &hashbrown::HashMap<String, config::CuGraph>) -> String {
+    let mut missions: Vec<_> = graphs.keys().cloned().collect();
+    missions.sort();
+    missions.join(", ")
 }
