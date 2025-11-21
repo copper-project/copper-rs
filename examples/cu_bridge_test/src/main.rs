@@ -15,7 +15,7 @@ const SLAB_SIZE: Option<usize> = Some(32 * 1024 * 1024);
 #[command(author, version, about = "Run bridge scheduling examples", long_about = None)]
 struct Cli {
     /// Mission graph to run
-    #[arg(value_enum, default_value_t = MissionArg::BridgeOnlyAb, value_name = "MISSION")]
+    #[arg(value_enum, default_value_t = MissionArg::BridgeFanout, value_name = "MISSION")]
     mission: MissionArg,
 }
 

@@ -89,8 +89,8 @@ impl<'a> NodeGraph<'a> {
 				next_idx += 1;
 			}
 			self.conn_layout.push_connection((*ea_conn, conn_map[&key]));
-			self.conn_layout.block_port(a_point);
-			self.conn_layout.block_port(b_point);
+			self.conn_layout.block_port(a_point, false);
+			self.conn_layout.block_port(b_point, true);
 		}
 		for mut ea_placement in self.placements.values().cloned() {
 			ea_placement.x =
