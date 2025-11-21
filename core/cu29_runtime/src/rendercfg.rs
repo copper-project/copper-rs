@@ -100,7 +100,7 @@ fn validate_mission_arg(
 ) -> CuResult<Option<String>> {
     match (&config.graphs, requested) {
         (ConfigGraphs::Simple(_), None) => Ok(None),
-        (ConfigGraphs::Simple(_), Some(id)) if id == "default" => Ok(None),
+        (ConfigGraphs::Simple(_), Some("default")) => Ok(None),
         (ConfigGraphs::Simple(_), Some(id)) => Err(CuError::from(format!(
             "Config is not mission-based; remove --mission (received '{id}')"
         ))),

@@ -1509,7 +1509,7 @@ impl CuConfig {
             let config_html = node_weight
                 .config
                 .as_ref()
-                .and_then(|config| build_config_table(config));
+                .and_then(build_config_table);
 
             let mut label_html = String::new();
             write!(
