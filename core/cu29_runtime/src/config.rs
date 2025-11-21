@@ -1506,10 +1506,7 @@ impl CuConfig {
                 build_port_table("Inputs", &node.inputs, &port_base, "in");
             let (outputs_table, output_map, default_output) =
                 build_port_table("Outputs", &node.outputs, &port_base, "out");
-            let config_html = node_weight
-                .config
-                .as_ref()
-                .and_then(build_config_table);
+            let config_html = node_weight.config.as_ref().and_then(build_config_table);
 
             let mut label_html = String::new();
             write!(
