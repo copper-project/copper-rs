@@ -1,4 +1,4 @@
-use ratatui::layout::Position;
+use ratatui::layout::{Position, Size};
 
 use super::*;
 
@@ -173,6 +173,16 @@ impl<'a> NodeGraph<'a> {
 				self.nudge(ea_child.from_node, x + rect_me.width + MARGIN);
 			}
 		}
+	}
+
+	pub fn content_bounds(&self) -> Size {
+		let mut width = 0;
+		let mut height = 0;
+		for placement in self.placements.values() {
+			width = width.max(placement.right());
+			height = height.max(placement.bottom());
+		}
+		Size::new(width, height)
 	}
 
 	pub fn split(&self, area: Rect) -> Vec<Rect> {

@@ -381,49 +381,79 @@ fn clip_tail(value: &str, max_chars: usize) -> String {
 
 #[allow(dead_code)]
 const NODE_HEIGHT_CONTENT: u16 = NODE_HEIGHT - 2;
+const GRAPH_WIDTH_PADDING: u16 = NODE_WIDTH;
+const GRAPH_HEIGHT_PADDING: u16 = NODE_HEIGHT;
 
 impl StatefulWidget for NodesScrollableWidget<'_> {
     type State = NodesScrollableWidgetState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        let node_layouts = state
-            .display_nodes
-            .iter()
-            .map(|node| {
-                let ports = node.inputs.len().max(node.outputs.len());
-                let content_rows = ports + NODE_PORT_ROW_OFFSET;
-                let height = (content_rows as u16).saturating_add(2).max(NODE_HEIGHT);
-                let mut title_line = Line::default();
-                title_line.spans.push(Span::styled(
-                    format!(" {}", node.node_type),
-                    Style::default().fg(node.node_type.color()),
-                ));
-                title_line.spans.push(Span::styled(
-                    format!(" {} ", node.id),
-                    Style::default().fg(Color::White),
-                ));
-                NodeLayout::new((NODE_WIDTH, height)).with_title_line(title_line)
-            })
-            .collect();
+        let build_node_layouts = || {
+            state
+                .display_nodes
+                .iter()
+                .map(|node| {
+                    let ports = node.inputs.len().max(node.outputs.len());
+                    let content_rows = ports + NODE_PORT_ROW_OFFSET;
+                    let height = (content_rows as u16).saturating_add(2).max(NODE_HEIGHT);
+                    let mut title_line = Line::default();
+                    title_line.spans.push(Span::styled(
+                        format!(" {}", node.node_type),
+                        Style::default().fg(node.node_type.color()),
+                    ));
+                    title_line.spans.push(Span::styled(
+                        format!(" {} ", node.id),
+                        Style::default().fg(Color::White),
+                    ));
+                    NodeLayout::new((NODE_WIDTH, height)).with_title_line(title_line)
+                })
+                .collect::<Vec<_>>()
+        };
 
         let node_count = state.display_nodes.len().max(1);
-        let content_width = ((node_count as u16) * (NODE_WIDTH + 12)).max(200);
+        let content_width = (node_count as u16)
+            .saturating_mul(NODE_WIDTH + 12)
+            .max(NODE_WIDTH);
         let max_ports = state
             .display_nodes
             .iter()
             .map(|node| node.inputs.len().max(node.outputs.len()))
             .max()
             .unwrap_or_default();
-        let content_height = (((max_ports + NODE_PORT_ROW_OFFSET) as u16) * 4).max(100);
-        let content_size = Size::new(content_width, content_height);
-        let mut scroll_view = ScrollView::new(content_size);
-        let mut graph = NodeGraph::new(
-            node_layouts,
-            state.connections.clone(),
-            content_size.width as usize,
-            content_size.height as usize,
-        );
+        let content_height = (((max_ports + NODE_PORT_ROW_OFFSET) as u16) * 4).max(NODE_HEIGHT);
+        let connections = state.connections.clone();
+        let build_graph = |width: u16, height: u16| {
+            NodeGraph::new(
+                build_node_layouts(),
+                connections.clone(),
+                width as usize,
+                height as usize,
+            )
+        };
+        let mut graph = build_graph(content_width, content_height);
         graph.calculate();
+        let mut content_size = Size::new(content_width, content_height);
+        if state.display_nodes.is_empty() {
+            content_size = Size::new(area.width.max(NODE_WIDTH), area.height.max(NODE_HEIGHT));
+            graph = build_graph(content_size.width, content_size.height);
+            graph.calculate();
+        } else {
+            let bounds = graph.content_bounds();
+            let desired_width = bounds
+                .width
+                .saturating_add(GRAPH_WIDTH_PADDING)
+                .max(NODE_WIDTH);
+            let desired_height = bounds
+                .height
+                .saturating_add(GRAPH_HEIGHT_PADDING)
+                .max(NODE_HEIGHT);
+            if desired_width != content_size.width || desired_height != content_size.height {
+                content_size = Size::new(desired_width, desired_height);
+                graph = build_graph(content_size.width, content_size.height);
+                graph.calculate();
+            }
+        }
+        let mut scroll_view = ScrollView::new(content_size);
         let zones = graph.split(scroll_view.area());
 
         {
