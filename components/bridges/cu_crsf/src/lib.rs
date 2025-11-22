@@ -11,24 +11,24 @@ pub use spin::{Mutex, Once};
 #[cfg(feature = "std")]
 mod std_impl {
     pub use std::string::String;
-    
+
     pub const SERIAL_PATH_KEY: &str = "serial_path";
-    pub const SERIAL_BAUD_KEY: &str = "baudrate"; 
+    pub const SERIAL_BAUD_KEY: &str = "baudrate";
     pub const SERIAL_TIMEOUT_KEY: &str = "timeout_ms";
 }
 
-// no-std implementation  
+// no-std implementation
 #[cfg(not(feature = "std"))]
 mod no_std_impl {
     pub use alloc::format;
-    
+
     pub const SERIAL_INDEX_KEY: &str = "serial_port_index";
 }
 
-#[cfg(feature = "std")]
-use std_impl::*;
 #[cfg(not(feature = "std"))]
 use no_std_impl::*;
+#[cfg(feature = "std")]
+use std_impl::*;
 
 use crate::messages::{LinkStatisticsPayload, RcChannelsPayload};
 use crsf::{LinkStatistics, Packet, PacketAddress, PacketParser, RcChannels};

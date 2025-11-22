@@ -11,7 +11,7 @@ extern crate alloc;
 #[cfg(feature = "std")]
 mod std_impl {
     pub use std::{format, mem, string::String, vec::Vec};
-    
+
     pub const DEVICE_KEY: &str = "device";
     pub const BAUD_KEY: &str = "baudrate";
     pub const TIMEOUT_KEY: &str = "timeout_ms";
@@ -25,14 +25,14 @@ mod std_impl {
 mod no_std_impl {
     pub use alloc::{format, vec::Vec};
     pub use core::mem;
-    
+
     pub const SERIAL_INDEX_KEY: &str = "serial_port_index";
 }
 
-#[cfg(feature = "std")]
-use std_impl::*;
 #[cfg(not(feature = "std"))]
 use no_std_impl::*;
+#[cfg(feature = "std")]
+use std_impl::*;
 
 use bincode::de::Decoder;
 use bincode::enc::Encoder;

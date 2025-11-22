@@ -25,10 +25,10 @@ mod no_std_impl {
     };
 }
 
-#[cfg(feature = "std")]
-use std_impl::*;
 #[cfg(not(feature = "std"))]
 use no_std_impl::*;
+#[cfg(feature = "std")]
+use std_impl::*;
 
 use crc_any::CRCu8;
 use packed_struct::PackedStruct;
