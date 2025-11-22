@@ -1,10 +1,18 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+
 use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
+use core::marker::PhantomData;
 use cu29::prelude::*;
 use serde::Serialize;
-use std::marker::PhantomData;
+
+#[cfg(not(feature = "std"))]
+use alloc::format;
 
 /// Output of the PID controller.
 #[derive(Debug, Default, Clone, Encode, Decode, Serialize)]
