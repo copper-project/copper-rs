@@ -36,7 +36,4 @@
             msg: "cu_msp_bridge::MspResponseBatch",
         ),
     ],
-    monitor: (
-        type: "cu_consolemon::CuConsoleMon",
-    ),
 )
