@@ -6,6 +6,24 @@ use serde::{Deserialize, Serialize};
 use crate::commands::MspCommandCode;
 use crate::MspPacketDirection::{FromFlightController, ToFlightController};
 use crate::{MspPacket, MspPacketData};
+
+// std implementation
+#[cfg(feature = "std")]
+mod std_impl {
+    pub use std::{string::String, vec::Vec};
+}
+
+// no-std implementation
+#[cfg(not(feature = "std"))]
+mod no_std_impl {
+    pub use alloc::{borrow::ToOwned, string::String, vec::Vec};
+}
+
+#[cfg(not(feature = "std"))]
+use no_std_impl::*;
+#[cfg(feature = "std")]
+use std_impl::*;
+
 #[cfg(feature = "bincode")]
 use bincode::{Decode, Encode};
 use packed_struct::types::bits::ByteArray;

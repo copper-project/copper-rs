@@ -1,12 +1,38 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+
 pub mod commands;
 pub mod structs;
+
+// std implementation
+#[cfg(feature = "std")]
+mod std_impl {
+    pub use std::{
+        error::Error,
+        fmt::{self, Debug, Display, Formatter},
+        mem,
+    };
+}
+
+// no-std implementation
+#[cfg(not(feature = "std"))]
+mod no_std_impl {
+    pub use core::{
+        fmt::{self, Debug, Display, Formatter},
+        mem,
+    };
+}
+
+#[cfg(not(feature = "std"))]
+use no_std_impl::*;
+#[cfg(feature = "std")]
+use std_impl::*;
 
 use crc_any::CRCu8;
 use packed_struct::PackedStruct;
 use smallvec::SmallVec;
-use std::error::Error;
-use std::fmt::{Debug, Display, Formatter};
-use std::{fmt, mem};
 
 #[derive(Clone, PartialEq)]
 pub struct MspPacketData(pub(crate) SmallVec<[u8; 256]>);
@@ -85,6 +111,7 @@ impl Display for MspPacketParseError {
     }
 }
 
+#[cfg(feature = "std")]
 impl Error for MspPacketParseError {}
 
 /// Packet's desired destination
@@ -139,7 +166,6 @@ enum MspVersion {
     V2,
 }
 
-#[derive(Debug)]
 /// Parser that can find packets from a raw byte stream
 pub struct MspParser {
     state: MspParserState,
@@ -226,7 +252,7 @@ impl MspParser {
                 data.push(input);
 
                 if data.len() == 2 {
-                    let mut s = [0u8; size_of::<u16>()];
+                    let mut s = [0u8; core::mem::size_of::<u16>()];
                     s.copy_from_slice(data);
                     self.packet_cmd = u16::from_le_bytes(s);
 
@@ -241,7 +267,7 @@ impl MspParser {
                 data.push(input);
 
                 if data.len() == 2 {
-                    let mut s = [0u8; size_of::<u16>()];
+                    let mut s = [0u8; core::mem::size_of::<u16>()];
                     s.copy_from_slice(data);
                     self.packet_data_length_remaining = u16::from_le_bytes(s).into();
                     self.packet_crc_v2.digest(data);
@@ -413,7 +439,7 @@ impl MspPacket {
     }
 
     pub fn decode_as<T: PackedStruct>(&self) -> Result<T, packed_struct::PackingError> {
-        let expected_size = size_of::<T::ByteArray>();
+        let expected_size = core::mem::size_of::<T::ByteArray>();
 
         if self.data.0.len() < expected_size {
             return Err(packed_struct::PackingError::BufferSizeMismatch {
@@ -443,7 +469,10 @@ mod tests {
         let size = packet.packet_size_bytes();
         assert_eq!(8, size);
 
-        let mut output = vec![0; size];
+        #[cfg(feature = "std")]
+        let mut output = std::vec![0; size];
+        #[cfg(not(feature = "std"))]
+        let mut output = alloc::vec![0; size];
         packet.serialize(&mut output).unwrap();
         let expected = [b'$', b'M', b'<', 2, 2, 0xbe, 0xef, 81];
         assert_eq!(&expected, output.as_slice());
@@ -465,7 +494,10 @@ mod tests {
     fn test_roundtrip() {
         fn roundtrip(packet: &MspPacket) {
             let size = packet.packet_size_bytes();
-            let mut output = vec![0; size];
+            #[cfg(feature = "std")]
+            let mut output = std::vec![0; size];
+            #[cfg(not(feature = "std"))]
+            let mut output = alloc::vec![0; size];
 
             packet.serialize(&mut output).unwrap();
             let mut parser = MspParser::new();

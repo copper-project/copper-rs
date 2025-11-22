@@ -12,7 +12,7 @@
     bridges: [
         (
             id: "msp_bridge",
-            type: "cu_msp_bridge::CuMspBridge",
+            type: "cu_msp_bridge::CuMspBridgeStd",
             config: {
                 "device": "/dev/null",
                 "baudrate": 115200,

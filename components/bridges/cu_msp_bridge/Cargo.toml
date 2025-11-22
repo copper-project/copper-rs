@@ -11,9 +11,19 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-cu29 = { workspace = true }
-cu-msp-lib = { path = "../../libs/cu_msp_lib", version = "0.10.0" }
-serialport = "4.8.1"
+cu29 = { path = "../../../core/cu29", default-features = false }
+cu-msp-lib = { path = "../../libs/cu_msp_lib", version = "0.10.0", default-features = false, features = ["bincode"] }
+cu-embedded-registry = { path = "../../libs/cu_embedded_registry", version = "0.10.0", default-features = false }
+serialport = { version = "4.8.1", optional = true }
+embedded-io = { version = "0.6.1", default-features = false }
+embedded-io-adapters = { version = "0.6.1", optional = true }
 smallvec = { workspace = true }
-bincode = { workspace = true }
+bincode = { workspace = true, features = ["alloc"] }
 serde = { workspace = true }
+spin = { workspace = true }
+
+[features]
+default = ["std"]
+std = ["cu29/std", "cu-msp-lib/std", "cu-embedded-registry/std", "embedded-io/std", "dep:embedded-io-adapters", "dep:serialport", "embedded-io-adapters/std"]
+defmt = ["embedded-io/defmt-03", "cu29/defmt"]
+alloc = ["embedded-io/alloc"]

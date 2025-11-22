@@ -20,8 +20,8 @@ rp235x-hal = { version = "0.3", features = ["critical-section-impl"] }
 pio = "=0.2.1"  # Needed
 pio-proc = "=0.2.1"
 cortex-m = "0.7.7"
-serde = { workspace = true, default-features = false, features = ["derive"] }
-bincode = { workspace = true, default-features = false, features = ["alloc"] }
+serde = { workspace = true, features = ["derive"] }
+bincode = { workspace = true, features = ["alloc"] }
 spin = { workspace = true }
 defmt = "1.0.1"
 

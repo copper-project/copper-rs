@@ -1,0 +1,22 @@
+[package]
+name = "cu-embedded-registry"
+description = "A shared embedded device registry for Copper components to register and retrieve devices like serial ports, I2C, SPI etc in no-std environments."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+cu29 = { path = "../../../core/cu29", default-features = false }
+spin = { workspace = true }
+embedded-io = { version = "0.6.1", default-features = false }
+
+[features]
+default = ["std"]
+std = ["cu29/std", "embedded-io/std"]
+defmt = ["embedded-io/defmt-03"]
+alloc = ["embedded-io/alloc"]
