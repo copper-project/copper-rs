@@ -1,0 +1,42 @@
+(
+    tasks: [
+        (
+            id: "msp_requester",
+            type: "tasks::LoopbackSource",
+        ),
+        (
+            id: "msp_verifier",
+            type: "tasks::LoopbackSink",
+        ),
+    ],
+    bridges: [
+        (
+            id: "msp_bridge",
+            type: "cu_msp_bridge::CuMspBridge",
+            config: {
+                "device": "/dev/null",
+                "baudrate": 115200,
+                "timeout_ms": 20,
+            },
+            channels: [
+                Tx ( id: "requests", route: "msp_bridge/requests" ),
+                Rx ( id: "responses", route: "msp_bridge/responses" ),
+            ],
+        ),
+    ],
+    cnx: [
+        (
+            src: "msp_requester",
+            dst: "msp_bridge/requests",
+            msg: "cu_msp_bridge::MspRequestBatch",
+        ),
+        (
+            src: "msp_bridge/responses",
+            dst: "msp_verifier",
+            msg: "cu_msp_bridge::MspResponseBatch",
+        ),
+    ],
+    monitor: (
+        type: "cu_consolemon::CuConsoleMon",
+    ),
+)
