@@ -19,8 +19,8 @@
                 "timeout_ms": 20,
             },
             channels: [
-                Tx ( id: "requests", route: "msp_bridge/requests" ),
-                Rx ( id: "responses", route: "msp_bridge/responses" ),
+                Tx ( id: "requests" ),
+                Rx ( id: "responses" ),
             ],
         ),
     ],
