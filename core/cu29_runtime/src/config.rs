@@ -11,6 +11,8 @@ use cu29_traits::{CuError, CuResult};
 use hashbrown::HashMap;
 use petgraph::stable_graph::{EdgeIndex, NodeIndex, StableDiGraph};
 use petgraph::visit::EdgeRef;
+#[cfg(feature = "std")]
+use petgraph::visit::IntoEdgeReferences;
 pub use petgraph::Direction::Incoming;
 pub use petgraph::Direction::Outgoing;
 use ron::extensions::Extensions;
@@ -1319,71 +1321,38 @@ impl CuConfig {
         mission_id: Option<&str>,
     ) -> CuResult<()> {
         writeln!(output, "digraph G {{").unwrap();
+        writeln!(output, "    graph [rankdir=LR, nodesep=0.8, ranksep=1.2];").unwrap();
+        writeln!(output, "    node [shape=plain, fontname=\"Noto Sans\"];").unwrap();
+        writeln!(output, "    edge [fontname=\"Noto Sans\"];").unwrap();
 
-        let graph = self.get_graph(mission_id)?;
-
-        for index in graph.node_indices() {
-            let node = &graph[index];
-            let config_str = match &node.config {
-                Some(config) => {
-                    let config_str = config
-                        .0
-                        .iter()
-                        .map(|(k, v)| format!("<B>{k}</B> = {v}<BR ALIGN=\"LEFT\"/>"))
-                        .collect::<Vec<String>>()
-                        .join("\n");
-                    format!("____________<BR/><BR ALIGN=\"LEFT\"/>{config_str}")
-                }
-                None => String::new(),
-            };
-            writeln!(output, "{} [", index.index()).unwrap();
-            writeln!(output, "shape=box,").unwrap();
-            writeln!(output, "style=\"rounded, filled\",").unwrap();
-            writeln!(output, "fontname=\"Noto Sans\"").unwrap();
-
-            let is_src = graph
-                .get_dst_edges(index.index() as NodeId)
-                .unwrap_or_default()
-                .is_empty();
-            let is_sink = graph
-                .get_src_edges(index.index() as NodeId)
-                .unwrap_or_default()
-                .is_empty();
-            if is_src {
-                writeln!(output, "fillcolor=lightgreen,").unwrap();
-            } else if is_sink {
-                writeln!(output, "fillcolor=lightblue,").unwrap();
-            } else {
-                writeln!(output, "fillcolor=lightgrey,").unwrap();
+        let sections = match (&self.graphs, mission_id) {
+            (Simple(graph), _) => vec![RenderSection { label: None, graph }],
+            (Missions(graphs), Some(id)) => {
+                let graph = graphs
+                    .get(id)
+                    .ok_or_else(|| CuError::from(format!("Mission {id} not found")))?;
+                vec![RenderSection {
+                    label: Some(id.to_string()),
+                    graph,
+                }]
             }
-            writeln!(output, "color=grey,").unwrap();
+            (Missions(graphs), None) => {
+                let mut missions: Vec<_> = graphs.iter().collect();
+                missions.sort_by(|a, b| a.0.cmp(b.0));
+                missions
+                    .into_iter()
+                    .map(|(label, graph)| RenderSection {
+                        label: Some(label.clone()),
+                        graph,
+                    })
+                    .collect()
+            }
+        };
 
-            writeln!(output, "labeljust=l,").unwrap();
-            writeln!(
-                output,
-                "label=< <FONT COLOR=\"red\"><B>{}</B></FONT> <FONT COLOR=\"dimgray\">[{}]</FONT><BR ALIGN=\"LEFT\"/>{} >",
-                node.id,
-                node.get_type(),
-                config_str
-            )
-                .unwrap();
-
-            writeln!(output, "];").unwrap();
+        for section in sections {
+            self.render_section(output, section.graph, section.label.as_deref())?;
         }
-        for edge in graph.0.edge_indices() {
-            let (src, dst) = graph.0.edge_endpoints(edge).unwrap();
 
-            let cnx = &graph.0[edge];
-            let msg = encode_text(&cnx.msg);
-            writeln!(
-                output,
-                "{} -> {} [label=< <B><FONT COLOR=\"gray\">{}</FONT></B> >];",
-                src.index(),
-                dst.index(),
-                msg
-            )
-            .unwrap();
-        }
         writeln!(output, "}}").unwrap();
         Ok(())
     }
@@ -1429,6 +1398,384 @@ impl CuConfig {
         }
         Ok(())
     }
+}
+
+#[cfg(feature = "std")]
+struct PortLookup {
+    inputs: HashMap<String, String>,
+    outputs: HashMap<String, String>,
+    default_input: Option<String>,
+    default_output: Option<String>,
+}
+
+#[cfg(feature = "std")]
+#[derive(Clone)]
+struct RenderNode {
+    id: String,
+    type_name: String,
+    flavor: Flavor,
+    inputs: Vec<String>,
+    outputs: Vec<String>,
+}
+
+#[cfg(feature = "std")]
+#[derive(Clone)]
+struct RenderConnection {
+    src: String,
+    src_port: Option<String>,
+    dst: String,
+    dst_port: Option<String>,
+    msg: String,
+}
+
+#[cfg(feature = "std")]
+struct RenderTopology {
+    nodes: Vec<RenderNode>,
+    connections: Vec<RenderConnection>,
+}
+
+#[cfg(feature = "std")]
+struct RenderSection<'a> {
+    label: Option<String>,
+    graph: &'a CuGraph,
+}
+
+#[cfg(feature = "std")]
+impl CuConfig {
+    fn render_section(
+        &self,
+        output: &mut dyn std::io::Write,
+        graph: &CuGraph,
+        label: Option<&str>,
+    ) -> CuResult<()> {
+        use std::fmt::Write as FmtWrite;
+
+        let mut topology = build_render_topology(graph, &self.bridges);
+        topology.nodes.sort_by(|a, b| a.id.cmp(&b.id));
+        topology.connections.sort_by(|a, b| {
+            a.src
+                .cmp(&b.src)
+                .then(a.dst.cmp(&b.dst))
+                .then(a.msg.cmp(&b.msg))
+        });
+
+        let cluster_id = label.map(|lbl| format!("cluster_{}", sanitize_identifier(lbl)));
+        if let Some(ref cluster_id) = cluster_id {
+            writeln!(output, "    subgraph \"{cluster_id}\" {{").unwrap();
+            writeln!(
+                output,
+                "        label=<<B>Mission: {}</B>>;",
+                encode_text(label.unwrap())
+            )
+            .unwrap();
+            writeln!(
+                output,
+                "        labelloc=t; labeljust=l; color=\"#bbbbbb\"; style=\"rounded\"; margin=20;"
+            )
+            .unwrap();
+        }
+        let indent = if cluster_id.is_some() {
+            "        "
+        } else {
+            "    "
+        };
+        let node_prefix = label
+            .map(|lbl| format!("{}__", sanitize_identifier(lbl)))
+            .unwrap_or_default();
+
+        let mut port_lookup: HashMap<String, PortLookup> = HashMap::new();
+        let mut id_lookup: HashMap<String, String> = HashMap::new();
+
+        for node in &topology.nodes {
+            let node_idx = graph
+                .get_node_id_by_name(node.id.as_str())
+                .ok_or_else(|| CuError::from(format!("Node '{}' missing from graph", node.id)))?;
+            let node_weight = graph
+                .get_node(node_idx)
+                .ok_or_else(|| CuError::from(format!("Node '{}' missing weight", node.id)))?;
+
+            let is_src = graph.get_dst_edges(node_idx).unwrap_or_default().is_empty();
+            let is_sink = graph.get_src_edges(node_idx).unwrap_or_default().is_empty();
+
+            let fillcolor = match node.flavor {
+                Flavor::Bridge => "#faedcd",
+                Flavor::Task if is_src => "#ddefc7",
+                Flavor::Task if is_sink => "#cce0ff",
+                _ => "#f2f2f2",
+            };
+
+            let port_base = format!("{}{}", node_prefix, sanitize_identifier(&node.id));
+            let (inputs_table, input_map, default_input) =
+                build_port_table("Inputs", &node.inputs, &port_base, "in");
+            let (outputs_table, output_map, default_output) =
+                build_port_table("Outputs", &node.outputs, &port_base, "out");
+            let config_html = node_weight.config.as_ref().and_then(build_config_table);
+
+            let mut label_html = String::new();
+            write!(
+                label_html,
+                "<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\" CELLPADDING=\"6\" COLOR=\"gray\" BGCOLOR=\"white\">"
+            )
+            .unwrap();
+            write!(
+                label_html,
+                "<TR><TD COLSPAN=\"2\" ALIGN=\"LEFT\" BGCOLOR=\"{fillcolor}\"><FONT POINT-SIZE=\"12\"><B>{}</B></FONT><BR/><FONT COLOR=\"dimgray\">[{}]</FONT></TD></TR>",
+                encode_text(&node.id),
+                encode_text(&node.type_name)
+            )
+            .unwrap();
+            write!(
+                label_html,
+                "<TR><TD ALIGN=\"LEFT\" VALIGN=\"TOP\">{inputs_table}</TD><TD ALIGN=\"LEFT\" VALIGN=\"TOP\">{outputs_table}</TD></TR>"
+            )
+            .unwrap();
+
+            if let Some(config_html) = config_html {
+                write!(
+                    label_html,
+                    "<TR><TD COLSPAN=\"2\" ALIGN=\"LEFT\">{config_html}</TD></TR>"
+                )
+                .unwrap();
+            }
+
+            label_html.push_str("</TABLE>");
+
+            let identifier_raw = if node_prefix.is_empty() {
+                node.id.clone()
+            } else {
+                format!("{node_prefix}{}", node.id)
+            };
+            let identifier = escape_dot_id(&identifier_raw);
+            writeln!(output, "{indent}\"{identifier}\" [label=<{label_html}>];").unwrap();
+
+            id_lookup.insert(node.id.clone(), identifier);
+            port_lookup.insert(
+                node.id.clone(),
+                PortLookup {
+                    inputs: input_map,
+                    outputs: output_map,
+                    default_input,
+                    default_output,
+                },
+            );
+        }
+
+        for cnx in &topology.connections {
+            let src_id = id_lookup
+                .get(&cnx.src)
+                .ok_or_else(|| CuError::from(format!("Unknown node '{}'", cnx.src)))?;
+            let dst_id = id_lookup
+                .get(&cnx.dst)
+                .ok_or_else(|| CuError::from(format!("Unknown node '{}'", cnx.dst)))?;
+            let src_suffix = port_lookup
+                .get(&cnx.src)
+                .and_then(|lookup| lookup.resolve_output(cnx.src_port.as_deref()))
+                .map(|port| format!(":\"{port}\":e"))
+                .unwrap_or_default();
+            let dst_suffix = port_lookup
+                .get(&cnx.dst)
+                .and_then(|lookup| lookup.resolve_input(cnx.dst_port.as_deref()))
+                .map(|port| format!(":\"{port}\":w"))
+                .unwrap_or_default();
+            let msg = encode_text(&cnx.msg);
+            writeln!(
+                output,
+                "{indent}\"{src_id}\"{src_suffix} -> \"{dst_id}\"{dst_suffix} [label=< <B><FONT COLOR=\"gray\">{msg}</FONT></B> >];"
+            )
+            .unwrap();
+        }
+
+        if cluster_id.is_some() {
+            writeln!(output, "    }}").unwrap();
+        }
+
+        Ok(())
+    }
+}
+
+#[cfg(feature = "std")]
+fn build_render_topology(graph: &CuGraph, bridges: &[BridgeConfig]) -> RenderTopology {
+    let mut bridge_lookup = HashMap::new();
+    for bridge in bridges {
+        bridge_lookup.insert(bridge.id.as_str(), bridge);
+    }
+
+    let mut nodes: HashMap<String, RenderNode> = HashMap::new();
+    for (_, node) in graph.get_all_nodes() {
+        let node_id = node.get_id();
+        let mut inputs = Vec::new();
+        let mut outputs = Vec::new();
+        if node.get_flavor() == Flavor::Bridge {
+            if let Some(bridge) = bridge_lookup.get(node_id.as_str()) {
+                for channel in &bridge.channels {
+                    match channel {
+                        // Rx brings data from the bridge into the graph, so treat it as an output.
+                        BridgeChannelConfigRepresentation::Rx { id, .. } => {
+                            outputs.push(id.clone())
+                        }
+                        // Tx consumes data from the graph heading into the bridge, so show it on the input side.
+                        BridgeChannelConfigRepresentation::Tx { id, .. } => inputs.push(id.clone()),
+                    }
+                }
+            }
+        }
+
+        nodes.insert(
+            node_id.clone(),
+            RenderNode {
+                id: node_id,
+                type_name: node.get_type().to_string(),
+                flavor: node.get_flavor(),
+                inputs,
+                outputs,
+            },
+        );
+    }
+
+    let mut connections = Vec::new();
+    for edge in graph.0.edge_references() {
+        let cnx = edge.weight();
+        if let Some(node) = nodes.get_mut(&cnx.src) {
+            if node.flavor == Flavor::Task && cnx.src_channel.is_none() && node.outputs.is_empty() {
+                node.outputs.push("out0".to_string());
+            }
+        }
+        if let Some(node) = nodes.get_mut(&cnx.dst) {
+            if node.flavor == Flavor::Task && cnx.dst_channel.is_none() {
+                let next = format!("in{}", node.inputs.len());
+                node.inputs.push(next);
+            }
+        }
+
+        connections.push(RenderConnection {
+            src: cnx.src.clone(),
+            src_port: cnx.src_channel.clone(),
+            dst: cnx.dst.clone(),
+            dst_port: cnx.dst_channel.clone(),
+            msg: cnx.msg.clone(),
+        });
+    }
+
+    RenderTopology {
+        nodes: nodes.into_values().collect(),
+        connections,
+    }
+}
+
+#[cfg(feature = "std")]
+impl PortLookup {
+    fn resolve_input(&self, name: Option<&str>) -> Option<&str> {
+        if let Some(name) = name {
+            if let Some(port) = self.inputs.get(name) {
+                return Some(port.as_str());
+            }
+        }
+        self.default_input.as_deref()
+    }
+
+    fn resolve_output(&self, name: Option<&str>) -> Option<&str> {
+        if let Some(name) = name {
+            if let Some(port) = self.outputs.get(name) {
+                return Some(port.as_str());
+            }
+        }
+        self.default_output.as_deref()
+    }
+}
+
+#[cfg(feature = "std")]
+fn build_port_table(
+    title: &str,
+    names: &[String],
+    base_id: &str,
+    prefix: &str,
+) -> (String, HashMap<String, String>, Option<String>) {
+    use std::fmt::Write as FmtWrite;
+
+    let mut html = String::new();
+    write!(
+        html,
+        "<TABLE BORDER=\"0\" CELLBORDER=\"0\" CELLSPACING=\"0\" CELLPADDING=\"1\">"
+    )
+    .unwrap();
+    write!(
+        html,
+        "<TR><TD ALIGN=\"LEFT\"><FONT COLOR=\"dimgray\">{}</FONT></TD></TR>",
+        encode_text(title)
+    )
+    .unwrap();
+
+    let mut lookup = HashMap::new();
+    let mut default_port = None;
+
+    if names.is_empty() {
+        html.push_str("<TR><TD ALIGN=\"LEFT\"><FONT COLOR=\"lightgray\">&mdash;</FONT></TD></TR>");
+    } else {
+        for (idx, name) in names.iter().enumerate() {
+            let port_id = format!("{base_id}_{prefix}_{idx}");
+            write!(
+                html,
+                "<TR><TD PORT=\"{port_id}\" ALIGN=\"LEFT\">{}</TD></TR>",
+                encode_text(name)
+            )
+            .unwrap();
+            lookup.insert(name.clone(), port_id.clone());
+            if idx == 0 {
+                default_port = Some(port_id);
+            }
+        }
+    }
+
+    html.push_str("</TABLE>");
+    (html, lookup, default_port)
+}
+
+#[cfg(feature = "std")]
+fn build_config_table(config: &ComponentConfig) -> Option<String> {
+    use std::fmt::Write as FmtWrite;
+
+    if config.0.is_empty() {
+        return None;
+    }
+
+    let mut entries: Vec<_> = config.0.iter().collect();
+    entries.sort_by(|a, b| a.0.cmp(b.0));
+
+    let mut html = String::new();
+    html.push_str("<TABLE BORDER=\"0\" CELLBORDER=\"0\" CELLSPACING=\"0\" CELLPADDING=\"1\">");
+    for (key, value) in entries {
+        let value_txt = format!("{value}");
+        write!(
+            html,
+            "<TR><TD ALIGN=\"LEFT\"><FONT COLOR=\"dimgray\">{}</FONT> = {}</TD></TR>",
+            encode_text(key),
+            encode_text(&value_txt)
+        )
+        .unwrap();
+    }
+    html.push_str("</TABLE>");
+    Some(html)
+}
+
+#[cfg(feature = "std")]
+fn sanitize_identifier(value: &str) -> String {
+    value
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect()
+}
+
+#[cfg(feature = "std")]
+fn escape_dot_id(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for ch in value.chars() {
+        match ch {
+            '"' => escaped.push_str("\\\""),
+            '\\' => escaped.push_str("\\\\"),
+            _ => escaped.push(ch),
+        }
+    }
+    escaped
 }
 
 impl LoggingConfig {
