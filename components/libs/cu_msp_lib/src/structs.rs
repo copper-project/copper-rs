@@ -1144,7 +1144,9 @@ impl MspResponse {
     }
 
     pub fn to_bytes(&self) -> Result<MspPacketData, PackingError> {
-        fn pack_into_packet_data<T: PackedStruct>(value: &T) -> Result<MspPacketData, PackingError> {
+        fn pack_into_packet_data<T: PackedStruct>(
+            value: &T,
+        ) -> Result<MspPacketData, PackingError> {
             let packed = value.pack()?;
             Ok(MspPacketData(SmallVec::from_slice(packed.as_bytes_slice())))
         }
