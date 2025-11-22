@@ -10,7 +10,15 @@ categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
+[features]
+default = ["std"]
+std = [
+    "cu29/std",
+    "bincode/std",
+    "serde/std",
+]
+
 [dependencies]
-cu29 = { workspace = true }
+cu29 = { path = "../../../core/cu29", version = "0.10.0", default-features = false }
 bincode = { workspace = true }
 serde = { workspace = true }
