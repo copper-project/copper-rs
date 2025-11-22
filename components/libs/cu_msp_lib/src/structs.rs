@@ -8,7 +8,8 @@ use crate::MspPacketDirection::{FromFlightController, ToFlightController};
 use crate::{MspPacket, MspPacketData};
 #[cfg(feature = "bincode")]
 use bincode::{Decode, Encode};
-use packed_struct::{PackedStruct, PackedStructSlice, PackingError, PrimitiveEnum};
+use packed_struct::types::bits::ByteArray;
+use packed_struct::{PackedStruct, PackingError, PrimitiveEnum};
 use smallvec::SmallVec;
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
@@ -1143,64 +1144,63 @@ impl MspResponse {
     }
 
     pub fn to_bytes(&self) -> Result<MspPacketData, PackingError> {
-        let mut result = MspPacketData::new();
-        match self {
-            MspResponse::MspApiVersion(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspFlightControllerVariant(data) => {
-                data.pack_to_slice(result.as_mut_slice())?
-            }
-            MspResponse::MspStatus(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspStatusEx(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspBfConfig(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspRawImu(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspDataFlashSummaryReply(data) => {
-                data.pack_to_slice(result.as_mut_slice())?
-            }
-            MspResponse::MspDataFlashReply(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspDataFlashRead(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspAccTrim(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspIdent(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspMisc(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspAttitude(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspAltitude(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspBatteryConfig(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspAnalog(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspRssiConfig(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspVoltageMeter(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspCurrentMeter(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspBatteryState(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspRcTuning(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspRxConfig(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspRcChannelValue(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspRcMappedChannel(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspFeatures(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspMotor(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspMotor3DConfig(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspMotorConfig(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspRcDeadband(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspSensorAlignment(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspAdvancedConfig(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspFilterConfig(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspPidAdvanced(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspSensorConfig(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspServos(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspMixerConfig(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspModeRange(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspSetModeRange(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspOsdConfig(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspSetGetOsdConfig(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspSetOsdLayout(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspSetOsdLayoutItem(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspOsdLayouts(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspSerialSetting(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspSettingInfoRequest(data) => {
-                data.pack_to_slice(result.as_mut_slice())?
-            }
-            MspResponse::MspSettingInfo(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::MspRc(data) => data.pack_to_slice(result.as_mut_slice())?,
-            MspResponse::Unknown => return Err(PackingError::InvalidValue),
+        fn pack_into_packet_data<T: PackedStruct>(
+            value: &T,
+        ) -> Result<MspPacketData, PackingError> {
+            let packed = value.pack()?;
+            Ok(MspPacketData(SmallVec::from_slice(packed.as_bytes_slice())))
         }
-        Ok(result)
+
+        match self {
+            MspResponse::MspApiVersion(data) => pack_into_packet_data(data),
+            MspResponse::MspFlightControllerVariant(data) => pack_into_packet_data(data),
+            MspResponse::MspStatus(data) => pack_into_packet_data(data),
+            MspResponse::MspStatusEx(data) => pack_into_packet_data(data),
+            MspResponse::MspBfConfig(data) => pack_into_packet_data(data),
+            MspResponse::MspRawImu(data) => pack_into_packet_data(data),
+            MspResponse::MspDataFlashSummaryReply(data) => pack_into_packet_data(data),
+            MspResponse::MspDataFlashReply(data) => pack_into_packet_data(data),
+            MspResponse::MspDataFlashRead(data) => pack_into_packet_data(data),
+            MspResponse::MspAccTrim(data) => pack_into_packet_data(data),
+            MspResponse::MspIdent(data) => pack_into_packet_data(data),
+            MspResponse::MspMisc(data) => pack_into_packet_data(data),
+            MspResponse::MspAttitude(data) => pack_into_packet_data(data),
+            MspResponse::MspAltitude(data) => pack_into_packet_data(data),
+            MspResponse::MspBatteryConfig(data) => pack_into_packet_data(data),
+            MspResponse::MspAnalog(data) => pack_into_packet_data(data),
+            MspResponse::MspRssiConfig(data) => pack_into_packet_data(data),
+            MspResponse::MspVoltageMeter(data) => pack_into_packet_data(data),
+            MspResponse::MspCurrentMeter(data) => pack_into_packet_data(data),
+            MspResponse::MspBatteryState(data) => pack_into_packet_data(data),
+            MspResponse::MspRcTuning(data) => pack_into_packet_data(data),
+            MspResponse::MspRxConfig(data) => pack_into_packet_data(data),
+            MspResponse::MspRcChannelValue(data) => pack_into_packet_data(data),
+            MspResponse::MspRcMappedChannel(data) => pack_into_packet_data(data),
+            MspResponse::MspFeatures(data) => pack_into_packet_data(data),
+            MspResponse::MspMotor(data) => pack_into_packet_data(data),
+            MspResponse::MspMotor3DConfig(data) => pack_into_packet_data(data),
+            MspResponse::MspMotorConfig(data) => pack_into_packet_data(data),
+            MspResponse::MspRcDeadband(data) => pack_into_packet_data(data),
+            MspResponse::MspSensorAlignment(data) => pack_into_packet_data(data),
+            MspResponse::MspAdvancedConfig(data) => pack_into_packet_data(data),
+            MspResponse::MspFilterConfig(data) => pack_into_packet_data(data),
+            MspResponse::MspPidAdvanced(data) => pack_into_packet_data(data),
+            MspResponse::MspSensorConfig(data) => pack_into_packet_data(data),
+            MspResponse::MspServos(data) => pack_into_packet_data(data),
+            MspResponse::MspMixerConfig(data) => pack_into_packet_data(data),
+            MspResponse::MspModeRange(data) => pack_into_packet_data(data),
+            MspResponse::MspSetModeRange(data) => pack_into_packet_data(data),
+            MspResponse::MspOsdConfig(data) => pack_into_packet_data(data),
+            MspResponse::MspSetGetOsdConfig(data) => pack_into_packet_data(data),
+            MspResponse::MspSetOsdLayout(data) => pack_into_packet_data(data),
+            MspResponse::MspSetOsdLayoutItem(data) => pack_into_packet_data(data),
+            MspResponse::MspOsdLayouts(data) => pack_into_packet_data(data),
+            MspResponse::MspSerialSetting(data) => pack_into_packet_data(data),
+            MspResponse::MspSettingInfoRequest(data) => pack_into_packet_data(data),
+            MspResponse::MspSettingInfo(data) => pack_into_packet_data(data),
+            MspResponse::MspRc(data) => pack_into_packet_data(data),
+            MspResponse::Unknown => Err(PackingError::InvalidValue),
+        }
     }
 }
 
