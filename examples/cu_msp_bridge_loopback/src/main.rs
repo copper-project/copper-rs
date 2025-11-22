@@ -4,6 +4,7 @@ use cu_msp_bridge::{MspRequestBatch, MspResponseBatch};
 use cu_msp_lib::commands::MspCommandCode;
 use cu_msp_lib::structs::{MspRc, MspResponse};
 use cu_msp_lib::{MspPacket, MspParser};
+use ctrlc;
 use nix::errno::Errno;
 use nix::fcntl::{fcntl, FcntlArg, OFlag};
 use nix::pty::openpty;
@@ -44,6 +45,7 @@ fn drive() -> CuResult<()> {
     let mut config = read_configuration(&config_path_str)?;
     let emulator = FlightControllerEmulator::new(&logs_dir)?;
     emulator.configure_bridge(&mut config)?;
+    install_ctrlc_cleanup(emulator.symlink_path.clone())?;
 
     let mut app = CuMspBridgeLoopbackAppBuilder::new()
         .with_context(&ctx)
@@ -67,6 +69,7 @@ fn drive() -> CuResult<()> {
         ));
     }
 
+    cleanup_symlink(&emulator.symlink_path);
     drop(emulator);
     Ok(())
 }
@@ -162,9 +165,7 @@ impl Drop for FlightControllerEmulator {
         if let Some(handle) = self.worker.take() {
             let _ = handle.join();
         }
-        if self.symlink_path.exists() {
-            let _ = fs::remove_file(&self.symlink_path);
-        }
+        cleanup_symlink(&self.symlink_path);
     }
 }
 
@@ -234,6 +235,20 @@ fn write_rc_response(file: &mut File) -> std::io::Result<()> {
     packet.serialize(&mut data).expect("serialize MSP response");
     file.write_all(&data)?;
     file.flush()
+}
+
+fn install_ctrlc_cleanup(symlink_path: PathBuf) -> CuResult<()> {
+    ctrlc::set_handler(move || {
+        cleanup_symlink(&symlink_path);
+        std::process::exit(130);
+    })
+    .map_err(|err| CuError::new_with_cause("failed to install Ctrl-C handler", err))
+}
+
+fn cleanup_symlink(path: &Path) {
+    if path.exists() {
+        let _ = fs::remove_file(path);
+    }
 }
 
 mod tasks {
