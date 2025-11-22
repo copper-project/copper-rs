@@ -1,4 +1,3 @@
-use ctrlc;
 use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
 use cu_msp_bridge::{MspRequestBatch, MspResponseBatch};
