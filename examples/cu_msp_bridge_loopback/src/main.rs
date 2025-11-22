@@ -1,17 +1,17 @@
+use ctrlc;
 use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
 use cu_msp_bridge::{MspRequestBatch, MspResponseBatch};
 use cu_msp_lib::commands::MspCommandCode;
 use cu_msp_lib::structs::{MspRc, MspResponse};
 use cu_msp_lib::{MspPacket, MspParser};
-use ctrlc;
 use nix::errno::Errno;
 use nix::fcntl::{fcntl, FcntlArg, OFlag};
 use nix::pty::openpty;
 use std::fs::{self, File};
 use std::io::{Read, Write};
-use std::os::unix::io::AsRawFd;
 use std::os::unix::fs::symlink;
+use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -32,7 +32,10 @@ fn drive() -> CuResult<()> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let logs_dir = manifest_dir.join("logs");
     fs::create_dir_all(&logs_dir).map_err(|err| {
-        CuError::new_with_cause("failed to create logs directory for MSP loopback example", err)
+        CuError::new_with_cause(
+            "failed to create logs directory for MSP loopback example",
+            err,
+        )
     })?;
     let logger_path = logs_dir.join("cu_msp_bridge_loopback.copper");
     let ctx = basic_copper_setup(&logger_path, Some(16 * 1024 * 1024), true, None)?;
@@ -172,7 +175,10 @@ impl Drop for FlightControllerEmulator {
 fn flight_controller_worker(running: Arc<AtomicBool>, master_fd: std::os::unix::io::OwnedFd) {
     let mut file = File::from(master_fd);
     if let Err(err) = set_nonblocking(&file) {
-        error!("MSP emulator failed to mark PTY non-blocking: {}", err.to_string());
+        error!(
+            "MSP emulator failed to mark PTY non-blocking: {}",
+            err.to_string()
+        );
         return;
     }
 
@@ -311,7 +317,10 @@ mod tasks {
 
         fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
             if let Some(batch) = input.payload() {
-                debug!("LoopbackSink: received MSP response batch with {} responses", batch.0.len());
+                debug!(
+                    "LoopbackSink: received MSP response batch with {} responses",
+                    batch.0.len()
+                );
                 if let Some(MspResponse::MspRc(rc)) = batch.0.first() {
                     debug!("Received RC response: {}", rc);
                     if rc.channels[0] == 1234 {
