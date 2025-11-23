@@ -217,12 +217,11 @@ fn flight_controller_worker(running: Arc<AtomicBool>, master_fd: std::os::unix::
 }
 
 fn set_nonblocking(file: &File) -> CuResult<()> {
-    let fd = file.as_raw_fd();
     let flags = OFlag::from_bits_truncate(
-        fcntl(fd, FcntlArg::F_GETFL)
+        fcntl(file, FcntlArg::F_GETFL)
             .map_err(|err| CuError::new_with_cause("failed to read PTY flags", err))?,
     );
-    fcntl(fd, FcntlArg::F_SETFL(flags | OFlag::O_NONBLOCK))
+    fcntl(file, FcntlArg::F_SETFL(flags | OFlag::O_NONBLOCK))
         .map_err(|err| CuError::new_with_cause("failed to set PTY non-blocking mode", err))?;
     Ok(())
 }
