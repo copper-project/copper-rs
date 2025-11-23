@@ -17,6 +17,7 @@ members = [
     "components/bridges/cu_crsf",
     "components/bridges/cu_msp_bridge",
     "components/libs/cu_msp_lib",
+    "components/libs/cu_embedded_registry",
     "components/libs/cu_transform",
     "components/monitors/cu_consolemon",
     "components/payloads/cu_ros_payloads",

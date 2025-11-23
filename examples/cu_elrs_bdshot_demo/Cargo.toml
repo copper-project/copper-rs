@@ -21,6 +21,7 @@ cu29 = { path = "../../core/cu29", default-features = false, features = ["defmt"
 cu-bdshot = { path = "../../components/bridges/cu_bdshot" }
 cu-crsf = { path = "../../components/bridges/cu_crsf", default-features = false, features = ["defmt", "alloc"] }
 cu-sdlogger = { path = "../../components/libs/cu_sdlogger" }
+cu-embedded-registry = { path = "../../components/libs/cu_embedded_registry", default-features = false, features = ["defmt"] }
 cortex-m-rt = "0.7"
 defmt-rtt = "1.1"
 embedded-hal = "1.0"
@@ -29,7 +30,7 @@ embedded-sdmmc = { version = "0.9", features = ["defmt-log"], default-features =
 panic-probe = { version = "1.0", features = ["defmt", "print-defmt"] }
 rp235x-hal = { version = "0.3", features = ["rt", "critical-section-impl"] }
 spin = { workspace = true }
-bincode = { workspace = true, default-features = false, features = ["alloc", "derive"] }
+bincode = { workspace = true, features = ["alloc", "derive"] }
 serde = { workspace = true }
 
 [features]

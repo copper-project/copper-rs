@@ -7,93 +7,39 @@ pub mod messages;
 
 pub use spin::{Mutex, Once};
 
-use crate::messages::{LinkStatisticsPayload, RcChannelsPayload};
+// std implementation
+#[cfg(feature = "std")]
+mod std_impl {
+    pub use std::string::String;
+
+    pub const SERIAL_PATH_KEY: &str = "serial_path";
+    pub const SERIAL_BAUD_KEY: &str = "baudrate";
+    pub const SERIAL_TIMEOUT_KEY: &str = "timeout_ms";
+}
+
+// no-std implementation
 #[cfg(not(feature = "std"))]
-use alloc::format;
+mod no_std_impl {
+    pub use alloc::format;
+
+    pub const SERIAL_INDEX_KEY: &str = "serial_port_index";
+}
+
+#[cfg(not(feature = "std"))]
+use no_std_impl::*;
+#[cfg(feature = "std")]
+use std_impl::*;
+
+use crate::messages::{LinkStatisticsPayload, RcChannelsPayload};
 use crsf::{LinkStatistics, Packet, PacketAddress, PacketParser, RcChannels};
 use cu29::cubridge::{
     BridgeChannel, BridgeChannelConfig, BridgeChannelInfo, BridgeChannelSet, CuBridge,
 };
-use cu29::prelude::debug;
 use cu29::prelude::*;
 use embedded_io::{Read, Write};
-#[cfg(feature = "std")]
-use std::string::String;
 
 const READ_BUFFER_SIZE: usize = 1024;
 const PARSER_BUFFER_SIZE: usize = 1024;
-
-#[cfg(feature = "std")]
-const SERIAL_PATH_KEY: &str = "serial_path";
-#[cfg(feature = "std")]
-const SERIAL_BAUD_KEY: &str = "baudrate";
-#[cfg(feature = "std")]
-const SERIAL_TIMEOUT_KEY: &str = "timeout_ms";
-#[cfg(not(feature = "std"))]
-const SERIAL_INDEX_KEY: &str = "serial_port_index";
-
-#[cfg(not(feature = "std"))]
-pub mod serial_registry {
-    use super::*;
-    use alloc::boxed::Box;
-    use core::any::{Any, TypeId};
-
-    type SerialEntry = Box<dyn Any + Send>;
-
-    struct SerialSlot {
-        type_id: TypeId,
-        entry: SerialEntry,
-    }
-
-    pub(super) const MAX_SERIAL_SLOTS: usize = 4;
-
-    struct SerialSlots {
-        entries: [Option<SerialSlot>; MAX_SERIAL_SLOTS],
-    }
-
-    impl SerialSlots {
-        const fn new() -> Self {
-            Self {
-                entries: [None, None, None, None],
-            }
-        }
-    }
-
-    static SERIAL_SLOTS: Mutex<SerialSlots> = Mutex::new(SerialSlots::new());
-
-    pub fn register<S, E>(slot: usize, serial: S) -> CuResult<()>
-    where
-        S: Write<Error = E> + Read<Error = E> + Send + 'static,
-    {
-        if slot >= MAX_SERIAL_SLOTS {
-            return Err(CuError::from(format!(
-                "CRSF serial registry slot {slot} out of range (max {MAX_SERIAL_SLOTS})"
-            )));
-        }
-        let mut slots = SERIAL_SLOTS.lock();
-        slots.entries[slot] = Some(SerialSlot {
-            type_id: TypeId::of::<S>(),
-            entry: Box::new(serial),
-        });
-        Ok(())
-    }
-
-    pub fn take<S, E>(slot: usize) -> Option<S>
-    where
-        S: Write<Error = E> + Read<Error = E> + Send + 'static,
-    {
-        if slot >= MAX_SERIAL_SLOTS {
-            return None;
-        }
-        let mut slots = SERIAL_SLOTS.lock();
-        let record = slots.entries[slot].take()?;
-        if record.type_id != TypeId::of::<S>() {
-            slots.entries[slot] = Some(record);
-            return None;
-        }
-        record.entry.downcast::<S>().map(|boxed| *boxed).ok()
-    }
-}
 
 pub trait SerialFactory<E>: Write<Error = E> + Read<Error = E> + Send + 'static {
     fn try_new(config: Option<&ComponentConfig>) -> CuResult<Self>
@@ -112,10 +58,10 @@ where
             .map(|v| v as usize)
             .unwrap_or(0);
 
-        serial_registry::take(slot).ok_or_else(|| {
+        cu_embedded_registry::take(slot).ok_or_else(|| {
             CuError::from(format!(
                 "CRSF bridge missing serial for slot {slot} (max index {})",
-                serial_registry::MAX_SERIAL_SLOTS - 1
+                cu_embedded_registry::MAX_SERIAL_SLOTS - 1
             ))
         })
     }
@@ -219,8 +165,9 @@ impl<S, E> CrsfBridge<S, E>
 where
     S: SerialFactory<E>,
 {
+    /// Register a serial port for use with CRSF bridge in no-std environments
     pub fn register_serial(slot: usize, serial_port: S) -> CuResult<()> {
-        serial_registry::register(slot, serial_port)
+        cu_embedded_registry::register(slot, serial_port)
     }
 }
 

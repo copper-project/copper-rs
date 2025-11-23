@@ -169,7 +169,7 @@ fn main() -> ! {
         .enable(csrf_uart_cfg, clocks.peripheral_clock.freq())
         .expect("Could not create UART peripheral");
 
-    cu_crsf::serial_registry::register(0, csrf_uart)
+    cu_embedded_registry::register(0, csrf_uart)
         .expect("Failed to register UART as CRSF serial port");
 
     info!("Setting up Copper...");
