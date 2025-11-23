@@ -9,9 +9,9 @@ use std::fmt::Debug;
 #[cfg(feature = "image")]
 use image::{ImageBuffer, Pixel};
 #[cfg(feature = "kornia")]
-use kornia::image::allocator::ImageAllocator;
+use kornia_image::allocator::ImageAllocator;
 #[cfg(feature = "kornia")]
-use kornia::image::Image;
+use kornia_image::Image;
 use serde::{Serialize, Serializer};
 
 #[derive(Default, Debug, Encode, Decode, Clone, Copy, Serialize)]
