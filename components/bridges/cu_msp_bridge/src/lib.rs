@@ -237,7 +237,7 @@ where
                             }
                             Ok(None) => {}
                             Err(err) => {
-                                error!("MSP bridge parser error: {}", err);
+                                error!("MSP bridge parser error: {}", err.to_string());
                             }
                         }
                     }
