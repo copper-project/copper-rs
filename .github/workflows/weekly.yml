@@ -12,7 +12,7 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@beta
         with:
           components: clippy, rustfmt
@@ -46,7 +46,7 @@ jobs:
             mode: cuda-release
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@beta
         with:
           components: rustc,cargo,rust-std,rustfmt,clippy
@@ -239,7 +239,7 @@ jobs:
     name: CI for embedded targets
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@beta
         with:
           targets: aarch64-unknown-none,thumbv8m.main-none-eabihf,riscv32imac-unknown-none-elf
