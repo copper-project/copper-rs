@@ -60,6 +60,7 @@ members = [
     "examples/cu_min_baremetal",
     "examples/cu_missions",
     "examples/cu_multisources",
+    "examples/cu_multisources_structs",
     "examples/cu_nologging_tasks",
     "examples/cu_rate_target",
     "examples/cu_pointclouds",
