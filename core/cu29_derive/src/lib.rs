@@ -638,9 +638,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         }
                         else {
                             // Use the placeholder sim task.
-                            let msg_type = graph
-                                .get_node_input_msg_type(task_id.as_str())
+                            let msg_types = graph
+                                .get_node_input_msg_types(task_id.as_str())
                                 .unwrap_or_else(|| panic!("CuSinkTask {task_id} should have an incoming connection with a valid input msg type"));
+                            let msg_type = if msg_types.len() == 1 {
+                                format!("({},)", msg_types[0])
+                            } else {
+                                format!("({})", msg_types.join(", "))
+                            };
                             let sim_task_name = format!("CuSimSinkTask<{msg_type}>");
                             parse_str(sim_task_name.as_str()).unwrap_or_else(|_| panic!("Could not build the placeholder for simulation: {sim_task_name}"))
                         }

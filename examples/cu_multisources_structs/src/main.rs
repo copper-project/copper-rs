@@ -44,6 +44,6 @@ fn main() {
     sleep(Duration::from_secs(1));
 }
 
-fn default_callback(sim_step: SimStep) -> SimOverride {
+fn default_callback(_sim_step: SimStep) -> SimOverride {
     SimOverride::ExecutedBySim
 }

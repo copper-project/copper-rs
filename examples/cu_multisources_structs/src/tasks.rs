@@ -86,9 +86,14 @@ impl CuSinkTask for MySink {
     // don't forget the other lifecycle methods if you need them: start, stop, preprocess, postprocess
 
     fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
-        // debug!("Sink Received message: {}", input.payload().unwrap().value);
-        // debug!("Sink Received message: {}", input.payload().unwrap().value);
-
+        debug!(
+            "Sink Received message 0: {}",
+            input.0.payload().unwrap().value
+        );
+        debug!(
+            "Sink Received message 1: {}",
+            input.1.payload().unwrap().value
+        );
         Ok(())
     }
 }

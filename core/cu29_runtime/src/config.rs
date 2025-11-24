@@ -712,6 +712,11 @@ impl CuGraph {
 
     #[allow(dead_code)]
     pub fn get_node_input_msg_type(&self, node_id: &str) -> Option<String> {
+        self.get_node_input_msg_types(node_id)
+            .and_then(|mut v| v.pop())
+    }
+
+    pub fn get_node_input_msg_types(&self, node_id: &str) -> Option<Vec<String>> {
         self.0.node_indices().find_map(|node_index| {
             if let Some(node) = self.0.node_weight(node_index) {
                 if node.id != node_id {
@@ -725,11 +730,17 @@ impl CuGraph {
                 if edges.is_empty() {
                     return None;
                 }
-                let cnx = self
-                    .0
-                    .edge_weight(EdgeIndex::new(edges[0]))
-                    .expect("Found an cnx id but could not retrieve it back");
-                return Some(cnx.msg.clone());
+                let msgs = edges
+                    .into_iter()
+                    .map(|edge_id| {
+                        let cnx = self
+                            .0
+                            .edge_weight(EdgeIndex::new(edge_id))
+                            .expect("Found an cnx id but could not retrieve it back");
+                        cnx.msg.clone()
+                    })
+                    .collect();
+                return Some(msgs);
             }
             None
         })

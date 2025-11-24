@@ -108,6 +108,7 @@
 //!
 
 use crate::config::ComponentConfig;
+use crate::cutask::CuMsgPack;
 
 use crate::cutask::{CuMsg, CuMsgPayload, CuSinkTask, CuSrcTask, Freezable};
 use crate::{input_msg, output_msg};
@@ -171,16 +172,37 @@ impl<T: CuMsgPayload> CuSrcTask for CuSimSrcTask<T> {
     }
 }
 
-/// This is a placeholder task for a sink task for the simulations.
-/// It basically does nothing in place of a real driver so it won't try to initialize any hardware.
-pub struct CuSimSinkTask<T> {
-    boo: PhantomData<T>,
+/// Helper to map a payload type (or tuple of payload types) to the corresponding `input_msg!` form.
+pub trait CuSimSinkInput {
+    type With<'m>: CuMsgPack
+    where
+        Self: 'm;
 }
 
-impl<T: CuMsgPayload> Freezable for CuSimSinkTask<T> {}
+macro_rules! impl_sim_sink_input_tuple {
+    ($($name:ident),+) => {
+        impl<$($name: CuMsgPayload),+> CuSimSinkInput for ($($name,)+) {
+            type With<'m> = input_msg!('m, $($name),+) where Self: 'm;
+        }
+    };
+}
 
-impl<T: CuMsgPayload> CuSinkTask for CuSimSinkTask<T> {
-    type Input<'m> = input_msg!(T);
+impl_sim_sink_input_tuple!(T1);
+impl_sim_sink_input_tuple!(T1, T2);
+impl_sim_sink_input_tuple!(T1, T2, T3);
+impl_sim_sink_input_tuple!(T1, T2, T3, T4);
+impl_sim_sink_input_tuple!(T1, T2, T3, T4, T5);
+
+/// This is a placeholder task for a sink task for the simulations.
+/// It basically does nothing in place of a real driver so it won't try to initialize any hardware.
+pub struct CuSimSinkTask<I> {
+    boo: PhantomData<I>,
+}
+
+impl<I> Freezable for CuSimSinkTask<I> {}
+
+impl<I: CuSimSinkInput + 'static> CuSinkTask for CuSimSinkTask<I> {
+    type Input<'m> = <I as CuSimSinkInput>::With<'m>;
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
     where
