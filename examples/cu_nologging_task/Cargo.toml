@@ -11,6 +11,7 @@ homepage.workspace = true
 repository.workspace = true
 default-run = "nologging-tasks"
 
+publish = false
 [dependencies]
 # cu29 = { workspace = true, features = ["macro_debug"] }
 cu29 = { workspace = true }

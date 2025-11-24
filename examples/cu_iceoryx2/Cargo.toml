@@ -10,6 +10,7 @@ homepage.workspace = true
 repository.workspace = true
 description = "Copper example to use Iceoryx2 as a middleware."
 
+publish = false
 [package.metadata.cargo-machete]
 ignored = ["bincode", "cu-caterpillar", "cu-consolemon"]
 
