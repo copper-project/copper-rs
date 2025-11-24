@@ -10,6 +10,7 @@ categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
+publish = false
 [package.metadata.copper]
 embedded_only = true
 embedded_config = "examples/cu_elrs_bdshot_demo/.cargo/config.toml"

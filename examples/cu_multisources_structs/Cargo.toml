@@ -1,9 +1,17 @@
 [package]
 name = "cu-multisources-structs"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "Schema-only example showing how to define multiple Copper data sources"
 default-run = "sim-test"
 
+publish = false
 [[bin]]
 name = "sim-test"
 path = "src/main.rs"
@@ -23,4 +31,3 @@ bincode = { workspace=true, features = ["derive"] }
 serde = { workspace=true, features = ["derive"] }
 cu29-helpers = { workspace=true  }
 cu29-export = { workspace=true, optional = true }
-

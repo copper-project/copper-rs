@@ -61,7 +61,7 @@ members = [
     "examples/cu_missions",
     "examples/cu_multisources",
     "examples/cu_multisources_structs",
-    "examples/cu_nologging_tasks",
+    "examples/cu_nologging_task",
     "examples/cu_rate_target",
     "examples/cu_pointclouds",
     "examples/cu_rp_balancebot",
