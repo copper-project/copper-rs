@@ -3,11 +3,6 @@ name = "cu-rp2350-skeleton"
 version = "0.1.0"
 edition = "2024"
 description = "A minimal example of using Copper on a RP2350 microcontroller"
-license.workspace = true
-keywords.workspace = true
-categories.workspace = true
-homepage.workspace = true
-repository.workspace = true
 authors = ["Guillaume Binet <gbin@gootz.net>"]
 default-run = "main"
 
