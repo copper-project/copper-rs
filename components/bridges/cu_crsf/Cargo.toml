@@ -1,0 +1,29 @@
+[package]
+name = "cu-crsf"
+description = "A copper-rs bridge to communicate through CRSF. The initial motivation is for an easy control & telemetry over radio link with ELRS for your robot."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+cu29 = { path = "../../../core/cu29", default-features = false }
+cu-embedded-registry = { path = "../../libs/cu_embedded_registry", version = "0.10.0", default-features = false }
+crsf = "2.0.1"
+embedded-io = { version = "0.6.1", default-features = false }  # hal is locked to 0.6
+embedded-io-adapters = { version = "0.6.1", optional = true }
+serialport = { version = "4.8.1", optional = true }
+serde = { workspace = true, features = ["derive"] }
+bincode = { workspace = true, features = ["alloc", "derive"] }
+spin = { workspace = true }
+
+
+[features]
+default = ["std"]
+std = ["cu29/std", "cu-embedded-registry/std", "embedded-io/std", "dep:embedded-io-adapters", "dep:serialport", "embedded-io-adapters/std"]
+defmt = ["embedded-io/defmt-03", "cu29/defmt"]
+alloc = ["embedded-io/alloc"]

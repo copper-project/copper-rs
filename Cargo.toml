@@ -14,7 +14,10 @@ members = [
     "core/cu29_soa_derive",
     "core/cu29_traits",
     "core/cu29_unifiedlog",
+    "components/bridges/cu_crsf",
+    "components/bridges/cu_msp_bridge",
     "components/libs/cu_msp_lib",
+    "components/libs/cu_embedded_registry",
     "components/libs/cu_transform",
     "components/monitors/cu_consolemon",
     "components/payloads/cu_ros_payloads",
@@ -23,7 +26,6 @@ members = [
     "components/libs/cu_sdlogger",
     "components/bridges/cu_bdshot",
     "components/sinks/cu_iceoryx2_sink",
-    "components/sinks/cu_msp_sink",
     "components/sinks/cu_rp_gpio",
     "components/sinks/cu_rp_sn754410",
     "components/sinks/cu_lewansoul",
@@ -33,7 +35,6 @@ members = [
     "components/sources/cu_gstreamer",
     "components/sources/cu_hesai",
     "components/sources/cu_livox",
-    "components/sources/cu_msp_src",
     "components/sources/cu_iceoryx2_src",
     "components/sources/cu_v4l",
     "components/sources/cu_vlp16",
@@ -45,8 +46,8 @@ members = [
     "components/tasks/cu_pid",
     "components/tasks/cu_ratelimit",
     "components/testing/cu_udp_inject",
-    "examples/cu_bdshot_demo",
-    "examples/cu_bridge_scheduler",
+    "examples/cu_elrs_bdshot_demo",
+    "examples/cu_bridge_test",
     "examples/cu_background_task",
     "examples/cu_caterpillar",
     "examples/cu_config_gen",
@@ -54,6 +55,7 @@ members = [
     "examples/cu_dorabench",
     "examples/cu_iceoryx2",
     "examples/cu_logging_size",
+    "examples/cu_msp_bridge_loopback",
     "examples/cu_monitoring",
     "examples/cu_min_baremetal",
     "examples/cu_missions",
@@ -86,6 +88,9 @@ default-members = [
 ]
 
 resolver = "2"
+
+[patch.crates-io]
+tui-nodes = { path = "support/vendor/tui-nodes" }
 
 [workspace.package]
 version = "0.10.0"
@@ -151,7 +156,7 @@ tempfile = "3.23"
 spin = { version = "0.10" } # should be removed when std is on, but cargo is bad at negative features
 
 # rerun
-rerun = { version = "0.26", default-features = false, features = ["sdk", "server", "log"] }
+rerun = { version = "0.27", default-features = false, features = ["sdk", "server", "log"] }
 
 # smallvec to avoid heap allocations
 smallvec = { version = "1.15", default-features = false, features = ["serde"] }

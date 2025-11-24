@@ -6,7 +6,7 @@ use crate::config::{ComponentConfig, CuDirection, Node, DEFAULT_KEYFRAME_INTERVA
 use crate::config::{CuConfig, CuGraph, NodeId, RuntimeConfig};
 use crate::copperlist::{CopperList, CopperListState, CuListZeroedInit, CuListsManager};
 use crate::cutask::{BincodeAdapter, Freezable};
-use crate::monitoring::CuMonitor;
+use crate::monitoring::{build_monitor_topology, CuMonitor};
 use cu29_clock::{ClockProvider, CuTime, RobotClock};
 use cu29_traits::CuResult;
 use cu29_traits::WriteStream;
@@ -260,7 +260,10 @@ impl<
         );
 
         let tasks = tasks_instanciator(all_instances_configs, threadpool.clone())?;
-        let monitor = monitor_instanciator(config);
+        let mut monitor = monitor_instanciator(config);
+        if let Ok(topology) = build_monitor_topology(config, mission) {
+            monitor.set_topology(topology);
+        }
         let bridges = bridges_instanciator(config)?;
 
         let (copperlists_logger, keyframes_logger, keyframe_interval) = match &config.logging {
@@ -326,7 +329,10 @@ impl<
 
         let tasks = tasks_instanciator(all_instances_configs)?;
 
-        let monitor = monitor_instanciator(config);
+        let mut monitor = monitor_instanciator(config);
+        if let Ok(topology) = build_monitor_topology(config, mission) {
+            monitor.set_topology(topology);
+        }
         let bridges = bridges_instanciator(config)?;
 
         let (copperlists_logger, keyframes_logger, keyframe_interval) = match &config.logging {

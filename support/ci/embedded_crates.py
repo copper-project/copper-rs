@@ -9,7 +9,7 @@ import json
 import shlex
 import subprocess
 import sys
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 def _load_embedded_packages() -> List[Dict[str, Any]]:
@@ -62,9 +62,14 @@ def _print_json(packages: List[Dict[str, Any]]) -> None:
     json.dump(packages, sys.stdout)
 
 
-def _run_action(packages: List[Dict[str, Any]], action: str) -> None:
+def _run_action(
+    packages: List[Dict[str, Any]], action: str, toolchain: Optional[str]
+) -> None:
     for pkg in packages:
-        cmd = ["cargo", "+stable", action, "-p", pkg["name"]]
+        cmd = ["cargo"]
+        if toolchain:
+            cmd.append(f"+{toolchain}")
+        cmd.extend([action, "-p", pkg["name"]])
         if pkg["no_default_features"]:
             cmd.append("--no-default-features")
         if pkg["features"]:
@@ -101,6 +106,14 @@ def main() -> None:
         default="clippy",
         help="Cargo subcommand to run (default: clippy).",
     )
+    run_parser.add_argument(
+        "--toolchain",
+        default="stable",
+        help=(
+            "Rust toolchain channel to use with cargo commands (default: stable). "
+            "Set to 'default' to rely on the runner's default toolchain."
+        ),
+    )
 
     args = parser.parse_args()
     packages = _load_embedded_packages()
@@ -112,7 +125,8 @@ def main() -> None:
     elif args.command == "excludes":
         _print_excludes(packages)
     elif args.command == "run":
-        _run_action(packages, args.action)
+        toolchain = None if args.toolchain == "default" else args.toolchain
+        _run_action(packages, args.action, toolchain)
     else:
         parser.error(f"unsupported command: {args.command}")
 
