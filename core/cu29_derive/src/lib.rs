@@ -310,11 +310,13 @@ fn gen_sim_support(
             }
         })
         .collect();
+    let mut variants = plan_enum;
+    variants.push(quote! { __Phantom(core::marker::PhantomData<&'a ()>) });
     quote! {
         // not used if sim is not generated but this is ok.
-        #[allow(dead_code)]
+        #[allow(dead_code, unused_lifetimes)]
         pub enum SimStep<'a> {
-            #(#plan_enum),*
+            #(#variants),*
         }
     }
 }

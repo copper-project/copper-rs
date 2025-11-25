@@ -114,7 +114,7 @@
             missions: ["BridgeFanout"],
         ),
     ],
-    monitor: (
-          type: "cu_consolemon::CuConsoleMon",
-    ),
+    // monitor: (
+    //       type: "cu_consolemon::CuConsoleMon",
+    // ),
 )
