@@ -13,7 +13,9 @@ use syn::{
 use crate::format::rustfmt_generated_code;
 use crate::utils::{config_id_to_bridge_const, config_id_to_enum, config_id_to_struct_member};
 use cu29_runtime::config::CuConfig;
-use cu29_runtime::config::{read_configuration, BridgeChannel, CuGraph, Flavor, Node, NodeId};
+use cu29_runtime::config::{
+    read_configuration, BridgeChannelConfigRepresentation, CuGraph, Flavor, Node, NodeId,
+};
 use cu29_runtime::curuntime::{
     compute_runtime_plan, find_task_type_for_id, CuExecutionLoop, CuExecutionStep, CuExecutionUnit,
     CuTaskType,
@@ -308,11 +310,13 @@ fn gen_sim_support(
             }
         })
         .collect();
+    let mut variants = plan_enum;
+    variants.push(quote! { __Phantom(core::marker::PhantomData<&'a ()>) });
     quote! {
         // not used if sim is not generated but this is ok.
-        #[allow(dead_code)]
+        #[allow(dead_code, unused_lifetimes)]
         pub enum SimStep<'a> {
-            #(#plan_enum),*
+            #(#variants),*
         }
     }
 }
@@ -514,7 +518,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         quote! {
                             {
                                 let (channel_route, channel_config) = match &bridge_cfg.channels[#channel_config_index] {
-                                    cu29::config::BridgeChannel::Tx { route, config, .. } => {
+                                    cu29::config::BridgeChannelConfigRepresentation::Tx { route, config, .. } => {
                                         (route.clone(), config.clone())
                                     }
                                     _ => panic!(
@@ -542,7 +546,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         quote! {
                             {
                                 let (channel_route, channel_config) = match &bridge_cfg.channels[#channel_config_index] {
-                                    cu29::config::BridgeChannel::Rx { route, config, .. } => {
+                                    cu29::config::BridgeChannelConfigRepresentation::Rx { route, config, .. } => {
                                         (route.clone(), config.clone())
                                     }
                                     _ => panic!(
@@ -636,9 +640,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         }
                         else {
                             // Use the placeholder sim task.
-                            let msg_type = graph
-                                .get_node_input_msg_type(task_id.as_str())
+                            let msg_types = graph
+                                .get_node_input_msg_types(task_id.as_str())
                                 .unwrap_or_else(|| panic!("CuSinkTask {task_id} should have an incoming connection with a valid input msg type"));
+                            let msg_type = if msg_types.len() == 1 {
+                                format!("({},)", msg_types[0])
+                            } else {
+                                format!("({})", msg_types.join(", "))
+                            };
                             let sim_task_name = format!("CuSimSinkTask<{msg_type}>");
                             parse_str(sim_task_name.as_str()).unwrap_or_else(|_| panic!("Could not build the placeholder for simulation: {sim_task_name}"))
                         }
@@ -2214,7 +2223,7 @@ fn build_bridge_specs(
 
         for (channel_index, channel) in bridge_cfg.channels.iter().enumerate() {
             match channel {
-                BridgeChannel::Rx { id, .. } => {
+                BridgeChannelConfigRepresentation::Rx { id, .. } => {
                     let key = BridgeChannelKey {
                         bridge_id: bridge_cfg.id.clone(),
                         channel_id: id.clone(),
@@ -2240,7 +2249,7 @@ fn build_bridge_specs(
                         });
                     }
                 }
-                BridgeChannel::Tx { id, .. } => {
+                BridgeChannelConfigRepresentation::Tx { id, .. } => {
                     let key = BridgeChannelKey {
                         bridge_id: bridge_cfg.id.clone(),
                         channel_id: id.clone(),
@@ -2867,11 +2876,13 @@ fn generate_bridge_tx_execution_tokens(
         quote! {
             {
                 let bridge = &mut bridges.#bridge_tuple_index;
-                let cumsg_input = &msgs.#input_index;
+                let cumsg_input = &mut msgs.#input_index;
+                // Stamp timing so monitors see consistent ranges for bridge Tx as well.
+                cumsg_input.metadata.process_time.start = clock.now().into();
                 if let Err(error) = bridge.send(
                     clock,
                     &<#bridge_type as cu29::cubridge::CuBridge>::Tx::#const_ident,
-                    cumsg_input,
+                    &*cumsg_input,
                 ) {
                     let decision = monitor.process_error(#monitor_index, CuTaskState::Process, &error);
                     match decision {
@@ -2890,6 +2901,7 @@ fn generate_bridge_tx_execution_tokens(
                         }
                     }
                 }
+                cumsg_input.metadata.process_time.end = clock.now().into();
             }
         },
         quote! {},

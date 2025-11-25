@@ -17,7 +17,7 @@ proc-macro = true
 [dependencies]
 cu29-runtime = { workspace = true, features = ["std"] }
 cu29-traits = { workspace = true }
-convert_case = "0.9"
+convert_case = "0.10"
 itertools = "0.14"
 quote = { workspace = true }
 proc-macro2 = { workspace = true }

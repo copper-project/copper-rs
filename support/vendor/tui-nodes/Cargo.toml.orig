@@ -1,0 +1,25 @@
+[package]
+name = "tui-nodes"
+version = "0.9.0"
+edition = "2021"
+authors = ["jaxter184 <jaxter184@gmail.com>"]
+description = """
+Node graph visualization for tui-rs
+"""
+documentation = "https://docs.rs/tui-nodes/0.1.1/tui-nodes/"
+keywords = ["tui", "terminal"]
+repository = "https://git.sr.ht/~jaxter184/tui-nodes"
+readme = "README.md"
+license = "MIT"
+
+[dependencies]
+ratatui = { version = "0.29.0", default-features = false }
+log = "0.4.17"
+
+[dev-dependencies]
+ratatui = { version = "0.29.0", features = ["crossterm"] }
+criterion = "0.5"
+
+[[bench]]
+name = "calculate"
+harness = false

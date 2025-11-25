@@ -1,0 +1,38 @@
+[package]
+name = "cu-elrs-bdshot-demo"
+description = "Example Copper app driving BDShot ESCs from an ELRS throttle command on the RP2350 reference board."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+publish = false
+[package.metadata.copper]
+embedded_only = true
+embedded_config = "examples/cu_elrs_bdshot_demo/.cargo/config.toml"
+embedded_target = "thumbv8m.main-none-eabihf"
+
+[dependencies]
+buddy_system_allocator = { version = "0.11", default-features = false, features = ["use_spin"] }
+cu29 = { path = "../../core/cu29", default-features = false, features = ["defmt", "log-level-debug"] }
+cu-bdshot = { path = "../../components/bridges/cu_bdshot" }
+cu-crsf = { path = "../../components/bridges/cu_crsf", default-features = false, features = ["defmt", "alloc"] }
+cu-sdlogger = { path = "../../components/libs/cu_sdlogger" }
+cu-embedded-registry = { path = "../../components/libs/cu_embedded_registry", default-features = false, features = ["defmt"] }
+cortex-m-rt = "0.7"
+defmt-rtt = "1.1"
+embedded-hal = "1.0"
+embedded-hal-bus = "0.3"
+embedded-sdmmc = { version = "0.9", features = ["defmt-log"], default-features = false }
+panic-probe = { version = "1.0", features = ["defmt", "print-defmt"] }
+rp235x-hal = { version = "0.3", features = ["rt", "critical-section-impl"] }
+spin = { workspace = true }
+bincode = { workspace = true, features = ["alloc", "derive"] }
+serde = { workspace = true }
+
+[features]
+default = []

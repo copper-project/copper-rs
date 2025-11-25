@@ -2,6 +2,10 @@
 
 Check out cu_rp_balancebot for a full example of how to use it.
 
+### Compatibility 
+
+This crate is compatible for std and no_std targets.
+
 ### Task and Input
 
 To be able to use it, you need to specialize it before you can reference it in your copper RON config:

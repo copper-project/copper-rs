@@ -230,6 +230,252 @@ pub trait CuBridge: Freezable {
     }
 }
 
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __cu29_bridge_channel_ctor {
+    ($id:ident, $variant:ident, $payload:ty) => {
+        $crate::cubridge::BridgeChannel::<$id, $payload>::new($id::$variant)
+    };
+    ($id:ident, $variant:ident, $payload:ty, $route:expr) => {
+        $crate::cubridge::BridgeChannel::<$id, $payload>::with_channel($id::$variant, $route)
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __cu29_define_bridge_channels {
+    (
+        @accum
+        $vis:vis struct $channels:ident : $id:ident
+        [ $($parsed:tt)+ ]
+    ) => {
+        $crate::__cu29_emit_bridge_channels! {
+            $vis struct $channels : $id { $($parsed)+ }
+        }
+    };
+    (
+        @accum
+        $vis:vis struct $channels:ident : $id:ident
+        [ ]
+    ) => {
+        compile_error!("tx_channels!/rx_channels! require at least one channel");
+    };
+    (
+        @accum
+        $vis:vis struct $channels:ident : $id:ident
+        [ $($parsed:tt)* ]
+        $(#[$chan_meta:meta])* $const_name:ident : $variant:ident => $payload:ty $(= $route:expr)? , $($rest:tt)*
+    ) => {
+        $crate::__cu29_define_bridge_channels!(
+            @accum
+            $vis struct $channels : $id
+            [
+                $($parsed)*
+                $(#[$chan_meta])* $const_name : $variant => $payload $(= $route)?,
+            ]
+            $($rest)*
+        );
+    };
+    (
+        @accum
+        $vis:vis struct $channels:ident : $id:ident
+        [ $($parsed:tt)* ]
+        $(#[$chan_meta:meta])* $const_name:ident : $variant:ident => $payload:ty $(= $route:expr)?
+    ) => {
+        $crate::__cu29_define_bridge_channels!(
+            @accum
+            $vis struct $channels : $id
+            [
+                $($parsed)*
+                $(#[$chan_meta])* $const_name : $variant => $payload $(= $route)?,
+            ]
+        );
+    };
+    (
+        @accum
+        $vis:vis struct $channels:ident : $id:ident
+        [ $($parsed:tt)* ]
+        $(#[$chan_meta:meta])* $name:ident => $payload:ty $(= $route:expr)? , $($rest:tt)*
+    ) => {
+        $crate::__cu29_paste! {
+            $crate::__cu29_define_bridge_channels!(
+                @accum
+                $vis struct $channels : $id
+                [
+                    $($parsed)*
+                    $(#[$chan_meta])* [<$name:snake:upper>] : [<$name:camel>] => $payload $(= $route)?,
+                ]
+                $($rest)*
+            );
+        }
+    };
+    (
+        @accum
+        $vis:vis struct $channels:ident : $id:ident
+        [ $($parsed:tt)* ]
+        $(#[$chan_meta:meta])* $name:ident => $payload:ty $(= $route:expr)?
+    ) => {
+        $crate::__cu29_paste! {
+            $crate::__cu29_define_bridge_channels!(
+                @accum
+                $vis struct $channels : $id
+                [
+                    $($parsed)*
+                    $(#[$chan_meta])* [<$name:snake:upper>] : [<$name:camel>] => $payload $(= $route)?,
+                ]
+            );
+        }
+    };
+    (
+        $vis:vis struct $channels:ident : $id:ident {
+            $($body:tt)*
+        }
+    ) => {
+        $crate::__cu29_define_bridge_channels!(
+            @accum
+            $vis struct $channels : $id
+            []
+            $($body)*
+        );
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __cu29_emit_bridge_channels {
+    (
+        $vis:vis struct $channels:ident : $id:ident {
+            $(
+                $(#[$chan_meta:meta])*
+                $const_name:ident : $variant:ident => $payload:ty $(= $route:expr)?,
+            )+
+        }
+    ) => {
+        #[derive(Copy, Clone, Debug, Eq, PartialEq, ::serde::Serialize, ::serde::Deserialize)]
+        #[repr(usize)]
+        #[serde(rename_all = "snake_case")]
+        $vis enum $id {
+            $(
+                $variant,
+            )+
+        }
+
+        impl $id {
+            /// Returns the zero-based ordinal for this channel (macro order).
+            pub const fn as_index(self) -> usize {
+                self as usize
+            }
+        }
+
+        $vis struct $channels;
+
+        #[allow(non_upper_case_globals)]
+        impl $channels {
+            $(
+                $(#[$chan_meta])*
+                $vis const $const_name: $crate::cubridge::BridgeChannel<$id, $payload> =
+                    $crate::__cu29_bridge_channel_ctor!(
+                        $id, $variant, $payload $(, $route)?
+                    );
+            )+
+        }
+
+        impl $crate::cubridge::BridgeChannelSet for $channels {
+            type Id = $id;
+
+            const STATIC_CHANNELS: &'static [&'static dyn $crate::cubridge::BridgeChannelInfo<Self::Id>] =
+                &[
+                    $(
+                        &Self::$const_name,
+                    )+
+                ];
+        }
+    };
+}
+
+/// Declares the transmit channels of a [`CuBridge`] implementation.
+///
+/// # Examples
+///
+/// ```
+/// # use cu29_runtime::tx_channels;
+/// # struct EscCommand;
+/// tx_channels! {
+///     esc0 => EscCommand,
+///     esc1 => EscCommand = "motor/esc1",
+/// }
+/// ```
+///
+/// ```
+/// # use cu29_runtime::tx_channels;
+/// # struct StateMsg;
+/// tx_channels! {
+///     pub(crate) struct MyTxChannels : MyTxId {
+///         state => StateMsg,
+///     }
+/// }
+/// ```
+///
+/// Channels declared through the macro gain `#[repr(usize)]` identifiers and an
+/// inherent `as_index()` helper that returns the zero-based ordinal (matching
+/// declaration order), which is convenient when indexing fixed arrays.
+#[macro_export]
+macro_rules! tx_channels {
+    (
+        $vis:vis struct $channels:ident : $id:ident {
+            $(
+                $(#[$chan_meta:meta])* $entry:tt => $payload:ty $(= $route:expr)?
+            ),+ $(,)?
+        }
+    ) => {
+        $crate::__cu29_define_bridge_channels! {
+            $vis struct $channels : $id {
+                $(
+                    $(#[$chan_meta])* $entry => $payload $(= $route)?,
+                )+
+            }
+        }
+    };
+    ({ $($rest:tt)* }) => {
+        $crate::tx_channels! {
+            pub struct TxChannels : TxId { $($rest)* }
+        }
+    };
+    ($($rest:tt)+) => {
+        $crate::tx_channels!({ $($rest)+ });
+    };
+}
+
+/// Declares the receive channels of a [`CuBridge`] implementation.
+///
+/// See [`tx_channels!`](crate::tx_channels!) for details on naming and indexing.
+#[macro_export]
+macro_rules! rx_channels {
+    (
+        $vis:vis struct $channels:ident : $id:ident {
+            $(
+                $(#[$chan_meta:meta])* $entry:tt => $payload:ty $(= $route:expr)?
+            ),+ $(,)?
+        }
+    ) => {
+        $crate::__cu29_define_bridge_channels! {
+            $vis struct $channels : $id {
+                $(
+                    $(#[$chan_meta])* $entry => $payload $(= $route)?,
+                )+
+            }
+        }
+    };
+    ({ $($rest:tt)* }) => {
+        $crate::rx_channels! {
+            pub struct RxChannels : RxId { $($rest)* }
+        }
+    };
+    ($($rest:tt)+) => {
+        $crate::rx_channels!({ $($rest)+ });
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -262,6 +508,20 @@ mod tests {
     #[derive(Clone, Debug, Default, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
     struct AlertMsg {
         code: u32,
+    }
+
+    tx_channels! {
+        struct MacroTxChannels : MacroTxId {
+            imu_stream => ImuMsg = "telemetry/imu",
+            motor_stream => MotorCmd,
+        }
+    }
+
+    rx_channels! {
+        struct MacroRxChannels : MacroRxId {
+            status_updates => StatusMsg = "sys/status",
+            alert_stream => AlertMsg,
+        }
     }
 
     // ---- Generated channel identifiers --------------------------------------
@@ -320,30 +580,6 @@ mod tests {
         alert_codes: Vec<u32>,
     }
 
-    // ---- Runtime-generated dispatch helpers (example) -----------------------
-    //
-    // In real Copper builds the generated glue would call the typed `handle_*` entry points
-    // directly, so bridge authors never see these unsafe casts. They are only present in this
-    // sample to keep the implementation compact while still demonstrating per-channel logic.
-    fn cast_msg<From, To>(msg: &CuMsg<From>) -> &CuMsg<To>
-    where
-        From: CuMsgPayload,
-        To: CuMsgPayload,
-    {
-        // Safety: in this test we only invoke the cast after matching on the channel that carries
-        // `To`. The channel type parameter guarantees that `From` == `To` for the selected branch.
-        unsafe { &*(msg as *const CuMsg<From> as *const CuMsg<To>) }
-    }
-
-    fn cast_msg_mut<From, To>(msg: &mut CuMsg<From>) -> &mut CuMsg<To>
-    where
-        From: CuMsgPayload,
-        To: CuMsgPayload,
-    {
-        // Safety: same reasoning as `cast_msg` but for mutable access.
-        unsafe { &mut *(msg as *mut CuMsg<From> as *mut CuMsg<To>) }
-    }
-
     impl Freezable for ExampleBridge {}
 
     impl CuBridge for ExampleBridge {
@@ -375,7 +611,7 @@ mod tests {
         {
             match channel.id {
                 TxId::Imu => {
-                    let imu_msg = cast_msg::<Payload, ImuMsg>(msg);
+                    let imu_msg = msg.downcast_ref::<ImuMsg>()?;
                     let payload = imu_msg
                         .payload()
                         .ok_or_else(|| CuError::from("imu missing payload"))?;
@@ -383,7 +619,7 @@ mod tests {
                     Ok(())
                 }
                 TxId::Motor => {
-                    let motor_msg = cast_msg::<Payload, MotorCmd>(msg);
+                    let motor_msg = msg.downcast_ref::<MotorCmd>()?;
                     let payload = motor_msg
                         .payload()
                         .ok_or_else(|| CuError::from("motor missing payload"))?;
@@ -404,7 +640,7 @@ mod tests {
         {
             match channel.id {
                 RxId::Status => {
-                    let status_msg = cast_msg_mut::<Payload, StatusMsg>(msg);
+                    let status_msg = msg.downcast_mut::<StatusMsg>()?;
                     status_msg.set_payload(StatusMsg { temperature: 21.5 });
                     if let Some(payload) = status_msg.payload() {
                         self.status_temps.push(payload.temperature);
@@ -412,7 +648,7 @@ mod tests {
                     Ok(())
                 }
                 RxId::Alert => {
-                    let alert_msg = cast_msg_mut::<Payload, AlertMsg>(msg);
+                    let alert_msg = msg.downcast_mut::<AlertMsg>()?;
                     alert_msg.set_payload(AlertMsg { code: 0xDEAD_BEEF });
                     if let Some(payload) = alert_msg.payload() {
                         self.alert_codes.push(payload.code);
@@ -421,6 +657,28 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn channel_macros_expose_static_metadata() {
+        assert_eq!(MacroTxChannels::STATIC_CHANNELS.len(), 2);
+        assert_eq!(
+            MacroTxChannels::IMU_STREAM.default_route,
+            Some("telemetry/imu")
+        );
+        assert!(MacroTxChannels::MOTOR_STREAM.default_route.is_none());
+        assert_eq!(MacroTxId::ImuStream as u8, MacroTxId::ImuStream as u8);
+        assert_eq!(MacroTxId::ImuStream.as_index(), 0);
+        assert_eq!(MacroTxId::MotorStream.as_index(), 1);
+
+        assert_eq!(MacroRxChannels::STATIC_CHANNELS.len(), 2);
+        assert_eq!(
+            MacroRxChannels::STATUS_UPDATES.default_route,
+            Some("sys/status")
+        );
+        assert!(MacroRxChannels::ALERT_STREAM.default_route.is_none());
+        assert_eq!(MacroRxId::StatusUpdates.as_index(), 0);
+        assert_eq!(MacroRxId::AlertStream.as_index(), 1);
     }
 
     #[test]

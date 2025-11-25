@@ -10,6 +10,7 @@ homepage.workspace = true
 repository.workspace = true
 description = "Copper example to use zenoh as a ROS 2 bridge."
 
+publish = false
 [dependencies]
 cu29 = { workspace = true }
 cu29-helpers = { workspace = true }

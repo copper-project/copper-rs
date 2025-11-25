@@ -47,12 +47,23 @@ pub(crate) fn config_id_to_struct_member(id: &str) -> String {
 /// Converts a configuration identifier into a SCREAMING_SNAKE_CASE name suitable
 /// for referencing bridge channel constants.
 pub(crate) fn config_id_to_bridge_const(id: &str) -> String {
-    let mut candidate = id
+    let sanitized = id
         .chars()
         .map(|c| if c.is_alphanumeric() { c } else { '_' })
         .collect::<String>();
 
-    candidate = candidate.to_case(Case::UpperSnake);
+    // Replicate paste::paste! { [<$ident:snake:upper>] } behavior used by the tx/rx macros.
+    let mut snake = String::with_capacity(sanitized.len());
+    let mut prev = '_';
+    for ch in sanitized.chars() {
+        if ch.is_uppercase() && prev != '_' {
+            snake.push('_');
+        }
+        snake.push(ch);
+        prev = ch;
+    }
+
+    let mut candidate = snake.to_lowercase().to_uppercase();
 
     if candidate.chars().next().is_some_and(|c| c.is_ascii_digit()) {
         candidate.insert(0, '_');
@@ -100,7 +111,7 @@ pub fn caller_crate_root() -> PathBuf {
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::config_id_to_enum;
+    use crate::utils::{config_id_to_bridge_const, config_id_to_enum};
 
     fn is_valid_rust_identifier(input: &str) -> bool {
         if input.is_empty() {
@@ -159,5 +170,12 @@ mod tests {
             crate::utils::config_id_to_struct_member("Test_Dunder"),
             "test_dunder"
         );
+    }
+
+    #[test]
+    fn test_identifier_to_bridge_const() {
+        assert_eq!(config_id_to_bridge_const("esc0_tx"), "ESC0_TX");
+        assert_eq!(config_id_to_bridge_const("esc_0_tx"), "ESC_0_TX");
+        assert_eq!(config_id_to_bridge_const("ImuStream"), "IMU_STREAM");
     }
 }

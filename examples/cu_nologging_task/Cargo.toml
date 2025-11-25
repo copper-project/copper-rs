@@ -1,0 +1,29 @@
+[package]
+name = "cu-nologging-task"
+description = "This is an example for the Copper project to show how to stop the output of a task being logged."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+default-run = "nologging-tasks"
+
+publish = false
+[dependencies]
+# cu29 = { workspace = true, features = ["macro_debug"] }
+cu29 = { workspace = true }
+cu29-helpers = { workspace = true }
+serde = { workspace = true }  # Keep
+cu29-export = { workspace = true }  # Keep
+
+
+[[bin]]
+name = "nologging-tasks"
+path = "src/main.rs"
+
+[[bin]]
+name = "logreader"
+path = "src/logreader.rs"

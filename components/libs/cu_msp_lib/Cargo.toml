@@ -11,12 +11,13 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-bincode = { workspace = true, optional = true }
+bincode = { workspace = true, features = ["alloc"], optional = true }
 serde = { workspace = true }
 smallvec = { workspace = true }
-crc-any = "2.5.0"
-packed_struct = "0.10.1"
+crc-any = { version = "2.5.0", default-features = false }
+packed_struct = { version = "0.10.1", default-features = false }
 
 [features]
-default = ["bincode"]
+default = ["std", "bincode"]
+std = ["serde/std", "smallvec/serde", "packed_struct/std"]
 bincode = ["dep:bincode"]

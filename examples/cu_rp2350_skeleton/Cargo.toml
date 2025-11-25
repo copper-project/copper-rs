@@ -3,6 +3,7 @@ name = "cu-rp2350-skeleton"
 version = "0.1.0"
 edition = "2024"
 description = "A minimal example of using Copper on a RP2350 microcontroller"
+authors = ["Guillaume Binet <gbin@gootz.net>"]
 default-run = "main"
 
 # To build the firmware:
@@ -16,6 +17,7 @@ default-run = "main"
 # To build the log reader host tool:
 # cargo build-logreader
 
+publish = false
 [dependencies]
 cu29 = { path = "../../core/cu29", version="0.10.0", default-features = false, features = ["log-level-debug"] } # pick it up directly to build it no-std
 cu-sdlogger = { path = "../../components/libs/cu_sdlogger", optional = true }

@@ -10,11 +10,12 @@ categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
+publish = false
 [dependencies]
 # cu29 = { workspace = true, features = ["macro_debug"] }
 cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
 tempfile = { workspace = true }
 serde = { workspace = true }
-
+cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.10.0" }
 
