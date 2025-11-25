@@ -418,20 +418,40 @@ mod python {
 mod tests {
     use super::*;
     use bincode::{encode_into_slice, Decode, Encode};
-    use fs_extra::dir::{copy, CopyOptions};
+    use std::fs;
     use std::io::Cursor;
+    use std::path::PathBuf;
     use std::sync::{Arc, Mutex};
     use tempfile::{tempdir, TempDir};
 
     fn copy_stringindex_to_temp(tmpdir: &TempDir) -> PathBuf {
-        // for some reason using the index in real only locks it and generates a change in the file.
-        let temp_path = tmpdir.path();
+        let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .unwrap()
+            .to_path_buf();
 
-        let mut copy_options = CopyOptions::new();
-        copy_options.copy_inside = true;
+        let target_dir = std::env::var("CARGO_TARGET_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| workspace_root.join("target"));
 
-        copy("test/cu29_log_index", temp_path, &copy_options).unwrap();
-        temp_path.join("cu29_log_index")
+        let src_dir = target_dir.join("debug/cu29_log_index");
+        let resolved_src = if src_dir.exists() {
+            src_dir
+        } else {
+            // Fallback to the default resolver used by the macros at build time.
+            cu29_intern_strs::default_log_index_dir()
+        };
+        let dest_dir = tmpdir.path().join("cu29_log_index");
+
+        fs::create_dir_all(&dest_dir).unwrap();
+        for entry in fs::read_dir(resolved_src).unwrap() {
+            let entry = entry.unwrap();
+            let dest = dest_dir.join(entry.file_name());
+            fs::copy(entry.path(), dest).unwrap();
+        }
+
+        dest_dir
     }
 
     #[test]
