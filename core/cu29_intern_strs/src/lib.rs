@@ -1,10 +1,11 @@
 use anyhow::{Context, Result};
-use redb::{Database, DatabaseError, ReadableDatabase, ReadableTable, TableDefinition};
-use std::fs;
+use bincode::config::standard;
+use bincode::{decode_from_slice, encode_to_vec, Decode, Encode};
+use fs2::FileExt;
+use std::collections::HashMap;
+use std::fs::{self, OpenOptions};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
-use std::cmp;
-use std::time::Duration;
 
 type IndexType = u32;
 
@@ -20,14 +21,23 @@ macro_rules! build_log {
 
 /// The name of the directory where the log index is stored.
 const INDEX_DIR_NAME: &str = "cu29_log_index";
-const DB_FILE_NAME: &str = "strings.redb";
+const DB_FILE_NAME: &str = "strings.bin";
 
-const COUNTER_TABLE: TableDefinition<&str, IndexType> = TableDefinition::new("counter");
-const STRING_TO_INDEX_TABLE: TableDefinition<&str, IndexType> =
-    TableDefinition::new("string_to_index");
-const INDEX_TO_STRING_TABLE: TableDefinition<IndexType, &str> =
-    TableDefinition::new("index_to_string");
-const COUNTER_KEY: &str = "__counter__";
+#[derive(Encode, Decode, Default)]
+struct InternDb {
+    next_index: IndexType,
+    strings: Vec<String>,
+    string_to_index: HashMap<String, IndexType>,
+}
+
+impl InternDb {
+    fn new() -> Self {
+        Self {
+            next_index: 1, // keep 0 reserved as before
+            ..Default::default()
+        }
+    }
+}
 
 fn parent_n_times(path: &Path, n: usize) -> Option<PathBuf> {
     let mut result = Some(path.to_path_buf());
@@ -45,8 +55,6 @@ pub fn default_log_index_dir() -> PathBuf {
 }
 
 fn database_path(base: &Path) -> PathBuf {
-    // If the caller passes a directory (old LMDB layout), create/read the redb file inside it.
-    // If a file path is provided (e.g. custom .redb path), use it directly.
     match base.extension() {
         Some(_) => base.to_path_buf(),
         None => base.join(DB_FILE_NAME),
@@ -56,83 +64,75 @@ fn database_path(base: &Path) -> PathBuf {
 /// Reads all interned strings from the index at the specified path.
 /// The index is created at compile time within your project output directory.
 pub fn read_interned_strings(index: &Path) -> Result<Vec<String>> {
-    let mut all_strings = Vec::<String>::new();
     let db_path = database_path(index);
     let db =
-        open_database_read(&db_path).context("Could not open the string index. Check the path.")?;
-
-    let read_txn = db.begin_read()?;
-    let index_to_string = read_txn
-        .open_table(INDEX_TO_STRING_TABLE)
-        .context("Could not open the index_to_string table")?;
-    for entry in index_to_string.iter()? {
-        let (index, value) = entry?;
-        let idx = index.value() as usize;
-        if all_strings.len() <= idx {
-            all_strings.resize(idx + 1, String::new());
-        }
-        all_strings[idx] = value.value().to_string();
-    }
-    Ok(all_strings)
+        load_db_shared(&db_path).context("Could not open the string index. Check the path.")?;
+    Ok(db.strings)
 }
 
 pub fn intern_string(s: &str) -> Option<IndexType> {
     let base_dir = default_log_index_dir();
     let db_path = database_path(&base_dir);
     if let Some(parent) = db_path.parent() {
-        fs::create_dir_all(parent).unwrap();
+        fs::create_dir_all(parent).ok()?;
     }
 
     #[cfg(feature = "macro_debug")]
     log_db_info_once(&db_path);
 
-    let db = open_or_create_database(&db_path)?;
+    let mut file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&db_path)
+        .ok()?;
+    file.lock_exclusive().ok()?;
 
-    // Fast path: see if the string already exists.
-    if let Ok(read_txn) = db.begin_read() {
-        if let Ok(string_to_index) = read_txn.open_table(STRING_TO_INDEX_TABLE) {
-            if let Ok(Some(index)) = string_to_index.get(s) {
-                let index = index.value();
-                #[cfg(feature = "macro_debug")]
-                {
-                    build_log!("#{:0>3} [r] -> {}.", index, s);
-                }
-                return Some(index);
-            }
-        }
-    }
+    let mut buf = Vec::new();
+    file.read_to_end(&mut buf).ok()?;
+    file.seek(SeekFrom::Start(0)).ok()?;
 
-    let write_txn = db.begin_write().ok()?;
-    let next_index = {
-        let mut counter_table = write_txn.open_table(COUNTER_TABLE).ok()?;
-        let mut string_to_index = write_txn.open_table(STRING_TO_INDEX_TABLE).ok()?;
-        let mut index_to_string = write_txn.open_table(INDEX_TO_STRING_TABLE).ok()?;
-
-        let current_counter = counter_table
-            .get(COUNTER_KEY)
-            .ok()?
-            .map(|v| v.value())
-            .unwrap_or(0);
-        let next_index = current_counter + 1;
-
-        counter_table.insert(COUNTER_KEY, next_index).ok()?;
-        index_to_string.insert(next_index, s).ok()?;
-        string_to_index.insert(s, next_index).ok()?;
-        next_index
+    let mut db = if buf.is_empty() {
+        InternDb::new()
+    } else {
+        decode_from_slice(&buf, standard()).ok()?.0
     };
 
-    write_txn.commit().ok()?;
+    if let Some(&idx) = db.string_to_index.get(s) {
+        #[cfg(feature = "macro_debug")]
+        {
+            build_log!("#{:0>3} [r] -> {}.", idx, s);
+        }
+        return Some(idx);
+    }
+
+    let idx = db.next_index;
+    let idx_usize = idx as usize;
+    if db.strings.len() <= idx_usize {
+        db.strings.resize(idx_usize + 1, String::new());
+    }
+    db.strings[idx_usize] = s.to_string();
+    db.string_to_index.insert(s.to_string(), idx);
+    db.next_index = db.next_index.checked_add(1)?;
+
+    let encoded = encode_to_vec(&db, standard()).ok()?;
+    file.set_len(0).ok()?;
+    file.write_all(&encoded).ok()?;
+    file.flush().ok()?;
+    let _ = file.unlock();
 
     #[cfg(feature = "macro_debug")]
     {
-        build_log!("#{:0>3} [n] -> {}.", next_index, s);
+        build_log!("#{:0>3} [n] -> {}.", idx, s);
     }
 
-    Some(next_index)
+    Some(idx)
 }
 
 #[cfg(feature = "macro_debug")]
 fn log_db_info_once(db_path: &Path) {
+    use std::sync::OnceLock;
     static ONCE: OnceLock<()> = OnceLock::new();
     ONCE.get_or_init(|| {
         build_log!(
@@ -146,36 +146,27 @@ fn log_db_info_once(db_path: &Path) {
     });
 }
 
-fn open_database_read(path: &Path) -> std::result::Result<Database, DatabaseError> {
-    retry_database_open(path, false)
-}
+fn load_db_shared(path: &Path) -> std::result::Result<InternDb, anyhow::Error> {
+    let mut file = match OpenOptions::new().read(true).open(path) {
+        Ok(f) => f,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(InternDb::new()),
+        Err(e) => return Err(e).context("Failed to open index file"),
+    };
+    file.lock_shared()
+        .context("Failed to lock index for read")?;
 
-fn open_or_create_database(path: &Path) -> Option<Database> {
-    retry_database_open(path, true).ok()
-}
+    let mut buf = Vec::new();
+    file.read_to_end(&mut buf)
+        .context("Failed to read index file")?;
+    let _ = file.unlock();
 
-fn retry_database_open(path: &Path, create: bool) -> std::result::Result<Database, DatabaseError> {
-    let mut attempts = 0u32;
-    // Allow up to ~5s of contention to serialize access across concurrent build processes.
-    const MAX_ATTEMPTS: u32 = 200;
-    let mut sleep_ms: u64 = 5;
-    loop {
-        let open_result = if create {
-            Database::create(path)
-        } else {
-            Database::open(path)
-        };
-
-        match open_result {
-            Ok(db) => return Ok(db),
-            Err(DatabaseError::DatabaseAlreadyOpen) if attempts < MAX_ATTEMPTS => {
-                std::thread::sleep(Duration::from_millis(sleep_ms));
-                sleep_ms = cmp::min(sleep_ms.saturating_mul(2), 250);
-            }
-            Err(e) => return Err(e),
-        }
-        attempts += 1;
+    if buf.is_empty() {
+        return Ok(InternDb::new());
     }
+
+    let (db, _): (InternDb, _) =
+        decode_from_slice(&buf, standard()).context("Failed to decode index")?;
+    Ok(db)
 }
 
 #[allow(dead_code)]

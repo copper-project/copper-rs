@@ -418,7 +418,7 @@ mod python {
 mod tests {
     use super::*;
     use bincode::{encode_into_slice, Decode, Encode};
-    use redb::{Database, TableDefinition};
+    use std::env;
     use std::fs;
     use std::io::Cursor;
     use std::path::PathBuf;
@@ -426,26 +426,20 @@ mod tests {
     use tempfile::{tempdir, TempDir};
 
     fn copy_stringindex_to_temp(tmpdir: &TempDir) -> PathBuf {
-        // Build a minimal redb index on the fly so tests don't depend on build-time artifacts.
-        let dest_dir = tmpdir.path().join("cu29_log_index");
-        fs::create_dir_all(&dest_dir).unwrap();
-        let db = Database::create(dest_dir.join("strings.redb")).unwrap();
-        let write_txn = db.begin_write().unwrap();
-        {
-            let mut index_to_string = write_txn
-                .open_table(TableDefinition::<u32, &str>::new("index_to_string"))
-                .unwrap();
-            // Provide entries for the message indexes used in this test module.
-            index_to_string.insert(2, "Just a String {}").unwrap();
-            index_to_string
-                .insert(3, "Just a String (low level) {}")
-                .unwrap();
-            index_to_string
-                .insert(4, "Just a String (end to end) {}")
-                .unwrap();
-        }
-        write_txn.commit().unwrap();
-        dest_dir
+        // Build a minimal index on the fly so tests don't depend on build-time artifacts.
+        let fake_out_dir = tmpdir.path().join("build").join("out").join("dir");
+        fs::create_dir_all(&fake_out_dir).unwrap();
+        env::set_var("LOG_INDEX_DIR", &fake_out_dir);
+
+        // Provide entries for the message indexes used in this test module.
+        let _ = cu29_intern_strs::intern_string("unused to start counter");
+        let _ = cu29_intern_strs::intern_string("Just a String {}");
+        let _ = cu29_intern_strs::intern_string("Just a String (low level) {}");
+        let _ = cu29_intern_strs::intern_string("Just a String (end to end) {}");
+
+        let index_dir = cu29_intern_strs::default_log_index_dir();
+        cu29_intern_strs::read_interned_strings(&index_dir).unwrap();
+        index_dir
     }
 
     #[test]
