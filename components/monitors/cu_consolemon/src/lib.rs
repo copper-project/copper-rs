@@ -1,7 +1,9 @@
 #[cfg(feature = "debug_pane")]
 mod debug_pane;
 pub mod sysinfo;
+mod tui_nodes;
 
+use crate::tui_nodes::{Connection, NodeGraph, NodeLayout};
 use ansi_to_tui::IntoText;
 use color_eyre::config::HookBuilder;
 use compact_str::{CompactString, ToCompactString};
@@ -37,7 +39,6 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 use std::{collections::HashMap, io, panic, thread};
-use tui_nodes::{Connection, NodeGraph, NodeLayout};
 use tui_widgets::scrollview::{ScrollView, ScrollViewState};
 
 #[cfg(feature = "debug_pane")]

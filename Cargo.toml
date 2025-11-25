@@ -89,9 +89,6 @@ default-members = [
 
 resolver = "2"
 
-[patch.crates-io]
-tui-nodes = { path = "support/vendor/tui-nodes" }
-
 [workspace.package]
 version = "0.10.0"
 authors = ["Guillaume Binet <gbin@gootz.net>"]
