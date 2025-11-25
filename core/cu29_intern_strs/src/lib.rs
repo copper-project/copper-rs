@@ -6,6 +6,16 @@ use std::sync::OnceLock;
 
 type IndexType = u32;
 
+#[cfg(feature = "macro_debug")]
+const COLORED_PREFIX_BUILD_LOG: &str = "\x1b[32mCLog:\x1b[0m";
+
+#[cfg(feature = "macro_debug")]
+macro_rules! build_log {
+    ($($arg:tt)*) => {
+        eprintln!("{} {}", COLORED_PREFIX_BUILD_LOG, format!($($arg)*));
+    };
+}
+
 /// The name of the directory where the log index is stored.
 const INDEX_DIR_NAME: &str = "cu29_log_index";
 const DB_FILE_NAME: &str = "strings.redb";
@@ -86,16 +96,6 @@ pub fn read_interned_strings(index: &Path) -> Result<Vec<String>> {
         all_strings[idx] = value.value().to_string();
     }
     Ok(all_strings)
-}
-
-#[cfg(feature = "macro_debug")]
-const COLORED_PREFIX_BUILD_LOG: &str = "\x1b[32mCLog:\x1b[0m";
-
-#[cfg(feature = "macro_debug")]
-macro_rules! build_log {
-    ($($arg:tt)*) => {
-        eprintln!("{} {}", COLORED_PREFIX_BUILD_LOG, format!($($arg)*));
-    };
 }
 
 pub fn intern_string(s: &str) -> Option<IndexType> {
