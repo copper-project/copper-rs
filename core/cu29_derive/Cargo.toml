@@ -22,7 +22,7 @@ itertools = "0.14"
 quote = { workspace = true }
 proc-macro2 = { workspace = true }
 syn = { workspace = true }
-syntect = "5.3"
+syntect = { workspace = true }
 walkdir = "2.5"
 
 [build-dependencies]
@@ -38,4 +38,3 @@ default = ["std"]
 # enables a more verbose build log showing the code generation.
 macro_debug = ["cu29-runtime/macro_debug"]
 std = ["cu29-traits/std", "cu29-unifiedlog/std"]
-

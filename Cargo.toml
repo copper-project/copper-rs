@@ -166,6 +166,7 @@ rayon = "1.11"
 
 # HashMap that is fast and has no std dependency
 hashbrown = { version = "0.16", features = ["serde"] }
+syntect = "5.3" # default features pull bincode 1.x for dump support; required by our format helpers
 
 [profile.screaming]
 inherits = "release"
