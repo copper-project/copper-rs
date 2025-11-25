@@ -14,7 +14,7 @@ repository.workspace = true
 [dependencies]
 syn = { workspace = true }
 quote = { workspace = true }
-syntect = "5.2.0"
+syntect = { workspace = true }
 
 [dev-dependencies]
 bincode = { workspace = true }
