@@ -225,7 +225,7 @@ pub fn textlog_dump(src: impl Read, index: &Path) -> CuResult<()> {
     for result in structlog_reader(src) {
         match result {
             Ok(entry) => match rebuild_logline(&all_strings, &entry) {
-                Ok(line) => println!("{}: {}", entry.time, line),
+                Ok(line) => println!("{line}"),
                 Err(e) => println!("Failed to rebuild log line: {e:?}"),
             },
             Err(e) => return Err(e),

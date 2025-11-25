@@ -1,8 +1,9 @@
 use anyhow::{Context, Result};
-use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
+use redb::{Database, DatabaseError, ReadableDatabase, ReadableTable, TableDefinition};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
+use std::time::Duration;
 
 type IndexType = u32;
 
@@ -72,7 +73,8 @@ fn database() -> &'static Database {
             );
         }
 
-        Database::create(db_path).expect("Failed to open interned strings database")
+        open_or_create_database(&db_path)
+            .unwrap_or_else(|e| panic!("Failed to open interned strings database: {e}"))
     })
 }
 
@@ -81,7 +83,8 @@ fn database() -> &'static Database {
 pub fn read_interned_strings(index: &Path) -> Result<Vec<String>> {
     let mut all_strings = Vec::<String>::new();
     let db_path = database_path(index);
-    let db = Database::open(db_path).context("Could not open the string index. Check the path.")?;
+    let db =
+        open_database_read(&db_path).context("Could not open the string index. Check the path.")?;
 
     let read_txn = db.begin_read()?;
     let index_to_string = read_txn
@@ -142,6 +145,38 @@ pub fn intern_string(s: &str) -> Option<IndexType> {
     }
 
     Some(next_index)
+}
+
+fn open_database_read(path: &Path) -> std::result::Result<Database, DatabaseError> {
+    retry_database_open(path, false)
+}
+
+fn open_or_create_database(path: &Path) -> std::result::Result<Database, DatabaseError> {
+    retry_database_open(path, true)
+}
+
+fn retry_database_open(path: &Path, create: bool) -> std::result::Result<Database, DatabaseError> {
+    let mut attempts = 0u32;
+    loop {
+        let open_result = if create {
+            Database::create(path)
+        } else {
+            Database::open(path)
+        };
+
+        match open_result {
+            Ok(db) => return Ok(db),
+            Err(DatabaseError::DatabaseAlreadyOpen) if attempts < 50 => {
+                std::thread::sleep(Duration::from_millis(10));
+                attempts += 1;
+                continue;
+            }
+            Err(DatabaseError::DatabaseAlreadyOpen) => {
+                return Err(DatabaseError::DatabaseAlreadyOpen);
+            }
+            Err(e) => return Err(e),
+        }
+    }
 }
 
 #[allow(dead_code)]

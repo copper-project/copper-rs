@@ -22,7 +22,7 @@ pub use defmt;
 #[cfg(feature = "std")]
 mod imp {
     pub use core::fmt::Display;
-    pub use cu29_traits::{CuError, CuResult};
+    pub use cu29_traits::CuResult;
     // strfmt forces hashmap from std
     pub use std::collections::HashMap;
     pub use std::fmt::Formatter;
@@ -188,18 +188,32 @@ pub fn format_logline(
     params: &[String],
     named_params: &HashMap<String, String>,
 ) -> CuResult<String> {
-    let mut format_str = format_str.to_string();
-
-    for param in params.iter() {
-        format_str = format_str.replacen("{}", param, 1);
+    // If the format string uses positional placeholders (`{}`), fill them in order using the
+    // anonymous params first, then any named params (sorted for determinism) if needed.
+    if format_str.contains("{}") {
+        let mut formatted = format_str.to_string();
+        for param in params.iter() {
+            if !formatted.contains("{}") {
+                break;
+            }
+            formatted = formatted.replacen("{}", param, 1);
+        }
+        if formatted.contains("{}") && !named_params.is_empty() {
+            let mut named = named_params.iter().collect::<Vec<_>>();
+            named.sort_by(|a, b| a.0.cmp(b.0));
+            for (_, value) in named {
+                if !formatted.contains("{}") {
+                    break;
+                }
+                formatted = formatted.replacen("{}", value, 1);
+            }
+        }
+        return Ok(format!("{time} [{level:?}]: {formatted}"));
     }
 
-    if named_params.is_empty() {
-        return Ok(format_str);
-    }
-
-    let logline = strfmt(&format_str, named_params).map_err(|e| {
-        CuError::new_with_cause(
+    // Otherwise rely on named formatting.
+    let logline = strfmt(format_str, named_params).map_err(|e| {
+        cu29_traits::CuError::new_with_cause(
             format!("Failed to format log line: {format_str:?} with variables [{named_params:?}]")
                 .as_str(),
             e,
