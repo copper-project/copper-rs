@@ -418,6 +418,7 @@ mod python {
 mod tests {
     use super::*;
     use bincode::{encode_into_slice, Decode, Encode};
+    use redb::{Database, TableDefinition};
     use std::fs;
     use std::io::Cursor;
     use std::path::PathBuf;
@@ -425,32 +426,25 @@ mod tests {
     use tempfile::{tempdir, TempDir};
 
     fn copy_stringindex_to_temp(tmpdir: &TempDir) -> PathBuf {
-        let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .and_then(|p| p.parent())
-            .unwrap()
-            .to_path_buf();
-
-        let target_dir = std::env::var("CARGO_TARGET_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| workspace_root.join("target"));
-
-        let src_dir = target_dir.join("debug/cu29_log_index");
-        let resolved_src = if src_dir.exists() {
-            src_dir
-        } else {
-            // Fallback to the default resolver used by the macros at build time.
-            cu29_intern_strs::default_log_index_dir()
-        };
+        // Build a minimal redb index on the fly so tests don't depend on build-time artifacts.
         let dest_dir = tmpdir.path().join("cu29_log_index");
-
         fs::create_dir_all(&dest_dir).unwrap();
-        for entry in fs::read_dir(resolved_src).unwrap() {
-            let entry = entry.unwrap();
-            let dest = dest_dir.join(entry.file_name());
-            fs::copy(entry.path(), dest).unwrap();
+        let db = Database::create(dest_dir.join("strings.redb")).unwrap();
+        let write_txn = db.begin_write().unwrap();
+        {
+            let mut index_to_string = write_txn
+                .open_table(TableDefinition::<u32, &str>::new("index_to_string"))
+                .unwrap();
+            // Provide entries for the message indexes used in this test module.
+            index_to_string.insert(2, "Just a String {}").unwrap();
+            index_to_string
+                .insert(3, "Just a String (low level) {}")
+                .unwrap();
+            index_to_string
+                .insert(4, "Just a String (end to end) {}")
+                .unwrap();
         }
-
+        write_txn.commit().unwrap();
         dest_dir
     }
 
