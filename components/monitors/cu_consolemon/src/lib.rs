@@ -33,7 +33,8 @@ use std::fmt::{Display, Formatter};
 use std::io::stdout;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 use std::{collections::HashMap, io, panic, thread};
 use tui_nodes::{Connection, NodeGraph, NodeLayout};
@@ -554,9 +555,20 @@ pub struct CuConsoleMon {
     taskids: &'static [&'static str],
     task_stats: Arc<Mutex<TaskStats>>,
     task_statuses: Arc<Mutex<Vec<TaskStatus>>>,
+    ui_handle: Option<JoinHandle<()>>,
     pool_stats: Arc<Mutex<Vec<PoolStats>>>,
     quitting: Arc<AtomicBool>,
     topology: Option<MonitorTopology>,
+}
+
+impl Drop for CuConsoleMon {
+    fn drop(&mut self) {
+        self.quitting.store(true, Ordering::SeqCst);
+        let _ = restore_terminal();
+        if let Some(handle) = self.ui_handle.take() {
+            let _ = handle.join();
+        }
+    }
 }
 
 struct UI {
@@ -564,6 +576,7 @@ struct UI {
     active_screen: Screen,
     sysinfo: String,
     task_stats: Arc<Mutex<TaskStats>>,
+    quitting: Arc<AtomicBool>,
     nodes_scrollable_widget_state: NodesScrollableWidgetState,
     #[cfg(feature = "debug_pane")]
     error_redirect: gag::BufferRedirect,
@@ -581,6 +594,7 @@ impl UI {
         task_ids: &'static [&'static str],
         task_stats: Arc<Mutex<TaskStats>>,
         task_statuses: Arc<Mutex<Vec<TaskStatus>>>,
+        quitting: Arc<AtomicBool>,
         error_redirect: gag::BufferRedirect,
         debug_output: Option<debug_pane::DebugLog>,
         pool_stats: Arc<Mutex<Vec<PoolStats>>>,
@@ -600,6 +614,7 @@ impl UI {
             active_screen: Screen::Neofetch,
             sysinfo: sysinfo::pfetch_info(),
             task_stats,
+            quitting,
             nodes_scrollable_widget_state,
             error_redirect,
             debug_output,
@@ -613,6 +628,7 @@ impl UI {
         task_ids: &'static [&'static str],
         task_stats: Arc<Mutex<TaskStats>>,
         task_statuses: Arc<Mutex<Vec<TaskStatus>>>,
+        quitting: Arc<AtomicBool>,
         pool_stats: Arc<Mutex<Vec<PoolStats>>>,
         topology: Option<MonitorTopology>,
     ) -> UI {
@@ -630,6 +646,7 @@ impl UI {
             active_screen: Screen::Neofetch,
             sysinfo: sysinfo::pfetch_info(),
             task_stats,
+            quitting,
             nodes_scrollable_widget_state,
             pool_stats,
         }
@@ -891,6 +908,9 @@ impl UI {
 
     fn run_app<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> io::Result<()> {
         loop {
+            if self.quitting.load(Ordering::SeqCst) {
+                break;
+            }
             #[cfg(feature = "debug_pane")]
             self.update_debug_output();
 
@@ -985,6 +1005,7 @@ impl CuMonitor for CuConsoleMon {
             taskids,
             task_stats,
             task_statuses: Arc::new(Mutex::new(vec![TaskStatus::default(); taskids.len()])),
+            ui_handle: None,
             quitting: Arc::new(AtomicBool::new(false)),
             pool_stats: Arc::new(Mutex::new(Vec::new())),
             topology: None,
@@ -1005,20 +1026,31 @@ impl CuMonitor for CuConsoleMon {
         let topology = self.topology.clone();
 
         // Start the main UI loop
-        thread::spawn(move || {
+        let handle = thread::spawn(move || {
             let backend = CrosstermBackend::new(stdout());
+            let _terminal_guard = TerminalRestoreGuard;
 
             // Ensure the terminal is restored if a panic occurs while the TUI is active.
             let prev_hook = panic::take_hook();
             panic::set_hook(Box::new(move |info| {
-                restore_terminal();
+                let _ = restore_terminal();
                 prev_hook(info);
             }));
 
-            setup_terminal();
+            install_signal_handlers(quitting.clone());
 
-            let mut terminal =
-                Terminal::new(backend).expect("Failed to initialize terminal backend");
+            if let Err(err) = setup_terminal() {
+                eprintln!("Failed to prepare terminal UI: {err}");
+                return;
+            }
+
+            let mut terminal = match Terminal::new(backend) {
+                Ok(terminal) => terminal,
+                Err(err) => {
+                    eprintln!("Failed to initialize terminal backend: {err}");
+                    return;
+                }
+            };
 
             #[cfg(feature = "debug_pane")]
             {
@@ -1031,6 +1063,7 @@ impl CuMonitor for CuConsoleMon {
                     taskids,
                     task_stats_ui,
                     error_states,
+                    quitting.clone(),
                     error_redirect,
                     None,
                     pool_stats_ui,
@@ -1053,7 +1086,9 @@ impl CuMonitor for CuConsoleMon {
                         Some(Box::new(log_subscriber) as Box<dyn log::Log>);
 
                     // Set up the terminal again, as there might be some logs which in the console before updating `EXTRA_TEXT_LOGGER`
-                    setup_terminal();
+                    if let Err(err) = setup_terminal() {
+                        eprintln!("Failed to reinitialize terminal after log redirect: {err}");
+                    }
 
                     ui.debug_output = Some(debug_log);
                 } else {
@@ -1071,6 +1106,7 @@ impl CuMonitor for CuConsoleMon {
                     taskids,
                     task_stats_ui,
                     error_states,
+                    quitting,
                     pool_stats_ui,
                     topology,
                 );
@@ -1081,9 +1117,10 @@ impl CuMonitor for CuConsoleMon {
 
             quitting.store(true, Ordering::SeqCst);
             // restoring the terminal
-            restore_terminal();
+            let _ = restore_terminal();
         });
 
+        self.ui_handle = Some(handle);
         Ok(())
     }
 
@@ -1138,7 +1175,12 @@ impl CuMonitor for CuConsoleMon {
     }
 
     fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
-        restore_terminal();
+        self.quitting.store(true, Ordering::SeqCst);
+        let _ = restore_terminal();
+
+        if let Some(handle) = self.ui_handle.take() {
+            let _ = handle.join();
+        }
 
         self.task_stats
             .lock()
@@ -1150,29 +1192,52 @@ impl CuMonitor for CuConsoleMon {
     }
 }
 
+struct TerminalRestoreGuard;
+
+impl Drop for TerminalRestoreGuard {
+    fn drop(&mut self) {
+        let _ = restore_terminal();
+    }
+}
+
+fn install_signal_handlers(quitting: Arc<AtomicBool>) {
+    static SIGNAL_HANDLER: OnceLock<()> = OnceLock::new();
+
+    let _ = SIGNAL_HANDLER.get_or_init(|| {
+        let quitting = quitting.clone();
+        if let Err(err) = ctrlc::set_handler(move || {
+            quitting.store(true, Ordering::SeqCst);
+            let _ = restore_terminal();
+            // Match the conventional 130 exit code for Ctrl-C.
+            std::process::exit(130);
+        }) {
+            eprintln!("Failed to install Ctrl-C handler: {err}");
+        }
+    });
+}
+
 fn init_error_hooks() {
     let (panic, error) = HookBuilder::default().into_hooks();
     let panic = panic.into_panic_hook();
     let error = error.into_eyre_hook();
     color_eyre::eyre::set_hook(Box::new(move |e| {
-        restore_terminal();
+        let _ = restore_terminal();
         error(e)
     }))
     .unwrap();
     std::panic::set_hook(Box::new(move |info| {
-        restore_terminal();
+        let _ = restore_terminal();
         panic(info)
     }));
 }
 
-fn setup_terminal() {
-    enable_raw_mode().expect("Could not enter raw mode: check terminal compatibility.");
-    execute!(stdout(), EnterAlternateScreen, EnableMouseCapture)
-        .expect("Could not enter alternateScreen: check terminal compatibility.");
+fn setup_terminal() -> io::Result<()> {
+    enable_raw_mode()?;
+    execute!(stdout(), EnterAlternateScreen, EnableMouseCapture)?;
+    Ok(())
 }
 
-fn restore_terminal() {
-    execute!(stdout(), LeaveAlternateScreen, DisableMouseCapture)
-        .expect("Could not leave alternate screen");
-    disable_raw_mode().expect("Could not restore the terminal.");
+fn restore_terminal() -> io::Result<()> {
+    execute!(stdout(), LeaveAlternateScreen, DisableMouseCapture)?;
+    disable_raw_mode()
 }

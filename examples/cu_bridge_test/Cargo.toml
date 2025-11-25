@@ -9,6 +9,7 @@ keywords.workspace = true
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
+default-run = "cu-bridge-test"
 
 publish = false
 [[bin]]
@@ -17,6 +18,7 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { workspace = true }
+cu29-export = { workspace = true }
 cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
 cu29-unifiedlog = { workspace = true }
@@ -25,6 +27,10 @@ once_cell = "1.21"
 serde = { workspace = true }
 tempfile = { workspace = true }
 cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.10.0" }
+
+[[bin]]
+name = "resim"
+path = "src/resim.rs"
 
 [features]
 default = []

@@ -29,5 +29,6 @@ tui-nodes = "0.9.0"
 tui-widgets = "0.5.0"
 color-eyre = "0.6.4"
 gag = "1.0.0"
+ctrlc = "3.4.2"
 log = { version = "0.4.27", features = ["std"], optional = true }
 chrono = { version = "0.4.41", optional = true }
