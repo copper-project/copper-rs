@@ -225,7 +225,7 @@ pub fn textlog_dump(src: impl Read, index: &Path) -> CuResult<()> {
     for result in structlog_reader(src) {
         match result {
             Ok(entry) => match rebuild_logline(&all_strings, &entry) {
-                Ok(line) => println!("{}: {}", entry.time, line),
+                Ok(line) => println!("{line}"),
                 Err(e) => println!("Failed to rebuild log line: {e:?}"),
             },
             Err(e) => return Err(e),
@@ -418,20 +418,28 @@ mod python {
 mod tests {
     use super::*;
     use bincode::{encode_into_slice, Decode, Encode};
-    use fs_extra::dir::{copy, CopyOptions};
+    use std::env;
+    use std::fs;
     use std::io::Cursor;
+    use std::path::PathBuf;
     use std::sync::{Arc, Mutex};
     use tempfile::{tempdir, TempDir};
 
     fn copy_stringindex_to_temp(tmpdir: &TempDir) -> PathBuf {
-        // for some reason using the index in real only locks it and generates a change in the file.
-        let temp_path = tmpdir.path();
+        // Build a minimal index on the fly so tests don't depend on build-time artifacts.
+        let fake_out_dir = tmpdir.path().join("build").join("out").join("dir");
+        fs::create_dir_all(&fake_out_dir).unwrap();
+        env::set_var("LOG_INDEX_DIR", &fake_out_dir);
 
-        let mut copy_options = CopyOptions::new();
-        copy_options.copy_inside = true;
+        // Provide entries for the message indexes used in this test module.
+        let _ = cu29_intern_strs::intern_string("unused to start counter");
+        let _ = cu29_intern_strs::intern_string("Just a String {}");
+        let _ = cu29_intern_strs::intern_string("Just a String (low level) {}");
+        let _ = cu29_intern_strs::intern_string("Just a String (end to end) {}");
 
-        copy("test/cu29_log_index", temp_path, &copy_options).unwrap();
-        temp_path.join("cu29_log_index")
+        let index_dir = cu29_intern_strs::default_log_index_dir();
+        cu29_intern_strs::read_interned_strings(&index_dir).unwrap();
+        index_dir
     }
 
     #[test]
