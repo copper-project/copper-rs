@@ -22,7 +22,7 @@ fn run_one_copperlist(
     copper_app: &mut BalanceBotReSim,
     robot_clock: &mut RobotClockMock,
     copper_list: CopperList<default::CuStampedDataSet>,
-) {
+) -> CuResult<()> {
     // Sync the copper clock to the simulated physics clock.
     let msgs = &copper_list.msgs;
 
@@ -67,9 +67,8 @@ fn run_one_copperlist(
             _ => SimOverride::ExecuteByRuntime,
         }
     };
-    copper_app
-        .run_one_iteration(&mut sim_callback)
-        .expect("Failed to run application.");
+    copper_app.run_one_iteration(&mut sim_callback)?;
+    Ok(())
 }
 
 fn main() {
@@ -108,7 +107,11 @@ fn main() {
     let iter = copperlists_reader::<default::CuStampedDataSet>(&mut reader);
     for entry in iter {
         println!("{entry:#?}");
-        run_one_copperlist(&mut copper_app, &mut robot_clock_mock, entry);
+        if let Err(err) = run_one_copperlist(&mut copper_app, &mut robot_clock_mock, entry) {
+            error!("Simulation replay stopped: {err}");
+            eprintln!("Simulation replay stopped: {err}");
+            break;
+        }
     }
     copper_app
         .stop_all_tasks(&mut default_callback)
