@@ -3,6 +3,7 @@ use redb::{Database, DatabaseError, ReadableDatabase, ReadableTable, TableDefini
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
+use std::cmp;
 use std::time::Duration;
 
 type IndexType = u32;
@@ -52,32 +53,6 @@ fn database_path(base: &Path) -> PathBuf {
     }
 }
 
-fn database() -> &'static Database {
-    static DB: OnceLock<Database> = OnceLock::new();
-    DB.get_or_init(|| {
-        let base_dir = default_log_index_dir();
-        let db_path = database_path(&base_dir);
-        if let Some(parent) = db_path.parent() {
-            fs::create_dir_all(parent).unwrap();
-        }
-
-        #[cfg(feature = "macro_debug")]
-        {
-            build_log!(
-                "=================================================================================="
-            );
-            build_log!("Interned strings are stored in: {:?}", db_path);
-            build_log!("   [r] is reused index and [n] is new index.");
-            build_log!(
-                "=================================================================================="
-            );
-        }
-
-        open_or_create_database(&db_path)
-            .unwrap_or_else(|e| panic!("Failed to open interned strings database: {e}"))
-    })
-}
-
 /// Reads all interned strings from the index at the specified path.
 /// The index is created at compile time within your project output directory.
 pub fn read_interned_strings(index: &Path) -> Result<Vec<String>> {
@@ -102,7 +77,16 @@ pub fn read_interned_strings(index: &Path) -> Result<Vec<String>> {
 }
 
 pub fn intern_string(s: &str) -> Option<IndexType> {
-    let db = database();
+    let base_dir = default_log_index_dir();
+    let db_path = database_path(&base_dir);
+    if let Some(parent) = db_path.parent() {
+        fs::create_dir_all(parent).unwrap();
+    }
+
+    #[cfg(feature = "macro_debug")]
+    log_db_info_once(&db_path);
+
+    let db = open_or_create_database(&db_path)?;
 
     // Fast path: see if the string already exists.
     if let Ok(read_txn) = db.begin_read() {
@@ -147,16 +131,34 @@ pub fn intern_string(s: &str) -> Option<IndexType> {
     Some(next_index)
 }
 
+#[cfg(feature = "macro_debug")]
+fn log_db_info_once(db_path: &Path) {
+    static ONCE: OnceLock<()> = OnceLock::new();
+    ONCE.get_or_init(|| {
+        build_log!(
+            "=================================================================================="
+        );
+        build_log!("Interned strings are stored in: {:?}", db_path);
+        build_log!("   [r] is reused index and [n] is new index.");
+        build_log!(
+            "=================================================================================="
+        );
+    });
+}
+
 fn open_database_read(path: &Path) -> std::result::Result<Database, DatabaseError> {
     retry_database_open(path, false)
 }
 
-fn open_or_create_database(path: &Path) -> std::result::Result<Database, DatabaseError> {
-    retry_database_open(path, true)
+fn open_or_create_database(path: &Path) -> Option<Database> {
+    retry_database_open(path, true).ok()
 }
 
 fn retry_database_open(path: &Path, create: bool) -> std::result::Result<Database, DatabaseError> {
     let mut attempts = 0u32;
+    // Allow up to ~5s of contention to serialize access across concurrent build processes.
+    const MAX_ATTEMPTS: u32 = 200;
+    let mut sleep_ms: u64 = 5;
     loop {
         let open_result = if create {
             Database::create(path)
@@ -166,16 +168,13 @@ fn retry_database_open(path: &Path, create: bool) -> std::result::Result<Databas
 
         match open_result {
             Ok(db) => return Ok(db),
-            Err(DatabaseError::DatabaseAlreadyOpen) if attempts < 50 => {
-                std::thread::sleep(Duration::from_millis(10));
-                attempts += 1;
-                continue;
-            }
-            Err(DatabaseError::DatabaseAlreadyOpen) => {
-                return Err(DatabaseError::DatabaseAlreadyOpen);
+            Err(DatabaseError::DatabaseAlreadyOpen) if attempts < MAX_ATTEMPTS => {
+                std::thread::sleep(Duration::from_millis(sleep_ms));
+                sleep_ms = cmp::min(sleep_ms.saturating_mul(2), 250);
             }
             Err(e) => return Err(e),
         }
+        attempts += 1;
     }
 }
 
