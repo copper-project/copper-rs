@@ -14,8 +14,8 @@ repository.workspace = true
 [dependencies]
 gstreamer = { version = "0.24", optional = true }
 cu29 = { workspace = true }
-cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "0.10.0" }
-cu-gstreamer = { path = "../../sources/cu_gstreamer", version = "0.10.0", optional = true }
+cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "0.11.0" }
+cu-gstreamer = { path = "../../sources/cu_gstreamer", version = "0.11.0", optional = true }
 
 [features]
 # The 'gst' feature includes dependencies for GStreamer support. 

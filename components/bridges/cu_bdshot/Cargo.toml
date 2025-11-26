@@ -15,7 +15,7 @@ embedded_only = true
 embedded_target = "thumbv8m.main-none-eabihf"
 
 [dependencies]
-cu29 = { path = "../../../core/cu29", default-features = false }
+cu29 = { path = "../../../core/cu29", version="0.11.0", default-features = false }
 rp235x-hal = { version = "0.3", features = ["critical-section-impl"] }
 pio = "=0.2.1"  # Needed
 pio-proc = "=0.2.1"

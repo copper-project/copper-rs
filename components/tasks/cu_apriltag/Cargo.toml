@@ -15,8 +15,8 @@ bincode = { workspace = true }
 cu29 = { workspace = true }
 serde = { workspace = true }
 arrayvec = "0.7.6"
-cu-spatial-payloads = { path = "../../payloads/cu_spatial_payloads", version = "0.10.0" }
-cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "0.10.0" }
+cu-spatial-payloads = { path = "../../payloads/cu_spatial_payloads", version = "0.11.0" }
+cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "0.11.0" }
 
 [target.'cfg(unix)'.dependencies]
 apriltag = { version = "0.4.0" }

@@ -20,7 +20,7 @@ socket2 = { version = "0.6.0", features = ["all"] }
 tempfile = { workspace = true }
 
 [dev-dependencies]
-cu-udp-inject = { path = "../../testing/cu_udp_inject", version = "0.10.0" }
+cu-udp-inject = { path = "../../testing/cu_udp_inject", version = "0.11.0" }
 cu29-derive = { workspace = true }
 cu29-helpers = { workspace = true }
 serde = { workspace = true }

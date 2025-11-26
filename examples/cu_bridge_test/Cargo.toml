@@ -26,7 +26,7 @@ bincode = { workspace = true }
 once_cell = "1.21"
 serde = { workspace = true }
 tempfile = { workspace = true }
-cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.10.0" }
+cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.11.0" }
 
 [[bin]]
 name = "resim"

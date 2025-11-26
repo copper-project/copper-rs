@@ -19,6 +19,6 @@ std = [
 ]
 
 [dependencies]
-cu29 = { path = "../../../core/cu29", version = "0.10.0", default-features = false }
+cu29 = { path = "../../../core/cu29", version = "0.11.0", default-features = false }
 bincode = { workspace = true }
 serde = { workspace = true }
