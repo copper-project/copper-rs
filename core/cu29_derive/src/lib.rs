@@ -602,13 +602,15 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         };
 
-        let all_sim_tasks_types: Vec<Type> = task_specs.ids
+        let all_sim_tasks_types: Vec<Type> = task_specs
+            .ids
             .iter()
             .zip(&task_specs.cutypes)
             .zip(&task_specs.sim_task_types)
             .zip(&task_specs.background_flags)
             .zip(&task_specs.run_in_sim_flags)
-            .map(|((((task_id, task_type), sim_type), background), run_in_sim)| {
+            .zip(task_specs.output_types.iter())
+            .map(|(((((task_id, task_type), sim_type), background), run_in_sim), output_type)| {
                 match task_type {
                     CuTaskType::Source => {
                         if *background {
@@ -625,9 +627,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         }
                     }
                     CuTaskType::Regular => {
-                        // TODO: wrap that correctly in a background task if background is true.
-                        // run_in_sim has no effect for normal tasks, they are always run in sim as is.
-                        sim_type.clone()
+                        if *background {
+                            if let Some(out_ty) = output_type {
+                                parse_quote!(CuAsyncTask<#sim_type, #out_ty>)
+                            } else {
+                                panic!("{task_id}: If a task is background, it has to have an output");
+                            }
+                        } else {
+                            // run_in_sim has no effect for normal tasks, they are always run in sim as is.
+                            sim_type.clone()
+                        }
                     },
                     CuTaskType::Sink => {
                         if *background {
@@ -676,15 +685,19 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         #[cfg(feature = "macro_debug")]
         eprintln!("[gen instances]");
-        // FIXME: implement here the threadpool emulation.
-        let task_sim_instances_init_code = all_sim_tasks_types.iter().enumerate().map(|(index, ty)| {
+        let task_sim_instances_init_code = all_sim_tasks_types.iter().zip(&task_specs.background_flags).enumerate().map(|(index, (ty, background))| {
             let additional_error_info = format!(
                 "Failed to get create instance for {}, instance index {}.",
                 task_specs.type_names[index], index
             );
+            let is_background = *background;
 
             quote! {
-                <#ty>::new(all_instances_configs[#index]).map_err(|e| e.add_cause(#additional_error_info))?
+                if #is_background {
+                    <#ty>::new(all_instances_configs[#index], threadpool.clone()).map_err(|e| e.add_cause(#additional_error_info))?
+                } else {
+                    <#ty>::new(all_instances_configs[#index]).map_err(|e| e.add_cause(#additional_error_info))?
+                }
             }
         }).collect::<Vec<_>>();
 
@@ -1635,14 +1648,17 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         };
 
         let sim_inst_body = if task_sim_instances_init_code.is_empty() {
-            quote! { Ok(()) }
+            quote! {
+                let _ = threadpool;
+                Ok(())
+            }
         } else {
             quote! { Ok(( #(#task_sim_instances_init_code),*, )) }
         };
 
         let sim_tasks_instanciator = if sim_mode {
             Some(quote! {
-                pub fn tasks_instanciator_sim(all_instances_configs: Vec<Option<&ComponentConfig>>, _threadpool: Arc<ThreadPool>) -> CuResult<CuSimTasks> {
+                pub fn tasks_instanciator_sim(all_instances_configs: Vec<Option<&ComponentConfig>>, threadpool: Arc<ThreadPool>) -> CuResult<CuSimTasks> {
                     #sim_inst_body
             }})
         } else {
