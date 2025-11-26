@@ -11,7 +11,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-cu29 = { path = "../../../core/cu29", default-features = false }
+cu29 = { path = "../../../core/cu29", version = "0.11.0", default-features = false }
 embedded-sdmmc = { version = "0.9", default-features = false }
 bincode = { workspace = true }
 

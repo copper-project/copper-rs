@@ -17,7 +17,7 @@ bincode = { workspace = true }
 serde = { workspace = true }
 smallvec = { workspace = true }
 
-cu-spatial-payloads = { path = "../../payloads/cu_spatial_payloads", version = "0.10.0", features = ["glam"] }
+cu-spatial-payloads = { path = "../../payloads/cu_spatial_payloads", version = "0.11", features = ["glam"] }
 
 petgraph = "0.8.1"  # For transform tree management
 thiserror = "2.0"   # For error handling
