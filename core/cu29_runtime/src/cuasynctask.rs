@@ -118,8 +118,7 @@ where
                     .unwrap()
                     .process(&clock, input_ref, output_ref)
                     .unwrap();
-                let end_from_metadata: Option<CuTime> =
-                    output_ref.metadata.process_time.end.into();
+                let end_from_metadata: Option<CuTime> = output_ref.metadata.process_time.end.into();
                 let end_time = end_from_metadata.unwrap_or_else(|| {
                     let now = clock.now();
                     output_ref.metadata.process_time.end = now.into();
