@@ -18,9 +18,9 @@ use embedded_sdmmc::SdCard;
 use rp235x_hal as hal;
 use rp235x_hal::clocks::Clock;
 use rp235x_hal::fugit::RateExtU32;
-use rp235x_hal::gpio::bank0::{Gpio12, Gpio13, Gpio15, Gpio16, Gpio17, Gpio18, Gpio19};
+use rp235x_hal::gpio::bank0::{Gpio15, Gpio16, Gpio17, Gpio18, Gpio19, Gpio2, Gpio3};
 use rp235x_hal::gpio::{
-    Function, FunctionPio0, FunctionSio, FunctionSpi, FunctionUart, FunctionXipCs1, Pin, PinId,
+    Function, FunctionPio0, FunctionSio, FunctionSpi, FunctionUartAux, FunctionXipCs1, Pin, PinId,
     PullDown, PullNone, PullType, PullUp, SioInput, SioOutput, ValidFunction,
 };
 use rp235x_hal::pac::{SPI0, UART0};
@@ -68,8 +68,8 @@ type Timer0 = Timer<CopyableTimer0>;
 type Timer1 = Timer<CopyableTimer1>;
 
 // Associated types for serial port
-type ElrsTx = Pin<Gpio12, FunctionUart, PullDown>;
-type ElrsRx = Pin<Gpio13, FunctionUart, PullUp>;
+type ElrsTx = Pin<Gpio2, FunctionUartAux, PullDown>;
+type ElrsRx = Pin<Gpio3, FunctionUartAux, PullUp>;
 type SerialPort = UartPeripheral<rp235x_hal::uart::Enabled, UART0, (ElrsTx, ElrsRx)>;
 type SerialPortError = rp235x_hal::uart::ReadErrorType;
 
@@ -116,13 +116,13 @@ fn main() -> ! {
 
     // Init Serial Port pins
     let tx = pins
-        .gpio12
+        .gpio2
         .into_push_pull_output()
-        .into_function::<FunctionUart>();
+        .into_function::<FunctionUartAux>();
     let rx = pins
-        .gpio13
+        .gpio3
         .into_pull_up_input()
-        .into_function::<FunctionUart>();
+        .into_function::<FunctionUartAux>();
 
     // Init PIOs
     let resources = Rp2350BoardResources::new(pio, sm0, sm1, sm2, sm3);
