@@ -190,6 +190,7 @@ pub struct EMMCLogger<BD: BlockDevice> {
     bd: Arc<ForceSyncSend<BD>>,
     next_block: BlockIdx,
     last_block: BlockIdx,
+    temporary_end_marker: Option<BlockIdx>,
 }
 
 impl<BD: BlockDevice> EMMCLogger<BD> {
@@ -214,6 +215,7 @@ impl<BD: BlockDevice> EMMCLogger<BD> {
             bd: Arc::new(ForceSyncSend::new(bd)),
             next_block,
             last_block,
+            temporary_end_marker: None,
         })
     }
 
@@ -226,6 +228,63 @@ impl<BD: BlockDevice> EMMCLogger<BD> {
         }
         Ok(start)
     }
+
+    fn clear_temporary_end_marker(&mut self) {
+        if let Some(marker) = self.temporary_end_marker.take() {
+            self.next_block = marker;
+        }
+    }
+
+    fn write_end_marker(&mut self, temporary: bool) -> CuResult<()> {
+        let marker = EndOfLogMarker { temporary };
+
+        let mut payload = [0u8; 32];
+        let payload_len = encode_into_slice(&marker, &mut payload[..], standard())
+            .map_err(|_| CuError::from("Could not encode end-of-log marker payload"))?;
+
+        let block_size = SECTION_HEADER_COMPACT_SIZE as usize;
+        let blocks_needed = 1 + ((payload_len + block_size - 1) / block_size);
+        let start_block = self.next_block;
+        let end_block = start_block + BlockCount(blocks_needed as u32);
+        if end_block > self.last_block {
+            return Err(CuError::from("out of space"));
+        }
+
+        let header = SectionHeader {
+            magic: SECTION_MAGIC,
+            block_size: SECTION_HEADER_COMPACT_SIZE,
+            entry_type: UnifiedLogType::LastEntry,
+            offset_to_next_section: (blocks_needed * block_size) as u32,
+            used: payload_len as u32,
+        };
+
+        let mut header_block = Block::new();
+        encode_into_slice(&header, header_block.as_mut(), standard())
+            .map_err(|_| CuError::from("Could not encode end-of-log header"))?;
+        self.bd
+            .write(&[header_block], start_block)
+            .map_err(|_| CuError::from("Could not write end-of-log header"))?;
+
+        // Write payload in subsequent blocks.
+        let mut remaining = payload_len;
+        let mut offset = 0usize;
+        let mut blk_idx = start_block + BlockCount(1);
+        while remaining > 0 {
+            let mut blk = Block::new();
+            let take = core::cmp::min(block_size, remaining);
+            blk.as_mut()[0..take].copy_from_slice(&payload[offset..offset + take]);
+            self.bd
+                .write(&[blk], blk_idx)
+                .map_err(|_| CuError::from("Could not write end-of-log payload"))?;
+            blk_idx += BlockCount(1);
+            offset += take;
+            remaining -= take;
+        }
+
+        self.temporary_end_marker = Some(start_block);
+        self.next_block = end_block;
+        Ok(())
+    }
 }
 
 impl<BD> UnifiedLogWrite<EMMCSectionStorage<BD>> for EMMCLogger<BD>
@@ -237,6 +296,7 @@ where
         entry_type: UnifiedLogType,
         requested_section_size: usize,
     ) -> CuResult<SectionHandle<EMMCSectionStorage<BD>>> {
+        self.clear_temporary_end_marker();
         let block_size = SECTION_HEADER_COMPACT_SIZE; // 512
         if block_size != 512 {
             panic!("EMMC: only 512 byte blocks supported");
@@ -260,7 +320,9 @@ where
         );
 
         // Create handle (this will call `storage.initialize(header)`).
-        SectionHandle::create(section_header, storage)
+        let mut handle = SectionHandle::create(section_header, storage)?;
+        self.write_end_marker(true)?;
+        Ok(handle)
     }
 
     fn flush_section(&mut self, section: &mut SectionHandle<EMMCSectionStorage<BD>>) {
@@ -279,6 +341,15 @@ where
         UnifiedLogStatus {
             total_used_space: (self.next_block.0 as usize) * BLK,
             total_allocated_space: (self.next_block.0 as usize) * BLK,
+        }
+    }
+}
+
+impl<BD: BlockDevice> Drop for EMMCLogger<BD> {
+    fn drop(&mut self) {
+        self.clear_temporary_end_marker();
+        if let Err(e) = self.write_end_marker(false) {
+            panic!("Failed to flush the unified logger: {}", e);
         }
     }
 }

@@ -168,6 +168,12 @@ pub struct UnifiedLogStatus {
     pub total_allocated_space: usize,
 }
 
+/// Payload stored in the end-of-log section to signal whether the log was cleanly closed.
+#[derive(Encode, Decode, Debug, Clone)]
+pub struct EndOfLogMarker {
+    pub temporary: bool,
+}
+
 /// The writing interface to the unified logger.
 /// Writing is "almost" linear as various streams can allocate sections and track them until
 /// they drop them.
