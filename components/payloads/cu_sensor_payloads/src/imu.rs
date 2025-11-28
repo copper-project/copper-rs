@@ -43,9 +43,9 @@ impl ImuPayload {
         mag_ut: Option<[f32; 3]>,
         temperature_c: f32,
     ) -> Self {
-        let accel = accel_mps2.map(|v| Acceleration::new::<meter_per_second_squared>(v));
-        let gyro = gyro_rad.map(|v| AngularVelocity::new::<radian_per_second>(v));
-        let mag = mag_ut.map(|values| values.map(|v| MagneticFluxDensity::new::<microtesla>(v)));
+        let accel = accel_mps2.map(Acceleration::new::<meter_per_second_squared>);
+        let gyro = gyro_rad.map(AngularVelocity::new::<radian_per_second>);
+        let mag = mag_ut.map(|values| values.map(MagneticFluxDensity::new::<microtesla>));
         let temperature = ThermodynamicTemperature::new::<degree_celsius>(temperature_c);
 
         Self {
