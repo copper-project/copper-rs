@@ -35,6 +35,7 @@ members = [
     "components/sources/cu_gstreamer",
     "components/sources/cu_hesai",
     "components/sources/cu_livox",
+    "components/sources/cu_mpu9250",
     "components/sources/cu_iceoryx2_src",
     "components/sources/cu_v4l",
     "components/sources/cu_vlp16",
