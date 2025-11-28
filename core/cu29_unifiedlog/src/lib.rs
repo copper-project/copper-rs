@@ -87,6 +87,7 @@ pub struct SectionHeader {
     pub entry_type: UnifiedLogType,
     pub offset_to_next_section: u32, // offset from the first byte of this header to the first byte of the next header (MAGIC to MAGIC).
     pub used: u32,                   // how much of the section is filled.
+    pub is_open: bool,               // true while being written, false once closed.
 }
 
 impl Display for SectionHeader {
@@ -95,8 +96,8 @@ impl Display for SectionHeader {
         writeln!(f, "    type -> {:?}", self.entry_type)?;
         write!(
             f,
-            "    use  -> {} / {}",
-            self.used, self.offset_to_next_section
+            "    use  -> {} / {} (open: {})",
+            self.used, self.offset_to_next_section, self.is_open
         )
     }
 }
@@ -109,6 +110,7 @@ impl Default for SectionHeader {
             entry_type: UnifiedLogType::Empty,
             offset_to_next_section: 0,
             used: 0,
+            is_open: true,
         }
     }
 }
@@ -144,6 +146,10 @@ impl<S: SectionStorage> SectionHandle<S> {
         let _ = storage.initialize(&header).map_err(|e| e.to_string())?;
         Ok(Self { header, storage })
     }
+
+    pub fn mark_closed(&mut self) {
+        self.header.is_open = false;
+    }
     pub fn append<E: Encode>(&mut self, entry: E) -> Result<usize, EncodeError> {
         self.storage.append(&entry)
     }
@@ -166,6 +172,12 @@ impl<S: SectionStorage> SectionHandle<S> {
 pub struct UnifiedLogStatus {
     pub total_used_space: usize,
     pub total_allocated_space: usize,
+}
+
+/// Payload stored in the end-of-log section to signal whether the log was cleanly closed.
+#[derive(Encode, Decode, Debug, Clone)]
+pub struct EndOfLogMarker {
+    pub temporary: bool,
 }
 
 /// The writing interface to the unified logger.
