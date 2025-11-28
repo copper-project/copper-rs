@@ -2,8 +2,8 @@
 //! It is std only.
 
 use crate::{
-    AllocatedSection, EndOfLogMarker, MainHeader, SectionHandle, SectionHeader, SectionStorage,
-    UnifiedLogRead, UnifiedLogStatus, UnifiedLogWrite, MAIN_MAGIC, SECTION_MAGIC,
+    AllocatedSection, MainHeader, SectionHandle, SectionHeader, SectionStorage, UnifiedLogRead,
+    UnifiedLogStatus, UnifiedLogWrite, MAIN_MAGIC, SECTION_MAGIC,
 };
 
 use crate::SECTION_HEADER_COMPACT_SIZE;
@@ -203,18 +203,9 @@ impl SlabEntry {
     }
 
     fn write_end_marker(&mut self, temporary: bool) -> CuResult<()> {
-        let marker = EndOfLogMarker { temporary };
-
         let block_size = SECTION_HEADER_COMPACT_SIZE as usize;
         let marker_start = self.align_to_next_page(self.current_global_position);
-
-        // Encode marker payload size to compute section size.
-        let mut marker_buf = [0u8; 32];
-        let marker_size = encode_into_slice(&marker, &mut marker_buf[..], standard())
-            .map_err(|e| CuError::new_with_cause("Failed to encode end-of-log marker", e))?;
-
-        // Full section size = header block + payload.
-        let total_marker_size = block_size + marker_size;
+        let total_marker_size = block_size; // header only
         let marker_end = marker_start + total_marker_size;
         if marker_end > self.mmap_buffer.len() {
             return Err("Not enough space to write end-of-log marker".into());
@@ -225,10 +216,10 @@ impl SlabEntry {
             block_size: SECTION_HEADER_COMPACT_SIZE,
             entry_type: UnifiedLogType::LastEntry,
             offset_to_next_section: total_marker_size as u32,
-            used: marker_size as u32,
+            used: 0,
+            is_open: temporary,
         };
 
-        // Header
         encode_into_slice(
             &header,
             &mut self.mmap_buffer
@@ -237,18 +228,8 @@ impl SlabEntry {
         )
         .map_err(|e| CuError::new_with_cause("Failed to encode end-of-log header", e))?;
 
-        // Payload right after header block.
-        let payload_start = marker_start + SECTION_HEADER_COMPACT_SIZE as usize;
-        encode_into_slice(
-            &marker,
-            &mut self.mmap_buffer[payload_start..payload_start + marker_size],
-            standard(),
-        )
-        .map_err(|e| CuError::new_with_cause("Failed to encode end-of-log payload", e))?;
-
         self.temporary_end_marker = Some(marker_start);
         self.current_global_position = marker_end;
-
         Ok(())
     }
 
@@ -321,6 +302,7 @@ impl SlabEntry {
             entry_type,
             offset_to_next_section: section_size,
             used: 0u32,
+            is_open: true,
         };
 
         // save the position to keep track for in flight sections
@@ -427,6 +409,7 @@ impl UnifiedLogWrite<MmapSectionStorage> for MmapUnifiedLoggerWrite {
     }
 
     fn flush_section(&mut self, section: &mut SectionHandle<MmapSectionStorage>) {
+        section.mark_closed();
         for slab in self.back_slabs.iter_mut() {
             if slab.is_it_my_section(section) {
                 slab.flush_section(section);
@@ -748,7 +731,7 @@ impl Read for UnifiedLoggerIOReader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{stream_write, EndOfLogMarker};
+    use crate::stream_write;
     use bincode::de::read::SliceReader;
     use bincode::{decode_from_reader, decode_from_slice, Decode, Encode};
     use cu29_traits::WriteStream;
@@ -877,13 +860,8 @@ mod tests {
             decode_from_slice::<SectionHeader, _>(&slab.mmap_buffer[marker_start..], standard())
                 .expect("Could not decode end-of-log marker header");
         assert_eq!(eof_header.entry_type, UnifiedLogType::LastEntry);
-        let data_start = marker_start + eof_header.block_size as usize;
-        let (payload, _) = decode_from_slice::<EndOfLogMarker, _>(
-            &slab.mmap_buffer[data_start..data_start + eof_header.used as usize],
-            standard(),
-        )
-        .expect("Could not decode end-of-log payload");
-        assert!(payload.temporary);
+        assert!(eof_header.is_open);
+        assert_eq!(eof_header.used, 0);
     }
 
     #[test]
@@ -910,13 +888,11 @@ mod tests {
         };
 
         loop {
-            let (header, data) = reader
+            let (header, _data) = reader
                 .raw_read_section()
                 .expect("Failed to read section while searching for EOF");
             if header.entry_type == UnifiedLogType::LastEntry {
-                let (payload, _) = decode_from_slice::<EndOfLogMarker, _>(&data, standard())
-                    .expect("Failed to decode end-of-log payload in final marker");
-                assert!(!payload.temporary);
+                assert!(!header.is_open);
                 break;
             }
         }

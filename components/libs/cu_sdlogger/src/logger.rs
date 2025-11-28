@@ -236,14 +236,8 @@ impl<BD: BlockDevice> EMMCLogger<BD> {
     }
 
     fn write_end_marker(&mut self, temporary: bool) -> CuResult<()> {
-        let marker = EndOfLogMarker { temporary };
-
-        let mut payload = [0u8; 32];
-        let payload_len = encode_into_slice(&marker, &mut payload[..], standard())
-            .map_err(|_| CuError::from("Could not encode end-of-log marker payload"))?;
-
         let block_size = SECTION_HEADER_COMPACT_SIZE as usize;
-        let blocks_needed = 1 + ((payload_len + block_size - 1) / block_size);
+        let blocks_needed = 1; // header only
         let start_block = self.next_block;
         let end_block = start_block + BlockCount(blocks_needed as u32);
         if end_block > self.last_block {
@@ -255,7 +249,8 @@ impl<BD: BlockDevice> EMMCLogger<BD> {
             block_size: SECTION_HEADER_COMPACT_SIZE,
             entry_type: UnifiedLogType::LastEntry,
             offset_to_next_section: (blocks_needed * block_size) as u32,
-            used: payload_len as u32,
+            used: 0,
+            is_open: temporary,
         };
 
         let mut header_block = Block::new();
@@ -264,22 +259,6 @@ impl<BD: BlockDevice> EMMCLogger<BD> {
         self.bd
             .write(&[header_block], start_block)
             .map_err(|_| CuError::from("Could not write end-of-log header"))?;
-
-        // Write payload in subsequent blocks.
-        let mut remaining = payload_len;
-        let mut offset = 0usize;
-        let mut blk_idx = start_block + BlockCount(1);
-        while remaining > 0 {
-            let mut blk = Block::new();
-            let take = core::cmp::min(block_size, remaining);
-            blk.as_mut()[0..take].copy_from_slice(&payload[offset..offset + take]);
-            self.bd
-                .write(&[blk], blk_idx)
-                .map_err(|_| CuError::from("Could not write end-of-log payload"))?;
-            blk_idx += BlockCount(1);
-            offset += take;
-            remaining -= take;
-        }
 
         self.temporary_end_marker = Some(start_block);
         self.next_block = end_block;
@@ -308,6 +287,7 @@ where
             entry_type,
             offset_to_next_section: requested_section_size as u32,
             used: 0,
+            is_open: true,
         };
 
         let section_size_in_blks: u32 = (requested_section_size / block_size as usize) as u32 + 1; // always round up
@@ -320,12 +300,13 @@ where
         );
 
         // Create handle (this will call `storage.initialize(header)`).
-        let mut handle = SectionHandle::create(section_header, storage)?;
+        let handle = SectionHandle::create(section_header, storage)?;
         self.write_end_marker(true)?;
         Ok(handle)
     }
 
     fn flush_section(&mut self, section: &mut SectionHandle<EMMCSectionStorage<BD>>) {
+        section.mark_closed();
         // and the end of the stream is ok.
         section
             .get_storage_mut()
