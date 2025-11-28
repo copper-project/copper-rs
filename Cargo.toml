@@ -90,7 +90,7 @@ default-members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.10.0"
+version = "0.11.0"
 authors = ["Guillaume Binet <gbin@gootz.net>"]
 edition = "2021"
 license = "Apache-2.0"
@@ -105,24 +105,24 @@ no_individual_tags = true
 [workspace.dependencies]
 
 # Copper Core
-cu29 = { path = "core/cu29", version = "0.10.0" } # default std
-cu29-clock = { path = "core/cu29_clock", default-features = false, version = "0.10.0" }
-cu29-derive = { path = "core/cu29_derive", default-features = false, version = "0.10.0" }
-cu29-export = { path = "core/cu29_export", version = "0.10.0" } # std only
-cu29-helpers = { path = "core/cu29_helpers", version = "0.10.0" }  # std only
-cu29-intern-strs = { path = "core/cu29_intern_strs", version = "0.10.0" } # std only
-cu29-log = { path = "core/cu29_log", default-features = false, version = "0.10.0" }
-cu29-log-derive = { path = "core/cu29_log_derive", default-features = false, version = "0.10.0" }
-cu29-log-runtime = { path = "core/cu29_log_runtime", default-features = false, version = "0.10.0" }
-cu29-runtime = { path = "core/cu29_runtime", default-features = false, version = "0.10.0" }
-cu29-soa-derive = { path = "core/cu29_soa_derive", default-features = false, version = "0.10.0" }
-cu29-traits = { path = "core/cu29_traits", default-features = false, version = "0.10.0" }
-cu29-unifiedlog = { path = "core/cu29_unifiedlog", default-features = false, features = ["compact"], version = "0.10.0" }
-cu29-value = { path = "core/cu29_value", default-features = false, version = "0.10.0" }
+cu29 = { path = "core/cu29", version = "0.11.0" } # default std
+cu29-clock = { path = "core/cu29_clock", default-features = false, version = "0.11.0" }
+cu29-derive = { path = "core/cu29_derive", default-features = false, version = "0.11.0" }
+cu29-export = { path = "core/cu29_export", version = "0.11.0" } # std only
+cu29-helpers = { path = "core/cu29_helpers", version = "0.11.0" }  # std only
+cu29-intern-strs = { path = "core/cu29_intern_strs", version = "0.11.0" } # std only
+cu29-log = { path = "core/cu29_log", default-features = false, version = "0.11.0" }
+cu29-log-derive = { path = "core/cu29_log_derive", default-features = false, version = "0.11.0" }
+cu29-log-runtime = { path = "core/cu29_log_runtime", default-features = false, version = "0.11.0" }
+cu29-runtime = { path = "core/cu29_runtime", default-features = false, version = "0.11.0" }
+cu29-soa-derive = { path = "core/cu29_soa_derive", default-features = false, version = "0.11.0" }
+cu29-traits = { path = "core/cu29_traits", default-features = false, version = "0.11.0" }
+cu29-unifiedlog = { path = "core/cu29_unifiedlog", default-features = false, features = ["compact"], version = "0.11.0" }
+cu29-value = { path = "core/cu29_value", default-features = false, version = "0.11.0" }
 
 # Payload definitions
-cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads", version = "0.10.0" }
-cu-ros-payloads = { path = "components/payloads/cu_ros_payloads", version = "0.10.0" }
+cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads", version = "0.11.0" }
+cu-ros-payloads = { path = "components/payloads/cu_ros_payloads", version = "0.11.0" }
 
 # External serialization
 bincode = { version = "2.0", default-features = false, features = ["derive", "alloc"] }

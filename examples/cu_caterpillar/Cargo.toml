@@ -42,8 +42,8 @@ cu29-helpers = { workspace = true }
 cu29-export = { workspace = true, features = ["python"] }
 serde = { workspace = true }
 
-cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.10.0" } # needed
-cu-rp-gpio = { path = "../../components/sinks/cu_rp_gpio", version = "0.10.0" }
+cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.11.0" } # needed
+cu-rp-gpio = { path = "../../components/sinks/cu_rp_gpio", version = "0.11.0" }
 
 
 [features]

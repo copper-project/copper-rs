@@ -15,8 +15,8 @@ publish = false
 cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
 tempfile = { workspace = true }
-cu-hesai = { path = "../../components/sources/cu_hesai", version = "0.10.0" }
-cu-udp-inject = { path = "../../components/testing/cu_udp_inject", version = "0.10.0" }
-cu-sensor-payloads = { path = "../../components/payloads/cu_sensor_payloads", version = "0.10.0" }
+cu-hesai = { path = "../../components/sources/cu_hesai", version = "0.11.0" }
+cu-udp-inject = { path = "../../components/testing/cu_udp_inject", version = "0.11.0" }
+cu-sensor-payloads = { path = "../../components/payloads/cu_sensor_payloads", version = "0.11.0" }
 rerun = { workspace = true }
 serde = { workspace = true }

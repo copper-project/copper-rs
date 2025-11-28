@@ -14,8 +14,8 @@ publish = false
 [dependencies]
 cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
-cu-caterpillar = { path = "../cu_caterpillar", version = "0.10.0" }
-cu-rp-gpio = { path = "../../components/sinks/cu_rp_gpio", version = "0.10.0" }
+cu-caterpillar = { path = "../cu_caterpillar", version = "0.11.0" }
+cu-rp-gpio = { path = "../../components/sinks/cu_rp_gpio", version = "0.11.0" }
 tempfile = { workspace = true }
 serde = { workspace = true }
 
