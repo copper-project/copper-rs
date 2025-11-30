@@ -23,11 +23,35 @@ fn map_debug_error<E: Debug>(context: &str, err: E) -> CuError {
     CuError::from(format!("{context}: {err:?}"))
 }
 
+#[derive(Serialize)]
+#[repr(u8)]
+pub enum WhoAmI {
+    Mpu9250 = 0x71,
+    Mpu9255 = 0x73,
+    Mpu6500 = 0x70,
+    Clone75 = 0x75,
+    Ak8963 = 0x48,
+    Unknown,
+}
+
+impl From<u8> for WhoAmI {
+    fn from(v: u8) -> Self {
+        match v {
+            0x71 => WhoAmI::Mpu9250,
+            0x73 => WhoAmI::Mpu9255,
+            0x70 => WhoAmI::Mpu6500,
+            0x75 => WhoAmI::Clone75,
+            0x48 => WhoAmI::Ak8963,
+            _ => WhoAmI::Unknown,
+        }
+    }
+}
+
 /// Trait implemented by MPU9250 backends capable of producing an [`ImuPayload`].
 pub trait Mpu9250Device: Send + 'static {
     type Error: Debug;
 
-    fn who_am_i(&mut self) -> Result<u8, Self::Error>;
+    fn who_am_i(&mut self) -> Result<WhoAmI, Self::Error>;
     fn read_measure(&mut self) -> Result<ImuPayload, Self::Error>;
 }
 
@@ -45,8 +69,8 @@ where
 {
     type Error = <DEV as Device>::Error;
 
-    fn who_am_i(&mut self) -> Result<u8, Self::Error> {
-        Mpu9250::who_am_i(self)
+    fn who_am_i(&mut self) -> Result<WhoAmI, Self::Error> {
+        Ok(WhoAmI::from(Mpu9250::who_am_i(self)?))
     }
 
     fn read_measure(&mut self) -> Result<ImuPayload, Self::Error> {
@@ -62,8 +86,8 @@ where
 {
     type Error = <DEV as Device>::Error;
 
-    fn who_am_i(&mut self) -> Result<u8, Self::Error> {
-        Mpu9250::who_am_i(self)
+    fn who_am_i(&mut self) -> Result<WhoAmI, Self::Error> {
+        Ok(WhoAmI::from(Mpu9250::who_am_i(self)?))
     }
 
     fn read_measure(&mut self) -> Result<ImuPayload, Self::Error> {
