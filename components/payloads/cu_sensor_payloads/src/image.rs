@@ -1,10 +1,14 @@
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
 use bincode::de::Decoder;
 use bincode::error::DecodeError;
 use bincode::{Decode, Encode};
+use core::fmt::Debug;
 use cu29::prelude::{ArrayLike, CuHandle};
 #[allow(unused_imports)]
 use cu29::{CuError, CuResult};
-use std::fmt::Debug;
+#[cfg(feature = "std")]
+use std::vec::Vec;
 
 #[cfg(feature = "image")]
 use image::{ImageBuffer, Pixel};
@@ -129,7 +133,7 @@ where
             let data: &[u8] = inner;
             core::slice::from_raw_parts(
                 data.as_ptr() as *const T,
-                data.len() / std::mem::size_of::<T>(),
+                data.len() / core::mem::size_of::<T>(),
             )
         });
 
