@@ -6,7 +6,6 @@ use crate::{
     UnifiedLogStatus, UnifiedLogWrite, MAIN_MAGIC, SECTION_MAGIC,
 };
 
-#[cfg(feature = "compact")]
 use crate::SECTION_HEADER_COMPACT_SIZE;
 
 use bincode::config::standard;
@@ -147,6 +146,7 @@ struct SlabEntry {
     sections_offsets_in_flight: Vec<usize>,
     flushed_until_offset: usize,
     page_size: usize,
+    temporary_end_marker: Option<usize>,
 }
 
 impl Drop for SlabEntry {
@@ -174,6 +174,7 @@ impl SlabEntry {
             sections_offsets_in_flight: Vec::with_capacity(16),
             flushed_until_offset: 0,
             page_size,
+            temporary_end_marker: None,
         }
     }
 
@@ -190,6 +191,46 @@ impl SlabEntry {
             )
             .expect("Failed to flush memory map");
         self.flushed_until_offset = until_position;
+    }
+
+    fn clear_temporary_end_marker(&mut self) {
+        if let Some(marker_start) = self.temporary_end_marker.take() {
+            self.current_global_position = marker_start;
+            if self.flushed_until_offset > marker_start {
+                self.flushed_until_offset = marker_start;
+            }
+        }
+    }
+
+    fn write_end_marker(&mut self, temporary: bool) -> CuResult<()> {
+        let block_size = SECTION_HEADER_COMPACT_SIZE as usize;
+        let marker_start = self.align_to_next_page(self.current_global_position);
+        let total_marker_size = block_size; // header only
+        let marker_end = marker_start + total_marker_size;
+        if marker_end > self.mmap_buffer.len() {
+            return Err("Not enough space to write end-of-log marker".into());
+        }
+
+        let header = SectionHeader {
+            magic: SECTION_MAGIC,
+            block_size: SECTION_HEADER_COMPACT_SIZE,
+            entry_type: UnifiedLogType::LastEntry,
+            offset_to_next_section: total_marker_size as u32,
+            used: 0,
+            is_open: temporary,
+        };
+
+        encode_into_slice(
+            &header,
+            &mut self.mmap_buffer
+                [marker_start..marker_start + SECTION_HEADER_COMPACT_SIZE as usize],
+            standard(),
+        )
+        .map_err(|e| CuError::new_with_cause("Failed to encode end-of-log header", e))?;
+
+        self.temporary_end_marker = Some(marker_start);
+        self.current_global_position = marker_end;
+        Ok(())
     }
 
     fn is_it_my_section(&self, section: &SectionHandle<MmapSectionStorage>) -> bool {
@@ -261,6 +302,7 @@ impl SlabEntry {
             entry_type,
             offset_to_next_section: section_size,
             used: 0u32,
+            is_open: true,
         };
 
         // save the position to keep track for in flight sections
@@ -336,6 +378,7 @@ impl UnifiedLogWrite<MmapSectionStorage> for MmapUnifiedLoggerWrite {
         requested_section_size: usize,
     ) -> CuResult<SectionHandle<MmapSectionStorage>> {
         self.garbage_collect_backslabs(); // Take the opportunity to keep up and close stale back slabs.
+        self.front_slab.clear_temporary_end_marker();
         let maybe_section = self
             .front_slab
             .add_section(entry_type, requested_section_size);
@@ -352,14 +395,21 @@ impl UnifiedLogWrite<MmapSectionStorage> for MmapUnifiedLoggerWrite {
                     .add_section(entry_type, requested_section_size)
                 {
                     AllocatedSection::NoMoreSpace => Err(CuError::from("out of space")),
-                    Section(section) => Ok(section),
+                    Section(section) => {
+                        self.place_end_marker(true)?;
+                        Ok(section)
+                    }
                 }
             }
-            Section(section) => Ok(section),
+            Section(section) => {
+                self.place_end_marker(true)?;
+                Ok(section)
+            }
         }
     }
 
     fn flush_section(&mut self, section: &mut SectionHandle<MmapSectionStorage>) {
+        section.mark_closed();
         for slab in self.back_slabs.iter_mut() {
             if slab.is_it_my_section(section) {
                 slab.flush_section(section);
@@ -413,6 +463,19 @@ impl MmapUnifiedLoggerWrite {
             .retain_mut(|slab| !slab.sections_offsets_in_flight.is_empty());
     }
 
+    fn place_end_marker(&mut self, temporary: bool) -> CuResult<()> {
+        match self.front_slab.write_end_marker(temporary) {
+            Ok(_) => Ok(()),
+            Err(_) => {
+                // Not enough space in the current slab, roll to a new one.
+                let new_slab = SlabEntry::new(self.next_slab(), self.front_slab.page_size);
+                self.back_slabs
+                    .push(mem::replace(&mut self.front_slab, new_slab));
+                self.front_slab.write_end_marker(temporary)
+            }
+        }
+    }
+
     pub fn stats(&self) -> (usize, Vec<usize>, usize) {
         (
             self.front_slab.current_global_position,
@@ -427,21 +490,15 @@ impl Drop for MmapUnifiedLoggerWrite {
         #[cfg(debug_assertions)]
         eprintln!("Flushing the unified Logger ... "); // Note this cannot be a structured log writing in this log.
 
-        let section = self.add_section(
-            UnifiedLogType::LastEntry,
-            SECTION_HEADER_COMPACT_SIZE as usize, // this is the absolute minimum size of a section.
-        );
-        match section {
-            Ok(mut section) => {
-                self.front_slab.flush_section(&mut section);
-                self.garbage_collect_backslabs();
-                #[cfg(debug_assertions)]
-                eprintln!("Unified Logger flushed."); // Note this cannot be a structured log writing in this log.
-            }
-            Err(e) => {
-                panic!("Failed to flush the unified logger: {}", e);
-            }
+        self.front_slab.clear_temporary_end_marker();
+        if let Err(e) = self.place_end_marker(false) {
+            panic!("Failed to flush the unified logger: {}", e);
         }
+        self.front_slab
+            .flush_until(self.front_slab.current_global_position);
+        self.garbage_collect_backslabs();
+        #[cfg(debug_assertions)]
+        eprintln!("Unified Logger flushed."); // Note this cannot be a structured log writing in this log.
     }
 }
 
@@ -676,7 +733,7 @@ mod tests {
     use super::*;
     use crate::stream_write;
     use bincode::de::read::SliceReader;
-    use bincode::{decode_from_reader, Decode, Encode};
+    use bincode::{decode_from_reader, decode_from_slice, Decode, Encode};
     use cu29_traits::WriteStream;
     use std::path::PathBuf;
     use std::sync::{Arc, Mutex};
@@ -778,6 +835,67 @@ mod tests {
             logger.front_slab.flushed_until_offset,
             logger.front_slab.current_global_position
         );
+    }
+
+    #[test]
+    fn test_temporary_end_marker_is_created() {
+        let tmp_dir = TempDir::new().expect("could not create a tmp dir");
+        let (logger, _) = make_a_logger(&tmp_dir, LARGE_SLAB);
+        {
+            let mut stream = stream_write::<u32, MmapSectionStorage>(
+                logger.clone(),
+                UnifiedLogType::StructuredLogLine,
+                1024,
+            )
+            .unwrap();
+            stream.log(&42u32).unwrap();
+        }
+
+        let logger_guard = logger.lock().unwrap();
+        let slab = &logger_guard.front_slab;
+        let marker_start = slab
+            .temporary_end_marker
+            .expect("temporary end-of-log marker missing");
+        let (eof_header, _) =
+            decode_from_slice::<SectionHeader, _>(&slab.mmap_buffer[marker_start..], standard())
+                .expect("Could not decode end-of-log marker header");
+        assert_eq!(eof_header.entry_type, UnifiedLogType::LastEntry);
+        assert!(eof_header.is_open);
+        assert_eq!(eof_header.used, 0);
+    }
+
+    #[test]
+    fn test_final_end_marker_is_not_temporary() {
+        let tmp_dir = TempDir::new().expect("could not create a tmp dir");
+        let (logger, f) = make_a_logger(&tmp_dir, LARGE_SLAB);
+        {
+            let mut stream = stream_write::<u32, MmapSectionStorage>(
+                logger.clone(),
+                UnifiedLogType::CopperList,
+                1024,
+            )
+            .unwrap();
+            stream.log(&1u32).unwrap();
+        }
+        drop(logger);
+
+        let MmapUnifiedLogger::Read(mut reader) = MmapUnifiedLoggerBuilder::new()
+            .file_base_name(&f)
+            .build()
+            .expect("Failed to build reader")
+        else {
+            panic!("Failed to create reader");
+        };
+
+        loop {
+            let (header, _data) = reader
+                .raw_read_section()
+                .expect("Failed to read section while searching for EOF");
+            if header.entry_type == UnifiedLogType::LastEntry {
+                assert!(!header.is_open);
+                break;
+            }
+        }
     }
 
     #[test]
