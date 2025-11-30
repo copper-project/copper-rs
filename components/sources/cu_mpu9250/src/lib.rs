@@ -51,12 +51,7 @@ where
 
     fn read_measure(&mut self) -> Result<ImuPayload, Self::Error> {
         let data = self.all::<[f32; 3]>()?;
-        Ok(ImuPayload::from_raw(
-            data.accel,
-            data.gyro,
-            Some(data.mag),
-            data.temp,
-        ))
+        Ok(ImuPayload::from_raw(data.accel, data.gyro, data.temp))
     }
 }
 
@@ -73,7 +68,7 @@ where
 
     fn read_measure(&mut self) -> Result<ImuPayload, Self::Error> {
         let data = self.all::<[f32; 3]>()?;
-        Ok(ImuPayload::from_raw(data.accel, data.gyro, None, data.temp))
+        Ok(ImuPayload::from_raw(data.accel, data.gyro, data.temp))
     }
 }
 
