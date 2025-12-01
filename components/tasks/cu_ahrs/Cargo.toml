@@ -12,6 +12,16 @@ repository.workspace = true
 
 [features]
 default = ["std"]
+rp2350-demo = [
+    "defmt",
+    "defmt-rtt",
+    "panic-probe",
+    "cortex-m",
+    "cortex-m-rt",
+    "embedded-hal",
+    "rp235x-hal",
+    "mpu9250",
+]
 std = [
     "cu29/std",
     "cu-sensor-payloads/std",
@@ -26,3 +36,16 @@ bincode = { workspace = true }
 serde = { workspace = true }
 dcmimu = "0.3.0"
 uom = { version = "0.37", default-features = false, features = ["serde", "f32", "si", "autoconvert"] }
+defmt = { version = "0.3", optional = true }
+defmt-rtt = { version = "1.1", optional = true }
+panic-probe = { version = "1.0", features = ["defmt", "print-defmt"], optional = true }
+cortex-m = { version = "0.7", optional = true }
+cortex-m-rt = { version = "0.7", optional = true }
+embedded-hal = { version = "1.0.0", optional = true }
+rp235x-hal = { version = "0.3", features = ["rt", "critical-section-impl", "defmt"], optional = true }
+mpu9250 = { version = "0.25.0", default-features = false, optional = true }
+
+[[example]]
+name = "rp2350_ahrs"
+path = "examples/rp2350_ahrs.rs"
+required-features = ["rp2350-demo"]

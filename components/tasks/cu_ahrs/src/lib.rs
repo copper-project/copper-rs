@@ -96,6 +96,46 @@ impl CuAhrs {
     }
 }
 
+pub mod sinks {
+    //! Simple sinks for AHRS outputs.
+    use super::*;
+
+    /// Logs incoming RPY to stdout/log and forwards the payload.
+    pub struct RpyPrinter;
+
+    impl Freezable for RpyPrinter {}
+
+    impl CuTask for RpyPrinter {
+        type Input<'m> = input_msg!(AhrsPose);
+        type Output<'m> = output_msg!(AhrsPose);
+
+        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+        where
+            Self: Sized,
+        {
+            Ok(Self)
+        }
+
+        fn process(
+            &mut self,
+            _clock: &RobotClock,
+            input: &Self::Input<'_>,
+            output: &mut Self::Output<'_>,
+        ) -> CuResult<()> {
+            if let Some(pose) = input.payload() {
+                info!(
+                    "AHRS RPY [rad]: roll={:.3} pitch={:.3} yaw={:.3}",
+                    pose.roll, pose.pitch, pose.yaw
+                );
+                output.set_payload(pose.clone());
+            } else {
+                output.clear_payload();
+            }
+            Ok(())
+        }
+    }
+}
+
 impl Freezable for CuAhrs {
     fn freeze<E: bincode::enc::Encoder>(
         &self,
