@@ -127,7 +127,7 @@ pub mod sinks {
                     "AHRS RPY [rad]: roll={:.3} pitch={:.3} yaw={:.3}",
                     pose.roll, pose.pitch, pose.yaw
                 );
-                output.set_payload(pose.clone());
+                output.set_payload(*pose);
             } else {
                 output.clear_payload();
             }

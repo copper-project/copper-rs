@@ -1,109 +1,118 @@
-#![no_std]
-#![no_main]
+#![cfg_attr(all(feature = "rp2350-demo", target_arch = "arm"), no_std)]
+#![cfg_attr(all(feature = "rp2350-demo", target_arch = "arm"), no_main)]
 
-use cortex_m_rt::entry;
-use cu29::cutask::CuMsg;
-use cu29_clock::{CuDuration, RobotClock};
-use cu_ahrs::CuAhrs;
-use cu_sensor_payloads::ImuPayload;
-use defmt::{info, warn, Debug2Format};
-use defmt_rtt as _;
-use embedded_hal::delay::DelayNs;
-use embedded_hal::digital::OutputPin;
-use embedded_hal::spi::MODE_0;
-use mpu9250::Mpu9250;
-use panic_probe as _;
-use rp235x_hal as hal;
+#[cfg(all(feature = "rp2350-demo", target_arch = "arm"))]
+mod firmware {
+    use cortex_m_rt::entry;
+    use cu29::clock::{CuDuration, RobotClock};
+    use cu29::cutask::CuMsg;
+    use cu29::prelude::CuTask;
+    use cu_ahrs::CuAhrs;
+    use cu_sensor_payloads::ImuPayload;
+    use defmt::{info, warn, Debug2Format};
+    use defmt_rtt as _;
+    use embedded_hal::delay::DelayNs;
+    use embedded_hal::digital::OutputPin;
+    use embedded_hal::spi::MODE_0;
+    use mpu9250::Mpu9250;
+    use panic_probe as _;
+    use rp235x_hal as hal;
 
-use hal::clocks::init_clocks_and_plls;
-use hal::fugit::RateExtU32;
-use hal::gpio::bank0::{Gpio10, Gpio11, Gpio12, Gpio13};
-use hal::gpio::{FunctionSpi, Pins, PullDown};
-use hal::pac;
-use hal::pac::SPI1;
-use hal::sio::Sio;
-use hal::spi::{Enabled, FrameFormat};
-use hal::timer::CopyableTimer0;
-use hal::watchdog::Watchdog;
-use hal::{Clock, Spi, Timer};
-use uom::si::angular_velocity::radian_per_second;
-use uom::si::f32::AngularVelocity as UomAngVel;
+    use hal::clocks::init_clocks_and_plls;
+    use hal::fugit::RateExtU32;
+    use hal::gpio::bank0::{Gpio10, Gpio11, Gpio12, Gpio13};
+    use hal::gpio::{FunctionSpi, Pins, PullDown};
+    use hal::pac;
+    use hal::pac::SPI1;
+    use hal::sio::Sio;
+    use hal::spi::{Enabled, FrameFormat};
+    use hal::timer::CopyableTimer0;
+    use hal::watchdog::Watchdog;
+    use hal::{Clock, Spi, Timer};
+    use uom::si::angular_velocity::radian_per_second;
+    use uom::si::f32::AngularVelocity as UomAngVel;
 
 // Place image definition so the ROM knows how to boot the firmware.
-#[unsafe(link_section = ".start_block")]
-#[used]
-pub static IMAGE_DEF: hal::block::ImageDef = hal::block::ImageDef::secure_exe();
+    #[unsafe(link_section = ".start_block")]
+    #[used]
+    pub static IMAGE_DEF: hal::block::ImageDef = hal::block::ImageDef::secure_exe();
 
 const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
 const US_TO_SEC: f32 = 1.0 / 1_000_000.0;
 
-type Mosi = hal::gpio::Pin<Gpio11, FunctionSpi, PullDown>;
-type Miso = hal::gpio::Pin<Gpio12, FunctionSpi, PullDown>;
-type Sck = hal::gpio::Pin<Gpio10, FunctionSpi, PullDown>;
-type SpiPins = (Mosi, Miso, Sck);
-type SpiBus = Spi<Enabled, SPI1, SpiPins>;
-type DelayTimer = Timer<CopyableTimer0>;
-type CsPin = hal::gpio::Pin<Gpio13, hal::gpio::FunctionSio<hal::gpio::SioOutput>, PullDown>;
-type CsError = <CsPin as embedded_hal::digital::ErrorType>::Error;
-type SpiErr = <SpiBus as embedded_hal::spi::ErrorType>::Error;
-type MpuSpiError = mpu9250::SpiError<SpiErr, CsError>;
-type MpuError = mpu9250::Error<MpuSpiError>;
+    type Mosi = hal::gpio::Pin<Gpio11, FunctionSpi, PullDown>;
+    type Miso = hal::gpio::Pin<Gpio12, FunctionSpi, PullDown>;
+    type Sck = hal::gpio::Pin<Gpio10, FunctionSpi, PullDown>;
+    type SpiPins = (Mosi, Miso, Sck);
+    type SpiBus = Spi<Enabled, SPI1, SpiPins>;
+    type DelayTimer = Timer<CopyableTimer0>;
+    type CsPin = hal::gpio::Pin<Gpio13, hal::gpio::FunctionSio<hal::gpio::SioOutput>, PullDown>;
+    type CsError = <CsPin as embedded_hal::digital::ErrorType>::Error;
+    type SpiErr = <SpiBus as embedded_hal::spi::ErrorType>::Error;
+    type MpuSpiError = mpu9250::SpiError<SpiErr, CsError>;
+    type MpuError = mpu9250::Error<MpuSpiError>;
 
-type MpuMarg = Mpu9250<mpu9250::SpiDevice<SpiBus, CsPin>, mpu9250::Marg>;
-type MpuImu = Mpu9250<mpu9250::SpiDevice<SpiBus, CsPin>, mpu9250::Imu>;
+    type MpuMarg = Mpu9250<mpu9250::SpiDevice<SpiBus, CsPin>, mpu9250::Marg>;
+    type MpuImu = Mpu9250<mpu9250::SpiDevice<SpiBus, CsPin>, mpu9250::Imu>;
 
-enum Mpu {
-    Marg(MpuMarg),
-    Imu(MpuImu),
-}
+    enum Mpu {
+        Marg(MpuMarg),
+        Imu(MpuImu),
+    }
 
-impl Mpu {
-    fn who_am_i(&mut self) -> Result<u8, MpuError> {
-        match self {
-            Mpu::Marg(m) => Ok(m.who_am_i()?),
-            Mpu::Imu(m) => Ok(m.who_am_i()?),
+    impl Mpu {
+        fn who_am_i(&mut self) -> Result<u8, MpuError> {
+            match self {
+                Mpu::Marg(m) => Ok(m.who_am_i()?),
+                Mpu::Imu(m) => Ok(m.who_am_i()?),
+            }
+        }
+
+        fn read_sample(&mut self) -> Result<ImuPayload, MpuError> {
+            let (accel, gyro, temp) = match self {
+                Mpu::Marg(m) => {
+                    let data = m.all::<[f32; 3]>()?;
+                    (data.accel, data.gyro, data.temp)
+                }
+                Mpu::Imu(m) => {
+                    let data = m.all::<[f32; 3]>()?;
+                    (data.accel, data.gyro, data.temp)
+                }
+            };
+            Ok(ImuPayload::from_raw(accel, gyro, temp))
         }
     }
 
-    fn read_sample(&mut self) -> Result<ImuPayload, MpuError> {
-        let data = match self {
-            Mpu::Marg(m) => m.all::<[f32; 3]>()?,
-            Mpu::Imu(m) => m.all::<[f32; 3]>()?,
-        };
-        Ok(ImuPayload::from_raw(data.accel, data.gyro, data.temp))
-    }
-}
+    fn init_mpu(spi: SpiBus, cs: CsPin, timer: &mut DelayTimer) -> Mpu {
+        info!("Initializing MPU9250 over SPI1 (imu)...");
+        let mut imu = Mpu9250::imu_default(spi, cs, timer).unwrap_or_else(|e| {
+            warn!("imu init failed: {:?}", Debug2Format(&e));
+            panic!();
+        });
 
-fn init_mpu(spi: SpiBus, cs: CsPin, timer: &mut DelayTimer) -> Mpu {
-    info!("Initializing MPU9250 over SPI1 (imu)...");
-    let mut imu = Mpu9250::imu_default(spi, cs, timer).unwrap_or_else(|e| {
-        warn!("imu init failed: {:?}", Debug2Format(&e));
-        panic!();
-    });
+        let id = imu.who_am_i().unwrap_or(0);
+        let mag_supported = matches!(id, 0x71 | 0x73);
 
-    let id = imu.who_am_i().unwrap_or(0);
-    let mag_supported = matches!(id, 0x71 | 0x73);
-
-    if mag_supported {
-        info!("WHO_AM_I=0x{:02X} -> trying marg (mag enabled)", id);
-        let (spi, cs) = imu.release();
-        match Mpu9250::marg_default(spi, cs, timer) {
-            Ok(dev) => {
-                info!("Using marg mode (gyro+accel+mag)");
-                return Mpu::Marg(dev);
+        if mag_supported {
+            info!("WHO_AM_I=0x{:02X} -> trying marg (mag enabled)", id);
+            let (spi, cs) = imu.release();
+            match Mpu9250::marg_default(spi, cs, timer) {
+                Ok(dev) => {
+                    info!("Using marg mode (gyro+accel+mag)");
+                    Mpu::Marg(dev)
+                }
+                Err(e) => {
+                    panic!("marg init failed: {:?}", Debug2Format(&e));
+                }
             }
-            Err(e) => {
-                panic!("marg init failed: {:?}", Debug2Format(&e));
-            }
+        } else {
+            info!("WHO_AM_I=0x{:02X} (mag not supported) -> imu-only", id);
+            Mpu::Imu(imu)
         }
-    } else {
-        info!("WHO_AM_I=0x{:02X} (mag not supported) -> imu-only", id);
-        Mpu::Imu(imu)
     }
-}
 
-#[entry]
-fn main() -> ! {
+    #[entry]
+    fn main() -> ! {
     let mut p = pac::Peripherals::take().unwrap();
     let mut watchdog = Watchdog::new(p.WATCHDOG);
     let clocks = init_clocks_and_plls(
@@ -152,7 +161,7 @@ fn main() -> ! {
         let now = timer.get_counter().ticks();
         let dt_us = now.wrapping_sub(last_ticks);
         last_ticks = now;
-        let dt_s = (dt_us as f32) * US_TO_SEC;
+        let _dt_s = (dt_us as f32) * US_TO_SEC;
 
         let sample = match mpu.read_sample() {
             Ok(mut payload) => {
@@ -185,47 +194,54 @@ fn main() -> ! {
     }
 }
 
-fn apply_bias(payload: &mut ImuPayload, bias: [f32; 3]) {
-    let bx = UomAngVel::new::<radian_per_second>(bias[0]);
-    let by = UomAngVel::new::<radian_per_second>(bias[1]);
-    let bz = UomAngVel::new::<radian_per_second>(bias[2]);
-    payload.gyro_x = payload.gyro_x - bx;
-    payload.gyro_y = payload.gyro_y - by;
-    payload.gyro_z = payload.gyro_z - bz;
+    fn apply_bias(payload: &mut ImuPayload, bias: [f32; 3]) {
+        let bx = UomAngVel::new::<radian_per_second>(bias[0]);
+        let by = UomAngVel::new::<radian_per_second>(bias[1]);
+        let bz = UomAngVel::new::<radian_per_second>(bias[2]);
+        payload.gyro_x -= bx;
+        payload.gyro_y -= by;
+        payload.gyro_z -= bz;
+    }
+
+    fn calibrate_gyro(mpu: &mut Mpu, timer: &mut DelayTimer) -> [f32; 3] {
+        info!("=== Gyro bias calibration: keep the board still ===");
+        const CAL_MS: u32 = 3_000;
+        const SAMPLE_DELAY_MS: u32 = 10;
+        let start = timer.get_counter().ticks();
+        let mut sum = [0.0f32; 3];
+        let mut count: u32 = 0;
+
+        while timer
+            .get_counter()
+            .ticks()
+            .wrapping_sub(start)
+            .saturating_div(1_000)
+            < (CAL_MS as u64)
+        {
+            match mpu.read_sample() {
+                Ok(payload) => {
+                    sum[0] += payload.gyro_x.value;
+                    sum[1] += payload.gyro_y.value;
+                    sum[2] += payload.gyro_z.value;
+                    count += 1;
+                }
+                Err(e) => warn!("calib read error: {:?}", Debug2Format(&e)),
+            }
+            timer.delay_ms(SAMPLE_DELAY_MS);
+        }
+
+        if count == 0 {
+            warn!("calibration produced no samples, defaulting to zero bias");
+            return [0.0; 3];
+        }
+
+        let inv = 1.0 / (count as f32);
+        [sum[0] * inv, sum[1] * inv, sum[2] * inv]
+    }
 }
 
-fn calibrate_gyro(mpu: &mut Mpu, timer: &mut DelayTimer) -> [f32; 3] {
-    info!("=== Gyro bias calibration: keep the board still ===");
-    const CAL_MS: u32 = 3_000;
-    const SAMPLE_DELAY_MS: u32 = 10;
-    let start = timer.get_counter().ticks();
-    let mut sum = [0.0f32; 3];
-    let mut count: u32 = 0;
-
-    while timer
-        .get_counter()
-        .ticks()
-        .wrapping_sub(start)
-        .saturating_div(1_000)
-        < (CAL_MS as u64)
-    {
-        match mpu.read_sample() {
-            Ok(payload) => {
-                sum[0] += payload.gyro_x.value;
-                sum[1] += payload.gyro_y.value;
-                sum[2] += payload.gyro_z.value;
-                count += 1;
-            }
-            Err(e) => warn!("calib read error: {:?}", Debug2Format(&e)),
-        }
-        timer.delay_ms(SAMPLE_DELAY_MS);
-    }
-
-    if count == 0 {
-        warn!("calibration produced no samples, defaulting to zero bias");
-        return [0.0; 3];
-    }
-
-    let inv = 1.0 / (count as f32);
-    [sum[0] * inv, sum[1] * inv, sum[2] * inv]
+#[cfg(not(all(feature = "rp2350-demo", target_arch = "arm")))]
+fn main() {
+    // Host/dummy entry to keep clippy happy without cross-building.
+    println!("rp2350_ahrs example requires --features rp2350-demo and a thumbv8m target.");
 }
