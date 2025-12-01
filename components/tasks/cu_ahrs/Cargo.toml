@@ -1,0 +1,28 @@
+[package]
+name = "cu-ahrs"
+description = "Copper task that fuses IMU payloads into roll, pitch, yaw."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[features]
+default = ["std"]
+std = [
+    "cu29/std",
+    "cu-sensor-payloads/std",
+    "bincode/std",
+    "serde/std",
+]
+
+[dependencies]
+cu29 = { path = "../../../core/cu29", version = "0.11.0", default-features = false }
+cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "0.11.0", default-features = false }
+bincode = { workspace = true }
+serde = { workspace = true }
+dcmimu = "0.3.0"
+uom = { version = "0.37", default-features = false, features = ["serde", "f32", "si", "autoconvert"] }
