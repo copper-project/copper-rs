@@ -12,4 +12,7 @@ fn main() {
     f.write_all(memory_x).unwrap();
     println!("cargo:rerun-if-changed=memory.x");
     println!("cargo:rerun-if-changed=build.rs");
+
+    // Needed by cu29 logging macros (LOG_INDEX_DIR env var)
+    println!("cargo:rustc-env=LOG_INDEX_DIR={}", out.display());
 }
