@@ -1,0 +1,9 @@
+(
+    tasks: [
+        (id: "src", type: "cu_mpu9250::LinuxMpu9250Source"),
+        (id: "logger", type: "cu_mpu9250::app::ImuLogSink"),
+    ],
+    cnx: [
+        (src: "src", dst: "logger", msg: "cu_mpu9250::ImuPayload"),
+    ],
+)

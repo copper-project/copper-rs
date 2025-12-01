@@ -83,6 +83,7 @@ impl UnifiedLogWrite<MySectionStorage> for MyEmbeddedLogger {
             entry_type,
             offset_to_next_section: 10000,
             used: 0,
+            is_open: true,
         };
 
         let mut storage: MySectionStorage = MySectionStorage {};
