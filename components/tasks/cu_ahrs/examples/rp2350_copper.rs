@@ -109,12 +109,10 @@ mod firmware {
                 )
                 .unwrap();
 
-                let mut timer: DelayTimer =
-                    Timer::new_timer0(p.TIMER0, &mut p.RESETS, &clocks);
+                let mut timer: DelayTimer = Timer::new_timer0(p.TIMER0, &mut p.RESETS, &clocks);
 
                 let sio = Sio::new(p.SIO);
-                let pins =
-                    Pins::new(p.IO_BANK0, p.PADS_BANK0, sio.gpio_bank0, &mut p.RESETS);
+                let pins = Pins::new(p.IO_BANK0, p.PADS_BANK0, sio.gpio_bank0, &mut p.RESETS);
 
                 let sck: Sck = pins.gpio10.into_function();
                 let mosi: Mosi = pins.gpio11.into_function();
@@ -122,19 +120,22 @@ mod firmware {
                 let mut cs: CsPin = pins.gpio13.into_push_pull_output();
                 let _ = cs.set_high(); // idle high
 
-                let spi: SpiBus =
-                    Spi::<_, _, _, 8>::new(p.SPI1, (mosi, miso, sck)).init(
-                        &mut p.RESETS,
-                        clocks.peripheral_clock.freq(),
-                        1_000_000u32.Hz(),
-                        FrameFormat::MotorolaSpi(MODE_0),
-                    );
+                let spi: SpiBus = Spi::<_, _, _, 8>::new(p.SPI1, (mosi, miso, sck)).init(
+                    &mut p.RESETS,
+                    clocks.peripheral_clock.freq(),
+                    1_000_000u32.Hz(),
+                    FrameFormat::MotorolaSpi(MODE_0),
+                );
 
                 let mpu = init_mpu(spi, cs, &mut timer);
                 Ok(Self { mpu, timer })
             }
 
-            fn process<'o>(&mut self, clock: &RobotClock, new_msg: &mut Self::Output<'o>) -> CuResult<()> {
+            fn process<'o>(
+                &mut self,
+                clock: &RobotClock,
+                new_msg: &mut Self::Output<'o>,
+            ) -> CuResult<()> {
                 let payload = self
                     .mpu
                     .read_sample()
