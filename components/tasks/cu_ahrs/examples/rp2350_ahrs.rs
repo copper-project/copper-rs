@@ -32,13 +32,13 @@ mod firmware {
     use uom::si::angular_velocity::radian_per_second;
     use uom::si::f32::AngularVelocity as UomAngVel;
 
-// Place image definition so the ROM knows how to boot the firmware.
+    // Place image definition so the ROM knows how to boot the firmware.
     #[unsafe(link_section = ".start_block")]
     #[used]
     pub static IMAGE_DEF: hal::block::ImageDef = hal::block::ImageDef::secure_exe();
 
-const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
-const US_TO_SEC: f32 = 1.0 / 1_000_000.0;
+    const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
+    const US_TO_SEC: f32 = 1.0 / 1_000_000.0;
 
     type Mosi = hal::gpio::Pin<Gpio11, FunctionSpi, PullDown>;
     type Miso = hal::gpio::Pin<Gpio12, FunctionSpi, PullDown>;
@@ -113,86 +113,86 @@ const US_TO_SEC: f32 = 1.0 / 1_000_000.0;
 
     #[entry]
     fn main() -> ! {
-    let mut p = pac::Peripherals::take().unwrap();
-    let mut watchdog = Watchdog::new(p.WATCHDOG);
-    let clocks = init_clocks_and_plls(
-        XOSC_CRYSTAL_FREQ,
-        p.XOSC,
-        p.CLOCKS,
-        p.PLL_SYS,
-        p.PLL_USB,
-        &mut p.RESETS,
-        &mut watchdog,
-    )
-    .unwrap();
+        let mut p = pac::Peripherals::take().unwrap();
+        let mut watchdog = Watchdog::new(p.WATCHDOG);
+        let clocks = init_clocks_and_plls(
+            XOSC_CRYSTAL_FREQ,
+            p.XOSC,
+            p.CLOCKS,
+            p.PLL_SYS,
+            p.PLL_USB,
+            &mut p.RESETS,
+            &mut watchdog,
+        )
+        .unwrap();
 
-    let mut timer: DelayTimer = Timer::new_timer0(p.TIMER0, &mut p.RESETS, &clocks);
+        let mut timer: DelayTimer = Timer::new_timer0(p.TIMER0, &mut p.RESETS, &clocks);
 
-    let sio = Sio::new(p.SIO);
-    let pins = Pins::new(p.IO_BANK0, p.PADS_BANK0, sio.gpio_bank0, &mut p.RESETS);
+        let sio = Sio::new(p.SIO);
+        let pins = Pins::new(p.IO_BANK0, p.PADS_BANK0, sio.gpio_bank0, &mut p.RESETS);
 
-    let sck: Sck = pins.gpio10.into_function();
-    let mosi: Mosi = pins.gpio11.into_function();
-    let miso: Miso = pins.gpio12.into_function();
-    let mut cs: CsPin = pins.gpio13.into_push_pull_output();
-    let _ = cs.set_high(); // idle high
+        let sck: Sck = pins.gpio10.into_function();
+        let mosi: Mosi = pins.gpio11.into_function();
+        let miso: Miso = pins.gpio12.into_function();
+        let mut cs: CsPin = pins.gpio13.into_push_pull_output();
+        let _ = cs.set_high(); // idle high
 
-    let spi: SpiBus = Spi::<_, _, _, 8>::new(p.SPI1, (mosi, miso, sck)).init(
-        &mut p.RESETS,
-        clocks.peripheral_clock.freq(),
-        1_000_000u32.Hz(),
-        FrameFormat::MotorolaSpi(MODE_0),
-    );
-
-    let mut mpu = init_mpu(spi, cs, &mut timer);
-
-    match mpu.who_am_i() {
-        Ok(id) => info!("WHO_AM_I=0x{:02X}", id),
-        Err(e) => warn!("who_am_i error: {:?}", Debug2Format(&e)),
-    }
-
-    let gyro_bias = calibrate_gyro(&mut mpu, &mut timer);
-
-    let mut ahrs = CuAhrs::new_filter();
-    let mut last_ticks = timer.get_counter().ticks();
-
-    info!("Starting AHRS loop (500 Hz raw read, 20 ms log)...");
-    loop {
-        let now = timer.get_counter().ticks();
-        let dt_us = now.wrapping_sub(last_ticks);
-        last_ticks = now;
-        let _dt_s = (dt_us as f32) * US_TO_SEC;
-
-        let sample = match mpu.read_sample() {
-            Ok(mut payload) => {
-                apply_bias(&mut payload, gyro_bias);
-                payload
-            }
-            Err(e) => {
-                warn!("imu read error: {:?}", Debug2Format(&e));
-                timer.delay_ms(20u32);
-                continue;
-            }
-        };
-
-        // The AHRS task expects TOV in CuTime; we approximate with timer ticks.
-        let pose = {
-            // feed with a fake TOV containing elapsed nanoseconds
-            let mut msg = CuMsg::new(Some(sample));
-            msg.tov = CuDuration::from((now as u64) * 1_000).into();
-            let mut output = CuMsg::new(None);
-            let _ = ahrs.process(&RobotClock::default(), &msg, &mut output);
-            output.payload().cloned().unwrap_or_default()
-        };
-
-        info!(
-            "pose rad: roll={=f32} pitch={=f32} yaw={=f32}",
-            pose.roll, pose.pitch, pose.yaw
+        let spi: SpiBus = Spi::<_, _, _, 8>::new(p.SPI1, (mosi, miso, sck)).init(
+            &mut p.RESETS,
+            clocks.peripheral_clock.freq(),
+            1_000_000u32.Hz(),
+            FrameFormat::MotorolaSpi(MODE_0),
         );
 
-        timer.delay_ms(20u32);
+        let mut mpu = init_mpu(spi, cs, &mut timer);
+
+        match mpu.who_am_i() {
+            Ok(id) => info!("WHO_AM_I=0x{:02X}", id),
+            Err(e) => warn!("who_am_i error: {:?}", Debug2Format(&e)),
+        }
+
+        let gyro_bias = calibrate_gyro(&mut mpu, &mut timer);
+
+        let mut ahrs = CuAhrs::new_filter();
+        let mut last_ticks = timer.get_counter().ticks();
+
+        info!("Starting AHRS loop (500 Hz raw read, 20 ms log)...");
+        loop {
+            let now = timer.get_counter().ticks();
+            let dt_us = now.wrapping_sub(last_ticks);
+            last_ticks = now;
+            let _dt_s = (dt_us as f32) * US_TO_SEC;
+
+            let sample = match mpu.read_sample() {
+                Ok(mut payload) => {
+                    apply_bias(&mut payload, gyro_bias);
+                    payload
+                }
+                Err(e) => {
+                    warn!("imu read error: {:?}", Debug2Format(&e));
+                    timer.delay_ms(20u32);
+                    continue;
+                }
+            };
+
+            // The AHRS task expects TOV in CuTime; we approximate with timer ticks.
+            let pose = {
+                // feed with a fake TOV containing elapsed nanoseconds
+                let mut msg = CuMsg::new(Some(sample));
+                msg.tov = CuDuration::from((now as u64) * 1_000).into();
+                let mut output = CuMsg::new(None);
+                let _ = ahrs.process(&RobotClock::default(), &msg, &mut output);
+                output.payload().cloned().unwrap_or_default()
+            };
+
+            info!(
+                "pose rad: roll={=f32} pitch={=f32} yaw={=f32}",
+                pose.roll, pose.pitch, pose.yaw
+            );
+
+            timer.delay_ms(20u32);
+        }
     }
-}
 
     fn apply_bias(payload: &mut ImuPayload, bias: [f32; 3]) {
         let bx = UomAngVel::new::<radian_per_second>(bias[0]);
