@@ -24,8 +24,7 @@ cargo test -p cu-ahrs
 
 # RP2350 firmware build (no_std): opt-in config/target.
 cd components/tasks/cu_ahrs
-CARGO_CONFIG=.cargo/config.rp2350.toml \
-    cargo run --no-default-features --features rp2350-demo --example rp2350_ahrs
+CARGO_CONFIG=.cargo/config.rp2350.toml cargo run --no-default-features --features rp2350-demo --example rp2350_ahrs
 ```
 
 The RP2350 build uses `thumbv8m.main-none-eabihf` and `memory.x` matching the original `mpu9250-whoami` app. It prints RPY (radians) over RTT/defmt. Wire your MPU9250 to SPI1 pins (SCK=GPIO10, MOSI=GPIO11, MISO=GPIO12, CS=GPIO13) on Pico 2W-class boards and flash with `probe-rs`.
