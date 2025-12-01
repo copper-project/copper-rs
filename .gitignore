@@ -1,6 +1,7 @@
 .idea
 /target
 /cu29_export.so
+/AGENTS.md
 
 *.copper
 Cargo.lock
