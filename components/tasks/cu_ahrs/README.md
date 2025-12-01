@@ -13,18 +13,19 @@
 
 The task captures the first valid pose as a zero reference, so outputs are relative to the start orientation by default.
 
-## Run a full MPU9250 → AHRS → print example
+## Bare-metal RP2350 demos
 
-An end-to-end bare-metal demo for RP2350 (mirrors `mpu9250-whoami`) lives in `examples/rp2350_ahrs.rs`:
+Two RP2350 no-std options mirroring `mpu9250-whoami`:
+- `examples/rp2350_ahrs.rs`: stand-alone loop (no Copper runtime) printing RPY.
+- `examples/rp2350_copper.rs` + `examples/rp_copperconfig.ron`: full Copper app wiring `tasks::MpuSource -> cu_ahrs::CuAhrs -> tasks::RpySink`.
 
 ```bash
 # Host clippy/tests remain on the default host target.
 cargo clippy -p cu-ahrs
 cargo test -p cu-ahrs
 
-# RP2350 firmware build (no_std): opt-in config/target.
-cd components/tasks/cu_ahrs
-CARGO_CONFIG=.cargo/config.rp2350.toml cargo run --no-default-features --features rp2350-demo --example rp2350_ahrs
+# RP2350 firmware builds (no_std): opt-in config/target.
+CARGO_CONFIG=.cargo/config.rp2350.toml cargo run --no-default-features --features rp2350-demo --example rp2350_copper
 ```
 
 The RP2350 build uses `thumbv8m.main-none-eabihf` and `memory.x` matching the original `mpu9250-whoami` app. It prints RPY (radians) over RTT/defmt. Wire your MPU9250 to SPI1 pins (SCK=GPIO10, MOSI=GPIO11, MISO=GPIO12, CS=GPIO13) on Pico 2W-class boards and flash with `probe-rs`.

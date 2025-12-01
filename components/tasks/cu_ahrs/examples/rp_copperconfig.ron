@@ -1,0 +1,11 @@
+(
+    tasks: [
+        (id: "mpu", type: "tasks::MpuSource"),
+        (id: "ahrs", type: "cu_ahrs::CuAhrs"),
+        (id: "sink", type: "tasks::RpySink"),
+    ],
+    cnx: [
+        (src: "mpu", dst: "ahrs", msg: "cu_sensor_payloads::ImuPayload"),
+        (src: "ahrs", dst: "sink", msg: "cu_ahrs::AhrsPose"),
+    ],
+)
