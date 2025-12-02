@@ -1,23 +1,23 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-#[cfg(not(feature = "std"))]
 extern crate alloc;
 
 use core::fmt::Debug;
 
-#[cfg(not(feature = "std"))]
 use alloc::format;
 use cu29::prelude::*;
 pub use cu_sensor_payloads::ImuPayload;
 use mpu9250::{Device, Imu as ImuOnly, Marg, Mpu9250, NineDOFDevice};
 
-#[cfg(feature = "linux-embedded")]
-mod linux;
-#[cfg(feature = "linux-embedded")]
-pub use linux::LinuxMpu9250Source;
+#[cfg(feature = "embedded-hal")]
+pub mod embedded_hal;
+#[cfg(feature = "linux-embedded-hal")]
+pub mod linux_embedded_hal;
+#[cfg(feature = "rp235x-hal")]
+pub mod rp235x_hal;
 
-#[cfg(feature = "std")]
-pub mod app;
+#[cfg(feature = "embedded-hal")]
+pub use embedded_hal::set_gyro_bias;
 
 fn map_debug_error<E: Debug>(context: &str, err: E) -> CuError {
     CuError::from(format!("{context}: {err:?}"))
@@ -118,11 +118,9 @@ where
     }
 
     fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
-        let whoami = self
-            .driver
+        self.driver
             .who_am_i()
             .map_err(|err| map_debug_error("mpu9250 WHO_AM_I", err))?;
-        debug!("MPU9250 WHO_AM_I=0x{:02X}", whoami);
         Ok(())
     }
 
