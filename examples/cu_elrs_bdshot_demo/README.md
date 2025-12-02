@@ -56,3 +56,7 @@ This mission is a starting point for integrating BDShot ESCs in a Copper robot.
 Replace the throttle tasks with your flight controller logic or scheduler and
 extend the sinks to react to the telemetry. The bridge itself lives in
 `components/bridges/cu_bdshot` and can be reused in other missions or boards.
+
+## Justfile command
+
+- `just elrs-bdshot-attach` — attach `probe-rs` to the built demo at `../../target/thumbv8m.main-none-eabihf/debug/cu-elrs-bdshot-demo`.

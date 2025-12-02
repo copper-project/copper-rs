@@ -20,3 +20,6 @@ ros2 topic echo /FOO std_msgs/String
 ros2 topic info /FOO -v
 ```
 
+## Justfile command
+
+- `just ros-rihs01-hashes` — list ROS2 RIHS01 type hashes from `/opt/ros/jazzy/share`.

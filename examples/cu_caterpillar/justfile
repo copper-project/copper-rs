@@ -1,0 +1,27 @@
+import "../../justfile"
+
+caterpillar-copperlist:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	RUST_BACKTRACE=1 cargo run --bin logreader /tmp/caterpillar.copper extract-copperlist
+
+caterpillar-rendercfg:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	../../target/release/copper-rendercfg copperconfig.ron --open
+
+caterpillar-logreader:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	RUST_BACKTRACE=1 cargo run --bin cu-caterpillar-logreader logs/caterpillar.copper extract-log ../../target/debug/copper_log_index
+
+caterpillar-resim:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	RUST_BACKTRACE=1 cargo run --bin cu-caterpillar-resim logs/caterpillar.copper
+
+caterpillar-cross-armv7:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	cross build --target armv7-unknown-linux-gnueabihf --release
+	scp ../../target/armv7-unknown-linux-gnueabihf/release/cu-caterpillar copper7:copper
