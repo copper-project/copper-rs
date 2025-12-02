@@ -1,0 +1,75 @@
+import "../justfile"
+
+mk-cu29-sdcard dev:
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	DEV="{{dev}}"
+	[[ -b "$DEV" ]] || { echo "not a block device: $DEV"; exit 1; }
+
+	for t in sgdisk mkfs.vfat lsblk wipefs udevadm; do
+	  command -v "$t" >/dev/null || { echo "missing tool: $t"; exit 1; }
+	done
+
+	read -r -p "ERASE ALL DATA on $DEV? type 'YES' to continue: " ans
+	[[ "$ans" == "YES" ]] || { echo "aborted"; exit 1; }
+
+	lsblk -ln "$DEV" -o NAME,MOUNTPOINTS | while read -r name mp; do
+	  [[ -n "${mp:-}" ]] && sudo umount -f "/dev/$name" || true
+	done
+
+	sudo wipefs -a "$DEV" || true
+	sudo sgdisk --zap-all "$DEV"
+
+	CU29_GUID="29A2E0C9-0000-4C75-9229-000000000029"
+	sudo sgdisk -og "$DEV"
+	sudo sgdisk \
+	  -n1:1MiB:+1MiB  -t1:0700                                -c1:"COPPERCFG" \
+	  -n2:0:0         -t2:${CU29_GUID}                        -c2:"Cu29" \
+	  "$DEV"
+
+	sudo partprobe "$DEV" || true
+	sudo udevadm settle || true
+	sleep 0.5
+
+	if [[ "$DEV" =~ [0-9]$ ]]; then P1="${DEV}p1"; P2="${DEV}p2"; else P1="${DEV}1"; P2="${DEV}2"; fi
+	[[ -b "$P1" && -b "$P2" ]] || { echo "partition nodes not found: $P1 $P2"; exit 1; }
+
+	sudo mkfs.vfat -F 12 -n COPPERCFG "$P1"
+
+	mnt=$(mktemp -d)
+	trap 'sudo umount "$mnt" 2>/dev/null || true; rmdir "$mnt" 2>/dev/null || true' EXIT
+	sudo mount "$P1" "$mnt"
+	sudo tee "$mnt/README-COPPER.txt" >/dev/null <<-'TXT'
+	This SD card uses Copper (Cu29) raw binary logging.
+
+	Partition layout (GPT):
+	  - Partition 1 (FAT12, label COPPERCFG): configuration + this notice
+	  - Partition 2 (type GUID 29A2E0C9-0000-4C75-9229-000000000029, label Cu29): Copper raw log storage
+
+	To read logs, use the Copper log reader.
+	Do NOT format or mount partition 2 — it is not a filesystem.
+	TXT
+	sync
+	sudo umount "$mnt"
+	rmdir "$mnt"
+	trap - EXIT
+
+	lsblk -o NAME,SIZE,TYPE,FSTYPE,PTTYPE,PARTLABEL,PARTTYPE,LABEL "$DEV"
+	echo "Done. Copper raw partition is $P2 (GPT type ${CU29_GUID}, PARTLABEL=Cu29)."
+
+cross-armv7-deploy:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	cd ..
+	cross build --target armv7-unknown-linux-gnueabihf --release
+	find target/armv7-unknown-linux-gnueabihf/release -maxdepth 1 -type f -executable -exec scp -r {} gbin@copper7:copper/ \;
+	scp copper_derive_test/copperconfig.ron gbin@copper7:copper
+
+cross-riscv64-deploy:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	cd ..
+	cross build --target riscv64gc-unknown-linux-gnu --release
+	find target/riscv64gc-unknown-linux-gnu/release -maxdepth 1 -type f -executable -exec scp -r {} gbin@copperv:copper/ \;
+	scp copper_derive_test/copperconfig.ron gbin@copperv:copper
