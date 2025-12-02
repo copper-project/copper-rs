@@ -22,7 +22,7 @@ jobs:
     strategy:
       matrix:
         # os: [ ubuntu-22.04, macos-latest, windows-latest ]
-        os: [ ubuntu-22.04, macos-latest ]
+        os: [ ubuntu-latest, macos-latest ]
         mode: [ debug, release, cuda-release ]
         exclude:
           - os: macos-latest
