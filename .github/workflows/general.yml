@@ -22,7 +22,7 @@ jobs:
     strategy:
       matrix:
         # os: [ ubuntu-22.04, macos-latest, windows-latest ]
-        os: [ ubuntu-latest, macos-latest ]
+        os: [ ubuntu-22.04, macos-latest ]
         mode: [ debug, release, cuda-release ]
         exclude:
           - os: macos-latest
@@ -93,7 +93,7 @@ jobs:
         uses: blinemedical/setup-gstreamer@v1.4.0
         with:
           arch: 'x86_64'
-          version: 1.26.9
+          version: 1.25.90
 
       - name: Setup GStreamer
         if: runner.os == 'MacOS'
