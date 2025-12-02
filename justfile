@@ -1,7 +1,8 @@
 # CI-aligned helpers mirroring .github/workflows/general.yml
 BASE_FEATURES := "macro_debug,mock,perf-ui,image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug"
 WINDOWS_BASE_FEATURES := "macro_debug,mock,perf-ui,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode"
-EMBEDDED_EXCLUDES := `python3 support/ci/embedded_crates.py excludes`
+export ROOT := `git rev-parse --show-toplevel`
+EMBEDDED_EXCLUDES := shell('python3 $1/support/ci/embedded_crates.py excludes', ROOT)
 
 # Run the main CI flow for the current host OS. Call like `just ci debug`.
 # Available modes: debug | release | cuda-release.
