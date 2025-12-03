@@ -15,7 +15,7 @@ bincode = { workspace = true }
 cu29 = { path = "../../../core/cu29", version = "0.11.0", default-features = false }
 cu29-traits = { path = "../../../core/cu29_traits", version = "0.11.0", default-features = false }
 cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "0.11.0", default-features = false }
-mpu9250 = { version = "0.25.0", default-features = false, features = ["spi"] }
+mpu9250 = { version = "0.25.0", default-features = false }
 serde = { workspace = true }
 uom = { version = "0.37", default-features = false, features = ["serde", "f32", "si", "autoconvert"] }
 cortex-m = { version = "0.7", optional = true }
@@ -36,7 +36,6 @@ rp235x-hal = [
     "dep:cortex-m-rt",
     "dep:rp235x-hal",
     "dep:defmt",
-    "mpu9250/spi",
 ]
 linux-embedded-hal = [
     "std",
