@@ -4,3 +4,9 @@ elrs-bdshot-attach:
 	#!/usr/bin/env bash
 	set -euo pipefail
 	probe-rs attach ../../target/thumbv8m.main-none-eabihf/debug/cu-elrs-bdshot-demo
+
+dag:
+  #!/usr/bin/env bash
+  pushd {{ROOT}}
+  cargo run -p cu29-runtime --bin cu29-rendercfg -- --open examples/cu_elrs_bdshot_demo/copperconfig.ron 
+  popd
