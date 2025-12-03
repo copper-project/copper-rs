@@ -31,11 +31,36 @@
         // ),
 
      ],
+
+    bridges: [
+        (  id: "crsf",
+           type: "cu_crsf::CrsfBridge<SerialPort, SerialPortError>",
+           channels: [
+                Rx ( id: "rc_rx" ),  // receiving RC Channels
+                Tx ( id: "lq_tx" ),  // Sending LineQuality back
+            ],
+        ),
+        (
+            id: "bdshot",
+            type: "cu_bdshot::RpBdshotBridge",
+            channels: [
+                Tx ( id: "esc0_tx" ),
+                Tx ( id: "esc1_tx" ),
+                Tx ( id: "esc2_tx" ),
+                Tx ( id: "esc3_tx" ),
+                Rx ( id: "esc0_rx" ),
+                Rx ( id: "esc1_rx" ),
+                Rx ( id: "esc2_rx" ),
+                Rx ( id: "esc3_rx" ),
+            ],
+        ),
+    ],
+
     cnx: [
     // TODO
     ],
     monitor: (
-          type: "cu_consolemon::CuConsoleMon",
+          // type: "cu_consolemon::CuConsoleMon", TODO: make a simple embedded monitor
     )
 )
 
