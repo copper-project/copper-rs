@@ -1,0 +1,21 @@
+import "../../justfile"
+
+docker-build-env:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	docker build -f Dockerfile -t copper-rs-env .
+
+docker-build-cuda-env:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	docker build -f Dockerfile_cuda -t copper-rs-cuda-env .
+
+docker-run-env:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	docker run -it -entrypoint="" --mount type=bind,source="$(pwd)"/../..,target=/home/copper-rs copper-rs-env
+
+docker-run-cuda-env:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	docker run -it -entrypoint="" --mount type=bind,source="$(pwd)"/../..,target=/home/copper-rs copper-rs-cuda-env

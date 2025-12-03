@@ -1,0 +1,11 @@
+import "../../justfile"
+
+profile-standardlog:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --bin standardlog_perf
+
+profile-structlog:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --bin structlog_perf
