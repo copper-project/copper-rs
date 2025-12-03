@@ -1,0 +1,15 @@
+(
+    tasks: [
+        (
+            id: "mpu",
+            type: "cu_mpu9250::rp235x_hal::RpMpu9250Source",
+            config: (gyro_cal_ms: 3000, gyro_sample_delay_ms: 10),
+        ),
+        (id: "ahrs", type: "cu_ahrs::CuAhrs"),
+        (id: "sink", type: "tasks::RpySink"),
+    ],
+    cnx: [
+        (src: "mpu", dst: "ahrs", msg: "cu_sensor_payloads::ImuPayload"),
+        (src: "ahrs", dst: "sink", msg: "cu_ahrs::AhrsPose"),
+    ],
+)

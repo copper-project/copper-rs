@@ -42,6 +42,7 @@ members = [
     "components/sources/cu_wt901",
     "components/sources/cu_rp_encoder",
     "components/tasks/cu_aligner",
+    "components/tasks/cu_ahrs",
     "components/tasks/cu_apriltag",
     "components/tasks/cu_dynthreshold",
     "components/tasks/cu_pid",
