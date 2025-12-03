@@ -1,0 +1,41 @@
+(
+    tasks: [
+        // (
+        //     id: "lateral_pid",
+        //     type: "tasks::BalPID",
+        //     config: {
+        //         "kp": 0.015,
+        //         "kd": 0.01,
+        //         "ki": 0.0,
+        //         "setpoint": 3072.0, 
+        //         "cutoff": 170.0, 
+        //     },
+        // ),
+
+        // (
+        //     id: "pitch_pid",
+        //     type: "tasks::PosPID",
+        //     config: {
+        //         "kp": 0.0005, 
+        //         "kd": 0.5,
+        //         "ki": 0.0,
+        //         "setpoint": 0.0,
+        //         "cutoff": 1000.0, 
+        //         "sampling_ms": 100,
+        //     },
+        // ),
+
+        // (
+        //     id: "merge_pids",
+        //     type: "tasks::PIDMerger",
+        // ),
+
+     ],
+    cnx: [
+    // TODO
+    ],
+    monitor: (
+          type: "cu_consolemon::CuConsoleMon",
+    )
+)
+
