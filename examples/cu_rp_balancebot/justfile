@@ -1,5 +1,11 @@
 import "../../justfile"
 
+dag:
+  #!/usr/bin/env bash
+  pushd {{ROOT}}
+  cargo run -p cu29-runtime --bin cu29-rendercfg -- --open examples/cu_rp_balancebot/copperconfig.ron 
+  popd
+
 balancebot-dump-text-logs:
 	#!/usr/bin/env bash
 	set -euo pipefail
