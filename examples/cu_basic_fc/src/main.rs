@@ -3,6 +3,10 @@
 
 extern crate alloc;
 
+use cortex_m_rt::entry;
+
+use rp235x_hal::pac;
+
 #[allow(unused_imports)]
 use defmt_rtt as _;
 #[allow(unused_imports)]
@@ -17,3 +21,9 @@ static IMAGE_DEF: hal::block::ImageDef = hal::block::ImageDef::secure_exe();
 
 #[global_allocator]
 static ALLOC: Heap<32> = Heap::empty();
+
+#[entry]
+fn main() -> ! {
+    let _p = pac::Peripherals::take().unwrap();
+    loop {}
+}
