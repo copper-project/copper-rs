@@ -1,10 +1,10 @@
 use core::fmt::Debug;
 
 use cu29::prelude::*;
-use embedded_hal as eh1;
-use embedded_hal_02::blocking::delay::DelayMs as Eh0DelayMs;
-use embedded_hal_02::blocking::spi::{Transfer as Eh0Transfer, Write as Eh0Write};
-use embedded_hal_02::digital::v2::OutputPin as Eh0OutputPin;
+use embedded_hal::blocking::delay::DelayMs as Eh0DelayMs;
+use embedded_hal::blocking::spi::{Transfer as Eh0Transfer, Write as Eh0Write};
+use embedded_hal::digital::v2::OutputPin as Eh0OutputPin;
+use embedded_hal_1 as eh1;
 use mpu9250::{Marg, Mpu9250};
 use uom::si::angular_velocity::radian_per_second;
 use uom::si::f32::AngularVelocity as UomAngVel;
@@ -61,7 +61,13 @@ enum Mpu<SPI, CS> {
     Imu(Mpu9250<SpiDev<SPI, CS>, mpu9250::Imu>),
 }
 
-impl<SPI, CS> Mpu<SPI, CS> {
+impl<SPI, CS> Mpu<SPI, CS>
+where
+    SPI: eh1::spi::SpiBus<u8>,
+    SPI::Error: Debug,
+    CS: eh1::digital::OutputPin,
+    CS::Error: Debug,
+{
     fn who_am_i(&mut self) -> Result<WhoAmI, MpuError<SPI, CS>> {
         let id = match self {
             Mpu::Marg(m) => m.who_am_i()?,
@@ -101,15 +107,19 @@ impl<SPI, CS> EmbeddedHalDriver<SPI, CS> {
     }
 }
 
-impl<SPI, CS, D> EmbeddedHalDriver<SPI, CS>
+impl<SPI, CS> EmbeddedHalDriver<SPI, CS>
 where
     SPI: eh1::spi::SpiBus<u8> + Send + 'static,
     SPI::Error: Debug,
     CS: eh1::digital::OutputPin + Send + 'static,
     CS::Error: Debug,
-    D: eh1::delay::DelayNs,
 {
-    pub fn new(spi: SPI, cs: CS, delay: D, settings: EmbeddedHalSettings) -> CuResult<Self> {
+    pub fn new<D: eh1::delay::DelayNs>(
+        spi: SPI,
+        cs: CS,
+        delay: D,
+        settings: EmbeddedHalSettings,
+    ) -> CuResult<Self> {
         let mut delay = Eh0Delay::new(delay);
         let spi = Eh0SpiBus::new(spi);
         let cs = Eh0Cs::new(cs);
@@ -168,6 +178,8 @@ struct Eh0SpiBus<SPI> {
     inner: SPI,
 }
 
+unsafe impl<SPI: Send> Send for Eh0SpiBus<SPI> {}
+
 impl<SPI> Eh0SpiBus<SPI> {
     fn new(inner: SPI) -> Self {
         Self { inner }
@@ -200,6 +212,8 @@ where
 struct Eh0Cs<CS> {
     inner: CS,
 }
+
+unsafe impl<CS: Send> Send for Eh0Cs<CS> {}
 
 impl<CS> Eh0Cs<CS> {
     fn new(inner: CS) -> Self {

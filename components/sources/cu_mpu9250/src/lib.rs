@@ -9,14 +9,8 @@ use cu29::prelude::*;
 pub use cu_sensor_payloads::ImuPayload;
 use mpu9250::{Device, Imu as ImuOnly, Marg, Mpu9250, NineDOFDevice};
 
-#[cfg(feature = "embedded-hal")]
 pub mod embedded_hal;
-#[cfg(feature = "linux-embedded-hal")]
-pub mod linux_embedded_hal;
-#[cfg(feature = "rp235x-hal")]
-pub mod rp235x_hal;
 
-#[cfg(feature = "embedded-hal")]
 pub use embedded_hal::set_gyro_bias;
 
 fn map_debug_error<E: Debug>(context: &str, err: E) -> CuError {
