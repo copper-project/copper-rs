@@ -262,6 +262,18 @@ mod tests {
     #[derive(Debug, Clone, Copy)]
     struct MockHalError;
 
+    impl eh1::spi::Error for MockHalError {
+        fn kind(&self) -> eh1::spi::ErrorKind {
+            eh1::spi::ErrorKind::Other
+        }
+    }
+
+    impl eh1::digital::Error for MockHalError {
+        fn kind(&self) -> eh1::digital::ErrorKind {
+            eh1::digital::ErrorKind::Other
+        }
+    }
+
     struct MockSpi;
 
     impl eh1::spi::ErrorType for MockSpi {

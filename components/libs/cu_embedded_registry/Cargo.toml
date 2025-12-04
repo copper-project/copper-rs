@@ -18,6 +18,6 @@ embedded-io = { version = "0.6.1", default-features = false }
 
 [features]
 default = ["std"]
-std = ["cu29/std", "embedded-io/std", "embedded-hal/std"]
+std = ["cu29/std", "embedded-io/std"]
 defmt = ["embedded-io/defmt-03", "embedded-hal/defmt-03"]
 alloc = ["embedded-io/alloc"]
