@@ -1,7 +1,7 @@
 (
     tasks: [
         (
-            id: "mpu",
+            id: "imu",
             type: "cu_mpu9250::rp235x_hal::RpMpu9250Source",
             config: { "gyro_cal_ms": 3000, "gyro_sample_delay_ms": 10 },
         ),
@@ -42,7 +42,7 @@
     ],
 
     cnx: [
-        (src: "mpu", dst: "ahrs", msg: "cu_sensor_payloads::ImuPayload"),
+        (src: "imu", dst: "ahrs", msg: "cu_sensor_payloads::ImuPayload"),
         (src: "crsf/rc_rx", dst: "rc", msg: "cu_crsf::messages::RcChannelsPayload"),
         (src: "esc_health", dst: "rc", msg: "tasks::EscStatus"),
 
@@ -56,9 +56,9 @@
         (src: "att_r", dst: "rate_r", msg: "tasks::RateSetpoint"),
         (src: "att_p", dst: "rate_p", msg: "tasks::RateSetpoint"),
         (src: "att_y", dst: "rate_y", msg: "tasks::RateSetpoint"),
-        (src: "mpu", dst: "rate_r", msg: "cu_sensor_payloads::ImuPayload"),
-        (src: "mpu", dst: "rate_p", msg: "cu_sensor_payloads::ImuPayload"),
-        (src: "mpu", dst: "rate_y", msg: "cu_sensor_payloads::ImuPayload"),
+        (src: "imu", dst: "rate_r", msg: "cu_sensor_payloads::ImuPayload"),
+        (src: "imu", dst: "rate_p", msg: "cu_sensor_payloads::ImuPayload"),
+        (src: "imu", dst: "rate_y", msg: "cu_sensor_payloads::ImuPayload"),
 
         (src: "rate_r", dst: "mixer", msg: "tasks::AxisCommand"),
         (src: "rate_p", dst: "mixer", msg: "tasks::AxisCommand"),
