@@ -19,7 +19,9 @@ rp2350-demo = [
     "cortex-m",
     "cortex-m-rt",
     "embedded-hal",
-        "mpu9250",
+    "rp235x-hal",
+    "cu-embedded-registry",
+    "mpu9250",
     "dep:cu-mpu9250",
 ]
 std = [
@@ -43,6 +45,8 @@ cortex-m = { version = "0.7", optional = true }
 cortex-m-rt = { version = "0.7", optional = true }
 embedded-hal = { version = "1.0.0", optional = true }
 mpu9250 = { version = "0.25.0", default-features = false, optional = true }
+rp235x-hal = { version = "0.3", features = ["rt", "critical-section-impl", "defmt"], optional = true }
+cu-embedded-registry = { path = "../../libs/cu_embedded_registry", default-features = false, optional = true }
 cu-mpu9250 = { path = "../../sources/cu_mpu9250", version = "0.11.0", default-features = false, optional = true }
 
 [[example]]
