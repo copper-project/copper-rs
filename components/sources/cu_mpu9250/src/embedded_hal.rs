@@ -1,10 +1,10 @@
 use core::fmt::Debug;
 
 use cu29::prelude::*;
-use embedded_hal as eh1;
-use embedded_hal_02::blocking::delay::DelayMs as Eh0DelayMs;
-use embedded_hal_02::blocking::spi::{Transfer as Eh0Transfer, Write as Eh0Write};
-use embedded_hal_02::digital::v2::OutputPin as Eh0OutputPin;
+use embedded_hal_1 as eh1;
+use embedded_hal::blocking::delay::DelayMs as Eh0DelayMs;
+use embedded_hal::blocking::spi::{Transfer as Eh0Transfer, Write as Eh0Write};
+use embedded_hal::digital::v2::OutputPin as Eh0OutputPin;
 use mpu9250::{Marg, Mpu9250};
 use uom::si::angular_velocity::radian_per_second;
 use uom::si::f32::AngularVelocity as UomAngVel;
@@ -63,8 +63,10 @@ enum Mpu<SPI, CS> {
 
 impl<SPI, CS> Mpu<SPI, CS>
 where
-    SPI: eh1::spi::ErrorType,
-    CS: eh1::digital::ErrorType,
+    SPI: eh1::spi::SpiBus<u8>,
+    SPI::Error: Debug,
+    CS: eh1::digital::OutputPin,
+    CS::Error: Debug,
 {
     fn who_am_i(&mut self) -> Result<WhoAmI, MpuError<SPI, CS>> {
         let id = match self {
