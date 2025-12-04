@@ -27,7 +27,7 @@ embedded-sdmmc = { version = "0.9", default-features = false, features = ["defmt
 ## Flight controller components
 
 ### Hardware
-cu-mpu9250 = { path = "../../components/sources/cu_mpu9250", features = ["rp235x-hal"], optional = true }
+cu-mpu9250 = { path = "../../components/sources/cu_mpu9250", optional = true }
 cu-bdshot = { path = "../../components/bridges/cu_bdshot", optional = true }
 cu-crsf = { path = "../../components/bridges/cu_crsf", default-features = false, features = ["defmt", "alloc"], optional = true }
 cu-sdlogger = { path = "../../components/libs/cu_sdlogger", optional = true }

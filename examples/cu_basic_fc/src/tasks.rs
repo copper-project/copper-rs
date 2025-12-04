@@ -69,7 +69,7 @@ impl CuTask for RcMapper {
         let armed = inputs.1.payload().map(|s| !s.fault).unwrap_or(true);
         let control = if let Some(rc) = inputs.0.payload() {
             ControlInputs {
-                roll: rc.inner().get(0).copied().unwrap_or_default() as f32,
+                roll: rc.inner().first().copied().unwrap_or_default() as f32,
                 pitch: rc.inner().get(1).copied().unwrap_or_default() as f32,
                 yaw: rc.inner().get(3).copied().unwrap_or_default() as f32,
                 throttle: rc.inner().get(2).copied().unwrap_or_default() as f32,

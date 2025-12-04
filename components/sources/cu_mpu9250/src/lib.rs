@@ -5,18 +5,15 @@ extern crate alloc;
 use core::fmt::Debug;
 
 use alloc::format;
+use core::marker::PhantomData;
 use cu29::prelude::*;
+use cu_embedded_registry as reg;
 pub use cu_sensor_payloads::ImuPayload;
+use embedded_hal_1 as eh1;
 use mpu9250::{Device, Imu as ImuOnly, Marg, Mpu9250, NineDOFDevice};
 
-#[cfg(feature = "embedded-hal")]
 pub mod embedded_hal;
-#[cfg(feature = "linux-embedded-hal")]
-pub mod linux_embedded_hal;
-#[cfg(feature = "rp235x-hal")]
-pub mod rp235x_hal;
 
-#[cfg(feature = "embedded-hal")]
 pub use embedded_hal::set_gyro_bias;
 
 fn map_debug_error<E: Debug>(context: &str, err: E) -> CuError {
@@ -55,13 +52,6 @@ pub trait Mpu9250Device: Send + 'static {
     fn read_measure(&mut self) -> Result<ImuPayload, Self::Error>;
 }
 
-/// Factory trait for constructing MPU9250 sources from a Copper component configuration.
-pub trait Mpu9250Factory: Mpu9250Device {
-    fn try_new(config: Option<&ComponentConfig>) -> CuResult<Self>
-    where
-        Self: Sized;
-}
-
 impl<DEV> Mpu9250Device for Mpu9250<DEV, Marg>
 where
     DEV: Device + NineDOFDevice + Send + 'static,
@@ -97,24 +87,76 @@ where
 }
 
 /// Copper source task for the MPU9250.
-pub struct Mpu9250Source<D>
+pub struct Mpu9250Source<SPI, CS, D>
 where
-    D: Mpu9250Factory,
+    SPI: eh1::spi::SpiBus<u8> + Send + 'static,
+    SPI::Error: Debug + Send + 'static,
+    CS: eh1::digital::OutputPin + Send + 'static,
+    CS::Error: Debug + Send + 'static,
+    D: eh1::delay::DelayNs + Send + 'static,
 {
-    driver: D,
+    driver: embedded_hal::EmbeddedHalDriver<SPI, CS>,
+    _pd: PhantomData<D>,
 }
 
-impl<D> Freezable for Mpu9250Source<D> where D: Mpu9250Factory {}
-
-impl<D> CuSrcTask for Mpu9250Source<D>
+impl<SPI, CS, D> Freezable for Mpu9250Source<SPI, CS, D>
 where
-    D: Mpu9250Factory,
+    SPI: eh1::spi::SpiBus<u8> + Send + 'static,
+    SPI::Error: Debug + Send + 'static,
+    CS: eh1::digital::OutputPin + Send + 'static,
+    CS::Error: Debug + Send + 'static,
+    D: eh1::delay::DelayNs + Send + 'static,
+{
+}
+
+impl<SPI, CS, D> CuSrcTask for Mpu9250Source<SPI, CS, D>
+where
+    SPI: eh1::spi::SpiBus<u8> + Send + 'static,
+    SPI::Error: Debug + Send + 'static,
+    CS: eh1::digital::OutputPin + Send + 'static,
+    CS::Error: Debug + Send + 'static,
+    D: eh1::delay::DelayNs + Send + 'static,
 {
     type Output<'m> = output_msg!(ImuPayload);
 
     fn new(config: Option<&ComponentConfig>) -> CuResult<Self> {
-        let driver = D::try_new(config)?;
-        Ok(Self { driver })
+        let settings = embedded_hal::EmbeddedHalSettings::from_config(config);
+
+        let spi_slot = config
+            .and_then(|cfg| cfg.get::<u32>("spi_slot"))
+            .unwrap_or(0) as usize;
+        let cs_slot = config
+            .and_then(|cfg| cfg.get::<u32>("cs_slot"))
+            .unwrap_or(0) as usize;
+        let delay_slot = config
+            .and_then(|cfg| cfg.get::<u32>("delay_slot"))
+            .unwrap_or(0) as usize;
+
+        let spi: SPI = reg::take_spi(spi_slot).ok_or_else(|| {
+            CuError::from(format!(
+                "mpu9250 SPI slot {spi_slot} empty (max {})",
+                reg::MAX_SPI_SLOTS - 1
+            ))
+        })?;
+        let cs: CS = reg::take_cs(cs_slot).ok_or_else(|| {
+            CuError::from(format!(
+                "mpu9250 CS slot {cs_slot} empty (max {})",
+                reg::MAX_CS_SLOTS - 1
+            ))
+        })?;
+        let delay: D = reg::take_delay(delay_slot).ok_or_else(|| {
+            CuError::from(format!(
+                "mpu9250 delay slot {delay_slot} empty (max {})",
+                reg::MAX_DELAY_SLOTS - 1
+            ))
+        })?;
+
+        let driver = embedded_hal::EmbeddedHalDriver::new(spi, cs, delay, settings)?;
+
+        Ok(Self {
+            driver,
+            _pd: PhantomData,
+        })
     }
 
     fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {

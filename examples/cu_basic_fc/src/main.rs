@@ -9,7 +9,11 @@ use alloc::vec::Vec;
 use buddy_system_allocator::LockedHeap as Heap;
 use cortex_m_rt::entry;
 use cu29::prelude::*;
+use cu_mpu9250::Mpu9250Source;
 use cu_sdlogger::{find_copper_partition, EMMCLogger, EMMCSectionStorage, ForceSyncSend};
+#[allow(unused_imports)]
+use defmt_rtt as _;
+use embedded_hal::digital::OutputPin;
 use embedded_hal::spi::MODE_0;
 use embedded_hal_bus::spi::ExclusiveDevice;
 use embedded_sdmmc::SdCard;
@@ -17,20 +21,20 @@ use panic_probe as _;
 use rp235x_hal as hal;
 use rp235x_hal::clocks::Clock;
 use rp235x_hal::fugit::RateExtU32;
-use rp235x_hal::gpio::bank0::{Gpio15, Gpio16, Gpio17, Gpio18, Gpio19, Gpio2, Gpio3, Gpio6, Gpio7, Gpio8, Gpio9};
-use rp235x_hal::gpio::{
-    Function, FunctionPio0, FunctionSio, FunctionSpi, FunctionUartAux, FunctionXipCs1, Pin, PinId, PullDown, PullNone,
-    PullType, PullUp, SioInput, SioOutput, ValidFunction,
+use rp235x_hal::gpio::bank0::{
+    Gpio10, Gpio11, Gpio12, Gpio13, Gpio15, Gpio16, Gpio17, Gpio18, Gpio19, Gpio2, Gpio3,
 };
-use rp235x_hal::pac::{SPI0, UART0};
+use rp235x_hal::gpio::{
+    Function, FunctionPio0, FunctionSio, FunctionSpi, FunctionUartAux, FunctionXipCs1, Pin, PinId,
+    PullDown, PullNone, PullType, PullUp, SioInput, SioOutput, ValidFunction,
+};
+use rp235x_hal::pac::{SPI0, SPI1, UART0};
 use rp235x_hal::pio::PIOExt;
 use rp235x_hal::spi::{Enabled, FrameFormat};
 use rp235x_hal::timer::{CopyableTimer0, CopyableTimer1};
 use rp235x_hal::uart::{DataBits, StopBits, UartConfig, UartPeripheral};
 use rp235x_hal::{pac, sio::Sio, watchdog::Watchdog, Spi, Timer};
 use spin::Mutex;
-#[allow(unused_imports)]
-use defmt_rtt as _;
 
 mod tasks;
 
@@ -63,11 +67,22 @@ type TSPimodoriSdCard = ForceSyncSend<SdCard<SdDev, Timer1>>;
 type Timer0 = Timer<CopyableTimer0>;
 type Timer1 = Timer<CopyableTimer1>;
 
+// IMU Pins/Interfaces
+type ImuSck = Pin<Gpio10, FunctionSpi, PullDown>;
+type ImuMosi = Pin<Gpio11, FunctionSpi, PullDown>;
+type ImuMiso = Pin<Gpio12, FunctionSpi, PullDown>;
+type ImuCs = Pin<Gpio13, FunctionSio<SioOutput>, PullDown>;
+type ImuSpi = Spi<Enabled, SPI1, (ImuMosi, ImuMiso, ImuSck)>;
+type ImuDelay = Timer0;
+
 // Associated types for serial port used by CRSF bridge.
 type ElrsTx = Pin<Gpio2, FunctionUartAux, PullDown>;
 type ElrsRx = Pin<Gpio3, FunctionUartAux, PullUp>;
 type SerialPort = UartPeripheral<hal::uart::Enabled, UART0, (ElrsTx, ElrsRx)>;
 type SerialPortError = hal::uart::ReadErrorType;
+
+// IMU Source Type for the dag
+pub type RpMpu9250Source = Mpu9250Source<ImuSpi, ImuCs, ImuDelay>;
 
 #[entry]
 fn main() -> ! {
@@ -110,6 +125,26 @@ fn main() -> ! {
         .into_pull_type::<PullNone>()
         .into_function::<FunctionPio0>();
 
+    // Init IMU SPI bus and register handles
+    let imu_miso: ImuMiso = pins.gpio12.into_function();
+    let mut imu_cs: ImuCs = pins.gpio13.into_push_pull_output();
+    let imu_sck: ImuSck = pins.gpio10.into_function();
+    let imu_mosi: ImuMosi = pins.gpio11.into_function();
+    let _ = imu_cs.set_high();
+
+    let imu_spi: ImuSpi = Spi::<_, _, _, 8>::new(p.SPI1, (imu_mosi, imu_miso, imu_sck)).init(
+        &mut p.RESETS,
+        clocks.peripheral_clock.freq(),
+        1_000_000u32.Hz(),
+        FrameFormat::MotorolaSpi(MODE_0),
+    );
+    let imu_delay: ImuDelay = timer0;
+
+    cu_embedded_registry::register_spi(0, imu_spi).expect("Failed to register IMU SPI bus");
+    cu_embedded_registry::register_cs(0, imu_cs).expect("Failed to register IMU CS pin");
+    cu_embedded_registry::register_delay(0, imu_delay)
+        .expect("Failed to register IMU delay provider");
+
     // Init Serial Port pins
     let tx = pins
         .gpio2
@@ -123,8 +158,9 @@ fn main() -> ! {
     // Init PIOs
     let resources = cu_bdshot::Rp2350BoardResources::new(pio, sm0, sm1, sm2, sm3);
     let board_cfg = cu_bdshot::Rp2350BoardConfig::default();
-    let board = cu_bdshot::Rp2350Board::new(resources, clocks.system_clock.freq().to_Hz(), board_cfg)
-        .expect("Failed to initialize BDShot board");
+    let board =
+        cu_bdshot::Rp2350Board::new(resources, clocks.system_clock.freq().to_Hz(), board_cfg)
+            .expect("Failed to initialize BDShot board");
     cu_bdshot::register_rp2350_board(board).expect("BDShot board already registered");
 
     init_psram_and_allocator(pins.gpio47);

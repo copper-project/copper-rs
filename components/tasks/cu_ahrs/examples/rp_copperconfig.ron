@@ -2,8 +2,14 @@
     tasks: [
         (
             id: "mpu",
-            type: "cu_mpu9250::rp235x_hal::RpMpu9250Source",
-            config: (gyro_cal_ms: 3000, gyro_sample_delay_ms: 10),
+            type: "registry::RpMpu9250Source",
+            config: (
+                spi_slot: 0,
+                cs_slot: 0,
+                delay_slot: 0,
+                gyro_cal_ms: 3000,
+                gyro_sample_delay_ms: 10,
+            ),
         ),
         (id: "ahrs", type: "cu_ahrs::CuAhrs"),
         (id: "sink", type: "tasks::RpySink"),
