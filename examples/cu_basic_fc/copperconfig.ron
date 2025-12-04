@@ -1,36 +1,21 @@
 (
     tasks: [
-        // (
-        //     id: "lateral_pid",
-        //     type: "tasks::BalPID",
-        //     config: {
-        //         "kp": 0.015,
-        //         "kd": 0.01,
-        //         "ki": 0.0,
-        //         "setpoint": 3072.0, 
-        //         "cutoff": 170.0, 
-        //     },
-        // ),
-
-        // (
-        //     id: "pitch_pid",
-        //     type: "tasks::PosPID",
-        //     config: {
-        //         "kp": 0.0005, 
-        //         "kd": 0.5,
-        //         "ki": 0.0,
-        //         "setpoint": 0.0,
-        //         "cutoff": 1000.0, 
-        //         "sampling_ms": 100,
-        //     },
-        // ),
-
-        // (
-        //     id: "merge_pids",
-        //     type: "tasks::PIDMerger",
-        // ),
-
-     ],
+        (
+            id: "mpu",
+            type: "cu_mpu9250::rp235x_hal::RpMpu9250Source",
+            config: { "gyro_cal_ms": 3000, "gyro_sample_delay_ms": 10 },
+        ),
+        (id: "ahrs", type: "cu_ahrs::CuAhrs"),
+        (id: "rc", type: "tasks::RcMapper"),
+        (id: "att_r", type: "tasks::AttitudePidRoll"),
+        (id: "att_p", type: "tasks::AttitudePidPitch"),
+        (id: "att_y", type: "tasks::AttitudePidYaw"),
+        (id: "rate_r", type: "tasks::RatePidRoll"),
+        (id: "rate_p", type: "tasks::RatePidPitch"),
+        (id: "rate_y", type: "tasks::RatePidYaw"),
+        (id: "mixer", type: "tasks::QuadXMixer"),
+        (id: "esc_health", type: "tasks::EscHealth"),
+    ],
 
     bridges: [
         (  id: "crsf",
@@ -57,10 +42,38 @@
     ],
 
     cnx: [
-    // TODO
-    ],
-    monitor: (
-          // type: "cu_consolemon::CuConsoleMon", TODO: make a simple embedded monitor
-    )
-)
+        (src: "mpu", dst: "ahrs", msg: "cu_sensor_payloads::ImuPayload"),
+        (src: "crsf/rc_rx", dst: "rc", msg: "cu_crsf::messages::RcChannelsPayload"),
+        (src: "esc_health", dst: "rc", msg: "tasks::EscStatus"),
 
+        (src: "ahrs", dst: "att_r", msg: "cu_ahrs::AhrsPose"),
+        (src: "ahrs", dst: "att_p", msg: "cu_ahrs::AhrsPose"),
+        (src: "ahrs", dst: "att_y", msg: "cu_ahrs::AhrsPose"),
+        (src: "rc", dst: "att_r", msg: "tasks::ControlInputs"),
+        (src: "rc", dst: "att_p", msg: "tasks::ControlInputs"),
+        (src: "rc", dst: "att_y", msg: "tasks::ControlInputs"),
+
+        (src: "att_r", dst: "rate_r", msg: "tasks::RateSetpoint"),
+        (src: "att_p", dst: "rate_p", msg: "tasks::RateSetpoint"),
+        (src: "att_y", dst: "rate_y", msg: "tasks::RateSetpoint"),
+        (src: "mpu", dst: "rate_r", msg: "cu_sensor_payloads::ImuPayload"),
+        (src: "mpu", dst: "rate_p", msg: "cu_sensor_payloads::ImuPayload"),
+        (src: "mpu", dst: "rate_y", msg: "cu_sensor_payloads::ImuPayload"),
+
+        (src: "rate_r", dst: "mixer", msg: "tasks::AxisCommand"),
+        (src: "rate_p", dst: "mixer", msg: "tasks::AxisCommand"),
+        (src: "rate_y", dst: "mixer", msg: "tasks::AxisCommand"),
+        (src: "rc", dst: "mixer", msg: "tasks::ControlInputs"),
+
+        (src: "mixer", dst: "bdshot/esc0_tx", msg: "cu_bdshot::EscCommand"),
+        (src: "mixer", dst: "bdshot/esc1_tx", msg: "cu_bdshot::EscCommand"),
+        (src: "mixer", dst: "bdshot/esc2_tx", msg: "cu_bdshot::EscCommand"),
+        (src: "mixer", dst: "bdshot/esc3_tx", msg: "cu_bdshot::EscCommand"),
+
+        (src: "bdshot/esc0_rx", dst: "esc_health", msg: "cu_bdshot::EscTelemetry"),
+        (src: "bdshot/esc1_rx", dst: "esc_health", msg: "cu_bdshot::EscTelemetry"),
+        (src: "bdshot/esc2_rx", dst: "esc_health", msg: "cu_bdshot::EscTelemetry"),
+        (src: "bdshot/esc3_rx", dst: "esc_health", msg: "cu_bdshot::EscTelemetry"),
+    ],
+    monitor: None,
+)

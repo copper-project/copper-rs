@@ -30,13 +30,7 @@ defmt = { version = "0.3", optional = true }
 default = []
 std = ["cu29/std", "cu29-traits/std", "cu-sensor-payloads/std", "serde/std"]
 embedded-hal = ["dep:embedded-hal", "dep:embedded-hal-02"]
-rp235x-hal = [
-    "embedded-hal",
-    "dep:cortex-m",
-    "dep:cortex-m-rt",
-    "dep:rp235x-hal",
-    "dep:defmt",
-]
+rp235x-hal = ["dep:cortex-m", "dep:cortex-m-rt", "dep:rp235x-hal", "dep:defmt"]
 linux-embedded-hal = [
     "std",
     "embedded-hal",

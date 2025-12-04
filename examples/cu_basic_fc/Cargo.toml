@@ -20,11 +20,14 @@ defmt-rtt = "1.1.0"
 panic-probe = "1.0.0"
 buddy_system_allocator = { version = "0.11", default-features = false, features = ["use_spin"] }
 rp235x-hal = { version = "0.3", features = ["rt", "critical-section-impl"] }
+embedded-hal = "1.0"
+embedded-hal-bus = "0.3"
+embedded-sdmmc = { version = "0.9", default-features = false, features = ["defmt-log"] }
 
 ## Flight controller components
 
 ### Hardware
-cu-mpu9250 = { path = "../../components/sources/cu_mpu9250", optional = true }
+cu-mpu9250 = { path = "../../components/sources/cu_mpu9250", features = ["rp235x-hal"], optional = true }
 cu-bdshot = { path = "../../components/bridges/cu_bdshot", optional = true }
 cu-crsf = { path = "../../components/bridges/cu_crsf", default-features = false, features = ["defmt", "alloc"], optional = true }
 cu-sdlogger = { path = "../../components/libs/cu_sdlogger", optional = true }
@@ -33,6 +36,11 @@ cu-embedded-registry = { path = "../../components/libs/cu_embedded_registry", de
 ### Algos
 cu-pid = { path = "../../components/tasks/cu_pid", default-features = false, version = "0.11.0" }
 cu-ahrs = { path = "../../components/tasks/cu_ahrs", default-features = false, version = "0.11.0" }
+cu-sensor-payloads = { path = "../../components/payloads/cu_sensor_payloads", default-features = false, version = "0.11.0" }
+bincode = { workspace = true }
+serde = { workspace = true }
+cu29-unifiedlog = { path = "../../core/cu29_unifiedlog", default-features = false, features = ["compact"] }
+spin = { workspace = true }
 
 # --> host dependencies <--
 
