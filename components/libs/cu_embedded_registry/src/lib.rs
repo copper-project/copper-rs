@@ -49,7 +49,12 @@ pub const MAX_SPI_SLOTS: usize = 8;
 pub const MAX_CS_SLOTS: usize = 8;
 pub const MAX_DELAY_SLOTS: usize = 8;
 
-fn register_inner<T>(slots: &mut [Option<TypedSlot>], max: usize, slot: usize, value: T) -> CuResult<()>
+fn register_inner<T>(
+    slots: &mut [Option<TypedSlot>],
+    max: usize,
+    slot: usize,
+    value: T,
+) -> CuResult<()>
 where
     T: Any + Send + 'static,
 {

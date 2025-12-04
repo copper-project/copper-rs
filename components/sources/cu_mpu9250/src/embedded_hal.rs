@@ -1,10 +1,10 @@
 use core::fmt::Debug;
 
 use cu29::prelude::*;
-use embedded_hal_1 as eh1;
 use embedded_hal::blocking::delay::DelayMs as Eh0DelayMs;
 use embedded_hal::blocking::spi::{Transfer as Eh0Transfer, Write as Eh0Write};
 use embedded_hal::digital::v2::OutputPin as Eh0OutputPin;
+use embedded_hal_1 as eh1;
 use mpu9250::{Marg, Mpu9250};
 use uom::si::angular_velocity::radian_per_second;
 use uom::si::f32::AngularVelocity as UomAngVel;

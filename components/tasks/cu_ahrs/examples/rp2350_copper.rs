@@ -10,9 +10,9 @@ mod firmware {
     use cu_mpu9250::Mpu9250Source;
     use defmt::{info, warn, Debug2Format};
     use defmt_rtt as _;
+    use hal::fugit::RateExtU32;
     use panic_probe as _;
     use rp235x_hal as hal;
-    use hal::fugit::RateExtU32;
 
     #[unsafe(link_section = ".start_block")]
     #[used]
@@ -50,9 +50,12 @@ mod firmware {
     pub mod registry {
         use super::*;
 
-        type Mosi = hal::gpio::Pin<hal::gpio::bank0::Gpio11, hal::gpio::FunctionSpi, hal::gpio::PullDown>;
-        type Miso = hal::gpio::Pin<hal::gpio::bank0::Gpio12, hal::gpio::FunctionSpi, hal::gpio::PullDown>;
-        type Sck = hal::gpio::Pin<hal::gpio::bank0::Gpio10, hal::gpio::FunctionSpi, hal::gpio::PullDown>;
+        type Mosi =
+            hal::gpio::Pin<hal::gpio::bank0::Gpio11, hal::gpio::FunctionSpi, hal::gpio::PullDown>;
+        type Miso =
+            hal::gpio::Pin<hal::gpio::bank0::Gpio12, hal::gpio::FunctionSpi, hal::gpio::PullDown>;
+        type Sck =
+            hal::gpio::Pin<hal::gpio::bank0::Gpio10, hal::gpio::FunctionSpi, hal::gpio::PullDown>;
         type SpiPins = (Mosi, Miso, Sck);
         type SpiBus = hal::Spi<hal::spi::Enabled, hal::pac::SPI1, SpiPins>;
         pub type CsPin = hal::gpio::Pin<
@@ -82,7 +85,8 @@ mod firmware {
             let timer: DelayTimer = hal::Timer::new_timer0(p.TIMER0, &mut p.RESETS, &clocks);
 
             let sio = hal::sio::Sio::new(p.SIO);
-            let pins = hal::gpio::Pins::new(p.IO_BANK0, p.PADS_BANK0, sio.gpio_bank0, &mut p.RESETS);
+            let pins =
+                hal::gpio::Pins::new(p.IO_BANK0, p.PADS_BANK0, sio.gpio_bank0, &mut p.RESETS);
 
             let sck: Sck = pins.gpio10.into_function();
             let mosi: Mosi = pins.gpio11.into_function();
