@@ -20,7 +20,7 @@ std = ["cu29/std"]
 defmt = ["cu29/defmt"]
 
 [dependencies]
-cu29 = { path = "../../../core/cu29", version = "0.11.0", default-features = false }
+cu29 = { path = "../../../core/cu29", version = "0.11.0", default-features = false, features = ["log-level-info"] }
 spin = { workspace = true }
 
 [dev-dependencies]

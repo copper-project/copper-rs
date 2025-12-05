@@ -170,7 +170,7 @@ impl CuMonitor for CuLogMon {
         *self.clock.lock() = Some(clock.clone());
         let mut window = self.window.lock();
         window.last_report_at = Some(clock.recent());
-        debug!("cu_logmon started ({} tasks)", self.taskids.len());
+        info!("cu_logmon started ({} tasks)", self.taskids.len());
         Ok(())
     }
 
@@ -209,7 +209,7 @@ impl CuMonitor for CuLogMon {
 
         if let Some(snapshot) = snapshot {
             let log_start = clock.recent();
-            debug!(
+            info!(
                 "[CL {}] rate {}.{} Hz ({} cl) | e2e p50 {}us p90 {}us p99 {}us max {}us | slow {} {}us | log {}us",
                 snapshot.copperlist_index,
                 snapshot.rate_whole,

@@ -84,7 +84,7 @@ fn main() {
 
     let copper_ctx =
         basic_copper_setup(&logger_path, SLAB_SIZE, true, None).expect("Failed to setup logger.");
-    debug!("Logger created at {}", logger_path);
+    info!("Logger created at {}", logger_path);
 
     let mut application = AppBuilder::new()
         .with_context(&copper_ctx)
@@ -92,7 +92,7 @@ fn main() {
         .expect("Failed to create runtime");
 
     let clock = copper_ctx.clock;
-    debug!("Starting app at {}", clock.now());
+    info!("Starting app at {}", clock.now());
     application
         .start_all_tasks()
         .expect("Failed to start application.");
@@ -109,5 +109,5 @@ fn main() {
     application
         .stop_all_tasks()
         .expect("Failed to stop application.");
-    debug!("App stopped at {}", clock.now());
+    info!("App stopped at {}", clock.now());
 }
