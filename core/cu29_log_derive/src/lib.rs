@@ -159,17 +159,11 @@ fn create_log_entry(input: TokenStream, level: CuLogLevel) -> TokenStream {
         }
     };
 
-    let error_handling: Option<TokenStream2> = if STD {
-        Some(quote! {
-            if let Err(e) = r {
-                eprintln!("Warning: Failed to log: {}", e);
-                let backtrace = std::backtrace::Backtrace::capture();
-                eprintln!("{:?}", backtrace);
-            }
-        })
-    } else {
-        None
-    };
+    let error_handling: Option<TokenStream2> = Some(quote! {
+        if let Err(_e) = r {
+            let _ = &_e;
+        }
+    });
 
     #[cfg(debug_assertions)]
     let defmt_macro: TokenStream2 = match level {

@@ -6,7 +6,6 @@ mod firmware {
     use cortex_m_rt::entry;
     use cu29::prelude::*;
     use cu_embedded_registry as reg;
-    use cu_mpu9250::embedded_hal::EmbeddedHalDriver;
     use cu_mpu9250::Mpu9250Source;
     use defmt::{info, warn, Debug2Format};
     use defmt_rtt as _;
@@ -66,7 +65,7 @@ mod firmware {
         pub type DelayTimer = hal::Timer<hal::timer::CopyableTimer0>;
 
         /// Registry-backed MPU9250 source alias for RP2350 SPI1 wiring (GPIO10-13).
-        pub type RpMpu9250Source = Mpu9250Source<EmbeddedHalDriver<SpiBus, CsPin>>;
+        pub type RpMpu9250Source = Mpu9250Source<SpiBus, CsPin, DelayTimer>;
 
         pub fn register_spi_cs_delay() -> CuResult<()> {
             let mut p = hal::pac::Peripherals::take().ok_or("RP235x peripherals unavailable")?;

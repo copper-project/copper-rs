@@ -1,0 +1,79 @@
+[package]
+name = "cu-basic-fc"
+description = "This is a basic quadcopter Flight Controller implemented end to end using Copper components"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+# default-run = "quad-sim"
+
+[dependencies]
+cu29 = { path = "../../core/cu29", default-features = false, features = ["defmt", "log-level-debug"] }
+
+# --> embedded dependencies <--
+cortex-m-rt = "0.7"
+defmt-rtt = "1.1.0"
+panic-probe = "1.0.0"
+buddy_system_allocator = { version = "0.11", default-features = false, features = ["use_spin"] }
+rp235x-hal = { version = "0.3", features = ["rt", "critical-section-impl"] }
+embedded-hal = "1.0"
+embedded-hal-bus = "0.3"
+embedded-sdmmc = { version = "0.9", default-features = false, features = ["defmt-log"] }
+
+## Flight controller components
+
+### Hardware
+cu-mpu9250 = { path = "../../components/sources/cu_mpu9250", optional = true }
+cu-bdshot = { path = "../../components/bridges/cu_bdshot", optional = true }
+cu-crsf = { path = "../../components/bridges/cu_crsf", default-features = false, features = ["defmt", "alloc"], optional = true }
+cu-sdlogger = { path = "../../components/libs/cu_sdlogger", optional = true }
+cu-embedded-registry = { path = "../../components/libs/cu_embedded_registry", default-features = false, features = ["defmt"], optional = true }
+
+### Algos
+cu-pid = { path = "../../components/tasks/cu_pid", default-features = false, version = "0.11.0" }
+cu-ahrs = { path = "../../components/tasks/cu_ahrs", default-features = false, version = "0.11.0" }
+cu-sensor-payloads = { path = "../../components/payloads/cu_sensor_payloads", default-features = false, version = "0.11.0" }
+bincode = { workspace = true }
+serde = { workspace = true }
+cu29-unifiedlog = { path = "../../core/cu29_unifiedlog", default-features = false, features = ["compact"] }
+spin = { workspace = true }
+
+# --> host dependencies <--
+
+## Log reader depencies
+cu29-export = { workspace = true, optional = true }
+
+## Sim dependencies
+bevy = { version = "0.17.3", default-features = false, features = ["x11", "wayland", "default_font", "bevy_render", "bevy_window", "bevy_core_pipeline", "bevy_pbr", "bevy_scene", "bevy_sprite", "bevy_gltf", "animation", "bevy_picking", "bevy_mesh_picking_backend", "tonemapping_luts", "bevy_ui", "ktx2", "jpeg", "png"], optional = true }
+avian3d = { version = "0.4.1", default-features = false, features = ["bevy_scene", "collider-from-mesh", "debug-plugin", "parallel", "f32", "3d", "parry-f32"], optional = true }
+cached-path = { version = "0.9.0", optional = true }
+
+
+[features]
+default = ["firmware"]
+firmware = ["dep:cu-mpu9250", "dep:cu-bdshot", "dep:cu-crsf", "dep:cu-sdlogger", "dep:cu-embedded-registry"]
+logreader = ["dep:cu29-export"]
+sim = ["dep:bevy", "dep:avian3d", "dep:cached-path", "dep:cu29-export"]
+
+[[bin]]
+name = "quad"
+path = "src/main.rs"
+
+# [[bin]]
+# name = "quad-logreader"
+# path = "src/logreader.rs"
+# required-features = ["logreader"]
+
+# [[bin]]
+# name = "quad-sim"
+# path = "src/sim.rs"
+# required-features = ["sim"]
+# 
+# [[bin]]
+# name = "quad-resim"
+# path = "src/resim.rs"
+# required-features = ["sim"]
