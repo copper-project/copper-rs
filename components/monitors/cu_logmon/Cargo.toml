@@ -1,5 +1,5 @@
 [package]
-name = "cu_logmon"
+name = "cu-logmon"
 description = "Lightweight Copper monitor that emits periodic stats over the standard Copper logging macros."
 version.workspace = true
 authors.workspace = true
