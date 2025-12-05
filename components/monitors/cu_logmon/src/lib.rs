@@ -72,10 +72,7 @@ pub struct CuLogMon {
 
 impl CuLogMon {
     fn compute_snapshot<'a>(&'a self, state: &WindowState, now: CuTime) -> Option<Snapshot<'a>> {
-        let last_report = match state.last_report_at {
-            Some(t) => t,
-            None => return None,
-        };
+        let last_report = state.last_report_at?;
 
         let elapsed = now - last_report;
         let elapsed_ns = elapsed.as_nanos();
@@ -92,9 +89,9 @@ impl CuLogMon {
 
         let slowest = find_slowest_task(&state.per_task);
         let (slowest_task, slowest_task_p99_us) = slowest
-            .and_then(|(idx, dur)| {
+            .map(|(idx, dur)| {
                 let name = self.taskids.get(idx).copied().unwrap_or("<?>");
-                Some((name, dur.as_micros()))
+                (name, dur.as_micros())
             })
             .unwrap_or(("none", 0));
 
