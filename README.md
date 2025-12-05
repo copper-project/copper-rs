@@ -20,7 +20,7 @@
 <p><strong style="color: #b87333;">⚡ Sub-microsecond latency</strong> – zero-alloc, data-oriented runtime  
 <p><strong style="color: #b87333;">⏱️ Deterministic replay</strong> – every run, bit-for-bit identical  
 <p><strong style="color: #b87333;">🧠 Interoperable with ROS2</strong> – bridges via Zenoh opening the path for a progressive migration.  
-<p><strong style="color: #b87333;">🪶 Runs anywhere</strong> – from Linux servers to bare-metal RP2350  
+<p><strong style="color: #b87333;">🪶 Runs anywhere</strong> – from Linux servers, workstations, SBC to bare-metal MPUs
 <p><strong style="color: #b87333;">📦 Built to ship</strong> – one stack from simulation to production
 
 ### Example Applications
