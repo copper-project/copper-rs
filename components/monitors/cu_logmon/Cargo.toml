@@ -15,9 +15,10 @@ build = "build.rs"
 path = "src/lib.rs"
 
 [features]
-default = ["std"]
+default = ["std", "color_log"]
 std = ["cu29/std"]
 defmt = ["cu29/defmt"]
+color_log = []
 
 [dependencies]
 cu29 = { path = "../../../core/cu29", version = "0.11.0", default-features = false, features = ["log-level-info"] }

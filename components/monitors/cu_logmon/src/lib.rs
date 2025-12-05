@@ -210,19 +210,49 @@ impl CuMonitor for CuLogMon {
 
         if let Some(snapshot) = snapshot {
             let log_start = clock.recent();
-            info!(
-                "[CL {}] rate {}.{} Hz | e2e p50 {}us p90 {}us p99 {}us max {}us | slow {} {}us | log_overhead {}us",
+            let use_color = cfg!(all(feature = "std", feature = "color_log"));
+            let base = format!(
+                "[CL {}] rate {}.{} Hz | slowest {} {}us | e2e p50 {}us p90 {}us p99 {}us max {}us | log_overhead {}us",
                 snapshot.copperlist_index,
                 snapshot.rate_whole,
                 snapshot.rate_tenths,
+                snapshot.slowest_task,
+                snapshot.slowest_task_p99_us,
                 snapshot.e2e_p50_us,
                 snapshot.e2e_p90_us,
                 snapshot.e2e_p99_us,
                 snapshot.e2e_max_us,
-                snapshot.slowest_task,
-                snapshot.slowest_task_p99_us,
                 snapshot.log_overhead_us,
             );
+            if use_color {
+                // Colored labels for readability (values stay uncolored).
+                const CL_COLOR: &str = "\x1b[94m"; // blue
+                const LABEL_COLOR: &str = "\x1b[92m"; // green for main labels
+                const SUBLABEL_COLOR: &str = "\x1b[93m"; // yellow for sublabels
+                const TASK_NAME_COLOR: &str = "\x1b[38;5;208m"; // orange for task name
+                const RESET: &str = "\x1b[0m";
+                let colored = format!(
+                    "[{cl_color}CL {cl}{reset}] {label}rate{reset} {rate_whole}.{rate_tenths} Hz | {label}slowest{reset} {task_color}{slow_task}{reset} {slow_p99}us | {label}e2e{reset} {sublabel}p50{reset} {p50}us {sublabel}p90{reset} {p90}us {sublabel}p99{reset} {p99}us {sublabel}max{reset} {max}us | {label}log_overhead{reset} {log_overhead}us",
+                    cl_color = CL_COLOR,
+                    label = LABEL_COLOR,
+                    sublabel = SUBLABEL_COLOR,
+                    task_color = TASK_NAME_COLOR,
+                    reset = RESET,
+                    cl = snapshot.copperlist_index,
+                    rate_whole = snapshot.rate_whole,
+                    rate_tenths = snapshot.rate_tenths,
+                    slow_task = snapshot.slowest_task,
+                    slow_p99 = snapshot.slowest_task_p99_us,
+                    p50 = snapshot.e2e_p50_us,
+                    p90 = snapshot.e2e_p90_us,
+                    p99 = snapshot.e2e_p99_us,
+                    max = snapshot.e2e_max_us,
+                    log_overhead = snapshot.log_overhead_us,
+                );
+                info!("{}", colored);
+            } else {
+                info!("{}", base);
+            }
             let log_end = clock.recent();
             self.window.lock().last_log_duration = log_end - log_start;
         }
