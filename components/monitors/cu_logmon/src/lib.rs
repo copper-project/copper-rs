@@ -52,7 +52,6 @@ impl WindowState {
 
 struct Snapshot<'a> {
     copperlist_index: u64,
-    window_count: u32,
     rate_whole: u64,
     rate_tenths: u64,
     e2e_p50_us: u64,
@@ -61,7 +60,7 @@ struct Snapshot<'a> {
     e2e_max_us: u64,
     slowest_task: &'a str,
     slowest_task_p99_us: u64,
-    last_log_us: u64,
+    log_overhead_us: u64,
 }
 
 pub struct CuLogMon {
@@ -95,18 +94,23 @@ impl CuLogMon {
             })
             .unwrap_or(("none", 0));
 
+        let e2e_p50 = state.end_to_end.percentile(0.5).as_micros();
+        let e2e_p90 = state.end_to_end.percentile(0.9).as_micros();
+        let e2e_p99 = state.end_to_end.percentile(0.99).as_micros();
+        // Max can skew low if a bucket underflows; keep it at least as high as p99.
+        let e2e_max = state.end_to_end.max().as_micros().max(e2e_p99);
+
         Some(Snapshot {
             copperlist_index: state.total_copperlists,
-            window_count: state.window_copperlists,
             rate_whole: rate_x10 / 10,
             rate_tenths: rate_x10 % 10,
-            e2e_p50_us: state.end_to_end.percentile(0.5).as_micros(),
-            e2e_p90_us: state.end_to_end.percentile(0.9).as_micros(),
-            e2e_p99_us: state.end_to_end.percentile(0.99).as_micros(),
-            e2e_max_us: state.end_to_end.max().as_micros(),
+            e2e_p50_us: e2e_p50,
+            e2e_p90_us: e2e_p90,
+            e2e_p99_us: e2e_p99,
+            e2e_max_us: e2e_max,
             slowest_task,
             slowest_task_p99_us,
-            last_log_us: state.last_log_duration.as_micros(),
+            log_overhead_us: state.last_log_duration.as_micros(),
         })
     }
 }
@@ -207,18 +211,17 @@ impl CuMonitor for CuLogMon {
         if let Some(snapshot) = snapshot {
             let log_start = clock.recent();
             info!(
-                "[CL {}] rate {}.{} Hz ({} cl) | e2e p50 {}us p90 {}us p99 {}us max {}us | slow {} {}us | log {}us",
+                "[CL {}] rate {}.{} Hz | e2e p50 {}us p90 {}us p99 {}us max {}us | slow {} {}us | log_overhead {}us",
                 snapshot.copperlist_index,
                 snapshot.rate_whole,
                 snapshot.rate_tenths,
-                snapshot.window_count,
                 snapshot.e2e_p50_us,
                 snapshot.e2e_p90_us,
                 snapshot.e2e_p99_us,
                 snapshot.e2e_max_us,
                 snapshot.slowest_task,
                 snapshot.slowest_task_p99_us,
-                snapshot.last_log_us,
+                snapshot.log_overhead_us,
             );
             let log_end = clock.recent();
             self.window.lock().last_log_duration = log_end - log_start;
