@@ -1,8 +1,7 @@
 use cu29::prelude::*;
-use simplelog::{Config as LogConfig, SimpleLogger};
+use cu29_helpers::basic_copper_setup;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 pub mod tasks {
@@ -76,38 +75,6 @@ struct App {}
 // Keep modest but large enough to satisfy section sizes in copperconfig.ron.
 const SLAB_SIZE: Option<usize> = Some(16 * 1024 * 1024);
 
-fn setup_logging(log_path: &PathBuf) -> CuResult<CopperContext> {
-    let preallocated_size = SLAB_SIZE.unwrap_or(1024 * 1024 * 10);
-    let UnifiedLogger::Write(logger) = UnifiedLoggerBuilder::new()
-        .write(true)
-        .create(true)
-        .file_base_name(log_path)
-        .preallocated_size(preallocated_size)
-        .build()
-        .expect("Failed to create logger")
-    else {
-        panic!("Failed to create logger")
-    };
-
-    let unified_logger = Arc::new(Mutex::new(logger));
-    let structured_stream = stream_write(
-        unified_logger.clone(),
-        UnifiedLogType::StructuredLogLine,
-        4096 * 10,
-    )?;
-
-    let text_logger = SimpleLogger::new(simplelog::LevelFilter::Debug, LogConfig::default());
-
-    let clock = RobotClock::new();
-    let structured_logging =
-        LoggerRuntime::init(clock.clone(), structured_stream, Some(text_logger));
-    Ok(CopperContext {
-        unified_logger,
-        logger_runtime: structured_logging,
-        clock,
-    })
-}
-
 fn main() {
     let logger_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("logs/logmon_copper_app.copper");
@@ -115,7 +82,8 @@ fn main() {
         let _ = fs::create_dir_all(parent);
     }
 
-    let copper_ctx = setup_logging(&logger_path).expect("Failed to setup logger.");
+    let copper_ctx =
+        basic_copper_setup(&logger_path, SLAB_SIZE, true, None).expect("Failed to setup logger.");
     debug!("Logger created at {}", logger_path);
 
     let mut application = AppBuilder::new()
