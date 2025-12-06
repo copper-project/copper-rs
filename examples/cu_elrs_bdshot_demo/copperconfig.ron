@@ -41,4 +41,7 @@
         (src: "bdshot/esc2_rx", dst: "tele2", msg: "cu_bdshot::EscTelemetry"),
         (src: "bdshot/esc3_rx", dst: "tele3", msg: "cu_bdshot::EscTelemetry"),
     ],
+    monitor: (
+         type: "cu_logmon::CuLogMon",
+    )
 )

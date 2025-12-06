@@ -177,3 +177,13 @@ panic = "abort"
 strip = "symbols"  # or "debuginfo" or true
 debug = false
 incremental = false
+
+# Optimized debug profile for firmware builds that still need defmt logging.
+[profile.dev-opt]
+inherits = "dev"
+opt-level = 2
+debug = 2
+debug-assertions = true
+overflow-checks = true
+lto = "thin"
+codegen-units = 1

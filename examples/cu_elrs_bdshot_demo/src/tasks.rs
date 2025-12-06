@@ -30,7 +30,7 @@ impl CuTask for ThrottleControl {
                 throttle,
                 request_telemetry: true,
             };
-            info!("Sending throttle {}.", throttle);
+            debug!("Sending throttle {}.", throttle);
             output.set_payload(command);
         }
 
@@ -63,19 +63,19 @@ impl<const ESC: usize> CuSinkTask for TelemetrySink<ESC> {
         if let Some(payload) = input.payload().and_then(|t| t.sample) {
             match payload {
                 DShotTelemetry::EncodingError => {
-                    info!("ESC{} telemetry encoding error", ESC)
+                    error!("ESC{} telemetry encoding error", ESC)
                 }
-                DShotTelemetry::Erpm(v) => info!("ESC{} eRPM {}", ESC, v),
-                DShotTelemetry::Temp(v) => info!("ESC{} temp {}C", ESC, v),
-                DShotTelemetry::Voltage(v) => info!("ESC{} voltage {}x0.25V", ESC, v),
-                DShotTelemetry::Amps(v) => info!("ESC{} current {}A", ESC, v),
-                DShotTelemetry::Debug1(v) => info!("ESC{} dbg1 {}", ESC, v),
-                DShotTelemetry::Debug2(v) => info!("ESC{} dbg2 {}", ESC, v),
-                DShotTelemetry::Debug3(v) => info!("ESC{} dbg3 {}", ESC, v),
-                DShotTelemetry::Event(v) => info!("ESC{} event {}", ESC, v),
+                DShotTelemetry::Erpm(v) => debug!("ESC{} eRPM {}", ESC, v),
+                DShotTelemetry::Temp(v) => debug!("ESC{} temp {}C", ESC, v),
+                DShotTelemetry::Voltage(v) => debug!("ESC{} voltage {}x0.25V", ESC, v),
+                DShotTelemetry::Amps(v) => debug!("ESC{} current {}A", ESC, v),
+                DShotTelemetry::Debug1(v) => debug!("ESC{} dbg1 {}", ESC, v),
+                DShotTelemetry::Debug2(v) => debug!("ESC{} dbg2 {}", ESC, v),
+                DShotTelemetry::Debug3(v) => debug!("ESC{} dbg3 {}", ESC, v),
+                DShotTelemetry::Event(v) => debug!("ESC{} event {}", ESC, v),
             }
         } else {
-            info!("No Telemetry {}", ESC);
+            warning!("No Telemetry {}", ESC);
         }
         Ok(())
     }

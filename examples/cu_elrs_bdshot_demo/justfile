@@ -1,9 +1,18 @@
 import "../../justfile"
 
-elrs-bdshot-attach:
-	#!/usr/bin/env bash
-	set -euo pipefail
-	probe-rs attach ../../target/thumbv8m.main-none-eabihf/debug/cu-elrs-bdshot-demo
+dev-opt:
+  #!/usr/bin/env bash
+  cargo run -p cu-elrs-bdshot-demo --profile dev-opt
+
+attach:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  probe-rs attach ../../target/thumbv8m.main-none-eabihf/debug/cu-elrs-bdshot-demo
+
+attach-dev-opt:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  probe-rs attach ../../target/thumbv8m.main-none-eabihf/dev-opt/cu-elrs-bdshot-demo
 
 dag:
   #!/usr/bin/env bash

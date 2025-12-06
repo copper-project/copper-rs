@@ -77,7 +77,7 @@ impl<P: BdshotBoardProvider> CuBridge for CuBdshotBridge<P> {
                     continue;
                 }
                 debug!("Sending disarm frames {}", idx);
-                self.board.delay(200);
+                self.board.delay(100);
                 if let Some(sample) = self.board.exchange(idx, idle_frame) {
                     self.telemetry_cache[idx] = Some(EscTelemetry {
                         sample: Some(sample),
@@ -89,12 +89,12 @@ impl<P: BdshotBoardProvider> CuBridge for CuBdshotBridge<P> {
             if ready {
                 break;
             }
-            info!("Waiting for ESCs startup {}...", i);
+            debug!("Waiting for ESCs startup {}...", i);
         }
 
         if !ready {
             error!("ESC TIMEOUT");
-            return Err(CuError::from("Timeout waiting for ESC to start up"));
+            // return Err(CuError::from("Timeout waiting for ESC to start up"));
         }
 
         let telemetry_cmd = EscCommand {
