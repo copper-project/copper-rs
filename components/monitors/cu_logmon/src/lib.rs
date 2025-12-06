@@ -6,13 +6,21 @@
 //! This monitor is `no_std` friendly and keeps allocations to a minimum while still
 //! reporting a per-second summary of the Copperlist cadence and latencies.
 
-#[cfg(feature = "std")]
-use std::vec::Vec;
 #[cfg(not(feature = "std"))]
 extern crate alloc;
+
+#[cfg(feature = "std")]
+mod deps {
+    pub use std::vec::Vec;
+}
+
 #[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
+mod deps {
+    pub use alloc::vec;
+}
+
 use cu29::prelude::*;
+use deps::*;
 use spin::Mutex;
 
 const REPORT_INTERVAL_SECS: u64 = 1;
@@ -148,7 +156,7 @@ fn find_slowest_task(per_task: &[CuDurationStatistics]) -> Option<(usize, CuDura
         .max_by_key(|(_, dur)| dur.as_nanos())
 }
 
-fn task_state_label(state: CuTaskState) -> &'static str {
+fn task_state_label(state: &CuTaskState) -> &'static str {
     match state {
         CuTaskState::Start => "start",
         CuTaskState::Preprocess => "pre",
@@ -249,9 +257,9 @@ impl CuMonitor for CuLogMon {
                     max = snapshot.e2e_max_us,
                     log_overhead = snapshot.log_overhead_us,
                 );
-                info!("{}", colored);
+                info!("{}", &colored);
             } else {
-                info!("{}", base);
+                info!("{}", &base);
             }
             let log_end = clock.recent();
             self.window.lock().last_log_duration = log_end - log_start;
@@ -262,7 +270,11 @@ impl CuMonitor for CuLogMon {
 
     fn process_error(&self, taskid: usize, step: CuTaskState, _error: &CuError) -> Decision {
         let task_name = self.taskids.get(taskid).copied().unwrap_or("<??>");
-        info!("Task error {} during {}", task_name, task_state_label(step));
+        info!(
+            "Task error {} during {}",
+            task_name,
+            task_state_label(&step)
+        );
         Decision::Ignore
     }
 }
