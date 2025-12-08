@@ -17,7 +17,6 @@ firmware:
   set -euo pipefail
   cargo build \
     --config .cargo/config-firmware.toml \
-    --target-dir target/firmware \
     -p cu-basic-fc \
     --bin quad \
     --release
