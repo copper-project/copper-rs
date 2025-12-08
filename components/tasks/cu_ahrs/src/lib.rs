@@ -1,6 +1,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![doc = include_str!("../README.md")]
 
+#[cfg(not(feature = "std"))]
+extern crate alloc;
 use bincode::{Decode, Encode};
 use cu29::prelude::*;
 use cu_sensor_payloads::ImuPayload;
@@ -8,9 +10,6 @@ use dcmimu::DCMIMU;
 use serde::Serialize;
 use uom::si::acceleration::meter_per_second_squared;
 use uom::si::angular_velocity::radian_per_second;
-
-#[cfg(not(feature = "std"))]
-extern crate alloc;
 
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
@@ -124,7 +123,7 @@ pub mod sinks {
         ) -> CuResult<()> {
             if let Some(pose) = input.payload() {
                 info!(
-                    "AHRS RPY [rad]: roll={:.3} pitch={:.3} yaw={:.3}",
+                    "AHRS RPY [rad]: roll={} pitch={} yaw={}",
                     pose.roll, pose.pitch, pose.yaw
                 );
                 output.set_payload(*pose);
