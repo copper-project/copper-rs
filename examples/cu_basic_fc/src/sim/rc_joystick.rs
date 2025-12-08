@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
 
-use evdev::{AbsoluteAxisType, AttributeSetRef, Device, EventType, InputEventKind, Key};
+use evdev::{AbsoluteAxisCode, AttributeSetRef, Device, EventSummary, EventType, KeyCode};
 
 /// Snapshot of all RC inputs normalized to [-1.0, 1.0].
 #[derive(Debug, Clone)]
@@ -126,31 +126,35 @@ impl RcJoystick {
         let events = self
             .device
             .fetch_events()
-            .map_err(|e| Error::new(ErrorKind::Other, e))?
+            .map_err(Error::other)?
             .collect::<Vec<_>>();
 
         for ev in events {
-            if let InputEventKind::AbsAxis(axis) = ev.kind() {
-                let Some((role, scale)) = self.axis_map.get(&axis.0).copied() else {
-                    continue;
-                };
+            match ev.destructure() {
+                EventSummary::AbsoluteAxis(_, axis, raw) => {
+                    let Some((role, scale)) = self.axis_map.get(&axis.0).copied() else {
+                        continue;
+                    };
 
-                let mut value = normalize_axis(&self.device, axis.0, ev.value());
-                if matches!(scale, AxisScale::ZeroToOne) {
-                    value = ((value + 1.0) * 0.5).clamp(0.0, 1.0);
+                    let mut value = normalize_axis(&self.device, axis.0, raw);
+                    if matches!(scale, AxisScale::ZeroToOne) {
+                        value = ((value + 1.0) * 0.5).clamp(0.0, 1.0);
+                    }
+                    let role_changed = self.update_axis(role, value);
+                    updated |= role_changed;
                 }
-                let role_changed = self.update_axis(role, value);
-                updated |= role_changed;
-            } else if let InputEventKind::Key(k) = ev.kind() {
-                if let Some(idx) = self.switch_map.get(&k.code()) {
-                    if let Some(sw) = self.state.switches.get_mut(*idx) {
-                        let new_state = ev.value() != 0;
-                        if sw.on != new_state {
-                            sw.on = new_state;
-                            updated = true;
+                EventSummary::Key(_, key, raw) => {
+                    if let Some(idx) = self.switch_map.get(&key.0) {
+                        if let Some(sw) = self.state.switches.get_mut(*idx) {
+                            let new_state = raw != 0;
+                            if sw.on != new_state {
+                                sw.on = new_state;
+                                updated = true;
+                            }
                         }
                     }
                 }
+                _ => {}
             }
         }
 
@@ -284,7 +288,7 @@ fn prime_switches(device: &Device, switch_map: &HashMap<u16, usize>, state: &mut
     if let Ok(keys) = device.get_key_state() {
         for (code, idx) in switch_map {
             if let Some(sw) = state.switches.get_mut(*idx) {
-                sw.on = keys.contains(Key::new(*code));
+                sw.on = keys.contains(KeyCode::new(*code));
             }
         }
     }
@@ -296,7 +300,8 @@ fn joystick_device_name(device: &Device) -> String {
 
 // ExpressLRS joystick switch codes mapped to radio labels directly.
 // Update these names if your Lua script exports different labels.
-const ELRS_SWITCH_CODES: &[(u16, &str)] = &[(0x120, "se"), (0x121, "sf")];
+const ELRS_SWITCH_CODES: &[(KeyCode, &str)] =
+    &[(KeyCode::new(0x120), "se"), (KeyCode::new(0x121), "sf")];
 
 fn build_switches(device: &Device) -> Vec<SwitchState> {
     let name = joystick_device_name(device);
@@ -305,7 +310,7 @@ fn build_switches(device: &Device) -> Vec<SwitchState> {
     if name.contains("expresslrs") || name.contains("radiomaster") {
         return ELRS_SWITCH_CODES
             .iter()
-            .filter(|(code, _)| supported.map_or(false, |s| s.contains(Key::new(*code as u16))))
+            .filter(|(code, _)| supported.is_some_and(|s| s.contains(*code)))
             .map(|(_, name)| SwitchState {
                 name: name.to_string(),
                 on: false,
@@ -332,7 +337,7 @@ fn build_switch_map(device: &Device, switches: &[SwitchState]) -> HashMap<u16, u
     if device_name.contains("expresslrs") || device_name.contains("radiomaster") {
         for (code, name) in ELRS_SWITCH_CODES.iter() {
             if let Some(idx) = switches.iter().position(|s| s.name == *name) {
-                map.insert(*code, idx);
+                map.insert(code.0, idx);
             }
         }
     } else if let Some(keys) = device.supported_keys() {
@@ -411,49 +416,49 @@ fn build_axis_map(device: &Device) -> HashMap<u16, (RcAxis, AxisScale)> {
             insert_if_present(
                 axes,
                 &mut map,
-                AbsoluteAxisType::ABS_X,
+                AbsoluteAxisCode::ABS_X,
                 RcAxis::Roll,
                 AxisScale::NegOneToOne,
             );
             insert_if_present(
                 axes,
                 &mut map,
-                AbsoluteAxisType::ABS_Y,
+                AbsoluteAxisCode::ABS_Y,
                 RcAxis::Pitch,
                 AxisScale::NegOneToOne,
             );
             insert_if_present(
                 axes,
                 &mut map,
-                AbsoluteAxisType::ABS_RY,
+                AbsoluteAxisCode::ABS_RY,
                 RcAxis::Yaw,
                 AxisScale::NegOneToOne,
             );
             insert_if_present(
                 axes,
                 &mut map,
-                AbsoluteAxisType::ABS_RX,
+                AbsoluteAxisCode::ABS_RX,
                 RcAxis::Throttle,
                 AxisScale::ZeroToOne,
             );
             insert_if_present(
                 axes,
                 &mut map,
-                AbsoluteAxisType::ABS_Z,
+                AbsoluteAxisCode::ABS_Z,
                 RcAxis::KnobSa,
                 AxisScale::NegOneToOne,
             );
             insert_if_present(
                 axes,
                 &mut map,
-                AbsoluteAxisType::ABS_RZ,
+                AbsoluteAxisCode::ABS_RZ,
                 RcAxis::KnobSb,
                 AxisScale::NegOneToOne,
             );
             insert_if_present(
                 axes,
                 &mut map,
-                AbsoluteAxisType::ABS_THROTTLE,
+                AbsoluteAxisCode::ABS_THROTTLE,
                 RcAxis::KnobSc,
                 AxisScale::NegOneToOne,
             );
@@ -462,8 +467,8 @@ fn build_axis_map(device: &Device) -> HashMap<u16, (RcAxis, AxisScale)> {
             let mut aux_index = 0u8;
             for axis in axes.iter() {
                 let code = axis.0;
-                if !map.contains_key(&code) {
-                    map.insert(code, (RcAxis::Aux(aux_index), AxisScale::NegOneToOne));
+                if let std::collections::hash_map::Entry::Vacant(entry) = map.entry(code) {
+                    entry.insert((RcAxis::Aux(aux_index), AxisScale::NegOneToOne));
                     aux_index += 1;
                 }
             }
@@ -474,21 +479,21 @@ fn build_axis_map(device: &Device) -> HashMap<u16, (RcAxis, AxisScale)> {
     bind_first(
         axes,
         &mut map,
-        &[AbsoluteAxisType::ABS_X, AbsoluteAxisType::ABS_RX],
+        &[AbsoluteAxisCode::ABS_X, AbsoluteAxisCode::ABS_RX],
         RcAxis::Roll,
         AxisScale::NegOneToOne,
     );
     bind_first(
         axes,
         &mut map,
-        &[AbsoluteAxisType::ABS_Y, AbsoluteAxisType::ABS_RY],
+        &[AbsoluteAxisCode::ABS_Y, AbsoluteAxisCode::ABS_RY],
         RcAxis::Pitch,
         AxisScale::NegOneToOne,
     );
     bind_first(
         axes,
         &mut map,
-        &[AbsoluteAxisType::ABS_RZ, AbsoluteAxisType::ABS_Z],
+        &[AbsoluteAxisCode::ABS_RZ, AbsoluteAxisCode::ABS_Z],
         RcAxis::Yaw,
         AxisScale::NegOneToOne,
     );
@@ -496,9 +501,9 @@ fn build_axis_map(device: &Device) -> HashMap<u16, (RcAxis, AxisScale)> {
         axes,
         &mut map,
         &[
-            AbsoluteAxisType::ABS_THROTTLE,
-            AbsoluteAxisType::ABS_Z,
-            AbsoluteAxisType::ABS_RUDDER,
+            AbsoluteAxisCode::ABS_THROTTLE,
+            AbsoluteAxisCode::ABS_Z,
+            AbsoluteAxisCode::ABS_RUDDER,
         ],
         RcAxis::Throttle,
         AxisScale::ZeroToOne,
@@ -507,8 +512,8 @@ fn build_axis_map(device: &Device) -> HashMap<u16, (RcAxis, AxisScale)> {
     let mut aux_index = 0u8;
     for axis in axes.iter() {
         let code = axis.0;
-        if !map.contains_key(&code) {
-            map.insert(code, (RcAxis::Aux(aux_index), AxisScale::NegOneToOne));
+        if let std::collections::hash_map::Entry::Vacant(entry) = map.entry(code) {
+            entry.insert((RcAxis::Aux(aux_index), AxisScale::NegOneToOne));
             aux_index += 1;
         }
     }
@@ -517,9 +522,9 @@ fn build_axis_map(device: &Device) -> HashMap<u16, (RcAxis, AxisScale)> {
 }
 
 fn insert_if_present(
-    axes: &AttributeSetRef<AbsoluteAxisType>,
+    axes: &AttributeSetRef<AbsoluteAxisCode>,
     map: &mut HashMap<u16, (RcAxis, AxisScale)>,
-    axis: AbsoluteAxisType,
+    axis: AbsoluteAxisCode,
     role: RcAxis,
     scale: AxisScale,
 ) {
@@ -529,9 +534,9 @@ fn insert_if_present(
 }
 
 fn bind_first(
-    axes: &AttributeSetRef<AbsoluteAxisType>,
+    axes: &AttributeSetRef<AbsoluteAxisCode>,
     map: &mut HashMap<u16, (RcAxis, AxisScale)>,
-    candidates: &[AbsoluteAxisType],
+    candidates: &[AbsoluteAxisCode],
     role: RcAxis,
     scale: AxisScale,
 ) {
