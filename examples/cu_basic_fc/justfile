@@ -12,7 +12,7 @@ rc:
   cargo run -p cu-basic-fc --no-default-features --features sim --bin rc-tester
 
 # Build firmware-only target using the firmware-specific Cargo config
-firmware:
+fw:
   #!/usr/bin/env bash
   set -euo pipefail
   cargo build \
