@@ -41,7 +41,7 @@ avian3d = { version = "0.4.1", default-features = false, features = ["bevy_scene
 cached-path = { version = "0.9.0", optional = true }
 evdev = { version = "0.13.2", optional = true }
 
-cu29 = { path = "../../core/cu29", default-features = false, features = ["defmt", "log-level-debug"], optional = true }
+cu29 = { path = "../../core/cu29", default-features = false, features = ["log-level-debug"], optional = true }
 cortex-m-rt = { version = "0.7", optional = true }
 defmt-rtt = { version = "1.1.0", optional = true }
 panic-probe = { version = "1.0.0", optional = true }
@@ -52,9 +52,10 @@ embedded-hal-bus = { version = "0.3", optional = true }
 embedded-sdmmc = { version = "0.9", default-features = false, features = ["defmt-log"], optional = true }
 
 [features]
-default = ["firmware"]
+default = ["sim"]
 firmware = [
   "dep:cu29",
+  "cu29/defmt",
   "dep:cortex-m-rt",
   "dep:defmt-rtt",
   "dep:panic-probe",
@@ -70,7 +71,15 @@ firmware = [
   "dep:cu-embedded-registry",
 ]
 logreader = ["dep:cu29-export"]
-sim = ["dep:bevy", "dep:avian3d", "dep:cached-path", "dep:cu29-export", "dep:evdev"]
+sim = [
+  "dep:cu29",
+  "cu29/std",
+  "dep:bevy",
+  "dep:avian3d",
+  "dep:cached-path",
+  "dep:cu29-export",
+  "dep:evdev",
+]
 
 [[bin]]
 name = "quad"
@@ -78,6 +87,7 @@ path = "src/main.rs"
 test = false
 doctest = false
 bench = false
+required-features = ["firmware"]
 
 [[bin]]
 name = "rc-tester"
