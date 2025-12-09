@@ -41,24 +41,34 @@ avian3d = { version = "0.4.1", default-features = false, features = ["bevy_scene
 cached-path = { version = "0.9.0", optional = true }
 evdev = { version = "0.13.2", optional = true }
 
-[target.'cfg(target_os = "none")'.dependencies]
-cu29 = { path = "../../core/cu29", default-features = false, features = ["defmt", "log-level-debug"] }
-cortex-m-rt = "0.7"
-defmt-rtt = "1.1.0"
-panic-probe = "1.0.0"
-buddy_system_allocator = { version = "0.11", default-features = false, features = ["use_spin"] }
-rp235x-hal = { version = "0.3", features = ["rt", "critical-section-impl"] }
-embedded-hal = "1.0"
-embedded-hal-bus = "0.3"
-embedded-sdmmc = { version = "0.9", default-features = false, features = ["defmt-log"] }
-
-[target.'cfg(not(target_os = "none"))'.dependencies]
-cu29 = { path = "../../core/cu29", default-features = true, features = ["log-level-debug"] }
-
+cu29 = { path = "../../core/cu29", default-features = false, features = ["defmt", "log-level-debug"], optional = true }
+cortex-m-rt = { version = "0.7", optional = true }
+defmt-rtt = { version = "1.1.0", optional = true }
+panic-probe = { version = "1.0.0", optional = true }
+buddy_system_allocator = { version = "0.11", default-features = false, features = ["use_spin"], optional = true }
+rp235x-hal = { version = "0.3", features = ["rt", "critical-section-impl"], optional = true }
+embedded-hal = { version = "1.0", optional = true }
+embedded-hal-bus = { version = "0.3", optional = true }
+embedded-sdmmc = { version = "0.9", default-features = false, features = ["defmt-log"], optional = true }
 
 [features]
 default = ["firmware"]
-firmware = ["dep:cu-mpu9250", "dep:cu-bdshot", "dep:cu-crsf", "dep:cu-sdlogger", "dep:cu-embedded-registry"]
+firmware = [
+  "dep:cu29",
+  "dep:cortex-m-rt",
+  "dep:defmt-rtt",
+  "dep:panic-probe",
+  "dep:buddy_system_allocator",
+  "dep:rp235x-hal",
+  "dep:embedded-hal",
+  "dep:embedded-hal-bus",
+  "dep:embedded-sdmmc",
+  "dep:cu-mpu9250",
+  "dep:cu-bdshot",
+  "dep:cu-crsf",
+  "dep:cu-sdlogger",
+  "dep:cu-embedded-registry",
+]
 logreader = ["dep:cu29-export"]
 sim = ["dep:bevy", "dep:avian3d", "dep:cached-path", "dep:cu29-export", "dep:evdev"]
 
