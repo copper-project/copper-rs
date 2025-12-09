@@ -1,0 +1,42 @@
+[package]
+name = "rp2-sdio"
+description = "PIO-based SDIO driver prototype for RP2350 (WIP)"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[lib]
+name = "rp2_sdio"
+
+[dependencies]
+rp235x-hal = { git = "https://github.com/rp-rs/rp-hal", package = "rp235x-hal", default-features = false, features = ["rt", "critical-section-impl"] }
+cortex-m = "0.7"
+cortex-m-rt = "0.7"
+embedded_hal_0_2 = { package = "embedded-hal", version = "0.2.5", features = ["unproven"] }
+embedded-io = { version = "0.6", default-features = false }
+fugit = "0.3"
+pio = "0.3"
+pio-proc = "0.3"
+bytemuck = { version = "1.13", features = ["min_const_generics"] }
+snafu = { version = "0.8", default-features = false }
+panic-halt = "0.2"
+critical-section = { version = "1.1", features = ["restore-state-u8"] }
+defmt = "0.3"
+defmt-rtt = "0.4"
+panic-probe = { version = "0.3", features = ["print-defmt"] }
+
+[features]
+default = ["critical-section-impl"]
+critical-section-impl = ["critical-section/restore-state-u8"]
+
+[profile.release]
+debug = 2
+disable-intrinsics = []
+rom-func-cache = []
+rom-v2-intrinsics = []
+rt = ["rp235x-hal/rt"]

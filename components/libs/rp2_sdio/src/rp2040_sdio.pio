@@ -1,0 +1,157 @@
+; rp2040 pio program for implementing sd card access in sdio mode
+; run "pioasm rp2040_sdio.pio rp2040_sdio.pio.h" to regenerate the c header from this.
+
+; the rp2040 official work-in-progress code at
+; https://github.com/raspberrypi/pico-extras/tree/master/src/rp2_common/pico_sd_card
+; may be useful reference, but this is independent implementation.
+;
+; for official sdio specifications, refer to:
+; https://www.sdcard.org/downloads/pls/
+; "sdio physical layer simplified specification version 8.00"
+
+; clock settings
+; for 3.3v communication the available speeds are:
+; - default speed: max. 25 mhz clock
+; - high speed:    max. 50 mhz clock
+;
+; from the default rp2040 clock speed of 125 mhz, the closest dividers
+; are 3 for 41.7 mhz and 5 for 25 mhz. the cpu can apply further divider
+; through state machine registers for the initial handshake.
+;
+; because data is written on the falling edge and read on the rising
+; edge, it is preferrable to have a long 0 state and short 1 state.
+;.define clkdiv 3
+;.define clkdiv 5
+;.define d0 ((clkdiv + 1) / 2 - 1)
+;.define d1 (clkdiv/2 - 1)
+
+.define d0 1
+.define d1 1
+.define clkdiv d0 + 1 + d1 + 1
+
+; .define public sdio_clk_gpio 17
+
+; this is relative to d0 gpio number.
+; the pin is selected by adding index to the
+;   pinctrl_in_base configuration, modulo 32.
+; this is used as a wait index, and must be between 4 and 31.
+; (offsets 0-3 are d0, d1, d2, and d3.)
+; Using -2 offset because CLK=34, D0=36 on the target board.
+.define public sdio_clk_pin_d0_offset 30    ; (-2 in mod32 arithmetic)
+
+; state machine 0 is used to:
+; - generate continuous clock on sdio_clk
+; - send cmd packets
+; - receive response packets
+;
+; pin mapping for this state machine:
+; - sideset    : clk
+; - in/out/set : cmd
+; - jmp_pin    : cmd
+;
+; the commands to send are put on tx fifo and must have two words:
+; word 0 bits 31-24: number of bits in command minus one (usually 47)
+; word 0 bits 23-00: first 24 bits of the command packet, shifted out msb first
+; word 1 bits 31-08: last 24 bits of the command packet, shifted out msb first
+; word 1 bits 07-00: number of bits in response minus one (usually 47), or 0 if no response
+;
+; the response is put on rx fifo, starting with the msb.
+; partial last word will be padded with zero bits at the top.
+;
+; the state machine execctrl should be set so that status indicates tx fifo < 2
+; and that autopull and autopush are enabled.
+
+.program sdio_cmd_clk
+    .side_set 1
+
+    set pins, 1         side 1 [d1]    ; initial state of cmd is high
+    set pindirs, 1      side 0 [d0]    ; set sdio_cmd as output
+    mov osr, null       side 1 [d1]    ; make sure osr is full of zeros to prevent autopull
+
+wait_cmd:
+    mov y, !status      side 0 [d0]    ; check if tx fifo has data
+    jmp !y wait_cmd     side 1 [d1]
+
+load_cmd:
+    out null, 32        side 0 [d0]    ; load first word (trigger autopull)
+    out x, 8            side 1 [d1]    ; number of bits to send
+
+send_cmd:
+    out pins, 1         side 0 [d0]    ; write output on falling edge of clk
+    jmp x-- send_cmd    side 1 [d1]
+
+prep_resp:
+    set pindirs, 0      side 0 [d0]    ; set sdio_cmd as input
+    out x, 8            side 1 [d1]    ; get number of bits in response
+    nop                 side 0 [d0]    ; for clock alignment
+    jmp !x resp_done    side 1 [d1]    ; check if we expect a response
+
+wait_resp:
+    nop                  side 0 [d0]
+    jmp pin wait_resp    side 1 [d1]    ; loop until sdio_cmd = 0
+
+    ; note: input bits are read at the same time as we write clk=0.
+    ; because the host controls the clock, the read happens before
+    ; the card sees the falling clock edge. this gives maximum time
+    ; for the data bit to settle.
+read_resp:
+    in pins, 1          side 0 [d0]    ; read input data bit
+    jmp x-- read_resp   side 1 [d1]    ; loop to receive all data bits
+
+resp_done:
+    push                side 0 [d0]    ; push the remaining part of response
+
+; state machine 1 is used to send and receive data blocks.
+; pin mapping for this state machine:
+; - in / out: sdio_d0-d3
+; - gpio defined at beginning of this file: sdio_clk
+
+; data reception program
+; this program will wait for initial start of block token and then
+; receive a data block. the application must set number of nibbles
+; to receive minus 1 to y register before running this program.
+.program sdio_data_rx
+
+wait_start:
+    wait 0 pin 0                           ; wait for zero state on d0
+    wait 1 pin sdio_clk_pin_d0_offset  [clkdiv-1]  ; wait for rising edge and then whole clock cycle
+
+rx_data:
+    in pins, 4                 [clkdiv-2]  ; read nibble
+    jmp x--, rx_data
+
+; data transmission program
+;
+; before running this program, pindirs should be set as output
+; and register x should be initialized with the number of nibbles
+; to send minus 1 (typically 8 + 1024 + 16 + 1 - 1 = 1048)
+; and register y with the number of response bits minus 1 (typically 31).
+;
+; words written to tx fifo must be:
+; - word 0: start token 0xfffffff0
+; - word 1-128: transmitted data (512 bytes)
+; - word 129-130: crc checksum
+; - word 131: end token 0xffffffff
+;
+; after the card reports idle status, rx fifo will get a word that
+; contains the d0 line response from card.
+
+.program sdio_data_tx
+    wait 0 pin sdio_clk_pin_d0_offset  
+    wait 1 pin sdio_clk_pin_d0_offset  [clkdiv + d1 - 1]; synchronize so that write occurs on falling edge
+
+tx_loop:
+    out pins, 4                [d0]    ; write nibble and wait for whole clock cycle
+    jmp x-- tx_loop            [d1]
+
+    set pindirs, 0x00          [d0]    ; set data bus as input
+
+.wrap_target
+response_loop:
+    in pins, 1                 [d1]    ; read d0 on rising edge
+    jmp y--, response_loop     [d0]
+
+wait_idle:
+    wait 1 pin 0               [d1]    ; wait for card to indicate idle condition
+    push                       [d0]    ; push the response token
+.wrap
