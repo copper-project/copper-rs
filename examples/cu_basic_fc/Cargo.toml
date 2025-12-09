@@ -65,6 +65,9 @@ sim = ["dep:bevy", "dep:avian3d", "dep:cached-path", "dep:cu29-export", "dep:evd
 [[bin]]
 name = "quad"
 path = "src/main.rs"
+test = false
+doctest = false
+bench = false
 
 [[bin]]
 name = "rc-tester"
