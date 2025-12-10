@@ -31,14 +31,16 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, StatefulWidget, Table};
 use ratatui::{Frame, Terminal};
+use std::backtrace::Backtrace;
 use std::fmt::{Display, Formatter};
-use std::io::stdout;
+use std::io::{stdout, Write};
 use std::marker::PhantomData;
+use std::process;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
-use std::{collections::HashMap, io, panic, thread};
+use std::{collections::HashMap, io, thread};
 use tui_widgets::scrollview::{ScrollView, ScrollViewState};
 
 #[cfg(feature = "debug_pane")]
@@ -1031,15 +1033,6 @@ impl CuMonitor for CuConsoleMon {
             let backend = CrosstermBackend::new(stdout());
             let _terminal_guard = TerminalRestoreGuard;
 
-            // Ensure the terminal is restored if a panic occurs while the TUI is active.
-            let prev_hook = panic::take_hook();
-            panic::set_hook(Box::new(move |info| {
-                let _ = restore_terminal();
-                prev_hook(info);
-            }));
-
-            install_signal_handlers(quitting.clone());
-
             if let Err(err) = setup_terminal() {
                 eprintln!("Failed to prepare terminal UI: {err}");
                 return;
@@ -1095,7 +1088,11 @@ impl CuMonitor for CuConsoleMon {
                 } else {
                     println!("EXTRA_TEXT_LOGGER is none");
                 }
-                ui.run_app(&mut terminal).expect("Failed to run app");
+                if let Err(err) = ui.run_app(&mut terminal) {
+                    let _ = restore_terminal();
+                    eprintln!("CuConsoleMon UI exited with error: {err}");
+                    return;
+                }
             }
 
             #[cfg(not(feature = "debug_pane"))]
@@ -1111,7 +1108,11 @@ impl CuMonitor for CuConsoleMon {
                     pool_stats_ui,
                     topology,
                 );
-                ui.run_app(&mut terminal).expect("Failed to run app");
+                if let Err(err) = ui.run_app(&mut terminal) {
+                    let _ = restore_terminal();
+                    eprintln!("CuConsoleMon UI exited with error: {err}");
+                    return;
+                }
 
                 drop(stderr_gag);
             }
@@ -1218,8 +1219,13 @@ fn install_signal_handlers(quitting: Arc<AtomicBool>) {
 }
 
 fn init_error_hooks() {
-    let (panic, error) = HookBuilder::default().into_hooks();
-    let panic = panic.into_panic_hook();
+    static ONCE: OnceLock<()> = OnceLock::new();
+    if ONCE.get().is_some() {
+        return;
+    }
+
+    let (panic_hook, error) = HookBuilder::default().into_hooks();
+    let panic = panic_hook.into_panic_hook();
     let error = error.into_eyre_hook();
     color_eyre::eyre::set_hook(Box::new(move |e| {
         let _ = restore_terminal();
@@ -1228,8 +1234,16 @@ fn init_error_hooks() {
     .unwrap();
     std::panic::set_hook(Box::new(move |info| {
         let _ = restore_terminal();
-        panic(info)
+        let bt = Backtrace::force_capture();
+        // stderr may be gagged; print to stdout so the panic is visible.
+        println!("CuConsoleMon panic: {info}");
+        println!("Backtrace:\n{bt}");
+        let _ = stdout().flush();
+        // Exit immediately so the process doesn't hang after the TUI restores.
+        process::exit(1);
     }));
+
+    let _ = ONCE.set(());
 }
 
 fn setup_terminal() -> io::Result<()> {
