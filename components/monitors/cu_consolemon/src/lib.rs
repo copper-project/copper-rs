@@ -425,8 +425,8 @@ impl StatefulWidget for NodesScrollableWidget<'_> {
             .max()
             .unwrap_or_default();
         // Give extra vertical room so long connections can route without aliasing
-        let content_height = (((max_ports + NODE_PORT_ROW_OFFSET) as u16) * 12)
-            .max(NODE_HEIGHT * 6);
+        let content_height =
+            (((max_ports + NODE_PORT_ROW_OFFSET) as u16) * 12).max(NODE_HEIGHT * 6);
         let connections = state.connections.clone();
         let build_graph = |width: u16, height: u16| {
             NodeGraph::new(
