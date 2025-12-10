@@ -53,7 +53,8 @@ pub const SD_CRC_IDX_LSB: usize = SD_CRC_IDX_MSB + 1;
 pub const SD_TEND_IDX: usize = SD_CRC_IDX_LSB + 1;
 
 /// Clock speed divider for initialization transfers (slower is safer for bring-up)
-pub const SD_CLK_DIV_INIT: u16 = 200;
+/// PIO runs from 120 MHz; divider is integer + fractional. Start very slow to prove cmd toggles.
+pub const SD_CLK_DIV_INIT: u16 = 600;
 
 /// Retry count
 pub const SD_RETRIES: usize = 3;
@@ -112,6 +113,8 @@ impl<'a, DmaCh: SingleChannelDma, P: PIOExt, D: TimerDevice> Sdio4bit<'a, DmaCh,
         sd_dat_base_id: u8,
         sd_full_clk_div: u16,
     ) -> Self {
+        // Note: `PIOx.split()` resets the PIO block, which clears the GPIOBASE bit.
+        // Callers targeting GPIO32+ must re-set GPIOBASE (bit 4) after splitting.
         info!("SDIO: setting up PIO programs");
         let program_cmd_clk =
             pio_file!("src/rp2040_sdio.pio", select_program("sdio_cmd_clk")).program;
@@ -134,6 +137,7 @@ impl<'a, DmaCh: SingleChannelDma, P: PIOExt, D: TimerDevice> Sdio4bit<'a, DmaCh,
                 .side_set_pin_base(sd_clk_id)
                 .out_shift_direction(ShiftDirection::Left)
                 .in_shift_direction(ShiftDirection::Left)
+                .pull_threshold(32)
                 .clock_divisor_fixed_point(SD_CLK_DIV_INIT, 0)
                 .autopush(true)
                 .autopull(true)
@@ -169,6 +173,10 @@ impl<'a, DmaCh: SingleChannelDma, P: PIOExt, D: TimerDevice> Sdio4bit<'a, DmaCh,
     }
 
     pub fn send_command(&mut self, command: SdCmd) -> Result<SdCmdResponse, SdioError> {
+        // Ensure a clean SM state each command
+        self.sm_cmd.clear_fifos();
+        self.sm_cmd.restart();
+
         if command.is_acmd() {
             self.send_command(SdCmd::AppCmd(self.rca))?;
         }
@@ -181,6 +189,9 @@ impl<'a, DmaCh: SingleChannelDma, P: PIOExt, D: TimerDevice> Sdio4bit<'a, DmaCh,
     }
 
     pub fn send_command_short(&mut self, command: SdCmd) -> Result<(), SdioError> {
+        self.sm_cmd.clear_fifos();
+        self.sm_cmd.restart();
+
         if command.is_acmd() {
             self.send_command(SdCmd::AppCmd(self.rca))?;
         }
@@ -458,6 +469,9 @@ impl<'a, DmaCh: SingleChannelDma, P: PIOExt, D: TimerDevice> Sdio4bit<'a, DmaCh,
     }
 
     pub fn init_card(&mut self) -> Result<(), SdioError> {
+        // Re-initialize the command state machine each attempt to avoid stale FIFO/shift state
+        self.sm_cmd.clear_fifos();
+        self.sm_cmd.restart();
         info!("SDIO: init_card start");
         self.timer.delay_us((SD_STARTUP_MS as u32) * 1000);
 
@@ -695,80 +709,77 @@ impl SdCmd {
     }
 
     pub fn format(&self) -> [u32; 2] {
-        let mut data = [0u32; 2];
-
-        // Bits 47-40 is the command number
-        data[0] = (self.get_cmd_index() as u32) << 24;
+        // Build the 48-bit command packet:
+        // [start=0][transmit=1][cmd_index(6)][arg(32)][crc7(7)][end=1]
         let response_type = self.get_cmd_response();
-        // Bits 39-32 is defined based on the command
-        // Bits 31-16 is the argument to the command
-        // If you see where the command is defined, each enum has
-        // the same offset as the command that corresponds to it
+        let mut arg: u32 = 0;
 
         match self {
             SdCmd::GoIdleState | SdCmd::AllSendCid | SdCmd::SendRelativeAddr => {}
 
             SdCmd::SelectDeselectCard(rca) => {
-                // Bits 31-16 are reserved
-                data[1] = (*rca as u32) << 16;
+                arg = (*rca as u32) << 16;
             }
             SdCmd::SendIfCond(test_pattern) => {
-                // Bits 31-28 is Voltage Supplied
-                // Currently we only support default 2.7-3.6V
-                data[1] |= 0x1 << 28;
-                // Bits 27-12 are reserved
-                // Bits 11-8 is the voltage accepted again. Hardcoding range that
-                // corresponds to 2.7-3.6V
-                // from the spec
-                // TODO: investigate if we can do 1.8V
-                data[1] |= 0b0001 << 24;
-                // 23-16 is the check pattern
-                data[1] |= (*test_pattern as u32) << 16;
+                // Voltage supplied: 2.7-3.6V (0b0001), plus check pattern in low byte.
+                arg |= 0x1 << 8; // VHS = 0b0001 at bits 11..8
+                arg |= *test_pattern as u32;
             }
             SdCmd::SendCsd(rca) => {
-                // Most of the bits are reserved for the card to set, but the
-                // top bits should be set to the RCA
-                data[0] = (*rca as u32) << 16;
+                arg = (*rca as u32) << 16;
             }
-            SdCmd::SetBlockLen(len) => data[1] = *len,
+            SdCmd::SetBlockLen(len) => arg = *len,
 
-            SdCmd::ReadSingleBlock(addr) | SdCmd::WriteBlock(addr) => data[1] = *addr,
+            SdCmd::ReadSingleBlock(addr) | SdCmd::WriteBlock(addr) => arg = *addr,
 
-            SdCmd::AppCmd(rca) => data[0] = (*rca as u32) << 16,
+            SdCmd::AppCmd(rca) => arg = (*rca as u32) << 16,
 
             SdCmd::SetBusWidth(wide) => {
-                data[1] = if *wide { 2 } else { 0 };
+                arg = if *wide { 2 } else { 0 };
             }
             SdCmd::SdAppOpCond(hcs, xpc, s18r, voltage_window) => {
-                // Bit 47 is reserved
-                // Bit 46 is the HCS
                 if *hcs {
-                    data[0] |= 1 << 14;
+                    arg |= 1 << 30;
                 }
-                // Bit 45 is reserved
-                // Bit 44 is XPC
                 if *xpc {
-                    data[0] |= 1 << 12;
+                    arg |= 1 << 28;
                 }
-                // Bits 43-41 are reserved
-                // Bit 40 is S18R
                 if *s18r {
-                    data[0] |= 1 << 8;
+                    arg |= 1 << 24;
                 }
-
-                // Bits 39-16 is the Voltage Window
-                data[0] |= (voltage_window >> 16) & 0xFF;
-                data[1] |= (voltage_window << 16) & 0xFFFF_0000;
+                arg |= voltage_window & 0xFFFF_FF;
             }
         }
 
-        // Bits 15-9 is the crc7 of the command, processed in big endian
-        let crc = calculate_crc7_from_words(&data, 1, 5);
-        data[1] |= (crc as u32) << 8;
+        let cmd_idx = self.get_cmd_index() as u8 & 0x3F;
+        let mut crc: u8 = 0;
+        let crc_bytes = [
+            0x40 | cmd_idx,           // start=0, transmit=1, command index
+            (arg >> 24) as u8,
+            (arg >> 16) as u8,
+            (arg >> 8) as u8,
+            arg as u8,
+        ];
+        for b in crc_bytes {
+            crc = CRC7_TABLE[(crc ^ b) as usize];
+        }
+        crc &= 0x7F;
 
-        // Bits 7-0 is the length of the response to the command - 1
+        let mut packet: u64 = 0;
+        packet |= (crc_bytes[0] as u64) << 40;
+        packet |= (crc_bytes[1] as u64) << 32;
+        packet |= (crc_bytes[2] as u64) << 24;
+        packet |= (crc_bytes[3] as u64) << 16;
+        packet |= (crc_bytes[4] as u64) << 8;
+        packet |= (crc as u64) << 1;
+        packet |= 1; // end bit
+
+        let mut data = [0u32; 2];
+        // Word0: bits31-24 = number of bits minus 1 (47), bits23-0 = top 24 bits of packet.
+        data[0] = (47u32 << 24) | ((packet >> 24) as u32 & 0x00FF_FFFF);
+        // Word1: bits31-8 = lower 24 bits of packet, bits7-0 = response length minus 1 (or 0 if none).
+        data[1] = ((packet & 0x00FF_FFFF) as u32) << 8;
         let response_len = response_type.get_response_len() as u32;
-
         if response_len > 0 {
             data[1] |= response_len - 1;
         }

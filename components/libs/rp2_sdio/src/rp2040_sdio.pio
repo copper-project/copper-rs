@@ -64,17 +64,16 @@
 .program sdio_cmd_clk
     .side_set 1
 
-    set pins, 1         side 1 [d1]    ; initial state of cmd is high
+    set pins, 1         side 0 [d1]    ; initial state of cmd high, no extra high clock
     set pindirs, 1      side 0 [d0]    ; set sdio_cmd as output
-    mov osr, null       side 1 [d1]    ; make sure osr is full of zeros to prevent autopull
+    nop                 side 0 [d0]
+    mov osr, null       side 0 [d1]    ; make sure osr is full of zeros to prevent autopull
 
 wait_cmd:
-    mov y, !status      side 0 [d0]    ; check if tx fifo has data
-    jmp !y wait_cmd     side 1 [d1]
+    pull block          side 0 [d0]    ; wait for first command word into OSR
 
 load_cmd:
-    out null, 32        side 0 [d0]    ; load first word (trigger autopull)
-    out x, 8            side 1 [d1]    ; number of bits to send
+    out x, 8            side 1 [d1]    ; number of bits to send (from word0 bits 31-24)
 
 send_cmd:
     out pins, 1         side 0 [d0]    ; write output on falling edge of clk

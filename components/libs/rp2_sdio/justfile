@@ -1,2 +1,8 @@
 example:
     cargo run --example smoke
+
+clk-toggler:
+    cargo run --example clk_toggler
+
+cmd-toggler:
+    cargo run --example cmd_toggler
