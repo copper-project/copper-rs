@@ -1204,30 +1204,13 @@ impl Drop for TerminalRestoreGuard {
     }
 }
 
-fn install_signal_handlers(quitting: Arc<AtomicBool>) {
-    static SIGNAL_HANDLER: OnceLock<()> = OnceLock::new();
-
-    let _ = SIGNAL_HANDLER.get_or_init(|| {
-        let quitting = quitting.clone();
-        if let Err(err) = ctrlc::set_handler(move || {
-            quitting.store(true, Ordering::SeqCst);
-            let _ = restore_terminal();
-            // Match the conventional 130 exit code for Ctrl-C.
-            std::process::exit(130);
-        }) {
-            eprintln!("Failed to install Ctrl-C handler: {err}");
-        }
-    });
-}
-
 fn init_error_hooks() {
     static ONCE: OnceLock<()> = OnceLock::new();
     if ONCE.get().is_some() {
         return;
     }
 
-    let (panic_hook, error) = HookBuilder::default().into_hooks();
-    let panic = panic_hook.into_panic_hook();
+    let (_panic_hook, error) = HookBuilder::default().into_hooks();
     let error = error.into_eyre_hook();
     color_eyre::eyre::set_hook(Box::new(move |e| {
         let _ = restore_terminal();
