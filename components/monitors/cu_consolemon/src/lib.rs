@@ -385,8 +385,8 @@ fn clip_tail(value: &str, max_chars: usize) -> String {
 
 #[allow(dead_code)]
 const NODE_HEIGHT_CONTENT: u16 = NODE_HEIGHT - 2;
-const GRAPH_WIDTH_PADDING: u16 = NODE_WIDTH;
-const GRAPH_HEIGHT_PADDING: u16 = NODE_HEIGHT;
+const GRAPH_WIDTH_PADDING: u16 = NODE_WIDTH * 2;
+const GRAPH_HEIGHT_PADDING: u16 = NODE_HEIGHT * 4;
 
 impl StatefulWidget for NodesScrollableWidget<'_> {
     type State = NodesScrollableWidgetState;
@@ -416,7 +416,7 @@ impl StatefulWidget for NodesScrollableWidget<'_> {
 
         let node_count = state.display_nodes.len().max(1);
         let content_width = (node_count as u16)
-            .saturating_mul(NODE_WIDTH + 12)
+            .saturating_mul(NODE_WIDTH + 20)
             .max(NODE_WIDTH);
         let max_ports = state
             .display_nodes
@@ -424,7 +424,9 @@ impl StatefulWidget for NodesScrollableWidget<'_> {
             .map(|node| node.inputs.len().max(node.outputs.len()))
             .max()
             .unwrap_or_default();
-        let content_height = (((max_ports + NODE_PORT_ROW_OFFSET) as u16) * 4).max(NODE_HEIGHT);
+        // Give extra vertical room so long connections can route without aliasing
+        let content_height =
+            (((max_ports + NODE_PORT_ROW_OFFSET) as u16) * 12).max(NODE_HEIGHT * 6);
         let connections = state.connections.clone();
         let build_graph = |width: u16, height: u16| {
             NodeGraph::new(
