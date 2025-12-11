@@ -236,6 +236,10 @@ pub struct Node {
     #[serde(skip_serializing_if = "Option::is_none")]
     config: Option<ComponentConfig>,
 
+    /// Resources requested by the task.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    resources: Option<HashMap<String, String>>,
+
     /// Missions for which this task is run.
     missions: Option<Vec<String>>,
 
@@ -268,6 +272,7 @@ impl Node {
             id: id.to_string(),
             type_: Some(ptype.to_string()),
             config: None,
+            resources: None,
             missions: None,
             background: None,
             run_in_sim: None,
@@ -307,6 +312,11 @@ impl Node {
     #[allow(dead_code)]
     pub fn get_instance_config(&self) -> Option<&ComponentConfig> {
         self.config.as_ref()
+    }
+
+    #[allow(dead_code)]
+    pub fn get_resources(&self) -> Option<&HashMap<String, String>> {
+        self.resources.as_ref()
     }
 
     /// By default, assume a source or a sink is not run in sim.
@@ -2362,6 +2372,45 @@ mod tests {
             }
             _ => panic!("expected Tx channel with config"),
         }
+    }
+
+    #[test]
+    fn test_task_resources_roundtrip() {
+        let txt = r#"
+        (
+            tasks: [
+                (
+                    id: "imu",
+                    type: "tasks::ImuDriver",
+                    resources: { "bus": "fc.spi_1", "irq": "fc.gpio_imu" },
+                ),
+            ],
+            cnx: [],
+        )
+        "#;
+
+        let config = CuConfig::deserialize_ron(txt);
+        let graph = config.graphs.get_graph(None).unwrap();
+        let node = graph.get_node(0).expect("missing task node");
+        let resources = node.get_resources().expect("missing resources map");
+        assert_eq!(resources.get("bus").map(String::as_str), Some("fc.spi_1"));
+        assert_eq!(
+            resources.get("irq").map(String::as_str),
+            Some("fc.gpio_imu")
+        );
+
+        let serialized = config.serialize_ron();
+        let deserialized = CuConfig::deserialize_ron(&serialized);
+        let graph = deserialized.graphs.get_graph(None).unwrap();
+        let node = graph.get_node(0).expect("missing task node");
+        let resources = node
+            .get_resources()
+            .expect("missing resources map after roundtrip");
+        assert_eq!(resources.get("bus").map(String::as_str), Some("fc.spi_1"));
+        assert_eq!(
+            resources.get("irq").map(String::as_str),
+            Some("fc.gpio_imu")
+        );
     }
 
     #[test]

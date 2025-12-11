@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs::read_to_string;
 use syn::meta::parser;
 use syn::Fields::{Named, Unnamed};
@@ -15,6 +15,7 @@ use crate::utils::{config_id_to_bridge_const, config_id_to_enum, config_id_to_st
 use cu29_runtime::config::CuConfig;
 use cu29_runtime::config::{
     read_configuration, BridgeChannelConfigRepresentation, CuGraph, Flavor, Node, NodeId,
+    ResourceBundleConfig,
 };
 use cu29_runtime::curuntime::{
     compute_runtime_plan, find_task_type_for_id, CuExecutionLoop, CuExecutionStep, CuExecutionUnit,
@@ -480,6 +481,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             &node_output_positions,
             &task_member_names,
         );
+
+        let resources_module = match build_resources_module(mission.as_str(), &copper_config, graph)
+        {
+            Ok(tokens) => tokens,
+            Err(e) => return return_error(e.to_string()),
+        };
 
         let ids = build_monitored_ids(&task_specs.ids, &mut culist_bridge_specs);
 
@@ -1753,6 +1760,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 // CuList is a CopperList with the list of all the messages types as msgs.
                 pub type CuTasks = #task_types_tuple;
                 pub type CuBridges = #bridges_type_tokens;
+                #resources_module
 
                 #sim_tasks
                 #sim_support
@@ -2307,6 +2315,188 @@ fn collect_task_member_names(graph: &CuGraph) -> Vec<(NodeId, String)> {
         .filter(|(_, node)| node.get_flavor() == Flavor::Task)
         .map(|(node_id, node)| (*node_id, config_id_to_struct_member(node.get_id().as_str())))
         .collect()
+}
+
+#[derive(Clone)]
+struct ResourceKeySpec {
+    path: String,
+    bundle_id: String,
+    enum_ident: Ident,
+    const_ident: Ident,
+}
+
+fn parse_resource_path(path: &str) -> CuResult<(String, String)> {
+    let (bundle_id, name) = path.split_once('.').ok_or_else(|| {
+        CuError::from(format!(
+            "Resource '{path}' is missing a bundle prefix (expected bundle.resource)"
+        ))
+    })?;
+
+    if bundle_id.is_empty() || name.is_empty() {
+        return Err(CuError::from(format!(
+            "Resource '{path}' must use the 'bundle.resource' format"
+        )));
+    }
+
+    Ok((bundle_id.to_string(), name.to_string()))
+}
+
+fn collect_resource_specs(graph: &CuGraph) -> CuResult<Vec<ResourceKeySpec>> {
+    let mut paths = BTreeSet::new();
+    for (_, node) in graph.get_all_nodes() {
+        if let Some(resources) = node.get_resources() {
+            for path in resources.values() {
+                paths.insert(path.clone());
+            }
+        }
+    }
+
+    let mut specs = Vec::new();
+    for path in paths {
+        let (bundle_id, name) = parse_resource_path(&path)?;
+        let enum_ident = Ident::new(&config_id_to_enum(&path), Span::call_site());
+        let const_ident = Ident::new(&config_id_to_bridge_const(name.as_str()), Span::call_site());
+        specs.push(ResourceKeySpec {
+            path,
+            bundle_id,
+            enum_ident,
+            const_ident,
+        });
+    }
+
+    Ok(specs)
+}
+
+fn build_bundle_list<'a>(config: &'a CuConfig, mission: &str) -> Vec<&'a ResourceBundleConfig> {
+    config
+        .resources
+        .iter()
+        .filter(|bundle| {
+            bundle
+                .missions
+                .as_ref()
+                .map_or(true, |missions| missions.iter().any(|m| m == mission))
+        })
+        .collect()
+}
+
+fn build_resources_module(
+    mission: &str,
+    config: &CuConfig,
+    graph: &CuGraph,
+) -> CuResult<proc_macro2::TokenStream> {
+    let resource_specs = collect_resource_specs(graph)?;
+    let bundle_specs = build_bundle_list(config, mission);
+
+    for spec in &resource_specs {
+        if !bundle_specs
+            .iter()
+            .any(|bundle| bundle.id == spec.bundle_id)
+        {
+            return Err(CuError::from(format!(
+                "Resource '{}' references unknown bundle '{}' for mission '{}'",
+                spec.path, spec.bundle_id, mission
+            )));
+        }
+    }
+
+    let mut resources_by_bundle: BTreeMap<String, Vec<&ResourceKeySpec>> = BTreeMap::new();
+    for spec in &resource_specs {
+        resources_by_bundle
+            .entry(spec.bundle_id.clone())
+            .or_default()
+            .push(spec);
+    }
+
+    let res_id_variants = resource_specs.iter().map(|spec| {
+        let ident = &spec.enum_ident;
+        quote! { #ident }
+    });
+
+    let bundle_modules = resources_by_bundle.iter().map(|(bundle_id, specs)| {
+        let module_ident = Ident::new(
+            &config_id_to_struct_member(bundle_id.as_str()),
+            Span::call_site(),
+        );
+        let consts = specs.iter().map(|spec| {
+            let const_ident = &spec.const_ident;
+            let enum_ident = &spec.enum_ident;
+            quote! {
+                pub const #const_ident: super::ResourceKey<super::ResId> =
+                    super::ResourceKey::new(super::ResId::#enum_ident);
+            }
+        });
+
+        quote! {
+            pub mod #module_ident {
+                #![allow(dead_code)]
+                #(#consts)*
+            }
+        }
+    });
+
+    let all_decl_entries = resource_specs.iter().map(|spec| {
+        let module_ident = Ident::new(
+            &config_id_to_struct_member(spec.bundle_id.as_str()),
+            Span::call_site(),
+        );
+        let const_ident = &spec.const_ident;
+        let path = LitStr::new(&spec.path, Span::call_site());
+        quote! { ResourceDecl::new(#module_ident::#const_ident, #path) }
+    });
+
+    let bundle_arrays = bundle_specs.iter().map(|bundle| {
+        let array_ident = Ident::new(
+            &config_id_to_bridge_const(bundle.id.as_str()),
+            Span::call_site(),
+        );
+        let module_ident = Ident::new(
+            &config_id_to_struct_member(bundle.id.as_str()),
+            Span::call_site(),
+        );
+        let bundle_resources = resources_by_bundle
+            .get(&bundle.id)
+            .cloned()
+            .unwrap_or_default();
+        let entries = bundle_resources.iter().map(|spec| {
+            let const_ident = &spec.const_ident;
+            let path = LitStr::new(&spec.path, Span::call_site());
+            quote! { ResourceDecl::new(#module_ident::#const_ident, #path) }
+        });
+        quote! {
+            const #array_ident: &[ResourceDecl<ResId>] = &[ #(#entries),* ];
+        }
+    });
+
+    let provider_entries = bundle_specs.iter().map(|bundle| {
+        let array_ident = Ident::new(
+            &config_id_to_bridge_const(bundle.id.as_str()),
+            Span::call_site(),
+        );
+        let bundle_id = LitStr::new(bundle.id.as_str(), Span::call_site());
+        let provider = LitStr::new(bundle.provider.as_str(), Span::call_site());
+        quote! { ResourceProvider::new(#bundle_id, #provider, #array_ident) }
+    });
+
+    let resources_module = quote! {
+        pub mod resources {
+            #![allow(dead_code)]
+            use cu29::resource::{ResourceDecl, ResourceKey, ResourceProvider};
+
+            #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+            pub enum ResId {
+                #(#res_id_variants,)*
+            }
+
+            #(#bundle_modules)*
+
+            pub const RESOURCES: &[ResourceDecl<ResId>] = &[ #(#all_decl_entries),* ];
+            #(#bundle_arrays)*
+            pub const PROVIDERS: &[ResourceProvider<ResId>] = &[ #(#provider_entries),* ];
+        }
+    };
+
+    Ok(resources_module)
 }
 
 fn build_execution_plan(
