@@ -435,6 +435,18 @@ fn validate_bridge_channel(
     }
 }
 
+/// Declarative definition of a resource bundle.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ResourceBundleConfig {
+    pub id: String,
+    #[serde(rename = "provider")]
+    pub provider: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub config: Option<ComponentConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub missions: Option<Vec<String>>,
+}
+
 /// Declarative definition of a bridge component with a list of channels.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BridgeConfig {
@@ -910,6 +922,8 @@ pub struct CuConfig {
     pub logging: Option<LoggingConfig>,
     /// Optional runtime configuration
     pub runtime: Option<RuntimeConfig>,
+    /// Declarative resource bundle definitions
+    pub resources: Vec<ResourceBundleConfig>,
     /// Declarative bridge definitions that are yet to be expanded into the graph
     pub bridges: Vec<BridgeConfig>,
     /// Graph structure - either a single graph or multiple mission-specific graphs
@@ -997,6 +1011,7 @@ pub struct IncludesConfig {
 #[derive(Serialize, Deserialize, Default)]
 struct CuConfigRepresentation {
     tasks: Option<Vec<Node>>,
+    resources: Option<Vec<ResourceBundleConfig>>,
     bridges: Option<Vec<BridgeConfig>>,
     cnx: Option<Vec<SerializedCnx>>,
     monitor: Option<MonitorConfig>,
@@ -1154,6 +1169,7 @@ where
     cuconfig.monitor = representation.monitor.clone();
     cuconfig.logging = representation.logging.clone();
     cuconfig.runtime = representation.runtime.clone();
+    cuconfig.resources = representation.resources.clone().unwrap_or_default();
     cuconfig.bridges = representation.bridges.clone().unwrap_or_default();
 
     Ok(cuconfig)
@@ -1187,6 +1203,11 @@ impl Serialize for CuConfig {
         } else {
             Some(self.bridges.clone())
         };
+        let resources = if self.resources.is_empty() {
+            None
+        } else {
+            Some(self.resources.clone())
+        };
         match &self.graphs {
             Simple(graph) => {
                 let tasks: Vec<Node> = graph
@@ -1209,6 +1230,7 @@ impl Serialize for CuConfig {
                     monitor: self.monitor.clone(),
                     logging: self.logging.clone(),
                     runtime: self.runtime.clone(),
+                    resources: resources.clone(),
                     missions: None,
                     includes: None,
                 }
@@ -1251,6 +1273,7 @@ impl Serialize for CuConfig {
 
                 CuConfigRepresentation {
                     tasks: Some(tasks),
+                    resources: resources.clone(),
                     bridges,
                     cnx: Some(cnx),
                     monitor: self.monitor.clone(),
@@ -1272,6 +1295,7 @@ impl Default for CuConfig {
             monitor: None,
             logging: None,
             runtime: None,
+            resources: Vec::new(),
             bridges: Vec::new(),
         }
     }
@@ -1292,6 +1316,7 @@ impl CuConfig {
             monitor: None,
             logging: None,
             runtime: None,
+            resources: Vec::new(),
             bridges: Vec::new(),
         }
     }
@@ -1895,6 +1920,20 @@ fn process_includes(
                 }
             }
 
+            if let Some(included_resources) = included_representation.resources {
+                if result.resources.is_none() {
+                    result.resources = Some(included_resources);
+                } else {
+                    let mut resources = result.resources.take().unwrap();
+                    for included_resource in included_resources {
+                        if !resources.iter().any(|r| r.id == included_resource.id) {
+                            resources.push(included_resource);
+                        }
+                    }
+                    result.resources = Some(resources);
+                }
+            }
+
             if let Some(included_cnx) = included_representation.cnx {
                 if result.cnx.is_none() {
                     result.cnx = Some(included_cnx);
@@ -2218,6 +2257,70 @@ mod tests {
             bridge.channels[1],
             BridgeChannelConfigRepresentation::Tx { .. }
         ));
+    }
+
+    #[test]
+    fn test_resource_parsing() {
+        let txt = r#"
+        (
+            resources: [
+                (
+                    id: "fc",
+                    provider: "copper_board_px4::Px4Bundle",
+                    config: { "baud": 921600 },
+                    missions: ["m1"],
+                ),
+                (
+                    id: "misc",
+                    provider: "cu29_runtime::StdClockBundle",
+                ),
+            ],
+        )
+        "#;
+
+        let config = CuConfig::deserialize_ron(txt);
+        assert_eq!(config.resources.len(), 2);
+        let fc = &config.resources[0];
+        assert_eq!(fc.id, "fc");
+        assert_eq!(fc.provider, "copper_board_px4::Px4Bundle");
+        assert_eq!(fc.missions.as_deref(), Some(&["m1".to_string()][..]));
+        let baud: u32 = fc
+            .config
+            .as_ref()
+            .and_then(|cfg| cfg.get("baud"))
+            .expect("missing baud");
+        assert_eq!(baud, 921_600);
+        let misc = &config.resources[1];
+        assert_eq!(misc.id, "misc");
+        assert_eq!(misc.provider, "cu29_runtime::StdClockBundle");
+        assert!(misc.config.is_none());
+    }
+
+    #[test]
+    fn test_resource_roundtrip() {
+        let mut config = CuConfig::default();
+        let mut bundle_cfg = ComponentConfig::default();
+        bundle_cfg.set("path", "/dev/ttyACM0".to_string());
+        config.resources.push(ResourceBundleConfig {
+            id: "fc".to_string(),
+            provider: "copper_board_px4::Px4Bundle".to_string(),
+            config: Some(bundle_cfg),
+            missions: Some(vec!["m1".to_string()]),
+        });
+
+        let serialized = config.serialize_ron();
+        let deserialized = CuConfig::deserialize_ron(&serialized);
+        assert_eq!(deserialized.resources.len(), 1);
+        let res = &deserialized.resources[0];
+        assert_eq!(res.id, "fc");
+        assert_eq!(res.provider, "copper_board_px4::Px4Bundle");
+        assert_eq!(res.missions.as_deref(), Some(&["m1".to_string()][..]));
+        let path: String = res
+            .config
+            .as_ref()
+            .and_then(|cfg| cfg.get("path"))
+            .expect("missing path");
+        assert_eq!(path, "/dev/ttyACM0");
     }
 
     #[test]
