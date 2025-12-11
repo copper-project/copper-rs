@@ -2482,7 +2482,7 @@ fn build_bundle_list<'a>(config: &'a CuConfig, mission: &str) -> Vec<&'a Resourc
             bundle
                 .missions
                 .as_ref()
-                .map_or(true, |missions| missions.iter().any(|m| m == mission))
+                .is_none_or(|missions| missions.iter().any(|m| m == mission))
         })
         .collect()
 }

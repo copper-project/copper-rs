@@ -55,6 +55,7 @@ impl<const ESC: usize> Default for TelemetrySink<ESC> {
 
 impl<const ESC: usize> CuSinkTask for TelemetrySink<ESC> {
     type Input<'m> = CuMsg<EscTelemetry>;
+    type Resources<'r> = ();
 
     fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self> {
         Ok(Self::default())

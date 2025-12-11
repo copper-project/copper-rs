@@ -2,7 +2,7 @@
     resources: [
         (
             id: "fc",
-            provider: "cu_elrs_bdshot_demo::resources::RadioBundle",
+            provider: "crate::resources::RadioBundle",
         ),
     ],
     tasks: [

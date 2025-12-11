@@ -17,14 +17,6 @@ mod std_impl {
     pub const SERIAL_TIMEOUT_KEY: &str = "timeout_ms";
 }
 
-// no-std implementation
-#[cfg(not(feature = "std"))]
-mod no_std_impl {
-    pub use alloc::format;
-}
-
-#[cfg(not(feature = "std"))]
-use no_std_impl::*;
 #[cfg(feature = "std")]
 use std_impl::*;
 
@@ -35,7 +27,9 @@ use cu29::cubridge::{
     BridgeChannel, BridgeChannelConfig, BridgeChannelInfo, BridgeChannelSet, CuBridge,
 };
 use cu29::prelude::*;
-use cu29::resource::{Owned, ResourceBindings, ResourceBundle, ResourceManager};
+#[cfg(feature = "std")]
+use cu29::resource::ResourceBundle;
+use cu29::resource::{Owned, ResourceBindings, ResourceManager};
 use embedded_io::{ErrorType, Read, Write};
 
 const READ_BUFFER_SIZE: usize = 1024;

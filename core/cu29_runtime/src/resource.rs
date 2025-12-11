@@ -16,9 +16,9 @@ use hashbrown::HashMap;
 #[cfg(not(feature = "std"))]
 mod imp {
     pub use alloc::boxed::Box;
+    pub use alloc::format;
     pub use alloc::string::String;
     pub use alloc::sync::Arc;
-    pub use alloc::vec::Vec;
 }
 
 #[cfg(feature = "std")]
