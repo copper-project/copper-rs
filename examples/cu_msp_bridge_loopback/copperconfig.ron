@@ -1,4 +1,15 @@
 (
+    resources: [
+        (
+            id: "fc",
+            provider: "cu_msp_bridge::StdSerialBundle",
+            config: {
+                "device": "/dev/null",
+                "baudrate": 115200,
+                "timeout_ms": 20,
+            },
+        ),
+    ],
     tasks: [
         (
             id: "msp_requester",
@@ -13,11 +24,7 @@
         (
             id: "msp_bridge",
             type: "cu_msp_bridge::CuMspBridgeStd",
-            config: {
-                "device": "/dev/null",
-                "baudrate": 115200,
-                "timeout_ms": 20,
-            },
+            resources: { serial: "fc.serial" },
             channels: [
                 Tx ( id: "requests" ),
                 Rx ( id: "responses" ),

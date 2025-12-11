@@ -2,9 +2,9 @@
 
 Bridge that combines the MSP source/sink tasks into one serial transport.  It exposes a single TX channel (`requests`) that accepts batches of [`cu_msp_lib::structs::MspRequest`] messages and a single RX channel (`responses`) that yields [`MspResponse`] batches decoded from the line.
 
-## Configuration
+## Resources and configuration
 
-The bridge reads the following optional keys from its component configuration:
+The bridge expects a `serial` resource. For std targets use the built-in `StdSerialBundle`, which opens a serial port and stores it as `Mutex<StdSerial>` under `<bundle>.serial`.
 
 | Key          | Type   | Default        | Description                                                |
 |--------------|--------|----------------|------------------------------------------------------------|
@@ -12,12 +12,22 @@ The bridge reads the following optional keys from its component configuration:
 | `baudrate`   | u32    | `115200`       | Serial baud rate.                                          |
 | `timeout_ms` | u64    | `50`           | Read timeout passed to the serial driver in milliseconds.  |
 
-Each Copper route that connects to `requests` or `responses` can override the default channel route if needed via the bridge channel configuration.
+```ron
+resources: [
+  (
+    id: "fc",
+    provider: "cu_msp_bridge::StdSerialBundle",
+    config: { "device": "/dev/ttyUSB0", "baudrate": 115200 },
+  ),
+],
+bridges: [
+  (
+    id: "msp_bridge",
+    type: "cu_msp_bridge::CuMspBridgeStd",
+    resources: { serial: "fc.serial" },
+    channels: [ Tx (id: "requests"), Rx (id: "responses") ],
+  ),
+],
+```
 
-## Usage
-
-1. Register `cu_msp_bridge::CuMspBridge` as a bridge in your Copper config and declare the `requests`/`responses` channels.
-2. Connect your task nodes to those channels using the `cu_msp_bridge::MspRequestBatch` and `cu_msp_bridge::MspResponseBatch` payloads.
-3. Provide the serial configuration (e.g. `device`, `baudrate`) through the bridge config block or override them programmatically using `CuConfig`.
-
-An end-to-end test lives in `examples/cu_msp_bridge_loopback`, which spins up a pseudo-terminal flight controller emulator, wires it to the bridge, sends an MSP `MspRc` request, and validates the echoed response to prove the bridge performs a complete MSP round-trip.
+For embedded targets, provide your own bundle that moves the UART into the `ResourceManager` (e.g. a `spin::Mutex<SerialPort>`). See `examples/cu_elrs_bdshot_demo` and `examples/cu_msp_bridge_loopback` for end-to-end wiring and config mutation.

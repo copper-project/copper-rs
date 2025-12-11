@@ -7,8 +7,12 @@ Serial bridge for TBS Crossfire / ExpressLRS receivers. It parses CRSF packets c
 - `lq_rx` (`LinkStatisticsPayload`): downlink link-quality metrics.
 - `rc_tx` / `lq_tx`: optional uplink of RC or link statistics toward the transmitter.
 
-## Configuration
+## Resources and configuration
+The bridge expects a `serial` resource (anything implementing `embedded_io` `Read`/`Write` + `Send + Sync`). Point the bridge's `resources` map at a bundle entry.
+
 **std builds**
+
+Use the built-in `StdSerialBundle`, which opens a serial port and stores it as `Mutex<StdSerial>` under `<bundle>.serial`.
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -16,36 +20,40 @@ Serial bridge for TBS Crossfire / ExpressLRS receivers. It parses CRSF packets c
 | `baudrate` | u32 | `420000` | UART baud rate. |
 | `timeout_ms` | u32 | `100` | Read timeout in milliseconds. |
 
-**no-std builds**
-
-| Key | Type | Default | Description |
-| --- | --- | --- | --- |
-| `serial_port_index` | u32 | `0` | Slot index pulled from `cu_embedded_registry`. Register the port before starting Copper. |
-
-## Usage
-std target example:
 ```ron
+resources: [
+  (
+    id: "radio",
+    provider: "cu_crsf::StdSerialBundle",
+    config: { "serial_path": "/dev/ttyUSB0", "baudrate": 420000 },
+  ),
+],
 bridges: [
   (
     id: "crsf",
-    type: "cu_crsf::CrsfBridge<cu_crsf::std_serial::StdSerial, std::io::Error>",
-    config: { "serial_path": "/dev/ttyUSB0", "baudrate": 420000 },
+    type: "cu_crsf::CrsfBridgeStd",
+    resources: { serial: "radio.serial" },
     channels: [ Rx (id: "rc_rx"), Rx (id: "lq_rx") ],
   ),
 ],
-cnx: [
-  (src: "crsf/rc_rx", dst: "controller", msg: "cu_crsf::messages::RcChannelsPayload"),
-]
 ```
 
-Embedded target example (no-std):
-```rust
-use cu_crsf::CrsfBridge;
-use embedded_io::{Read, Write};
+**no-std builds**
 
-// Register your UART once; the bridge will pull it by slot at startup.
-let uart = /* your UART implementing Read+Write */;
-<CrsfBridge<_, _> as cu_crsf::SerialFactory<_>>::register_serial(0, uart)?;
+Provide your own bundle that moves a UART into the `ResourceManager` (typically a `spin::Mutex<SerialPort>`). The `resources` module in `examples/cu_elrs_bdshot_demo` shows a complete pattern:
+
+```ron
+resources: [
+  ( id: "fc", provider: "my_app::resources::RadioBundle" ),
+],
+bridges: [
+  (
+    id: "crsf",
+    type: "cu_crsf::CrsfBridge<SerialResource, SerialPortError>",
+    resources: { serial: "fc.serial" },
+    channels: [ Rx (id: "rc_rx"), Tx (id: "lq_tx") ],
+  ),
+],
 ```
 
-See `examples/cu_elrs_bdshot_demo` for a complete wiring that feeds CRSF RC channels into a BDShot bridge on the RP2350 reference board.
+See `examples/cu_elrs_bdshot_demo` for a full wiring that feeds CRSF RC channels into a BDShot bridge on the RP2350 reference board.
