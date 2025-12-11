@@ -8,7 +8,10 @@ impl CuSrcTask for ExampleSrc {
     type Resources<'r> = ();
     type Output<'m> = output_msg!(i32);
 
-    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -30,7 +33,10 @@ impl CuTask for ExampleTaskA {
     type Input<'m> = input_msg!(i32);
     type Output<'m> = output_msg!(i32);
 
-    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -58,7 +64,10 @@ impl CuTask for ExampleTaskB {
     type Input<'m> = input_msg!(i32);
     type Output<'m> = output_msg!(i32);
 
-    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -85,7 +94,10 @@ impl CuSinkTask for ExampleSink {
     type Resources<'r> = ();
     type Input<'m> = input_msg!(i32);
 
-    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
     where
         Self: Sized,
     {

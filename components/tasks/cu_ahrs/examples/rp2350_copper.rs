@@ -28,7 +28,7 @@ mod firmware {
             type Resources<'r> = ();
             type Input<'m> = input_msg!(cu_ahrs::AhrsPose);
 
-            fn new(
+            fn new_with(
                 _config: Option<&ComponentConfig>,
                 _resources: Self::Resources<'_>,
             ) -> CuResult<Self>

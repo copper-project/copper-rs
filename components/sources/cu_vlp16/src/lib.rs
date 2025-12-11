@@ -22,7 +22,7 @@ impl CuSrcTask for Vlp16 {
     type Resources<'r> = ();
     type Output<'m> = output_msg!(PointCloudSoa<10000>);
 
-    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -101,7 +101,7 @@ mod tests {
     fn vlp16_end_2_end_test() {
         let clk = RobotClock::new();
         let cfg = ComponentConfig::new();
-        let mut drv = Vlp16::new(Some(&cfg), ()).unwrap();
+        let mut drv = Vlp16::new(Some(&cfg)).unwrap();
 
         let mut streamer = PcapStreamer::new("test/VLP_16_Single.pcap", "127.0.0.1:2368");
 

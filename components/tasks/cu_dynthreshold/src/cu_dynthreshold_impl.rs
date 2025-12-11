@@ -119,7 +119,7 @@ impl CuTask for DynThreshold {
     type Input<'m> = input_msg!(CuGstBuffer);
     type Output<'m> = output_msg!(CuImage<Vec<u8>>);
 
-    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {

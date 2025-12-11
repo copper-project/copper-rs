@@ -289,9 +289,21 @@ pub trait CuSrcTask: Freezable {
     /// Resources required by the task.
     type Resources<'r>;
 
+    /// Backward-compatible constructor for tasks that do not require resources.
+    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+    where
+        Self: Sized,
+        for<'r> Self::Resources<'r>: Default,
+    {
+        Self::new_with(_config, Default::default())
+    }
+
     /// Here you need to initialize everything your task will need for the duration of its lifetime.
     /// The config allows you to access the configuration of the task.
-    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
     where
         Self: Sized;
 
@@ -332,9 +344,21 @@ pub trait CuTask: Freezable {
     /// Resources required by the task.
     type Resources<'r>;
 
+    /// Backward-compatible constructor for tasks that do not require resources.
+    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+    where
+        Self: Sized,
+        for<'r> Self::Resources<'r>: Default,
+    {
+        Self::new_with(_config, Default::default())
+    }
+
     /// Here you need to initialize everything your task will need for the duration of its lifetime.
     /// The config allows you to access the configuration of the task.
-    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
     where
         Self: Sized;
 
@@ -379,9 +403,21 @@ pub trait CuSinkTask: Freezable {
     /// Resources required by the task.
     type Resources<'r>;
 
+    /// Backward-compatible constructor for tasks that do not require resources.
+    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+    where
+        Self: Sized,
+        for<'r> Self::Resources<'r>: Default,
+    {
+        Self::new_with(_config, Default::default())
+    }
+
     /// Here you need to initialize everything your task will need for the duration of its lifetime.
     /// The config allows you to access the configuration of the task.
-    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
     where
         Self: Sized;
 

@@ -31,7 +31,7 @@ impl CuSrcTask for Tele15 {
     type Resources<'r> = ();
     type Output<'m> = output_msg!(LidarCuMsgPayload);
 
-    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -102,7 +102,7 @@ mod tests {
         let mut streamer = PcapStreamer::new("tests/livox_tele15_small.pcap", "127.0.0.1:56001");
         let config = ComponentConfig::new();
 
-        let mut tele15 = Tele15::new(Some(&config), ()).unwrap();
+        let mut tele15 = Tele15::new(Some(&config)).unwrap();
 
         let new_payload = LidarCuMsgPayload::default();
         let mut new_msg = CuMsg::<LidarCuMsgPayload>::new(Some(new_payload));

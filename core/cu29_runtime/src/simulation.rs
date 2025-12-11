@@ -161,7 +161,10 @@ impl<T: CuMsgPayload> CuSrcTask for CuSimSrcTask<T> {
     type Resources<'r> = ();
     type Output<'m> = output_msg!(T);
 
-    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -206,7 +209,10 @@ impl<I: CuSimSinkInput + 'static> CuSinkTask for CuSimSinkTask<I> {
     type Resources<'r> = ();
     type Input<'m> = <I as CuSimSinkInput>::With<'m>;
 
-    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
     where
         Self: Sized,
     {

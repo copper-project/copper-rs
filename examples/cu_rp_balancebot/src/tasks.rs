@@ -16,7 +16,10 @@ impl CuTask for PIDMerger {
     type Input<'m> = input_msg!('m, PIDControlOutputPayload, PIDControlOutputPayload);
     type Output<'m> = output_msg!(MotorPayload);
 
-    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
     where
         Self: Sized,
     {

@@ -200,7 +200,7 @@ impl CuSinkTask for Lewansoul {
     type Resources<'r> = ();
     type Input<'m> = input_msg!(ServoPositionsPayload);
 
-    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -262,7 +262,7 @@ mod tests {
         config.0.insert("servo0".to_string(), 1.into());
         config.0.insert("servo1".to_string(), 2.into());
 
-        let mut lewansoul = Lewansoul::new(Some(&config), ()).unwrap();
+        let mut lewansoul = Lewansoul::new(Some(&config)).unwrap();
         let _position = lewansoul.read_current_position(1).unwrap();
 
         let _angle_limits = lewansoul.read_angle_limits(1).unwrap();

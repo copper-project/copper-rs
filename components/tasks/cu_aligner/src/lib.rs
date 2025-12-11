@@ -30,7 +30,7 @@ macro_rules! define_task {
                 cu29::payload::CuArray<$p, { $mos }>
             ),*));
 
-            fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+            fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
             where
                 Self: Sized,
             {
@@ -102,7 +102,7 @@ mod tests {
         let mut config = ComponentConfig::default();
         config.set("target_alignment_window_ms", 1000);
         config.set("stale_data_horizon_ms", 2000);
-        let mut aligner = AlignerTask::new(Some(&config), ()).unwrap();
+        let mut aligner = AlignerTask::new(Some(&config)).unwrap();
         let m1 = CuStampedData::<f32, CuMsgMetadata>::default();
         let m2 = CuStampedData::<i32, CuMsgMetadata>::default();
         let input: <AlignerTask as CuTask>::Input<'_> = (&m1, &m2);

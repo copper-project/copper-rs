@@ -109,7 +109,10 @@ pub mod sinks {
         type Input<'m> = input_msg!(AhrsPose);
         type Output<'m> = output_msg!(AhrsPose);
 
-        fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+        fn new_with(
+            _config: Option<&ComponentConfig>,
+            _resources: Self::Resources<'_>,
+        ) -> CuResult<Self>
         where
             Self: Sized,
         {
@@ -181,7 +184,10 @@ impl CuTask for CuAhrs {
     type Input<'m> = input_msg!(ImuPayload);
     type Output<'m> = output_msg!(AhrsPose);
 
-    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
     where
         Self: Sized,
     {

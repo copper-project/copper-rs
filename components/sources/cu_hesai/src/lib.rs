@@ -62,7 +62,7 @@ impl CuSrcTask for Xt32 {
     type Resources<'r> = ();
     type Output<'m> = output_msg!(LidarCuMsgPayload);
 
-    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -155,7 +155,7 @@ mod tests {
         let mut streamer = PcapStreamer::new("tests/hesai-xt32-small.pcap", "127.0.0.1:2368");
         let config = ComponentConfig::new();
 
-        let mut xt32 = Xt32::new(Some(&config), ()).unwrap();
+        let mut xt32 = Xt32::new(Some(&config)).unwrap();
 
         let new_payload = LidarCuMsgPayload::default();
         let mut new_msg = CuMsg::<LidarCuMsgPayload>::new(Some(new_payload));

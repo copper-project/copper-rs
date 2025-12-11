@@ -15,7 +15,10 @@ impl CuSinkTask for HesaiTestSink {
     type Resources<'r> = ();
     type Input<'m> = input_msg!(LidarCuMsgPayload);
 
-    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
     where
         Self: Sized,
     {

@@ -21,7 +21,7 @@ impl CuSinkTask for RerunPlyViz {
     type Resources<'r> = ();
     type Input<'m> = input_msg!(LidarCuMsgPayload);
 
-    fn new(
+    fn new_with(
         _config: Option<&ComponentConfig>,
         _resources: Self::Resources<'_>,
     ) -> Result<Self, CuError>

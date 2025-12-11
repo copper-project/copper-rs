@@ -64,7 +64,7 @@ pub mod tasks {
         type Resources<'r> = ();
         type Output<'m> = CuMsg<messages::FromSource>;
 
-        fn new(
+        fn new_with(
             _config: Option<&ComponentConfig>,
             _resources: Self::Resources<'_>,
         ) -> CuResult<Self> {
@@ -93,7 +93,7 @@ pub mod tasks {
         type Input<'m> = CuMsg<messages::ChainPayload>;
         type Output<'m> = CuMsg<messages::ChainPayload>;
 
-        fn new(
+        fn new_with(
             _config: Option<&ComponentConfig>,
             _resources: Self::Resources<'_>,
         ) -> CuResult<Self> {
@@ -125,7 +125,7 @@ pub mod tasks {
         type Resources<'r> = ();
         type Input<'m> = CuMsg<messages::SinkPayload>;
 
-        fn new(
+        fn new_with(
             _config: Option<&ComponentConfig>,
             _resources: Self::Resources<'_>,
         ) -> CuResult<Self> {
@@ -175,7 +175,7 @@ pub mod bridges {
         type Tx = AlphaTxChannels;
         type Rx = AlphaRxChannels;
 
-        fn new(
+        fn new_with(
             _config: Option<&ComponentConfig>,
             _tx: &[BridgeChannelConfig<<Self::Tx as BridgeChannelSet>::Id>],
             _rx: &[BridgeChannelConfig<<Self::Rx as BridgeChannelSet>::Id>],
@@ -256,7 +256,7 @@ pub mod bridges {
         type Tx = BetaTxChannels;
         type Rx = BetaRxChannels;
 
-        fn new(
+        fn new_with(
             _config: Option<&ComponentConfig>,
             _tx: &[BridgeChannelConfig<<Self::Tx as BridgeChannelSet>::Id>],
             _rx: &[BridgeChannelConfig<<Self::Rx as BridgeChannelSet>::Id>],

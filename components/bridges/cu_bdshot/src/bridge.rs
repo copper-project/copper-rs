@@ -39,7 +39,7 @@ impl<P: BdshotBoardProvider> CuBridge for CuBdshotBridge<P> {
     type Tx = TxChannels;
     type Rx = RxChannels;
 
-    fn new(
+    fn new_with(
         _config: Option<&ComponentConfig>,
         tx: &[BridgeChannelConfig<TxId>],
         _rx: &[BridgeChannelConfig<RxId>],
