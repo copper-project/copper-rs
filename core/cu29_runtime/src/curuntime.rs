@@ -2,9 +2,7 @@
 //! It is exposed to the user via the `copper_runtime` macro injecting it as a field in their application struct.
 //!
 
-use crate::config::{
-    ComponentConfig, CuDirection, Node, ResourceMapping, DEFAULT_KEYFRAME_INTERVAL,
-};
+use crate::config::{ComponentConfig, CuDirection, Node, DEFAULT_KEYFRAME_INTERVAL};
 use crate::config::{CuConfig, CuGraph, NodeId, RuntimeConfig};
 use crate::copperlist::{CopperList, CopperListState, CuListZeroedInit, CuListsManager};
 use crate::cutask::{BincodeAdapter, Freezable};
@@ -243,7 +241,6 @@ impl<
         resources_instanciator: impl Fn(&CuConfig) -> CuResult<ResourceManager>,
         tasks_instanciator: impl for<'c> Fn(
             Vec<Option<&'c ComponentConfig>>,
-            Vec<Option<&'c ResourceMapping>>,
             &mut ResourceManager,
             Arc<ThreadPool>,
         ) -> CuResult<CT>,
@@ -258,11 +255,6 @@ impl<
             .iter()
             .map(|(_, node)| node.get_instance_config())
             .collect();
-        let all_resources: Vec<Option<&ResourceMapping>> = graph
-            .get_all_nodes()
-            .iter()
-            .map(|(_, node)| node.get_resources())
-            .collect();
 
         // TODO: make that configurable
 
@@ -275,12 +267,7 @@ impl<
 
         let mut resources = resources_instanciator(config)?;
 
-        let tasks = tasks_instanciator(
-            all_instances_configs,
-            all_resources,
-            &mut resources,
-            threadpool.clone(),
-        )?;
+        let tasks = tasks_instanciator(all_instances_configs, &mut resources, threadpool.clone())?;
         let mut monitor = monitor_instanciator(config);
         if let Ok(topology) = build_monitor_topology(config, mission) {
             monitor.set_topology(topology);
@@ -339,7 +326,6 @@ impl<
         resources_instanciator: impl Fn(&CuConfig) -> CuResult<ResourceManager>,
         tasks_instanciator: impl for<'c> Fn(
             Vec<Option<&'c ComponentConfig>>,
-            Vec<Option<&'c ResourceMapping>>,
             &mut ResourceManager,
         ) -> CuResult<CT>,
         monitor_instanciator: impl Fn(&CuConfig) -> M,
@@ -353,15 +339,10 @@ impl<
             .iter()
             .map(|(_, node)| node.get_instance_config())
             .collect();
-        let all_resources: Vec<Option<&ResourceMapping>> = graph
-            .get_all_nodes()
-            .iter()
-            .map(|(_, node)| node.get_resources())
-            .collect();
 
         let mut resources = resources_instanciator(config)?;
 
-        let tasks = tasks_instanciator(all_instances_configs, all_resources, &mut resources)?;
+        let tasks = tasks_instanciator(all_instances_configs, &mut resources)?;
 
         let mut monitor = monitor_instanciator(config);
         if let Ok(topology) = build_monitor_topology(config, mission) {
@@ -844,7 +825,6 @@ mod tests {
     #[cfg(feature = "std")]
     fn tasks_instanciator(
         all_instances_configs: Vec<Option<&ComponentConfig>>,
-        _all_resources: Vec<Option<&ResourceMapping>>,
         _resources: &mut ResourceManager,
         _threadpool: Arc<ThreadPool>,
     ) -> CuResult<Tasks> {
@@ -857,12 +837,11 @@ mod tests {
     #[cfg(not(feature = "std"))]
     fn tasks_instanciator(
         all_instances_configs: Vec<Option<&ComponentConfig>>,
-        _all_resources: Vec<Option<&ResourceMapping>>,
         _resources: &mut ResourceManager,
     ) -> CuResult<Tasks> {
         Ok((
-            TestSource::new(all_instances_configs[0], ())?,
-            TestSink::new(all_instances_configs[1], ())?,
+            TestSource::new(all_instances_configs[0])?,
+            TestSink::new(all_instances_configs[1])?,
         ))
     }
 
@@ -875,7 +854,7 @@ mod tests {
     }
 
     fn resources_instanciator(_config: &CuConfig) -> CuResult<ResourceManager> {
-        Ok(ResourceManager::default())
+        Ok(ResourceManager::new(0))
     }
 
     #[derive(Debug)]

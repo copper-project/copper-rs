@@ -36,12 +36,15 @@ use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
-use cu29::config::ResourceMapping;
 use cu29::cubridge::{
     BridgeChannel, BridgeChannelConfig, BridgeChannelInfo, BridgeChannelSet, CuBridge,
 };
 use cu29::prelude::*;
-use cu29::resource::{Owned, ResourceBindings, ResourceBundle, ResourceManager};
+use cu29::resource::{
+    Owned, ResourceBindings, ResourceBundle, ResourceManager, ResourceMapping,
+};
+#[cfg(feature = "std")]
+use cu29::resource::ResourceDecl;
 use cu_msp_lib::structs::{MspRequest, MspResponse};
 use cu_msp_lib::{MspPacket, MspParser};
 use embedded_io::{ErrorType, Read, Write};
@@ -221,7 +224,7 @@ where
             CuError::from("MSP bridge resources must include `serial: <bundle.resource>`")
         })?;
         let serial = manager
-            .take::<S>(path)
+            .take::<S>(path.typed())
             .map_err(|e| e.add_cause("Failed to fetch MSP serial resource"))?;
         Ok(Self { serial })
     }
@@ -323,6 +326,7 @@ impl ResourceBundle for StdSerialBundle {
     fn build(
         bundle_id: &str,
         config: Option<&ComponentConfig>,
+        resources: &[ResourceDecl],
         manager: &mut ResourceManager,
     ) -> CuResult<()> {
         let cfg =
@@ -339,7 +343,11 @@ impl ResourceBundle for StdSerialBundle {
                 "MSP bridge failed to open serial `{device}` at {baudrate} baud: {err}"
             ))
         })?;
-        manager.add_owned(format!("{bundle_id}.serial"), LockedSerial::new(serial))
+        let key = resources
+            .first()
+            .ok_or_else(|| CuError::from("MSP serial bundle missing resource decl"))?
+            .key;
+        manager.add_owned(key.typed(), LockedSerial::new(serial))
     }
 }
 

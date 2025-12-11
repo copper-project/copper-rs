@@ -1,31 +1,25 @@
 //! Resource descriptors and utilities to hand resources to tasks and bridges.
-//!
-//! The `resources` module that the derive macro generates for each mission
-//! exposes typed `ResourceKey` values and bundle metadata. This module provides
-//! the runtime side to register resources (either eagerly via bundle providers
-//! declared in the Copper config, or manually with `add_bundle_prebuilt`) and
-//! to hydrate the `Resources` associated type declared by each task/bridge.
+//! Generated mission code exposes typed `ResourceKey` values and bundle
+//! metadata; this module provides the runtime side.
 
 use crate::config::ComponentConfig;
 use core::any::Any;
 use core::fmt;
 use core::marker::PhantomData;
 use cu29_traits::{CuError, CuResult};
-use hashbrown::HashMap;
 
 #[cfg(not(feature = "std"))]
 mod imp {
     pub use alloc::boxed::Box;
-    pub use alloc::format;
-    pub use alloc::string::String;
     pub use alloc::sync::Arc;
+    pub use alloc::vec::Vec;
 }
 
 #[cfg(feature = "std")]
 mod imp {
     pub use std::boxed::Box;
-    pub use std::string::String;
     pub use std::sync::Arc;
+    pub use std::vec::Vec;
 }
 
 use imp::*;
@@ -58,28 +52,102 @@ impl ResourceEntry {
     }
 }
 
+/// Typed identifier for a resource entry.
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub struct ResourceKey<T = ()> {
+    index: usize,
+    _marker: PhantomData<fn() -> T>,
+}
+
+impl<T> ResourceKey<T> {
+    pub const fn new(index: usize) -> Self {
+        Self {
+            index,
+            _marker: PhantomData,
+        }
+    }
+
+    pub const fn index(&self) -> usize {
+        self.index
+    }
+
+    /// Reinterpret this key as pointing to a concrete resource type.
+    pub fn typed<U>(self) -> ResourceKey<U> {
+        ResourceKey {
+            index: self.index,
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<T> fmt::Debug for ResourceKey<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ResourceKey")
+            .field("index", &self.index)
+            .finish()
+    }
+}
+
+/// Static declaration of a single resource path bound to a key.
+#[derive(Copy, Clone, Debug)]
+pub struct ResourceDecl {
+    pub key: ResourceKey,
+    pub path: &'static str,
+}
+
+impl ResourceDecl {
+    pub const fn new(key: ResourceKey, path: &'static str) -> Self {
+        Self { key, path }
+    }
+}
+
+/// Static mapping between user-defined binding names (e.g. "bus", "irq") and
+/// resource keys. Backed by a slice to avoid runtime allocation.
+#[derive(Clone, Copy)]
+pub struct ResourceMapping {
+    entries: &'static [(&'static str, ResourceKey)],
+}
+
+impl ResourceMapping {
+    pub const fn new(entries: &'static [(&'static str, ResourceKey)]) -> Self {
+        Self { entries }
+    }
+
+    pub fn get(&self, name: &str) -> Option<ResourceKey> {
+        self.entries
+            .iter()
+            .find(|(entry_name, _)| *entry_name == name)
+            .map(|(_, key)| *key)
+    }
+}
+
 /// Manages the concrete resources available to tasks and bridges.
-#[derive(Default)]
 pub struct ResourceManager {
-    entries: HashMap<String, ResourceEntry>,
+    entries: Box<[Option<ResourceEntry>]>,
 }
 
 impl ResourceManager {
-    /// Register an owned resource under a fully-qualified path such as
-    /// `fc.spi_1`.
+    /// Creates a new manager sized for the number of resources generated for
+    /// the current mission.
+    pub fn new(num_resources: usize) -> Self {
+        let mut entries = Vec::with_capacity(num_resources);
+        entries.resize_with(num_resources, || None);
+        Self {
+            entries: entries.into_boxed_slice(),
+        }
+    }
+
+    /// Register an owned resource in the slot identified by `key`.
     pub fn add_owned<T: 'static + Send + Sync>(
         &mut self,
-        path: impl Into<String>,
+        key: ResourceKey<T>,
         value: T,
     ) -> CuResult<()> {
-        let path = path.into();
-        if self.entries.contains_key(&path) {
-            return Err(CuError::from(format!(
-                "Resource '{path}' already registered"
-            )));
+        let idx = key.index();
+        if self.entries[idx].is_some() {
+            return Err(CuError::from("Resource already registered"));
         }
-        self.entries
-            .insert(path, ResourceEntry::Owned(Box::new(value)));
+        self.entries[idx] = Some(ResourceEntry::Owned(Box::new(value)));
         Ok(())
     }
 
@@ -87,52 +155,43 @@ impl ResourceManager {
     /// receive references.
     pub fn add_shared<T: 'static + Send + Sync>(
         &mut self,
-        path: impl Into<String>,
+        key: ResourceKey<T>,
         value: Arc<T>,
     ) -> CuResult<()> {
-        let path = path.into();
-        if self.entries.contains_key(&path) {
-            return Err(CuError::from(format!(
-                "Resource '{path}' already registered"
-            )));
+        let idx = key.index();
+        if self.entries[idx].is_some() {
+            return Err(CuError::from("Resource already registered"));
         }
-        self.entries.insert(
-            path,
-            ResourceEntry::Shared(value as Arc<dyn Any + Send + Sync>),
-        );
+        self.entries[idx] = Some(ResourceEntry::Shared(value as Arc<dyn Any + Send + Sync>));
         Ok(())
     }
 
-    /// Returns true if any resource with the given bundle prefix (e.g. `fc.`)
-    /// is already registered.
-    pub fn has_bundle(&self, bundle_id: &str) -> bool {
-        let prefix = format!("{bundle_id}.");
-        self.entries.keys().any(|k| k.starts_with(&prefix))
-    }
-
-    /// Borrow a shared resource by path.
-    pub fn borrow<'r, T: 'static + Send + Sync>(&'r self, path: &str) -> CuResult<Borrowed<'r, T>> {
+    /// Borrow a shared resource by key.
+    pub fn borrow<'r, T: 'static + Send + Sync>(
+        &'r self,
+        key: ResourceKey<T>,
+    ) -> CuResult<Borrowed<'r, T>> {
+        let idx = key.index();
         let entry = self
             .entries
-            .get(path)
-            .ok_or_else(|| CuError::from(format!("Resource '{path}' not found")))?;
+            .get(idx)
+            .and_then(|opt| opt.as_ref())
+            .ok_or_else(|| CuError::from("Resource not found"))?;
         entry
             .as_shared::<T>()
             .map(Borrowed)
-            .ok_or_else(|| CuError::from(format!("Resource '{path}' has unexpected type")))
+            .ok_or_else(|| CuError::from("Resource has unexpected type"))
     }
 
-    /// Move out an owned resource by path.
-    pub fn take<T: 'static + Send + Sync>(&mut self, path: &str) -> CuResult<Owned<T>> {
-        let entry = self
-            .entries
-            .remove(path)
-            .ok_or_else(|| CuError::from(format!("Resource '{path}' not found")))?;
-        entry.into_owned::<T>().map(Owned).ok_or_else(|| {
-            CuError::from(format!(
-                "Resource '{path}' is not owned or has unexpected type"
-            ))
-        })
+    /// Move out an owned resource by key.
+    pub fn take<T: 'static + Send + Sync>(&mut self, key: ResourceKey<T>) -> CuResult<Owned<T>> {
+        let idx = key.index();
+        let entry = self.entries.get_mut(idx).and_then(|opt| opt.take());
+        let entry = entry.ok_or_else(|| CuError::from("Resource not found"))?;
+        entry
+            .into_owned::<T>()
+            .map(Owned)
+            .ok_or_else(|| CuError::from("Resource is not owned or has unexpected type"))
     }
 
     /// Insert a prebuilt bundle by running a caller-supplied function. This is
@@ -140,28 +199,27 @@ impl ResourceManager {
     /// code (for example, owning handles to embedded peripherals).
     pub fn add_bundle_prebuilt(
         &mut self,
-        bundle_id: &str,
-        builder: impl FnOnce(&str, &mut ResourceManager) -> CuResult<()>,
+        builder: impl FnOnce(&mut ResourceManager) -> CuResult<()>,
     ) -> CuResult<()> {
-        builder(bundle_id, self)
+        builder(self)
     }
 }
 
 /// Trait implemented by resource binding structs passed to task/bridge
 /// constructors. Implementors pull the concrete resources they need from the
 /// `ResourceManager`, using the symbolic mapping provided in the Copper config
-/// (`resources: { name: "bundle.id" }`).
+/// (`resources: { name: "bundle.resource" }`).
 pub trait ResourceBindings<'r>: Sized {
     fn from_bindings(
         manager: &'r mut ResourceManager,
-        mapping: Option<&HashMap<String, String>>,
+        mapping: Option<&ResourceMapping>,
     ) -> CuResult<Self>;
 }
 
 impl<'r> ResourceBindings<'r> for () {
     fn from_bindings(
         _manager: &'r mut ResourceManager,
-        _mapping: Option<&HashMap<String, String>>,
+        _mapping: Option<&ResourceMapping>,
     ) -> CuResult<Self> {
         Ok(())
     }
@@ -173,55 +231,9 @@ pub trait ResourceBundle {
     fn build(
         bundle_id: &str,
         config: Option<&ComponentConfig>,
+        resources: &[ResourceDecl],
         manager: &mut ResourceManager,
     ) -> CuResult<()>;
-}
-
-/// Typed identifier for a resource entry.
-#[derive(Copy, Clone, Eq, PartialEq)]
-pub struct ResourceKey<Id, T = ()> {
-    id: Id,
-    _marker: PhantomData<fn() -> T>,
-}
-
-impl<Id, T> ResourceKey<Id, T> {
-    pub const fn new(id: Id) -> Self {
-        Self {
-            id,
-            _marker: PhantomData,
-        }
-    }
-
-    pub const fn id(&self) -> &Id {
-        &self.id
-    }
-
-    /// Reinterpret this key as pointing to a concrete resource type.
-    pub fn typed<U>(self) -> ResourceKey<Id, U> {
-        ResourceKey {
-            id: self.id,
-            _marker: PhantomData,
-        }
-    }
-}
-
-impl<Id: fmt::Debug, T> fmt::Debug for ResourceKey<Id, T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ResourceKey").field("id", &self.id).finish()
-    }
-}
-
-/// Static declaration of a single resource path bound to a key.
-#[derive(Copy, Clone, Debug)]
-pub struct ResourceDecl<Id> {
-    pub key: ResourceKey<Id>,
-    pub path: &'static str,
-}
-
-impl<Id> ResourceDecl<Id> {
-    pub const fn new(key: ResourceKey<Id>, path: &'static str) -> Self {
-        Self { key, path }
-    }
 }
 
 /// Static metadata describing how to create a bundle of resources.
@@ -229,17 +241,17 @@ impl<Id> ResourceDecl<Id> {
 /// The runtime will call the provider identified by `provider_path` to populate
 /// the resources listed in `resources`.
 #[derive(Copy, Clone, Debug)]
-pub struct ResourceProvider<Id: 'static> {
+pub struct ResourceProvider {
     pub id: &'static str,
     pub provider_path: &'static str,
-    pub resources: &'static [ResourceDecl<Id>],
+    pub resources: &'static [ResourceDecl],
 }
 
-impl<Id: 'static> ResourceProvider<Id> {
+impl ResourceProvider {
     pub const fn new(
         id: &'static str,
         provider_path: &'static str,
-        resources: &'static [ResourceDecl<Id>],
+        resources: &'static [ResourceDecl],
     ) -> Self {
         Self {
             id,

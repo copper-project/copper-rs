@@ -50,8 +50,6 @@ pub struct ComponentConfig(pub HashMap<String, Value>);
 
 /// Mapping between resource binding names and bundle-scoped resource ids.
 #[allow(dead_code)]
-pub type ResourceMapping = HashMap<String, String>;
-
 impl Display for ComponentConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut first = true;

@@ -482,8 +482,18 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             &task_member_names,
         );
 
+        let resource_specs = match collect_resource_specs(graph, &task_specs) {
+            Ok(specs) => specs,
+            Err(e) => return return_error(e.to_string()),
+        };
+
         let (resources_module, resources_instanciator_fn) =
-            match build_resources_module(mission.as_str(), &copper_config, graph) {
+            match build_resources_module(mission.as_str(), &copper_config, &resource_specs) {
+                Ok(tokens) => tokens,
+                Err(e) => return return_error(e.to_string()),
+            };
+        let task_resource_mappings_tokens =
+            match build_task_resource_mappings(&resource_specs, &task_specs) {
                 Ok(tokens) => tokens,
                 Err(e) => return return_error(e.to_string()),
             };
@@ -708,7 +718,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         {
                             let resources = <<#ty as CuSrcTask>::Resources<'_> as ResourceBindings>::from_bindings(
                                 resources,
-                                all_resources[#index],
+                                TASK_RESOURCE_MAPPINGS[#index],
                             ).map_err(|e| e.add_cause(#additional_error_info))?;
                             <#ty>::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
                         }
@@ -717,7 +727,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         {
                             let resources = <<#ty as CuTask>::Resources<'_> as ResourceBindings>::from_bindings(
                                 resources,
-                                all_resources[#index],
+                                TASK_RESOURCE_MAPPINGS[#index],
                             ).map_err(|e| e.add_cause(#additional_error_info))?;
                             <#ty>::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
                         }
@@ -726,7 +736,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         {
                             let resources = <<#ty as CuSinkTask>::Resources<'_> as ResourceBindings>::from_bindings(
                                 resources,
-                                all_resources[#index],
+                                TASK_RESOURCE_MAPPINGS[#index],
                             ).map_err(|e| e.add_cause(#additional_error_info))?;
                             <#ty>::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
                         }
@@ -751,7 +761,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         {
                             let resources = <<#task_type as CuSrcTask>::Resources<'_> as ResourceBindings>::from_bindings(
                                 resources,
-                                all_resources[#index],
+                                TASK_RESOURCE_MAPPINGS[#index],
                             ).map_err(|e| e.add_cause(#additional_error_info))?;
                             #task_type::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
                         }
@@ -762,7 +772,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 {
                                     let resources = <<#base_task_type as CuTask>::Resources<'_> as ResourceBindings>::from_bindings(
                                         resources,
-                                        all_resources[#index],
+                                        TASK_RESOURCE_MAPPINGS[#index],
                                     ).map_err(|e| e.add_cause(#additional_error_info))?;
                                     #task_type::new(all_instances_configs[#index], resources, threadpool.clone()).map_err(|e| e.add_cause(#additional_error_info))?
                                 }
@@ -772,7 +782,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 {
                                     let resources = <<#task_type as CuTask>::Resources<'_> as ResourceBindings>::from_bindings(
                                         resources,
-                                        all_resources[#index],
+                                        TASK_RESOURCE_MAPPINGS[#index],
                                     ).map_err(|e| e.add_cause(#additional_error_info))?;
                                     #task_type::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
                                 }
@@ -783,7 +793,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         {
                             let resources = <<#task_type as CuSinkTask>::Resources<'_> as ResourceBindings>::from_bindings(
                                 resources,
-                                all_resources[#index],
+                                TASK_RESOURCE_MAPPINGS[#index],
                             ).map_err(|e| e.add_cause(#additional_error_info))?;
                             #task_type::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
                         }
@@ -1725,7 +1735,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         let sim_inst_body = if task_sim_instances_init_code.is_empty() {
             quote! {
-                let _ = (all_resources, resources, _threadpool);
+                let _ = (resources, _threadpool);
                 Ok(())
             }
         } else {
@@ -1736,7 +1746,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             Some(quote! {
                 pub fn tasks_instanciator_sim(
                     all_instances_configs: Vec<Option<&ComponentConfig>>,
-                    all_resources: Vec<Option<&ResourceMapping>>,
                     resources: &mut ResourceManager,
                     _threadpool: Arc<ThreadPool>,
                 ) -> CuResult<CuSimTasks> {
@@ -1748,7 +1757,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         let tasks_inst_body_std = if task_instances_init_code.is_empty() {
             quote! {
-                let _ = (all_resources, resources, threadpool);
+                let _ = (resources, threadpool);
                 Ok(())
             }
         } else {
@@ -1757,7 +1766,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         let tasks_inst_body_nostd = if task_instances_init_code.is_empty() {
             quote! {
-                let _ = (all_resources, resources);
+                let _ = resources;
                 Ok(())
             }
         } else {
@@ -1768,7 +1777,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! {
                 pub fn tasks_instanciator<'c>(
                     all_instances_configs: Vec<Option<&'c ComponentConfig>>,
-                    all_resources: Vec<Option<&ResourceMapping>>,
                     resources: &mut ResourceManager,
                     threadpool: Arc<ThreadPool>,
                 ) -> CuResult<CuTasks> {
@@ -1780,7 +1788,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! {
                 pub fn tasks_instanciator<'c>(
                     all_instances_configs: Vec<Option<&'c ComponentConfig>>,
-                    all_resources: Vec<Option<&ResourceMapping>>,
                     resources: &mut ResourceManager,
                 ) -> CuResult<CuTasks> {
                     #tasks_inst_body_nostd
@@ -1793,7 +1800,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::rayon::ThreadPool;
                 use cu29::cuasynctask::CuAsyncTask;
                 use cu29::curuntime::CopperContext;
-                use cu29::config::ResourceMapping;
+                use cu29::resource::ResourceMapping;
                 use cu29::resource::{ResourceBindings, ResourceManager};
                 use cu29::prelude::UnifiedLoggerWrite;
                 use cu29::prelude::memmap::MmapSectionStorage;
@@ -1815,7 +1822,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use core::mem::size_of;
                 use spin::Mutex;
                 use cu29::resource::{ResourceBindings, ResourceManager};
-                use cu29::config::ResourceMapping;
+                use cu29::resource::ResourceMapping;
             }
         };
 
@@ -1868,6 +1875,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 pub type CuBridges = #bridges_type_tokens;
                 #resources_module
                 #resources_instanciator_fn
+                #task_resource_mappings_tokens
 
                 #sim_tasks
                 #sim_support
@@ -2430,6 +2438,8 @@ struct ResourceKeySpec {
     bundle_id: String,
     enum_ident: Ident,
     const_ident: Ident,
+    binding_name: String,
+    task_index: usize,
 }
 
 fn parse_resource_path(path: &str) -> CuResult<(String, String)> {
@@ -2448,27 +2458,45 @@ fn parse_resource_path(path: &str) -> CuResult<(String, String)> {
     Ok((bundle_id.to_string(), name.to_string()))
 }
 
-fn collect_resource_specs(graph: &CuGraph) -> CuResult<Vec<ResourceKeySpec>> {
-    let mut paths = BTreeSet::new();
-    for (_, node) in graph.get_all_nodes() {
+fn collect_resource_specs(
+    graph: &CuGraph,
+    task_specs: &CuTaskSpecSet,
+) -> CuResult<Vec<ResourceKeySpec>> {
+    let mut seen_paths = BTreeSet::new();
+    let mut specs = Vec::new();
+
+    for (node_id, node) in graph.get_all_nodes() {
         if let Some(resources) = node.get_resources() {
-            for path in resources.values() {
-                paths.insert(path.clone());
+            let task_index =
+                task_specs.node_id_to_task_index[node_id as usize].ok_or_else(|| {
+                    CuError::from(format!(
+                        "Resource mapping attached to non-task node '{}'",
+                        node.get_id()
+                    ))
+                })?;
+
+            for (binding_name, path) in resources {
+                if !seen_paths.insert(path.clone()) {
+                    return Err(CuError::from(format!(
+                        "Resource path '{}' is used multiple times, resource paths must be unique within a mission",
+                        path
+                    )));
+                }
+
+                let (bundle_id, name) = parse_resource_path(path)?;
+                let enum_ident = Ident::new(&config_id_to_enum(path), Span::call_site());
+                let const_ident =
+                    Ident::new(&config_id_to_bridge_const(name.as_str()), Span::call_site());
+                specs.push(ResourceKeySpec {
+                    path: path.clone(),
+                    bundle_id,
+                    enum_ident,
+                    const_ident,
+                    binding_name: binding_name.clone(),
+                    task_index,
+                });
             }
         }
-    }
-
-    let mut specs = Vec::new();
-    for path in paths {
-        let (bundle_id, name) = parse_resource_path(&path)?;
-        let enum_ident = Ident::new(&config_id_to_enum(&path), Span::call_site());
-        let const_ident = Ident::new(&config_id_to_bridge_const(name.as_str()), Span::call_site());
-        specs.push(ResourceKeySpec {
-            path,
-            bundle_id,
-            enum_ident,
-            const_ident,
-        });
     }
 
     Ok(specs)
@@ -2490,12 +2518,11 @@ fn build_bundle_list<'a>(config: &'a CuConfig, mission: &str) -> Vec<&'a Resourc
 fn build_resources_module(
     mission: &str,
     config: &CuConfig,
-    graph: &CuGraph,
+    resource_specs: &[ResourceKeySpec],
 ) -> CuResult<(proc_macro2::TokenStream, proc_macro2::TokenStream)> {
-    let resource_specs = collect_resource_specs(graph)?;
     let bundle_specs = build_bundle_list(config, mission);
 
-    for spec in &resource_specs {
+    for spec in resource_specs {
         if !bundle_specs
             .iter()
             .any(|bundle| bundle.id == spec.bundle_id)
@@ -2508,7 +2535,7 @@ fn build_resources_module(
     }
 
     let mut resources_by_bundle: BTreeMap<String, Vec<&ResourceKeySpec>> = BTreeMap::new();
-    for spec in &resource_specs {
+    for spec in resource_specs {
         resources_by_bundle
             .entry(spec.bundle_id.clone())
             .or_default()
@@ -2519,6 +2546,23 @@ fn build_resources_module(
         let ident = &spec.enum_ident;
         quote! { #ident }
     });
+    let num_resources = resource_specs.len();
+    let res_id_def = if num_resources == 0 {
+        quote! {
+            #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+            pub enum ResId {
+                __Unused,
+            }
+        }
+    } else {
+        quote! {
+            #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+            #[repr(usize)]
+            pub enum ResId {
+                #(#res_id_variants,)*
+            }
+        }
+    };
 
     let bundle_modules = resources_by_bundle.iter().map(|(bundle_id, specs)| {
         let module_ident = Ident::new(
@@ -2529,8 +2573,8 @@ fn build_resources_module(
             let const_ident = &spec.const_ident;
             let enum_ident = &spec.enum_ident;
             quote! {
-                pub const #const_ident: super::ResourceKey<super::ResId> =
-                    super::ResourceKey::new(super::ResId::#enum_ident);
+                pub const #const_ident: super::ResourceKey =
+                    super::ResourceKey::new(super::ResId::#enum_ident as usize);
             }
         });
 
@@ -2571,7 +2615,7 @@ fn build_resources_module(
             quote! { ResourceDecl::new(#module_ident::#const_ident, #path) }
         });
         quote! {
-            const #array_ident: &[ResourceDecl<ResId>] = &[ #(#entries),* ];
+            pub const #array_ident: &[ResourceDecl] = &[ #(#entries),* ];
         }
     });
 
@@ -2590,21 +2634,24 @@ fn build_resources_module(
             #![allow(dead_code)]
             use cu29::resource::{ResourceDecl, ResourceKey, ResourceProvider};
 
-            #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-            pub enum ResId {
-                #(#res_id_variants,)*
-            }
+            #res_id_def
+
+            pub const NUM_RESOURCES: usize = #num_resources;
 
             #(#bundle_modules)*
 
-            pub const RESOURCES: &[ResourceDecl<ResId>] = &[ #(#all_decl_entries),* ];
+            pub const RESOURCES: &[ResourceDecl] = &[ #(#all_decl_entries),* ];
             #(#bundle_arrays)*
-            pub const PROVIDERS: &[ResourceProvider<ResId>] = &[ #(#provider_entries),* ];
+            pub const PROVIDERS: &[ResourceProvider] = &[ #(#provider_entries),* ];
         }
     };
 
     let bundle_inits = bundle_specs.iter().map(|bundle| {
         let bundle_id = LitStr::new(bundle.id.as_str(), Span::call_site());
+        let array_ident = Ident::new(
+            &config_id_to_bridge_const(bundle.id.as_str()),
+            Span::call_site(),
+        );
         let provider_path: syn::Path = syn::parse_str(bundle.provider.as_str()).map_err(|err| {
             CuError::from(format!(
                 "Failed to parse provider path '{}' for bundle '{}': {err}",
@@ -2613,30 +2660,91 @@ fn build_resources_module(
         })?;
 
         Ok(quote! {
-            if !manager.has_bundle(#bundle_id) {
-                let bundle_cfg = config
-                    .resources
-                    .iter()
-                    .find(|b| b.id == #bundle_id)
-                    .unwrap_or_else(|| panic!("Resource bundle '{}' missing from configuration", #bundle_id));
-                <#provider_path as cu29::resource::ResourceBundle>::build(
-                    #bundle_id,
-                    bundle_cfg.config.as_ref(),
-                    &mut manager,
-                )?;
-            }
+            let bundle_cfg = config
+                .resources
+                .iter()
+                .find(|b| b.id == #bundle_id)
+                .unwrap_or_else(|| panic!("Resource bundle '{}' missing from configuration", #bundle_id));
+            <#provider_path as cu29::resource::ResourceBundle>::build(
+                #bundle_id,
+                bundle_cfg.config.as_ref(),
+                resources::#array_ident,
+                &mut manager,
+            )?;
         })
     }).collect::<CuResult<Vec<_>>>()?;
 
     let resources_instanciator = quote! {
         pub fn resources_instanciator(config: &CuConfig) -> CuResult<cu29::resource::ResourceManager> {
-            let mut manager = cu29::resource::ResourceManager::default();
+            let mut manager = cu29::resource::ResourceManager::new(resources::NUM_RESOURCES);
             #(#bundle_inits)*
             Ok(manager)
         }
     };
 
     Ok((resources_module, resources_instanciator))
+}
+
+fn build_task_resource_mappings(
+    resource_specs: &[ResourceKeySpec],
+    task_specs: &CuTaskSpecSet,
+) -> CuResult<proc_macro2::TokenStream> {
+    let mut per_task: Vec<Vec<(&str, Ident, Ident)>> = vec![Vec::new(); task_specs.ids.len()];
+
+    for spec in resource_specs {
+        let module_ident = Ident::new(
+            &config_id_to_struct_member(spec.bundle_id.as_str()),
+            Span::call_site(),
+        );
+        per_task
+            .get_mut(spec.task_index)
+            .ok_or_else(|| {
+                CuError::from(format!(
+                    "Resource '{}' mapped to invalid task index {}",
+                    spec.path, spec.task_index
+                ))
+            })?
+            .push((
+                spec.binding_name.as_str(),
+                module_ident,
+                spec.const_ident.clone(),
+            ));
+    }
+
+    let mut mapping_entries = Vec::new();
+    let mut mapping_consts = Vec::new();
+    let mut mapping_refs = Vec::new();
+
+    for (idx, entries) in per_task.iter().enumerate() {
+        if entries.is_empty() {
+            mapping_refs.push(quote! { None });
+            continue;
+        }
+        let entries_ident = format_ident!("TASK{}_RES_ENTRIES", idx);
+        let map_ident = format_ident!("TASK{}_RES_MAPPING", idx);
+        let entry_tokens = entries.iter().map(|(name, module_ident, const_ident)| {
+            let name_lit = LitStr::new(name, Span::call_site());
+            quote! { (#name_lit, resources::#module_ident::#const_ident) }
+        });
+        mapping_entries.push(quote! {
+            const #entries_ident: &[(&str, cu29::resource::ResourceKey)] = &[ #(#entry_tokens),* ];
+        });
+        mapping_consts.push(quote! {
+            const #map_ident: cu29::resource::ResourceMapping = cu29::resource::ResourceMapping::new(#entries_ident);
+        });
+        mapping_refs.push(quote! { Some(&#map_ident) });
+    }
+
+    let mappings_array = quote! {
+        pub const TASK_RESOURCE_MAPPINGS: &[Option<&cu29::resource::ResourceMapping>] =
+            &[ #(#mapping_refs),* ];
+    };
+
+    Ok(quote! {
+        #(#mapping_entries)*
+        #(#mapping_consts)*
+        #mappings_array
+    })
 }
 
 fn build_execution_plan(

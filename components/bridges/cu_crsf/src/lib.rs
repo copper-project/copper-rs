@@ -22,14 +22,15 @@ use std_impl::*;
 
 use crate::messages::{LinkStatisticsPayload, RcChannelsPayload};
 use crsf::{LinkStatistics, Packet, PacketAddress, PacketParser, RcChannels};
-use cu29::config::ResourceMapping;
 use cu29::cubridge::{
     BridgeChannel, BridgeChannelConfig, BridgeChannelInfo, BridgeChannelSet, CuBridge,
 };
 use cu29::prelude::*;
 #[cfg(feature = "std")]
 use cu29::resource::ResourceBundle;
-use cu29::resource::{Owned, ResourceBindings, ResourceManager};
+#[cfg(feature = "std")]
+use cu29::resource::ResourceDecl;
+use cu29::resource::{Owned, ResourceBindings, ResourceManager, ResourceMapping};
 use embedded_io::{ErrorType, Read, Write};
 
 const READ_BUFFER_SIZE: usize = 1024;
@@ -128,7 +129,7 @@ where
             CuError::from("CRSF bridge resources must include `serial: <bundle.resource>`")
         })?;
         let serial = manager
-            .take::<S>(path)
+            .take::<S>(path.typed())
             .map_err(|e| e.add_cause("Failed to fetch CRSF serial resource"))?;
         Ok(Self { serial })
     }
@@ -254,6 +255,7 @@ impl ResourceBundle for StdSerialBundle {
     fn build(
         bundle_id: &str,
         config: Option<&ComponentConfig>,
+        resources: &[ResourceDecl],
         manager: &mut ResourceManager,
     ) -> CuResult<()> {
         let cfg =
@@ -269,7 +271,11 @@ impl ResourceBundle for StdSerialBundle {
                 "Failed to open serial `{path}` at {baud} baud: {err}"
             ))
         })?;
-        manager.add_owned(format!("{bundle_id}.serial"), LockedSerial::new(serial))
+        let key = resources
+            .first()
+            .ok_or_else(|| CuError::from("CRSF serial bundle missing resource decl"))?
+            .key;
+        manager.add_owned(key.typed(), LockedSerial::new(serial))
     }
 }
 
