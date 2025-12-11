@@ -117,9 +117,10 @@ where
     CS::Error: Debug + Send + 'static,
     D: eh1::delay::DelayNs + Send + 'static,
 {
+    type Resources<'r> = ();
     type Output<'m> = output_msg!(ImuPayload);
 
-    fn new(config: Option<&ComponentConfig>) -> CuResult<Self> {
+    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self> {
         let settings = embedded_hal::EmbeddedHalSettings::from_config(config);
 
         let spi_slot = config

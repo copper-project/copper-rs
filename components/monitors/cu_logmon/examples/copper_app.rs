@@ -14,9 +14,13 @@ pub mod tasks {
     impl Freezable for Src {}
 
     impl CuSrcTask for Src {
+        type Resources<'r> = ();
         type Output<'m> = output_msg!(u32);
 
-        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+        fn new(
+            _config: Option<&ComponentConfig>,
+            _resources: Self::Resources<'_>,
+        ) -> CuResult<Self> {
             Ok(Self { counter: 0 })
         }
 
@@ -32,10 +36,14 @@ pub mod tasks {
     impl Freezable for Step {}
 
     impl CuTask for Step {
+        type Resources<'r> = ();
         type Input<'m> = input_msg!(u32);
         type Output<'m> = output_msg!(u32);
 
-        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+        fn new(
+            _config: Option<&ComponentConfig>,
+            _resources: Self::Resources<'_>,
+        ) -> CuResult<Self> {
             Ok(Self)
         }
 
@@ -56,9 +64,13 @@ pub mod tasks {
     impl Freezable for Sink {}
 
     impl CuSinkTask for Sink {
+        type Resources<'r> = ();
         type Input<'m> = input_msg!(u32);
 
-        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+        fn new(
+            _config: Option<&ComponentConfig>,
+            _resources: Self::Resources<'_>,
+        ) -> CuResult<Self> {
             Ok(Self)
         }
 

@@ -105,10 +105,11 @@ pub mod sinks {
     impl Freezable for RpyPrinter {}
 
     impl CuTask for RpyPrinter {
+        type Resources<'r> = ();
         type Input<'m> = input_msg!(AhrsPose);
         type Output<'m> = output_msg!(AhrsPose);
 
-        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+        fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
         where
             Self: Sized,
         {
@@ -176,10 +177,11 @@ impl Freezable for CuAhrs {
 }
 
 impl CuTask for CuAhrs {
+    type Resources<'r> = ();
     type Input<'m> = input_msg!(ImuPayload);
     type Output<'m> = output_msg!(AhrsPose);
 
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {

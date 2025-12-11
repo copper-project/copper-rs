@@ -286,10 +286,12 @@ impl<'a, T: Freezable + ?Sized> Encode for BincodeAdapter<'a, T> {
 /// Note: A source has the privilege to have a clock passed to it vs a frozen clock.
 pub trait CuSrcTask: Freezable {
     type Output<'m>: CuMsgPayload;
+    /// Resources required by the task.
+    type Resources<'r>;
 
     /// Here you need to initialize everything your task will need for the duration of its lifetime.
     /// The config allows you to access the configuration of the task.
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized;
 
@@ -327,10 +329,12 @@ pub trait CuSrcTask: Freezable {
 pub trait CuTask: Freezable {
     type Input<'m>: CuMsgPack;
     type Output<'m>: CuMsgPayload;
+    /// Resources required by the task.
+    type Resources<'r>;
 
     /// Here you need to initialize everything your task will need for the duration of its lifetime.
     /// The config allows you to access the configuration of the task.
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized;
 
@@ -372,10 +376,12 @@ pub trait CuTask: Freezable {
 /// A Sink Task is a task that only consumes messages. For example drivers for actuators are Sink Tasks.
 pub trait CuSinkTask: Freezable {
     type Input<'m>: CuMsgPack;
+    /// Resources required by the task.
+    type Resources<'r>;
 
     /// Here you need to initialize everything your task will need for the duration of its lifetime.
     /// The config allows you to access the configuration of the task.
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized;
 

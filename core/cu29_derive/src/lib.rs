@@ -587,6 +587,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             bridge_cfg.config.as_ref(),
                             tx_channels,
                             rx_channels,
+                            (),
                         )?
                     };
                 }
@@ -691,7 +692,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             );
 
             quote! {
-                <#ty>::new(all_instances_configs[#index]).map_err(|e| e.add_cause(#additional_error_info))?
+                <#ty>::new(all_instances_configs[#index], ()).map_err(|e| e.add_cause(#additional_error_info))?
             }
         }).collect::<Vec<_>>();
 
@@ -702,11 +703,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             );
             if *background {
                 quote! {
-                    #task_type::new(all_instances_configs[#index], threadpool.clone()).map_err(|e| e.add_cause(#additional_error_info))?
+                    #task_type::new(all_instances_configs[#index], (), threadpool.clone()).map_err(|e| e.add_cause(#additional_error_info))?
                 }
             } else {
                 quote! {
-                    #task_type::new(all_instances_configs[#index]).map_err(|e| e.add_cause(#additional_error_info))?
+                    #task_type::new(all_instances_configs[#index], ()).map_err(|e| e.add_cause(#additional_error_info))?
                 }
             }
         }).collect::<Vec<_>>();

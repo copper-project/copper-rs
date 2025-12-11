@@ -266,6 +266,7 @@ impl<S, E> CuBridge for CuMspBridge<S, E>
 where
     S: SerialFactory<E>,
 {
+    type Resources<'r> = ();
     type Tx = TxChannels;
     type Rx = RxChannels;
 
@@ -273,6 +274,7 @@ where
         config: Option<&ComponentConfig>,
         tx_channels: &[BridgeChannelConfig<<Self::Tx as BridgeChannelSet>::Id>],
         rx_channels: &[BridgeChannelConfig<<Self::Rx as BridgeChannelSet>::Id>],
+        _resources: Self::Resources<'_>,
     ) -> CuResult<Self>
     where
         Self: Sized,

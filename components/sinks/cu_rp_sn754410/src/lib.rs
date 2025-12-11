@@ -130,8 +130,9 @@ impl Freezable for SN754410 {
 }
 
 impl CuSinkTask for SN754410 {
+    type Resources<'r> = ();
     type Input<'m> = input_msg!(MotorPayload);
-    fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -224,9 +225,13 @@ pub mod test_support {
     impl Freezable for SN754410TestSrc {}
 
     impl CuSrcTask for SN754410TestSrc {
+        type Resources<'r> = ();
         type Output<'m> = output_msg!(MotorPayload);
 
-        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+        fn new(
+            _config: Option<&ComponentConfig>,
+            _resources: Self::Resources<'_>,
+        ) -> CuResult<Self> {
             Ok(Self {})
         }
 

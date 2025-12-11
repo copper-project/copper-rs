@@ -740,8 +740,9 @@ mod tests {
     impl Freezable for TestSource {}
 
     impl CuSrcTask for TestSource {
+        type Resources<'r> = ();
         type Output<'m> = ();
-        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+        fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
         where
             Self: Sized,
         {
@@ -762,9 +763,10 @@ mod tests {
     impl Freezable for TestSink {}
 
     impl CuSinkTask for TestSink {
+        type Resources<'r> = ();
         type Input<'m> = ();
 
-        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+        fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
         where
             Self: Sized,
         {
@@ -804,16 +806,16 @@ mod tests {
         _threadpool: Arc<ThreadPool>,
     ) -> CuResult<Tasks> {
         Ok((
-            TestSource::new(all_instances_configs[0])?,
-            TestSink::new(all_instances_configs[1])?,
+            TestSource::new(all_instances_configs[0], ())?,
+            TestSink::new(all_instances_configs[1], ())?,
         ))
     }
 
     #[cfg(not(feature = "std"))]
     fn tasks_instanciator(all_instances_configs: Vec<Option<&ComponentConfig>>) -> CuResult<Tasks> {
         Ok((
-            TestSource::new(all_instances_configs[0])?,
-            TestSink::new(all_instances_configs[1])?,
+            TestSource::new(all_instances_configs[0], ())?,
+            TestSink::new(all_instances_configs[1], ())?,
         ))
     }
 

@@ -280,9 +280,13 @@ mod tasks {
     impl Freezable for LoopbackSource {}
 
     impl CuSrcTask for LoopbackSource {
+        type Resources<'r> = ();
         type Output<'m> = CuMsg<MspRequestBatch>;
 
-        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+        fn new(
+            _config: Option<&ComponentConfig>,
+            _resources: Self::Resources<'_>,
+        ) -> CuResult<Self> {
             Ok(Self { sent: false })
         }
 
@@ -307,9 +311,13 @@ mod tasks {
     impl Freezable for LoopbackSink {}
 
     impl CuSinkTask for LoopbackSink {
+        type Resources<'r> = ();
         type Input<'m> = CuMsg<MspResponseBatch>;
 
-        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+        fn new(
+            _config: Option<&ComponentConfig>,
+            _resources: Self::Resources<'_>,
+        ) -> CuResult<Self> {
             Ok(Self)
         }
 

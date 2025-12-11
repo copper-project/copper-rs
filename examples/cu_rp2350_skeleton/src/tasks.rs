@@ -56,6 +56,7 @@ pub struct BooleanSource {
 }
 impl Freezable for BooleanSource {}
 impl CuSrcTask for BooleanSource {
+    type Resources<'r> = ();
     type Output<'m> = output_msg!(bool);
     fn new(_: Option<&ComponentConfig>) -> CuResult<Self> {
         Ok(Self { state: false })
@@ -75,6 +76,7 @@ impl CuSrcTask for BooleanSource {
 pub struct LEDSink;
 impl Freezable for LEDSink {}
 impl CuSinkTask for LEDSink {
+    type Resources<'r> = ();
     type Input<'m> = input_msg!(bool);
     fn new(_: Option<&ComponentConfig>) -> CuResult<Self> {
         Ok(Self)

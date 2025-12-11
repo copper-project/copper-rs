@@ -15,9 +15,10 @@ pub struct MySource {}
 impl Freezable for MySource {}
 
 impl CuSrcTask for MySource {
+    type Resources<'r> = ();
     type Output<'m> = output_msg!(MyPayload);
 
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -42,10 +43,11 @@ pub struct MyTask {
 impl Freezable for MyTask {}
 
 impl CuTask for MyTask {
+    type Resources<'r> = ();
     type Input<'m> = input_msg!(MyPayload);
     type Output<'m> = output_msg!(MyPayload);
 
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -75,9 +77,10 @@ pub struct MySink {}
 impl Freezable for MySink {}
 
 impl CuSinkTask for MySink {
+    type Resources<'r> = ();
     type Input<'m> = input_msg!(MyPayload);
 
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {

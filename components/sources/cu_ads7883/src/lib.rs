@@ -90,9 +90,10 @@ fn read_adc(spi: &mut Spidev) -> std::io::Result<u16> {
 use mock::read_adc;
 
 impl CuSrcTask for ADS7883 {
+    type Resources<'r> = ();
     type Output<'m> = output_msg!(ADSReadingPayload);
 
-    fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -173,9 +174,13 @@ pub mod test_support {
     impl Freezable for ADS78883TestSink {}
 
     impl CuSinkTask for ADS78883TestSink {
+        type Resources<'r> = ();
         type Input<'m> = input_msg!(ADSReadingPayload);
 
-        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+        fn new(
+            _config: Option<&ComponentConfig>,
+            _resources: Self::Resources<'_>,
+        ) -> CuResult<Self> {
             Ok(Self {})
         }
 

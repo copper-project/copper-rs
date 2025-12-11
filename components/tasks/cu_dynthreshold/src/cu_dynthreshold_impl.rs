@@ -115,10 +115,11 @@ pub struct DynThreshold {
 impl Freezable for DynThreshold {}
 
 impl CuTask for DynThreshold {
+    type Resources<'r> = ();
     type Input<'m> = input_msg!(CuGstBuffer);
     type Output<'m> = output_msg!(CuImage<Vec<u8>>);
 
-    fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {

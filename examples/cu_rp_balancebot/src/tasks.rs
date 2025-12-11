@@ -12,10 +12,11 @@ pub struct PIDMerger {}
 impl Freezable for PIDMerger {}
 
 impl CuTask for PIDMerger {
+    type Resources<'r> = ();
     type Input<'m> = input_msg!('m, PIDControlOutputPayload, PIDControlOutputPayload);
     type Output<'m> = output_msg!(MotorPayload);
 
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {

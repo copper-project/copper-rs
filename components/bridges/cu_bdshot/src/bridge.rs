@@ -35,6 +35,7 @@ pub struct CuBdshotBridge<P: BdshotBoardProvider> {
 impl<P: BdshotBoardProvider> Freezable for CuBdshotBridge<P> {}
 
 impl<P: BdshotBoardProvider> CuBridge for CuBdshotBridge<P> {
+    type Resources<'r> = ();
     type Tx = TxChannels;
     type Rx = RxChannels;
 
@@ -42,6 +43,7 @@ impl<P: BdshotBoardProvider> CuBridge for CuBdshotBridge<P> {
         _config: Option<&ComponentConfig>,
         tx: &[BridgeChannelConfig<TxId>],
         _rx: &[BridgeChannelConfig<RxId>],
+        _resources: Self::Resources<'_>,
     ) -> CuResult<Self>
     where
         Self: Sized,

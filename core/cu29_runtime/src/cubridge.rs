@@ -174,6 +174,8 @@ pub trait CuBridge: Freezable {
     type Tx: BridgeChannelSet;
     /// Incoming channels (external world -> Copper).
     type Rx: BridgeChannelSet;
+    /// Resources required by the bridge.
+    type Resources<'r>;
 
     /// Constructs a new bridge.
     ///
@@ -183,6 +185,7 @@ pub trait CuBridge: Freezable {
         config: Option<&ComponentConfig>,
         tx_channels: &[BridgeChannelConfig<<Self::Tx as BridgeChannelSet>::Id>],
         rx_channels: &[BridgeChannelConfig<<Self::Rx as BridgeChannelSet>::Id>],
+        resources: Self::Resources<'_>,
     ) -> CuResult<Self>
     where
         Self: Sized;
@@ -583,6 +586,7 @@ mod tests {
     impl Freezable for ExampleBridge {}
 
     impl CuBridge for ExampleBridge {
+        type Resources<'r> = ();
         type Tx = TxChannels;
         type Rx = RxChannels;
 
@@ -590,6 +594,7 @@ mod tests {
             config: Option<&ComponentConfig>,
             _tx_channels: &[BridgeChannelConfig<TxId>],
             _rx_channels: &[BridgeChannelConfig<RxId>],
+            _resources: Self::Resources<'_>,
         ) -> CuResult<Self> {
             let mut instance = ExampleBridge::default();
             if let Some(cfg) = config {
@@ -717,8 +722,9 @@ mod tests {
             Some("custom/motor".to_string())
         );
 
-        let mut bridge = ExampleBridge::new(Some(&bridge_cfg), &tx_descriptors, &rx_descriptors)
-            .expect("bridge should build");
+        let mut bridge =
+            ExampleBridge::new(Some(&bridge_cfg), &tx_descriptors, &rx_descriptors, ())
+                .expect("bridge should build");
 
         assert_eq!(bridge.port, "ttyUSB0");
 

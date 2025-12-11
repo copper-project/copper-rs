@@ -214,9 +214,10 @@ impl Freezable for WT901 {
 }
 
 impl CuSrcTask for WT901 {
+    type Resources<'r> = ();
     type Output<'m> = output_msg!(PositionalReadingsPayload);
 
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {

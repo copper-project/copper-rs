@@ -158,9 +158,10 @@ pub struct CuSimSrcTask<T> {
 impl<T> Freezable for CuSimSrcTask<T> {}
 
 impl<T: CuMsgPayload> CuSrcTask for CuSimSrcTask<T> {
+    type Resources<'r> = ();
     type Output<'m> = output_msg!(T);
 
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -202,9 +203,10 @@ pub struct CuSimSinkTask<I> {
 impl<I> Freezable for CuSimSinkTask<I> {}
 
 impl<I: CuSimSinkInput + 'static> CuSinkTask for CuSimSinkTask<I> {
+    type Resources<'r> = ();
     type Input<'m> = <I as CuSimSinkInput>::With<'m>;
 
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {

@@ -62,9 +62,10 @@ impl From<RPGpioPayload> for Level {
 impl Freezable for RPGpio {}
 
 impl CuSinkTask for RPGpio {
+    type Resources<'r> = ();
     type Input<'m> = input_msg!(RPGpioPayload);
 
-    fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
