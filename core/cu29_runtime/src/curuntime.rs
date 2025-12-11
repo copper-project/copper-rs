@@ -2,11 +2,14 @@
 //! It is exposed to the user via the `copper_runtime` macro injecting it as a field in their application struct.
 //!
 
-use crate::config::{ComponentConfig, CuDirection, Node, DEFAULT_KEYFRAME_INTERVAL};
+use crate::config::{
+    ComponentConfig, CuDirection, Node, ResourceMapping, DEFAULT_KEYFRAME_INTERVAL,
+};
 use crate::config::{CuConfig, CuGraph, NodeId, RuntimeConfig};
 use crate::copperlist::{CopperList, CopperListState, CuListZeroedInit, CuListsManager};
 use crate::cutask::{BincodeAdapter, Freezable};
 use crate::monitoring::{build_monitor_topology, CuMonitor};
+use crate::resource::ResourceManager;
 use cu29_clock::{ClockProvider, CuTime, RobotClock};
 use cu29_traits::CuResult;
 use cu29_traits::WriteStream;
@@ -148,6 +151,9 @@ pub struct CuRuntime<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize
     /// Tuple of all instantiated bridges.
     pub bridges: CB,
 
+    /// Resource registry kept alive for tasks borrowing shared handles.
+    pub resources: ResourceManager,
+
     /// For backgrounded tasks.
     #[cfg(feature = "std")]
     pub threadpool: Arc<ThreadPool>,
@@ -234,12 +240,15 @@ impl<
         clock: RobotClock,
         config: &CuConfig,
         mission: Option<&str>,
+        resources_instanciator: impl Fn(&CuConfig) -> CuResult<ResourceManager>,
         tasks_instanciator: impl for<'c> Fn(
             Vec<Option<&'c ComponentConfig>>,
+            Vec<Option<&'c ResourceMapping>>,
+            &mut ResourceManager,
             Arc<ThreadPool>,
         ) -> CuResult<CT>,
         monitor_instanciator: impl Fn(&CuConfig) -> M,
-        bridges_instanciator: impl Fn(&CuConfig) -> CuResult<CB>,
+        bridges_instanciator: impl Fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>,
         copperlists_logger: impl WriteStream<CopperList<P>> + 'static,
         keyframes_logger: impl WriteStream<KeyFrame> + 'static,
     ) -> CuResult<Self> {
@@ -248,6 +257,11 @@ impl<
             .get_all_nodes()
             .iter()
             .map(|(_, node)| node.get_instance_config())
+            .collect();
+        let all_resources: Vec<Option<&ResourceMapping>> = graph
+            .get_all_nodes()
+            .iter()
+            .map(|(_, node)| node.get_resources())
             .collect();
 
         // TODO: make that configurable
@@ -259,12 +273,19 @@ impl<
                 .expect("Could not create the threadpool"),
         );
 
-        let tasks = tasks_instanciator(all_instances_configs, threadpool.clone())?;
+        let mut resources = resources_instanciator(config)?;
+
+        let tasks = tasks_instanciator(
+            all_instances_configs,
+            all_resources,
+            &mut resources,
+            threadpool.clone(),
+        )?;
         let mut monitor = monitor_instanciator(config);
         if let Ok(topology) = build_monitor_topology(config, mission) {
             monitor.set_topology(topology);
         }
-        let bridges = bridges_instanciator(config)?;
+        let bridges = bridges_instanciator(config, &mut resources)?;
 
         let (copperlists_logger, keyframes_logger, keyframe_interval) = match &config.logging {
             Some(logging_config) if logging_config.enable_task_logging => (
@@ -297,6 +318,7 @@ impl<
         let runtime = Self {
             tasks,
             bridges,
+            resources,
             threadpool,
             monitor,
             clock,
@@ -314,9 +336,14 @@ impl<
         clock: RobotClock,
         config: &CuConfig,
         mission: Option<&str>,
-        tasks_instanciator: impl for<'c> Fn(Vec<Option<&'c ComponentConfig>>) -> CuResult<CT>,
+        resources_instanciator: impl Fn(&CuConfig) -> CuResult<ResourceManager>,
+        tasks_instanciator: impl for<'c> Fn(
+            Vec<Option<&'c ComponentConfig>>,
+            Vec<Option<&'c ResourceMapping>>,
+            &mut ResourceManager,
+        ) -> CuResult<CT>,
         monitor_instanciator: impl Fn(&CuConfig) -> M,
-        bridges_instanciator: impl Fn(&CuConfig) -> CuResult<CB>,
+        bridges_instanciator: impl Fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>,
         copperlists_logger: impl WriteStream<CopperList<P>> + 'static,
         keyframes_logger: impl WriteStream<KeyFrame> + 'static,
     ) -> CuResult<Self> {
@@ -326,14 +353,21 @@ impl<
             .iter()
             .map(|(_, node)| node.get_instance_config())
             .collect();
+        let all_resources: Vec<Option<&ResourceMapping>> = graph
+            .get_all_nodes()
+            .iter()
+            .map(|(_, node)| node.get_resources())
+            .collect();
 
-        let tasks = tasks_instanciator(all_instances_configs)?;
+        let mut resources = resources_instanciator(config)?;
+
+        let tasks = tasks_instanciator(all_instances_configs, all_resources, &mut resources)?;
 
         let mut monitor = monitor_instanciator(config);
         if let Ok(topology) = build_monitor_topology(config, mission) {
             monitor.set_topology(topology);
         }
-        let bridges = bridges_instanciator(config)?;
+        let bridges = bridges_instanciator(config, &mut resources)?;
 
         let (copperlists_logger, keyframes_logger, keyframe_interval) = match &config.logging {
             Some(logging_config) if logging_config.enable_task_logging => (
@@ -368,6 +402,7 @@ impl<
             bridges,
             #[cfg(feature = "std")]
             threadpool,
+            resources,
             monitor,
             clock,
             copperlists_manager,
@@ -803,6 +838,8 @@ mod tests {
     #[cfg(feature = "std")]
     fn tasks_instanciator(
         all_instances_configs: Vec<Option<&ComponentConfig>>,
+        _all_resources: Vec<Option<&ResourceMapping>>,
+        _resources: &mut ResourceManager,
         _threadpool: Arc<ThreadPool>,
     ) -> CuResult<Tasks> {
         Ok((
@@ -812,7 +849,11 @@ mod tests {
     }
 
     #[cfg(not(feature = "std"))]
-    fn tasks_instanciator(all_instances_configs: Vec<Option<&ComponentConfig>>) -> CuResult<Tasks> {
+    fn tasks_instanciator(
+        all_instances_configs: Vec<Option<&ComponentConfig>>,
+        _all_resources: Vec<Option<&ResourceMapping>>,
+        _resources: &mut ResourceManager,
+    ) -> CuResult<Tasks> {
         Ok((
             TestSource::new(all_instances_configs[0], ())?,
             TestSink::new(all_instances_configs[1], ())?,
@@ -823,8 +864,12 @@ mod tests {
         NoMonitor {}
     }
 
-    fn bridges_instanciator(_config: &CuConfig) -> CuResult<()> {
+    fn bridges_instanciator(_config: &CuConfig, _resources: &mut ResourceManager) -> CuResult<()> {
         Ok(())
+    }
+
+    fn resources_instanciator(_config: &CuConfig) -> CuResult<ResourceManager> {
+        Ok(ResourceManager::default())
     }
 
     #[derive(Debug)]
@@ -847,6 +892,7 @@ mod tests {
             RobotClock::default(),
             &config,
             None,
+            resources_instanciator,
             tasks_instanciator,
             monitor_instanciator,
             bridges_instanciator,
@@ -868,6 +914,7 @@ mod tests {
             RobotClock::default(),
             &config,
             None,
+            resources_instanciator,
             tasks_instanciator,
             monitor_instanciator,
             bridges_instanciator,

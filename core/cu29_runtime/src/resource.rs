@@ -6,6 +6,7 @@
 //! declared in the Copper config, or manually with `add_bundle_prebuilt`) and
 //! to hydrate the `Resources` associated type declared by each task/bridge.
 
+use crate::config::ComponentConfig;
 use core::any::Any;
 use core::fmt;
 use core::marker::PhantomData;
@@ -37,7 +38,7 @@ pub struct Owned<T>(pub T);
 pub struct Borrowed<'r, T>(pub &'r T);
 
 enum ResourceEntry {
-    Owned(Box<dyn Any + Send>),
+    Owned(Box<dyn Any + Send + Sync>),
     Shared(Arc<dyn Any + Send + Sync>),
 }
 
@@ -49,7 +50,7 @@ impl ResourceEntry {
         }
     }
 
-    fn into_owned<T: 'static + Send>(self) -> Option<T> {
+    fn into_owned<T: 'static + Send + Sync>(self) -> Option<T> {
         match self {
             ResourceEntry::Owned(boxed) => boxed.downcast::<T>().map(|b| *b).ok(),
             ResourceEntry::Shared(_) => None,
@@ -66,7 +67,7 @@ pub struct ResourceManager {
 impl ResourceManager {
     /// Register an owned resource under a fully-qualified path such as
     /// `fc.spi_1`.
-    pub fn add_owned<T: 'static + Send>(
+    pub fn add_owned<T: 'static + Send + Sync>(
         &mut self,
         path: impl Into<String>,
         value: T,
@@ -122,7 +123,7 @@ impl ResourceManager {
     }
 
     /// Move out an owned resource by path.
-    pub fn take<T: 'static + Send>(&mut self, path: &str) -> CuResult<Owned<T>> {
+    pub fn take<T: 'static + Send + Sync>(&mut self, path: &str) -> CuResult<Owned<T>> {
         let entry = self
             .entries
             .remove(path)
@@ -164,6 +165,16 @@ impl<'r> ResourceBindings<'r> for () {
     ) -> CuResult<Self> {
         Ok(())
     }
+}
+
+/// Bundle providers implement this trait to populate the `ResourceManager` with
+/// concrete resources for a given bundle id.
+pub trait ResourceBundle {
+    fn build(
+        bundle_id: &str,
+        config: Option<&ComponentConfig>,
+        manager: &mut ResourceManager,
+    ) -> CuResult<()>;
 }
 
 /// Typed identifier for a resource entry.

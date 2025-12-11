@@ -482,11 +482,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             &task_member_names,
         );
 
-        let resources_module = match build_resources_module(mission.as_str(), &copper_config, graph)
-        {
-            Ok(tokens) => tokens,
-            Err(e) => return return_error(e.to_string()),
-        };
+        let (resources_module, resources_instanciator_fn) =
+            match build_resources_module(mission.as_str(), &copper_config, graph) {
+                Ok(tokens) => tokens,
+                Err(e) => return return_error(e.to_string()),
+            };
 
         let ids = build_monitored_ids(&task_specs.ids, &mut culist_bridge_specs);
 
@@ -515,6 +515,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let bridge_type = &spec.type_path;
                 let bridge_name = spec.id.clone();
                 let config_index = syn::Index::from(spec.config_index);
+                let binding_error = LitStr::new(
+                    &format!("Failed to bind resources for bridge '{}'", bridge_name),
+                    Span::call_site(),
+                );
                 let tx_configs: Vec<proc_macro2::TokenStream> = spec
                     .tx_channels
                     .iter()
@@ -524,9 +528,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         let channel_config_index = syn::Index::from(channel.config_index);
                         quote! {
                             {
-                                let (channel_route, channel_config) = match &bridge_cfg.channels[#channel_config_index] {
-                                    cu29::config::BridgeChannelConfigRepresentation::Tx { route, config, .. } => {
-                                        (route.clone(), config.clone())
+                        let (channel_route, channel_config) = match &bridge_cfg.channels[#channel_config_index] {
+                            cu29::config::BridgeChannelConfigRepresentation::Tx { route, config, .. } => {
+                                (route.clone(), config.clone())
                                     }
                                     _ => panic!(
                                         "Bridge '{}' channel '{}' expected to be Tx",
@@ -577,6 +581,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             .bridges
                             .get(#config_index)
                             .unwrap_or_else(|| panic!("Bridge '{}' missing from configuration", #bridge_name));
+                        let bridge_resources = <<#bridge_type as cu29::cubridge::CuBridge>::Resources<'_> as ResourceBindings>::from_bindings(
+                            resources,
+                            None,
+                        )
+                        .map_err(|e| cu29::CuError::new_with_cause(#binding_error, e))?;
                         let tx_channels: &[cu29::cubridge::BridgeChannelConfig<
                             <<#bridge_type as cu29::cubridge::CuBridge>::Tx as cu29::cubridge::BridgeChannelSet>::Id,
                         >] = &[#(#tx_configs),*];
@@ -587,7 +596,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             bridge_cfg.config.as_ref(),
                             tx_channels,
                             rx_channels,
-                            (),
+                            bridge_resources,
                         )?
                     };
                 }
@@ -596,14 +605,15 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         let bridges_instanciator = if culist_bridge_specs.is_empty() {
             quote! {
-                pub fn bridges_instanciator(_config: &CuConfig) -> CuResult<CuBridges> {
+                pub fn bridges_instanciator(_config: &CuConfig, resources: &mut ResourceManager) -> CuResult<CuBridges> {
+                    let _ = resources;
                     Ok(())
                 }
             }
         } else {
             let bridge_bindings = bridge_binding_idents.clone();
             quote! {
-                pub fn bridges_instanciator(config: &CuConfig) -> CuResult<CuBridges> {
+                pub fn bridges_instanciator(config: &CuConfig, resources: &mut ResourceManager) -> CuResult<CuBridges> {
                     #(#bridge_init_statements)*
                     Ok((#(#bridge_bindings),*,))
                 }
@@ -685,32 +695,102 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         #[cfg(feature = "macro_debug")]
         eprintln!("[gen instances]");
         // FIXME: implement here the threadpool emulation.
-        let task_sim_instances_init_code = all_sim_tasks_types.iter().enumerate().map(|(index, ty)| {
-            let additional_error_info = format!(
-                "Failed to get create instance for {}, instance index {}.",
-                task_specs.type_names[index], index
-            );
-
-            quote! {
-                <#ty>::new(all_instances_configs[#index], ()).map_err(|e| e.add_cause(#additional_error_info))?
-            }
-        }).collect::<Vec<_>>();
-
-        let task_instances_init_code = task_specs.instantiation_types.iter().zip(&task_specs.background_flags).enumerate().map(|(index, (task_type, background))| {
-            let additional_error_info = format!(
-                "Failed to get create instance for {}, instance index {}.",
-                task_specs.type_names[index], index
-            );
-            if *background {
-                quote! {
-                    #task_type::new(all_instances_configs[#index], (), threadpool.clone()).map_err(|e| e.add_cause(#additional_error_info))?
+        let task_sim_instances_init_code = all_sim_tasks_types
+            .iter()
+            .enumerate()
+            .map(|(index, ty)| {
+                let additional_error_info = format!(
+                    "Failed to get create instance for {}, instance index {}.",
+                    task_specs.type_names[index], index
+                );
+                match task_specs.cutypes[index] {
+                    CuTaskType::Source => quote! {
+                        {
+                            let resources = <<#ty as CuSrcTask>::Resources<'_> as ResourceBindings>::from_bindings(
+                                resources,
+                                all_resources[#index],
+                            ).map_err(|e| e.add_cause(#additional_error_info))?;
+                            <#ty>::new(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
+                        }
+                    },
+                    CuTaskType::Regular => quote! {
+                        {
+                            let resources = <<#ty as CuTask>::Resources<'_> as ResourceBindings>::from_bindings(
+                                resources,
+                                all_resources[#index],
+                            ).map_err(|e| e.add_cause(#additional_error_info))?;
+                            <#ty>::new(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
+                        }
+                    },
+                    CuTaskType::Sink => quote! {
+                        {
+                            let resources = <<#ty as CuSinkTask>::Resources<'_> as ResourceBindings>::from_bindings(
+                                resources,
+                                all_resources[#index],
+                            ).map_err(|e| e.add_cause(#additional_error_info))?;
+                            <#ty>::new(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
+                        }
+                    },
                 }
-            } else {
-                quote! {
-                    #task_type::new(all_instances_configs[#index], ()).map_err(|e| e.add_cause(#additional_error_info))?
+            })
+            .collect::<Vec<_>>();
+
+        let task_instances_init_code = task_specs
+            .instantiation_types
+            .iter()
+            .zip(&task_specs.sim_task_types)
+            .zip(&task_specs.background_flags)
+            .enumerate()
+            .map(|(index, ((task_type, base_task_type), background))| {
+                let additional_error_info = format!(
+                    "Failed to get create instance for {}, instance index {}.",
+                    task_specs.type_names[index], index
+                );
+                match task_specs.cutypes[index] {
+                    CuTaskType::Source => quote! {
+                        {
+                            let resources = <<#task_type as CuSrcTask>::Resources<'_> as ResourceBindings>::from_bindings(
+                                resources,
+                                all_resources[#index],
+                            ).map_err(|e| e.add_cause(#additional_error_info))?;
+                            #task_type::new(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
+                        }
+                    },
+                    CuTaskType::Regular => {
+                        if *background {
+                            quote! {
+                                {
+                                    let resources = <<#base_task_type as CuTask>::Resources<'_> as ResourceBindings>::from_bindings(
+                                        resources,
+                                        all_resources[#index],
+                                    ).map_err(|e| e.add_cause(#additional_error_info))?;
+                                    #task_type::new(all_instances_configs[#index], resources, threadpool.clone()).map_err(|e| e.add_cause(#additional_error_info))?
+                                }
+                            }
+                        } else {
+                            quote! {
+                                {
+                                    let resources = <<#task_type as CuTask>::Resources<'_> as ResourceBindings>::from_bindings(
+                                        resources,
+                                        all_resources[#index],
+                                    ).map_err(|e| e.add_cause(#additional_error_info))?;
+                                    #task_type::new(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
+                                }
+                            }
+                        }
+                    }
+                    CuTaskType::Sink => quote! {
+                        {
+                            let resources = <<#task_type as CuSinkTask>::Resources<'_> as ResourceBindings>::from_bindings(
+                                resources,
+                                all_resources[#index],
+                            ).map_err(|e| e.add_cause(#additional_error_info))?;
+                            #task_type::new(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
+                        }
+                    },
                 }
-            }
-        }).collect::<Vec<_>>();
+            })
+            .collect::<Vec<_>>();
 
         // Generate the code to create instances of the nodes
         // It maps the types to their index
@@ -1433,6 +1513,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             clock,
                             &config,
                             Some(#mission),
+                            #mission_mod::resources_instanciator,
                             #mission_mod::#tasks_instanciator_fn,
                             #mission_mod::monitor_instanciator,
                             #mission_mod::bridges_instanciator,
@@ -1643,14 +1724,22 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         };
 
         let sim_inst_body = if task_sim_instances_init_code.is_empty() {
-            quote! { Ok(()) }
+            quote! {
+                let _ = (all_resources, resources, _threadpool);
+                Ok(())
+            }
         } else {
             quote! { Ok(( #(#task_sim_instances_init_code),*, )) }
         };
 
         let sim_tasks_instanciator = if sim_mode {
             Some(quote! {
-                pub fn tasks_instanciator_sim(all_instances_configs: Vec<Option<&ComponentConfig>>, _threadpool: Arc<ThreadPool>) -> CuResult<CuSimTasks> {
+                pub fn tasks_instanciator_sim(
+                    all_instances_configs: Vec<Option<&ComponentConfig>>,
+                    all_resources: Vec<Option<&ResourceMapping>>,
+                    resources: &mut ResourceManager,
+                    _threadpool: Arc<ThreadPool>,
+                ) -> CuResult<CuSimTasks> {
                     #sim_inst_body
             }})
         } else {
@@ -1659,7 +1748,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         let tasks_inst_body_std = if task_instances_init_code.is_empty() {
             quote! {
-                let _ = threadpool;
+                let _ = (all_resources, resources, threadpool);
                 Ok(())
             }
         } else {
@@ -1667,21 +1756,33 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         };
 
         let tasks_inst_body_nostd = if task_instances_init_code.is_empty() {
-            quote! { Ok(()) }
+            quote! {
+                let _ = (all_resources, resources);
+                Ok(())
+            }
         } else {
             quote! { Ok(( #(#task_instances_init_code),*, )) }
         };
 
         let tasks_instanciator = if std {
             quote! {
-                pub fn tasks_instanciator<'c>(all_instances_configs: Vec<Option<&'c ComponentConfig>>, threadpool: Arc<ThreadPool>) -> CuResult<CuTasks> {
+                pub fn tasks_instanciator<'c>(
+                    all_instances_configs: Vec<Option<&'c ComponentConfig>>,
+                    all_resources: Vec<Option<&ResourceMapping>>,
+                    resources: &mut ResourceManager,
+                    threadpool: Arc<ThreadPool>,
+                ) -> CuResult<CuTasks> {
                     #tasks_inst_body_std
                 }
             }
         } else {
             // no thread pool in the no-std impl
             quote! {
-                pub fn tasks_instanciator<'c>(all_instances_configs: Vec<Option<&'c ComponentConfig>>) -> CuResult<CuTasks> {
+                pub fn tasks_instanciator<'c>(
+                    all_instances_configs: Vec<Option<&'c ComponentConfig>>,
+                    all_resources: Vec<Option<&ResourceMapping>>,
+                    resources: &mut ResourceManager,
+                ) -> CuResult<CuTasks> {
                     #tasks_inst_body_nostd
                 }
             }
@@ -1692,6 +1793,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::rayon::ThreadPool;
                 use cu29::cuasynctask::CuAsyncTask;
                 use cu29::curuntime::CopperContext;
+                use cu29::config::ResourceMapping;
+                use cu29::resource::{ResourceBindings, ResourceManager};
                 use cu29::prelude::UnifiedLoggerWrite;
                 use cu29::prelude::memmap::MmapSectionStorage;
                 use std::fmt::{Debug, Formatter};
@@ -1711,6 +1814,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use core::fmt::Result as FmtResult;
                 use core::mem::size_of;
                 use spin::Mutex;
+                use cu29::resource::{ResourceBindings, ResourceManager};
+                use cu29::config::ResourceMapping;
             }
         };
 
@@ -1762,6 +1867,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 pub type CuTasks = #task_types_tuple;
                 pub type CuBridges = #bridges_type_tokens;
                 #resources_module
+                #resources_instanciator_fn
 
                 #sim_tasks
                 #sim_support
@@ -2385,7 +2491,7 @@ fn build_resources_module(
     mission: &str,
     config: &CuConfig,
     graph: &CuGraph,
-) -> CuResult<proc_macro2::TokenStream> {
+) -> CuResult<(proc_macro2::TokenStream, proc_macro2::TokenStream)> {
     let resource_specs = collect_resource_specs(graph)?;
     let bundle_specs = build_bundle_list(config, mission);
 
@@ -2497,7 +2603,40 @@ fn build_resources_module(
         }
     };
 
-    Ok(resources_module)
+    let bundle_inits = bundle_specs.iter().map(|bundle| {
+        let bundle_id = LitStr::new(bundle.id.as_str(), Span::call_site());
+        let provider_path: syn::Path = syn::parse_str(bundle.provider.as_str()).map_err(|err| {
+            CuError::from(format!(
+                "Failed to parse provider path '{}' for bundle '{}': {err}",
+                bundle.provider, bundle.id
+            ))
+        })?;
+
+        Ok(quote! {
+            if !manager.has_bundle(#bundle_id) {
+                let bundle_cfg = config
+                    .resources
+                    .iter()
+                    .find(|b| b.id == #bundle_id)
+                    .unwrap_or_else(|| panic!("Resource bundle '{}' missing from configuration", #bundle_id));
+                <#provider_path as cu29::resource::ResourceBundle>::build(
+                    #bundle_id,
+                    bundle_cfg.config.as_ref(),
+                    &mut manager,
+                )?;
+            }
+        })
+    }).collect::<CuResult<Vec<_>>>()?;
+
+    let resources_instanciator = quote! {
+        pub fn resources_instanciator(config: &CuConfig) -> CuResult<cu29::resource::ResourceManager> {
+            let mut manager = cu29::resource::ResourceManager::default();
+            #(#bundle_inits)*
+            Ok(manager)
+        }
+    };
+
+    Ok((resources_module, resources_instanciator))
 }
 
 fn build_execution_plan(
