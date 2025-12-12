@@ -1,26 +1,7 @@
 (
     tasks: [
-        (
-            id: "imu",
-            type: "RpMpu9250Source",
-            config: {
-                "spi_slot": 0,
-                "cs_slot": 0,
-                "delay_slot": 0,
-                "gyro_cal_ms": 3000,
-                "gyro_sample_delay_ms": 10,
-            },
-        ),
-        (id: "ahrs", type: "cu_ahrs::CuAhrs"),
         (id: "mapper", type: "tasks::RcMapper"),
-        (id: "att_r", type: "tasks::AttitudePidRoll"),
-        (id: "att_p", type: "tasks::AttitudePidPitch"),
-        (id: "att_y", type: "tasks::AttitudePidYaw"),
-        (id: "rate_r", type: "tasks::RatePidRoll"),
-        (id: "rate_p", type: "tasks::RatePidPitch"),
-        (id: "rate_y", type: "tasks::RatePidYaw"),
-        (id: "mixer", type: "tasks::QuadXMixer"),
-        (id: "esc_health", type: "tasks::EscHealth"),
+        (id: "control_sink", type: "tasks::ControlSink"),
     ],
 
     bridges: [
@@ -31,55 +12,11 @@
                 Tx ( id: "lq_tx" ),  // Sending LineQuality back
             ],
         ),
-        (
-            id: "motors",
-            type: "cu_bdshot::RpBdshotBridge",
-            channels: [
-                Tx ( id: "esc0_tx" ),
-                Tx ( id: "esc1_tx" ),
-                Tx ( id: "esc2_tx" ),
-                Tx ( id: "esc3_tx" ),
-                Rx ( id: "esc0_rx" ),
-                Rx ( id: "esc1_rx" ),
-                Rx ( id: "esc2_rx" ),
-                Rx ( id: "esc3_rx" ),
-            ],
-        ),
     ],
 
     cnx: [
-        (src: "imu", dst: "ahrs", msg: "cu_sensor_payloads::ImuPayload"),
         (src: "rc/rc_rx", dst: "mapper", msg: "cu_crsf::messages::RcChannelsPayload"),
-        (src: "esc_health", dst: "mapper", msg: "tasks::EscStatus"),
-
-        (src: "ahrs", dst: "att_r", msg: "cu_ahrs::AhrsPose"),
-        (src: "ahrs", dst: "att_p", msg: "cu_ahrs::AhrsPose"),
-        (src: "ahrs", dst: "att_y", msg: "cu_ahrs::AhrsPose"),
-        (src: "mapper", dst: "att_r", msg: "tasks::ControlInputs"),
-        (src: "mapper", dst: "att_p", msg: "tasks::ControlInputs"),
-        (src: "mapper", dst: "att_y", msg: "tasks::ControlInputs"),
-
-        (src: "att_r", dst: "rate_r", msg: "tasks::RateSetpoint"),
-        (src: "att_p", dst: "rate_p", msg: "tasks::RateSetpoint"),
-        (src: "att_y", dst: "rate_y", msg: "tasks::RateSetpoint"),
-        (src: "imu", dst: "rate_r", msg: "cu_sensor_payloads::ImuPayload"),
-        (src: "imu", dst: "rate_p", msg: "cu_sensor_payloads::ImuPayload"),
-        (src: "imu", dst: "rate_y", msg: "cu_sensor_payloads::ImuPayload"),
-
-        (src: "rate_r", dst: "mixer", msg: "tasks::AxisCommand"),
-        (src: "rate_p", dst: "mixer", msg: "tasks::AxisCommand"),
-        (src: "rate_y", dst: "mixer", msg: "tasks::AxisCommand"),
-        (src: "mapper", dst: "mixer", msg: "tasks::ControlInputs"),
-
-        (src: "mixer", dst: "motors/esc0_tx", msg: "cu_bdshot::EscCommand"),
-        (src: "mixer", dst: "motors/esc1_tx", msg: "cu_bdshot::EscCommand"),
-        (src: "mixer", dst: "motors/esc2_tx", msg: "cu_bdshot::EscCommand"),
-        (src: "mixer", dst: "motors/esc3_tx", msg: "cu_bdshot::EscCommand"),
-
-        (src: "motors/esc0_rx", dst: "esc_health", msg: "cu_bdshot::EscTelemetry"),
-        (src: "motors/esc1_rx", dst: "esc_health", msg: "cu_bdshot::EscTelemetry"),
-        (src: "motors/esc2_rx", dst: "esc_health", msg: "cu_bdshot::EscTelemetry"),
-        (src: "motors/esc3_rx", dst: "esc_health", msg: "cu_bdshot::EscTelemetry"),
+        (src: "mapper", dst: "control_sink", msg: "tasks::ControlInputs"),
     ],
     monitor: None,
 )

@@ -23,7 +23,6 @@ cu-embedded-registry = { path = "../../components/libs/cu_embedded_registry", de
 
 ### Algos
 cu-pid = { path = "../../components/tasks/cu_pid", default-features = false, version = "0.11.0" }
-cu-ahrs = { path = "../../components/tasks/cu_ahrs", default-features = false, version = "0.11.0" }
 cu-sensor-payloads = { path = "../../components/payloads/cu_sensor_payloads", default-features = false, version = "0.11.0" }
 bincode = { workspace = true }
 serde = { workspace = true }
@@ -46,10 +45,10 @@ cortex-m-rt = { version = "0.7", optional = true }
 defmt-rtt = { version = "1.1.0", optional = true }
 panic-probe = { version = "1.0.0", optional = true }
 buddy_system_allocator = { version = "0.11", default-features = false, features = ["use_spin"], optional = true }
-rp235x-hal = { version = "0.3", features = ["rt", "critical-section-impl"], optional = true }
-embedded-hal = { version = "1.0", optional = true }
-embedded-hal-bus = { version = "0.3", optional = true }
-embedded-sdmmc = { version = "0.9", default-features = false, features = ["defmt-log"], optional = true }
+stm32-hal2 = { version = "2.1.9", default-features = false, features = ["h743v", "h7rt", "defmt"], optional = true }
+embedded-io = { version = "0.6", optional = true }
+embedded-alloc = { version = "0.5", optional = true }
+cortex-m = { version = "0.7", features = ["critical-section-single-core"], optional = true }
 
 [features]
 default = ["sim"]
@@ -60,14 +59,12 @@ firmware = [
   "dep:defmt-rtt",
   "dep:panic-probe",
   "dep:buddy_system_allocator",
-  "dep:rp235x-hal",
-  "dep:embedded-hal",
-  "dep:embedded-hal-bus",
-  "dep:embedded-sdmmc",
+  "dep:stm32-hal2",
+  "dep:embedded-io",
+  "dep:embedded-alloc",
+  "dep:cortex-m",
   "dep:cu-mpu9250",
-  "dep:cu-bdshot",
   "dep:cu-crsf",
-  "dep:cu-sdlogger",
   "dep:cu-embedded-registry",
 ]
 logreader = ["dep:cu29-export"]

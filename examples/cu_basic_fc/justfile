@@ -15,9 +15,8 @@ rc:
 fw:
   #!/usr/bin/env bash
   set -euo pipefail
-  cargo build \
+  cargo run \
     --config .cargo/config-firmware.toml \
     --no-default-features --features firmware \
     -p cu-basic-fc \
-    --bin quad \
-    --release
+    --bin quad

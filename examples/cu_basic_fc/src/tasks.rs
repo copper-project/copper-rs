@@ -2,11 +2,14 @@
 
 use cu29::bincode::{Decode, Encode};
 use cu29::prelude::*;
-use cu_ahrs::AhrsPose;
-use cu_bdshot::{EscCommand, EscTelemetry};
 use cu_crsf::messages::RcChannelsPayload;
 use cu_sensor_payloads::ImuPayload;
+use defmt::info;
 use serde::Serialize;
+
+// Placeholder AHRS pose until the sensor/estimator is brought up on STM32.
+#[derive(Debug, Default, Clone, Copy, Encode, Decode, Serialize, PartialEq, Eq)]
+pub struct AhrsPose;
 
 #[derive(Debug, Default, Clone, Copy, Encode, Decode, Serialize, PartialEq, Eq)]
 #[repr(u8)]
@@ -43,6 +46,30 @@ pub struct EscStatus {
     pub fault: bool,
 }
 
+pub struct ControlSink;
+impl Freezable for ControlSink {}
+impl CuSinkTask for ControlSink {
+    type Input<'m> = CuMsg<ControlInputs>;
+
+    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+        Ok(Self)
+    }
+
+    fn process<'i>(&mut self, _clock: &RobotClock, inputs: &Self::Input<'i>) -> CuResult<()> {
+        if let Some(ctrl) = inputs.payload() {
+            info!(
+                "ctrl roll={} pitch={} yaw={} thr={} armed={}",
+                ctrl.roll,
+                ctrl.pitch,
+                ctrl.yaw,
+                ctrl.throttle,
+                ctrl.armed
+            );
+        }
+        Ok(())
+    }
+}
+
 impl Freezable for ControlInputs {}
 impl Freezable for RateSetpoint {}
 impl Freezable for AxisCommand {}
@@ -53,7 +80,7 @@ pub struct RcMapper;
 impl Freezable for RcMapper {}
 
 impl CuTask for RcMapper {
-    type Input<'m> = (&'m CuMsg<RcChannelsPayload>, &'m CuMsg<EscStatus>);
+    type Input<'m> = CuMsg<RcChannelsPayload>;
     type Output<'m> = CuMsg<ControlInputs>;
 
     fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
@@ -66,23 +93,19 @@ impl CuTask for RcMapper {
         inputs: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
-        let armed = inputs.1.payload().map(|s| !s.fault).unwrap_or(true);
-        let control = if let Some(rc) = inputs.0.payload() {
-            ControlInputs {
-                roll: rc.inner().first().copied().unwrap_or_default() as f32,
-                pitch: rc.inner().get(1).copied().unwrap_or_default() as f32,
-                yaw: rc.inner().get(3).copied().unwrap_or_default() as f32,
-                throttle: rc.inner().get(2).copied().unwrap_or_default() as f32,
+        let armed = true;
+        // Forward the control inputs downstream when present.
+        if let Some(rc) = inputs.payload() {
+            output.set_payload(ControlInputs {
+                roll: rc.inner().first().copied().unwrap_or(0) as f32,
+                pitch: rc.inner().get(1).copied().unwrap_or(0) as f32,
+                yaw: rc.inner().get(3).copied().unwrap_or(0) as f32,
+                throttle: rc.inner().get(2).copied().unwrap_or(0) as f32,
                 armed,
-            }
+            });
         } else {
-            ControlInputs {
-                armed,
-                ..ControlInputs::default()
-            }
-        };
-
-        output.set_payload(control);
+            output.clear_payload();
+        }
         Ok(())
     }
 }
@@ -151,62 +174,9 @@ rate_pid!(RatePidRoll, Axis::Roll);
 rate_pid!(RatePidPitch, Axis::Pitch);
 rate_pid!(RatePidYaw, Axis::Yaw);
 
-pub struct QuadXMixer;
+// Motor mixer and health are RP2350/BDShot-specific; commented until ported to H743.
+// pub struct QuadXMixer;
+// impl Freezable for QuadXMixer {}
+// impl CuTask for QuadXMixer { ... }
 
-impl Freezable for QuadXMixer {}
-
-impl CuTask for QuadXMixer {
-    type Input<'m> = (
-        &'m CuMsg<AxisCommand>,
-        &'m CuMsg<AxisCommand>,
-        &'m CuMsg<AxisCommand>,
-        &'m CuMsg<ControlInputs>,
-    );
-    type Output<'m> = CuMsg<EscCommand>;
-
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
-        Ok(Self)
-    }
-
-    fn process<'i, 'o>(
-        &mut self,
-        _clock: &RobotClock,
-        input: &Self::Input<'i>,
-        output: &mut Self::Output<'o>,
-    ) -> CuResult<()> {
-        let throttle = input.3.payload().map(|c| c.throttle).unwrap_or_default();
-        output.set_payload(EscCommand {
-            throttle: throttle as u16,
-            request_telemetry: true,
-        });
-        Ok(())
-    }
-}
-
-pub struct EscHealth;
-
-impl Freezable for EscHealth {}
-
-impl CuTask for EscHealth {
-    type Input<'m> = (
-        &'m CuMsg<EscTelemetry>,
-        &'m CuMsg<EscTelemetry>,
-        &'m CuMsg<EscTelemetry>,
-        &'m CuMsg<EscTelemetry>,
-    );
-    type Output<'m> = CuMsg<EscStatus>;
-
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
-        Ok(Self)
-    }
-
-    fn process<'i, 'o>(
-        &mut self,
-        _clock: &RobotClock,
-        _input: &Self::Input<'i>,
-        output: &mut Self::Output<'o>,
-    ) -> CuResult<()> {
-        output.set_payload(EscStatus { fault: false });
-        Ok(())
-    }
-}
+// EscHealth stub removed; mapper no longer depends on esc status.

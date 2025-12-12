@@ -4,297 +4,251 @@
 extern crate alloc;
 
 use alloc::sync::Arc;
-use alloc::vec;
-use alloc::vec::Vec;
-use buddy_system_allocator::LockedHeap as Heap;
-use cortex_m_rt::entry;
+use cortex_m::{asm, peripheral::DWT};
+use cortex_m_rt::{entry, exception, ExceptionFrame};
 use cu29::prelude::*;
-use cu_mpu9250::Mpu9250Source;
-use cu_sdlogger::{find_copper_partition, EMMCLogger, EMMCSectionStorage, ForceSyncSend};
-#[allow(unused_imports)]
+use defmt::info;
 use defmt_rtt as _;
-use embedded_hal::digital::OutputPin;
-use embedded_hal::spi::MODE_0;
-use embedded_hal_bus::spi::ExclusiveDevice;
-use embedded_sdmmc::SdCard;
+use embedded_alloc::Heap as StdHeap;
 use panic_probe as _;
-use rp235x_hal as hal;
-use rp235x_hal::clocks::Clock;
-use rp235x_hal::fugit::RateExtU32;
-use rp235x_hal::gpio::bank0::{
-    Gpio10, Gpio11, Gpio12, Gpio13, Gpio15, Gpio16, Gpio17, Gpio18, Gpio19, Gpio2, Gpio3,
-};
-use rp235x_hal::gpio::{
-    Function, FunctionPio0, FunctionSio, FunctionSpi, FunctionUartAux, FunctionXipCs1, Pin, PinId,
-    PullDown, PullNone, PullType, PullUp, SioInput, SioOutput, ValidFunction,
-};
-use rp235x_hal::pac::{SPI0, SPI1, UART0};
-use rp235x_hal::pio::PIOExt;
-use rp235x_hal::spi::{Enabled, FrameFormat};
-use rp235x_hal::timer::{CopyableTimer0, CopyableTimer1};
-use rp235x_hal::uart::{DataBits, StopBits, UartConfig, UartPeripheral};
-use rp235x_hal::{pac, sio::Sio, watchdog::Watchdog, Spi, Timer};
 use spin::Mutex;
+use stm32_hal2::{
+    clocks::Clocks,
+    gpio::{Pin, PinMode, Port},
+    pac,
+    usart::{self, Usart},
+};
+use bincode::{error::EncodeError, Encode};
+use cu29_unifiedlog::{SectionHandle, UnifiedLogStatus};
+use cu29::prelude::UnifiedLogType;
+use cu_sensor_payloads::ImuPayload;
+use alloc::vec;
 
 mod tasks;
 
-#[unsafe(link_section = ".start_block")]
-#[used]
-static IMAGE_DEF: hal::block::ImageDef = hal::block::ImageDef::secure_exe();
-
 #[global_allocator]
-static ALLOC: Heap<32> = Heap::empty();
+static ALLOC: StdHeap = StdHeap::empty();
 
 #[copper_runtime(config = "copperconfig.ron")]
 struct FlightControllerApp {}
 
-const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
+// UART6 pins: PC6 (TX) PC7 (RX), AF7.
+type SerialPort = SerialWrapper;
+type SerialPortError = embedded_io::ErrorKind;
 
-// SDCard Pins
-type Mosi = Pin<Gpio19, FunctionSpi, PullDown>;
-type Miso = Pin<Gpio16, FunctionSpi, PullDown>;
-type Sck = Pin<Gpio18, FunctionSpi, PullDown>;
-type Cs = Pin<Gpio17, FunctionSio<SioOutput>, PullDown>;
-type Det = Pin<Gpio15, FunctionSio<SioInput>, PullUp>;
+// Dummy IMU source placeholder.
+pub struct DummyImu;
+pub type RpMpu9250Source = DummyImu;
+impl Freezable for DummyImu {}
 
-// SDCard types
-type Spi0 = Spi<Enabled, SPI0, (Mosi, Miso, Sck)>;
-type SdDev = ExclusiveDevice<Spi0, Cs, Timer0>;
-type PimodoriSdCard = SdCard<SdDev, Timer1>;
-type TSPimodoriSdCard = ForceSyncSend<SdCard<SdDev, Timer1>>;
+// Minimal no-op storage/logger to satisfy Copper generics.
+struct NoopStorage;
+#[derive(Clone, Copy)]
+struct NoopLogger;
 
-// Timers
-type Timer0 = Timer<CopyableTimer0>;
-type Timer1 = Timer<CopyableTimer1>;
+struct SerialWrapper {
+    inner: Usart<pac::USART6>,
+}
 
-// IMU Pins/Interfaces
-type ImuSck = Pin<Gpio10, FunctionSpi, PullDown>;
-type ImuMosi = Pin<Gpio11, FunctionSpi, PullDown>;
-type ImuMiso = Pin<Gpio12, FunctionSpi, PullDown>;
-type ImuCs = Pin<Gpio13, FunctionSio<SioOutput>, PullDown>;
-type ImuSpi = Spi<Enabled, SPI1, (ImuMosi, ImuMiso, ImuSck)>;
-type ImuDelay = Timer0;
+impl CuTask for DummyImu {
+    type Input<'m> = ();
+    type Output<'m> = CuMsg<ImuPayload>;
 
-// Associated types for serial port used by CRSF bridge.
-type ElrsTx = Pin<Gpio2, FunctionUartAux, PullDown>;
-type ElrsRx = Pin<Gpio3, FunctionUartAux, PullUp>;
-type SerialPort = UartPeripheral<hal::uart::Enabled, UART0, (ElrsTx, ElrsRx)>;
-type SerialPortError = hal::uart::ReadErrorType;
+    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+        Ok(Self)
+    }
 
-// IMU Source Type for the dag
-pub type RpMpu9250Source = Mpu9250Source<ImuSpi, ImuCs, ImuDelay>;
+    fn process<'i, 'o>(
+        &mut self,
+        _clock: &RobotClock,
+        _inputs: &Self::Input<'i>,
+        output: &mut Self::Output<'o>,
+    ) -> CuResult<()> {
+        output.clear_payload();
+        Ok(())
+    }
+}
+
+impl SectionStorage for NoopStorage {
+    fn initialize<E: Encode>(&mut self, _hdr: &E) -> Result<usize, EncodeError> {
+        Ok(0)
+    }
+    fn post_update_header<E: Encode>(&mut self, _hdr: &E) -> Result<usize, EncodeError> {
+        Ok(0)
+    }
+    fn append<E: Encode>(&mut self, _item: &E) -> Result<usize, EncodeError> {
+        Ok(0)
+    }
+    fn flush(&mut self) -> Result<usize, CuError> {
+        Ok(0)
+    }
+}
+
+impl UnifiedLogWrite<NoopStorage> for NoopLogger {
+    fn add_section(
+        &mut self,
+        _ty: UnifiedLogType,
+        _start: usize,
+    ) -> Result<SectionHandle<NoopStorage>, CuError> {
+        let header = cu29_unifiedlog::SectionHeader {
+            entry_type: UnifiedLogType::Empty,
+            ..Default::default()
+        };
+        SectionHandle::create(header, NoopStorage)
+            .map_err(|e| CuError::from(format!("noop section create failed: {:?}", e)))
+    }
+    fn flush_section(&mut self, _handle: &mut SectionHandle<NoopStorage>) {}
+    fn status(&self) -> UnifiedLogStatus {
+        UnifiedLogStatus {
+            total_used_space: 0,
+            total_allocated_space: 0,
+        }
+    }
+}
+
+// embedded-io traits for registry use.
+impl embedded_io::ErrorType for NoopLogger {
+    type Error = core::convert::Infallible;
+}
+impl embedded_io::Write for NoopLogger {
+    fn write(&mut self, _buf: &[u8]) -> Result<usize, Self::Error> {
+        Ok(0)
+    }
+    fn flush(&mut self) -> Result<(), Self::Error> {
+        Ok(())
+    }
+}
+impl embedded_io::Read for NoopLogger {
+    fn read(&mut self, _buf: &mut [u8]) -> Result<usize, Self::Error> {
+        Ok(0)
+    }
+}
+
+impl embedded_io::ErrorType for SerialWrapper {
+    type Error = SerialPortError;
+}
+impl embedded_io::Read for SerialWrapper {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        self.inner
+            .read(buf)
+            .map(|_| buf.len())
+            .map_err(|_| SerialPortError::Other)
+    }
+}
+impl embedded_io::Write for SerialWrapper {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+        self.inner
+            .write(buf)
+            .map(|_| buf.len())
+            .map_err(|_| SerialPortError::Other)
+    }
+    fn flush(&mut self) -> Result<(), Self::Error> {
+        Ok(())
+    }
+}
+
 
 #[entry]
 fn main() -> ! {
-    let mut p = pac::Peripherals::take().unwrap();
-    let mut watchdog = Watchdog::new(p.WATCHDOG);
-    let clocks = hal::clocks::init_clocks_and_plls(
-        XOSC_CRYSTAL_FREQ,
-        p.XOSC,
-        p.CLOCKS,
-        p.PLL_SYS,
-        p.PLL_USB,
-        &mut p.RESETS,
-        &mut watchdog,
-    )
-    .unwrap();
+    // Minimal bring-up: core peripherals + clocks + heap.
+    let mut cp = cortex_m::Peripherals::take().unwrap();
+    cp.SCB.enable_fpu();
+    cp.DCB.enable_trace();
+    DWT::unlock();
+    cp.DWT.enable_cycle_counter();
 
-    // Init Timers
-    let timer0: Timer0 = Timer::new_timer0(p.TIMER0, &mut p.RESETS, &clocks);
-    let timer_for_clock = timer0;
+    let dp = pac::Peripherals::take().unwrap();
 
-    // Init SDCard Pins
-    let sio = Sio::new(p.SIO);
-    let pins = hal::gpio::Pins::new(p.IO_BANK0, p.PADS_BANK0, sio.gpio_bank0, &mut p.RESETS);
-    let (pio, sm0, sm1, sm2, sm3) = p.PIO0.split(&mut p.RESETS);
+    // Clocks: default HSI -> PLL1 ~400MHz.
+    let clocks = Clocks::default();
+    clocks.setup().expect("clock setup");
 
-    let _gp6 = pins
-        .gpio6
-        .into_pull_type::<PullNone>()
-        .into_function::<FunctionPio0>();
-    let _gp7 = pins
-        .gpio7
-        .into_pull_type::<PullNone>()
-        .into_function::<FunctionPio0>();
-    let _gp8 = pins
-        .gpio8
-        .into_pull_type::<PullNone>()
-        .into_function::<FunctionPio0>();
-    let _gp9 = pins
-        .gpio9
-        .into_pull_type::<PullNone>()
-        .into_function::<FunctionPio0>();
+    defmt::info!("Boot: core enabled");
+    defmt::info!("Clocks configured: sysclk={}Hz", clocks.sysclk());
 
-    // Init IMU SPI bus and register handles
-    let imu_miso: ImuMiso = pins.gpio12.into_function();
-    let mut imu_cs: ImuCs = pins.gpio13.into_push_pull_output();
-    let imu_sck: ImuSck = pins.gpio10.into_function();
-    let imu_mosi: ImuMosi = pins.gpio11.into_function();
-    let _ = imu_cs.set_high();
+    init_heap();
+    defmt::info!("Heap initialized");
 
-    let imu_spi: ImuSpi = Spi::<_, _, _, 8>::new(p.SPI1, (imu_mosi, imu_miso, imu_sck)).init(
-        &mut p.RESETS,
-        clocks.peripheral_clock.freq(),
-        1_000_000u32.Hz(),
-        FrameFormat::MotorolaSpi(MODE_0),
-    );
-    let imu_delay: ImuDelay = timer0;
-
-    cu_embedded_registry::register_spi(0, imu_spi).expect("Failed to register IMU SPI bus");
-    cu_embedded_registry::register_cs(0, imu_cs).expect("Failed to register IMU CS pin");
-    cu_embedded_registry::register_delay(0, imu_delay)
-        .expect("Failed to register IMU delay provider");
-
-    // Init Serial Port pins
-    let tx = pins
-        .gpio2
-        .into_push_pull_output()
-        .into_function::<FunctionUartAux>();
-    let rx = pins
-        .gpio3
-        .into_pull_up_input()
-        .into_function::<FunctionUartAux>();
-
-    // Init PIOs
-    let resources = cu_bdshot::Rp2350BoardResources::new(pio, sm0, sm1, sm2, sm3);
-    let board_cfg = cu_bdshot::Rp2350BoardConfig::default();
-    let board =
-        cu_bdshot::Rp2350Board::new(resources, clocks.system_clock.freq().to_Hz(), board_cfg)
-            .expect("Failed to initialize BDShot board");
-    cu_bdshot::register_rp2350_board(board).expect("BDShot board already registered");
-
-    init_psram_and_allocator(pins.gpio47);
-    quick_memory_test();
-
-    info!("Setting up the SDCard...");
-
-    let miso: Miso = pins.gpio16.into_function();
-    let cs: Cs = pins.gpio17.into_push_pull_output();
-    let sck: Sck = pins.gpio18.into_function();
-    let mosi: Mosi = pins.gpio19.into_function();
-    let _det: Det = pins.gpio15.into_pull_up_input();
-
-    let sd_spi: Spi0 = Spi::<_, _, _, 8>::new(p.SPI0, (mosi, miso, sck)).init(
-        &mut p.RESETS,
-        clocks.peripheral_clock.freq(),
-        16_000_000u32.Hz(),
-        FrameFormat::MotorolaSpi(MODE_0),
-    );
-
-    let sd_dev: SdDev = ExclusiveDevice::new(sd_spi, cs, timer0).unwrap();
-    let delay1: Timer1 = Timer::new_timer1(p.TIMER1, &mut p.RESETS, &clocks);
-    info!("Creating Sdcard...");
-    let sd: PimodoriSdCard = SdCard::new(sd_dev, delay1);
-
-    if let Err(e) = sd.num_bytes() {
-        defmt::panic!("SD Card error: {}", e);
+    // Smoke-test allocator.
+    let mut buf = alloc::vec![0u8; 1024];
+    for (i, b) in buf.iter_mut().enumerate() {
+        *b = (i & 0xFF) as u8;
     }
+    defmt::info!("Heap alloc test passed: len={}", buf.len());
 
-    info!("Creating TSPimodoriSdCard...");
-    let sd = TSPimodoriSdCard::new(sd);
+    // 64-bit division sanity check to ensure runtime helpers/FPU setup are OK.
+    let div_test = 1_000_000_001u64 / 3u64;
+    defmt::info!("64-bit div sanity: {}", div_test);
 
-    // Init Serial
-    // CrossFire is spec at 418_000 but all implementations use 420_000.
-    let csrf_uart_cfg = UartConfig::new(420_000.Hz(), DataBits::Eight, None, StopBits::One);
-
-    let csrf_uart: SerialPort = UartPeripheral::new(p.UART0, (tx, rx), &mut p.RESETS)
-        .enable(csrf_uart_cfg, clocks.peripheral_clock.freq())
-        .expect("Could not create UART peripheral");
-
-    cu_embedded_registry::register(0, csrf_uart)
-        .expect("Failed to register UART as CRSF serial port");
-
-    info!("Setting up Copper...");
-
-    let clock = build_clock(timer_for_clock);
-
-    let Ok(Some((blk_id, blk_len))) = find_copper_partition(&sd) else {
-        panic!(
-            "Could not find the copper partition on the SDCard. Format it with the Copper SD script."
-        );
+    // UART6 for CRSF.
+    let _tx = Pin::new(Port::C, 6, PinMode::Alt(7));
+    let _rx = Pin::new(Port::C, 7, PinMode::Alt(7));
+    let serial = SerialWrapper {
+        inner: Usart::new(
+            dp.USART6,
+            420_000, // CRSF baud
+            usart::UsartConfig::default(),
+            &clocks,
+        )
+        .expect("uart6 init"),
     };
+    defmt::info!("UART6 init done");
 
-    info!(
-        "Found copper partition at block {} with length {}",
-        blk_id.0, blk_len.0
+    // Register serial port for CRSF (slot 0).
+    if let Err(e) = cu_embedded_registry::register(0, serial) {
+        defmt::error!("registry uart6 failed: {:?}", e);
+        panic!("registry failed");
+    }
+    defmt::info!("UART6 registered in registry");
+
+    // Spin up Copper runtime with CRSF -> mapper -> sink graph.
+    info!("Building Copper runtime clock");
+    let clock = build_clock();
+    info!("Clock ready, constructing app");
+    let writer = Arc::new(Mutex::new(NoopLogger));
+
+    match <FlightControllerApp as CuApplication<NoopStorage, NoopLogger>>::new(clock, writer) {
+        Ok(mut app) => {
+            info!("App constructed, starting Copper FC (H743, CRSF on UART6)...");
+            let _ = <FlightControllerApp as CuApplication<NoopStorage, NoopLogger>>::run(&mut app);
+            info!("Copper runtime returned unexpectedly");
+        }
+        Err(e) => {
+            defmt::error!("App init failed: {:?}", e);
+        }
+    }
+    loop { asm::wfi(); }
+}
+
+fn build_clock() -> RobotClock {
+    // Use a mock clock to avoid calibration/division at startup.
+    let (clock, _mock) = RobotClock::mock();
+    clock
+}
+
+fn init_heap() {
+    extern "C" {
+        static mut __ebss: u8;
+        static mut _stack_start: u8;
+    }
+
+    let start = (&raw mut __ebss) as *mut u8 as usize;
+    let stack_top = (&raw mut _stack_start) as *mut u8 as usize;
+    // Leave space for stacks/ISRs to grow downward.
+    let reserve = 64 * 1024; // 64 KB stack guard
+    let end = stack_top.saturating_sub(reserve);
+    let size = end.saturating_sub(start);
+
+    unsafe { ALLOC.init(start, size) }
+}
+
+#[exception]
+unsafe fn HardFault(ef: &ExceptionFrame) -> ! {
+    defmt::error!(
+        "HardFault: pc=0x{:x} lr=0x{:x} sp=0x{:x}",
+        ef.pc(),
+        ef.lr(),
+        cortex_m::register::msp::read()
     );
-
-    let writer = Arc::new(Mutex::new(
-        EMMCLogger::new(sd, blk_id, blk_len).expect("Could not create EMMC logger"),
-    ));
-
-    let mut app = FlightControllerApp::new(clock, writer).unwrap();
-    info!("Starting flight controller...");
-
-    let _ = <FlightControllerApp as CuApplication<
-        EMMCSectionStorage<TSPimodoriSdCard>,
-        EMMCLogger<TSPimodoriSdCard>,
-    >>::run(&mut app);
-    error!("Copper crashed.");
-    #[allow(clippy::empty_loop)]
     loop {}
-}
-
-fn build_clock(timer: Timer0) -> RobotClock {
-    RobotClock::new_with_rtc(
-        {
-            let timer_for_counter = timer;
-            move || timer_for_counter.get_counter().ticks() * 1_000
-        },
-        {
-            let timer_for_wait = timer;
-            move |ns| {
-                let start = timer_for_wait.get_counter().ticks();
-                let wait_us = ns / 1_000;
-                while timer_for_wait.get_counter().ticks().wrapping_sub(start) < wait_us {
-                    core::hint::spin_loop();
-                }
-            }
-        },
-    )
-}
-
-fn init_psram_and_allocator<I, F, P>(cs1: Pin<I, F, P>)
-where
-    I: PinId + ValidFunction<FunctionXipCs1>,
-    F: Function,
-    P: PullType,
-{
-    unsafe extern "C" {
-        static mut __psram_heap_start__: u8;
-        static mut __psram_heap_end__: u8;
-    }
-
-    let _ = cs1.into_function::<FunctionXipCs1>();
-
-    unsafe {
-        let xip = &*pac::XIP_CTRL::ptr();
-        xip.ctrl().modify(|_, w| w.writable_m1().set_bit());
-
-        let start = &raw mut __psram_heap_start__ as *mut _ as usize;
-        let end = &raw mut __psram_heap_end__ as *mut _ as usize;
-        ALLOC.lock().init(start, end - start);
-    }
-}
-
-fn quick_memory_test() {
-    info!("Testing Memory...");
-    mem_stats();
-    let mut v: Vec<u8> = vec![0u8; 4 * 1024];
-    for (i, item) in v.iter_mut().enumerate() {
-        *item = (i % 256) as u8;
-    }
-    info!("After 4kB allocation...");
-    mem_stats();
-    for (i, item) in v.iter().enumerate() {
-        assert_eq!(*item, (i % 256) as u8);
-    }
-    info!("Memory test passed.");
-}
-
-fn mem_stats() {
-    let current = ALLOC.lock().stats_alloc_actual();
-    let total = ALLOC.lock().stats_total_bytes();
-    info!("heap: current={}", current);
-    info!("heap: total={}", total);
 }
