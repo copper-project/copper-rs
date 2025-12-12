@@ -1,6 +1,40 @@
 //! Resource descriptors and utilities to hand resources to tasks and bridges.
-//! Generated mission code exposes typed `ResourceKey` values and bundle
-//! metadata; this module provides the runtime side.
+//! User view: in `copperconfig.ron`, map the binding names your tasks/bridges
+//! expect to the resources exported by your board bundle. Exclusive things
+//! (like a serial port) should be bound once; shared things (like a telemetry
+//! bus `Arc`) can be bound to multiple consumers.
+//!
+//! ```ron
+//! (
+//!     resources: [ ( id: "board", provider: "board_crate::BoardBundle" ) ],
+//!     bridges: [
+//!         ( id: "crsf", type: "cu_crsf::CrsfBridge<SerialPort, SerialError>",
+//!           resources: { serial: "board.serial0" } // pick whichever serial port you want
+//!         ),
+//!     ],
+//!     tasks: [
+//!         ( id: "telemetry", type: "app::TelemetryTask",
+//!           resources: { bus: "board.telemetry_bus" } // shared: borrowed
+//!         ),
+//!     ],
+//! )
+//! ```
+//!
+//! Writing your own task/bridge? Add a small `Resources` struct and implement
+//! `ResourceBindings` to pull the names you declared:
+//! ```rust,ignore
+//! pub struct TelemetryResources<'r> { pub bus: Borrowed<'r, TelemetryBus> }
+//! impl<'r> ResourceBindings<'r> for TelemetryResources<'r> {
+//!     fn from_bindings(mgr: &'r mut ResourceManager, map: Option<&ResourceMapping>) -> CuResult<Self> {
+//!         let key = map.expect("bus binding").get("bus").expect("bus").typed();
+//!         Ok(Self { bus: mgr.borrow(key)? })
+//!     }
+//! }
+//! pub fn new_with(_cfg: Option<&ComponentConfig>, res: TelemetryResources<'_>) -> CuResult<Self> {
+//!     Ok(Self { bus: res.bus })
+//! }
+//! ```
+//! Otherwise, use config to point to the right board resource and you're done.
 
 use crate::config::ComponentConfig;
 use core::any::Any;
@@ -31,6 +65,7 @@ pub struct Owned<T>(pub T);
 /// the `ResourceManager`.
 pub struct Borrowed<'r, T>(pub &'r T);
 
+/// A resource can be exclusive (most common case) or shared.
 enum ResourceEntry {
     Owned(Box<dyn Any + Send + Sync>),
     Shared(Arc<dyn Any + Send + Sync>),
@@ -55,15 +90,16 @@ impl ResourceEntry {
 /// Typed identifier for a resource entry.
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub struct ResourceKey<T = ()> {
+    // This index is unique per mission
     index: usize,
-    _marker: PhantomData<fn() -> T>,
+    _boo: PhantomData<fn() -> T>,
 }
 
 impl<T> ResourceKey<T> {
     pub const fn new(index: usize) -> Self {
         Self {
             index,
-            _marker: PhantomData,
+            _boo: PhantomData,
         }
     }
 
@@ -75,7 +111,7 @@ impl<T> ResourceKey<T> {
     pub fn typed<U>(self) -> ResourceKey<U> {
         ResourceKey {
             index: self.index,
-            _marker: PhantomData,
+            _boo: PhantomData,
         }
     }
 }
