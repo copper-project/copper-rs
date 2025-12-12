@@ -40,11 +40,9 @@ use cu29::cubridge::{
     BridgeChannel, BridgeChannelConfig, BridgeChannelInfo, BridgeChannelSet, CuBridge,
 };
 use cu29::prelude::*;
-use cu29::resource::{
-    Owned, ResourceBindings, ResourceBundle, ResourceManager, ResourceMapping,
-};
 #[cfg(feature = "std")]
 use cu29::resource::ResourceDecl;
+use cu29::resource::{Owned, ResourceBindings, ResourceBundle, ResourceManager, ResourceMapping};
 use cu_msp_lib::structs::{MspRequest, MspResponse};
 use cu_msp_lib::{MspPacket, MspParser};
 use embedded_io::{ErrorType, Read, Write};
