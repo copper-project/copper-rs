@@ -297,14 +297,5 @@ impl ResourceProvider {
     }
 }
 
-/// Helper macro to declare the tuple type of resources a task needs, and to
-/// destructure that tuple with named bindings.
-#[macro_export]
-macro_rules! resources {
-    ($($name:ident : $ty:ty),+ $(,)?) => {
-        ( $( $ty , )+ )
-    };
-    { $($name:ident),+ $(,)? } => {
-        ( $( $name ),+, )
-    };
-}
+// The legacy `resources!` macro was replaced by the proc-macro in `cu29_derive::resources`.
+// Import it from `cu29_derive` or `cu29::prelude`.

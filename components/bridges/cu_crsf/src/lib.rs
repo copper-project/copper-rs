@@ -30,7 +30,7 @@ use cu29::prelude::*;
 use cu29::resource::ResourceBundle;
 #[cfg(feature = "std")]
 use cu29::resource::ResourceDecl;
-use cu29::resource::{Owned, ResourceBindings, ResourceManager, ResourceMapping};
+use cu29::resources;
 use embedded_io::{ErrorType, Read, Write};
 
 const READ_BUFFER_SIZE: usize = 1024;
@@ -46,6 +46,10 @@ tx_channels! {
     lq_tx => LinkStatisticsPayload,
     rc_tx => RcChannelsPayload
 }
+
+resources!(for<S, E> where S: Write<Error = E> + Read<Error = E> + Send + Sync + 'static {
+    serial => Owned<S>,
+});
 
 /// Crossfire bridge for Copper-rs.
 pub struct CrsfBridge<S, E>
@@ -110,38 +114,13 @@ where
 
 impl<S, E> Freezable for CrsfBridge<S, E> where S: Write<Error = E> + Read<Error = E> {}
 
-pub struct CrsfResources<S> {
-    pub serial: Owned<S>,
-}
-
-impl<'r, S, E> ResourceBindings<'r> for CrsfResources<S>
-where
-    S: Write<Error = E> + Read<Error = E> + Send + Sync + 'static,
-{
-    fn from_bindings(
-        manager: &'r mut ResourceManager,
-        mapping: Option<&ResourceMapping>,
-    ) -> CuResult<Self> {
-        let mapping = mapping.ok_or_else(|| {
-            CuError::from("CRSF bridge requires a `serial` resource mapping in copperconfig")
-        })?;
-        let path = mapping.get("serial").ok_or_else(|| {
-            CuError::from("CRSF bridge resources must include `serial: <bundle.resource>`")
-        })?;
-        let serial = manager
-            .take::<S>(path.typed())
-            .map_err(|e| e.add_cause("Failed to fetch CRSF serial resource"))?;
-        Ok(Self { serial })
-    }
-}
-
 impl<S, E> CuBridge for CrsfBridge<S, E>
 where
     S: Write<Error = E> + Read<Error = E> + Send + Sync + 'static,
 {
-    type Resources<'r> = CrsfResources<S>;
     type Tx = TxChannels;
     type Rx = RxChannels;
+    type Resources<'r> = Resources<S, E>;
 
     fn new_with(
         config: Option<&ComponentConfig>,
@@ -263,13 +242,11 @@ impl ResourceBundle for StdSerialBundle {
                 "CRSF serial bundle `{bundle_id}` requires configuration"
             ))
         })?;
-        let path = cfg
-            .get::<String>(SERIAL_PATH_KEY)
-            .ok_or_else(|| {
-                CuError::from(format!(
-                    "CRSF serial bundle `{bundle_id}` missing `serial_path` entry"
-                ))
-            })?;
+        let path = cfg.get::<String>(SERIAL_PATH_KEY).ok_or_else(|| {
+            CuError::from(format!(
+                "CRSF serial bundle `{bundle_id}` missing `serial_path` entry"
+            ))
+        })?;
         let baud = cfg.get::<u32>(SERIAL_BAUD_KEY).unwrap_or(420_000);
         let timeout_ms = cfg.get::<u32>(SERIAL_TIMEOUT_KEY).unwrap_or(100) as u64;
 

@@ -44,6 +44,7 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
+pub use cu29_derive::resources;
 pub use cu29_runtime::config;
 pub use cu29_runtime::copperlist;
 #[cfg(feature = "std")]
@@ -74,7 +75,7 @@ pub mod prelude {
     #[cfg(feature = "std")]
     pub use ctrlc;
     pub use cu29_clock::*;
-    pub use cu29_derive::*;
+    pub use cu29_derive::*; // includes resources! proc macro
     pub use cu29_log::*;
     pub use cu29_log_derive::*;
     pub use cu29_log_runtime::*;

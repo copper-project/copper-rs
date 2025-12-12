@@ -25,6 +25,7 @@ use cu29_traits::{CuError, CuResult};
 use proc_macro2::{Ident, Span};
 
 mod format;
+mod resources;
 mod utils;
 
 // TODO: this needs to be determined when the runtime is sizing itself.
@@ -40,6 +41,11 @@ fn return_error(msg: String) -> TokenStream {
     syn::Error::new(Span::call_site(), msg)
         .to_compile_error()
         .into()
+}
+
+#[proc_macro]
+pub fn resources(input: TokenStream) -> TokenStream {
+    resources::resources(input)
 }
 
 /// Generates the CopperList content type from a config.
