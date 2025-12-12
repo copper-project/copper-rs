@@ -12,11 +12,16 @@ use defmt_rtt as _;
 use embedded_alloc::Heap as StdHeap;
 use panic_probe as _;
 use spin::Mutex;
-use stm32_hal2::{
-    clocks::Clocks,
-    gpio::{Pin, PinMode, Port},
+use stm32h7xx_hal::{
+    gpio::{
+        gpioc::{PC6, PC7},
+        Alternate,
+    },
     pac,
-    usart::{self, Usart},
+    prelude::*,
+    serial::Error as UartError,
+    nb,
+    serial::{config::Config, Serial},
 };
 use bincode::{error::EncodeError, Encode};
 use cu29_unifiedlog::{SectionHandle, UnifiedLogStatus};
@@ -46,8 +51,10 @@ struct NoopStorage;
 #[derive(Clone, Copy)]
 struct NoopLogger;
 
+type Uart6Pins = (PC6<Alternate<7>>, PC7<Alternate<7>>);
+
 struct SerialWrapper {
-    inner: Usart<pac::USART6>,
+    inner: Serial<pac::USART6>,
 }
 
 impl CuTask for DummyImu {
@@ -129,18 +136,44 @@ impl embedded_io::ErrorType for SerialWrapper {
 }
 impl embedded_io::Read for SerialWrapper {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        self.inner
-            .read(buf)
-            .map(|_| buf.len())
-            .map_err(|_| SerialPortError::Other)
+        let mut read = 0;
+        for b in buf.iter_mut() {
+            match self.inner.read() {
+                Ok(byte) => {
+                    *b = byte;
+                    read += 1;
+                }
+                Err(nb::Error::WouldBlock) => break, // no more data right now
+                Err(nb::Error::Other(e)) => match e {
+                    UartError::Overrun => {
+                        defmt::warn!("UART6 overrun, data lost");
+                        // Clear and keep going; treat as no more data.
+                        break;
+                    }
+                    _ => {
+                        defmt::error!("UART6 read err: {:?}", e);
+                        return Err(SerialPortError::Other);
+                    }
+                },
+            }
+        }
+        Ok(read)
     }
 }
 impl embedded_io::Write for SerialWrapper {
     fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-        self.inner
-            .write(buf)
-            .map(|_| buf.len())
-            .map_err(|_| SerialPortError::Other)
+        let mut written = 0;
+        for &b in buf {
+            match self.inner.write(b) {
+                Ok(()) => written += 1,
+                Err(nb::Error::WouldBlock) => break,
+                Err(nb::Error::Other(e)) => {
+                    defmt::error!("UART6 write err: {:?}", e);
+                    return Err(SerialPortError::Other);
+                }
+            }
+        }
+        Ok(written)
     }
     fn flush(&mut self) -> Result<(), Self::Error> {
         Ok(())
@@ -159,12 +192,14 @@ fn main() -> ! {
 
     let dp = pac::Peripherals::take().unwrap();
 
-    // Clocks: default HSI -> PLL1 ~400MHz.
-    let clocks = Clocks::default();
-    clocks.setup().expect("clock setup");
+    // Clocks: default configuration (~400MHz sysclk).
+    let pwr = dp.PWR.constrain();
+    let pwrcfg = pwr.freeze();
+    let ccdr = dp.RCC.constrain().freeze(pwrcfg, &dp.SYSCFG);
+    let sys_hz = ccdr.clocks.sys_ck().raw();
 
     defmt::info!("Boot: core enabled");
-    defmt::info!("Clocks configured: sysclk={}Hz", clocks.sysclk());
+    defmt::info!("Clocks configured: sysclk={}Hz", sys_hz);
 
     init_heap();
     defmt::info!("Heap initialized");
@@ -181,16 +216,16 @@ fn main() -> ! {
     defmt::info!("64-bit div sanity: {}", div_test);
 
     // UART6 for CRSF.
-    let _tx = Pin::new(Port::C, 6, PinMode::Alt(7));
-    let _rx = Pin::new(Port::C, 7, PinMode::Alt(7));
+    let gpioc = dp.GPIOC.split(ccdr.peripheral.GPIOC);
+    let tx = gpioc.pc6.into_alternate();
+    let rx = gpioc.pc7.into_alternate();
+
+    let config = Config::default().baudrate(420_000.bps());
     let serial = SerialWrapper {
-        inner: Usart::new(
-            dp.USART6,
-            420_000, // CRSF baud
-            usart::UsartConfig::default(),
-            &clocks,
-        )
-        .expect("uart6 init"),
+        inner: dp
+            .USART6
+            .serial((tx, rx), config, ccdr.peripheral.USART6, &ccdr.clocks)
+            .expect("uart6 init"),
     };
     defmt::info!("UART6 init done");
 
