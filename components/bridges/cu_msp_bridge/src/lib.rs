@@ -327,8 +327,11 @@ impl ResourceBundle for StdSerialBundle {
         resources: &[ResourceDecl],
         manager: &mut ResourceManager,
     ) -> CuResult<()> {
-        let cfg =
-            config.ok_or_else(|| CuError::from("MSP serial bundle requires configuration"))?;
+        let cfg = config.ok_or_else(|| {
+            CuError::from(format!(
+                "MSP serial bundle `{bundle_id}` requires configuration"
+            ))
+        })?;
         let device = cfg
             .get::<String>(DEVICE_KEY)
             .filter(|s| !s.is_empty())
@@ -343,7 +346,11 @@ impl ResourceBundle for StdSerialBundle {
         })?;
         let key = resources
             .first()
-            .ok_or_else(|| CuError::from("MSP serial bundle missing resource decl"))?
+            .ok_or_else(|| {
+                CuError::from(format!(
+                    "MSP serial bundle `{bundle_id}` missing resource decl"
+                ))
+            })?
             .key;
         manager.add_owned(key.typed(), LockedSerial::new(serial))
     }

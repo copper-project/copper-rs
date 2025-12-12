@@ -258,11 +258,18 @@ impl ResourceBundle for StdSerialBundle {
         resources: &[ResourceDecl],
         manager: &mut ResourceManager,
     ) -> CuResult<()> {
-        let cfg =
-            config.ok_or_else(|| CuError::from("CRSF serial bundle requires configuration"))?;
+        let cfg = config.ok_or_else(|| {
+            CuError::from(format!(
+                "CRSF serial bundle `{bundle_id}` requires configuration"
+            ))
+        })?;
         let path = cfg
             .get::<String>(SERIAL_PATH_KEY)
-            .ok_or_else(|| CuError::from("CRSF serial bundle missing `serial_path` entry"))?;
+            .ok_or_else(|| {
+                CuError::from(format!(
+                    "CRSF serial bundle `{bundle_id}` missing `serial_path` entry"
+                ))
+            })?;
         let baud = cfg.get::<u32>(SERIAL_BAUD_KEY).unwrap_or(420_000);
         let timeout_ms = cfg.get::<u32>(SERIAL_TIMEOUT_KEY).unwrap_or(100) as u64;
 
@@ -273,7 +280,11 @@ impl ResourceBundle for StdSerialBundle {
         })?;
         let key = resources
             .first()
-            .ok_or_else(|| CuError::from("CRSF serial bundle missing resource decl"))?
+            .ok_or_else(|| {
+                CuError::from(format!(
+                    "CRSF serial bundle `{bundle_id}` missing resource decl"
+                ))
+            })?
             .key;
         manager.add_owned(key.typed(), LockedSerial::new(serial))
     }
