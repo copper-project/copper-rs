@@ -29,8 +29,8 @@ unsafe impl<T> Sync for ForceSyncSend<T> {}
 
 impl<B: BlockDevice> BlockDevice for ForceSyncSend<B> {
     type Error = B::Error;
-    fn read(&self, blocks: &mut [Block], start: BlockIdx) -> Result<(), Self::Error> {
-        self.inner_mut().read(blocks, start)
+    fn read(&self, blocks: &mut [Block], start: BlockIdx, reason: &str) -> Result<(), Self::Error> {
+        self.inner_mut().read(blocks, start, reason)
     }
     fn write(&self, blocks: &[Block], start: BlockIdx) -> Result<(), Self::Error> {
         self.inner_mut().write(blocks, start)

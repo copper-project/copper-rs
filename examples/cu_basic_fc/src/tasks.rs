@@ -29,6 +29,10 @@ pub struct ControlInputs {
     pub armed: bool,
 }
 
+pub struct LedBeat {
+    on: bool,
+}
+
 #[derive(Debug, Default, Clone, Encode, Decode, Serialize)]
 pub struct RateSetpoint {
     pub axis: Axis,
@@ -74,6 +78,28 @@ impl Freezable for ControlInputs {}
 impl Freezable for RateSetpoint {}
 impl Freezable for AxisCommand {}
 impl Freezable for EscStatus {}
+impl Freezable for LedBeat {}
+
+impl CuSinkTask for LedBeat {
+    type Input<'m> = CuMsg<ControlInputs>;
+
+    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+        Ok(Self { on: false })
+    }
+
+    fn process<'i>(&mut self, _clock: &RobotClock, _inputs: &Self::Input<'i>) -> CuResult<()> {
+        // Toggle the green LED so we can see if the Copper loop is alive.
+        if let Some(led) = crate::GREEN_LED.lock().as_mut() {
+            if self.on {
+                let _ = led.set_low();
+            } else {
+                let _ = led.set_high();
+            }
+            self.on = !self.on;
+        }
+        Ok(())
+    }
+}
 
 pub struct RcMapper;
 

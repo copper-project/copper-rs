@@ -15,18 +15,18 @@ use spin::Mutex;
 use stm32h7xx_hal::{
     gpio::{
         gpioc::{PC6, PC7},
-        Alternate,
+        Alternate, Speed,
     },
     pac,
     prelude::*,
+    rcc,
+    sdmmc::{self, SdCard, Sdmmc, SdmmcBlockDevice},
     serial::Error as UartError,
     nb,
     serial::{config::Config, Serial},
 };
-use bincode::{error::EncodeError, Encode};
-use cu29_unifiedlog::{SectionHandle, UnifiedLogStatus};
-use cu29::prelude::UnifiedLogType;
 use cu_sensor_payloads::ImuPayload;
+use cu_sdlogger::{find_copper_partition, EMMCLogger, EMMCSectionStorage, ForceSyncSend};
 use alloc::vec;
 
 mod tasks;
@@ -41,15 +41,16 @@ struct FlightControllerApp {}
 type SerialPort = SerialWrapper;
 type SerialPortError = embedded_io::ErrorKind;
 
+type SdBlockDev = ForceSyncSend<SdmmcBlockDevice<Sdmmc<pac::SDMMC1, SdCard>>>;
+type LogStorage = EMMCSectionStorage<SdBlockDev>;
+type Logger = EMMCLogger<SdBlockDev>;
+
 // Dummy IMU source placeholder.
 pub struct DummyImu;
 pub type RpMpu9250Source = DummyImu;
 impl Freezable for DummyImu {}
 
-// Minimal no-op storage/logger to satisfy Copper generics.
-struct NoopStorage;
-#[derive(Clone, Copy)]
-struct NoopLogger;
+static GREEN_LED: Mutex<Option<stm32h7xx_hal::gpio::gpioe::PE6<stm32h7xx_hal::gpio::Output<stm32h7xx_hal::gpio::PushPull>>>> = Mutex::new(None);
 
 type Uart6Pins = (PC6<Alternate<7>>, PC7<Alternate<7>>);
 
@@ -73,61 +74,6 @@ impl CuTask for DummyImu {
     ) -> CuResult<()> {
         output.clear_payload();
         Ok(())
-    }
-}
-
-impl SectionStorage for NoopStorage {
-    fn initialize<E: Encode>(&mut self, _hdr: &E) -> Result<usize, EncodeError> {
-        Ok(0)
-    }
-    fn post_update_header<E: Encode>(&mut self, _hdr: &E) -> Result<usize, EncodeError> {
-        Ok(0)
-    }
-    fn append<E: Encode>(&mut self, _item: &E) -> Result<usize, EncodeError> {
-        Ok(0)
-    }
-    fn flush(&mut self) -> Result<usize, CuError> {
-        Ok(0)
-    }
-}
-
-impl UnifiedLogWrite<NoopStorage> for NoopLogger {
-    fn add_section(
-        &mut self,
-        _ty: UnifiedLogType,
-        _start: usize,
-    ) -> Result<SectionHandle<NoopStorage>, CuError> {
-        let header = cu29_unifiedlog::SectionHeader {
-            entry_type: UnifiedLogType::Empty,
-            ..Default::default()
-        };
-        SectionHandle::create(header, NoopStorage)
-            .map_err(|e| CuError::from(format!("noop section create failed: {:?}", e)))
-    }
-    fn flush_section(&mut self, _handle: &mut SectionHandle<NoopStorage>) {}
-    fn status(&self) -> UnifiedLogStatus {
-        UnifiedLogStatus {
-            total_used_space: 0,
-            total_allocated_space: 0,
-        }
-    }
-}
-
-// embedded-io traits for registry use.
-impl embedded_io::ErrorType for NoopLogger {
-    type Error = core::convert::Infallible;
-}
-impl embedded_io::Write for NoopLogger {
-    fn write(&mut self, _buf: &[u8]) -> Result<usize, Self::Error> {
-        Ok(0)
-    }
-    fn flush(&mut self) -> Result<(), Self::Error> {
-        Ok(())
-    }
-}
-impl embedded_io::Read for NoopLogger {
-    fn read(&mut self, _buf: &mut [u8]) -> Result<usize, Self::Error> {
-        Ok(0)
     }
 }
 
@@ -192,10 +138,16 @@ fn main() -> ! {
 
     let dp = pac::Peripherals::take().unwrap();
 
-    // Clocks: default configuration (~400MHz sysclk).
+    // Clocks: enable PLL1 Q so SDMMC has a valid kernel clock source.
     let pwr = dp.PWR.constrain();
     let pwrcfg = pwr.freeze();
-    let ccdr = dp.RCC.constrain().freeze(pwrcfg, &dp.SYSCFG);
+    let rcc = dp.RCC.constrain();
+    // Enable PLL1 Q so SDMMC kernel clock is valid (otherwise HAL panics).
+    let ccdr = rcc
+        .pll1_q_ck(100.MHz())
+        .freeze(pwrcfg, &dp.SYSCFG);
+    let per = ccdr.peripheral;
+    let sdmmc1_rec = per.SDMMC1;
     let sys_hz = ccdr.clocks.sys_ck().raw();
 
     defmt::info!("Boot: core enabled");
@@ -215,8 +167,10 @@ fn main() -> ! {
     let div_test = 1_000_000_001u64 / 3u64;
     defmt::info!("64-bit div sanity: {}", div_test);
 
-    // UART6 for CRSF.
-    let gpioc = dp.GPIOC.split(ccdr.peripheral.GPIOC);
+    // UART6 for CRSF and SDMMC for logging.
+    let gpioc = dp.GPIOC.split(per.GPIOC);
+    let gpiod = dp.GPIOD.split(per.GPIOD);
+    let gpioe = dp.GPIOE.split(per.GPIOE);
     let tx = gpioc.pc6.into_alternate();
     let rx = gpioc.pc7.into_alternate();
 
@@ -224,7 +178,7 @@ fn main() -> ! {
     let serial = SerialWrapper {
         inner: dp
             .USART6
-            .serial((tx, rx), config, ccdr.peripheral.USART6, &ccdr.clocks)
+            .serial((tx, rx), config, per.USART6, &ccdr.clocks)
             .expect("uart6 init"),
     };
     defmt::info!("UART6 init done");
@@ -236,16 +190,42 @@ fn main() -> ! {
     }
     defmt::info!("UART6 registered in registry");
 
+    // Green status LED (PE6).
+    let mut green_led = gpioe.pe6.into_push_pull_output();
+    let _ = green_led.set_low();
+    *GREEN_LED.lock() = Some(green_led);
+
+    // Initialize SD card for logging
+    defmt::info!("Starting SD logger init");
+    let logger = init_sd_logger(
+        dp.SDMMC1,
+        sdmmc1_rec,
+        &ccdr.clocks,
+        (
+            gpioc.pc12.into_alternate().internal_pull_up(false).speed(Speed::VeryHigh),  // CLK - no pull-up!
+            gpiod.pd2.into_alternate().internal_pull_up(true).speed(Speed::VeryHigh),   // CMD
+            gpioc.pc8.into_alternate().internal_pull_up(true).speed(Speed::VeryHigh),   // D0
+            gpioc.pc9.into_alternate().internal_pull_up(true).speed(Speed::VeryHigh),   // D1
+            gpioc.pc10.into_alternate().internal_pull_up(true).speed(Speed::VeryHigh),  // D2
+            gpioc.pc11.into_alternate().internal_pull_up(true).speed(Speed::VeryHigh),  // D3
+        ),
+    )
+    .unwrap_or_else(|e| {
+        defmt::error!("SD logger init failed: {}", e);
+        panic!("sd logger init");
+    });
+    defmt::info!("SD logger ready");
+
     // Spin up Copper runtime with CRSF -> mapper -> sink graph.
     info!("Building Copper runtime clock");
     let clock = build_clock();
     info!("Clock ready, constructing app");
-    let writer = Arc::new(Mutex::new(NoopLogger));
+    let writer = Arc::new(Mutex::new(logger));
 
-    match <FlightControllerApp as CuApplication<NoopStorage, NoopLogger>>::new(clock, writer) {
+    match <FlightControllerApp as CuApplication<LogStorage, Logger>>::new(clock, writer) {
         Ok(mut app) => {
             info!("App constructed, starting Copper FC (H743, CRSF on UART6)...");
-            let _ = <FlightControllerApp as CuApplication<NoopStorage, NoopLogger>>::run(&mut app);
+            let _ = <FlightControllerApp as CuApplication<LogStorage, Logger>>::run(&mut app);
             info!("Copper runtime returned unexpectedly");
         }
         Err(e) => {
@@ -253,6 +233,100 @@ fn main() -> ! {
         }
     }
     loop { asm::wfi(); }
+}
+
+fn init_sd_logger(
+    sdmmc1: pac::SDMMC1,
+    sdmmc1_rec: rcc::rec::Sdmmc1,
+    clocks: &rcc::CoreClocks,
+    pins: (
+        impl sdmmc::PinClk<pac::SDMMC1>,
+        impl sdmmc::PinCmd<pac::SDMMC1>,
+        impl sdmmc::PinD0<pac::SDMMC1>,
+        impl sdmmc::PinD1<pac::SDMMC1>,
+        impl sdmmc::PinD2<pac::SDMMC1>,
+        impl sdmmc::PinD3<pac::SDMMC1>,
+    ),
+) -> Result<Logger, CuError> {
+    // Manually ensure SDMMC1 clock/reset are asserted before HAL init, to avoid sticky state.
+    unsafe {
+        let rcc = &*pac::RCC::ptr();
+        // Select PLL1_Q as SDMMC kernel clock.
+        // 0b00 selects PLL1_Q.
+        rcc.d1ccipr.modify(|_, w| w.sdmmcsel().bit(false));
+        // Enable SDMMC1 clock.
+        rcc.ahb3enr.modify(|_, w| w.sdmmc1en().set_bit());
+        // Reset pulse.
+        rcc.ahb3rstr.modify(|_, w| w.sdmmc1rst().set_bit());
+        rcc.ahb3rstr.modify(|_, w| w.sdmmc1rst().clear_bit());
+    }
+
+    defmt::info!("SDMMC: constructing peripheral");
+    let mut sdmmc: Sdmmc<_, SdCard> = sdmmc1.sdmmc(pins, sdmmc1_rec, clocks);
+    // Use the same frequency as the official STM32 example
+    let bus_frequency = 10.MHz();
+
+    defmt::info!("SDMMC: init (ensure SD card is properly inserted)");
+    defmt::info!("SDMMC: checking hardware status...");
+    
+    // Check if SDMMC is properly enabled before attempting init
+    unsafe {
+        let rcc = &*pac::RCC::ptr();
+        let ahb3enr = rcc.ahb3enr.read();
+        let d1ccipr = rcc.d1ccipr.read();
+        defmt::info!("SDMMC1 clock enabled: {}", ahb3enr.sdmmc1en().bit());
+        defmt::info!("SDMMC1 kernel clock sel: {}", d1ccipr.sdmmcsel().bit());
+    }
+    
+    // Add some delay before init to ensure hardware is stable
+    defmt::info!("SDMMC: waiting for hardware stabilization...");
+    cortex_m::asm::delay(50_000_000); // ~50ms delay at typical CPU speeds
+    
+    defmt::info!("SDMMC: attempting init with {}Hz bus freq", bus_frequency.raw());
+    defmt::info!("SDMMC: If this hangs, check:");
+    defmt::info!("  1. SD card is properly inserted");
+    defmt::info!("  2. Try a different SD card");
+    defmt::info!("  3. Check hardware connections");
+    defmt::info!("  4. Verify power supply");
+    
+    // Try init with timeout detection by checking if we can at least start
+    let init_result = sdmmc.init(bus_frequency);
+    
+    match init_result {
+        Ok(_) => {
+            defmt::info!("SDMMC: initialization successful!");
+        }
+        Err(e) => {
+            defmt::error!("SDMMC init failed with error: {:?}", defmt::Debug2Format(&e));
+            defmt::error!("Common causes:");
+            defmt::error!("1. No SD card inserted");
+            defmt::error!("2. SD card is corrupted or incompatible");
+            defmt::error!("3. Hardware wiring issues");
+            defmt::error!("4. Power supply problems");
+            return Err(CuError::from("SDMMC init failed - check hardware and SD card"));
+        }
+    }
+
+    if let Err(e) = sdmmc.card() {
+        defmt::warn!("No SD card detected: {:?}", e);
+        return Err(CuError::from("no sd card"));
+    }
+
+    let bd = ForceSyncSend::new(sdmmc.sdmmc_block_device());
+
+    let (start, count) = match find_copper_partition(&bd) {
+        Ok(Some((s, c))) => (s, c),
+        Ok(None) => {
+            defmt::warn!("Copper partition not found on SD");
+            return Err(CuError::from("copper partition missing"));
+        }
+        Err(_) => {
+            defmt::warn!("SD read error during partition scan");
+            return Err(CuError::from("sd read error during partition scan"));
+        }
+    };
+
+    Logger::new(bd, start, count)
 }
 
 fn build_clock() -> RobotClock {

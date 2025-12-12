@@ -18,7 +18,7 @@ pub fn find_copper_partition<D: BlockDevice>(
     ];
 
     let mut hdr = [Block::new(); 1];
-    sd.read(&mut hdr, BlockIdx(1))?;
+    sd.read(&mut hdr, BlockIdx(1), "gpt-lba1")?;
     let h: &[u8] = &hdr[0].contents;
     if &h[0..8] != b"EFI PART" {
         return Ok(None);
@@ -36,7 +36,7 @@ pub fn find_copper_partition<D: BlockDevice>(
     let mut buf = [Block::new(); 1];
 
     while remain > 0 {
-        sd.read(&mut buf, BlockIdx(lba))?;
+        sd.read(&mut buf, BlockIdx(lba), "gpt-entry")?;
         let b = &buf[0].contents;
         let usable = core::cmp::min(remain, Block::LEN);
 

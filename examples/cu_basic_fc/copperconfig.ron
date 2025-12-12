@@ -2,6 +2,7 @@
     tasks: [
         (id: "mapper", type: "tasks::RcMapper"),
         (id: "control_sink", type: "tasks::ControlSink"),
+        (id: "led_blink", type: "tasks::LedBeat"),
     ],
 
     bridges: [
@@ -17,6 +18,7 @@
     cnx: [
         (src: "rc/rc_rx", dst: "mapper", msg: "cu_crsf::messages::RcChannelsPayload"),
         (src: "mapper", dst: "control_sink", msg: "tasks::ControlInputs"),
+        (src: "mapper", dst: "led_blink", msg: "tasks::ControlInputs"),
     ],
     monitor: None,
 )
