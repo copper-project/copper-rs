@@ -9,7 +9,7 @@ use cortex_m_rt::{entry, exception, ExceptionFrame};
 use cu29::prelude::*;
 use defmt::info;
 use defmt_rtt as _;
-use embedded_alloc::Heap as StdHeap;
+use buddy_system_allocator::LockedHeap as StdHeap;
 use panic_probe as _;
 use spin::Mutex;
 use stm32h7xx_hal::{
@@ -32,7 +32,8 @@ use alloc::vec;
 mod tasks;
 
 #[global_allocator]
-static ALLOC: StdHeap = StdHeap::empty();
+static ALLOC: StdHeap<32> = StdHeap::empty();
+static mut HEAP_MEM: [u8; 256 * 1024] = [0; 256 * 1024];
 
 #[copper_runtime(config = "copperconfig.ron")]
 struct FlightControllerApp {}
@@ -138,17 +139,27 @@ fn main() -> ! {
 
     let dp = pac::Peripherals::take().unwrap();
 
-    // Clocks: enable PLL1 Q so SDMMC has a valid kernel clock source.
+    // Clocks: match the INAV setup (480 MHz SYSCLK, 240 MHz HCLK, 120 MHz PCLKs)
+    // and feed SDMMC from a 200 MHz PLL2R kernel clock.
     let pwr = dp.PWR.constrain();
     let pwrcfg = pwr.freeze();
     let rcc = dp.RCC.constrain();
-    // Enable PLL1 Q so SDMMC kernel clock is valid (otherwise HAL panics).
-    let ccdr = rcc
-        .pll1_q_ck(100.MHz())
+    // Clocks: 25MHz HSE -> 400 MHz SYS, HCLK 200, PCLKs 100, PLL2R 200 for SDMMC.
+    let mut ccdr = rcc
+        .use_hse(25.MHz())
+        .sys_ck(400.MHz())
+        .hclk(200.MHz())
+        .pclk1(100.MHz())
+        .pclk2(100.MHz())
+        .pclk3(100.MHz())
+        .pclk4(100.MHz())
+        .pll2_r_ck(200.MHz())
         .freeze(pwrcfg, &dp.SYSCFG);
-    let per = ccdr.peripheral;
-    let sdmmc1_rec = per.SDMMC1;
+    ccdr
+        .peripheral
+        .kernel_sdmmc_clk_mux(rcc::rec::SdmmcClkSel::Pll2R);
     let sys_hz = ccdr.clocks.sys_ck().raw();
+    let sdmmc1_rec = ccdr.peripheral.SDMMC1;
 
     defmt::info!("Boot: core enabled");
     defmt::info!("Clocks configured: sysclk={}Hz", sys_hz);
@@ -163,14 +174,10 @@ fn main() -> ! {
     }
     defmt::info!("Heap alloc test passed: len={}", buf.len());
 
-    // 64-bit division sanity check to ensure runtime helpers/FPU setup are OK.
-    let div_test = 1_000_000_001u64 / 3u64;
-    defmt::info!("64-bit div sanity: {}", div_test);
-
     // UART6 for CRSF and SDMMC for logging.
-    let gpioc = dp.GPIOC.split(per.GPIOC);
-    let gpiod = dp.GPIOD.split(per.GPIOD);
-    let gpioe = dp.GPIOE.split(per.GPIOE);
+    let gpioc = dp.GPIOC.split(ccdr.peripheral.GPIOC);
+    let gpiod = dp.GPIOD.split(ccdr.peripheral.GPIOD);
+    let gpioe = dp.GPIOE.split(ccdr.peripheral.GPIOE);
     let tx = gpioc.pc6.into_alternate();
     let rx = gpioc.pc7.into_alternate();
 
@@ -178,7 +185,7 @@ fn main() -> ! {
     let serial = SerialWrapper {
         inner: dp
             .USART6
-            .serial((tx, rx), config, per.USART6, &ccdr.clocks)
+            .serial((tx, rx), config, ccdr.peripheral.USART6, &ccdr.clocks)
             .expect("uart6 init"),
     };
     defmt::info!("UART6 init done");
@@ -197,23 +204,51 @@ fn main() -> ! {
 
     // Initialize SD card for logging
     defmt::info!("Starting SD logger init");
-    let logger = init_sd_logger(
+    let logger = match init_sd_logger(
         dp.SDMMC1,
         sdmmc1_rec,
         &ccdr.clocks,
         (
-            gpioc.pc12.into_alternate().internal_pull_up(false).speed(Speed::VeryHigh),  // CLK - no pull-up!
-            gpiod.pd2.into_alternate().internal_pull_up(true).speed(Speed::VeryHigh),   // CMD
-            gpioc.pc8.into_alternate().internal_pull_up(true).speed(Speed::VeryHigh),   // D0
-            gpioc.pc9.into_alternate().internal_pull_up(true).speed(Speed::VeryHigh),   // D1
-            gpioc.pc10.into_alternate().internal_pull_up(true).speed(Speed::VeryHigh),  // D2
-            gpioc.pc11.into_alternate().internal_pull_up(true).speed(Speed::VeryHigh),  // D3
+            gpioc
+                .pc12
+                .into_alternate::<12>()
+                .internal_pull_up(false)
+                .speed(Speed::VeryHigh), // CLK - no pull-up
+            gpiod
+                .pd2
+                .into_alternate::<12>()
+                .internal_pull_up(false)
+                .speed(Speed::VeryHigh), // CMD no PU (matches INAV IOCFG_SDMMC)
+            gpioc
+                .pc8
+                .into_alternate::<12>()
+                .internal_pull_up(false)
+                .speed(Speed::VeryHigh), // D0
+            gpioc
+                .pc9
+                .into_alternate::<12>()
+                .internal_pull_up(false)
+                .speed(Speed::VeryHigh), // D1
+            gpioc
+                .pc10
+                .into_alternate::<12>()
+                .internal_pull_up(false)
+                .speed(Speed::VeryHigh), // D2
+            gpioc
+                .pc11
+                .into_alternate::<12>()
+                .internal_pull_up(false)
+                .speed(Speed::VeryHigh), // D3
         ),
-    )
-    .unwrap_or_else(|e| {
-        defmt::error!("SD logger init failed: {}", e);
-        panic!("sd logger init");
-    });
+    ) {
+        Ok(l) => l,
+        Err(e) => {
+            defmt::error!("SD logger init failed: {}", e);
+            loop {
+                asm::wfi();
+            }
+        }
+    };
     defmt::info!("SD logger ready");
 
     // Spin up Copper runtime with CRSF -> mapper -> sink graph.
@@ -248,23 +283,27 @@ fn init_sd_logger(
         impl sdmmc::PinD3<pac::SDMMC1>,
     ),
 ) -> Result<Logger, CuError> {
-    // Manually ensure SDMMC1 clock/reset are asserted before HAL init, to avoid sticky state.
+    // Make sure SDMMC1 is clocked and reset cleanly before HAL touches it.
     unsafe {
         let rcc = &*pac::RCC::ptr();
-        // Select PLL1_Q as SDMMC kernel clock.
-        // 0b00 selects PLL1_Q.
-        rcc.d1ccipr.modify(|_, w| w.sdmmcsel().bit(false));
-        // Enable SDMMC1 clock.
+        // Select PLL2R as kernel clock explicitly (00: PLL1Q, 01: PLL2R).
+        rcc.d1ccipr.modify(|_, w| w.sdmmcsel().bit(true));
+        // Enable clock and pulse reset.
         rcc.ahb3enr.modify(|_, w| w.sdmmc1en().set_bit());
-        // Reset pulse.
         rcc.ahb3rstr.modify(|_, w| w.sdmmc1rst().set_bit());
         rcc.ahb3rstr.modify(|_, w| w.sdmmc1rst().clear_bit());
     }
 
-    defmt::info!("SDMMC: constructing peripheral");
+    defmt::info!("SDMMC: constructing peripheral (kernel clk=200MHz via PLL2R)");
+    // Force 1-bit bus during bring-up to reduce sensitivity to extra lines.
     let mut sdmmc: Sdmmc<_, SdCard> = sdmmc1.sdmmc(pins, sdmmc1_rec, clocks);
-    // Use the same frequency as the official STM32 example
-    let bus_frequency = 10.MHz();
+    // Match INAV: sample on falling edge.
+    sdmmc
+        .inner_mut()
+        .clkcr
+        .modify(|_, w| w.negedge().set_bit());
+    // Start at a safe 400 kHz identification clock; can be raised later.
+    let bus_frequency = 400.kHz();
 
     defmt::info!("SDMMC: init (ensure SD card is properly inserted)");
     defmt::info!("SDMMC: checking hardware status...");
@@ -283,27 +322,17 @@ fn init_sd_logger(
     cortex_m::asm::delay(50_000_000); // ~50ms delay at typical CPU speeds
     
     defmt::info!("SDMMC: attempting init with {}Hz bus freq", bus_frequency.raw());
-    defmt::info!("SDMMC: If this hangs, check:");
-    defmt::info!("  1. SD card is properly inserted");
-    defmt::info!("  2. Try a different SD card");
-    defmt::info!("  3. Check hardware connections");
-    defmt::info!("  4. Verify power supply");
     
     // Try init with timeout detection by checking if we can at least start
     let init_result = sdmmc.init(bus_frequency);
     
     match init_result {
         Ok(_) => {
-            defmt::info!("SDMMC: initialization successful!");
+            defmt::info!("SDMMC: initialization successful, scanning for Copper partition");
         }
         Err(e) => {
             defmt::error!("SDMMC init failed with error: {:?}", defmt::Debug2Format(&e));
-            defmt::error!("Common causes:");
-            defmt::error!("1. No SD card inserted");
-            defmt::error!("2. SD card is corrupted or incompatible");
-            defmt::error!("3. Hardware wiring issues");
-            defmt::error!("4. Power supply problems");
-            return Err(CuError::from("SDMMC init failed - check hardware and SD card"));
+            return Err(CuError::from("SDMMC init failed"));
         }
     }
 
@@ -336,19 +365,12 @@ fn build_clock() -> RobotClock {
 }
 
 fn init_heap() {
-    extern "C" {
-        static mut __ebss: u8;
-        static mut _stack_start: u8;
+    unsafe {
+        let start = HEAP_MEM.as_mut_ptr() as usize;
+        let size = core::mem::size_of_val(&HEAP_MEM);
+        defmt::info!("Heap region start=0x{:x} size={}", start, size);
+        ALLOC.lock().init(start, size);
     }
-
-    let start = (&raw mut __ebss) as *mut u8 as usize;
-    let stack_top = (&raw mut _stack_start) as *mut u8 as usize;
-    // Leave space for stacks/ISRs to grow downward.
-    let reserve = 64 * 1024; // 64 KB stack guard
-    let end = stack_top.saturating_sub(reserve);
-    let size = end.saturating_sub(start);
-
-    unsafe { ALLOC.init(start, size) }
 }
 
 #[exception]
