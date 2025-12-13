@@ -193,11 +193,11 @@ fn flight_controller_worker(running: Arc<AtomicBool>, master_fd: std::os::unix::
                 for &byte in &buffer[..n] {
                     if let Ok(Some(packet)) = parser.parse(byte) {
                         let command: MspCommandCode = packet.cmd.into();
-                        if command == MspCommandCode::MSP_RC {
-                            if let Err(err) = write_rc_response(&mut file) {
-                                eprintln!("MSP emulator failed to echo RC packet: {err}");
-                                return;
-                            }
+                        if command == MspCommandCode::MSP_RC
+                            && let Err(err) = write_rc_response(&mut file)
+                        {
+                            eprintln!("MSP emulator failed to echo RC packet: {err}");
+                            return;
                         }
                     }
                 }

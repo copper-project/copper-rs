@@ -429,7 +429,10 @@ mod tests {
         // Build a minimal index on the fly so tests don't depend on build-time artifacts.
         let fake_out_dir = tmpdir.path().join("build").join("out").join("dir");
         fs::create_dir_all(&fake_out_dir).unwrap();
-        env::set_var("LOG_INDEX_DIR", &fake_out_dir);
+        // Explicit unsafe block required for this unsafe API.
+        unsafe {
+            env::set_var("LOG_INDEX_DIR", &fake_out_dir);
+        }
 
         // Provide entries for the message indexes used in this test module.
         let _ = cu29_intern_strs::intern_string("unused to start counter");

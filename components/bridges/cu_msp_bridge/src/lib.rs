@@ -143,8 +143,7 @@ impl MspResponseBatch {
     }
 
     pub fn push(&mut self, resp: MspResponse) {
-        let Self(ref mut vec) = self;
-        vec.push(resp);
+        self.0.push(resp);
     }
 
     pub fn clear(&mut self) {

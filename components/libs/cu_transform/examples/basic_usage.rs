@@ -90,16 +90,15 @@ fn main() {
     }
 
     // Demonstrate velocity computation
-    if let Some(latest) = world_to_robot_buffer.get_latest_transform() {
-        if let Some(closest) = world_to_robot_buffer.get_closest_transform(CuDuration(1000)) {
-            if let Some(velocity) = latest.compute_velocity(closest) {
-                println!("\nVelocity computation:");
-                println!(
-                    "  Linear velocity: [{}, {}, {}]",
-                    velocity.linear[0], velocity.linear[1], velocity.linear[2]
-                );
-            }
-        }
+    if let Some(latest) = world_to_robot_buffer.get_latest_transform()
+        && let Some(closest) = world_to_robot_buffer.get_closest_transform(CuDuration(1000))
+        && let Some(velocity) = latest.compute_velocity(closest)
+    {
+        println!("\nVelocity computation:");
+        println!(
+            "  Linear velocity: [{}, {}, {}]",
+            velocity.linear[0], velocity.linear[1], velocity.linear[2]
+        );
     }
 
     // Demonstrate the stringly typed version of the API.

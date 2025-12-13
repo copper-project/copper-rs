@@ -29,10 +29,10 @@ use std::path::PathBuf;
 fn get_original_dev_path(fd: RawFd) -> Option<PathBuf> {
     let link_path = format!("/proc/self/fd/{fd}");
 
-    if let Ok(path) = fs::read_link(link_path) {
-        if path.to_string_lossy().starts_with("/dev/video") {
-            return Some(path);
-        }
+    if let Ok(path) = fs::read_link(link_path)
+        && path.to_string_lossy().starts_with("/dev/video")
+    {
+        return Some(path);
     }
     None
 }
