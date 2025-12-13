@@ -8,8 +8,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_TARGET_DIR: /mnt/cargo-target
-  CARGO_HOME: /mnt/cargo-home
 
 jobs:
   Unit-Tests:
