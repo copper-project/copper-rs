@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["Borrowed","Owned","ResourceDecl","ResourceKey","ResourceManager","ResourceMapping","ResourceProvider"],"trait":["ResourceBindings","ResourceBundle"]};
