@@ -224,10 +224,14 @@ mod tests {
     impl Freezable for ControlledTask {}
 
     impl CuTask for ControlledTask {
+        type Resources<'r> = ();
         type Input<'m> = input_msg!(u32);
         type Output<'m> = output_msg!(u32);
 
-        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+        fn new_with(
+            _config: Option<&ComponentConfig>,
+            _resources: Self::Resources<'_>,
+        ) -> CuResult<Self>
         where
             Self: Sized,
         {
@@ -276,7 +280,7 @@ mod tests {
             .expect("completion channel already set");
 
         let mut async_task: CuAsyncTask<ControlledTask, u32> =
-            CuAsyncTask::new(Some(&ComponentConfig::default()), tp).unwrap();
+            CuAsyncTask::new(Some(&ComponentConfig::default()), (), tp.clone()).unwrap();
         let input = CuMsg::new(Some(1u32));
         let mut output = CuMsg::new(None);
 
