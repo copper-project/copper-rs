@@ -1,0 +1,14 @@
+[env]
+DEFMT_LOG = "info"
+
+[build]
+target = "thumbv8m.main-none-eabihf"
+
+[target.thumbv8m.main-none-eabihf]
+rustflags = [
+    "-C", "link-arg=--nmagic",
+    "-C", "link-arg=-Tlink.x",
+    "-C", "link-arg=-Tdefmt.x",
+    "-C", "target-cpu=cortex-m33",
+]
+runner = "probe-rs run --chip RP235x --protocol swd"

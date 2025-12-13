@@ -20,7 +20,7 @@
 <p><strong style="color: #b87333;">⚡ Sub-microsecond latency</strong> – zero-alloc, data-oriented runtime  
 <p><strong style="color: #b87333;">⏱️ Deterministic replay</strong> – every run, bit-for-bit identical  
 <p><strong style="color: #b87333;">🧠 Interoperable with ROS2</strong> – bridges via Zenoh opening the path for a progressive migration.  
-<p><strong style="color: #b87333;">🪶 Runs anywhere</strong> – from Linux servers to bare-metal RP2350  
+<p><strong style="color: #b87333;">🪶 Runs anywhere</strong> – from Linux servers, workstations, SBC to bare-metal MPUs
 <p><strong style="color: #b87333;">📦 Built to ship</strong> – one stack from simulation to production
 
 ### Example Applications
@@ -113,6 +113,17 @@ cargo cunew [path_where_you_want_your_project_created]
 ```
 
 Check out [copper-templates](templates/README.md) for more info.
+
+### Task automation with `just`
+
+We use [`just`](https://github.com/casey/just) for repeatable tasks. `just` loads the nearest `justfile` in the directory tree, so `cd` into the project you want before running commands.
+
+- Root helpers (CI/lint): `just -l` in the repo root.
+- Example-specific helpers: `cd examples/cu_caterpillar && just -l`, `cd examples/ros_caterpillar && just -l`, `cd examples/ros_zenoh_caterpillar && just -l`, `cd examples/cu_rp_balancebot && just -l`, `cd examples/cu_elrs_bdshot_demo && just -l`, `cd examples/cu_standalone_structlog && just -l`.
+- Component helpers: `cd components/sources/cu_ads7883 && just -l`, `cd components/sinks/cu_rp_sn754410 && just -l`, `cd components/payloads/cu_ros_payloads && just -l`.
+- Support utilities: `cd support && just -l` (general deploy/sdcard), `cd support/docker && just -l` (build/run dev containers).
+
+If you do not have `just` installed, follow the instructions in the [`just` README](https://github.com/casey/just#installation) for your platform.
 
 ### Overview of a Copper Application
 

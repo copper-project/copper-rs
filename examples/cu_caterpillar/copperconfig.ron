@@ -118,8 +118,7 @@
                slab_size_mib:     1024,   // allocate space on disk by the Gibibyte
                section_size_mib:  100,    // allocate for the copperlists in the logs by 100MB at a time.
     ),
-    // monitor: (
-    //              type: "cu_consolemon::CuConsoleMon",
-    //              config: {"file": "copperconfig.ron"},
-    //          )
+    monitor: (
+                  type: "cu_consolemon::CuConsoleMon",
+             )
 )

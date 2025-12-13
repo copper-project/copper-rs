@@ -1,0 +1,31 @@
+(
+    tasks: [
+        (
+            id: "src",
+            type: "tasks::Src",
+        ),
+        (
+            id: "task",
+            type: "tasks::Step",
+        ),
+        (
+            id: "sink",
+            type: "tasks::Sink",
+        ),
+    ],
+    cnx: [
+        (src: "src", dst: "task", msg: "u32"),
+        (src: "task", dst: "sink", msg: "u32"),
+    ],
+    monitor: (
+        type: "cu_logmon::CuLogMon",
+    ),
+    logging: (
+        slab_size_mib: 16,
+        section_size_mib: 4,
+        enable_task_logging: false,
+    ),
+    runtime: (
+        rate_target_hz: 20,
+    ),
+)

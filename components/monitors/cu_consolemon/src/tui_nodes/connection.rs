@@ -7,7 +7,7 @@ use ratatui::{
 };
 use std::collections::{BTreeMap as Map, BinaryHeap};
 
-const SEARCH_TIMEOUT: usize = 5000;
+const SEARCH_TIMEOUT: usize = 20000;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LineType {
@@ -210,19 +210,17 @@ impl ConnectionsLayout {
     pub fn block_zone(&mut self, area: Rect) {
         for x in 0..area.width {
             for y in 0..area.height {
-                if x != area.width - 1 {
-                    self.edge_field[(
-                        ((x + area.x) as usize, (y + area.y) as usize),
-                        Direction::East,
-                    )
-                        .into()] = Edge::Blocked;
+                let xi = (x + area.x) as usize;
+                let yi = (y + area.y) as usize;
+                // Skip any cells that would fall outside the allocated grid to avoid panics.
+                if xi >= self.width || yi >= self.height {
+                    continue;
                 }
-                if y != area.height - 1 {
-                    self.edge_field[(
-                        ((x + area.x) as usize, (y + area.y) as usize),
-                        Direction::South,
-                    )
-                        .into()] = Edge::Blocked;
+                if x != area.width - 1 && xi + 1 < self.width {
+                    self.edge_field[((xi, yi), Direction::East).into()] = Edge::Blocked;
+                }
+                if y != area.height - 1 && yi + 1 < self.height {
+                    self.edge_field[((xi, yi), Direction::South).into()] = Edge::Blocked;
                 }
             }
         }
@@ -249,10 +247,10 @@ impl ConnectionsLayout {
                 self.ports[&(true, ea_conn.0.to_node, ea_conn.0.to_port)],
                 Direction::East,
             );
-            if start.0 .0 > self.edge_field.width || start.0 .1 > self.edge_field.height {
+            if start.0 .0 >= self.edge_field.width || start.0 .1 >= self.edge_field.height {
                 continue;
             }
-            if goal.0 .0 > self.edge_field.width || goal.0 .1 > self.edge_field.height {
+            if goal.0 .0 >= self.edge_field.width || goal.0 .1 >= self.edge_field.height {
                 continue;
             }
             //println!("drawing connection {start:?} to {goal:?}");

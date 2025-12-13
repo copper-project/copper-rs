@@ -11,6 +11,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
+embedded-hal = { version = "1.0.0", default-features = false }
 cu29 = { path = "../../../core/cu29", version = "0.11.0", default-features = false }
 spin = { workspace = true }
 embedded-io = { version = "0.6.1", default-features = false }
@@ -18,5 +19,5 @@ embedded-io = { version = "0.6.1", default-features = false }
 [features]
 default = ["std"]
 std = ["cu29/std", "embedded-io/std"]
-defmt = ["embedded-io/defmt-03"]
+defmt = ["embedded-io/defmt-03", "embedded-hal/defmt-03"]
 alloc = ["embedded-io/alloc"]

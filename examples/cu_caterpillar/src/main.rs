@@ -18,7 +18,7 @@ fn main() {
         }
     }
 
-    let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), SLAB_SIZE, true, None)
+    let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), SLAB_SIZE, false, None)
         .expect("Failed to setup logger.");
     let mut application = CaterpillarApplicationBuilder::new()
         .with_context(&copper_ctx)
