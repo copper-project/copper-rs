@@ -284,7 +284,7 @@ fn build_clock() -> RobotClock {
 fn init_heap() {
     unsafe {
         let start = HEAP_MEM.as_mut_ptr() as usize;
-        let size = core::mem::size_of_val(&HEAP_MEM);
+        let size = core::mem::size_of_val(&mut const HEAP_MEM);
         defmt::info!("Heap region start=0x{:x} size={}", start, size);
         ALLOC.lock().init(start, size);
     }
