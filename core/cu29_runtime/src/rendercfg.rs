@@ -1,6 +1,6 @@
 mod config;
 use clap::Parser;
-use config::{read_configuration, ConfigGraphs};
+use config::{ConfigGraphs, read_configuration};
 pub use cu29_traits::*;
 use std::io::Cursor;
 use std::io::Write;

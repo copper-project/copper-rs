@@ -1,8 +1,8 @@
 use velodyne_lidar::{Config, Config16};
 use velodyne_lidar::{DataPacket, Packet};
 
-use cu29::prelude::*;
 use cu_sensor_payloads::{PointCloud, PointCloudSoa};
+use cu29::prelude::*;
 use std::net::UdpSocket;
 use std::time::Duration;
 use velodyne_lidar::iter::try_packet_to_frame_xyz;

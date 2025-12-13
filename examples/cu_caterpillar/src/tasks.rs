@@ -1,9 +1,9 @@
+use cu_rp_gpio::RPGpioPayload;
 use cu29::bincode::de::Decoder;
 use cu29::bincode::enc::Encoder;
 use cu29::bincode::error::{DecodeError, EncodeError};
 use cu29::bincode::{Decode, Encode};
 use cu29::prelude::*;
-use cu_rp_gpio::RPGpioPayload;
 
 #[derive(Default)]
 pub struct CaterpillarSource {

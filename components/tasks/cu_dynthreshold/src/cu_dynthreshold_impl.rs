@@ -1,6 +1,6 @@
-use cu29::prelude::*;
 use cu_gstreamer::CuGstBuffer;
 use cu_sensor_payloads::{CuImage, CuImageBufferFormat};
+use cu29::prelude::*;
 use std::cmp::{max, min};
 use std::ops::DerefMut;
 use std::sync::Arc;
@@ -207,9 +207,9 @@ impl CuTask for DynThreshold {
 #[cfg(feature = "gst")]
 mod tests {
     use crate::DynThreshold;
-    use cu29::prelude::*;
     use cu_gstreamer::CuGstBuffer;
     use cu_sensor_payloads::CuImage;
+    use cu29::prelude::*;
     use gstreamer::Buffer;
     use std::ops::Deref;
 

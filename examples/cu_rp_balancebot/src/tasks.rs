@@ -1,8 +1,8 @@
-use cu29::prelude::*;
 use cu_ads7883_new::ADSReadingPayload;
 use cu_pid::{GenericPIDTask, PIDControlOutputPayload};
 use cu_rp_encoder::EncoderPayload;
 use cu_rp_sn754410_new::MotorPayload;
+use cu29::prelude::*;
 
 pub type BalPID = GenericPIDTask<ADSReadingPayload>;
 pub type PosPID = GenericPIDTask<EncoderPayload>;

@@ -1,9 +1,9 @@
 use cu29::clock::RobotClock;
 use cu29::{bincode, prelude::*};
 
-use zenoh::key_expr::KeyExpr;
 use zenoh::Config;
 use zenoh::Error as ZenohError;
+use zenoh::key_expr::KeyExpr;
 
 use std::marker::PhantomData;
 

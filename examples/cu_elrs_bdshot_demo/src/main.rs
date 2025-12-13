@@ -8,17 +8,17 @@ use alloc::vec;
 use alloc::vec::Vec;
 use buddy_system_allocator::LockedHeap as Heap;
 use cortex_m_rt::entry;
+use cu_bdshot::{Rp2350Board, Rp2350BoardConfig, Rp2350BoardResources, register_rp2350_board};
+use cu_sdlogger::{EMMCLogger, EMMCSectionStorage, ForceSyncSend, find_copper_partition};
 use cu29::cubridge::CuBridge;
 use cu29::prelude::*;
-use cu_bdshot::{register_rp2350_board, Rp2350Board, Rp2350BoardConfig, Rp2350BoardResources};
-use cu_sdlogger::{find_copper_partition, EMMCLogger, EMMCSectionStorage, ForceSyncSend};
 use embedded_hal::spi::MODE_0;
 use embedded_hal_bus::spi::ExclusiveDevice;
 use embedded_sdmmc::SdCard;
 use rp235x_hal as hal;
 use rp235x_hal::clocks::Clock;
 use rp235x_hal::fugit::RateExtU32;
-use rp235x_hal::gpio::bank0::{Gpio15, Gpio16, Gpio17, Gpio18, Gpio19, Gpio2, Gpio3};
+use rp235x_hal::gpio::bank0::{Gpio2, Gpio3, Gpio15, Gpio16, Gpio17, Gpio18, Gpio19};
 use rp235x_hal::gpio::{
     Function, FunctionPio0, FunctionSio, FunctionSpi, FunctionUartAux, FunctionXipCs1, Pin, PinId,
     PullDown, PullNone, PullType, PullUp, SioInput, SioOutput, ValidFunction,
@@ -28,7 +28,7 @@ use rp235x_hal::pio::PIOExt;
 use rp235x_hal::spi::{Enabled, FrameFormat};
 use rp235x_hal::timer::{CopyableTimer0, CopyableTimer1};
 use rp235x_hal::uart::{DataBits, StopBits, UartConfig, UartPeripheral};
-use rp235x_hal::{clocks::init_clocks_and_plls, pac, sio::Sio, watchdog::Watchdog, Spi, Timer};
+use rp235x_hal::{Spi, Timer, clocks::init_clocks_and_plls, pac, sio::Sio, watchdog::Watchdog};
 use spin::Mutex;
 
 #[allow(unused_imports)]

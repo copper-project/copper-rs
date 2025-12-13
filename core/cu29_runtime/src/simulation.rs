@@ -168,7 +168,9 @@ impl<T: CuMsgPayload> CuSrcTask for CuSimSrcTask<T> {
     }
 
     fn process(&mut self, _clock: &RobotClock, _new_msg: &mut Self::Output<'_>) -> CuResult<()> {
-        unimplemented!("A placeholder for sim was called for a source, you need answer SimOverride to ExecutedBySim for the Process step.")
+        unimplemented!(
+            "A placeholder for sim was called for a source, you need answer SimOverride to ExecutedBySim for the Process step."
+        )
     }
 }
 
@@ -212,6 +214,8 @@ impl<I: CuSimSinkInput + 'static> CuSinkTask for CuSimSinkTask<I> {
     }
 
     fn process(&mut self, _clock: &RobotClock, _input: &Self::Input<'_>) -> CuResult<()> {
-        unimplemented!("A placeholder for sim was called for a sink, you need answer SimOverride to ExecutedBySim for the Process step.")
+        unimplemented!(
+            "A placeholder for sim was called for a sink, you need answer SimOverride to ExecutedBySim for the Process step."
+        )
     }
 }

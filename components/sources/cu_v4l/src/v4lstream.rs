@@ -8,7 +8,7 @@ use v4l::device::Handle;
 use v4l::io::traits::{CaptureStream, Stream};
 use v4l::memory::Memory;
 use v4l::v4l_sys::{v4l2_buffer, v4l2_buffer__bindgen_ty_1, v4l2_format, v4l2_requestbuffers};
-use v4l::{v4l2, Device};
+use v4l::{Device, v4l2};
 
 // A specialized V4L stream that uses Copper Buffers for memory management.
 pub struct CuV4LStream {

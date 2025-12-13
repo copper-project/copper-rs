@@ -2,15 +2,15 @@
 mod mock;
 
 use bincode::{Decode, Encode};
-use cu29::prelude::*;
 use cu29::CuResult;
+use cu29::prelude::*;
 use std::sync::{Arc, Mutex};
 
 #[allow(unused_imports)]
 use cu29_traits::CuError;
 
 #[cfg(mock)]
-use mock::{get_pin, InputPin};
+use mock::{InputPin, get_pin};
 #[cfg(hardware)]
 use rppal::gpio::{Gpio, InputPin, Level, Trigger};
 use serde::Deserialize;

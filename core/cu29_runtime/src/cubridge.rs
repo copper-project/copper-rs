@@ -592,10 +592,10 @@ mod tests {
             _rx_channels: &[BridgeChannelConfig<RxId>],
         ) -> CuResult<Self> {
             let mut instance = ExampleBridge::default();
-            if let Some(cfg) = config {
-                if let Some(port) = cfg.get::<String>("port") {
-                    instance.port = port;
-                }
+            if let Some(cfg) = config
+                && let Some(port) = cfg.get::<String>("port")
+            {
+                instance.port = port;
             }
             Ok(instance)
         }

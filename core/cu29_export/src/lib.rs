@@ -4,8 +4,8 @@ use bincode::config::standard;
 use bincode::decode_from_std_read;
 use bincode::error::DecodeError;
 use clap::{Parser, Subcommand, ValueEnum};
-use cu29::prelude::*;
 use cu29::UnifiedLogType;
+use cu29::prelude::*;
 use cu29_intern_strs::read_interned_strings;
 use fsck::check;
 use std::fmt::{Display, Formatter};
@@ -417,13 +417,13 @@ mod python {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bincode::{encode_into_slice, Decode, Encode};
+    use bincode::{Decode, Encode, encode_into_slice};
     use std::env;
     use std::fs;
     use std::io::Cursor;
     use std::path::PathBuf;
     use std::sync::{Arc, Mutex};
-    use tempfile::{tempdir, TempDir};
+    use tempfile::{TempDir, tempdir};
 
     fn copy_stringindex_to_temp(tmpdir: &TempDir) -> PathBuf {
         // Build a minimal index on the fly so tests don't depend on build-time artifacts.

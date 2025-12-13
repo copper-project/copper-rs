@@ -1,6 +1,6 @@
 use crate::FrameIdString;
-use cu29::clock::{CuTime, CuTimeRange};
 use cu_spatial_payloads::Transform3D;
+use cu29::clock::{CuTime, CuTimeRange};
 use dashmap::DashMap;
 use num_traits;
 use serde::{Deserialize, Serialize};
@@ -19,16 +19,16 @@ pub struct StampedTransform<T: Copy + Debug + Default + 'static> {
 }
 
 impl<
-        T: Copy
-            + Debug
-            + 'static
-            + Default
-            + std::ops::Add<Output = T>
-            + std::ops::Sub<Output = T>
-            + std::ops::Mul<Output = T>
-            + std::ops::Div<Output = T>
-            + num_traits::NumCast,
-    > StampedTransform<T>
+    T: Copy
+        + Debug
+        + 'static
+        + Default
+        + std::ops::Add<Output = T>
+        + std::ops::Sub<Output = T>
+        + std::ops::Mul<Output = T>
+        + std::ops::Div<Output = T>
+        + num_traits::NumCast,
+> StampedTransform<T>
 {
     /// Compute the velocity (linear and angular) from this transform and a previous transform
     ///
@@ -219,11 +219,11 @@ impl<T: Copy + Debug + Default + 'static, const N: usize> ConstTransformBuffer<T
         let mut latest_idx = 0;
 
         for i in 0..self.count.min(N) {
-            if let Some(ref t) = self.transforms[i] {
-                if latest_time.is_none() || t.stamp > latest_time.unwrap() {
-                    latest_time = Some(t.stamp);
-                    latest_idx = i;
-                }
+            if let Some(ref t) = self.transforms[i]
+                && latest_time.is_none_or(|lt| t.stamp > lt)
+            {
+                latest_time = Some(t.stamp);
+                latest_idx = i;
             }
         }
 
@@ -272,10 +272,11 @@ impl<T: Copy + Debug + Default + 'static, const N: usize> ConstTransformBuffer<T
         let mut result = Vec::new();
 
         for i in 0..self.count.min(N) {
-            if let Some(ref t) = self.transforms[i] {
-                if t.stamp >= start_time && t.stamp <= end_time {
-                    result.push(t);
-                }
+            if let Some(ref t) = self.transforms[i]
+                && t.stamp >= start_time
+                && t.stamp <= end_time
+            {
+                result.push(t);
             }
         }
 

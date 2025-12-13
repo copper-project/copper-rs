@@ -1,14 +1,14 @@
 //! Transform message system using CuMsg and compile-time frame types
 //! This replaces the StampedTransform approach with a more Copper-native design
 
+use crate::FrameIdString;
 use crate::frames::{FrameId, FramePair};
 use crate::velocity::VelocityTransform;
-use crate::FrameIdString;
 use bincode::{Decode, Encode};
+use cu_spatial_payloads::Transform3D;
 use cu29::clock::{CuTime, CuTimeRange, Tov};
 use cu29::cutask::CuStampedData;
 use cu29::prelude::CuMsgPayload;
-use cu_spatial_payloads::Transform3D;
 use num_traits;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
@@ -236,10 +236,10 @@ where
         let mut time_indices: Vec<(CuTime, usize)> = Vec::new();
 
         for i in 0..self.count {
-            if let Some(ref transform) = self.transforms[i] {
-                if let Some(time) = transform.timestamp() {
-                    time_indices.push((time, i));
-                }
+            if let Some(ref transform) = self.transforms[i]
+                && let Some(time) = transform.timestamp()
+            {
+                time_indices.push((time, i));
             }
         }
 
@@ -277,18 +277,18 @@ where
         let mut closest_diff = u64::MAX;
 
         for i in 0..self.count {
-            if let Some(ref transform) = self.transforms[i] {
-                if let Some(transform_time) = transform.timestamp() {
-                    let diff = if time.as_nanos() > transform_time.as_nanos() {
-                        time.as_nanos() - transform_time.as_nanos()
-                    } else {
-                        transform_time.as_nanos() - time.as_nanos()
-                    };
+            if let Some(ref transform) = self.transforms[i]
+                && let Some(transform_time) = transform.timestamp()
+            {
+                let diff = if time.as_nanos() > transform_time.as_nanos() {
+                    time.as_nanos() - transform_time.as_nanos()
+                } else {
+                    transform_time.as_nanos() - time.as_nanos()
+                };
 
-                    if diff < closest_diff {
-                        closest_diff = diff;
-                        closest_idx = i;
-                    }
+                if diff < closest_diff {
+                    closest_diff = diff;
+                    closest_idx = i;
                 }
             }
         }
@@ -327,14 +327,14 @@ where
         let mut after_idx = None;
 
         for i in 0..self.count {
-            if let Some(ref transform) = self.transforms[i] {
-                if let Some(transform_time) = transform.timestamp() {
-                    if transform_time <= time {
-                        before_idx = Some(i);
-                    } else if after_idx.is_none() {
-                        after_idx = Some(i);
-                        break;
-                    }
+            if let Some(ref transform) = self.transforms[i]
+                && let Some(transform_time) = transform.timestamp()
+            {
+                if transform_time <= time {
+                    before_idx = Some(i);
+                } else if after_idx.is_none() {
+                    after_idx = Some(i);
+                    break;
                 }
             }
         }

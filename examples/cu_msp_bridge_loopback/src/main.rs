@@ -1,19 +1,19 @@
-use cu29::prelude::*;
-use cu29_helpers::basic_copper_setup;
 use cu_msp_bridge::{MspRequestBatch, MspResponseBatch};
 use cu_msp_lib::commands::MspCommandCode;
 use cu_msp_lib::structs::{MspRc, MspResponse};
 use cu_msp_lib::{MspPacket, MspParser};
+use cu29::prelude::*;
+use cu29_helpers::basic_copper_setup;
 use nix::errno::Errno;
-use nix::fcntl::{fcntl, FcntlArg, OFlag};
+use nix::fcntl::{FcntlArg, OFlag, fcntl};
 use nix::pty::openpty;
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::os::unix::fs::symlink;
 use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 

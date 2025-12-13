@@ -267,7 +267,8 @@ impl<A: GlobalAlloc> CountingAlloc<A> {
 
 unsafe impl<A: GlobalAlloc> GlobalAlloc for CountingAlloc<A> {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let p = self.inner.alloc(layout);
+        // Explicit unsafe block required in Rust 2024 for calling unsafe functions inside unsafe fn.
+        let p = unsafe { self.inner.alloc(layout) };
         if !p.is_null() {
             self.allocated.fetch_add(layout.size(), Ordering::SeqCst);
         }
@@ -275,7 +276,8 @@ unsafe impl<A: GlobalAlloc> GlobalAlloc for CountingAlloc<A> {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        self.inner.dealloc(ptr, layout);
+        // Explicit unsafe block required in Rust 2024 for calling unsafe functions inside unsafe fn.
+        unsafe { self.inner.dealloc(ptr, layout) };
         self.deallocated.fetch_add(layout.size(), Ordering::SeqCst);
     }
 }
@@ -408,11 +410,7 @@ impl LiveStatistics {
 
     #[inline]
     pub fn min(&self) -> u64 {
-        if self.count == 0 {
-            0
-        } else {
-            self.min_val
-        }
+        if self.count == 0 { 0 } else { self.min_val }
     }
 
     #[inline]

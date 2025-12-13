@@ -13,7 +13,7 @@ use cu29::cutask::CuMsgMetadata;
 use cu29::monitoring::{
     ComponentKind, CuDurationStatistics, CuMonitor, CuTaskState, Decision, MonitorTopology,
 };
-use cu29::prelude::{pool, CuCompactString, CuTime};
+use cu29::prelude::{CuCompactString, CuTime, pool};
 use cu29::{CuError, CuResult};
 #[cfg(feature = "debug_pane")]
 use debug_pane::UIExt;
@@ -21,7 +21,7 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::buffer::Buffer;
 use ratatui::crossterm::event::{DisableMouseCapture, EnableMouseCapture, Event, KeyCode};
 use ratatui::crossterm::terminal::{
-    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
 use ratatui::crossterm::{event, execute};
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Size};
@@ -33,7 +33,7 @@ use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, StatefulWidget, Tab
 use ratatui::{Frame, Terminal};
 use std::backtrace::Backtrace;
 use std::fmt::{Display, Formatter};
-use std::io::{stdout, Write};
+use std::io::{Write, stdout};
 use std::marker::PhantomData;
 use std::process;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -44,8 +44,7 @@ use std::{collections::HashMap, io, thread};
 use tui_widgets::scrollview::{ScrollView, ScrollViewState};
 
 #[cfg(feature = "debug_pane")]
-const MENU_CONTENT: &str =
-    "   [1] SysInfo  [2] DAG  [3] Latencies  [4] Memory Pools [5] Debug Output  [q] Quit | Scroll: hjkl or ↑↓←→   ";
+const MENU_CONTENT: &str = "   [1] SysInfo  [2] DAG  [3] Latencies  [4] Memory Pools [5] Debug Output  [q] Quit | Scroll: hjkl or ↑↓←→   ";
 #[cfg(not(feature = "debug_pane"))]
 const MENU_CONTENT: &str =
     "   [1] SysInfo  [2] DAG  [3] Latencies  [4] Memory Pools [q] Quit | Scroll: hjkl or ↑↓←→   ";

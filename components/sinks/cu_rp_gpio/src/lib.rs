@@ -40,22 +40,14 @@ impl From<RPGpioPayload> for bool {
 
 impl From<RPGpioPayload> for u8 {
     fn from(msg: RPGpioPayload) -> Self {
-        if msg.on {
-            1
-        } else {
-            0
-        }
+        if msg.on { 1 } else { 0 }
     }
 }
 
 #[cfg(hardware)]
 impl From<RPGpioPayload> for Level {
     fn from(msg: RPGpioPayload) -> Self {
-        if msg.on {
-            Level::Low
-        } else {
-            Level::High
-        }
+        if msg.on { Level::Low } else { Level::High }
     }
 }
 

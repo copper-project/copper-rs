@@ -261,7 +261,11 @@ impl<S: SectionStorage, L: UnifiedLogWrite<S>> LogStream<S, L> {
 
 impl<S: SectionStorage, L: UnifiedLogWrite<S>> Debug for LogStream<S, L> {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "MmapStream {{ entry_type: {:?}, current_position: {}, minimum_allocation_amount: {} }}", self.entry_type, self.current_position, self.minimum_allocation_amount)
+        write!(
+            f,
+            "MmapStream {{ entry_type: {:?}, current_position: {}, minimum_allocation_amount: {} }}",
+            self.entry_type, self.current_position, self.minimum_allocation_amount
+        )
     }
 }
 

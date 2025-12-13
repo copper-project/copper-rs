@@ -1,7 +1,7 @@
 use clap::{Parser, ValueEnum};
 use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
-use cu29_unifiedlog::{memmap::MmapSectionStorage, UnifiedLoggerWrite};
+use cu29_unifiedlog::{UnifiedLoggerWrite, memmap::MmapSectionStorage};
 use std::{fs, path::PathBuf};
 
 use cu_bridge_test::{

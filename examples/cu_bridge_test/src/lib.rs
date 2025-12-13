@@ -304,7 +304,7 @@ mod tests {
     use cu29::curuntime::CopperContext;
     use cu29::prelude::{CuApplication, CuResult};
     use cu29_helpers::basic_copper_setup;
-    use cu29_unifiedlog::{memmap::MmapSectionStorage, UnifiedLoggerWrite};
+    use cu29_unifiedlog::{UnifiedLoggerWrite, memmap::MmapSectionStorage};
     use once_cell::sync::Lazy;
     use std::sync::Mutex;
     use tempfile::TempDir;

@@ -2,11 +2,11 @@ use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use std::collections::HashMap;
 use std::fs::read_to_string;
-use syn::meta::parser;
 use syn::Fields::{Named, Unnamed};
+use syn::meta::parser;
 use syn::{
-    parse_macro_input, parse_quote, parse_str, Field, Fields, ItemImpl, ItemStruct, LitStr, Type,
-    TypeTuple,
+    Field, Fields, ItemImpl, ItemStruct, LitStr, Type, TypeTuple, parse_macro_input, parse_quote,
+    parse_str,
 };
 
 #[cfg(feature = "macro_debug")]
@@ -14,11 +14,11 @@ use crate::format::rustfmt_generated_code;
 use crate::utils::{config_id_to_bridge_const, config_id_to_enum, config_id_to_struct_member};
 use cu29_runtime::config::CuConfig;
 use cu29_runtime::config::{
-    read_configuration, BridgeChannelConfigRepresentation, CuGraph, Flavor, Node, NodeId,
+    BridgeChannelConfigRepresentation, CuGraph, Flavor, Node, NodeId, read_configuration,
 };
 use cu29_runtime::curuntime::{
-    compute_runtime_plan, find_task_type_for_id, CuExecutionLoop, CuExecutionStep, CuExecutionUnit,
-    CuTaskType,
+    CuExecutionLoop, CuExecutionStep, CuExecutionUnit, CuTaskType, compute_runtime_plan,
+    find_task_type_for_id,
 };
 use cu29_traits::{CuError, CuResult};
 use proc_macro2::{Ident, Span};
@@ -385,7 +385,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             return return_error(
                 "Expected config file attribute like #[CopperRuntime(config = \"path\")]"
                     .to_string(),
-            )
+            );
         }
     };
 
@@ -401,7 +401,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
     };
     let copper_config_content = match read_to_string(config_full_path(config_file.as_str())) {
         Ok(ok) => ok,
-        Err(e) => return return_error(format!("Could not read the config file (should not happen because we just succeeded just before). {e}"))
+        Err(e) => {
+            return return_error(format!(
+                "Could not read the config file (should not happen because we just succeeded just before). {e}"
+            ));
+        }
     };
 
     #[cfg(feature = "macro_debug")]
@@ -438,7 +442,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             fields_unnamed.unnamed.push(runtime_field);
         }
         Fields::Unit => {
-            panic!("This struct is a unit struct, it should have named or unnamed fields. use struct Something {{}} and not struct Something;")
+            panic!(
+                "This struct is a unit struct, it should have named or unnamed fields. use struct Something {{}} and not struct Something;"
+            )
         }
     };
 
@@ -1837,21 +1843,17 @@ fn config_full_path(config_file: &str) -> String {
 }
 
 fn extract_tasks_output_types(graph: &CuGraph) -> Vec<Option<Type>> {
-    let result = graph
+    graph
         .get_all_nodes()
         .iter()
         .map(|(_, node)| {
             let id = node.get_id();
             let type_str = graph.get_node_output_msg_type(id.as_str());
-            let result = type_str.map(|type_str| {
-                let result = parse_str::<Type>(type_str.as_str())
-                    .expect("Could not parse output message type.");
-                result
-            });
-            result
+            type_str.map(|type_str| {
+                parse_str::<Type>(type_str.as_str()).expect("Could not parse output message type.")
+            })
         })
-        .collect();
-    result
+        .collect()
 }
 
 struct CuTaskSpecSet {
@@ -2470,24 +2472,24 @@ fn collect_culist_metadata(
     let mut node_output_positions = HashMap::new();
 
     for unit in &runtime_plan.steps {
-        if let CuExecutionUnit::Step(step) = unit {
-            if let Some((output_idx, _)) = &step.output_msg_index_type {
-                culist_order.push(*output_idx as usize);
-                match &exec_entities[step.node_id as usize].kind {
-                    ExecutionEntityKind::Task { .. } => {
-                        if let Some(original_node_id) = plan_to_original.get(&step.node_id) {
-                            node_output_positions.insert(*original_node_id, *output_idx as usize);
-                        }
+        if let CuExecutionUnit::Step(step) = unit
+            && let Some((output_idx, _)) = &step.output_msg_index_type
+        {
+            culist_order.push(*output_idx as usize);
+            match &exec_entities[step.node_id as usize].kind {
+                ExecutionEntityKind::Task { .. } => {
+                    if let Some(original_node_id) = plan_to_original.get(&step.node_id) {
+                        node_output_positions.insert(*original_node_id, *output_idx as usize);
                     }
-                    ExecutionEntityKind::BridgeRx {
-                        bridge_index,
-                        channel_index,
-                    } => {
-                        bridge_specs[*bridge_index].rx_channels[*channel_index].culist_index =
-                            Some(*output_idx as usize);
-                    }
-                    ExecutionEntityKind::BridgeTx { .. } => {}
                 }
+                ExecutionEntityKind::BridgeRx {
+                    bridge_index,
+                    channel_index,
+                } => {
+                    bridge_specs[*bridge_index].rx_channels[*channel_index].culist_index =
+                        Some(*output_idx as usize);
+                }
+                ExecutionEntityKind::BridgeTx { .. } => {}
             }
         }
     }

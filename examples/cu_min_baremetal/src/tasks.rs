@@ -29,7 +29,7 @@ impl<const S: usize> CuSrcTask for DoraSource<S> {
 
     fn process(&mut self, clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
         new_msg.tov = Tov::Time(clock.now());
-        let DoraPayload(ref mut v) = new_msg.payload_mut().as_mut().unwrap();
+        let DoraPayload(v) = new_msg.payload_mut().as_mut().unwrap();
         v.resize(FORTY_K, 0);
         v[42] = 42;
         Ok(())

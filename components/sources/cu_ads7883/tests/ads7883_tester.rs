@@ -1,6 +1,6 @@
+use cu_ads7883_new::ADSReadingPayload;
 use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
-use cu_ads7883_new::ADSReadingPayload;
 
 #[copper_runtime(config = "tests/copperconfig.ron")]
 struct ADS78883Tester {}

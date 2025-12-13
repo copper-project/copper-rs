@@ -94,8 +94,8 @@ pub mod prelude {
     pub use cu29_runtime::*;
     pub use cu29_traits::*;
     pub use cu29_unifiedlog::*;
-    pub use cu29_value::to_value;
     pub use cu29_value::Value;
+    pub use cu29_value::to_value;
     #[cfg(feature = "std")]
     pub use pool::*;
     pub use serde::Serialize;

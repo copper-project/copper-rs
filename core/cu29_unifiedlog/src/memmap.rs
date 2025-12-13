@@ -2,15 +2,16 @@
 //! It is std only.
 
 use crate::{
-    AllocatedSection, MainHeader, SectionHandle, SectionHeader, SectionStorage, UnifiedLogRead,
-    UnifiedLogStatus, UnifiedLogWrite, MAIN_MAGIC, SECTION_MAGIC,
+    AllocatedSection, MAIN_MAGIC, MainHeader, SECTION_MAGIC, SectionHandle, SectionHeader,
+    SectionStorage, UnifiedLogRead, UnifiedLogStatus, UnifiedLogWrite,
 };
 
 use crate::SECTION_HEADER_COMPACT_SIZE;
 
+use AllocatedSection::Section;
 use bincode::config::standard;
 use bincode::error::EncodeError;
-use bincode::{decode_from_slice, encode_into_slice, Encode};
+use bincode::{Encode, decode_from_slice, encode_into_slice};
 use core::slice::from_raw_parts_mut;
 use cu29_traits::{CuError, CuResult, UnifiedLogType};
 use memmap2::{Mmap, MmapMut};
@@ -19,7 +20,6 @@ use std::io::Read;
 use std::mem::ManuallyDrop;
 use std::path::{Path, PathBuf};
 use std::{io, mem};
-use AllocatedSection::Section;
 
 pub struct MmapSectionStorage {
     buffer: &'static mut [u8],
@@ -733,7 +733,7 @@ mod tests {
     use super::*;
     use crate::stream_write;
     use bincode::de::read::SliceReader;
-    use bincode::{decode_from_reader, decode_from_slice, Decode, Encode};
+    use bincode::{Decode, Encode, decode_from_reader, decode_from_slice};
     use cu29_traits::WriteStream;
     use std::path::PathBuf;
     use std::sync::{Arc, Mutex};
@@ -784,7 +784,7 @@ mod tests {
                 .unwrap();
             let used = logger.front_slab.used();
             assert!(used < 4 * page_size::get()); // ie. 3 headers, 1 page max per
-                                                  // logger drops
+            // logger drops
 
             used
         };

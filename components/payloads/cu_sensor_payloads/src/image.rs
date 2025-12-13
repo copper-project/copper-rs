@@ -13,9 +13,9 @@ use std::vec::Vec;
 #[cfg(feature = "image")]
 use image::{ImageBuffer, Pixel};
 #[cfg(feature = "kornia")]
-use kornia_image::allocator::ImageAllocator;
-#[cfg(feature = "kornia")]
 use kornia_image::Image;
+#[cfg(feature = "kornia")]
+use kornia_image::allocator::ImageAllocator;
 use serde::{Serialize, Serializer};
 
 #[derive(Default, Debug, Encode, Decode, Clone, Copy, Serialize)]
