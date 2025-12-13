@@ -91,12 +91,6 @@ doctest = false
 bench = false
 required-features = ["firmware"]
 
-[profile.dev]
-panic = "abort" # no_std firmware: use abort-based panics
-
-[profile.release]
-panic = "abort"
-
 [[bin]]
 name = "rc-tester"
 path = "src/sim/rc_tester.rs"
