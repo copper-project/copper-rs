@@ -1,3 +1,4 @@
+use crate::sdmmc::{Block, BlockCount, BlockDevice, BlockIdx};
 use alloc::sync::Arc;
 use bincode::config::standard;
 use bincode::enc::write::Writer as BincodeWriter;
@@ -5,7 +6,6 @@ use bincode::error::EncodeError;
 use bincode::{encode_into_slice, encode_into_writer, Encode};
 use core::cell::UnsafeCell;
 use cu29::prelude::*;
-use embedded_sdmmc::{Block, BlockCount, BlockDevice, BlockIdx};
 
 const BLK: usize = 512;
 
@@ -29,9 +29,17 @@ unsafe impl<T> Sync for ForceSyncSend<T> {}
 
 impl<B: BlockDevice> BlockDevice for ForceSyncSend<B> {
     type Error = B::Error;
+
+    #[cfg(feature = "eh02")]
     fn read(&self, blocks: &mut [Block], start: BlockIdx, reason: &str) -> Result<(), Self::Error> {
         self.inner_mut().read(blocks, start, reason)
     }
+
+    #[cfg(feature = "eh1")]
+    fn read(&self, blocks: &mut [Block], start: BlockIdx) -> Result<(), Self::Error> {
+        self.inner_mut().read(blocks, start)
+    }
+
     fn write(&self, blocks: &[Block], start: BlockIdx) -> Result<(), Self::Error> {
         self.inner_mut().write(blocks, start)
     }
