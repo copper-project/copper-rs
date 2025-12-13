@@ -22,8 +22,8 @@ jobs:
 
     strategy:
       matrix:
-        # os: [ ubuntu-22.04, macos-latest, windows-latest ]
-        os: [ ubuntu-22.04, macos-latest ]
+        # os: [ ubuntu-latest, macos-latest, windows-latest ]
+        os: [ ubuntu-latest, macos-latest ]
         mode: [ debug, release, cuda-release ]
         exclude:
           - os: macos-latest
@@ -64,10 +64,6 @@ jobs:
           docker-images: true
           swap-storage: true
 
-      - name: Install dependencies (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y pkg-config libudev-dev libpcap-dev libglib2.0-dev
-
       - name: Install dependencies (Windows)
         if: runner.os == 'Windows'
         run: |
@@ -88,13 +84,39 @@ jobs:
           # Set PCAP library path
           echo "LIB=$env:USERPROFILE\npcap-sdk\Lib\x64" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
 
-      - name: Setup GStreamer (x86_64)
-        if: runner.os != 'MacOs'
-        id: setup_gstreamer_mac
-        uses: blinemedical/setup-gstreamer@v1.4.0
+      - name: Cache apt packages (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/cache@v4
         with:
-          arch: 'x86_64'
-          version: 1.24.13
+          path: /var/cache/apt/archives
+          key: ${{ runner.os }}-apt-gstreamer-${{ hashFiles('.github/workflows/general.yml') }}
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            libudev-dev \
+            libpcap-dev \
+            libglib2.0-dev \
+            clang \
+            libclang-dev \
+            libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-bad1.0-dev \
+            gstreamer1.0-plugins-base \
+            gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad \
+            gstreamer1.0-plugins-ugly \
+            gstreamer1.0-libav \
+            gstreamer1.0-tools \
+            gstreamer1.0-x \
+            gstreamer1.0-alsa \
+            gstreamer1.0-gl \
+            gstreamer1.0-gtk3 \
+            gstreamer1.0-qt5 \
+            gstreamer1.0-pulseaudio
 
       - name: Setup GStreamer
         if: runner.os == 'MacOS'
