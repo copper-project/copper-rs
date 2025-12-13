@@ -25,9 +25,13 @@ mod firmware {
         impl Freezable for RpySink {}
 
         impl CuSinkTask for RpySink {
+            type Resources<'r> = ();
             type Input<'m> = input_msg!(cu_ahrs::AhrsPose);
 
-            fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+            fn new_with(
+                _config: Option<&ComponentConfig>,
+                _resources: Self::Resources<'_>,
+            ) -> CuResult<Self>
             where
                 Self: Sized,
             {

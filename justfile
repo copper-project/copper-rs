@@ -4,58 +4,8 @@ WINDOWS_BASE_FEATURES := "macro_debug,mock,perf-ui,image,kornia,python,gst,faer,
 export ROOT := `git rev-parse --show-toplevel`
 EMBEDDED_EXCLUDES := shell('python3 $1/support/ci/embedded_crates.py excludes', ROOT)
 
-# Run the main CI flow for the current host OS. Call like `just ci debug`.
-# Available modes: debug | release | cuda-release.
-ci mode="debug":
-	#!/usr/bin/env bash
-	set -euo pipefail
-
-	mode="{{mode}}"
-	release_flag=""
-	if [ "$mode" = "release" ] || [ "$mode" = "cuda-release" ]; then
-		release_flag="--release"
-	fi
-
-	os=$(uname -s)
-	if [ "$os" = "Linux" ]; then
-		if [ "$mode" = "cuda-release" ]; then
-			features="--features {{BASE_FEATURES}},python,cuda"
-		else
-			features="--features {{BASE_FEATURES}},python"
-		fi
-	elif [ "$os" = "Darwin" ]; then
-		if [ "$mode" = "cuda-release" ]; then
-			features="--features {{BASE_FEATURES}},cuda"
-		else
-			features="--features {{BASE_FEATURES}}"
-		fi
-	else
-		if [ "$mode" = "cuda-release" ]; then
-			features="--features {{WINDOWS_BASE_FEATURES}},cuda"
-		else
-			features="--features {{WINDOWS_BASE_FEATURES}}"
-		fi
-	fi
-
-	cargo +stable clippy ${release_flag} --workspace --all-targets {{EMBEDDED_EXCLUDES}} -- --deny warnings
-	cargo +stable clippy ${release_flag} --workspace --all-targets ${features} {{EMBEDDED_EXCLUDES}} -- --deny warnings
-	cargo +stable build ${release_flag} --workspace --all-targets ${features} {{EMBEDDED_EXCLUDES}}
-
-	if [ "$mode" = "debug" ]; then
-		cargo +stable test --doc --workspace {{EMBEDDED_EXCLUDES}}
-	fi
-
-	cargo +stable nextest run ${release_flag} --all-targets --workspace {{EMBEDDED_EXCLUDES}}
-	cargo +stable nextest run ${release_flag} --all-targets --workspace ${features} {{EMBEDDED_EXCLUDES}}
-
-	if [ "$mode" = "debug" ]; then
-		cargo +stable install cargo-generate
-		rm -rf templates/test_project
-		cd templates
-		cargo +stable generate -p cu_full --name test_project --destination . -d copper_source=local -d copper_root_path=../.. --silent
-		cd test_project
-		cargo +stable build
-	fi
+ci:
+  act -W .github/workflows/general.yml -j Unit-Tests --matrix os:ubuntu-latest --matrix mode:debug -P ubuntu-latest=ghcr.io/catthehacker/ubuntu:act-latest
 
 # Formatting and typo checks mirroring the dedicated workflow job.
 lint:

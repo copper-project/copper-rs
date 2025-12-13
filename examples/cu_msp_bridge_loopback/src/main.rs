@@ -142,21 +142,13 @@ impl FlightControllerEmulator {
 
     fn configure_bridge(&self, config: &mut CuConfig) -> CuResult<()> {
         let device_path = self.symlink_path.to_string_lossy().into_owned();
-        let graph = config.get_graph_mut(None)?;
-        let node_id = graph
-            .get_node_id_by_name("msp_bridge")
-            .ok_or_else(|| CuError::from("config missing `msp_bridge` node"))?;
-        let node = graph
-            .get_node_mut(node_id)
-            .ok_or_else(|| CuError::from("unable to mutate msp_bridge node"))?;
-        node.set_param("device", device_path.clone());
-
-        if let Some(bridge_cfg) = config.bridges.iter_mut().find(|b| b.id == "msp_bridge") {
-            let component = bridge_cfg.config.get_or_insert_with(ComponentConfig::new);
-            component.set("device", device_path);
-        } else {
-            return Err(CuError::from("config missing `msp_bridge` bridge entry"));
-        }
+        let bundle_cfg = config
+            .resources
+            .iter_mut()
+            .find(|b| b.id == "fc")
+            .ok_or_else(|| CuError::from("config missing `fc` resource bundle"))?;
+        let component = bundle_cfg.config.get_or_insert_with(ComponentConfig::new);
+        component.set("device", device_path);
         Ok(())
     }
 }
@@ -280,9 +272,13 @@ mod tasks {
     impl Freezable for LoopbackSource {}
 
     impl CuSrcTask for LoopbackSource {
+        type Resources<'r> = ();
         type Output<'m> = CuMsg<MspRequestBatch>;
 
-        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+        fn new_with(
+            _config: Option<&ComponentConfig>,
+            _resources: Self::Resources<'_>,
+        ) -> CuResult<Self> {
             Ok(Self { sent: false })
         }
 
@@ -307,9 +303,13 @@ mod tasks {
     impl Freezable for LoopbackSink {}
 
     impl CuSinkTask for LoopbackSink {
+        type Resources<'r> = ();
         type Input<'m> = CuMsg<MspResponseBatch>;
 
-        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+        fn new_with(
+            _config: Option<&ComponentConfig>,
+            _resources: Self::Resources<'_>,
+        ) -> CuResult<Self> {
             Ok(Self)
         }
 

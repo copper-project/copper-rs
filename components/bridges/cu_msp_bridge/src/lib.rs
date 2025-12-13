@@ -25,8 +25,6 @@ mod std_impl {
 mod no_std_impl {
     pub use alloc::{format, vec::Vec};
     pub use core::mem;
-
-    pub const SERIAL_INDEX_KEY: &str = "serial_port_index";
 }
 
 #[cfg(not(feature = "std"))]
@@ -42,65 +40,19 @@ use cu29::cubridge::{
     BridgeChannel, BridgeChannelConfig, BridgeChannelInfo, BridgeChannelSet, CuBridge,
 };
 use cu29::prelude::*;
+#[cfg(feature = "std")]
+use cu29::resource::ResourceDecl;
+use cu29::resource::{Owned, ResourceBindings, ResourceBundle, ResourceManager, ResourceMapping};
 use cu_msp_lib::structs::{MspRequest, MspResponse};
 use cu_msp_lib::{MspPacket, MspParser};
-use embedded_io::{Read, Write};
+use embedded_io::{ErrorType, Read, Write};
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
+use spin::Mutex;
 
 const READ_BUFFER_SIZE: usize = 512;
 const MAX_REQUESTS_PER_BATCH: usize = 8;
 const MAX_RESPONSES_PER_BATCH: usize = 16;
-
-pub trait SerialFactory<E>: Write<Error = E> + Read<Error = E> + Send + 'static {
-    fn try_new(config: Option<&ComponentConfig>) -> CuResult<Self>
-    where
-        Self: Sized;
-}
-
-#[cfg(not(feature = "std"))]
-impl<S, E> SerialFactory<E> for S
-where
-    S: Write<Error = E> + Read<Error = E> + Send + 'static,
-{
-    fn try_new(config: Option<&ComponentConfig>) -> CuResult<Self> {
-        let slot = config
-            .and_then(|cfg| cfg.get::<u32>(SERIAL_INDEX_KEY))
-            .map(|v| v as usize)
-            .unwrap_or(0);
-
-        cu_embedded_registry::take(slot).ok_or_else(|| {
-            CuError::from(format!(
-                "MSP bridge missing serial for slot {slot} (max index {})",
-                cu_embedded_registry::MAX_SERIAL_SLOTS - 1
-            ))
-        })
-    }
-}
-
-#[cfg(feature = "std")]
-impl SerialFactory<std::io::Error> for std_serial::StdSerial {
-    fn try_new(config: Option<&ComponentConfig>) -> CuResult<Self> {
-        let device = config
-            .and_then(|cfg| cfg.get::<String>(DEVICE_KEY))
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| DEFAULT_DEVICE.to_string());
-
-        let baudrate = config
-            .and_then(|cfg| cfg.get::<u32>(BAUD_KEY))
-            .unwrap_or(DEFAULT_BAUDRATE);
-
-        let timeout_ms = config
-            .and_then(|cfg| cfg.get::<u64>(TIMEOUT_KEY))
-            .unwrap_or(DEFAULT_TIMEOUT_MS);
-
-        std_serial::open(&device, baudrate, timeout_ms).map_err(|err| {
-            CuError::from(format!(
-                "MSP bridge failed to open serial `{device}` at {baudrate} baud: {err}"
-            ))
-        })
-    }
-}
 
 /// Batch of MSP requests transported over the bridge.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -249,37 +201,54 @@ where
     }
 }
 
-#[cfg(not(feature = "std"))]
-impl<S, E> CuMspBridge<S, E>
+impl<S, E> Freezable for CuMspBridge<S, E> where S: Write<Error = E> + Read<Error = E> {}
+
+pub struct MspResources<S> {
+    pub serial: Owned<S>,
+}
+
+impl<'r, S, E> ResourceBindings<'r> for MspResources<S>
 where
-    S: SerialFactory<E>,
+    S: Write<Error = E> + Read<Error = E> + Send + Sync + 'static,
 {
-    /// Register a serial port for use with MSP bridge in no-std environments
-    pub fn register_serial(slot: usize, serial_port: S) -> CuResult<()> {
-        cu_embedded_registry::register(slot, serial_port)
+    fn from_bindings(
+        manager: &'r mut ResourceManager,
+        mapping: Option<&ResourceMapping>,
+    ) -> CuResult<Self> {
+        let mapping = mapping.ok_or_else(|| {
+            CuError::from("MSP bridge requires a `serial` resource mapping in copperconfig")
+        })?;
+        let path = mapping.get("serial").ok_or_else(|| {
+            CuError::from("MSP bridge resources must include `serial: <bundle.resource>`")
+        })?;
+        let serial = manager
+            .take::<S>(path.typed())
+            .map_err(|e| e.add_cause("Failed to fetch MSP serial resource"))?;
+        Ok(Self { serial })
     }
 }
 
-impl<S, E> Freezable for CuMspBridge<S, E> where S: Write<Error = E> + Read<Error = E> {}
-
 impl<S, E> CuBridge for CuMspBridge<S, E>
 where
-    S: SerialFactory<E>,
+    S: Write<Error = E> + Read<Error = E> + Send + Sync + 'static,
 {
+    type Resources<'r> = MspResources<S>;
     type Tx = TxChannels;
     type Rx = RxChannels;
 
-    fn new(
+    fn new_with(
         config: Option<&ComponentConfig>,
         tx_channels: &[BridgeChannelConfig<<Self::Tx as BridgeChannelSet>::Id>],
         rx_channels: &[BridgeChannelConfig<<Self::Rx as BridgeChannelSet>::Id>],
+        resources: Self::Resources<'_>,
     ) -> CuResult<Self>
     where
         Self: Sized,
     {
         let _ = tx_channels;
         let _ = rx_channels;
-        Ok(Self::from_serial(S::try_new(config)?))
+        let _ = config;
+        Ok(Self::from_serial(resources.serial.0))
     }
 
     fn preprocess(&mut self, _clock: &RobotClock) -> CuResult<()> {
@@ -347,6 +316,77 @@ pub mod std_serial {
     }
 }
 
+#[cfg(feature = "std")]
+pub struct StdSerialBundle;
+
+#[cfg(feature = "std")]
+impl ResourceBundle for StdSerialBundle {
+    fn build(
+        bundle_id: &str,
+        config: Option<&ComponentConfig>,
+        resources: &[ResourceDecl],
+        manager: &mut ResourceManager,
+    ) -> CuResult<()> {
+        let cfg = config.ok_or_else(|| {
+            CuError::from(format!(
+                "MSP serial bundle `{bundle_id}` requires configuration"
+            ))
+        })?;
+        let device = cfg
+            .get::<String>(DEVICE_KEY)
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| DEFAULT_DEVICE.to_string());
+        let baudrate = cfg.get::<u32>(BAUD_KEY).unwrap_or(DEFAULT_BAUDRATE);
+        let timeout_ms = cfg.get::<u64>(TIMEOUT_KEY).unwrap_or(DEFAULT_TIMEOUT_MS);
+
+        let serial = std_serial::open(&device, baudrate, timeout_ms).map_err(|err| {
+            CuError::from(format!(
+                "MSP bridge failed to open serial `{device}` at {baudrate} baud: {err}"
+            ))
+        })?;
+        let key = resources
+            .first()
+            .ok_or_else(|| {
+                CuError::from(format!(
+                    "MSP serial bundle `{bundle_id}` missing resource decl"
+                ))
+            })?
+            .key;
+        manager.add_owned(key.typed(), LockedSerial::new(serial))
+    }
+}
+
+pub struct LockedSerial<T>(pub Mutex<T>);
+
+impl<T> LockedSerial<T> {
+    pub fn new(inner: T) -> Self {
+        Self(Mutex::new(inner))
+    }
+}
+
+impl<T: ErrorType> ErrorType for LockedSerial<T> {
+    type Error = T::Error;
+}
+
+impl<T: Read> Read for LockedSerial<T> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        let mut guard = self.0.lock();
+        guard.read(buf)
+    }
+}
+
+impl<T: Write> Write for LockedSerial<T> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+        let mut guard = self.0.lock();
+        guard.write(buf)
+    }
+
+    fn flush(&mut self) -> Result<(), Self::Error> {
+        let mut guard = self.0.lock();
+        guard.flush()
+    }
+}
+
 /// Type alias for MSP bridge using standard I/O (for backward compatibility)
 #[cfg(feature = "std")]
-pub type CuMspBridgeStd = CuMspBridge<std_serial::StdSerial, std::io::Error>;
+pub type CuMspBridgeStd = CuMspBridge<LockedSerial<std_serial::StdSerial>, std::io::Error>;

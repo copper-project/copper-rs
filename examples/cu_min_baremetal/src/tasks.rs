@@ -19,8 +19,12 @@ impl<const S: usize> Freezable for DoraSource<S> {}
 
 impl<const S: usize> CuSrcTask for DoraSource<S> {
     type Output<'m> = output_msg!(DoraPayload);
+    type Resources<'r> = ();
 
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -42,8 +46,12 @@ impl<const S: usize> Freezable for DoraSink<S> {}
 
 impl<const S: usize> CuSinkTask for DoraSink<S> {
     type Input<'m> = input_msg!(DoraPayload);
+    type Resources<'r> = ();
 
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
     where
         Self: Sized,
     {

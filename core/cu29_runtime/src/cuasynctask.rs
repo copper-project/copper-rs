@@ -27,8 +27,12 @@ where
     O: CuMsgPayload + Send + 'static,
 {
     #[allow(unused)]
-    pub fn new(config: Option<&ComponentConfig>, tp: Arc<ThreadPool>) -> CuResult<Self> {
-        let task = Arc::new(Mutex::new(T::new(config)?));
+    pub fn new(
+        config: Option<&ComponentConfig>,
+        resources: T::Resources<'_>,
+        tp: Arc<ThreadPool>,
+    ) -> CuResult<Self> {
+        let task = Arc::new(Mutex::new(T::new_with(config, resources)?));
         let output = Arc::new(Mutex::new(CuMsg::default()));
         Ok(Self {
             task,
@@ -55,10 +59,14 @@ where
     I: CuMsgPayload + Send + Sync + 'static,
     O: CuMsgPayload + Send + 'static,
 {
+    type Resources<'r> = ();
     type Input<'m> = T::Input<'m>;
     type Output<'m> = T::Output<'m>;
 
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -157,10 +165,14 @@ mod tests {
     impl Freezable for TestTask {}
 
     impl CuTask for TestTask {
+        type Resources<'r> = ();
         type Input<'m> = input_msg!(u32);
         type Output<'m> = output_msg!(u32);
 
-        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+        fn new_with(
+            _config: Option<&ComponentConfig>,
+            _resources: Self::Resources<'_>,
+        ) -> CuResult<Self>
         where
             Self: Sized,
         {
@@ -190,7 +202,7 @@ mod tests {
         let config = ComponentConfig::default();
         let clock = RobotClock::default();
         let mut async_task: CuAsyncTask<TestTask, u32> =
-            CuAsyncTask::new(Some(&config), tp).unwrap();
+            CuAsyncTask::new(Some(&config), (), tp).unwrap();
         let input = CuMsg::new(Some(42u32));
         let mut output = CuMsg::new(None);
 

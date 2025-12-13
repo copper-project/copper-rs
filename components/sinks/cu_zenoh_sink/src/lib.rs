@@ -43,9 +43,10 @@ impl<P> CuSinkTask for ZenohSink<P>
 where
     P: CuMsgPayload + 'static,
 {
+    type Resources<'r> = ();
     type Input<'m> = input_msg!(P);
 
-    fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {

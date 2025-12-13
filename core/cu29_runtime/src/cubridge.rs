@@ -174,15 +174,31 @@ pub trait CuBridge: Freezable {
     type Tx: BridgeChannelSet;
     /// Incoming channels (external world -> Copper).
     type Rx: BridgeChannelSet;
+    /// Resources required by the bridge.
+    type Resources<'r>;
+
+    /// Backward-compatible constructor for bridges that do not require resources.
+    fn new(
+        config: Option<&ComponentConfig>,
+        tx_channels: &[BridgeChannelConfig<<Self::Tx as BridgeChannelSet>::Id>],
+        rx_channels: &[BridgeChannelConfig<<Self::Rx as BridgeChannelSet>::Id>],
+    ) -> CuResult<Self>
+    where
+        Self: Sized,
+        for<'r> Self::Resources<'r>: Default,
+    {
+        Self::new_with(config, tx_channels, rx_channels, Default::default())
+    }
 
     /// Constructs a new bridge.
     ///
     /// The runtime passes the bridge-level configuration plus the per-channel descriptors
     /// so the implementation can cache settings such as QoS, IDs, baud rates, etc.
-    fn new(
+    fn new_with(
         config: Option<&ComponentConfig>,
         tx_channels: &[BridgeChannelConfig<<Self::Tx as BridgeChannelSet>::Id>],
         rx_channels: &[BridgeChannelConfig<<Self::Rx as BridgeChannelSet>::Id>],
+        resources: Self::Resources<'_>,
     ) -> CuResult<Self>
     where
         Self: Sized;
@@ -583,13 +599,15 @@ mod tests {
     impl Freezable for ExampleBridge {}
 
     impl CuBridge for ExampleBridge {
+        type Resources<'r> = ();
         type Tx = TxChannels;
         type Rx = RxChannels;
 
-        fn new(
+        fn new_with(
             config: Option<&ComponentConfig>,
             _tx_channels: &[BridgeChannelConfig<TxId>],
             _rx_channels: &[BridgeChannelConfig<RxId>],
+            _resources: Self::Resources<'_>,
         ) -> CuResult<Self> {
             let mut instance = ExampleBridge::default();
             if let Some(cfg) = config {

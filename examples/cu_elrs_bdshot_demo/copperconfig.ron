@@ -1,4 +1,10 @@
 (
+    resources: [
+        (
+            id: "fc",
+            provider: "crate::resources::RadioBundle",
+        ),
+    ],
     tasks: [
         (id: "thr", type: "tasks::ThrottleControl"),
         (id: "tele0", type: "tasks::TelemetrySink0"),
@@ -8,8 +14,8 @@
     ],
     bridges: [
         (  id: "crsf",
-           type: "cu_crsf::CrsfBridge<SerialPort, SerialPortError>",
-           //  config: {"serial_port_index": 0} is default
+           type: "cu_crsf::CrsfBridge<SerialResource, SerialPortError>",
+           resources: { serial: "fc.serial" },
            channels: [
                 Rx ( id: "rc_rx" ),  // receiving RC Channels
                 Tx ( id: "lq_tx" ),  // Sending LineQuality back

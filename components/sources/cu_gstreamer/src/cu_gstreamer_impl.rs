@@ -75,9 +75,10 @@ pub struct CuGStreamer<const N: usize> {
 impl<const N: usize> Freezable for CuGStreamer<N> {}
 
 impl<const N: usize> CuSrcTask for CuGStreamer<N> {
+    type Resources<'r> = ();
     type Output<'m> = output_msg!(CuGstBuffer);
 
-    fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {

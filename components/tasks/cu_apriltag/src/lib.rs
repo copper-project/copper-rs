@@ -162,10 +162,14 @@ impl Freezable for AprilTags {}
 
 #[cfg(windows)]
 impl CuTask for AprilTags {
+    type Resources<'r> = ();
     type Input<'m> = input_msg!(CuImage<Vec<u8>>);
     type Output<'m> = output_msg!(AprilTagDetections);
 
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -184,10 +188,14 @@ impl CuTask for AprilTags {
 
 #[cfg(not(windows))]
 impl CuTask for AprilTags {
+    type Resources<'r> = ();
     type Input<'m> = input_msg!(CuImage<Vec<u8>>);
     type Output<'m> = output_msg!(AprilTagDetections);
 
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
     where
         Self: Sized,
     {

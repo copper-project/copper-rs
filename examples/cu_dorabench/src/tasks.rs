@@ -13,9 +13,13 @@ pub struct DoraSource<const S: usize> {
 impl<const S: usize> Freezable for DoraSource<S> {}
 
 impl<const S: usize> CuSrcTask for DoraSource<S> {
+    type Resources<'r> = ();
     type Output<'m> = output_msg!(DoraPayload);
 
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -37,9 +41,13 @@ pub struct DoraSink<const S: usize> {}
 impl<const S: usize> Freezable for DoraSink<S> {}
 
 impl<const S: usize> CuSinkTask for DoraSink<S> {
+    type Resources<'r> = ();
     type Input<'m> = input_msg!(DoraPayload);
 
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
     where
         Self: Sized,
     {

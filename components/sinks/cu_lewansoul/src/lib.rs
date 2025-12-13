@@ -197,9 +197,10 @@ impl Decode<()> for ServoPositionsPayload {
 }
 
 impl CuSinkTask for Lewansoul {
+    type Resources<'r> = ();
     type Input<'m> = input_msg!(ServoPositionsPayload);
 
-    fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
