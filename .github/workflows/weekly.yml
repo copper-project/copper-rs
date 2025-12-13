@@ -34,7 +34,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     env:
-      DYLD_LIBRARY_PATH: /Library/Frameworks/GStreamer.framework/Versions/Current/lib:$DYLD_LIBRARY_PATH
+      DYLD_LIBRARY_PATH: /opt/homebrew/opt/gstreamer/lib:/usr/local/opt/gstreamer/lib:$DYLD_LIBRARY_PATH
       BASE_FEATURES: macro_debug,mock,perf-ui,image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
 
     strategy:
@@ -134,13 +134,22 @@ jobs:
             gstreamer1.0-qt5 \
             gstreamer1.0-pulseaudio
 
-      - name: Setup GStreamer
-        if: runner.os == 'MacOS'
-        id: setup_gstreamer_other
-        uses: blinemedical/setup-gstreamer@v1.4.0
-        with:
-          arch: 'arm64'
-          version: 1.24.12
+      - name: Install GStreamer (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew update
+          brew install \
+            gstreamer \
+            gst-plugins-base \
+            gst-plugins-good \
+            gst-plugins-bad \
+            gst-plugins-ugly \
+            gst-libav \
+            gst-plugins-rs \
+            gtk+3 \
+            qt@5
+          echo "DYLD_LIBRARY_PATH=/opt/homebrew/opt/gstreamer/lib:/usr/local/opt/gstreamer/lib:$DYLD_LIBRARY_PATH" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig:/opt/homebrew/opt/gstreamer/lib/pkgconfig:$(brew --prefix qt@5)/lib/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
 
       - name: Debug GStreamer Installation
         if: runner.os == 'macOS'
@@ -149,14 +158,12 @@ jobs:
           pkg-config --modversion gstreamer-1.0 || { echo "GStreamer not found!"; }
 
           echo "Checking GStreamer library path..."
-          if [[ -d "/Library/Frameworks/GStreamer.framework" ]]; then
-            echo "GStreamer is installed at /Library/Frameworks/GStreamer.framework"
+          if [[ -d "/opt/homebrew/opt/gstreamer/lib" ]]; then
+            echo "GStreamer is installed at /opt/homebrew/opt/gstreamer/lib"
+            ls -l /opt/homebrew/opt/gstreamer/lib | head
           else
-            echo "GStreamer framework is missing!"
+            echo "GStreamer libraries missing!"
           fi
-
-          echo "Checking GStreamer shared libraries..."
-          ls -l /Library/Frameworks/GStreamer.framework/Versions/Current/lib/ | grep libgstapp || { echo "libgstapp missing!"; }
 
           echo "Checking PKG_CONFIG_PATH..."
           echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
