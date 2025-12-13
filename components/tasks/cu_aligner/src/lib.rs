@@ -24,12 +24,13 @@ macro_rules! define_task {
         impl Freezable for $name {}
 
         impl CuTask for $name {
+    type Resources<'r> = ();
             type Input<'m> = input_msg!('m, $($p),*);
             type Output<'m> = output_msg!(($(
                 cu29::payload::CuArray<$p, { $mos }>
             ),*));
 
-            fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
+            fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
             where
                 Self: Sized,
             {

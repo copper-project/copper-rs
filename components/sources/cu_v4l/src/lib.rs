@@ -12,9 +12,13 @@ mod empty_impl {
     impl Freezable for V4l {}
 
     impl CuSrcTask for V4l {
+        type Resources<'r> = ();
         type Output<'m> = output_msg!(CuImage<Vec<u8>>);
 
-        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+        fn new_with(
+            _config: Option<&ComponentConfig>,
+            _resources: Self::Resources<'_>,
+        ) -> CuResult<Self>
         where
             Self: Sized,
         {
@@ -70,9 +74,13 @@ mod linux_impl {
     }
 
     impl CuSrcTask for V4l {
+        type Resources<'r> = ();
         type Output<'m> = output_msg!(CuImage<Vec<u8>>);
 
-        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+        fn new_with(
+            _config: Option<&ComponentConfig>,
+            _resources: Self::Resources<'_>,
+        ) -> CuResult<Self>
         where
             Self: Sized,
         {

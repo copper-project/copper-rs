@@ -18,9 +18,13 @@ struct RerunPlyViz {
 impl Freezable for RerunPlyViz {}
 
 impl CuSinkTask for RerunPlyViz {
+    type Resources<'r> = ();
     type Input<'m> = input_msg!(LidarCuMsgPayload);
 
-    fn new(_config: Option<&ComponentConfig>) -> Result<Self, CuError>
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> Result<Self, CuError>
     where
         Self: Sized,
     {

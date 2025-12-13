@@ -22,9 +22,13 @@ impl Freezable for CaterpillarSource {
 }
 
 impl CuSrcTask for CaterpillarSource {
+    type Resources<'r> = ();
     type Output<'m> = output_msg!(RPGpioPayload);
 
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -46,10 +50,14 @@ pub struct CaterpillarTask {}
 impl Freezable for CaterpillarTask {}
 
 impl CuTask for CaterpillarTask {
+    type Resources<'r> = ();
     type Input<'m> = input_msg!(RPGpioPayload);
     type Output<'m> = output_msg!(RPGpioPayload);
 
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
     where
         Self: Sized,
     {

@@ -5,7 +5,7 @@ extern crate alloc;
 
 pub mod messages;
 
-pub use spin::{Mutex, Once};
+pub use spin::Mutex;
 
 // std implementation
 #[cfg(feature = "std")]
@@ -17,16 +17,6 @@ mod std_impl {
     pub const SERIAL_TIMEOUT_KEY: &str = "timeout_ms";
 }
 
-// no-std implementation
-#[cfg(not(feature = "std"))]
-mod no_std_impl {
-    pub use alloc::format;
-
-    pub const SERIAL_INDEX_KEY: &str = "serial_port_index";
-}
-
-#[cfg(not(feature = "std"))]
-use no_std_impl::*;
 #[cfg(feature = "std")]
 use std_impl::*;
 
@@ -36,57 +26,15 @@ use cu29::cubridge::{
     BridgeChannel, BridgeChannelConfig, BridgeChannelInfo, BridgeChannelSet, CuBridge,
 };
 use cu29::prelude::*;
-use embedded_io::{Read, Write};
+#[cfg(feature = "std")]
+use cu29::resource::ResourceBundle;
+#[cfg(feature = "std")]
+use cu29::resource::ResourceDecl;
+use cu29::resources;
+use embedded_io::{ErrorType, Read, Write};
 
 const READ_BUFFER_SIZE: usize = 1024;
 const PARSER_BUFFER_SIZE: usize = 1024;
-
-pub trait SerialFactory<E>: Write<Error = E> + Read<Error = E> + Send + 'static {
-    fn try_new(config: Option<&ComponentConfig>) -> CuResult<Self>
-    where
-        Self: Sized;
-}
-
-#[cfg(not(feature = "std"))]
-impl<S, E> SerialFactory<E> for S
-where
-    S: Write<Error = E> + Read<Error = E> + Send + 'static,
-{
-    fn try_new(config: Option<&ComponentConfig>) -> CuResult<Self> {
-        let slot = config
-            .and_then(|cfg| cfg.get::<u32>(SERIAL_INDEX_KEY))
-            .map(|v| v as usize)
-            .unwrap_or(0);
-
-        cu_embedded_registry::take(slot).ok_or_else(|| {
-            CuError::from(format!(
-                "CRSF bridge missing serial for slot {slot} (max index {})",
-                cu_embedded_registry::MAX_SERIAL_SLOTS - 1
-            ))
-        })
-    }
-}
-
-#[cfg(feature = "std")]
-impl SerialFactory<std::io::Error> for std_serial::StdSerial {
-    fn try_new(config: Option<&ComponentConfig>) -> CuResult<Self> {
-        let cfg = config.ok_or_else(|| {
-            CuError::from("CRSF bridge requires configuration with serial parameters")
-        })?;
-
-        let path = cfg
-            .get::<String>(SERIAL_PATH_KEY)
-            .ok_or_else(|| CuError::from("CRSF bridge config missing `serial_path` entry"))?;
-        let baud = cfg.get::<u32>(SERIAL_BAUD_KEY).unwrap_or(420_000);
-        let timeout_ms = cfg.get::<u32>(SERIAL_TIMEOUT_KEY).unwrap_or(100) as u64;
-
-        std_serial::open(&path, baud, timeout_ms).map_err(|err| {
-            CuError::from(format!(
-                "Failed to open serial `{path}` at {baud} baud: {err}"
-            ))
-        })
-    }
-}
 
 rx_channels! {
     lq_rx => LinkStatisticsPayload,
@@ -98,6 +46,10 @@ tx_channels! {
     lq_tx => LinkStatisticsPayload,
     rc_tx => RcChannelsPayload
 }
+
+resources!(for<S, E> where S: Write<Error = E> + Read<Error = E> + Send + Sync + 'static {
+    serial => Owned<S>,
+});
 
 /// Crossfire bridge for Copper-rs.
 pub struct CrsfBridge<S, E>
@@ -160,30 +112,21 @@ where
     }
 }
 
-#[cfg(not(feature = "std"))]
-impl<S, E> CrsfBridge<S, E>
-where
-    S: SerialFactory<E>,
-{
-    /// Register a serial port for use with CRSF bridge in no-std environments
-    pub fn register_serial(slot: usize, serial_port: S) -> CuResult<()> {
-        cu_embedded_registry::register(slot, serial_port)
-    }
-}
-
 impl<S, E> Freezable for CrsfBridge<S, E> where S: Write<Error = E> + Read<Error = E> {}
 
 impl<S, E> CuBridge for CrsfBridge<S, E>
 where
-    S: SerialFactory<E>,
+    S: Write<Error = E> + Read<Error = E> + Send + Sync + 'static,
 {
     type Tx = TxChannels;
     type Rx = RxChannels;
+    type Resources<'r> = Resources<S, E>;
 
-    fn new(
+    fn new_with(
         config: Option<&ComponentConfig>,
         tx_channels: &[BridgeChannelConfig<<Self::Tx as BridgeChannelSet>::Id>],
         rx_channels: &[BridgeChannelConfig<<Self::Rx as BridgeChannelSet>::Id>],
+        resources: Self::Resources<'_>,
     ) -> CuResult<Self>
     where
         Self: Sized,
@@ -191,7 +134,9 @@ where
         let _ = tx_channels;
         let _ = rx_channels;
 
-        Ok(Self::from_serial(S::try_new(config)?))
+        let _ = config;
+
+        Ok(Self::from_serial(resources.serial.0))
     }
 
     fn send<'a, Payload>(
@@ -280,3 +225,79 @@ pub mod std_serial {
         Ok(FromStd::new(port))
     }
 }
+
+#[cfg(feature = "std")]
+pub struct StdSerialBundle;
+
+#[cfg(feature = "std")]
+impl ResourceBundle for StdSerialBundle {
+    fn build(
+        bundle_id: &str,
+        config: Option<&ComponentConfig>,
+        resources: &[ResourceDecl],
+        manager: &mut ResourceManager,
+    ) -> CuResult<()> {
+        let cfg = config.ok_or_else(|| {
+            CuError::from(format!(
+                "CRSF serial bundle `{bundle_id}` requires configuration"
+            ))
+        })?;
+        let path = cfg.get::<String>(SERIAL_PATH_KEY).ok_or_else(|| {
+            CuError::from(format!(
+                "CRSF serial bundle `{bundle_id}` missing `serial_path` entry"
+            ))
+        })?;
+        let baud = cfg.get::<u32>(SERIAL_BAUD_KEY).unwrap_or(420_000);
+        let timeout_ms = cfg.get::<u32>(SERIAL_TIMEOUT_KEY).unwrap_or(100) as u64;
+
+        let serial = std_serial::open(&path, baud, timeout_ms).map_err(|err| {
+            CuError::from(format!(
+                "Failed to open serial `{path}` at {baud} baud: {err}"
+            ))
+        })?;
+        let key = resources
+            .first()
+            .ok_or_else(|| {
+                CuError::from(format!(
+                    "CRSF serial bundle `{bundle_id}` missing resource decl"
+                ))
+            })?
+            .key;
+        manager.add_owned(key.typed(), LockedSerial::new(serial))
+    }
+}
+
+pub struct LockedSerial<T>(pub Mutex<T>);
+
+impl<T> LockedSerial<T> {
+    pub fn new(inner: T) -> Self {
+        Self(Mutex::new(inner))
+    }
+}
+
+impl<T: ErrorType> ErrorType for LockedSerial<T> {
+    type Error = T::Error;
+}
+
+impl<T: Read> Read for LockedSerial<T> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        let mut guard = self.0.lock();
+        guard.read(buf)
+    }
+}
+
+impl<T: Write> Write for LockedSerial<T> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+        let mut guard = self.0.lock();
+        guard.write(buf)
+    }
+
+    fn flush(&mut self) -> Result<(), Self::Error> {
+        let mut guard = self.0.lock();
+        guard.flush()
+    }
+}
+
+/// Convenience alias for std targets.
+#[cfg(feature = "std")]
+pub type CrsfBridgeStd = CrsfBridge<LockedSerial<std_serial::StdSerial>, std::io::Error>;
