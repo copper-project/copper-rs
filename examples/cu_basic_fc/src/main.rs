@@ -139,30 +139,18 @@ fn main() -> ! {
 
     let dp = pac::Peripherals::take().unwrap();
 
-    // Clocks: match the INAV setup (480 MHz SYSCLK, 240 MHz HCLK, 120 MHz PCLKs)
-    // and feed SDMMC from a 200 MHz PLL2R kernel clock.
+    // Clocks: mirror the known-good sdcard-test setup.
     let pwr = dp.PWR.constrain();
-    let pwrcfg = pwr.freeze();
+    let vos = pwr.freeze();
     let rcc = dp.RCC.constrain();
-    // Clocks: 25MHz HSE -> 400 MHz SYS, HCLK 200, PCLKs 100, PLL2R 200 for SDMMC.
-    let mut ccdr = rcc
-        .use_hse(25.MHz())
+    let ccdr = rcc
         .sys_ck(400.MHz())
-        .hclk(200.MHz())
-        .pclk1(100.MHz())
-        .pclk2(100.MHz())
-        .pclk3(100.MHz())
-        .pclk4(100.MHz())
-        .pll2_r_ck(200.MHz())
-        .freeze(pwrcfg, &dp.SYSCFG);
-    ccdr
-        .peripheral
-        .kernel_sdmmc_clk_mux(rcc::rec::SdmmcClkSel::Pll2R);
-    let sys_hz = ccdr.clocks.sys_ck().raw();
+        .pll1_q_ck(100.MHz())
+        .freeze(vos, &dp.SYSCFG);
     let sdmmc1_rec = ccdr.peripheral.SDMMC1;
 
     defmt::info!("Boot: core enabled");
-    defmt::info!("Clocks configured: sysclk={}Hz", sys_hz);
+    defmt::info!("Clocks configured");
 
     init_heap();
     defmt::info!("Heap initialized");
@@ -209,36 +197,12 @@ fn main() -> ! {
         sdmmc1_rec,
         &ccdr.clocks,
         (
-            gpioc
-                .pc12
-                .into_alternate::<12>()
-                .internal_pull_up(false)
-                .speed(Speed::VeryHigh), // CLK - no pull-up
-            gpiod
-                .pd2
-                .into_alternate::<12>()
-                .internal_pull_up(false)
-                .speed(Speed::VeryHigh), // CMD no PU (matches INAV IOCFG_SDMMC)
-            gpioc
-                .pc8
-                .into_alternate::<12>()
-                .internal_pull_up(false)
-                .speed(Speed::VeryHigh), // D0
-            gpioc
-                .pc9
-                .into_alternate::<12>()
-                .internal_pull_up(false)
-                .speed(Speed::VeryHigh), // D1
-            gpioc
-                .pc10
-                .into_alternate::<12>()
-                .internal_pull_up(false)
-                .speed(Speed::VeryHigh), // D2
-            gpioc
-                .pc11
-                .into_alternate::<12>()
-                .internal_pull_up(false)
-                .speed(Speed::VeryHigh), // D3
+            gpioc.pc12.into_alternate::<12>().speed(Speed::VeryHigh),
+            gpiod.pd2.into_alternate::<12>().speed(Speed::VeryHigh),
+            gpioc.pc8.into_alternate::<12>().speed(Speed::VeryHigh),
+            gpioc.pc9.into_alternate::<12>().speed(Speed::VeryHigh),
+            gpioc.pc10.into_alternate::<12>().speed(Speed::VeryHigh),
+            gpioc.pc11.into_alternate::<12>().speed(Speed::VeryHigh),
         ),
     ) {
         Ok(l) => l,
@@ -283,63 +247,16 @@ fn init_sd_logger(
         impl sdmmc::PinD3<pac::SDMMC1>,
     ),
 ) -> Result<Logger, CuError> {
-    // Make sure SDMMC1 is clocked and reset cleanly before HAL touches it.
-    unsafe {
-        let rcc = &*pac::RCC::ptr();
-        // Select PLL2R as kernel clock explicitly (00: PLL1Q, 01: PLL2R).
-        rcc.d1ccipr.modify(|_, w| w.sdmmcsel().bit(true));
-        // Enable clock and pulse reset.
-        rcc.ahb3enr.modify(|_, w| w.sdmmc1en().set_bit());
-        rcc.ahb3rstr.modify(|_, w| w.sdmmc1rst().set_bit());
-        rcc.ahb3rstr.modify(|_, w| w.sdmmc1rst().clear_bit());
-    }
-
-    defmt::info!("SDMMC: constructing peripheral (kernel clk=200MHz via PLL2R)");
-    // Force 1-bit bus during bring-up to reduce sensitivity to extra lines.
+    defmt::info!("Basic Init done, creating sdmmc...");
     let mut sdmmc: Sdmmc<_, SdCard> = sdmmc1.sdmmc(pins, sdmmc1_rec, clocks);
-    // Match INAV: sample on falling edge.
+
+    defmt::info!("Init()... ");
     sdmmc
-        .inner_mut()
-        .clkcr
-        .modify(|_, w| w.negedge().set_bit());
-    // Start at a safe 400 kHz identification clock; can be raised later.
-    let bus_frequency = 400.kHz();
-
-    defmt::info!("SDMMC: init (ensure SD card is properly inserted)");
-    defmt::info!("SDMMC: checking hardware status...");
-    
-    // Check if SDMMC is properly enabled before attempting init
-    unsafe {
-        let rcc = &*pac::RCC::ptr();
-        let ahb3enr = rcc.ahb3enr.read();
-        let d1ccipr = rcc.d1ccipr.read();
-        defmt::info!("SDMMC1 clock enabled: {}", ahb3enr.sdmmc1en().bit());
-        defmt::info!("SDMMC1 kernel clock sel: {}", d1ccipr.sdmmcsel().bit());
-    }
-    
-    // Add some delay before init to ensure hardware is stable
-    defmt::info!("SDMMC: waiting for hardware stabilization...");
-    cortex_m::asm::delay(50_000_000); // ~50ms delay at typical CPU speeds
-    
-    defmt::info!("SDMMC: attempting init with {}Hz bus freq", bus_frequency.raw());
-    
-    // Try init with timeout detection by checking if we can at least start
-    let init_result = sdmmc.init(bus_frequency);
-    
-    match init_result {
-        Ok(_) => {
-            defmt::info!("SDMMC: initialization successful, scanning for Copper partition");
-        }
-        Err(e) => {
-            defmt::error!("SDMMC init failed with error: {:?}", defmt::Debug2Format(&e));
-            return Err(CuError::from("SDMMC init failed"));
-        }
-    }
-
-    if let Err(e) = sdmmc.card() {
-        defmt::warn!("No SD card detected: {:?}", e);
-        return Err(CuError::from("no sd card"));
-    }
+        .init(25.MHz())
+        .map_err(|_| CuError::from("SDMMC init failed"))?;
+    defmt::info!("Init passed ... ");
+    sdmmc.card().map_err(|_| CuError::from("no sd card"))?;
+    defmt::info!("Card detected!!");
 
     let bd = ForceSyncSend::new(sdmmc.sdmmc_block_device());
 

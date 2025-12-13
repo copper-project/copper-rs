@@ -20,5 +20,12 @@
         (src: "mapper", dst: "control_sink", msg: "tasks::ControlInputs"),
         (src: "mapper", dst: "led_blink", msg: "tasks::ControlInputs"),
     ],
-    monitor: None,
+    monitor: (
+        type: "cu_logmon::CuLogMon",
+    ),
+    logging: (
+        slab_size_mib: 16,
+        section_size_mib: 4,
+        enable_task_logging: false,
+    ),
 )

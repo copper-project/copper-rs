@@ -20,6 +20,7 @@ cu-bdshot = { path = "../../components/bridges/cu_bdshot", optional = true }
 cu-crsf = { path = "../../components/bridges/cu_crsf", default-features = false, features = ["defmt", "alloc"], optional = true }
 cu-sdlogger = { path = "../../components/libs/cu_sdlogger", optional = true }
 cu-embedded-registry = { path = "../../components/libs/cu_embedded_registry", default-features = false, features = ["defmt"], optional = true }
+cu-logmon = { path = "../../components/monitors/cu_logmon", default-features = false, features = ["defmt"], optional = true }
 
 ### Algos
 cu-pid = { path = "../../components/tasks/cu_pid", default-features = false, version = "0.11.0" }
@@ -69,6 +70,7 @@ firmware = [
   "dep:cu-crsf",
   "dep:cu-embedded-registry",
   "dep:cu-sdlogger",
+  "dep:cu-logmon",
 ]
 logreader = ["dep:cu29-export"]
 sim = [
