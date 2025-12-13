@@ -16,7 +16,6 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     env:
-      DYLD_LIBRARY_PATH: /opt/homebrew/opt/gstreamer/lib:/usr/local/opt/gstreamer/lib:$DYLD_LIBRARY_PATH
       BASE_FEATURES: macro_debug,mock,perf-ui,image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
 
     strategy:
