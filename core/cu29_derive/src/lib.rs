@@ -685,37 +685,50 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         #[cfg(feature = "macro_debug")]
         eprintln!("[gen instances]");
-        let task_sim_instances_init_code = all_sim_tasks_types.iter().zip(&task_specs.background_flags).enumerate().map(|(index, (ty, background))| {
-            let additional_error_info = format!(
-                "Failed to get create instance for {}, instance index {}.",
-                task_specs.type_names[index], index
-            );
-            let is_background = *background;
+        let task_sim_instances_init_code = all_sim_tasks_types
+            .iter()
+            .zip(&task_specs.background_flags)
+            .enumerate()
+            .map(|(index, (ty, background))| {
+                let additional_error_info = format!(
+                    "Failed to get create instance for {}, instance index {}.",
+                    task_specs.type_names[index], index
+                );
 
-            quote! {
-                if #is_background {
-                    <#ty>::new(all_instances_configs[#index], threadpool.clone()).map_err(|e| e.add_cause(#additional_error_info))?
+                let call = if *background {
+                    quote! { <#ty>::new(all_instances_configs[#index], threadpool.clone()) }
                 } else {
-                    <#ty>::new(all_instances_configs[#index]).map_err(|e| e.add_cause(#additional_error_info))?
-                }
-            }
-        }).collect::<Vec<_>>();
+                    quote! { <#ty>::new(all_instances_configs[#index]) }
+                };
 
-        let task_instances_init_code = task_specs.instantiation_types.iter().zip(&task_specs.background_flags).enumerate().map(|(index, (task_type, background))| {
-            let additional_error_info = format!(
-                "Failed to get create instance for {}, instance index {}.",
-                task_specs.type_names[index], index
-            );
-            if *background {
                 quote! {
-                    #task_type::new(all_instances_configs[#index], threadpool.clone()).map_err(|e| e.add_cause(#additional_error_info))?
+                    #call.map_err(|e| e.add_cause(#additional_error_info))?
                 }
-            } else {
+            })
+            .collect::<Vec<_>>();
+
+        let task_instances_init_code = task_specs
+            .instantiation_types
+            .iter()
+            .zip(&task_specs.background_flags)
+            .enumerate()
+            .map(|(index, (task_type, background))| {
+                let additional_error_info = format!(
+                    "Failed to get create instance for {}, instance index {}.",
+                    task_specs.type_names[index], index
+                );
+
+                let call = if *background {
+                    quote! { #task_type::new(all_instances_configs[#index], threadpool.clone()) }
+                } else {
+                    quote! { #task_type::new(all_instances_configs[#index]) }
+                };
+
                 quote! {
-                    #task_type::new(all_instances_configs[#index]).map_err(|e| e.add_cause(#additional_error_info))?
+                    #call.map_err(|e| e.add_cause(#additional_error_info))?
                 }
-            }
-        }).collect::<Vec<_>>();
+            })
+            .collect::<Vec<_>>();
 
         // Generate the code to create instances of the nodes
         // It maps the types to their index
