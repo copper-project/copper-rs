@@ -1,0 +1,31 @@
+(
+    tasks: [
+        (id: "mapper", type: "tasks::RcMapper"),
+        (id: "control_sink", type: "tasks::ControlSink"),
+        (id: "led_blink", type: "tasks::LedBeat"),
+    ],
+
+    bridges: [
+        (  id: "rc",
+           type: "cu_crsf::CrsfBridge<SerialPort, SerialPortError>",
+           channels: [
+                Rx ( id: "rc_rx" ),  // receiving RC Channels
+                Tx ( id: "lq_tx" ),  // Sending LineQuality back
+            ],
+        ),
+    ],
+
+    cnx: [
+        (src: "rc/rc_rx", dst: "mapper", msg: "cu_crsf::messages::RcChannelsPayload"),
+        (src: "mapper", dst: "control_sink", msg: "tasks::ControlInputs"),
+        (src: "mapper", dst: "led_blink", msg: "tasks::ControlInputs"),
+    ],
+    monitor: (
+        type: "cu_logmon::CuLogMon",
+    ),
+    logging: (
+        slab_size_mib: 16,
+        section_size_mib: 4,
+        enable_task_logging: false,
+    ),
+)

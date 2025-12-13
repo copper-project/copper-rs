@@ -6,19 +6,18 @@ extern crate alloc;
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
-use core::ops::Sub;
 use cortex_m_rt::entry;
 use hal::{clocks::init_clocks_and_plls, gpio::Pins, pac, sio::Sio, watchdog::Watchdog};
 use rp235x_hal as hal;
 use rp235x_hal::gpio::bank0::{Gpio15, Gpio16, Gpio17, Gpio18, Gpio19};
 
+use cu_sdlogger::sdmmc::SdCard;
 use cu_sdlogger::{find_copper_partition, EMMCLogger, EMMCSectionStorage, ForceSyncSend};
 use buddy_system_allocator::LockedHeap as Heap;
 use cu29::prelude::*;
 use defmt_rtt as _;
 use embedded_hal::spi::MODE_0;
 use embedded_hal_bus::spi::ExclusiveDevice;
-use embedded_sdmmc::SdCard;
 use panic_probe as _;
 use rp235x_hal::fugit::RateExtU32;
 use rp235x_hal::gpio::{

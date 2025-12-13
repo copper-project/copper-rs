@@ -12,9 +12,14 @@ repository.workspace = true
 
 [dependencies]
 cu29 = { path = "../../../core/cu29", version = "0.11.0", default-features = false }
-embedded-sdmmc = { version = "0.9", default-features = false }
+# HALs we target (e.g. stm32h7xx-hal 0.16) still vendor embedded-sdmmc 0.5, so keep it aligned to avoid dual versions.
+embedded-sdmmc = { version = "0.5", default-features = false, optional = true }
+# Some HALs (e.g. rp235x-hal) sit on embedded-hal 1.0 and need embedded-sdmmc 0.9.
+embedded-sdmmc-eh1 = { package = "embedded-sdmmc", version = "0.9", default-features = false, optional = true }
 bincode = { workspace = true }
 
 [features]
-default = []
+default = ["eh02"]
 std = []
+eh02 = ["dep:embedded-sdmmc"]
+eh1 = ["dep:embedded-sdmmc-eh1"]

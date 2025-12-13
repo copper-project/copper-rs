@@ -1,0 +1,18 @@
+import "../../justfile"
+
+dag:
+  #!/usr/bin/env bash
+  pushd {{ROOT}}
+  cargo run -p cu29-runtime --bin cu29-rendercfg -- --open examples/cu_basic_fc/copperconfig.ron 
+  popd
+
+# A quick test to see if the sim can pick up your RC.
+rc:
+  #!/usr/bin/env bash
+  cargo run -p cu-basic-fc --no-default-features --features sim --bin rc-tester
+
+# Build firmware-only target using the firmware-specific Cargo config
+fw:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cargo run --release --config .cargo/config-firmware.toml --no-default-features --features firmware -p cu-basic-fc --bin quad

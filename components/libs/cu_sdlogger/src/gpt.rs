@@ -1,4 +1,4 @@
-use embedded_sdmmc::{Block, BlockCount, BlockDevice, BlockIdx};
+use crate::sdmmc::{Block, BlockCount, BlockDevice, BlockIdx};
 
 /// Scan the GPT on the SD/eMMC card and return the block range of the Cu29 partition.
 pub fn find_copper_partition<D: BlockDevice>(
@@ -18,7 +18,7 @@ pub fn find_copper_partition<D: BlockDevice>(
     ];
 
     let mut hdr = [Block::new(); 1];
-    sd.read(&mut hdr, BlockIdx(1))?;
+    read_blocks(sd, &mut hdr, BlockIdx(1), "gpt-lba1")?;
     let h: &[u8] = &hdr[0].contents;
     if &h[0..8] != b"EFI PART" {
         return Ok(None);
@@ -36,7 +36,7 @@ pub fn find_copper_partition<D: BlockDevice>(
     let mut buf = [Block::new(); 1];
 
     while remain > 0 {
-        sd.read(&mut buf, BlockIdx(lba))?;
+        read_blocks(sd, &mut buf, BlockIdx(lba), "gpt-entry")?;
         let b = &buf[0].contents;
         let usable = core::cmp::min(remain, Block::LEN);
 
@@ -58,4 +58,24 @@ pub fn find_copper_partition<D: BlockDevice>(
     }
 
     Ok(None)
+}
+
+#[cfg(feature = "eh02")]
+fn read_blocks<D: BlockDevice>(
+    dev: &D,
+    blocks: &mut [Block],
+    start_block_idx: BlockIdx,
+    reason: &str,
+) -> Result<(), D::Error> {
+    dev.read(blocks, start_block_idx, reason)
+}
+
+#[cfg(feature = "eh1")]
+fn read_blocks<D: BlockDevice>(
+    dev: &D,
+    blocks: &mut [Block],
+    start_block_idx: BlockIdx,
+    _reason: &str,
+) -> Result<(), D::Error> {
+    dev.read(blocks, start_block_idx)
 }
