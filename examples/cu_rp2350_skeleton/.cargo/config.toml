@@ -2,8 +2,9 @@
 DEFMT_LOG = "debug"
 
 [alias]
-build-logreader = "build --no-default-features --features host --bin blinky-logreader"
-run-logreader = "run --no-default-features --features host --bin blinky-logreader"
+# Force host target for logreader to avoid inheriting the default thumb target.
+build-logreader = "build --target=x86_64-unknown-linux-gnu --no-default-features --features host --bin blinky-logreader"
+run-logreader = "run --target=x86_64-unknown-linux-gnu --no-default-features --features host --bin blinky-logreader"
 build-arm = "build --target=thumbv8m.main-none-eabihf --bin cu-blinky --features firmware"
 run-arm = "run --target=thumbv8m.main-none-eabihf --bin cu-blinky --features firmware"
 
