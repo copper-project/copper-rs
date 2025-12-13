@@ -4,12 +4,15 @@
 extern crate alloc;
 
 use alloc::sync::Arc;
+use alloc::vec;
+use buddy_system_allocator::LockedHeap as StdHeap;
 use cortex_m::{asm, peripheral::DWT};
 use cortex_m_rt::{entry, exception, ExceptionFrame};
 use cu29::prelude::*;
+use cu_sdlogger::{find_copper_partition, EMMCLogger, EMMCSectionStorage, ForceSyncSend};
+use cu_sensor_payloads::ImuPayload;
 use defmt::info;
 use defmt_rtt as _;
-use buddy_system_allocator::LockedHeap as StdHeap;
 use panic_probe as _;
 use spin::Mutex;
 use stm32h7xx_hal::{
@@ -17,17 +20,13 @@ use stm32h7xx_hal::{
         gpioc::{PC6, PC7},
         Alternate, Speed,
     },
-    pac,
+    nb, pac,
     prelude::*,
     rcc,
     sdmmc::{self, SdCard, Sdmmc, SdmmcBlockDevice},
     serial::Error as UartError,
-    nb,
     serial::{config::Config, Serial},
 };
-use cu_sensor_payloads::ImuPayload;
-use cu_sdlogger::{find_copper_partition, EMMCLogger, EMMCSectionStorage, ForceSyncSend};
-use alloc::vec;
 
 mod tasks;
 
@@ -51,7 +50,11 @@ pub struct DummyImu;
 pub type RpMpu9250Source = DummyImu;
 impl Freezable for DummyImu {}
 
-static GREEN_LED: Mutex<Option<stm32h7xx_hal::gpio::gpioe::PE6<stm32h7xx_hal::gpio::Output<stm32h7xx_hal::gpio::PushPull>>>> = Mutex::new(None);
+static GREEN_LED: Mutex<
+    Option<
+        stm32h7xx_hal::gpio::gpioe::PE6<stm32h7xx_hal::gpio::Output<stm32h7xx_hal::gpio::PushPull>>,
+    >,
+> = Mutex::new(None);
 
 type Uart6Pins = (PC6<Alternate<7>>, PC7<Alternate<7>>);
 
@@ -126,7 +129,6 @@ impl embedded_io::Write for SerialWrapper {
         Ok(())
     }
 }
-
 
 #[entry]
 fn main() -> ! {
@@ -231,7 +233,9 @@ fn main() -> ! {
             defmt::error!("App init failed: {:?}", e);
         }
     }
-    loop { asm::wfi(); }
+    loop {
+        asm::wfi();
+    }
 }
 
 fn init_sd_logger(
@@ -284,7 +288,7 @@ fn build_clock() -> RobotClock {
 fn init_heap() {
     unsafe {
         let start = HEAP_MEM.as_mut_ptr() as usize;
-        let size = core::mem::size_of_val(&mut const HEAP_MEM);
+        let size = core::mem::size_of_val(&HEAP_MEM);
         defmt::info!("Heap region start=0x{:x} size={}", start, size);
         ALLOC.lock().init(start, size);
     }

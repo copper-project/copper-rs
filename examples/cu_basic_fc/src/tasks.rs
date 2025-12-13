@@ -63,11 +63,7 @@ impl CuSinkTask for ControlSink {
         if let Some(ctrl) = inputs.payload() {
             info!(
                 "ctrl roll={} pitch={} yaw={} thr={} armed={}",
-                ctrl.roll,
-                ctrl.pitch,
-                ctrl.yaw,
-                ctrl.throttle,
-                ctrl.armed
+                ctrl.roll, ctrl.pitch, ctrl.yaw, ctrl.throttle, ctrl.armed
             );
         }
         Ok(())
