@@ -110,11 +110,11 @@ impl UnifiedLogWrite<MySectionStorage> for MyEmbeddedLogger {
 const HEAP_SIZE: usize = 128usize * 1024usize;
 
 #[cfg(not(feature = "std"))]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn main() {
     // the no std version
 
-    #[link_section = ".bss.heap"]
+    #[unsafe(link_section = ".bss.heap")]
     static mut HEAP: [u8; HEAP_SIZE] = [0; HEAP_SIZE];
 
     unsafe {
