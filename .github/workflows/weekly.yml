@@ -170,13 +170,6 @@ jobs:
           echo "Checking DYLD_LIBRARY_PATH..."
           echo "DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH"
 
-          echo "Checking linked libraries for cu_gstreamer..."
-          if ls target/debug/deps/cu_gstreamer-* 1> /dev/null 2>&1; then
-            otool -L target/debug/deps/cu_gstreamer-* | grep libgstapp || { echo "libgstapp is not linked!"; }
-          else
-            echo "cu_gstreamer binary not found, skipping otool check."
-          fi
-
 
       - name: Install CUDA
         uses: Jimver/cuda-toolkit@v0.2.28
@@ -236,6 +229,20 @@ jobs:
         run: cargo +beta clippy $RELEASE_FLAG --workspace --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES -- --deny warnings
       - name: Run build with all features on (${{ matrix.os }} | ${{matrix.mode}})
         run: cargo +beta build $RELEASE_FLAG --workspace --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES
+
+      - name: Verify GStreamer linkage (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          TARGET_DIR=target/debug
+          if [[ "$RELEASE_FLAG" == "--release" ]]; then
+            TARGET_DIR=target/release
+          fi
+          echo "Checking linked libraries in $TARGET_DIR..."
+          if ls "$TARGET_DIR"/deps/cu_gstreamer-* 1> /dev/null 2>&1; then
+            otool -L "$TARGET_DIR"/deps/cu_gstreamer-* | grep libgstapp || { echo "libgstapp is not linked!"; }
+          else
+            echo "cu_gstreamer binary not found, skipping otool check."
+          fi
 
       - name: Run doctests on (${{ matrix.os }} | debug)
         if: matrix.mode == 'debug'
