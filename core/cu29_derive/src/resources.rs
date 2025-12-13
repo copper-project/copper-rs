@@ -155,7 +155,7 @@ impl Parse for ResourcesMacro {
             parenthesized!(content in input);
             let params: Punctuated<Ident, Token![,]> =
                 content.parse_terminated(Ident::parse, Token![,])?;
-            generics.extend(params.into_iter());
+            generics.extend(params);
         }
 
         let mut where_preds = Vec::new();
