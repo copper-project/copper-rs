@@ -7,7 +7,7 @@ use cu29_traits::CuResult;
 use hashbrown::HashMap;
 use object_pool::{Pool, ReusableOwned};
 use smallvec::SmallVec;
-use std::alloc::{alloc, dealloc, Layout};
+use std::alloc::{Layout, alloc, dealloc};
 use std::fmt::Debug;
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex, OnceLock};

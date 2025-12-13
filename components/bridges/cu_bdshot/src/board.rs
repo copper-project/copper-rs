@@ -2,8 +2,8 @@ use crate::decode::{decode_telemetry_packet, extract_telemetry_payload_with_crc_
 use crate::esc_channel::EscChannel;
 use crate::messages::{DShotTelemetry, EscCommand};
 use cortex_m::asm;
-use cu29::prelude::CuError;
 use cu29::CuResult;
+use cu29::prelude::CuError;
 use hal::dma::Word;
 use hal::pac;
 use hal::pio::{PIOBuilder, StateMachineIndex, ValidStateMachine};

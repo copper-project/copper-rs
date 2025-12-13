@@ -4,7 +4,7 @@ use std::process::Command;
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{Color, Style, Theme, ThemeSet};
 use syntect::parsing::SyntaxSet;
-use syntect::util::{as_24_bit_terminal_escaped, LinesWithEndings};
+use syntect::util::{LinesWithEndings, as_24_bit_terminal_escaped};
 
 /// A utility method to ease up the debugging of the macro generated code by formatting it with rustfmt.
 #[allow(dead_code)]

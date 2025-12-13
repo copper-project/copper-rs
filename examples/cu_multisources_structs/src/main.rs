@@ -15,10 +15,10 @@ struct SimTestApplication {}
 
 fn main() {
     let logger_path = "logs/sim-test.copper";
-    if let Some(parent) = Path::new(logger_path).parent() {
-        if !parent.exists() {
-            std::fs::create_dir_all(parent).expect("Failed to create logs directory");
-        }
+    if let Some(parent) = Path::new(logger_path).parent()
+        && !parent.exists()
+    {
+        std::fs::create_dir_all(parent).expect("Failed to create logs directory");
     }
     let copper_ctx = basic_copper_setup(
         &PathBuf::from(&logger_path),

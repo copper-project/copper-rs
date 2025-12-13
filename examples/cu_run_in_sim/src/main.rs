@@ -126,10 +126,10 @@ fn main() -> CuResult<()> {
     #[allow(clippy::identity_op)]
     const LOG_SLAB_SIZE: Option<usize> = Some(1 * 1024 * 1024 * 1024);
     let logger_path = "logs/run_in_sim.copper";
-    if let Some(parent) = Path::new(logger_path).parent() {
-        if !parent.exists() {
-            fs::create_dir_all(parent).expect("Failed to create logs directory");
-        }
+    if let Some(parent) = Path::new(logger_path).parent()
+        && !parent.exists()
+    {
+        fs::create_dir_all(parent).expect("Failed to create logs directory");
     }
 
     // here we set up a mock clock so the simulation can take control of it.

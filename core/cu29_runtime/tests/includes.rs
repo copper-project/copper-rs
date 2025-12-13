@@ -1,6 +1,6 @@
 #[cfg(all(test, feature = "std"))]
 mod tests {
-    use cu29_runtime::config::{read_configuration, NodeId};
+    use cu29_runtime::config::{NodeId, read_configuration};
     use std::fs::{create_dir_all, write};
     use tempfile::tempdir;
 

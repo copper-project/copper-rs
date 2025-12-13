@@ -12,8 +12,8 @@ use cu29::prelude::*;
 mod imp {
     pub use alloc::sync::Arc;
     pub use alloc::vec;
-    pub use bincode::error::EncodeError;
     pub use bincode::Encode;
+    pub use bincode::error::EncodeError;
     pub use core::ptr::addr_of_mut;
     pub use spin::Mutex;
 }
@@ -110,11 +110,11 @@ impl UnifiedLogWrite<MySectionStorage> for MyEmbeddedLogger {
 const HEAP_SIZE: usize = 128usize * 1024usize;
 
 #[cfg(not(feature = "std"))]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn main() {
     // the no std version
 
-    #[link_section = ".bss.heap"]
+    #[unsafe(link_section = ".bss.heap")]
     static mut HEAP: [u8; HEAP_SIZE] = [0; HEAP_SIZE];
 
     unsafe {

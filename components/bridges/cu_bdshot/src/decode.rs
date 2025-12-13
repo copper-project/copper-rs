@@ -112,8 +112,8 @@ pub fn decode_telemetry_packet(payload: u16) -> DShotTelemetry {
 #[cfg(test)]
 mod tests {
     use super::{
-        decode_telemetry_packet, extract_telemetry_payload_with_crc_test, fold_gcr, gcr_to_16bit,
-        DShotTelemetry,
+        DShotTelemetry, decode_telemetry_packet, extract_telemetry_payload_with_crc_test, fold_gcr,
+        gcr_to_16bit,
     };
 
     #[test]

@@ -1,7 +1,7 @@
 use avian3d::prelude::*;
 use bevy::color::palettes::css::RED;
-use bevy::core_pipeline::fxaa::Fxaa;
 use bevy::core_pipeline::Skybox;
+use bevy::core_pipeline::fxaa::Fxaa;
 use bevy::input::{
     keyboard::KeyCode,
     mouse::{MouseButton, MouseMotion, MouseWheel},

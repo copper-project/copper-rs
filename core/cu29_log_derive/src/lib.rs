@@ -5,10 +5,10 @@ use cu29_log::CuLogLevel;
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::parse::Parser;
-use syn::spanned::Spanned;
 #[allow(unused)]
 use syn::Token;
+use syn::parse::Parser;
+use syn::spanned::Spanned;
 use syn::{Expr, ExprLit, Lit};
 
 /// Create reference of unused_variables to avoid warnings

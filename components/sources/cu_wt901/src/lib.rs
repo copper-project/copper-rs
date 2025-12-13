@@ -91,10 +91,18 @@ impl Display for PositionalReadingsPayload {
         write!(
             f,
             "acc_x: {}, acc_y: {}, acc_z: {}\n gyro_x: {}, gyro_y: {}, gyro_z: {}\nmag_x: {}, mag_y: {}, mag_z: {}\nroll: {}, pitch: {}, yaw: {}",
-            acc_style.with(self.acc_x), acc_style.with(self.acc_y), acc_style.with(self.acc_z),
-            angv_style.with(self.gyro_x), angv_style.with(self.gyro_y), angv_style.with(self.gyro_z),
-            mag_style.with(self.mag_x), mag_style.with(self.mag_y), mag_style.with(self.mag_z),
-            angle_style.with(self.roll), angle_style.with(self.pitch), angle_style.with(self.yaw)
+            acc_style.with(self.acc_x),
+            acc_style.with(self.acc_y),
+            acc_style.with(self.acc_z),
+            angv_style.with(self.gyro_x),
+            angv_style.with(self.gyro_y),
+            angv_style.with(self.gyro_z),
+            mag_style.with(self.mag_x),
+            mag_style.with(self.mag_y),
+            mag_style.with(self.mag_z),
+            angle_style.with(self.roll),
+            angle_style.with(self.pitch),
+            angle_style.with(self.yaw)
         )
     }
 }

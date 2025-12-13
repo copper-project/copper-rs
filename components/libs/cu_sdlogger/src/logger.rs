@@ -2,7 +2,7 @@ use alloc::sync::Arc;
 use bincode::config::standard;
 use bincode::enc::write::Writer as BincodeWriter;
 use bincode::error::EncodeError;
-use bincode::{encode_into_slice, encode_into_writer, Encode};
+use bincode::{Encode, encode_into_slice, encode_into_writer};
 use core::cell::UnsafeCell;
 use cu29::prelude::*;
 use embedded_sdmmc::{Block, BlockCount, BlockDevice, BlockIdx};

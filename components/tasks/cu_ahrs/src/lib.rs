@@ -4,8 +4,8 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 use bincode::{Decode, Encode};
-use cu29::prelude::*;
 use cu_sensor_payloads::ImuPayload;
+use cu29::prelude::*;
 use dcmimu::DCMIMU;
 use serde::Serialize;
 use uom::si::acceleration::meter_per_second_squared;

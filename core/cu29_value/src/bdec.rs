@@ -1,8 +1,8 @@
 use crate::Value;
+use bincode::BorrowDecode;
 use bincode::de::Decoder;
 use bincode::de::{BorrowDecoder, Decode};
 use bincode::error::DecodeError;
-use bincode::BorrowDecode;
 use cu29_clock::CuTime;
 
 #[cfg(not(feature = "std"))]

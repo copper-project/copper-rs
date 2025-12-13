@@ -3,8 +3,8 @@
 use packed_struct::derive::{PackedStruct, PrimitiveEnum};
 use serde::{Deserialize, Serialize};
 
-use crate::commands::MspCommandCode;
 use crate::MspPacketDirection::{FromFlightController, ToFlightController};
+use crate::commands::MspCommandCode;
 use crate::{MspPacket, MspPacketData};
 
 // std implementation

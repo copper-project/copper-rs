@@ -6,7 +6,7 @@ use cu29_clock::RobotClock;
 use cu29_log_runtime::LoggerRuntime;
 use cu29_runtime::curuntime::CopperContext;
 use cu29_traits::{CuResult, UnifiedLogType};
-use cu29_unifiedlog::{stream_write, UnifiedLogger, UnifiedLoggerBuilder};
+use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, stream_write};
 use simplelog::TermLogger;
 #[cfg(debug_assertions)]
 use simplelog::{ColorChoice, Config, LevelFilter, TerminalMode};

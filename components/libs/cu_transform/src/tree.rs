@@ -1,11 +1,11 @@
+use crate::FrameIdString;
 use crate::error::{TransformError, TransformResult};
 use crate::transform::{StampedTransform, TransformStore};
 use crate::transform_payload::StampedFrameTransform;
 use crate::velocity::VelocityTransform;
 use crate::velocity_cache::VelocityTransformCache;
-use crate::FrameIdString;
-use cu29::clock::{CuTime, RobotClock, Tov};
 use cu_spatial_payloads::Transform3D;
+use cu29::clock::{CuTime, RobotClock, Tov};
 use dashmap::DashMap;
 use petgraph::algo::dijkstra;
 use petgraph::graph::{DiGraph, NodeIndex};
@@ -330,7 +330,7 @@ where
             _ => {
                 return Err(TransformError::Unknown(
                     "Invalid Time of Validity".to_string(),
-                ))
+                ));
             }
         };
 
@@ -657,7 +657,7 @@ where
             // Apply the proper velocity transformation
             // We need the current position for proper velocity transformation
             let position = [T::default(); 3]; // Assume transformation at origin for simplicity
-                                              // A more accurate implementation would track the position
+            // A more accurate implementation would track the position
 
             // Apply velocity transformation
             if *inverse {
@@ -748,7 +748,7 @@ where
 mod tests {
     use super::*;
     use crate::test_utils::get_translation;
-    use crate::{frame_id, FrameTransform};
+    use crate::{FrameTransform, frame_id};
     use cu29::clock::{CuDuration, RobotClock};
 
     // Helper function to replace assert_relative_eq

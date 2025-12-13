@@ -1,6 +1,6 @@
 use cu29::prelude::*;
 
-use crate::board::{encode_frame, BdshotBoard};
+use crate::board::{BdshotBoard, encode_frame};
 use crate::messages::{EscCommand, EscTelemetry};
 
 pub trait BdshotBoardProvider {

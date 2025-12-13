@@ -120,10 +120,11 @@ mod tests {
 
         // Check if the first character is valid
         let mut chars = input.chars();
-        if let Some(first) = chars.next() {
-            if !first.is_alphabetic() && first != '_' {
-                return false;
-            }
+        if let Some(first) = chars.next()
+            && !first.is_alphabetic()
+            && first != '_'
+        {
+            return false;
         }
 
         // Check the rest of the characters

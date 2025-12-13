@@ -2,7 +2,7 @@ use compact_str::CompactString;
 use cu_sensor_payloads::PointCloudSoa;
 use serde::{Deserialize, Serialize};
 
-use crate::{builtin::Header, RosMsgAdapter};
+use crate::{RosMsgAdapter, builtin::Header};
 
 // sensor_msgs/PointField
 #[derive(Clone, Debug, Serialize, Deserialize)]

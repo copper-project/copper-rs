@@ -149,11 +149,7 @@ pub fn conn_symbol(is_input: bool, block_style: BorderType, conn_style: LineType
         (BorderType::Double, LineType::Plain | LineType::Rounded) => ("╢", "╟"),
         (BorderType::QuadrantInside | BorderType::QuadrantOutside, _) => ("u", "u"),
     };
-    if is_input {
-        out.0
-    } else {
-        out.1
-    }
+    if is_input { out.0 } else { out.1 }
 }
 
 pub const ALIAS_CHARS: [&str; 24] = [
@@ -247,10 +243,10 @@ impl ConnectionsLayout {
                 self.ports[&(true, ea_conn.0.to_node, ea_conn.0.to_port)],
                 Direction::East,
             );
-            if start.0 .0 >= self.edge_field.width || start.0 .1 >= self.edge_field.height {
+            if start.0.0 >= self.edge_field.width || start.0.1 >= self.edge_field.height {
                 continue;
             }
-            if goal.0 .0 >= self.edge_field.width || goal.0 .1 >= self.edge_field.height {
+            if goal.0.0 >= self.edge_field.width || goal.0.1 >= self.edge_field.height {
                 continue;
             }
             //println!("drawing connection {start:?} to {goal:?}");
@@ -517,8 +513,8 @@ impl ConnectionsLayout {
                     {
                         isize::MAX
                     } else {
-                        let ax = current.0 .0 as isize;
-                        let ay = current.0 .1 as isize;
+                        let ax = current.0.0 as isize;
+                        let ay = current.0.1 as isize;
                         let sx = start.0 as isize;
                         let sy = start.1 as isize;
                         let ex = end.0 as isize;
@@ -572,23 +568,23 @@ impl From<((usize, usize), Direction)> for EdgeIdx {
     fn from(value: ((usize, usize), Direction)) -> Self {
         match value.1 {
             Direction::North => Self {
-                x: value.0 .0,
-                y: value.0 .1,
+                x: value.0.0,
+                y: value.0.1,
                 is_vertical: true,
             },
             Direction::South => Self {
-                x: value.0 .0,
-                y: value.0 .1 + 1,
+                x: value.0.0,
+                y: value.0.1 + 1,
                 is_vertical: true,
             },
             Direction::East => Self {
-                x: value.0 .0 + 1,
-                y: value.0 .1,
+                x: value.0.0 + 1,
+                y: value.0.1,
                 is_vertical: false,
             },
             Direction::West => Self {
-                x: value.0 .0,
-                y: value.0 .1,
+                x: value.0.0,
+                y: value.0.1,
                 is_vertical: false,
             },
         }

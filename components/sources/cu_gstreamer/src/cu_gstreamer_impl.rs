@@ -6,7 +6,7 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use circular_buffer::CircularBuffer;
-use gstreamer::{parse, Buffer, BufferRef, Caps, FlowSuccess, Pipeline};
+use gstreamer::{Buffer, BufferRef, Caps, FlowSuccess, Pipeline, parse};
 use gstreamer_app::{AppSink, AppSinkCallbacks};
 use serde::Serialize;
 use std::fmt::Debug;

@@ -1,9 +1,9 @@
-use cu29::prelude::*;
-use cu29_helpers::basic_copper_setup;
-use cu_hesai::parser::Packet;
 use cu_hesai::LidarCuMsgPayload;
+use cu_hesai::parser::Packet;
 use cu_sensor_payloads::Distance;
 use cu_udp_inject::PcapStreamer;
+use cu29::prelude::*;
+use cu29_helpers::basic_copper_setup;
 use rerun::Position3D;
 
 const SLAB_SIZE: Option<usize> = Some(100 * 1024 * 1024);

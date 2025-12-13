@@ -9,6 +9,6 @@ mod connection;
 mod graph;
 mod node;
 
-pub use connection::{conn_symbol, Connection, ConnectionsLayout};
+pub use connection::{Connection, ConnectionsLayout, conn_symbol};
 pub use graph::NodeGraph;
 pub use node::NodeLayout;

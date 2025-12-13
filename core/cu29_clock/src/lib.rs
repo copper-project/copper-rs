@@ -23,11 +23,11 @@ mod raw_counter;
 
 pub use raw_counter::*;
 
+use bincode::BorrowDecode;
 use bincode::de::BorrowDecoder;
 use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
-use bincode::BorrowDecode;
 use bincode::{Decode, Encode};
 use core::ops::{Add, Sub};
 use serde::{Deserialize, Serialize};

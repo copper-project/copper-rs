@@ -1,9 +1,9 @@
 pub mod parser;
 
-use crate::parser::{generate_default_elevation_calibration, RefTime};
+use crate::parser::{RefTime, generate_default_elevation_calibration};
 use chrono::Utc;
-use cu29::prelude::*;
 use cu_sensor_payloads::{PointCloud, PointCloudSoa};
+use cu29::prelude::*;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use std::io::ErrorKind;
 use std::io::Read;
@@ -145,8 +145,8 @@ mod tests {
     use super::*;
     use crate::parser::Packet;
     use chrono::DateTime;
-    use cu29::cutask::CuMsg;
     use cu_udp_inject::PcapStreamer;
+    use cu29::cutask::CuMsg;
 
     #[test]
     fn test_xt32() {

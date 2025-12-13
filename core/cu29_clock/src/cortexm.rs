@@ -1,6 +1,6 @@
 // --- Cortex-M (bare-metal)
 
-use cortex_m::peripheral::{Peripherals, DWT};
+use cortex_m::peripheral::{DWT, Peripherals};
 
 pub fn initialize() {
     let mut cp = unsafe { Peripherals::steal() };

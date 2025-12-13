@@ -9,7 +9,7 @@ use mpu9250::{Marg, Mpu9250};
 use uom::si::angular_velocity::radian_per_second;
 use uom::si::f32::AngularVelocity as UomAngVel;
 
-use crate::{map_debug_error, ImuPayload, Mpu9250Device, WhoAmI};
+use crate::{ImuPayload, Mpu9250Device, WhoAmI, map_debug_error};
 
 pub const DEFAULT_GYRO_CAL_MS: u32 = 0;
 pub const DEFAULT_GYRO_SAMPLE_DELAY_MS: u32 = 10;

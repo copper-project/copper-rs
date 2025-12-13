@@ -9,13 +9,13 @@ use bevy::prelude::*;
 use bevy::render::RenderPlugin;
 use bevy::scene::ScenePlugin;
 // disembiguation as there is also a bevy::prelude::debug
+use cu_ads7883_new::ADSReadingPayload;
+use cu_rp_encoder::EncoderPayload;
 use cu29::prelude::debug;
 #[allow(unused_imports)]
 use cu29::prelude::error;
 use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
-use cu_ads7883_new::ADSReadingPayload;
-use cu_rp_encoder::EncoderPayload;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -55,10 +55,10 @@ fn setup_copper(mut commands: Commands) {
     #[allow(clippy::identity_op)]
     const LOG_SLAB_SIZE: Option<usize> = Some(1 * 1024 * 1024 * 1024);
     let logger_path = "logs/balance.copper";
-    if let Some(parent) = Path::new(logger_path).parent() {
-        if !parent.exists() {
-            fs::create_dir_all(parent).expect("Failed to create logs directory");
-        }
+    if let Some(parent) = Path::new(logger_path).parent()
+        && !parent.exists()
+    {
+        fs::create_dir_all(parent).expect("Failed to create logs directory");
     }
 
     // here we set up a mock clock so the simulation can take control of it.

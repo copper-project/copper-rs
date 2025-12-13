@@ -2,8 +2,8 @@ mod format;
 #[cfg(feature = "macro_debug")]
 use format::{highlight_rust_code, rustfmt_generated_code};
 use proc_macro::TokenStream;
-use quote::{format_ident, quote, ToTokens};
-use syn::{parse_macro_input, Data, DeriveInput, Fields, Type};
+use quote::{ToTokens, format_ident, quote};
+use syn::{Data, DeriveInput, Fields, Type, parse_macro_input};
 
 /// Build a fixed sized SoA (Structure of Arrays) from a struct.
 /// The outputted SoA will be suitable for in place storage in messages and should be

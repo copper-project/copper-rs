@@ -12,17 +12,17 @@ use log::Log;
 #[cfg(not(feature = "std"))]
 mod imp {
     pub use alloc::boxed::Box;
-    pub use spin::once::Once as OnceLock;
     pub use spin::Mutex;
+    pub use spin::once::Once as OnceLock;
 }
 
 #[cfg(feature = "std")]
 mod imp {
     pub use bincode::config::Configuration;
-    pub use bincode::enc::write::Writer;
     pub use bincode::enc::Encode;
     pub use bincode::enc::Encoder;
     pub use bincode::enc::EncoderImpl;
+    pub use bincode::enc::write::Writer;
     pub use bincode::error::EncodeError;
     pub use std::fmt::{Debug, Formatter};
     pub use std::fs::File;
@@ -128,11 +128,11 @@ impl Drop for LoggerRuntime {
         self.flush();
         // Assume on no-std that there is no buffering. TODO(gbin): check if this hold true.
         #[cfg(feature = "std")]
-        if let Some((mutex, _clock)) = WRITER.get() {
-            if let Ok(mut writer_guard) = mutex.lock() {
-                // Replace the current WriteStream with a DummyWriteStream
-                *writer_guard = Box::new(DummyWriteStream);
-            }
+        if let Some((mutex, _clock)) = WRITER.get()
+            && let Ok(mut writer_guard) = mutex.lock()
+        {
+            // Replace the current WriteStream with a DummyWriteStream
+            *writer_guard = Box::new(DummyWriteStream);
         }
     }
 }

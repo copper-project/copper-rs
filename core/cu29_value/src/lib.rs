@@ -449,7 +449,7 @@ mod tests {
                     "ADDED" => Event::Added(<_>::deserialize(object_deserializer)?),
                     "ERROR" => Event::Error(<_>::deserialize(object_deserializer)?),
                     kind => {
-                        return Err(serde::de::Error::unknown_variant(kind, &["ADDED", "ERROR"]))
+                        return Err(serde::de::Error::unknown_variant(kind, &["ADDED", "ERROR"]));
                     }
                 })
             }

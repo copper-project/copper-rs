@@ -5,16 +5,16 @@ use std::error::Error;
 use std::fmt;
 use std::fmt::{Debug, Formatter};
 use std::mem::size_of;
+use uom::ConversionFactor;
 use uom::fmt::DisplayStyle::Abbreviation;
 use uom::num_traits::ToPrimitive;
+use uom::si::Unit;
 use uom::si::angle::degree;
 use uom::si::angular_velocity::revolution_per_minute;
 use uom::si::f32::{Angle, Ratio};
 use uom::si::f32::{AngularVelocity, Length};
 use uom::si::length::millimeter;
 use uom::si::ratio::{percent, ratio};
-use uom::si::Unit;
-use uom::ConversionFactor;
 
 #[derive(Debug)]
 pub enum HesaiError {
@@ -503,7 +503,7 @@ pub fn generate_default_elevation_calibration() -> [Angle; 32] {
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::{parse_packet, Packet, RefTime};
+    use crate::parser::{Packet, RefTime, parse_packet};
     use cu29::clock::CuDuration;
     use cu29::prelude::RobotClock;
 

@@ -1,5 +1,5 @@
-use cu29::prelude::*;
 use cu_logmon::CuLogMon;
+use cu29::prelude::*;
 use log::{Level, LevelFilter, Metadata, Record};
 use std::thread;
 use std::time::Duration;
