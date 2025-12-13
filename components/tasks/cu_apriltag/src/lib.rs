@@ -307,7 +307,7 @@ mod tests {
     #[test]
     #[cfg(not(windows))]
     fn test_end2end_apriltag() -> Result<()> {
-        let img = process_image("tests/data/simple.jpg")?;
+        let img = process_image("tests/data/simple.png")?;
         let format = CuImageBufferFormat {
             width: img.width(),
             height: img.height(),

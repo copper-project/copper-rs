@@ -2,7 +2,8 @@ use ratatui::layout::{Position, Size};
 
 use super::*;
 
-const MARGIN: u16 = 10;
+// Extra horizontal space between columns to reduce line collisions/alias markers
+const MARGIN: u16 = 12;
 const LOOP_OFFSET: i32 = 3;
 
 #[derive(Debug)]
