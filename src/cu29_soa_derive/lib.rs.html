@@ -2,8 +2,8 @@
 <a href=#2 id=2 data-nosnippet>2</a><span class="attr">#[cfg(feature = <span class="string">"macro_debug"</span>)]
 <a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span>format::{highlight_rust_code, rustfmt_generated_code};
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>proc_macro::TokenStream;
-<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>quote::{format_ident, quote, ToTokens};
-<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>syn::{parse_macro_input, Data, DeriveInput, Fields, Type};
+<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>quote::{ToTokens, format_ident, quote};
+<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>syn::{Data, DeriveInput, Fields, Type, parse_macro_input};
 <a href=#7 id=7 data-nosnippet>7</a>
 <a href=#8 id=8 data-nosnippet>8</a><span class="doccomment">/// Build a fixed sized SoA (Structure of Arrays) from a struct.
 <a href=#9 id=9 data-nosnippet>9</a>/// The outputted SoA will be suitable for in place storage in messages and should be

@@ -12,17 +12,17 @@
 <a href=#12 id=12 data-nosnippet>12</a><span class="attr">#[cfg(not(feature = <span class="string">"std"</span>))]
 <a href=#13 id=13 data-nosnippet>13</a></span><span class="kw">mod </span>imp {
 <a href=#14 id=14 data-nosnippet>14</a>    <span class="kw">pub use </span>alloc::boxed::Box;
-<a href=#15 id=15 data-nosnippet>15</a>    <span class="kw">pub use </span>spin::once::Once <span class="kw">as </span>OnceLock;
-<a href=#16 id=16 data-nosnippet>16</a>    <span class="kw">pub use </span>spin::Mutex;
+<a href=#15 id=15 data-nosnippet>15</a>    <span class="kw">pub use </span>spin::Mutex;
+<a href=#16 id=16 data-nosnippet>16</a>    <span class="kw">pub use </span>spin::once::Once <span class="kw">as </span>OnceLock;
 <a href=#17 id=17 data-nosnippet>17</a>}
 <a href=#18 id=18 data-nosnippet>18</a>
 <a href=#19 id=19 data-nosnippet>19</a><span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
 <a href=#20 id=20 data-nosnippet>20</a></span><span class="kw">mod </span>imp {
 <a href=#21 id=21 data-nosnippet>21</a>    <span class="kw">pub use </span>bincode::config::Configuration;
-<a href=#22 id=22 data-nosnippet>22</a>    <span class="kw">pub use </span>bincode::enc::write::Writer;
-<a href=#23 id=23 data-nosnippet>23</a>    <span class="kw">pub use </span>bincode::enc::Encode;
-<a href=#24 id=24 data-nosnippet>24</a>    <span class="kw">pub use </span>bincode::enc::Encoder;
-<a href=#25 id=25 data-nosnippet>25</a>    <span class="kw">pub use </span>bincode::enc::EncoderImpl;
+<a href=#22 id=22 data-nosnippet>22</a>    <span class="kw">pub use </span>bincode::enc::Encode;
+<a href=#23 id=23 data-nosnippet>23</a>    <span class="kw">pub use </span>bincode::enc::Encoder;
+<a href=#24 id=24 data-nosnippet>24</a>    <span class="kw">pub use </span>bincode::enc::EncoderImpl;
+<a href=#25 id=25 data-nosnippet>25</a>    <span class="kw">pub use </span>bincode::enc::write::Writer;
 <a href=#26 id=26 data-nosnippet>26</a>    <span class="kw">pub use </span>bincode::error::EncodeError;
 <a href=#27 id=27 data-nosnippet>27</a>    <span class="kw">pub use </span>std::fmt::{Debug, Formatter};
 <a href=#28 id=28 data-nosnippet>28</a>    <span class="kw">pub use </span>std::fs::File;
@@ -128,11 +128,11 @@
 <a href=#128 id=128 data-nosnippet>128</a>        <span class="self">self</span>.flush();
 <a href=#129 id=129 data-nosnippet>129</a>        <span class="comment">// Assume on no-std that there is no buffering. TODO(gbin): check if this hold true.
 <a href=#130 id=130 data-nosnippet>130</a>        </span><span class="attr">#[cfg(feature = <span class="string">"std"</span>)]
-<a href=#131 id=131 data-nosnippet>131</a>        </span><span class="kw">if let </span><span class="prelude-val">Some</span>((mutex, _clock)) = WRITER.get() {
-<a href=#132 id=132 data-nosnippet>132</a>            <span class="kw">if let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>writer_guard) = mutex.lock() {
-<a href=#133 id=133 data-nosnippet>133</a>                <span class="comment">// Replace the current WriteStream with a DummyWriteStream
-<a href=#134 id=134 data-nosnippet>134</a>                </span><span class="kw-2">*</span>writer_guard = Box::new(DummyWriteStream);
-<a href=#135 id=135 data-nosnippet>135</a>            }
+<a href=#131 id=131 data-nosnippet>131</a>        </span><span class="kw">if let </span><span class="prelude-val">Some</span>((mutex, _clock)) = WRITER.get()
+<a href=#132 id=132 data-nosnippet>132</a>            &amp;&amp; <span class="kw">let </span><span class="prelude-val">Ok</span>(<span class="kw-2">mut </span>writer_guard) = mutex.lock()
+<a href=#133 id=133 data-nosnippet>133</a>        {
+<a href=#134 id=134 data-nosnippet>134</a>            <span class="comment">// Replace the current WriteStream with a DummyWriteStream
+<a href=#135 id=135 data-nosnippet>135</a>            </span><span class="kw-2">*</span>writer_guard = Box::new(DummyWriteStream);
 <a href=#136 id=136 data-nosnippet>136</a>        }
 <a href=#137 id=137 data-nosnippet>137</a>    }
 <a href=#138 id=138 data-nosnippet>138</a>}

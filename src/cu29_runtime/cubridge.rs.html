@@ -610,10 +610,10 @@
 <a href=#610 id=610 data-nosnippet>610</a>            _resources: <span class="self">Self</span>::Resources&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#611 id=611 data-nosnippet>611</a>        ) -&gt; CuResult&lt;<span class="self">Self</span>&gt; {
 <a href=#612 id=612 data-nosnippet>612</a>            <span class="kw">let </span><span class="kw-2">mut </span>instance = ExampleBridge::default();
-<a href=#613 id=613 data-nosnippet>613</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(cfg) = config {
-<a href=#614 id=614 data-nosnippet>614</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(port) = cfg.get::&lt;String&gt;(<span class="string">"port"</span>) {
-<a href=#615 id=615 data-nosnippet>615</a>                    instance.port = port;
-<a href=#616 id=616 data-nosnippet>616</a>                }
+<a href=#613 id=613 data-nosnippet>613</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(cfg) = config
+<a href=#614 id=614 data-nosnippet>614</a>                &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(port) = cfg.get::&lt;String&gt;(<span class="string">"port"</span>)
+<a href=#615 id=615 data-nosnippet>615</a>            {
+<a href=#616 id=616 data-nosnippet>616</a>                instance.port = port;
 <a href=#617 id=617 data-nosnippet>617</a>            }
 <a href=#618 id=618 data-nosnippet>618</a>            <span class="prelude-val">Ok</span>(instance)
 <a href=#619 id=619 data-nosnippet>619</a>        }

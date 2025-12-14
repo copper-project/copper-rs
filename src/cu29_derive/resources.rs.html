@@ -2,8 +2,8 @@
 <a href=#2 id=2 data-nosnippet>2</a><span class="kw">use </span>quote::quote;
 <a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>syn::parse::{Parse, ParseStream};
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>syn::{
-<a href=#5 id=5 data-nosnippet>5</a>    braced, parenthesized, parse_macro_input, punctuated::Punctuated, Error, Ident, Token, Type,
-<a href=#6 id=6 data-nosnippet>6</a>    WherePredicate,
+<a href=#5 id=5 data-nosnippet>5</a>    Error, Ident, Token, Type, WherePredicate, braced, parenthesized, parse_macro_input,
+<a href=#6 id=6 data-nosnippet>6</a>    punctuated::Punctuated,
 <a href=#7 id=7 data-nosnippet>7</a>};
 <a href=#8 id=8 data-nosnippet>8</a>
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">pub fn </span>resources(input: TokenStream) -&gt; TokenStream {
@@ -207,7 +207,7 @@
 <a href=#207 id=207 data-nosnippet>207</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(Error::new(
 <a href=#208 id=208 data-nosnippet>208</a>                    kind_ident.span(),
 <a href=#209 id=209 data-nosnippet>209</a>                    <span class="macro">format!</span>(<span class="string">"unknown kind `{}`"</span>, other),
-<a href=#210 id=210 data-nosnippet>210</a>                ))
+<a href=#210 id=210 data-nosnippet>210</a>                ));
 <a href=#211 id=211 data-nosnippet>211</a>            }
 <a href=#212 id=212 data-nosnippet>212</a>        };
 <a href=#213 id=213 data-nosnippet>213</a>        <span class="kw">let </span>_lt = input.parse::&lt;<span class="macro">Token!</span>[&lt;]&gt;()<span class="question-mark">?</span>;

@@ -187,7 +187,7 @@
 <a href=#187 id=187 data-nosnippet>187</a>
 <a href=#188 id=188 data-nosnippet>188</a><span class="kw">impl </span>Encode <span class="kw">for </span>CuCompactString {
 <a href=#189 id=189 data-nosnippet>189</a>    <span class="kw">fn </span>encode&lt;E: Encoder&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, encoder: <span class="kw-2">&amp;mut </span>E) -&gt; <span class="prelude-ty">Result</span>&lt;(), EncodeError&gt; {
-<a href=#190 id=190 data-nosnippet>190</a>        <span class="kw">let </span>CuCompactString(<span class="kw-2">ref </span>compact_string) = <span class="self">self</span>;
+<a href=#190 id=190 data-nosnippet>190</a>        <span class="kw">let </span>CuCompactString(compact_string) = <span class="self">self</span>;
 <a href=#191 id=191 data-nosnippet>191</a>        <span class="kw">let </span>bytes = <span class="kw-2">&amp;</span>compact_string.as_bytes();
 <a href=#192 id=192 data-nosnippet>192</a>        bytes.encode(encoder)
 <a href=#193 id=193 data-nosnippet>193</a>    }

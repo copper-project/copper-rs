@@ -120,63 +120,64 @@
 <a href=#120 id=120 data-nosnippet>120</a>
 <a href=#121 id=121 data-nosnippet>121</a>        <span class="comment">// Check if the first character is valid
 <a href=#122 id=122 data-nosnippet>122</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>chars = input.chars();
-<a href=#123 id=123 data-nosnippet>123</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(first) = chars.next() {
-<a href=#124 id=124 data-nosnippet>124</a>            <span class="kw">if </span>!first.is_alphabetic() &amp;&amp; <span class="macro">first !</span>= <span class="string">'_' </span>{
-<a href=#125 id=125 data-nosnippet>125</a>                <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#126 id=126 data-nosnippet>126</a>            }
-<a href=#127 id=127 data-nosnippet>127</a>        }
-<a href=#128 id=128 data-nosnippet>128</a>
-<a href=#129 id=129 data-nosnippet>129</a>        <span class="comment">// Check the rest of the characters
-<a href=#130 id=130 data-nosnippet>130</a>        </span><span class="kw">if </span>!chars.all(|c| c.is_alphanumeric() || c == <span class="string">'_'</span>) {
-<a href=#131 id=131 data-nosnippet>131</a>            <span class="kw">return </span><span class="bool-val">false</span>;
-<a href=#132 id=132 data-nosnippet>132</a>        }
-<a href=#133 id=133 data-nosnippet>133</a>
-<a href=#134 id=134 data-nosnippet>134</a>        <span class="comment">// Check if it's a Rust keyword (can use a set of known keywords)
-<a href=#135 id=135 data-nosnippet>135</a>        </span><span class="kw">let </span>keywords = [
-<a href=#136 id=136 data-nosnippet>136</a>            <span class="string">"as"</span>, <span class="string">"break"</span>, <span class="string">"const"</span>, <span class="string">"continue"</span>, <span class="string">"crate"</span>, <span class="string">"else"</span>, <span class="string">"enum"</span>, <span class="string">"extern"</span>, <span class="string">"false"</span>, <span class="string">"fn"</span>,
-<a href=#137 id=137 data-nosnippet>137</a>            <span class="string">"for"</span>, <span class="string">"if"</span>, <span class="string">"impl"</span>, <span class="string">"in"</span>, <span class="string">"let"</span>, <span class="string">"loop"</span>, <span class="string">"match"</span>, <span class="string">"mod"</span>, <span class="string">"move"</span>, <span class="string">"mut"</span>, <span class="string">"pub"</span>, <span class="string">"ref"</span>,
-<a href=#138 id=138 data-nosnippet>138</a>            <span class="string">"return"</span>, <span class="string">"self"</span>, <span class="string">"Self"</span>, <span class="string">"static"</span>, <span class="string">"struct"</span>, <span class="string">"super"</span>, <span class="string">"trait"</span>, <span class="string">"true"</span>, <span class="string">"type"</span>,
-<a href=#139 id=139 data-nosnippet>139</a>            <span class="string">"unsafe"</span>, <span class="string">"use"</span>, <span class="string">"where"</span>, <span class="string">"while"</span>,
-<a href=#140 id=140 data-nosnippet>140</a>        ];
-<a href=#141 id=141 data-nosnippet>141</a>
-<a href=#142 id=142 data-nosnippet>142</a>        !keywords.contains(<span class="kw-2">&amp;</span>input)
-<a href=#143 id=143 data-nosnippet>143</a>    }
-<a href=#144 id=144 data-nosnippet>144</a>
-<a href=#145 id=145 data-nosnippet>145</a>    <span class="attr">#[test]
-<a href=#146 id=146 data-nosnippet>146</a>    </span><span class="kw">fn </span>test_identifier_to_enum() {
-<a href=#147 id=147 data-nosnippet>147</a>        <span class="kw">let </span>test_cases = [<span class="string">"toto"</span>, <span class="string">"#id"</span>, <span class="string">"!!something"</span>, <span class="string">"hey?"</span>, <span class="string">"é"</span>, <span class="string">"t"</span>];
-<a href=#148 id=148 data-nosnippet>148</a>
-<a href=#149 id=149 data-nosnippet>149</a>        test_cases.iter().for_each(|input| {
-<a href=#150 id=150 data-nosnippet>150</a>            <span class="kw">let </span>after = config_id_to_enum(input);
-<a href=#151 id=151 data-nosnippet>151</a>            <span class="macro">assert!</span>(
-<a href=#152 id=152 data-nosnippet>152</a>                is_valid_rust_identifier(after.as_str()),
-<a href=#153 id=153 data-nosnippet>153</a>                <span class="string">"bf {input} af {after}"
-<a href=#154 id=154 data-nosnippet>154</a>            </span>);
-<a href=#155 id=155 data-nosnippet>155</a>        })
-<a href=#156 id=156 data-nosnippet>156</a>    }
-<a href=#157 id=157 data-nosnippet>157</a>
-<a href=#158 id=158 data-nosnippet>158</a>    <span class="attr">#[test]
-<a href=#159 id=159 data-nosnippet>159</a>    </span><span class="kw">fn </span>test_identifier_to_struct_member() {
-<a href=#160 id=160 data-nosnippet>160</a>        <span class="macro">assert_eq!</span>(<span class="kw">crate</span>::utils::config_id_to_struct_member(<span class="string">"toto"</span>), <span class="string">"toto"</span>);
-<a href=#161 id=161 data-nosnippet>161</a>        <span class="macro">assert_eq!</span>(<span class="kw">crate</span>::utils::config_id_to_struct_member(<span class="string">"#id"</span>), <span class="string">"id"</span>);
-<a href=#162 id=162 data-nosnippet>162</a>        <span class="macro">assert_eq!</span>(
-<a href=#163 id=163 data-nosnippet>163</a>            <span class="kw">crate</span>::utils::config_id_to_struct_member(<span class="string">"!!something"</span>),
-<a href=#164 id=164 data-nosnippet>164</a>            <span class="string">"something"
-<a href=#165 id=165 data-nosnippet>165</a>        </span>);
-<a href=#166 id=166 data-nosnippet>166</a>        <span class="macro">assert_eq!</span>(<span class="kw">crate</span>::utils::config_id_to_struct_member(<span class="string">"hey?"</span>), <span class="string">"hey"</span>);
-<a href=#167 id=167 data-nosnippet>167</a>        <span class="macro">assert_eq!</span>(<span class="kw">crate</span>::utils::config_id_to_struct_member(<span class="string">"é"</span>), <span class="string">"é"</span>);
-<a href=#168 id=168 data-nosnippet>168</a>        <span class="macro">assert_eq!</span>(<span class="kw">crate</span>::utils::config_id_to_struct_member(<span class="string">"T"</span>), <span class="string">"t"</span>);
-<a href=#169 id=169 data-nosnippet>169</a>        <span class="macro">assert_eq!</span>(
-<a href=#170 id=170 data-nosnippet>170</a>            <span class="kw">crate</span>::utils::config_id_to_struct_member(<span class="string">"Test_Dunder"</span>),
-<a href=#171 id=171 data-nosnippet>171</a>            <span class="string">"test_dunder"
-<a href=#172 id=172 data-nosnippet>172</a>        </span>);
-<a href=#173 id=173 data-nosnippet>173</a>    }
-<a href=#174 id=174 data-nosnippet>174</a>
-<a href=#175 id=175 data-nosnippet>175</a>    <span class="attr">#[test]
-<a href=#176 id=176 data-nosnippet>176</a>    </span><span class="kw">fn </span>test_identifier_to_bridge_const() {
-<a href=#177 id=177 data-nosnippet>177</a>        <span class="macro">assert_eq!</span>(config_id_to_bridge_const(<span class="string">"esc0_tx"</span>), <span class="string">"ESC0_TX"</span>);
-<a href=#178 id=178 data-nosnippet>178</a>        <span class="macro">assert_eq!</span>(config_id_to_bridge_const(<span class="string">"esc_0_tx"</span>), <span class="string">"ESC_0_TX"</span>);
-<a href=#179 id=179 data-nosnippet>179</a>        <span class="macro">assert_eq!</span>(config_id_to_bridge_const(<span class="string">"ImuStream"</span>), <span class="string">"IMU_STREAM"</span>);
-<a href=#180 id=180 data-nosnippet>180</a>    }
-<a href=#181 id=181 data-nosnippet>181</a>}
+<a href=#123 id=123 data-nosnippet>123</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(first) = chars.next()
+<a href=#124 id=124 data-nosnippet>124</a>            &amp;&amp; !first.is_alphabetic()
+<a href=#125 id=125 data-nosnippet>125</a>            &amp;&amp; <span class="macro">first !</span>= <span class="string">'_'
+<a href=#126 id=126 data-nosnippet>126</a>        </span>{
+<a href=#127 id=127 data-nosnippet>127</a>            <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#128 id=128 data-nosnippet>128</a>        }
+<a href=#129 id=129 data-nosnippet>129</a>
+<a href=#130 id=130 data-nosnippet>130</a>        <span class="comment">// Check the rest of the characters
+<a href=#131 id=131 data-nosnippet>131</a>        </span><span class="kw">if </span>!chars.all(|c| c.is_alphanumeric() || c == <span class="string">'_'</span>) {
+<a href=#132 id=132 data-nosnippet>132</a>            <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#133 id=133 data-nosnippet>133</a>        }
+<a href=#134 id=134 data-nosnippet>134</a>
+<a href=#135 id=135 data-nosnippet>135</a>        <span class="comment">// Check if it's a Rust keyword (can use a set of known keywords)
+<a href=#136 id=136 data-nosnippet>136</a>        </span><span class="kw">let </span>keywords = [
+<a href=#137 id=137 data-nosnippet>137</a>            <span class="string">"as"</span>, <span class="string">"break"</span>, <span class="string">"const"</span>, <span class="string">"continue"</span>, <span class="string">"crate"</span>, <span class="string">"else"</span>, <span class="string">"enum"</span>, <span class="string">"extern"</span>, <span class="string">"false"</span>, <span class="string">"fn"</span>,
+<a href=#138 id=138 data-nosnippet>138</a>            <span class="string">"for"</span>, <span class="string">"if"</span>, <span class="string">"impl"</span>, <span class="string">"in"</span>, <span class="string">"let"</span>, <span class="string">"loop"</span>, <span class="string">"match"</span>, <span class="string">"mod"</span>, <span class="string">"move"</span>, <span class="string">"mut"</span>, <span class="string">"pub"</span>, <span class="string">"ref"</span>,
+<a href=#139 id=139 data-nosnippet>139</a>            <span class="string">"return"</span>, <span class="string">"self"</span>, <span class="string">"Self"</span>, <span class="string">"static"</span>, <span class="string">"struct"</span>, <span class="string">"super"</span>, <span class="string">"trait"</span>, <span class="string">"true"</span>, <span class="string">"type"</span>,
+<a href=#140 id=140 data-nosnippet>140</a>            <span class="string">"unsafe"</span>, <span class="string">"use"</span>, <span class="string">"where"</span>, <span class="string">"while"</span>,
+<a href=#141 id=141 data-nosnippet>141</a>        ];
+<a href=#142 id=142 data-nosnippet>142</a>
+<a href=#143 id=143 data-nosnippet>143</a>        !keywords.contains(<span class="kw-2">&amp;</span>input)
+<a href=#144 id=144 data-nosnippet>144</a>    }
+<a href=#145 id=145 data-nosnippet>145</a>
+<a href=#146 id=146 data-nosnippet>146</a>    <span class="attr">#[test]
+<a href=#147 id=147 data-nosnippet>147</a>    </span><span class="kw">fn </span>test_identifier_to_enum() {
+<a href=#148 id=148 data-nosnippet>148</a>        <span class="kw">let </span>test_cases = [<span class="string">"toto"</span>, <span class="string">"#id"</span>, <span class="string">"!!something"</span>, <span class="string">"hey?"</span>, <span class="string">"é"</span>, <span class="string">"t"</span>];
+<a href=#149 id=149 data-nosnippet>149</a>
+<a href=#150 id=150 data-nosnippet>150</a>        test_cases.iter().for_each(|input| {
+<a href=#151 id=151 data-nosnippet>151</a>            <span class="kw">let </span>after = config_id_to_enum(input);
+<a href=#152 id=152 data-nosnippet>152</a>            <span class="macro">assert!</span>(
+<a href=#153 id=153 data-nosnippet>153</a>                is_valid_rust_identifier(after.as_str()),
+<a href=#154 id=154 data-nosnippet>154</a>                <span class="string">"bf {input} af {after}"
+<a href=#155 id=155 data-nosnippet>155</a>            </span>);
+<a href=#156 id=156 data-nosnippet>156</a>        })
+<a href=#157 id=157 data-nosnippet>157</a>    }
+<a href=#158 id=158 data-nosnippet>158</a>
+<a href=#159 id=159 data-nosnippet>159</a>    <span class="attr">#[test]
+<a href=#160 id=160 data-nosnippet>160</a>    </span><span class="kw">fn </span>test_identifier_to_struct_member() {
+<a href=#161 id=161 data-nosnippet>161</a>        <span class="macro">assert_eq!</span>(<span class="kw">crate</span>::utils::config_id_to_struct_member(<span class="string">"toto"</span>), <span class="string">"toto"</span>);
+<a href=#162 id=162 data-nosnippet>162</a>        <span class="macro">assert_eq!</span>(<span class="kw">crate</span>::utils::config_id_to_struct_member(<span class="string">"#id"</span>), <span class="string">"id"</span>);
+<a href=#163 id=163 data-nosnippet>163</a>        <span class="macro">assert_eq!</span>(
+<a href=#164 id=164 data-nosnippet>164</a>            <span class="kw">crate</span>::utils::config_id_to_struct_member(<span class="string">"!!something"</span>),
+<a href=#165 id=165 data-nosnippet>165</a>            <span class="string">"something"
+<a href=#166 id=166 data-nosnippet>166</a>        </span>);
+<a href=#167 id=167 data-nosnippet>167</a>        <span class="macro">assert_eq!</span>(<span class="kw">crate</span>::utils::config_id_to_struct_member(<span class="string">"hey?"</span>), <span class="string">"hey"</span>);
+<a href=#168 id=168 data-nosnippet>168</a>        <span class="macro">assert_eq!</span>(<span class="kw">crate</span>::utils::config_id_to_struct_member(<span class="string">"é"</span>), <span class="string">"é"</span>);
+<a href=#169 id=169 data-nosnippet>169</a>        <span class="macro">assert_eq!</span>(<span class="kw">crate</span>::utils::config_id_to_struct_member(<span class="string">"T"</span>), <span class="string">"t"</span>);
+<a href=#170 id=170 data-nosnippet>170</a>        <span class="macro">assert_eq!</span>(
+<a href=#171 id=171 data-nosnippet>171</a>            <span class="kw">crate</span>::utils::config_id_to_struct_member(<span class="string">"Test_Dunder"</span>),
+<a href=#172 id=172 data-nosnippet>172</a>            <span class="string">"test_dunder"
+<a href=#173 id=173 data-nosnippet>173</a>        </span>);
+<a href=#174 id=174 data-nosnippet>174</a>    }
+<a href=#175 id=175 data-nosnippet>175</a>
+<a href=#176 id=176 data-nosnippet>176</a>    <span class="attr">#[test]
+<a href=#177 id=177 data-nosnippet>177</a>    </span><span class="kw">fn </span>test_identifier_to_bridge_const() {
+<a href=#178 id=178 data-nosnippet>178</a>        <span class="macro">assert_eq!</span>(config_id_to_bridge_const(<span class="string">"esc0_tx"</span>), <span class="string">"ESC0_TX"</span>);
+<a href=#179 id=179 data-nosnippet>179</a>        <span class="macro">assert_eq!</span>(config_id_to_bridge_const(<span class="string">"esc_0_tx"</span>), <span class="string">"ESC_0_TX"</span>);
+<a href=#180 id=180 data-nosnippet>180</a>        <span class="macro">assert_eq!</span>(config_id_to_bridge_const(<span class="string">"ImuStream"</span>), <span class="string">"IMU_STREAM"</span>);
+<a href=#181 id=181 data-nosnippet>181</a>    }
+<a href=#182 id=182 data-nosnippet>182</a>}
 </code></pre></div></section></main></body></html>
