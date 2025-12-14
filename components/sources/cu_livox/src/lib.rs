@@ -28,9 +28,10 @@ const MAX_POINTS: usize = 100;
 pub type LidarCuMsgPayload = PointCloudSoa<MAX_POINTS>;
 
 impl CuSrcTask for Tele15 {
+    type Resources<'r> = ();
     type Output<'m> = output_msg!(LidarCuMsgPayload);
 
-    fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {

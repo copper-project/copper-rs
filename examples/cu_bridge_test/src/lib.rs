@@ -61,9 +61,13 @@ pub mod tasks {
     impl Freezable for SourceToBridge {}
 
     impl CuSrcTask for SourceToBridge {
+        type Resources<'r> = ();
         type Output<'m> = CuMsg<messages::FromSource>;
 
-        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+        fn new_with(
+            _config: Option<&ComponentConfig>,
+            _resources: Self::Resources<'_>,
+        ) -> CuResult<Self> {
             Ok(Self { next: 1 })
         }
 
@@ -85,10 +89,14 @@ pub mod tasks {
     impl Freezable for PassthroughChain {}
 
     impl CuTask for PassthroughChain {
+        type Resources<'r> = ();
         type Input<'m> = CuMsg<messages::ChainPayload>;
         type Output<'m> = CuMsg<messages::ChainPayload>;
 
-        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+        fn new_with(
+            _config: Option<&ComponentConfig>,
+            _resources: Self::Resources<'_>,
+        ) -> CuResult<Self> {
             Ok(Self)
         }
 
@@ -114,9 +122,13 @@ pub mod tasks {
     impl Freezable for SinkFromBridge {}
 
     impl CuSinkTask for SinkFromBridge {
+        type Resources<'r> = ();
         type Input<'m> = CuMsg<messages::SinkPayload>;
 
-        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+        fn new_with(
+            _config: Option<&ComponentConfig>,
+            _resources: Self::Resources<'_>,
+        ) -> CuResult<Self> {
             Ok(Self)
         }
 
@@ -159,13 +171,15 @@ pub mod bridges {
     impl Freezable for AlphaBridge {}
 
     impl CuBridge for AlphaBridge {
+        type Resources<'r> = ();
         type Tx = AlphaTxChannels;
         type Rx = AlphaRxChannels;
 
-        fn new(
+        fn new_with(
             _config: Option<&ComponentConfig>,
             _tx: &[BridgeChannelConfig<<Self::Tx as BridgeChannelSet>::Id>],
             _rx: &[BridgeChannelConfig<<Self::Rx as BridgeChannelSet>::Id>],
+            _resources: Self::Resources<'_>,
         ) -> CuResult<Self>
         where
             Self: Sized,
@@ -238,13 +252,15 @@ pub mod bridges {
     impl Freezable for BetaBridge {}
 
     impl CuBridge for BetaBridge {
+        type Resources<'r> = ();
         type Tx = BetaTxChannels;
         type Rx = BetaRxChannels;
 
-        fn new(
+        fn new_with(
             _config: Option<&ComponentConfig>,
             _tx: &[BridgeChannelConfig<<Self::Tx as BridgeChannelSet>::Id>],
             _rx: &[BridgeChannelConfig<<Self::Rx as BridgeChannelSet>::Id>],
+            _resources: Self::Resources<'_>,
         ) -> CuResult<Self>
         where
             Self: Sized,

@@ -35,9 +35,10 @@ where
     P: CuMsgPayload + 'static,
     IceorixCuMsg<P>: iceoryx2::prelude::ZeroCopySend,
 {
+    type Resources<'r> = ();
     type Output<'m> = output_msg!(P);
 
-    fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {

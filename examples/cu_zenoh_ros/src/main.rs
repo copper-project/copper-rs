@@ -16,9 +16,13 @@ pub mod tasks {
     impl Freezable for ExampleSrc {}
 
     impl CuSrcTask for ExampleSrc {
+        type Resources<'r> = ();
         type Output<'m> = output_msg!(i8);
 
-        fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+        fn new_with(
+            _config: Option<&ComponentConfig>,
+            _resources: Self::Resources<'_>,
+        ) -> CuResult<Self>
         where
             Self: Sized,
         {

@@ -62,9 +62,10 @@ impl<P> CuSinkTask for ZenohRosSink<P>
 where
     P: CuMsgPayload + RosMsgAdapter<'static>,
 {
+    type Resources<'r> = ();
     type Input<'m> = input_msg!(P);
 
-    fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {

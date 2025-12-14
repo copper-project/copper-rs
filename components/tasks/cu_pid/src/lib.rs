@@ -149,10 +149,11 @@ where
     f32: for<'a> From<&'a I>,
     I: CuMsgPayload,
 {
+    type Resources<'r> = ();
     type Input<'m> = input_msg!(I);
     type Output<'m> = output_msg!(PIDControlOutputPayload);
 
-    fn new(config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {

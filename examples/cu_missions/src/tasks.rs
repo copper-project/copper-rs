@@ -5,9 +5,13 @@ pub struct ExampleSrc {}
 impl Freezable for ExampleSrc {}
 
 impl CuSrcTask for ExampleSrc {
+    type Resources<'r> = ();
     type Output<'m> = output_msg!(i32);
 
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -25,10 +29,14 @@ pub struct ExampleTaskA {}
 impl Freezable for ExampleTaskA {}
 
 impl CuTask for ExampleTaskA {
+    type Resources<'r> = ();
     type Input<'m> = input_msg!(i32);
     type Output<'m> = output_msg!(i32);
 
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -52,10 +60,14 @@ pub struct ExampleTaskB {}
 impl Freezable for ExampleTaskB {}
 
 impl CuTask for ExampleTaskB {
+    type Resources<'r> = ();
     type Input<'m> = input_msg!(i32);
     type Output<'m> = output_msg!(i32);
 
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -79,9 +91,13 @@ pub struct ExampleSink {}
 impl Freezable for ExampleSink {}
 
 impl CuSinkTask for ExampleSink {
+    type Resources<'r> = ();
     type Input<'m> = input_msg!(i32);
 
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self>
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
     where
         Self: Sized,
     {

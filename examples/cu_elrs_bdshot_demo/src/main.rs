@@ -36,6 +36,7 @@ use defmt_rtt as _;
 #[allow(unused_imports)]
 use panic_probe as _;
 
+mod resources;
 mod tasks;
 
 #[copper_runtime(config = "copperconfig.ron")]
@@ -72,6 +73,8 @@ type ElrsTx = Pin<Gpio2, FunctionUartAux, PullDown>;
 type ElrsRx = Pin<Gpio3, FunctionUartAux, PullUp>;
 type SerialPort = UartPeripheral<rp235x_hal::uart::Enabled, UART0, (ElrsTx, ElrsRx)>;
 type SerialPortError = rp235x_hal::uart::ReadErrorType;
+type SerialResourceInner = SerialPort;
+type SerialResource = cu_crsf::LockedSerial<SerialResourceInner>;
 
 #[entry]
 fn main() -> ! {
@@ -169,8 +172,7 @@ fn main() -> ! {
         .enable(csrf_uart_cfg, clocks.peripheral_clock.freq())
         .expect("Could not create UART peripheral");
 
-    cu_embedded_registry::register(0, csrf_uart)
-        .expect("Failed to register UART as CRSF serial port");
+    resources::stash_crsf_serial(csrf_uart);
 
     info!("Setting up Copper...");
 

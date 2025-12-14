@@ -11,10 +11,14 @@ pub struct ThrottleControl {}
 impl Freezable for ThrottleControl {}
 
 impl CuTask for ThrottleControl {
+    type Resources<'r> = ();
     type Input<'m> = CuMsg<RcChannelsPayload>;
     type Output<'m> = CuMsg<EscCommand>;
 
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self> {
         Ok(Self::default())
     }
 
@@ -54,8 +58,12 @@ impl<const ESC: usize> Default for TelemetrySink<ESC> {
 
 impl<const ESC: usize> CuSinkTask for TelemetrySink<ESC> {
     type Input<'m> = CuMsg<EscTelemetry>;
+    type Resources<'r> = ();
 
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self> {
         Ok(Self::default())
     }
 
