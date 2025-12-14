@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs::read_to_string;
 use syn::meta::parser;
 use syn::Fields::{Named, Unnamed};
@@ -2558,9 +2558,17 @@ fn build_resources_module(
     config: &CuConfig,
     resource_specs: &[ResourceKeySpec],
 ) -> CuResult<(proc_macro2::TokenStream, proc_macro2::TokenStream)> {
+    let mut unique_specs: Vec<&ResourceKeySpec> = Vec::new();
+    let mut seen_paths = BTreeSet::new();
+    for spec in resource_specs {
+        if seen_paths.insert(spec.path.clone()) {
+            unique_specs.push(spec);
+        }
+    }
+
     let bundle_specs = build_bundle_list(config, mission);
 
-    for spec in resource_specs {
+    for spec in &unique_specs {
         if !bundle_specs
             .iter()
             .any(|bundle| bundle.id == spec.bundle_id)
@@ -2573,18 +2581,18 @@ fn build_resources_module(
     }
 
     let mut resources_by_bundle: BTreeMap<String, Vec<&ResourceKeySpec>> = BTreeMap::new();
-    for spec in resource_specs {
+    for spec in &unique_specs {
         resources_by_bundle
             .entry(spec.bundle_id.clone())
             .or_default()
             .push(spec);
     }
 
-    let res_id_variants = resource_specs.iter().map(|spec| {
+    let res_id_variants = unique_specs.iter().map(|spec| {
         let ident = &spec.enum_ident;
         quote! { #ident }
     });
-    let num_resources = resource_specs.len();
+    let num_resources = unique_specs.len();
     let res_id_def = if num_resources == 0 {
         quote! {
             #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -2624,7 +2632,7 @@ fn build_resources_module(
         }
     });
 
-    let all_decl_entries = resource_specs.iter().map(|spec| {
+    let all_decl_entries = unique_specs.iter().map(|spec| {
         let module_ident = Ident::new(
             &config_id_to_struct_member(spec.bundle_id.as_str()),
             Span::call_site(),
