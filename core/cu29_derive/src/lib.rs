@@ -713,8 +713,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         // FIXME: implement here the threadpool emulation.
         let task_sim_instances_init_code = all_sim_tasks_types
             .iter()
+            .zip(&task_specs.sim_task_types)
+            .zip(&task_specs.background_flags)
             .enumerate()
-            .map(|(index, ty)| {
+            .map(|(index, ((ty, base_task_type), background))| {
                 let additional_error_info = format!(
                     "Failed to get create instance for {}, instance index {}.",
                     task_specs.type_names[index], index
@@ -729,15 +731,29 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             <#ty>::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
                         }
                     },
-                    CuTaskType::Regular => quote! {
-                        {
-                            let resources = <<#ty as CuTask>::Resources<'_> as ResourceBindings>::from_bindings(
-                                resources,
-                                TASK_RESOURCE_MAPPINGS[#index],
-                            ).map_err(|e| e.add_cause(#additional_error_info))?;
-                            <#ty>::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
+                    CuTaskType::Regular => {
+                        if *background {
+                            quote! {
+                                {
+                                    let resources = <<#base_task_type as CuTask>::Resources<'_> as ResourceBindings>::from_bindings(
+                                        resources,
+                                        TASK_RESOURCE_MAPPINGS[#index],
+                                    ).map_err(|e| e.add_cause(#additional_error_info))?;
+                                    <#ty>::new(all_instances_configs[#index], resources, threadpool.clone()).map_err(|e| e.add_cause(#additional_error_info))?
+                                }
+                            }
+                        } else {
+                            quote! {
+                                {
+                                    let resources = <<#ty as CuTask>::Resources<'_> as ResourceBindings>::from_bindings(
+                                        resources,
+                                        TASK_RESOURCE_MAPPINGS[#index],
+                                    ).map_err(|e| e.add_cause(#additional_error_info))?;
+                                    <#ty>::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
+                                }
+                            }
                         }
-                    },
+                    }
                     CuTaskType::Sink => quote! {
                         {
                             let resources = <<#ty as CuSinkTask>::Resources<'_> as ResourceBindings>::from_bindings(
@@ -1741,7 +1757,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         let sim_inst_body = if task_sim_instances_init_code.is_empty() {
             quote! {
-                let _ = (resources, _threadpool);
+                let _ = (resources, threadpool);
                 Ok(())
             }
         } else {
@@ -1753,7 +1769,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 pub fn tasks_instanciator_sim(
                     all_instances_configs: Vec<Option<&ComponentConfig>>,
                     resources: &mut ResourceManager,
-                    _threadpool: Arc<ThreadPool>,
+                    threadpool: Arc<ThreadPool>,
                 ) -> CuResult<CuSimTasks> {
                     #sim_inst_body
             }})
