@@ -488,7 +488,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             &task_member_names,
         );
 
-        let resource_specs = match collect_resource_specs(graph, &task_specs) {
+        let resource_specs = match collect_resource_specs(graph, &task_specs, &culist_bridge_specs)
+        {
             Ok(specs) => specs,
             Err(e) => return return_error(e.to_string()),
         };
@@ -503,6 +504,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 Ok(tokens) => tokens,
                 Err(e) => return return_error(e.to_string()),
             };
+        let bridge_resource_mappings_tokens =
+            build_bridge_resource_mappings(&resource_specs, &culist_bridge_specs);
 
         let ids = build_monitored_ids(&task_specs.ids, &mut culist_bridge_specs);
 
@@ -599,7 +602,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             .unwrap_or_else(|| panic!("Bridge '{}' missing from configuration", #bridge_name));
                         let bridge_resources = <<#bridge_type as cu29::cubridge::CuBridge>::Resources<'_> as ResourceBindings>::from_bindings(
                             resources,
-                            None,
+                            BRIDGE_RESOURCE_MAPPINGS[#idx],
                         )
                         .map_err(|e| cu29::CuError::new_with_cause(#binding_error, e))?;
                         let tx_channels: &[cu29::cubridge::BridgeChannelConfig<
@@ -1882,6 +1885,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #resources_module
                 #resources_instanciator_fn
                 #task_resource_mappings_tokens
+                #bridge_resource_mappings_tokens
 
                 #sim_tasks
                 #sim_support
@@ -2438,6 +2442,12 @@ fn collect_task_member_names(graph: &CuGraph) -> Vec<(NodeId, String)> {
         .collect()
 }
 
+#[derive(Clone, Copy)]
+enum ResourceOwner {
+    Task(usize),
+    Bridge(usize),
+}
+
 #[derive(Clone)]
 struct ResourceKeySpec {
     path: String,
@@ -2445,7 +2455,7 @@ struct ResourceKeySpec {
     enum_ident: Ident,
     const_ident: Ident,
     binding_name: String,
-    task_index: usize,
+    owner: ResourceOwner,
 }
 
 fn parse_resource_path(path: &str) -> CuResult<(String, String)> {
@@ -2467,40 +2477,62 @@ fn parse_resource_path(path: &str) -> CuResult<(String, String)> {
 fn collect_resource_specs(
     graph: &CuGraph,
     task_specs: &CuTaskSpecSet,
+    bridge_specs: &[BridgeSpec],
 ) -> CuResult<Vec<ResourceKeySpec>> {
-    let mut seen_paths = BTreeSet::new();
+    let mut path_registry: BTreeMap<String, (String, Ident, Ident)> = BTreeMap::new();
+    let mut bridge_lookup: BTreeMap<String, usize> = BTreeMap::new();
+    for (idx, spec) in bridge_specs.iter().enumerate() {
+        bridge_lookup.insert(spec.id.clone(), idx);
+    }
     let mut specs = Vec::new();
+
+    let mut push_spec =
+        |owner: ResourceOwner, binding_name: String, path: String| -> CuResult<()> {
+            let (bundle_id, name) = parse_resource_path(&path)?;
+            let (bundle_id, enum_ident, const_ident) = path_registry
+                .entry(path.clone())
+                .or_insert_with(|| {
+                    let enum_ident =
+                        Ident::new(&config_id_to_enum(path.as_str()), Span::call_site());
+                    let const_ident =
+                        Ident::new(&config_id_to_bridge_const(name.as_str()), Span::call_site());
+                    (bundle_id.clone(), enum_ident, const_ident)
+                })
+                .clone();
+
+            specs.push(ResourceKeySpec {
+                path,
+                bundle_id,
+                enum_ident,
+                const_ident,
+                binding_name,
+                owner,
+            });
+            Ok(())
+        };
 
     for (node_id, node) in graph.get_all_nodes() {
         if let Some(resources) = node.get_resources() {
-            let task_index =
-                task_specs.node_id_to_task_index[node_id as usize].ok_or_else(|| {
+            let task_index = task_specs.node_id_to_task_index[node_id as usize];
+            let owner = if let Some(task_index) = task_index {
+                ResourceOwner::Task(task_index)
+            } else if node.get_flavor() == Flavor::Bridge {
+                let bridge_index = bridge_lookup.get(&node.get_id()).ok_or_else(|| {
                     CuError::from(format!(
-                        "Resource mapping attached to non-task node '{}'",
+                        "Resource mapping attached to unknown bridge node '{}'",
                         node.get_id()
                     ))
                 })?;
+                ResourceOwner::Bridge(*bridge_index)
+            } else {
+                return Err(CuError::from(format!(
+                    "Resource mapping attached to non-task node '{}'",
+                    node.get_id()
+                )));
+            };
 
             for (binding_name, path) in resources {
-                if !seen_paths.insert(path.clone()) {
-                    return Err(CuError::from(format!(
-                        "Resource path '{}' is used multiple times, resource paths must be unique within a mission",
-                        path
-                    )));
-                }
-
-                let (bundle_id, name) = parse_resource_path(path)?;
-                let enum_ident = Ident::new(&config_id_to_enum(path), Span::call_site());
-                let const_ident =
-                    Ident::new(&config_id_to_bridge_const(name.as_str()), Span::call_site());
-                specs.push(ResourceKeySpec {
-                    path: path.clone(),
-                    bundle_id,
-                    enum_ident,
-                    const_ident,
-                    binding_name: binding_name.clone(),
-                    task_index,
-                });
+                push_spec(owner, binding_name.clone(), path.clone())?;
             }
         }
     }
@@ -2526,9 +2558,17 @@ fn build_resources_module(
     config: &CuConfig,
     resource_specs: &[ResourceKeySpec],
 ) -> CuResult<(proc_macro2::TokenStream, proc_macro2::TokenStream)> {
+    let mut unique_specs: Vec<&ResourceKeySpec> = Vec::new();
+    let mut seen_paths = BTreeSet::new();
+    for spec in resource_specs {
+        if seen_paths.insert(spec.path.clone()) {
+            unique_specs.push(spec);
+        }
+    }
+
     let bundle_specs = build_bundle_list(config, mission);
 
-    for spec in resource_specs {
+    for spec in &unique_specs {
         if !bundle_specs
             .iter()
             .any(|bundle| bundle.id == spec.bundle_id)
@@ -2541,18 +2581,18 @@ fn build_resources_module(
     }
 
     let mut resources_by_bundle: BTreeMap<String, Vec<&ResourceKeySpec>> = BTreeMap::new();
-    for spec in resource_specs {
+    for spec in &unique_specs {
         resources_by_bundle
             .entry(spec.bundle_id.clone())
             .or_default()
             .push(spec);
     }
 
-    let res_id_variants = resource_specs.iter().map(|spec| {
+    let res_id_variants = unique_specs.iter().map(|spec| {
         let ident = &spec.enum_ident;
         quote! { #ident }
     });
-    let num_resources = resource_specs.len();
+    let num_resources = unique_specs.len();
     let res_id_def = if num_resources == 0 {
         quote! {
             #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -2592,7 +2632,7 @@ fn build_resources_module(
         }
     });
 
-    let all_decl_entries = resource_specs.iter().map(|spec| {
+    let all_decl_entries = unique_specs.iter().map(|spec| {
         let module_ident = Ident::new(
             &config_id_to_struct_member(spec.bundle_id.as_str()),
             Span::call_site(),
@@ -2698,16 +2738,19 @@ fn build_task_resource_mappings(
     let mut per_task: Vec<Vec<(&str, Ident, Ident)>> = vec![Vec::new(); task_specs.ids.len()];
 
     for spec in resource_specs {
+        let ResourceOwner::Task(task_index) = spec.owner else {
+            continue;
+        };
         let module_ident = Ident::new(
             &config_id_to_struct_member(spec.bundle_id.as_str()),
             Span::call_site(),
         );
         per_task
-            .get_mut(spec.task_index)
+            .get_mut(task_index)
             .ok_or_else(|| {
                 CuError::from(format!(
                     "Resource '{}' mapped to invalid task index {}",
-                    spec.path, spec.task_index
+                    spec.path, task_index
                 ))
             })?
             .push((
@@ -2751,6 +2794,63 @@ fn build_task_resource_mappings(
         #(#mapping_consts)*
         #mappings_array
     })
+}
+
+fn build_bridge_resource_mappings(
+    resource_specs: &[ResourceKeySpec],
+    bridge_specs: &[BridgeSpec],
+) -> proc_macro2::TokenStream {
+    let mut per_bridge: Vec<Vec<(&str, Ident, Ident)>> = vec![Vec::new(); bridge_specs.len()];
+
+    for spec in resource_specs {
+        let ResourceOwner::Bridge(bridge_index) = spec.owner else {
+            continue;
+        };
+        let module_ident = Ident::new(
+            &config_id_to_struct_member(spec.bundle_id.as_str()),
+            Span::call_site(),
+        );
+        per_bridge[bridge_index].push((
+            spec.binding_name.as_str(),
+            module_ident,
+            spec.const_ident.clone(),
+        ));
+    }
+
+    let mut mapping_entries = Vec::new();
+    let mut mapping_consts = Vec::new();
+    let mut mapping_refs = Vec::new();
+
+    for (idx, entries) in per_bridge.iter().enumerate() {
+        if entries.is_empty() {
+            mapping_refs.push(quote! { None });
+            continue;
+        }
+        let entries_ident = format_ident!("BRIDGE{}_RES_ENTRIES", idx);
+        let map_ident = format_ident!("BRIDGE{}_RES_MAPPING", idx);
+        let entry_tokens = entries.iter().map(|(name, module_ident, const_ident)| {
+            let name_lit = LitStr::new(name, Span::call_site());
+            quote! { (#name_lit, resources::#module_ident::#const_ident) }
+        });
+        mapping_entries.push(quote! {
+            const #entries_ident: &[(&str, cu29::resource::ResourceKey)] = &[ #(#entry_tokens),* ];
+        });
+        mapping_consts.push(quote! {
+            const #map_ident: cu29::resource::ResourceMapping = cu29::resource::ResourceMapping::new(#entries_ident);
+        });
+        mapping_refs.push(quote! { Some(&#map_ident) });
+    }
+
+    let mappings_array = quote! {
+        pub const BRIDGE_RESOURCE_MAPPINGS: &[Option<&cu29::resource::ResourceMapping>] =
+            &[ #(#mapping_refs),* ];
+    };
+
+    quote! {
+        #(#mapping_entries)*
+        #(#mapping_consts)*
+        #mappings_array
+    }
 }
 
 fn build_execution_plan(
@@ -3359,6 +3459,39 @@ mod tests {
     fn test_compile_fail() {
         let t = trybuild::TestCases::new();
         t.compile_fail("tests/compile_fail/*/*.rs");
+    }
+
+    #[test]
+    fn bridge_resources_are_collected() {
+        use super::*;
+        use cu29::config::{CuGraph, Flavor, Node};
+        use std::collections::HashMap;
+        use syn::parse_str;
+
+        let mut graph = CuGraph::default();
+        let mut node = Node::new_with_flavor("radio", "bridge::Dummy", Flavor::Bridge);
+        let mut res = HashMap::new();
+        res.insert("serial".to_string(), "fc.serial0".to_string());
+        node.set_resources(Some(res));
+        graph.add_node(node).expect("bridge node");
+
+        let task_specs = CuTaskSpecSet::from_graph(&graph);
+        let bridge_spec = BridgeSpec {
+            id: "radio".to_string(),
+            type_path: parse_str("bridge::Dummy").unwrap(),
+            config_index: 0,
+            tuple_index: 0,
+            monitor_index: None,
+            rx_channels: Vec::new(),
+            tx_channels: Vec::new(),
+        };
+
+        let specs =
+            collect_resource_specs(&graph, &task_specs, &[bridge_spec]).expect("collect specs");
+        assert_eq!(specs.len(), 1);
+        assert!(matches!(specs[0].owner, ResourceOwner::Bridge(0)));
+        assert_eq!(specs[0].binding_name, "serial");
+        assert_eq!(specs[0].path, "fc.serial0");
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
