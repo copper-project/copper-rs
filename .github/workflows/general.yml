@@ -8,7 +8,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_TARGET_DIR: ${{ github.workspace }}/target
 
 jobs:
   Unit-Tests:
@@ -17,7 +16,6 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     env:
-      DYLD_LIBRARY_PATH: /Library/Frameworks/GStreamer.framework/Versions/Current/lib:$DYLD_LIBRARY_PATH
       BASE_FEATURES: macro_debug,mock,perf-ui,image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
 
     strategy:
@@ -63,6 +61,15 @@ jobs:
           large-packages: false
           docker-images: true
           swap-storage: true
+
+      - name: Linux-only Cargo paths
+        if: runner.os == 'Linux'
+        run: |
+          echo "CARGO_TARGET_DIR=/mnt/cargo-target" >> $GITHUB_ENV
+          echo "CARGO_HOME=/mnt/cargo-home" >> $GITHUB_ENV
+          echo "TMPDIR=/mnt/tmp" >> $GITHUB_ENV
+          sudo mkdir -p /mnt/cargo-home /mnt/cargo-target /mnt/tmp
+          sudo chown -R "$USER:$USER" /mnt/cargo-home /mnt/cargo-target /mnt/tmp
 
       - name: Install dependencies (Windows)
         if: runner.os == 'Windows'
@@ -118,13 +125,22 @@ jobs:
             gstreamer1.0-qt5 \
             gstreamer1.0-pulseaudio
 
-      - name: Setup GStreamer
-        if: runner.os == 'MacOS'
-        id: setup_gstreamer_other
-        uses: blinemedical/setup-gstreamer@v1.4.0
-        with:
-          arch: 'arm64'
-          version: 1.24.13
+      - name: Install GStreamer (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew update
+          brew install \
+            gstreamer \
+            gst-plugins-base \
+            gst-plugins-good \
+            gst-plugins-bad \
+            gst-plugins-ugly \
+            gst-libav \
+            gst-plugins-rs \
+            gtk+3 \
+            qt@5
+          echo "DYLD_LIBRARY_PATH=/opt/homebrew/opt/gstreamer/lib:/usr/local/opt/gstreamer/lib:$DYLD_LIBRARY_PATH" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig:/opt/homebrew/opt/gstreamer/lib/pkgconfig:$(brew --prefix qt@5)/lib/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
 
       - name: Debug GStreamer Installation
         if: runner.os == 'macOS'
@@ -133,27 +149,18 @@ jobs:
           pkg-config --modversion gstreamer-1.0 || { echo "GStreamer not found!"; }
 
           echo "Checking GStreamer library path..."
-          if [[ -d "/Library/Frameworks/GStreamer.framework" ]]; then
-            echo "GStreamer is installed at /Library/Frameworks/GStreamer.framework"
+          if [[ -d "/opt/homebrew/opt/gstreamer/lib" ]]; then
+            echo "GStreamer is installed at /opt/homebrew/opt/gstreamer/lib"
+            ls -l /opt/homebrew/opt/gstreamer/lib | head
           else
-            echo "GStreamer framework is missing!"
+            echo "GStreamer libraries missing!"
           fi
-
-          echo "Checking GStreamer shared libraries..."
-          ls -l /Library/Frameworks/GStreamer.framework/Versions/Current/lib/ | grep libgstapp || { echo "libgstapp missing!"; }
 
           echo "Checking PKG_CONFIG_PATH..."
           echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
 
           echo "Checking DYLD_LIBRARY_PATH..."
           echo "DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH"
-
-          echo "Checking linked libraries for cu_gstreamer..."
-          if ls target/debug/deps/cu_gstreamer-* 1> /dev/null 2>&1; then
-            otool -L target/debug/deps/cu_gstreamer-* | grep libgstapp || { echo "libgstapp is not linked!"; }
-          else
-            echo "cu_gstreamer binary not found, skipping otool check."
-          fi
 
 
       - name: Install CUDA
@@ -214,6 +221,20 @@ jobs:
         run: cargo +stable clippy $RELEASE_FLAG --workspace --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES -- --deny warnings
       - name: Run build with all features on (${{ matrix.os }} | ${{matrix.mode}})
         run: cargo +stable build $RELEASE_FLAG --workspace --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES
+
+      - name: Verify GStreamer linkage (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          TARGET_DIR=target/debug
+          if [[ "$RELEASE_FLAG" == "--release" ]]; then
+            TARGET_DIR=target/release
+          fi
+          echo "Checking linked libraries in $TARGET_DIR..."
+          if ls "$TARGET_DIR"/deps/cu_gstreamer-* 1> /dev/null 2>&1; then
+            otool -L "$TARGET_DIR"/deps/cu_gstreamer-* | grep libgstapp || { echo "libgstapp is not linked!"; }
+          else
+            echo "cu_gstreamer binary not found, skipping otool check."
+          fi
 
       - name: Run doctests on (${{ matrix.os }} | debug)
         if: matrix.mode == 'debug'
