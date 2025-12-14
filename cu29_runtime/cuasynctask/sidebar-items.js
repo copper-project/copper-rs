@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["CuAsyncTask"]};
+window.SIDEBAR_ITEMS = {"struct":["CuAsyncTask","CuAsyncTaskResources"]};
