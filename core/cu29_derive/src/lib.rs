@@ -2530,8 +2530,8 @@ fn collect_resource_specs(
             }
         }
 
-        if let Some(task_index) = task_specs.node_id_to_task_index[node_id as usize] {
-            if task_specs.background_flags[task_index]
+        if let Some(task_index) = task_specs.node_id_to_task_index[node_id as usize]
+            && task_specs.background_flags[task_index]
                 && resources
                     .map(|res| !res.contains_key("bg_threads"))
                     .unwrap_or(true)
@@ -2542,7 +2542,6 @@ fn collect_resource_specs(
                     "threadpool.bg_threads".to_string(),
                 )?;
             }
-        }
     }
 
     Ok(specs)

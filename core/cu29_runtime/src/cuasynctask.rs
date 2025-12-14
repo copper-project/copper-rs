@@ -122,12 +122,11 @@ where
                 return Ok(());
             }
 
-            if let Some(ready_at) = state.ready_at {
-                if clock.now() < ready_at {
+            if let Some(ready_at) = state.ready_at
+                && clock.now() < ready_at {
                     // result not yet allowed to surface based on recorded completion time
                     return Ok(());
                 }
-            }
 
             // mark as processing before spawning the next job
             state.processing = true;
