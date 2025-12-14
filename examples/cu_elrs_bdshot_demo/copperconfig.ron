@@ -15,7 +15,7 @@
     bridges: [
         (  id: "crsf",
            type: "cu_crsf::CrsfBridge<SerialResource, SerialPortError>",
-           resources: { serial: "fc.serial" },
+           resources: { "serial": "fc.serial" },
            channels: [
                 Rx ( id: "rc_rx" ),  // receiving RC Channels
                 Tx ( id: "lq_tx" ),  // Sending LineQuality back

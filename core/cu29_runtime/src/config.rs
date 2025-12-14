@@ -307,6 +307,14 @@ impl Node {
     }
 
     #[allow(dead_code)]
+    pub fn set_resources<I>(&mut self, resources: Option<I>)
+    where
+        I: IntoIterator<Item = (String, String)>,
+    {
+        self.resources = resources.map(|iter| iter.into_iter().collect());
+    }
+
+    #[allow(dead_code)]
     pub fn is_background(&self) -> bool {
         self.background.unwrap_or(false)
     }
@@ -468,6 +476,8 @@ pub struct BridgeConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub config: Option<ComponentConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub resources: Option<HashMap<String, String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub missions: Option<Vec<String>>,
     /// List of logical endpoints exposed by this bridge.
     pub channels: Vec<BridgeChannelConfigRepresentation>,
@@ -477,6 +487,7 @@ impl BridgeConfig {
     fn to_node(&self) -> Node {
         let mut node = Node::new_with_flavor(&self.id, &self.type_, Flavor::Bridge);
         node.config = self.config.clone();
+        node.resources = self.resources.clone();
         node.missions = self.missions.clone();
         node
     }
@@ -2263,6 +2274,7 @@ mod tests {
             id: "radio".to_string(),
             type_: "tasks::SerialBridge".to_string(),
             config: Some(bridge_config),
+            resources: None,
             missions: None,
             channels: vec![
                 BridgeChannelConfigRepresentation::Rx {
@@ -2439,6 +2451,102 @@ mod tests {
             resources.get("irq").map(String::as_str),
             Some("fc.gpio_imu")
         );
+    }
+
+    #[test]
+    fn test_bridge_resources_preserved() {
+        let mut config = CuConfig::default();
+        config.resources.push(ResourceBundleConfig {
+            id: "fc".to_string(),
+            provider: "board::Bundle".to_string(),
+            config: None,
+            missions: None,
+        });
+        let bridge_resources = HashMap::from([("serial".to_string(), "fc.serial0".to_string())]);
+        config.bridges.push(BridgeConfig {
+            id: "radio".to_string(),
+            type_: "tasks::SerialBridge".to_string(),
+            config: None,
+            resources: Some(bridge_resources),
+            missions: None,
+            channels: vec![BridgeChannelConfigRepresentation::Tx {
+                id: "uplink".to_string(),
+                route: None,
+                config: None,
+            }],
+        });
+
+        let serialized = config.serialize_ron();
+        let deserialized = CuConfig::deserialize_ron(&serialized);
+        let graph = deserialized.graphs.get_graph(None).expect("missing graph");
+        let bridge_id = graph
+            .get_node_id_by_name("radio")
+            .expect("bridge node missing");
+        let node = graph.get_node(bridge_id).expect("missing bridge node");
+        let resources = node
+            .get_resources()
+            .expect("bridge resources were not preserved");
+        assert_eq!(
+            resources.get("serial").map(String::as_str),
+            Some("fc.serial0")
+        );
+    }
+
+    #[test]
+    fn test_demo_config_parses() {
+        let txt = r#"(
+    resources: [
+        (
+            id: "fc",
+            provider: "crate::resources::RadioBundle",
+        ),
+    ],
+    tasks: [
+        (id: "thr", type: "tasks::ThrottleControl"),
+        (id: "tele0", type: "tasks::TelemetrySink0"),
+        (id: "tele1", type: "tasks::TelemetrySink1"),
+        (id: "tele2", type: "tasks::TelemetrySink2"),
+        (id: "tele3", type: "tasks::TelemetrySink3"),
+    ],
+    bridges: [
+        (  id: "crsf",
+           type: "cu_crsf::CrsfBridge<SerialResource, SerialPortError>",
+           resources: { "serial": "fc.serial" },
+           channels: [
+                Rx ( id: "rc_rx" ),  // receiving RC Channels
+                Tx ( id: "lq_tx" ),  // Sending LineQuality back
+            ],
+        ),
+        (
+            id: "bdshot",
+            type: "cu_bdshot::RpBdshotBridge",
+            channels: [
+                Tx ( id: "esc0_tx" ),
+                Tx ( id: "esc1_tx" ),
+                Tx ( id: "esc2_tx" ),
+                Tx ( id: "esc3_tx" ),
+                Rx ( id: "esc0_rx" ),
+                Rx ( id: "esc1_rx" ),
+                Rx ( id: "esc2_rx" ),
+                Rx ( id: "esc3_rx" ),
+            ],
+        ),
+    ],
+    cnx: [
+        (src: "crsf/rc_rx", dst: "thr", msg: "cu_crsf::messages::RcChannelsPayload"),
+        (src: "thr", dst: "bdshot/esc0_tx", msg: "cu_bdshot::EscCommand"),
+        (src: "thr", dst: "bdshot/esc1_tx", msg: "cu_bdshot::EscCommand"),
+        (src: "thr", dst: "bdshot/esc2_tx", msg: "cu_bdshot::EscCommand"),
+        (src: "thr", dst: "bdshot/esc3_tx", msg: "cu_bdshot::EscCommand"),
+        (src: "bdshot/esc0_rx", dst: "tele0", msg: "cu_bdshot::EscTelemetry"),
+        (src: "bdshot/esc1_rx", dst: "tele1", msg: "cu_bdshot::EscTelemetry"),
+        (src: "bdshot/esc2_rx", dst: "tele2", msg: "cu_bdshot::EscTelemetry"),
+        (src: "bdshot/esc3_rx", dst: "tele3", msg: "cu_bdshot::EscTelemetry"),
+    ],
+)"#;
+        let config = CuConfig::deserialize_ron(txt);
+        assert_eq!(config.resources.len(), 1);
+        assert_eq!(config.bridges.len(), 2);
     }
 
     #[test]
