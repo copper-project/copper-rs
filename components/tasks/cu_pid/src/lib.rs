@@ -159,7 +159,7 @@ where
     {
         match config {
             Some(config) => {
-                debug!("PIDTask config: {}", config);
+                debug!("PIDTask config loaded");
                 let setpoint: f32 = config
                     .get::<f64>("setpoint")
                     .ok_or("'setpoint' not found in config")?
