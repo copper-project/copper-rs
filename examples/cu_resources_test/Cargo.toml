@@ -1,0 +1,32 @@
+[package]
+name = "cu-resources-test"
+description = "Resource-heavy Copper demo covering bundles, missions, owned vs shared, and bridge resources."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+default-run = "cu-resources-test"
+
+publish = false
+
+[[bin]]
+name = "cu-resources-test"
+path = "src/main.rs"
+
+[dependencies]
+clap = { workspace = true }
+cu29 = { workspace = true, features = ["log-level-debug"] }
+cu29-helpers = { workspace = true }
+cu29-unifiedlog = { workspace = true }
+cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.11.0" }
+serde = { workspace = true }
+bincode = { workspace = true }
+parking_lot = "0.12"
+
+[features]
+default = []
+macro_debug = ["cu29/macro_debug"]
