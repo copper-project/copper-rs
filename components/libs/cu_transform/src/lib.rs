@@ -26,5 +26,5 @@ pub use transform_payload::{FrameTransform, TypedTransform, TypedTransformBuffer
 pub use tree::TransformTree;
 pub use velocity::VelocityTransform;
 
-pub use cu29::prelude::CuMsg;
 pub use cu_spatial_payloads::Transform3D;
+pub use cu29::prelude::CuMsg;

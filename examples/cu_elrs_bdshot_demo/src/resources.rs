@@ -1,6 +1,6 @@
 use crate::{SerialResource, SerialResourceInner};
-use cu29::resource::{ResourceBundle, ResourceDecl, ResourceManager};
 use cu29::CuResult;
+use cu29::resource::{ResourceBundle, ResourceDecl, ResourceManager};
 
 static SERIAL: spin::Mutex<Option<SerialResourceInner>> = spin::Mutex::new(None);
 

@@ -1,6 +1,6 @@
+use cu_wt901::PositionalReadingsPayload;
 use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
-use cu_wt901::PositionalReadingsPayload;
 
 use std::thread::sleep;
 use std::time::Duration;

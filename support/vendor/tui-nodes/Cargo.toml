@@ -10,7 +10,7 @@
 # See Cargo.toml.orig for the original contents.
 
 [package]
-edition = "2021"
+edition = "2024"
 name = "tui-nodes"
 version = "0.9.0"
 authors = ["jaxter184 <jaxter184@gmail.com>"]

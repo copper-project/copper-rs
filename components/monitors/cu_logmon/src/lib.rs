@@ -202,10 +202,10 @@ impl CuMonitor for CuLogMon {
             }
 
             for (idx, meta) in msgs.iter().enumerate() {
-                if let Some(task_stat) = window.per_task.get_mut(idx) {
-                    if let Some(duration) = task_duration(meta) {
-                        task_stat.record(duration);
-                    }
+                if let Some(task_stat) = window.per_task.get_mut(idx)
+                    && let Some(duration) = task_duration(meta)
+                {
+                    task_stat.record(duration);
                 }
             }
 

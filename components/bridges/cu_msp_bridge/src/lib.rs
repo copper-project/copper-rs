@@ -36,6 +36,8 @@ use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
+use cu_msp_lib::structs::{MspRequest, MspResponse};
+use cu_msp_lib::{MspPacket, MspParser};
 use cu29::cubridge::{
     BridgeChannel, BridgeChannelConfig, BridgeChannelInfo, BridgeChannelSet, CuBridge,
 };
@@ -43,8 +45,6 @@ use cu29::prelude::*;
 #[cfg(feature = "std")]
 use cu29::resource::ResourceDecl;
 use cu29::resource::{Owned, ResourceBindings, ResourceBundle, ResourceManager, ResourceMapping};
-use cu_msp_lib::structs::{MspRequest, MspResponse};
-use cu_msp_lib::{MspPacket, MspParser};
 use embedded_io::{ErrorType, Read, Write};
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
@@ -64,13 +64,11 @@ impl MspRequestBatch {
     }
 
     pub fn push(&mut self, req: MspRequest) {
-        let Self(ref mut vec) = self;
-        vec.push(req);
+        self.0.push(req);
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &MspRequest> {
-        let Self(ref vec) = self;
-        vec.iter()
+        self.0.iter()
     }
 }
 
@@ -97,8 +95,7 @@ impl MspResponseBatch {
     }
 
     pub fn push(&mut self, resp: MspResponse) {
-        let Self(ref mut vec) = self;
-        vec.push(resp);
+        self.0.push(resp);
     }
 
     pub fn clear(&mut self) {

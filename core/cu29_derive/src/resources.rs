@@ -2,8 +2,8 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse::{Parse, ParseStream};
 use syn::{
-    braced, parenthesized, parse_macro_input, punctuated::Punctuated, Error, Ident, Token, Type,
-    WherePredicate,
+    Error, Ident, Token, Type, WherePredicate, braced, parenthesized, parse_macro_input,
+    punctuated::Punctuated,
 };
 
 pub fn resources(input: TokenStream) -> TokenStream {
@@ -207,7 +207,7 @@ impl Parse for ResourceEntry {
                 return Err(Error::new(
                     kind_ident.span(),
                     format!("unknown kind `{}`", other),
-                ))
+                ));
             }
         };
         let _lt = input.parse::<Token![<]>()?;

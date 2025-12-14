@@ -60,7 +60,7 @@ pub fn find_copper_partition<D: BlockDevice>(
     Ok(None)
 }
 
-#[cfg(feature = "eh02")]
+#[cfg(all(feature = "eh02", not(feature = "eh1")))]
 fn read_blocks<D: BlockDevice>(
     dev: &D,
     blocks: &mut [Block],

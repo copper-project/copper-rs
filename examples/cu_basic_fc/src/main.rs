@@ -7,25 +7,25 @@ use alloc::sync::Arc;
 use alloc::vec;
 use buddy_system_allocator::LockedHeap as StdHeap;
 use cortex_m::{asm, peripheral::DWT};
-use cortex_m_rt::{entry, exception, ExceptionFrame};
-use cu29::prelude::*;
-use cu_sdlogger::{find_copper_partition, EMMCLogger, EMMCSectionStorage, ForceSyncSend};
+use cortex_m_rt::{ExceptionFrame, entry, exception};
+use cu_sdlogger::{EMMCLogger, EMMCSectionStorage, ForceSyncSend, find_copper_partition};
 use cu_sensor_payloads::ImuPayload;
+use cu29::prelude::*;
 use defmt::info;
 use defmt_rtt as _;
 use panic_probe as _;
 use spin::Mutex;
 use stm32h7xx_hal::{
     gpio::{
-        gpioc::{PC6, PC7},
         Alternate, Speed,
+        gpioc::{PC6, PC7},
     },
     nb, pac,
     prelude::*,
     rcc,
     sdmmc::{self, SdCard, Sdmmc, SdmmcBlockDevice},
     serial::Error as UartError,
-    serial::{config::Config, Serial},
+    serial::{Serial, config::Config},
 };
 
 mod tasks;

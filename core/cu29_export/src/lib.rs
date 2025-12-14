@@ -4,8 +4,8 @@ use bincode::config::standard;
 use bincode::decode_from_std_read;
 use bincode::error::DecodeError;
 use clap::{Parser, Subcommand, ValueEnum};
-use cu29::prelude::*;
 use cu29::UnifiedLogType;
+use cu29::prelude::*;
 use cu29_intern_strs::read_interned_strings;
 use fsck::check;
 use std::fmt::{Display, Formatter};
@@ -417,19 +417,22 @@ mod python {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bincode::{encode_into_slice, Decode, Encode};
+    use bincode::{Decode, Encode, encode_into_slice};
     use std::env;
     use std::fs;
     use std::io::Cursor;
     use std::path::PathBuf;
     use std::sync::{Arc, Mutex};
-    use tempfile::{tempdir, TempDir};
+    use tempfile::{TempDir, tempdir};
 
     fn copy_stringindex_to_temp(tmpdir: &TempDir) -> PathBuf {
         // Build a minimal index on the fly so tests don't depend on build-time artifacts.
         let fake_out_dir = tmpdir.path().join("build").join("out").join("dir");
         fs::create_dir_all(&fake_out_dir).unwrap();
-        env::set_var("LOG_INDEX_DIR", &fake_out_dir);
+        // Explicit unsafe block needed by Rust 2024 for this unsafe API.
+        unsafe {
+            env::set_var("LOG_INDEX_DIR", &fake_out_dir);
+        }
 
         // Provide entries for the message indexes used in this test module.
         let _ = cu29_intern_strs::intern_string("unused to start counter");

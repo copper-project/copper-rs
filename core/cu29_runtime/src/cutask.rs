@@ -6,11 +6,11 @@ use bincode::de::{Decode, Decoder};
 use bincode::enc::{Encode, Encoder};
 use bincode::error::{DecodeError, EncodeError};
 use compact_str::{CompactString, ToCompactString};
-use core::any::{type_name, TypeId};
+use core::any::{TypeId, type_name};
 use cu29_clock::{PartialCuTimeRange, RobotClock, Tov};
 use cu29_traits::{
-    CuCompactString, CuError, CuMsgMetadataTrait, CuResult, ErasedCuStampedData, Metadata,
-    COMPACT_STRING_CAPACITY,
+    COMPACT_STRING_CAPACITY, CuCompactString, CuError, CuMsgMetadataTrait, CuResult,
+    ErasedCuStampedData, Metadata,
 };
 use serde::{Deserialize, Serialize};
 
@@ -210,7 +210,7 @@ impl<T: CuMsgPayload> CuStampedData<T, CuMsgMetadata> {
     /// The caller must guarantee that the message really contains a payload of type `U`. Failing
     /// to do so is undefined behaviour.
     pub unsafe fn assume_payload<U: CuMsgPayload>(&self) -> &CuMsg<U> {
-        &*(self as *const CuMsg<T> as *const CuMsg<U>)
+        unsafe { &*(self as *const CuMsg<T> as *const CuMsg<U>) }
     }
 
     /// Mutable variant of [`assume_payload`](Self::assume_payload).
@@ -220,7 +220,7 @@ impl<T: CuMsgPayload> CuStampedData<T, CuMsgMetadata> {
     /// The caller must guarantee that mutating the returned message is sound for the actual
     /// payload type stored in the buffer.
     pub unsafe fn assume_payload_mut<U: CuMsgPayload>(&mut self) -> &mut CuMsg<U> {
-        &mut *(self as *mut CuMsg<T> as *mut CuMsg<U>)
+        unsafe { &mut *(self as *mut CuMsg<T> as *mut CuMsg<U>) }
     }
 }
 

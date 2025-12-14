@@ -1,7 +1,7 @@
 use core::marker::PhantomData;
-use cu29::prelude::*;
 use cu_bdshot::{DShotTelemetry, EscCommand, EscTelemetry};
 use cu_crsf::messages::RcChannelsPayload;
+use cu29::prelude::*;
 
 const CRSF_THROTTLE_INDEX: usize = 2; // 0 is aileron, 1, elevator, 2 is throttle, 3 is rudder
 

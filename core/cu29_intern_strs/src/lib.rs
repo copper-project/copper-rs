@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use bincode::config::standard;
-use bincode::{decode_from_slice, encode_to_vec, Decode, Encode};
+use bincode::{Decode, Encode, decode_from_slice, encode_to_vec};
 use fs2::FileExt;
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};

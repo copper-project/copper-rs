@@ -2,10 +2,7 @@
 
 extern crate alloc;
 
-#[cfg(all(feature = "eh1", feature = "eh02"))]
-compile_error!("Features \"eh1\" and \"eh02\" are mutually exclusive; disable default features when enabling \"eh1\".");
-
-#[cfg(feature = "eh02")]
+#[cfg(all(not(feature = "eh1"), feature = "eh02"))]
 pub use embedded_sdmmc as sdmmc;
 #[cfg(feature = "eh1")]
 pub use embedded_sdmmc_eh1 as sdmmc;

@@ -85,6 +85,7 @@ macro_rules! define_task {
 
 #[cfg(test)]
 mod tests {
+    use cu29::CuResult;
     use cu29::config::ComponentConfig;
     use cu29::cutask::CuMsg;
     use cu29::cutask::CuTask;
@@ -93,7 +94,6 @@ mod tests {
     use cu29::input_msg;
     use cu29::output_msg;
     use cu29::payload::CuArray;
-    use cu29::CuResult;
 
     define_task!(AlignerTask, 0 => { 10, 5, f32 }, 1 => { 5, 10, i32 });
 
