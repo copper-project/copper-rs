@@ -336,6 +336,23 @@ mod tests {
         done_rx
             .recv_timeout(Duration::from_secs(1))
             .expect("background task never finished");
+        // Wait until the async wrapper has cleared its processing flag and captured ready_at.
+        let mut ready_at_recorded = None;
+        for _ in 0..100 {
+            let state = async_task.state.lock().unwrap();
+            if !state.processing {
+                ready_at_recorded = state.ready_at;
+                if ready_at_recorded.is_some() {
+                    break;
+                }
+            }
+            drop(state);
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        assert!(
+            ready_at_recorded.is_some(),
+            "background task finished without recording ready_at"
+        );
 
         // Replay earlier than the recorded end time: the output should be held back.
         clock_mock.set_value(20);
