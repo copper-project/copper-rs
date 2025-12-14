@@ -1,9 +1,9 @@
 #![allow(dead_code)]
 
-use cu29::bincode::{Decode, Encode};
-use cu29::prelude::*;
 use cu_crsf::messages::RcChannelsPayload;
 use cu_sensor_payloads::ImuPayload;
+use cu29::bincode::{Decode, Encode};
+use cu29::prelude::*;
 use defmt::info;
 use serde::Serialize;
 

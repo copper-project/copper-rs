@@ -2,10 +2,10 @@
 ///
 /// The constraint on the messages is that they can be part of a copper list, fixed sized and bincode serializable.
 use arrayvec::ArrayVec;
+use bincode::BorrowDecode;
 use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
-use bincode::BorrowDecode;
 use bincode::{Decode, Encode};
 use serde_derive::{Deserialize, Serialize};
 

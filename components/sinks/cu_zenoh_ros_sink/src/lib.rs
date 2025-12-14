@@ -7,15 +7,15 @@ mod topic;
 
 use attachment::encode_attachment;
 use cdr::{CdrBe, Infinite};
+use cu_ros_payloads::RosMsgAdapter;
 use cu29::clock::RobotClock;
 use cu29::prelude::*;
-use cu_ros_payloads::RosMsgAdapter;
 use error::cu_error_map;
 use liveliness::{node_liveliness, publisher_liveliness};
 use node::Node;
 use topic::Topic;
-use zenoh::bytes::Encoding;
 use zenoh::Config;
+use zenoh::bytes::Encoding;
 
 use std::marker::PhantomData;
 

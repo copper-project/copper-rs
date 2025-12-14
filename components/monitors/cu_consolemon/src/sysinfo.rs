@@ -1,6 +1,6 @@
 use libmacchina::{
-    traits::GeneralReadout as _, traits::KernelReadout as _, traits::MemoryReadout as _,
-    traits::PackageReadout as _, GeneralReadout, KernelReadout, MemoryReadout, PackageReadout,
+    GeneralReadout, KernelReadout, MemoryReadout, PackageReadout, traits::GeneralReadout as _,
+    traits::KernelReadout as _, traits::MemoryReadout as _, traits::PackageReadout as _,
 };
 
 use pfetch_logo_parser::{Color, Logo, LogoPart};
@@ -187,7 +187,7 @@ fn pfetch(info: Vec<(Color, String, String)>, logo: Logo, logo_enabled: bool) ->
         pfetch_str += &format!(
             "{padding1}{bold}{logo}{padding2}{color}{info1}{nobold}{separator}{padding3}{color2}{info2}\n",
             padding1 = " ".repeat(padding1),
-            bold = if color_enabled {"\x1b[1m"} else {""},
+            bold = if color_enabled { "\x1b[1m" } else { "" },
             logo = if logo_enabled {
                 logo_lines.next().unwrap_or("")
             } else {
@@ -201,31 +201,34 @@ fn pfetch(info: Vec<(Color, String, String)>, logo: Logo, logo_enabled: bool) ->
                 info.get(l).map_or("".to_owned(), |line| {
                     let (color, _, _) = line;
                     color.to_string()
-                }
-                )
+                })
             } else {
                 "".into()
             },
             info1 = info.get(l).map_or("", |line| &line.1),
-            nobold = if color_enabled {"\x1b[0m"} else {""},
-            separator = info.get(l).map_or("".into(), |line|
-                if ! &line.2.is_empty() {
+            nobold = if color_enabled { "\x1b[0m" } else { "" },
+            separator = info
+                .get(l)
+                .map_or("".into(), |line| if !&line.2.is_empty() {
                     dotenvy::var("PF_SEP").unwrap_or_default()
-                } else { "".into() }
-            ),
+                } else {
+                    "".into()
+                }),
             padding3 = " ".repeat(
                 info1_width.saturating_sub(info.get(l).map_or(0, |(_, line, _)| line.len()))
                     + padding3
             ),
-            color2 = if color_enabled {match dotenvy::var("PF_COL2") {
-                Ok(newcolor) => {
-                    match Color::from_str(&newcolor) {
+            color2 = if color_enabled {
+                match dotenvy::var("PF_COL2") {
+                    Ok(newcolor) => match Color::from_str(&newcolor) {
                         Ok(newcolor) => format!("{newcolor}"),
                         Err(_) => "".into(),
-                    }
-                },
-                Err(_) => "".into()
-            }} else {"".into()},
+                    },
+                    Err(_) => "".into(),
+                }
+            } else {
+                "".into()
+            },
             info2 = info.get(l).map_or("", |line| &line.2)
         )
     }

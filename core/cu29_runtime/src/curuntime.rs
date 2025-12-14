@@ -2,19 +2,19 @@
 //! It is exposed to the user via the `copper_runtime` macro injecting it as a field in their application struct.
 //!
 
-use crate::config::{ComponentConfig, CuDirection, Node, DEFAULT_KEYFRAME_INTERVAL};
+use crate::config::{ComponentConfig, CuDirection, DEFAULT_KEYFRAME_INTERVAL, Node};
 use crate::config::{CuConfig, CuGraph, NodeId, RuntimeConfig};
 use crate::copperlist::{CopperList, CopperListState, CuListZeroedInit, CuListsManager};
 use crate::cutask::{BincodeAdapter, Freezable};
-use crate::monitoring::{build_monitor_topology, CuMonitor};
+use crate::monitoring::{CuMonitor, build_monitor_topology};
 use crate::resource::ResourceManager;
 use cu29_clock::{ClockProvider, CuTime, RobotClock};
 use cu29_traits::CuResult;
 use cu29_traits::WriteStream;
 use cu29_traits::{CopperListTuple, CuError};
 
-use bincode::enc::write::{SizeWriter, SliceWriter};
 use bincode::enc::EncoderImpl;
+use bincode::enc::write::{SizeWriter, SliceWriter};
 use bincode::error::EncodeError;
 use bincode::{Decode, Encode};
 use core::fmt::{Debug, Formatter};
@@ -219,12 +219,12 @@ impl KeyFrame {
 }
 
 impl<
-        CT,
-        CB,
-        P: CopperListTuple + CuListZeroedInit + Default + 'static,
-        M: CuMonitor,
-        const NBCL: usize,
-    > CuRuntime<CT, CB, P, M, NBCL>
+    CT,
+    CB,
+    P: CopperListTuple + CuListZeroedInit + Default + 'static,
+    M: CuMonitor,
+    const NBCL: usize,
+> CuRuntime<CT, CB, P, M, NBCL>
 {
     // FIXME(gbin): this became REALLY ugly with no-std
     #[allow(clippy::too_many_arguments)]

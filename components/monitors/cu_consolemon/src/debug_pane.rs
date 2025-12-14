@@ -1,8 +1,8 @@
 use crate::UI;
+use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::prelude::Stylize;
 use ratatui::widgets::{Block, Borders, Paragraph};
-use ratatui::Frame;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc::SendError;
 use {

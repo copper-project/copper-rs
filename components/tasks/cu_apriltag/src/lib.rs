@@ -9,10 +9,10 @@ use apriltag_sys::image_u8_t;
 
 use bincode::de::Decoder;
 use bincode::error::DecodeError;
-use cu29::bincode::{Decode, Encode};
-use cu29::prelude::*;
 use cu_sensor_payloads::CuImage;
 use cu_spatial_payloads::Pose as CuPose;
+use cu29::bincode::{Decode, Encode};
+use cu29::prelude::*;
 use serde::ser::SerializeTuple;
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -290,8 +290,8 @@ mod tests {
     use super::*;
     use anyhow::Context;
     use anyhow::Result;
-    use image::{imageops::crop, imageops::resize, imageops::FilterType, Luma};
     use image::{ImageBuffer, ImageReader};
+    use image::{Luma, imageops::FilterType, imageops::crop, imageops::resize};
 
     #[cfg(not(windows))]
     use cu_sensor_payloads::CuImageBufferFormat;

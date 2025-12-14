@@ -3,7 +3,7 @@ use alloc::sync::Arc;
 use bincode::config::standard;
 use bincode::enc::write::Writer as BincodeWriter;
 use bincode::error::EncodeError;
-use bincode::{encode_into_slice, encode_into_writer, Encode};
+use bincode::{Encode, encode_into_slice, encode_into_writer};
 use core::cell::UnsafeCell;
 use cu29::prelude::*;
 
@@ -30,7 +30,7 @@ unsafe impl<T> Sync for ForceSyncSend<T> {}
 impl<B: BlockDevice> BlockDevice for ForceSyncSend<B> {
     type Error = B::Error;
 
-    #[cfg(feature = "eh02")]
+    #[cfg(all(feature = "eh02", not(feature = "eh1")))]
     fn read(&self, blocks: &mut [Block], start: BlockIdx, reason: &str) -> Result<(), Self::Error> {
         self.inner_mut().read(blocks, start, reason)
     }

@@ -2,8 +2,8 @@ pub mod parser;
 
 use crate::parser::RefTime;
 use chrono::Utc;
-use cu29::prelude::*;
 use cu_sensor_payloads::{PointCloud, PointCloudSoa};
+use cu29::prelude::*;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use std::io::{ErrorKind, Read};
 use std::net::SocketAddr;
@@ -93,8 +93,8 @@ mod tests {
     use super::*;
     use crate::parser::LidarFrame;
     use chrono::DateTime;
-    use cu29::cutask::CuMsg;
     use cu_udp_inject::PcapStreamer;
+    use cu29::cutask::CuMsg;
 
     #[test]
     fn test_tele15() {

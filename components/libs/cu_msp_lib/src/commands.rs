@@ -1,5 +1,5 @@
-use packed_struct::derive::PrimitiveEnum;
 use packed_struct::PrimitiveEnum;
+use packed_struct::derive::PrimitiveEnum;
 
 #[derive(PrimitiveEnum, Debug, Copy, Clone, PartialEq)]
 #[allow(non_camel_case_types)]

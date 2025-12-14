@@ -41,7 +41,7 @@ impl Default for RcChannelsPayload {
 
 impl PartialEq for RcChannelsPayload {
     fn eq(&self, other: &Self) -> bool {
-        self.0 .0 == other.0 .0
+        self.0.0 == other.0.0
     }
 }
 
@@ -49,7 +49,7 @@ impl Eq for RcChannelsPayload {}
 
 impl Encode for RcChannelsPayload {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        for value in self.0 .0.iter() {
+        for value in self.0.0.iter() {
             value.encode(encoder)?;
         }
         Ok(())
@@ -208,7 +208,7 @@ mod tests {
 
         assert_eq!(consumed, encoded.len());
         assert_eq!(payload, decoded);
-        assert_eq!(decoded.0 .0, channels);
+        assert_eq!(decoded.0.0, channels);
     }
 
     #[test]

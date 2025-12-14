@@ -1,6 +1,6 @@
 use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
-use iceoryx2_bb_log::{set_log_level, LogLevel};
+use iceoryx2_bb_log::{LogLevel, set_log_level};
 
 #[copper_runtime(config = "downstream.ron")]
 struct DownstreamApplication {}
