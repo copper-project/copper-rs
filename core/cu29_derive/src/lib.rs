@@ -2689,33 +2689,38 @@ fn build_resources_module(
         }
     };
 
-    let bundle_inits = bundle_specs.iter().map(|bundle| {
-        let bundle_id = LitStr::new(bundle.id.as_str(), Span::call_site());
-        let array_ident = Ident::new(
-            &config_id_to_bridge_const(bundle.id.as_str()),
-            Span::call_site(),
-        );
-        let provider_path: syn::Path = syn::parse_str(bundle.provider.as_str()).map_err(|err| {
-            CuError::from(format!(
-                "Failed to parse provider path '{}' for bundle '{}': {err}",
-                bundle.provider, bundle.id
-            ))
-        })?;
+    let bundle_inits = bundle_specs
+        .iter()
+        .filter(|bundle| resources_by_bundle.contains_key(&bundle.id))
+        .map(|bundle| {
+            let bundle_id = LitStr::new(bundle.id.as_str(), Span::call_site());
+            let array_ident = Ident::new(
+                &config_id_to_bridge_const(bundle.id.as_str()),
+                Span::call_site(),
+            );
+            let provider_path: syn::Path =
+                syn::parse_str(bundle.provider.as_str()).map_err(|err| {
+                    CuError::from(format!(
+                        "Failed to parse provider path '{}' for bundle '{}': {err}",
+                        bundle.provider, bundle.id
+                    ))
+                })?;
 
-        Ok(quote! {
-            let bundle_cfg = config
-                .resources
-                .iter()
-                .find(|b| b.id == #bundle_id)
-                .unwrap_or_else(|| panic!("Resource bundle '{}' missing from configuration", #bundle_id));
-            <#provider_path as cu29::resource::ResourceBundle>::build(
-                #bundle_id,
-                bundle_cfg.config.as_ref(),
-                resources::#array_ident,
-                &mut manager,
-            )?;
+            Ok(quote! {
+                let bundle_cfg = config
+                    .resources
+                    .iter()
+                    .find(|b| b.id == #bundle_id)
+                    .unwrap_or_else(|| panic!("Resource bundle '{}' missing from configuration", #bundle_id));
+                <#provider_path as cu29::resource::ResourceBundle>::build(
+                    #bundle_id,
+                    bundle_cfg.config.as_ref(),
+                    resources::#array_ident,
+                    &mut manager,
+                )?;
+            })
         })
-    }).collect::<CuResult<Vec<_>>>()?;
+        .collect::<CuResult<Vec<_>>>()?;
 
     let resources_instanciator = quote! {
         pub fn resources_instanciator(config: &CuConfig) -> CuResult<cu29::resource::ResourceManager> {
