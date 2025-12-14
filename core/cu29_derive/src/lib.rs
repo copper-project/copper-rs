@@ -2532,16 +2532,16 @@ fn collect_resource_specs(
 
         if let Some(task_index) = task_specs.node_id_to_task_index[node_id as usize]
             && task_specs.background_flags[task_index]
-                && resources
-                    .map(|res| !res.contains_key("bg_threads"))
-                    .unwrap_or(true)
-            {
-                push_spec(
-                    ResourceOwner::Task(task_index),
-                    "bg_threads".to_string(),
-                    "threadpool.bg_threads".to_string(),
-                )?;
-            }
+            && resources
+                .map(|res| !res.contains_key("bg_threads"))
+                .unwrap_or(true)
+        {
+            push_spec(
+                ResourceOwner::Task(task_index),
+                "bg_threads".to_string(),
+                "threadpool.bg_threads".to_string(),
+            )?;
+        }
     }
 
     Ok(specs)

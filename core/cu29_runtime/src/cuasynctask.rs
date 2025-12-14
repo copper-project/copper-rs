@@ -123,10 +123,11 @@ where
             }
 
             if let Some(ready_at) = state.ready_at
-                && clock.now() < ready_at {
-                    // result not yet allowed to surface based on recorded completion time
-                    return Ok(());
-                }
+                && clock.now() < ready_at
+            {
+                // result not yet allowed to surface based on recorded completion time
+                return Ok(());
+            }
 
             // mark as processing before spawning the next job
             state.processing = true;
@@ -189,8 +190,8 @@ mod tests {
     use cu29_traits::CuResult;
     use rayon::ThreadPoolBuilder;
     use std::borrow::BorrowMut;
-    use std::sync::mpsc;
     use std::sync::OnceLock;
+    use std::sync::mpsc;
     use std::time::Duration;
 
     static READY_RX: OnceLock<Arc<Mutex<mpsc::Receiver<CuTime>>>> = OnceLock::new();
