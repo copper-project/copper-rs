@@ -636,13 +636,15 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         };
 
-        let all_sim_tasks_types: Vec<Type> = task_specs.ids
+        let all_sim_tasks_types: Vec<Type> = task_specs
+            .ids
             .iter()
             .zip(&task_specs.cutypes)
             .zip(&task_specs.sim_task_types)
             .zip(&task_specs.background_flags)
             .zip(&task_specs.run_in_sim_flags)
-            .map(|((((task_id, task_type), sim_type), background), run_in_sim)| {
+            .zip(task_specs.output_types.iter())
+            .map(|(((((task_id, task_type), sim_type), background), run_in_sim), output_type)| {
                 match task_type {
                     CuTaskType::Source => {
                         if *background {
@@ -659,9 +661,16 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         }
                     }
                     CuTaskType::Regular => {
-                        // TODO: wrap that correctly in a background task if background is true.
-                        // run_in_sim has no effect for normal tasks, they are always run in sim as is.
-                        sim_type.clone()
+                        if *background {
+                            if let Some(out_ty) = output_type {
+                                parse_quote!(CuAsyncTask<#sim_type, #out_ty>)
+                            } else {
+                                panic!("{task_id}: If a task is background, it has to have an output");
+                            }
+                        } else {
+                            // run_in_sim has no effect for normal tasks, they are always run in sim as is.
+                            sim_type.clone()
+                        }
                     },
                     CuTaskType::Sink => {
                         if *background {
@@ -687,8 +696,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         }
                     }
                 }
-    })
-    .collect();
+            })
+            .collect();
 
         #[cfg(feature = "macro_debug")]
         eprintln!("[build task tuples]");
@@ -710,13 +719,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         #[cfg(feature = "macro_debug")]
         eprintln!("[gen instances]");
-        // FIXME: implement here the threadpool emulation.
         let task_sim_instances_init_code = all_sim_tasks_types
             .iter()
-            .zip(&task_specs.sim_task_types)
-            .zip(&task_specs.background_flags)
             .enumerate()
-            .map(|(index, ((ty, base_task_type), background))| {
+            .map(|(index, ty)| {
                 let additional_error_info = format!(
                     "Failed to get create instance for {}, instance index {}.",
                     task_specs.type_names[index], index
@@ -731,29 +737,15 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             <#ty>::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
                         }
                     },
-                    CuTaskType::Regular => {
-                        if *background {
-                            quote! {
-                                {
-                                    let resources = <<#base_task_type as CuTask>::Resources<'_> as ResourceBindings>::from_bindings(
-                                        resources,
-                                        TASK_RESOURCE_MAPPINGS[#index],
-                                    ).map_err(|e| e.add_cause(#additional_error_info))?;
-                                    <#ty>::new(all_instances_configs[#index], resources, threadpool.clone()).map_err(|e| e.add_cause(#additional_error_info))?
-                                }
-                            }
-                        } else {
-                            quote! {
-                                {
-                                    let resources = <<#ty as CuTask>::Resources<'_> as ResourceBindings>::from_bindings(
-                                        resources,
-                                        TASK_RESOURCE_MAPPINGS[#index],
-                                    ).map_err(|e| e.add_cause(#additional_error_info))?;
-                                    <#ty>::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
-                                }
-                            }
+                    CuTaskType::Regular => quote! {
+                        {
+                            let resources = <<#ty as CuTask>::Resources<'_> as ResourceBindings>::from_bindings(
+                                resources,
+                                TASK_RESOURCE_MAPPINGS[#index],
+                            ).map_err(|e| e.add_cause(#additional_error_info))?;
+                            <#ty>::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
                         }
-                    }
+                    },
                     CuTaskType::Sink => quote! {
                         {
                             let resources = <<#ty as CuSinkTask>::Resources<'_> as ResourceBindings>::from_bindings(
@@ -770,10 +762,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let task_instances_init_code = task_specs
             .instantiation_types
             .iter()
-            .zip(&task_specs.sim_task_types)
             .zip(&task_specs.background_flags)
             .enumerate()
-            .map(|(index, ((task_type, base_task_type), background))| {
+            .map(|(index, (task_type, _background))| {
                 let additional_error_info = format!(
                     "Failed to get create instance for {}, instance index {}.",
                     task_specs.type_names[index], index
@@ -788,29 +779,15 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             #task_type::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
                         }
                     },
-                    CuTaskType::Regular => {
-                        if *background {
-                            quote! {
-                                {
-                                    let resources = <<#base_task_type as CuTask>::Resources<'_> as ResourceBindings>::from_bindings(
-                                        resources,
-                                        TASK_RESOURCE_MAPPINGS[#index],
-                                    ).map_err(|e| e.add_cause(#additional_error_info))?;
-                                    #task_type::new(all_instances_configs[#index], resources, threadpool.clone()).map_err(|e| e.add_cause(#additional_error_info))?
-                                }
-                            }
-                        } else {
-                            quote! {
-                                {
-                                    let resources = <<#task_type as CuTask>::Resources<'_> as ResourceBindings>::from_bindings(
-                                        resources,
-                                        TASK_RESOURCE_MAPPINGS[#index],
-                                    ).map_err(|e| e.add_cause(#additional_error_info))?;
-                                    #task_type::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
-                                }
-                            }
+                    CuTaskType::Regular => quote! {
+                        {
+                            let resources = <<#task_type as CuTask>::Resources<'_> as ResourceBindings>::from_bindings(
+                                resources,
+                                TASK_RESOURCE_MAPPINGS[#index],
+                            ).map_err(|e| e.add_cause(#additional_error_info))?;
+                            #task_type::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
                         }
-                    }
+                    },
                     CuTaskType::Sink => quote! {
                         {
                             let resources = <<#task_type as CuSinkTask>::Resources<'_> as ResourceBindings>::from_bindings(
@@ -1757,7 +1734,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         let sim_inst_body = if task_sim_instances_init_code.is_empty() {
             quote! {
-                let _ = (resources, threadpool);
+                let _ = resources;
                 Ok(())
             }
         } else {
@@ -1769,7 +1746,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 pub fn tasks_instanciator_sim(
                     all_instances_configs: Vec<Option<&ComponentConfig>>,
                     resources: &mut ResourceManager,
-                    threadpool: Arc<ThreadPool>,
                 ) -> CuResult<CuSimTasks> {
                     #sim_inst_body
             }})
@@ -1779,7 +1755,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         let tasks_inst_body_std = if task_instances_init_code.is_empty() {
             quote! {
-                let _ = (resources, threadpool);
+                let _ = resources;
                 Ok(())
             }
         } else {
@@ -1800,7 +1776,6 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 pub fn tasks_instanciator<'c>(
                     all_instances_configs: Vec<Option<&'c ComponentConfig>>,
                     resources: &mut ResourceManager,
-                    threadpool: Arc<ThreadPool>,
                 ) -> CuResult<CuTasks> {
                     #tasks_inst_body_std
                 }
@@ -2484,40 +2459,63 @@ fn collect_resource_specs(
     graph: &CuGraph,
     task_specs: &CuTaskSpecSet,
 ) -> CuResult<Vec<ResourceKeySpec>> {
-    let mut seen_paths = BTreeSet::new();
     let mut specs = Vec::new();
+    let mut path_registry: BTreeMap<String, (String, Ident, Ident)> = BTreeMap::new();
 
-    for (node_id, node) in graph.get_all_nodes() {
-        if let Some(resources) = node.get_resources() {
-            let task_index =
-                task_specs.node_id_to_task_index[node_id as usize].ok_or_else(|| {
-                    CuError::from(format!(
-                        "Resource mapping attached to non-task node '{}'",
-                        node.get_id()
-                    ))
-                })?;
-
-            for (binding_name, path) in resources {
-                if !seen_paths.insert(path.clone()) {
-                    return Err(CuError::from(format!(
-                        "Resource path '{}' is used multiple times, resource paths must be unique within a mission",
-                        path
-                    )));
-                }
-
-                let (bundle_id, name) = parse_resource_path(path)?;
-                let enum_ident = Ident::new(&config_id_to_enum(path), Span::call_site());
+    let mut push_spec = |task_index: usize, binding_name: String, path: String| -> CuResult<()> {
+        let (bundle_id, name) = parse_resource_path(&path)?;
+        let (bundle_id, enum_ident, const_ident) = path_registry
+            .entry(path.clone())
+            .or_insert_with(|| {
+                let enum_ident = Ident::new(&config_id_to_enum(path.as_str()), Span::call_site());
                 let const_ident =
                     Ident::new(&config_id_to_bridge_const(name.as_str()), Span::call_site());
-                specs.push(ResourceKeySpec {
-                    path: path.clone(),
-                    bundle_id,
-                    enum_ident,
-                    const_ident,
-                    binding_name: binding_name.clone(),
-                    task_index,
-                });
+                (bundle_id.clone(), enum_ident, const_ident)
+            })
+            .clone();
+
+        specs.push(ResourceKeySpec {
+            path,
+            bundle_id,
+            enum_ident,
+            const_ident,
+            binding_name,
+            task_index,
+        });
+        Ok(())
+    };
+
+    for (node_id, node) in graph.get_all_nodes() {
+        let task_index = match task_specs.node_id_to_task_index[node_id as usize] {
+            Some(idx) => idx,
+            None => {
+                if node.get_resources().is_some() {
+                    return Err(CuError::from(format!(
+                        "Resource mapping attached to non-task node '{}'",
+                        node.get_id()
+                    )));
+                }
+                continue;
             }
+        };
+
+        if let Some(resources) = node.get_resources() {
+            for (binding_name, path) in resources {
+                push_spec(task_index, binding_name.clone(), path.clone())?;
+            }
+        }
+
+        if task_specs.background_flags[task_index]
+            && node
+                .get_resources()
+                .map(|res| !res.contains_key("bg_threads"))
+                .unwrap_or(true)
+        {
+            push_spec(
+                task_index,
+                "bg_threads".to_string(),
+                "threadpool.bg_threads".to_string(),
+            )?;
         }
     }
 
@@ -2542,9 +2540,17 @@ fn build_resources_module(
     config: &CuConfig,
     resource_specs: &[ResourceKeySpec],
 ) -> CuResult<(proc_macro2::TokenStream, proc_macro2::TokenStream)> {
+    let mut unique_specs: Vec<&ResourceKeySpec> = Vec::new();
+    let mut seen_paths = BTreeSet::new();
+    for spec in resource_specs {
+        if seen_paths.insert(spec.path.clone()) {
+            unique_specs.push(spec);
+        }
+    }
+
     let bundle_specs = build_bundle_list(config, mission);
 
-    for spec in resource_specs {
+    for spec in &unique_specs {
         if !bundle_specs
             .iter()
             .any(|bundle| bundle.id == spec.bundle_id)
@@ -2557,18 +2563,18 @@ fn build_resources_module(
     }
 
     let mut resources_by_bundle: BTreeMap<String, Vec<&ResourceKeySpec>> = BTreeMap::new();
-    for spec in resource_specs {
+    for spec in &unique_specs {
         resources_by_bundle
             .entry(spec.bundle_id.clone())
             .or_default()
             .push(spec);
     }
 
-    let res_id_variants = resource_specs.iter().map(|spec| {
+    let res_id_variants = unique_specs.iter().map(|spec| {
         let ident = &spec.enum_ident;
         quote! { #ident }
     });
-    let num_resources = resource_specs.len();
+    let num_resources = unique_specs.len();
     let res_id_def = if num_resources == 0 {
         quote! {
             #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -2591,13 +2597,17 @@ fn build_resources_module(
             &config_id_to_struct_member(bundle_id.as_str()),
             Span::call_site(),
         );
-        let consts = specs.iter().map(|spec| {
+        let mut seen_consts = BTreeSet::new();
+        let consts = specs.iter().filter_map(|spec| {
             let const_ident = &spec.const_ident;
             let enum_ident = &spec.enum_ident;
-            quote! {
+            if !seen_consts.insert(const_ident.to_string()) {
+                return None;
+            }
+            Some(quote! {
                 pub const #const_ident: super::ResourceKey =
                     super::ResourceKey::new(super::ResId::#enum_ident as usize);
-            }
+            })
         });
 
         quote! {
@@ -2608,15 +2618,18 @@ fn build_resources_module(
         }
     });
 
-    let all_decl_entries = resource_specs.iter().map(|spec| {
-        let module_ident = Ident::new(
-            &config_id_to_struct_member(spec.bundle_id.as_str()),
-            Span::call_site(),
-        );
-        let const_ident = &spec.const_ident;
-        let path = LitStr::new(&spec.path, Span::call_site());
-        quote! { ResourceDecl::new(#module_ident::#const_ident, #path) }
-    });
+    let all_decl_entries = unique_specs
+        .iter()
+        .map(|spec| {
+            let module_ident = Ident::new(
+                &config_id_to_struct_member(spec.bundle_id.as_str()),
+                Span::call_site(),
+            );
+            let const_ident = &spec.const_ident;
+            let path = LitStr::new(&spec.path, Span::call_site());
+            quote! { ResourceDecl::new(#module_ident::#const_ident, #path) }
+        })
+        .collect::<Vec<_>>();
 
     let bundle_arrays = bundle_specs.iter().map(|bundle| {
         let array_ident = Ident::new(
@@ -2627,29 +2640,37 @@ fn build_resources_module(
             &config_id_to_struct_member(bundle.id.as_str()),
             Span::call_site(),
         );
-        let bundle_resources = resources_by_bundle
+        let mut seen_paths = BTreeSet::new();
+        let entries = resources_by_bundle
             .get(&bundle.id)
             .cloned()
-            .unwrap_or_default();
-        let entries = bundle_resources.iter().map(|spec| {
-            let const_ident = &spec.const_ident;
-            let path = LitStr::new(&spec.path, Span::call_site());
-            quote! { ResourceDecl::new(#module_ident::#const_ident, #path) }
-        });
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|spec| {
+                if !seen_paths.insert(spec.path.clone()) {
+                    return None;
+                }
+                let const_ident = &spec.const_ident;
+                let path = LitStr::new(&spec.path, Span::call_site());
+                Some(quote! { ResourceDecl::new(#module_ident::#const_ident, #path) })
+            });
         quote! {
             pub const #array_ident: &[ResourceDecl] = &[ #(#entries),* ];
         }
     });
 
-    let provider_entries = bundle_specs.iter().map(|bundle| {
-        let array_ident = Ident::new(
-            &config_id_to_bridge_const(bundle.id.as_str()),
-            Span::call_site(),
-        );
-        let bundle_id = LitStr::new(bundle.id.as_str(), Span::call_site());
-        let provider = LitStr::new(bundle.provider.as_str(), Span::call_site());
-        quote! { ResourceProvider::new(#bundle_id, #provider, #array_ident) }
-    });
+    let provider_entries = bundle_specs
+        .iter()
+        .filter(|bundle| resources_by_bundle.contains_key(&bundle.id))
+        .map(|bundle| {
+            let array_ident = Ident::new(
+                &config_id_to_bridge_const(bundle.id.as_str()),
+                Span::call_site(),
+            );
+            let bundle_id = LitStr::new(bundle.id.as_str(), Span::call_site());
+            let provider = LitStr::new(bundle.provider.as_str(), Span::call_site());
+            quote! { ResourceProvider::new(#bundle_id, #provider, #array_ident) }
+        });
 
     let resources_module = quote! {
         pub mod resources {

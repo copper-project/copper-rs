@@ -942,6 +942,28 @@ pub struct CuConfig {
     pub graphs: ConfigGraphs,
 }
 
+impl CuConfig {
+    #[cfg(feature = "std")]
+    fn ensure_threadpool_bundle(&mut self) {
+        if self
+            .resources
+            .iter()
+            .any(|bundle| bundle.id == "threadpool")
+        {
+            return;
+        }
+
+        let mut config = ComponentConfig::default();
+        config.set("threads", 2u64);
+        self.resources.push(ResourceBundleConfig {
+            id: "threadpool".to_string(),
+            provider: "cu29::resource::ThreadPoolBundle".to_string(),
+            config: Some(config),
+            missions: None,
+        });
+    }
+}
+
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
 pub struct MonitorConfig {
     #[serde(rename = "type")]
@@ -2027,8 +2049,12 @@ fn parse_config_string(content: &str) -> CuResult<CuConfigRepresentation> {
 /// Convert a CuConfigRepresentation to a CuConfig.
 /// Uses the deserialize_impl method and validates the logging configuration.
 fn config_representation_to_config(representation: CuConfigRepresentation) -> CuResult<CuConfig> {
-    let cuconfig = CuConfig::deserialize_impl(representation)
+    #[allow(unused_mut)]
+    let mut cuconfig = CuConfig::deserialize_impl(representation)
         .map_err(|e| CuError::from(format!("Error deserializing configuration: {e}")))?;
+
+    #[cfg(feature = "std")]
+    cuconfig.ensure_threadpool_bundle();
 
     cuconfig.validate_logging_config()?;
 

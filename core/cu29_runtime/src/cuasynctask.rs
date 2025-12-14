@@ -1,7 +1,8 @@
 use crate::config::ComponentConfig;
 use crate::cutask::{CuMsg, CuMsgPayload, CuTask, Freezable};
+use crate::resource::{ResourceBindings, ResourceManager, ResourceMapping};
 use cu29_clock::{CuTime, RobotClock};
-use cu29_traits::CuResult;
+use cu29_traits::{CuError, CuResult};
 use rayon::ThreadPool;
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -19,6 +20,34 @@ where
     output: Arc<Mutex<CuMsg<O>>>,
     state: Arc<Mutex<AsyncState>>,
     tp: Arc<ThreadPool>,
+}
+
+/// Resource bundle required by a backgrounded task.
+pub struct CuAsyncTaskResources<'r, T: CuTask> {
+    pub inner: T::Resources<'r>,
+    pub threadpool: Arc<ThreadPool>,
+}
+
+impl<'r, T> ResourceBindings<'r> for CuAsyncTaskResources<'r, T>
+where
+    T: CuTask,
+    T::Resources<'r>: ResourceBindings<'r>,
+{
+    fn from_bindings(
+        manager: &'r mut ResourceManager,
+        mapping: Option<&ResourceMapping>,
+    ) -> CuResult<Self> {
+        let mapping = mapping.ok_or_else(|| CuError::from("Missing resource bindings"))?;
+        let threadpool_key = mapping
+            .get("bg_threads")
+            .ok_or_else(|| CuError::from("Missing 'bg_threads' binding for background task"))?
+            .typed();
+        let threadpool = manager.borrow_shared_arc(threadpool_key)?;
+        Ok(Self {
+            inner: T::Resources::from_bindings(manager, Some(mapping))?,
+            threadpool,
+        })
+    }
 }
 
 impl<T, O> CuAsyncTask<T, O>
@@ -59,18 +88,25 @@ where
     I: CuMsgPayload + Send + Sync + 'static,
     O: CuMsgPayload + Send + 'static,
 {
-    type Resources<'r> = ();
+    type Resources<'r> = CuAsyncTaskResources<'r, T>;
     type Input<'m> = T::Input<'m>;
     type Output<'m> = T::Output<'m>;
 
-    fn new_with(
-        _config: Option<&ComponentConfig>,
-        _resources: Self::Resources<'_>,
-    ) -> CuResult<Self>
+    fn new_with(config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
-        Err("AsyncTask cannot be instantiated directly, use Async_task::new()".into())
+        let task = Arc::new(Mutex::new(T::new_with(config, resources.inner)?));
+        let output = Arc::new(Mutex::new(CuMsg::default()));
+        Ok(Self {
+            task,
+            output,
+            state: Arc::new(Mutex::new(AsyncState {
+                processing: false,
+                ready_at: None,
+            })),
+            tp: resources.threadpool,
+        })
     }
 
     fn process<'i, 'o>(
