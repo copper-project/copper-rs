@@ -309,7 +309,7 @@ pub fn parse_frame(data: &[u8]) -> Result<&LidarFrame, LivoxError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::{parse_frame, LidarFrame, RefTime};
+    use crate::parser::{LidarFrame, RefTime, parse_frame};
     use chrono::prelude::*;
     use cu29::prelude::{CuDuration, RobotClock};
 

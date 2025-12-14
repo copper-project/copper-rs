@@ -5,21 +5,21 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
+use ConfigGraphs::{Missions, Simple};
 use core::fmt;
 use core::fmt::Display;
 use cu29_traits::{CuError, CuResult};
 use hashbrown::HashMap;
+pub use petgraph::Direction::Incoming;
+pub use petgraph::Direction::Outgoing;
 use petgraph::stable_graph::{EdgeIndex, NodeIndex, StableDiGraph};
 use petgraph::visit::EdgeRef;
 #[cfg(feature = "std")]
 use petgraph::visit::IntoEdgeReferences;
-pub use petgraph::Direction::Incoming;
-pub use petgraph::Direction::Outgoing;
 use ron::extensions::Extensions;
 use ron::value::Value as RonValue;
 use ron::{Number, Options};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use ConfigGraphs::{Missions, Simple};
 
 #[cfg(not(feature = "std"))]
 mod imp {
@@ -896,14 +896,14 @@ impl ConfigGraphs {
     #[allow(dead_code)]
     pub fn get_graph_mut(&mut self, mission_id: Option<&str>) -> CuResult<&mut CuGraph> {
         match self {
-            Simple(ref mut graph) => {
+            Simple(graph) => {
                 if mission_id.is_none() {
                     Ok(graph)
                 } else {
                     Err("Cannot get mission graph from simple config".into())
                 }
             }
-            Missions(ref mut graphs) => {
+            Missions(graphs) => {
                 if let Some(id) = mission_id {
                     graphs
                         .get_mut(id)
@@ -1664,17 +1664,15 @@ fn build_render_topology(graph: &CuGraph, bridges: &[BridgeConfig]) -> RenderTop
         let node_id = node.get_id();
         let mut inputs = Vec::new();
         let mut outputs = Vec::new();
-        if node.get_flavor() == Flavor::Bridge {
-            if let Some(bridge) = bridge_lookup.get(node_id.as_str()) {
-                for channel in &bridge.channels {
-                    match channel {
-                        // Rx brings data from the bridge into the graph, so treat it as an output.
-                        BridgeChannelConfigRepresentation::Rx { id, .. } => {
-                            outputs.push(id.clone())
-                        }
-                        // Tx consumes data from the graph heading into the bridge, so show it on the input side.
-                        BridgeChannelConfigRepresentation::Tx { id, .. } => inputs.push(id.clone()),
-                    }
+        if node.get_flavor() == Flavor::Bridge
+            && let Some(bridge) = bridge_lookup.get(node_id.as_str())
+        {
+            for channel in &bridge.channels {
+                match channel {
+                    // Rx brings data from the bridge into the graph, so treat it as an output.
+                    BridgeChannelConfigRepresentation::Rx { id, .. } => outputs.push(id.clone()),
+                    // Tx consumes data from the graph heading into the bridge, so show it on the input side.
+                    BridgeChannelConfigRepresentation::Tx { id, .. } => inputs.push(id.clone()),
                 }
             }
         }
@@ -1694,16 +1692,19 @@ fn build_render_topology(graph: &CuGraph, bridges: &[BridgeConfig]) -> RenderTop
     let mut connections = Vec::new();
     for edge in graph.0.edge_references() {
         let cnx = edge.weight();
-        if let Some(node) = nodes.get_mut(&cnx.src) {
-            if node.flavor == Flavor::Task && cnx.src_channel.is_none() && node.outputs.is_empty() {
-                node.outputs.push("out0".to_string());
-            }
+        if let Some(node) = nodes.get_mut(&cnx.src)
+            && node.flavor == Flavor::Task
+            && cnx.src_channel.is_none()
+            && node.outputs.is_empty()
+        {
+            node.outputs.push("out0".to_string());
         }
-        if let Some(node) = nodes.get_mut(&cnx.dst) {
-            if node.flavor == Flavor::Task && cnx.dst_channel.is_none() {
-                let next = format!("in{}", node.inputs.len());
-                node.inputs.push(next);
-            }
+        if let Some(node) = nodes.get_mut(&cnx.dst)
+            && node.flavor == Flavor::Task
+            && cnx.dst_channel.is_none()
+        {
+            let next = format!("in{}", node.inputs.len());
+            node.inputs.push(next);
         }
 
         connections.push(RenderConnection {
@@ -1724,19 +1725,19 @@ fn build_render_topology(graph: &CuGraph, bridges: &[BridgeConfig]) -> RenderTop
 #[cfg(feature = "std")]
 impl PortLookup {
     fn resolve_input(&self, name: Option<&str>) -> Option<&str> {
-        if let Some(name) = name {
-            if let Some(port) = self.inputs.get(name) {
-                return Some(port.as_str());
-            }
+        if let Some(name) = name
+            && let Some(port) = self.inputs.get(name)
+        {
+            return Some(port.as_str());
         }
         self.default_input.as_deref()
     }
 
     fn resolve_output(&self, name: Option<&str>) -> Option<&str> {
-        if let Some(name) = name {
-            if let Some(port) = self.outputs.get(name) {
-                return Some(port.as_str());
-            }
+        if let Some(name) = name
+            && let Some(port) = self.outputs.get(name)
+        {
+            return Some(port.as_str());
         }
         self.default_output.as_deref()
     }
@@ -1840,12 +1841,13 @@ fn escape_dot_id(value: &str) -> String {
 impl LoggingConfig {
     /// Validate the logging configuration to ensure section pre-allocation sizes do not exceed slab sizes.
     pub fn validate(&self) -> CuResult<()> {
-        if let Some(section_size_mib) = self.section_size_mib {
-            if let Some(slab_size_mib) = self.slab_size_mib {
-                if section_size_mib > slab_size_mib {
-                    return Err(CuError::from(format!("Section size ({section_size_mib} MiB) cannot be larger than slab size ({slab_size_mib} MiB). Adjust the parameters accordingly.")));
-                }
-            }
+        if let Some(section_size_mib) = self.section_size_mib
+            && let Some(slab_size_mib) = self.slab_size_mib
+            && section_size_mib > slab_size_mib
+        {
+            return Err(CuError::from(format!(
+                "Section size ({section_size_mib} MiB) cannot be larger than slab size ({slab_size_mib} MiB). Adjust the parameters accordingly."
+            )));
         }
 
         Ok(())

@@ -144,13 +144,13 @@ impl RcJoystick {
                     updated |= role_changed;
                 }
                 EventSummary::Key(_, key, raw) => {
-                    if let Some(idx) = self.switch_map.get(&key.0) {
-                        if let Some(sw) = self.state.switches.get_mut(*idx) {
-                            let new_state = raw != 0;
-                            if sw.on != new_state {
-                                sw.on = new_state;
-                                updated = true;
-                            }
+                    if let Some(idx) = self.switch_map.get(&key.0)
+                        && let Some(sw) = self.state.switches.get_mut(*idx)
+                    {
+                        let new_state = raw != 0;
+                        if sw.on != new_state {
+                            sw.on = new_state;
+                            updated = true;
                         }
                     }
                 }
@@ -374,17 +374,16 @@ fn score_device(device: &Device, preferred_name: Option<&str>) -> i32 {
         score += 10;
     }
 
-    if let Some(abs_axes) = device.supported_absolute_axes() {
-        if abs_axes.iter().len() >= 4 {
-            score += 10;
-        }
+    if let Some(abs_axes) = device.supported_absolute_axes()
+        && abs_axes.iter().len() >= 4
+    {
+        score += 10;
     }
 
-    if let Some(keys) = device.supported_keys() {
-        let has_pad_like = keys.iter().any(|k| (0x120..=0x13e).contains(&k.code()));
-        if has_pad_like {
-            score += 5;
-        }
+    if let Some(keys) = device.supported_keys()
+        && keys.iter().any(|k| (0x120..=0x13e).contains(&k.code()))
+    {
+        score += 5;
     }
 
     if let Some(name) = device.name() {
@@ -395,10 +394,10 @@ fn score_device(device: &Device, preferred_name: Option<&str>) -> i32 {
         if lower.contains("joystick") {
             score += 5;
         }
-        if let Some(pref) = preferred_name {
-            if lower.contains(&pref.to_lowercase()) {
-                score += 100;
-            }
+        if let Some(pref) = preferred_name
+            && lower.contains(&pref.to_lowercase())
+        {
+            score += 100;
         }
     }
 
@@ -411,69 +410,69 @@ fn build_axis_map(device: &Device) -> HashMap<u16, (RcAxis, AxisScale)> {
         return map;
     };
 
-    if let Some(name) = device.name().map(|n| n.to_lowercase()) {
-        if name.contains("expresslrs") || name.contains("radiomaster") {
-            insert_if_present(
-                axes,
-                &mut map,
-                AbsoluteAxisCode::ABS_X,
-                RcAxis::Roll,
-                AxisScale::NegOneToOne,
-            );
-            insert_if_present(
-                axes,
-                &mut map,
-                AbsoluteAxisCode::ABS_Y,
-                RcAxis::Pitch,
-                AxisScale::NegOneToOne,
-            );
-            insert_if_present(
-                axes,
-                &mut map,
-                AbsoluteAxisCode::ABS_RY,
-                RcAxis::Yaw,
-                AxisScale::NegOneToOne,
-            );
-            insert_if_present(
-                axes,
-                &mut map,
-                AbsoluteAxisCode::ABS_RX,
-                RcAxis::Throttle,
-                AxisScale::ZeroToOne,
-            );
-            insert_if_present(
-                axes,
-                &mut map,
-                AbsoluteAxisCode::ABS_Z,
-                RcAxis::KnobSa,
-                AxisScale::NegOneToOne,
-            );
-            insert_if_present(
-                axes,
-                &mut map,
-                AbsoluteAxisCode::ABS_RZ,
-                RcAxis::KnobSb,
-                AxisScale::NegOneToOne,
-            );
-            insert_if_present(
-                axes,
-                &mut map,
-                AbsoluteAxisCode::ABS_THROTTLE,
-                RcAxis::KnobSc,
-                AxisScale::NegOneToOne,
-            );
+    if let Some(name) = device.name().map(|n| n.to_lowercase())
+        && (name.contains("expresslrs") || name.contains("radiomaster"))
+    {
+        insert_if_present(
+            axes,
+            &mut map,
+            AbsoluteAxisCode::ABS_X,
+            RcAxis::Roll,
+            AxisScale::NegOneToOne,
+        );
+        insert_if_present(
+            axes,
+            &mut map,
+            AbsoluteAxisCode::ABS_Y,
+            RcAxis::Pitch,
+            AxisScale::NegOneToOne,
+        );
+        insert_if_present(
+            axes,
+            &mut map,
+            AbsoluteAxisCode::ABS_RY,
+            RcAxis::Yaw,
+            AxisScale::NegOneToOne,
+        );
+        insert_if_present(
+            axes,
+            &mut map,
+            AbsoluteAxisCode::ABS_RX,
+            RcAxis::Throttle,
+            AxisScale::ZeroToOne,
+        );
+        insert_if_present(
+            axes,
+            &mut map,
+            AbsoluteAxisCode::ABS_Z,
+            RcAxis::KnobSa,
+            AxisScale::NegOneToOne,
+        );
+        insert_if_present(
+            axes,
+            &mut map,
+            AbsoluteAxisCode::ABS_RZ,
+            RcAxis::KnobSb,
+            AxisScale::NegOneToOne,
+        );
+        insert_if_present(
+            axes,
+            &mut map,
+            AbsoluteAxisCode::ABS_THROTTLE,
+            RcAxis::KnobSc,
+            AxisScale::NegOneToOne,
+        );
 
-            // Any remaining axes become aux channels.
-            let mut aux_index = 0u8;
-            for axis in axes.iter() {
-                let code = axis.0;
-                if let std::collections::hash_map::Entry::Vacant(entry) = map.entry(code) {
-                    entry.insert((RcAxis::Aux(aux_index), AxisScale::NegOneToOne));
-                    aux_index += 1;
-                }
+        // Any remaining axes become aux channels.
+        let mut aux_index = 0u8;
+        for axis in axes.iter() {
+            let code = axis.0;
+            if let std::collections::hash_map::Entry::Vacant(entry) = map.entry(code) {
+                entry.insert((RcAxis::Aux(aux_index), AxisScale::NegOneToOne));
+                aux_index += 1;
             }
-            return map;
         }
+        return map;
     }
 
     bind_first(
@@ -549,14 +548,15 @@ fn bind_first(
 }
 
 fn normalize_axis(device: &Device, axis_code: u16, raw: i32) -> f32 {
-    if let Ok(abs_vals) = device.get_abs_state() {
-        if let Some(info) = abs_vals.get(axis_code as usize) {
-            let min = info.minimum as f32;
-            let max = info.maximum as f32;
-            if (max - min).abs() > f32::EPSILON {
-                let normalized = (raw as f32 - min) / (max - min);
-                return (normalized * 2.0 - 1.0).clamp(-1.0, 1.0);
-            }
+    if let Ok(abs_vals) = device.get_abs_state()
+        && let Some(info) = abs_vals.get(axis_code as usize)
+    {
+        let min = info.minimum as f32;
+        let max = info.maximum as f32;
+        let range = max - min;
+        if range.abs() > f32::EPSILON {
+            let normalized = (raw as f32 - min) / range;
+            return (normalized * 2.0 - 1.0).clamp(-1.0, 1.0);
         }
     }
 

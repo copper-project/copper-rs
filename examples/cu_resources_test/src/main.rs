@@ -1,7 +1,7 @@
 use clap::{Parser, ValueEnum};
 use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
-use cu29_unifiedlog::{memmap::MmapSectionStorage, UnifiedLoggerWrite};
+use cu29_unifiedlog::{UnifiedLoggerWrite, memmap::MmapSectionStorage};
 use std::{fs, path::PathBuf};
 
 mod bridges;
@@ -54,13 +54,13 @@ fn drive() -> CuResult<()> {
     let args = Cli::parse();
 
     let logger_path = PathBuf::from("logs/cu_resources_test.copper");
-    if let Some(parent) = logger_path.parent() {
-        if let Err(err) = fs::create_dir_all(parent) {
-            return Err(CuError::new_with_cause(
-                "failed to create log directory",
-                err,
-            ));
-        }
+    if let Some(parent) = logger_path.parent()
+        && let Err(err) = fs::create_dir_all(parent)
+    {
+        return Err(CuError::new_with_cause(
+            "failed to create log directory",
+            err,
+        ));
     }
 
     let ctx = basic_copper_setup(&logger_path, SLAB_SIZE, true, None)?;

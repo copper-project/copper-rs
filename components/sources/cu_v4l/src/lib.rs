@@ -4,8 +4,8 @@ mod v4lstream;
 // This allows this module to be used on simulation on Windows and MacOS
 #[cfg(not(target_os = "linux"))]
 mod empty_impl {
-    use cu29::prelude::*;
     use cu_sensor_payloads::CuImage;
+    use cu29::prelude::*;
 
     pub struct V4l {}
 
@@ -47,10 +47,10 @@ mod linux_impl {
     use v4l::video::Capture;
 
     use crate::v4lstream::CuV4LStream;
-    use cu29::prelude::*;
     use cu_sensor_payloads::{CuImage, CuImageBufferFormat};
+    use cu29::prelude::*;
 
-    use nix::time::{clock_gettime, ClockId};
+    use nix::time::{ClockId, clock_gettime};
 
     pub use v4l::buffer::Type;
     pub use v4l::framesize::FrameSizeEnum;
@@ -269,9 +269,9 @@ mod linux_impl {
     #[cfg(test)]
     mod tests {
         use super::*;
+        use rerun::RecordingStreamBuilder;
         use rerun::components::ImageBuffer;
         use rerun::datatypes::{Blob, ImageFormat};
-        use rerun::RecordingStreamBuilder;
         use rerun::{Image, PixelFormat};
         use std::thread;
 

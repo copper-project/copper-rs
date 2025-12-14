@@ -8,9 +8,7 @@ use std::convert::From;
 // By default use Rust type as ROS type
 #[macro_export]
 macro_rules! ros_type_name {
-    ($t:ty) => {{
-        std::any::type_name::<$t>().rsplit("::").next().unwrap()
-    }};
+    ($t:ty) => {{ std::any::type_name::<$t>().rsplit("::").next().unwrap() }};
 }
 
 /// ROS adaptation trait to convert payload data to ROS compatible message.

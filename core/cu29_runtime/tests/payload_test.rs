@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use bincode::{config, Decode, Encode};
+    use bincode::{Decode, Encode, config};
     use cu29_runtime::payload::CuArrayVec;
 
     // Test default initialization

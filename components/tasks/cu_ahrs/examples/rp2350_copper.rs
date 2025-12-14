@@ -4,10 +4,10 @@
 #[cfg(all(feature = "rp2350-demo", target_arch = "arm"))]
 mod firmware {
     use cortex_m_rt::entry;
-    use cu29::prelude::*;
     use cu_embedded_registry as reg;
     use cu_mpu9250::Mpu9250Source;
-    use defmt::{info, warn, Debug2Format};
+    use cu29::prelude::*;
+    use defmt::{Debug2Format, info, warn};
     use defmt_rtt as _;
     use hal::fugit::RateExtU32;
     use panic_probe as _;
@@ -134,5 +134,7 @@ mod firmware {
 
 #[cfg(not(all(feature = "rp2350-demo", target_arch = "arm")))]
 fn main() {
-    println!("rp2350_copper requires --no-default-features --features rp2350-demo and the RP2350 target config.");
+    println!(
+        "rp2350_copper requires --no-default-features --features rp2350-demo and the RP2350 target config."
+    );
 }
