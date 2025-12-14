@@ -50,8 +50,9 @@ members = [
     "components/tasks/cu_ratelimit",
     "components/testing/cu_udp_inject",
     "examples/cu_elrs_bdshot_demo",
-    "examples/cu_bridge_test",
     "examples/cu_background_task",
+    "examples/cu_basic_fc",
+    "examples/cu_bridge_test",
     "examples/cu_caterpillar",
     "examples/cu_config_gen",
     "examples/cu_config_variation",
@@ -92,6 +93,9 @@ default-members = [
 ]
 
 resolver = "2"
+
+[profile.release]
+debug = 2
 
 [workspace.package]
 version = "0.11.0"
