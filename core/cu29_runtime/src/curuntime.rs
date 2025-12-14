@@ -37,7 +37,6 @@ mod imp {
 mod imp {
     pub use cu29_log_runtime::LoggerRuntime;
     pub use cu29_unifiedlog::UnifiedLoggerWrite;
-    pub use rayon::ThreadPool;
     pub use std::collections::VecDeque;
     pub use std::fmt::Result as FmtResult;
     pub use std::sync::{Arc, Mutex};
@@ -152,10 +151,6 @@ pub struct CuRuntime<CT, CB, P: CopperListTuple, M: CuMonitor, const NBCL: usize
     /// Resource registry kept alive for tasks borrowing shared handles.
     pub resources: ResourceManager,
 
-    /// For backgrounded tasks.
-    #[cfg(feature = "std")]
-    pub threadpool: Arc<ThreadPool>,
-
     /// The runtime monitoring.
     pub monitor: M,
 
@@ -242,7 +237,6 @@ impl<
         tasks_instanciator: impl for<'c> Fn(
             Vec<Option<&'c ComponentConfig>>,
             &mut ResourceManager,
-            Arc<ThreadPool>,
         ) -> CuResult<CT>,
         monitor_instanciator: impl Fn(&CuConfig) -> M,
         bridges_instanciator: impl Fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>,
@@ -256,18 +250,9 @@ impl<
             .map(|(_, node)| node.get_instance_config())
             .collect();
 
-        // TODO: make that configurable
-
-        let threadpool = Arc::new(
-            rayon::ThreadPoolBuilder::new()
-                .num_threads(2) // default to 4 threads if not specified
-                .build()
-                .expect("Could not create the threadpool"),
-        );
-
         let mut resources = resources_instanciator(config)?;
 
-        let tasks = tasks_instanciator(all_instances_configs, &mut resources, threadpool.clone())?;
+        let tasks = tasks_instanciator(all_instances_configs, &mut resources)?;
         let mut monitor = monitor_instanciator(config);
         if let Ok(topology) = build_monitor_topology(config, mission) {
             monitor.set_topology(topology);
@@ -306,7 +291,6 @@ impl<
             tasks,
             bridges,
             resources,
-            threadpool,
             monitor,
             clock,
             copperlists_manager,
@@ -381,8 +365,6 @@ impl<
         let runtime = Self {
             tasks,
             bridges,
-            #[cfg(feature = "std")]
-            threadpool,
             resources,
             monitor,
             clock,
@@ -826,7 +808,6 @@ mod tests {
     fn tasks_instanciator(
         all_instances_configs: Vec<Option<&ComponentConfig>>,
         _resources: &mut ResourceManager,
-        _threadpool: Arc<ThreadPool>,
     ) -> CuResult<Tasks> {
         Ok((
             TestSource::new(all_instances_configs[0])?,

@@ -219,6 +219,27 @@ impl ResourceManager {
             .ok_or_else(|| CuError::from("Resource has unexpected type"))
     }
 
+    /// Borrow a shared `Arc`-backed resource by key, cloning the `Arc` for the caller.
+    #[cfg(feature = "std")]
+    pub fn borrow_shared_arc<T: 'static + Send + Sync>(
+        &self,
+        key: ResourceKey<T>,
+    ) -> CuResult<Arc<T>> {
+        let idx = key.index();
+        let entry = self
+            .entries
+            .get(idx)
+            .and_then(|opt| opt.as_ref())
+            .ok_or_else(|| CuError::from("Resource not found"))?;
+        match entry {
+            ResourceEntry::Shared(arc) => arc
+                .clone()
+                .downcast::<T>()
+                .map_err(|_| CuError::from("Resource has unexpected type")),
+            ResourceEntry::Owned(_) => Err(CuError::from("Resource is owned, not shared")),
+        }
+    }
+
     /// Move out an owned resource by key.
     pub fn take<T: 'static + Send + Sync>(&mut self, key: ResourceKey<T>) -> CuResult<Owned<T>> {
         let idx = key.index();
@@ -299,3 +320,40 @@ impl ResourceProvider {
 
 // The legacy `resources!` macro was replaced by the proc-macro in `cu29_derive::resources`.
 // Import it from `cu29_derive` or `cu29::prelude`.
+
+#[cfg(feature = "std")]
+pub struct ThreadPoolBundle;
+
+#[cfg(feature = "std")]
+impl ResourceBundle for ThreadPoolBundle {
+    fn build(
+        bundle_id: &str,
+        config: Option<&ComponentConfig>,
+        resources: &[ResourceDecl],
+        manager: &mut ResourceManager,
+    ) -> CuResult<()> {
+        use rayon::ThreadPoolBuilder;
+
+        const DEFAULT_THREADS: usize = 2;
+        let threads: usize = config
+            .and_then(|cfg| cfg.get::<u64>("threads"))
+            .map(|v| v as usize)
+            .unwrap_or(DEFAULT_THREADS);
+
+        let pool = ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build()
+            .map_err(|e| CuError::from(format!("Failed to build threadpool: {e}")))?;
+
+        let key = resources
+            .iter()
+            .find(|decl| decl.path == format!("{bundle_id}.bg_threads"))
+            .ok_or_else(|| {
+                CuError::from("ThreadPoolBundle missing required resource 'bg_threads'")
+            })?
+            .key
+            .typed();
+
+        manager.add_shared(key, Arc::new(pool))
+    }
+}
