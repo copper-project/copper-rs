@@ -1,7 +1,7 @@
 use bincode::{Decode, Encode};
 use core::fmt::Debug;
+use core::ops::Mul;
 use serde::{Deserialize, Serialize};
-use std::ops::Mul;
 use uom::si::angle::radian;
 use uom::si::f32::Angle as Angle32;
 use uom::si::f32::Length as Length32;

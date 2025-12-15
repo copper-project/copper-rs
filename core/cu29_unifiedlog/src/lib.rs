@@ -1,6 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-#[cfg(not(feature = "std"))]
 extern crate alloc;
 extern crate core;
 
@@ -20,29 +19,14 @@ mod compat {
 #[cfg(feature = "std")]
 pub use compat::*;
 
+use alloc::string::ToString;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use core::fmt::{Debug, Display, Formatter, Result as FmtResult};
 #[cfg(not(feature = "std"))]
-mod imp {
-    pub use alloc::string::ToString;
-    pub use alloc::sync::Arc;
-    pub use alloc::vec::Vec;
-    pub use core::fmt::Debug;
-    pub use core::fmt::Display;
-    pub use core::fmt::Formatter;
-    pub use core::fmt::Result as FmtResult;
-    pub use spin::Mutex;
-}
-
+use spin::Mutex;
 #[cfg(feature = "std")]
-mod imp {
-    pub use std::fmt::Debug;
-    pub use std::fmt::Display;
-    pub use std::fmt::Formatter;
-    pub use std::fmt::Result as FmtResult;
-    pub use std::sync::Arc;
-    pub use std::sync::Mutex;
-}
-
-use imp::*;
+use std::sync::Mutex;
 
 use bincode::error::EncodeError;
 use bincode::{Decode, Encode};

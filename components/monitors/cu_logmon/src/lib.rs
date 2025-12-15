@@ -6,21 +6,11 @@
 //! This monitor is `no_std` friendly and keeps allocations to a minimum while still
 //! reporting a per-second summary of the Copperlist cadence and latencies.
 
-#[cfg(not(feature = "std"))]
 extern crate alloc;
 
-#[cfg(feature = "std")]
-mod deps {
-    pub use std::vec::Vec;
-}
-
-#[cfg(not(feature = "std"))]
-mod deps {
-    pub use alloc::vec;
-}
-
+use alloc::vec;
+use alloc::vec::Vec;
 use cu29::prelude::*;
-use deps::*;
 use spin::Mutex;
 
 const REPORT_INTERVAL_SECS: u64 = 1;

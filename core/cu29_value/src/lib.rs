@@ -1,21 +1,11 @@
 #![doc(html_root_url = "https://docs.rs/serde-value/0.7.0/")]
 #![cfg_attr(not(feature = "std"), no_std)]
-#[cfg(not(feature = "std"))]
 extern crate alloc;
 
-#[cfg(not(feature = "std"))]
-mod imp {
-    pub use alloc::boxed::Box;
-    pub use alloc::collections::BTreeMap;
-    pub use alloc::string::String;
-    pub use alloc::vec::Vec;
-}
-#[cfg(feature = "std")]
-mod imp {
-    pub use std::collections::BTreeMap;
-}
-
-use imp::*;
+use alloc::boxed::Box;
+use alloc::collections::BTreeMap;
+use alloc::string::String;
+use alloc::vec::Vec;
 
 use core::cmp::Ordering;
 use core::fmt::{Display, Formatter};

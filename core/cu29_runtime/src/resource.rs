@@ -42,21 +42,9 @@ use core::fmt;
 use core::marker::PhantomData;
 use cu29_traits::{CuError, CuResult};
 
-#[cfg(not(feature = "std"))]
-mod imp {
-    pub use alloc::boxed::Box;
-    pub use alloc::sync::Arc;
-    pub use alloc::vec::Vec;
-}
-
-#[cfg(feature = "std")]
-mod imp {
-    pub use std::boxed::Box;
-    pub use std::sync::Arc;
-    pub use std::vec::Vec;
-}
-
-use imp::*;
+use alloc::boxed::Box;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 /// Lightweight wrapper used when a task needs to take ownership of a resource.
 pub struct Owned<T>(pub T);

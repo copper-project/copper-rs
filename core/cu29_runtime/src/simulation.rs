@@ -112,9 +112,9 @@ use crate::cutask::CuMsgPack;
 
 use crate::cutask::{CuMsg, CuMsgPayload, CuSinkTask, CuSrcTask, Freezable};
 use crate::{input_msg, output_msg};
+use core::marker::PhantomData;
 use cu29_clock::RobotClock;
 use cu29_traits::CuResult;
-use std::marker::PhantomData;
 
 /// This is the state that will be passed to the simulation support to hook
 /// into the lifecycle of the tasks.

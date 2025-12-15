@@ -1,7 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![doc = include_str!("../README.md")]
 
-#[cfg(not(feature = "std"))]
 extern crate alloc;
 use bincode::{Decode, Encode};
 use cu_sensor_payloads::ImuPayload;
@@ -13,8 +12,6 @@ use uom::si::angular_velocity::radian_per_second;
 
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
-#[cfg(feature = "std")]
-use std::vec::Vec;
 
 use core::mem::size_of;
 use core::ptr;

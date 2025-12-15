@@ -1,34 +1,16 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-#[cfg(not(feature = "std"))]
 extern crate alloc;
 
 pub mod commands;
 pub mod structs;
 
-// std implementation
+use core::{
+    fmt::{self, Debug, Display, Formatter},
+    mem,
+};
 #[cfg(feature = "std")]
-mod std_impl {
-    pub use std::{
-        error::Error,
-        fmt::{self, Debug, Display, Formatter},
-        mem,
-    };
-}
-
-// no-std implementation
-#[cfg(not(feature = "std"))]
-mod no_std_impl {
-    pub use core::{
-        fmt::{self, Debug, Display, Formatter},
-        mem,
-    };
-}
-
-#[cfg(not(feature = "std"))]
-use no_std_impl::*;
-#[cfg(feature = "std")]
-use std_impl::*;
+use std::error::Error;
 
 use crc_any::CRCu8;
 use packed_struct::PackedStruct;

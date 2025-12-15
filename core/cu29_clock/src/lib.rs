@@ -1,6 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-#[cfg(not(feature = "std"))]
 extern crate alloc;
 #[cfg(test)]
 extern crate approx;
@@ -35,23 +34,10 @@ use serde::{Deserialize, Serialize};
 // We use this to be able to support embedded 32bit platforms
 use portable_atomic::{AtomicU64, Ordering};
 
-#[cfg(not(feature = "std"))]
-mod imp {
-    pub use alloc::format;
-    pub use alloc::sync::Arc;
-    pub use core::fmt::{Display, Formatter};
-    pub use core::ops::{AddAssign, Div, Mul, SubAssign};
-}
-
-#[cfg(feature = "std")]
-mod imp {
-    pub use std::convert::Into;
-    pub use std::fmt::{Display, Formatter};
-    pub use std::ops::{AddAssign, Div, Mul, SubAssign};
-    pub use std::sync::Arc;
-}
-
-use imp::*;
+use alloc::format;
+use alloc::sync::Arc;
+use core::fmt::{Display, Formatter};
+use core::ops::{AddAssign, Div, Mul, SubAssign};
 
 /// High-precision instant in time, represented as nanoseconds since an arbitrary epoch
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]

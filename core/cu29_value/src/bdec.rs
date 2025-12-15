@@ -5,20 +5,11 @@ use bincode::de::{BorrowDecoder, Decode};
 use bincode::error::DecodeError;
 use cu29_clock::CuTime;
 
-#[cfg(not(feature = "std"))]
-mod imp {
-    pub use alloc::boxed::Box;
-    pub use alloc::collections::BTreeMap;
-    pub use alloc::format;
-    pub use alloc::string::String;
-    pub use alloc::vec::Vec;
-}
-#[cfg(feature = "std")]
-mod imp {
-    pub use std::collections::BTreeMap;
-}
-
-use imp::*;
+use alloc::boxed::Box;
+use alloc::collections::BTreeMap;
+use alloc::format;
+use alloc::string::String;
+use alloc::vec::Vec;
 
 // TODO: Unharcode all those enum types values
 impl<Context> Decode<Context> for Value {

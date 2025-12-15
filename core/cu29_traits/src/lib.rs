@@ -20,7 +20,6 @@
 //! ```
 
 #![cfg_attr(not(feature = "std"), no_std)]
-#[cfg(not(feature = "std"))]
 extern crate alloc;
 
 use bincode::de::{BorrowDecoder, Decoder};
@@ -28,19 +27,13 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{BorrowDecode, Decode as dDecode, Decode, Encode, Encode as dEncode};
 use compact_str::CompactString;
-#[cfg(not(feature = "std"))]
-use core::error::Error as CoreError;
 use cu29_clock::{PartialCuTimeRange, Tov};
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "std")]
-use std::fmt::{Debug, Display, Formatter};
-
-#[cfg(not(feature = "std"))]
 use alloc::string::{String, ToString};
-#[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 #[cfg(not(feature = "std"))]
+use core::error::Error as CoreError;
 use core::fmt::{Debug, Display, Formatter};
 #[cfg(feature = "std")]
 use std::error::Error;

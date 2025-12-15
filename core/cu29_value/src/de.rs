@@ -5,21 +5,11 @@ use core::marker::PhantomData;
 use cu29_clock::CuDuration;
 use serde::{de, forward_to_deserialize_any};
 
-#[cfg(not(feature = "std"))]
-mod imp {
-    pub use alloc::borrow::ToOwned;
-    pub use alloc::boxed::Box;
-    pub use alloc::collections::BTreeMap;
-    pub use alloc::string::String;
-    pub use alloc::string::ToString;
-    pub use alloc::vec::Vec;
-}
-#[cfg(feature = "std")]
-mod imp {
-    pub use std::collections::BTreeMap;
-}
-
-use imp::*;
+use alloc::borrow::ToOwned;
+use alloc::boxed::Box;
+use alloc::collections::BTreeMap;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 
 #[derive(Debug)]
 pub enum Unexpected {

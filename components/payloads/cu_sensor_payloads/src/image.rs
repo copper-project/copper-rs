@@ -1,4 +1,3 @@
-#[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 use bincode::de::Decoder;
 use bincode::error::DecodeError;
@@ -7,8 +6,6 @@ use core::fmt::Debug;
 use cu29::prelude::{ArrayLike, CuHandle};
 #[allow(unused_imports)]
 use cu29::{CuError, CuResult};
-#[cfg(feature = "std")]
-use std::vec::Vec;
 
 #[cfg(feature = "image")]
 use image::{ImageBuffer, Pixel};

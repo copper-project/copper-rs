@@ -4,28 +4,12 @@
 
 use crate::config::ComponentConfig;
 use crate::cutask::{CuMsg, CuMsgPayload, Freezable};
+use alloc::borrow::Cow;
+use alloc::string::String;
+use core::fmt::{Debug, Formatter};
 use core::marker::PhantomData;
 use cu29_clock::RobotClock;
 use cu29_traits::CuResult;
-
-#[cfg(not(feature = "std"))]
-use alloc::borrow::Cow;
-
-#[cfg(feature = "std")]
-use std::borrow::Cow;
-
-#[cfg(not(feature = "std"))]
-mod imp {
-    pub use alloc::fmt::{Debug, Formatter};
-    pub use alloc::string::String;
-}
-
-#[cfg(feature = "std")]
-mod imp {
-    pub use std::fmt::{Debug, Formatter};
-}
-
-use imp::*;
 
 /// Compile-time description of a single bridge channel, including the message type carried on it.
 ///
@@ -497,13 +481,10 @@ mod tests {
     use super::*;
     use crate::config::ComponentConfig;
     use crate::cutask::CuMsg;
-    #[cfg(not(feature = "std"))]
     use alloc::vec::Vec;
     use cu29_clock::RobotClock;
     use cu29_traits::CuError;
     use serde::{Deserialize, Serialize};
-    #[cfg(feature = "std")]
-    use std::vec::Vec;
 
     // ---- Generated channel payload stubs (Copper build output) ---------------
     #[derive(Clone, Debug, Default, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
