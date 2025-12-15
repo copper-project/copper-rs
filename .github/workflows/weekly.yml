@@ -101,7 +101,7 @@ jobs:
 
       - name: Cache apt packages (Linux)
         if: runner.os == 'Linux'
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: /var/cache/apt/archives
           key: ${{ runner.os }}-apt-gstreamer-${{ hashFiles('.github/workflows/weekly.yml') }}
