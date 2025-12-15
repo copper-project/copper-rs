@@ -6,8 +6,6 @@ pub mod messages;
 
 pub use spin::Mutex;
 
-use alloc::string::String;
-
 // std implementation
 #[cfg(feature = "std")]
 mod std_impl {
