@@ -238,7 +238,7 @@ jobs:
 
       - name: Run doctests on (${{ matrix.os }} | debug)
         if: matrix.mode == 'debug'
-        run: cargo +stable test --doc --workspace $EMBEDDED_EXCLUDES
+        run: cargo +stable test --doc --workspace $EMBEDDED_EXCLUDES --quiet
 
       # Run Unit Tests
       - name: Run Unit Tests on (${{ matrix.os }} | ${{matrix.mode}})
