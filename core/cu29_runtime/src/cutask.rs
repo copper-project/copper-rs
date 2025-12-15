@@ -14,20 +14,8 @@ use cu29_traits::{
 };
 use serde::{Deserialize, Serialize};
 
-#[cfg(not(feature = "std"))]
-mod imp {
-    pub use alloc::fmt::Result as FmtResult;
-    pub use alloc::fmt::{Debug, Display, Formatter};
-    pub use alloc::format;
-}
-
-#[cfg(feature = "std")]
-mod imp {
-    pub use std::fmt::Result as FmtResult;
-    pub use std::fmt::{Debug, Display, Formatter};
-}
-
-use imp::*;
+use alloc::format;
+use core::fmt::{Debug, Display, Formatter, Result as FmtResult};
 
 /// The state of a task.
 // Everything that is stateful in copper for zero copy constraints need to be restricted to this trait.

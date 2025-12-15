@@ -13,36 +13,27 @@ use cu29_traits::CuResult;
 use cu29_traits::WriteStream;
 use cu29_traits::{CopperListTuple, CuError};
 
+use alloc::boxed::Box;
+use alloc::collections::VecDeque;
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use bincode::enc::EncoderImpl;
 use bincode::enc::write::{SizeWriter, SliceWriter};
 use bincode::error::EncodeError;
 use bincode::{Decode, Encode};
+use core::fmt::Result as FmtResult;
 use core::fmt::{Debug, Formatter};
 use petgraph::prelude::*;
 use petgraph::visit::VisitMap;
 use petgraph::visit::Visitable;
 
-#[cfg(not(feature = "std"))]
-mod imp {
-    pub use alloc::boxed::Box;
-    pub use alloc::collections::VecDeque;
-    pub use alloc::format;
-    pub use alloc::string::String;
-    pub use alloc::string::ToString;
-    pub use alloc::vec::Vec;
-    pub use core::fmt::Result as FmtResult;
-}
-
 #[cfg(feature = "std")]
-mod imp {
-    pub use cu29_log_runtime::LoggerRuntime;
-    pub use cu29_unifiedlog::UnifiedLoggerWrite;
-    pub use std::collections::VecDeque;
-    pub use std::fmt::Result as FmtResult;
-    pub use std::sync::{Arc, Mutex};
-}
-
-use imp::*;
+use cu29_log_runtime::LoggerRuntime;
+#[cfg(feature = "std")]
+use cu29_unifiedlog::UnifiedLoggerWrite;
+#[cfg(feature = "std")]
+use std::sync::{Arc, Mutex};
 
 /// Just a simple struct to hold the various bits needed to run a Copper application.
 #[cfg(feature = "std")]

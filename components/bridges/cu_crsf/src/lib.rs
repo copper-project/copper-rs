@@ -1,6 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-#[cfg(not(feature = "std"))]
 extern crate alloc;
 
 pub mod messages;
@@ -10,8 +9,6 @@ pub use spin::Mutex;
 // std implementation
 #[cfg(feature = "std")]
 mod std_impl {
-    pub use std::string::String;
-
     pub const SERIAL_PATH_KEY: &str = "serial_path";
     pub const SERIAL_BAUD_KEY: &str = "baudrate";
     pub const SERIAL_TIMEOUT_KEY: &str = "timeout_ms";

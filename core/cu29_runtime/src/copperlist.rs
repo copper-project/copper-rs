@@ -3,22 +3,10 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
-#[cfg(not(feature = "std"))]
-mod imp {
-    pub use alloc::alloc::alloc_zeroed;
-    pub use alloc::alloc::handle_alloc_error;
-    pub use alloc::boxed::Box;
-    pub use alloc::vec::Vec;
-}
-
-#[cfg(feature = "std")]
-mod imp {
-    pub use std::alloc::alloc_zeroed;
-    pub use std::alloc::handle_alloc_error;
-}
-
+use alloc::alloc::{alloc_zeroed, handle_alloc_error};
+use alloc::boxed::Box;
+use alloc::vec::Vec;
 use core::alloc::Layout;
-use imp::*;
 
 use bincode::{Decode, Encode};
 use core::fmt;
