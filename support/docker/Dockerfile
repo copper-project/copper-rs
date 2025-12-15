@@ -36,7 +36,7 @@ RUN curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C ${CARGO_HOME:-~/
 RUN cargo install cargo-generate 
 
 # Set environment variables for build modes and features
-ENV FEATURES_FLAG="--features macro_debug,mock,perf-ui,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode"
+ENV FEATURES_FLAG="--features mock,perf-ui,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode"
 
 # Set up entry environment
 WORKDIR /home/copper-rs

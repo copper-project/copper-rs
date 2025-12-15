@@ -207,7 +207,7 @@
             
             # Cargo configuration
             export CARGO_TERM_COLOR=always
-            export FEATURES_FLAG="--features macro_debug,mock,perf-ui,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode${cudaFeatureFlag}"
+            export FEATURES_FLAG="--features mock,perf-ui,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode${cudaFeatureFlag}"
             
             # LLVM configuration (platform-specific versions)
             export LLVM_CONFIG=${llvmPackages.llvm}/bin/llvm-config

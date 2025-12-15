@@ -34,7 +34,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     env:
-      BASE_FEATURES: macro_debug,mock,perf-ui,image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      BASE_FEATURES: mock,perf-ui,image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
 
     strategy:
       matrix:
@@ -211,9 +211,9 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           $features = if ($env:matrix_mode -eq 'cuda-release') {
-            '--features macro_debug,mock,perf-ui,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode,cuda'
+            '--features mock,perf-ui,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode,cuda'
           } else {
-            '--features macro_debug,mock,perf-ui,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode'
+            '--features mock,perf-ui,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode'
           }
           Add-Content -Path $env:GITHUB_ENV -Value "FEATURES_FLAG=$features"
 
@@ -246,7 +246,7 @@ jobs:
 
       - name: Run doctests on (${{ matrix.os }} | debug)
         if: matrix.mode == 'debug'
-        run: cargo +beta test --doc --workspace $EMBEDDED_EXCLUDES
+        run: cargo +beta test --doc --workspace $EMBEDDED_EXCLUDES --quiet
 
       # Run Unit Tests
       - name: Run Unit Tests on (${{ matrix.os }} | ${{matrix.mode}})
