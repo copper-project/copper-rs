@@ -14,7 +14,7 @@ Only the channels declared in the Copper config are driven; others stay idle.
   let board = Rp2350Board::new(resources, system_clock_hz, Rp2350BoardConfig::default())?;
   cu_bdshot::register_rp2350_board(board)?;
   ```
-- STM32: `Stm32BdshotBridge` is a stub today; wire your STM32 hardware by providing a `BdshotBoard` implementation and provider for your target.
+- STM32: `Stm32BdshotBridge` expects you to register a backend that can emit DSHOT frames and capture the 21-bit telemetry response. Build a backend for your STM32H7 timer/DMA setup (see `H7Dshot600Backend` + `encode_dshot600_dma` helpers) and register it at startup with `cu_bdshot::register_stm32_bdshot_backend(...)`.
 - On startup the RP2350 bridge sends repeated disarm frames and waits for telemetry; it errors out if ESCs never answer.
 
 ## Configuration

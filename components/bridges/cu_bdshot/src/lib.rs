@@ -1,5 +1,8 @@
 #![cfg_attr(not(test), no_std)]
 
+#[cfg(feature = "stm32")]
+extern crate alloc;
+
 pub mod board;
 pub mod bridge;
 pub mod messages;

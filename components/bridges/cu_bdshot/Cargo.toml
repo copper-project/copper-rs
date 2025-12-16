@@ -25,8 +25,9 @@ rp235x-hal = { version = "0.3", features = ["critical-section-impl"], optional =
 pio = { version = "=0.2.1", optional = true }  # Needed for RP2350 support
 pio-proc = { version = "=0.2.1", optional = true }
 cortex-m = { version = "0.7.7", optional = true }
+stm32h7xx-hal = { version = "0.16.0", default-features = false, optional = true }
 
 [features]
 default = ["stm32"]
-stm32 = []
+stm32 = ["cortex-m"]
 rp2350 = ["rp235x-hal", "pio", "pio-proc", "cortex-m"]
