@@ -30,14 +30,14 @@ pub mod rp2350;
 #[cfg(feature = "stm32")]
 pub mod stm32;
 
-#[cfg(feature = "stm32")]
-pub use stm32::{
-    DshotDmaTx, H7Dshot600Backend, Stm32BdshotBackend, Stm32BdshotBoard, Stm32BoardProvider,
-    TelemetryCapture, decode_oversampled_telemetry, encode_dshot600_dma,
-    register_stm32_bdshot_backend, DSHOT_BIT_0_TICKS, DSHOT_BIT_1_TICKS, DSHOT_DMA_BUFFER_SIZE,
-};
 #[cfg(feature = "rp2350")]
 pub use rp2350::{
     Rp2350Board, Rp2350BoardConfig, Rp2350BoardProvider, Rp2350BoardResources,
     register_rp2350_board,
+};
+#[cfg(feature = "stm32")]
+pub use stm32::{
+    DSHOT_BIT_0_TICKS, DSHOT_BIT_1_TICKS, DSHOT_DMA_BUFFER_SIZE, DshotDmaTx, H7Dshot600Backend,
+    Stm32BdshotBackend, Stm32BdshotBoard, Stm32BoardProvider, TelemetryCapture,
+    decode_oversampled_telemetry, encode_dshot600_dma, register_stm32_bdshot_backend,
 };

@@ -1,11 +1,11 @@
-use alloc::boxed::Box;
 use crate::board::BdshotBoard;
 use crate::bridge::BdshotBoardProvider;
 use crate::decode::{decode_telemetry_packet, extract_telemetry_payload_with_crc_test, fold_gcr};
 use crate::messages::DShotTelemetry;
+use alloc::boxed::Box;
+use cortex_m::asm;
 use cu29::CuResult;
 use cu29::prelude::CuError;
-use cortex_m::asm;
 use spin::Mutex;
 
 /// Minimal trait a hardware backend must implement to drive bidirectional DShot600 on STM32/H7.
@@ -226,17 +226,85 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::decode_oversampled_telemetry;
+    use super::{
+        DSHOT_BIT_0_TICKS, DSHOT_BIT_1_TICKS, Stm32BdshotBackend, Stm32BdshotBoard,
+        decode_oversampled_telemetry, encode_dshot600_dma,
+    };
+    use crate::board::BdshotBoard;
+    use crate::messages::EscCommand;
+    use crate::{DShotTelemetry, encode_frame};
+
+    #[derive(Default)]
+    struct DummyBackend {
+        sent: alloc::vec::Vec<u32>,
+        telemetry: Option<u32>,
+    }
+
+    impl Stm32BdshotBackend for DummyBackend {
+        fn channels(&self) -> usize {
+            1
+        }
+
+        fn send_frame(&mut self, channel: usize, frame: u32) {
+            assert_eq!(channel, 0);
+            self.sent.push(frame);
+        }
+
+        fn read_raw_telemetry(&mut self, channel: usize) -> Option<u32> {
+            assert_eq!(channel, 0);
+            self.telemetry.take()
+        }
+
+        fn delay_us(&mut self, _micros: u32) {}
+    }
 
     #[test]
     fn majority_decode_fixed_pattern() {
         // Raw NRZI pattern for zero RPM telemetry (same as decode::tests) with 3x oversampling.
-        let pattern: [u8; 63] = [
-            0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0,
-            1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0,
-            1, 0, 0, 1,
-        ];
+        let pattern: [u8; 63] = {
+            let bits = [
+                0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1,
+            ];
+            let mut buf = [0u8; 63];
+            for (i, bit) in bits.into_iter().enumerate() {
+                let base = i * 3;
+                buf[base] = bit;
+                buf[base + 1] = bit;
+                buf[base + 2] = bit;
+            }
+            buf
+        };
         let raw21 = decode_oversampled_telemetry(&pattern).unwrap();
         assert_eq!(raw21, 0b001010010100101010001);
+    }
+
+    #[test]
+    fn encode_dshot600_dma_matches_bits() {
+        // 0xA5A5 has alternating bits for easy inspection
+        let buf = encode_dshot600_dma(0xA5A5);
+        // First bit is 1
+        assert_eq!(buf[0], DSHOT_BIT_1_TICKS);
+        // Second bit is 0
+        assert_eq!(buf[1], DSHOT_BIT_0_TICKS);
+        // Last two are reset padding
+        assert_eq!(buf[16], 0);
+        assert_eq!(buf[17], 0);
+    }
+
+    #[test]
+    fn board_exchange_decodes_telemetry() {
+        let raw21 = 0b001010010100101010001; // zero RPM telemetry sample
+        let backend = DummyBackend {
+            telemetry: Some(raw21),
+            ..Default::default()
+        };
+        let mut board = Stm32BdshotBoard::new(backend);
+        let cmd = EscCommand {
+            throttle: 0,
+            request_telemetry: true,
+        };
+        let frame = encode_frame(cmd);
+        let telem = board.exchange(0, frame).unwrap();
+        assert_eq!(telem, DShotTelemetry::Erpm(0));
     }
 }
