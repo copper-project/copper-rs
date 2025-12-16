@@ -16,14 +16,17 @@ embedded_target = "thumbv8m.main-none-eabihf"
 
 [dependencies]
 cu29 = { path = "../../../core/cu29", version="0.11.0", default-features = false }
-rp235x-hal = { version = "0.3", features = ["critical-section-impl"] }
-pio = "=0.2.1"  # Needed
-pio-proc = "=0.2.1"
-cortex-m = "0.7.7"
 serde = { workspace = true, features = ["derive"] }
 bincode = { workspace = true, features = ["alloc"] }
 spin = { workspace = true }
 defmt = "1.0.1"
 
+rp235x-hal = { version = "0.3", features = ["critical-section-impl"], optional = true }
+pio = { version = "=0.2.1", optional = true }  # Needed for RP2350 support
+pio-proc = { version = "=0.2.1", optional = true }
+cortex-m = { version = "0.7.7", optional = true }
+
 [features]
-default = []
+default = ["stm32"]
+stm32 = []
+rp2350 = ["rp235x-hal", "pio", "pio-proc", "cortex-m"]
