@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29_derive/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-80aa586b.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_derive" data-themes="" data-resource-suffix="" data-rustdoc-version="1.94.0-nightly (31010ca61 2025-12-16)" data-channel="nightly" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../../static.files/storage-e2aeef58.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-3e30299d.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-ffcac47a.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">cu29_derive/</div>lib.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>proc_macro::TokenStream;
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `core/cu29_derive/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-80aa586b.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="cu29_derive" data-themes="" data-resource-suffix="" data-rustdoc-version="1.94.0-nightly (f794a0873 2025-12-17)" data-channel="nightly" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-a3946164.js" data-settings-js="settings-c38705f0.js" ><script src="../../static.files/storage-e2aeef58.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-3e30299d.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-ffcac47a.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">cu29_derive/</div>lib.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>proc_macro::TokenStream;
 <a href=#2 id=2 data-nosnippet>2</a><span class="kw">use </span>quote::{format_ident, quote};
 <a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>std::collections::{BTreeMap, BTreeSet, HashMap};
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>std::fs::read_to_string;
@@ -3476,101 +3476,130 @@
 <a href=#3476 id=3476 data-nosnippet>3476</a>    )
 <a href=#3477 id=3477 data-nosnippet>3477</a>}
 <a href=#3478 id=3478 data-nosnippet>3478</a>
-<a href=#3479 id=3479 data-nosnippet>3479</a><span class="attr">#[cfg(test)]
-<a href=#3480 id=3480 data-nosnippet>3480</a></span><span class="kw">mod </span>tests {
-<a href=#3481 id=3481 data-nosnippet>3481</a>    <span class="comment">// See tests/compile_file directory for more information
-<a href=#3482 id=3482 data-nosnippet>3482</a>    </span><span class="attr">#[test]
-<a href=#3483 id=3483 data-nosnippet>3483</a>    </span><span class="kw">fn </span>test_compile_fail() {
-<a href=#3484 id=3484 data-nosnippet>3484</a>        <span class="kw">let </span>t = trybuild::TestCases::new();
-<a href=#3485 id=3485 data-nosnippet>3485</a>        t.compile_fail(<span class="string">"tests/compile_fail/*/*.rs"</span>);
-<a href=#3486 id=3486 data-nosnippet>3486</a>    }
-<a href=#3487 id=3487 data-nosnippet>3487</a>
-<a href=#3488 id=3488 data-nosnippet>3488</a>    <span class="attr">#[test]
-<a href=#3489 id=3489 data-nosnippet>3489</a>    </span><span class="kw">fn </span>bridge_resources_are_collected() {
-<a href=#3490 id=3490 data-nosnippet>3490</a>        <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#3491 id=3491 data-nosnippet>3491</a>        <span class="kw">use </span>cu29::config::{CuGraph, Flavor, Node};
-<a href=#3492 id=3492 data-nosnippet>3492</a>        <span class="kw">use </span>std::collections::HashMap;
-<a href=#3493 id=3493 data-nosnippet>3493</a>        <span class="kw">use </span>syn::parse_str;
-<a href=#3494 id=3494 data-nosnippet>3494</a>
-<a href=#3495 id=3495 data-nosnippet>3495</a>        <span class="kw">let </span><span class="kw-2">mut </span>graph = CuGraph::default();
-<a href=#3496 id=3496 data-nosnippet>3496</a>        <span class="kw">let </span><span class="kw-2">mut </span>node = Node::new_with_flavor(<span class="string">"radio"</span>, <span class="string">"bridge::Dummy"</span>, Flavor::Bridge);
-<a href=#3497 id=3497 data-nosnippet>3497</a>        <span class="kw">let </span><span class="kw-2">mut </span>res = HashMap::new();
-<a href=#3498 id=3498 data-nosnippet>3498</a>        res.insert(<span class="string">"serial"</span>.to_string(), <span class="string">"fc.serial0"</span>.to_string());
-<a href=#3499 id=3499 data-nosnippet>3499</a>        node.set_resources(<span class="prelude-val">Some</span>(res));
-<a href=#3500 id=3500 data-nosnippet>3500</a>        graph.add_node(node).expect(<span class="string">"bridge node"</span>);
-<a href=#3501 id=3501 data-nosnippet>3501</a>
-<a href=#3502 id=3502 data-nosnippet>3502</a>        <span class="kw">let </span>task_specs = CuTaskSpecSet::from_graph(<span class="kw-2">&amp;</span>graph);
-<a href=#3503 id=3503 data-nosnippet>3503</a>        <span class="kw">let </span>bridge_spec = BridgeSpec {
-<a href=#3504 id=3504 data-nosnippet>3504</a>            id: <span class="string">"radio"</span>.to_string(),
-<a href=#3505 id=3505 data-nosnippet>3505</a>            type_path: parse_str(<span class="string">"bridge::Dummy"</span>).unwrap(),
-<a href=#3506 id=3506 data-nosnippet>3506</a>            config_index: <span class="number">0</span>,
-<a href=#3507 id=3507 data-nosnippet>3507</a>            tuple_index: <span class="number">0</span>,
-<a href=#3508 id=3508 data-nosnippet>3508</a>            monitor_index: <span class="prelude-val">None</span>,
-<a href=#3509 id=3509 data-nosnippet>3509</a>            rx_channels: Vec::new(),
-<a href=#3510 id=3510 data-nosnippet>3510</a>            tx_channels: Vec::new(),
-<a href=#3511 id=3511 data-nosnippet>3511</a>        };
-<a href=#3512 id=3512 data-nosnippet>3512</a>
-<a href=#3513 id=3513 data-nosnippet>3513</a>        <span class="kw">let </span>specs =
-<a href=#3514 id=3514 data-nosnippet>3514</a>            collect_resource_specs(<span class="kw-2">&amp;</span>graph, <span class="kw-2">&amp;</span>task_specs, <span class="kw-2">&amp;</span>[bridge_spec]).expect(<span class="string">"collect specs"</span>);
-<a href=#3515 id=3515 data-nosnippet>3515</a>        <span class="macro">assert_eq!</span>(specs.len(), <span class="number">1</span>);
-<a href=#3516 id=3516 data-nosnippet>3516</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(specs[<span class="number">0</span>].owner, ResourceOwner::Bridge(<span class="number">0</span>)));
-<a href=#3517 id=3517 data-nosnippet>3517</a>        <span class="macro">assert_eq!</span>(specs[<span class="number">0</span>].binding_name, <span class="string">"serial"</span>);
-<a href=#3518 id=3518 data-nosnippet>3518</a>        <span class="macro">assert_eq!</span>(specs[<span class="number">0</span>].path, <span class="string">"fc.serial0"</span>);
-<a href=#3519 id=3519 data-nosnippet>3519</a>    }
-<a href=#3520 id=3520 data-nosnippet>3520</a>}
-<a href=#3521 id=3521 data-nosnippet>3521</a><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-<a href=#3522 id=3522 data-nosnippet>3522</a></span><span class="kw">enum </span>BridgeChannelDirection {
-<a href=#3523 id=3523 data-nosnippet>3523</a>    Rx,
-<a href=#3524 id=3524 data-nosnippet>3524</a>    Tx,
-<a href=#3525 id=3525 data-nosnippet>3525</a>}
-<a href=#3526 id=3526 data-nosnippet>3526</a>
-<a href=#3527 id=3527 data-nosnippet>3527</a><span class="attr">#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-<a href=#3528 id=3528 data-nosnippet>3528</a></span><span class="kw">struct </span>BridgeChannelKey {
-<a href=#3529 id=3529 data-nosnippet>3529</a>    bridge_id: String,
-<a href=#3530 id=3530 data-nosnippet>3530</a>    channel_id: String,
-<a href=#3531 id=3531 data-nosnippet>3531</a>    direction: BridgeChannelDirection,
-<a href=#3532 id=3532 data-nosnippet>3532</a>}
-<a href=#3533 id=3533 data-nosnippet>3533</a>
-<a href=#3534 id=3534 data-nosnippet>3534</a><span class="attr">#[derive(Clone)]
-<a href=#3535 id=3535 data-nosnippet>3535</a></span><span class="kw">struct </span>BridgeChannelSpec {
-<a href=#3536 id=3536 data-nosnippet>3536</a>    id: String,
-<a href=#3537 id=3537 data-nosnippet>3537</a>    const_ident: Ident,
-<a href=#3538 id=3538 data-nosnippet>3538</a>    <span class="attr">#[allow(dead_code)]
-<a href=#3539 id=3539 data-nosnippet>3539</a>    </span>msg_type: Type,
-<a href=#3540 id=3540 data-nosnippet>3540</a>    config_index: usize,
-<a href=#3541 id=3541 data-nosnippet>3541</a>    plan_node_id: <span class="prelude-ty">Option</span>&lt;NodeId&gt;,
-<a href=#3542 id=3542 data-nosnippet>3542</a>    culist_index: <span class="prelude-ty">Option</span>&lt;usize&gt;,
-<a href=#3543 id=3543 data-nosnippet>3543</a>    monitor_index: <span class="prelude-ty">Option</span>&lt;usize&gt;,
-<a href=#3544 id=3544 data-nosnippet>3544</a>}
-<a href=#3545 id=3545 data-nosnippet>3545</a>
-<a href=#3546 id=3546 data-nosnippet>3546</a><span class="attr">#[derive(Clone)]
-<a href=#3547 id=3547 data-nosnippet>3547</a></span><span class="kw">struct </span>BridgeSpec {
-<a href=#3548 id=3548 data-nosnippet>3548</a>    id: String,
-<a href=#3549 id=3549 data-nosnippet>3549</a>    type_path: Type,
-<a href=#3550 id=3550 data-nosnippet>3550</a>    config_index: usize,
-<a href=#3551 id=3551 data-nosnippet>3551</a>    tuple_index: usize,
-<a href=#3552 id=3552 data-nosnippet>3552</a>    monitor_index: <span class="prelude-ty">Option</span>&lt;usize&gt;,
-<a href=#3553 id=3553 data-nosnippet>3553</a>    rx_channels: Vec&lt;BridgeChannelSpec&gt;,
-<a href=#3554 id=3554 data-nosnippet>3554</a>    tx_channels: Vec&lt;BridgeChannelSpec&gt;,
-<a href=#3555 id=3555 data-nosnippet>3555</a>}
-<a href=#3556 id=3556 data-nosnippet>3556</a>
-<a href=#3557 id=3557 data-nosnippet>3557</a><span class="attr">#[derive(Clone)]
-<a href=#3558 id=3558 data-nosnippet>3558</a></span><span class="kw">struct </span>ExecutionEntity {
-<a href=#3559 id=3559 data-nosnippet>3559</a>    kind: ExecutionEntityKind,
-<a href=#3560 id=3560 data-nosnippet>3560</a>}
+<a href=#3479 id=3479 data-nosnippet>3479</a><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+<a href=#3480 id=3480 data-nosnippet>3480</a></span><span class="kw">enum </span>BridgeChannelDirection {
+<a href=#3481 id=3481 data-nosnippet>3481</a>    Rx,
+<a href=#3482 id=3482 data-nosnippet>3482</a>    Tx,
+<a href=#3483 id=3483 data-nosnippet>3483</a>}
+<a href=#3484 id=3484 data-nosnippet>3484</a>
+<a href=#3485 id=3485 data-nosnippet>3485</a><span class="attr">#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+<a href=#3486 id=3486 data-nosnippet>3486</a></span><span class="kw">struct </span>BridgeChannelKey {
+<a href=#3487 id=3487 data-nosnippet>3487</a>    bridge_id: String,
+<a href=#3488 id=3488 data-nosnippet>3488</a>    channel_id: String,
+<a href=#3489 id=3489 data-nosnippet>3489</a>    direction: BridgeChannelDirection,
+<a href=#3490 id=3490 data-nosnippet>3490</a>}
+<a href=#3491 id=3491 data-nosnippet>3491</a>
+<a href=#3492 id=3492 data-nosnippet>3492</a><span class="attr">#[derive(Clone)]
+<a href=#3493 id=3493 data-nosnippet>3493</a></span><span class="kw">struct </span>BridgeChannelSpec {
+<a href=#3494 id=3494 data-nosnippet>3494</a>    id: String,
+<a href=#3495 id=3495 data-nosnippet>3495</a>    const_ident: Ident,
+<a href=#3496 id=3496 data-nosnippet>3496</a>    <span class="attr">#[allow(dead_code)]
+<a href=#3497 id=3497 data-nosnippet>3497</a>    </span>msg_type: Type,
+<a href=#3498 id=3498 data-nosnippet>3498</a>    config_index: usize,
+<a href=#3499 id=3499 data-nosnippet>3499</a>    plan_node_id: <span class="prelude-ty">Option</span>&lt;NodeId&gt;,
+<a href=#3500 id=3500 data-nosnippet>3500</a>    culist_index: <span class="prelude-ty">Option</span>&lt;usize&gt;,
+<a href=#3501 id=3501 data-nosnippet>3501</a>    monitor_index: <span class="prelude-ty">Option</span>&lt;usize&gt;,
+<a href=#3502 id=3502 data-nosnippet>3502</a>}
+<a href=#3503 id=3503 data-nosnippet>3503</a>
+<a href=#3504 id=3504 data-nosnippet>3504</a><span class="attr">#[derive(Clone)]
+<a href=#3505 id=3505 data-nosnippet>3505</a></span><span class="kw">struct </span>BridgeSpec {
+<a href=#3506 id=3506 data-nosnippet>3506</a>    id: String,
+<a href=#3507 id=3507 data-nosnippet>3507</a>    type_path: Type,
+<a href=#3508 id=3508 data-nosnippet>3508</a>    config_index: usize,
+<a href=#3509 id=3509 data-nosnippet>3509</a>    tuple_index: usize,
+<a href=#3510 id=3510 data-nosnippet>3510</a>    monitor_index: <span class="prelude-ty">Option</span>&lt;usize&gt;,
+<a href=#3511 id=3511 data-nosnippet>3511</a>    rx_channels: Vec&lt;BridgeChannelSpec&gt;,
+<a href=#3512 id=3512 data-nosnippet>3512</a>    tx_channels: Vec&lt;BridgeChannelSpec&gt;,
+<a href=#3513 id=3513 data-nosnippet>3513</a>}
+<a href=#3514 id=3514 data-nosnippet>3514</a>
+<a href=#3515 id=3515 data-nosnippet>3515</a><span class="attr">#[derive(Clone)]
+<a href=#3516 id=3516 data-nosnippet>3516</a></span><span class="kw">struct </span>ExecutionEntity {
+<a href=#3517 id=3517 data-nosnippet>3517</a>    kind: ExecutionEntityKind,
+<a href=#3518 id=3518 data-nosnippet>3518</a>}
+<a href=#3519 id=3519 data-nosnippet>3519</a>
+<a href=#3520 id=3520 data-nosnippet>3520</a><span class="attr">#[derive(Clone)]
+<a href=#3521 id=3521 data-nosnippet>3521</a></span><span class="kw">enum </span>ExecutionEntityKind {
+<a href=#3522 id=3522 data-nosnippet>3522</a>    Task {
+<a href=#3523 id=3523 data-nosnippet>3523</a>        task_index: usize,
+<a href=#3524 id=3524 data-nosnippet>3524</a>    },
+<a href=#3525 id=3525 data-nosnippet>3525</a>    BridgeRx {
+<a href=#3526 id=3526 data-nosnippet>3526</a>        bridge_index: usize,
+<a href=#3527 id=3527 data-nosnippet>3527</a>        channel_index: usize,
+<a href=#3528 id=3528 data-nosnippet>3528</a>    },
+<a href=#3529 id=3529 data-nosnippet>3529</a>    BridgeTx {
+<a href=#3530 id=3530 data-nosnippet>3530</a>        bridge_index: usize,
+<a href=#3531 id=3531 data-nosnippet>3531</a>        channel_index: usize,
+<a href=#3532 id=3532 data-nosnippet>3532</a>    },
+<a href=#3533 id=3533 data-nosnippet>3533</a>}
+<a href=#3534 id=3534 data-nosnippet>3534</a>
+<a href=#3535 id=3535 data-nosnippet>3535</a><span class="attr">#[cfg(test)]
+<a href=#3536 id=3536 data-nosnippet>3536</a></span><span class="kw">mod </span>tests {
+<a href=#3537 id=3537 data-nosnippet>3537</a>    <span class="comment">// See tests/compile_file directory for more information
+<a href=#3538 id=3538 data-nosnippet>3538</a>    </span><span class="attr">#[test]
+<a href=#3539 id=3539 data-nosnippet>3539</a>    </span><span class="kw">fn </span>test_compile_fail() {
+<a href=#3540 id=3540 data-nosnippet>3540</a>        <span class="kw">use </span>rustc_version::{Channel, version_meta};
+<a href=#3541 id=3541 data-nosnippet>3541</a>        <span class="kw">use </span>std::{fs, path::Path};
+<a href=#3542 id=3542 data-nosnippet>3542</a>
+<a href=#3543 id=3543 data-nosnippet>3543</a>        <span class="kw">let </span>dir = Path::new(<span class="string">"tests/compile_fail"</span>);
+<a href=#3544 id=3544 data-nosnippet>3544</a>        <span class="kw">for </span>entry <span class="kw">in </span>fs::read_dir(dir).unwrap() {
+<a href=#3545 id=3545 data-nosnippet>3545</a>            <span class="kw">let </span>entry = entry.unwrap();
+<a href=#3546 id=3546 data-nosnippet>3546</a>            <span class="kw">if </span>!entry.file_type().unwrap().is_dir() {
+<a href=#3547 id=3547 data-nosnippet>3547</a>                <span class="kw">continue</span>;
+<a href=#3548 id=3548 data-nosnippet>3548</a>            }
+<a href=#3549 id=3549 data-nosnippet>3549</a>            <span class="kw">for </span>file <span class="kw">in </span>fs::read_dir(entry.path()).unwrap() {
+<a href=#3550 id=3550 data-nosnippet>3550</a>                <span class="kw">let </span>file = file.unwrap();
+<a href=#3551 id=3551 data-nosnippet>3551</a>                <span class="kw">let </span>p = file.path();
+<a href=#3552 id=3552 data-nosnippet>3552</a>                <span class="kw">if </span>p.extension().and_then(|x| x.to_str()) != <span class="prelude-val">Some</span>(<span class="string">"rs"</span>) {
+<a href=#3553 id=3553 data-nosnippet>3553</a>                    <span class="kw">continue</span>;
+<a href=#3554 id=3554 data-nosnippet>3554</a>                }
+<a href=#3555 id=3555 data-nosnippet>3555</a>
+<a href=#3556 id=3556 data-nosnippet>3556</a>                <span class="kw">let </span>base = p.with_extension(<span class="string">"stderr"</span>); <span class="comment">// the file trybuild reads
+<a href=#3557 id=3557 data-nosnippet>3557</a>                </span><span class="kw">let </span>src = <span class="kw">match </span>version_meta().unwrap().channel {
+<a href=#3558 id=3558 data-nosnippet>3558</a>                    Channel::Beta =&gt; Path::new(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{}.beta"</span>, base.display())).to_path_buf(),
+<a href=#3559 id=3559 data-nosnippet>3559</a>                    <span class="kw">_ </span>=&gt; Path::new(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{}.stable"</span>, base.display())).to_path_buf(),
+<a href=#3560 id=3560 data-nosnippet>3560</a>                };
 <a href=#3561 id=3561 data-nosnippet>3561</a>
-<a href=#3562 id=3562 data-nosnippet>3562</a><span class="attr">#[derive(Clone)]
-<a href=#3563 id=3563 data-nosnippet>3563</a></span><span class="kw">enum </span>ExecutionEntityKind {
-<a href=#3564 id=3564 data-nosnippet>3564</a>    Task {
-<a href=#3565 id=3565 data-nosnippet>3565</a>        task_index: usize,
-<a href=#3566 id=3566 data-nosnippet>3566</a>    },
-<a href=#3567 id=3567 data-nosnippet>3567</a>    BridgeRx {
-<a href=#3568 id=3568 data-nosnippet>3568</a>        bridge_index: usize,
-<a href=#3569 id=3569 data-nosnippet>3569</a>        channel_index: usize,
-<a href=#3570 id=3570 data-nosnippet>3570</a>    },
-<a href=#3571 id=3571 data-nosnippet>3571</a>    BridgeTx {
-<a href=#3572 id=3572 data-nosnippet>3572</a>        bridge_index: usize,
-<a href=#3573 id=3573 data-nosnippet>3573</a>        channel_index: usize,
-<a href=#3574 id=3574 data-nosnippet>3574</a>    },
-<a href=#3575 id=3575 data-nosnippet>3575</a>}
+<a href=#3562 id=3562 data-nosnippet>3562</a>                <span class="kw">if </span>src.exists() {
+<a href=#3563 id=3563 data-nosnippet>3563</a>                    fs::copy(src, <span class="kw-2">&amp;</span>base).unwrap();
+<a href=#3564 id=3564 data-nosnippet>3564</a>                }
+<a href=#3565 id=3565 data-nosnippet>3565</a>            }
+<a href=#3566 id=3566 data-nosnippet>3566</a>        }
+<a href=#3567 id=3567 data-nosnippet>3567</a>
+<a href=#3568 id=3568 data-nosnippet>3568</a>        <span class="kw">let </span>t = trybuild::TestCases::new();
+<a href=#3569 id=3569 data-nosnippet>3569</a>        t.compile_fail(<span class="string">"tests/compile_fail/*/*.rs"</span>);
+<a href=#3570 id=3570 data-nosnippet>3570</a>    }
+<a href=#3571 id=3571 data-nosnippet>3571</a>
+<a href=#3572 id=3572 data-nosnippet>3572</a>    <span class="attr">#[test]
+<a href=#3573 id=3573 data-nosnippet>3573</a>    </span><span class="kw">fn </span>bridge_resources_are_collected() {
+<a href=#3574 id=3574 data-nosnippet>3574</a>        <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#3575 id=3575 data-nosnippet>3575</a>        <span class="kw">use </span>cu29::config::{CuGraph, Flavor, Node};
+<a href=#3576 id=3576 data-nosnippet>3576</a>        <span class="kw">use </span>std::collections::HashMap;
+<a href=#3577 id=3577 data-nosnippet>3577</a>        <span class="kw">use </span>syn::parse_str;
+<a href=#3578 id=3578 data-nosnippet>3578</a>
+<a href=#3579 id=3579 data-nosnippet>3579</a>        <span class="kw">let </span><span class="kw-2">mut </span>graph = CuGraph::default();
+<a href=#3580 id=3580 data-nosnippet>3580</a>        <span class="kw">let </span><span class="kw-2">mut </span>node = Node::new_with_flavor(<span class="string">"radio"</span>, <span class="string">"bridge::Dummy"</span>, Flavor::Bridge);
+<a href=#3581 id=3581 data-nosnippet>3581</a>        <span class="kw">let </span><span class="kw-2">mut </span>res = HashMap::new();
+<a href=#3582 id=3582 data-nosnippet>3582</a>        res.insert(<span class="string">"serial"</span>.to_string(), <span class="string">"fc.serial0"</span>.to_string());
+<a href=#3583 id=3583 data-nosnippet>3583</a>        node.set_resources(<span class="prelude-val">Some</span>(res));
+<a href=#3584 id=3584 data-nosnippet>3584</a>        graph.add_node(node).expect(<span class="string">"bridge node"</span>);
+<a href=#3585 id=3585 data-nosnippet>3585</a>
+<a href=#3586 id=3586 data-nosnippet>3586</a>        <span class="kw">let </span>task_specs = CuTaskSpecSet::from_graph(<span class="kw-2">&amp;</span>graph);
+<a href=#3587 id=3587 data-nosnippet>3587</a>        <span class="kw">let </span>bridge_spec = BridgeSpec {
+<a href=#3588 id=3588 data-nosnippet>3588</a>            id: <span class="string">"radio"</span>.to_string(),
+<a href=#3589 id=3589 data-nosnippet>3589</a>            type_path: parse_str(<span class="string">"bridge::Dummy"</span>).unwrap(),
+<a href=#3590 id=3590 data-nosnippet>3590</a>            config_index: <span class="number">0</span>,
+<a href=#3591 id=3591 data-nosnippet>3591</a>            tuple_index: <span class="number">0</span>,
+<a href=#3592 id=3592 data-nosnippet>3592</a>            monitor_index: <span class="prelude-val">None</span>,
+<a href=#3593 id=3593 data-nosnippet>3593</a>            rx_channels: Vec::new(),
+<a href=#3594 id=3594 data-nosnippet>3594</a>            tx_channels: Vec::new(),
+<a href=#3595 id=3595 data-nosnippet>3595</a>        };
+<a href=#3596 id=3596 data-nosnippet>3596</a>
+<a href=#3597 id=3597 data-nosnippet>3597</a>        <span class="kw">let </span>specs =
+<a href=#3598 id=3598 data-nosnippet>3598</a>            collect_resource_specs(<span class="kw-2">&amp;</span>graph, <span class="kw-2">&amp;</span>task_specs, <span class="kw-2">&amp;</span>[bridge_spec]).expect(<span class="string">"collect specs"</span>);
+<a href=#3599 id=3599 data-nosnippet>3599</a>        <span class="macro">assert_eq!</span>(specs.len(), <span class="number">1</span>);
+<a href=#3600 id=3600 data-nosnippet>3600</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(specs[<span class="number">0</span>].owner, ResourceOwner::Bridge(<span class="number">0</span>)));
+<a href=#3601 id=3601 data-nosnippet>3601</a>        <span class="macro">assert_eq!</span>(specs[<span class="number">0</span>].binding_name, <span class="string">"serial"</span>);
+<a href=#3602 id=3602 data-nosnippet>3602</a>        <span class="macro">assert_eq!</span>(specs[<span class="number">0</span>].path, <span class="string">"fc.serial0"</span>);
+<a href=#3603 id=3603 data-nosnippet>3603</a>    }
+<a href=#3604 id=3604 data-nosnippet>3604</a>}
 </code></pre></div></section></main></body></html>
