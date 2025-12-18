@@ -30,6 +30,7 @@ cu29-unifiedlog = { workspace = true }  # needed
 
 [dev-dependencies]
 trybuild = "1.0"
+rustc_version = "0.4"
 cu29 = { workspace = true } # needed for compile_fail tests
 serde = { workspace = true } # needed for compile_fail tests
 

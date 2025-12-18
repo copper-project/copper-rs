@@ -3476,48 +3476,6 @@ fn generate_bridge_tx_execution_tokens(
     )
 }
 
-#[cfg(test)]
-mod tests {
-    // See tests/compile_file directory for more information
-    #[test]
-    fn test_compile_fail() {
-        let t = trybuild::TestCases::new();
-        t.compile_fail("tests/compile_fail/*/*.rs");
-    }
-
-    #[test]
-    fn bridge_resources_are_collected() {
-        use super::*;
-        use cu29::config::{CuGraph, Flavor, Node};
-        use std::collections::HashMap;
-        use syn::parse_str;
-
-        let mut graph = CuGraph::default();
-        let mut node = Node::new_with_flavor("radio", "bridge::Dummy", Flavor::Bridge);
-        let mut res = HashMap::new();
-        res.insert("serial".to_string(), "fc.serial0".to_string());
-        node.set_resources(Some(res));
-        graph.add_node(node).expect("bridge node");
-
-        let task_specs = CuTaskSpecSet::from_graph(&graph);
-        let bridge_spec = BridgeSpec {
-            id: "radio".to_string(),
-            type_path: parse_str("bridge::Dummy").unwrap(),
-            config_index: 0,
-            tuple_index: 0,
-            monitor_index: None,
-            rx_channels: Vec::new(),
-            tx_channels: Vec::new(),
-        };
-
-        let specs =
-            collect_resource_specs(&graph, &task_specs, &[bridge_spec]).expect("collect specs");
-        assert_eq!(specs.len(), 1);
-        assert!(matches!(specs[0].owner, ResourceOwner::Bridge(0)));
-        assert_eq!(specs[0].binding_name, "serial");
-        assert_eq!(specs[0].path, "fc.serial0");
-    }
-}
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum BridgeChannelDirection {
     Rx,
@@ -3572,4 +3530,75 @@ enum ExecutionEntityKind {
         bridge_index: usize,
         channel_index: usize,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    // See tests/compile_file directory for more information
+    #[test]
+    fn test_compile_fail() {
+        use rustc_version::{Channel, version_meta};
+        use std::{fs, path::Path};
+
+        let dir = Path::new("tests/compile_fail");
+        for entry in fs::read_dir(dir).unwrap() {
+            let entry = entry.unwrap();
+            if !entry.file_type().unwrap().is_dir() {
+                continue;
+            }
+            for file in fs::read_dir(entry.path()).unwrap() {
+                let file = file.unwrap();
+                let p = file.path();
+                if p.extension().and_then(|x| x.to_str()) != Some("rs") {
+                    continue;
+                }
+
+                let base = p.with_extension("stderr"); // the file trybuild reads
+                let src = match version_meta().unwrap().channel {
+                    Channel::Beta => Path::new(&format!("{}.beta", base.display())).to_path_buf(),
+                    _ => Path::new(&format!("{}.stable", base.display())).to_path_buf(),
+                };
+
+                if src.exists() {
+                    fs::copy(src, &base).unwrap();
+                }
+            }
+        }
+
+        let t = trybuild::TestCases::new();
+        t.compile_fail("tests/compile_fail/*/*.rs");
+    }
+
+    #[test]
+    fn bridge_resources_are_collected() {
+        use super::*;
+        use cu29::config::{CuGraph, Flavor, Node};
+        use std::collections::HashMap;
+        use syn::parse_str;
+
+        let mut graph = CuGraph::default();
+        let mut node = Node::new_with_flavor("radio", "bridge::Dummy", Flavor::Bridge);
+        let mut res = HashMap::new();
+        res.insert("serial".to_string(), "fc.serial0".to_string());
+        node.set_resources(Some(res));
+        graph.add_node(node).expect("bridge node");
+
+        let task_specs = CuTaskSpecSet::from_graph(&graph);
+        let bridge_spec = BridgeSpec {
+            id: "radio".to_string(),
+            type_path: parse_str("bridge::Dummy").unwrap(),
+            config_index: 0,
+            tuple_index: 0,
+            monitor_index: None,
+            rx_channels: Vec::new(),
+            tx_channels: Vec::new(),
+        };
+
+        let specs =
+            collect_resource_specs(&graph, &task_specs, &[bridge_spec]).expect("collect specs");
+        assert_eq!(specs.len(), 1);
+        assert!(matches!(specs[0].owner, ResourceOwner::Bridge(0)));
+        assert_eq!(specs[0].binding_name, "serial");
+        assert_eq!(specs[0].path, "fc.serial0");
+    }
 }

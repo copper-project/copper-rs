@@ -1,0 +1,9 @@
+error[E0412]: cannot find type `MyMsg` in this scope
+ --> tests/compile_fail/cu_msg/non_existent_task_type.rs:5:1
+  |
+5 | gen_cumsgs!("config/non_existent_task_type.ron");
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ not found in this scope
+  |
+  = help: consider importing this struct:
+          crate::MyMsg
+  = note: this error originates in the macro `gen_cumsgs` (in Nightly builds, run with -Z macro-backtrace for more info)
