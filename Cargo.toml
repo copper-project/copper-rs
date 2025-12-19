@@ -109,6 +109,8 @@ repository = "https://github.com/copper-project/copper-rs"
 
 [workspace.metadata.workspaces]
 no_individual_tags = true
+apriltag = { git = "https://github.com/jerry73204/apriltag-rust.git", rev = "9e7ce5a0dd9f2d178225a436b05944bf01b17438" }
+apriltag-sys = { git = "https://github.com/jerry73204/apriltag-rust.git", rev = "9e7ce5a0dd9f2d178225a436b05944bf01b17438" }
 
 [workspace.dependencies]
 
