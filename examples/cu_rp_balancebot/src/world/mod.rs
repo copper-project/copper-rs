@@ -1,6 +1,5 @@
 use avian3d::math::Vector;
 use avian3d::prelude::*;
-use bevy::anti_alias::fxaa::Fxaa;
 use bevy::color::palettes::css::RED;
 use bevy::core_pipeline::Skybox;
 use bevy::input::{
@@ -9,6 +8,7 @@ use bevy::input::{
 };
 use bevy::pbr::{DefaultOpaqueRendererMethod, ScreenSpaceReflections};
 use bevy::prelude::*;
+use bevy_anti_alias::fxaa::Fxaa;
 use cached_path::{Cache, Error as CacheError, ProgressBar};
 use std::path::{Path, PathBuf}; // Import PathBuf
 
@@ -126,7 +126,7 @@ pub fn build_world(app: &mut App, headless: bool) -> &mut App {
         app.add_plugins(MeshPickingPlugin);
         app.add_systems(Update, toggle_simulation_state)
             .add_systems(Update, camera_control_system)
-            .add_systems(Update, external_force_display)
+            // .add_systems(Update, external_force_display)
             .add_systems(PostUpdate, reset_sim);
     }
 
