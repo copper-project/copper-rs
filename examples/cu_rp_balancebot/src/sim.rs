@@ -1,9 +1,9 @@
 pub mod tasks;
 mod world;
 
-use crate::world::{Cart, Rod};
+use crate::world::{AppliedForce, Cart, Rod};
 use avian3d::math::Vector;
-use avian3d::prelude::{ExternalForce, Physics};
+use avian3d::prelude::{Forces, Physics, RigidBodyForces};
 use bevy::asset::UnapprovedPathMode;
 use bevy::prelude::*;
 use bevy::render::RenderPlugin;
@@ -95,16 +95,17 @@ fn setup_copper(mut commands: Commands) {
 
 /// This is a bevy system to trigger the Copper application to run one iteration.
 /// We can query the state of the world from here and pass it to the Copper application.
+/// Forces is Avian's mutable query data; it is queried without an `&mut` wrapper.
 #[allow(clippy::type_complexity)]
 fn run_copper_callback(
     mut query_set: ParamSet<(
-        Query<(&Transform, &mut ExternalForce), With<Cart>>,
+        Query<(&Transform, Forces, &mut AppliedForce), With<Cart>>,
         Query<&Transform, With<Rod>>,
     )>,
     physics_time: Res<Time<Physics>>,
     robot_clock: ResMut<CopperMockClock>,
     mut copper_ctx: ResMut<Copper>,
-    mut exit_writer: EventWriter<AppExit>,
+    mut exit_writer: MessageWriter<AppExit>,
 ) {
     // Check if the Cart spawned; if not, return early.
     if query_set.p0().is_empty() {
@@ -139,8 +140,9 @@ fn run_copper_callback(
             default::SimStep::Balpos(_) => SimOverride::ExecutedBySim,
             default::SimStep::Railpos(CuTaskCallbackState::Process(_, output)) => {
                 // Here same thing for the rail encoder.
-                let bindings = query_set.p0();
-                let (cart_transform, _) = bindings.single().expect("Failed to get cart transform");
+                let mut bindings = query_set.p0();
+                let (cart_transform, _, _) =
+                    bindings.single_mut().expect("Failed to get cart transform");
                 let ticks = (cart_transform.translation.x * 2000.0) as i32;
                 output.set_payload(EncoderPayload { ticks });
                 output.tov = robot_clock.clock.now().into();
@@ -151,22 +153,26 @@ fn run_copper_callback(
                 // And now when copper wants to use the motor
                 // we apply a force in the simulation.
                 let mut bindings = query_set.p0();
-                let (_, mut cart_force) = bindings.single_mut().expect("Failed to get cart force");
+                let (_, mut cart_force, mut applied_force) =
+                    bindings.single_mut().expect("Failed to get cart force");
                 let maybe_motor_actuation = input.payload();
                 if let Some(motor_actuation) = maybe_motor_actuation {
                     if motor_actuation.power.is_nan() {
-                        cart_force.apply_force(Vector::ZERO);
+                        cart_force.reset_accumulated_linear_acceleration();
+                        applied_force.0 = Vec3::ZERO;
                         return SimOverride::ExecutedBySim;
                     }
                     let force_magnitude = motor_actuation.power * 2.0;
                     let new_force = Vector::new(force_magnitude, 0.0, 0.0);
                     cart_force.apply_force(new_force);
+                    applied_force.0 = new_force;
                     output
                         .metadata
                         .set_status(format!("Applied force: {force_magnitude}"));
                     SimOverride::ExecutedBySim
                 } else {
-                    cart_force.apply_force(Vector::ZERO);
+                    cart_force.reset_accumulated_linear_acceleration();
+                    applied_force.0 = Vec3::ZERO;
                     SimOverride::Errored("Safety Mode.".into())
                 }
             }
@@ -181,7 +187,7 @@ fn run_copper_callback(
     }
 }
 
-fn stop_copper_on_exit(mut exit_events: EventReader<AppExit>, mut copper_ctx: ResMut<Copper>) {
+fn stop_copper_on_exit(mut exit_events: MessageReader<AppExit>, mut copper_ctx: ResMut<Copper>) {
     for _ in exit_events.read() {
         println!("Exiting copper");
         copper_ctx
