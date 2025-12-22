@@ -30,6 +30,8 @@ pub struct CuBdshotBridge<P: BdshotBoardProvider> {
     board: P::Board,
     telemetry_cache: [Option<EscTelemetry>; MAX_ESC_CHANNELS],
     active_channels: [bool; MAX_ESC_CHANNELS],
+    send_interval: Option<CuDuration>,
+    last_send: [Option<CuTime>; MAX_ESC_CHANNELS],
 }
 
 impl<P: BdshotBoardProvider> Freezable for CuBdshotBridge<P> {}
@@ -40,7 +42,7 @@ impl<P: BdshotBoardProvider> CuBridge for CuBdshotBridge<P> {
     type Rx = RxChannels;
 
     fn new_with(
-        _config: Option<&ComponentConfig>,
+        config: Option<&ComponentConfig>,
         tx: &[BridgeChannelConfig<TxId>],
         _rx: &[BridgeChannelConfig<RxId>],
         _resources: Self::Resources<'_>,
@@ -61,10 +63,24 @@ impl<P: BdshotBoardProvider> CuBridge for CuBdshotBridge<P> {
         for ch in tx {
             active[ch.channel.id.as_index()] = true;
         }
+        let send_interval = if let Some(cfg) = config {
+            if let Some(rate_hz) = cfg.get::<f64>("rate_hz") {
+                if rate_hz <= 0.0 {
+                    return Err(CuError::from("BDShot rate_hz must be > 0"));
+                }
+                Some(CuDuration::from((1e9 / rate_hz) as u64))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
         Ok(Self {
             board,
             telemetry_cache: Default::default(),
             active_channels: active,
+            send_interval,
+            last_send: [None; MAX_ESC_CHANNELS],
         })
     }
 
@@ -119,7 +135,7 @@ impl<P: BdshotBoardProvider> CuBridge for CuBdshotBridge<P> {
 
     fn send<'a, Payload>(
         &mut self,
-        _clock: &RobotClock,
+        clock: &RobotClock,
         channel: &'static BridgeChannel<<Self::Tx as BridgeChannelSet>::Id, Payload>,
         msg: &CuMsg<Payload>,
     ) -> CuResult<()>
@@ -132,6 +148,15 @@ impl<P: BdshotBoardProvider> CuBridge for CuBdshotBridge<P> {
         }
         if !self.active_channels[idx] {
             return Ok(());
+        }
+        if let Some(interval) = self.send_interval {
+            let now = clock.recent();
+            if let Some(last) = self.last_send[idx] {
+                if now - last < interval {
+                    return Ok(());
+                }
+            }
+            self.last_send[idx] = Some(now);
         }
         let payload: &CuMsg<EscCommand> = msg.downcast_ref()?;
         let command = payload.payload().cloned().unwrap_or_default();

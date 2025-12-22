@@ -26,7 +26,10 @@ Only the channels declared in the Copper config are driven; others stay idle.
 - On startup the bridge sends repeated disarm frames and waits for telemetry; it errors out if ESCs never answer.
 
 ## Configuration
-There are no component-level config keys yet. Channel activation is driven solely by the Copper bridge channel list.
+Optional component-level config keys:
+- `rate_hz`: Maximum per-channel frame rate. If too early, the bridge skips sending on that cycle.
+
+Channel activation is driven solely by the Copper bridge channel list.
 
 ## Usage
 Declare the bridge and wire tasks to it:
