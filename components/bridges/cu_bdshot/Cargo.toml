@@ -27,6 +27,6 @@ spin = { workspace = true }
 defmt = "1.0.1"
 
 [features]
-default = ["rp2350"]
+default = []
 rp2350 = ["dep:rp235x-hal", "dep:pio", "dep:pio-proc"]
 stm32h7 = ["dep:stm32h7xx-hal"]
