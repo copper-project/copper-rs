@@ -120,7 +120,11 @@ pub fn build_world(app: &mut App, headless: bool) -> &mut App {
         .add_systems(Startup, setup_scene)
         .add_systems(Startup, setup_ui)
         .add_systems(Update, setup_entities) // Wait for the cart entity to be loaded
-        .add_systems(Update, update_physics);
+        .add_systems(Update, update_physics)
+        .add_systems(
+            FixedPostUpdate,
+            lock_cart_rotation.in_set(PhysicsSystems::Last),
+        );
 
     // these will make a headless app crash, so only add them if we aren't headless
     if !headless {
@@ -390,14 +394,13 @@ fn setup_ui(mut commands: Commands) {
 // This needs to match an object / parent object name in the GLTF file (in blender this is the object name).
 const CART_GLTF_ASSET_NAME: &str = "Cart";
 
-fn try_to_find_cart_entity(query: Query<(Entity, &Name), Without<Cart>>) -> Option<Entity> {
-    if let Some((cart_entity, _)) = query
+fn try_to_find_cart_entity(
+    query: &Query<(Entity, &Name, &Transform), Without<Cart>>,
+) -> Option<(Entity, Quat)> {
+    query
         .iter()
-        .find(|(_, name)| name.as_str() == CART_GLTF_ASSET_NAME)
-    {
-        return Some(cart_entity);
-    }
-    None
+        .find(|(_, name, _)| name.as_str() == CART_GLTF_ASSET_NAME)
+        .map(|(cart_entity, _, transform)| (cart_entity, transform.rotation))
 }
 
 #[derive(Resource)]
@@ -413,11 +416,14 @@ struct CartBundle {
     locked_axes: LockedAxes,
 }
 
+#[derive(Component, Debug, Clone, Copy)]
+struct CartRotationLock(Quat);
+
 fn setup_entities(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    query: Query<(Entity, &Name), Without<Cart>>,
+    query: Query<(Entity, &Name, &Transform), Without<Cart>>,
     mut setup_completed: ResMut<SetupCompleted>,
 ) {
     let SetupCompleted(completed) = *setup_completed;
@@ -426,27 +432,30 @@ fn setup_entities(
     }
 
     // The cart entity will be loaded from the GLTF file, we need to wait for it to be loaded
-    let cart_entity = match try_to_find_cart_entity(query) {
-        Some(entity) => entity,
+    let (cart_entity, cart_rotation) = match try_to_find_cart_entity(&query) {
+        Some(cart) => cart,
         None => return,
     };
 
     let cart_collider_model = Collider::cuboid(CART_WIDTH, CART_HEIGHT, CART_DEPTH);
     let cart_mass_props = MassPropertiesBundle::from_shape(&cart_collider_model, ALUMINUM_DENSITY); // It is a mix of emptiness and motor and steel.. overall some aluminum?
 
-    commands.entity(cart_entity).insert(CartBundle {
-        applied_force: AppliedForce::default(),
-        cart: Cart,
-        mass_props: cart_mass_props,
-        dominance: Dominance(5),
-        rigid_body: RigidBody::Dynamic,
-        locked_axes: LockedAxes::new()
-            .lock_translation_z()
-            .lock_translation_y()
-            .lock_rotation_x()
-            .lock_rotation_y()
-            .lock_rotation_z(),
-    });
+    commands.entity(cart_entity).insert((
+        CartBundle {
+            applied_force: AppliedForce::default(),
+            cart: Cart,
+            mass_props: cart_mass_props,
+            dominance: Dominance(5),
+            rigid_body: RigidBody::Dynamic,
+            locked_axes: LockedAxes::new()
+                .lock_translation_z()
+                .lock_translation_y()
+                .lock_rotation_x()
+                .lock_rotation_y()
+                .lock_rotation_z(),
+        },
+        CartRotationLock(cart_rotation),
+    ));
 
     // let the cart be dragged too
     commands
@@ -863,4 +872,26 @@ fn update_physics(state: Res<SimulationState>, mut time: ResMut<Time<Virtual>>) 
         return;
     }
     time.unpause();
+}
+
+// Clamp cart rotation to its initial orientation so it only slides on the rail.
+fn lock_cart_rotation(
+    mut carts: Query<(
+        &CartRotationLock,
+        Option<&mut Rotation>,
+        Option<&mut Transform>,
+        Option<&mut AngularVelocity>,
+    ), With<Cart>>,
+) {
+    for (lock, rotation, transform, angular_velocity) in carts.iter_mut() {
+        if let Some(mut rotation) = rotation {
+            *rotation = Rotation(lock.0);
+        }
+        if let Some(mut transform) = transform {
+            transform.rotation = lock.0;
+        }
+        if let Some(mut angular_velocity) = angular_velocity {
+            *angular_velocity = AngularVelocity::ZERO;
+        }
+    }
 }
