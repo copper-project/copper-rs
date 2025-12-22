@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use cu_bdshot::{EscCommand, EscTelemetry};
 use cu_crsf::messages::RcChannelsPayload;
 use cu_sensor_payloads::ImuPayload;
 use cu29::bincode::{Decode, Encode};
@@ -28,6 +29,8 @@ pub struct ControlInputs {
     pub throttle: f32,
     pub armed: bool,
 }
+
+const TELEMETRY_LOG_EVERY: u32 = 1000;
 
 pub struct LedBeat {
     on: bool,
@@ -69,6 +72,71 @@ impl CuSinkTask for ControlSink {
         Ok(())
     }
 }
+
+pub struct ThrottleToEsc;
+
+impl Freezable for ThrottleToEsc {}
+
+impl CuTask for ThrottleToEsc {
+    type Input<'m> = CuMsg<ControlInputs>;
+    type Output<'m> = CuMsg<EscCommand>;
+
+    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+        Ok(Self)
+    }
+
+    fn process<'i, 'o>(
+        &mut self,
+        _clock: &RobotClock,
+        input: &Self::Input<'i>,
+        output: &mut Self::Output<'o>,
+    ) -> CuResult<()> {
+        if let Some(ctrl) = input.payload() {
+            let raw = if ctrl.armed { ctrl.throttle } else { 0.0 };
+            let throttle = raw.clamp(0.0, 2047.0) as u16;
+            output.set_payload(EscCommand {
+                throttle,
+                request_telemetry: true,
+            });
+        } else {
+            output.clear_payload();
+        }
+        Ok(())
+    }
+}
+
+pub struct TelemetryLogger<const ESC: usize> {
+    count: u32,
+}
+
+impl<const ESC: usize> Freezable for TelemetryLogger<ESC> {}
+
+impl<const ESC: usize> CuSinkTask for TelemetryLogger<ESC> {
+    type Input<'m> = CuMsg<EscTelemetry>;
+
+    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+        Ok(Self { count: 0 })
+    }
+
+    fn process<'i>(&mut self, _clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
+        if let Some(payload) = input.payload() {
+            self.count = self.count.wrapping_add(1);
+            if self.count % TELEMETRY_LOG_EVERY == 0 {
+                if let Some(sample) = payload.sample {
+                    info!("ESC{} telemetry {}", ESC, sample);
+                } else {
+                    info!("ESC{} telemetry missing", ESC);
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+pub type TelemetryLogger0 = TelemetryLogger<0>;
+pub type TelemetryLogger1 = TelemetryLogger<1>;
+pub type TelemetryLogger2 = TelemetryLogger<2>;
+pub type TelemetryLogger3 = TelemetryLogger<3>;
 
 impl Freezable for ControlInputs {}
 impl Freezable for RateSetpoint {}

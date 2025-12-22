@@ -66,6 +66,8 @@ firmware = [
   "dep:embedded-alloc",
   "dep:embedded-sdmmc",
   "dep:cortex-m",
+  "dep:cu-bdshot",
+  "cu-bdshot/stm32h7",
   "dep:cu-mpu9250",
   "dep:cu-crsf",
   "dep:cu-embedded-registry",

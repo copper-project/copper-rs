@@ -8,6 +8,7 @@ use alloc::vec;
 use buddy_system_allocator::LockedHeap as StdHeap;
 use cortex_m::{asm, peripheral::DWT};
 use cortex_m_rt::{ExceptionFrame, entry, exception};
+use cu_bdshot::{Stm32H7Board, Stm32H7BoardResources, register_stm32h7_board};
 use cu_sdlogger::{EMMCLogger, EMMCSectionStorage, ForceSyncSend, find_copper_partition};
 use cu_sensor_payloads::ImuPayload;
 use cu29::prelude::*;
@@ -187,11 +188,6 @@ fn main() -> ! {
     }
     defmt::info!("UART6 registered in registry");
 
-    // Green status LED (PE6).
-    let mut green_led = gpioe.pe6.into_push_pull_output();
-    let _ = green_led.set_low();
-    *GREEN_LED.lock() = Some(green_led);
-
     // Initialize SD card for logging
     defmt::info!("Starting SD logger init");
     let logger = match init_sd_logger(
@@ -216,6 +212,29 @@ fn main() -> ! {
         }
     };
     defmt::info!("SD logger ready");
+
+    // Register BDShot board (STM32H7, GPIOE PE14/13/11/9) before Copper runtime start.
+    let bdshot_resources = Stm32H7BoardResources {
+        gpioe,
+        dwt: cp.DWT,
+        sysclk_hz: ccdr.clocks.sys_ck().raw(),
+    };
+    let bdshot_board = match Stm32H7Board::new(bdshot_resources) {
+        Ok(board) => board,
+        Err(e) => {
+            defmt::error!("BDShot board init failed: {:?}", e);
+            loop {
+                asm::wfi();
+            }
+        }
+    };
+    if let Err(e) = register_stm32h7_board(bdshot_board) {
+        defmt::error!("BDShot board registration failed: {:?}", e);
+        loop {
+            asm::wfi();
+        }
+    }
+    defmt::info!("BDShot board registered");
 
     // Spin up Copper runtime with CRSF -> mapper -> sink graph.
     info!("Building Copper runtime clock");

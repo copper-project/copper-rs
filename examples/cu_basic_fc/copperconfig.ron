@@ -1,8 +1,13 @@
 (
     tasks: [
         (id: "mapper", type: "tasks::RcMapper"),
+        (id: "esc_cmd", type: "tasks::ThrottleToEsc"),
         (id: "control_sink", type: "tasks::ControlSink"),
         (id: "led_blink", type: "tasks::LedBeat"),
+        (id: "tele0", type: "tasks::TelemetryLogger0"),
+        (id: "tele1", type: "tasks::TelemetryLogger1"),
+        (id: "tele2", type: "tasks::TelemetryLogger2"),
+        (id: "tele3", type: "tasks::TelemetryLogger3"),
     ],
 
     bridges: [
@@ -13,12 +18,35 @@
                 Tx ( id: "lq_tx" ),  // Sending LineQuality back
             ],
         ),
+        (
+           id: "bdshot",
+           type: "cu_bdshot::Stm32BdshotBridge",
+           channels: [
+                Tx ( id: "esc0_tx" ),
+                Tx ( id: "esc1_tx" ),
+                Tx ( id: "esc2_tx" ),
+                Tx ( id: "esc3_tx" ),
+                Rx ( id: "esc0_rx" ),
+                Rx ( id: "esc1_rx" ),
+                Rx ( id: "esc2_rx" ),
+                Rx ( id: "esc3_rx" ),
+            ],
+        ),
     ],
 
     cnx: [
         (src: "rc/rc_rx", dst: "mapper", msg: "cu_crsf::messages::RcChannelsPayload"),
+        (src: "mapper", dst: "esc_cmd", msg: "tasks::ControlInputs"),
         (src: "mapper", dst: "control_sink", msg: "tasks::ControlInputs"),
         (src: "mapper", dst: "led_blink", msg: "tasks::ControlInputs"),
+        (src: "esc_cmd", dst: "bdshot/esc0_tx", msg: "cu_bdshot::EscCommand"),
+        (src: "esc_cmd", dst: "bdshot/esc1_tx", msg: "cu_bdshot::EscCommand"),
+        (src: "esc_cmd", dst: "bdshot/esc2_tx", msg: "cu_bdshot::EscCommand"),
+        (src: "esc_cmd", dst: "bdshot/esc3_tx", msg: "cu_bdshot::EscCommand"),
+        (src: "bdshot/esc0_rx", dst: "tele0", msg: "cu_bdshot::EscTelemetry"),
+        (src: "bdshot/esc1_rx", dst: "tele1", msg: "cu_bdshot::EscTelemetry"),
+        (src: "bdshot/esc2_rx", dst: "tele2", msg: "cu_bdshot::EscTelemetry"),
+        (src: "bdshot/esc3_rx", dst: "tele3", msg: "cu_bdshot::EscTelemetry"),
     ],
     monitor: (
         type: "cu_logmon::CuLogMon",
