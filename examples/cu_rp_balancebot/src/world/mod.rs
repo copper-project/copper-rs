@@ -1,4 +1,5 @@
 use avian3d::math::Vector;
+use avian3d::physics_transform::{PreSolveDeltaPosition, PreSolveDeltaRotation};
 use avian3d::prelude::*;
 use bevy::color::palettes::css::RED;
 use bevy::core_pipeline::Skybox;
@@ -464,9 +465,9 @@ fn setup_entities(
     commands.spawn((
         PrismaticJoint::new(rail_entity, cart_entity)
             .with_slider_axis(Vec3::X) // Allow movement along the X-axis
-            .with_align_compliance(1e-9)
-            .with_angle_compliance(1e-9)
-            .with_limit_compliance(1e-9)
+            .with_align_compliance(0.0)
+            .with_angle_compliance(0.0)
+            .with_limit_compliance(0.0)
             .with_limits(-RAIL_WIDTH / 2.0, RAIL_WIDTH / 2.0)
             .with_local_anchor1(Vec3::new(0.0, RAIL_HEIGHT / 2.0, 0.0)) // Rail top edge
             .with_local_anchor2(Vec3::new(0.0, -CART_HEIGHT / 2.0, 0.0)),
@@ -508,9 +509,9 @@ fn setup_entities(
         .id();
     commands.spawn((
         RevoluteJoint::new(cart_entity, rod_entity)
-            .with_point_compliance(1e-16)
-            .with_align_compliance(1e-16)
-            .with_limit_compliance(1e-16)
+            .with_point_compliance(0.0)
+            .with_align_compliance(0.0)
+            .with_limit_compliance(0.0)
             .with_hinge_axis(Vec3::Z) // Align the axis of rotation along the Z-axis
             .with_local_anchor1(Vec3::new(
                 0.0,
@@ -648,6 +649,10 @@ fn reset_sim(
             Option<&Rod>,
             Option<&Cart>,
             Option<&mut Transform>,
+            Option<&mut Position>,
+            Option<&mut Rotation>,
+            Option<&mut PreSolveDeltaPosition>,
+            Option<&mut PreSolveDeltaRotation>,
             Option<&mut AppliedForce>,
             Option<&mut LinearVelocity>,
             Option<&mut AngularVelocity>,
@@ -665,25 +670,64 @@ fn reset_sim(
                 rod_component,
                 cart_component,
                 transform,
+                position,
+                rotation,
+                presolve_position,
+                presolve_rotation,
                 ext_force,
                 linear_velocity,
                 angular_velocity,
             ) in query.iter_mut()
             {
-                if let Some(mut transform) = transform {
-                    if rod_component.is_some() {
-                        transform.translation = Vec3::new(
-                            0.0,
-                            ROD_HEIGHT / 2.0 + CART_HEIGHT,
-                            CART_DEPTH / 2.0 + ROD_DEPTH / 2.0 + AXIS_LENGTH,
-                        );
+                let is_rod: bool = rod_component.is_some();
+                let is_cart: bool = cart_component.is_some();
 
+                // Calculate the target translations once so we can apply them to both Transform and Position.
+                let rod_translation: Vector = Vector::new(
+                    0.0,
+                    ROD_HEIGHT / 2.0 + CART_HEIGHT,
+                    CART_DEPTH / 2.0 + ROD_DEPTH / 2.0 + AXIS_LENGTH,
+                );
+                let mut cart_translation: Vector = transform
+                    .as_ref()
+                    .map(|t| Vector::new(t.translation.x, t.translation.y, t.translation.z))
+                    .or_else(|| position.as_ref().map(|p| p.0))
+                    .unwrap_or(Vector::ZERO);
+                cart_translation.x = 0.0;
+
+                if let Some(mut transform) = transform {
+                    if is_rod {
+                        transform.translation =
+                            Vec3::new(rod_translation.x, rod_translation.y, rod_translation.z);
                         transform.rotation = Quat::IDENTITY;
                     }
 
-                    if cart_component.is_some() {
-                        transform.translation.x = 0.0;
+                    if is_cart {
+                        transform.translation = Vec3::new(
+                            cart_translation.x,
+                            cart_translation.y,
+                            cart_translation.z,
+                        );
                     }
+                }
+                if let Some(mut position) = position {
+                    if is_rod {
+                        *position = Position::new(rod_translation);
+                    }
+                    if is_cart {
+                        *position = Position::new(cart_translation);
+                    }
+                }
+                if let Some(mut rotation) = rotation {
+                    if is_rod {
+                        *rotation = Rotation::IDENTITY;
+                    }
+                }
+                if let Some(mut presolve_position) = presolve_position {
+                    **presolve_position = Vector::ZERO;
+                }
+                if let Some(mut presolve_rotation) = presolve_rotation {
+                    **presolve_rotation = Rotation::IDENTITY;
                 }
                 if let Some(mut ext_force) = ext_force {
                     ext_force.0 = Vector::ZERO;
