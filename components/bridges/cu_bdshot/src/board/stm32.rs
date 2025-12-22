@@ -1,10 +1,10 @@
 use super::BdshotBoard;
 use crate::bridge::BdshotBoardProvider;
-use crate::dshot::{decode_raw21, dshot_frame, TelemetryDecode};
+use crate::dshot::{TelemetryDecode, decode_raw21, dshot_frame};
 use crate::messages::{DShotTelemetry, EscCommand};
 use cortex_m::peripheral::DWT;
-use cu29::prelude::CuError;
 use cu29::CuResult;
+use cu29::prelude::CuError;
 use spin::Mutex;
 use stm32h7xx_hal as hal;
 
@@ -145,7 +145,11 @@ impl BdshotBoard for Stm32H7Board {
 }
 
 pub fn encode_frame(command: EscCommand) -> u32 {
-    dshot_frame(command.throttle, command.request_telemetry, INVERT_CSUM_ON_TELEM) as u32
+    dshot_frame(
+        command.throttle,
+        command.request_telemetry,
+        INVERT_CSUM_ON_TELEM,
+    ) as u32
 }
 
 /// Global to be able to send the actual HW interface to the bridge.
@@ -180,11 +184,7 @@ fn busy_wait(start: u32, cycles: u32, dwt: &DWT) {
 
 fn drive_signal_level(gpioe: &hal::pac::gpioe::RegisterBlock, mask: u32, high: bool) {
     let (set_mask, reset_mask) = if INVERT_SIGNAL {
-        if high {
-            (0, mask)
-        } else {
-            (mask, 0)
-        }
+        if high { (0, mask) } else { (mask, 0) }
     } else if high {
         (mask, 0)
     } else {
@@ -207,7 +207,11 @@ fn send_frame(
     for bit in (0..16).rev() {
         let bit_start = dwt.cyccnt.read();
         drive_signal_level(gpioe, mask, true);
-        let high_cycles = if (frame >> bit) & 1 == 1 { t1_high } else { t0_high };
+        let high_cycles = if (frame >> bit) & 1 == 1 {
+            t1_high
+        } else {
+            t0_high
+        };
         busy_wait(bit_start, high_cycles, dwt);
         drive_signal_level(gpioe, mask, false);
         busy_wait(bit_start, bit_cycles, dwt);
@@ -273,14 +277,22 @@ fn decode_telemetry(
         return None;
     }
 
-    let mut level = if (samples[start] & motor_mask) != 0 { 1u8 } else { 0u8 };
+    let mut level = if (samples[start] & motor_mask) != 0 {
+        1u8
+    } else {
+        0u8
+    };
     let mut run_len: u32 = 1;
     let mut bits: i32 = 0;
     let mut value: u32 = 0;
     let end = start.saturating_add(remaining);
     let mut i = start + 1;
     while i < end {
-        let bit = if (samples[i] & motor_mask) != 0 { 1u8 } else { 0u8 };
+        let bit = if (samples[i] & motor_mask) != 0 {
+            1u8
+        } else {
+            0u8
+        };
         if bit == level {
             run_len += 1;
         } else {

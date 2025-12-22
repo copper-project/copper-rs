@@ -11,8 +11,8 @@ use pio_proc::pio_file;
 use rp235x_hal as hal;
 use spin::Mutex;
 
-use crate::bridge::BdshotBoardProvider;
 use super::BdshotBoard;
+use crate::bridge::BdshotBoardProvider;
 
 pub struct Rp2350Board {
     cycles_per_micro: u32,

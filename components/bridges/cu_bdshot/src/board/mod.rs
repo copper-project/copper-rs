@@ -16,12 +16,11 @@ pub trait BdshotBoard {
 
 #[cfg(feature = "rp2350")]
 pub use rp2350::{
-    encode_frame, register_rp2350_board, Rp2350Board, Rp2350BoardConfig, Rp2350BoardProvider,
-    Rp2350BoardResources,
+    Rp2350Board, Rp2350BoardConfig, Rp2350BoardProvider, Rp2350BoardResources, encode_frame,
+    register_rp2350_board,
 };
 
 #[cfg(feature = "stm32h7")]
 pub use stm32::{
-    encode_frame, register_stm32h7_board, Stm32H7Board, Stm32H7BoardProvider,
-    Stm32H7BoardResources,
+    Stm32H7Board, Stm32H7BoardProvider, Stm32H7BoardResources, encode_frame, register_stm32h7_board,
 };

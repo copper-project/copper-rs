@@ -12,11 +12,7 @@ pub(crate) fn dshot_checksum(data: u16, invert: bool) -> u16 {
         csum_data >>= 4;
     }
     let csum = csum & 0xF;
-    if invert {
-        (!csum) & 0xF
-    } else {
-        csum
-    }
+    if invert { (!csum) & 0xF } else { csum }
 }
 
 /// Build a 16-bit DSHOT frame from value and telemetry flag.

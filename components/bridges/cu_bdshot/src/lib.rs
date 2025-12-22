@@ -17,12 +17,12 @@ mod esc_channel;
 
 #[cfg(feature = "rp2350")]
 pub use board::{
-    register_rp2350_board, Rp2350Board, Rp2350BoardConfig, Rp2350BoardProvider,
-    Rp2350BoardResources,
+    Rp2350Board, Rp2350BoardConfig, Rp2350BoardProvider, Rp2350BoardResources,
+    register_rp2350_board,
 };
 #[cfg(feature = "stm32h7")]
 pub use board::{
-    register_stm32h7_board, Stm32H7Board, Stm32H7BoardProvider, Stm32H7BoardResources,
+    Stm32H7Board, Stm32H7BoardProvider, Stm32H7BoardResources, register_stm32h7_board,
 };
 pub use bridge::{BdshotBoardProvider, CuBdshotBridge};
 pub use messages::{DShotTelemetry, EscCommand, EscTelemetry};
