@@ -10,6 +10,7 @@ pub mod bridge;
 pub mod messages;
 
 mod decode;
+#[cfg(feature = "stm32h7")]
 mod dshot;
 #[cfg(feature = "rp2350")]
 mod esc_channel;

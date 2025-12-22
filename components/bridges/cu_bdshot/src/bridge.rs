@@ -151,10 +151,10 @@ impl<P: BdshotBoardProvider> CuBridge for CuBdshotBridge<P> {
         }
         if let Some(interval) = self.send_interval {
             let now = clock.recent();
-            if let Some(last) = self.last_send[idx] {
-                if now - last < interval {
-                    return Ok(());
-                }
+            if let Some(last) = self.last_send[idx]
+                && now - last < interval
+            {
+                return Ok(());
             }
             self.last_send[idx] = Some(now);
         }

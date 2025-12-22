@@ -32,6 +32,7 @@ pub(crate) fn dshot_frame(value: u16, telemetry: bool, invert_csum_on_telem: boo
 }
 
 /// Decode telemetry frame; returns 11-bit payload if checksum matches.
+#[allow(dead_code)]
 pub(crate) fn decode_telemetry(raw: u16, invert_csum_on_telem: bool) -> Option<u16> {
     let payload = raw >> 4;
     let csum = raw & 0xF;
@@ -43,6 +44,7 @@ pub(crate) fn decode_telemetry(raw: u16, invert_csum_on_telem: bool) -> Option<u
 }
 
 /// Slide a 16-bit window over 21 sampled bits and pick the first checksum-valid candidate.
+#[allow(dead_code)]
 pub(crate) fn try_decode_raw21(raw21: u32, invert_csum_on_telem: bool) -> Option<(u16, u8)> {
     for offset in 0..=5 {
         let candidate = ((raw21 >> (5 - offset)) & 0xFFFF) as u16;
@@ -53,6 +55,7 @@ pub(crate) fn try_decode_raw21(raw21: u32, invert_csum_on_telem: bool) -> Option
     None
 }
 
+#[allow(dead_code)]
 pub(crate) struct TelemetryDecode {
     pub raw20: u32,
     pub data: u16,

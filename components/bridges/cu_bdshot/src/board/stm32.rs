@@ -45,14 +45,17 @@ pub struct Stm32H7BoardResources {
 }
 
 pub struct Stm32H7Board {
-    motors: Motors,
-    gpioe: &'static hal::pac::gpioe::RegisterBlock,
+    _motors: Motors,
+    gpioe: *const hal::pac::gpioe::RegisterBlock,
     dwt: DWT,
     cycles_per_us: u32,
     bit_cycles: u32,
     t0_high: u32,
     t1_high: u32,
 }
+
+// Safe in this context: the board is registered once and used on a single core.
+unsafe impl Send for Stm32H7Board {}
 
 struct Motors {
     _m1: Pin<'E', 14, Output<PushPull>>,
@@ -72,10 +75,10 @@ impl Motors {
     }
 
     fn all_low(&mut self) {
-        let _ = self._m1.set_low();
-        let _ = self._m2.set_low();
-        let _ = self._m3.set_low();
-        let _ = self._m4.set_low();
+        self._m1.set_low();
+        self._m2.set_low();
+        self._m3.set_low();
+        self._m4.set_low();
     }
 }
 
@@ -87,10 +90,9 @@ impl Stm32H7Board {
         let t0_high = bit_cycles / 3;
         let mut motors = Motors::new(resources.gpioe);
         motors.all_low();
-        let gpioe = unsafe { &*hal::pac::GPIOE::ptr() };
         Ok(Self {
-            motors,
-            gpioe,
+            _motors: motors,
+            gpioe: hal::pac::GPIOE::ptr(),
             dwt: resources.dwt,
             cycles_per_us,
             bit_cycles,
@@ -104,15 +106,16 @@ impl BdshotBoard for Stm32H7Board {
     const CHANNEL_COUNT: usize = 4;
 
     fn exchange(&mut self, channel: usize, frame: u32) -> Option<DShotTelemetry> {
+        let gpioe = unsafe { &*self.gpioe };
         let mask = *MOTOR_TELE_MASKS.get(channel)?;
         let moder_mask = MOTOR_MODER_MASKS[channel];
         let moder_output = MOTOR_MODER_OUTPUTS[channel];
         let pupdr_mask = MOTOR_PUPDR_MASKS[channel];
-        set_mode_output(self.gpioe, moder_mask, moder_output, pupdr_mask);
-        drive_signal_level(self.gpioe, mask, false);
+        set_mode_output(gpioe, moder_mask, moder_output, pupdr_mask);
+        drive_signal_level(gpioe, mask, false);
         let frame_start = self.dwt.cyccnt.read();
         send_frame(
-            self.gpioe,
+            gpioe,
             &self.dwt,
             self.bit_cycles,
             self.t0_high,
@@ -120,10 +123,10 @@ impl BdshotBoard for Stm32H7Board {
             mask,
             frame as u16,
         );
-        set_mode_input(self.gpioe, moder_mask, pupdr_mask);
+        set_mode_input(gpioe, moder_mask, pupdr_mask);
         let wants_telemetry = (frame as u16) & 0x10 != 0;
         if wants_telemetry {
-            decode_telemetry(self.gpioe, &self.dwt, frame_start, self.bit_cycles, mask)
+            decode_telemetry(gpioe, &self.dwt, frame_start, self.bit_cycles, mask)
         } else {
             None
         }
@@ -247,9 +250,9 @@ fn decode_telemetry(
 
     let mut samples = [0u32; LA_SAMPLES];
     let mut t = start_scan;
-    for i in 0..LA_SAMPLES {
+    for slot in samples.iter_mut().take(LA_SAMPLES) {
         while dwt.cyccnt.read().wrapping_sub(t) as i32 as u32 & 0x8000_0000 != 0 {}
-        samples[i] = gpioe.idr.read().bits();
+        *slot = gpioe.idr.read().bits();
         t = t.wrapping_add(la_step_cyc);
     }
 
