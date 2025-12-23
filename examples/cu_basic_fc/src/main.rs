@@ -18,8 +18,7 @@ use panic_probe as _;
 use spin::Mutex;
 use stm32h7xx_hal::{
     gpio::{
-        Alternate, Speed,
-        gpioc::{PC6, PC7},
+        Speed,
     },
     nb, pac,
     prelude::*,
@@ -57,17 +56,26 @@ static GREEN_LED: Mutex<
     >,
 > = Mutex::new(None);
 
-type Uart6Pins = (PC6<Alternate<7>>, PC7<Alternate<7>>);
-
 struct SerialWrapper {
     inner: Serial<pac::USART6>,
 }
 
+// Safety: the firmware uses a single-threaded runtime; no concurrent access.
+unsafe impl Send for SerialWrapper {}
+unsafe impl Sync for SerialWrapper {}
+
 impl CuTask for DummyImu {
+    type Resources<'r> = ();
     type Input<'m> = ();
     type Output<'m> = CuMsg<ImuPayload>;
 
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
+    where
+        Self: Sized,
+    {
         Ok(Self)
     }
 
@@ -306,8 +314,8 @@ fn build_clock() -> RobotClock {
 
 fn init_heap() {
     unsafe {
-        let start = HEAP_MEM.as_mut_ptr() as usize;
-        let size = core::mem::size_of_val(&HEAP_MEM);
+        let start = core::ptr::addr_of_mut!(HEAP_MEM) as usize;
+        let size = core::mem::size_of::<[u8; 256 * 1024]>();
         defmt::info!("Heap region start=0x{:x} size={}", start, size);
         ALLOC.lock().init(start, size);
     }
@@ -321,5 +329,7 @@ unsafe fn HardFault(ef: &ExceptionFrame) -> ! {
         ef.lr(),
         cortex_m::register::msp::read()
     );
-    loop {}
+    loop {
+        asm::bkpt();
+    }
 }
