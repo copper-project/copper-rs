@@ -282,7 +282,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-unknown-none,thumbv8m.main-none-eabihf,riscv32imac-unknown-none-elf
+          targets: aarch64-unknown-none,thumbv7em-none-eabihf,thumbv8m.main-none-eabihf,riscv32imac-unknown-none-elf
           components: rustc,cargo,rust-std,rustfmt,clippy
       - name: Install latest nextest
         uses: taiki-e/install-action@nextest
