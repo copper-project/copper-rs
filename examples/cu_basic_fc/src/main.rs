@@ -17,9 +17,7 @@ use defmt_rtt as _;
 use panic_probe as _;
 use spin::Mutex;
 use stm32h7xx_hal::{
-    gpio::{
-        Speed,
-    },
+    gpio::Speed,
     nb, pac,
     prelude::*,
     rcc,
