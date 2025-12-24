@@ -1501,21 +1501,37 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     let config_filename = #config_file;
 
                     #[cfg(target_os = "none")]
-                    ::cu29::prelude::__cu29_defmt_info!("CuApp new: config file {}", config_filename);
+                    {
+                        let structured_stream = ::cu29::prelude::stream_write::<
+                            ::cu29::prelude::CuLogEntry,
+                            S,
+                        >(
+                            unified_logger.clone(),
+                            ::cu29::prelude::UnifiedLogType::StructuredLogLine,
+                            4096 * 10,
+                        )?;
+                        let _logger_runtime = ::cu29::prelude::LoggerRuntime::init(
+                            clock.clone(),
+                            structured_stream,
+                            None::<::cu29::prelude::NullLog>,
+                        );
+                    }
                     #[cfg(target_os = "none")]
-                    ::cu29::prelude::__cu29_defmt_info!("CuApp new: loading config");
+                    ::cu29::prelude::info!("CuApp new: config file {}", config_filename);
+                    #[cfg(target_os = "none")]
+                    ::cu29::prelude::info!("CuApp new: loading config");
                     #config_load_stmt
                     #[cfg(target_os = "none")]
-                    ::cu29::prelude::__cu29_defmt_info!("CuApp new: config loaded");
+                    ::cu29::prelude::info!("CuApp new: config loaded");
                     if let Some(runtime) = &config.runtime {
                         #[cfg(target_os = "none")]
-                        ::cu29::prelude::__cu29_defmt_info!(
+                        ::cu29::prelude::info!(
                             "CuApp new: rate_target_hz={}",
                             runtime.rate_target_hz.unwrap_or(0)
                         );
                     } else {
                         #[cfg(target_os = "none")]
-                        ::cu29::prelude::__cu29_defmt_info!("CuApp new: rate_target_hz=none");
+                        ::cu29::prelude::info!("CuApp new: rate_target_hz=none");
                     }
 
                     // For simple cases we can say the section is just a bunch of Copper Lists.
@@ -1527,12 +1543,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         default_section_size = section_size_mib as usize * 1024usize * 1024usize;
                     }
                     #[cfg(target_os = "none")]
-                    ::cu29::prelude::__cu29_defmt_info!(
+                    ::cu29::prelude::info!(
                         "CuApp new: copperlist section size={}",
                         default_section_size
                     );
                     #[cfg(target_os = "none")]
-                    ::cu29::prelude::__cu29_defmt_info!("CuApp new: creating copperlist stream");
+                    ::cu29::prelude::info!("CuApp new: creating copperlist stream");
                     let copperlist_stream = stream_write::<#mission_mod::CuList, S>(
                         unified_logger.clone(),
                         UnifiedLogType::CopperList,
@@ -1542,20 +1558,20 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         // This is to be sure we have the size of at least a Culist and some.
                     )?;
                     #[cfg(target_os = "none")]
-                    ::cu29::prelude::__cu29_defmt_info!("CuApp new: copperlist stream ready");
+                    ::cu29::prelude::info!("CuApp new: copperlist stream ready");
 
                     #[cfg(target_os = "none")]
-                    ::cu29::prelude::__cu29_defmt_info!("CuApp new: creating keyframes stream");
+                    ::cu29::prelude::info!("CuApp new: creating keyframes stream");
                     let keyframes_stream = stream_write::<KeyFrame, S>(
                         unified_logger.clone(),
                         UnifiedLogType::FrozenTasks,
                         1024 * 1024 * 10, // 10 MiB
                     )?;
                     #[cfg(target_os = "none")]
-                    ::cu29::prelude::__cu29_defmt_info!("CuApp new: keyframes stream ready");
+                    ::cu29::prelude::info!("CuApp new: keyframes stream ready");
 
                     #[cfg(target_os = "none")]
-                    ::cu29::prelude::__cu29_defmt_info!("CuApp new: building runtime");
+                    ::cu29::prelude::info!("CuApp new: building runtime");
                     let copper_runtime = CuRuntime::<#mission_mod::#tasks_type, #mission_mod::CuBridges, #mission_mod::CuStampedDataSet, #monitor_type, #DEFAULT_CLNB>::new(
                         clock,
                         &config,
@@ -1567,7 +1583,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         copperlist_stream,
                         keyframes_stream)?;
                     #[cfg(target_os = "none")]
-                    ::cu29::prelude::__cu29_defmt_info!("CuApp new: runtime built");
+                    ::cu29::prelude::info!("CuApp new: runtime built");
 
                     let application = Ok(#application_name { copper_runtime });
 
