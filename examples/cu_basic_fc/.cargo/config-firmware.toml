@@ -13,4 +13,4 @@ rustflags = [
     "-C", "panic=abort",
 ]
 
-runner = "probe-rs run --chip STM32H743VITx --protocol swd"
+runner = "probe-rs run --chip STM32H743VITx --protocol swd --speed 8000"
