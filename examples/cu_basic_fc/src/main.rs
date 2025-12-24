@@ -6,7 +6,10 @@ extern crate alloc;
 use alloc::sync::Arc;
 use alloc::vec;
 use buddy_system_allocator::LockedHeap as StdHeap;
-use cortex_m::{asm, peripheral::{DWT, SCB}};
+use cortex_m::{
+    asm,
+    peripheral::{DWT, SCB},
+};
 use cortex_m_rt::{ExceptionFrame, entry, exception};
 use cu_bdshot::{Stm32H7Board, Stm32H7BoardResources, register_stm32h7_board};
 use cu_sdlogger::{EMMCLogger, EMMCSectionStorage, ForceSyncSend, find_copper_partition};
@@ -26,8 +29,8 @@ use stm32h7xx_hal::{
     serial::{Serial, config::Config},
 };
 
-mod tasks;
 mod resources;
+mod tasks;
 
 #[global_allocator]
 static ALLOC: StdHeap<32> = StdHeap::empty();
