@@ -173,10 +173,7 @@ fn task_state_label(state: &CuTaskState) -> &'static str {
 impl CuMonitor for CuLogMon {
     fn new(_config: &CuConfig, taskids: &'static [&'static str]) -> CuResult<Self> {
         #[cfg(target_os = "none")]
-        cu29::prelude::defmt::info!(
-            "CuLogMon::new: task_count={}",
-            taskids.len()
-        );
+        cu29::prelude::defmt::info!("CuLogMon::new: task_count={}", taskids.len());
         let window = WindowState::new(taskids.len());
         #[cfg(target_os = "none")]
         cu29::prelude::defmt::info!("CuLogMon::new: window ready");
