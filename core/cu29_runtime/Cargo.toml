@@ -52,6 +52,9 @@ libm = { version = "0.2" } # f64 math for 32 bit platforms
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 cudarc = { version = "0.18", optional = true, features = ["cuda-version-from-build-system"] }
 
+[target.'cfg(target_os = "none")'.dependencies]
+defmt = "0.3"
+
 [features]
 default = ["std"]
 cuda = ["dep:cudarc"]

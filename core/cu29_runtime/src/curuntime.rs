@@ -269,6 +269,17 @@ impl<
             inner: CuListsManager::new(),
             logger: copperlists_logger,
         };
+        #[cfg(target_os = "none")]
+        {
+            let cl_size = core::mem::size_of::<CopperList<P>>();
+            let total_bytes = cl_size.saturating_mul(NBCL);
+            defmt::info!(
+                "CuRuntime::new: copperlists count={} cl_size={} total_bytes={}",
+                NBCL,
+                cl_size,
+                total_bytes
+            );
+        }
 
         let keyframes_manager = KeyFramesManager {
             inner: KeyFrame::new(),
@@ -308,21 +319,41 @@ impl<
         copperlists_logger: impl WriteStream<CopperList<P>> + 'static,
         keyframes_logger: impl WriteStream<KeyFrame> + 'static,
     ) -> CuResult<Self> {
+        #[cfg(target_os = "none")]
+        defmt::info!("CuRuntime::new: get graph");
         let graph = config.get_graph(mission)?;
+        #[cfg(target_os = "none")]
+        defmt::info!("CuRuntime::new: graph ok");
         let all_instances_configs: Vec<Option<&ComponentConfig>> = graph
             .get_all_nodes()
             .iter()
             .map(|(_, node)| node.get_instance_config())
             .collect();
 
+        #[cfg(target_os = "none")]
+        defmt::info!("CuRuntime::new: resources instanciator");
         let mut resources = resources_instanciator(config)?;
 
+        #[cfg(target_os = "none")]
+        defmt::info!("CuRuntime::new: tasks instanciator");
         let tasks = tasks_instanciator(all_instances_configs, &mut resources)?;
 
+        #[cfg(target_os = "none")]
+        defmt::info!("CuRuntime::new: monitor instanciator");
         let mut monitor = monitor_instanciator(config);
+        #[cfg(target_os = "none")]
+        defmt::info!("CuRuntime::new: monitor instanciator ok");
+        #[cfg(target_os = "none")]
+        defmt::info!("CuRuntime::new: build monitor topology");
         if let Ok(topology) = build_monitor_topology(config, mission) {
+            #[cfg(target_os = "none")]
+            defmt::info!("CuRuntime::new: monitor topology ok");
             monitor.set_topology(topology);
+            #[cfg(target_os = "none")]
+            defmt::info!("CuRuntime::new: monitor topology set");
         }
+        #[cfg(target_os = "none")]
+        defmt::info!("CuRuntime::new: bridges instanciator");
         let bridges = bridges_instanciator(config, &mut resources)?;
 
         let (copperlists_logger, keyframes_logger, keyframe_interval) = match &config.logging {
@@ -344,6 +375,17 @@ impl<
             inner: CuListsManager::new(),
             logger: copperlists_logger,
         };
+        #[cfg(target_os = "none")]
+        {
+            let cl_size = core::mem::size_of::<CopperList<P>>();
+            let total_bytes = cl_size.saturating_mul(NBCL);
+            defmt::info!(
+                "CuRuntime::new: copperlists count={} cl_size={} total_bytes={}",
+                NBCL,
+                cl_size,
+                total_bytes
+            );
+        }
 
         let keyframes_manager = KeyFramesManager {
             inner: KeyFrame::new(),

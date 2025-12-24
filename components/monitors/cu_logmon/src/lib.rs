@@ -28,13 +28,27 @@ struct WindowState {
 impl WindowState {
     fn new(task_count: usize) -> Self {
         let max_sample = CuDuration::from_secs(MAX_LATENCY_SECS);
+        #[cfg(target_os = "none")]
+        cu29::prelude::defmt::info!("WindowState::new: init end_to_end");
+        let end_to_end = CuDurationStatistics::new(max_sample);
+        #[cfg(target_os = "none")]
+        cu29::prelude::defmt::info!("WindowState::new: init per_task");
+        #[cfg(target_os = "none")]
+        cu29::prelude::defmt::info!(
+            "WindowState::new: stats_size={} per_task_bytes={}",
+            core::mem::size_of::<CuDurationStatistics>(),
+            core::mem::size_of::<CuDurationStatistics>() * task_count
+        );
+        let per_task = vec![CuDurationStatistics::new(max_sample); task_count];
+        #[cfg(target_os = "none")]
+        cu29::prelude::defmt::info!("WindowState::new: init done");
         Self {
             total_copperlists: 0,
             window_copperlists: 0,
             last_report_at: None,
             last_log_duration: CuDuration::MIN,
-            end_to_end: CuDurationStatistics::new(max_sample),
-            per_task: vec![CuDurationStatistics::new(max_sample); task_count],
+            end_to_end,
+            per_task,
         }
     }
 
@@ -158,10 +172,18 @@ fn task_state_label(state: &CuTaskState) -> &'static str {
 
 impl CuMonitor for CuLogMon {
     fn new(_config: &CuConfig, taskids: &'static [&'static str]) -> CuResult<Self> {
+        #[cfg(target_os = "none")]
+        cu29::prelude::defmt::info!(
+            "CuLogMon::new: task_count={}",
+            taskids.len()
+        );
+        let window = WindowState::new(taskids.len());
+        #[cfg(target_os = "none")]
+        cu29::prelude::defmt::info!("CuLogMon::new: window ready");
         Ok(Self {
             taskids,
             clock: Mutex::new(None),
-            window: Mutex::new(WindowState::new(taskids.len())),
+            window: Mutex::new(window),
         })
     }
 

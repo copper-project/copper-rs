@@ -6,7 +6,7 @@ extern crate alloc;
 use alloc::sync::Arc;
 use alloc::vec;
 use buddy_system_allocator::LockedHeap as StdHeap;
-use cortex_m::{asm, peripheral::DWT};
+use cortex_m::{asm, peripheral::{DWT, SCB}};
 use cortex_m_rt::{ExceptionFrame, entry, exception};
 use cu_bdshot::{Stm32H7Board, Stm32H7BoardResources, register_stm32h7_board};
 use cu_sdlogger::{EMMCLogger, EMMCSectionStorage, ForceSyncSend, find_copper_partition};
@@ -27,6 +27,7 @@ use stm32h7xx_hal::{
 };
 
 mod tasks;
+mod resources;
 
 #[global_allocator]
 static ALLOC: StdHeap<32> = StdHeap::empty();
@@ -163,6 +164,7 @@ fn main() -> ! {
 
     init_heap();
     defmt::info!("Heap initialized");
+    log_heap_stats("after-init");
 
     // Smoke-test allocator.
     let mut buf = alloc::vec![0u8; 1024];
@@ -251,6 +253,7 @@ fn main() -> ! {
     match <FlightControllerApp as CuApplication<LogStorage, Logger>>::new(clock, writer) {
         Ok(mut app) => {
             info!("App constructed, starting Copper FC (H743, CRSF on UART6)...");
+            log_heap_stats("before-run");
             let _ = <FlightControllerApp as CuApplication<LogStorage, Logger>>::run(&mut app);
             info!("Copper runtime returned unexpectedly");
         }
@@ -319,13 +322,45 @@ fn init_heap() {
     }
 }
 
+fn log_heap_stats(tag: &str) {
+    let heap = ALLOC.lock();
+    let user = heap.stats_alloc_user();
+    let allocated = heap.stats_alloc_actual();
+    let total = heap.stats_total_bytes();
+    let free = total.saturating_sub(allocated);
+    defmt::info!(
+        "Heap stats({}): user={} alloc={} total={} free={}",
+        tag,
+        user,
+        allocated,
+        total,
+        free
+    );
+}
+
 #[exception]
 unsafe fn HardFault(ef: &ExceptionFrame) -> ! {
+    let scb = unsafe { &*SCB::PTR };
+    let cfsr = scb.cfsr.read();
+    let hfsr = scb.hfsr.read();
+    let dfsr = scb.dfsr.read();
+    let mmfar = scb.mmfar.read();
+    let bfar = scb.bfar.read();
+    let afsr = scb.afsr.read();
     defmt::error!(
         "HardFault: pc=0x{:x} lr=0x{:x} sp=0x{:x}",
         ef.pc(),
         ef.lr(),
         cortex_m::register::msp::read()
+    );
+    defmt::error!(
+        "Fault status: CFSR=0x{:x} HFSR=0x{:x} DFSR=0x{:x} MMFAR=0x{:x} BFAR=0x{:x} AFSR=0x{:x}",
+        cfsr,
+        hfsr,
+        dfsr,
+        mmfar,
+        bfar,
+        afsr
     );
     loop {
         asm::bkpt();

@@ -1,4 +1,10 @@
 (
+    resources: [
+        (
+            id: "fc",
+            provider: "crate::resources::SerialBundle",
+        ),
+    ],
     tasks: [
         (id: "mapper", type: "tasks::RcMapper"),
         (id: "esc_cmd", type: "tasks::ThrottleToEsc"),
@@ -13,6 +19,7 @@
     bridges: [
         (  id: "rc",
            type: "cu_crsf::CrsfBridge<SerialPort, SerialPortError>",
+           resources: { "serial": "fc.serial" },
            channels: [
                 Rx ( id: "rc_rx" ),  // receiving RC Channels
                 Tx ( id: "lq_tx" ),  // Sending LineQuality back
