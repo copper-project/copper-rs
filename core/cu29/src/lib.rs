@@ -77,6 +77,9 @@ pub mod prelude {
     pub use cu29_clock::*;
     pub use cu29_derive::*; // includes resources! proc macro
     pub use cu29_log::*;
+    pub use cu29_log::{
+        __cu29_defmt_debug, __cu29_defmt_error, __cu29_defmt_info, __cu29_defmt_warn,
+    };
     pub use cu29_log_derive::*;
     pub use cu29_log_runtime::*;
     pub use cu29_runtime::app::*;
