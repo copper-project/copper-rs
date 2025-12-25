@@ -28,8 +28,7 @@ mod format;
 mod resources;
 mod utils;
 
-// TODO: this needs to be determined when the runtime is sizing itself.
-const DEFAULT_CLNB: usize = 10;
+const DEFAULT_CLNB: usize = 2; // We can double buffer for now until we add the parallel copperlist execution support.
 
 #[inline]
 fn int2sliceindex(i: u32) -> syn::Index {
