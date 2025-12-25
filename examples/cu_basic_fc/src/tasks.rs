@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use cu_bdshot::{EscCommand, EscTelemetry};
 use cu_crsf::messages::RcChannelsPayload;
 use cu_sensor_payloads::ImuPayload;
 use cu29::bincode::{Decode, Encode};
@@ -29,6 +30,8 @@ pub struct ControlInputs {
     pub armed: bool,
 }
 
+const TELEMETRY_LOG_EVERY: u32 = 1000;
+
 pub struct LedBeat {
     on: bool,
 }
@@ -53,9 +56,16 @@ pub struct EscStatus {
 pub struct ControlSink;
 impl Freezable for ControlSink {}
 impl CuSinkTask for ControlSink {
+    type Resources<'r> = ();
     type Input<'m> = CuMsg<ControlInputs>;
 
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
+    where
+        Self: Sized,
+    {
         Ok(Self)
     }
 
@@ -70,6 +80,85 @@ impl CuSinkTask for ControlSink {
     }
 }
 
+pub struct ThrottleToEsc;
+
+impl Freezable for ThrottleToEsc {}
+
+impl CuTask for ThrottleToEsc {
+    type Resources<'r> = ();
+    type Input<'m> = CuMsg<ControlInputs>;
+    type Output<'m> = CuMsg<EscCommand>;
+
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
+    where
+        Self: Sized,
+    {
+        Ok(Self)
+    }
+
+    fn process<'i, 'o>(
+        &mut self,
+        _clock: &RobotClock,
+        input: &Self::Input<'i>,
+        output: &mut Self::Output<'o>,
+    ) -> CuResult<()> {
+        if let Some(ctrl) = input.payload() {
+            let raw = if ctrl.armed { ctrl.throttle } else { 0.0 };
+            let throttle = raw.clamp(0.0, 2047.0) as u16;
+            output.set_payload(EscCommand {
+                throttle,
+                request_telemetry: true,
+            });
+        } else {
+            output.clear_payload();
+        }
+        Ok(())
+    }
+}
+
+pub struct TelemetryLogger<const ESC: usize> {
+    count: u32,
+}
+
+impl<const ESC: usize> Freezable for TelemetryLogger<ESC> {}
+
+impl<const ESC: usize> CuSinkTask for TelemetryLogger<ESC> {
+    type Resources<'r> = ();
+    type Input<'m> = CuMsg<EscTelemetry>;
+
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
+    where
+        Self: Sized,
+    {
+        Ok(Self { count: 0 })
+    }
+
+    fn process<'i>(&mut self, _clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
+        if let Some(payload) = input.payload() {
+            self.count = self.count.wrapping_add(1);
+            if self.count.is_multiple_of(TELEMETRY_LOG_EVERY) {
+                if let Some(sample) = payload.sample {
+                    info!("ESC{} telemetry {}", ESC, sample);
+                } else {
+                    info!("ESC{} telemetry missing", ESC);
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+pub type TelemetryLogger0 = TelemetryLogger<0>;
+pub type TelemetryLogger1 = TelemetryLogger<1>;
+pub type TelemetryLogger2 = TelemetryLogger<2>;
+pub type TelemetryLogger3 = TelemetryLogger<3>;
+
 impl Freezable for ControlInputs {}
 impl Freezable for RateSetpoint {}
 impl Freezable for AxisCommand {}
@@ -77,9 +166,16 @@ impl Freezable for EscStatus {}
 impl Freezable for LedBeat {}
 
 impl CuSinkTask for LedBeat {
+    type Resources<'r> = ();
     type Input<'m> = CuMsg<ControlInputs>;
 
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
+    where
+        Self: Sized,
+    {
         Ok(Self { on: false })
     }
 
@@ -87,9 +183,9 @@ impl CuSinkTask for LedBeat {
         // Toggle the green LED so we can see if the Copper loop is alive.
         if let Some(led) = crate::GREEN_LED.lock().as_mut() {
             if self.on {
-                let _ = led.set_low();
+                led.set_low();
             } else {
-                let _ = led.set_high();
+                led.set_high();
             }
             self.on = !self.on;
         }
@@ -102,10 +198,17 @@ pub struct RcMapper;
 impl Freezable for RcMapper {}
 
 impl CuTask for RcMapper {
+    type Resources<'r> = ();
     type Input<'m> = CuMsg<RcChannelsPayload>;
     type Output<'m> = CuMsg<ControlInputs>;
 
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
+    where
+        Self: Sized,
+    {
         Ok(Self)
     }
 
@@ -137,10 +240,17 @@ macro_rules! attitude_pid {
         pub struct $name;
         impl Freezable for $name {}
         impl CuTask for $name {
+            type Resources<'r> = ();
             type Input<'m> = (&'m CuMsg<AhrsPose>, &'m CuMsg<ControlInputs>);
             type Output<'m> = CuMsg<RateSetpoint>;
 
-            fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+            fn new_with(
+                _config: Option<&ComponentConfig>,
+                _resources: Self::Resources<'_>,
+            ) -> CuResult<Self>
+            where
+                Self: Sized,
+            {
                 Ok(Self)
             }
 
@@ -169,10 +279,17 @@ macro_rules! rate_pid {
         pub struct $name;
         impl Freezable for $name {}
         impl CuTask for $name {
+            type Resources<'r> = ();
             type Input<'m> = (&'m CuMsg<RateSetpoint>, &'m CuMsg<ImuPayload>);
             type Output<'m> = CuMsg<AxisCommand>;
 
-            fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+            fn new_with(
+                _config: Option<&ComponentConfig>,
+                _resources: Self::Resources<'_>,
+            ) -> CuResult<Self>
+            where
+                Self: Sized,
+            {
                 Ok(Self)
             }
 

@@ -23,6 +23,7 @@ cu-bdshot = { path = "../../components/bridges/cu_bdshot", features = ["rp2350"]
 cu-crsf = { path = "../../components/bridges/cu_crsf", default-features = false, features = ["defmt", "alloc"] }
 cu-sdlogger = { path = "../../components/libs/cu_sdlogger", default-features = false, features = ["eh1"] }
 cortex-m-rt = "0.7"
+defmt = "1.0"
 defmt-rtt = "1.1"
 embedded-hal = "1.0"
 embedded-hal-bus = "0.3"

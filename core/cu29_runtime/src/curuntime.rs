@@ -13,6 +13,22 @@ use cu29_traits::CuResult;
 use cu29_traits::WriteStream;
 use cu29_traits::{CopperListTuple, CuError};
 
+#[cfg(target_os = "none")]
+#[allow(unused_imports)]
+use cu29_log::{ANONYMOUS, CuLogEntry, CuLogLevel};
+#[cfg(target_os = "none")]
+#[allow(unused_imports)]
+use cu29_log_derive::info;
+#[cfg(target_os = "none")]
+#[allow(unused_imports)]
+use cu29_log_runtime::log;
+#[cfg(all(target_os = "none", debug_assertions))]
+#[allow(unused_imports)]
+use cu29_log_runtime::log_debug_mode;
+#[cfg(target_os = "none")]
+#[allow(unused_imports)]
+use cu29_value::to_value;
+
 use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::format;
@@ -269,6 +285,15 @@ impl<
             inner: CuListsManager::new(),
             logger: copperlists_logger,
         };
+        #[cfg(target_os = "none")]
+        {
+            let cl_size = core::mem::size_of::<CopperList<P>>();
+            let total_bytes = cl_size.saturating_mul(NBCL);
+            info!(
+                "CuRuntime::new: copperlists count={} cl_size={} total_bytes={}",
+                NBCL, cl_size, total_bytes
+            );
+        }
 
         let keyframes_manager = KeyFramesManager {
             inner: KeyFrame::new(),
@@ -308,21 +333,41 @@ impl<
         copperlists_logger: impl WriteStream<CopperList<P>> + 'static,
         keyframes_logger: impl WriteStream<KeyFrame> + 'static,
     ) -> CuResult<Self> {
+        #[cfg(target_os = "none")]
+        info!("CuRuntime::new: get graph");
         let graph = config.get_graph(mission)?;
+        #[cfg(target_os = "none")]
+        info!("CuRuntime::new: graph ok");
         let all_instances_configs: Vec<Option<&ComponentConfig>> = graph
             .get_all_nodes()
             .iter()
             .map(|(_, node)| node.get_instance_config())
             .collect();
 
+        #[cfg(target_os = "none")]
+        info!("CuRuntime::new: resources instanciator");
         let mut resources = resources_instanciator(config)?;
 
+        #[cfg(target_os = "none")]
+        info!("CuRuntime::new: tasks instanciator");
         let tasks = tasks_instanciator(all_instances_configs, &mut resources)?;
 
+        #[cfg(target_os = "none")]
+        info!("CuRuntime::new: monitor instanciator");
         let mut monitor = monitor_instanciator(config);
+        #[cfg(target_os = "none")]
+        info!("CuRuntime::new: monitor instanciator ok");
+        #[cfg(target_os = "none")]
+        info!("CuRuntime::new: build monitor topology");
         if let Ok(topology) = build_monitor_topology(config, mission) {
+            #[cfg(target_os = "none")]
+            info!("CuRuntime::new: monitor topology ok");
             monitor.set_topology(topology);
+            #[cfg(target_os = "none")]
+            info!("CuRuntime::new: monitor topology set");
         }
+        #[cfg(target_os = "none")]
+        info!("CuRuntime::new: bridges instanciator");
         let bridges = bridges_instanciator(config, &mut resources)?;
 
         let (copperlists_logger, keyframes_logger, keyframe_interval) = match &config.logging {
@@ -344,6 +389,15 @@ impl<
             inner: CuListsManager::new(),
             logger: copperlists_logger,
         };
+        #[cfg(target_os = "none")]
+        {
+            let cl_size = core::mem::size_of::<CopperList<P>>();
+            let total_bytes = cl_size.saturating_mul(NBCL);
+            info!(
+                "CuRuntime::new: copperlists count={} cl_size={} total_bytes={}",
+                NBCL, cl_size, total_bytes
+            );
+        }
 
         let keyframes_manager = KeyFramesManager {
             inner: KeyFrame::new(),

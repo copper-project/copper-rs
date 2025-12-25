@@ -6,8 +6,12 @@ extern crate alloc;
 use alloc::sync::Arc;
 use alloc::vec;
 use buddy_system_allocator::LockedHeap as StdHeap;
-use cortex_m::{asm, peripheral::DWT};
+use cortex_m::{
+    asm,
+    peripheral::{DWT, SCB},
+};
 use cortex_m_rt::{ExceptionFrame, entry, exception};
+use cu_bdshot::{Stm32H7Board, Stm32H7BoardResources, register_stm32h7_board};
 use cu_sdlogger::{EMMCLogger, EMMCSectionStorage, ForceSyncSend, find_copper_partition};
 use cu_sensor_payloads::ImuPayload;
 use cu29::prelude::*;
@@ -16,10 +20,7 @@ use defmt_rtt as _;
 use panic_probe as _;
 use spin::Mutex;
 use stm32h7xx_hal::{
-    gpio::{
-        Alternate, Speed,
-        gpioc::{PC6, PC7},
-    },
+    gpio::Speed,
     nb, pac,
     prelude::*,
     rcc,
@@ -28,6 +29,7 @@ use stm32h7xx_hal::{
     serial::{Serial, config::Config},
 };
 
+mod resources;
 mod tasks;
 
 #[global_allocator]
@@ -56,17 +58,26 @@ static GREEN_LED: Mutex<
     >,
 > = Mutex::new(None);
 
-type Uart6Pins = (PC6<Alternate<7>>, PC7<Alternate<7>>);
-
 struct SerialWrapper {
     inner: Serial<pac::USART6>,
 }
 
+// Safety: the firmware uses a single-threaded runtime; no concurrent access.
+unsafe impl Send for SerialWrapper {}
+unsafe impl Sync for SerialWrapper {}
+
 impl CuTask for DummyImu {
+    type Resources<'r> = ();
     type Input<'m> = ();
     type Output<'m> = CuMsg<ImuPayload>;
 
-    fn new(_config: Option<&ComponentConfig>) -> CuResult<Self> {
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
+    where
+        Self: Sized,
+    {
         Ok(Self)
     }
 
@@ -156,6 +167,7 @@ fn main() -> ! {
 
     init_heap();
     defmt::info!("Heap initialized");
+    log_heap_stats("after-init");
 
     // Smoke-test allocator.
     let mut buf = alloc::vec![0u8; 1024];
@@ -187,11 +199,6 @@ fn main() -> ! {
     }
     defmt::info!("UART6 registered in registry");
 
-    // Green status LED (PE6).
-    let mut green_led = gpioe.pe6.into_push_pull_output();
-    let _ = green_led.set_low();
-    *GREEN_LED.lock() = Some(green_led);
-
     // Initialize SD card for logging
     defmt::info!("Starting SD logger init");
     let logger = match init_sd_logger(
@@ -217,6 +224,29 @@ fn main() -> ! {
     };
     defmt::info!("SD logger ready");
 
+    // Register BDShot board (STM32H7, GPIOE PE14/13/11/9) before Copper runtime start.
+    let bdshot_resources = Stm32H7BoardResources {
+        gpioe,
+        dwt: cp.DWT,
+        sysclk_hz: ccdr.clocks.sys_ck().raw(),
+    };
+    let bdshot_board = match Stm32H7Board::new(bdshot_resources) {
+        Ok(board) => board,
+        Err(e) => {
+            defmt::error!("BDShot board init failed: {:?}", e);
+            loop {
+                asm::wfi();
+            }
+        }
+    };
+    if let Err(e) = register_stm32h7_board(bdshot_board) {
+        defmt::error!("BDShot board registration failed: {:?}", e);
+        loop {
+            asm::wfi();
+        }
+    }
+    defmt::info!("BDShot board registered");
+
     // Spin up Copper runtime with CRSF -> mapper -> sink graph.
     info!("Building Copper runtime clock");
     let clock = build_clock();
@@ -226,6 +256,7 @@ fn main() -> ! {
     match <FlightControllerApp as CuApplication<LogStorage, Logger>>::new(clock, writer) {
         Ok(mut app) => {
             info!("App constructed, starting Copper FC (H743, CRSF on UART6)...");
+            log_heap_stats("before-run");
             let _ = <FlightControllerApp as CuApplication<LogStorage, Logger>>::run(&mut app);
             info!("Copper runtime returned unexpectedly");
         }
@@ -287,20 +318,54 @@ fn build_clock() -> RobotClock {
 
 fn init_heap() {
     unsafe {
-        let start = HEAP_MEM.as_mut_ptr() as usize;
-        let size = core::mem::size_of_val(&HEAP_MEM);
+        let start = core::ptr::addr_of_mut!(HEAP_MEM) as usize;
+        let size = core::mem::size_of::<[u8; 256 * 1024]>();
         defmt::info!("Heap region start=0x{:x} size={}", start, size);
         ALLOC.lock().init(start, size);
     }
 }
 
+fn log_heap_stats(tag: &str) {
+    let heap = ALLOC.lock();
+    let user = heap.stats_alloc_user();
+    let allocated = heap.stats_alloc_actual();
+    let total = heap.stats_total_bytes();
+    let free = total.saturating_sub(allocated);
+    defmt::info!(
+        "Heap stats({}): user={} alloc={} total={} free={}",
+        tag,
+        user,
+        allocated,
+        total,
+        free
+    );
+}
+
 #[exception]
 unsafe fn HardFault(ef: &ExceptionFrame) -> ! {
+    let scb = unsafe { &*SCB::PTR };
+    let cfsr = scb.cfsr.read();
+    let hfsr = scb.hfsr.read();
+    let dfsr = scb.dfsr.read();
+    let mmfar = scb.mmfar.read();
+    let bfar = scb.bfar.read();
+    let afsr = scb.afsr.read();
     defmt::error!(
         "HardFault: pc=0x{:x} lr=0x{:x} sp=0x{:x}",
         ef.pc(),
         ef.lr(),
         cortex_m::register::msp::read()
     );
-    loop {}
+    defmt::error!(
+        "Fault status: CFSR=0x{:x} HFSR=0x{:x} DFSR=0x{:x} MMFAR=0x{:x} BFAR=0x{:x} AFSR=0x{:x}",
+        cfsr,
+        hfsr,
+        dfsr,
+        mmfar,
+        bfar,
+        afsr
+    );
+    loop {
+        asm::bkpt();
+    }
 }
