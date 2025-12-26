@@ -493,8 +493,13 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             &task_member_names,
         );
 
-        let resource_specs = match collect_resource_specs(graph, &task_specs, &culist_bridge_specs)
-        {
+        let resource_specs = match collect_resource_specs(
+            graph,
+            &task_specs,
+            &culist_bridge_specs,
+            &copper_config,
+            mission.as_str(),
+        ) {
             Ok(specs) => specs,
             Err(e) => return return_error(e.to_string()),
         };
@@ -1321,7 +1326,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     debug!("CuConfig: Reading configuration from file: {}", config_filename);
                     cu29::config::read_configuration(config_filename)?
                 } else {
-                    let original_config = <Self as #app_trait<S, L>>::get_original_config();
+                    let original_config = Self::original_config();
                     debug!("CuConfig: Using the original configuration the project was compiled with: {}", &original_config);
                     cu29::config::read_configuration_str(original_config, None)?
                 };
@@ -1329,10 +1334,51 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         } else {
             quote! {
                 // Only the original config is available in no-std
-                let original_config = <Self as #app_trait<S, L>>::get_original_config();
+                let original_config = Self::original_config();
                 debug!("CuConfig: Using the original configuration the project was compiled with: {}", &original_config);
                 let config = cu29::config::read_configuration_str(original_config, None)?;
             }
+        };
+
+        let init_resources_sig = if std {
+            quote! {
+                pub fn init_resources(config_override: Option<CuConfig>) -> CuResult<AppResources>
+            }
+        } else {
+            quote! {
+                pub fn init_resources() -> CuResult<AppResources>
+            }
+        };
+
+        let init_resources_call = if std {
+            quote! { Self::init_resources(config_override)? }
+        } else {
+            quote! { Self::init_resources()? }
+        };
+
+        let new_with_resources_sig = if sim_mode {
+            quote! {
+                pub fn new_with_resources<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static>(
+                    clock: RobotClock,
+                    unified_logger: Arc<Mutex<L>>,
+                    app_resources: AppResources,
+                    sim_callback: &mut impl FnMut(SimStep) -> SimOverride,
+                ) -> CuResult<Self>
+            }
+        } else {
+            quote! {
+                pub fn new_with_resources<S: SectionStorage + 'static, L: UnifiedLogWrite<S> + 'static>(
+                    clock: RobotClock,
+                    unified_logger: Arc<Mutex<L>>,
+                    app_resources: AppResources,
+                ) -> CuResult<Self>
+            }
+        };
+
+        let new_with_resources_call = if sim_mode {
+            quote! { Self::new_with_resources(clock, unified_logger, app_resources, sim_callback) }
+        } else {
+            quote! { Self::new_with_resources(clock, unified_logger, app_resources) }
         };
 
         let kill_handler = if std {
@@ -1489,6 +1535,137 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             quote!()
         };
 
+        let app_resources_struct = quote! {
+            pub struct AppResources {
+                pub config: CuConfig,
+                pub resources: ResourceManager,
+            }
+        };
+
+        let init_resources_fn = quote! {
+            #init_resources_sig {
+                let config_filename = #config_file;
+
+                #[cfg(target_os = "none")]
+                ::cu29::prelude::info!("CuApp init: config file {}", config_filename);
+                #[cfg(target_os = "none")]
+                ::cu29::prelude::info!("CuApp init: loading config");
+                #config_load_stmt
+                #[cfg(target_os = "none")]
+                ::cu29::prelude::info!("CuApp init: config loaded");
+                if let Some(runtime) = &config.runtime {
+                    #[cfg(target_os = "none")]
+                    ::cu29::prelude::info!(
+                        "CuApp init: rate_target_hz={}",
+                        runtime.rate_target_hz.unwrap_or(0)
+                    );
+                } else {
+                    #[cfg(target_os = "none")]
+                    ::cu29::prelude::info!("CuApp init: rate_target_hz=none");
+                }
+
+                #[cfg(target_os = "none")]
+                ::cu29::prelude::info!("CuApp init: building resources");
+                let resources = #mission_mod::resources_instanciator(&config)?;
+                #[cfg(target_os = "none")]
+                ::cu29::prelude::info!("CuApp init: resources ready");
+
+                Ok(AppResources { config, resources })
+            }
+        };
+
+        let new_with_resources_fn = quote! {
+            #new_with_resources_sig {
+                let AppResources { config, resources } = app_resources;
+
+                #[cfg(target_os = "none")]
+                {
+                    let structured_stream = ::cu29::prelude::stream_write::<
+                        ::cu29::prelude::CuLogEntry,
+                        S,
+                    >(
+                        unified_logger.clone(),
+                        ::cu29::prelude::UnifiedLogType::StructuredLogLine,
+                        4096 * 10,
+                    )?;
+                    let _logger_runtime = ::cu29::prelude::LoggerRuntime::init(
+                        clock.clone(),
+                        structured_stream,
+                        None::<::cu29::prelude::NullLog>,
+                    );
+                }
+
+                // For simple cases we can say the section is just a bunch of Copper Lists.
+                // But we can now have allocations outside of it so we can override it from the config.
+                let mut default_section_size = size_of::<super::#mission_mod::CuList>() * 64;
+                // Check if there is a logging configuration with section_size_mib
+                if let Some(section_size_mib) = config.logging.as_ref().and_then(|l| l.section_size_mib) {
+                    // Convert MiB to bytes
+                    default_section_size = section_size_mib as usize * 1024usize * 1024usize;
+                }
+                #[cfg(target_os = "none")]
+                ::cu29::prelude::info!(
+                    "CuApp new: copperlist section size={}",
+                    default_section_size
+                );
+                #[cfg(target_os = "none")]
+                ::cu29::prelude::info!("CuApp new: creating copperlist stream");
+                let copperlist_stream = stream_write::<#mission_mod::CuList, S>(
+                    unified_logger.clone(),
+                    UnifiedLogType::CopperList,
+                    default_section_size,
+                    // the 2 sizes are not directly related as we encode the CuList but we can
+                    // assume the encoded size is close or lower than the non encoded one
+                    // This is to be sure we have the size of at least a Culist and some.
+                )?;
+                #[cfg(target_os = "none")]
+                ::cu29::prelude::info!("CuApp new: copperlist stream ready");
+
+                #[cfg(target_os = "none")]
+                ::cu29::prelude::info!("CuApp new: creating keyframes stream");
+                let keyframes_stream = stream_write::<KeyFrame, S>(
+                    unified_logger.clone(),
+                    UnifiedLogType::FrozenTasks,
+                    1024 * 1024 * 10, // 10 MiB
+                )?;
+                #[cfg(target_os = "none")]
+                ::cu29::prelude::info!("CuApp new: keyframes stream ready");
+
+                #[cfg(target_os = "none")]
+                ::cu29::prelude::info!("CuApp new: building runtime");
+                let copper_runtime = CuRuntime::<#mission_mod::#tasks_type, #mission_mod::CuBridges, #mission_mod::CuStampedDataSet, #monitor_type, #DEFAULT_CLNB>::new_with_resources(
+                    clock,
+                    &config,
+                    Some(#mission),
+                    resources,
+                    #mission_mod::#tasks_instanciator_fn,
+                    #mission_mod::monitor_instanciator,
+                    #mission_mod::bridges_instanciator,
+                    copperlist_stream,
+                    keyframes_stream)?;
+                #[cfg(target_os = "none")]
+                ::cu29::prelude::info!("CuApp new: runtime built");
+
+                let application = Ok(#application_name { copper_runtime });
+
+                #sim_callback_on_new
+
+                application
+            }
+        };
+
+        let app_inherent_impl = quote! {
+            impl #application_name {
+                pub fn original_config() -> String {
+                    #copper_config_content.to_string()
+                }
+
+                #init_resources_fn
+
+                #new_with_resources_fn
+            }
+        };
+
         #[cfg(feature = "std")]
         #[cfg(feature = "macro_debug")]
         eprintln!("[build result]");
@@ -1497,102 +1674,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #simstep_type_decl
 
                 #new {
-                    let config_filename = #config_file;
-
-                    #[cfg(target_os = "none")]
-                    {
-                        let structured_stream = ::cu29::prelude::stream_write::<
-                            ::cu29::prelude::CuLogEntry,
-                            S,
-                        >(
-                            unified_logger.clone(),
-                            ::cu29::prelude::UnifiedLogType::StructuredLogLine,
-                            4096 * 10,
-                        )?;
-                        let _logger_runtime = ::cu29::prelude::LoggerRuntime::init(
-                            clock.clone(),
-                            structured_stream,
-                            None::<::cu29::prelude::NullLog>,
-                        );
-                    }
-                    #[cfg(target_os = "none")]
-                    ::cu29::prelude::info!("CuApp new: config file {}", config_filename);
-                    #[cfg(target_os = "none")]
-                    ::cu29::prelude::info!("CuApp new: loading config");
-                    #config_load_stmt
-                    #[cfg(target_os = "none")]
-                    ::cu29::prelude::info!("CuApp new: config loaded");
-                    if let Some(runtime) = &config.runtime {
-                        #[cfg(target_os = "none")]
-                        ::cu29::prelude::info!(
-                            "CuApp new: rate_target_hz={}",
-                            runtime.rate_target_hz.unwrap_or(0)
-                        );
-                    } else {
-                        #[cfg(target_os = "none")]
-                        ::cu29::prelude::info!("CuApp new: rate_target_hz=none");
-                    }
-
-                    // For simple cases we can say the section is just a bunch of Copper Lists.
-                    // But we can now have allocations outside of it so we can override it from the config.
-                    let mut default_section_size = size_of::<super::#mission_mod::CuList>() * 64;
-                    // Check if there is a logging configuration with section_size_mib
-                    if let Some(section_size_mib) = config.logging.as_ref().and_then(|l| l.section_size_mib) {
-                        // Convert MiB to bytes
-                        default_section_size = section_size_mib as usize * 1024usize * 1024usize;
-                    }
-                    #[cfg(target_os = "none")]
-                    ::cu29::prelude::info!(
-                        "CuApp new: copperlist section size={}",
-                        default_section_size
-                    );
-                    #[cfg(target_os = "none")]
-                    ::cu29::prelude::info!("CuApp new: creating copperlist stream");
-                    let copperlist_stream = stream_write::<#mission_mod::CuList, S>(
-                        unified_logger.clone(),
-                        UnifiedLogType::CopperList,
-                        default_section_size,
-                        // the 2 sizes are not directly related as we encode the CuList but we can
-                        // assume the encoded size is close or lower than the non encoded one
-                        // This is to be sure we have the size of at least a Culist and some.
-                    )?;
-                    #[cfg(target_os = "none")]
-                    ::cu29::prelude::info!("CuApp new: copperlist stream ready");
-
-                    #[cfg(target_os = "none")]
-                    ::cu29::prelude::info!("CuApp new: creating keyframes stream");
-                    let keyframes_stream = stream_write::<KeyFrame, S>(
-                        unified_logger.clone(),
-                        UnifiedLogType::FrozenTasks,
-                        1024 * 1024 * 10, // 10 MiB
-                    )?;
-                    #[cfg(target_os = "none")]
-                    ::cu29::prelude::info!("CuApp new: keyframes stream ready");
-
-                    #[cfg(target_os = "none")]
-                    ::cu29::prelude::info!("CuApp new: building runtime");
-                    let copper_runtime = CuRuntime::<#mission_mod::#tasks_type, #mission_mod::CuBridges, #mission_mod::CuStampedDataSet, #monitor_type, #DEFAULT_CLNB>::new(
-                        clock,
-                        &config,
-                        Some(#mission),
-                        #mission_mod::resources_instanciator,
-                        #mission_mod::#tasks_instanciator_fn,
-                        #mission_mod::monitor_instanciator,
-                        #mission_mod::bridges_instanciator,
-                        copperlist_stream,
-                        keyframes_stream)?;
-                    #[cfg(target_os = "none")]
-                    ::cu29::prelude::info!("CuApp new: runtime built");
-
-                    let application = Ok(#application_name { copper_runtime });
-
-                    #sim_callback_on_new
-
-                    application
+                    let app_resources = #init_resources_call;
+                    #new_with_resources_call
                 }
 
                 fn get_original_config() -> String {
-                    #copper_config_content.to_string()
+                    Self::original_config()
                 }
 
                 #run_methods
@@ -1855,6 +1942,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::curuntime::CopperContext;
                 use cu29::resource::ResourceMapping;
                 use cu29::resource::{ResourceBindings, ResourceManager};
+                use cu29::prelude::SectionStorage;
                 use cu29::prelude::UnifiedLoggerWrite;
                 use cu29::prelude::memmap::MmapSectionStorage;
                 use std::fmt::{Debug, Formatter};
@@ -1874,6 +1962,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use core::fmt::Result as FmtResult;
                 use core::mem::size_of;
                 use spin::Mutex;
+                use cu29::prelude::SectionStorage;
                 use cu29::resource::{ResourceBindings, ResourceManager};
                 use cu29::resource::ResourceMapping;
             }
@@ -1946,8 +2035,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 }
 
                 // The application for this mission
+                #app_resources_struct
                 pub #application_struct
 
+                #app_inherent_impl
                 #application_impl
 
                 #std_application_impl
@@ -1971,6 +2062,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         };
         quote! {
             #default_builder
+
+            #[allow(unused_imports)]
+            use default::AppResources;
+
+            #[allow(unused_imports)]
+            use default::resources as app_resources;
 
             #[allow(unused_imports)]
             use default::#application_name;
@@ -2486,6 +2583,7 @@ fn collect_task_member_names(graph: &CuGraph) -> Vec<(NodeId, String)> {
 enum ResourceOwner {
     Task(usize),
     Bridge(usize),
+    Export,
 }
 
 #[derive(Clone)]
@@ -2518,6 +2616,8 @@ fn collect_resource_specs(
     graph: &CuGraph,
     task_specs: &CuTaskSpecSet,
     bridge_specs: &[BridgeSpec],
+    config: &CuConfig,
+    mission: &str,
 ) -> CuResult<Vec<ResourceKeySpec>> {
     let mut path_registry: BTreeMap<String, (String, Ident, Ident)> = BTreeMap::new();
     let mut bridge_lookup: BTreeMap<String, usize> = BTreeMap::new();
@@ -2588,6 +2688,29 @@ fn collect_resource_specs(
                 "bg_threads".to_string(),
                 "threadpool.bg_threads".to_string(),
             )?;
+        }
+    }
+
+    let bundle_specs = build_bundle_list(config, mission);
+    for bundle in bundle_specs {
+        let Some(exports) = bundle.exports.as_ref() else {
+            continue;
+        };
+        for export in exports {
+            if export.is_empty() {
+                return Err(CuError::from(format!(
+                    "Resource export in bundle '{}' cannot be empty",
+                    bundle.id
+                )));
+            }
+            if export.contains('.') {
+                return Err(CuError::from(format!(
+                    "Resource export '{}' in bundle '{}' must not include '.'",
+                    export, bundle.id
+                )));
+            }
+            let path = format!("{}.{}", bundle.id, export);
+            push_spec(ResourceOwner::Export, export.clone(), path)?;
         }
     }
 
@@ -3641,8 +3764,9 @@ mod tests {
             tx_channels: Vec::new(),
         };
 
-        let specs =
-            collect_resource_specs(&graph, &task_specs, &[bridge_spec]).expect("collect specs");
+        let config = cu29::config::CuConfig::default();
+        let specs = collect_resource_specs(&graph, &task_specs, &[bridge_spec], &config, "default")
+            .expect("collect specs");
         assert_eq!(specs.len(), 1);
         assert!(matches!(specs[0].owner, ResourceOwner::Bridge(0)));
         assert_eq!(specs[0].binding_name, "serial");

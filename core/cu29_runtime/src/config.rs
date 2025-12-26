@@ -462,6 +462,8 @@ pub struct ResourceBundleConfig {
     #[serde(rename = "provider")]
     pub provider: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub exports: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub config: Option<ComponentConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub missions: Option<Vec<String>>,
@@ -969,6 +971,7 @@ impl CuConfig {
         self.resources.push(ResourceBundleConfig {
             id: "threadpool".to_string(),
             provider: "cu29::resource::ThreadPoolBundle".to_string(),
+            exports: None,
             config: Some(config),
             missions: None,
         });
@@ -2356,6 +2359,7 @@ mod tests {
         config.resources.push(ResourceBundleConfig {
             id: "fc".to_string(),
             provider: "copper_board_px4::Px4Bundle".to_string(),
+            exports: None,
             config: Some(bundle_cfg),
             missions: Some(vec!["m1".to_string()]),
         });
@@ -2461,6 +2465,7 @@ mod tests {
         config.resources.push(ResourceBundleConfig {
             id: "fc".to_string(),
             provider: "board::Bundle".to_string(),
+            exports: None,
             config: None,
             missions: None,
         });

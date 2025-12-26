@@ -250,14 +250,42 @@ impl<
         copperlists_logger: impl WriteStream<CopperList<P>> + 'static,
         keyframes_logger: impl WriteStream<KeyFrame> + 'static,
     ) -> CuResult<Self> {
+        let resources = resources_instanciator(config)?;
+        Self::new_with_resources(
+            clock,
+            config,
+            mission,
+            resources,
+            tasks_instanciator,
+            monitor_instanciator,
+            bridges_instanciator,
+            copperlists_logger,
+            keyframes_logger,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[cfg(feature = "std")]
+    pub fn new_with_resources(
+        clock: RobotClock,
+        config: &CuConfig,
+        mission: Option<&str>,
+        mut resources: ResourceManager,
+        tasks_instanciator: impl for<'c> Fn(
+            Vec<Option<&'c ComponentConfig>>,
+            &mut ResourceManager,
+        ) -> CuResult<CT>,
+        monitor_instanciator: impl Fn(&CuConfig) -> M,
+        bridges_instanciator: impl Fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>,
+        copperlists_logger: impl WriteStream<CopperList<P>> + 'static,
+        keyframes_logger: impl WriteStream<KeyFrame> + 'static,
+    ) -> CuResult<Self> {
         let graph = config.get_graph(mission)?;
         let all_instances_configs: Vec<Option<&ComponentConfig>> = graph
             .get_all_nodes()
             .iter()
             .map(|(_, node)| node.get_instance_config())
             .collect();
-
-        let mut resources = resources_instanciator(config)?;
 
         let tasks = tasks_instanciator(all_instances_configs, &mut resources)?;
         let mut monitor = monitor_instanciator(config);
@@ -334,6 +362,38 @@ impl<
         keyframes_logger: impl WriteStream<KeyFrame> + 'static,
     ) -> CuResult<Self> {
         #[cfg(target_os = "none")]
+        info!("CuRuntime::new: resources instanciator");
+        let resources = resources_instanciator(config)?;
+        Self::new_with_resources(
+            clock,
+            config,
+            mission,
+            resources,
+            tasks_instanciator,
+            monitor_instanciator,
+            bridges_instanciator,
+            copperlists_logger,
+            keyframes_logger,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[cfg(not(feature = "std"))]
+    pub fn new_with_resources(
+        clock: RobotClock,
+        config: &CuConfig,
+        mission: Option<&str>,
+        mut resources: ResourceManager,
+        tasks_instanciator: impl for<'c> Fn(
+            Vec<Option<&'c ComponentConfig>>,
+            &mut ResourceManager,
+        ) -> CuResult<CT>,
+        monitor_instanciator: impl Fn(&CuConfig) -> M,
+        bridges_instanciator: impl Fn(&CuConfig, &mut ResourceManager) -> CuResult<CB>,
+        copperlists_logger: impl WriteStream<CopperList<P>> + 'static,
+        keyframes_logger: impl WriteStream<KeyFrame> + 'static,
+    ) -> CuResult<Self> {
+        #[cfg(target_os = "none")]
         info!("CuRuntime::new: get graph");
         let graph = config.get_graph(mission)?;
         #[cfg(target_os = "none")]
@@ -343,10 +403,6 @@ impl<
             .iter()
             .map(|(_, node)| node.get_instance_config())
             .collect();
-
-        #[cfg(target_os = "none")]
-        info!("CuRuntime::new: resources instanciator");
-        let mut resources = resources_instanciator(config)?;
 
         #[cfg(target_os = "none")]
         info!("CuRuntime::new: tasks instanciator");
