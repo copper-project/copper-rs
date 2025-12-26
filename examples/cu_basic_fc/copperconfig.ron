@@ -3,6 +3,7 @@
         (
             id: "fc",
             provider: "crate::resources::MicoAirH743",
+            exports: ["uart6", "uart2", "green_led", "logger"],
         ),
     ],
     tasks: [
@@ -23,7 +24,7 @@
     bridges: [
         (  id: "rc",
            type: "cu_crsf::CrsfBridge<SerialPort, SerialPortError>",
-           resources: { "serial": "fc.serial" },
+           resources: { "serial": "fc.uart6" },
            channels: [
                 Rx ( id: "rc_rx" ),  // receiving RC Channels
                 Tx ( id: "lq_tx" ),  // Sending LineQuality back
