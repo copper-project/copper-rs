@@ -17,9 +17,9 @@ Only the channels declared in the Copper config are driven; others stay idle.
   let board = Rp2350Board::new(resources, system_clock_hz, Rp2350BoardConfig::default())?;
   cu_bdshot::register_rp2350_board(board)?;
   ```
-- Build a `Stm32H7Board` from GPIOE (PE14/13/11/9) plus a running DWT cycle counter and register it once before Copper boots:
+- Build a `Stm32H7Board` from GPIOE pins (PE14/13/11/9) plus a running DWT cycle counter and register it once before Copper boots:
   ```rust
-  let resources = Stm32H7BoardResources { gpioe, dwt, sysclk_hz };
+  let resources = Stm32H7BoardResources { m1, m2, m3, m4, dwt, sysclk_hz };
   let board = Stm32H7Board::new(resources)?;
   cu_bdshot::register_stm32h7_board(board)?;
   ```

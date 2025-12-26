@@ -52,11 +52,8 @@ pub struct DummyImu;
 pub type RpMpu9250Source = DummyImu;
 impl Freezable for DummyImu {}
 
-static GREEN_LED: Mutex<
-    Option<
-        stm32h7xx_hal::gpio::gpioe::PE6<stm32h7xx_hal::gpio::Output<stm32h7xx_hal::gpio::PushPull>>,
-    >,
-> = Mutex::new(None);
+pub type GreenLed =
+    stm32h7xx_hal::gpio::gpioe::PE6<stm32h7xx_hal::gpio::Output<stm32h7xx_hal::gpio::PushPull>>;
 
 struct SerialWrapper {
     inner: Serial<pac::USART6>,
@@ -182,6 +179,7 @@ fn main() -> ! {
     let gpioe = dp.GPIOE.split(ccdr.peripheral.GPIOE);
     let tx = gpioc.pc6.into_alternate();
     let rx = gpioc.pc7.into_alternate();
+    let green_led = gpioe.pe6.into_push_pull_output();
 
     let config = Config::default().baudrate(420_000.bps());
     let serial = SerialWrapper {
@@ -192,12 +190,9 @@ fn main() -> ! {
     };
     defmt::info!("UART6 init done");
 
-    // Register serial port for CRSF (slot 0).
-    if let Err(e) = cu_embedded_registry::register(0, serial) {
-        defmt::error!("registry uart6 failed: {:?}", e);
-        panic!("registry failed");
-    }
-    defmt::info!("UART6 registered in registry");
+    resources::stash_serial(serial);
+    resources::stash_green_led(green_led);
+    defmt::info!("UART6 + LED stashed for resource bundle");
 
     // Initialize SD card for logging
     defmt::info!("Starting SD logger init");
@@ -226,7 +221,10 @@ fn main() -> ! {
 
     // Register BDShot board (STM32H7, GPIOE PE14/13/11/9) before Copper runtime start.
     let bdshot_resources = Stm32H7BoardResources {
-        gpioe,
+        m1: gpioe.pe14,
+        m2: gpioe.pe13,
+        m3: gpioe.pe11,
+        m4: gpioe.pe9,
         dwt: cp.DWT,
         sysclk_hz: ccdr.clocks.sys_ck().raw(),
     };
