@@ -3765,9 +3765,8 @@ mod tests {
         };
 
         let config = cu29::config::CuConfig::default();
-        let specs =
-            collect_resource_specs(&graph, &task_specs, &[bridge_spec], &config, "default")
-                .expect("collect specs");
+        let specs = collect_resource_specs(&graph, &task_specs, &[bridge_spec], &config, "default")
+            .expect("collect specs");
         assert_eq!(specs.len(), 1);
         assert!(matches!(specs[0].owner, ResourceOwner::Bridge(0)));
         assert_eq!(specs[0].binding_name, "serial");
