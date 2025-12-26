@@ -2,14 +2,19 @@
     resources: [
         (
             id: "fc",
-            provider: "crate::resources::SerialBundle",
+            provider: "crate::resources::MicoAirH743",
+            exports: ["uart6", "uart2", "green_led", "logger"],
         ),
     ],
     tasks: [
         (id: "mapper", type: "tasks::RcMapper"),
         (id: "esc_cmd", type: "tasks::ThrottleToEsc"),
         (id: "control_sink", type: "tasks::ControlSink"),
-        (id: "led_blink", type: "tasks::LedBeat"),
+        (
+            id: "led_blink",
+            type: "tasks::LedBeat",
+            resources: { "led": "fc.green_led" },
+        ),
         (id: "tele0", type: "tasks::TelemetryLogger0"),
         (id: "tele1", type: "tasks::TelemetryLogger1"),
         (id: "tele2", type: "tasks::TelemetryLogger2"),
@@ -19,7 +24,7 @@
     bridges: [
         (  id: "rc",
            type: "cu_crsf::CrsfBridge<SerialPort, SerialPortError>",
-           resources: { "serial": "fc.serial" },
+           resources: { "serial": "fc.uart6" },
            channels: [
                 Rx ( id: "rc_rx" ),  // receiving RC Channels
                 Tx ( id: "lq_tx" ),  // Sending LineQuality back

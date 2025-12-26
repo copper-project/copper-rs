@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use crate::GreenLed;
 use cu_bdshot::{EscCommand, EscTelemetry};
 use cu_crsf::messages::RcChannelsPayload;
 use cu_sensor_payloads::ImuPayload;
@@ -32,8 +33,13 @@ pub struct ControlInputs {
 
 const TELEMETRY_LOG_EVERY: u32 = 1000;
 
+resources!({
+    led => Owned<spin::Mutex<GreenLed>>,
+});
+
 pub struct LedBeat {
     on: bool,
+    led: spin::Mutex<GreenLed>,
 }
 
 #[derive(Debug, Default, Clone, Encode, Decode, Serialize)]
@@ -166,29 +172,28 @@ impl Freezable for EscStatus {}
 impl Freezable for LedBeat {}
 
 impl CuSinkTask for LedBeat {
-    type Resources<'r> = ();
+    type Resources<'r> = Resources;
     type Input<'m> = CuMsg<ControlInputs>;
 
-    fn new_with(
-        _config: Option<&ComponentConfig>,
-        _resources: Self::Resources<'_>,
-    ) -> CuResult<Self>
+    fn new_with(_config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
-        Ok(Self { on: false })
+        Ok(Self {
+            on: false,
+            led: resources.led.0,
+        })
     }
 
     fn process<'i>(&mut self, _clock: &RobotClock, _inputs: &Self::Input<'i>) -> CuResult<()> {
         // Toggle the green LED so we can see if the Copper loop is alive.
-        if let Some(led) = crate::GREEN_LED.lock().as_mut() {
-            if self.on {
-                led.set_low();
-            } else {
-                led.set_high();
-            }
-            self.on = !self.on;
+        let mut led = self.led.lock();
+        if self.on {
+            led.set_low();
+        } else {
+            led.set_high();
         }
+        self.on = !self.on;
         Ok(())
     }
 }

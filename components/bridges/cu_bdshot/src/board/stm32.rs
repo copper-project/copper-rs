@@ -8,7 +8,7 @@ use cu29::prelude::CuError;
 use spin::Mutex;
 use stm32h7xx_hal as hal;
 
-use hal::gpio::{Output, Pin, PushPull};
+use hal::gpio::{Analog, Output, Pin, PushPull};
 
 // Slightly faster than nominal DSHOT600 (matching BF timing).
 const DSHOT_FREQUENCY: u32 = 650_000;
@@ -39,7 +39,10 @@ const MOTOR_PUPDR_MASKS: [u32; 4] = [
 ];
 
 pub struct Stm32H7BoardResources {
-    pub gpioe: hal::gpio::gpioe::Parts,
+    pub m1: hal::gpio::gpioe::PE14<Analog>,
+    pub m2: hal::gpio::gpioe::PE13<Analog>,
+    pub m3: hal::gpio::gpioe::PE11<Analog>,
+    pub m4: hal::gpio::gpioe::PE9<Analog>,
     pub dwt: DWT,
     pub sysclk_hz: u32,
 }
@@ -65,12 +68,17 @@ struct Motors {
 }
 
 impl Motors {
-    fn new(gpioe: hal::gpio::gpioe::Parts) -> Self {
+    fn new(
+        m1: hal::gpio::gpioe::PE14<Analog>,
+        m2: hal::gpio::gpioe::PE13<Analog>,
+        m3: hal::gpio::gpioe::PE11<Analog>,
+        m4: hal::gpio::gpioe::PE9<Analog>,
+    ) -> Self {
         Self {
-            _m1: gpioe.pe14.into_push_pull_output(),
-            _m2: gpioe.pe13.into_push_pull_output(),
-            _m3: gpioe.pe11.into_push_pull_output(),
-            _m4: gpioe.pe9.into_push_pull_output(),
+            _m1: m1.into_push_pull_output(),
+            _m2: m2.into_push_pull_output(),
+            _m3: m3.into_push_pull_output(),
+            _m4: m4.into_push_pull_output(),
         }
     }
 
@@ -88,7 +96,7 @@ impl Stm32H7Board {
         let cycles_per_us = (resources.sysclk_hz / 1_000_000).max(1);
         let t1_high = (bit_cycles * 2) / 3;
         let t0_high = bit_cycles / 3;
-        let mut motors = Motors::new(resources.gpioe);
+        let mut motors = Motors::new(resources.m1, resources.m2, resources.m3, resources.m4);
         motors.all_low();
         Ok(Self {
             _motors: motors,
