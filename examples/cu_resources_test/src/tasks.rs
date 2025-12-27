@@ -147,16 +147,41 @@ pub struct SensorResources {
     pub global: Arc<GlobalLog>,
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum SensorBinding {
+    Counter,
+    Bus,
+    Tag,
+    Global,
+}
+
 impl ResourceBindings<'_> for SensorResources {
+    type Binding = SensorBinding;
+
     fn from_bindings(
         manager: &mut ResourceManager,
-        mapping: Option<&ResourceMapping>,
+        mapping: Option<&ResourceBindingMap<Self::Binding>>,
     ) -> CuResult<Self> {
         let mapping = mapping.ok_or_else(|| CuError::from("missing sensor bindings"))?;
-        let counter = manager.take(mapping.get("counter").unwrap().typed())?;
-        let bus = manager.borrow(mapping.get("bus").unwrap().typed::<Arc<SharedBus>>())?;
-        let tag = manager.borrow(mapping.get("tag").unwrap().typed::<Arc<String>>())?;
-        let global = manager.borrow(mapping.get("global").unwrap().typed::<Arc<GlobalLog>>())?;
+        let counter = manager.take(mapping.get(SensorBinding::Counter).unwrap().typed())?;
+        let bus = manager.borrow(
+            mapping
+                .get(SensorBinding::Bus)
+                .unwrap()
+                .typed::<Arc<SharedBus>>(),
+        )?;
+        let tag = manager.borrow(
+            mapping
+                .get(SensorBinding::Tag)
+                .unwrap()
+                .typed::<Arc<String>>(),
+        )?;
+        let global = manager.borrow(
+            mapping
+                .get(SensorBinding::Global)
+                .unwrap()
+                .typed::<Arc<GlobalLog>>(),
+        )?;
         Ok(Self {
             counter,
             bus: bus.0.clone(),
@@ -172,15 +197,39 @@ pub struct InspectorResources {
     pub global: Arc<GlobalLog>,
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum InspectorBinding {
+    Bus,
+    Note,
+    Global,
+}
+
 impl ResourceBindings<'_> for InspectorResources {
+    type Binding = InspectorBinding;
+
     fn from_bindings(
         manager: &mut ResourceManager,
-        mapping: Option<&ResourceMapping>,
+        mapping: Option<&ResourceBindingMap<Self::Binding>>,
     ) -> CuResult<Self> {
         let mapping = mapping.ok_or_else(|| CuError::from("missing inspector bindings"))?;
-        let bus = manager.borrow(mapping.get("bus").unwrap().typed::<Arc<SharedBus>>())?;
-        let note = manager.borrow(mapping.get("note").unwrap().typed::<Arc<String>>())?;
-        let global = manager.borrow(mapping.get("global").unwrap().typed::<Arc<GlobalLog>>())?;
+        let bus = manager.borrow(
+            mapping
+                .get(InspectorBinding::Bus)
+                .unwrap()
+                .typed::<Arc<SharedBus>>(),
+        )?;
+        let note = manager.borrow(
+            mapping
+                .get(InspectorBinding::Note)
+                .unwrap()
+                .typed::<Arc<String>>(),
+        )?;
+        let global = manager.borrow(
+            mapping
+                .get(InspectorBinding::Global)
+                .unwrap()
+                .typed::<Arc<GlobalLog>>(),
+        )?;
         Ok(Self {
             bus: bus.0.clone(),
             note: note.0.clone(),

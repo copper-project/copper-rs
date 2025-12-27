@@ -1,9 +1,8 @@
-use alloc::string::String;
 use cortex_m::peripheral::DWT;
 use cu_bdshot::{Stm32H7Board, Stm32H7BoardResources, register_stm32h7_board};
 use cu_sdlogger::{EMMCLogger, EMMCSectionStorage, ForceSyncSend, find_copper_partition};
-use cu29::resource::{ResourceBundle, ResourceDecl, ResourceKey, ResourceManager};
-use cu29::{CuError, CuResult};
+use cu29::resource::{ResourceBundle, ResourceManager};
+use cu29::{CuError, CuResult, bundle_resources};
 use spin::Mutex;
 use stm32h7xx_hal::{
     gpio::Speed,
@@ -101,18 +100,6 @@ type SdBlockDev = ForceSyncSend<SdmmcBlockDevice<Sdmmc<pac::SDMMC1, SdCard>>>;
 pub type LogStorage = EMMCSectionStorage<SdBlockDev>;
 pub type Logger = EMMCLogger<SdBlockDev>;
 
-fn lookup(resources: &[ResourceDecl], bundle: &str, name: &str) -> CuResult<ResourceKey> {
-    let mut path = String::new();
-    path.push_str(bundle);
-    path.push('.');
-    path.push_str(name);
-    resources
-        .iter()
-        .find(|decl| decl.path == path)
-        .map(|decl| decl.key)
-        .ok_or_else(|| CuError::from("Resource not declared"))
-}
-
 fn init_sd_logger(
     sdmmc1: pac::SDMMC1,
     sdmmc1_rec: rcc::rec::Sdmmc1,
@@ -156,11 +143,12 @@ fn init_sd_logger(
 
 pub struct MicoAirH743;
 
+bundle_resources!(MicoAirH743: Uart6, Uart2, GreenLed, Logger);
+
 impl ResourceBundle for MicoAirH743 {
     fn build(
-        bundle_id: &str,
+        bundle: cu29::resource::BundleContext<Self>,
         _config: Option<&cu29::config::ComponentConfig>,
-        resources: &[ResourceDecl],
         manager: &mut ResourceManager,
     ) -> CuResult<()> {
         let mut cp = cortex_m::Peripherals::take()
@@ -241,10 +229,10 @@ impl ResourceBundle for MicoAirH743 {
         let bdshot_board = Stm32H7Board::new(bdshot_resources)?;
         register_stm32h7_board(bdshot_board)?;
 
-        let uart6_key = lookup(resources, bundle_id, "uart6")?.typed();
-        let uart2_key = lookup(resources, bundle_id, "uart2")?.typed();
-        let led_key = lookup(resources, bundle_id, "green_led")?.typed();
-        let logger_key = lookup(resources, bundle_id, "logger")?.typed();
+        let uart6_key = bundle.key(MicoAirH743Id::Uart6);
+        let uart2_key = bundle.key(MicoAirH743Id::Uart2);
+        let led_key = bundle.key(MicoAirH743Id::GreenLed);
+        let logger_key = bundle.key(MicoAirH743Id::Logger);
 
         manager.add_owned(uart6_key, uart6)?;
         manager.add_owned(uart2_key, uart2)?;

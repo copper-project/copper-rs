@@ -19,7 +19,7 @@ mod resources;
 mod tasks;
 
 pub use resources::{
-    GreenLed, LogStorage, Logger, SerialPort, SerialPortError, Uart2Port, Uart6Port,
+    GreenLed, LogStorage, Logger, MicoAirH743Id, SerialPort, SerialPortError, Uart2Port, Uart6Port,
 };
 
 #[global_allocator]
@@ -84,10 +84,8 @@ fn main() -> ! {
     };
     defmt::info!("Board resources initialized");
 
-    let logger = match resources
-        .resources
-        .take(app_resources::fc::LOGGER.typed::<Logger>())
-    {
+    let logger_key = app_resources::bundles::FC.key::<Logger>(MicoAirH743Id::Logger);
+    let logger = match resources.resources.take(logger_key) {
         Ok(logger) => logger.0,
         Err(e) => {
             defmt::error!("Logger resource missing: {:?}", e);

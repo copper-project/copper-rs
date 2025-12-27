@@ -3,7 +3,6 @@
         (
             id: "fc",
             provider: "crate::resources::MicoAirH743",
-            exports: ["uart6", "uart2", "green_led", "logger"],
         ),
     ],
     tasks: [
