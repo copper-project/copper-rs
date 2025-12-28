@@ -84,7 +84,7 @@ fn main() -> ! {
     };
     defmt::info!("Board resources initialized");
 
-    let logger_key = app_resources::bundles::FC.key::<Logger>(MicoAirH743Id::Logger);
+    let logger_key = app_resources::bundles::FC.key::<Logger, _>(MicoAirH743Id::Logger);
     let logger = match resources.resources.take(logger_key) {
         Ok(logger) => logger.0,
         Err(e) => {

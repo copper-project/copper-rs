@@ -956,6 +956,9 @@ pub struct CuConfig {
 impl CuConfig {
     #[cfg(feature = "std")]
     fn ensure_threadpool_bundle(&mut self) {
+        if !self.has_background_tasks() {
+            return;
+        }
         if self
             .resources
             .iter()
@@ -972,6 +975,22 @@ impl CuConfig {
             config: Some(config),
             missions: None,
         });
+    }
+
+    #[cfg(feature = "std")]
+    fn has_background_tasks(&self) -> bool {
+        match &self.graphs {
+            ConfigGraphs::Simple(graph) => graph
+                .get_all_nodes()
+                .iter()
+                .any(|(_, node)| node.is_background()),
+            ConfigGraphs::Missions(graphs) => graphs.values().any(|graph| {
+                graph
+                    .get_all_nodes()
+                    .iter()
+                    .any(|(_, node)| node.is_background())
+            }),
+        }
     }
 }
 
