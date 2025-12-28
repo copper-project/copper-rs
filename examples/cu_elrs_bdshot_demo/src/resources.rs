@@ -1,6 +1,6 @@
 use crate::{SerialResource, SerialResourceInner};
-use cu29::CuResult;
-use cu29::resource::{ResourceBundle, ResourceDecl, ResourceManager};
+use cu29::resource::{ResourceBundle, ResourceManager};
+use cu29::{CuResult, bundle_resources};
 
 static SERIAL: spin::Mutex<Option<SerialResourceInner>> = spin::Mutex::new(None);
 
@@ -10,11 +10,12 @@ pub fn stash_crsf_serial(serial: SerialResourceInner) {
 
 pub struct RadioBundle;
 
+bundle_resources!(RadioBundle: Serial);
+
 impl ResourceBundle for RadioBundle {
     fn build(
-        _bundle_id: &str,
+        bundle: cu29::resource::BundleContext<Self>,
         _config: Option<&cu29::config::ComponentConfig>,
-        resources: &[ResourceDecl],
         manager: &mut ResourceManager,
     ) -> CuResult<()> {
         let serial = SERIAL
@@ -22,10 +23,7 @@ impl ResourceBundle for RadioBundle {
             .take()
             .ok_or_else(|| cu29::CuError::from("CRSF serial port not initialized"))?;
         let serial = SerialResource::new(serial);
-        let key = resources
-            .first()
-            .ok_or_else(|| cu29::CuError::from("Radio bundle missing resource decl"))?
-            .key;
-        manager.add_owned(key.typed(), serial)
+        let key = bundle.key(RadioBundleId::Serial);
+        manager.add_owned(key, serial)
     }
 }

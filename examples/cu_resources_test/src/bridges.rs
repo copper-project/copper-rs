@@ -24,15 +24,29 @@ pub struct StatsBridgeResources {
     pub global: Arc<GlobalLog>,
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum Binding {
+    Bus,
+    Tag,
+    Global,
+}
+
 impl ResourceBindings<'_> for StatsBridgeResources {
+    type Binding = Binding;
+
     fn from_bindings(
         manager: &mut ResourceManager,
-        mapping: Option<&ResourceMapping>,
+        mapping: Option<&ResourceBindingMap<Self::Binding>>,
     ) -> CuResult<Self> {
         let mapping = mapping.ok_or_else(|| CuError::from("missing bridge bindings"))?;
-        let bus = manager.borrow(mapping.get("bus").unwrap().typed::<Arc<SharedBus>>())?;
-        let tag = manager.borrow(mapping.get("tag").unwrap().typed::<Arc<String>>())?;
-        let global = manager.borrow(mapping.get("global").unwrap().typed::<Arc<GlobalLog>>())?;
+        let bus = manager.borrow(mapping.get(Binding::Bus).unwrap().typed::<Arc<SharedBus>>())?;
+        let tag = manager.borrow(mapping.get(Binding::Tag).unwrap().typed::<Arc<String>>())?;
+        let global = manager.borrow(
+            mapping
+                .get(Binding::Global)
+                .unwrap()
+                .typed::<Arc<GlobalLog>>(),
+        )?;
         Ok(Self {
             bus: bus.0.clone(),
             tag: tag.0.clone(),

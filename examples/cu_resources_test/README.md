@@ -30,7 +30,7 @@ Implementations live in `src/resources.rs`:
    - `ExtraBundle`:
      - `note` → owned `String`.
 
-   Each bundle receives the slice of `ResourceDecl` for its id and inserts the right keys into the `ResourceManager`.
+   Each bundle uses its `bundle_resources!` ids to insert the right keys into the `ResourceManager`.
 
 3) **Tasks/bridges pull resources**  
 Resource binding structs implement `ResourceBindings` manually:

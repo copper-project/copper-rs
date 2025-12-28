@@ -44,7 +44,7 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
-pub use cu29_derive::resources;
+pub use cu29_derive::{bundle_resources, resources};
 pub use cu29_runtime::config;
 pub use cu29_runtime::copperlist;
 #[cfg(feature = "std")]

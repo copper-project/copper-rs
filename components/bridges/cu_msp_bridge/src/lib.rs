@@ -42,9 +42,7 @@ use cu29::cubridge::{
     BridgeChannel, BridgeChannelConfig, BridgeChannelInfo, BridgeChannelSet, CuBridge,
 };
 use cu29::prelude::*;
-#[cfg(feature = "std")]
-use cu29::resource::ResourceDecl;
-use cu29::resource::{Owned, ResourceBindings, ResourceBundle, ResourceManager, ResourceMapping};
+use cu29::resource::{Owned, ResourceBindings, ResourceBundle, ResourceManager};
 use embedded_io::{ErrorType, Read, Write};
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
@@ -204,18 +202,25 @@ pub struct MspResources<S> {
     pub serial: Owned<S>,
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum Binding {
+    Serial,
+}
+
 impl<'r, S, E> ResourceBindings<'r> for MspResources<S>
 where
     S: Write<Error = E> + Read<Error = E> + Send + Sync + 'static,
 {
+    type Binding = Binding;
+
     fn from_bindings(
         manager: &'r mut ResourceManager,
-        mapping: Option<&ResourceMapping>,
+        mapping: Option<&cu29::resource::ResourceBindingMap<Self::Binding>>,
     ) -> CuResult<Self> {
         let mapping = mapping.ok_or_else(|| {
             CuError::from("MSP bridge requires a `serial` resource mapping in copperconfig")
         })?;
-        let path = mapping.get("serial").ok_or_else(|| {
+        let path = mapping.get(Binding::Serial).ok_or_else(|| {
             CuError::from("MSP bridge resources must include `serial: <bundle.resource>`")
         })?;
         let serial = manager
@@ -317,16 +322,19 @@ pub mod std_serial {
 pub struct StdSerialBundle;
 
 #[cfg(feature = "std")]
+bundle_resources!(StdSerialBundle: Serial);
+
+#[cfg(feature = "std")]
 impl ResourceBundle for StdSerialBundle {
     fn build(
-        bundle_id: &str,
+        bundle: cu29::resource::BundleContext<Self>,
         config: Option<&ComponentConfig>,
-        resources: &[ResourceDecl],
         manager: &mut ResourceManager,
     ) -> CuResult<()> {
         let cfg = config.ok_or_else(|| {
             CuError::from(format!(
-                "MSP serial bundle `{bundle_id}` requires configuration"
+                "MSP serial bundle `{}` requires configuration",
+                bundle.bundle_id()
             ))
         })?;
         let device = cfg
@@ -341,15 +349,8 @@ impl ResourceBundle for StdSerialBundle {
                 "MSP bridge failed to open serial `{device}` at {baudrate} baud: {err}"
             ))
         })?;
-        let key = resources
-            .first()
-            .ok_or_else(|| {
-                CuError::from(format!(
-                    "MSP serial bundle `{bundle_id}` missing resource decl"
-                ))
-            })?
-            .key;
-        manager.add_owned(key.typed(), LockedSerial::new(serial))
+        let key = bundle.key(StdSerialBundleId::Serial);
+        manager.add_owned(key, LockedSerial::new(serial))
     }
 }
 

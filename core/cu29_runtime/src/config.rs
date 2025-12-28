@@ -462,8 +462,6 @@ pub struct ResourceBundleConfig {
     #[serde(rename = "provider")]
     pub provider: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub exports: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub config: Option<ComponentConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub missions: Option<Vec<String>>,
@@ -958,6 +956,9 @@ pub struct CuConfig {
 impl CuConfig {
     #[cfg(feature = "std")]
     fn ensure_threadpool_bundle(&mut self) {
+        if !self.has_background_tasks() {
+            return;
+        }
         if self
             .resources
             .iter()
@@ -971,10 +972,25 @@ impl CuConfig {
         self.resources.push(ResourceBundleConfig {
             id: "threadpool".to_string(),
             provider: "cu29::resource::ThreadPoolBundle".to_string(),
-            exports: None,
             config: Some(config),
             missions: None,
         });
+    }
+
+    #[cfg(feature = "std")]
+    fn has_background_tasks(&self) -> bool {
+        match &self.graphs {
+            ConfigGraphs::Simple(graph) => graph
+                .get_all_nodes()
+                .iter()
+                .any(|(_, node)| node.is_background()),
+            ConfigGraphs::Missions(graphs) => graphs.values().any(|graph| {
+                graph
+                    .get_all_nodes()
+                    .iter()
+                    .any(|(_, node)| node.is_background())
+            }),
+        }
     }
 }
 
@@ -2359,7 +2375,6 @@ mod tests {
         config.resources.push(ResourceBundleConfig {
             id: "fc".to_string(),
             provider: "copper_board_px4::Px4Bundle".to_string(),
-            exports: None,
             config: Some(bundle_cfg),
             missions: Some(vec!["m1".to_string()]),
         });
@@ -2465,7 +2480,6 @@ mod tests {
         config.resources.push(ResourceBundleConfig {
             id: "fc".to_string(),
             provider: "board::Bundle".to_string(),
-            exports: None,
             config: None,
             missions: None,
         });

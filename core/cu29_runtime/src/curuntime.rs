@@ -936,7 +936,7 @@ mod tests {
     }
 
     fn resources_instanciator(_config: &CuConfig) -> CuResult<ResourceManager> {
-        Ok(ResourceManager::new(0))
+        Ok(ResourceManager::new(&[]))
     }
 
     #[derive(Debug)]
