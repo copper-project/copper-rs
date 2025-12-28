@@ -3,6 +3,8 @@ mod debug_pane;
 pub mod sysinfo;
 mod tui_nodes;
 
+use cu29::prelude::ctrlc;
+
 use crate::tui_nodes::{Connection, NodeGraph, NodeLayout};
 use ansi_to_tui::IntoText;
 use color_eyre::config::HookBuilder;
