@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["Borrowed","Owned","ResourceDecl","ResourceKey","ResourceManager","ResourceMapping","ResourceProvider","ThreadPoolBundle"],"trait":["ResourceBindings","ResourceBundle"]};
+window.SIDEBAR_ITEMS = {"enum":["ThreadPoolId"],"struct":["Borrowed","BundleContext","BundleIndex","Owned","ResourceBindingMap","ResourceKey","ResourceManager","ThreadPoolBundle"],"trait":["ResourceBindings","ResourceBundle","ResourceBundleDecl","ResourceId"]};

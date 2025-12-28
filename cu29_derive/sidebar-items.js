@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"attr":["copper_runtime"],"macro":["gen_cumsgs","resources"]};
+window.SIDEBAR_ITEMS = {"attr":["copper_runtime"],"macro":["bundle_resources","gen_cumsgs","resources"]};
