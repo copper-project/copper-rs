@@ -910,7 +910,10 @@ impl UI {
         };
     }
 
-    fn run_app<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> io::Result<()> {
+    fn run_app<B: Backend<Error = io::Error>>(
+        &mut self,
+        terminal: &mut Terminal<B>,
+    ) -> io::Result<()> {
         loop {
             if self.quitting.load(Ordering::SeqCst) {
                 break;
