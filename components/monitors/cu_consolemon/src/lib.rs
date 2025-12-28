@@ -23,8 +23,8 @@ use ratatui::crossterm::event::{DisableMouseCapture, EnableMouseCapture, Event, 
 use ratatui::crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
-use ratatui::crossterm::{event, execute};
 use ratatui::crossterm::tty::IsTty;
+use ratatui::crossterm::{event, execute};
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Size};
 use ratatui::prelude::{Backend, Rect};
 use ratatui::prelude::{Stylize, Widget};
