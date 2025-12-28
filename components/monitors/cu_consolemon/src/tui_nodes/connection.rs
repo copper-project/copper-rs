@@ -19,7 +19,7 @@ pub enum LineType {
 }
 
 impl LineType {
-    pub fn to_line_set(self) -> line::Set {
+    pub fn to_line_set(self) -> line::Set<'static> {
         match self {
             LineType::Plain => line::NORMAL,
             LineType::Rounded => line::ROUNDED,
@@ -36,7 +36,14 @@ impl From<BorderType> for LineType {
             BorderType::Rounded => LineType::Rounded,
             BorderType::Double => LineType::Double,
             BorderType::Thick => LineType::Thick,
-            _ => unimplemented!(),
+            BorderType::LightDoubleDashed
+            | BorderType::LightTripleDashed
+            | BorderType::LightQuadrupleDashed
+            | BorderType::QuadrantInside
+            | BorderType::QuadrantOutside => LineType::Plain,
+            BorderType::HeavyDoubleDashed
+            | BorderType::HeavyTripleDashed
+            | BorderType::HeavyQuadrupleDashed => LineType::Thick,
         }
     }
 }
@@ -134,11 +141,39 @@ impl Connection {
 /// Generate the correct connection symbol for this node
 pub fn conn_symbol(is_input: bool, block_style: BorderType, conn_style: LineType) -> &'static str {
     let out = match (block_style, conn_style) {
-        (BorderType::Plain | BorderType::Rounded, LineType::Thick) => ("┥", "┝"),
-        (BorderType::Plain | BorderType::Rounded, LineType::Double) => ("╡", "╞"),
-        (BorderType::Plain | BorderType::Rounded, LineType::Plain | LineType::Rounded) => {
-            ("┤", "├")
-        }
+        (
+            BorderType::Plain
+            | BorderType::Rounded
+            | BorderType::LightDoubleDashed
+            | BorderType::HeavyDoubleDashed
+            | BorderType::LightTripleDashed
+            | BorderType::HeavyTripleDashed
+            | BorderType::LightQuadrupleDashed
+            | BorderType::HeavyQuadrupleDashed,
+            LineType::Thick,
+        ) => ("┥", "┝"),
+        (
+            BorderType::Plain
+            | BorderType::Rounded
+            | BorderType::LightDoubleDashed
+            | BorderType::HeavyDoubleDashed
+            | BorderType::LightTripleDashed
+            | BorderType::HeavyTripleDashed
+            | BorderType::LightQuadrupleDashed
+            | BorderType::HeavyQuadrupleDashed,
+            LineType::Double,
+        ) => ("╡", "╞"),
+        (
+            BorderType::Plain
+            | BorderType::Rounded
+            | BorderType::LightDoubleDashed
+            | BorderType::HeavyDoubleDashed
+            | BorderType::LightTripleDashed
+            | BorderType::HeavyTripleDashed
+            | BorderType::LightQuadrupleDashed
+            | BorderType::HeavyQuadrupleDashed,
+            LineType::Plain | LineType::Rounded,
+        ) => ("┤", "├"),
 
         (BorderType::Thick, LineType::Thick) => ("┫", "┣"),
         (BorderType::Thick, LineType::Double) => ("╡", "╞"), // fallback
@@ -347,7 +382,7 @@ impl ConnectionsLayout {
     }
 
     pub fn render(&self, area: Rect, buf: &mut Buffer) {
-        let bor = |idx: Edge| -> line::Set {
+        let bor = |idx: Edge| -> line::Set<'static> {
             if let Edge::Connection(idx) = idx {
                 self.line_types[&idx].to_line_set()
             } else if idx == Edge::Blocked {
