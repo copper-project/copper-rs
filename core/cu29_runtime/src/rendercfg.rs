@@ -1945,14 +1945,14 @@ fn build_loop_path(
     } else {
         1.0
     };
-    let dir_x_start = if start_dir.abs() > 0.0 {
+    let _dir_x_start = if start_dir.abs() > 0.0 {
         start_dir
     } else if start.x >= center_x {
         1.0
     } else {
         -1.0
     };
-    let dir_x_end = if end_dir.abs() > 0.0 {
+    let _dir_x_end = if end_dir.abs() > 0.0 {
         end_dir
     } else if end.x >= center_x {
         1.0
@@ -1960,33 +1960,23 @@ fn build_loop_path(
         -1.0
     };
 
-    let lane_y = center_y + dir_y * loop_dy;
     let loop_pad = width * 0.4 + 40.0;
-    let left = center_x - (width / 2.0 + loop_pad);
-    let right = center_x + (width / 2.0 + loop_pad);
+    let left = start.x.min(end.x) - loop_pad;
+    let right = start.x.max(end.x) + loop_pad;
+    let top_y = center_y + dir_y * loop_dy;
 
-    let start_out_x = if dir_x_start >= 0.0 { right } else { left };
-    let end_out_x = if dir_x_end >= 0.0 { left } else { right };
-    let start_stub = (start_out_x - start.x).abs().max(edge_port_handle(start, end));
-    let end_stub = (end.x - end_out_x).abs().max(edge_port_handle(start, end));
-    let start_out = Point::new(start_out_x, lane_y);
-    let end_out = Point::new(end_out_x, lane_y);
-    let lane_dir = if end_out.x >= start_out.x { 1.0 } else { -1.0 };
+    let (c1, c2) = if start.x <= end.x {
+        (Point::new(left, top_y), Point::new(right, top_y))
+    } else {
+        (Point::new(right, top_y), Point::new(left, top_y))
+    };
 
-    let seg1 = BezierSegment {
+    vec![BezierSegment {
         start,
-        c1: Point::new(start.x + dir_x_start * start_stub, start.y),
-        c2: Point::new(start_out.x - lane_dir * start_stub, lane_y),
-        end: start_out,
-    };
-    let seg2 = straight_segment(start_out, end_out);
-    let seg3 = BezierSegment {
-        start: end_out,
-        c1: Point::new(end_out.x + lane_dir * end_stub, lane_y),
-        c2: Point::new(end.x - dir_x_end * end_stub, end.y),
+        c1: Point::new(c1.x, c1.y),
+        c2: Point::new(c2.x, c2.y),
         end,
-    };
-    vec![seg1, seg2, seg3]
+    }]
 }
 
 fn build_lane_path(
