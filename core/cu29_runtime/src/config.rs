@@ -1415,6 +1415,7 @@ impl CuConfig {
 
     /// Render the configuration graph in the dot format.
     #[cfg(feature = "std")]
+    #[allow(dead_code)]
     pub fn render(
         &self,
         output: &mut dyn std::io::Write,
@@ -1501,6 +1502,7 @@ impl CuConfig {
 }
 
 #[cfg(feature = "std")]
+#[allow(dead_code)]
 struct PortLookup {
     inputs: HashMap<String, String>,
     outputs: HashMap<String, String>,
@@ -1510,31 +1512,32 @@ struct PortLookup {
 
 #[cfg(feature = "std")]
 #[derive(Clone)]
-struct RenderNode {
-    id: String,
-    type_name: String,
-    flavor: Flavor,
-    inputs: Vec<String>,
-    outputs: Vec<String>,
+pub(crate) struct RenderNode {
+    pub(crate) id: String,
+    pub(crate) type_name: String,
+    pub(crate) flavor: Flavor,
+    pub(crate) inputs: Vec<String>,
+    pub(crate) outputs: Vec<String>,
 }
 
 #[cfg(feature = "std")]
 #[derive(Clone)]
-struct RenderConnection {
-    src: String,
-    src_port: Option<String>,
-    dst: String,
-    dst_port: Option<String>,
-    msg: String,
+pub(crate) struct RenderConnection {
+    pub(crate) src: String,
+    pub(crate) src_port: Option<String>,
+    pub(crate) dst: String,
+    pub(crate) dst_port: Option<String>,
+    pub(crate) msg: String,
 }
 
 #[cfg(feature = "std")]
-struct RenderTopology {
-    nodes: Vec<RenderNode>,
-    connections: Vec<RenderConnection>,
+pub(crate) struct RenderTopology {
+    pub(crate) nodes: Vec<RenderNode>,
+    pub(crate) connections: Vec<RenderConnection>,
 }
 
 #[cfg(feature = "std")]
+#[allow(dead_code)]
 struct RenderSection<'a> {
     label: Option<String>,
     graph: &'a CuGraph,
@@ -1542,6 +1545,7 @@ struct RenderSection<'a> {
 
 #[cfg(feature = "std")]
 impl CuConfig {
+    #[allow(dead_code)]
     fn render_section(
         &self,
         output: &mut dyn std::io::Write,
@@ -1694,13 +1698,17 @@ impl CuConfig {
 }
 
 #[cfg(feature = "std")]
-fn build_render_topology(graph: &CuGraph, bridges: &[BridgeConfig]) -> RenderTopology {
+pub(crate) fn build_render_topology(
+    graph: &CuGraph,
+    bridges: &[BridgeConfig],
+) -> RenderTopology {
     let mut bridge_lookup = HashMap::new();
     for bridge in bridges {
         bridge_lookup.insert(bridge.id.as_str(), bridge);
     }
 
-    let mut nodes: HashMap<String, RenderNode> = HashMap::new();
+    let mut nodes: Vec<RenderNode> = Vec::new();
+    let mut node_lookup: HashMap<String, usize> = HashMap::new();
     for (_, node) in graph.get_all_nodes() {
         let node_id = node.get_id();
         let mut inputs = Vec::new();
@@ -1718,34 +1726,32 @@ fn build_render_topology(graph: &CuGraph, bridges: &[BridgeConfig]) -> RenderTop
             }
         }
 
-        nodes.insert(
-            node_id.clone(),
-            RenderNode {
-                id: node_id,
-                type_name: node.get_type().to_string(),
-                flavor: node.get_flavor(),
-                inputs,
-                outputs,
-            },
-        );
+        node_lookup.insert(node_id.clone(), nodes.len());
+        nodes.push(RenderNode {
+            id: node_id,
+            type_name: node.get_type().to_string(),
+            flavor: node.get_flavor(),
+            inputs,
+            outputs,
+        });
     }
 
     let mut connections = Vec::new();
     for edge in graph.0.edge_references() {
         let cnx = edge.weight();
-        if let Some(node) = nodes.get_mut(&cnx.src)
-            && node.flavor == Flavor::Task
-            && cnx.src_channel.is_none()
-            && node.outputs.is_empty()
-        {
-            node.outputs.push("out0".to_string());
+        if let Some(&idx) = node_lookup.get(&cnx.src) {
+            let node = &mut nodes[idx];
+            if node.flavor == Flavor::Task && cnx.src_channel.is_none() && node.outputs.is_empty()
+            {
+                node.outputs.push("out0".to_string());
+            }
         }
-        if let Some(node) = nodes.get_mut(&cnx.dst)
-            && node.flavor == Flavor::Task
-            && cnx.dst_channel.is_none()
-        {
-            let next = format!("in{}", node.inputs.len());
-            node.inputs.push(next);
+        if let Some(&idx) = node_lookup.get(&cnx.dst) {
+            let node = &mut nodes[idx];
+            if node.flavor == Flavor::Task && cnx.dst_channel.is_none() {
+                let next = format!("in{}", node.inputs.len());
+                node.inputs.push(next);
+            }
         }
 
         connections.push(RenderConnection {
@@ -1758,7 +1764,7 @@ fn build_render_topology(graph: &CuGraph, bridges: &[BridgeConfig]) -> RenderTop
     }
 
     RenderTopology {
-        nodes: nodes.into_values().collect(),
+        nodes,
         connections,
     }
 }
@@ -1785,6 +1791,7 @@ impl PortLookup {
 }
 
 #[cfg(feature = "std")]
+#[allow(dead_code)]
 fn build_port_table(
     title: &str,
     names: &[String],
@@ -1832,6 +1839,7 @@ fn build_port_table(
 }
 
 #[cfg(feature = "std")]
+#[allow(dead_code)]
 fn build_config_table(config: &ComponentConfig) -> Option<String> {
     use std::fmt::Write as FmtWrite;
 
@@ -1859,6 +1867,7 @@ fn build_config_table(config: &ComponentConfig) -> Option<String> {
 }
 
 #[cfg(feature = "std")]
+#[allow(dead_code)]
 fn sanitize_identifier(value: &str) -> String {
     value
         .chars()
@@ -1867,6 +1876,7 @@ fn sanitize_identifier(value: &str) -> String {
 }
 
 #[cfg(feature = "std")]
+#[allow(dead_code)]
 fn escape_dot_id(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
     for ch in value.chars() {

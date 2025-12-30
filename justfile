@@ -84,3 +84,26 @@ std-ci mode="debug": lint
 	fi
 
 # Project-specific helpers now live in per-directory justfiles under examples/, components/, and support/.
+
+# Render copperconfig.ron from the current working directory.
+dag mission="":
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	invocation_dir="{{invocation_directory()}}"
+	cfg_path="${invocation_dir}/copperconfig.ron"
+	if [[ ! -f "$cfg_path" ]]; then
+		echo "No copperconfig.ron found in ${invocation_dir}" >&2
+		exit 1
+	fi
+
+	cd "{{ROOT}}"
+	mission_value="{{mission}}"
+	if [[ "$mission_value" == mission=* ]]; then
+		mission_value="${mission_value#mission=}"
+	fi
+	mission_arg=()
+	if [[ -n "$mission_value" ]]; then
+		mission_arg=(--mission "$mission_value")
+	fi
+	cargo run -p cu29-runtime --bin cu29-rendercfg -- "${mission_arg[@]}" --open "$cfg_path"
