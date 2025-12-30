@@ -26,6 +26,7 @@ const PORT_VALUE_FONT_SIZE: usize = FONT_SIZE * 4 / 6;
 const EDGE_FONT_SIZE: usize = 9;
 const EDGE_LABEL_FIT_RATIO: f64 = 0.8;
 const EDGE_LABEL_OFFSET: f64 = 8.0;
+const EDGE_LABEL_LIGHTEN: f64 = 0.35;
 const MODULE_TRUNC_MARKER: &str = "…";
 const MODULE_SEPARATOR: &str = "⠶";
 const BACK_EDGE_STACK_SPACING: f64 = 16.0;
@@ -52,6 +53,19 @@ const TYPE_WRAP_WIDTH: usize = 24;
 const CONFIG_WRAP_WIDTH: usize = 32;
 const LAYOUT_SCALE_X: f64 = 1.4;
 const LAYOUT_SCALE_Y: f64 = 1.1;
+
+const EDGE_COLOR_PALETTE: [&str; 10] = [
+    "#1F77B4",
+    "#FF7F0E",
+    "#2CA02C",
+    "#D62728",
+    "#9467BD",
+    "#8C564B",
+    "#E377C2",
+    "#7F7F7F",
+    "#BCBD22",
+    "#17BECF",
+];
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -637,6 +651,16 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
         );
         let offset = Point::new(GRAPH_MARGIN - section_min.x, cursor_y - section_min.y);
         let content_offset = offset.add(Point::new(0.0, label_padding));
+        let cluster_top_left = section_min.add(offset);
+        let cluster_bottom_right = section_max.add(offset);
+        let label_bounds_min = Point::new(
+            cluster_top_left.x + 4.0,
+            cluster_top_left.y + label_padding + 4.0,
+        );
+        let label_bounds_max = Point::new(
+            cluster_bottom_right.x - 4.0,
+            cluster_bottom_right.y - 4.0,
+        );
 
         if let Some(label) = &section.label {
             draw_cluster(&mut svg, section_min, section_max, label, offset);
@@ -691,6 +715,8 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
             );
             let start = matches!(edge.arrow.start, LineEndKind::Arrow);
             let end = matches!(edge.arrow.end, LineEndKind::Arrow);
+            let color_idx = edge_color_index(edge, idx);
+            let line_color = EDGE_COLOR_PALETTE[color_idx];
             let label = if edge.label.is_empty() {
                 None
             } else {
@@ -713,9 +739,10 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
                 } else {
                     fit_edge_label(&edge.label, &path, EDGE_FONT_SIZE)
                 };
+                let label_color = lighten_hex(line_color, EDGE_LABEL_LIGHTEN);
                 let mut label = ArrowLabel::new(
                     text,
-                    DIM_GRAY,
+                    &label_color,
                     font_size,
                     true,
                     FontFamily::Mono,
@@ -785,15 +812,23 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
                 } else {
                     place_edge_label(&label.text, label.font_size, &path, &blocked_boxes)
                 };
-                label = label.with_position(label_pos);
+                let clamped = clamp_label_position(
+                    label_pos,
+                    &label.text,
+                    label.font_size,
+                    label_bounds_min,
+                    label_bounds_max,
+                );
+                label = label.with_position(clamped);
                 Some(label)
             };
 
+            let edge_look = colored_edge_style(&edge.arrow.look, line_color);
             svg.draw_arrow(
                 &path,
                 dashed,
                 (start, end),
-                &edge.arrow.look,
+                &edge_look,
                 label.as_ref(),
             );
         }
@@ -1420,6 +1455,56 @@ fn normalize_web_color(color: &str) -> String {
         return format!("#{}", &color[1..7]);
     }
     color.to_string()
+}
+
+fn colored_edge_style(base: &StyleAttr, color: &str) -> StyleAttr {
+    StyleAttr::new(
+        Color::fast(color),
+        base.line_width,
+        None,
+        0,
+        EDGE_FONT_SIZE,
+    )
+}
+
+fn edge_color_index(edge: &RenderEdge, idx: usize) -> usize {
+    let mut hash = idx as u64;
+    if !edge.label.is_empty() {
+        for byte in edge.label.as_bytes() {
+            hash = hash.wrapping_mul(131).wrapping_add(*byte as u64);
+        }
+    }
+    if let Some(port) = &edge.src_port {
+        for byte in port.as_bytes() {
+            hash = hash.wrapping_mul(131).wrapping_add(*byte as u64);
+        }
+    }
+    if let Some(port) = &edge.dst_port {
+        for byte in port.as_bytes() {
+            hash = hash.wrapping_mul(131).wrapping_add(*byte as u64);
+        }
+    }
+    (hash as usize) % EDGE_COLOR_PALETTE.len()
+}
+
+fn lighten_hex(color: &str, amount: f64) -> String {
+    let Some(hex) = color.strip_prefix('#') else {
+        return color.to_string();
+    };
+    if hex.len() != 6 {
+        return color.to_string();
+    }
+    let parse = |idx| u8::from_str_radix(&hex[idx..idx + 2], 16).ok();
+    let (Some(r), Some(g), Some(b)) = (parse(0), parse(2), parse(4)) else {
+        return color.to_string();
+    };
+    let blend = |c| ((c as f64) + (255.0 - c as f64) * amount).round() as u8;
+    format!(
+        "#{:02X}{:02X}{:02X}",
+        blend(r),
+        blend(g),
+        blend(b)
+    )
 }
 
 fn wrap_text(text: &str, max_width: usize) -> String {
@@ -2057,6 +2142,27 @@ fn label_bbox(center: Point, size: Point, pad: f64) -> (Point, Point) {
 
 fn rects_overlap(a: (Point, Point), b: (Point, Point)) -> bool {
     a.1.x >= b.0.x && b.1.x >= a.0.x && a.1.y >= b.0.y && b.1.y >= a.0.y
+}
+
+fn clamp_label_position(
+    pos: Point,
+    text: &str,
+    font_size: usize,
+    min: Point,
+    max: Point,
+) -> Point {
+    let size = get_size_for_str(text, font_size);
+    let half_w = size.x / 2.0 + 2.0;
+    let half_h = size.y / 2.0 + 2.0;
+    let min_x = min.x + half_w;
+    let max_x = max.x - half_w;
+    let min_y = min.y + half_h;
+    let max_y = max.y - half_h;
+
+    Point::new(
+        pos.x.clamp(min_x, max_x),
+        pos.y.clamp(min_y, max_y),
+    )
 }
 
 fn segment_length(seg: &BezierSegment) -> f64 {
