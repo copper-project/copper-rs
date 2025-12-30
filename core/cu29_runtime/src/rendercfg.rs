@@ -24,7 +24,7 @@ const TYPE_FONT_SIZE: usize = FONT_SIZE * 7 / 10;
 const PORT_HEADER_FONT_SIZE: usize = FONT_SIZE * 4 / 6;
 const PORT_VALUE_FONT_SIZE: usize = FONT_SIZE * 4 / 6;
 const CONFIG_FONT_SIZE: usize = PORT_VALUE_FONT_SIZE - 1;
-const EDGE_FONT_SIZE: usize = 9;
+const EDGE_FONT_SIZE: usize = 6;
 const EDGE_LABEL_FIT_RATIO: f64 = 0.8;
 const EDGE_LABEL_OFFSET: f64 = 8.0;
 const EDGE_LABEL_LIGHTEN: f64 = 0.35;
@@ -56,8 +56,8 @@ const CELL_LINE_SPACING: f64 = 2.0;
 const PLACEHOLDER_TEXT: &str = "\u{2014}";
 const TYPE_WRAP_WIDTH: usize = 24;
 const CONFIG_WRAP_WIDTH: usize = 32;
-const LAYOUT_SCALE_X: f64 = 1.4;
-const LAYOUT_SCALE_Y: f64 = 1.1;
+const LAYOUT_SCALE_X: f64 = 1.8;
+const LAYOUT_SCALE_Y: f64 = 1.2;
 
 const EDGE_COLOR_PALETTE: [&str; 10] = [
     "#1F77B4",
@@ -777,7 +777,15 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
                 } else if let Some(slot) = straight_slots.get(&idx) {
                     fit_label_to_width(&edge.label, slot.width, EDGE_FONT_SIZE)
                 } else if let Some(slot) = detour_slots.get(&idx) {
-                    fit_label_to_width(&edge.label, slot.width, EDGE_FONT_SIZE)
+                    let mut max_width = slot.width;
+                    if slot.group_count <= 1 {
+                        if let Some((_, _, lane_len)) = find_horizontal_lane_span(&path) {
+                            max_width = max_width.max(lane_len * EDGE_LABEL_FIT_RATIO);
+                        } else if slot.group_width > 0.0 {
+                            max_width = max_width.max(slot.group_width * 0.9);
+                        }
+                    }
+                    fit_label_to_width(&edge.label, max_width, EDGE_FONT_SIZE)
                 } else if edge_is_detour[idx] {
                     let (lane_left, lane_right) = detour_lane_bounds_from_points(
                         edge_points[idx].0,
@@ -806,7 +814,7 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
                         .position()
                         .center()
                         .add(content_offset);
-                    if let Some((center_x, lane_y)) = find_horizontal_lane(&path) {
+                    if let Some((center_x, lane_y, _)) = find_horizontal_lane_span(&path) {
                         let above = lane_y < node_center.y;
                         place_detour_label(
                             &label.text,
@@ -1223,6 +1231,8 @@ struct DetourLabelSlot {
     width: f64,
     lane_y: f64,
     above: bool,
+    group_count: usize,
+    group_width: f64,
 }
 
 struct BezierSegment {
@@ -2175,7 +2185,7 @@ fn place_self_loop_label(
     place_label_with_offset(text, font_size, mid, normal, 0.0, blocked)
 }
 
-fn find_horizontal_lane(path: &[BezierSegment]) -> Option<(f64, f64)> {
+fn find_horizontal_lane_span(path: &[BezierSegment]) -> Option<(f64, f64, f64)> {
     let mut best: Option<(f64, f64)> = None;
     let mut best_dx = 0.0;
     let tol = 0.5;
@@ -2199,7 +2209,7 @@ fn find_horizontal_lane(path: &[BezierSegment]) -> Option<(f64, f64)> {
         ));
     }
 
-    best
+    best.map(|(x, y)| (x, y, best_dx))
 }
 
 fn place_detour_label(
@@ -2410,8 +2420,8 @@ fn build_detour_label_slots(
             right = right.max(*lane_right);
         }
         let width = (right - left).max(1.0);
-        let count = edges.len() as f64;
-        let slot_width = width / count;
+        let count = edges.len();
+        let slot_width = width / count as f64;
 
         for (slot_idx, (edge_idx, _, _, _)) in edges.into_iter().enumerate() {
             let center_x = left + (slot_idx as f64 + 0.5) * slot_width;
@@ -2422,6 +2432,8 @@ fn build_detour_label_slots(
                     width: slot_width * 0.9,
                     lane_y: detour_lane_y[edge_idx],
                     above: detour_above[edge_idx],
+                    group_count: count,
+                    group_width: width,
                 },
             );
         }
