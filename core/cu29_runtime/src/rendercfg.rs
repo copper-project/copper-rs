@@ -34,6 +34,8 @@ const BACK_EDGE_DUP_SPACING: f64 = 6.0;
 const BACK_EDGE_SPAN_EPS: f64 = 4.0;
 const BACK_EDGE_TANGENT_DX: f64 = 18.0;
 const DETOUR_LABEL_CLEARANCE: f64 = 6.0;
+const EDGE_STUB_LEN: f64 = 32.0;
+const EDGE_STUB_MIN: f64 = 18.0;
 const INTERMEDIATE_X_EPS: f64 = 6.0;
 const BORDER_COLOR: &str = "#999999";
 const DIM_GRAY: &str = "dimgray";
@@ -536,7 +538,7 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
         };
         let node_bounds = collect_node_bounds(section);
         let mut expanded_bounds = (min, max);
-        let mut edge_paths: Vec<Vec<(Point, Point)>> = Vec::with_capacity(section.edges.len());
+        let mut edge_paths: Vec<Vec<BezierSegment>> = Vec::with_capacity(section.edges.len());
         let mut edge_points: Vec<(Point, Point)> = Vec::with_capacity(section.edges.len());
         let mut edge_is_self: Vec<bool> = Vec::with_capacity(section.edges.len());
         let mut edge_is_detour: Vec<bool> = Vec::with_capacity(section.edges.len());
@@ -600,19 +602,26 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
 
         for (idx, edge) in section.edges.iter().enumerate() {
             let (src_point, dst_point) = edge_points[idx];
+            let (fallback_start_dir, fallback_end_dir) =
+                fallback_port_dirs(src_point, dst_point);
+            let start_dir =
+                port_dir(edge.src_port.as_ref()).unwrap_or(fallback_start_dir);
+            let end_dir = port_dir(edge.dst_port.as_ref()).unwrap_or(fallback_end_dir);
             let path = if edge.src == edge.dst {
                 let pos = section.graph.element(edge.src).position();
                 let bbox = pos.bbox(false);
-                build_loop_path(src_point, dst_point, bbox)
+                build_loop_path(src_point, dst_point, bbox, start_dir, end_dir)
             } else if edge_is_detour[idx] {
-                build_back_edge_path(src_point, dst_point, detour_lane_y[idx])
+                build_back_edge_path(src_point, dst_point, detour_lane_y[idx], start_dir, end_dir)
             } else {
-                build_edge_path(src_point, dst_point)
+                build_edge_path(src_point, dst_point, start_dir, end_dir)
             };
 
-            for point in &path {
-                expand_bounds(&mut expanded_bounds, point.0);
-                expand_bounds(&mut expanded_bounds, point.1);
+            for segment in &path {
+                expand_bounds(&mut expanded_bounds, segment.start);
+                expand_bounds(&mut expanded_bounds, segment.c1);
+                expand_bounds(&mut expanded_bounds, segment.c2);
+                expand_bounds(&mut expanded_bounds, segment.end);
             }
 
             edge_paths.push(path);
@@ -669,7 +678,12 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
         for ((idx, edge), path) in section.edges.iter().enumerate().zip(edge_paths.iter()) {
             let path = path
                 .iter()
-                .map(|(a, b)| (a.add(content_offset), b.add(content_offset)))
+                .map(|seg| BezierSegment {
+                    start: seg.start.add(content_offset),
+                    c1: seg.c1.add(content_offset),
+                    c2: seg.c2.add(content_offset),
+                    end: seg.end.add(content_offset),
+                })
                 .collect::<Vec<_>>();
             let dashed = matches!(
                 edge.arrow.line_style,
@@ -707,7 +721,19 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
                     FontFamily::Mono,
                 );
             let label_pos = if edge_is_self[idx] {
-                    place_edge_label(&label.text, label.font_size, &path, &blocked_boxes)
+                    let node_center = section
+                        .graph
+                        .element(edge.src)
+                        .position()
+                        .center()
+                        .add(content_offset);
+                    place_self_loop_label(
+                        &label.text,
+                        label.font_size,
+                        &path,
+                        node_center,
+                        &blocked_boxes,
+                    )
                 } else if edge_is_detour[idx] {
                     let mut label_pos = None;
                     if let Some(slot) = detour_slots.get(&idx) {
@@ -1083,6 +1109,13 @@ struct DetourLabelSlot {
     above: bool,
 }
 
+struct BezierSegment {
+    start: Point,
+    c1: Point,
+    c2: Point,
+    end: Point,
+}
+
 impl ArrowLabel {
     fn new(
         text: String,
@@ -1241,19 +1274,21 @@ impl SvgWriter {
 
     fn draw_arrow(
         &mut self,
-        path: &[(Point, Point)],
+        path: &[BezierSegment],
         dashed: bool,
         head: (bool, bool),
         look: &StyleAttr,
         label: Option<&ArrowLabel>,
     ) {
-        if path.len() < 2 {
+        if path.is_empty() {
             return;
         }
 
-        for point in path {
-            self.grow_window(point.0, Point::new(0.0, 0.0));
-            self.grow_window(point.1, Point::new(0.0, 0.0));
+        for segment in path {
+            self.grow_window(segment.start, Point::new(0.0, 0.0));
+            self.grow_window(segment.c1, Point::new(0.0, 0.0));
+            self.grow_window(segment.c2, Point::new(0.0, 0.0));
+            self.grow_window(segment.end, Point::new(0.0, 0.0));
         }
 
         let dash = if dashed {
@@ -1310,8 +1345,8 @@ impl SvgWriter {
                 self.content.push_str(&line);
             } else {
                 let label_path_id = format!("{}_label", path_id);
-                let start = path[0].0;
-                let end = path[path.len() - 1].1;
+                let start = path[0].start;
+                let end = path[path.len() - 1].end;
                 let label_path_data = build_explicit_path_string(path, start.x > end.x);
                 let label_path_el = format!(
                     "<path id=\"{}\" d=\"{}\" fill=\"none\" stroke=\"none\" />\n",
@@ -1638,32 +1673,147 @@ fn expand_bounds(bounds: &mut (Point, Point), point: Point) {
     bounds.1.y = bounds.1.y.max(point.y);
 }
 
-fn build_edge_path(start: Point, end: Point) -> Vec<(Point, Point)> {
-    let dir = if end.x >= start.x { 1.0 } else { -1.0 };
-    let dx = (end.x - start.x).abs().max(40.0);
-    let ctrl1 = Point::new(start.x + dir * dx * 0.5, start.y);
-    let ctrl2 = Point::new(end.x - dir * dx * 0.5, end.y);
-    vec![(start, ctrl1), (ctrl2, end)]
+fn port_dir(port: Option<&String>) -> Option<f64> {
+    port.and_then(|name| {
+        if name.starts_with("out_") {
+            Some(1.0)
+        } else if name.starts_with("in_") {
+            Some(-1.0)
+        } else {
+            None
+        }
+    })
 }
 
-fn build_back_edge_path(start: Point, end: Point, lane_y: f64) -> Vec<(Point, Point)> {
-    let dx_total = (start.x - end.x).abs().max(40.0);
-    let max_dx = (dx_total / 2.0 - 10.0).max(20.0);
-    let curve_dx = (dx_total * 0.25).min(max_dx);
+fn fallback_port_dirs(start: Point, end: Point) -> (f64, f64) {
+    let dir = if end.x >= start.x { 1.0 } else { -1.0 };
+    (dir, -dir)
+}
 
-    let mid_x = (start.x + end.x) / 2.0;
+fn lerp_point(a: Point, b: Point, t: f64) -> Point {
+    Point::new(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
+}
+
+fn straight_segment(start: Point, end: Point) -> BezierSegment {
+    BezierSegment {
+        start,
+        c1: lerp_point(start, end, 1.0 / 3.0),
+        c2: lerp_point(start, end, 2.0 / 3.0),
+        end,
+    }
+}
+
+fn edge_stub_len(start: Point, end: Point) -> f64 {
+    let dx = (end.x - start.x).abs();
+    if dx <= 0.0 {
+        return 0.0;
+    }
+    let max_stub = dx * 0.45;
+    let mut stub = EDGE_STUB_LEN.min(max_stub);
+    let min_stub = EDGE_STUB_MIN.min(max_stub);
+    if stub < min_stub {
+        stub = min_stub;
+    }
+    stub
+}
+
+fn build_edge_path(start: Point, end: Point, start_dir: f64, end_dir: f64) -> Vec<BezierSegment> {
+    let dir = if end.x >= start.x { 1.0 } else { -1.0 };
+    let stub = edge_stub_len(start, end);
+    if stub <= 1.0 {
+        let dx = (end.x - start.x).abs().max(40.0);
+        let ctrl1 = Point::new(start.x + dir * dx * 0.5, start.y);
+        let ctrl2 = Point::new(end.x - dir * dx * 0.5, end.y);
+        return vec![BezierSegment {
+            start,
+            c1: ctrl1,
+            c2: ctrl2,
+            end,
+        }];
+    }
+
+    let start_stub = Point::new(start.x + start_dir * stub, start.y);
+    let end_stub = Point::new(end.x + end_dir * stub, end.y);
+    let inner_dir = if end_stub.x >= start_stub.x { 1.0 } else { -1.0 };
+    let curve_dx = ((end_stub.x - start_stub.x).abs() * 0.35).max(10.0);
+
+    let seg1 = straight_segment(start, start_stub);
+    let seg2 = BezierSegment {
+        start: start_stub,
+        c1: Point::new(start_stub.x + inner_dir * curve_dx, start_stub.y),
+        c2: Point::new(end_stub.x - inner_dir * curve_dx, end_stub.y),
+        end: end_stub,
+    };
+    let seg3 = straight_segment(end_stub, end);
+    vec![seg1, seg2, seg3]
+}
+
+fn build_back_edge_path(
+    start: Point,
+    end: Point,
+    lane_y: f64,
+    start_dir: f64,
+    end_dir: f64,
+) -> Vec<BezierSegment> {
+    let dir = if end.x >= start.x { 1.0 } else { -1.0 };
+    let stub = edge_stub_len(start, end);
+    if stub <= 1.0 {
+        let dx_total = (start.x - end.x).abs().max(40.0);
+        let max_dx = (dx_total / 2.0 - 10.0).max(20.0);
+        let curve_dx = (dx_total * 0.25).min(max_dx);
+        let mid_x = (start.x + end.x) / 2.0;
+        let mid = Point::new(mid_x, lane_y);
+        let outward = -dir;
+        let ctrl1 = Point::new(start.x + outward * BACK_EDGE_TANGENT_DX, start.y);
+        let ctrl2 = Point::new(mid.x - dir * curve_dx, lane_y);
+        let ctrl3 = Point::new(end.x - dir * curve_dx, end.y);
+        return vec![
+            BezierSegment {
+                start,
+                c1: ctrl1,
+                c2: ctrl2,
+                end: mid,
+            },
+            BezierSegment {
+                start: mid,
+                c1: Point::new(mid.x + dir * curve_dx, lane_y),
+                c2: ctrl3,
+                end,
+            },
+        ];
+    }
+
+    let start_stub = Point::new(start.x + start_dir * stub, start.y);
+    let end_stub = Point::new(end.x + end_dir * stub, end.y);
+    let mid_x = (start_stub.x + end_stub.x) / 2.0;
     let mid = Point::new(mid_x, lane_y);
+    let inner_dir = if end_stub.x >= start_stub.x { 1.0 } else { -1.0 };
+    let curve_dx = ((end_stub.x - start_stub.x).abs() * 0.25).max(10.0);
 
-    let dir = if end.x >= start.x { 1.0 } else { -1.0 };
-    let outward = -dir;
-    let ctrl1 = Point::new(start.x + outward * BACK_EDGE_TANGENT_DX, start.y);
-    let ctrl2 = Point::new(mid.x - dir * curve_dx, lane_y);
-    let ctrl3 = Point::new(end.x - dir * curve_dx, end.y);
-
-    vec![(start, ctrl1), (ctrl2, mid), (ctrl3, end)]
+    let seg1 = straight_segment(start, start_stub);
+    let seg2 = BezierSegment {
+        start: start_stub,
+        c1: Point::new(start_stub.x + inner_dir * curve_dx, start_stub.y),
+        c2: Point::new(mid.x - inner_dir * curve_dx, mid.y),
+        end: mid,
+    };
+    let seg3 = BezierSegment {
+        start: mid,
+        c1: Point::new(mid.x + inner_dir * curve_dx, mid.y),
+        c2: Point::new(end_stub.x - inner_dir * curve_dx, end_stub.y),
+        end: end_stub,
+    };
+    let seg4 = straight_segment(end_stub, end);
+    vec![seg1, seg2, seg3, seg4]
 }
 
-fn build_loop_path(start: Point, end: Point, bbox: (Point, Point)) -> Vec<(Point, Point)> {
+fn build_loop_path(
+    start: Point,
+    end: Point,
+    bbox: (Point, Point),
+    start_dir: f64,
+    end_dir: f64,
+) -> Vec<BezierSegment> {
     let width = bbox.1.x - bbox.0.x;
     let height = bbox.1.y - bbox.0.y;
     let loop_dx = width * 0.6 + 40.0;
@@ -1677,100 +1827,117 @@ fn build_loop_path(start: Point, end: Point, bbox: (Point, Point)) -> Vec<(Point
     } else {
         1.0
     };
-    let dir_x_start = if start.x >= center_x { 1.0 } else { -1.0 };
-    let dir_x_end = if end.x >= center_x { 1.0 } else { -1.0 };
+    let dir_x_start = if start_dir.abs() > 0.0 {
+        start_dir
+    } else if start.x >= center_x {
+        1.0
+    } else {
+        -1.0
+    };
+    let dir_x_end = if end_dir.abs() > 0.0 {
+        end_dir
+    } else if end.x >= center_x {
+        1.0
+    } else {
+        -1.0
+    };
 
-    let ctrl1 = Point::new(
-        start.x + dir_x_start * loop_dx,
-        start.y + dir_y * loop_dy,
-    );
-    let ctrl2 = Point::new(
-        end.x + dir_x_end * loop_dx,
-        end.y + dir_y * loop_dy,
-    );
-    vec![(start, ctrl1), (ctrl2, end)]
+    let stub = EDGE_STUB_LEN.min(width * 0.3).max(EDGE_STUB_MIN);
+    let start_stub = Point::new(start.x + dir_x_start * stub, start.y);
+    let end_stub = Point::new(end.x + dir_x_end * stub, end.y);
+
+    let seg1 = straight_segment(start, start_stub);
+    let seg2 = BezierSegment {
+        start: start_stub,
+        c1: Point::new(
+            start_stub.x + dir_x_start * loop_dx,
+            start_stub.y + dir_y * loop_dy,
+        ),
+        c2: Point::new(
+            end_stub.x + dir_x_end * loop_dx,
+            end_stub.y + dir_y * loop_dy,
+        ),
+        end: end_stub,
+    };
+    let seg3 = straight_segment(end_stub, end);
+    vec![seg1, seg2, seg3]
 }
 
-fn build_path_string(path: &[(Point, Point)]) -> String {
-    if path.len() < 2 {
+fn build_path_string(path: &[BezierSegment]) -> String {
+    if path.is_empty() {
         return String::new();
     }
 
     let mut path_builder = String::new();
+    let first = &path[0];
     path_builder.push_str(&format!(
         "M {} {} C {} {}, {} {}, {} {} ",
-        path[0].0.x,
-        path[0].0.y,
-        path[0].1.x,
-        path[0].1.y,
-        path[1].0.x,
-        path[1].0.y,
-        path[1].1.x,
-        path[1].1.y
+        first.start.x,
+        first.start.y,
+        first.c1.x,
+        first.c1.y,
+        first.c2.x,
+        first.c2.y,
+        first.end.x,
+        first.end.y
     ));
-    let mut prev_end = path[1].1;
-    let mut prev_c2 = path[1].0;
-    for point in path.iter().skip(2) {
-        let c1 = Point::new(
-            prev_end.x * 2.0 - prev_c2.x,
-            prev_end.y * 2.0 - prev_c2.y,
-        );
+    for segment in path.iter().skip(1) {
         path_builder.push_str(&format!(
             "C {} {}, {} {}, {} {} ",
-            c1.x,
-            c1.y,
-            point.0.x,
-            point.0.y,
-            point.1.x,
-            point.1.y
+            segment.c1.x,
+            segment.c1.y,
+            segment.c2.x,
+            segment.c2.y,
+            segment.end.x,
+            segment.end.y
         ));
-        prev_end = point.1;
-        prev_c2 = point.0;
     }
     path_builder.trim().to_string()
 }
 
-fn build_explicit_path_string(path: &[(Point, Point)], reverse: bool) -> String {
-    if path.len() < 2 {
+fn build_explicit_path_string(path: &[BezierSegment], reverse: bool) -> String {
+    if path.is_empty() {
         return String::new();
     }
 
-    let mut segments = Vec::new();
-    let start = path[0].0;
-    let mut prev_end = path[1].1;
-    let mut prev_c2 = path[1].0;
-    segments.push((start, path[0].1, prev_c2, prev_end));
-
-    for idx in 2..path.len() {
-        let end = path[idx].1;
-        let c2 = path[idx].0;
-        let c1 = Point::new(
-            prev_end.x * 2.0 - prev_c2.x,
-            prev_end.y * 2.0 - prev_c2.y,
-        );
-        segments.push((prev_end, c1, c2, end));
-        prev_end = end;
-        prev_c2 = c2;
-    }
-
-    if reverse {
-        segments.reverse();
-        for seg in &mut segments {
-            *seg = (seg.3, seg.2, seg.1, seg.0);
-        }
-    }
-
     let mut path_builder = String::new();
-    let (start, c1, c2, end) = segments[0];
+    let reversed;
+    let segments: &[BezierSegment] = if reverse {
+        reversed = path
+            .iter()
+            .rev()
+            .map(|seg| BezierSegment {
+                start: seg.end,
+                c1: seg.c2,
+                c2: seg.c1,
+                end: seg.start,
+            })
+            .collect::<Vec<_>>();
+        &reversed
+    } else {
+        path
+    };
+    let first = &segments[0];
     path_builder.push_str(&format!(
         "M {} {} C {} {}, {} {}, {} {} ",
-        start.x, start.y, c1.x, c1.y, c2.x, c2.y, end.x, end.y
+        first.start.x,
+        first.start.y,
+        first.c1.x,
+        first.c1.y,
+        first.c2.x,
+        first.c2.y,
+        first.end.x,
+        first.end.y
     ));
     for segment in segments.iter().skip(1) {
-        let (_, c1, c2, end) = *segment;
         path_builder.push_str(&format!(
             "C {} {}, {} {}, {} {} ",
-            c1.x, c1.y, c2.x, c2.y, end.x, end.y
+            segment.c1.x,
+            segment.c1.y,
+            segment.c2.x,
+            segment.c2.y,
+            segment.end.x,
+            segment.end.y
         ));
     }
     path_builder.trim().to_string()
@@ -1779,7 +1946,7 @@ fn build_explicit_path_string(path: &[(Point, Point)], reverse: bool) -> String 
 fn place_edge_label(
     text: &str,
     font_size: usize,
-    path: &[(Point, Point)],
+    path: &[BezierSegment],
     blocked: &[(Point, Point)],
 ) -> Point {
     let (mid, dir) = path_label_anchor(path);
@@ -1791,6 +1958,36 @@ fn place_edge_label(
         normal = Point::new(-normal.x, -normal.y);
     }
     place_label_with_normal(text, font_size, mid, normal, blocked)
+}
+
+fn place_self_loop_label(
+    text: &str,
+    font_size: usize,
+    path: &[BezierSegment],
+    node_center: Point,
+    blocked: &[(Point, Point)],
+) -> Point {
+    if path.is_empty() {
+        return node_center;
+    }
+    let mut best = &path[0];
+    let mut best_len = 0.0;
+    for seg in path {
+        let len = segment_length(seg);
+        if len > best_len {
+            best_len = len;
+            best = seg;
+        }
+    }
+    let mid = segment_point(best, 0.5);
+    let mut normal = Point::new(mid.x - node_center.x, mid.y - node_center.y);
+    let norm = (normal.x * normal.x + normal.y * normal.y).sqrt();
+    if norm > 0.0 {
+        normal = Point::new(normal.x / norm, normal.y / norm);
+    } else {
+        normal = Point::new(0.0, 1.0);
+    }
+    place_label_with_offset(text, font_size, mid, normal, 0.0, blocked)
 }
 
 fn place_detour_label(
@@ -1862,6 +2059,31 @@ fn rects_overlap(a: (Point, Point), b: (Point, Point)) -> bool {
     a.1.x >= b.0.x && b.1.x >= a.0.x && a.1.y >= b.0.y && b.1.y >= a.0.y
 }
 
+fn segment_length(seg: &BezierSegment) -> f64 {
+    seg.start.distance_to(seg.c1)
+        + seg.c1.distance_to(seg.c2)
+        + seg.c2.distance_to(seg.end)
+}
+
+fn segment_point(seg: &BezierSegment, t: f64) -> Point {
+    let u = 1.0 - t;
+    let tt = t * t;
+    let uu = u * u;
+    let uuu = uu * u;
+    let ttt = tt * t;
+
+    let mut p = Point::new(0.0, 0.0);
+    p.x = uuu * seg.start.x
+        + 3.0 * uu * t * seg.c1.x
+        + 3.0 * u * tt * seg.c2.x
+        + ttt * seg.end.x;
+    p.y = uuu * seg.start.y
+        + 3.0 * uu * t * seg.c1.y
+        + 3.0 * u * tt * seg.c2.y
+        + ttt * seg.end.y;
+    p
+}
+
 fn detour_lane_bounds_from_points(start: Point, end: Point) -> (f64, f64) {
     let dx_total = (start.x - end.x).abs().max(40.0);
     let max_dx = (dx_total / 2.0 - 10.0).max(20.0);
@@ -1898,9 +2120,8 @@ fn build_straight_label_slots(
         });
 
         for (slot_idx, (edge_idx, start, end)) in edges.into_iter().enumerate() {
-            let t = if end.x >= start.x { 0.25 } else { 0.75 };
-            let center_x = start.x + (end.x - start.x) * t;
-            let center_y = start.y + (end.y - start.y) * t;
+            let center_x = (start.x + end.x) / 2.0;
+            let center_y = (start.y + end.y) / 2.0;
             let span = (end.x - start.x).abs().max(1.0);
             let width = span * EDGE_LABEL_FIT_RATIO;
             let normal = if end.x >= start.x {
@@ -1994,23 +2215,17 @@ fn fit_label_to_width(label: &str, max_width: f64, base_size: usize) -> (String,
     (candidate, base_size)
 }
 
-fn path_label_anchor(path: &[(Point, Point)]) -> (Point, Point) {
-    if path.len() < 2 {
+fn path_label_anchor(path: &[BezierSegment]) -> (Point, Point) {
+    if path.is_empty() {
         return (Point::new(0.0, 0.0), Point::new(1.0, 0.0));
     }
 
-    let mut points = Vec::with_capacity(path.len() + 1);
-    points.push(path[0].0);
-    for seg in path {
-        points.push(seg.1);
-    }
-
     let mut best_score = 0.0;
-    let mut best_mid = points[0];
+    let mut best_mid = path[0].start;
     let mut best_dir = Point::new(1.0, 0.0);
-    for window in points.windows(2) {
-        let a = window[0];
-        let b = window[1];
+    for seg in path {
+        let a = seg.start;
+        let b = seg.end;
         let dx = b.x - a.x;
         let dy = b.y - a.y;
         let len = (dx * dx + dy * dy).sqrt();
@@ -2030,8 +2245,8 @@ fn path_label_anchor(path: &[(Point, Point)]) -> (Point, Point) {
     (best_mid, best_dir)
 }
 
-fn fit_edge_label(label: &str, path: &[(Point, Point)], base_size: usize) -> (String, usize) {
-    if label.is_empty() || path.len() < 2 {
+fn fit_edge_label(label: &str, path: &[BezierSegment], base_size: usize) -> (String, usize) {
+    if label.is_empty() || path.is_empty() {
         return (label.to_string(), base_size);
     }
     let approx_len = approximate_path_length(path);
@@ -2054,16 +2269,13 @@ fn direction_unit(start: Point, end: Point) -> Point {
     }
 }
 
-fn approximate_path_length(path: &[(Point, Point)]) -> f64 {
+fn approximate_path_length(path: &[BezierSegment]) -> f64 {
     let mut length = 0.0;
-    for window in path.windows(2) {
-        let prev = window[0];
-        let next = window[1];
-        length += prev.0.distance_to(prev.1);
-        length += prev.1.distance_to(next.0);
+    for seg in path {
+        length += seg.start.distance_to(seg.c1);
+        length += seg.c1.distance_to(seg.c2);
+        length += seg.c2.distance_to(seg.end);
     }
-    let last = path[path.len() - 1];
-    length += last.0.distance_to(last.1);
     length
 }
 
