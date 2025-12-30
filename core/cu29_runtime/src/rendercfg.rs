@@ -43,6 +43,8 @@ const BORDER_COLOR: &str = "#999999";
 const HEADER_BG: &str = "#f4f4f4";
 const VALUE_BORDER_WIDTH: f64 = 0.6;
 const OUTER_BORDER_WIDTH: f64 = 1.3;
+const EDGE_PORT_HANDLE: f64 = 12.0;
+const ARROW_HEAD_MARGIN: f64 = 6.0;
 const DIM_GRAY: &str = "dimgray";
 const LIGHT_GRAY: &str = "lightgray";
 const CLUSTER_COLOR: &str = "#bbbbbb";
@@ -656,7 +658,7 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
                 fallback_port_dirs(src_point, dst_point);
             let start_dir =
                 port_dir(edge.src_port.as_ref()).unwrap_or(fallback_start_dir);
-            let end_dir = port_dir(edge.dst_port.as_ref()).unwrap_or(fallback_end_dir);
+            let end_dir = port_dir_incoming(edge.dst_port.as_ref()).unwrap_or(fallback_end_dir);
             let path = if edge.src == edge.dst {
                 let pos = section.graph.element(edge.src).position();
                 let bbox = pos.bbox(false);
@@ -1699,9 +1701,9 @@ impl TableVisitor for PortAnchorCollector<'_> {
 
         let is_output = port.starts_with("out_");
         let x = if is_output {
-            loc.x + size.x / 2.0
+            loc.x + size.x / 2.0 + ARROW_HEAD_MARGIN
         } else {
-            loc.x - size.x / 2.0
+            loc.x - size.x / 2.0 - ARROW_HEAD_MARGIN
         };
         self.anchors.insert(port.clone(), Point::new(x, loc.y));
     }
@@ -1823,9 +1825,13 @@ fn port_dir(port: Option<&String>) -> Option<f64> {
     })
 }
 
+fn port_dir_incoming(port: Option<&String>) -> Option<f64> {
+    port_dir(port).map(|dir| -dir)
+}
+
 fn fallback_port_dirs(start: Point, end: Point) -> (f64, f64) {
     let dir = if end.x >= start.x { 1.0 } else { -1.0 };
-    (dir, -dir)
+    (dir, dir)
 }
 
 fn lerp_point(a: Point, b: Point, t: f64) -> Point {
@@ -1855,6 +1861,15 @@ fn edge_stub_len(start: Point, end: Point) -> f64 {
     stub
 }
 
+fn edge_port_handle(start: Point, end: Point) -> f64 {
+    let dx = (end.x - start.x).abs();
+    let mut handle = EDGE_PORT_HANDLE.min(dx * 0.2);
+    if handle < 6.0 {
+        handle = 6.0;
+    }
+    handle
+}
+
 fn build_edge_path(start: Point, end: Point, start_dir: f64, end_dir: f64) -> Vec<BezierSegment> {
     let dir = if end.x >= start.x { 1.0 } else { -1.0 };
     let stub = edge_stub_len(start, end);
@@ -1871,7 +1886,7 @@ fn build_edge_path(start: Point, end: Point, start_dir: f64, end_dir: f64) -> Ve
     }
 
     let start_stub = Point::new(start.x + start_dir * stub, start.y);
-    let end_stub = Point::new(end.x + end_dir * stub, end.y);
+    let end_stub = Point::new(end.x - end_dir * stub, end.y);
     let inner_dir = if end_stub.x >= start_stub.x { 1.0 } else { -1.0 };
     let curve_dx = ((end_stub.x - start_stub.x).abs() * 0.35).max(10.0);
 
@@ -1893,56 +1908,7 @@ fn build_back_edge_path(
     start_dir: f64,
     end_dir: f64,
 ) -> Vec<BezierSegment> {
-    let dir = if end.x >= start.x { 1.0 } else { -1.0 };
-    let stub = edge_stub_len(start, end);
-    if stub <= 1.0 {
-        let dx_total = (start.x - end.x).abs().max(40.0);
-        let max_dx = (dx_total / 2.0 - 10.0).max(20.0);
-        let curve_dx = (dx_total * 0.25).min(max_dx);
-        let mid_x = (start.x + end.x) / 2.0;
-        let mid = Point::new(mid_x, lane_y);
-        let outward = -dir;
-        let ctrl1 = Point::new(start.x + outward * BACK_EDGE_TANGENT_DX, start.y);
-        let ctrl2 = Point::new(mid.x - dir * curve_dx, lane_y);
-        let ctrl3 = Point::new(end.x - dir * curve_dx, end.y);
-        return vec![
-            BezierSegment {
-                start,
-                c1: ctrl1,
-                c2: ctrl2,
-                end: mid,
-            },
-            BezierSegment {
-                start: mid,
-                c1: Point::new(mid.x + dir * curve_dx, lane_y),
-                c2: ctrl3,
-                end,
-            },
-        ];
-    }
-
-    let start_stub = Point::new(start.x + start_dir * stub, start.y);
-    let end_stub = Point::new(end.x + end_dir * stub, end.y);
-    let mid_x = (start_stub.x + end_stub.x) / 2.0;
-    let mid = Point::new(mid_x, lane_y);
-    let inner_dir = if end_stub.x >= start_stub.x { 1.0 } else { -1.0 };
-    let curve_dx = ((end_stub.x - start_stub.x).abs() * 0.25).max(10.0);
-
-    let seg1 = straight_segment(start, start_stub);
-    let seg2 = BezierSegment {
-        start: start_stub,
-        c1: Point::new(start_stub.x + inner_dir * curve_dx, start_stub.y),
-        c2: Point::new(mid.x - inner_dir * curve_dx, mid.y),
-        end: mid,
-    };
-    let seg3 = BezierSegment {
-        start: mid,
-        c1: Point::new(mid.x + inner_dir * curve_dx, mid.y),
-        c2: Point::new(end_stub.x - inner_dir * curve_dx, end_stub.y),
-        end: end_stub,
-    };
-    let seg4 = straight_segment(end_stub, end);
-    vec![seg1, seg2, seg3, seg4]
+    build_lane_path(start, end, lane_y, start_dir, end_dir)
 }
 
 fn build_loop_path(
@@ -1954,7 +1920,6 @@ fn build_loop_path(
 ) -> Vec<BezierSegment> {
     let width = bbox.1.x - bbox.0.x;
     let height = bbox.1.y - bbox.0.y;
-    let loop_dx = width * 0.6 + 40.0;
     let loop_dy = height * 0.8 + 30.0;
 
     let center_x = (bbox.0.x + bbox.1.x) / 2.0;
@@ -1980,24 +1945,46 @@ fn build_loop_path(
         -1.0
     };
 
-    let stub = EDGE_STUB_LEN.min(width * 0.3).max(EDGE_STUB_MIN);
-    let start_stub = Point::new(start.x + dir_x_start * stub, start.y);
-    let end_stub = Point::new(end.x + dir_x_end * stub, end.y);
+    let lane_y = center_y + dir_y * loop_dy;
+    build_lane_path(start, end, lane_y, dir_x_start, dir_x_end)
+}
 
-    let seg1 = straight_segment(start, start_stub);
-    let seg2 = BezierSegment {
-        start: start_stub,
-        c1: Point::new(
-            start_stub.x + dir_x_start * loop_dx,
-            start_stub.y + dir_y * loop_dy,
-        ),
-        c2: Point::new(
-            end_stub.x + dir_x_end * loop_dx,
-            end_stub.y + dir_y * loop_dy,
-        ),
-        end: end_stub,
+fn build_lane_path(
+    start: Point,
+    end: Point,
+    lane_y: f64,
+    start_dir: f64,
+    end_dir: f64,
+) -> Vec<BezierSegment> {
+    let base_stub = edge_port_handle(start, end);
+    let dy_start = (lane_y - start.y).abs();
+    let dy_end = (lane_y - end.y).abs();
+    let max_stub = (end.x - start.x).abs().max(40.0) * 0.45;
+    let start_stub = (base_stub + dy_start * 0.6).min(max_stub.max(base_stub));
+    let end_stub = (base_stub + dy_end * 0.6).min(max_stub.max(base_stub));
+    let start_corner = Point::new(start.x + start_dir * start_stub, lane_y);
+    let end_corner = Point::new(end.x - end_dir * end_stub, lane_y);
+    let lane_dir = if (end_corner.x - start_corner.x).abs() < 1.0 {
+        if end_dir.abs() > 0.0 { end_dir } else { start_dir }
+    } else if end_corner.x >= start_corner.x {
+        1.0
+    } else {
+        -1.0
     };
-    let seg3 = straight_segment(end_stub, end);
+
+    let seg1 = BezierSegment {
+        start,
+        c1: Point::new(start.x + start_dir * start_stub, start.y),
+        c2: Point::new(start_corner.x - lane_dir * start_stub, lane_y),
+        end: start_corner,
+    };
+    let seg2 = straight_segment(start_corner, end_corner);
+    let seg3 = BezierSegment {
+        start: end_corner,
+        c1: Point::new(end_corner.x + lane_dir * end_stub, lane_y),
+        c2: Point::new(end.x - end_dir * end_stub, end.y),
+        end,
+    };
     vec![seg1, seg2, seg3]
 }
 
