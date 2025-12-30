@@ -33,6 +33,7 @@ const BACK_EDGE_NODE_GAP: f64 = 12.0;
 const BACK_EDGE_DUP_SPACING: f64 = 6.0;
 const BACK_EDGE_SPAN_EPS: f64 = 4.0;
 const BACK_EDGE_TANGENT_DX: f64 = 18.0;
+const DETOUR_LABEL_CLEARANCE: f64 = 6.0;
 const INTERMEDIATE_X_EPS: f64 = 6.0;
 const BORDER_COLOR: &str = "#999999";
 const DIM_GRAY: &str = "dimgray";
@@ -632,7 +633,7 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
             draw_cluster(&mut svg, section_min, section_max, label, offset);
         }
 
-        let mut label_boxes: Vec<(Point, Point)> = node_bounds
+        let mut blocked_boxes: Vec<(Point, Point)> = node_bounds
             .iter()
             .map(|b| {
                 (
@@ -648,7 +649,7 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
                 section_min.x + offset.x + CELL_PADDING,
                 section_min.y + offset.y + FONT_SIZE as f64,
             );
-            label_boxes.push((
+            blocked_boxes.push((
                 Point::new(label_pos.x, label_pos.y - label_size.y / 2.0)
                     .sub(Point::new(2.0, 2.0)),
                 Point::new(label_pos.x + label_size.x, label_pos.y + label_size.y / 2.0)
@@ -705,8 +706,43 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
                     true,
                     FontFamily::Mono,
                 );
-                let label_pos = if edge_is_self[idx] {
-                    place_edge_label(&label.text, label.font_size, &path, &mut label_boxes)
+            let label_pos = if edge_is_self[idx] {
+                    place_edge_label(&label.text, label.font_size, &path, &blocked_boxes)
+                } else if edge_is_detour[idx] {
+                    let mut label_pos = None;
+                    if let Some(slot) = detour_slots.get(&idx) {
+                        label_pos = Some(place_detour_label(
+                            &label.text,
+                            label.font_size,
+                            slot.center_x + content_offset.x,
+                            slot.lane_y + content_offset.y,
+                            slot.above,
+                            &blocked_boxes,
+                        ));
+                    }
+                    if label_pos.is_none() {
+                        label_pos = Some(place_detour_label(
+                            &label.text,
+                            label.font_size,
+                            (edge_points[idx].0.x + edge_points[idx].1.x) / 2.0 + content_offset.x,
+                            detour_lane_y[idx] + content_offset.y,
+                            detour_above[idx],
+                            &blocked_boxes,
+                        ));
+                    }
+                    if let Some(pos) = label_pos {
+                        pos
+                    } else {
+                        let dir = direction_unit(edge_points[idx].0, edge_points[idx].1);
+                        place_label_with_offset(
+                            &label.text,
+                            label.font_size,
+                            edge_points[idx].0.add(content_offset),
+                            dir,
+                            EDGE_LABEL_OFFSET,
+                            &blocked_boxes,
+                        )
+                    }
                 } else if let Some(slot) = straight_slots.get(&idx) {
                     let mut normal = slot.normal;
                     if normal.y > 0.0 {
@@ -718,28 +754,10 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
                         slot.center.add(content_offset),
                         normal,
                         slot.stack_offset,
-                        &mut label_boxes,
-                    )
-                } else if let Some(slot) = detour_slots.get(&idx) {
-                    place_detour_label(
-                        &label.text,
-                        label.font_size,
-                        slot.center_x + content_offset.x,
-                        slot.lane_y + content_offset.y,
-                        slot.above,
-                        &mut label_boxes,
-                    )
-                } else if edge_is_detour[idx] {
-                    place_detour_label(
-                        &label.text,
-                        label.font_size,
-                        (edge_points[idx].0.x + edge_points[idx].1.x) / 2.0 + content_offset.x,
-                        detour_lane_y[idx] + content_offset.y,
-                        detour_above[idx],
-                        &mut label_boxes,
+                        &blocked_boxes,
                     )
                 } else {
-                    place_edge_label(&label.text, label.font_size, &path, &mut label_boxes)
+                    place_edge_label(&label.text, label.font_size, &path, &blocked_boxes)
                 };
                 label = label.with_position(label_pos);
                 Some(label)
@@ -1691,8 +1709,12 @@ fn build_path_string(path: &[(Point, Point)]) -> String {
         path[1].1.y
     ));
     let mut prev_end = path[1].1;
+    let mut prev_c2 = path[1].0;
     for point in path.iter().skip(2) {
-        let c1 = prev_end;
+        let c1 = Point::new(
+            prev_end.x * 2.0 - prev_c2.x,
+            prev_end.y * 2.0 - prev_c2.y,
+        );
         path_builder.push_str(&format!(
             "C {} {}, {} {}, {} {} ",
             c1.x,
@@ -1703,6 +1725,7 @@ fn build_path_string(path: &[(Point, Point)]) -> String {
             point.1.y
         ));
         prev_end = point.1;
+        prev_c2 = point.0;
     }
     path_builder.trim().to_string()
 }
@@ -1757,7 +1780,7 @@ fn place_edge_label(
     text: &str,
     font_size: usize,
     path: &[(Point, Point)],
-    boxes: &mut Vec<(Point, Point)>,
+    blocked: &[(Point, Point)],
 ) -> Point {
     let (mid, dir) = path_label_anchor(path);
     let mut normal = Point::new(-dir.y, dir.x);
@@ -1767,7 +1790,7 @@ fn place_edge_label(
     if normal.y > 0.0 {
         normal = Point::new(-normal.x, -normal.y);
     }
-    place_label_with_normal(text, font_size, mid, normal, boxes)
+    place_label_with_normal(text, font_size, mid, normal, blocked)
 }
 
 fn place_detour_label(
@@ -1776,15 +1799,16 @@ fn place_detour_label(
     center_x: f64,
     lane_y: f64,
     above: bool,
-    boxes: &mut Vec<(Point, Point)>,
+    blocked: &[(Point, Point)],
 ) -> Point {
     let mid = Point::new(center_x, lane_y);
     let normal = if above {
-        Point::new(0.0, 1.0)
-    } else {
         Point::new(0.0, -1.0)
+    } else {
+        Point::new(0.0, 1.0)
     };
-    place_label_with_normal(text, font_size, mid, normal, boxes)
+    let extra = (font_size as f64 * 0.6).max(DETOUR_LABEL_CLEARANCE);
+    place_label_with_offset(text, font_size, mid, normal, extra, blocked)
 }
 
 fn place_label_with_normal(
@@ -1792,20 +1816,9 @@ fn place_label_with_normal(
     font_size: usize,
     mid: Point,
     normal: Point,
-    boxes: &mut Vec<(Point, Point)>,
+    blocked: &[(Point, Point)],
 ) -> Point {
-    let size = get_size_for_str(text, font_size);
-    let mut normal = normal;
-    if normal.x == 0.0 && normal.y == 0.0 {
-        normal = Point::new(0.0, -1.0);
-    }
-    let best = Point::new(
-        mid.x + normal.x * EDGE_LABEL_OFFSET,
-        mid.y + normal.y * EDGE_LABEL_OFFSET,
-    );
-    let bbox = label_bbox(best, size, 2.0);
-    boxes.push(bbox);
-    best
+    place_label_with_offset(text, font_size, mid, normal, 0.0, blocked)
 }
 
 fn place_label_with_offset(
@@ -1814,18 +1827,26 @@ fn place_label_with_offset(
     mid: Point,
     normal: Point,
     offset: f64,
-    boxes: &mut Vec<(Point, Point)>,
+    blocked: &[(Point, Point)],
 ) -> Point {
     let size = get_size_for_str(text, font_size);
     let mut normal = normal;
     if normal.x == 0.0 && normal.y == 0.0 {
         normal = Point::new(0.0, -1.0);
     }
-    let offset = EDGE_LABEL_OFFSET + offset;
-    let best = Point::new(mid.x + normal.x * offset, mid.y + normal.y * offset);
-    let bbox = label_bbox(best, size, 2.0);
-    boxes.push(bbox);
-    best
+    let base_offset = EDGE_LABEL_OFFSET + offset;
+    let step = font_size as f64 + 6.0;
+    let mut last = Point::new(mid.x + normal.x * base_offset, mid.y + normal.y * base_offset);
+    for attempt in 0..6 {
+        let offset = base_offset + attempt as f64 * step;
+        let pos = Point::new(mid.x + normal.x * offset, mid.y + normal.y * offset);
+        let bbox = label_bbox(pos, size, 2.0);
+        if !blocked.iter().any(|b| rects_overlap(*b, bbox)) {
+            return pos;
+        }
+        last = pos;
+    }
+    last
 }
 
 fn label_bbox(center: Point, size: Point, pad: f64) -> (Point, Point) {
@@ -1835,6 +1856,10 @@ fn label_bbox(center: Point, size: Point, pad: f64) -> (Point, Point) {
         Point::new(center.x - half_w, center.y - half_h),
         Point::new(center.x + half_w, center.y + half_h),
     )
+}
+
+fn rects_overlap(a: (Point, Point), b: (Point, Point)) -> bool {
+    a.1.x >= b.0.x && b.1.x >= a.0.x && a.1.y >= b.0.y && b.1.y >= a.0.y
 }
 
 fn detour_lane_bounds_from_points(start: Point, end: Point) -> (f64, f64) {
@@ -2016,6 +2041,17 @@ fn fit_edge_label(label: &str, path: &[(Point, Point)], base_size: usize) -> (St
     }
 
     fit_label_to_width(label, available, base_size)
+}
+
+fn direction_unit(start: Point, end: Point) -> Point {
+    let dx = end.x - start.x;
+    let dy = end.y - start.y;
+    let len = (dx * dx + dy * dy).sqrt();
+    if len <= 0.0 {
+        Point::new(1.0, 0.0)
+    } else {
+        Point::new(dx / len, dy / len)
+    }
 }
 
 fn approximate_path_length(path: &[(Point, Point)]) -> f64 {
