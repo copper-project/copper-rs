@@ -40,6 +40,9 @@ const EDGE_STUB_LEN: f64 = 32.0;
 const EDGE_STUB_MIN: f64 = 18.0;
 const INTERMEDIATE_X_EPS: f64 = 6.0;
 const BORDER_COLOR: &str = "#999999";
+const HEADER_BG: &str = "#f4f4f4";
+const VALUE_BORDER_WIDTH: f64 = 0.6;
+const OUTER_BORDER_WIDTH: f64 = 1.3;
 const DIM_GRAY: &str = "dimgray";
 const LIGHT_GRAY: &str = "lightgray";
 const CLUSTER_COLOR: &str = "#bbbbbb";
@@ -228,10 +231,10 @@ fn build_section_layout(
             .is_empty();
 
         let header_fill = match node.flavor {
-            config::Flavor::Bridge => "#faedcd",
+            config::Flavor::Bridge => "#f7d7e4",
             config::Flavor::Task if is_src => "#ddefc7",
             config::Flavor::Task if is_sink => "#cce0ff",
-            _ => "#f2f2f2",
+            _ => "#fde7c2",
         };
 
         let (table, port_lookup) = build_node_table(node, node_weight, header_fill);
@@ -394,12 +397,10 @@ fn build_port_column(
     target_len: usize,
 ) -> TableNode {
     let mut rows = Vec::new();
-    rows.push(TableNode::Cell(TableCell::single_line_sized(
-        title,
-        DIM_GRAY,
-        false,
-        PORT_HEADER_FONT_SIZE,
-    )));
+    rows.push(TableNode::Cell(
+        TableCell::single_line_sized(title, "black", false, PORT_HEADER_FONT_SIZE)
+            .with_background(HEADER_BG),
+    ));
 
     let desired_rows = target_len.max(1);
     for idx in 0..desired_rows {
@@ -411,15 +412,19 @@ fn build_port_column(
             }
             rows.push(TableNode::Cell(
                 TableCell::single_line_sized(name, "black", false, PORT_VALUE_FONT_SIZE)
-                    .with_port(port_id),
+                    .with_port(port_id)
+                    .with_border_width(VALUE_BORDER_WIDTH),
             ));
         } else {
-            rows.push(TableNode::Cell(TableCell::single_line_sized(
-                PLACEHOLDER_TEXT,
-                LIGHT_GRAY,
-                false,
-                PORT_VALUE_FONT_SIZE,
-            )));
+            rows.push(TableNode::Cell(
+                TableCell::single_line_sized(
+                    PLACEHOLDER_TEXT,
+                    LIGHT_GRAY,
+                    false,
+                    PORT_VALUE_FONT_SIZE,
+                )
+                .with_border_width(VALUE_BORDER_WIDTH),
+            ));
         }
     }
 
@@ -434,12 +439,10 @@ fn build_config_rows(config: &config::ComponentConfig) -> Vec<TableNode> {
     let mut entries: Vec<_> = config.0.iter().collect();
     entries.sort_by(|a, b| a.0.cmp(b.0));
 
-    let header = TableNode::Cell(TableCell::single_line_sized(
-        "Config",
-        DIM_GRAY,
-        false,
-        CONFIG_FONT_SIZE,
-    ));
+    let header = TableNode::Cell(
+        TableCell::single_line_sized("Config", "black", false, PORT_HEADER_FONT_SIZE)
+            .with_background(HEADER_BG),
+    );
 
     let mut key_lines = Vec::new();
     let mut value_lines = Vec::new();
@@ -463,8 +466,8 @@ fn build_config_rows(config: &config::ComponentConfig) -> Vec<TableNode> {
         }
     }
 
-    let keys_cell = TableCell::new(key_lines);
-    let values_cell = TableCell::new(value_lines);
+    let keys_cell = TableCell::new(key_lines).with_border_width(VALUE_BORDER_WIDTH);
+    let values_cell = TableCell::new(value_lines).with_border_width(VALUE_BORDER_WIDTH);
     let body = TableNode::Array(vec![TableNode::Cell(keys_cell), TableNode::Cell(values_cell)]);
 
     vec![header, body]
@@ -893,6 +896,14 @@ fn draw_node_table(svg: &mut SvgWriter, node: &NodeRender, element: &Element, of
         size,
         &mut renderer,
     );
+    svg.draw_rect(
+        top_left,
+        size,
+        Some(BORDER_COLOR),
+        OUTER_BORDER_WIDTH,
+        None,
+        0.0,
+    );
 }
 
 fn draw_cluster(svg: &mut SvgWriter, min: Point, max: Point, label: &str, offset: Point) {
@@ -1023,6 +1034,7 @@ struct TableCell {
     lines: Vec<CellLine>,
     port: Option<String>,
     background: Option<String>,
+    border_width: f64,
 }
 
 impl TableCell {
@@ -1031,6 +1043,7 @@ impl TableCell {
             lines,
             port: None,
             background: None,
+            border_width: 1.0,
         }
     }
 
@@ -1050,6 +1063,11 @@ impl TableCell {
 
     fn with_background(mut self, color: &str) -> Self {
         self.background = Some(color.to_string());
+        self
+    }
+
+    fn with_border_width(mut self, width: f64) -> Self {
+        self.border_width = width;
         self
     }
 
@@ -1119,8 +1137,14 @@ impl TableVisitor for TableRenderer<'_> {
         if let Some(bg) = &cell.background {
             self.svg.draw_rect(top_left, size, None, 0.0, Some(bg), 0.0);
         }
-        self.svg
-            .draw_rect(top_left, size, Some(BORDER_COLOR), 1.0, None, 0.0);
+        self.svg.draw_rect(
+            top_left,
+            size,
+            Some(BORDER_COLOR),
+            cell.border_width,
+            None,
+            0.0,
+        );
 
         if cell.lines.is_empty() {
             return;
