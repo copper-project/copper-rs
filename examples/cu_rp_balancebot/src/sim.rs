@@ -3,7 +3,7 @@ mod world;
 
 use crate::world::{AppliedForce, Cart, Rod};
 use avian3d::math::Vector;
-use avian3d::prelude::{Forces, Physics, RigidBodyForces};
+use avian3d::prelude::{ConstantForce, Physics};
 use bevy::asset::UnapprovedPathMode;
 use bevy::prelude::*;
 use bevy::render::RenderPlugin;
@@ -95,11 +95,11 @@ fn setup_copper(mut commands: Commands) {
 
 /// This is a bevy system to trigger the Copper application to run one iteration.
 /// We can query the state of the world from here and pass it to the Copper application.
-/// Forces is Avian's mutable query data; it is queried without an `&mut` wrapper.
+/// ConstantForce persists across physics steps and mimics the old ExternalForce behavior.
 #[allow(clippy::type_complexity)]
 fn run_copper_callback(
     mut query_set: ParamSet<(
-        Query<(&Transform, Forces, &mut AppliedForce), With<Cart>>,
+        Query<(&Transform, &mut ConstantForce, &mut AppliedForce), With<Cart>>,
         Query<&Transform, With<Rod>>,
     )>,
     physics_time: Res<Time<Physics>>,
@@ -158,21 +158,19 @@ fn run_copper_callback(
                 let maybe_motor_actuation = input.payload();
                 if let Some(motor_actuation) = maybe_motor_actuation {
                     if motor_actuation.power.is_nan() {
-                        cart_force.reset_accumulated_linear_acceleration();
-                        applied_force.0 = Vec3::ZERO;
+                        applied_force.0 = cart_force.0;
                         return SimOverride::ExecutedBySim;
                     }
                     let force_magnitude = motor_actuation.power * 2.0;
                     let new_force = Vector::new(force_magnitude, 0.0, 0.0);
-                    cart_force.apply_force(new_force);
-                    applied_force.0 = new_force;
+                    cart_force.0 += new_force;
+                    applied_force.0 = cart_force.0;
                     output
                         .metadata
                         .set_status(format!("Applied force: {force_magnitude}"));
                     SimOverride::ExecutedBySim
                 } else {
-                    cart_force.reset_accumulated_linear_acceleration();
-                    applied_force.0 = Vec3::ZERO;
+                    applied_force.0 = cart_force.0;
                     SimOverride::Errored("Safety Mode.".into())
                 }
             }

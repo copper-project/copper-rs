@@ -410,6 +410,7 @@ struct SetupCompleted(bool);
 struct CartBundle {
     applied_force: AppliedForce,
     cart: Cart,
+    constant_force: ConstantForce,
     mass_props: MassPropertiesBundle,
     dominance: Dominance,
     rigid_body: RigidBody,
@@ -444,6 +445,7 @@ fn setup_entities(
         CartBundle {
             applied_force: AppliedForce::default(),
             cart: Cart,
+            constant_force: ConstantForce::default(),
             mass_props: cart_mass_props,
             dominance: Dominance(5),
             rigid_body: RigidBody::Dynamic,
@@ -660,12 +662,13 @@ fn reset_sim(
             Option<&mut Transform>,
             Option<&mut Position>,
             Option<&mut Rotation>,
-            Option<&mut PreSolveDeltaPosition>,
-            Option<&mut PreSolveDeltaRotation>,
-            Option<&mut AppliedForce>,
-            Option<&mut LinearVelocity>,
-            Option<&mut AngularVelocity>,
-        )>,
+        Option<&mut PreSolveDeltaPosition>,
+        Option<&mut PreSolveDeltaRotation>,
+        Option<&mut AppliedForce>,
+        Option<&mut ConstantForce>,
+        Option<&mut LinearVelocity>,
+        Option<&mut AngularVelocity>,
+    )>,
         Query<Forces>,
     )>,
 ) {
@@ -680,14 +683,15 @@ fn reset_sim(
                 cart_component,
                 transform,
                 position,
-                rotation,
-                presolve_position,
-                presolve_rotation,
-                ext_force,
-                linear_velocity,
-                angular_velocity,
-            ) in query.iter_mut()
-            {
+            rotation,
+            presolve_position,
+            presolve_rotation,
+            ext_force,
+            constant_force,
+            linear_velocity,
+            angular_velocity,
+        ) in query.iter_mut()
+    {
                 let is_rod: bool = rod_component.is_some();
                 let is_cart: bool = cart_component.is_some();
 
@@ -740,6 +744,9 @@ fn reset_sim(
                 }
                 if let Some(mut ext_force) = ext_force {
                     ext_force.0 = Vector::ZERO;
+                }
+                if let Some(mut constant_force) = constant_force {
+                    constant_force.0 = Vector::ZERO;
                 }
 
                 // Defer force resets until after this query borrow is dropped.
