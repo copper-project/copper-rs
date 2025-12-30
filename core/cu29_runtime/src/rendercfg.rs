@@ -1967,11 +1967,9 @@ fn build_loop_path(
     start_dir: f64,
     end_dir: f64,
 ) -> Vec<BezierSegment> {
-    let width = bbox.1.x - bbox.0.x;
     let height = bbox.1.y - bbox.0.y;
     let loop_dy = height * 0.8 + 30.0;
 
-    let center_x = (bbox.0.x + bbox.1.x) / 2.0;
     let center_y = (bbox.0.y + bbox.1.y) / 2.0;
 
     let dir_y = if (start.y + end.y) / 2.0 < center_y {
@@ -1979,38 +1977,8 @@ fn build_loop_path(
     } else {
         1.0
     };
-    let _dir_x_start = if start_dir.abs() > 0.0 {
-        start_dir
-    } else if start.x >= center_x {
-        1.0
-    } else {
-        -1.0
-    };
-    let _dir_x_end = if end_dir.abs() > 0.0 {
-        end_dir
-    } else if end.x >= center_x {
-        1.0
-    } else {
-        -1.0
-    };
-
-    let loop_pad = width * 0.4 + 40.0;
-    let left = start.x.min(end.x) - loop_pad;
-    let right = start.x.max(end.x) + loop_pad;
-    let top_y = center_y + dir_y * loop_dy;
-
-    let (c1, c2) = if start.x <= end.x {
-        (Point::new(left, top_y), Point::new(right, top_y))
-    } else {
-        (Point::new(right, top_y), Point::new(left, top_y))
-    };
-
-    vec![BezierSegment {
-        start,
-        c1: Point::new(c1.x, c1.y),
-        c2: Point::new(c2.x, c2.y),
-        end,
-    }]
+    let lane_y = center_y + dir_y * loop_dy;
+    build_back_edge_path(start, end, lane_y, start_dir, end_dir, None)
 }
 
 fn build_lane_path(
