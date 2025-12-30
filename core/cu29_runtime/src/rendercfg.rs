@@ -23,6 +23,7 @@ const FONT_SIZE: usize = 12;
 const TYPE_FONT_SIZE: usize = FONT_SIZE * 7 / 10;
 const PORT_HEADER_FONT_SIZE: usize = FONT_SIZE * 4 / 6;
 const PORT_VALUE_FONT_SIZE: usize = FONT_SIZE * 4 / 6;
+const CONFIG_FONT_SIZE: usize = PORT_VALUE_FONT_SIZE - 1;
 const EDGE_FONT_SIZE: usize = 9;
 const EDGE_LABEL_FIT_RATIO: f64 = 0.8;
 const EDGE_LABEL_OFFSET: f64 = 8.0;
@@ -355,12 +356,14 @@ fn build_node_table(
     ));
 
     let mut port_lookup = PortLookup::default();
+    let max_ports = node.inputs.len().max(node.outputs.len());
     let inputs = build_port_column(
         "Inputs",
         &node.inputs,
         "in",
         &mut port_lookup.inputs,
         &mut port_lookup.default_input,
+        max_ports,
     );
     let outputs = build_port_column(
         "Outputs",
@@ -368,13 +371,14 @@ fn build_node_table(
         "out",
         &mut port_lookup.outputs,
         &mut port_lookup.default_output,
+        max_ports,
     );
     rows.push(TableNode::Array(vec![inputs, outputs]));
 
     if let Some(config) = node_weight.get_instance_config() {
         let config_rows = build_config_rows(config);
         if !config_rows.is_empty() {
-            rows.push(TableNode::Array(config_rows));
+            rows.extend(config_rows);
         }
     }
 
@@ -387,6 +391,7 @@ fn build_port_column(
     prefix: &str,
     lookup: &mut HashMap<String, String>,
     default_port: &mut Option<String>,
+    target_len: usize,
 ) -> TableNode {
     let mut rows = Vec::new();
     rows.push(TableNode::Cell(TableCell::single_line_sized(
@@ -396,24 +401,25 @@ fn build_port_column(
         PORT_HEADER_FONT_SIZE,
     )));
 
-    if names.is_empty() {
-        rows.push(TableNode::Cell(TableCell::single_line_sized(
-            PLACEHOLDER_TEXT,
-            LIGHT_GRAY,
-            false,
-            PORT_VALUE_FONT_SIZE,
-        )));
-    } else {
-        for (idx, name) in names.iter().enumerate() {
+    let desired_rows = target_len.max(1);
+    for idx in 0..desired_rows {
+        if let Some(name) = names.get(idx) {
             let port_id = format!("{prefix}_{idx}");
             lookup.insert(name.clone(), port_id.clone());
-            if idx == 0 {
+            if default_port.is_none() {
                 *default_port = Some(port_id.clone());
             }
             rows.push(TableNode::Cell(
                 TableCell::single_line_sized(name, "black", false, PORT_VALUE_FONT_SIZE)
                     .with_port(port_id),
             ));
+        } else {
+            rows.push(TableNode::Cell(TableCell::single_line_sized(
+                PLACEHOLDER_TEXT,
+                LIGHT_GRAY,
+                false,
+                PORT_VALUE_FONT_SIZE,
+            )));
         }
     }
 
@@ -428,13 +434,40 @@ fn build_config_rows(config: &config::ComponentConfig) -> Vec<TableNode> {
     let mut entries: Vec<_> = config.0.iter().collect();
     entries.sort_by(|a, b| a.0.cmp(b.0));
 
-    entries
-        .into_iter()
-        .map(|(key, value)| {
-            let line = wrap_text(&format!("{key} = {value}"), CONFIG_WRAP_WIDTH);
-            TableNode::Cell(TableCell::single_line(line, DIM_GRAY, false))
-        })
-        .collect()
+    let header = TableNode::Cell(TableCell::single_line_sized(
+        "Config",
+        DIM_GRAY,
+        false,
+        CONFIG_FONT_SIZE,
+    ));
+
+    let mut key_lines = Vec::new();
+    let mut value_lines = Vec::new();
+    for (key, value) in entries {
+        let value_str = wrap_text(&format!("{value}"), CONFIG_WRAP_WIDTH);
+        let value_parts: Vec<_> = value_str.split('\n').collect();
+        for (idx, part) in value_parts.iter().enumerate() {
+            let key_text = if idx == 0 { key.as_str() } else { "" };
+            key_lines.push(CellLine::code(
+                key_text,
+                DIM_GRAY,
+                true,
+                CONFIG_FONT_SIZE,
+            ));
+            value_lines.push(CellLine::code(
+                *part,
+                DIM_GRAY,
+                false,
+                CONFIG_FONT_SIZE,
+            ));
+        }
+    }
+
+    let keys_cell = TableCell::new(key_lines);
+    let values_cell = TableCell::new(value_lines);
+    let body = TableNode::Array(vec![TableNode::Cell(keys_cell), TableNode::Cell(values_cell)]);
+
+    vec![header, body]
 }
 
 fn table_to_record(node: &TableNode) -> RecordDef {
@@ -999,10 +1032,6 @@ impl TableCell {
             port: None,
             background: None,
         }
-    }
-
-    fn single_line(text: impl Into<String>, color: &str, bold: bool) -> Self {
-        Self::new(vec![CellLine::new(text, color, bold, FONT_SIZE)])
     }
 
     fn single_line_sized(
