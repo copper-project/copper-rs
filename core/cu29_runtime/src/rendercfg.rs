@@ -34,7 +34,6 @@ const BACK_EDGE_STACK_SPACING: f64 = 16.0;
 const BACK_EDGE_NODE_GAP: f64 = 12.0;
 const BACK_EDGE_DUP_SPACING: f64 = 6.0;
 const BACK_EDGE_SPAN_EPS: f64 = 4.0;
-const BACK_EDGE_TANGENT_DX: f64 = 18.0;
 const DETOUR_LABEL_CLEARANCE: f64 = 6.0;
 const EDGE_STUB_LEN: f64 = 32.0;
 const EDGE_STUB_MIN: f64 = 18.0;
@@ -651,6 +650,12 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
                 };
             }
         }
+        let detour_slots = build_detour_label_slots(
+            &edge_points,
+            &edge_is_detour,
+            &detour_above,
+            &detour_lane_y,
+        );
 
         for (idx, edge) in section.edges.iter().enumerate() {
             let (src_point, dst_point) = edge_points[idx];
@@ -664,7 +669,20 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
                 let bbox = pos.bbox(false);
                 build_loop_path(src_point, dst_point, bbox, start_dir, end_dir)
             } else if edge_is_detour[idx] {
-                build_back_edge_path(src_point, dst_point, detour_lane_y[idx], start_dir, end_dir)
+                let lane_span = detour_slots.get(&idx).map(|slot| {
+                    (
+                        slot.center_x - slot.width / 2.0,
+                        slot.center_x + slot.width / 2.0,
+                    )
+                });
+                build_back_edge_path(
+                    src_point,
+                    dst_point,
+                    detour_lane_y[idx],
+                    start_dir,
+                    end_dir,
+                    lane_span,
+                )
             } else {
                 build_edge_path(src_point, dst_point, start_dir, end_dir)
             };
@@ -730,12 +748,6 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
 
         let straight_slots =
             build_straight_label_slots(&edge_points, &edge_is_detour, &edge_is_self);
-        let detour_slots = build_detour_label_slots(
-            &edge_points,
-            &edge_is_detour,
-            &detour_above,
-            &detour_lane_y,
-        );
 
         for ((idx, edge), path) in section.edges.iter().enumerate().zip(edge_paths.iter()) {
             let path = path
@@ -1907,8 +1919,9 @@ fn build_back_edge_path(
     lane_y: f64,
     start_dir: f64,
     end_dir: f64,
+    lane_span: Option<(f64, f64)>,
 ) -> Vec<BezierSegment> {
-    build_lane_path(start, end, lane_y, start_dir, end_dir)
+    build_lane_path(start, end, lane_y, start_dir, end_dir, lane_span)
 }
 
 fn build_loop_path(
@@ -1918,7 +1931,6 @@ fn build_loop_path(
     start_dir: f64,
     end_dir: f64,
 ) -> Vec<BezierSegment> {
-    let width = bbox.1.x - bbox.0.x;
     let height = bbox.1.y - bbox.0.y;
     let loop_dy = height * 0.8 + 30.0;
 
@@ -1946,7 +1958,7 @@ fn build_loop_path(
     };
 
     let lane_y = center_y + dir_y * loop_dy;
-    build_lane_path(start, end, lane_y, dir_x_start, dir_x_end)
+    build_lane_path(start, end, lane_y, dir_x_start, dir_x_end, None)
 }
 
 fn build_lane_path(
@@ -1955,6 +1967,7 @@ fn build_lane_path(
     lane_y: f64,
     start_dir: f64,
     end_dir: f64,
+    lane_span: Option<(f64, f64)>,
 ) -> Vec<BezierSegment> {
     let base_stub = edge_port_handle(start, end);
     let dy_start = (lane_y - start.y).abs();
@@ -1962,15 +1975,61 @@ fn build_lane_path(
     let max_stub = (end.x - start.x).abs().max(40.0) * 0.45;
     let start_stub = (base_stub + dy_start * 0.6).min(max_stub.max(base_stub));
     let end_stub = (base_stub + dy_end * 0.6).min(max_stub.max(base_stub));
-    let start_corner = Point::new(start.x + start_dir * start_stub, lane_y);
-    let end_corner = Point::new(end.x - end_dir * end_stub, lane_y);
-    let lane_dir = if (end_corner.x - start_corner.x).abs() < 1.0 {
-        if end_dir.abs() > 0.0 { end_dir } else { start_dir }
-    } else if end_corner.x >= start_corner.x {
-        1.0
+    let is_reverse = start.x > end.x;
+    let default_start_corner = Point::new(start.x + start_dir * start_stub, lane_y);
+    let default_end_corner = Point::new(end.x - end_dir * end_stub, lane_y);
+
+    let (mut lane_left, mut lane_right) = if let Some((a, b)) = lane_span {
+        if a <= b {
+            (a, b)
+        } else {
+            (b, a)
+        }
     } else {
-        -1.0
+        detour_lane_bounds_from_points(start, end)
     };
+    let default_left = default_start_corner.x.min(default_end_corner.x);
+    let default_right = default_start_corner.x.max(default_end_corner.x);
+    lane_left = lane_left.clamp(default_left, default_right);
+    lane_right = lane_right.clamp(default_left, default_right);
+    if lane_right - lane_left < 1.0 {
+        lane_left = default_left;
+        lane_right = default_right;
+    }
+
+    if is_reverse {
+        let start_out = default_start_corner;
+        let lane_start = Point::new(lane_right, lane_y);
+        let lane_end = Point::new(lane_left, lane_y);
+        let lane_dir = if lane_start.x >= lane_end.x { -1.0 } else { 1.0 };
+
+        let mut segments = Vec::new();
+        segments.push(BezierSegment {
+            start,
+            c1: Point::new(start.x + start_dir * start_stub, start.y),
+            c2: Point::new(start_out.x - lane_dir * start_stub, lane_y),
+            end: start_out,
+        });
+        if (start_out.x - lane_start.x).abs() > 1.0 {
+            segments.push(straight_segment(start_out, lane_start));
+        }
+        if (lane_start.x - lane_end.x).abs() > 1.0 {
+            segments.push(straight_segment(lane_start, lane_end));
+        }
+        segments.push(BezierSegment {
+            start: lane_end,
+            c1: Point::new(lane_end.x + lane_dir * end_stub, lane_y),
+            c2: Point::new(end.x - end_dir * end_stub, end.y),
+            end,
+        });
+        return segments;
+    }
+
+    let start_corner_x = lane_left.max(default_start_corner.x);
+    let end_corner_x = lane_right.min(default_end_corner.x);
+    let start_corner = Point::new(start_corner_x, lane_y);
+    let end_corner = Point::new(end_corner_x, lane_y);
+    let lane_dir = if end_corner.x >= start_corner.x { 1.0 } else { -1.0 };
 
     let seg1 = BezierSegment {
         start,
