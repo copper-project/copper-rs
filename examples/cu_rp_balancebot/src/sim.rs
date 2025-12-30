@@ -158,7 +158,8 @@ fn run_copper_callback(
                 let maybe_motor_actuation = input.payload();
                 if let Some(motor_actuation) = maybe_motor_actuation {
                     if motor_actuation.power.is_nan() {
-                        applied_force.0 = cart_force.0;
+                        cart_force.0 = Vector::ZERO;
+                        applied_force.0 = Vector::ZERO;
                         return SimOverride::ExecutedBySim;
                     }
                     let force_magnitude = motor_actuation.power * 2.0;
@@ -170,7 +171,8 @@ fn run_copper_callback(
                         .set_status(format!("Applied force: {force_magnitude}"));
                     SimOverride::ExecutedBySim
                 } else {
-                    applied_force.0 = cart_force.0;
+                    cart_force.0 = Vector::ZERO;
+                    applied_force.0 = Vector::ZERO;
                     SimOverride::Errored("Safety Mode.".into())
                 }
             }
