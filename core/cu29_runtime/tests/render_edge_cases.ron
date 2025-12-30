@@ -1,0 +1,160 @@
+// Render edge-case layouts for the SVG renderer (self-loops, back-edges, crossings).
+//
+// to run it: cargo run -p cu29-runtime --bin cu29-rendercfg -- --open render_edge_cases.ron
+(
+    missions: [
+        (id: "EdgeSelfLoop"),
+        (id: "EdgeSelfLoopMulti"),
+        (id: "EdgeBackEdge"),
+        (id: "EdgeBackEdgeMulti"),
+        (id: "EdgeBackEdgeOver"),
+        (id: "EdgeCrossingSingle"),
+        (id: "EdgeCrossingMulti"),
+    ],
+    tasks: [
+        (
+            id: "back_src",
+            type: "tasks::BackSrc",
+            missions: ["EdgeBackEdge", "EdgeBackEdgeMulti", "EdgeBackEdgeOver"],
+        ),
+        (
+            id: "back_mid",
+            type: "tasks::BackMid",
+            missions: ["EdgeBackEdge", "EdgeBackEdgeMulti", "EdgeBackEdgeOver"],
+        ),
+        (
+            id: "back_dst",
+            type: "tasks::BackDst",
+            missions: ["EdgeBackEdge", "EdgeBackEdgeMulti", "EdgeBackEdgeOver"],
+        ),
+        (
+            id: "cross_a",
+            type: "tasks::CrossA",
+            missions: ["EdgeCrossingSingle", "EdgeCrossingMulti"],
+        ),
+        (
+            id: "cross_b",
+            type: "tasks::CrossB",
+            missions: ["EdgeCrossingSingle", "EdgeCrossingMulti"],
+        ),
+        (
+            id: "cross_c",
+            type: "tasks::CrossC",
+            missions: ["EdgeCrossingSingle", "EdgeCrossingMulti"],
+        ),
+        (
+            id: "cross_d",
+            type: "tasks::CrossD",
+            missions: ["EdgeCrossingSingle", "EdgeCrossingMulti"],
+        ),
+    ],
+    bridges: [
+        (
+            id: "self_one",
+            type: "bridges::SelfOne",
+            missions: ["EdgeSelfLoop"],
+            channels: [
+                Rx ( id: "in1", route: "self_one/in1" ),
+                Tx ( id: "out1", route: "self_one/out1" ),
+            ],
+        ),
+        (
+            id: "self_multi",
+            type: "bridges::SelfMulti",
+            missions: ["EdgeSelfLoopMulti"],
+            channels: [
+                Rx ( id: "in1", route: "self_multi/in1" ),
+                Rx ( id: "in2", route: "self_multi/in2" ),
+                Rx ( id: "in3", route: "self_multi/in3" ),
+                Tx ( id: "out1", route: "self_multi/out1" ),
+                Tx ( id: "out2", route: "self_multi/out2" ),
+            ],
+        ),
+    ],
+    cnx: [
+        (
+            src: "self_one/in1",
+            dst: "self_one/out1",
+            msg: "messages::SelfLoop",
+            missions: ["EdgeSelfLoop"],
+        ),
+        (
+            src: "self_multi/in1",
+            dst: "self_multi/out1",
+            msg: "messages::SelfLoop",
+            missions: ["EdgeSelfLoopMulti"],
+        ),
+        (
+            src: "self_multi/in2",
+            dst: "self_multi/out2",
+            msg: "messages::SelfLoop",
+            missions: ["EdgeSelfLoopMulti"],
+        ),
+        (
+            src: "self_multi/in3",
+            dst: "self_multi/out1",
+            msg: "messages::SelfLoop",
+            missions: ["EdgeSelfLoopMulti"],
+        ),
+        (
+            src: "back_src",
+            dst: "back_mid",
+            msg: "messages::Forward",
+            missions: ["EdgeBackEdge", "EdgeBackEdgeMulti", "EdgeBackEdgeOver"],
+        ),
+        (
+            src: "back_mid",
+            dst: "back_dst",
+            msg: "messages::Forward",
+            missions: ["EdgeBackEdge", "EdgeBackEdgeMulti", "EdgeBackEdgeOver"],
+        ),
+        (
+            src: "back_dst",
+            dst: "back_src",
+            msg: "messages::Back",
+            missions: ["EdgeBackEdge"],
+        ),
+        (
+            src: "back_dst",
+            dst: "back_src",
+            msg: "messages::BackAlt",
+            missions: ["EdgeBackEdgeMulti", "EdgeBackEdgeOver"],
+        ),
+        (
+            src: "back_dst",
+            dst: "back_mid",
+            msg: "messages::BackAlt",
+            missions: ["EdgeBackEdgeMulti", "EdgeBackEdgeOver"],
+        ),
+        (
+            src: "back_mid",
+            dst: "back_src",
+            msg: "messages::BackAlt",
+            missions: ["EdgeBackEdgeMulti", "EdgeBackEdgeOver"],
+        ),
+        (
+            src: "cross_a",
+            dst: "cross_d",
+            msg: "messages::CrossOne",
+            missions: ["EdgeCrossingSingle", "EdgeCrossingMulti"],
+        ),
+        (
+            src: "cross_b",
+            dst: "cross_c",
+            msg: "messages::CrossTwo",
+            missions: ["EdgeCrossingSingle", "EdgeCrossingMulti"],
+        ),
+        (
+            src: "cross_a",
+            dst: "cross_c",
+            msg: "messages::CrossThree",
+            missions: ["EdgeCrossingMulti"],
+        ),
+        (
+            src: "cross_b",
+            dst: "cross_d",
+            msg: "messages::CrossFour",
+            missions: ["EdgeCrossingMulti"],
+        ),
+    ],
+)
