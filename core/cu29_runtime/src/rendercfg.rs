@@ -1295,6 +1295,7 @@ impl RenderBackend for NullBackend {
 
 struct SvgWriter {
     content: String,
+    overlay: String,
     view_size: Point,
     counter: usize,
 }
@@ -1303,6 +1304,7 @@ impl SvgWriter {
     fn new() -> Self {
         Self {
             content: String::new(),
+            overlay: String::new(),
             view_size: Point::new(0.0, 0.0),
             counter: 0,
         }
@@ -1376,6 +1378,40 @@ impl SvgWriter {
         self.grow_window(top_left, size);
     }
 
+    fn draw_text_overlay(
+        &mut self,
+        pos: Point,
+        text: &str,
+        font_size: usize,
+        color: &str,
+        bold: bool,
+        anchor: &str,
+        family: FontFamily,
+    ) {
+        if text.is_empty() {
+            return;
+        }
+
+        let escaped = escape_xml(text);
+        let weight = if bold { "bold" } else { "normal" };
+        let line = format!(
+            "<text x=\"{}\" y=\"{}\" text-anchor=\"{}\" dominant-baseline=\"middle\" style=\"font-family:{}; font-size:{}px; fill:{}; font-weight:{};\">{}</text>\n",
+            pos.x,
+            pos.y,
+            anchor,
+            family.as_css(),
+            font_size,
+            color,
+            weight,
+            escaped
+        );
+        self.overlay.push_str(&line);
+
+        let size = get_size_for_str(text, font_size);
+        let top_left = Point::new(pos.x, pos.y - size.y / 2.0);
+        self.grow_window(top_left, size);
+    }
+
     fn draw_arrow(
         &mut self,
         path: &[BezierSegment],
@@ -1436,17 +1472,15 @@ impl SvgWriter {
             let escaped = escape_xml(&label.text);
             let weight = if label.bold { "bold" } else { "normal" };
             if let Some(pos) = label.position {
-                let line = format!(
-                    "<text x=\"{}\" y=\"{}\" text-anchor=\"middle\" dominant-baseline=\"middle\" style=\"font-family:{}; font-size:{}px; fill:{}; font-weight:{};\">{}</text>\n",
-                    pos.x,
-                    pos.y,
-                    label.font_family.as_css(),
+                self.draw_text_overlay(
+                    pos,
+                    &label.text,
                     label.font_size,
-                    label.color,
-                    weight,
-                    escaped
+                    &label.color,
+                    label.bold,
+                    "middle",
+                    label.font_family,
                 );
-                self.content.push_str(&line);
             } else {
                 let label_path_id = format!("{}_label", path_id);
                 let start = path[0].start;
@@ -1457,7 +1491,7 @@ impl SvgWriter {
                     label_path_id,
                     label_path_data
                 );
-                self.content.push_str(&label_path_el);
+                self.overlay.push_str(&label_path_el);
 
                 let line = format!(
                     "<text><textPath href=\"#{}\" startOffset=\"50%\" text-anchor=\"middle\" dy=\"{}\" style=\"font-family:{}; font-size:{}px; fill:{}; font-weight:{};\">{}</textPath></text>\n",
@@ -1469,7 +1503,7 @@ impl SvgWriter {
                     weight,
                     escaped
                 );
-                self.content.push_str(&line);
+                self.overlay.push_str(&line);
             }
         }
 
@@ -1500,7 +1534,7 @@ impl SvgWriter {
 </marker>
 </defs>\n"#;
         let footer = "</svg>";
-        format!("{}{}{}{}", header, defs, self.content, footer)
+        format!("{}{}{}{}{}", header, defs, self.content, self.overlay, footer)
     }
 }
 
