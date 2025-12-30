@@ -1987,81 +1987,48 @@ fn build_lane_path(
     end_dir: f64,
     lane_span: Option<(f64, f64)>,
 ) -> Vec<BezierSegment> {
+    let _ = lane_span;
     let base_stub = edge_port_handle(start, end);
     let dy_start = (lane_y - start.y).abs();
     let dy_end = (lane_y - end.y).abs();
     let max_stub = (end.x - start.x).abs().max(40.0) * 0.45;
     let start_stub = (base_stub + dy_start * 0.6).min(max_stub.max(base_stub));
     let end_stub = (base_stub + dy_end * 0.6).min(max_stub.max(base_stub));
-    let is_reverse = start.x > end.x;
-    let default_start_corner = Point::new(start.x + start_dir * start_stub, lane_y);
-    let default_end_corner = Point::new(end.x - end_dir * end_stub, lane_y);
-
-    let (mut lane_left, mut lane_right) = if let Some((a, b)) = lane_span {
-        if a <= b {
-            (a, b)
-        } else {
-            (b, a)
-        }
+    let mut start_corner = Point::new(start.x, lane_y);
+    let mut end_corner = Point::new(end.x, lane_y);
+    let lane_dir = if (end_corner.x - start_corner.x).abs() < 1.0 {
+        if end_dir.abs() > 0.0 { end_dir } else { start_dir }
+    } else if end_corner.x >= start_corner.x {
+        1.0
     } else {
-        detour_lane_bounds_from_points(start, end)
+        -1.0
     };
-    let default_left = default_start_corner.x.min(default_end_corner.x);
-    let default_right = default_start_corner.x.max(default_end_corner.x);
-    lane_left = lane_left.clamp(default_left, default_right);
-    lane_right = lane_right.clamp(default_left, default_right);
-    if lane_right - lane_left < 1.0 {
-        lane_left = default_left;
-        lane_right = default_right;
-    }
-
-    if is_reverse {
-        let start_out = default_start_corner;
-        let lane_start = Point::new(lane_right, lane_y);
-        let lane_end = Point::new(lane_left, lane_y);
-        let lane_dir = if lane_start.x >= lane_end.x { -1.0 } else { 1.0 };
-        let entry_dir = -lane_dir;
-
-        let mut segments = Vec::new();
-        segments.push(BezierSegment {
-            start,
-            c1: Point::new(start.x + start_dir * start_stub, start.y),
-            c2: Point::new(start_out.x + entry_dir * start_stub, lane_y),
-            end: start_out,
-        });
-        if (start_out.x - lane_start.x).abs() > 1.0 {
-            segments.push(straight_segment(start_out, lane_start));
+    let span = (end_corner.x - start_corner.x).abs();
+    if start.x < end.x && span > 1.0 {
+        let min_span = 60.0;
+        let mut shrink = (span * 0.2).min(80.0);
+        let max_shrink = ((span - min_span).max(0.0)) / 2.0;
+        if shrink > max_shrink {
+            shrink = max_shrink;
         }
-        if (lane_start.x - lane_end.x).abs() > 1.0 {
-            segments.push(straight_segment(lane_start, lane_end));
-        }
-        segments.push(BezierSegment {
-            start: lane_end,
-            c1: Point::new(lane_end.x + lane_dir * end_stub, lane_y),
-            c2: Point::new(end.x - end_dir * end_stub, end.y),
-            end,
-        });
-        return segments;
+        start_corner.x += lane_dir * shrink;
+        end_corner.x -= lane_dir * shrink;
     }
-
-    let start_corner_x = lane_left.max(default_start_corner.x);
-    let end_corner_x = lane_right.min(default_end_corner.x);
-    let start_corner = Point::new(start_corner_x, lane_y);
-    let end_corner = Point::new(end_corner_x, lane_y);
-    let lane_dir = if end_corner.x >= start_corner.x { 1.0 } else { -1.0 };
-
-    let entry_dir = lane_dir;
+    let entry_dir = -lane_dir;
+    let handle_scale = if start.x < end.x { 0.6 } else { 1.0 };
+    let entry_handle = (start_stub * handle_scale).max(6.0);
+    let exit_handle = (end_stub * handle_scale).max(6.0);
     let seg1 = BezierSegment {
         start,
-        c1: Point::new(start.x + start_dir * start_stub, start.y),
-        c2: Point::new(start_corner.x + entry_dir * start_stub, lane_y),
+        c1: Point::new(start.x + start_dir * entry_handle, start.y),
+        c2: Point::new(start_corner.x + entry_dir * entry_handle, lane_y),
         end: start_corner,
     };
     let seg2 = straight_segment(start_corner, end_corner);
     let seg3 = BezierSegment {
         start: end_corner,
-        c1: Point::new(end_corner.x + lane_dir * end_stub, lane_y),
-        c2: Point::new(end.x - end_dir * end_stub, end.y),
+        c1: Point::new(end_corner.x + lane_dir * exit_handle, lane_y),
+        c2: Point::new(end.x - end_dir * exit_handle, end.y),
         end,
     };
     vec![seg1, seg2, seg3]
