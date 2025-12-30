@@ -806,13 +806,25 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
                         .position()
                         .center()
                         .add(content_offset);
-                    place_self_loop_label(
-                        &label.text,
-                        label.font_size,
-                        &path,
-                        node_center,
-                        &blocked_boxes,
-                    )
+                    if let Some((center_x, lane_y)) = find_horizontal_lane(&path) {
+                        let above = lane_y < node_center.y;
+                        place_detour_label(
+                            &label.text,
+                            label.font_size,
+                            center_x,
+                            lane_y,
+                            above,
+                            &blocked_boxes,
+                        )
+                    } else {
+                        place_self_loop_label(
+                            &label.text,
+                            label.font_size,
+                            &path,
+                            node_center,
+                            &blocked_boxes,
+                        )
+                    }
                 } else if edge_is_detour[idx] {
                     let mut label_pos = None;
                     if let Some(slot) = detour_slots.get(&idx) {
@@ -2161,6 +2173,33 @@ fn place_self_loop_label(
         normal = Point::new(0.0, 1.0);
     }
     place_label_with_offset(text, font_size, mid, normal, 0.0, blocked)
+}
+
+fn find_horizontal_lane(path: &[BezierSegment]) -> Option<(f64, f64)> {
+    let mut best: Option<(f64, f64)> = None;
+    let mut best_dx = 0.0;
+    let tol = 0.5;
+
+    for seg in path {
+        let dy = (seg.end.y - seg.start.y).abs();
+        if dy > tol {
+            continue;
+        }
+        if (seg.c1.y - seg.start.y).abs() > tol || (seg.c2.y - seg.start.y).abs() > tol {
+            continue;
+        }
+        let dx = (seg.end.x - seg.start.x).abs();
+        if dx <= best_dx {
+            continue;
+        }
+        best_dx = dx;
+        best = Some((
+            (seg.start.x + seg.end.x) / 2.0,
+            (seg.start.y + seg.end.y) / 2.0,
+        ));
+    }
+
+    best
 }
 
 fn place_detour_label(
