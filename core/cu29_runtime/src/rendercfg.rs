@@ -1192,11 +1192,8 @@ impl TableVisitor for TableRenderer<'_> {
             } else {
                 self.node_left_x
             };
-            self.svg.draw_circle_overlay(
-                Point::new(dot_x, loc.y),
-                PORT_DOT_RADIUS,
-                BORDER_COLOR,
-            );
+            self.svg
+                .draw_circle_overlay(Point::new(dot_x, loc.y), PORT_DOT_RADIUS, BORDER_COLOR);
         }
 
         if cell.lines.is_empty() {
