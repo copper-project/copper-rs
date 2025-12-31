@@ -1,9 +1,9 @@
 pub mod tasks;
+mod motor_model;
 mod world;
-
 use crate::world::{AppliedForce, Cart, Rod};
 use avian3d::math::Vector;
-use avian3d::prelude::{ConstantForce, Physics};
+use avian3d::prelude::{ComputedMass, ConstantForce, Physics};
 use bevy::asset::UnapprovedPathMode;
 use bevy::prelude::*;
 use bevy::render::RenderPlugin;
@@ -99,8 +99,16 @@ fn setup_copper(mut commands: Commands) {
 #[allow(clippy::type_complexity)]
 fn run_copper_callback(
     mut query_set: ParamSet<(
-        Query<(&Transform, &mut ConstantForce, &mut AppliedForce), With<Cart>>,
-        Query<&Transform, With<Rod>>,
+        Query<
+            (
+                &Transform,
+                &mut ConstantForce,
+                &mut AppliedForce,
+                &ComputedMass,
+            ),
+            With<Cart>,
+        >,
+        Query<(&Transform, &ComputedMass), With<Rod>>,
     )>,
     physics_time: Res<Time<Physics>>,
     robot_clock: ResMut<CopperMockClock>,
@@ -122,7 +130,8 @@ fn run_copper_callback(
                 // we run this code when the balpos source (the adc giving the rod position) is called
                 // we get the physical state of the world and inject what the sensor would read back to copper
                 let bindings = query_set.p1();
-                let rod_transform = bindings.single().expect("Failed to get rod transform");
+                let (rod_transform, _rod_mass) =
+                    bindings.single().expect("Failed to get rod transform");
 
                 let (_roll, _pitch, yaw) = rod_transform.rotation.to_euler(EulerRot::YXZ);
 
@@ -141,7 +150,7 @@ fn run_copper_callback(
             default::SimStep::Railpos(CuTaskCallbackState::Process(_, output)) => {
                 // Here same thing for the rail encoder.
                 let mut bindings = query_set.p0();
-                let (cart_transform, _, _) =
+                let (cart_transform, _, _, _) =
                     bindings.single_mut().expect("Failed to get cart transform");
                 let ticks = (cart_transform.translation.x * 2000.0) as i32;
                 output.set_payload(EncoderPayload { ticks });
@@ -152,8 +161,13 @@ fn run_copper_callback(
             default::SimStep::Motor(CuTaskCallbackState::Process(input, output)) => {
                 // And now when copper wants to use the motor
                 // we apply a force in the simulation.
+                let rod_mass = {
+                    let bindings = query_set.p1();
+                    let (_, rod_mass) = bindings.single().expect("Failed to get rod mass");
+                    rod_mass.value()
+                };
                 let mut bindings = query_set.p0();
-                let (_, mut cart_force, mut applied_force) =
+                let (_, mut cart_force, mut applied_force, cart_mass) =
                     bindings.single_mut().expect("Failed to get cart force");
                 let maybe_motor_actuation = input.payload();
                 if let Some(motor_actuation) = maybe_motor_actuation {
@@ -162,10 +176,12 @@ fn run_copper_callback(
                         applied_force.0 = Vector::ZERO;
                         return SimOverride::ExecutedBySim;
                     }
-                    let force_magnitude = motor_actuation.power * 2.0;
+                    let total_mass = cart_mass.value() + rod_mass;
+                    let force_magnitude =
+                        motor_model::force_from_power(motor_actuation.power, total_mass);
                     let new_force = Vector::new(force_magnitude, 0.0, 0.0);
-                    cart_force.0 += new_force;
-                    applied_force.0 = cart_force.0;
+                    cart_force.0 = new_force;
+                    applied_force.0 = new_force;
                     output
                         .metadata
                         .set_status(format!("Applied force: {force_magnitude}"));

@@ -1,4 +1,5 @@
 pub mod tasks;
+mod motor_model;
 use cu29::prelude::*;
 use cu29_export::copperlists_reader;
 use cu29_helpers::basic_copper_setup;
@@ -56,7 +57,10 @@ fn run_one_copperlist(
                     if motor_actuation.power.is_nan() {
                         return SimOverride::ExecutedBySim;
                     }
-                    let force_magnitude = motor_actuation.power * 2.0;
+                    let force_magnitude = motor_model::force_from_power(
+                        motor_actuation.power,
+                        motor_model::ESTIMATED_TOTAL_MASS_KG,
+                    );
                     output
                         .metadata
                         .set_status(format!("Applied force: {force_magnitude}"));
