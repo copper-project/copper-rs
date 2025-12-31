@@ -1114,7 +1114,6 @@ impl TableCell {
 #[derive(Clone, Copy)]
 enum TextAlign {
     Left,
-    Center,
     Right,
 }
 
