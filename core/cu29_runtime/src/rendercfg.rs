@@ -15,6 +15,13 @@ use std::cmp::Ordering;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
+use svg::node::element::path::Data;
+use svg::node::element::{
+    Definitions, Group, Marker, Path as SvgPath, Polygon, Rectangle, Text, TextPath,
+};
+use svg::node::Text as TextNode;
+use svg::node::Node;
+use svg::Document;
 use tempfile::Builder;
 
 // Typography and text formatting.
@@ -1262,17 +1269,47 @@ impl RenderBackend for NullBackend {
 }
 
 struct SvgWriter {
-    content: String,
-    overlay: String,
+    content: Group,
+    overlay: Group,
+    defs: Definitions,
     view_size: Point,
     counter: usize,
 }
 
 impl SvgWriter {
     fn new() -> Self {
+        let mut defs = Definitions::new();
+        let start_marker = Marker::new()
+            .set("id", "startarrow")
+            .set("markerWidth", 10)
+            .set("markerHeight", 7)
+            .set("refX", 0)
+            .set("refY", 3.5)
+            .set("orient", "auto")
+            .add(
+                Polygon::new()
+                    .set("points", "10 0, 10 7, 0 3.5")
+                    .set("fill", "context-stroke"),
+            );
+        let end_marker = Marker::new()
+            .set("id", "endarrow")
+            .set("markerWidth", 10)
+            .set("markerHeight", 7)
+            .set("refX", 10)
+            .set("refY", 3.5)
+            .set("orient", "auto")
+            .add(
+                Polygon::new()
+                    .set("points", "0 0, 10 3.5, 0 7")
+                    .set("fill", "context-stroke"),
+            );
+        defs.append(start_marker);
+        defs.append(end_marker);
+
         Self {
-            content: String::new(),
-            overlay: String::new(),
+            content: Group::new(),
+            overlay: Group::new(),
+            defs,
             view_size: Point::new(0.0, 0.0),
             counter: 0,
         }
@@ -1297,19 +1334,18 @@ impl SvgWriter {
         let stroke_color = stroke.unwrap_or("none");
         let fill_color = fill.unwrap_or("none");
         let width = if stroke.is_some() { stroke_width } else { 0.0 };
-        let line = format!(
-            "<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"{}\" stroke=\"{}\" stroke-width=\"{}\" rx=\"{}\" ry=\"{}\" />\n",
-            top_left.x,
-            top_left.y,
-            size.x,
-            size.y,
-            fill_color,
-            stroke_color,
-            width,
-            rounded,
-            rounded
-        );
-        self.content.push_str(&line);
+        let mut rect = Rectangle::new()
+            .set("x", top_left.x)
+            .set("y", top_left.y)
+            .set("width", size.x)
+            .set("height", size.y)
+            .set("fill", fill_color)
+            .set("stroke", stroke_color)
+            .set("stroke-width", width);
+        if rounded > 0.0 {
+            rect = rect.set("rx", rounded).set("ry", rounded);
+        }
+        self.content.append(rect);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1329,18 +1365,17 @@ impl SvgWriter {
 
         let escaped = escape_xml(text);
         let weight = if bold { "bold" } else { "normal" };
-        let line = format!(
-            "<text x=\"{}\" y=\"{}\" text-anchor=\"{}\" dominant-baseline=\"middle\" style=\"font-family:{}; font-size:{}px; fill:{}; font-weight:{};\">{}</text>\n",
-            pos.x,
-            pos.y,
-            anchor,
-            family.as_css(),
-            font_size,
-            color,
-            weight,
-            escaped
-        );
-        self.content.push_str(&line);
+        let mut node = Text::new()
+            .set("x", pos.x)
+            .set("y", pos.y)
+            .set("text-anchor", anchor)
+            .set("dominant-baseline", "middle")
+            .set("font-family", family.as_css())
+            .set("font-size", format!("{font_size}px"))
+            .set("fill", color)
+            .set("font-weight", weight);
+        node.append(TextNode::new(escaped));
+        self.content.append(node);
 
         let size = get_size_for_str(text, font_size);
         let top_left = Point::new(pos.x, pos.y - size.y / 2.0);
@@ -1364,18 +1399,17 @@ impl SvgWriter {
 
         let escaped = escape_xml(text);
         let weight = if bold { "bold" } else { "normal" };
-        let line = format!(
-            "<text x=\"{}\" y=\"{}\" text-anchor=\"{}\" dominant-baseline=\"middle\" style=\"font-family:{}; font-size:{}px; fill:{}; font-weight:{};\">{}</text>\n",
-            pos.x,
-            pos.y,
-            anchor,
-            family.as_css(),
-            font_size,
-            color,
-            weight,
-            escaped
-        );
-        self.overlay.push_str(&line);
+        let mut node = Text::new()
+            .set("x", pos.x)
+            .set("y", pos.y)
+            .set("text-anchor", anchor)
+            .set("dominant-baseline", "middle")
+            .set("font-family", family.as_css())
+            .set("font-size", format!("{font_size}px"))
+            .set("fill", color)
+            .set("font-weight", weight);
+        node.append(TextNode::new(escaped));
+        self.overlay.append(node);
 
         let size = get_size_for_str(text, font_size);
         let top_left = Point::new(pos.x, pos.y - size.y / 2.0);
@@ -1401,46 +1435,33 @@ impl SvgWriter {
             self.grow_window(segment.end, Point::new(0.0, 0.0));
         }
 
-        let dash = if dashed {
-            "stroke-dasharray=\"5,5\""
-        } else {
-            ""
-        };
-        let start = if head.0 {
-            "marker-start=\"url(#startarrow)\""
-        } else {
-            ""
-        };
-        let end = if head.1 {
-            "marker-end=\"url(#endarrow)\""
-        } else {
-            ""
-        };
         let stroke_color = look.line_color.to_web_color();
         let stroke_color = normalize_web_color(&stroke_color);
 
-        let path_builder = build_path_string(path);
-
+        let path_data = build_path_data(path);
         let path_id = format!("arrow{}", self.counter);
-        let line = format!(
-            "<path id=\"{}\" d=\"{}\" stroke=\"{}\" stroke-width=\"{}\" {} {} {} fill=\"none\" />\n",
-            path_id,
-            path_builder.trim(),
-            stroke_color,
-            look.line_width,
-            dash,
-            start,
-            end
-        );
-        self.content.push_str(&line);
+        let mut path_el = SvgPath::new()
+            .set("id", path_id.clone())
+            .set("d", path_data)
+            .set("stroke", stroke_color)
+            .set("stroke-width", look.line_width)
+            .set("fill", "none");
+        if dashed {
+            path_el = path_el.set("stroke-dasharray", "5,5");
+        }
+        if head.0 {
+            path_el = path_el.set("marker-start", "url(#startarrow)");
+        }
+        if head.1 {
+            path_el = path_el.set("marker-end", "url(#endarrow)");
+        }
+        self.content.append(path_el);
 
         if let Some(label) = label {
             if label.text.is_empty() {
                 self.counter += 1;
                 return;
             }
-            let escaped = escape_xml(&label.text);
-            let weight = if label.bold { "bold" } else { "normal" };
             if let Some(pos) = label.position {
                 self.draw_text_overlay(
                     pos,
@@ -1455,24 +1476,29 @@ impl SvgWriter {
                 let label_path_id = format!("{}_label", path_id);
                 let start = path[0].start;
                 let end = path[path.len() - 1].end;
-                let label_path_data = build_explicit_path_string(path, start.x > end.x);
-                let label_path_el = format!(
-                    "<path id=\"{}\" d=\"{}\" fill=\"none\" stroke=\"none\" />\n",
-                    label_path_id, label_path_data
-                );
-                self.overlay.push_str(&label_path_el);
+                let label_path_data = build_explicit_path_data(path, start.x > end.x);
+                let label_path_el = SvgPath::new()
+                    .set("id", label_path_id.clone())
+                    .set("d", label_path_data)
+                    .set("fill", "none")
+                    .set("stroke", "none");
+                self.overlay.append(label_path_el);
 
-                let line = format!(
-                    "<text><textPath href=\"#{}\" startOffset=\"50%\" text-anchor=\"middle\" dy=\"{}\" style=\"font-family:{}; font-size:{}px; fill:{}; font-weight:{};\">{}</textPath></text>\n",
-                    label_path_id,
-                    EDGE_LABEL_OFFSET,
-                    label.font_family.as_css(),
-                    label.font_size,
-                    label.color,
-                    weight,
-                    escaped
-                );
-                self.overlay.push_str(&line);
+                let escaped = escape_xml(&label.text);
+                let weight = if label.bold { "bold" } else { "normal" };
+                let mut text_path = TextPath::new()
+                    .set("href", format!("#{label_path_id}"))
+                    .set("startOffset", "50%")
+                    .set("text-anchor", "middle")
+                    .set("dy", EDGE_LABEL_OFFSET)
+                    .set("font-family", label.font_family.as_css())
+                    .set("font-size", format!("{}px", label.font_size))
+                    .set("fill", label.color.clone())
+                    .set("font-weight", weight);
+                text_path.append(TextNode::new(escaped));
+                let mut text_node = Text::new();
+                text_node.append(text_path);
+                self.overlay.append(text_node);
             }
         }
 
@@ -1490,23 +1516,16 @@ impl SvgWriter {
         } else {
             self.view_size.y
         };
-        let header = format!(
-            "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n<svg width=\"{}\" height=\"{}\" viewBox=\"0 0 {} {}\" xmlns=\"http://www.w3.org/2000/svg\">\n",
-            width, height, width, height
-        );
-        let defs = r#"<defs>
-<marker id="startarrow" markerWidth="10" markerHeight="7" refX="0" refY="3.5" orient="auto">
-<polygon points="10 0, 10 7, 0 3.5" fill="context-stroke" />
-</marker>
-<marker id="endarrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
-<polygon points="0 0, 10 3.5, 0 7" fill="context-stroke" />
-</marker>
-</defs>\n"#;
-        let footer = "</svg>";
-        format!(
-            "{}{}{}{}{}",
-            header, defs, self.content, self.overlay, footer
-        )
+
+        Document::new()
+            .set("width", width)
+            .set("height", height)
+            .set("viewBox", (0, 0, width, height))
+            .set("xmlns", "http://www.w3.org/2000/svg")
+            .add(self.defs)
+            .add(self.content)
+            .add(self.overlay)
+            .to_string()
     }
 }
 
@@ -2002,74 +2021,69 @@ fn build_lane_path(
     vec![seg1, seg2, seg3]
 }
 
-fn build_path_string(path: &[BezierSegment]) -> String {
+fn build_path_data(path: &[BezierSegment]) -> Data {
     if path.is_empty() {
-        return String::new();
+        return Data::new();
     }
 
-    let mut path_builder = String::new();
     let first = &path[0];
-    path_builder.push_str(&format!(
-        "M {} {} C {} {}, {} {}, {} {} ",
-        first.start.x,
-        first.start.y,
-        first.c1.x,
-        first.c1.y,
-        first.c2.x,
-        first.c2.y,
-        first.end.x,
-        first.end.y
-    ));
+    let mut data = Data::new()
+        .move_to((first.start.x, first.start.y))
+        .cubic_curve_to((
+            first.c1.x,
+            first.c1.y,
+            first.c2.x,
+            first.c2.y,
+            first.end.x,
+            first.end.y,
+        ));
     for segment in path.iter().skip(1) {
-        path_builder.push_str(&format!(
-            "C {} {}, {} {}, {} {} ",
-            segment.c1.x, segment.c1.y, segment.c2.x, segment.c2.y, segment.end.x, segment.end.y
+        data = data.cubic_curve_to((
+            segment.c1.x,
+            segment.c1.y,
+            segment.c2.x,
+            segment.c2.y,
+            segment.end.x,
+            segment.end.y,
         ));
     }
-    path_builder.trim().to_string()
+    data
 }
 
-fn build_explicit_path_string(path: &[BezierSegment], reverse: bool) -> String {
+fn build_explicit_path_data(path: &[BezierSegment], reverse: bool) -> Data {
     if path.is_empty() {
-        return String::new();
+        return Data::new();
     }
 
-    let mut path_builder = String::new();
-    let reversed;
-    let segments: &[BezierSegment] = if reverse {
-        reversed = path
-            .iter()
-            .rev()
-            .map(|seg| BezierSegment {
-                start: seg.end,
-                c1: seg.c2,
-                c2: seg.c1,
-                end: seg.start,
-            })
-            .collect::<Vec<_>>();
-        &reversed
-    } else {
-        path
+    if !reverse {
+        return build_path_data(path);
+    }
+
+    let mut iter = path.iter().rev();
+    let Some(first) = iter.next() else {
+        return Data::new();
     };
-    let first = &segments[0];
-    path_builder.push_str(&format!(
-        "M {} {} C {} {}, {} {}, {} {} ",
-        first.start.x,
-        first.start.y,
-        first.c1.x,
-        first.c1.y,
-        first.c2.x,
-        first.c2.y,
-        first.end.x,
-        first.end.y
-    ));
-    for segment in segments.iter().skip(1) {
-        path_builder.push_str(&format!(
-            "C {} {}, {} {}, {} {} ",
-            segment.c1.x, segment.c1.y, segment.c2.x, segment.c2.y, segment.end.x, segment.end.y
+    let mut data = Data::new()
+        .move_to((first.end.x, first.end.y))
+        .cubic_curve_to((
+            first.c2.x,
+            first.c2.y,
+            first.c1.x,
+            first.c1.y,
+            first.start.x,
+            first.start.y,
+        ));
+    for segment in iter {
+        data = data.cubic_curve_to((
+            segment.c2.x,
+            segment.c2.y,
+            segment.c1.x,
+            segment.c1.y,
+            segment.start.x,
+            segment.start.y,
         ));
     }
-    path_builder.trim().to_string()
+    data
 }
 
 fn place_edge_label(
