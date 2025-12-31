@@ -21,7 +21,7 @@ use svg::node::Node;
 use svg::node::Text as TextNode;
 use svg::node::element::path::Data;
 use svg::node::element::{
-    Definitions, Group, Marker, Path as SvgPath, Polygon, Rectangle, Text, TextPath,
+    Circle, Definitions, Group, Marker, Path as SvgPath, Polygon, Rectangle, Text, TextPath,
 };
 use tempfile::Builder;
 
@@ -78,7 +78,8 @@ const INTERMEDIATE_X_EPS: f64 = 6.0;
 const EDGE_STUB_LEN: f64 = 32.0;
 const EDGE_STUB_MIN: f64 = 18.0;
 const EDGE_PORT_HANDLE: f64 = 12.0;
-const ARROW_HEAD_MARGIN: f64 = 6.0;
+const PORT_DOT_RADIUS: f64 = 2.6;
+const PORT_LINE_GAP: f64 = 2.8;
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -396,6 +397,7 @@ fn build_node_table(
         &mut port_lookup.inputs,
         &mut port_lookup.default_input,
         max_ports,
+        TextAlign::Left,
     );
     let outputs = build_port_column(
         "Outputs",
@@ -404,6 +406,7 @@ fn build_node_table(
         &mut port_lookup.outputs,
         &mut port_lookup.default_output,
         max_ports,
+        TextAlign::Right,
     );
     rows.push(TableNode::Array(vec![inputs, outputs]));
 
@@ -425,11 +428,13 @@ fn build_port_column(
     lookup: &mut HashMap<String, String>,
     default_port: &mut Option<String>,
     target_len: usize,
+    align: TextAlign,
 ) -> TableNode {
     let mut rows = Vec::new();
     rows.push(TableNode::Cell(
         TableCell::single_line_sized(title, "black", false, PORT_HEADER_FONT_SIZE)
-            .with_background(HEADER_BG),
+            .with_background(HEADER_BG)
+            .with_align(align),
     ));
 
     let desired_rows = target_len.max(1);
@@ -443,7 +448,8 @@ fn build_port_column(
             rows.push(TableNode::Cell(
                 TableCell::single_line_sized(name, "black", false, PORT_VALUE_FONT_SIZE)
                     .with_port(port_id)
-                    .with_border_width(VALUE_BORDER_WIDTH),
+                    .with_border_width(VALUE_BORDER_WIDTH)
+                    .with_align(align),
             ));
         } else {
             rows.push(TableNode::Cell(
@@ -453,7 +459,8 @@ fn build_port_column(
                     false,
                     PORT_VALUE_FONT_SIZE,
                 )
-                .with_border_width(VALUE_BORDER_WIDTH),
+                .with_border_width(VALUE_BORDER_WIDTH)
+                .with_align(align),
             ));
         }
     }
@@ -917,7 +924,11 @@ fn draw_node_table(svg: &mut SvgWriter, node: &NodeRender, element: &Element, of
 
     svg.draw_rect(top_left, size, None, 0.0, Some("white"), 0.0);
 
-    let mut renderer = TableRenderer { svg };
+    let mut renderer = TableRenderer {
+        svg,
+        node_left_x: top_left.x,
+        node_right_x: top_left.x + size.x,
+    };
     visit_table(
         &node.table,
         element.orientation,
@@ -1048,6 +1059,7 @@ struct TableCell {
     port: Option<String>,
     background: Option<String>,
     border_width: f64,
+    align: TextAlign,
 }
 
 impl TableCell {
@@ -1057,6 +1069,7 @@ impl TableCell {
             port: None,
             background: None,
             border_width: 1.0,
+            align: TextAlign::Left,
         }
     }
 
@@ -1084,6 +1097,11 @@ impl TableCell {
         self
     }
 
+    fn with_align(mut self, align: TextAlign) -> Self {
+        self.align = align;
+        self
+    }
+
     fn label(&self) -> String {
         self.lines
             .iter()
@@ -1091,6 +1109,13 @@ impl TableCell {
             .collect::<Vec<_>>()
             .join("\n")
     }
+}
+
+#[derive(Clone, Copy)]
+enum TextAlign {
+    Left,
+    Center,
+    Right,
 }
 
 #[derive(Clone)]
@@ -1141,6 +1166,8 @@ trait TableVisitor {
 
 struct TableRenderer<'a> {
     svg: &'a mut SvgWriter,
+    node_left_x: f64,
+    node_right_x: f64,
 }
 
 impl TableVisitor for TableRenderer<'_> {
@@ -1159,13 +1186,31 @@ impl TableVisitor for TableRenderer<'_> {
             0.0,
         );
 
+        if let Some(port) = &cell.port {
+            let is_output = port.starts_with("out_");
+            let dot_x = if is_output {
+                self.node_right_x
+            } else {
+                self.node_left_x
+            };
+            self.svg.draw_circle_overlay(
+                Point::new(dot_x, loc.y),
+                PORT_DOT_RADIUS,
+                BORDER_COLOR,
+            );
+        }
+
         if cell.lines.is_empty() {
             return;
         }
 
         let total_height = cell_text_height(cell);
         let mut current_y = loc.y - total_height / 2.0;
-        let text_x = loc.x - size.x / 2.0 + CELL_PADDING;
+        let (text_x, anchor) = match cell.align {
+            TextAlign::Left => (loc.x - size.x / 2.0 + CELL_PADDING, "start"),
+            TextAlign::Center => (loc.x, "middle"),
+            TextAlign::Right => (loc.x + size.x / 2.0 - CELL_PADDING, "end"),
+        };
 
         for (idx, line) in cell.lines.iter().enumerate() {
             let line_height = line.font_size as f64;
@@ -1176,7 +1221,7 @@ impl TableVisitor for TableRenderer<'_> {
                 line.font_size,
                 &line.color,
                 line.bold,
-                "start",
+                anchor,
                 line.font_family,
             );
             current_y += line_height;
@@ -1371,6 +1416,19 @@ impl SvgWriter {
             rect = rect.set("rx", rounded).set("ry", rounded);
         }
         self.content.append(rect);
+    }
+
+    fn draw_circle_overlay(&mut self, center: Point, radius: f64, fill: &str) {
+        let circle = Circle::new()
+            .set("cx", center.x)
+            .set("cy", center.y)
+            .set("r", radius)
+            .set("fill", fill);
+        self.overlay.append(circle);
+
+        let top_left = Point::new(center.x - radius, center.y - radius);
+        let size = Point::new(radius * 2.0, radius * 2.0);
+        self.grow_window(top_left, size);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1721,10 +1779,14 @@ fn collect_port_anchors(node: &NodeRender, element: &Element) -> HashMap<String,
     let pos = element.position();
     let center = pos.center();
     let size = pos.size(false);
+    let left_x = center.x - size.x / 2.0;
+    let right_x = center.x + size.x / 2.0;
 
     let mut anchors = HashMap::new();
     let mut collector = PortAnchorCollector {
         anchors: &mut anchors,
+        node_left_x: left_x,
+        node_right_x: right_x,
     };
     visit_table(
         &node.table,
@@ -1738,19 +1800,22 @@ fn collect_port_anchors(node: &NodeRender, element: &Element) -> HashMap<String,
 
 struct PortAnchorCollector<'a> {
     anchors: &'a mut HashMap<String, Point>,
+    node_left_x: f64,
+    node_right_x: f64,
 }
 
 impl TableVisitor for PortAnchorCollector<'_> {
-    fn handle_cell(&mut self, cell: &TableCell, loc: Point, size: Point) {
+    fn handle_cell(&mut self, cell: &TableCell, loc: Point, _size: Point) {
         let Some(port) = &cell.port else {
             return;
         };
 
         let is_output = port.starts_with("out_");
+        let port_offset = PORT_LINE_GAP + PORT_DOT_RADIUS;
         let x = if is_output {
-            loc.x + size.x / 2.0 + ARROW_HEAD_MARGIN
+            self.node_right_x + port_offset
         } else {
-            loc.x - size.x / 2.0 - ARROW_HEAD_MARGIN
+            self.node_left_x - port_offset
         };
         self.anchors.insert(port.clone(), Point::new(x, loc.y));
     }
