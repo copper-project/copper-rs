@@ -5,21 +5,21 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
-use ConfigGraphs::{Missions, Simple};
 use core::fmt;
 use core::fmt::Display;
 use cu29_traits::{CuError, CuResult};
 use hashbrown::HashMap;
-pub use petgraph::Direction::Incoming;
-pub use petgraph::Direction::Outgoing;
 use petgraph::stable_graph::{EdgeIndex, NodeIndex, StableDiGraph};
 use petgraph::visit::EdgeRef;
 #[cfg(feature = "std")]
 use petgraph::visit::IntoEdgeReferences;
+pub use petgraph::Direction::Incoming;
+pub use petgraph::Direction::Outgoing;
 use ron::extensions::Extensions;
 use ron::value::Value as RonValue;
 use ron::{Number, Options};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use ConfigGraphs::{Missions, Simple};
 
 #[cfg(not(feature = "std"))]
 mod imp {
@@ -1504,10 +1504,10 @@ impl CuConfig {
 #[cfg(feature = "std")]
 #[derive(Default)]
 pub(crate) struct PortLookup {
-    pub(crate) inputs: HashMap<String, String>,
-    pub(crate) outputs: HashMap<String, String>,
-    pub(crate) default_input: Option<String>,
-    pub(crate) default_output: Option<String>,
+    pub inputs: HashMap<String, String>,
+    pub outputs: HashMap<String, String>,
+    pub default_input: Option<String>,
+    pub default_output: Option<String>,
 }
 
 #[cfg(feature = "std")]
@@ -1770,7 +1770,7 @@ pub(crate) fn build_render_topology(graph: &CuGraph, bridges: &[BridgeConfig]) -
 
 #[cfg(feature = "std")]
 impl PortLookup {
-    pub(crate) fn resolve_input(&self, name: Option<&str>) -> Option<&str> {
+    pub fn resolve_input(&self, name: Option<&str>) -> Option<&str> {
         if let Some(name) = name
             && let Some(port) = self.inputs.get(name)
         {
@@ -1779,7 +1779,7 @@ impl PortLookup {
         self.default_input.as_deref()
     }
 
-    pub(crate) fn resolve_output(&self, name: Option<&str>) -> Option<&str> {
+    pub fn resolve_output(&self, name: Option<&str>) -> Option<&str> {
         if let Some(name) = name
             && let Some(port) = self.outputs.get(name)
         {
