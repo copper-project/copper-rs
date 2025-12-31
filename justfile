@@ -99,9 +99,6 @@ dag mission="":
 
 	cd "{{ROOT}}"
 	mission_value="{{mission}}"
-	if [[ "$mission_value" == mission=* ]]; then
-		mission_value="${mission_value#mission=}"
-	fi
 	mission_arg=()
 	if [[ -n "$mission_value" ]]; then
 		mission_arg=(--mission "$mission_value")
