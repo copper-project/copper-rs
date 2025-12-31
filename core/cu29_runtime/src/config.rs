@@ -1698,10 +1698,7 @@ impl CuConfig {
 }
 
 #[cfg(feature = "std")]
-pub(crate) fn build_render_topology(
-    graph: &CuGraph,
-    bridges: &[BridgeConfig],
-) -> RenderTopology {
+pub(crate) fn build_render_topology(graph: &CuGraph, bridges: &[BridgeConfig]) -> RenderTopology {
     let mut bridge_lookup = HashMap::new();
     for bridge in bridges {
         bridge_lookup.insert(bridge.id.as_str(), bridge);
@@ -1741,8 +1738,7 @@ pub(crate) fn build_render_topology(
         let cnx = edge.weight();
         if let Some(&idx) = node_lookup.get(&cnx.src) {
             let node = &mut nodes[idx];
-            if node.flavor == Flavor::Task && cnx.src_channel.is_none() && node.outputs.is_empty()
-            {
+            if node.flavor == Flavor::Task && cnx.src_channel.is_none() && node.outputs.is_empty() {
                 node.outputs.push("out0".to_string());
             }
         }
@@ -1763,10 +1759,7 @@ pub(crate) fn build_render_topology(
         });
     }
 
-    RenderTopology {
-        nodes,
-        connections,
-    }
+    RenderTopology { nodes, connections }
 }
 
 #[cfg(feature = "std")]

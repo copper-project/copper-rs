@@ -1,17 +1,17 @@
 mod config;
 use clap::Parser;
-use config::{build_render_topology, read_configuration, ConfigGraphs};
+use config::{ConfigGraphs, build_render_topology, read_configuration};
 pub use cu29_traits::*;
 use layout::adt::dag::NodeHandle;
 use layout::core::base::Orientation;
 use layout::core::color::Color;
 use layout::core::format::{RenderBackend, Visible};
-use layout::core::geometry::{get_size_for_str, pad_shape_scalar, Point};
+use layout::core::geometry::{Point, get_size_for_str, pad_shape_scalar};
 use layout::core::style::{LineStyleKind, StyleAttr};
 use layout::std_shapes::shapes::{Arrow, Element, LineEndKind, RecordDef, ShapeKind};
 use layout::topo::layout::VisualGraph;
-use std::collections::HashMap;
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
@@ -60,16 +60,8 @@ const LAYOUT_SCALE_X: f64 = 1.8;
 const LAYOUT_SCALE_Y: f64 = 1.2;
 
 const EDGE_COLOR_PALETTE: [&str; 10] = [
-    "#1F77B4",
-    "#FF7F0E",
-    "#2CA02C",
-    "#D62728",
-    "#9467BD",
-    "#8C564B",
-    "#E377C2",
-    "#7F7F7F",
-    "#BCBD22",
-    "#17BECF",
+    "#1F77B4", "#FF7F0E", "#2CA02C", "#D62728", "#9467BD", "#8C564B", "#E377C2", "#7F7F7F",
+    "#BCBD22", "#17BECF",
 ];
 
 #[derive(Parser)]
@@ -145,7 +137,11 @@ fn open_svg(path: &std::path::Path) -> std::io::Result<()> {
         return Ok(());
     }
 
-    let program = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+    let program = if cfg!(target_os = "macos") {
+        "open"
+    } else {
+        "xdg-open"
+    };
     Command::new(program).arg(path).status()?;
     Ok(())
 }
@@ -452,24 +448,17 @@ fn build_config_rows(config: &config::ComponentConfig) -> Vec<TableNode> {
         let value_parts: Vec<_> = value_str.split('\n').collect();
         for (idx, part) in value_parts.iter().enumerate() {
             let key_text = if idx == 0 { key.as_str() } else { "" };
-            key_lines.push(CellLine::code(
-                key_text,
-                DIM_GRAY,
-                true,
-                CONFIG_FONT_SIZE,
-            ));
-            value_lines.push(CellLine::code(
-                *part,
-                DIM_GRAY,
-                false,
-                CONFIG_FONT_SIZE,
-            ));
+            key_lines.push(CellLine::code(key_text, DIM_GRAY, true, CONFIG_FONT_SIZE));
+            value_lines.push(CellLine::code(*part, DIM_GRAY, false, CONFIG_FONT_SIZE));
         }
     }
 
     let keys_cell = TableCell::new(key_lines).with_border_width(VALUE_BORDER_WIDTH);
     let values_cell = TableCell::new(value_lines).with_border_width(VALUE_BORDER_WIDTH);
-    let body = TableNode::Array(vec![TableNode::Cell(keys_cell), TableNode::Cell(values_cell)]);
+    let body = TableNode::Array(vec![
+        TableNode::Cell(keys_cell),
+        TableNode::Cell(values_cell),
+    ]);
 
     vec![header, body]
 }
@@ -605,13 +594,7 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
             let span_max_x = src_point.x.max(dst_point.x);
             let is_self = edge.src == edge.dst;
             let has_intermediate = !is_self
-                && span_has_intermediate(
-                    &node_bounds,
-                    span_min_x,
-                    span_max_x,
-                    edge.src,
-                    edge.dst,
-                );
+                && span_has_intermediate(&node_bounds, span_min_x, span_max_x, edge.src, edge.dst);
             let is_reverse = src_point.x > dst_point.x;
             let is_detour = !is_self && (is_reverse || has_intermediate);
             edge_points.push((src_point, dst_point));
@@ -650,19 +633,13 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
                 };
             }
         }
-        let detour_slots = build_detour_label_slots(
-            &edge_points,
-            &edge_is_detour,
-            &detour_above,
-            &detour_lane_y,
-        );
+        let detour_slots =
+            build_detour_label_slots(&edge_points, &edge_is_detour, &detour_above, &detour_lane_y);
 
         for (idx, edge) in section.edges.iter().enumerate() {
             let (src_point, dst_point) = edge_points[idx];
-            let (fallback_start_dir, fallback_end_dir) =
-                fallback_port_dirs(src_point, dst_point);
-            let start_dir =
-                port_dir(edge.src_port.as_ref()).unwrap_or(fallback_start_dir);
+            let (fallback_start_dir, fallback_end_dir) = fallback_port_dirs(src_point, dst_point);
+            let start_dir = port_dir(edge.src_port.as_ref()).unwrap_or(fallback_start_dir);
             let end_dir = port_dir_incoming(edge.dst_port.as_ref()).unwrap_or(fallback_end_dir);
             let path = if edge.src == edge.dst {
                 let pos = section.graph.element(edge.src).position();
@@ -672,10 +649,7 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
                 let lane_span = detour_slots.get(&idx).map(|slot| {
                     let mid_x = (src_point.x + dst_point.x) / 2.0;
                     let half = slot.width / 2.0;
-                    (
-                        mid_x - half,
-                        mid_x + half,
-                    )
+                    (mid_x - half, mid_x + half)
                 });
                 build_back_edge_path(
                     src_point,
@@ -715,10 +689,8 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
             cluster_top_left.x + 4.0,
             cluster_top_left.y + label_padding + 4.0,
         );
-        let label_bounds_max = Point::new(
-            cluster_bottom_right.x - 4.0,
-            cluster_bottom_right.y - 4.0,
-        );
+        let label_bounds_max =
+            Point::new(cluster_bottom_right.x - 4.0, cluster_bottom_right.y - 4.0);
 
         if let Some(label) = &section.label {
             draw_cluster(&mut svg, section_min, section_max, label, offset);
@@ -728,8 +700,12 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
             .iter()
             .map(|b| {
                 (
-                    Point::new(b.left, b.top).add(content_offset).sub(Point::new(4.0, 4.0)),
-                    Point::new(b.right, b.bottom).add(content_offset).add(Point::new(4.0, 4.0)),
+                    Point::new(b.left, b.top)
+                        .add(content_offset)
+                        .sub(Point::new(4.0, 4.0)),
+                    Point::new(b.right, b.bottom)
+                        .add(content_offset)
+                        .add(Point::new(4.0, 4.0)),
                 )
             })
             .collect();
@@ -741,8 +717,7 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
                 section_min.y + offset.y + FONT_SIZE as f64,
             );
             blocked_boxes.push((
-                Point::new(label_pos.x, label_pos.y - label_size.y / 2.0)
-                    .sub(Point::new(2.0, 2.0)),
+                Point::new(label_pos.x, label_pos.y - label_size.y / 2.0).sub(Point::new(2.0, 2.0)),
                 Point::new(label_pos.x + label_size.x, label_pos.y + label_size.y / 2.0)
                     .add(Point::new(2.0, 2.0)),
             ));
@@ -792,10 +767,8 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
                     }
                     fit_label_to_width(&edge.label, max_width, EDGE_FONT_SIZE)
                 } else if edge_is_detour[idx] {
-                    let (lane_left, lane_right) = detour_lane_bounds_from_points(
-                        edge_points[idx].0,
-                        edge_points[idx].1,
-                    );
+                    let (lane_left, lane_right) =
+                        detour_lane_bounds_from_points(edge_points[idx].0, edge_points[idx].1);
                     fit_label_to_width(
                         &edge.label,
                         (lane_right - lane_left).max(1.0),
@@ -805,14 +778,9 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
                     fit_edge_label(&edge.label, &path, EDGE_FONT_SIZE)
                 };
                 let label_color = lighten_hex(line_color, EDGE_LABEL_LIGHTEN);
-                let mut label = ArrowLabel::new(
-                    text,
-                    &label_color,
-                    font_size,
-                    true,
-                    FontFamily::Mono,
-                );
-            let label_pos = if edge_is_self[idx] {
+                let mut label =
+                    ArrowLabel::new(text, &label_color, font_size, true, FontFamily::Mono);
+                let label_pos = if edge_is_self[idx] {
                     let node_center = section
                         .graph
                         .element(edge.src)
@@ -901,13 +869,7 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
             };
 
             let edge_look = colored_edge_style(&edge.arrow.look, line_color);
-            svg.draw_arrow(
-                &path,
-                dashed,
-                (start, end),
-                &edge_look,
-                label.as_ref(),
-            );
+            svg.draw_arrow(&path, dashed, (start, end), &edge_look, label.as_ref());
         }
 
         for node in &section.nodes {
@@ -1516,8 +1478,7 @@ impl SvgWriter {
                 let label_path_data = build_explicit_path_string(path, start.x > end.x);
                 let label_path_el = format!(
                     "<path id=\"{}\" d=\"{}\" fill=\"none\" stroke=\"none\" />\n",
-                    label_path_id,
-                    label_path_data
+                    label_path_id, label_path_data
                 );
                 self.overlay.push_str(&label_path_el);
 
@@ -1562,7 +1523,10 @@ impl SvgWriter {
 </marker>
 </defs>\n"#;
         let footer = "</svg>";
-        format!("{}{}{}{}{}", header, defs, self.content, self.overlay, footer)
+        format!(
+            "{}{}{}{}{}",
+            header, defs, self.content, self.overlay, footer
+        )
     }
 }
 
@@ -1589,13 +1553,7 @@ fn normalize_web_color(color: &str) -> String {
 }
 
 fn colored_edge_style(base: &StyleAttr, color: &str) -> StyleAttr {
-    StyleAttr::new(
-        Color::fast(color),
-        base.line_width,
-        None,
-        0,
-        EDGE_FONT_SIZE,
-    )
+    StyleAttr::new(Color::fast(color), base.line_width, None, 0, EDGE_FONT_SIZE)
 }
 
 fn edge_color_index(edge: &RenderEdge, idx: usize) -> usize {
@@ -1630,12 +1588,7 @@ fn lighten_hex(color: &str, amount: f64) -> String {
         return color.to_string();
     };
     let blend = |c| ((c as f64) + (255.0 - c as f64) * amount).round() as u8;
-    format!(
-        "#{:02X}{:02X}{:02X}",
-        blend(r),
-        blend(g),
-        blend(b)
-    )
+    format!("#{:02X}{:02X}{:02X}", blend(r), blend(g), blend(b))
 }
 
 fn wrap_text(text: &str, max_width: usize) -> String {
@@ -1963,7 +1916,11 @@ fn build_edge_path(start: Point, end: Point, start_dir: f64, end_dir: f64) -> Ve
 
     let start_stub = Point::new(start.x + start_dir * stub, start.y);
     let end_stub = Point::new(end.x - end_dir * stub, end.y);
-    let inner_dir = if end_stub.x >= start_stub.x { 1.0 } else { -1.0 };
+    let inner_dir = if end_stub.x >= start_stub.x {
+        1.0
+    } else {
+        -1.0
+    };
     let curve_dx = ((end_stub.x - start_stub.x).abs() * 0.35).max(10.0);
 
     let seg1 = straight_segment(start, start_stub);
@@ -2027,7 +1984,11 @@ fn build_lane_path(
     let mut start_corner = Point::new(start.x, lane_y);
     let mut end_corner = Point::new(end.x, lane_y);
     let lane_dir = if (end_corner.x - start_corner.x).abs() < 1.0 {
-        if end_dir.abs() > 0.0 { end_dir } else { start_dir }
+        if end_dir.abs() > 0.0 {
+            end_dir
+        } else {
+            start_dir
+        }
     } else if end_corner.x >= start_corner.x {
         1.0
     } else {
@@ -2085,12 +2046,7 @@ fn build_path_string(path: &[BezierSegment]) -> String {
     for segment in path.iter().skip(1) {
         path_builder.push_str(&format!(
             "C {} {}, {} {}, {} {} ",
-            segment.c1.x,
-            segment.c1.y,
-            segment.c2.x,
-            segment.c2.y,
-            segment.end.x,
-            segment.end.y
+            segment.c1.x, segment.c1.y, segment.c2.x, segment.c2.y, segment.end.x, segment.end.y
         ));
     }
     path_builder.trim().to_string()
@@ -2133,12 +2089,7 @@ fn build_explicit_path_string(path: &[BezierSegment], reverse: bool) -> String {
     for segment in segments.iter().skip(1) {
         path_builder.push_str(&format!(
             "C {} {}, {} {}, {} {} ",
-            segment.c1.x,
-            segment.c1.y,
-            segment.c2.x,
-            segment.c2.y,
-            segment.end.x,
-            segment.end.y
+            segment.c1.x, segment.c1.y, segment.c2.x, segment.c2.y, segment.end.x, segment.end.y
         ));
     }
     path_builder.trim().to_string()
@@ -2261,7 +2212,10 @@ fn place_label_with_offset(
     }
     let base_offset = EDGE_LABEL_OFFSET + offset;
     let step = font_size as f64 + 6.0;
-    let mut last = Point::new(mid.x + normal.x * base_offset, mid.y + normal.y * base_offset);
+    let mut last = Point::new(
+        mid.x + normal.x * base_offset,
+        mid.y + normal.y * base_offset,
+    );
     for attempt in 0..6 {
         let offset = base_offset + attempt as f64 * step;
         let pos = Point::new(mid.x + normal.x * offset, mid.y + normal.y * offset);
@@ -2287,13 +2241,7 @@ fn rects_overlap(a: (Point, Point), b: (Point, Point)) -> bool {
     a.1.x >= b.0.x && b.1.x >= a.0.x && a.1.y >= b.0.y && b.1.y >= a.0.y
 }
 
-fn clamp_label_position(
-    pos: Point,
-    text: &str,
-    font_size: usize,
-    min: Point,
-    max: Point,
-) -> Point {
+fn clamp_label_position(pos: Point, text: &str, font_size: usize, min: Point, max: Point) -> Point {
     let size = get_size_for_str(text, font_size);
     let half_w = size.x / 2.0 + 2.0;
     let half_h = size.y / 2.0 + 2.0;
@@ -2302,16 +2250,11 @@ fn clamp_label_position(
     let min_y = min.y + half_h;
     let max_y = max.y - half_h;
 
-    Point::new(
-        pos.x.clamp(min_x, max_x),
-        pos.y.clamp(min_y, max_y),
-    )
+    Point::new(pos.x.clamp(min_x, max_x), pos.y.clamp(min_y, max_y))
 }
 
 fn segment_length(seg: &BezierSegment) -> f64 {
-    seg.start.distance_to(seg.c1)
-        + seg.c1.distance_to(seg.c2)
-        + seg.c2.distance_to(seg.end)
+    seg.start.distance_to(seg.c1) + seg.c1.distance_to(seg.c2) + seg.c2.distance_to(seg.end)
 }
 
 fn segment_point(seg: &BezierSegment, t: f64) -> Point {
@@ -2322,14 +2265,8 @@ fn segment_point(seg: &BezierSegment, t: f64) -> Point {
     let ttt = tt * t;
 
     let mut p = Point::new(0.0, 0.0);
-    p.x = uuu * seg.start.x
-        + 3.0 * uu * t * seg.c1.x
-        + 3.0 * u * tt * seg.c2.x
-        + ttt * seg.end.x;
-    p.y = uuu * seg.start.y
-        + 3.0 * uu * t * seg.c1.y
-        + 3.0 * u * tt * seg.c2.y
-        + ttt * seg.end.y;
+    p.x = uuu * seg.start.x + 3.0 * uu * t * seg.c1.x + 3.0 * u * tt * seg.c2.x + ttt * seg.end.x;
+    p.y = uuu * seg.start.y + 3.0 * uu * t * seg.c1.y + 3.0 * u * tt * seg.c2.y + ttt * seg.end.y;
     p
 }
 
