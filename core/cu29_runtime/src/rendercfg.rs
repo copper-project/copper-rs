@@ -1,7 +1,8 @@
 mod config;
 use clap::Parser;
-use config::{build_render_topology, read_configuration, ConfigGraphs};
+use config::{build_render_topology, read_configuration, ConfigGraphs, PortLookup};
 pub use cu29_traits::*;
+use hashbrown::HashMap;
 use layout::adt::dag::NodeHandle;
 use layout::core::base::Orientation;
 use layout::core::color::Color;
@@ -11,7 +12,6 @@ use layout::core::style::{LineStyleKind, StyleAttr};
 use layout::std_shapes::shapes::{Arrow, Element, LineEndKind, RecordDef, ShapeKind};
 use layout::topo::layout::VisualGraph;
 use std::cmp::Ordering;
-use std::collections::HashMap;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
@@ -117,7 +117,7 @@ fn main() -> std::io::Result<()> {
         let temp_path = temp_file
             .into_temp_path()
             .keep()
-            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?;
+            .map_err(std::io::Error::other)?;
 
         open_svg(&temp_path)?;
     } else {
@@ -947,7 +947,7 @@ fn print_mission_list(config: &config::CuConfig) {
     }
 }
 
-fn format_mission_list(graphs: &hashbrown::HashMap<String, config::CuGraph>) -> String {
+fn format_mission_list(graphs: &HashMap<String, config::CuGraph>) -> String {
     let mut missions: Vec<_> = graphs.keys().cloned().collect();
     missions.sort();
     missions.join(", ")
@@ -979,34 +979,6 @@ struct RenderEdge {
     label: String,
     src_port: Option<String>,
     dst_port: Option<String>,
-}
-
-#[derive(Default)]
-struct PortLookup {
-    inputs: HashMap<String, String>,
-    outputs: HashMap<String, String>,
-    default_input: Option<String>,
-    default_output: Option<String>,
-}
-
-impl PortLookup {
-    fn resolve_input(&self, name: Option<&str>) -> Option<&str> {
-        if let Some(name) = name
-            && let Some(port) = self.inputs.get(name)
-        {
-            return Some(port.as_str());
-        }
-        self.default_input.as_deref()
-    }
-
-    fn resolve_output(&self, name: Option<&str>) -> Option<&str> {
-        if let Some(name) = name
-            && let Some(port) = self.outputs.get(name)
-        {
-            return Some(port.as_str());
-        }
-        self.default_output.as_deref()
-    }
 }
 
 #[derive(Clone)]
@@ -1317,6 +1289,7 @@ impl SvgWriter {
         self.content.push_str(&line);
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn draw_text(
         &mut self,
         pos: Point,
@@ -1351,6 +1324,7 @@ impl SvgWriter {
         self.grow_window(top_left, size);
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn draw_text_overlay(
         &mut self,
         pos: Point,
@@ -1804,10 +1778,10 @@ fn assign_back_edge_offsets(plans: &[BackEdgePlan], offsets: &mut [f64]) {
     let mut layer_counts: HashMap<usize, usize> = HashMap::new();
 
     for plan in plans {
-        if let Some(prev_span) = last_span {
-            if (plan.span - prev_span).abs() > BACK_EDGE_SPAN_EPS {
-                layer += 1;
-            }
+        if let Some(prev_span) = last_span
+            && (plan.span - prev_span).abs() > BACK_EDGE_SPAN_EPS
+        {
+            layer += 1;
         }
         last_span = Some(plan.span);
 
@@ -2264,7 +2238,10 @@ fn build_straight_label_slots(
     edge_is_detour: &[bool],
     edge_is_self: &[bool],
 ) -> HashMap<usize, StraightLabelSlot> {
-    let mut groups: HashMap<(i64, i64), Vec<(usize, Point, Point)>> = HashMap::new();
+    type StraightGroupKey = (i64, i64); // (start_x_bucket, start_y_bucket)
+    type StraightEdgeEntry = (usize, Point, Point); // (edge_idx, start, end)
+
+    let mut groups: HashMap<StraightGroupKey, Vec<StraightEdgeEntry>> = HashMap::new();
     for (idx, (start, end)) in edge_points.iter().enumerate() {
         if edge_is_detour[idx] || edge_is_self[idx] {
             continue;
@@ -2318,7 +2295,10 @@ fn build_detour_label_slots(
     detour_above: &[bool],
     detour_lane_y: &[f64],
 ) -> HashMap<usize, DetourLabelSlot> {
-    let mut groups: HashMap<(i64, i64, bool), Vec<(usize, f64, f64, f64)>> = HashMap::new();
+    type DetourLaneKey = (i64, i64, bool); // (left_bucket, right_bucket, above)
+    type DetourEdgeEntry = (usize, f64, f64, f64); // (edge_idx, lane_left, lane_right, start_x)
+
+    let mut groups: HashMap<DetourLaneKey, Vec<DetourEdgeEntry>> = HashMap::new();
     for (idx, (start, end)) in edge_points.iter().enumerate() {
         if !edge_is_detour[idx] {
             continue;
@@ -2548,9 +2528,7 @@ fn strip_type_params(label: &str) -> String {
                 depth += 1;
             }
             '>' => {
-                if depth > 0 {
-                    depth -= 1;
-                }
+                depth = depth.saturating_sub(1);
             }
             _ => {
                 if depth == 0 {
