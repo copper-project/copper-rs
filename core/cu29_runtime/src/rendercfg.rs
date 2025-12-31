@@ -21,7 +21,8 @@ use svg::node::Node;
 use svg::node::Text as TextNode;
 use svg::node::element::path::Data;
 use svg::node::element::{
-    Circle, Definitions, Group, Marker, Path as SvgPath, Polygon, Rectangle, Text, TextPath,
+    Circle, Definitions, Element as SvgElement, Group, Image, Line, Marker, Path as SvgPath,
+    Polygon, Rectangle, Text, TextPath,
 };
 use tempfile::Builder;
 
@@ -39,6 +40,7 @@ const CONFIG_WRAP_WIDTH: usize = 32;
 const MODULE_TRUNC_MARKER: &str = "…";
 const MODULE_SEPARATOR: &str = "⠶";
 const PLACEHOLDER_TEXT: &str = "\u{2014}";
+const COPPER_LOGO_SVG: &str = include_str!("../assets/cu29.svg");
 
 // Color palette and fills.
 const BORDER_COLOR: &str = "#999999";
@@ -46,6 +48,11 @@ const HEADER_BG: &str = "#f4f4f4";
 const DIM_GRAY: &str = "dimgray";
 const LIGHT_GRAY: &str = "lightgray";
 const CLUSTER_COLOR: &str = "#bbbbbb";
+const BRIDGE_HEADER_BG: &str = "#f7d7e4";
+const SOURCE_HEADER_BG: &str = "#ddefc7";
+const SINK_HEADER_BG: &str = "#cce0ff";
+const TASK_HEADER_BG: &str = "#fde7c2";
+const COPPER_LINK_COLOR: &str = "#0000E0";
 const EDGE_COLOR_PALETTE: [&str; 10] = [
     "#1F77B4", "#FF7F0E", "#2CA02C", "#D62728", "#9467BD", "#8C564B", "#E377C2", "#7F7F7F",
     "#BCBD22", "#17BECF",
@@ -80,6 +87,26 @@ const EDGE_STUB_MIN: f64 = 18.0;
 const EDGE_PORT_HANDLE: f64 = 12.0;
 const PORT_DOT_RADIUS: f64 = 2.6;
 const PORT_LINE_GAP: f64 = 2.8;
+const LEGEND_TITLE_SIZE: usize = 11;
+const LEGEND_FONT_SIZE: usize = 10;
+const LEGEND_SWATCH_SIZE: f64 = 10.0;
+const LEGEND_PADDING: f64 = 8.0;
+const LEGEND_CORNER_RADIUS: f64 = 6.0;
+const LEGEND_ROW_GAP: f64 = 6.0;
+const LEGEND_LINK_GAP: f64 = 3.0;
+const LEGEND_WITH_LOGO_GAP: f64 = 4.0;
+const LEGEND_VERSION_GAP: f64 = 0.0;
+const LEGEND_SECTION_GAP: f64 = 8.0;
+const LEGEND_BOTTOM_PADDING: f64 = 6.0;
+const LEGEND_LOGO_SIZE: f64 = 16.0;
+const LEGEND_TEXT_WIDTH_FACTOR: f64 = 0.52;
+const COPPER_GITHUB_URL: &str = "https://github.com/copper-project/copper-rs";
+const LEGEND_ITEMS: [(&str, &str); 4] = [
+    ("Source", SOURCE_HEADER_BG),
+    ("Task", TASK_HEADER_BG),
+    ("Sink", SINK_HEADER_BG),
+    ("Bridge", BRIDGE_HEADER_BG),
+];
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -248,10 +275,10 @@ fn build_section_layout(
             .is_empty();
 
         let header_fill = match node.flavor {
-            config::Flavor::Bridge => "#f7d7e4",
-            config::Flavor::Task if is_src => "#ddefc7",
-            config::Flavor::Task if is_sink => "#cce0ff",
-            _ => "#fde7c2",
+            config::Flavor::Bridge => BRIDGE_HEADER_BG,
+            config::Flavor::Task if is_src => SOURCE_HEADER_BG,
+            config::Flavor::Task if is_sink => SINK_HEADER_BG,
+            _ => TASK_HEADER_BG,
         };
 
         let (table, port_lookup) = build_node_table(node, node_weight, header_fill);
@@ -608,6 +635,8 @@ fn visit_table(
 fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
     let mut svg = SvgWriter::new();
     let mut cursor_y = GRAPH_MARGIN;
+    let mut last_section_bottom = GRAPH_MARGIN;
+    let mut last_section_right = GRAPH_MARGIN;
 
     for section in sections {
         let cluster_margin = if section.label.is_some() {
@@ -718,6 +747,8 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
         let content_offset = offset.add(Point::new(0.0, label_padding));
         let cluster_top_left = section_min.add(offset);
         let cluster_bottom_right = section_max.add(offset);
+        last_section_bottom = last_section_bottom.max(cluster_bottom_right.y);
+        last_section_right = last_section_right.max(cluster_bottom_right.x);
         let label_bounds_min = Point::new(
             cluster_top_left.x + 4.0,
             cluster_top_left.y + label_padding + 4.0,
@@ -912,6 +943,9 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
         cursor_y += (section_max.y - section_min.y) + SECTION_SPACING;
     }
 
+    let legend_top = last_section_bottom + GRAPH_MARGIN;
+    let _legend_height = draw_legend(&mut svg, legend_top, last_section_right);
+
     svg.finalize()
 }
 
@@ -963,6 +997,206 @@ fn draw_cluster(svg: &mut SvgWriter, min: Point, max: Point, label: &str, offset
         "start",
         FontFamily::Sans,
     );
+}
+
+/// Render a legend cartridge for task colors and the copper-rs credit line.
+fn draw_legend(svg: &mut SvgWriter, top_y: f64, content_right: f64) -> f64 {
+    let metrics = measure_legend();
+    let legend_x = (content_right - metrics.width).max(GRAPH_MARGIN);
+    let top_left = Point::new(legend_x, top_y);
+
+    svg.draw_rect(
+        top_left,
+        Point::new(metrics.width, metrics.height),
+        Some(BORDER_COLOR),
+        0.6,
+        Some("white"),
+        LEGEND_CORNER_RADIUS,
+    );
+
+    let title_pos = Point::new(
+        top_left.x + LEGEND_PADDING,
+        top_left.y + LEGEND_PADDING + LEGEND_TITLE_SIZE as f64 / 2.0,
+    );
+    svg.draw_text(
+        title_pos,
+        "Legend",
+        LEGEND_TITLE_SIZE,
+        DIM_GRAY,
+        true,
+        "start",
+        FontFamily::Sans,
+    );
+
+    let mut cursor_y = top_left.y + LEGEND_PADDING + LEGEND_TITLE_SIZE as f64 + LEGEND_ROW_GAP;
+    let item_height = LEGEND_SWATCH_SIZE.max(LEGEND_FONT_SIZE as f64);
+    for (label, color) in LEGEND_ITEMS {
+        let center_y = cursor_y + item_height / 2.0;
+        let swatch_top = center_y - LEGEND_SWATCH_SIZE / 2.0;
+        let swatch_left = top_left.x + LEGEND_PADDING;
+        svg.draw_rect(
+            Point::new(swatch_left, swatch_top),
+            Point::new(LEGEND_SWATCH_SIZE, LEGEND_SWATCH_SIZE),
+            Some(BORDER_COLOR),
+            0.6,
+            Some(color),
+            2.0,
+        );
+        let text_x = swatch_left + LEGEND_SWATCH_SIZE + 4.0;
+        svg.draw_text(
+            Point::new(text_x, center_y),
+            label,
+            LEGEND_FONT_SIZE,
+            "black",
+            false,
+            "start",
+            FontFamily::Sans,
+        );
+        cursor_y += item_height + LEGEND_ROW_GAP;
+    }
+
+    cursor_y += LEGEND_SECTION_GAP;
+    let divider_y = cursor_y - LEGEND_ROW_GAP / 2.0;
+    svg.draw_line(
+        Point::new(top_left.x + LEGEND_PADDING, divider_y),
+        Point::new(top_left.x + metrics.width - LEGEND_PADDING, divider_y),
+        "#e0e0e0",
+        0.5,
+    );
+
+    let credit_height = draw_created_with(
+        svg,
+        Point::new(top_left.x + LEGEND_PADDING, cursor_y),
+        top_left.x + metrics.width - LEGEND_PADDING,
+    );
+    cursor_y += credit_height;
+
+    cursor_y - top_left.y + LEGEND_BOTTOM_PADDING
+}
+
+fn draw_created_with(svg: &mut SvgWriter, top_left: Point, right_edge: f64) -> f64 {
+    let left_text = "Created with";
+    let link_text = "Copper-rs";
+    let version_text = format!("v{}", env!("CARGO_PKG_VERSION"));
+    let left_width = legend_text_width(left_text, LEGEND_FONT_SIZE);
+    let link_width = legend_text_width(link_text, LEGEND_FONT_SIZE);
+    let version_width = legend_text_width(version_text.as_str(), LEGEND_FONT_SIZE);
+    let height = LEGEND_LOGO_SIZE.max(LEGEND_FONT_SIZE as f64);
+    let center_y = top_left.y + height / 2.0;
+    let version_text_x = right_edge;
+    let link_text_x = version_text_x - version_width - LEGEND_VERSION_GAP;
+    let link_start_x = link_text_x - link_width;
+    let logo_left = link_start_x - LEGEND_LINK_GAP - LEGEND_LOGO_SIZE;
+    let logo_top = center_y - LEGEND_LOGO_SIZE / 2.0;
+    let left_text_anchor = logo_left - LEGEND_WITH_LOGO_GAP;
+
+    svg.draw_text(
+        Point::new(left_text_anchor, center_y),
+        left_text,
+        LEGEND_FONT_SIZE,
+        DIM_GRAY,
+        false,
+        "end",
+        FontFamily::Sans,
+    );
+
+    let logo_uri = svg_data_uri(COPPER_LOGO_SVG);
+    let image = Image::new()
+        .set("x", logo_left)
+        .set("y", logo_top)
+        .set("width", LEGEND_LOGO_SIZE)
+        .set("height", LEGEND_LOGO_SIZE)
+        .set("href", logo_uri.clone())
+        .set("xlink:href", logo_uri);
+    let mut text_node = build_text_node(
+        Point::new(link_text_x, center_y),
+        link_text,
+        LEGEND_FONT_SIZE,
+        COPPER_LINK_COLOR,
+        false,
+        "end",
+        FontFamily::Sans,
+    );
+    text_node.assign("text-decoration", "underline");
+    text_node.assign("text-underline-offset", "1");
+    text_node.assign("text-decoration-thickness", "0.6");
+
+    let mut link = SvgElement::new("a");
+    link.assign("href", COPPER_GITHUB_URL);
+    link.assign("target", "_blank");
+    link.assign("rel", "noopener noreferrer");
+    link.append(image);
+    link.append(text_node);
+    svg.append_node(link);
+
+    svg.draw_text(
+        Point::new(version_text_x, center_y),
+        version_text.as_str(),
+        LEGEND_FONT_SIZE,
+        DIM_GRAY,
+        false,
+        "end",
+        FontFamily::Sans,
+    );
+
+    let left_text_start = left_text_anchor - left_width;
+    let total_width = right_edge - left_text_start;
+    svg.grow_window(
+        Point::new(left_text_start, top_left.y),
+        Point::new(total_width, height),
+    );
+
+    height
+}
+
+struct LegendMetrics {
+    width: f64,
+    height: f64,
+}
+
+fn measure_legend() -> LegendMetrics {
+    let title_width = get_size_for_str("Legend", LEGEND_TITLE_SIZE).x;
+    let mut max_line_width = title_width;
+
+    for (label, _) in LEGEND_ITEMS {
+        let label_width = get_size_for_str(label, LEGEND_FONT_SIZE).x;
+        let line_width = LEGEND_SWATCH_SIZE + 4.0 + label_width;
+        max_line_width = max_line_width.max(line_width);
+    }
+
+    let credit_left = "Created with";
+    let credit_link = "Copper-rs";
+    let credit_version = format!("v{}", env!("CARGO_PKG_VERSION"));
+    let credit_width = legend_text_width(credit_left, LEGEND_FONT_SIZE)
+        + LEGEND_WITH_LOGO_GAP
+        + LEGEND_LOGO_SIZE
+        + LEGEND_LINK_GAP
+        + legend_text_width(credit_link, LEGEND_FONT_SIZE)
+        + LEGEND_VERSION_GAP
+        + legend_text_width(credit_version.as_str(), LEGEND_FONT_SIZE);
+    max_line_width = max_line_width.max(credit_width);
+
+    let item_height = LEGEND_SWATCH_SIZE.max(LEGEND_FONT_SIZE as f64);
+    let items_count = LEGEND_ITEMS.len() as f64;
+    let items_height = if items_count > 0.0 {
+        items_count * item_height + (items_count - 1.0) * LEGEND_ROW_GAP
+    } else {
+        0.0
+    };
+    let credit_height = LEGEND_LOGO_SIZE.max(LEGEND_FONT_SIZE as f64);
+    let height = LEGEND_PADDING
+        + LEGEND_BOTTOM_PADDING
+        + LEGEND_TITLE_SIZE as f64
+        + LEGEND_ROW_GAP
+        + items_height
+        + LEGEND_ROW_GAP
+        + LEGEND_SECTION_GAP
+        + credit_height;
+
+    LegendMetrics {
+        width: LEGEND_PADDING * 2.0 + max_line_width,
+        height,
+    }
 }
 
 /// Fail fast on invalid mission ids and provide a readable list.
@@ -1192,11 +1426,8 @@ impl TableVisitor for TableRenderer<'_> {
             } else {
                 self.node_left_x
             };
-            self.svg.draw_circle_overlay(
-                Point::new(dot_x, loc.y),
-                PORT_DOT_RADIUS,
-                BORDER_COLOR,
-            );
+            self.svg
+                .draw_circle_overlay(Point::new(dot_x, loc.y), PORT_DOT_RADIUS, BORDER_COLOR);
         }
 
         if cell.lines.is_empty() {
@@ -1207,7 +1438,6 @@ impl TableVisitor for TableRenderer<'_> {
         let mut current_y = loc.y - total_height / 2.0;
         let (text_x, anchor) = match cell.align {
             TextAlign::Left => (loc.x - size.x / 2.0 + CELL_PADDING, "start"),
-            TextAlign::Center => (loc.x, "middle"),
             TextAlign::Right => (loc.x + size.x / 2.0 - CELL_PADDING, "end"),
         };
 
@@ -1430,6 +1660,28 @@ impl SvgWriter {
         self.grow_window(top_left, size);
     }
 
+    fn draw_line(&mut self, start: Point, end: Point, color: &str, width: f64) {
+        let line = Line::new()
+            .set("x1", start.x)
+            .set("y1", start.y)
+            .set("x2", end.x)
+            .set("y2", end.y)
+            .set("stroke", color)
+            .set("stroke-width", width);
+        self.content.append(line);
+
+        let top_left = Point::new(start.x.min(end.x), start.y.min(end.y));
+        let size = Point::new((start.x - end.x).abs(), (start.y - end.y).abs());
+        self.grow_window(top_left, size);
+    }
+
+    fn append_node<T>(&mut self, node: T)
+    where
+        T: Into<Box<dyn Node>>,
+    {
+        self.content.append(node);
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn draw_text(
         &mut self,
@@ -1612,6 +1864,7 @@ impl SvgWriter {
             .set("height", height)
             .set("viewBox", (0, 0, width, height))
             .set("xmlns", "http://www.w3.org/2000/svg")
+            .set("xmlns:xlink", "http://www.w3.org/1999/xlink")
             .add(self.defs)
             .add(self.content)
             .add(self.overlay)
@@ -1632,6 +1885,71 @@ fn escape_xml(input: &str) -> String {
         }
     }
     res
+}
+
+fn build_text_node(
+    pos: Point,
+    text: &str,
+    font_size: usize,
+    color: &str,
+    bold: bool,
+    anchor: &str,
+    family: FontFamily,
+) -> Text {
+    let escaped = escape_xml(text);
+    let weight = if bold { "bold" } else { "normal" };
+    let mut node = Text::new()
+        .set("x", pos.x)
+        .set("y", pos.y)
+        .set("text-anchor", anchor)
+        .set("dominant-baseline", "middle")
+        .set("font-family", family.as_css())
+        .set("font-size", format!("{font_size}px"))
+        .set("fill", color)
+        .set("font-weight", weight);
+    node.append(TextNode::new(escaped));
+    node
+}
+
+fn svg_data_uri(svg: &str) -> String {
+    format!(
+        "data:image/svg+xml;base64,{}",
+        base64_encode(svg.as_bytes())
+    )
+}
+
+fn base64_encode(input: &[u8]) -> String {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
+    let mut i = 0;
+    while i < input.len() {
+        let b0 = input[i];
+        let b1 = if i + 1 < input.len() { input[i + 1] } else { 0 };
+        let b2 = if i + 2 < input.len() { input[i + 2] } else { 0 };
+        let triple = ((b0 as u32) << 16) | ((b1 as u32) << 8) | (b2 as u32);
+        let idx0 = ((triple >> 18) & 0x3F) as usize;
+        let idx1 = ((triple >> 12) & 0x3F) as usize;
+        let idx2 = ((triple >> 6) & 0x3F) as usize;
+        let idx3 = (triple & 0x3F) as usize;
+        out.push(TABLE[idx0] as char);
+        out.push(TABLE[idx1] as char);
+        if i + 1 < input.len() {
+            out.push(TABLE[idx2] as char);
+        } else {
+            out.push('=');
+        }
+        if i + 2 < input.len() {
+            out.push(TABLE[idx3] as char);
+        } else {
+            out.push('=');
+        }
+        i += 3;
+    }
+    out
+}
+
+fn legend_text_width(text: &str, font_size: usize) -> f64 {
+    text.chars().count() as f64 * font_size as f64 * LEGEND_TEXT_WIDTH_FACTOR
 }
 
 fn normalize_web_color(color: &str) -> String {
