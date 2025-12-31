@@ -192,12 +192,7 @@ fn build_section_layout(
     section: &SectionRef<'_>,
 ) -> CuResult<SectionLayout> {
     let mut topology = build_render_topology(section.graph, &config.bridges);
-    topology.connections.sort_by(|a, b| {
-        a.src
-            .cmp(&b.src)
-            .then(a.dst.cmp(&b.dst))
-            .then(a.msg.cmp(&b.msg))
-    });
+    topology.sort_connections();
 
     let graph_orientation = Orientation::LeftToRight;
     let node_orientation = graph_orientation.flip();

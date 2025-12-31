@@ -5,21 +5,21 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
-use ConfigGraphs::{Missions, Simple};
 use core::fmt;
 use core::fmt::Display;
 use cu29_traits::{CuError, CuResult};
 use hashbrown::HashMap;
-pub use petgraph::Direction::Incoming;
-pub use petgraph::Direction::Outgoing;
 use petgraph::stable_graph::{EdgeIndex, NodeIndex, StableDiGraph};
 use petgraph::visit::EdgeRef;
 #[cfg(feature = "std")]
 use petgraph::visit::IntoEdgeReferences;
+pub use petgraph::Direction::Incoming;
+pub use petgraph::Direction::Outgoing;
 use ron::extensions::Extensions;
 use ron::value::Value as RonValue;
 use ron::{Number, Options};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use ConfigGraphs::{Missions, Simple};
 
 #[cfg(not(feature = "std"))]
 mod imp {
@@ -1513,27 +1513,38 @@ struct PortLookup {
 #[cfg(feature = "std")]
 #[derive(Clone)]
 pub(crate) struct RenderNode {
-    pub(crate) id: String,
-    pub(crate) type_name: String,
-    pub(crate) flavor: Flavor,
-    pub(crate) inputs: Vec<String>,
-    pub(crate) outputs: Vec<String>,
+    pub id: String,
+    pub type_name: String,
+    pub flavor: Flavor,
+    pub inputs: Vec<String>,
+    pub outputs: Vec<String>,
 }
 
 #[cfg(feature = "std")]
 #[derive(Clone)]
 pub(crate) struct RenderConnection {
-    pub(crate) src: String,
-    pub(crate) src_port: Option<String>,
-    pub(crate) dst: String,
-    pub(crate) dst_port: Option<String>,
-    pub(crate) msg: String,
+    pub src: String,
+    pub src_port: Option<String>,
+    pub dst: String,
+    pub dst_port: Option<String>,
+    pub msg: String,
 }
 
 #[cfg(feature = "std")]
 pub(crate) struct RenderTopology {
-    pub(crate) nodes: Vec<RenderNode>,
-    pub(crate) connections: Vec<RenderConnection>,
+    pub nodes: Vec<RenderNode>,
+    pub connections: Vec<RenderConnection>,
+}
+
+impl RenderTopology {
+    pub fn sort_connections(&mut self) {
+        self.connections.sort_by(|a, b| {
+            a.src
+                .cmp(&b.src)
+                .then(a.dst.cmp(&b.dst))
+                .then(a.msg.cmp(&b.msg))
+        });
+    }
 }
 
 #[cfg(feature = "std")]
@@ -1556,12 +1567,7 @@ impl CuConfig {
 
         let mut topology = build_render_topology(graph, &self.bridges);
         topology.nodes.sort_by(|a, b| a.id.cmp(&b.id));
-        topology.connections.sort_by(|a, b| {
-            a.src
-                .cmp(&b.src)
-                .then(a.dst.cmp(&b.dst))
-                .then(a.msg.cmp(&b.msg))
-        });
+        topology.sort_connections();
 
         let cluster_id = label.map(|lbl| format!("cluster_{}", sanitize_identifier(lbl)));
         if let Some(ref cluster_id) = cluster_id {
