@@ -57,10 +57,9 @@ fn run_one_copperlist(
                     if motor_actuation.power.is_nan() {
                         return SimOverride::ExecutedBySim;
                     }
-                    let force_magnitude = motor_model::force_from_power(
-                        motor_actuation.power,
-                        motor_model::ESTIMATED_TOTAL_MASS_KG,
-                    );
+                    let total_mass = motor_model::total_mass_kg();
+                    let force_magnitude =
+                        motor_model::force_from_power(motor_actuation.power, total_mass);
                     output
                         .metadata
                         .set_status(format!("Applied force: {force_magnitude}"));

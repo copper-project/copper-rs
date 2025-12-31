@@ -52,6 +52,7 @@ bevy = { version = "0.17.3", default-features = false, features = [
     "bevy_mesh_picking_backend",
     "tonemapping_luts",
     "bevy_ui",
+    "bevy_ui_render",
     "ktx2",
     "jpeg",
     "png",

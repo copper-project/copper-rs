@@ -9,8 +9,10 @@ use bevy::input::{
 };
 use bevy::pbr::{DefaultOpaqueRendererMethod, ScreenSpaceReflections};
 use bevy::prelude::*;
+use bevy::ui::IsDefaultUiCamera;
 use bevy_anti_alias::fxaa::Fxaa;
 use cached_path::{Cache, Error as CacheError, ProgressBar};
+use crate::motor_model;
 use std::path::{Path, PathBuf}; // Import PathBuf
 
 use std::{fs, io};
@@ -22,20 +24,20 @@ pub const DIFFUSE_MAP: &str = "diffuse_map.ktx2";
 const TABLE_HEIGHT: f32 = 0.724;
 const RAIL_WIDTH: f32 = 0.55; // 55cm
 const RAIL_HEIGHT: f32 = 0.02;
-const RAIL_DEPTH: f32 = 0.06;
+const RAIL_DEPTH: f32 = motor_model::CART_DEPTH;
 
-const CART_WIDTH: f32 = 0.040;
-const CART_HEIGHT: f32 = 0.045; // The mid rail is 1cm above the bottom rail, and the cart is 35mm tall.
+const CART_WIDTH: f32 = motor_model::CART_WIDTH;
+const CART_HEIGHT: f32 = motor_model::CART_HEIGHT; // The mid rail is 1cm above the bottom rail, and the cart is 35mm tall.
 const CART_DEPTH: f32 = RAIL_DEPTH;
 
-const ROD_WIDTH: f32 = 0.007; // 7mm
-const ROD_HEIGHT: f32 = 0.50; // 50cm
-const ROD_DEPTH: f32 = ROD_WIDTH;
+const ROD_WIDTH: f32 = motor_model::ROD_WIDTH; // 7mm
+const ROD_HEIGHT: f32 = motor_model::ROD_HEIGHT; // 50cm
+const ROD_DEPTH: f32 = motor_model::ROD_DEPTH;
 
 const AXIS_LENGTH: f32 = 0.02;
 
-const STEEL_DENSITY: f32 = 7800.0; // kg/m^3
-const ALUMINUM_DENSITY: f32 = 2700.0; // kg/m^3
+const STEEL_DENSITY: f32 = motor_model::STEEL_DENSITY; // kg/m^3
+const ALUMINUM_DENSITY: f32 = motor_model::ALUMINUM_DENSITY; // kg/m^3
 
 #[allow(dead_code)]
 const ROD_VOLUME: f32 = ROD_WIDTH * ROD_HEIGHT * ROD_DEPTH;
@@ -56,6 +58,11 @@ struct CameraControl {
 enum SimulationState {
     Running,
     Paused,
+}
+
+#[derive(Resource, Default)]
+pub struct DragState {
+    pub override_motor: bool,
 }
 
 #[derive(Component)]
@@ -115,6 +122,7 @@ pub fn build_world(app: &mut App, headless: bool) -> &mut App {
             pixels_per_newton: 100.,
             max_force: 10.,
         })
+        .insert_resource(DragState::default())
         .insert_resource(Gravity::default())
         .insert_resource(Time::<Physics>::default())
         .add_systems(Startup, setup_scene)
@@ -131,7 +139,7 @@ pub fn build_world(app: &mut App, headless: bool) -> &mut App {
         app.add_plugins(MeshPickingPlugin);
         app.add_systems(Update, toggle_simulation_state)
             .add_systems(Update, camera_control_system)
-            // .add_systems(Update, external_force_display)
+            .add_systems(Update, external_force_display)
             .add_systems(PostUpdate, reset_sim);
     }
 
@@ -313,6 +321,7 @@ fn setup_scene(
     // Spawn the camera
     commands.spawn((
         Camera3d::default(),
+        IsDefaultUiCamera,
         Msaa::Off,
         Skybox {
             image: skybox_handle,
@@ -569,8 +578,11 @@ fn on_drag(
     drag: On<Pointer<Drag>>,
     camera_query: Option<Single<&Transform, With<Camera>>>,
     parents: Query<(&ChildOf, Option<&RigidBody>)>,
+    cart: Query<(), With<Cart>>,
     mut forces: Query<Forces>,
+    mut constant_forces: Query<&mut ConstantForce>,
     mut applied_forces: Query<&mut AppliedForce>,
+    mut drag_state: ResMut<DragState>,
     drag_control: Res<DragControl>,
 ) {
     if drag.button != PointerButton::Primary {
@@ -584,6 +596,14 @@ fn on_drag(
 
     let event = drag.event();
     let target_entity = get_rigid_body_entity(event.entity, &parents);
+    let is_cart = cart.get(target_entity).is_ok();
+
+    if is_cart {
+        drag_state.override_motor = true;
+        if let Ok(mut constant_force) = constant_forces.get_mut(target_entity) {
+            constant_force.0 = Vector::ZERO;
+        }
+    }
 
     if let Ok(mut force) = forces.get_mut(target_entity) {
         // calculate world X-direction drag from screenspace drag
@@ -604,8 +624,11 @@ fn on_drag(
 fn on_drag_end(
     drag: On<Pointer<DragEnd>>,
     parents: Query<(&ChildOf, Option<&RigidBody>)>,
+    cart: Query<(), With<Cart>>,
     mut forces: Query<Forces>,
+    mut constant_forces: Query<&mut ConstantForce>,
     mut applied_forces: Query<&mut AppliedForce>,
+    mut drag_state: ResMut<DragState>,
 ) {
     if drag.button != PointerButton::Primary {
         return;
@@ -613,6 +636,14 @@ fn on_drag_end(
 
     let event = drag.event();
     let target_entity = get_rigid_body_entity(event.entity, &parents);
+    let is_cart = cart.get(target_entity).is_ok();
+
+    if is_cart {
+        drag_state.override_motor = false;
+        if let Ok(mut constant_force) = constant_forces.get_mut(target_entity) {
+            constant_force.0 = Vector::ZERO;
+        }
+    }
 
     if let Ok(mut force) = forces.get_mut(target_entity) {
         force.reset_accumulated_linear_acceleration();
@@ -654,6 +685,7 @@ pub fn external_force_display(
 #[allow(clippy::type_complexity)]
 fn reset_sim(
     keys: Res<ButtonInput<KeyCode>>,
+    mut drag_state: ResMut<DragState>,
     mut queries: ParamSet<(
         Query<(
             Entity,
@@ -673,6 +705,7 @@ fn reset_sim(
     )>,
 ) {
     if keys.just_pressed(KeyCode::KeyR) {
+        drag_state.override_motor = false;
         let mut entities_with_forces = Vec::new();
 
         {
