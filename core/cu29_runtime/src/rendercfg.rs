@@ -775,12 +775,17 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
                 let (text, font_size) = if edge_is_self[idx] {
                     fit_edge_label(&edge.label, &path, EDGE_FONT_SIZE)
                 } else if let Some(slot) = straight_slots.get(&idx) {
-                    fit_label_to_width(&edge.label, slot.width, EDGE_FONT_SIZE)
+                    let mut max_width = slot.width;
+                    if slot.group_count <= 1 {
+                        let path_width = approximate_path_length(&path);
+                        max_width = max_width.max(path_width);
+                    }
+                    fit_label_to_width(&edge.label, max_width, EDGE_FONT_SIZE)
                 } else if let Some(slot) = detour_slots.get(&idx) {
                     let mut max_width = slot.width;
                     if slot.group_count <= 1 {
                         if let Some((_, _, lane_len)) = find_horizontal_lane_span(&path) {
-                            max_width = max_width.max(lane_len * EDGE_LABEL_FIT_RATIO);
+                            max_width = max_width.max(lane_len);
                         } else if slot.group_width > 0.0 {
                             max_width = max_width.max(slot.group_width * 0.9);
                         }
@@ -1224,6 +1229,7 @@ struct StraightLabelSlot {
     width: f64,
     normal: Point,
     stack_offset: f64,
+    group_count: usize,
 }
 
 struct DetourLabelSlot {
@@ -2362,6 +2368,7 @@ fn build_straight_label_slots(
                 .then_with(|| a.2.y.partial_cmp(&b.2.y).unwrap_or(Ordering::Equal))
         });
 
+        let group_count = edges.len();
         for (slot_idx, (edge_idx, start, end)) in edges.into_iter().enumerate() {
             let center_x = (start.x + end.x) / 2.0;
             let center_y = (start.y + end.y) / 2.0;
@@ -2379,6 +2386,7 @@ fn build_straight_label_slots(
                     width,
                     normal,
                     stack_offset: slot_idx as f64 * (EDGE_FONT_SIZE as f64 + 4.0),
+                    group_count,
                 },
             );
         }
