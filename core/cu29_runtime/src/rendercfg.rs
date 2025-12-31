@@ -1,12 +1,12 @@
 mod config;
 use clap::Parser;
-use config::{ConfigGraphs, build_render_topology, read_configuration};
+use config::{build_render_topology, read_configuration, ConfigGraphs};
 pub use cu29_traits::*;
 use layout::adt::dag::NodeHandle;
 use layout::core::base::Orientation;
 use layout::core::color::Color;
 use layout::core::format::{RenderBackend, Visible};
-use layout::core::geometry::{Point, get_size_for_str, pad_shape_scalar};
+use layout::core::geometry::{get_size_for_str, pad_shape_scalar, Point};
 use layout::core::style::{LineStyleKind, StyleAttr};
 use layout::std_shapes::shapes::{Arrow, Element, LineEndKind, RecordDef, ShapeKind};
 use layout::topo::layout::VisualGraph;
@@ -646,19 +646,7 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
                 let bbox = pos.bbox(false);
                 build_loop_path(src_point, dst_point, bbox, start_dir, end_dir)
             } else if edge_is_detour[idx] {
-                let lane_span = detour_slots.get(&idx).map(|slot| {
-                    let mid_x = (src_point.x + dst_point.x) / 2.0;
-                    let half = slot.width / 2.0;
-                    (mid_x - half, mid_x + half)
-                });
-                build_back_edge_path(
-                    src_point,
-                    dst_point,
-                    detour_lane_y[idx],
-                    start_dir,
-                    end_dir,
-                    lane_span,
-                )
+                build_back_edge_path(src_point, dst_point, detour_lane_y[idx], start_dir, end_dir)
             } else {
                 build_edge_path(src_point, dst_point, start_dir, end_dir)
             };
@@ -1940,9 +1928,8 @@ fn build_back_edge_path(
     lane_y: f64,
     start_dir: f64,
     end_dir: f64,
-    lane_span: Option<(f64, f64)>,
 ) -> Vec<BezierSegment> {
-    build_lane_path(start, end, lane_y, start_dir, end_dir, lane_span)
+    build_lane_path(start, end, lane_y, start_dir, end_dir)
 }
 
 fn build_loop_path(
@@ -1963,7 +1950,7 @@ fn build_loop_path(
         1.0
     };
     let lane_y = center_y + dir_y * loop_dy;
-    build_back_edge_path(start, end, lane_y, start_dir, end_dir, None)
+    build_back_edge_path(start, end, lane_y, start_dir, end_dir)
 }
 
 fn build_lane_path(
@@ -1972,9 +1959,7 @@ fn build_lane_path(
     lane_y: f64,
     start_dir: f64,
     end_dir: f64,
-    lane_span: Option<(f64, f64)>,
 ) -> Vec<BezierSegment> {
-    let _ = lane_span;
     let base_stub = edge_port_handle(start, end);
     let dy_start = (lane_y - start.y).abs();
     let dy_end = (lane_y - end.y).abs();
