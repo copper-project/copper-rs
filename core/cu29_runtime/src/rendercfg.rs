@@ -3,6 +3,7 @@ use clap::Parser;
 use config::{ConfigGraphs, PortLookup, build_render_topology, read_configuration};
 pub use cu29_traits::*;
 use hashbrown::HashMap;
+use hashbrown::hash_map::Entry;
 use layout::adt::dag::NodeHandle;
 use layout::core::base::Orientation;
 use layout::core::color::Color;
@@ -49,6 +50,7 @@ const EDGE_COLOR_PALETTE: [&str; 10] = [
     "#1F77B4", "#FF7F0E", "#2CA02C", "#D62728", "#9467BD", "#8C564B", "#E377C2", "#7F7F7F",
     "#BCBD22", "#17BECF",
 ];
+const EDGE_COLOR_ORDER: [usize; 10] = [0, 2, 1, 9, 7, 8, 3, 5, 6, 4];
 
 // Layout spacing and sizing.
 const GRAPH_MARGIN: f64 = 20.0;
@@ -268,7 +270,8 @@ fn build_section_layout(
     }
 
     let mut edges = Vec::new();
-    let mut label_seen: HashMap<(NodeHandle, NodeHandle, String), bool> = HashMap::new();
+    let mut edge_groups: HashMap<EdgeGroupKey, usize> = HashMap::new();
+    let mut next_color_slot = 0usize;
     let edge_look = StyleAttr::new(Color::fast("black"), 1, None, 0, EDGE_FONT_SIZE);
     for cnx in &topology.connections {
         let src_handle = node_handles
@@ -296,9 +299,19 @@ fn build_section_layout(
             &dst_port,
         );
         graph.add_edge(arrow.clone(), *src_handle, *dst_handle);
-        let label_key = (*src_handle, *dst_handle, cnx.msg.clone());
-        let show_label = !label_seen.contains_key(&label_key);
-        label_seen.insert(label_key, true);
+        let group_key = EdgeGroupKey {
+            src: *src_handle,
+            src_port: src_port.clone(),
+            msg: cnx.msg.clone(),
+        };
+        let (color_idx, show_label) = match edge_groups.entry(group_key) {
+            Entry::Occupied(entry) => (*entry.get(), false),
+            Entry::Vacant(entry) => {
+                let color_idx = edge_cycle_color_index(&mut next_color_slot);
+                entry.insert(color_idx);
+                (color_idx, true)
+            }
+        };
         edges.push(RenderEdge {
             src: *src_handle,
             dst: *dst_handle,
@@ -308,6 +321,7 @@ fn build_section_layout(
             } else {
                 String::new()
             },
+            color_idx,
             src_port,
             dst_port,
         });
@@ -751,8 +765,7 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
             );
             let start = matches!(edge.arrow.start, LineEndKind::Arrow);
             let end = matches!(edge.arrow.end, LineEndKind::Arrow);
-            let color_idx = edge_color_index(edge, idx);
-            let line_color = EDGE_COLOR_PALETTE[color_idx];
+            let line_color = EDGE_COLOR_PALETTE[edge.color_idx];
             let label = if edge.label.is_empty() {
                 None
             } else {
@@ -1008,8 +1021,16 @@ struct RenderEdge {
     dst: NodeHandle,
     arrow: Arrow,
     label: String,
+    color_idx: usize,
     src_port: Option<String>,
     dst_port: Option<String>,
+}
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+struct EdgeGroupKey {
+    src: NodeHandle,
+    src_port: Option<String>,
+    msg: String,
 }
 
 #[derive(Clone)]
@@ -1564,24 +1585,10 @@ fn colored_edge_style(base: &StyleAttr, color: &str) -> StyleAttr {
     StyleAttr::new(Color::fast(color), base.line_width, None, 0, EDGE_FONT_SIZE)
 }
 
-fn edge_color_index(edge: &RenderEdge, idx: usize) -> usize {
-    let mut hash = idx as u64;
-    if !edge.label.is_empty() {
-        for byte in edge.label.as_bytes() {
-            hash = hash.wrapping_mul(131).wrapping_add(*byte as u64);
-        }
-    }
-    if let Some(port) = &edge.src_port {
-        for byte in port.as_bytes() {
-            hash = hash.wrapping_mul(131).wrapping_add(*byte as u64);
-        }
-    }
-    if let Some(port) = &edge.dst_port {
-        for byte in port.as_bytes() {
-            hash = hash.wrapping_mul(131).wrapping_add(*byte as u64);
-        }
-    }
-    (hash as usize) % EDGE_COLOR_PALETTE.len()
+fn edge_cycle_color_index(slot: &mut usize) -> usize {
+    let idx = EDGE_COLOR_ORDER[*slot % EDGE_COLOR_ORDER.len()];
+    *slot += 1;
+    idx
 }
 
 fn lighten_hex(color: &str, amount: f64) -> String {
