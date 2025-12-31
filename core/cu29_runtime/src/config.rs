@@ -1536,6 +1536,7 @@ pub(crate) struct RenderTopology {
     pub connections: Vec<RenderConnection>,
 }
 
+#[cfg(feature = "std")]
 impl RenderTopology {
     pub fn sort_connections(&mut self) {
         self.connections.sort_by(|a, b| {
