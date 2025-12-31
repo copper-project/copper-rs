@@ -385,7 +385,9 @@ fn build_node_table(
         ),
     ];
     rows.push(TableNode::Cell(
-        TableCell::new(header_lines).with_background(header_fill),
+        TableCell::new(header_lines)
+            .with_background(header_fill)
+            .with_align(TextAlign::Center),
     ));
 
     let mut port_lookup = PortLookup::default();
@@ -1114,6 +1116,7 @@ impl TableCell {
 #[derive(Clone, Copy)]
 enum TextAlign {
     Left,
+    Center,
     Right,
 }
 
