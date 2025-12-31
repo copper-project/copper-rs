@@ -1284,7 +1284,7 @@ impl SvgWriter {
             .set("id", "startarrow")
             .set("markerWidth", 10)
             .set("markerHeight", 7)
-            .set("refX", 0)
+            .set("refX", 2)
             .set("refY", 3.5)
             .set("orient", "auto")
             .add(
@@ -1296,7 +1296,7 @@ impl SvgWriter {
             .set("id", "endarrow")
             .set("markerWidth", 10)
             .set("markerHeight", 7)
-            .set("refX", 10)
+            .set("refX", 8)
             .set("refY", 3.5)
             .set("orient", "auto")
             .add(
