@@ -15,13 +15,13 @@ use std::cmp::Ordering;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
+use svg::Document;
+use svg::node::Node;
+use svg::node::Text as TextNode;
 use svg::node::element::path::Data;
 use svg::node::element::{
     Definitions, Group, Marker, Path as SvgPath, Polygon, Rectangle, Text, TextPath,
 };
-use svg::node::Text as TextNode;
-use svg::node::Node;
-use svg::Document;
 use tempfile::Builder;
 
 // Typography and text formatting.
@@ -66,6 +66,7 @@ const LAYOUT_SCALE_Y: f64 = 1.2;
 const EDGE_LABEL_FIT_RATIO: f64 = 0.8;
 const EDGE_LABEL_OFFSET: f64 = 8.0;
 const EDGE_LABEL_LIGHTEN: f64 = 0.35;
+const EDGE_LABEL_HALO_WIDTH: f64 = 3.0;
 const DETOUR_LABEL_CLEARANCE: f64 = 6.0;
 const BACK_EDGE_STACK_SPACING: f64 = 16.0;
 const BACK_EDGE_NODE_GAP: f64 = 12.0;
@@ -1407,7 +1408,11 @@ impl SvgWriter {
             .set("font-family", family.as_css())
             .set("font-size", format!("{font_size}px"))
             .set("fill", color)
-            .set("font-weight", weight);
+            .set("font-weight", weight)
+            .set("stroke", "white")
+            .set("stroke-width", EDGE_LABEL_HALO_WIDTH)
+            .set("paint-order", "stroke")
+            .set("stroke-linejoin", "round");
         node.append(TextNode::new(escaped));
         self.overlay.append(node);
 
@@ -1494,7 +1499,11 @@ impl SvgWriter {
                     .set("font-family", label.font_family.as_css())
                     .set("font-size", format!("{}px", label.font_size))
                     .set("fill", label.color.clone())
-                    .set("font-weight", weight);
+                    .set("font-weight", weight)
+                    .set("stroke", "white")
+                    .set("stroke-width", EDGE_LABEL_HALO_WIDTH)
+                    .set("paint-order", "stroke")
+                    .set("stroke-linejoin", "round");
                 text_path.append(TextNode::new(escaped));
                 let mut text_node = Text::new();
                 text_node.append(text_path);
