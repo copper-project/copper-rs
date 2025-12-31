@@ -5,21 +5,21 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
+use ConfigGraphs::{Missions, Simple};
 use core::fmt;
 use core::fmt::Display;
 use cu29_traits::{CuError, CuResult};
 use hashbrown::HashMap;
+pub use petgraph::Direction::Incoming;
+pub use petgraph::Direction::Outgoing;
 use petgraph::stable_graph::{EdgeIndex, NodeIndex, StableDiGraph};
 use petgraph::visit::EdgeRef;
 #[cfg(feature = "std")]
 use petgraph::visit::IntoEdgeReferences;
-pub use petgraph::Direction::Incoming;
-pub use petgraph::Direction::Outgoing;
 use ron::extensions::Extensions;
 use ron::value::Value as RonValue;
 use ron::{Number, Options};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use ConfigGraphs::{Missions, Simple};
 
 #[cfg(not(feature = "std"))]
 mod imp {

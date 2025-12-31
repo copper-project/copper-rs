@@ -1,13 +1,13 @@
 mod config;
 use clap::Parser;
-use config::{build_render_topology, read_configuration, ConfigGraphs, PortLookup};
+use config::{ConfigGraphs, PortLookup, build_render_topology, read_configuration};
 pub use cu29_traits::*;
 use hashbrown::HashMap;
 use layout::adt::dag::NodeHandle;
 use layout::core::base::Orientation;
 use layout::core::color::Color;
 use layout::core::format::{RenderBackend, Visible};
-use layout::core::geometry::{get_size_for_str, pad_shape_scalar, Point};
+use layout::core::geometry::{Point, get_size_for_str, pad_shape_scalar};
 use layout::core::style::{LineStyleKind, StyleAttr};
 use layout::std_shapes::shapes::{Arrow, Element, LineEndKind, RecordDef, ShapeKind};
 use layout::topo::layout::VisualGraph;
@@ -17,6 +17,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use tempfile::Builder;
 
+// Typography and text formatting.
 const FONT_FAMILY: &str = "'Noto Sans', sans-serif";
 const MONO_FONT_FAMILY: &str = "'Noto Sans Mono'";
 const FONT_SIZE: usize = 12;
@@ -25,44 +26,49 @@ const PORT_HEADER_FONT_SIZE: usize = FONT_SIZE * 4 / 6;
 const PORT_VALUE_FONT_SIZE: usize = FONT_SIZE * 4 / 6;
 const CONFIG_FONT_SIZE: usize = PORT_VALUE_FONT_SIZE - 1;
 const EDGE_FONT_SIZE: usize = 7;
-const EDGE_LABEL_FIT_RATIO: f64 = 0.8;
-const EDGE_LABEL_OFFSET: f64 = 8.0;
-const EDGE_LABEL_LIGHTEN: f64 = 0.35;
+const TYPE_WRAP_WIDTH: usize = 24;
+const CONFIG_WRAP_WIDTH: usize = 32;
 const MODULE_TRUNC_MARKER: &str = "…";
 const MODULE_SEPARATOR: &str = "⠶";
-const BACK_EDGE_STACK_SPACING: f64 = 16.0;
-const BACK_EDGE_NODE_GAP: f64 = 12.0;
-const BACK_EDGE_DUP_SPACING: f64 = 6.0;
-const BACK_EDGE_SPAN_EPS: f64 = 4.0;
-const DETOUR_LABEL_CLEARANCE: f64 = 6.0;
-const EDGE_STUB_LEN: f64 = 32.0;
-const EDGE_STUB_MIN: f64 = 18.0;
-const INTERMEDIATE_X_EPS: f64 = 6.0;
+const PLACEHOLDER_TEXT: &str = "\u{2014}";
+
+// Color palette and fills.
 const BORDER_COLOR: &str = "#999999";
 const HEADER_BG: &str = "#f4f4f4";
-const VALUE_BORDER_WIDTH: f64 = 0.6;
-const OUTER_BORDER_WIDTH: f64 = 1.3;
-const EDGE_PORT_HANDLE: f64 = 12.0;
-const ARROW_HEAD_MARGIN: f64 = 6.0;
 const DIM_GRAY: &str = "dimgray";
 const LIGHT_GRAY: &str = "lightgray";
 const CLUSTER_COLOR: &str = "#bbbbbb";
-const CLUSTER_MARGIN: f64 = 20.0;
-const GRAPH_MARGIN: f64 = 20.0;
-const SECTION_SPACING: f64 = 60.0;
-const BOX_SHAPE_PADDING: f64 = 10.0;
-const CELL_PADDING: f64 = 6.0;
-const CELL_LINE_SPACING: f64 = 2.0;
-const PLACEHOLDER_TEXT: &str = "\u{2014}";
-const TYPE_WRAP_WIDTH: usize = 24;
-const CONFIG_WRAP_WIDTH: usize = 32;
-const LAYOUT_SCALE_X: f64 = 1.8;
-const LAYOUT_SCALE_Y: f64 = 1.2;
-
 const EDGE_COLOR_PALETTE: [&str; 10] = [
     "#1F77B4", "#FF7F0E", "#2CA02C", "#D62728", "#9467BD", "#8C564B", "#E377C2", "#7F7F7F",
     "#BCBD22", "#17BECF",
 ];
+
+// Layout spacing and sizing.
+const GRAPH_MARGIN: f64 = 20.0;
+const CLUSTER_MARGIN: f64 = 20.0;
+const SECTION_SPACING: f64 = 60.0;
+const BOX_SHAPE_PADDING: f64 = 10.0;
+const CELL_PADDING: f64 = 6.0;
+const CELL_LINE_SPACING: f64 = 2.0;
+const VALUE_BORDER_WIDTH: f64 = 0.6;
+const OUTER_BORDER_WIDTH: f64 = 1.3;
+const LAYOUT_SCALE_X: f64 = 1.8;
+const LAYOUT_SCALE_Y: f64 = 1.2;
+
+// Edge routing and label placement.
+const EDGE_LABEL_FIT_RATIO: f64 = 0.8;
+const EDGE_LABEL_OFFSET: f64 = 8.0;
+const EDGE_LABEL_LIGHTEN: f64 = 0.35;
+const DETOUR_LABEL_CLEARANCE: f64 = 6.0;
+const BACK_EDGE_STACK_SPACING: f64 = 16.0;
+const BACK_EDGE_NODE_GAP: f64 = 12.0;
+const BACK_EDGE_DUP_SPACING: f64 = 6.0;
+const BACK_EDGE_SPAN_EPS: f64 = 4.0;
+const INTERMEDIATE_X_EPS: f64 = 6.0;
+const EDGE_STUB_LEN: f64 = 32.0;
+const EDGE_STUB_MIN: f64 = 18.0;
+const EDGE_PORT_HANDLE: f64 = 12.0;
+const ARROW_HEAD_MARGIN: f64 = 6.0;
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -82,6 +88,7 @@ struct Args {
 }
 
 /// Render the configuration file to an SVG and optionally opens it with inkscape.
+/// CLI entrypoint that parses args, renders SVG, and optionally opens it.
 fn main() -> std::io::Result<()> {
     // Parse command line arguments
     let args = Args::parse();
@@ -128,6 +135,7 @@ fn main() -> std::io::Result<()> {
     Ok(())
 }
 
+/// Hide platform-specific open commands behind a single helper.
 fn open_svg(path: &std::path::Path) -> std::io::Result<()> {
     if cfg!(target_os = "windows") {
         Command::new("cmd")
@@ -146,6 +154,7 @@ fn open_svg(path: &std::path::Path) -> std::io::Result<()> {
     Ok(())
 }
 
+/// Run the full render pipeline and return SVG bytes for the CLI.
 fn render_config_svg(config: &config::CuConfig, mission_id: Option<&str>) -> CuResult<Vec<u8>> {
     let sections = build_sections(config, mission_id)?;
     let mut layouts = Vec::new();
@@ -156,6 +165,7 @@ fn render_config_svg(config: &config::CuConfig, mission_id: Option<&str>) -> CuR
     Ok(render_sections_to_svg(&layouts).into_bytes())
 }
 
+/// Normalize mission selection into a list of sections to render.
 fn build_sections<'a>(
     config: &'a config::CuConfig,
     mission_id: Option<&str>,
@@ -187,6 +197,7 @@ fn build_sections<'a>(
     Ok(sections)
 }
 
+/// Convert a config graph into positioned nodes, edges, and port anchors.
 fn build_section_layout(
     config: &config::CuConfig,
     section: &SectionRef<'_>,
@@ -330,6 +341,7 @@ fn build_section_layout(
     })
 }
 
+/// Build the record table for a node and capture port ids for routing.
 fn build_node_table(
     node: &config::RenderNode,
     node_weight: &config::Node,
@@ -380,6 +392,7 @@ fn build_node_table(
     (TableNode::Array(rows), port_lookup)
 }
 
+/// Keep input/output rows aligned and generate stable port identifiers.
 fn build_port_column(
     title: &str,
     names: &[String],
@@ -423,6 +436,7 @@ fn build_port_column(
     TableNode::Array(rows)
 }
 
+/// Render config entries in a stable order for readability and diffs.
 fn build_config_rows(config: &config::ComponentConfig) -> Vec<TableNode> {
     if config.0.is_empty() {
         return Vec::new();
@@ -458,6 +472,7 @@ fn build_config_rows(config: &config::ComponentConfig) -> Vec<TableNode> {
     vec![header, body]
 }
 
+/// Adapt our table tree into the layout-rs record format.
 fn table_to_record(node: &TableNode) -> RecordDef {
     match node {
         TableNode::Cell(cell) => RecordDef::Text(cell.label(), cell.port.clone()),
@@ -467,6 +482,7 @@ fn table_to_record(node: &TableNode) -> RecordDef {
     }
 }
 
+/// Estimate record size before layout so edges and clusters can be sized.
 fn record_size(node: &TableNode, dir: Orientation) -> Point {
     match node {
         TableNode::Cell(cell) => pad_shape_scalar(cell_text_size(cell), BOX_SHAPE_PADDING),
@@ -491,6 +507,7 @@ fn record_size(node: &TableNode, dir: Orientation) -> Point {
     }
 }
 
+/// Walk table cells to compute positions and collect port anchors.
 fn visit_table(
     node: &TableNode,
     dir: Orientation,
@@ -555,6 +572,7 @@ fn visit_table(
     }
 }
 
+/// Render each section and merge them into a single SVG canvas.
 fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
     let mut svg = SvgWriter::new();
     let mut cursor_y = GRAPH_MARGIN;
@@ -866,6 +884,7 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
     svg.finalize()
 }
 
+/// Draw table cells manually since the layout engine only positions shapes.
 fn draw_node_table(svg: &mut SvgWriter, node: &NodeRender, element: &Element, offset: Point) {
     let pos = element.position();
     let center = pos.center().add(offset);
@@ -892,6 +911,7 @@ fn draw_node_table(svg: &mut SvgWriter, node: &NodeRender, element: &Element, of
     );
 }
 
+/// Visually group mission sections with a labeled bounding box.
 fn draw_cluster(svg: &mut SvgWriter, min: Point, max: Point, label: &str, offset: Point) {
     let top_left = min.add(offset);
     let size = max.sub(min);
@@ -910,6 +930,7 @@ fn draw_cluster(svg: &mut SvgWriter, min: Point, max: Point, label: &str, offset
     );
 }
 
+/// Fail fast on invalid mission ids and provide a readable list.
 fn validate_mission_arg(
     config: &config::CuConfig,
     requested: Option<&str>,
@@ -934,6 +955,7 @@ fn validate_mission_arg(
     }
 }
 
+/// Support a CLI mode that prints mission names and exits.
 fn print_mission_list(config: &config::CuConfig) {
     match &config.graphs {
         ConfigGraphs::Simple(_) => println!("default"),
@@ -947,6 +969,7 @@ fn print_mission_list(config: &config::CuConfig) {
     }
 }
 
+/// Keep mission lists stable for consistent error messages.
 fn format_mission_list(graphs: &HashMap<String, config::CuGraph>) -> String {
     let mut missions: Vec<_> = graphs.keys().cloned().collect();
     missions.sort();
