@@ -181,7 +181,10 @@ fn build_sections<'a>(
     mission_id: Option<&str>,
 ) -> CuResult<Vec<SectionRef<'a>>> {
     let sections = match (&config.graphs, mission_id) {
-        (ConfigGraphs::Simple(graph), _) => vec![SectionRef { label: None, graph }],
+        (ConfigGraphs::Simple(graph), _) => vec![SectionRef {
+            label: Some("Default".to_string()),
+            graph,
+        }],
         (ConfigGraphs::Missions(graphs), Some(id)) => {
             let graph = graphs
                 .get(id)
@@ -1338,8 +1341,8 @@ impl SvgWriter {
     }
 
     fn grow_window(&mut self, point: Point, size: Point) {
-        self.view_size.x = self.view_size.x.max(point.x + size.x + 5.0);
-        self.view_size.y = self.view_size.y.max(point.y + size.y + 5.0);
+        self.view_size.x = self.view_size.x.max(point.x + size.x);
+        self.view_size.y = self.view_size.y.max(point.y + size.y);
     }
 
     fn draw_rect(
@@ -1539,12 +1542,12 @@ impl SvgWriter {
         let width = if self.view_size.x < 1.0 {
             1.0
         } else {
-            self.view_size.x
+            self.view_size.x + GRAPH_MARGIN
         };
         let height = if self.view_size.y < 1.0 {
             1.0
         } else {
-            self.view_size.y
+            self.view_size.y + GRAPH_MARGIN
         };
 
         Document::new()
