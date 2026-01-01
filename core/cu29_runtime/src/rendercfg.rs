@@ -412,7 +412,9 @@ fn build_node_table(
         ),
     ];
     rows.push(TableNode::Cell(
-        TableCell::new(header_lines).with_background(header_fill),
+        TableCell::new(header_lines)
+            .with_background(header_fill)
+            .with_align(TextAlign::Center),
     ));
 
     let mut port_lookup = PortLookup::default();
@@ -1348,6 +1350,7 @@ impl TableCell {
 #[derive(Clone, Copy)]
 enum TextAlign {
     Left,
+    Center,
     Right,
 }
 
@@ -1438,6 +1441,7 @@ impl TableVisitor for TableRenderer<'_> {
         let mut current_y = loc.y - total_height / 2.0;
         let (text_x, anchor) = match cell.align {
             TextAlign::Left => (loc.x - size.x / 2.0 + CELL_PADDING, "start"),
+            TextAlign::Center => (loc.x, "middle"),
             TextAlign::Right => (loc.x + size.x / 2.0 - CELL_PADDING, "end"),
         };
 
