@@ -158,33 +158,36 @@ fn run_copper_callback(
                     bindings.single_mut().expect("Failed to get cart force");
                 let maybe_motor_actuation = input.payload();
                 let override_motor = drag_state.override_motor;
+                if override_motor {
+                    if let Some(motor_actuation) = maybe_motor_actuation {
+                        if !motor_actuation.power.is_nan() {
+                            let total_mass = motor_model::total_mass_kg();
+                            let force_magnitude =
+                                motor_model::force_from_power(motor_actuation.power, total_mass);
+                            output
+                                .metadata
+                                .set_status(format!("Applied force: {force_magnitude}"));
+                        }
+                    }
+                    return SimOverride::ExecutedBySim;
+                }
                 if let Some(motor_actuation) = maybe_motor_actuation {
                     if motor_actuation.power.is_nan() {
                         cart_force.0 = Vector::ZERO;
-                        if !override_motor {
-                            applied_force.0 = Vector::ZERO;
-                        }
                         return SimOverride::ExecutedBySim;
                     }
                     let total_mass = motor_model::total_mass_kg();
                     let force_magnitude =
                         motor_model::force_from_power(motor_actuation.power, total_mass);
                     let new_force = Vector::new(force_magnitude, 0.0, 0.0);
-                    if override_motor {
-                        cart_force.0 = Vector::ZERO;
-                    } else {
-                        cart_force.0 = new_force;
-                        applied_force.0 = new_force;
-                    }
+                    cart_force.0 = new_force;
+                    applied_force.0 = new_force;
                     output
                         .metadata
                         .set_status(format!("Applied force: {force_magnitude}"));
                     SimOverride::ExecutedBySim
                 } else {
                     cart_force.0 = Vector::ZERO;
-                    if !override_motor {
-                        applied_force.0 = Vector::ZERO;
-                    }
                     SimOverride::Errored("Safety Mode.".into())
                 }
             }

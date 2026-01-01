@@ -557,29 +557,14 @@ fn setup_entities(
     setup_completed.0 = true; // Mark as completed
 }
 
-fn get_rigid_body_entity(
-    mut drag_target: Entity,
-    parents: &Query<(&ChildOf, Option<&RigidBody>)>,
-) -> Entity {
-    // get a rigid body entity (the drag event may target a descendant of them)
-    while let Ok((parent, maybe_rigid_body)) = parents.get(drag_target) {
-        if maybe_rigid_body.is_some() {
-            break;
-        }
-        drag_target = parent.parent();
-    }
-
-    // this will return the highest ancestor if no rigid body is found, which is fine
-    drag_target
-}
-
 // Avian's `Forces` is the mutable query data for applying forces.
+// Note: We use drag.target() (deprecated in Bevy 0.17) because it returns the observer's entity
+// (cart/rod), not the clicked mesh child. The suggested alternative event.entity doesn't work
+// for our use case with bubbling pointer events.
 fn on_drag(
     drag: On<Pointer<Drag>>,
     camera_query: Option<Single<&Transform, With<Camera>>>,
-    parents: Query<(&ChildOf, Option<&RigidBody>)>,
     cart: Query<(), With<Cart>>,
-    mut forces: Query<Forces>,
     mut constant_forces: Query<&mut ConstantForce>,
     mut applied_forces: Query<&mut AppliedForce>,
     mut drag_state: ResMut<DragState>,
@@ -594,38 +579,33 @@ fn on_drag(
         return;
     };
 
-    let event = drag.event();
-    let target_entity = get_rigid_body_entity(event.entity, &parents);
+    // Use drag.target() to get the observer's entity (cart or rod), not the clicked mesh child
+    let target_entity = drag.target();
     let is_cart = cart.get(target_entity).is_ok();
 
     if is_cart {
         drag_state.override_motor = true;
-        if let Ok(mut constant_force) = constant_forces.get_mut(target_entity) {
-            constant_force.0 = Vector::ZERO;
-        }
     }
 
-    if let Ok(mut force) = forces.get_mut(target_entity) {
-        // calculate world X-direction drag from screenspace drag
-        // drag.delta.y should basically never contribute (as long as camera isn't rolled), but scaling by camera_transform.right() will feel more natural when dragging from a steep visual angle
-        let drag_delta_world = event.distance.x * camera_transform.right()
-            + event.distance.y * camera_transform.down();
+    // calculate world X-direction drag from screenspace drag
+    // drag.delta.y should basically never contribute (as long as camera isn't rolled), but scaling by camera_transform.right() will feel more natural when dragging from a steep visual angle
+    let drag_delta_world = drag.distance.x * camera_transform.right()
+        + drag.distance.y * camera_transform.down();
 
-        // apply a force to that object based on the world length and direction of the mouse drag
-        let applied_force_vec = (drag_delta_world / drag_control.pixels_per_newton)
-            .clamp_length_max(drag_control.max_force);
-        force.apply_force(applied_force_vec);
-        if let Ok(mut recorded_force) = applied_forces.get_mut(target_entity) {
-            recorded_force.0 = applied_force_vec;
-        }
+    // apply a force to that object based on the world length and direction of the mouse drag
+    let applied_force_vec = (drag_delta_world / drag_control.pixels_per_newton)
+        .clamp_length_max(drag_control.max_force);
+    if let Ok(mut constant_force) = constant_forces.get_mut(target_entity) {
+        constant_force.0 = applied_force_vec;
+    }
+    if let Ok(mut recorded_force) = applied_forces.get_mut(target_entity) {
+        recorded_force.0 = applied_force_vec;
     }
 }
 
 fn on_drag_end(
     drag: On<Pointer<DragEnd>>,
-    parents: Query<(&ChildOf, Option<&RigidBody>)>,
     cart: Query<(), With<Cart>>,
-    mut forces: Query<Forces>,
     mut constant_forces: Query<&mut ConstantForce>,
     mut applied_forces: Query<&mut AppliedForce>,
     mut drag_state: ResMut<DragState>,
@@ -634,20 +614,15 @@ fn on_drag_end(
         return;
     }
 
-    let event = drag.event();
-    let target_entity = get_rigid_body_entity(event.entity, &parents);
+    // Use drag.target() to get the observer's entity (cart or rod)
+    let target_entity = drag.target();
     let is_cart = cart.get(target_entity).is_ok();
 
     if is_cart {
         drag_state.override_motor = false;
-        if let Ok(mut constant_force) = constant_forces.get_mut(target_entity) {
-            constant_force.0 = Vector::ZERO;
-        }
     }
-
-    if let Ok(mut force) = forces.get_mut(target_entity) {
-        force.reset_accumulated_linear_acceleration();
-        force.reset_accumulated_angular_acceleration();
+    if let Ok(mut constant_force) = constant_forces.get_mut(target_entity) {
+        constant_force.0 = Vector::ZERO;
     }
     if let Ok(mut recorded_force) = applied_forces.get_mut(target_entity) {
         recorded_force.0 = Vector::ZERO;
