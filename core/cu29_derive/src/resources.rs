@@ -6,6 +6,8 @@ use syn::{
     punctuated::Punctuated,
 };
 
+use crate::utils::config_id_to_enum;
+
 pub fn resources(input: TokenStream) -> TokenStream {
     let ResourcesMacro {
         generics,
@@ -26,9 +28,12 @@ pub fn resources(input: TokenStream) -> TokenStream {
     let mut fields = Vec::new();
     let mut inits = Vec::new();
 
+    let mut binding_variants = Vec::new();
+
     for entry in entries {
         let name = entry.name;
         let binding = name.to_string();
+        let binding_ident = Ident::new(&config_id_to_enum(&binding), name.span());
         let ty = entry.ty;
         let (field_ty, access) = match entry.kind {
             ResourceKind::Owned => (
@@ -47,11 +52,12 @@ pub fn resources(input: TokenStream) -> TokenStream {
         inits.push(quote! {
             #name: {
                 let key = mapping
-                    .get(#binding)
+                    .get(Binding::#binding_ident)
                     .ok_or_else(|| ::cu29::CuError::from(concat!("missing `", #binding, "` resource binding")))?;
                 manager.#access(key.typed())?
             }
         });
+        binding_variants.push(binding_ident);
     }
 
     let where_clause = if where_preds.is_empty() {
@@ -84,6 +90,11 @@ pub fn resources(input: TokenStream) -> TokenStream {
 
     let expanded = if needs_lifetime {
         quote! {
+            #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+            pub enum Binding {
+                #(#binding_variants),*
+            }
+
             pub struct Resources #lifetime_params {
                 #(#fields),*
             }
@@ -91,9 +102,11 @@ pub fn resources(input: TokenStream) -> TokenStream {
             impl #lifetime_params ::cu29::resource::ResourceBindings<'r> for Resources #lifetime_params
             #where_clause
             {
+                type Binding = Binding;
+
                 fn from_bindings(
                     manager: &'r mut ::cu29::resource::ResourceManager,
-                    mapping: Option<&::cu29::resource::ResourceMapping>,
+                    mapping: Option<&::cu29::resource::ResourceBindingMap<Self::Binding>>,
                 ) -> ::cu29::CuResult<Self> {
                     let mapping = mapping.ok_or_else(|| ::cu29::CuError::from("missing resource bindings"))?;
                     Ok(Self { #(#inits),* })
@@ -102,6 +115,11 @@ pub fn resources(input: TokenStream) -> TokenStream {
         }
     } else {
         quote! {
+            #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+            pub enum Binding {
+                #(#binding_variants),*
+            }
+
             pub struct Resources #lifetime_params {
                 #(#fields),*
             }
@@ -109,9 +127,11 @@ pub fn resources(input: TokenStream) -> TokenStream {
             impl #lifetime_params ::cu29::resource::ResourceBindings<'_> for Resources #lifetime_params
             #where_clause
             {
+                type Binding = Binding;
+
                 fn from_bindings(
                     manager: &mut ::cu29::resource::ResourceManager,
-                    mapping: Option<&::cu29::resource::ResourceMapping>,
+                    mapping: Option<&::cu29::resource::ResourceBindingMap<Self::Binding>>,
                 ) -> ::cu29::CuResult<Self> {
                     let mapping = mapping.ok_or_else(|| ::cu29::CuError::from("missing resource bindings"))?;
                     Ok(Self { #(#inits),* })

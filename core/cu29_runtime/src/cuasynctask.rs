@@ -1,8 +1,7 @@
 use crate::config::ComponentConfig;
 use crate::cutask::{CuMsg, CuMsgPayload, CuTask, Freezable};
-use crate::resource::{ResourceBindings, ResourceManager, ResourceMapping};
 use cu29_clock::{CuTime, RobotClock};
-use cu29_traits::{CuError, CuResult};
+use cu29_traits::CuResult;
 use rayon::ThreadPool;
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -26,28 +25,6 @@ where
 pub struct CuAsyncTaskResources<'r, T: CuTask> {
     pub inner: T::Resources<'r>,
     pub threadpool: Arc<ThreadPool>,
-}
-
-impl<'r, T> ResourceBindings<'r> for CuAsyncTaskResources<'r, T>
-where
-    T: CuTask,
-    T::Resources<'r>: ResourceBindings<'r>,
-{
-    fn from_bindings(
-        manager: &'r mut ResourceManager,
-        mapping: Option<&ResourceMapping>,
-    ) -> CuResult<Self> {
-        let mapping = mapping.ok_or_else(|| CuError::from("Missing resource bindings"))?;
-        let threadpool_key = mapping
-            .get("bg_threads")
-            .ok_or_else(|| CuError::from("Missing 'bg_threads' binding for background task"))?
-            .typed();
-        let threadpool = manager.borrow_shared_arc(threadpool_key)?;
-        Ok(Self {
-            inner: T::Resources::from_bindings(manager, Some(mapping))?,
-            threadpool,
-        })
-    }
 }
 
 impl<T, O> CuAsyncTask<T, O>

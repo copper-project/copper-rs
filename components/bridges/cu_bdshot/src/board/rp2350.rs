@@ -11,15 +11,8 @@ use pio_proc::pio_file;
 use rp235x_hal as hal;
 use spin::Mutex;
 
+use super::BdshotBoard;
 use crate::bridge::BdshotBoardProvider;
-
-pub trait BdshotBoard {
-    const CHANNEL_COUNT: usize;
-
-    fn exchange(&mut self, channel: usize, frame: u32) -> Option<DShotTelemetry>;
-
-    fn delay(&mut self, micros: u32);
-}
 
 pub struct Rp2350Board {
     cycles_per_micro: u32,

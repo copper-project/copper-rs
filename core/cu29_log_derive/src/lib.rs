@@ -3,7 +3,8 @@ extern crate proc_macro;
 use cu29_intern_strs::intern_string;
 use cu29_log::CuLogLevel;
 use proc_macro::TokenStream;
-use proc_macro2::TokenStream as TokenStream2;
+use proc_macro_crate::{FoundCrate, crate_name};
+use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::quote;
 #[allow(unused)]
 use syn::Token;
@@ -141,6 +142,40 @@ fn create_log_entry(input: TokenStream, level: CuLogLevel) -> TokenStream {
         .map(|(_, rhs)| quote! { #rhs })
         .collect();
 
+    let defmt_available = crate_name("defmt").is_ok();
+
+    fn defmt_macro_path(level: CuLogLevel) -> TokenStream2 {
+        let macro_ident = match level {
+            CuLogLevel::Debug => quote! { defmt_debug },
+            CuLogLevel::Info => quote! { defmt_info },
+            CuLogLevel::Warning => quote! { defmt_warn },
+            CuLogLevel::Error => quote! { defmt_error },
+            CuLogLevel::Critical => quote! { defmt_error },
+        };
+
+        let (base, use_prelude) = match crate_name("cu29") {
+            Ok(FoundCrate::Name(name)) => {
+                let ident = proc_macro2::Ident::new(&name, Span::call_site());
+                (quote! { ::#ident }, true)
+            }
+            Ok(FoundCrate::Itself) => (quote! { crate }, true),
+            Err(_) => match crate_name("cu29-log") {
+                Ok(FoundCrate::Name(name)) => {
+                    let ident = proc_macro2::Ident::new(&name, Span::call_site());
+                    (quote! { ::#ident }, false)
+                }
+                Ok(FoundCrate::Itself) => (quote! { crate }, false),
+                Err(_) => (quote! { ::cu29_log }, false),
+            },
+        };
+
+        if use_prelude {
+            quote! { #base::prelude::#macro_ident }
+        } else {
+            quote! { #base::#macro_ident }
+        }
+    }
+
     // Runtime logging path (unchanged)
     #[cfg(not(debug_assertions))]
     let log_stmt = quote! { let r = log(&mut log_entry); };
@@ -166,17 +201,11 @@ fn create_log_entry(input: TokenStream, level: CuLogLevel) -> TokenStream {
     });
 
     #[cfg(debug_assertions)]
-    let defmt_macro: TokenStream2 = match level {
-        CuLogLevel::Debug => quote! { ::cu29::prelude::__cu29_defmt_debug },
-        CuLogLevel::Info => quote! { ::cu29::prelude::__cu29_defmt_info  },
-        CuLogLevel::Warning => quote! { ::cu29::prelude::__cu29_defmt_warn  },
-        CuLogLevel::Error => quote! { ::cu29::prelude::__cu29_defmt_error },
-        CuLogLevel::Critical => quote! { ::cu29::prelude::__cu29_defmt_error },
-    };
+    let defmt_macro: TokenStream2 = defmt_macro_path(level);
 
     #[cfg(debug_assertions)]
-    let maybe_inject_defmt: Option<TokenStream2> = if STD {
-        None // defmt never exist in std mode ...
+    let maybe_inject_defmt: Option<TokenStream2> = if STD || !defmt_available {
+        None // defmt is only emitted in no-std builds.
     } else {
         Some(quote! {
              #[cfg(debug_assertions)]

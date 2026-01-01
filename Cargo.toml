@@ -133,7 +133,7 @@ cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads", version 
 cu-ros-payloads = { path = "components/payloads/cu_ros_payloads", version = "0.11.0" }
 
 # External serialization
-bincode = { version = "2.0", default-features = false, features = ["derive", "alloc"] }
+bincode = { package = "cu-bincode", version = "2.0", default-features = false, features = ["derive", "alloc"] }
 serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
 erased-serde = { version = "0.4", default-features = false, features = ["alloc"] }
 serde_derive = { version = "1.0", features = ["default"] }
@@ -161,7 +161,7 @@ tempfile = "3.23"
 spin = { version = "0.10" } # should be removed when std is on, but cargo is bad at negative features
 
 # rerun
-rerun = { version = "0.27", default-features = false, features = ["sdk", "server", "log"] }
+rerun = { version = "0.28", default-features = false, features = ["sdk", "server", "log"] }
 
 # smallvec to avoid heap allocations
 smallvec = { version = "1.15", default-features = false, features = ["serde"] }

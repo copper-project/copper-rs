@@ -1,5 +1,5 @@
-use cu29::resource::{ResourceBundle, ResourceDecl, ResourceKey, ResourceManager};
-use cu29::{CuError, CuResult};
+use cu29::resource::{ResourceBundle, ResourceManager};
+use cu29::{CuResult, bundle_resources};
 use parking_lot::Mutex;
 use std::sync::Arc;
 
@@ -58,32 +58,24 @@ impl GlobalLog {
     }
 }
 
-fn lookup(resources: &[ResourceDecl], bundle: &str, name: &str) -> CuResult<ResourceKey> {
-    let path = format!("{bundle}.{name}");
-    resources
-        .iter()
-        .find(|decl| decl.path == path)
-        .map(|decl| decl.key)
-        .ok_or_else(|| CuError::from(format!("Resource '{path}' not declared")))
-}
-
 pub struct BoardBundle;
+
+bundle_resources!(BoardBundle: Bus, Counter, Tag);
 
 impl ResourceBundle for BoardBundle {
     fn build(
-        bundle_id: &str,
+        bundle: cu29::resource::BundleContext<Self>,
         config: Option<&cu29::config::ComponentConfig>,
-        resources: &[ResourceDecl],
         manager: &mut ResourceManager,
     ) -> CuResult<()> {
         let label: String = config
             .and_then(|cfg| cfg.get("label"))
-            .unwrap_or_else(|| format!("{bundle_id}-bus"));
+            .unwrap_or_else(|| format!("{}-bus", bundle.bundle_id()));
         let offset: i64 = config.and_then(|cfg| cfg.get("offset")).unwrap_or(0);
 
-        let bus_key = lookup(resources, bundle_id, "bus")?.typed();
-        let counter_key = lookup(resources, bundle_id, "counter")?.typed();
-        let tag_key = lookup(resources, bundle_id, "tag")?.typed();
+        let bus_key = bundle.key(BoardBundleId::Bus);
+        let counter_key = bundle.key(BoardBundleId::Counter);
+        let tag_key = bundle.key(BoardBundleId::Tag);
 
         let bus = Arc::new(SharedBus::new(label.clone()));
         manager.add_shared(bus_key, Arc::new(bus))?;
@@ -95,17 +87,18 @@ impl ResourceBundle for BoardBundle {
 
 pub struct ExtraBundle;
 
+bundle_resources!(ExtraBundle: Note);
+
 impl ResourceBundle for ExtraBundle {
     fn build(
-        bundle_id: &str,
+        bundle: cu29::resource::BundleContext<Self>,
         config: Option<&cu29::config::ComponentConfig>,
-        resources: &[ResourceDecl],
         manager: &mut ResourceManager,
     ) -> CuResult<()> {
         let note: String = config
             .and_then(|cfg| cfg.get("note"))
-            .unwrap_or_else(|| format!("{bundle_id}-note"));
-        let note_key = lookup(resources, bundle_id, "note")?.typed();
+            .unwrap_or_else(|| format!("{}-note", bundle.bundle_id()));
+        let note_key = bundle.key(ExtraBundleId::Note);
         manager.add_owned(note_key, note)?;
         Ok(())
     }
@@ -113,14 +106,15 @@ impl ResourceBundle for ExtraBundle {
 
 pub struct GlobalBundle;
 
+bundle_resources!(GlobalBundle: Log);
+
 impl ResourceBundle for GlobalBundle {
     fn build(
-        bundle_id: &str,
+        bundle: cu29::resource::BundleContext<Self>,
         _config: Option<&cu29::config::ComponentConfig>,
-        resources: &[ResourceDecl],
         manager: &mut ResourceManager,
     ) -> CuResult<()> {
-        let log_key = lookup(resources, bundle_id, "log")?.typed();
+        let log_key = bundle.key(GlobalBundleId::Log);
         manager.add_shared(log_key, Arc::new(Arc::new(GlobalLog::default())))?;
         Ok(())
     }

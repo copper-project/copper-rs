@@ -44,7 +44,7 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
-pub use cu29_derive::resources;
+pub use cu29_derive::{bundle_resources, resources};
 pub use cu29_runtime::config;
 pub use cu29_runtime::copperlist;
 #[cfg(feature = "std")]
@@ -64,6 +64,10 @@ pub use cu29_runtime::tx_channels;
 
 pub use bincode;
 pub use cu29_clock as clock;
+#[cfg(feature = "defmt")]
+pub mod defmt {
+    pub use ::defmt::{debug, error, info, warn};
+}
 #[cfg(feature = "std")]
 pub use cu29_runtime::config::read_configuration;
 pub use cu29_traits::*;
@@ -71,12 +75,69 @@ pub use cu29_traits::*;
 #[cfg(feature = "std")]
 pub use rayon;
 
+// defmt shims re-exported for proc-macro call sites
+#[cfg(all(feature = "defmt", not(feature = "std")))]
+#[macro_export]
+macro_rules! defmt_debug {
+    ($fmt:literal $(, $arg:expr)* $(,)?) => {
+        $crate::defmt::debug!($fmt $(, $arg)*);
+    }
+}
+#[cfg(not(all(feature = "defmt", not(feature = "std"))))]
+#[macro_export]
+macro_rules! defmt_debug {
+    ($($tt:tt)*) => {{}};
+}
+
+#[cfg(all(feature = "defmt", not(feature = "std")))]
+#[macro_export]
+macro_rules! defmt_info {
+    ($fmt:literal $(, $arg:expr)* $(,)?) => {
+        $crate::defmt::info!($fmt $(, $arg)*);
+    }
+}
+#[cfg(not(all(feature = "defmt", not(feature = "std"))))]
+#[macro_export]
+macro_rules! defmt_info {
+    ($($tt:tt)*) => {{}};
+}
+
+#[cfg(all(feature = "defmt", not(feature = "std")))]
+#[macro_export]
+macro_rules! defmt_warn {
+    ($fmt:literal $(, $arg:expr)* $(,)?) => {
+        $crate::defmt::warn!($fmt $(, $arg)*);
+    }
+}
+#[cfg(not(all(feature = "defmt", not(feature = "std"))))]
+#[macro_export]
+macro_rules! defmt_warn {
+    ($($tt:tt)*) => {{}};
+}
+
+#[cfg(all(feature = "defmt", not(feature = "std")))]
+#[macro_export]
+macro_rules! defmt_error {
+    ($fmt:literal $(, $arg:expr)* $(,)?) => {
+        $crate::defmt::error!($fmt $(, $arg)*);
+    }
+}
+#[cfg(not(all(feature = "defmt", not(feature = "std"))))]
+#[macro_export]
+macro_rules! defmt_error {
+    ($($tt:tt)*) => {{}};
+}
+
 pub mod prelude {
+    pub use crate::{defmt_debug, defmt_error, defmt_info, defmt_warn};
     #[cfg(feature = "std")]
     pub use ctrlc;
     pub use cu29_clock::*;
     pub use cu29_derive::*; // includes resources! proc macro
     pub use cu29_log::*;
+    pub use cu29_log::{
+        __cu29_defmt_debug, __cu29_defmt_error, __cu29_defmt_info, __cu29_defmt_warn,
+    };
     pub use cu29_log_derive::*;
     pub use cu29_log_runtime::*;
     pub use cu29_runtime::app::*;

@@ -23,6 +23,7 @@ use ratatui::crossterm::event::{DisableMouseCapture, EnableMouseCapture, Event, 
 use ratatui::crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
+use ratatui::crossterm::tty::IsTty;
 use ratatui::crossterm::{event, execute};
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Size};
 use ratatui::prelude::{Backend, Rect};
@@ -33,7 +34,7 @@ use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, StatefulWidget, Tab
 use ratatui::{Frame, Terminal};
 use std::backtrace::Backtrace;
 use std::fmt::{Display, Formatter};
-use std::io::{Write, stdout};
+use std::io::{Write, stdin, stdout};
 use std::marker::PhantomData;
 use std::process;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -910,7 +911,10 @@ impl UI {
         };
     }
 
-    fn run_app<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> io::Result<()> {
+    fn run_app<B: Backend<Error = io::Error>>(
+        &mut self,
+        terminal: &mut Terminal<B>,
+    ) -> io::Result<()> {
         loop {
             if self.quitting.load(Ordering::SeqCst) {
                 break;
@@ -1020,6 +1024,10 @@ impl CuMonitor for CuConsoleMon {
     }
 
     fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        if !should_start_ui() {
+            return Ok(());
+        }
+
         let config_dup = self.config.clone();
         let taskids = self.taskids;
 
@@ -1239,4 +1247,26 @@ fn setup_terminal() -> io::Result<()> {
 fn restore_terminal() -> io::Result<()> {
     execute!(stdout(), LeaveAlternateScreen, DisableMouseCapture)?;
     disable_raw_mode()
+}
+
+fn should_start_ui() -> bool {
+    if !stdout().is_tty() || !stdin().is_tty() {
+        return false;
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::io::AsRawFd;
+        let stdin_fd = stdin().as_raw_fd();
+        let fg_pgrp = unsafe { libc::tcgetpgrp(stdin_fd) };
+        if fg_pgrp == -1 {
+            return false;
+        }
+        let pgrp = unsafe { libc::getpgrp() };
+        if fg_pgrp != pgrp {
+            return false;
+        }
+    }
+
+    true
 }

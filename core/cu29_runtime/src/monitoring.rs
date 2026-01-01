@@ -352,7 +352,10 @@ impl Drop for ScopedAllocCounter {
     }
 }
 
+#[cfg(feature = "std")]
 const BUCKET_COUNT: usize = 1024;
+#[cfg(not(feature = "std"))]
+const BUCKET_COUNT: usize = 256;
 
 /// Accumulative stat object that can give your some real time statistics.
 /// Uses a fixed-size bucketed histogram for accurate percentile calculations.

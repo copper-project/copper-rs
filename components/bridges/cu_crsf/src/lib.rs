@@ -25,8 +25,6 @@ use cu29::cubridge::{
 use cu29::prelude::*;
 #[cfg(feature = "std")]
 use cu29::resource::ResourceBundle;
-#[cfg(feature = "std")]
-use cu29::resource::ResourceDecl;
 use cu29::resources;
 use embedded_io::{ErrorType, Read, Write};
 
@@ -227,21 +225,25 @@ pub mod std_serial {
 pub struct StdSerialBundle;
 
 #[cfg(feature = "std")]
+bundle_resources!(StdSerialBundle: Serial);
+
+#[cfg(feature = "std")]
 impl ResourceBundle for StdSerialBundle {
     fn build(
-        bundle_id: &str,
+        bundle: cu29::resource::BundleContext<Self>,
         config: Option<&ComponentConfig>,
-        resources: &[ResourceDecl],
         manager: &mut ResourceManager,
     ) -> CuResult<()> {
         let cfg = config.ok_or_else(|| {
             CuError::from(format!(
-                "CRSF serial bundle `{bundle_id}` requires configuration"
+                "CRSF serial bundle `{}` requires configuration",
+                bundle.bundle_id()
             ))
         })?;
         let path = cfg.get::<String>(SERIAL_PATH_KEY).ok_or_else(|| {
             CuError::from(format!(
-                "CRSF serial bundle `{bundle_id}` missing `serial_path` entry"
+                "CRSF serial bundle `{}` missing `serial_path` entry",
+                bundle.bundle_id()
             ))
         })?;
         let baud = cfg.get::<u32>(SERIAL_BAUD_KEY).unwrap_or(420_000);
@@ -252,15 +254,8 @@ impl ResourceBundle for StdSerialBundle {
                 "Failed to open serial `{path}` at {baud} baud: {err}"
             ))
         })?;
-        let key = resources
-            .first()
-            .ok_or_else(|| {
-                CuError::from(format!(
-                    "CRSF serial bundle `{bundle_id}` missing resource decl"
-                ))
-            })?
-            .key;
-        manager.add_owned(key.typed(), LockedSerial::new(serial))
+        let key = bundle.key(StdSerialBundleId::Serial);
+        manager.add_owned(key, LockedSerial::new(serial))
     }
 }
 
