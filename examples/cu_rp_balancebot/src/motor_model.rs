@@ -13,6 +13,7 @@ pub const CART_DEPTH: f32 = 0.06;
 
 pub const ROD_WIDTH: f32 = 0.007;
 pub const ROD_HEIGHT: f32 = 0.50;
+#[allow(dead_code)]
 pub const ROD_DEPTH: f32 = ROD_WIDTH;
 
 pub const STEEL_DENSITY: f32 = 7800.0; // kg/m^3

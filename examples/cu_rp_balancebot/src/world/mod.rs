@@ -737,10 +737,10 @@ fn reset_sim(
                         *position = Position::new(cart_translation);
                     }
                 }
-                if let Some(mut rotation) = rotation {
-                    if is_rod {
-                        *rotation = Rotation::IDENTITY;
-                    }
+                if let Some(mut rotation) = rotation
+                    && is_rod
+                {
+                    *rotation = Rotation::IDENTITY;
                 }
                 if let Some(mut presolve_position) = presolve_position {
                     **presolve_position = Vector::ZERO;
@@ -888,6 +888,7 @@ fn update_physics(state: Res<SimulationState>, mut time: ResMut<Time<Virtual>>) 
 }
 
 // Clamp cart rotation to its initial orientation so it only slides on the rail.
+#[allow(clippy::type_complexity)]
 fn lock_cart_rotation(
     mut carts: Query<
         (

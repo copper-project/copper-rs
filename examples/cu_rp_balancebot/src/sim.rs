@@ -159,15 +159,15 @@ fn run_copper_callback(
                 let maybe_motor_actuation = input.payload();
                 let override_motor = drag_state.override_motor;
                 if override_motor {
-                    if let Some(motor_actuation) = maybe_motor_actuation {
-                        if !motor_actuation.power.is_nan() {
-                            let total_mass = motor_model::total_mass_kg();
-                            let force_magnitude =
-                                motor_model::force_from_power(motor_actuation.power, total_mass);
-                            output
-                                .metadata
-                                .set_status(format!("Applied force: {force_magnitude}"));
-                        }
+                    if let Some(motor_actuation) = maybe_motor_actuation
+                        && !motor_actuation.power.is_nan()
+                    {
+                        let total_mass = motor_model::total_mass_kg();
+                        let force_magnitude =
+                            motor_model::force_from_power(motor_actuation.power, total_mass);
+                        output
+                            .metadata
+                            .set_status(format!("Applied force: {force_magnitude}"));
                     }
                     return SimOverride::ExecutedBySim;
                 }
