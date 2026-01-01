@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="23.818493mm"
+   height="23.818493mm"
+   viewBox="0 0 23.818493 23.818493"
+   version="1.1"
+   id="svg1"
+   sodipodi:docname="cu29.svg"
+   inkscape:version="1.4 (e7c3feb100, 2024-10-09)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     inkscape:zoom="4.1479598"
+     inkscape:cx="111.01843"
+     inkscape:cy="36.162357"
+     inkscape:window-width="2455"
+     inkscape:window-height="1464"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="svg1" />
+  <defs
+     id="defs1" />
+  <g
+     id="g53"
+     transform="translate(-169.02678,-38.922626)">
+    <rect
+       style="fill:#0000e0;fill-opacity:1;stroke:none;stroke-width:1.08266;stroke-dasharray:none;stroke-opacity:1"
+       id="rect174-4-0-5-1-9-0-5"
+       width="23.818493"
+       height="23.818493"
+       x="169.02678"
+       y="38.922626"
+       ry="1.845107" />
+    <rect
+       style="fill:#0000e0;fill-opacity:1;stroke:#ffffff;stroke-width:0.595;stroke-dasharray:none;stroke-opacity:1"
+       id="rect174-4-0-5-1-9-0"
+       width="20"
+       height="20"
+       x="170.93602"
+       y="40.831871"
+       ry="0" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:3.52778px;font-family:Orbitron;-inkscape-font-specification:'Orbitron Bold';text-align:end;text-anchor:end;fill:#ffffff;fill-opacity:1;stroke:#b3b3b3;stroke-width:0;stroke-dasharray:none;stroke-opacity:1"
+       x="188.78641"
+       y="45.951553"
+       id="text4-3-6-6-7-7-8-0-9"><tspan
+         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:3.52778px;font-family:Orbitron;-inkscape-font-specification:'Orbitron Bold';text-align:end;text-anchor:end;fill:#ffffff;fill-opacity:1;stroke:#b3b3b3;stroke-width:0;stroke-dasharray:none;stroke-opacity:1"
+         x="188.78641"
+         y="45.951553"
+         id="tspan5-8-0-4-7-6-7-6-2"><tspan
+           dy="0 0"
+           id="tspan53-0"
+           style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-size:3.52778px;font-family:Orbitron;-inkscape-font-specification:'Orbitron Bold';text-align:end;text-anchor:end;fill:#ffffff;fill-opacity:1;stroke:#b3b3b3;stroke-width:0;stroke-dasharray:none;stroke-opacity:1">29</tspan></tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:9.17222px;font-family:Orbitron;-inkscape-font-specification:Orbitron;letter-spacing:0.552979px;fill:#ffffff;fill-opacity:1;stroke:#ffffff;stroke-width:0.495;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1"
+       x="173.68405"
+       y="55.192207"
+       id="text53"><tspan
+         id="tspan53"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:9.17222px;font-family:Orbitron;-inkscape-font-specification:Orbitron;letter-spacing:0.552979px;fill:#ffffff;stroke:#ffffff;stroke-width:0.495;stroke-linejoin:miter;stroke-dasharray:none"
+         x="173.68405"
+         y="55.192207">Cu</tspan></text>
+  </g>
+</svg>
