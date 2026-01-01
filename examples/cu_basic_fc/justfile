@@ -1,11 +1,5 @@
 import "../../justfile"
 
-dag:
-  #!/usr/bin/env bash
-  pushd {{ROOT}}
-  cargo run -p cu29-runtime --bin cu29-rendercfg -- --open examples/cu_basic_fc/copperconfig.ron 
-  popd
-
 # A quick test to see if the sim can pick up your RC.
 rc:
   #!/usr/bin/env bash

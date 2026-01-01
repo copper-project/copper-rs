@@ -5,11 +5,6 @@ cl:
 	set -euo pipefail
 	RUST_BACKTRACE=1 cargo run --bin logreader /tmp/caterpillar.copper extract-copperlist
 
-dag:
-	#!/usr/bin/env bash
-	set -euo pipefail
-	../../target/release/copper-rendercfg copperconfig.ron --open
-
 logreader:
 	#!/usr/bin/env bash
 	set -euo pipefail
