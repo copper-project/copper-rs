@@ -1,3 +1,4 @@
+use crate::motor_model;
 use avian3d::math::Vector;
 use avian3d::physics_transform::{PreSolveDeltaPosition, PreSolveDeltaRotation};
 use avian3d::prelude::*;
@@ -12,7 +13,6 @@ use bevy::prelude::*;
 use bevy::ui::IsDefaultUiCamera;
 use bevy_anti_alias::fxaa::Fxaa;
 use cached_path::{Cache, Error as CacheError, ProgressBar};
-use crate::motor_model;
 use std::path::{Path, PathBuf}; // Import PathBuf
 
 use std::{fs, io};
@@ -81,7 +81,9 @@ fn assert_reflected_types(type_registry: Res<AppTypeRegistry>) {
         "Transform must be registered for scenes"
     );
     assert!(
-        registry.get(std::any::TypeId::of::<GlobalTransform>()).is_some(),
+        registry
+            .get(std::any::TypeId::of::<GlobalTransform>())
+            .is_some(),
         "GlobalTransform must be registered for scenes"
     );
     assert!(
@@ -395,7 +397,7 @@ fn setup_ui(mut commands: Commands) {
                     font_size: 12.0,
                     ..default()
                 },
-            TextColor(Color::WHITE),
+                TextColor(Color::WHITE),
             ));
         });
 }
@@ -558,9 +560,8 @@ fn setup_entities(
 }
 
 // Avian's `Forces` is the mutable query data for applying forces.
-// Note: We use drag.target() (deprecated in Bevy 0.17) because it returns the observer's entity
-// (cart/rod), not the clicked mesh child. The suggested alternative event.entity doesn't work
-// for our use case with bubbling pointer events.
+// Use drag.observer() to get the entity that registered the observer (cart/rod), not the clicked mesh child.
+// Use drag.original_event_target() if the original hit entity is needed.
 fn on_drag(
     drag: On<Pointer<Drag>>,
     camera_query: Option<Single<&Transform, With<Camera>>>,
@@ -579,8 +580,8 @@ fn on_drag(
         return;
     };
 
-    // Use drag.target() to get the observer's entity (cart or rod), not the clicked mesh child
-    let target_entity = drag.target();
+    // Use drag.observer() to get the observer's entity (cart or rod), not the clicked mesh child.
+    let target_entity = drag.observer();
     let is_cart = cart.get(target_entity).is_ok();
 
     if is_cart {
@@ -589,8 +590,8 @@ fn on_drag(
 
     // calculate world X-direction drag from screenspace drag
     // drag.delta.y should basically never contribute (as long as camera isn't rolled), but scaling by camera_transform.right() will feel more natural when dragging from a steep visual angle
-    let drag_delta_world = drag.distance.x * camera_transform.right()
-        + drag.distance.y * camera_transform.down();
+    let drag_delta_world =
+        drag.distance.x * camera_transform.right() + drag.distance.y * camera_transform.down();
 
     // apply a force to that object based on the world length and direction of the mouse drag
     let applied_force_vec = (drag_delta_world / drag_control.pixels_per_newton)
@@ -614,8 +615,8 @@ fn on_drag_end(
         return;
     }
 
-    // Use drag.target() to get the observer's entity (cart or rod)
-    let target_entity = drag.target();
+    // Use drag.observer() to get the observer's entity (cart or rod).
+    let target_entity = drag.observer();
     let is_cart = cart.get(target_entity).is_ok();
 
     if is_cart {
@@ -669,13 +670,13 @@ fn reset_sim(
             Option<&mut Transform>,
             Option<&mut Position>,
             Option<&mut Rotation>,
-        Option<&mut PreSolveDeltaPosition>,
-        Option<&mut PreSolveDeltaRotation>,
-        Option<&mut AppliedForce>,
-        Option<&mut ConstantForce>,
-        Option<&mut LinearVelocity>,
-        Option<&mut AngularVelocity>,
-    )>,
+            Option<&mut PreSolveDeltaPosition>,
+            Option<&mut PreSolveDeltaRotation>,
+            Option<&mut AppliedForce>,
+            Option<&mut ConstantForce>,
+            Option<&mut LinearVelocity>,
+            Option<&mut AngularVelocity>,
+        )>,
         Query<Forces>,
     )>,
 ) {
@@ -691,15 +692,15 @@ fn reset_sim(
                 cart_component,
                 transform,
                 position,
-            rotation,
-            presolve_position,
-            presolve_rotation,
-            ext_force,
-            constant_force,
-            linear_velocity,
-            angular_velocity,
-        ) in query.iter_mut()
-    {
+                rotation,
+                presolve_position,
+                presolve_rotation,
+                ext_force,
+                constant_force,
+                linear_velocity,
+                angular_velocity,
+            ) in query.iter_mut()
+            {
                 let is_rod: bool = rod_component.is_some();
                 let is_cart: bool = cart_component.is_some();
 
@@ -724,11 +725,8 @@ fn reset_sim(
                     }
 
                     if is_cart {
-                        transform.translation = Vec3::new(
-                            cart_translation.x,
-                            cart_translation.y,
-                            cart_translation.z,
-                        );
+                        transform.translation =
+                            Vec3::new(cart_translation.x, cart_translation.y, cart_translation.z);
                     }
                 }
                 if let Some(mut position) = position {
@@ -891,12 +889,15 @@ fn update_physics(state: Res<SimulationState>, mut time: ResMut<Time<Virtual>>) 
 
 // Clamp cart rotation to its initial orientation so it only slides on the rail.
 fn lock_cart_rotation(
-    mut carts: Query<(
-        &CartRotationLock,
-        Option<&mut Rotation>,
-        Option<&mut Transform>,
-        Option<&mut AngularVelocity>,
-    ), With<Cart>>,
+    mut carts: Query<
+        (
+            &CartRotationLock,
+            Option<&mut Rotation>,
+            Option<&mut Transform>,
+            Option<&mut AngularVelocity>,
+        ),
+        With<Cart>,
+    >,
 ) {
     for (lock, rotation, transform, angular_velocity) in carts.iter_mut() {
         if let Some(mut rotation) = rotation {

@@ -1,5 +1,5 @@
-pub mod tasks;
 mod motor_model;
+pub mod tasks;
 use cu29::prelude::*;
 use cu29_export::copperlists_reader;
 use cu29_helpers::basic_copper_setup;

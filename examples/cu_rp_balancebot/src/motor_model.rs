@@ -19,11 +19,16 @@ pub const STEEL_DENSITY: f32 = 7800.0; // kg/m^3
 pub const ALUMINUM_DENSITY: f32 = 2700.0; // kg/m^3
 
 pub fn total_mass_kg() -> f32 {
-    let cart_mass =
-        Mass::from_shape(&Collider::cuboid(CART_WIDTH, CART_HEIGHT, CART_DEPTH), ALUMINUM_DENSITY)
-            .0;
-    let rod_mass =
-        Mass::from_shape(&Collider::capsule(ROD_WIDTH / 2.0, ROD_HEIGHT), STEEL_DENSITY).0;
+    let cart_mass = Mass::from_shape(
+        &Collider::cuboid(CART_WIDTH, CART_HEIGHT, CART_DEPTH),
+        ALUMINUM_DENSITY,
+    )
+    .0;
+    let rod_mass = Mass::from_shape(
+        &Collider::capsule(ROD_WIDTH / 2.0, ROD_HEIGHT),
+        STEEL_DENSITY,
+    )
+    .0;
     cart_mass + rod_mass
 }
 

@@ -1,5 +1,5 @@
-pub mod tasks;
 mod motor_model;
+pub mod tasks;
 mod world;
 use crate::world::{AppliedForce, Cart, DragState, Rod};
 use avian3d::math::Vector;
