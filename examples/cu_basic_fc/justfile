@@ -25,7 +25,7 @@ fsck log="logs/embedded.copper":
   fi
   RUST_BACKTRACE=1 cargo run -p cu-basic-fc --no-default-features --features logreader --bin quad-logreader -- "$log" fsck
 
-textlogs log="logs/embedded.copper" index="{{ROOT}}/target/debug/cu29_log_index":
+textlogs log="logs/embedded.copper" index="../../target/debug/cu29_log_index":
   #!/usr/bin/env bash
   set -euo pipefail
   invocation_dir="{{invocation_directory()}}"
