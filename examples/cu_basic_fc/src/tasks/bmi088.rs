@@ -252,15 +252,16 @@ where
         let temp_raw = (temp_msb as i16) * 8 + (temp_lsb as i16) / 32;
         let temp_c = (temp_raw as f32) * 0.125 + 23.0;
 
+        // Remap BMI088 axes into NED body frame: +X forward, +Y right, +Z down.
         let accel_mps2 = [
-            accel_raw_to_mps2(ax, self.acc_mps2_per_lsb),
             accel_raw_to_mps2(ay, self.acc_mps2_per_lsb),
+            accel_raw_to_mps2(ax, self.acc_mps2_per_lsb),
             accel_raw_to_mps2(az, self.acc_mps2_per_lsb),
         ];
         let gyro_rad = [
-            gyro_raw_to_rad(gx),
-            gyro_raw_to_rad(gy),
-            gyro_raw_to_rad(gz),
+            -gyro_raw_to_rad(gy),
+            -gyro_raw_to_rad(gx),
+            -gyro_raw_to_rad(gz),
         ];
 
         Ok(ImuPayload::from_raw(accel_mps2, gyro_rad, temp_c))

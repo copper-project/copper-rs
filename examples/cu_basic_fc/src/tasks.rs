@@ -343,7 +343,7 @@ impl CuTask for RcMapper {
 
         let channels = &rc.inner().0;
         let roll = normalize_axis(channels.first().copied().unwrap_or(self.rc_mid), self);
-        let pitch = normalize_axis(channels.get(1).copied().unwrap_or(self.rc_mid), self);
+        let pitch = -normalize_axis(channels.get(1).copied().unwrap_or(self.rc_mid), self);
         let throttle = normalize_throttle(
             channels.get(2).copied().unwrap_or(self.rc_min),
             self.rc_min,
@@ -794,10 +794,10 @@ impl CuTask for RateController {
 }
 
 const QUADX_MIX: [(f32, f32, f32); 4] = [
-    (-1.0, 1.0, -1.0), // rear right
-    (-1.0, -1.0, 1.0), // front right
-    (1.0, 1.0, 1.0),   // rear left
-    (1.0, -1.0, -1.0), // front left
+    (-1.0, -1.0, -1.0), // rear right
+    (-1.0, 1.0, 1.0),   // front right
+    (1.0, -1.0, 1.0),   // rear left
+    (1.0, 1.0, -1.0),   // front left
 ];
 const DSHOT_MIN_ARM_CMD: u16 = 100;
 
