@@ -8,6 +8,8 @@ use cu29::bincode::{Decode, Encode};
 use cu29::prelude::*;
 use defmt::info;
 use serde::Serialize;
+use uom::si::angular_velocity::degree_per_second;
+use uom::si::thermodynamic_temperature::degree_celsius;
 
 mod bmi088;
 
@@ -192,15 +194,19 @@ impl CuSinkTask for ImuLogger {
         if let Some(payload) = input.payload() {
             self.count = self.count.wrapping_add(1);
             if self.count.is_multiple_of(IMU_LOG_EVERY) {
+                let gx_dps = payload.gyro_x.get::<degree_per_second>();
+                let gy_dps = payload.gyro_y.get::<degree_per_second>();
+                let gz_dps = payload.gyro_z.get::<degree_per_second>();
+                let temp_c = payload.temperature.get::<degree_celsius>();
                 info!(
-                    "imu ax={} ay={} az={} gx={} gy={} gz={} t={}",
+                    "imu ax={} m.s⁻² ay={} m.s⁻² az={} m.s⁻² gx={} deg.s⁻¹ gy={} deg.s⁻¹ gz={} deg.s⁻¹ t={} °C",
                     payload.accel_x.value,
                     payload.accel_y.value,
                     payload.accel_z.value,
-                    payload.gyro_x.value,
-                    payload.gyro_y.value,
-                    payload.gyro_z.value,
-                    payload.temperature.value
+                    gx_dps,
+                    gy_dps,
+                    gz_dps,
+                    temp_c
                 );
             }
         }

@@ -36,6 +36,7 @@ bincode = { workspace = true }
 serde = { workspace = true }
 cu29-unifiedlog = { path = "../../core/cu29_unifiedlog", default-features = false, features = ["compact"] }
 spin = { workspace = true }
+uom = { version = "0.37", default-features = false, features = ["serde", "f32", "si", "autoconvert"] }
 
 # --> host dependencies <--
 
