@@ -18,11 +18,15 @@ use stm32h7xx_hal::{
     spi::{Config as SpiConfig, Mode, Phase, Polarity, SpiExt},
 };
 
+const UART_OVERRUN_LOG_PERIOD_SECS: u32 = 1;
+
 pub type SerialPortError = embedded_io::ErrorKind;
 
 pub struct SerialWrapper<U> {
     inner: Serial<U>,
     label: &'static str,
+    last_overrun_cycle: Option<u32>,
+    overrun_period_cycles: u32,
 }
 
 // Safety: the firmware uses a single-threaded runtime; no concurrent access.
@@ -30,8 +34,27 @@ unsafe impl<U> Send for SerialWrapper<U> {}
 unsafe impl<U> Sync for SerialWrapper<U> {}
 
 impl<U> SerialWrapper<U> {
-    fn new(inner: Serial<U>, label: &'static str) -> Self {
-        Self { inner, label }
+    fn new(inner: Serial<U>, label: &'static str, overrun_period_cycles: u32) -> Self {
+        Self {
+            inner,
+            label,
+            last_overrun_cycle: None,
+            overrun_period_cycles,
+        }
+    }
+
+    fn should_warn_overrun(&mut self) -> bool {
+        if self.overrun_period_cycles == 0 {
+            return true;
+        }
+        let now = DWT::cycle_count();
+        match self.last_overrun_cycle {
+            Some(prev) if now.wrapping_sub(prev) < self.overrun_period_cycles => false,
+            _ => {
+                self.last_overrun_cycle = Some(now);
+                true
+            }
+        }
     }
 }
 
@@ -53,7 +76,9 @@ macro_rules! impl_serial_wrapper_io {
                         Err(nb::Error::WouldBlock) => break, // no more data right now
                         Err(nb::Error::Other(e)) => match e {
                             UartError::Overrun => {
-                                defmt::warn!("{} overrun, data lost", self.label);
+                                if self.should_warn_overrun() {
+                                    defmt::warn!("{} overrun, data lost", self.label);
+                                }
                                 // Clear and keep going; treat as no more data.
                                 break;
                             }
@@ -239,6 +264,7 @@ impl ResourceBundle for MicoAirH743 {
 
         let green_led = gpioe.pe6.into_push_pull_output();
 
+        let overrun_period_cycles = sysclk_hz.saturating_mul(UART_OVERRUN_LOG_PERIOD_SECS);
         let uart6_config = Config::default().baudrate(420_000.bps());
         let uart6 = SerialWrapper::new(
             dp.USART6
@@ -250,6 +276,7 @@ impl ResourceBundle for MicoAirH743 {
                 )
                 .map_err(|_| CuError::from("uart6 init failed"))?,
             "UART6",
+            overrun_period_cycles,
         );
 
         let uart2_config = Config::default().baudrate(115_200.bps());
@@ -263,6 +290,7 @@ impl ResourceBundle for MicoAirH743 {
                 )
                 .map_err(|_| CuError::from("uart2 init failed"))?,
             "UART2",
+            overrun_period_cycles,
         );
 
         let logger = init_sd_logger(

@@ -1,11 +1,13 @@
 #![allow(dead_code)]
 
 use crate::GreenLed;
-use cu_bdshot::{EscCommand, EscTelemetry};
-use cu_crsf::messages::RcChannelsPayload;
-use cu_sensor_payloads::ImuPayload;
 use cu29::bincode::{Decode, Encode};
 use cu29::prelude::*;
+use cu_ahrs::AhrsPose;
+use cu_bdshot::{EscCommand, EscTelemetry};
+use cu_crsf::messages::RcChannelsPayload;
+use cu_pid::PIDController;
+use cu_sensor_payloads::ImuPayload;
 use defmt::info;
 use serde::Serialize;
 use uom::si::angular_velocity::degree_per_second;
@@ -13,17 +15,13 @@ use uom::si::thermodynamic_temperature::degree_celsius;
 
 mod bmi088;
 
-// Placeholder AHRS pose until the sensor/estimator is brought up on STM32.
-#[derive(Debug, Default, Clone, Copy, Encode, Decode, Serialize, PartialEq, Eq)]
-pub struct AhrsPose;
-
 #[derive(Debug, Default, Clone, Copy, Encode, Decode, Serialize, PartialEq, Eq)]
 #[repr(u8)]
-pub enum Axis {
+pub enum FlightMode {
     #[default]
-    Roll = 0,
-    Pitch = 1,
-    Yaw = 2,
+    Angle = 0,
+    Acro = 1,
+    PositionHold = 2,
 }
 
 #[derive(Debug, Default, Clone, Encode, Decode, Serialize)]
@@ -33,10 +31,24 @@ pub struct ControlInputs {
     pub yaw: f32,
     pub throttle: f32,
     pub armed: bool,
+    pub mode: FlightMode,
+}
+
+#[derive(Debug, Default, Clone, Encode, Decode, Serialize)]
+pub struct BodyRateSetpoint {
+    pub roll: f32,
+    pub pitch: f32,
+    pub yaw: f32,
+}
+
+#[derive(Debug, Default, Clone, Encode, Decode, Serialize)]
+pub struct BodyCommand {
+    pub roll: f32,
+    pub pitch: f32,
+    pub yaw: f32,
 }
 
 const TELEMETRY_LOG_EVERY: u32 = 1000;
-const IMU_LOG_EVERY: u32 = 100;
 
 resources!({
     led => Owned<spin::Mutex<GreenLed>>,
@@ -47,24 +59,9 @@ pub struct LedBeat {
     led: spin::Mutex<GreenLed>,
 }
 
-#[derive(Debug, Default, Clone, Encode, Decode, Serialize)]
-pub struct RateSetpoint {
-    pub axis: Axis,
-    pub rate: f32,
+pub struct ControlSink {
+    last_log: Option<CuTime>,
 }
-
-#[derive(Debug, Default, Clone, Encode, Decode, Serialize)]
-pub struct AxisCommand {
-    pub axis: Axis,
-    pub value: f32,
-}
-
-#[derive(Debug, Default, Clone, Encode, Decode, Serialize)]
-pub struct EscStatus {
-    pub fault: bool,
-}
-
-pub struct ControlSink;
 impl Freezable for ControlSink {}
 impl CuSinkTask for ControlSink {
     type Resources<'r> = ();
@@ -77,14 +74,22 @@ impl CuSinkTask for ControlSink {
     where
         Self: Sized,
     {
-        Ok(Self)
+        Ok(Self { last_log: None })
     }
 
     fn process<'i>(&mut self, _clock: &RobotClock, inputs: &Self::Input<'i>) -> CuResult<()> {
         if let Some(ctrl) = inputs.payload() {
+            if !should_log(&mut self.last_log, inputs.tov, human_log_period()) {
+                return Ok(());
+            }
             info!(
-                "ctrl roll={} pitch={} yaw={} thr={} armed={}",
-                ctrl.roll, ctrl.pitch, ctrl.yaw, ctrl.throttle, ctrl.armed
+                "ctrl roll={} pitch={} yaw={} thr={} armed={} mode={}",
+                ctrl.roll,
+                ctrl.pitch,
+                ctrl.yaw,
+                ctrl.throttle,
+                ctrl.armed,
+                mode_label(ctrl.mode)
             );
         }
         Ok(())
@@ -118,7 +123,7 @@ impl CuTask for ThrottleToEsc {
     ) -> CuResult<()> {
         if let Some(ctrl) = input.payload() {
             let raw = if ctrl.armed { ctrl.throttle } else { 0.0 };
-            let throttle = raw.clamp(0.0, 2047.0) as u16;
+            let throttle = (raw.clamp(0.0, 1.0) * 2047.0) as u16;
             output.set_payload(EscCommand {
                 throttle,
                 request_telemetry: true,
@@ -171,7 +176,7 @@ pub type TelemetryLogger2 = TelemetryLogger<2>;
 pub type TelemetryLogger3 = TelemetryLogger<3>;
 
 pub struct ImuLogger {
-    count: u32,
+    last_log: Option<CuTime>,
 }
 
 impl Freezable for ImuLogger {}
@@ -187,28 +192,28 @@ impl CuSinkTask for ImuLogger {
     where
         Self: Sized,
     {
-        Ok(Self { count: 0 })
+        Ok(Self { last_log: None })
     }
 
     fn process<'i>(&mut self, _clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
         if let Some(payload) = input.payload() {
-            self.count = self.count.wrapping_add(1);
-            if self.count.is_multiple_of(IMU_LOG_EVERY) {
-                let gx_dps = payload.gyro_x.get::<degree_per_second>();
-                let gy_dps = payload.gyro_y.get::<degree_per_second>();
-                let gz_dps = payload.gyro_z.get::<degree_per_second>();
-                let temp_c = payload.temperature.get::<degree_celsius>();
-                info!(
-                    "imu ax={} m.s⁻² ay={} m.s⁻² az={} m.s⁻² gx={} deg.s⁻¹ gy={} deg.s⁻¹ gz={} deg.s⁻¹ t={} °C",
-                    payload.accel_x.value,
-                    payload.accel_y.value,
-                    payload.accel_z.value,
-                    gx_dps,
-                    gy_dps,
-                    gz_dps,
-                    temp_c
-                );
+            if !should_log(&mut self.last_log, input.tov, human_log_period()) {
+                return Ok(());
             }
+            let gx_dps = payload.gyro_x.get::<degree_per_second>();
+            let gy_dps = payload.gyro_y.get::<degree_per_second>();
+            let gz_dps = payload.gyro_z.get::<degree_per_second>();
+            let temp_c = payload.temperature.get::<degree_celsius>();
+            info!(
+                "imu ax={} m.s⁻² ay={} m.s⁻² az={} m.s⁻² gx={} deg.s⁻¹ gy={} deg.s⁻¹ gz={} deg.s⁻¹ t={} °C",
+                payload.accel_x.value,
+                payload.accel_y.value,
+                payload.accel_z.value,
+                gx_dps,
+                gy_dps,
+                gz_dps,
+                temp_c
+            );
         }
         Ok(())
     }
@@ -221,10 +226,10 @@ pub type Bmi088Source = bmi088::Bmi088Source<
     crate::resources::Bmi088Delay,
 >;
 
+impl Freezable for FlightMode {}
 impl Freezable for ControlInputs {}
-impl Freezable for RateSetpoint {}
-impl Freezable for AxisCommand {}
-impl Freezable for EscStatus {}
+impl Freezable for BodyRateSetpoint {}
+impl Freezable for BodyCommand {}
 impl Freezable for LedBeat {}
 
 impl CuSinkTask for LedBeat {
@@ -254,7 +259,19 @@ impl CuSinkTask for LedBeat {
     }
 }
 
-pub struct RcMapper;
+pub struct RcMapper {
+    rc_min: u16,
+    rc_mid: u16,
+    rc_max: u16,
+    deadband: u16,
+    arm_channel: usize,
+    arm_min: u16,
+    arm_max: u16,
+    mode_channel: Option<usize>,
+    mode_low_max: Option<u16>,
+    mode_mid_max: Option<u16>,
+    last_log: Option<CuTime>,
+}
 
 impl Freezable for RcMapper {}
 
@@ -263,14 +280,54 @@ impl CuTask for RcMapper {
     type Input<'m> = CuMsg<RcChannelsPayload>;
     type Output<'m> = CuMsg<ControlInputs>;
 
-    fn new_with(
-        _config: Option<&ComponentConfig>,
-        _resources: Self::Resources<'_>,
-    ) -> CuResult<Self>
+    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
-        Ok(Self)
+        let arm_cfg = config.and_then(|cfg| cfg.get::<u32>("arm_channel"));
+        let mut arm_channel = arm_cfg.map(|v| v as usize).unwrap_or(3);
+        if arm_channel > 15 {
+            info!(
+                "rc mapper arm_channel {} out of range, clamping to 15",
+                arm_channel
+            );
+            arm_channel = 15;
+        }
+        let arm_min = cfg_u16(config, "arm_min", 1700);
+        let arm_max = cfg_u16(config, "arm_max", 1811);
+        let mode_cfg = config
+            .and_then(|cfg| cfg.get::<u32>("mode_channel"))
+            .map(|v| v as usize);
+        let mode_low_max = config
+            .and_then(|cfg| cfg.get::<u32>("mode_low_max"))
+            .map(|v| v.min(u16::MAX as u32) as u16);
+        let mode_mid_max = config
+            .and_then(|cfg| cfg.get::<u32>("mode_mid_max"))
+            .map(|v| v.min(u16::MAX as u32) as u16);
+
+        info!(
+            "rc mapper cfg arm_channel={:?} arm_min={} arm_max={} mode_channel={:?} mode_low_max={} mode_mid_max={}",
+            arm_cfg,
+            arm_min,
+            arm_max,
+            mode_cfg,
+            mode_low_max.unwrap_or(0),
+            mode_mid_max.unwrap_or(0)
+        );
+
+        Ok(Self {
+            rc_min: cfg_u16(config, "rc_min", 172),
+            rc_mid: cfg_u16(config, "rc_mid", 992),
+            rc_max: cfg_u16(config, "rc_max", 1811),
+            deadband: cfg_u16(config, "rc_deadband", 0),
+            arm_channel,
+            arm_min,
+            arm_max,
+            mode_channel: mode_cfg,
+            mode_low_max,
+            mode_mid_max,
+            last_log: None,
+        })
     }
 
     fn process<'i, 'o>(
@@ -279,104 +336,659 @@ impl CuTask for RcMapper {
         inputs: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
-        let armed = true;
-        // Forward the control inputs downstream when present.
-        if let Some(rc) = inputs.payload() {
-            output.set_payload(ControlInputs {
-                roll: rc.inner().first().copied().unwrap_or(0) as f32,
-                pitch: rc.inner().get(1).copied().unwrap_or(0) as f32,
-                yaw: rc.inner().get(3).copied().unwrap_or(0) as f32,
-                throttle: rc.inner().get(2).copied().unwrap_or(0) as f32,
-                armed,
-            });
-        } else {
+        let Some(rc) = inputs.payload() else {
             output.clear_payload();
+            return Ok(());
+        };
+
+        let channels = &rc.inner().0;
+        let roll = normalize_axis(channels.first().copied().unwrap_or(self.rc_mid), self);
+        let pitch = normalize_axis(channels.get(1).copied().unwrap_or(self.rc_mid), self);
+        let throttle = normalize_throttle(
+            channels.get(2).copied().unwrap_or(self.rc_min),
+            self.rc_min,
+            self.rc_max,
+        );
+        let yaw = normalize_axis(channels.get(3).copied().unwrap_or(self.rc_mid), self);
+
+        let arm_value = channels.get(self.arm_channel).copied().unwrap_or(0);
+        let armed = arm_value >= self.arm_min && arm_value <= self.arm_max;
+
+        let mode = match self.mode_channel.and_then(|idx| channels.get(idx).copied()) {
+            Some(value) => {
+                let (low_max, mid_max) = match (self.mode_low_max, self.mode_mid_max) {
+                    (Some(low), Some(mid)) => (low, mid),
+                    _ => {
+                        let low = ((self.rc_min as u32 + self.rc_mid as u32) / 2) as u16;
+                        let mid = ((self.rc_mid as u32 + self.rc_max as u32) / 2) as u16;
+                        (low, mid)
+                    }
+                };
+                if value <= low_max {
+                    FlightMode::Acro
+                } else if value <= mid_max {
+                    FlightMode::Angle
+                } else {
+                    FlightMode::PositionHold
+                }
+            }
+            None => FlightMode::Angle,
+        };
+
+        if should_log(&mut self.last_log, inputs.tov, human_log_period()) {
+            let mode_channel = self.mode_channel.unwrap_or(0);
+            let mode_value = self
+                .mode_channel
+                .and_then(|idx| channels.get(idx).copied())
+                .unwrap_or(0);
+            info!(
+                "rc ch0={} ch1={} ch2={} ch3={} ch4={} ch5={} ch6={} ch7={} ch8={} ch9={} ch10={} ch11={} ch12={} ch13={} ch14={} ch15={} arm_ch0={} arm_raw={} armed={} mode_ch0={} mode_raw={} mode={} mode_low_max={} mode_mid_max={}",
+                channels[0],
+                channels[1],
+                channels[2],
+                channels[3],
+                channels[4],
+                channels[5],
+                channels[6],
+                channels[7],
+                channels[8],
+                channels[9],
+                channels[10],
+                channels[11],
+                channels[12],
+                channels[13],
+                channels[14],
+                channels[15],
+                self.arm_channel,
+                arm_value,
+                armed,
+                mode_channel,
+                mode_value,
+                mode_label(mode),
+                self.mode_low_max.unwrap_or(0),
+                self.mode_mid_max.unwrap_or(0)
+            );
         }
+
+        output.tov = inputs.tov;
+        output.set_payload(ControlInputs {
+            roll,
+            pitch,
+            yaw,
+            throttle,
+            armed,
+            mode,
+        });
         Ok(())
     }
 }
 
-macro_rules! attitude_pid {
-    ($name:ident, $axis:expr) => {
-        pub struct $name;
-        impl Freezable for $name {}
-        impl CuTask for $name {
-            type Resources<'r> = ();
-            type Input<'m> = (&'m CuMsg<AhrsPose>, &'m CuMsg<ControlInputs>);
-            type Output<'m> = CuMsg<RateSetpoint>;
-
-            fn new_with(
-                _config: Option<&ComponentConfig>,
-                _resources: Self::Resources<'_>,
-            ) -> CuResult<Self>
-            where
-                Self: Sized,
-            {
-                Ok(Self)
-            }
-
-            fn process<'i, 'o>(
-                &mut self,
-                _clock: &RobotClock,
-                _input: &Self::Input<'i>,
-                output: &mut Self::Output<'o>,
-            ) -> CuResult<()> {
-                output.set_payload(RateSetpoint {
-                    axis: $axis,
-                    rate: 0.0,
-                });
-                Ok(())
-            }
-        }
-    };
+pub struct ImuCalibrator {
+    bias: [f32; 3],
+    sum: [f32; 3],
+    samples: u32,
+    required_samples: u32,
+    last_armed: bool,
+    calibrating: bool,
 }
 
-attitude_pid!(AttitudePidRoll, Axis::Roll);
-attitude_pid!(AttitudePidPitch, Axis::Pitch);
-attitude_pid!(AttitudePidYaw, Axis::Yaw);
+impl Freezable for ImuCalibrator {}
 
-macro_rules! rate_pid {
-    ($name:ident, $axis:expr) => {
-        pub struct $name;
-        impl Freezable for $name {}
-        impl CuTask for $name {
-            type Resources<'r> = ();
-            type Input<'m> = (&'m CuMsg<RateSetpoint>, &'m CuMsg<ImuPayload>);
-            type Output<'m> = CuMsg<AxisCommand>;
+impl CuTask for ImuCalibrator {
+    type Resources<'r> = ();
+    type Input<'m> = input_msg!('m, ImuPayload, ControlInputs);
+    type Output<'m> = CuMsg<ImuPayload>;
 
-            fn new_with(
-                _config: Option<&ComponentConfig>,
-                _resources: Self::Resources<'_>,
-            ) -> CuResult<Self>
-            where
-                Self: Sized,
-            {
-                Ok(Self)
-            }
+    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    where
+        Self: Sized,
+    {
+        let cal_ms = cfg_u32(config, "cal_ms", 3000);
+        let sample_period_ms = cfg_u32(config, "sample_period_ms", 10);
+        let default_samples = (cal_ms / sample_period_ms.max(1)).max(1);
+        let required_samples = cfg_u32(config, "cal_samples", default_samples);
 
-            fn process<'i, 'o>(
-                &mut self,
-                _clock: &RobotClock,
-                _input: &Self::Input<'i>,
-                output: &mut Self::Output<'o>,
-            ) -> CuResult<()> {
-                output.set_payload(AxisCommand {
-                    axis: $axis,
-                    value: 0.0,
-                });
-                Ok(())
-            }
+        Ok(Self {
+            bias: [0.0; 3],
+            sum: [0.0; 3],
+            samples: 0,
+            required_samples,
+            last_armed: false,
+            calibrating: false,
+        })
+    }
+
+    fn process<'i, 'o>(
+        &mut self,
+        _clock: &RobotClock,
+        input: &Self::Input<'i>,
+        output: &mut Self::Output<'o>,
+    ) -> CuResult<()> {
+        let (imu_msg, ctrl_msg) = *input;
+        let Some(imu) = imu_msg.payload() else {
+            output.clear_payload();
+            return Ok(());
+        };
+        let armed = ctrl_msg.payload().map(|c| c.armed).unwrap_or(false);
+
+        if !armed {
+            self.calibrating = false;
+            self.sum = [0.0; 3];
+            self.samples = 0;
+            self.last_armed = false;
+            output.tov = imu_msg.tov;
+            output.set_payload(*imu);
+            return Ok(());
         }
-    };
+
+        if armed && !self.last_armed {
+            self.calibrating = true;
+            self.sum = [0.0; 3];
+            self.samples = 0;
+        }
+        self.last_armed = armed;
+
+        if self.calibrating {
+            self.sum[0] += imu.gyro_x.value;
+            self.sum[1] += imu.gyro_y.value;
+            self.sum[2] += imu.gyro_z.value;
+            self.samples = self.samples.saturating_add(1);
+
+            if self.samples >= self.required_samples {
+                let inv = 1.0 / (self.samples as f32);
+                self.bias = [self.sum[0] * inv, self.sum[1] * inv, self.sum[2] * inv];
+                self.calibrating = false;
+                let bias_deg = [
+                    self.bias[0].to_degrees(),
+                    self.bias[1].to_degrees(),
+                    self.bias[2].to_degrees(),
+                ];
+                info!(
+                    "imu gyro bias x={} deg.s⁻¹ y={} deg.s⁻¹ z={} deg.s⁻¹",
+                    bias_deg[0], bias_deg[1], bias_deg[2]
+                );
+            }
+
+            output.clear_payload();
+            output.metadata.set_status("cal");
+            return Ok(());
+        }
+
+        let accel_mps2 = [imu.accel_x.value, imu.accel_y.value, imu.accel_z.value];
+        let gyro_rad = [
+            imu.gyro_x.value - self.bias[0],
+            imu.gyro_y.value - self.bias[1],
+            imu.gyro_z.value - self.bias[2],
+        ];
+        let temp_c = imu.temperature.get::<degree_celsius>();
+
+        output.tov = imu_msg.tov;
+        output.metadata.set_status("ok");
+        output.set_payload(ImuPayload::from_raw(accel_mps2, gyro_rad, temp_c));
+        Ok(())
+    }
 }
 
-rate_pid!(RatePidRoll, Axis::Roll);
-rate_pid!(RatePidPitch, Axis::Pitch);
-rate_pid!(RatePidYaw, Axis::Yaw);
+struct AxisPid {
+    pid: PIDController,
+    initialized: bool,
+}
 
-// Motor mixer and health are RP2350/BDShot-specific; commented until ported to H743.
-// pub struct QuadXMixer;
-// impl Freezable for QuadXMixer {}
-// impl CuTask for QuadXMixer { ... }
+impl AxisPid {
+    fn new(pid: PIDController) -> Self {
+        Self {
+            pid,
+            initialized: false,
+        }
+    }
 
-// EscHealth stub removed; mapper no longer depends on esc status.
+    fn reset(&mut self) {
+        self.pid.reset();
+        self.initialized = false;
+    }
+
+    fn update(&mut self, measurement: f32, dt: CuDuration) -> Option<f32> {
+        if !self.initialized {
+            self.pid.init_measurement(measurement);
+            self.initialized = true;
+            return None;
+        }
+        Some(self.pid.next_control_output(measurement, dt).output)
+    }
+}
+
+pub struct AttitudeController {
+    roll_pid: AxisPid,
+    pitch_pid: AxisPid,
+    angle_limit_rad: f32,
+    rate_limit_rad: f32,
+    acro_rate_rad: f32,
+    dt_fallback: CuDuration,
+    last_time: Option<CuTime>,
+    last_mode: FlightMode,
+}
+
+impl Freezable for AttitudeController {}
+
+impl CuTask for AttitudeController {
+    type Resources<'r> = ();
+    type Input<'m> = input_msg!('m, AhrsPose, ControlInputs);
+    type Output<'m> = CuMsg<BodyRateSetpoint>;
+
+    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    where
+        Self: Sized,
+    {
+        let angle_limit_rad = cfg_f32(config, "angle_limit_deg", 25.0).to_radians();
+        let rate_limit_rad = cfg_f32(config, "rate_limit_dps", 180.0).to_radians();
+        let acro_rate_rad = cfg_f32(config, "acro_rate_dps", 360.0).to_radians();
+        let kp = cfg_f32(config, "kp", 4.0);
+        let ki = cfg_f32(config, "ki", 0.0);
+        let kd = cfg_f32(config, "kd", 0.0);
+        let dt_fallback = CuDuration::from_millis(cfg_u32(config, "dt_ms", 10) as u64);
+
+        let roll_pid = PIDController::new(
+            kp,
+            ki,
+            kd,
+            0.0,
+            rate_limit_rad,
+            rate_limit_rad,
+            rate_limit_rad,
+            rate_limit_rad,
+            CuDuration::default(),
+        );
+        let pitch_pid = PIDController::new(
+            kp,
+            ki,
+            kd,
+            0.0,
+            rate_limit_rad,
+            rate_limit_rad,
+            rate_limit_rad,
+            rate_limit_rad,
+            CuDuration::default(),
+        );
+
+        Ok(Self {
+            roll_pid: AxisPid::new(roll_pid),
+            pitch_pid: AxisPid::new(pitch_pid),
+            angle_limit_rad,
+            rate_limit_rad,
+            acro_rate_rad,
+            dt_fallback,
+            last_time: None,
+            last_mode: FlightMode::Angle,
+        })
+    }
+
+    fn process<'i, 'o>(
+        &mut self,
+        clock: &RobotClock,
+        input: &Self::Input<'i>,
+        output: &mut Self::Output<'o>,
+    ) -> CuResult<()> {
+        let (pose_msg, ctrl_msg) = *input;
+        let Some(pose) = pose_msg.payload() else {
+            output.clear_payload();
+            return Ok(());
+        };
+        let Some(ctrl) = ctrl_msg.payload() else {
+            output.clear_payload();
+            return Ok(());
+        };
+
+        if !ctrl.armed {
+            self.roll_pid.reset();
+            self.pitch_pid.reset();
+            self.last_mode = ctrl.mode;
+            output.tov = pose_msg.tov;
+            output.set_payload(BodyRateSetpoint::default());
+            return Ok(());
+        }
+
+        if ctrl.mode != self.last_mode {
+            self.roll_pid.reset();
+            self.pitch_pid.reset();
+            self.last_mode = ctrl.mode;
+        }
+
+        let now = clock.now();
+        let dt = dt_or_fallback(&mut self.last_time, now, self.dt_fallback);
+
+        let (roll_rate, pitch_rate) =
+            if matches!(ctrl.mode, FlightMode::Angle | FlightMode::PositionHold) {
+                let target_roll = (ctrl.roll * self.angle_limit_rad)
+                    .clamp(-self.angle_limit_rad, self.angle_limit_rad);
+                let target_pitch = (ctrl.pitch * self.angle_limit_rad)
+                    .clamp(-self.angle_limit_rad, self.angle_limit_rad);
+                let roll_measure = pose.roll - target_roll;
+                let pitch_measure = pose.pitch - target_pitch;
+                let roll_rate = self.roll_pid.update(roll_measure, dt).unwrap_or(0.0);
+                let pitch_rate = self.pitch_pid.update(pitch_measure, dt).unwrap_or(0.0);
+                (
+                    roll_rate.clamp(-self.rate_limit_rad, self.rate_limit_rad),
+                    pitch_rate.clamp(-self.rate_limit_rad, self.rate_limit_rad),
+                )
+            } else {
+                self.roll_pid.reset();
+                self.pitch_pid.reset();
+                (
+                    (ctrl.roll * self.acro_rate_rad).clamp(-self.acro_rate_rad, self.acro_rate_rad),
+                    (ctrl.pitch * self.acro_rate_rad)
+                        .clamp(-self.acro_rate_rad, self.acro_rate_rad),
+                )
+            };
+
+        let yaw_rate =
+            (ctrl.yaw * self.acro_rate_rad).clamp(-self.acro_rate_rad, self.acro_rate_rad);
+
+        output.tov = pose_msg.tov;
+        output.set_payload(BodyRateSetpoint {
+            roll: roll_rate,
+            pitch: pitch_rate,
+            yaw: yaw_rate,
+        });
+        Ok(())
+    }
+}
+
+pub struct RateController {
+    roll_pid: AxisPid,
+    pitch_pid: AxisPid,
+    yaw_pid: AxisPid,
+    output_limit: f32,
+    dt_fallback: CuDuration,
+    last_time: Option<CuTime>,
+}
+
+impl Freezable for RateController {}
+
+impl CuTask for RateController {
+    type Resources<'r> = ();
+    type Input<'m> = input_msg!('m, BodyRateSetpoint, ImuPayload, ControlInputs);
+    type Output<'m> = CuMsg<BodyCommand>;
+
+    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    where
+        Self: Sized,
+    {
+        let kp = cfg_f32(config, "kp", 0.15);
+        let ki = cfg_f32(config, "ki", 0.0);
+        let kd = cfg_f32(config, "kd", 0.0);
+        let kp_yaw = cfg_f32(config, "kp_yaw", kp);
+        let ki_yaw = cfg_f32(config, "ki_yaw", ki);
+        let kd_yaw = cfg_f32(config, "kd_yaw", kd);
+        let output_limit = cfg_f32(config, "output_limit", 1.0);
+        let dt_fallback = CuDuration::from_millis(cfg_u32(config, "dt_ms", 10) as u64);
+
+        let pid = |p: f32, i: f32, d: f32| {
+            PIDController::new(
+                p,
+                i,
+                d,
+                0.0,
+                output_limit,
+                output_limit,
+                output_limit,
+                output_limit,
+                CuDuration::default(),
+            )
+        };
+
+        Ok(Self {
+            roll_pid: AxisPid::new(pid(kp, ki, kd)),
+            pitch_pid: AxisPid::new(pid(kp, ki, kd)),
+            yaw_pid: AxisPid::new(pid(kp_yaw, ki_yaw, kd_yaw)),
+            output_limit,
+            dt_fallback,
+            last_time: None,
+        })
+    }
+
+    fn process<'i, 'o>(
+        &mut self,
+        clock: &RobotClock,
+        input: &Self::Input<'i>,
+        output: &mut Self::Output<'o>,
+    ) -> CuResult<()> {
+        let (setpoint_msg, imu_msg, ctrl_msg) = *input;
+        let Some(setpoint) = setpoint_msg.payload() else {
+            output.clear_payload();
+            return Ok(());
+        };
+        let Some(imu) = imu_msg.payload() else {
+            output.clear_payload();
+            return Ok(());
+        };
+        let armed = ctrl_msg.payload().map(|c| c.armed).unwrap_or(false);
+
+        if !armed {
+            self.roll_pid.reset();
+            self.pitch_pid.reset();
+            self.yaw_pid.reset();
+            output.tov = imu_msg.tov;
+            output.set_payload(BodyCommand::default());
+            return Ok(());
+        }
+
+        let now = clock.now();
+        let dt = dt_or_fallback(&mut self.last_time, now, self.dt_fallback);
+
+        let roll_measure = imu.gyro_x.value - setpoint.roll;
+        let pitch_measure = imu.gyro_y.value - setpoint.pitch;
+        let yaw_measure = imu.gyro_z.value - setpoint.yaw;
+
+        let roll_cmd = self.roll_pid.update(roll_measure, dt).unwrap_or(0.0);
+        let pitch_cmd = self.pitch_pid.update(pitch_measure, dt).unwrap_or(0.0);
+        let yaw_cmd = self.yaw_pid.update(yaw_measure, dt).unwrap_or(0.0);
+
+        output.tov = imu_msg.tov;
+        output.set_payload(BodyCommand {
+            roll: roll_cmd.clamp(-self.output_limit, self.output_limit),
+            pitch: pitch_cmd.clamp(-self.output_limit, self.output_limit),
+            yaw: yaw_cmd.clamp(-self.output_limit, self.output_limit),
+        });
+        Ok(())
+    }
+}
+
+const QUADX_MIX: [(f32, f32, f32); 4] = [
+    (-1.0, 1.0, -1.0), // rear right
+    (-1.0, -1.0, 1.0), // front right
+    (1.0, 1.0, 1.0),   // rear left
+    (1.0, -1.0, -1.0), // front left
+];
+const DSHOT_MIN_ARM_CMD: u16 = 100;
+
+struct MotorLogState {
+    last_log: Option<CuTime>,
+    values: [u16; 4],
+}
+
+impl MotorLogState {
+    const fn new() -> Self {
+        Self {
+            last_log: None,
+            values: [0; 4],
+        }
+    }
+}
+
+static MOTOR_LOG: spin::Mutex<MotorLogState> = spin::Mutex::new(MotorLogState::new());
+
+pub struct QuadXMixer {
+    motor_index: usize,
+    props_out: bool,
+}
+
+impl Freezable for QuadXMixer {}
+
+impl CuTask for QuadXMixer {
+    type Resources<'r> = ();
+    type Input<'m> = input_msg!('m, ControlInputs, BodyCommand);
+    type Output<'m> = CuMsg<EscCommand>;
+
+    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    where
+        Self: Sized,
+    {
+        let motor_index = cfg_usize(config, "motor_index", 0);
+        if motor_index >= QUADX_MIX.len() {
+            return Err(CuError::from("motor_index out of range for QuadX"));
+        }
+        let props_out = config
+            .and_then(|cfg| cfg.get::<bool>("props_out"))
+            .unwrap_or(true);
+
+        Ok(Self {
+            motor_index,
+            props_out,
+        })
+    }
+
+    fn process<'i, 'o>(
+        &mut self,
+        _clock: &RobotClock,
+        input: &Self::Input<'i>,
+        output: &mut Self::Output<'o>,
+    ) -> CuResult<()> {
+        let (ctrl_msg, cmd_msg) = *input;
+        let Some(ctrl) = ctrl_msg.payload() else {
+            output.set_payload(EscCommand::disarm());
+            return Ok(());
+        };
+
+        let command = match cmd_msg.payload() {
+            Some(cmd) if ctrl.armed => {
+                let (roll_coeff, pitch_coeff, mut yaw_coeff) = QUADX_MIX[self.motor_index];
+                if self.props_out {
+                    yaw_coeff = -yaw_coeff;
+                }
+                let mix = cmd.roll * roll_coeff + cmd.pitch * pitch_coeff + cmd.yaw * yaw_coeff;
+                let throttle = ctrl.throttle.clamp(0.0, 1.0);
+                let motor = (throttle + mix).clamp(0.0, 1.0);
+                let throttle_raw = (motor * 2047.0) as u16;
+                EscCommand {
+                    throttle: throttle_raw.max(DSHOT_MIN_ARM_CMD),
+                    request_telemetry: true,
+                }
+            }
+            _ => EscCommand::disarm(),
+        };
+
+        {
+            let mut state = MOTOR_LOG.lock();
+            if self.motor_index < state.values.len() {
+                state.values[self.motor_index] = command.throttle;
+            }
+            if self.motor_index == 0
+                && should_log(&mut state.last_log, ctrl_msg.tov, human_log_period())
+            {
+                info!(
+                    "motors cmd0={} cmd1={} cmd2={} cmd3={}",
+                    state.values[0], state.values[1], state.values[2], state.values[3]
+                );
+            }
+        }
+
+        output.set_payload(command);
+        Ok(())
+    }
+}
+
+fn normalize_axis(raw: u16, cfg: &RcMapper) -> f32 {
+    let raw_i = raw as i32;
+    let mid_i = cfg.rc_mid as i32;
+    let deadband = cfg.deadband as i32;
+    if (raw_i - mid_i).abs() <= deadband {
+        return 0.0;
+    }
+    if raw >= cfg.rc_mid {
+        let denom = (cfg.rc_max.saturating_sub(cfg.rc_mid)) as f32;
+        if denom <= 0.0 {
+            return 0.0;
+        }
+        ((raw - cfg.rc_mid) as f32 / denom).clamp(0.0, 1.0)
+    } else {
+        let denom = (cfg.rc_mid.saturating_sub(cfg.rc_min)) as f32;
+        if denom <= 0.0 {
+            return 0.0;
+        }
+        -((cfg.rc_mid - raw) as f32 / denom).clamp(0.0, 1.0)
+    }
+}
+
+fn normalize_throttle(raw: u16, min: u16, max: u16) -> f32 {
+    if max <= min {
+        return 0.0;
+    }
+    let span = (max - min) as f32;
+    ((raw.saturating_sub(min)) as f32 / span).clamp(0.0, 1.0)
+}
+
+fn human_log_period() -> CuDuration {
+    CuDuration::from_secs(1)
+}
+
+fn should_log(last: &mut Option<CuTime>, tov: Tov, period: CuDuration) -> bool {
+    let now = match tov {
+        Tov::Time(time) => Some(time),
+        Tov::Range(range) => Some(range.end),
+        Tov::None => None,
+    };
+    let Some(now) = now else {
+        return true;
+    };
+    match last {
+        Some(prev) if now - *prev < period => false,
+        _ => {
+            *last = Some(now);
+            true
+        }
+    }
+}
+
+fn mode_label(mode: FlightMode) -> &'static str {
+    match mode {
+        FlightMode::Angle => "angle",
+        FlightMode::Acro => "air",
+        FlightMode::PositionHold => "position",
+    }
+}
+
+fn dt_or_fallback(last_time: &mut Option<CuTime>, now: CuTime, fallback: CuDuration) -> CuDuration {
+    let dt = last_time.map(|prev| now - prev);
+    *last_time = Some(now);
+    match dt {
+        Some(duration) if duration > CuDuration::MIN => duration,
+        _ => fallback,
+    }
+}
+
+fn cfg_f32(config: Option<&ComponentConfig>, key: &str, default: f32) -> f32 {
+    config
+        .and_then(|cfg| cfg.get::<f64>(key))
+        .map(|v| v as f32)
+        .unwrap_or(default)
+}
+
+fn cfg_u32(config: Option<&ComponentConfig>, key: &str, default: u32) -> u32 {
+    config
+        .and_then(|cfg| cfg.get::<u32>(key))
+        .unwrap_or(default)
+}
+
+fn cfg_u16(config: Option<&ComponentConfig>, key: &str, default: u16) -> u16 {
+    config
+        .and_then(|cfg| cfg.get::<u32>(key))
+        .map(|v| v.min(u16::MAX as u32) as u16)
+        .unwrap_or(default)
+}
+
+fn cfg_usize(config: Option<&ComponentConfig>, key: &str, default: usize) -> usize {
+    config
+        .and_then(|cfg| cfg.get::<u32>(key))
+        .map(|v| v as usize)
+        .unwrap_or(default)
+}
