@@ -26,9 +26,25 @@
         (
             id: "attitude",
             type: "tasks::AttitudeController",
-            config: { "angle_limit_deg": 25.0 },
+            config: {
+                "angle_limit_deg": 60.0,
+                "kp": 5.0,
+                "ki": 0.0,
+                "kd": 0.0,
+            },
         ),
-        (id: "rate", type: "tasks::RateController"),
+        (
+            id: "rate",
+            type: "tasks::RateController",
+            config: {
+                "kp": 0.1688,
+                "ki": 2.2963,
+                "kd": 0.0019,
+                "kp_yaw": 0.1652,
+                "ki_yaw": 2.2403,
+                "kd_yaw": 0.0,
+            },
+        ),
         (
             id: "mixer0",
             type: "tasks::QuadXMixer",
