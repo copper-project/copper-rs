@@ -8,6 +8,10 @@ use cu29::bincode::{Decode, Encode};
 use cu29::prelude::*;
 use defmt::info;
 use serde::Serialize;
+use uom::si::angular_velocity::degree_per_second;
+use uom::si::thermodynamic_temperature::degree_celsius;
+
+mod bmi088;
 
 // Placeholder AHRS pose until the sensor/estimator is brought up on STM32.
 #[derive(Debug, Default, Clone, Copy, Encode, Decode, Serialize, PartialEq, Eq)]
@@ -32,6 +36,7 @@ pub struct ControlInputs {
 }
 
 const TELEMETRY_LOG_EVERY: u32 = 1000;
+const IMU_LOG_EVERY: u32 = 100;
 
 resources!({
     led => Owned<spin::Mutex<GreenLed>>,
@@ -164,6 +169,57 @@ pub type TelemetryLogger0 = TelemetryLogger<0>;
 pub type TelemetryLogger1 = TelemetryLogger<1>;
 pub type TelemetryLogger2 = TelemetryLogger<2>;
 pub type TelemetryLogger3 = TelemetryLogger<3>;
+
+pub struct ImuLogger {
+    count: u32,
+}
+
+impl Freezable for ImuLogger {}
+
+impl CuSinkTask for ImuLogger {
+    type Resources<'r> = ();
+    type Input<'m> = CuMsg<ImuPayload>;
+
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
+    where
+        Self: Sized,
+    {
+        Ok(Self { count: 0 })
+    }
+
+    fn process<'i>(&mut self, _clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
+        if let Some(payload) = input.payload() {
+            self.count = self.count.wrapping_add(1);
+            if self.count.is_multiple_of(IMU_LOG_EVERY) {
+                let gx_dps = payload.gyro_x.get::<degree_per_second>();
+                let gy_dps = payload.gyro_y.get::<degree_per_second>();
+                let gz_dps = payload.gyro_z.get::<degree_per_second>();
+                let temp_c = payload.temperature.get::<degree_celsius>();
+                info!(
+                    "imu ax={} m.s⁻² ay={} m.s⁻² az={} m.s⁻² gx={} deg.s⁻¹ gy={} deg.s⁻¹ gz={} deg.s⁻¹ t={} °C",
+                    payload.accel_x.value,
+                    payload.accel_y.value,
+                    payload.accel_z.value,
+                    gx_dps,
+                    gy_dps,
+                    gz_dps,
+                    temp_c
+                );
+            }
+        }
+        Ok(())
+    }
+}
+
+pub type Bmi088Source = bmi088::Bmi088Source<
+    crate::resources::Bmi088Spi,
+    crate::resources::Bmi088AccCs,
+    crate::resources::Bmi088GyrCs,
+    crate::resources::Bmi088Delay,
+>;
 
 impl Freezable for ControlInputs {}
 impl Freezable for RateSetpoint {}

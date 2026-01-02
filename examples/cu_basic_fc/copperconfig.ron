@@ -6,6 +6,17 @@
         ),
     ],
     tasks: [
+        (
+            id: "bmi088",
+            type: "tasks::Bmi088Source",
+            resources: {
+                "spi": "fc.bmi088_spi",
+                "acc_cs": "fc.bmi088_acc_cs",
+                "gyr_cs": "fc.bmi088_gyr_cs",
+                "delay": "fc.bmi088_delay",
+            },
+        ),
+        (id: "imu_logger", type: "tasks::ImuLogger"),
         (id: "mapper", type: "tasks::RcMapper"),
         (id: "esc_cmd", type: "tasks::ThrottleToEsc"),
         (id: "control_sink", type: "tasks::ControlSink"),
@@ -46,6 +57,7 @@
     ],
 
     cnx: [
+        (src: "bmi088", dst: "imu_logger", msg: "cu_sensor_payloads::ImuPayload"),
         (src: "rc/rc_rx", dst: "mapper", msg: "cu_crsf::messages::RcChannelsPayload"),
         (src: "mapper", dst: "esc_cmd", msg: "tasks::ControlInputs"),
         (src: "mapper", dst: "control_sink", msg: "tasks::ControlInputs"),
