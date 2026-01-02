@@ -1,35 +1,12 @@
 #![allow(dead_code)]
 
 use crate::GreenLed;
+pub use crate::messages::{AhrsPose, Axis, AxisCommand, ControlInputs, EscStatus, RateSetpoint};
 use cu_bdshot::{EscCommand, EscTelemetry};
 use cu_crsf::messages::RcChannelsPayload;
 use cu_sensor_payloads::ImuPayload;
-use cu29::bincode::{Decode, Encode};
 use cu29::prelude::*;
 use defmt::info;
-use serde::Serialize;
-
-// Placeholder AHRS pose until the sensor/estimator is brought up on STM32.
-#[derive(Debug, Default, Clone, Copy, Encode, Decode, Serialize, PartialEq, Eq)]
-pub struct AhrsPose;
-
-#[derive(Debug, Default, Clone, Copy, Encode, Decode, Serialize, PartialEq, Eq)]
-#[repr(u8)]
-pub enum Axis {
-    #[default]
-    Roll = 0,
-    Pitch = 1,
-    Yaw = 2,
-}
-
-#[derive(Debug, Default, Clone, Encode, Decode, Serialize)]
-pub struct ControlInputs {
-    pub roll: f32,
-    pub pitch: f32,
-    pub yaw: f32,
-    pub throttle: f32,
-    pub armed: bool,
-}
 
 const TELEMETRY_LOG_EVERY: u32 = 1000;
 
@@ -40,23 +17,6 @@ resources!({
 pub struct LedBeat {
     on: bool,
     led: spin::Mutex<GreenLed>,
-}
-
-#[derive(Debug, Default, Clone, Encode, Decode, Serialize)]
-pub struct RateSetpoint {
-    pub axis: Axis,
-    pub rate: f32,
-}
-
-#[derive(Debug, Default, Clone, Encode, Decode, Serialize)]
-pub struct AxisCommand {
-    pub axis: Axis,
-    pub value: f32,
-}
-
-#[derive(Debug, Default, Clone, Encode, Decode, Serialize)]
-pub struct EscStatus {
-    pub fault: bool,
 }
 
 pub struct ControlSink;

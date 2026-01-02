@@ -47,9 +47,9 @@
 
     cnx: [
         (src: "rc/rc_rx", dst: "mapper", msg: "cu_crsf::messages::RcChannelsPayload"),
-        (src: "mapper", dst: "esc_cmd", msg: "tasks::ControlInputs"),
-        (src: "mapper", dst: "control_sink", msg: "tasks::ControlInputs"),
-        (src: "mapper", dst: "led_blink", msg: "tasks::ControlInputs"),
+        (src: "mapper", dst: "esc_cmd", msg: "crate::messages::ControlInputs"),
+        (src: "mapper", dst: "control_sink", msg: "crate::messages::ControlInputs"),
+        (src: "mapper", dst: "led_blink", msg: "crate::messages::ControlInputs"),
         (src: "esc_cmd", dst: "bdshot/esc0_tx", msg: "cu_bdshot::EscCommand"),
         (src: "esc_cmd", dst: "bdshot/esc1_tx", msg: "cu_bdshot::EscCommand"),
         (src: "esc_cmd", dst: "bdshot/esc2_tx", msg: "cu_bdshot::EscCommand"),

@@ -85,6 +85,105 @@ std-ci mode="debug": lint
 
 # Project-specific helpers now live in per-directory justfiles under examples/, components/, and support/.
 
+# Partition/format an SD card for Cu29 logging (destroys data).
+mkpartition dev:
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	DEV="{{dev}}"
+	[[ -b "$DEV" ]] || { echo "not a block device: $DEV"; exit 1; }
+
+	for t in sgdisk mkfs.vfat lsblk wipefs udevadm; do
+	  command -v "$t" >/dev/null || { echo "missing tool: $t"; exit 1; }
+	done
+
+	read -r -p "ERASE ALL DATA on $DEV? type 'YES' to continue: " ans
+	[[ "$ans" == "YES" ]] || { echo "aborted"; exit 1; }
+
+	lsblk -ln "$DEV" -o NAME,MOUNTPOINTS | while read -r name mp; do
+	  [[ -n "${mp:-}" ]] && sudo umount -f "/dev/$name" || true
+	done
+
+	sudo wipefs -a "$DEV" || true
+	sudo sgdisk --zap-all "$DEV"
+
+	CU29_GUID="29A2E0C9-0000-4C75-9229-000000000029"
+	sudo sgdisk -og "$DEV"
+	sudo sgdisk \
+	  -n1:1MiB:+1MiB  -t1:0700                                -c1:"COPPERCFG" \
+	  -n2:0:0         -t2:${CU29_GUID}                        -c2:"Cu29" \
+	  "$DEV"
+
+	sudo partprobe "$DEV" || true
+	sudo udevadm settle || true
+	sleep 0.5
+
+	if [[ "$DEV" =~ [0-9]$ ]]; then P1="${DEV}p1"; P2="${DEV}p2"; else P1="${DEV}1"; P2="${DEV}2"; fi
+	[[ -b "$P1" && -b "$P2" ]] || { echo "partition nodes not found: $P1 $P2"; exit 1; }
+
+	sudo mkfs.vfat -F 12 -n COPPERCFG "$P1"
+
+	mnt=$(mktemp -d)
+	trap 'sudo umount "$mnt" 2>/dev/null || true; rmdir "$mnt" 2>/dev/null || true' EXIT
+	sudo mount "$P1" "$mnt"
+	sudo tee "$mnt/README-COPPER.txt" >/dev/null <<-'TXT'
+	This SD card uses Copper (Cu29) raw binary logging.
+
+	Partition layout (GPT):
+	  - Partition 1 (FAT12, label COPPERCFG): configuration + this notice
+	  - Partition 2 (type GUID 29A2E0C9-0000-4C75-9229-000000000029, label Cu29): Copper raw log storage
+
+	To read logs, use the Copper log reader.
+	Do NOT format or mount partition 2 — it is not a filesystem.
+	TXT
+	sync
+	sudo umount "$mnt"
+	rmdir "$mnt"
+	trap - EXIT
+
+	lsblk -o NAME,SIZE,TYPE,FSTYPE,PTTYPE,PARTLABEL,PARTTYPE,LABEL "$DEV"
+	echo "Done. Copper raw partition is $P2 (GPT type ${CU29_GUID}, PARTLABEL=Cu29)."
+
+# Extract the Cu29 raw log partition into a .copper file.
+extract-log dev out="logs/embedded_0.copper":
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	DEV="{{dev}}"
+	OUT="{{out}}"
+	invocation_dir="{{invocation_directory()}}"
+	[[ -b "$DEV" ]] || { echo "not a block device: $DEV"; exit 1; }
+
+	for t in lsblk dd; do
+	  command -v "$t" >/dev/null || { echo "missing tool: $t"; exit 1; }
+	done
+
+	CU29_GUID="29A2E0C9-0000-4C75-9229-000000000029"
+	dev_type="$(lsblk -no TYPE "$DEV" 2>/dev/null | head -n1 || true)"
+
+	PART="$DEV"
+	if [[ "$dev_type" == "disk" ]]; then
+	  PART="$(lsblk -lnpo NAME,PARTLABEL,PARTTYPE "$DEV" | awk -v guid="$CU29_GUID" '($2=="Cu29") || (toupper($3)==toupper(guid)) {print $1; exit}')"
+	  [[ -n "${PART:-}" ]] || { echo "Cu29 partition not found on $DEV"; exit 1; }
+	fi
+
+	if [[ "$dev_type" == "part" ]]; then
+	  part_label="$(lsblk -no PARTLABEL "$PART" 2>/dev/null | head -n1 || true)"
+	  part_type="$(lsblk -no PARTTYPE "$PART" 2>/dev/null | head -n1 || true)"
+	  part_label="${part_label:-}"
+	  part_type="${part_type:-}"
+	  if [[ "$part_label" != "Cu29" && "${part_type^^}" != "${CU29_GUID}" ]]; then
+	    echo "Warning: $PART does not look like a Cu29 partition (label=$part_label type=$part_type)" >&2
+	  fi
+	fi
+
+	if [[ "$OUT" != /* ]]; then
+	  OUT="${invocation_dir}/${OUT}"
+	fi
+
+	echo "Reading Cu29 partition $PART -> $OUT"
+	sudo dd if="$PART" of="$OUT" bs=4M status=progress conv=fsync
+
 # Render copperconfig.ron from the current working directory.
 dag mission="":
 	#!/usr/bin/env bash
