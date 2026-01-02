@@ -9,6 +9,8 @@ use cu29::prelude::*;
 use defmt::info;
 use serde::Serialize;
 
+mod bmi088;
+
 // Placeholder AHRS pose until the sensor/estimator is brought up on STM32.
 #[derive(Debug, Default, Clone, Copy, Encode, Decode, Serialize, PartialEq, Eq)]
 pub struct AhrsPose;
@@ -164,6 +166,13 @@ pub type TelemetryLogger0 = TelemetryLogger<0>;
 pub type TelemetryLogger1 = TelemetryLogger<1>;
 pub type TelemetryLogger2 = TelemetryLogger<2>;
 pub type TelemetryLogger3 = TelemetryLogger<3>;
+
+pub type Bmi088Source = bmi088::Bmi088Source<
+    crate::resources::Bmi088Spi,
+    crate::resources::Bmi088AccCs,
+    crate::resources::Bmi088GyrCs,
+    crate::resources::Bmi088Delay,
+>;
 
 impl Freezable for ControlInputs {}
 impl Freezable for RateSetpoint {}
