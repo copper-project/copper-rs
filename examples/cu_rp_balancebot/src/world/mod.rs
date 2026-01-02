@@ -63,6 +63,8 @@ enum SimulationState {
 #[derive(Resource, Default)]
 pub struct DragState {
     pub override_motor: bool,
+    /// Currently active drag: (entity, force)
+    pub active_drag: Option<(Entity, Vector)>,
 }
 
 #[derive(Component)]
@@ -142,6 +144,10 @@ pub fn build_world(app: &mut App, headless: bool) -> &mut App {
         app.add_systems(Update, toggle_simulation_state)
             .add_systems(Update, camera_control_system)
             .add_systems(Update, external_force_display)
+            .add_systems(
+                FixedPostUpdate,
+                apply_drag_force.in_set(PhysicsSystems::Prepare),
+            )
             .add_systems(PostUpdate, reset_sim);
     }
 
@@ -473,6 +479,7 @@ fn setup_entities(
     // let the cart be dragged too
     commands
         .entity(cart_entity)
+        .observe(on_drag_start)
         .observe(on_drag)
         .observe(on_drag_end);
 
@@ -526,6 +533,7 @@ fn setup_entities(
                 .lock_rotation_x(),
             AppliedForce::default(),
         ))
+        .observe(on_drag_start)
         .observe(on_drag)
         .observe(on_drag_end)
         .id();
@@ -559,14 +567,50 @@ fn setup_entities(
     setup_completed.0 = true; // Mark as completed
 }
 
-// Avian's `Forces` is the mutable query data for applying forces.
-// Use drag.observer() to get the entity that registered the observer (cart/rod), not the clicked mesh child.
-// Use drag.original_event_target() if the original hit entity is needed.
+fn get_rigid_body_entity(
+    mut drag_target: Entity,
+    parents: &Query<(&ChildOf, Option<&RigidBody>)>,
+) -> Entity {
+    // get a rigid body entity (the drag event may target a descendant of them)
+    while let Ok((parent, maybe_rigid_body)) = parents.get(drag_target) {
+        if maybe_rigid_body.is_some() {
+            break;
+        }
+        drag_target = parent.parent();
+    }
+
+    // this will return the highest ancestor if no rigid body is found, which is fine
+    drag_target
+}
+
+/// Called immediately when drag starts (before any mouse movement)
+fn on_drag_start(
+    drag: On<Pointer<DragStart>>,
+    parents: Query<(&ChildOf, Option<&RigidBody>)>,
+    cart: Query<(), With<Cart>>,
+    mut drag_state: ResMut<DragState>,
+) {
+    if drag.button != PointerButton::Primary {
+        return;
+    }
+
+    let original_target = drag.entity;
+    let target_entity = get_rigid_body_entity(original_target, &parents);
+    let is_cart = cart.get(target_entity).is_ok();
+
+    if is_cart {
+        drag_state.override_motor = true;
+    }
+
+    // Initialize drag with zero force - on_drag will update with actual force
+    drag_state.active_drag = Some((target_entity, Vector::ZERO));
+}
+
 fn on_drag(
     drag: On<Pointer<Drag>>,
     camera_query: Option<Single<&Transform, With<Camera>>>,
+    parents: Query<(&ChildOf, Option<&RigidBody>)>,
     cart: Query<(), With<Cart>>,
-    mut constant_forces: Query<&mut ConstantForce>,
     mut applied_forces: Query<&mut AppliedForce>,
     mut drag_state: ResMut<DragState>,
     drag_control: Res<DragControl>,
@@ -580,8 +624,9 @@ fn on_drag(
         return;
     };
 
-    // Use drag.observer() to get the observer's entity (cart or rod), not the clicked mesh child.
-    let target_entity = drag.observer();
+    // Use drag.entity (the Pointer<E>.entity field) to get the originally hit entity
+    let original_target = drag.entity;
+    let target_entity = get_rigid_body_entity(original_target, &parents);
     let is_cart = cart.get(target_entity).is_ok();
 
     if is_cart {
@@ -594,11 +639,12 @@ fn on_drag(
         drag.distance.x * camera_transform.right() + drag.distance.y * camera_transform.down();
 
     // apply a force to that object based on the world length and direction of the mouse drag
-    let applied_force_vec = (drag_delta_world / drag_control.pixels_per_newton)
+    let applied_force_vec: Vector = (drag_delta_world / drag_control.pixels_per_newton)
         .clamp_length_max(drag_control.max_force);
-    if let Ok(mut constant_force) = constant_forces.get_mut(target_entity) {
-        constant_force.0 = applied_force_vec;
-    }
+
+    // Store the drag state - a system will apply force continuously
+    drag_state.active_drag = Some((target_entity, applied_force_vec));
+
     if let Ok(mut recorded_force) = applied_forces.get_mut(target_entity) {
         recorded_force.0 = applied_force_vec;
     }
@@ -606,8 +652,8 @@ fn on_drag(
 
 fn on_drag_end(
     drag: On<Pointer<DragEnd>>,
+    parents: Query<(&ChildOf, Option<&RigidBody>)>,
     cart: Query<(), With<Cart>>,
-    mut constant_forces: Query<&mut ConstantForce>,
     mut applied_forces: Query<&mut AppliedForce>,
     mut drag_state: ResMut<DragState>,
 ) {
@@ -615,18 +661,27 @@ fn on_drag_end(
         return;
     }
 
-    // Use drag.observer() to get the observer's entity (cart or rod).
-    let target_entity = drag.observer();
+    let target_entity = get_rigid_body_entity(drag.entity, &parents);
     let is_cart = cart.get(target_entity).is_ok();
 
     if is_cart {
         drag_state.override_motor = false;
     }
-    if let Ok(mut constant_force) = constant_forces.get_mut(target_entity) {
-        constant_force.0 = Vector::ZERO;
-    }
+
+    // Clear the active drag
+    drag_state.active_drag = None;
+
     if let Ok(mut recorded_force) = applied_forces.get_mut(target_entity) {
         recorded_force.0 = Vector::ZERO;
+    }
+}
+
+/// System that applies drag force continuously while dragging
+fn apply_drag_force(drag_state: Res<DragState>, mut forces: Query<Forces>) {
+    if let Some((entity, force_vec)) = drag_state.active_drag
+        && let Ok(mut force) = forces.get_mut(entity)
+    {
+        force.apply_force(force_vec);
     }
 }
 
