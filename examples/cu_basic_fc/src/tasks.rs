@@ -34,6 +34,7 @@ pub struct ControlInputs {
 }
 
 const TELEMETRY_LOG_EVERY: u32 = 1000;
+const IMU_LOG_EVERY: u32 = 100;
 
 resources!({
     led => Owned<spin::Mutex<GreenLed>>,
@@ -166,6 +167,46 @@ pub type TelemetryLogger0 = TelemetryLogger<0>;
 pub type TelemetryLogger1 = TelemetryLogger<1>;
 pub type TelemetryLogger2 = TelemetryLogger<2>;
 pub type TelemetryLogger3 = TelemetryLogger<3>;
+
+pub struct ImuLogger {
+    count: u32,
+}
+
+impl Freezable for ImuLogger {}
+
+impl CuSinkTask for ImuLogger {
+    type Resources<'r> = ();
+    type Input<'m> = CuMsg<ImuPayload>;
+
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
+    where
+        Self: Sized,
+    {
+        Ok(Self { count: 0 })
+    }
+
+    fn process<'i>(&mut self, _clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
+        if let Some(payload) = input.payload() {
+            self.count = self.count.wrapping_add(1);
+            if self.count.is_multiple_of(IMU_LOG_EVERY) {
+                info!(
+                    "imu ax={} ay={} az={} gx={} gy={} gz={} t={}",
+                    payload.accel_x.value,
+                    payload.accel_y.value,
+                    payload.accel_z.value,
+                    payload.gyro_x.value,
+                    payload.gyro_y.value,
+                    payload.gyro_z.value,
+                    payload.temperature.value
+                );
+            }
+        }
+        Ok(())
+    }
+}
 
 pub type Bmi088Source = bmi088::Bmi088Source<
     crate::resources::Bmi088Spi,
