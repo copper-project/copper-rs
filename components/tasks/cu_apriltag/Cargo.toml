@@ -19,8 +19,8 @@ cu-spatial-payloads = { path = "../../payloads/cu_spatial_payloads", version = "
 cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "0.11.0" }
 
 [target.'cfg(unix)'.dependencies]
-apriltag = { version = "0.4.0" }
-apriltag-sys = { version = "0.4.0" }
+apriltag = { git = "https://github.com/jerry73204/apriltag-rust.git", rev = "9e7ce5a0dd9f2d178225a436b05944bf01b17438" }
+apriltag-sys = { git = "https://github.com/jerry73204/apriltag-rust.git", rev = "9e7ce5a0dd9f2d178225a436b05944bf01b17438" }
 
 [dev-dependencies]
 image = "0.25.6"
