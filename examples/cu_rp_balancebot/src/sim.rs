@@ -4,7 +4,7 @@ mod world;
 use crate::world::{AppliedForce, Cart, DragState, Rod};
 use avian3d::math::Vector;
 use avian3d::prelude::{ConstantForce, Physics};
-use bevy::asset::UnapprovedPathMode;
+use bevy::asset::{AssetApp, UnapprovedPathMode};
 use bevy::prelude::*;
 use bevy::render::RenderPlugin;
 use bevy::scene::ScenePlugin;
@@ -230,12 +230,6 @@ pub fn make_world(headless: bool) -> App {
     };
 
     if headless {
-        // these are not added in the minimal plugins but are needed for the integration test to run
-        world.insert_resource(Assets::<Mesh>::default());
-        world.insert_resource(Assets::<Font>::default());
-        world.insert_resource(SceneSpawner::default());
-        world.insert_resource(Assets::<StandardMaterial>::default());
-
         // add the minimal plugins as well as others needed for our simulation to run
         world.add_plugins((
             MinimalPlugins,
@@ -246,6 +240,12 @@ pub fn make_world(headless: bool) -> App {
             ScenePlugin,
             ImagePlugin::default(),
         ));
+
+        // MinimalPlugins doesn't register render asset types; initialize what the sim uses.
+        world.init_asset::<Mesh>();
+        world.init_asset::<StandardMaterial>();
+        world.init_asset::<Font>();
+        world.init_resource::<SceneSpawner>();
     } else {
         world.add_plugins(
             DefaultPlugins
