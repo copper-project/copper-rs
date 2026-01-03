@@ -6,7 +6,7 @@ use cu29::prelude::*;
 use cu_ahrs::AhrsPose;
 use cu_bdshot::{EscCommand, EscTelemetry};
 use cu_crsf::messages::RcChannelsPayload;
-use cu_pid::PIDController;
+use cu_pid::{PIDControlOutputPayload, PIDController};
 use cu_sensor_payloads::ImuPayload;
 use defmt::info;
 use serde::Serialize;
@@ -177,6 +177,8 @@ pub type TelemetryLogger3 = TelemetryLogger<3>;
 
 pub struct ImuLogger {
     last_log: Option<CuTime>,
+    last_tov: Option<CuTime>,
+    count: u32,
 }
 
 impl Freezable for ImuLogger {}
@@ -192,27 +194,48 @@ impl CuSinkTask for ImuLogger {
     where
         Self: Sized,
     {
-        Ok(Self { last_log: None })
+        Ok(Self {
+            last_log: None,
+            last_tov: None,
+            count: 0,
+        })
     }
 
     fn process<'i>(&mut self, _clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
         if let Some(payload) = input.payload() {
-            if !should_log(&mut self.last_log, input.tov, human_log_period()) {
+            self.count = self.count.wrapping_add(1);
+            let log_due = should_log(&mut self.last_log, input.tov, human_log_period())
+                || self.count.is_multiple_of(200);
+            if !log_due {
                 return Ok(());
             }
+            let (tov_kind, tov_start_ns, tov_end_ns, tov_time) = match input.tov {
+                Tov::Time(t) => (1_u8, t.as_nanos(), t.as_nanos(), Some(t)),
+                Tov::Range(r) => (2_u8, r.start.as_nanos(), r.end.as_nanos(), Some(r.end)),
+                Tov::None => (0_u8, 0_u64, 0_u64, None),
+            };
+            let dt_ms = match (self.last_tov, tov_time) {
+                (Some(prev), Some(curr)) => (curr - prev).as_millis(),
+                _ => 0,
+            };
+            self.last_tov = tov_time;
             let gx_dps = payload.gyro_x.get::<degree_per_second>();
             let gy_dps = payload.gyro_y.get::<degree_per_second>();
             let gz_dps = payload.gyro_z.get::<degree_per_second>();
             let temp_c = payload.temperature.get::<degree_celsius>();
             info!(
-                "imu ax={} m.s⁻² ay={} m.s⁻² az={} m.s⁻² gx={} deg.s⁻¹ gy={} deg.s⁻¹ gz={} deg.s⁻¹ t={} °C",
+                "imu ax={} m.s⁻² ay={} m.s⁻² az={} m.s⁻² gx={} deg.s⁻¹ gy={} deg.s⁻¹ gz={} deg.s⁻¹ t={} °C tov_kind={} tov_start_ns={} tov_end_ns={} tov_dt_ms={}",
                 payload.accel_x.value,
                 payload.accel_y.value,
                 payload.accel_z.value,
                 gx_dps,
                 gy_dps,
                 gz_dps,
-                temp_c
+                temp_c,
+                tov_kind,
+                tov_start_ns,
+                tov_end_ns,
+                dt_ms
             );
         }
         Ok(())
@@ -547,13 +570,15 @@ impl AxisPid {
         self.initialized = false;
     }
 
-    fn update(&mut self, measurement: f32, dt: CuDuration) -> Option<f32> {
+    fn update(&mut self, measurement: f32, dt: CuDuration) -> Option<PIDControlOutputPayload> {
+        // cu_pid expects dt in microseconds (it divides by 1e6), so scale nanoseconds down.
+        let dt_pid = CuDuration::from_nanos((dt.as_nanos() / 1_000).max(1));
         if !self.initialized {
             self.pid.init_measurement(measurement);
             self.initialized = true;
             return None;
         }
-        Some(self.pid.next_control_output(measurement, dt).output)
+        Some(self.pid.next_control_output(measurement, dt_pid))
     }
 }
 
@@ -664,8 +689,10 @@ impl CuTask for AttitudeController {
                     .clamp(-self.angle_limit_rad, self.angle_limit_rad);
                 let roll_measure = pose.roll - target_roll;
                 let pitch_measure = pose.pitch - target_pitch;
-                let roll_rate = self.roll_pid.update(roll_measure, dt).unwrap_or(0.0);
-                let pitch_rate = self.pitch_pid.update(pitch_measure, dt).unwrap_or(0.0);
+                let roll_out = self.roll_pid.update(roll_measure, dt).unwrap_or_default();
+                let pitch_out = self.pitch_pid.update(pitch_measure, dt).unwrap_or_default();
+                let roll_rate = roll_out.output;
+                let pitch_rate = pitch_out.output;
                 (
                     roll_rate.clamp(-self.rate_limit_rad, self.rate_limit_rad),
                     pitch_rate.clamp(-self.rate_limit_rad, self.rate_limit_rad),
@@ -700,6 +727,8 @@ pub struct RateController {
     output_limit: f32,
     dt_fallback: CuDuration,
     last_time: Option<CuTime>,
+    last_log: Option<CuTime>,
+    count: u32,
 }
 
 impl Freezable for RateController {}
@@ -743,6 +772,8 @@ impl CuTask for RateController {
             output_limit,
             dt_fallback,
             last_time: None,
+            last_log: None,
+            count: 0,
         })
     }
 
@@ -779,9 +810,52 @@ impl CuTask for RateController {
         let pitch_measure = imu.gyro_y.value - setpoint.pitch;
         let yaw_measure = imu.gyro_z.value - setpoint.yaw;
 
-        let roll_cmd = self.roll_pid.update(roll_measure, dt).unwrap_or(0.0);
-        let pitch_cmd = self.pitch_pid.update(pitch_measure, dt).unwrap_or(0.0);
-        let yaw_cmd = self.yaw_pid.update(yaw_measure, dt).unwrap_or(0.0);
+        let roll_out = self.roll_pid.update(roll_measure, dt).unwrap_or_default();
+        let pitch_out = self.pitch_pid.update(pitch_measure, dt).unwrap_or_default();
+        let yaw_out = self.yaw_pid.update(yaw_measure, dt).unwrap_or_default();
+        let roll_cmd = roll_out.output;
+        let pitch_cmd = pitch_out.output;
+        let yaw_cmd = yaw_out.output;
+
+        self.count = self.count.wrapping_add(1);
+        let log_due = should_log(&mut self.last_log, ctrl_msg.tov, human_log_period())
+            || self.count.is_multiple_of(200);
+        if log_due {
+            let sp_roll = setpoint.roll.to_degrees();
+            let sp_pitch = setpoint.pitch.to_degrees();
+            let sp_yaw = setpoint.yaw.to_degrees();
+            let gyro_roll = imu.gyro_x.value.to_degrees();
+            let gyro_pitch = imu.gyro_y.value.to_degrees();
+            let gyro_yaw = imu.gyro_z.value.to_degrees();
+            info!(
+                "rate_pid dt_ms={} sp_r={} gyro_r={} out_r={} p_r={} i_r={} d_r={}",
+                dt.as_millis(),
+                sp_roll,
+                gyro_roll,
+                roll_out.output,
+                roll_out.p,
+                roll_out.i,
+                roll_out.d
+            );
+            info!(
+                "rate_pid sp_p={} gyro_p={} out_p={} p_p={} i_p={} d_p={}",
+                sp_pitch,
+                gyro_pitch,
+                pitch_out.output,
+                pitch_out.p,
+                pitch_out.i,
+                pitch_out.d
+            );
+            info!(
+                "rate_pid sp_y={} gyro_y={} out_y={} p_y={} i_y={} d_y={}",
+                sp_yaw,
+                gyro_yaw,
+                yaw_out.output,
+                yaw_out.p,
+                yaw_out.i,
+                yaw_out.d
+            );
+        }
 
         output.tov = imu_msg.tov;
         output.set_payload(BodyCommand {
