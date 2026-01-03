@@ -1,13 +1,13 @@
 #![allow(dead_code)]
 
 use crate::GreenLed;
-use cu29::bincode::{Decode, Encode};
-use cu29::prelude::*;
 use cu_ahrs::AhrsPose;
 use cu_bdshot::{EscCommand, EscTelemetry};
 use cu_crsf::messages::RcChannelsPayload;
 use cu_pid::{PIDControlOutputPayload, PIDController};
 use cu_sensor_payloads::ImuPayload;
+use cu29::bincode::{Decode, Encode};
+use cu29::prelude::*;
 use defmt::info;
 use serde::Serialize;
 use uom::si::angular_velocity::degree_per_second;
@@ -48,20 +48,62 @@ pub struct BodyCommand {
     pub yaw: f32,
 }
 
-const TELEMETRY_LOG_EVERY: u32 = 1000;
+const LOG_PERIOD_MS: u64 = 500;
 
 resources!({
     led => Owned<spin::Mutex<GreenLed>>,
 });
+
+struct LogRateLimiter {
+    last: Option<CuTime>,
+}
+
+impl LogRateLimiter {
+    const fn new() -> Self {
+        Self { last: None }
+    }
+
+    fn should_log(&mut self, clock: &RobotClock, tov: Tov) -> bool {
+        let now = match tov {
+            Tov::Time(time) => time,
+            Tov::Range(range) => range.end,
+            Tov::None => clock.now(),
+        };
+        match self.last {
+            Some(prev) if now - prev < CuDuration::from_millis(LOG_PERIOD_MS) => false,
+            _ => {
+                self.last = Some(now);
+                true
+            }
+        }
+    }
+}
+
+macro_rules! info_rl {
+    ($state:expr, $clock:expr, $tov:expr, { $($body:tt)* }) => {{
+        let mut state = $state.lock();
+        if state.should_log($clock, $tov) {
+            $($body)*
+        }
+    }};
+    ($state:expr, $clock:expr, $tov:expr, $($arg:tt)+) => {{
+        info_rl!($state, $clock, $tov, { info!($($arg)+); });
+    }};
+}
+
+static LOG_CTRL: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new());
+static LOG_TELEMETRY: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new());
+static LOG_IMU: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new());
+static LOG_RC: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new());
+static LOG_RATE: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new());
+static LOG_MOTORS: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new());
 
 pub struct LedBeat {
     on: bool,
     led: spin::Mutex<GreenLed>,
 }
 
-pub struct ControlSink {
-    last_log: Option<CuTime>,
-}
+pub struct ControlSink {}
 impl Freezable for ControlSink {}
 impl CuSinkTask for ControlSink {
     type Resources<'r> = ();
@@ -74,15 +116,15 @@ impl CuSinkTask for ControlSink {
     where
         Self: Sized,
     {
-        Ok(Self { last_log: None })
+        Ok(Self {})
     }
 
-    fn process<'i>(&mut self, _clock: &RobotClock, inputs: &Self::Input<'i>) -> CuResult<()> {
+    fn process<'i>(&mut self, clock: &RobotClock, inputs: &Self::Input<'i>) -> CuResult<()> {
         if let Some(ctrl) = inputs.payload() {
-            if !should_log(&mut self.last_log, inputs.tov, human_log_period()) {
-                return Ok(());
-            }
-            info!(
+            info_rl!(
+                &LOG_CTRL,
+                clock,
+                inputs.tov,
                 "ctrl roll={} pitch={} yaw={} thr={} armed={} mode={}",
                 ctrl.roll,
                 ctrl.pitch,
@@ -117,10 +159,11 @@ impl CuTask for ThrottleToEsc {
 
     fn process<'i, 'o>(
         &mut self,
-        _clock: &RobotClock,
+        clock: &RobotClock,
         input: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
+        output.tov = ensure_tov(clock, input.tov);
         if let Some(ctrl) = input.payload() {
             let raw = if ctrl.armed { ctrl.throttle } else { 0.0 };
             let throttle = (raw.clamp(0.0, 1.0) * 2047.0) as u16;
@@ -135,9 +178,7 @@ impl CuTask for ThrottleToEsc {
     }
 }
 
-pub struct TelemetryLogger<const ESC: usize> {
-    count: u32,
-}
+pub struct TelemetryLogger<const ESC: usize> {}
 
 impl<const ESC: usize> Freezable for TelemetryLogger<ESC> {}
 
@@ -152,19 +193,18 @@ impl<const ESC: usize> CuSinkTask for TelemetryLogger<ESC> {
     where
         Self: Sized,
     {
-        Ok(Self { count: 0 })
+        Ok(Self {})
     }
 
-    fn process<'i>(&mut self, _clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
+    fn process<'i>(&mut self, clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
         if let Some(payload) = input.payload() {
-            self.count = self.count.wrapping_add(1);
-            if self.count.is_multiple_of(TELEMETRY_LOG_EVERY) {
+            info_rl!(&LOG_TELEMETRY, clock, input.tov, {
                 if let Some(sample) = payload.sample {
                     info!("ESC{} telemetry {}", ESC, sample);
                 } else {
                     info!("ESC{} telemetry missing", ESC);
                 }
-            }
+            });
         }
         Ok(())
     }
@@ -176,9 +216,7 @@ pub type TelemetryLogger2 = TelemetryLogger<2>;
 pub type TelemetryLogger3 = TelemetryLogger<3>;
 
 pub struct ImuLogger {
-    last_log: Option<CuTime>,
     last_tov: Option<CuTime>,
-    count: u32,
 }
 
 impl Freezable for ImuLogger {}
@@ -194,49 +232,41 @@ impl CuSinkTask for ImuLogger {
     where
         Self: Sized,
     {
-        Ok(Self {
-            last_log: None,
-            last_tov: None,
-            count: 0,
-        })
+        Ok(Self { last_tov: None })
     }
 
-    fn process<'i>(&mut self, _clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
+    fn process<'i>(&mut self, clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
         if let Some(payload) = input.payload() {
-            self.count = self.count.wrapping_add(1);
-            let log_due = should_log(&mut self.last_log, input.tov, human_log_period())
-                || self.count.is_multiple_of(200);
-            if !log_due {
-                return Ok(());
-            }
-            let (tov_kind, tov_start_ns, tov_end_ns, tov_time) = match input.tov {
-                Tov::Time(t) => (1_u8, t.as_nanos(), t.as_nanos(), Some(t)),
-                Tov::Range(r) => (2_u8, r.start.as_nanos(), r.end.as_nanos(), Some(r.end)),
-                Tov::None => (0_u8, 0_u64, 0_u64, None),
-            };
-            let dt_ms = match (self.last_tov, tov_time) {
-                (Some(prev), Some(curr)) => (curr - prev).as_millis(),
-                _ => 0,
-            };
-            self.last_tov = tov_time;
-            let gx_dps = payload.gyro_x.get::<degree_per_second>();
-            let gy_dps = payload.gyro_y.get::<degree_per_second>();
-            let gz_dps = payload.gyro_z.get::<degree_per_second>();
-            let temp_c = payload.temperature.get::<degree_celsius>();
-            info!(
-                "imu ax={} m.s⁻² ay={} m.s⁻² az={} m.s⁻² gx={} deg.s⁻¹ gy={} deg.s⁻¹ gz={} deg.s⁻¹ t={} °C tov_kind={} tov_start_ns={} tov_end_ns={} tov_dt_ms={}",
-                payload.accel_x.value,
-                payload.accel_y.value,
-                payload.accel_z.value,
-                gx_dps,
-                gy_dps,
-                gz_dps,
-                temp_c,
-                tov_kind,
-                tov_start_ns,
-                tov_end_ns,
-                dt_ms
-            );
+            info_rl!(&LOG_IMU, clock, input.tov, {
+                let (tov_kind, tov_start_ns, tov_end_ns, tov_time) = match input.tov {
+                    Tov::Time(t) => (1_u8, t.as_nanos(), t.as_nanos(), Some(t)),
+                    Tov::Range(r) => (2_u8, r.start.as_nanos(), r.end.as_nanos(), Some(r.end)),
+                    Tov::None => (0_u8, 0_u64, 0_u64, None),
+                };
+                let dt_us = match (self.last_tov, tov_time) {
+                    (Some(prev), Some(curr)) => (curr - prev).as_micros(),
+                    _ => 0,
+                };
+                self.last_tov = tov_time;
+                let gx_dps = payload.gyro_x.get::<degree_per_second>();
+                let gy_dps = payload.gyro_y.get::<degree_per_second>();
+                let gz_dps = payload.gyro_z.get::<degree_per_second>();
+                let temp_c = payload.temperature.get::<degree_celsius>();
+                info!(
+                    "imu ax={} m.s⁻² ay={} m.s⁻² az={} m.s⁻² gx={} deg.s⁻¹ gy={} deg.s⁻¹ gz={} deg.s⁻¹ t={} °C tov_kind={} tov_start_ns={} tov_end_ns={} tov_dt_us={}",
+                    payload.accel_x.value,
+                    payload.accel_y.value,
+                    payload.accel_z.value,
+                    gx_dps,
+                    gy_dps,
+                    gz_dps,
+                    temp_c,
+                    tov_kind,
+                    tov_start_ns,
+                    tov_end_ns,
+                    dt_us
+                );
+            });
         }
         Ok(())
     }
@@ -293,7 +323,6 @@ pub struct RcMapper {
     mode_channel: Option<usize>,
     mode_low_max: Option<u16>,
     mode_mid_max: Option<u16>,
-    last_log: Option<CuTime>,
 }
 
 impl Freezable for RcMapper {}
@@ -349,17 +378,17 @@ impl CuTask for RcMapper {
             mode_channel: mode_cfg,
             mode_low_max,
             mode_mid_max,
-            last_log: None,
         })
     }
 
     fn process<'i, 'o>(
         &mut self,
-        _clock: &RobotClock,
+        clock: &RobotClock,
         inputs: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
         let Some(rc) = inputs.payload() else {
+            output.tov = ensure_tov(clock, inputs.tov);
             output.clear_payload();
             return Ok(());
         };
@@ -398,7 +427,7 @@ impl CuTask for RcMapper {
             None => FlightMode::Angle,
         };
 
-        if should_log(&mut self.last_log, inputs.tov, human_log_period()) {
+        info_rl!(&LOG_RC, clock, inputs.tov, {
             let mode_channel = self.mode_channel.unwrap_or(0);
             let mode_value = self
                 .mode_channel
@@ -431,9 +460,9 @@ impl CuTask for RcMapper {
                 self.mode_low_max.unwrap_or(0),
                 self.mode_mid_max.unwrap_or(0)
             );
-        }
+        });
 
-        output.tov = inputs.tov;
+        output.tov = ensure_tov(clock, inputs.tov);
         output.set_payload(ControlInputs {
             roll,
             pitch,
@@ -483,12 +512,13 @@ impl CuTask for ImuCalibrator {
 
     fn process<'i, 'o>(
         &mut self,
-        _clock: &RobotClock,
+        clock: &RobotClock,
         input: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
         let (imu_msg, ctrl_msg) = *input;
         let Some(imu) = imu_msg.payload() else {
+            output.tov = ensure_tov(clock, imu_msg.tov);
             output.clear_payload();
             return Ok(());
         };
@@ -499,7 +529,7 @@ impl CuTask for ImuCalibrator {
             self.sum = [0.0; 3];
             self.samples = 0;
             self.last_armed = false;
-            output.tov = imu_msg.tov;
+            output.tov = ensure_tov(clock, imu_msg.tov);
             output.set_payload(*imu);
             return Ok(());
         }
@@ -532,6 +562,7 @@ impl CuTask for ImuCalibrator {
                 );
             }
 
+            output.tov = ensure_tov(clock, imu_msg.tov);
             output.clear_payload();
             output.metadata.set_status("cal");
             return Ok(());
@@ -545,7 +576,7 @@ impl CuTask for ImuCalibrator {
         ];
         let temp_c = imu.temperature.get::<degree_celsius>();
 
-        output.tov = imu_msg.tov;
+        output.tov = ensure_tov(clock, imu_msg.tov);
         output.metadata.set_status("ok");
         output.set_payload(ImuPayload::from_raw(accel_mps2, gyro_rad, temp_c));
         Ok(())
@@ -654,11 +685,14 @@ impl CuTask for AttitudeController {
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
         let (pose_msg, ctrl_msg) = *input;
+        let output_tov = ensure_tov(clock, prefer_tov(pose_msg.tov, ctrl_msg.tov));
         let Some(pose) = pose_msg.payload() else {
+            output.tov = output_tov;
             output.clear_payload();
             return Ok(());
         };
         let Some(ctrl) = ctrl_msg.payload() else {
+            output.tov = output_tov;
             output.clear_payload();
             return Ok(());
         };
@@ -667,7 +701,7 @@ impl CuTask for AttitudeController {
             self.roll_pid.reset();
             self.pitch_pid.reset();
             self.last_mode = ctrl.mode;
-            output.tov = pose_msg.tov;
+            output.tov = output_tov;
             output.set_payload(BodyRateSetpoint::default());
             return Ok(());
         }
@@ -710,7 +744,7 @@ impl CuTask for AttitudeController {
         let yaw_rate =
             (ctrl.yaw * self.acro_rate_rad).clamp(-self.acro_rate_rad, self.acro_rate_rad);
 
-        output.tov = pose_msg.tov;
+        output.tov = output_tov;
         output.set_payload(BodyRateSetpoint {
             roll: roll_rate,
             pitch: pitch_rate,
@@ -726,9 +760,8 @@ pub struct RateController {
     yaw_pid: AxisPid,
     output_limit: f32,
     dt_fallback: CuDuration,
+    i_throttle_min: f32,
     last_time: Option<CuTime>,
-    last_log: Option<CuTime>,
-    count: u32,
 }
 
 impl Freezable for RateController {}
@@ -750,6 +783,7 @@ impl CuTask for RateController {
         let kd_yaw = cfg_f32(config, "kd_yaw", kd);
         let output_limit = cfg_f32(config, "output_limit", 1.0);
         let dt_fallback = CuDuration::from_millis(cfg_u32(config, "dt_ms", 10) as u64);
+        let i_throttle_min = cfg_f32(config, "i_throttle_min", 0.05);
 
         let pid = |p: f32, i: f32, d: f32| {
             PIDController::new(
@@ -771,9 +805,8 @@ impl CuTask for RateController {
             yaw_pid: AxisPid::new(pid(kp_yaw, ki_yaw, kd_yaw)),
             output_limit,
             dt_fallback,
+            i_throttle_min,
             last_time: None,
-            last_log: None,
-            count: 0,
         })
     }
 
@@ -784,21 +817,29 @@ impl CuTask for RateController {
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
         let (setpoint_msg, imu_msg, ctrl_msg) = *input;
+        let output_tov = ensure_tov(
+            clock,
+            prefer_tov(imu_msg.tov, prefer_tov(setpoint_msg.tov, ctrl_msg.tov)),
+        );
         let Some(setpoint) = setpoint_msg.payload() else {
+            output.tov = output_tov;
             output.clear_payload();
             return Ok(());
         };
         let Some(imu) = imu_msg.payload() else {
+            output.tov = output_tov;
             output.clear_payload();
             return Ok(());
         };
-        let armed = ctrl_msg.payload().map(|c| c.armed).unwrap_or(false);
+        let ctrl = ctrl_msg.payload();
+        let armed = ctrl.map(|c| c.armed).unwrap_or(false);
+        let throttle = ctrl.map(|c| c.throttle).unwrap_or(0.0);
 
         if !armed {
             self.roll_pid.reset();
             self.pitch_pid.reset();
             self.yaw_pid.reset();
-            output.tov = imu_msg.tov;
+            output.tov = output_tov;
             output.set_payload(BodyCommand::default());
             return Ok(());
         }
@@ -817,10 +858,11 @@ impl CuTask for RateController {
         let pitch_cmd = pitch_out.output;
         let yaw_cmd = yaw_out.output;
 
-        self.count = self.count.wrapping_add(1);
-        let log_due = should_log(&mut self.last_log, ctrl_msg.tov, human_log_period())
-            || self.count.is_multiple_of(200);
-        if log_due {
+        let log_tov = ensure_tov(
+            clock,
+            prefer_tov(ctrl_msg.tov, prefer_tov(setpoint_msg.tov, imu_msg.tov)),
+        );
+        info_rl!(&LOG_RATE, clock, log_tov, {
             let sp_roll = setpoint.roll.to_degrees();
             let sp_pitch = setpoint.pitch.to_degrees();
             let sp_yaw = setpoint.yaw.to_degrees();
@@ -828,8 +870,8 @@ impl CuTask for RateController {
             let gyro_pitch = imu.gyro_y.value.to_degrees();
             let gyro_yaw = imu.gyro_z.value.to_degrees();
             info!(
-                "rate_pid dt_ms={} sp_r={} gyro_r={} out_r={} p_r={} i_r={} d_r={}",
-                dt.as_millis(),
+                "rate_pid dt_us={} sp_r={} gyro_r={} out_r={} p_r={} i_r={} d_r={}",
+                dt.as_micros(),
                 sp_roll,
                 gyro_roll,
                 roll_out.output,
@@ -839,25 +881,24 @@ impl CuTask for RateController {
             );
             info!(
                 "rate_pid sp_p={} gyro_p={} out_p={} p_p={} i_p={} d_p={}",
-                sp_pitch,
-                gyro_pitch,
-                pitch_out.output,
-                pitch_out.p,
-                pitch_out.i,
-                pitch_out.d
+                sp_pitch, gyro_pitch, pitch_out.output, pitch_out.p, pitch_out.i, pitch_out.d
             );
             info!(
                 "rate_pid sp_y={} gyro_y={} out_y={} p_y={} i_y={} d_y={}",
-                sp_yaw,
-                gyro_yaw,
-                yaw_out.output,
-                yaw_out.p,
-                yaw_out.i,
-                yaw_out.d
+                sp_yaw, gyro_yaw, yaw_out.output, yaw_out.p, yaw_out.i, yaw_out.d
             );
+        });
+
+        if throttle < self.i_throttle_min {
+            self.roll_pid.reset();
+            self.pitch_pid.reset();
+            self.yaw_pid.reset();
+            output.tov = output_tov;
+            output.set_payload(BodyCommand::default());
+            return Ok(());
         }
 
-        output.tov = imu_msg.tov;
+        output.tov = output_tov;
         output.set_payload(BodyCommand {
             roll: roll_cmd.clamp(-self.output_limit, self.output_limit),
             pitch: pitch_cmd.clamp(-self.output_limit, self.output_limit),
@@ -876,16 +917,12 @@ const QUADX_MIX: [(f32, f32, f32); 4] = [
 const DSHOT_MIN_ARM_CMD: u16 = 100;
 
 struct MotorLogState {
-    last_log: Option<CuTime>,
     values: [u16; 4],
 }
 
 impl MotorLogState {
     const fn new() -> Self {
-        Self {
-            last_log: None,
-            values: [0; 4],
-        }
+        Self { values: [0; 4] }
     }
 }
 
@@ -923,12 +960,14 @@ impl CuTask for QuadXMixer {
 
     fn process<'i, 'o>(
         &mut self,
-        _clock: &RobotClock,
+        clock: &RobotClock,
         input: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
         let (ctrl_msg, cmd_msg) = *input;
+        let output_tov = ensure_tov(clock, prefer_tov(cmd_msg.tov, ctrl_msg.tov));
         let Some(ctrl) = ctrl_msg.payload() else {
+            output.tov = output_tov;
             output.set_payload(EscCommand::disarm());
             return Ok(());
         };
@@ -956,16 +995,19 @@ impl CuTask for QuadXMixer {
             if self.motor_index < state.values.len() {
                 state.values[self.motor_index] = command.throttle;
             }
-            if self.motor_index == 0
-                && should_log(&mut state.last_log, ctrl_msg.tov, human_log_period())
-            {
+        }
+
+        if self.motor_index == 0 {
+            info_rl!(&LOG_MOTORS, clock, ctrl_msg.tov, {
+                let state = MOTOR_LOG.lock();
                 info!(
                     "motors cmd0={} cmd1={} cmd2={} cmd3={}",
                     state.values[0], state.values[1], state.values[2], state.values[3]
                 );
-            }
+            });
         }
 
+        output.tov = output_tov;
         output.set_payload(command);
         Ok(())
     }
@@ -1001,25 +1043,17 @@ fn normalize_throttle(raw: u16, min: u16, max: u16) -> f32 {
     ((raw.saturating_sub(min)) as f32 / span).clamp(0.0, 1.0)
 }
 
-fn human_log_period() -> CuDuration {
-    CuDuration::from_secs(1)
+fn prefer_tov(primary: Tov, fallback: Tov) -> Tov {
+    match primary {
+        Tov::None => fallback,
+        _ => primary,
+    }
 }
 
-fn should_log(last: &mut Option<CuTime>, tov: Tov, period: CuDuration) -> bool {
-    let now = match tov {
-        Tov::Time(time) => Some(time),
-        Tov::Range(range) => Some(range.end),
-        Tov::None => None,
-    };
-    let Some(now) = now else {
-        return true;
-    };
-    match last {
-        Some(prev) if now - *prev < period => false,
-        _ => {
-            *last = Some(now);
-            true
-        }
+fn ensure_tov(clock: &RobotClock, tov: Tov) -> Tov {
+    match tov {
+        Tov::None => Tov::Time(clock.now()),
+        _ => tov,
     }
 }
 
