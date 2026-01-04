@@ -81,6 +81,10 @@ impl PIDController {
         self.last_error = 0.0f32;
     }
 
+    pub fn reset_integral(&mut self) {
+        self.integral = 0.0f32;
+    }
+
     pub fn init_measurement(&mut self, measurement: f32) {
         self.last_error = self.setpoint - measurement;
         self.elapsed = self.sampling; // force the computation on the first next_control_output
