@@ -24,7 +24,7 @@ embedded_features = "firmware"
 ### Hardware
 cu-mpu9250 = { path = "../../components/sources/cu_mpu9250", optional = true }
 cu-bdshot = { path = "../../components/bridges/cu_bdshot", optional = true }
-cu-crsf = { path = "../../components/bridges/cu_crsf", default-features = false, features = ["defmt", "alloc"], optional = true }
+cu-crsf = { path = "../../components/bridges/cu_crsf", default-features = false, features = ["alloc"], optional = true }
 cu-sdlogger = { path = "../../components/libs/cu_sdlogger", optional = true }
 cu-embedded-registry = { path = "../../components/libs/cu_embedded_registry", default-features = false, features = ["defmt"], optional = true }
 cu-logmon = { path = "../../components/monitors/cu_logmon", default-features = false, features = ["defmt"], optional = true }
@@ -84,11 +84,22 @@ firmware = [
   "dep:cu-ahrs",
   "dep:cu-mpu9250",
   "dep:cu-crsf",
+  "cu-crsf/defmt",
   "dep:cu-embedded-registry",
   "dep:cu-sdlogger",
   "dep:cu-logmon",
 ]
-logreader = ["dep:cu29-export"]
+logreader = [
+  "dep:cu29",
+  "cu29/std",
+  "bincode/std",
+  "serde/std",
+  "dep:cu29-export",
+  "dep:cu-crsf",
+  "dep:cu-bdshot",
+  "dep:cu-ahrs",
+  "cu-bdshot/messages-only",
+]
 sim = [
   "dep:cu29",
   "cu29/std",
@@ -112,10 +123,10 @@ name = "rc-tester"
 path = "src/sim/rc_tester.rs"
 required-features = ["sim"]
 
-# [[bin]]
-# name = "quad-logreader"
-# path = "src/logreader.rs"
-# required-features = ["logreader"]
+[[bin]]
+name = "quad-logreader"
+path = "src/logreader.rs"
+required-features = ["logreader"]
 
 # [[bin]]
 # name = "quad-sim"

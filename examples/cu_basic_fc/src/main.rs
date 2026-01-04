@@ -15,6 +15,7 @@ use defmt_rtt as _;
 use panic_probe as _;
 use spin::Mutex;
 
+mod messages;
 mod resources;
 mod tasks;
 

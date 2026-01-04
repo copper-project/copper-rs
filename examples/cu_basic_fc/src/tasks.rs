@@ -1,52 +1,18 @@
 #![allow(dead_code)]
 
 use crate::GreenLed;
+use crate::messages::{BodyCommand, BodyRateSetpoint, ControlInputs, FlightMode};
 use cu_ahrs::AhrsPose;
 use cu_bdshot::{EscCommand, EscTelemetry};
 use cu_crsf::messages::RcChannelsPayload;
 use cu_pid::{PIDControlOutputPayload, PIDController};
 use cu_sensor_payloads::ImuPayload;
-use cu29::bincode::{Decode, Encode};
 use cu29::prelude::*;
 use defmt::info;
-use serde::Serialize;
 use uom::si::angular_velocity::degree_per_second;
 use uom::si::thermodynamic_temperature::degree_celsius;
 
 mod bmi088;
-
-#[derive(Debug, Default, Clone, Copy, Encode, Decode, Serialize, PartialEq, Eq)]
-#[repr(u8)]
-pub enum FlightMode {
-    #[default]
-    Angle = 0,
-    Acro = 1,
-    PositionHold = 2,
-}
-
-#[derive(Debug, Default, Clone, Encode, Decode, Serialize)]
-pub struct ControlInputs {
-    pub roll: f32,
-    pub pitch: f32,
-    pub yaw: f32,
-    pub throttle: f32,
-    pub armed: bool,
-    pub mode: FlightMode,
-}
-
-#[derive(Debug, Default, Clone, Encode, Decode, Serialize)]
-pub struct BodyRateSetpoint {
-    pub roll: f32,
-    pub pitch: f32,
-    pub yaw: f32,
-}
-
-#[derive(Debug, Default, Clone, Encode, Decode, Serialize)]
-pub struct BodyCommand {
-    pub roll: f32,
-    pub pitch: f32,
-    pub yaw: f32,
-}
 
 const LOG_PERIOD_MS: u64 = 500;
 
