@@ -76,7 +76,7 @@ pub enum MspCommandCode {
     // OSD commands
     MSP_OSD_VIDEO_CONFIG = 180,
     MSP_SET_OSD_VIDEO_CONFIG = 181,
-    MSP_OSD_VIDEO_STATUS = 182,
+    MSP_DISPLAYPORT = 182, // MSP displayport
     MSP_OSD_ELEMENT_SUMMARY = 183,
     MSP_OSD_LAYOUT_CONFIG = 184,
     MSP_SET_OSD_LAYOUT_CONFIG = 185,
@@ -186,6 +186,10 @@ pub enum MspCommandCode {
 
     MSP2_INAV_SERVO_MIXER = 0x2020,
     MSP2_INAV_SET_SERVO_MIXER = 0x2021,
+}
+
+impl MspCommandCode {
+    pub const MSP_OSD_VIDEO_STATUS: Self = MspCommandCode::MSP_DISPLAYPORT;
 }
 
 impl From<u16> for MspCommandCode {

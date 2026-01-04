@@ -575,6 +575,71 @@ pub struct MspSetMotorMixer {
     pub motor_mixer: MspMotorMixer,
 }
 
+pub const MSP_DP_HEARTBEAT: u8 = 0;
+pub const MSP_DP_RELEASE: u8 = 1;
+pub const MSP_DP_CLEAR_SCREEN: u8 = 2;
+pub const MSP_DP_WRITE_STRING: u8 = 3;
+pub const MSP_DP_DRAW_SCREEN: u8 = 4;
+pub const MSP_DP_OPTIONS: u8 = 5;
+pub const MSP_DP_SYS: u8 = 6;
+pub const MSP_DP_FONTCHAR_WRITE: u8 = 7;
+
+#[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq, Eq)]
+pub struct MspDisplayPort {
+    pub payload: Vec<u8>,
+}
+
+impl MspDisplayPort {
+    pub fn new(payload: Vec<u8>) -> Self {
+        Self { payload }
+    }
+
+    pub fn heartbeat() -> Self {
+        Self {
+            payload: Vec::from([MSP_DP_HEARTBEAT]),
+        }
+    }
+
+    pub fn release() -> Self {
+        Self {
+            payload: Vec::from([MSP_DP_RELEASE]),
+        }
+    }
+
+    pub fn clear_screen() -> Self {
+        Self {
+            payload: Vec::from([MSP_DP_CLEAR_SCREEN]),
+        }
+    }
+
+    pub fn draw_screen() -> Self {
+        Self {
+            payload: Vec::from([MSP_DP_DRAW_SCREEN]),
+        }
+    }
+
+    pub fn write_string(row: u8, col: u8, attr: u8, text: &str) -> Self {
+        let mut payload = Vec::with_capacity(4 + text.len());
+        payload.push(MSP_DP_WRITE_STRING);
+        payload.push(row);
+        payload.push(col);
+        payload.push(attr);
+        payload.extend_from_slice(text.as_bytes());
+        Self { payload }
+    }
+
+    pub fn sys(row: u8, col: u8, element: u8) -> Self {
+        Self {
+            payload: Vec::from([MSP_DP_SYS, row, col, element]),
+        }
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.payload
+    }
+}
+
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(bytes = "13", endian = "lsb", bit_numbering = "msb0")]
@@ -955,6 +1020,7 @@ pub enum MspRequest {
     MspRc,
     MspSetRawRc(MspRc),
     MspRawImu,
+    MspDisplayPort(MspDisplayPort),
 }
 
 impl MspRequest {
@@ -964,6 +1030,7 @@ impl MspRequest {
             MspRequest::MspRc => MspCommandCode::MSP_RC,
             MspRequest::MspSetRawRc(_) => MspCommandCode::MSP_SET_RAW_RC,
             MspRequest::MspRawImu => MspCommandCode::MSP_RAW_IMU,
+            MspRequest::MspDisplayPort(_) => MspCommandCode::MSP_DISPLAYPORT,
             _ => MspCommandCode::MSP_API_VERSION,
         }
     }
@@ -994,6 +1061,11 @@ impl From<MspRequest> for MspPacket {
                 cmd: MspCommandCode::MSP_RAW_IMU.to_primitive(),
                 direction: ToFlightController,
                 data: MspPacketData::new(), // empty
+            },
+            MspRequest::MspDisplayPort(displayport) => MspPacket {
+                cmd: MspCommandCode::MSP_DISPLAYPORT.to_primitive(),
+                direction: FromFlightController,
+                data: MspPacketData::from(displayport.as_bytes()),
             },
             _ => MspPacket {
                 cmd: MspCommandCode::MSP_API_VERSION.to_primitive(),
@@ -1026,6 +1098,11 @@ impl From<&MspRequest> for MspPacket {
                 cmd: MspCommandCode::MSP_RAW_IMU.to_primitive(),
                 direction: ToFlightController,
                 data: MspPacketData::new(), // empty
+            },
+            MspRequest::MspDisplayPort(displayport) => MspPacket {
+                cmd: MspCommandCode::MSP_DISPLAYPORT.to_primitive(),
+                direction: FromFlightController,
+                data: MspPacketData::from(displayport.as_bytes()),
             },
             _ => MspPacket {
                 cmd: MspCommandCode::MSP_API_VERSION.to_primitive(),
@@ -1218,140 +1295,191 @@ impl From<MspResponse> for MspPacket {
 }
 impl From<MspPacket> for MspResponse {
     fn from(packet: MspPacket) -> Self {
-        match packet.cmd.into() {
-            MspCommandCode::MSP_API_VERSION => {
-                MspResponse::MspApiVersion(packet.decode_as::<MspApiVersion>().unwrap())
-            }
-            MspCommandCode::MSP_FC_VARIANT => MspResponse::MspFlightControllerVariant(
-                packet.decode_as::<MspFlightControllerVariant>().unwrap(),
-            ),
-            MspCommandCode::MSP_STATUS => {
-                MspResponse::MspStatus(packet.decode_as::<MspStatus>().unwrap())
-            }
-            MspCommandCode::MSP_STATUS_EX => {
-                MspResponse::MspStatusEx(packet.decode_as::<MspStatusEx>().unwrap())
-            }
-            MspCommandCode::MSP_BF_CONFIG => {
-                MspResponse::MspBfConfig(packet.decode_as::<MspBfConfig>().unwrap())
-            }
-            MspCommandCode::MSP_RAW_IMU => {
-                MspResponse::MspRawImu(packet.decode_as::<MspRawImu>().unwrap())
-            }
-            MspCommandCode::MSP_DATAFLASH_SUMMARY => MspResponse::MspDataFlashSummaryReply(
-                packet.decode_as::<MspDataFlashSummaryReply>().unwrap(),
-            ),
-            MspCommandCode::MSP_DATAFLASH_READ => {
-                MspResponse::MspDataFlashReply(packet.decode_as::<MspDataFlashReply>().unwrap())
-            }
-            MspCommandCode::MSP_ACC_TRIM => {
-                MspResponse::MspAccTrim(packet.decode_as::<MspAccTrim>().unwrap())
-            }
-            MspCommandCode::MSP_IDENT => {
-                MspResponse::MspIdent(packet.decode_as::<MspIdent>().unwrap())
-            }
-            MspCommandCode::MSP_MISC => {
-                MspResponse::MspMisc(packet.decode_as::<MspMisc>().unwrap())
-            }
-            MspCommandCode::MSP_ATTITUDE => {
-                MspResponse::MspAttitude(packet.decode_as::<MspAttitude>().unwrap())
-            }
-            MspCommandCode::MSP_ALTITUDE => {
-                MspResponse::MspAltitude(packet.decode_as::<MspAltitude>().unwrap())
-            }
-            MspCommandCode::MSP_BATTERY_CONFIG => {
-                MspResponse::MspBatteryConfig(packet.decode_as::<MspBatteryConfig>().unwrap())
-            }
-            MspCommandCode::MSP_ANALOG => {
-                MspResponse::MspAnalog(packet.decode_as::<MspAnalog>().unwrap())
-            }
-            MspCommandCode::MSP_RSSI_CONFIG => {
-                MspResponse::MspRssiConfig(packet.decode_as::<MspRssiConfig>().unwrap())
-            }
-            MspCommandCode::MSP_VOLTAGE_METERS => {
-                MspResponse::MspVoltageMeter(packet.decode_as::<MspVoltageMeter>().unwrap())
-            }
-            MspCommandCode::MSP_AMPERAGE_METER_CONFIG => {
-                MspResponse::MspCurrentMeter(packet.decode_as::<MspCurrentMeter>().unwrap())
-            }
-            MspCommandCode::MSP_BATTERY_STATE => {
-                MspResponse::MspBatteryState(packet.decode_as::<MspBatteryState>().unwrap())
-            }
-            MspCommandCode::MSP_RC_TUNING => {
-                MspResponse::MspRcTuning(packet.decode_as::<MspRcTuning>().unwrap())
-            }
-            MspCommandCode::MSP_RX_CONFIG => {
-                MspResponse::MspRxConfig(packet.decode_as::<MspRxConfig>().unwrap())
-            }
-            MspCommandCode::MSP_RX_MAP => {
-                MspResponse::MspRcChannelValue(packet.decode_as::<MspRcChannelValue>().unwrap())
-            }
-            MspCommandCode::MSP_SET_RX_MAP => {
-                MspResponse::MspRcMappedChannel(packet.decode_as::<MspRcMappedChannel>().unwrap())
-            }
-            MspCommandCode::MSP_FEATURE => {
-                MspResponse::MspFeatures(packet.decode_as::<MspFeatures>().unwrap())
-            }
-            MspCommandCode::MSP_MOTOR => {
-                MspResponse::MspMotor(packet.decode_as::<MspMotor>().unwrap())
-            }
-            MspCommandCode::MSP_MOTOR_3D_CONFIG => {
-                MspResponse::MspMotor3DConfig(packet.decode_as::<MspMotor3DConfig>().unwrap())
-            }
-            MspCommandCode::MSP_MOTOR_CONFIG => {
-                MspResponse::MspMotorConfig(packet.decode_as::<MspMotorConfig>().unwrap())
-            }
-            MspCommandCode::MSP_RC_DEADBAND => {
-                MspResponse::MspRcDeadband(packet.decode_as::<MspRcDeadband>().unwrap())
-            }
-            MspCommandCode::MSP_BOARD_ALIGNMENT => {
-                MspResponse::MspSensorAlignment(packet.decode_as::<MspSensorAlignment>().unwrap())
-            }
-            MspCommandCode::MSP_ADVANCED_CONFIG => {
-                MspResponse::MspAdvancedConfig(packet.decode_as::<MspAdvancedConfig>().unwrap())
-            }
-            MspCommandCode::MSP_FILTER_CONFIG => {
-                MspResponse::MspFilterConfig(packet.decode_as::<MspFilterConfig>().unwrap())
-            }
-            MspCommandCode::MSP_PID_ADVANCED => {
-                MspResponse::MspPidAdvanced(packet.decode_as::<MspPidAdvanced>().unwrap())
-            }
-            MspCommandCode::MSP_SENSOR_CONFIG => {
-                MspResponse::MspSensorConfig(packet.decode_as::<MspSensorConfig>().unwrap())
-            }
-            MspCommandCode::MSP_SERVO => {
-                MspResponse::MspServos(packet.decode_as::<MspServos>().unwrap())
-            }
-            MspCommandCode::MSP_MIXER => {
-                MspResponse::MspMixerConfig(packet.decode_as::<MspMixerConfig>().unwrap())
-            }
-            MspCommandCode::MSP_MODE_RANGES => {
-                MspResponse::MspModeRange(packet.decode_as::<MspModeRange>().unwrap())
-            }
-            MspCommandCode::MSP_SET_MODE_RANGE => {
-                MspResponse::MspSetModeRange(packet.decode_as::<MspSetModeRange>().unwrap())
-            }
-            MspCommandCode::MSP_OSD_CONFIG => {
-                MspResponse::MspOsdConfig(packet.decode_as::<MspOsdConfig>().unwrap())
-            }
-            MspCommandCode::MSP_OSD_LAYOUT_CONFIG => {
-                MspResponse::MspSetOsdLayout(packet.decode_as::<MspSetOsdLayout>().unwrap())
-            }
-            MspCommandCode::MSP2_INAV_OSD_SET_LAYOUT_ITEM => {
-                MspResponse::MspSetOsdLayoutItem(packet.decode_as::<MspSetOsdLayoutItem>().unwrap())
-            }
-            MspCommandCode::MSP2_INAV_OSD_LAYOUTS => {
-                MspResponse::MspOsdLayouts(packet.decode_as::<MspOsdLayouts>().unwrap())
-            }
-            MspCommandCode::MSP2_SET_SERIAL_CONFIG => {
-                MspResponse::MspSerialSetting(packet.decode_as::<MspSerialSetting>().unwrap())
-            }
-            MspCommandCode::MSP2_COMMON_SETTING => MspResponse::MspSettingInfoRequest(
-                packet.decode_as::<MspSettingInfoRequest>().unwrap(),
-            ),
-            MspCommandCode::MSP2_COMMON_SETTING_INFO => {
-                MspResponse::MspSettingInfo(packet.decode_as::<MspSettingInfo>().unwrap())
-            }
-            MspCommandCode::MSP_RC => MspResponse::MspRc(packet.decode_as::<MspRc>().unwrap()),
+        let cmd = match MspCommandCode::from_primitive(packet.cmd) {
+            Some(cmd) => cmd,
+            None => return MspResponse::Unknown,
+        };
+        match cmd {
+            MspCommandCode::MSP_API_VERSION => packet
+                .decode_as::<MspApiVersion>()
+                .map(MspResponse::MspApiVersion)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_FC_VARIANT => packet
+                .decode_as::<MspFlightControllerVariant>()
+                .map(MspResponse::MspFlightControllerVariant)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_STATUS => packet
+                .decode_as::<MspStatus>()
+                .map(MspResponse::MspStatus)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_STATUS_EX => packet
+                .decode_as::<MspStatusEx>()
+                .map(MspResponse::MspStatusEx)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_BF_CONFIG => packet
+                .decode_as::<MspBfConfig>()
+                .map(MspResponse::MspBfConfig)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_RAW_IMU => packet
+                .decode_as::<MspRawImu>()
+                .map(MspResponse::MspRawImu)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_DATAFLASH_SUMMARY => packet
+                .decode_as::<MspDataFlashSummaryReply>()
+                .map(MspResponse::MspDataFlashSummaryReply)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_DATAFLASH_READ => packet
+                .decode_as::<MspDataFlashReply>()
+                .map(MspResponse::MspDataFlashReply)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_ACC_TRIM => packet
+                .decode_as::<MspAccTrim>()
+                .map(MspResponse::MspAccTrim)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_IDENT => packet
+                .decode_as::<MspIdent>()
+                .map(MspResponse::MspIdent)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_MISC => packet
+                .decode_as::<MspMisc>()
+                .map(MspResponse::MspMisc)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_ATTITUDE => packet
+                .decode_as::<MspAttitude>()
+                .map(MspResponse::MspAttitude)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_ALTITUDE => packet
+                .decode_as::<MspAltitude>()
+                .map(MspResponse::MspAltitude)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_BATTERY_CONFIG => packet
+                .decode_as::<MspBatteryConfig>()
+                .map(MspResponse::MspBatteryConfig)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_ANALOG => packet
+                .decode_as::<MspAnalog>()
+                .map(MspResponse::MspAnalog)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_RSSI_CONFIG => packet
+                .decode_as::<MspRssiConfig>()
+                .map(MspResponse::MspRssiConfig)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_VOLTAGE_METERS => packet
+                .decode_as::<MspVoltageMeter>()
+                .map(MspResponse::MspVoltageMeter)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_AMPERAGE_METER_CONFIG => packet
+                .decode_as::<MspCurrentMeter>()
+                .map(MspResponse::MspCurrentMeter)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_BATTERY_STATE => packet
+                .decode_as::<MspBatteryState>()
+                .map(MspResponse::MspBatteryState)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_RC_TUNING => packet
+                .decode_as::<MspRcTuning>()
+                .map(MspResponse::MspRcTuning)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_RX_CONFIG => packet
+                .decode_as::<MspRxConfig>()
+                .map(MspResponse::MspRxConfig)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_RX_MAP => packet
+                .decode_as::<MspRcChannelValue>()
+                .map(MspResponse::MspRcChannelValue)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_SET_RX_MAP => packet
+                .decode_as::<MspRcMappedChannel>()
+                .map(MspResponse::MspRcMappedChannel)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_FEATURE => packet
+                .decode_as::<MspFeatures>()
+                .map(MspResponse::MspFeatures)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_MOTOR => packet
+                .decode_as::<MspMotor>()
+                .map(MspResponse::MspMotor)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_MOTOR_3D_CONFIG => packet
+                .decode_as::<MspMotor3DConfig>()
+                .map(MspResponse::MspMotor3DConfig)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_MOTOR_CONFIG => packet
+                .decode_as::<MspMotorConfig>()
+                .map(MspResponse::MspMotorConfig)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_RC_DEADBAND => packet
+                .decode_as::<MspRcDeadband>()
+                .map(MspResponse::MspRcDeadband)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_BOARD_ALIGNMENT => packet
+                .decode_as::<MspSensorAlignment>()
+                .map(MspResponse::MspSensorAlignment)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_ADVANCED_CONFIG => packet
+                .decode_as::<MspAdvancedConfig>()
+                .map(MspResponse::MspAdvancedConfig)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_FILTER_CONFIG => packet
+                .decode_as::<MspFilterConfig>()
+                .map(MspResponse::MspFilterConfig)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_PID_ADVANCED => packet
+                .decode_as::<MspPidAdvanced>()
+                .map(MspResponse::MspPidAdvanced)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_SENSOR_CONFIG => packet
+                .decode_as::<MspSensorConfig>()
+                .map(MspResponse::MspSensorConfig)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_SERVO => packet
+                .decode_as::<MspServos>()
+                .map(MspResponse::MspServos)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_MIXER => packet
+                .decode_as::<MspMixerConfig>()
+                .map(MspResponse::MspMixerConfig)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_MODE_RANGES => packet
+                .decode_as::<MspModeRange>()
+                .map(MspResponse::MspModeRange)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_SET_MODE_RANGE => packet
+                .decode_as::<MspSetModeRange>()
+                .map(MspResponse::MspSetModeRange)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_OSD_CONFIG => packet
+                .decode_as::<MspOsdConfig>()
+                .map(MspResponse::MspOsdConfig)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_OSD_LAYOUT_CONFIG => packet
+                .decode_as::<MspSetOsdLayout>()
+                .map(MspResponse::MspSetOsdLayout)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP2_INAV_OSD_SET_LAYOUT_ITEM => packet
+                .decode_as::<MspSetOsdLayoutItem>()
+                .map(MspResponse::MspSetOsdLayoutItem)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP2_INAV_OSD_LAYOUTS => packet
+                .decode_as::<MspOsdLayouts>()
+                .map(MspResponse::MspOsdLayouts)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP2_SET_SERIAL_CONFIG => packet
+                .decode_as::<MspSerialSetting>()
+                .map(MspResponse::MspSerialSetting)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP2_COMMON_SETTING => packet
+                .decode_as::<MspSettingInfoRequest>()
+                .map(MspResponse::MspSettingInfoRequest)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP2_COMMON_SETTING_INFO => packet
+                .decode_as::<MspSettingInfo>()
+                .map(MspResponse::MspSettingInfo)
+                .unwrap_or(MspResponse::Unknown),
+            MspCommandCode::MSP_RC => packet
+                .decode_as::<MspRc>()
+                .map(MspResponse::MspRc)
+                .unwrap_or(MspResponse::Unknown),
             _ => MspResponse::Unknown,
         }
     }

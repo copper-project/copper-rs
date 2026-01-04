@@ -4,6 +4,8 @@ use crate::GreenLed;
 use cu_ahrs::AhrsPose;
 use cu_bdshot::{EscCommand, EscTelemetry};
 use cu_crsf::messages::RcChannelsPayload;
+use cu_msp_bridge::{MspRequestBatch, MspResponseBatch};
+use cu_msp_lib::structs::{MspDisplayPort, MspRequest};
 use cu_pid::{PIDControlOutputPayload, PIDController};
 use cu_sensor_payloads::ImuPayload;
 use cu29::bincode::{Decode, Encode};
@@ -214,6 +216,151 @@ pub type TelemetryLogger0 = TelemetryLogger<0>;
 pub type TelemetryLogger1 = TelemetryLogger<1>;
 pub type TelemetryLogger2 = TelemetryLogger<2>;
 pub type TelemetryLogger3 = TelemetryLogger<3>;
+
+pub struct MspNoopSource;
+
+impl Freezable for MspNoopSource {}
+
+impl CuSrcTask for MspNoopSource {
+    type Resources<'r> = ();
+    type Output<'m> = CuMsg<MspRequestBatch>;
+
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
+    where
+        Self: Sized,
+    {
+        Ok(Self)
+    }
+
+    fn process<'o>(&mut self, clock: &RobotClock, output: &mut Self::Output<'o>) -> CuResult<()> {
+        output.tov = ensure_tov(clock, Tov::None);
+        output.clear_payload();
+        Ok(())
+    }
+}
+
+pub struct MspNoopSink;
+
+impl Freezable for MspNoopSink {}
+
+impl CuSinkTask for MspNoopSink {
+    type Resources<'r> = ();
+    type Input<'m> = CuMsg<MspResponseBatch>;
+
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
+    where
+        Self: Sized,
+    {
+        Ok(Self)
+    }
+
+    fn process<'i>(&mut self, _clock: &RobotClock, _input: &Self::Input<'i>) -> CuResult<()> {
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StatusLabel {
+    Disarmed,
+    Angle,
+    Air,
+}
+
+impl StatusLabel {
+    const fn as_str(self) -> &'static str {
+        match self {
+            StatusLabel::Disarmed => "XXX  ",
+            StatusLabel::Angle => "ANGLE",
+            StatusLabel::Air => "AIR  ",
+        }
+    }
+}
+
+pub struct VtxOsd {
+    row: u8,
+    cols: u8,
+    col_center: u8,
+    last_label: Option<StatusLabel>,
+}
+
+impl Freezable for VtxOsd {}
+
+impl CuTask for VtxOsd {
+    type Resources<'r> = ();
+    type Input<'m> = CuMsg<ControlInputs>;
+    type Output<'m> = CuMsg<MspRequestBatch>;
+
+    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    where
+        Self: Sized,
+    {
+        let cols = cfg_u16(config, "cols", 53).max(1).min(u8::MAX as u16) as u8;
+        let default_center = (cols / 2) as u16;
+        let col_center =
+            cfg_u16(config, "col_center", default_center).min(cols.saturating_sub(1) as u16) as u8;
+        let row = cfg_u16(config, "row", 13).min(u8::MAX as u16) as u8;
+        Ok(Self {
+            row,
+            cols,
+            col_center,
+            last_label: None,
+        })
+    }
+
+    fn process<'i, 'o>(
+        &mut self,
+        clock: &RobotClock,
+        input: &Self::Input<'i>,
+        output: &mut Self::Output<'o>,
+    ) -> CuResult<()> {
+        output.tov = ensure_tov(clock, input.tov);
+        let Some(ctrl) = input.payload() else {
+            output.clear_payload();
+            return Ok(());
+        };
+
+        let label = if !ctrl.armed {
+            StatusLabel::Disarmed
+        } else if ctrl.mode == FlightMode::Acro {
+            StatusLabel::Air
+        } else {
+            StatusLabel::Angle
+        };
+
+        if self.last_label == Some(label) {
+            output.clear_payload();
+            return Ok(());
+        }
+        self.last_label = Some(label);
+
+        let text = label.as_str();
+        let width = text.len() as u8;
+        let col = if self.cols <= width {
+            0
+        } else {
+            let half = width / 2;
+            let mut col = self.col_center.saturating_sub(half);
+            if col.saturating_add(width) > self.cols {
+                col = self.cols.saturating_sub(width);
+            }
+            col
+        };
+
+        let mut batch = MspRequestBatch::new();
+        batch.push(MspRequest::MspDisplayPort(MspDisplayPort::write_string(
+            self.row, col, 0, text,
+        )));
+        batch.push(MspRequest::MspDisplayPort(MspDisplayPort::draw_screen()));
+        output.set_payload(batch);
+        Ok(())
+    }
+}
 
 pub struct ImuLogger {
     last_tov: Option<CuTime>,

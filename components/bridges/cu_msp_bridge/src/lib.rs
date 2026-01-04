@@ -23,7 +23,7 @@ mod std_impl {
 // no-std implementation
 #[cfg(not(feature = "std"))]
 mod no_std_impl {
-    pub use alloc::{format, vec::Vec};
+    pub use alloc::{string::ToString, vec::Vec};
     pub use core::mem;
 }
 
@@ -42,7 +42,9 @@ use cu29::cubridge::{
     BridgeChannel, BridgeChannelConfig, BridgeChannelInfo, BridgeChannelSet, CuBridge,
 };
 use cu29::prelude::*;
-use cu29::resource::{Owned, ResourceBindings, ResourceBundle, ResourceManager};
+#[cfg(feature = "std")]
+use cu29::resource::ResourceBundle;
+use cu29::resource::{Owned, ResourceBindings, ResourceManager};
 use embedded_io::{ErrorType, Read, Write};
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
@@ -176,7 +178,14 @@ where
                     for &byte in &self.read_buffer[..n] {
                         match self.parser.parse(byte) {
                             Ok(Some(packet)) => {
+                                let cmd = packet.cmd;
                                 let response = MspResponse::from(packet);
+                                if matches!(response, MspResponse::Unknown) {
+                                    cu29_log_derive::warning!(
+                                        "MSP bridge unknown response cmd={}",
+                                        cmd
+                                    );
+                                }
                                 self.pending_responses.push(response);
                                 if self.pending_responses.0.len() >= MAX_RESPONSES_PER_BATCH {
                                     break;
@@ -184,7 +193,10 @@ where
                             }
                             Ok(None) => {}
                             Err(err) => {
-                                error!("MSP bridge parser error: {}", err.to_string());
+                                cu29_log_derive::warning!(
+                                    "MSP bridge parser error: {}",
+                                    err.to_string()
+                                );
                             }
                         }
                     }
