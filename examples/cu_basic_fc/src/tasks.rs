@@ -601,6 +601,10 @@ impl AxisPid {
         self.initialized = false;
     }
 
+    fn reset_integral(&mut self) {
+        self.pid.reset_integral();
+    }
+
     fn update(&mut self, measurement: f32, dt: CuDuration) -> Option<PIDControlOutputPayload> {
         // cu_pid expects dt in microseconds (it divides by 1e6), so scale nanoseconds down.
         let dt_pid = CuDuration::from_nanos((dt.as_nanos() / 1_000).max(1));
@@ -890,12 +894,9 @@ impl CuTask for RateController {
         });
 
         if throttle < self.i_throttle_min {
-            self.roll_pid.reset();
-            self.pitch_pid.reset();
-            self.yaw_pid.reset();
-            output.tov = output_tov;
-            output.set_payload(BodyCommand::default());
-            return Ok(());
+            self.roll_pid.reset_integral();
+            self.pitch_pid.reset_integral();
+            self.yaw_pid.reset_integral();
         }
 
         output.tov = output_tov;
