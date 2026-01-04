@@ -3,21 +3,30 @@ use cu_bdshot::{Stm32H7Board, Stm32H7BoardResources, register_stm32h7_board};
 use cu_sdlogger::{EMMCLogger, EMMCSectionStorage, ForceSyncSend, find_copper_partition};
 use cu29::resource::{ResourceBundle, ResourceManager};
 use cu29::{CuError, CuResult, bundle_resources};
+use embedded_hal::blocking::delay::DelayMs;
+use embedded_hal::blocking::spi::Transfer;
+use embedded_hal::digital::v2::OutputPin;
 use spin::Mutex;
 use stm32h7xx_hal::{
-    gpio::Speed,
+    delay::Delay,
+    gpio::{Output, PushPull, Speed},
     nb, pac,
     prelude::*,
     rcc,
     sdmmc::{self, SdCard, Sdmmc, SdmmcBlockDevice},
     serial::{Error as UartError, Serial, config::Config},
+    spi::{Config as SpiConfig, Mode, Phase, Polarity, SpiExt},
 };
+
+const UART_OVERRUN_LOG_PERIOD_SECS: u32 = 1;
 
 pub type SerialPortError = embedded_io::ErrorKind;
 
 pub struct SerialWrapper<U> {
     inner: Serial<U>,
     label: &'static str,
+    last_overrun_cycle: Option<u32>,
+    overrun_period_cycles: u32,
 }
 
 // Safety: the firmware uses a single-threaded runtime; no concurrent access.
@@ -25,8 +34,27 @@ unsafe impl<U> Send for SerialWrapper<U> {}
 unsafe impl<U> Sync for SerialWrapper<U> {}
 
 impl<U> SerialWrapper<U> {
-    fn new(inner: Serial<U>, label: &'static str) -> Self {
-        Self { inner, label }
+    fn new(inner: Serial<U>, label: &'static str, overrun_period_cycles: u32) -> Self {
+        Self {
+            inner,
+            label,
+            last_overrun_cycle: None,
+            overrun_period_cycles,
+        }
+    }
+
+    fn should_warn_overrun(&mut self) -> bool {
+        if self.overrun_period_cycles == 0 {
+            return true;
+        }
+        let now = DWT::cycle_count();
+        match self.last_overrun_cycle {
+            Some(prev) if now.wrapping_sub(prev) < self.overrun_period_cycles => false,
+            _ => {
+                self.last_overrun_cycle = Some(now);
+                true
+            }
+        }
     }
 }
 
@@ -48,7 +76,9 @@ macro_rules! impl_serial_wrapper_io {
                         Err(nb::Error::WouldBlock) => break, // no more data right now
                         Err(nb::Error::Other(e)) => match e {
                             UartError::Overrun => {
-                                defmt::warn!("{} overrun, data lost", self.label);
+                                if self.should_warn_overrun() {
+                                    defmt::warn!("{} overrun, data lost", self.label);
+                                }
                                 // Clear and keep going; treat as no more data.
                                 break;
                             }
@@ -93,8 +123,61 @@ pub type Uart6Port = SerialWrapper<pac::USART6>;
 pub type Uart2Port = SerialWrapper<pac::USART2>;
 pub type SerialPort = Uart6Port;
 
+pub struct SingleThreaded<T>(T);
+
+impl<T> SingleThreaded<T> {
+    pub fn new(inner: T) -> Self {
+        Self(inner)
+    }
+}
+
+// Safety: the firmware uses a single-threaded runtime; no concurrent access.
+unsafe impl<T> Send for SingleThreaded<T> {}
+unsafe impl<T> Sync for SingleThreaded<T> {}
+
+impl<T> Transfer<u8> for SingleThreaded<T>
+where
+    T: Transfer<u8>,
+{
+    type Error = T::Error;
+
+    fn transfer<'w>(&mut self, words: &'w mut [u8]) -> Result<&'w [u8], Self::Error> {
+        self.0.transfer(words)
+    }
+}
+
+impl<T> OutputPin for SingleThreaded<T>
+where
+    T: OutputPin,
+{
+    type Error = T::Error;
+
+    fn set_low(&mut self) -> Result<(), Self::Error> {
+        self.0.set_low()
+    }
+
+    fn set_high(&mut self) -> Result<(), Self::Error> {
+        self.0.set_high()
+    }
+}
+
+impl<T> DelayMs<u32> for SingleThreaded<T>
+where
+    T: DelayMs<u32>,
+{
+    fn delay_ms(&mut self, ms: u32) {
+        self.0.delay_ms(ms);
+    }
+}
+
 pub type GreenLed =
     stm32h7xx_hal::gpio::gpioe::PE6<stm32h7xx_hal::gpio::Output<stm32h7xx_hal::gpio::PushPull>>;
+
+pub type Bmi088Spi =
+    SingleThreaded<stm32h7xx_hal::spi::Spi<pac::SPI2, stm32h7xx_hal::spi::Enabled, u8>>;
+pub type Bmi088AccCs = SingleThreaded<stm32h7xx_hal::gpio::gpiod::PD4<Output<PushPull>>>;
+pub type Bmi088GyrCs = SingleThreaded<stm32h7xx_hal::gpio::gpiod::PD5<Output<PushPull>>>;
+pub type Bmi088Delay = SingleThreaded<Delay>;
 
 type SdBlockDev = ForceSyncSend<SdmmcBlockDevice<Sdmmc<pac::SDMMC1, SdCard>>>;
 pub type LogStorage = EMMCSectionStorage<SdBlockDev>;
@@ -143,7 +226,7 @@ fn init_sd_logger(
 
 pub struct MicoAirH743;
 
-bundle_resources!(MicoAirH743: Uart6, Uart2, GreenLed, Logger);
+bundle_resources!(MicoAirH743: Uart6, Uart2, GreenLed, Logger, Bmi088Spi, Bmi088AccCs, Bmi088GyrCs, Bmi088Delay);
 
 impl ResourceBundle for MicoAirH743 {
     fn build(
@@ -156,7 +239,9 @@ impl ResourceBundle for MicoAirH743 {
         cp.SCB.enable_fpu();
         cp.DCB.enable_trace();
         DWT::unlock();
-        cp.DWT.enable_cycle_counter();
+        let mut dwt = cp.DWT;
+        dwt.enable_cycle_counter();
+        let syst = cp.SYST;
 
         let dp = pac::Peripherals::take()
             .ok_or_else(|| CuError::from("stm32 peripherals already taken"))?;
@@ -169,6 +254,7 @@ impl ResourceBundle for MicoAirH743 {
             .sys_ck(400.MHz())
             .pll1_q_ck(100.MHz())
             .freeze(vos, &dp.SYSCFG);
+        let sysclk_hz = ccdr.clocks.sys_ck().raw();
         let sdmmc1_rec = ccdr.peripheral.SDMMC1;
 
         let gpioa = dp.GPIOA.split(ccdr.peripheral.GPIOA);
@@ -178,6 +264,7 @@ impl ResourceBundle for MicoAirH743 {
 
         let green_led = gpioe.pe6.into_push_pull_output();
 
+        let overrun_period_cycles = sysclk_hz.saturating_mul(UART_OVERRUN_LOG_PERIOD_SECS);
         let uart6_config = Config::default().baudrate(420_000.bps());
         let uart6 = SerialWrapper::new(
             dp.USART6
@@ -189,6 +276,7 @@ impl ResourceBundle for MicoAirH743 {
                 )
                 .map_err(|_| CuError::from("uart6 init failed"))?,
             "UART6",
+            overrun_period_cycles,
         );
 
         let uart2_config = Config::default().baudrate(115_200.bps());
@@ -202,6 +290,7 @@ impl ResourceBundle for MicoAirH743 {
                 )
                 .map_err(|_| CuError::from("uart2 init failed"))?,
             "UART2",
+            overrun_period_cycles,
         );
 
         let logger = init_sd_logger(
@@ -218,13 +307,39 @@ impl ResourceBundle for MicoAirH743 {
             ),
         )?;
 
+        let sck = gpiod.pd3.into_alternate::<5>().speed(Speed::VeryHigh);
+        let miso = gpioc.pc2.into_alternate::<5>().speed(Speed::VeryHigh);
+        let mosi = gpioc.pc3.into_alternate::<5>().speed(Speed::VeryHigh);
+        let mut bmi088_acc_cs = gpiod.pd4.into_push_pull_output();
+        let mut bmi088_gyr_cs = gpiod.pd5.into_push_pull_output();
+        bmi088_acc_cs.set_high();
+        bmi088_gyr_cs.set_high();
+
+        let spi_cfg = SpiConfig::new(Mode {
+            polarity: Polarity::IdleHigh,
+            phase: Phase::CaptureOnSecondTransition,
+        });
+        let bmi088_spi: stm32h7xx_hal::spi::Spi<pac::SPI2, stm32h7xx_hal::spi::Enabled, u8> =
+            dp.SPI2.spi(
+                (sck, miso, mosi),
+                spi_cfg,
+                10.MHz(),
+                ccdr.peripheral.SPI2,
+                &ccdr.clocks,
+            );
+
+        let bmi088_spi = SingleThreaded::new(bmi088_spi);
+        let bmi088_acc_cs = SingleThreaded::new(bmi088_acc_cs);
+        let bmi088_gyr_cs = SingleThreaded::new(bmi088_gyr_cs);
+        let bmi088_delay = SingleThreaded::new(Delay::new(syst, ccdr.clocks));
+
         let bdshot_resources = Stm32H7BoardResources {
             m1: gpioe.pe14,
             m2: gpioe.pe13,
             m3: gpioe.pe11,
             m4: gpioe.pe9,
-            dwt: cp.DWT,
-            sysclk_hz: ccdr.clocks.sys_ck().raw(),
+            dwt,
+            sysclk_hz,
         };
         let bdshot_board = Stm32H7Board::new(bdshot_resources)?;
         register_stm32h7_board(bdshot_board)?;
@@ -233,11 +348,19 @@ impl ResourceBundle for MicoAirH743 {
         let uart2_key = bundle.key(MicoAirH743Id::Uart2);
         let led_key = bundle.key(MicoAirH743Id::GreenLed);
         let logger_key = bundle.key(MicoAirH743Id::Logger);
+        let bmi088_spi_key = bundle.key(MicoAirH743Id::Bmi088Spi);
+        let bmi088_acc_cs_key = bundle.key(MicoAirH743Id::Bmi088AccCs);
+        let bmi088_gyr_cs_key = bundle.key(MicoAirH743Id::Bmi088GyrCs);
+        let bmi088_delay_key = bundle.key(MicoAirH743Id::Bmi088Delay);
 
         manager.add_owned(uart6_key, uart6)?;
         manager.add_owned(uart2_key, uart2)?;
         manager.add_owned(led_key, Mutex::new(green_led))?;
         manager.add_owned(logger_key, logger)?;
+        manager.add_owned(bmi088_spi_key, bmi088_spi)?;
+        manager.add_owned(bmi088_acc_cs_key, bmi088_acc_cs)?;
+        manager.add_owned(bmi088_gyr_cs_key, bmi088_gyr_cs)?;
+        manager.add_owned(bmi088_delay_key, bmi088_delay)?;
         Ok(())
     }
 }

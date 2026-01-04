@@ -4,6 +4,7 @@ ratatui = "ratatui"
 thr = "thr"
 IST = "IST"
 iterm = "iterm"
+NED = "NED"
 
 [files]
 extend-exclude = ["patches/*", "components/payloads/cu_ros_payloads/**"]
