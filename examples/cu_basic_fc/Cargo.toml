@@ -28,6 +28,7 @@ cu-crsf = { path = "../../components/bridges/cu_crsf", default-features = false,
 cu-sdlogger = { path = "../../components/libs/cu_sdlogger", optional = true }
 cu-embedded-registry = { path = "../../components/libs/cu_embedded_registry", default-features = false, features = ["defmt"], optional = true }
 cu-logmon = { path = "../../components/monitors/cu_logmon", default-features = false, features = ["defmt"], optional = true }
+cu-ahrs = { path = "../../components/tasks/cu_ahrs", default-features = false, features = ["defmt"], optional = true }
 
 ### Algos
 cu-pid = { path = "../../components/tasks/cu_pid", default-features = false, version = "0.11.0" }
@@ -80,6 +81,7 @@ firmware = [
   "dep:cortex-m",
   "dep:cu-bdshot",
   "cu-bdshot/stm32h7",
+  "dep:cu-ahrs",
   "dep:cu-mpu9250",
   "dep:cu-crsf",
   "dep:cu-embedded-registry",
