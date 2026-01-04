@@ -1,0 +1,49 @@
+name: Reusable Embedded CI
+
+on:
+  workflow_call:
+    inputs:
+      toolchain:
+        required: true
+        type: string
+      cargo_target_dir:
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  embedded:
+    name: CI for embedded targets
+    runs-on: ubuntu-latest
+    env:
+      CARGO_TERM_COLOR: always
+
+    steps:
+      - uses: actions/checkout@v6
+      - name: Configure CARGO_TARGET_DIR
+        if: inputs.cargo_target_dir != ''
+        run: echo "CARGO_TARGET_DIR=${{ inputs.cargo_target_dir }}" >> $GITHUB_ENV
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          targets: aarch64-unknown-none,thumbv7em-none-eabihf,thumbv8m.main-none-eabihf,riscv32imac-unknown-none-elf
+          components: rustc,cargo,rust-std,rustfmt,clippy
+      - name: Install latest nextest
+        uses: taiki-e/install-action@nextest
+      - name: Check compilation of core with no-std
+        run: cargo +${{ inputs.toolchain }} build --no-default-features
+      - name: Unit tests of core with no-std
+        run: cargo +${{ inputs.toolchain }} nextest run --no-default-features
+      - name: Clippy embedded-only crates
+        run: python3 support/ci/embedded_crates.py run --action clippy --toolchain ${{ inputs.toolchain }}
+      - name: Build embedded-only crates
+        run: python3 support/ci/embedded_crates.py run --action build --toolchain ${{ inputs.toolchain }}
+      - name: Clippy an rp2350 example
+        working-directory: examples/cu_rp2350_skeleton
+        run: cargo +${{ inputs.toolchain }} clippy
+      - name: Cross compile an rp2350 example with Arm
+        working-directory: examples/cu_rp2350_skeleton
+        run: cargo +${{ inputs.toolchain }} build-arm
+      - name: Compile the logreader for the rp2350 example (host)
+        working-directory: examples/cu_rp2350_skeleton
+        run: cargo +${{ inputs.toolchain }} build-logreader
