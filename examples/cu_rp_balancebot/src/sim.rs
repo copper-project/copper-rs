@@ -1,10 +1,10 @@
+mod motor_model;
 pub mod tasks;
 mod world;
-
-use crate::world::{Cart, Rod};
+use crate::world::{AppliedForce, Cart, DragState, Rod};
 use avian3d::math::Vector;
-use avian3d::prelude::{ExternalForce, Physics};
-use bevy::asset::UnapprovedPathMode;
+use avian3d::prelude::{ConstantForce, Physics};
+use bevy::asset::{AssetApp, UnapprovedPathMode};
 use bevy::prelude::*;
 use bevy::render::RenderPlugin;
 use bevy::scene::ScenePlugin;
@@ -95,16 +95,18 @@ fn setup_copper(mut commands: Commands) {
 
 /// This is a bevy system to trigger the Copper application to run one iteration.
 /// We can query the state of the world from here and pass it to the Copper application.
+/// ConstantForce persists across physics steps and mimics the old ExternalForce behavior.
 #[allow(clippy::type_complexity)]
 fn run_copper_callback(
     mut query_set: ParamSet<(
-        Query<(&Transform, &mut ExternalForce), With<Cart>>,
+        Query<(&Transform, &mut ConstantForce, &mut AppliedForce), With<Cart>>,
         Query<&Transform, With<Rod>>,
     )>,
     physics_time: Res<Time<Physics>>,
     robot_clock: ResMut<CopperMockClock>,
     mut copper_ctx: ResMut<Copper>,
-    mut exit_writer: EventWriter<AppExit>,
+    drag_state: Res<DragState>,
+    mut exit_writer: MessageWriter<AppExit>,
 ) {
     // Check if the Cart spawned; if not, return early.
     if query_set.p0().is_empty() {
@@ -139,8 +141,9 @@ fn run_copper_callback(
             default::SimStep::Balpos(_) => SimOverride::ExecutedBySim,
             default::SimStep::Railpos(CuTaskCallbackState::Process(_, output)) => {
                 // Here same thing for the rail encoder.
-                let bindings = query_set.p0();
-                let (cart_transform, _) = bindings.single().expect("Failed to get cart transform");
+                let mut bindings = query_set.p0();
+                let (cart_transform, _, _) =
+                    bindings.single_mut().expect("Failed to get cart transform");
                 let ticks = (cart_transform.translation.x * 2000.0) as i32;
                 output.set_payload(EncoderPayload { ticks });
                 output.tov = robot_clock.clock.now().into();
@@ -151,22 +154,40 @@ fn run_copper_callback(
                 // And now when copper wants to use the motor
                 // we apply a force in the simulation.
                 let mut bindings = query_set.p0();
-                let (_, mut cart_force) = bindings.single_mut().expect("Failed to get cart force");
+                let (_, mut cart_force, mut applied_force) =
+                    bindings.single_mut().expect("Failed to get cart force");
                 let maybe_motor_actuation = input.payload();
+                let override_motor = drag_state.override_motor;
+                if override_motor {
+                    if let Some(motor_actuation) = maybe_motor_actuation
+                        && !motor_actuation.power.is_nan()
+                    {
+                        let total_mass = motor_model::total_mass_kg();
+                        let force_magnitude =
+                            motor_model::force_from_power(motor_actuation.power, total_mass);
+                        output
+                            .metadata
+                            .set_status(format!("Applied force: {force_magnitude}"));
+                    }
+                    return SimOverride::ExecutedBySim;
+                }
                 if let Some(motor_actuation) = maybe_motor_actuation {
                     if motor_actuation.power.is_nan() {
-                        cart_force.apply_force(Vector::ZERO);
+                        cart_force.0 = Vector::ZERO;
                         return SimOverride::ExecutedBySim;
                     }
-                    let force_magnitude = motor_actuation.power * 2.0;
+                    let total_mass = motor_model::total_mass_kg();
+                    let force_magnitude =
+                        motor_model::force_from_power(motor_actuation.power, total_mass);
                     let new_force = Vector::new(force_magnitude, 0.0, 0.0);
-                    cart_force.apply_force(new_force);
+                    cart_force.0 = new_force;
+                    applied_force.0 = new_force;
                     output
                         .metadata
                         .set_status(format!("Applied force: {force_magnitude}"));
                     SimOverride::ExecutedBySim
                 } else {
-                    cart_force.apply_force(Vector::ZERO);
+                    cart_force.0 = Vector::ZERO;
                     SimOverride::Errored("Safety Mode.".into())
                 }
             }
@@ -181,7 +202,7 @@ fn run_copper_callback(
     }
 }
 
-fn stop_copper_on_exit(mut exit_events: EventReader<AppExit>, mut copper_ctx: ResMut<Copper>) {
+fn stop_copper_on_exit(mut exit_events: MessageReader<AppExit>, mut copper_ctx: ResMut<Copper>) {
     for _ in exit_events.read() {
         println!("Exiting copper");
         copper_ctx
@@ -209,12 +230,6 @@ pub fn make_world(headless: bool) -> App {
     };
 
     if headless {
-        // these are not added in the minimal plugins but are needed for the integration test to run
-        world.insert_resource(Assets::<Mesh>::default());
-        world.insert_resource(Assets::<Font>::default());
-        world.insert_resource(SceneSpawner::default());
-        world.insert_resource(Assets::<StandardMaterial>::default());
-
         // add the minimal plugins as well as others needed for our simulation to run
         world.add_plugins((
             MinimalPlugins,
@@ -225,6 +240,12 @@ pub fn make_world(headless: bool) -> App {
             ScenePlugin,
             ImagePlugin::default(),
         ));
+
+        // MinimalPlugins doesn't register render asset types; initialize what the sim uses.
+        world.init_asset::<Mesh>();
+        world.init_asset::<StandardMaterial>();
+        world.init_asset::<Font>();
+        world.init_resource::<SceneSpawner>();
     } else {
         world.add_plugins(
             DefaultPlugins
