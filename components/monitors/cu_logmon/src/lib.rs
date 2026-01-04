@@ -8,6 +8,7 @@
 
 extern crate alloc;
 
+use alloc::format;
 use alloc::vec;
 use alloc::vec::Vec;
 use cu29::prelude::*;

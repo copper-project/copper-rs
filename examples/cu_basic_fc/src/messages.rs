@@ -1,17 +1,13 @@
 use cu29::bincode::{Decode, Encode};
 use serde::Serialize;
 
-// Placeholder AHRS pose until the sensor/estimator is brought up on STM32.
-#[derive(Debug, Default, Clone, Copy, Encode, Decode, Serialize, PartialEq, Eq)]
-pub struct AhrsPose;
-
 #[derive(Debug, Default, Clone, Copy, Encode, Decode, Serialize, PartialEq, Eq)]
 #[repr(u8)]
-pub enum Axis {
+pub enum FlightMode {
     #[default]
-    Roll = 0,
-    Pitch = 1,
-    Yaw = 2,
+    Angle = 0,
+    Acro = 1,
+    PositionHold = 2,
 }
 
 #[derive(Debug, Default, Clone, Encode, Decode, Serialize)]
@@ -21,21 +17,19 @@ pub struct ControlInputs {
     pub yaw: f32,
     pub throttle: f32,
     pub armed: bool,
+    pub mode: FlightMode,
 }
 
 #[derive(Debug, Default, Clone, Encode, Decode, Serialize)]
-pub struct RateSetpoint {
-    pub axis: Axis,
-    pub rate: f32,
+pub struct BodyRateSetpoint {
+    pub roll: f32,
+    pub pitch: f32,
+    pub yaw: f32,
 }
 
 #[derive(Debug, Default, Clone, Encode, Decode, Serialize)]
-pub struct AxisCommand {
-    pub axis: Axis,
-    pub value: f32,
-}
-
-#[derive(Debug, Default, Clone, Encode, Decode, Serialize)]
-pub struct EscStatus {
-    pub fault: bool,
+pub struct BodyCommand {
+    pub roll: f32,
+    pub pitch: f32,
+    pub yaw: f32,
 }

@@ -97,6 +97,7 @@ logreader = [
   "dep:cu29-export",
   "dep:cu-crsf",
   "dep:cu-bdshot",
+  "dep:cu-ahrs",
   "cu-bdshot/messages-only",
 ]
 sim = [
