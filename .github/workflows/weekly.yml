@@ -7,7 +7,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_TARGET_DIR: ${{ github.workspace }}/target
 
 jobs:
   audit:
@@ -33,11 +32,10 @@ jobs:
     uses: ./.github/workflows/reusable-unit-tests.yml
     with:
       toolchain: beta
-      cargo_target_dir: ${{ github.workspace }}/target
+      linux_cargo_paths: true
 
   embedded:
     name: CI for embedded targets
     uses: ./.github/workflows/reusable-embedded.yml
     with:
       toolchain: beta
-      cargo_target_dir: ${{ github.workspace }}/target
