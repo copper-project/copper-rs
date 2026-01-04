@@ -104,3 +104,18 @@ dag mission="":
 		mission_arg=(--mission "$mission_value")
 	fi
 	cargo run -p cu29-runtime --bin cu29-rendercfg -- "${mission_arg[@]}" --open "$cfg_path"
+
+# Helpers for managing git worktrees for different branches.
+wt branch:
+  #!/usr/bin/env bash
+  set -euo pipefail
+
+  name="$(basename "{{branch}}")"
+  dir="$(realpath ../copper-rs.${name})"
+  echo "Adding worktree for branch '{{branch}}' at ${dir}"
+  git worktree add "${dir}" "{{branch}}"
+  if [[ -n "${ZELLIJ:-}" ]]; then
+    zellij action new-tab --name "${name}"
+    zellij action write-chars "cd ${dir};reset"
+    zellij action write 13
+  fi
