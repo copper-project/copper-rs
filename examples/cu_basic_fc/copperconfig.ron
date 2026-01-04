@@ -28,7 +28,7 @@
             type: "tasks::AttitudeController",
             config: {
                 "angle_limit_deg": 60.0,
-                "kp": 5.0,
+                "kp": 1.0,
                 "ki": 0.0,
                 "kd": 0.0,
             },
@@ -37,9 +37,9 @@
             id: "rate",
             type: "tasks::RateController",
             config: {
-                "kp": 0.10,
-                "ki": 1.00,
-                "kd": 0.001,
+                "kp": 0.08,
+                "ki": 0.0,
+                "kd": 0.002,
                 "kp_yaw": 0.1652,
                 "ki_yaw": 2.2403,
                 "kd_yaw": 0.0,
