@@ -23,7 +23,7 @@ jobs:
 
     env:
       CARGO_TERM_COLOR: always
-      BASE_FEATURES: mock,perf-ui,image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      BASE_FEATURES: mock,image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
 
     strategy:
       matrix:
@@ -213,9 +213,9 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           $features = if ($env:matrix_mode -eq 'cuda-release') {
-            '--features mock,perf-ui,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode,cuda'
+            '--features mock,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode,cuda'
           } else {
-            '--features mock,perf-ui,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode'
+            '--features mock,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode'
           }
           Add-Content -Path $env:GITHUB_ENV -Value "FEATURES_FLAG=$features"
 

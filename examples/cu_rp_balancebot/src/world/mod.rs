@@ -1,16 +1,18 @@
+use crate::motor_model;
+use avian3d::math::Vector;
+use avian3d::physics_transform::{PreSolveDeltaPosition, PreSolveDeltaRotation};
 use avian3d::prelude::*;
 use bevy::color::palettes::css::RED;
 use bevy::core_pipeline::Skybox;
-use bevy::core_pipeline::fxaa::Fxaa;
 use bevy::input::{
     keyboard::KeyCode,
     mouse::{MouseButton, MouseMotion, MouseWheel},
 };
 use bevy::pbr::{DefaultOpaqueRendererMethod, ScreenSpaceReflections};
 use bevy::prelude::*;
+use bevy::ui::IsDefaultUiCamera;
+use bevy_anti_alias::fxaa::Fxaa;
 use cached_path::{Cache, Error as CacheError, ProgressBar};
-#[cfg(feature = "perf-ui")]
-use iyes_perf_ui::prelude::{PerfUiAllEntries, PerfUiPlugin};
 use std::path::{Path, PathBuf}; // Import PathBuf
 
 use std::{fs, io};
@@ -22,20 +24,20 @@ pub const DIFFUSE_MAP: &str = "diffuse_map.ktx2";
 const TABLE_HEIGHT: f32 = 0.724;
 const RAIL_WIDTH: f32 = 0.55; // 55cm
 const RAIL_HEIGHT: f32 = 0.02;
-const RAIL_DEPTH: f32 = 0.06;
+const RAIL_DEPTH: f32 = motor_model::CART_DEPTH;
 
-const CART_WIDTH: f32 = 0.040;
-const CART_HEIGHT: f32 = 0.045; // The mid rail is 1cm above the bottom rail, and the cart is 35mm tall.
+const CART_WIDTH: f32 = motor_model::CART_WIDTH;
+const CART_HEIGHT: f32 = motor_model::CART_HEIGHT; // The mid rail is 1cm above the bottom rail, and the cart is 35mm tall.
 const CART_DEPTH: f32 = RAIL_DEPTH;
 
-const ROD_WIDTH: f32 = 0.007; // 7mm
-const ROD_HEIGHT: f32 = 0.50; // 50cm
-const ROD_DEPTH: f32 = ROD_WIDTH;
+const ROD_WIDTH: f32 = motor_model::ROD_WIDTH; // 7mm
+const ROD_HEIGHT: f32 = motor_model::ROD_HEIGHT; // 50cm
+const ROD_DEPTH: f32 = motor_model::ROD_DEPTH;
 
 const AXIS_LENGTH: f32 = 0.02;
 
-const STEEL_DENSITY: f32 = 7800.0; // kg/m^3
-const ALUMINUM_DENSITY: f32 = 2700.0; // kg/m^3
+const STEEL_DENSITY: f32 = motor_model::STEEL_DENSITY; // kg/m^3
+const ALUMINUM_DENSITY: f32 = motor_model::ALUMINUM_DENSITY; // kg/m^3
 
 #[allow(dead_code)]
 const ROD_VOLUME: f32 = ROD_WIDTH * ROD_HEIGHT * ROD_DEPTH;
@@ -58,18 +60,61 @@ enum SimulationState {
     Paused,
 }
 
+#[derive(Resource, Default)]
+pub struct DragState {
+    pub override_motor: bool,
+    /// Currently active drag: (entity, force)
+    pub active_drag: Option<(Entity, Vector)>,
+}
+
 #[derive(Component)]
 pub struct Cart;
 
 #[derive(Component)]
 pub struct Rod;
 
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct AppliedForce(pub Vector);
+
+fn assert_reflected_types(type_registry: Res<AppTypeRegistry>) {
+    let registry = type_registry.read();
+    assert!(
+        registry.get(std::any::TypeId::of::<Transform>()).is_some(),
+        "Transform must be registered for scenes"
+    );
+    assert!(
+        registry
+            .get(std::any::TypeId::of::<GlobalTransform>())
+            .is_some(),
+        "GlobalTransform must be registered for scenes"
+    );
+    assert!(
+        registry
+            .get(std::any::TypeId::of::<TransformTreeChanged>())
+            .is_some(),
+        "TransformTreeChanged must be registered for scenes"
+    );
+    assert!(
+        registry.get(std::any::TypeId::of::<Visibility>()).is_some(),
+        "Visibility must be registered for scenes"
+    );
+    assert!(
+        registry.get(std::any::TypeId::of::<Children>()).is_some(),
+        "Children must be registered for scenes"
+    );
+    assert!(
+        registry.get(std::any::TypeId::of::<ChildOf>()).is_some(),
+        "ChildOf must be registered for scenes"
+    );
+}
+
 pub fn build_world(app: &mut App, headless: bool) -> &mut App {
+    app.init_resource::<AppTypeRegistry>();
     let app = app
         .add_plugins(PhysicsPlugins::default().with_length_unit(1000.0))
         // we want Bevy to measure these values for us:
         .add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default())
-        .add_plugins(bevy::diagnostic::EntityCountDiagnosticsPlugin)
+        .add_plugins(bevy::diagnostic::EntityCountDiagnosticsPlugin::default())
         .insert_resource(DefaultOpaqueRendererMethod::deferred())
         .insert_resource(SimulationState::Running)
         .insert_resource(CameraControl {
@@ -81,12 +126,17 @@ pub fn build_world(app: &mut App, headless: bool) -> &mut App {
             pixels_per_newton: 100.,
             max_force: 10.,
         })
+        .insert_resource(DragState::default())
         .insert_resource(Gravity::default())
         .insert_resource(Time::<Physics>::default())
         .add_systems(Startup, setup_scene)
         .add_systems(Startup, setup_ui)
         .add_systems(Update, setup_entities) // Wait for the cart entity to be loaded
-        .add_systems(Update, update_physics);
+        .add_systems(Update, update_physics)
+        .add_systems(
+            FixedPostUpdate,
+            lock_cart_rotation.in_set(PhysicsSystems::Last),
+        );
 
     // these will make a headless app crash, so only add them if we aren't headless
     if !headless {
@@ -94,11 +144,29 @@ pub fn build_world(app: &mut App, headless: bool) -> &mut App {
         app.add_systems(Update, toggle_simulation_state)
             .add_systems(Update, camera_control_system)
             .add_systems(Update, external_force_display)
+            .add_systems(
+                FixedPostUpdate,
+                apply_drag_force.in_set(PhysicsSystems::Prepare),
+            )
             .add_systems(PostUpdate, reset_sim);
     }
 
-    #[cfg(feature = "perf-ui")]
-    app.add_plugins(PerfUiPlugin);
+    // Ensure scene-spawned transforms are registered in the type registry.
+    app.register_type::<Transform>();
+    app.register_type::<GlobalTransform>();
+    app.register_type::<TransformTreeChanged>();
+    app.register_type::<Visibility>();
+    app.register_type::<InheritedVisibility>();
+    app.register_type::<ViewVisibility>();
+    app.register_type::<Name>();
+    app.register_type::<Children>();
+    app.register_type::<ChildOf>();
+    app.register_type::<Handle<Mesh>>();
+    app.register_type::<Handle<StandardMaterial>>();
+    app.register_type::<Handle<Image>>();
+    app.register_type::<Handle<Gltf>>();
+    app.register_type::<Handle<Scene>>();
+    app.add_systems(Startup, assert_reflected_types);
 
     app
 }
@@ -261,6 +329,7 @@ fn setup_scene(
     // Spawn the camera
     commands.spawn((
         Camera3d::default(),
+        IsDefaultUiCamera,
         Msaa::Off,
         Skybox {
             image: skybox_handle,
@@ -313,7 +382,7 @@ fn setup_ui(mut commands: Commands) {
                 ..default()
             },
             BackgroundColor(Color::srgba(0.25, 0.41, 0.88, 0.7)),
-            BorderColor(Color::srgba(0.8, 0.8, 0.8, 0.7)),
+            BorderColor::all(Color::srgba(0.8, 0.8, 0.8, 0.7)),
             BorderRadius::all(Val::Px(10.0)),
         ))
         .with_children(|parent| {
@@ -337,22 +406,18 @@ fn setup_ui(mut commands: Commands) {
                 TextColor(Color::WHITE),
             ));
         });
-
-    #[cfg(feature = "perf-ui")]
-    commands.spawn(PerfUiAllEntries::default());
 }
 
 // This needs to match an object / parent object name in the GLTF file (in blender this is the object name).
 const CART_GLTF_ASSET_NAME: &str = "Cart";
 
-fn try_to_find_cart_entity(query: Query<(Entity, &Name), Without<Cart>>) -> Option<Entity> {
-    if let Some((cart_entity, _)) = query
+fn try_to_find_cart_entity(
+    query: &Query<(Entity, &Name, &Transform), Without<Cart>>,
+) -> Option<(Entity, Quat)> {
+    query
         .iter()
-        .find(|(_, name)| name.as_str() == CART_GLTF_ASSET_NAME)
-    {
-        return Some(cart_entity);
-    }
-    None
+        .find(|(_, name, _)| name.as_str() == CART_GLTF_ASSET_NAME)
+        .map(|(cart_entity, _, transform)| (cart_entity, transform.rotation))
 }
 
 #[derive(Resource)]
@@ -360,19 +425,23 @@ struct SetupCompleted(bool);
 
 #[derive(Bundle)]
 struct CartBundle {
-    external_force: ExternalForce,
+    applied_force: AppliedForce,
     cart: Cart,
+    constant_force: ConstantForce,
     mass_props: MassPropertiesBundle,
     dominance: Dominance,
     rigid_body: RigidBody,
     locked_axes: LockedAxes,
 }
 
+#[derive(Component, Debug, Clone, Copy)]
+struct CartRotationLock(Quat);
+
 fn setup_entities(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    query: Query<(Entity, &Name), Without<Cart>>,
+    query: Query<(Entity, &Name, &Transform), Without<Cart>>,
     mut setup_completed: ResMut<SetupCompleted>,
 ) {
     let SetupCompleted(completed) = *setup_completed;
@@ -381,31 +450,36 @@ fn setup_entities(
     }
 
     // The cart entity will be loaded from the GLTF file, we need to wait for it to be loaded
-    let cart_entity = match try_to_find_cart_entity(query) {
-        Some(entity) => entity,
+    let (cart_entity, cart_rotation) = match try_to_find_cart_entity(&query) {
+        Some(cart) => cart,
         None => return,
     };
 
     let cart_collider_model = Collider::cuboid(CART_WIDTH, CART_HEIGHT, CART_DEPTH);
     let cart_mass_props = MassPropertiesBundle::from_shape(&cart_collider_model, ALUMINUM_DENSITY); // It is a mix of emptiness and motor and steel.. overall some aluminum?
 
-    commands.entity(cart_entity).insert(CartBundle {
-        external_force: ExternalForce::new(Vec3::ZERO),
-        cart: Cart,
-        mass_props: cart_mass_props,
-        dominance: Dominance(5),
-        rigid_body: RigidBody::Dynamic,
-        locked_axes: LockedAxes::new()
-            .lock_translation_z()
-            .lock_translation_y()
-            .lock_rotation_x()
-            .lock_rotation_y()
-            .lock_rotation_z(),
-    });
+    commands.entity(cart_entity).insert((
+        CartBundle {
+            applied_force: AppliedForce::default(),
+            cart: Cart,
+            constant_force: ConstantForce::default(),
+            mass_props: cart_mass_props,
+            dominance: Dominance(5),
+            rigid_body: RigidBody::Dynamic,
+            locked_axes: LockedAxes::new()
+                .lock_translation_z()
+                .lock_translation_y()
+                .lock_rotation_x()
+                .lock_rotation_y()
+                .lock_rotation_z(),
+        },
+        CartRotationLock(cart_rotation),
+    ));
 
     // let the cart be dragged too
     commands
         .entity(cart_entity)
+        .observe(on_drag_start)
         .observe(on_drag)
         .observe(on_drag_end);
 
@@ -417,16 +491,20 @@ fn setup_entities(
         .id();
 
     // Connect the cart to the rail
-    commands.spawn(
+    commands.spawn((
         PrismaticJoint::new(rail_entity, cart_entity)
-            .with_free_axis(Vec3::X) // Allow movement along the X-axis
-            .with_compliance(1e-9)
-            .with_linear_velocity_damping(100.0)
-            .with_angular_velocity_damping(10.0)
+            .with_slider_axis(Vec3::X) // Allow movement along the X-axis
+            .with_align_compliance(0.0)
+            .with_angle_compliance(0.0)
+            .with_limit_compliance(0.0)
             .with_limits(-RAIL_WIDTH / 2.0, RAIL_WIDTH / 2.0)
-            .with_local_anchor_1(Vec3::new(0.0, RAIL_HEIGHT / 2.0, 0.0)) // Rail top edge
-            .with_local_anchor_2(Vec3::new(0.0, -CART_HEIGHT / 2.0, 0.0)),
-    );
+            .with_local_anchor1(Vec3::new(0.0, RAIL_HEIGHT / 2.0, 0.0)) // Rail top edge
+            .with_local_anchor2(Vec3::new(0.0, -CART_HEIGHT / 2.0, 0.0)),
+        JointDamping {
+            linear: 100.0,
+            angular: 10.0,
+        },
+    ));
 
     let rod_collider_model = Collider::capsule(ROD_WIDTH / 2.0, ROD_HEIGHT);
     let rod_mass_props = MassPropertiesBundle::from_shape(&rod_collider_model, STEEL_DENSITY); // overall some aluminum?
@@ -453,23 +531,29 @@ fn setup_entities(
                 .lock_translation_z()
                 .lock_rotation_y()
                 .lock_rotation_x(),
+            AppliedForce::default(),
         ))
+        .observe(on_drag_start)
         .observe(on_drag)
         .observe(on_drag_end)
         .id();
-    commands.spawn(
+    commands.spawn((
         RevoluteJoint::new(cart_entity, rod_entity)
-            .with_compliance(1e-16)
-            .with_linear_velocity_damping(10.0)
-            .with_angular_velocity_damping(10.0)
-            .with_aligned_axis(Vec3::Z) // Align the axis of rotation along the Z-axis
-            .with_local_anchor_1(Vec3::new(
+            .with_point_compliance(0.0)
+            .with_align_compliance(0.0)
+            .with_limit_compliance(0.0)
+            .with_hinge_axis(Vec3::Z) // Align the axis of rotation along the Z-axis
+            .with_local_anchor1(Vec3::new(
                 0.0,
                 CART_HEIGHT / 2.0,
                 CART_DEPTH / 2.0 + ROD_DEPTH / 2.0 + AXIS_LENGTH,
             )) // aim at the center of the rod at the bottom
-            .with_local_anchor_2(Vec3::new(0.0, -ROD_HEIGHT / 2.0, 0.0)), // Anchor on the rod (bottom)
-    );
+            .with_local_anchor2(Vec3::new(0.0, -ROD_HEIGHT / 2.0, 0.0)), // Anchor on the rod (bottom)
+        JointDamping {
+            linear: 10.0,
+            angular: 10.0,
+        },
+    ));
 
     // Light
     commands.spawn((
@@ -499,11 +583,36 @@ fn get_rigid_body_entity(
     drag_target
 }
 
+/// Called immediately when drag starts (before any mouse movement)
+fn on_drag_start(
+    drag: On<Pointer<DragStart>>,
+    parents: Query<(&ChildOf, Option<&RigidBody>)>,
+    cart: Query<(), With<Cart>>,
+    mut drag_state: ResMut<DragState>,
+) {
+    if drag.button != PointerButton::Primary {
+        return;
+    }
+
+    let original_target = drag.entity;
+    let target_entity = get_rigid_body_entity(original_target, &parents);
+    let is_cart = cart.get(target_entity).is_ok();
+
+    if is_cart {
+        drag_state.override_motor = true;
+    }
+
+    // Initialize drag with zero force - on_drag will update with actual force
+    drag_state.active_drag = Some((target_entity, Vector::ZERO));
+}
+
 fn on_drag(
-    drag: Trigger<Pointer<Drag>>,
+    drag: On<Pointer<Drag>>,
     camera_query: Option<Single<&Transform, With<Camera>>>,
     parents: Query<(&ChildOf, Option<&RigidBody>)>,
-    mut external_force: Query<&mut ExternalForce>,
+    cart: Query<(), With<Cart>>,
+    mut applied_forces: Query<&mut AppliedForce>,
+    mut drag_state: ResMut<DragState>,
     drag_control: Res<DragControl>,
 ) {
     if drag.button != PointerButton::Primary {
@@ -515,43 +624,69 @@ fn on_drag(
         return;
     };
 
-    let target_entity = get_rigid_body_entity(drag.target, &parents);
+    // Use drag.entity (the Pointer<E>.entity field) to get the originally hit entity
+    let original_target = drag.entity;
+    let target_entity = get_rigid_body_entity(original_target, &parents);
+    let is_cart = cart.get(target_entity).is_ok();
 
-    if let Ok(mut external_force) = external_force.get_mut(target_entity) {
-        // clear any previously applied forces (they persist by default)
-        external_force.clear();
+    if is_cart {
+        drag_state.override_motor = true;
+    }
 
-        // calculate world X-direction drag from screenspace drag
-        // drag.delta.y should basically never contribute (as long as camera isn't rolled), but scaling by camera_transform.right() will feel more natural when dragging from a steep visual angle
-        let drag_delta_world =
-            drag.distance.x * camera_transform.right() + drag.distance.y * camera_transform.down();
+    // calculate world X-direction drag from screenspace drag
+    // drag.delta.y should basically never contribute (as long as camera isn't rolled), but scaling by camera_transform.right() will feel more natural when dragging from a steep visual angle
+    let drag_delta_world =
+        drag.distance.x * camera_transform.right() + drag.distance.y * camera_transform.down();
 
-        // apply a force to that object based on the world length and direction of the mouse drag
-        let applied_force = (drag_delta_world / drag_control.pixels_per_newton)
-            .clamp_length_max(drag_control.max_force);
-        external_force.apply_force(applied_force);
+    // apply a force to that object based on the world length and direction of the mouse drag
+    let applied_force_vec: Vector = (drag_delta_world / drag_control.pixels_per_newton)
+        .clamp_length_max(drag_control.max_force);
+
+    // Store the drag state - a system will apply force continuously
+    drag_state.active_drag = Some((target_entity, applied_force_vec));
+
+    if let Ok(mut recorded_force) = applied_forces.get_mut(target_entity) {
+        recorded_force.0 = applied_force_vec;
     }
 }
 
 fn on_drag_end(
-    drag: Trigger<Pointer<DragEnd>>,
+    drag: On<Pointer<DragEnd>>,
     parents: Query<(&ChildOf, Option<&RigidBody>)>,
-    mut external_force: Query<&mut ExternalForce>,
+    cart: Query<(), With<Cart>>,
+    mut applied_forces: Query<&mut AppliedForce>,
+    mut drag_state: ResMut<DragState>,
 ) {
     if drag.button != PointerButton::Primary {
         return;
     }
 
-    let target_entity = get_rigid_body_entity(drag.target, &parents);
+    let target_entity = get_rigid_body_entity(drag.entity, &parents);
+    let is_cart = cart.get(target_entity).is_ok();
 
-    if let Ok(mut external_force) = external_force.get_mut(target_entity) {
-        // the drag ended, so clear the applied forces
-        external_force.clear();
+    if is_cart {
+        drag_state.override_motor = false;
+    }
+
+    // Clear the active drag
+    drag_state.active_drag = None;
+
+    if let Ok(mut recorded_force) = applied_forces.get_mut(target_entity) {
+        recorded_force.0 = Vector::ZERO;
+    }
+}
+
+/// System that applies drag force continuously while dragging
+fn apply_drag_force(drag_state: Res<DragState>, mut forces: Query<Forces>) {
+    if let Some((entity, force_vec)) = drag_state.active_drag
+        && let Ok(mut force) = forces.get_mut(entity)
+    {
+        force.apply_force(force_vec);
     }
 }
 
 pub fn external_force_display(
-    external_force: Query<(Entity, &Position, &ExternalForce)>,
+    external_force: Query<(Entity, &Position, &AppliedForce)>,
     cart: Query<(), With<Cart>>,
     rod: Query<(), With<Rod>>,
     mut gizmos: Gizmos,
@@ -571,7 +706,7 @@ pub fn external_force_display(
             .for_each(|(_, position, external_force)| {
                 gizmos.arrow(
                     **position,
-                    **position + (**external_force).clamp_length_max(10.),
+                    **position + (external_force.0).clamp_length_max(10.),
                     RED,
                 );
             });
@@ -581,50 +716,118 @@ pub fn external_force_display(
 #[allow(clippy::type_complexity)]
 fn reset_sim(
     keys: Res<ButtonInput<KeyCode>>,
-    mut query: Query<(
-        Option<&Rod>,
-        Option<&Cart>,
-        Option<&mut Transform>,
-        Option<&mut ExternalForce>,
-        Option<&mut LinearVelocity>,
-        Option<&mut AngularVelocity>,
+    mut drag_state: ResMut<DragState>,
+    mut queries: ParamSet<(
+        Query<(
+            Entity,
+            Option<&Rod>,
+            Option<&Cart>,
+            Option<&mut Transform>,
+            Option<&mut Position>,
+            Option<&mut Rotation>,
+            Option<&mut PreSolveDeltaPosition>,
+            Option<&mut PreSolveDeltaRotation>,
+            Option<&mut AppliedForce>,
+            Option<&mut ConstantForce>,
+            Option<&mut LinearVelocity>,
+            Option<&mut AngularVelocity>,
+        )>,
+        Query<Forces>,
     )>,
 ) {
     if keys.just_pressed(KeyCode::KeyR) {
-        for (
-            rod_component,
-            cart_component,
-            transform,
-            ext_force,
-            linear_velocity,
-            angular_velocity,
-        ) in query.iter_mut()
+        drag_state.override_motor = false;
+        let mut entities_with_forces = Vec::new();
+
         {
-            if let Some(mut transform) = transform {
-                if rod_component.is_some() {
-                    transform.translation = Vec3::new(
-                        0.0,
-                        ROD_HEIGHT / 2.0 + CART_HEIGHT,
-                        CART_DEPTH / 2.0 + ROD_DEPTH / 2.0 + AXIS_LENGTH,
-                    );
+            let mut query = queries.p0();
+            for (
+                entity,
+                rod_component,
+                cart_component,
+                transform,
+                position,
+                rotation,
+                presolve_position,
+                presolve_rotation,
+                ext_force,
+                constant_force,
+                linear_velocity,
+                angular_velocity,
+            ) in query.iter_mut()
+            {
+                let is_rod: bool = rod_component.is_some();
+                let is_cart: bool = cart_component.is_some();
 
-                    transform.rotation = Quat::IDENTITY;
+                // Calculate the target translations once so we can apply them to both Transform and Position.
+                let rod_translation: Vector = Vector::new(
+                    0.0,
+                    ROD_HEIGHT / 2.0 + CART_HEIGHT,
+                    CART_DEPTH / 2.0 + ROD_DEPTH / 2.0 + AXIS_LENGTH,
+                );
+                let mut cart_translation: Vector = transform
+                    .as_ref()
+                    .map(|t| Vector::new(t.translation.x, t.translation.y, t.translation.z))
+                    .or_else(|| position.as_ref().map(|p| p.0))
+                    .unwrap_or(Vector::ZERO);
+                cart_translation.x = 0.0;
+
+                if let Some(mut transform) = transform {
+                    if is_rod {
+                        transform.translation =
+                            Vec3::new(rod_translation.x, rod_translation.y, rod_translation.z);
+                        transform.rotation = Quat::IDENTITY;
+                    }
+
+                    if is_cart {
+                        transform.translation =
+                            Vec3::new(cart_translation.x, cart_translation.y, cart_translation.z);
+                    }
+                }
+                if let Some(mut position) = position {
+                    if is_rod {
+                        *position = Position::new(rod_translation);
+                    }
+                    if is_cart {
+                        *position = Position::new(cart_translation);
+                    }
+                }
+                if let Some(mut rotation) = rotation
+                    && is_rod
+                {
+                    *rotation = Rotation::IDENTITY;
+                }
+                if let Some(mut presolve_position) = presolve_position {
+                    **presolve_position = Vector::ZERO;
+                }
+                if let Some(mut presolve_rotation) = presolve_rotation {
+                    **presolve_rotation = Rotation::IDENTITY;
+                }
+                if let Some(mut ext_force) = ext_force {
+                    ext_force.0 = Vector::ZERO;
+                }
+                if let Some(mut constant_force) = constant_force {
+                    constant_force.0 = Vector::ZERO;
                 }
 
-                if cart_component.is_some() {
-                    transform.translation.x = 0.0;
+                // Defer force resets until after this query borrow is dropped.
+                entities_with_forces.push(entity);
+
+                if let Some(mut velocity) = linear_velocity {
+                    *velocity = LinearVelocity::ZERO;
+                }
+
+                if let Some(mut angular_velocity) = angular_velocity {
+                    *angular_velocity = AngularVelocity::ZERO;
                 }
             }
-            if let Some(mut ext_force) = ext_force {
-                ext_force.clear();
-            }
+        }
 
-            if let Some(mut velocity) = linear_velocity {
-                *velocity = LinearVelocity::ZERO;
-            }
-
-            if let Some(mut angular_velocity) = angular_velocity {
-                *angular_velocity = AngularVelocity::ZERO;
+        let mut forces = queries.p1();
+        for entity in entities_with_forces {
+            if let Ok(mut force) = forces.get_mut(entity) {
+                force.reset_accumulated_linear_acceleration();
+                force.reset_accumulated_angular_acceleration();
             }
         }
     }
@@ -634,8 +837,8 @@ fn reset_sim(
 fn camera_control_system(
     camera_control: Res<CameraControl>,
     keys: Res<ButtonInput<KeyCode>>,
-    mut scroll_evr: EventReader<MouseWheel>,
-    mut mouse_motion: EventReader<MouseMotion>,
+    mut scroll_evr: MessageReader<MouseWheel>,
+    mut mouse_motion: MessageReader<MouseMotion>,
     mut query: Query<&mut Transform, With<Camera>>,
     // use real time to scale camera movement in case physics time is paused
     time: Res<Time<Real>>,
@@ -737,4 +940,30 @@ fn update_physics(state: Res<SimulationState>, mut time: ResMut<Time<Virtual>>) 
         return;
     }
     time.unpause();
+}
+
+// Clamp cart rotation to its initial orientation so it only slides on the rail.
+#[allow(clippy::type_complexity)]
+fn lock_cart_rotation(
+    mut carts: Query<
+        (
+            &CartRotationLock,
+            Option<&mut Rotation>,
+            Option<&mut Transform>,
+            Option<&mut AngularVelocity>,
+        ),
+        With<Cart>,
+    >,
+) {
+    for (lock, rotation, transform, angular_velocity) in carts.iter_mut() {
+        if let Some(mut rotation) = rotation {
+            *rotation = Rotation(lock.0);
+        }
+        if let Some(mut transform) = transform {
+            transform.rotation = lock.0;
+        }
+        if let Some(mut angular_velocity) = angular_velocity {
+            *angular_velocity = AngularVelocity::ZERO;
+        }
+    }
 }
