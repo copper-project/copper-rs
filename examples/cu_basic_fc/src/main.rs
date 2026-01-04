@@ -118,10 +118,21 @@ fn main() -> ! {
     }
 }
 
+const SYSCLK_HZ: u64 = 400_000_000;
+
+fn read_rtc_ns() -> u64 {
+    let cycles = cu29::clock::read_raw_counter() as u128;
+    ((cycles * 1_000_000_000u128) / SYSCLK_HZ as u128) as u64
+}
+
+fn sleep_ns(ns: u64) {
+    let cycles = ((ns as u128 * SYSCLK_HZ as u128) / 1_000_000_000u128) as u32;
+    asm::delay(cycles.max(1));
+}
+
 fn build_clock() -> RobotClock {
-    // Use a mock clock to avoid calibration/division at startup.
-    let (clock, _mock) = RobotClock::mock();
-    clock
+    cu29::clock::initialize();
+    RobotClock::new_with_rtc(read_rtc_ns, sleep_ns)
 }
 
 fn init_heap() {

@@ -1,0 +1,273 @@
+name: Reusable Unit Tests
+
+on:
+  workflow_call:
+    inputs:
+      toolchain:
+        required: true
+        type: string
+      cargo_target_dir:
+        required: false
+        type: string
+        default: ""
+      linux_cargo_paths:
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+
+    runs-on: ${{ matrix.os }}
+
+    env:
+      CARGO_TERM_COLOR: always
+      BASE_FEATURES: mock,image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+
+    strategy:
+      matrix:
+        # os: [ ubuntu-latest, macos-latest, windows-latest ]
+        os: [ ubuntu-latest, macos-latest ]
+        mode: [ debug, release, cuda-release ]
+        exclude:
+          - os: macos-latest
+            mode: cuda-release
+
+    steps:
+      - uses: actions/checkout@v6
+      - name: Configure CARGO_TARGET_DIR
+        if: inputs.cargo_target_dir != ''
+        run: echo "CARGO_TARGET_DIR=${{ inputs.cargo_target_dir }}" >> $GITHUB_ENV
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          components: rustc,cargo,rust-std,rustfmt,clippy
+      - name: Setup rust-cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: ${{ matrix.mode }}
+          shared-key: rust-${{ matrix.os }}
+          save-if: ${{ github.ref == 'refs/heads/master' }}
+          cache-targets: "false"
+          cache-bin: "false"
+      - name: Install latest nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Install winget
+        if: runner.os == 'Windows'
+        uses: Cyberboss/install-winget@v1
+
+      - name: Free Disk Space (Ubuntu)
+        if: runner.os == 'Linux'
+        uses: jlumbroso/free-disk-space@main
+        with:
+          # this might remove tools that are actually needed,
+          # if set to "true" but frees about 6 GB
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          # do not remove large-packages, as it is necessary
+          large-packages: false
+          docker-images: true
+          swap-storage: true
+
+      - name: Linux-only Cargo paths
+        if: runner.os == 'Linux' && inputs.linux_cargo_paths
+        run: |
+          echo "CARGO_TARGET_DIR=/mnt/cargo-target" >> $GITHUB_ENV
+          echo "CARGO_HOME=/mnt/cargo-home" >> $GITHUB_ENV
+          echo "TMPDIR=/mnt/tmp" >> $GITHUB_ENV
+          sudo mkdir -p /mnt/cargo-home /mnt/cargo-target /mnt/tmp
+          sudo chown -R "$USER:$USER" /mnt/cargo-home /mnt/cargo-target /mnt/tmp
+
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          # Verify winget availability
+          if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
+              Write-Host "winget is not installed or available."
+              exit 1
+          }
+
+          # Install PCAP SDK
+          Invoke-WebRequest -Uri https://npcap.com/dist/npcap-sdk-1.13.zip -OutFile npcap-sdk.zip
+          Expand-Archive -Path npcap-sdk.zip -DestinationPath $env:USERPROFILE\npcap-sdk
+          Remove-Item npcap-sdk.zip
+
+          # Install Win10Pcap (if winget is available)
+          winget install DaiyuuNobori.Win10Pcap --accept-source-agreements --accept-package-agreements
+
+          # Set PCAP library path
+          echo "LIB=$env:USERPROFILE\npcap-sdk\Lib\x64" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+      - name: Cache apt packages (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/cache@v5
+        with:
+          path: /var/cache/apt/archives
+          key: ${{ runner.os }}-apt-gstreamer-${{ hashFiles('.github/workflows/reusable-unit-tests.yml') }}
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            libudev-dev \
+            libpcap-dev \
+            libglib2.0-dev \
+            clang \
+            libclang-dev \
+            libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-bad1.0-dev \
+            gstreamer1.0-plugins-base \
+            gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad \
+            gstreamer1.0-plugins-ugly \
+            gstreamer1.0-libav \
+            gstreamer1.0-tools \
+            gstreamer1.0-x \
+            gstreamer1.0-alsa \
+            gstreamer1.0-gl \
+            gstreamer1.0-gtk3 \
+            gstreamer1.0-qt5 \
+            gstreamer1.0-pulseaudio
+
+      - name: Install GStreamer (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew update
+          brew install \
+            gstreamer \
+            gst-plugins-base \
+            gst-plugins-good \
+            gst-plugins-bad \
+            gst-plugins-ugly \
+            gst-libav \
+            gst-plugins-rs \
+            gtk+3 \
+            qt@5
+          echo "DYLD_LIBRARY_PATH=/opt/homebrew/opt/gstreamer/lib:/usr/local/opt/gstreamer/lib:$DYLD_LIBRARY_PATH" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig:/opt/homebrew/opt/gstreamer/lib/pkgconfig:$(brew --prefix qt@5)/lib/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
+
+      - name: Debug GStreamer Installation
+        if: runner.os == 'macOS'
+        run: |
+          echo "Checking GStreamer version..."
+          pkg-config --modversion gstreamer-1.0 || { echo "GStreamer not found!"; }
+
+          echo "Checking GStreamer library path..."
+          if [[ -d "/opt/homebrew/opt/gstreamer/lib" ]]; then
+            echo "GStreamer is installed at /opt/homebrew/opt/gstreamer/lib"
+            ls -l /opt/homebrew/opt/gstreamer/lib | head
+          else
+            echo "GStreamer libraries missing!"
+          fi
+
+          echo "Checking PKG_CONFIG_PATH..."
+          echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
+
+          echo "Checking DYLD_LIBRARY_PATH..."
+          echo "DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH"
+
+      - name: Install CUDA
+        uses: Jimver/cuda-toolkit@v0.2.30
+        if: runner.os != 'macOS' && matrix.mode == 'cuda-release'
+        with:
+          cuda: 12.6.1
+          log-file-suffix: '${{ matrix.os }}-${{ matrix.mode }}-cuda.txt'
+          use-github-cache: false
+          use-local-cache: false
+
+      - name: Set build mode (Linux / MacOS)
+        if: runner.os != 'Windows' && ( matrix.mode == 'release' || matrix.mode == 'cuda-release' )
+        run: echo "RELEASE_FLAG=--release" >> $GITHUB_ENV
+
+      - name: Set build mode (Windows)
+        if: runner.os == 'Windows' && ( matrix.mode == 'release' || matrix.mode == 'cuda-release' )
+        run: |
+          Add-Content -Path $env:GITHUB_ENV -Value "RELEASE_FLAG=--release"
+
+      - name: Set features (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          if [[ '${{ matrix.mode }}' == 'cuda-release' ]]; then
+            echo "FEATURES_FLAG=--features $BASE_FEATURES,python,cuda" >> $GITHUB_ENV
+          else
+            echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
+          fi
+
+      - name: Set features (MacOS)
+        if: runner.os == 'macOS'
+        run: |
+          if [[ '${{ matrix.mode }}' == 'cuda-release' ]]; then
+            echo "FEATURES_FLAG=--features $BASE_FEATURES,cuda" >> $GITHUB_ENV
+          else
+            echo "FEATURES_FLAG=--features $BASE_FEATURES" >> $GITHUB_ENV
+          fi
+
+      - name: Set features (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $features = if ($env:matrix_mode -eq 'cuda-release') {
+            '--features mock,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode,cuda'
+          } else {
+            '--features mock,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode'
+          }
+          Add-Content -Path $env:GITHUB_ENV -Value "FEATURES_FLAG=$features"
+
+      - name: Detect embedded-only crates
+        run: |
+          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
+          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
+
+      # Run Clippy and build
+      - name: Run clippy on (${{ matrix.os }} | ${{matrix.mode}})
+        run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG --workspace --all-targets $EMBEDDED_EXCLUDES -- --deny warnings
+      - name: Run clippy with all features on (${{ matrix.os }} | ${{matrix.mode}})
+        run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG --workspace --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES -- --deny warnings
+      - name: Run build with all features on (${{ matrix.os }} | ${{matrix.mode}})
+        run: cargo +${{ inputs.toolchain }} build $RELEASE_FLAG --workspace --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES
+
+      - name: Verify GStreamer linkage (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          TARGET_DIR=target/debug
+          if [[ "$RELEASE_FLAG" == "--release" ]]; then
+            TARGET_DIR=target/release
+          fi
+          echo "Checking linked libraries in $TARGET_DIR..."
+          if ls "$TARGET_DIR"/deps/cu_gstreamer-* 1> /dev/null 2>&1; then
+            otool -L "$TARGET_DIR"/deps/cu_gstreamer-* | grep libgstapp || { echo "libgstapp is not linked!"; }
+          else
+            echo "cu_gstreamer binary not found, skipping otool check."
+          fi
+
+      - name: Run doctests on (${{ matrix.os }} | debug)
+        if: matrix.mode == 'debug'
+        run: cargo +${{ inputs.toolchain }} test --doc --workspace $EMBEDDED_EXCLUDES --quiet
+
+      # Run Unit Tests
+      - name: Run Unit Tests on (${{ matrix.os }} | ${{matrix.mode}})
+        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets --workspace $EMBEDDED_EXCLUDES
+      - name: Run Unit Tests with all features on (${{ matrix.os }} | ${{matrix.mode}})
+        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets --workspace $FEATURES_FLAG $EMBEDDED_EXCLUDES
+
+      # Run Project Generation Tests
+      - name: Install cargo-generate on (${{ matrix.os }} | debug)
+        if: matrix.mode == 'debug'
+        run: cargo +${{ inputs.toolchain }} install cargo-generate
+
+      - name: Generate new project on (${{ matrix.os }} | debug)
+        if: matrix.mode == 'debug'
+        run: |
+          cd templates
+          cargo +${{ inputs.toolchain }} generate -p cu_full --name test_project --destination . -d copper_source=local -d copper_root_path=../.. --silent
+      - name: Build generated project on (${{ matrix.os }} | debug)
+        if: matrix.mode == 'debug'
+        run: |
+          cd templates/test_project
+          cargo +${{ inputs.toolchain }} build
