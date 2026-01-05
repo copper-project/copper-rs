@@ -77,33 +77,262 @@ pub struct MspAvailableSensors {
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
-#[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
-#[packed_struct(endian = "lsb")]
-pub struct MspStatus {
-    pub cycle_time: u16,
-    pub i2c_errors: u16,
-    #[packed_field(size_bits = "8")]
-    pub sensors: MspAvailableSensors,
-    pub null1: u8,
-    pub flight_mode: u32,
-    pub profile: u8,
-    pub system_load: u16,
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, Default, PartialEq, Eq)]
+pub struct MspStatusSensors {
+    pub acc: bool,
+    pub baro: bool,
+    pub mag: bool,
+    pub gps: bool,
+    pub rangefinder: bool,
+    pub gyro: bool,
+    pub optical_flow: bool,
+}
+
+impl MspStatusSensors {
+    pub fn from_bits(bits: u16) -> Self {
+        Self {
+            acc: bits & (1 << 0) != 0,
+            baro: bits & (1 << 1) != 0,
+            mag: bits & (1 << 2) != 0,
+            gps: bits & (1 << 3) != 0,
+            rangefinder: bits & (1 << 4) != 0,
+            gyro: bits & (1 << 5) != 0,
+            optical_flow: bits & (1 << 6) != 0,
+        }
+    }
+
+    pub fn to_bits(self) -> u16 {
+        (self.acc as u16) << 0
+            | (self.baro as u16) << 1
+            | (self.mag as u16) << 2
+            | (self.gps as u16) << 3
+            | (self.rangefinder as u16) << 4
+            | (self.gyro as u16) << 5
+            | (self.optical_flow as u16) << 6
+    }
+}
+
+impl From<u16> for MspStatusSensors {
+    fn from(bits: u16) -> Self {
+        Self::from_bits(bits)
+    }
+}
+
+impl From<MspStatusSensors> for u16 {
+    fn from(value: MspStatusSensors) -> Self {
+        value.to_bits()
+    }
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
-#[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
-#[packed_struct(endian = "lsb")]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
+pub struct MspStatus {
+    pub cycle_time: u16,
+    pub i2c_errors: u16,
+    pub sensors: MspStatusSensors,
+    pub flight_mode_flags: u32,
+    pub current_pid_profile_index: u8,
+    pub average_system_load_percent: u16,
+    pub gyro_cycle_time: u16,
+    pub extra_flight_mode_flags: Vec<u8>,
+    pub arming_disable_flags_count: u8,
+    pub arming_disable_flags: u32,
+    pub config_state_flags: u8,
+    pub core_temp_celsius: u16,
+    pub control_rate_profile_count: u8,
+}
+
+#[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
 pub struct MspStatusEx {
     pub cycle_time: u16,
     pub i2c_errors: u16,
-    #[packed_field(size_bits = "8")]
-    pub sensors: MspAvailableSensors,
-    pub null1: u8,
-    pub flight_mode: u32,
+    pub sensors: MspStatusSensors,
+    pub flight_mode_flags: u32,
     pub current_pid_profile_index: u8,
     pub average_system_load_percent: u16,
     pub max_profile_count: u8,
     pub current_control_rate_profile_index: u8,
+    pub extra_flight_mode_flags: Vec<u8>,
+    pub arming_disable_flags_count: u8,
+    pub arming_disable_flags: u32,
+    pub config_state_flags: u8,
+    pub core_temp_celsius: u16,
+    pub control_rate_profile_count: u8,
+}
+
+impl MspStatus {
+    pub fn from_bytes(data: &[u8]) -> Result<Self, PackingError> {
+        let mut offset = 0;
+        let cycle_time = read_u16(data, &mut offset)?;
+        let i2c_errors = read_u16(data, &mut offset)?;
+        let sensors = MspStatusSensors::from(read_u16(data, &mut offset)?);
+        let flight_mode_flags = read_u32(data, &mut offset)?;
+        let current_pid_profile_index = read_u8(data, &mut offset)?;
+        let average_system_load_percent = read_u16(data, &mut offset)?;
+        let gyro_cycle_time = read_u16(data, &mut offset)?;
+        let extra_flight_mode_flags_len = read_u8(data, &mut offset)? as usize;
+        let extra_flight_mode_flags = read_bytes(data, &mut offset, extra_flight_mode_flags_len)?;
+        let arming_disable_flags_count = read_u8(data, &mut offset)?;
+        let arming_disable_flags = read_u32(data, &mut offset)?;
+        let config_state_flags = read_u8(data, &mut offset)?;
+        let core_temp_celsius = read_u16(data, &mut offset)?;
+        let control_rate_profile_count = read_u8(data, &mut offset)?;
+
+        Ok(Self {
+            cycle_time,
+            i2c_errors,
+            sensors,
+            flight_mode_flags,
+            current_pid_profile_index,
+            average_system_load_percent,
+            gyro_cycle_time,
+            extra_flight_mode_flags,
+            arming_disable_flags_count,
+            arming_disable_flags,
+            config_state_flags,
+            core_temp_celsius,
+            control_rate_profile_count,
+        })
+    }
+
+    pub fn to_packet_data(&self) -> Result<MspPacketData, PackingError> {
+        if self.extra_flight_mode_flags.len() > 15 {
+            return Err(PackingError::InvalidValue);
+        }
+        let mut data = SmallVec::<[u8; 256]>::new();
+        data.extend_from_slice(&self.cycle_time.to_le_bytes());
+        data.extend_from_slice(&self.i2c_errors.to_le_bytes());
+        data.extend_from_slice(&u16::from(self.sensors).to_le_bytes());
+        data.extend_from_slice(&self.flight_mode_flags.to_le_bytes());
+        data.push(self.current_pid_profile_index);
+        data.extend_from_slice(&self.average_system_load_percent.to_le_bytes());
+        data.extend_from_slice(&self.gyro_cycle_time.to_le_bytes());
+        data.push(self.extra_flight_mode_flags.len() as u8);
+        data.extend_from_slice(&self.extra_flight_mode_flags);
+        data.push(self.arming_disable_flags_count);
+        data.extend_from_slice(&self.arming_disable_flags.to_le_bytes());
+        data.push(self.config_state_flags);
+        data.extend_from_slice(&self.core_temp_celsius.to_le_bytes());
+        data.push(self.control_rate_profile_count);
+
+        Ok(MspPacketData(data))
+    }
+}
+
+impl MspStatusEx {
+    pub fn from_bytes(data: &[u8]) -> Result<Self, PackingError> {
+        let mut offset = 0;
+        let cycle_time = read_u16(data, &mut offset)?;
+        let i2c_errors = read_u16(data, &mut offset)?;
+        let sensors = MspStatusSensors::from(read_u16(data, &mut offset)?);
+        let flight_mode_flags = read_u32(data, &mut offset)?;
+        let current_pid_profile_index = read_u8(data, &mut offset)?;
+        let average_system_load_percent = read_u16(data, &mut offset)?;
+        let max_profile_count = read_u8(data, &mut offset)?;
+        let current_control_rate_profile_index = read_u8(data, &mut offset)?;
+        let extra_flight_mode_flags_len = read_u8(data, &mut offset)? as usize;
+        let extra_flight_mode_flags = read_bytes(data, &mut offset, extra_flight_mode_flags_len)?;
+        let arming_disable_flags_count = read_u8(data, &mut offset)?;
+        let arming_disable_flags = read_u32(data, &mut offset)?;
+        let config_state_flags = read_u8(data, &mut offset)?;
+        let core_temp_celsius = read_u16(data, &mut offset)?;
+        let control_rate_profile_count = read_u8(data, &mut offset)?;
+
+        Ok(Self {
+            cycle_time,
+            i2c_errors,
+            sensors,
+            flight_mode_flags,
+            current_pid_profile_index,
+            average_system_load_percent,
+            max_profile_count,
+            current_control_rate_profile_index,
+            extra_flight_mode_flags,
+            arming_disable_flags_count,
+            arming_disable_flags,
+            config_state_flags,
+            core_temp_celsius,
+            control_rate_profile_count,
+        })
+    }
+
+    pub fn to_packet_data(&self) -> Result<MspPacketData, PackingError> {
+        if self.extra_flight_mode_flags.len() > 15 {
+            return Err(PackingError::InvalidValue);
+        }
+        let mut data = SmallVec::<[u8; 256]>::new();
+        data.extend_from_slice(&self.cycle_time.to_le_bytes());
+        data.extend_from_slice(&self.i2c_errors.to_le_bytes());
+        data.extend_from_slice(&u16::from(self.sensors).to_le_bytes());
+        data.extend_from_slice(&self.flight_mode_flags.to_le_bytes());
+        data.push(self.current_pid_profile_index);
+        data.extend_from_slice(&self.average_system_load_percent.to_le_bytes());
+        data.push(self.max_profile_count);
+        data.push(self.current_control_rate_profile_index);
+        data.push(self.extra_flight_mode_flags.len() as u8);
+        data.extend_from_slice(&self.extra_flight_mode_flags);
+        data.push(self.arming_disable_flags_count);
+        data.extend_from_slice(&self.arming_disable_flags.to_le_bytes());
+        data.push(self.config_state_flags);
+        data.extend_from_slice(&self.core_temp_celsius.to_le_bytes());
+        data.push(self.control_rate_profile_count);
+
+        Ok(MspPacketData(data))
+    }
+}
+
+fn read_u8(data: &[u8], offset: &mut usize) -> Result<u8, PackingError> {
+    if *offset + 1 > data.len() {
+        return Err(PackingError::BufferSizeMismatch {
+            expected: *offset + 1,
+            actual: data.len(),
+        });
+    }
+    let value = data[*offset];
+    *offset += 1;
+    Ok(value)
+}
+
+fn read_u16(data: &[u8], offset: &mut usize) -> Result<u16, PackingError> {
+    if *offset + 2 > data.len() {
+        return Err(PackingError::BufferSizeMismatch {
+            expected: *offset + 2,
+            actual: data.len(),
+        });
+    }
+    let value = u16::from_le_bytes([data[*offset], data[*offset + 1]]);
+    *offset += 2;
+    Ok(value)
+}
+
+fn read_u32(data: &[u8], offset: &mut usize) -> Result<u32, PackingError> {
+    if *offset + 4 > data.len() {
+        return Err(PackingError::BufferSizeMismatch {
+            expected: *offset + 4,
+            actual: data.len(),
+        });
+    }
+    let value = u32::from_le_bytes([
+        data[*offset],
+        data[*offset + 1],
+        data[*offset + 2],
+        data[*offset + 3],
+    ]);
+    *offset += 4;
+    Ok(value)
+}
+
+fn read_bytes(data: &[u8], offset: &mut usize, len: usize) -> Result<Vec<u8>, PackingError> {
+    if *offset + len > data.len() {
+        return Err(PackingError::BufferSizeMismatch {
+            expected: *offset + len,
+            actual: data.len(),
+        });
+    }
+    let bytes = data[*offset..*offset + len].to_vec();
+    *offset += len;
+    Ok(bytes)
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
@@ -1020,6 +1249,8 @@ pub enum MspRequest {
     MspRc,
     MspSetRawRc(MspRc),
     MspRawImu,
+    MspStatus(MspStatus),
+    MspStatusEx(MspStatusEx),
     MspDisplayPort(MspDisplayPort),
 }
 
@@ -1030,6 +1261,8 @@ impl MspRequest {
             MspRequest::MspRc => MspCommandCode::MSP_RC,
             MspRequest::MspSetRawRc(_) => MspCommandCode::MSP_SET_RAW_RC,
             MspRequest::MspRawImu => MspCommandCode::MSP_RAW_IMU,
+            MspRequest::MspStatus(_) => MspCommandCode::MSP_STATUS,
+            MspRequest::MspStatusEx(_) => MspCommandCode::MSP_STATUS_EX,
             MspRequest::MspDisplayPort(_) => MspCommandCode::MSP_DISPLAYPORT,
             _ => MspCommandCode::MSP_API_VERSION,
         }
@@ -1061,6 +1294,16 @@ impl From<MspRequest> for MspPacket {
                 cmd: MspCommandCode::MSP_RAW_IMU.to_primitive(),
                 direction: ToFlightController,
                 data: MspPacketData::new(), // empty
+            },
+            MspRequest::MspStatus(status) => MspPacket {
+                cmd: MspCommandCode::MSP_STATUS.to_primitive(),
+                direction: FromFlightController,
+                data: status.to_packet_data().unwrap(),
+            },
+            MspRequest::MspStatusEx(status) => MspPacket {
+                cmd: MspCommandCode::MSP_STATUS_EX.to_primitive(),
+                direction: FromFlightController,
+                data: status.to_packet_data().unwrap(),
             },
             MspRequest::MspDisplayPort(displayport) => MspPacket {
                 cmd: MspCommandCode::MSP_DISPLAYPORT.to_primitive(),
@@ -1098,6 +1341,16 @@ impl From<&MspRequest> for MspPacket {
                 cmd: MspCommandCode::MSP_RAW_IMU.to_primitive(),
                 direction: ToFlightController,
                 data: MspPacketData::new(), // empty
+            },
+            MspRequest::MspStatus(status) => MspPacket {
+                cmd: MspCommandCode::MSP_STATUS.to_primitive(),
+                direction: FromFlightController,
+                data: status.to_packet_data().unwrap(),
+            },
+            MspRequest::MspStatusEx(status) => MspPacket {
+                cmd: MspCommandCode::MSP_STATUS_EX.to_primitive(),
+                direction: FromFlightController,
+                data: status.to_packet_data().unwrap(),
             },
             MspRequest::MspDisplayPort(displayport) => MspPacket {
                 cmd: MspCommandCode::MSP_DISPLAYPORT.to_primitive(),
@@ -1234,8 +1487,8 @@ impl MspResponse {
         match self {
             MspResponse::MspApiVersion(data) => pack_into_packet_data(data),
             MspResponse::MspFlightControllerVariant(data) => pack_into_packet_data(data),
-            MspResponse::MspStatus(data) => pack_into_packet_data(data),
-            MspResponse::MspStatusEx(data) => pack_into_packet_data(data),
+            MspResponse::MspStatus(data) => data.to_packet_data(),
+            MspResponse::MspStatusEx(data) => data.to_packet_data(),
             MspResponse::MspBfConfig(data) => pack_into_packet_data(data),
             MspResponse::MspRawImu(data) => pack_into_packet_data(data),
             MspResponse::MspDataFlashSummaryReply(data) => pack_into_packet_data(data),
@@ -1308,12 +1561,10 @@ impl From<MspPacket> for MspResponse {
                 .decode_as::<MspFlightControllerVariant>()
                 .map(MspResponse::MspFlightControllerVariant)
                 .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_STATUS => packet
-                .decode_as::<MspStatus>()
+            MspCommandCode::MSP_STATUS => MspStatus::from_bytes(packet.data.as_slice())
                 .map(MspResponse::MspStatus)
                 .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_STATUS_EX => packet
-                .decode_as::<MspStatusEx>()
+            MspCommandCode::MSP_STATUS_EX => MspStatusEx::from_bytes(packet.data.as_slice())
                 .map(MspResponse::MspStatusEx)
                 .unwrap_or(MspResponse::Unknown),
             MspCommandCode::MSP_BF_CONFIG => packet
@@ -1482,6 +1733,93 @@ impl From<MspPacket> for MspResponse {
                 .unwrap_or(MspResponse::Unknown),
             _ => MspResponse::Unknown,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn msp_status_serialization_roundtrip() {
+        let status = MspStatus {
+            cycle_time: 1234,
+            i2c_errors: 5,
+            sensors: MspStatusSensors {
+                acc: true,
+                baro: true,
+                mag: false,
+                gps: false,
+                rangefinder: false,
+                gyro: true,
+                optical_flow: false,
+            },
+            flight_mode_flags: 0x11223344,
+            current_pid_profile_index: 2,
+            average_system_load_percent: 100,
+            gyro_cycle_time: 250,
+            extra_flight_mode_flags: vec![0xAA, 0xBB],
+            arming_disable_flags_count: 29,
+            arming_disable_flags: 0xDEADBEEF,
+            config_state_flags: 1,
+            core_temp_celsius: 42,
+            control_rate_profile_count: 3,
+        };
+
+        let data = status.to_packet_data().expect("serialize MSP_STATUS");
+        let expected = vec![
+            0xD2, 0x04, // cycle_time
+            0x05, 0x00, // i2c_errors
+            0x23, 0x00, // sensors
+            0x44, 0x33, 0x22, 0x11, // flight_mode_flags
+            0x02, // current_pid_profile_index
+            0x64, 0x00, // average_system_load_percent
+            0xFA, 0x00, // gyro_cycle_time
+            0x02, // extra_flight_mode_flags_len
+            0xAA, 0xBB, // extra_flight_mode_flags
+            0x1D, // arming_disable_flags_count
+            0xEF, 0xBE, 0xAD, 0xDE, // arming_disable_flags
+            0x01, // config_state_flags
+            0x2A, 0x00, // core_temp_celsius
+            0x03, // control_rate_profile_count
+        ];
+
+        assert_eq!(data.as_slice(), expected.as_slice());
+
+        let decoded = MspStatus::from_bytes(data.as_slice()).expect("decode MSP_STATUS");
+        assert_eq!(decoded, status);
+    }
+
+    #[test]
+    fn msp_status_ex_serialization_roundtrip() {
+        let status = MspStatusEx {
+            cycle_time: 321,
+            i2c_errors: 1,
+            sensors: MspStatusSensors {
+                acc: true,
+                baro: false,
+                mag: true,
+                gps: false,
+                rangefinder: false,
+                gyro: true,
+                optical_flow: true,
+            },
+            flight_mode_flags: 0xAABBCCDD,
+            current_pid_profile_index: 1,
+            average_system_load_percent: 250,
+            max_profile_count: 3,
+            current_control_rate_profile_index: 2,
+            extra_flight_mode_flags: vec![],
+            arming_disable_flags_count: 29,
+            arming_disable_flags: 0,
+            config_state_flags: 0,
+            core_temp_celsius: 0,
+            control_rate_profile_count: 3,
+        };
+
+        let data = status.to_packet_data().expect("serialize MSP_STATUS_EX");
+        let decoded = MspStatusEx::from_bytes(data.as_slice()).expect("decode MSP_STATUS_EX");
+        assert_eq!(decoded, status);
     }
 }
 

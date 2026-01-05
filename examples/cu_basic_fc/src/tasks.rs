@@ -2,11 +2,12 @@
 
 use crate::GreenLed;
 use crate::messages::{BodyCommand, BodyRateSetpoint, ControlInputs, FlightMode};
+use alloc::vec::Vec;
 use cu_ahrs::AhrsPose;
 use cu_bdshot::EscCommand;
 use cu_crsf::messages::RcChannelsPayload;
 use cu_msp_bridge::{MspRequestBatch, MspResponseBatch};
-use cu_msp_lib::structs::{MspDisplayPort, MspRequest};
+use cu_msp_lib::structs::{MspDisplayPort, MspRequest, MspStatus, MspStatusSensors};
 use cu_pid::{PIDControlOutputPayload, PIDController};
 use cu_sensor_payloads::ImuPayload;
 use cu29::prelude::*;
@@ -19,6 +20,8 @@ const LOG_PERIOD_MS: u64 = 500;
 const HEAP_LOG_PERIOD_MS: u64 = 500;
 const VTX_HEARTBEAT_PERIOD_MS: u64 = 1000;
 const VTX_DRAW_PERIOD_MS: u64 = 250;
+// Matches Betaflight ARMING_DISABLE_FLAGS_COUNT (log2(ARM_SWITCH) + 1).
+const MSP_ARMING_DISABLE_FLAGS_COUNT: u8 = 29;
 
 resources!({
     led => Owned<spin::Mutex<GreenLed>>,
@@ -248,14 +251,15 @@ pub struct VtxOsd {
     last_label: Option<StatusLabel>,
     last_heartbeat: Option<CuTime>,
     last_draw: Option<CuTime>,
+    last_armed: bool,
 }
 
 impl Freezable for VtxOsd {}
 
 impl CuTask for VtxOsd {
-    type Resources<'r> = ();
     type Input<'m> = CuMsg<ControlInputs>;
     type Output<'m> = CuMsg<MspRequestBatch>;
+    type Resources<'r> = ();
 
     fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
@@ -273,6 +277,7 @@ impl CuTask for VtxOsd {
             last_label: None,
             last_heartbeat: None,
             last_draw: None,
+            last_armed: false,
         })
     }
 
@@ -289,6 +294,11 @@ impl CuTask for VtxOsd {
             Tov::None => clock.now(),
         };
         let mut batch = MspRequestBatch::new();
+        let ctrl = input.payload();
+
+        if let Some(ctrl) = ctrl {
+            self.last_armed = ctrl.armed;
+        }
 
         let heartbeat_due = self
             .last_heartbeat
@@ -296,10 +306,11 @@ impl CuTask for VtxOsd {
             .unwrap_or(true);
         if heartbeat_due {
             batch.push(MspRequest::MspDisplayPort(MspDisplayPort::heartbeat()));
+            batch.push(MspRequest::MspStatus(build_msp_status(self.last_armed)));
             self.last_heartbeat = Some(now);
         }
 
-        let Some(ctrl) = input.payload() else {
+        let Some(ctrl) = ctrl else {
             if batch.0.is_empty() {
                 output.clear_payload();
             } else {
@@ -358,6 +369,33 @@ impl CuTask for VtxOsd {
             output.set_payload(batch);
         }
         Ok(())
+    }
+}
+
+fn build_msp_status(armed: bool) -> MspStatus {
+    let mut flight_mode_flags = 0;
+    if armed {
+        flight_mode_flags |= 1;
+    }
+
+    MspStatus {
+        cycle_time: 0,
+        i2c_errors: 0,
+        sensors: MspStatusSensors {
+            acc: true,
+            gyro: true,
+            ..Default::default()
+        },
+        flight_mode_flags,
+        current_pid_profile_index: 0,
+        average_system_load_percent: 0,
+        gyro_cycle_time: 0,
+        extra_flight_mode_flags: Vec::new(),
+        arming_disable_flags_count: MSP_ARMING_DISABLE_FLAGS_COUNT,
+        arming_disable_flags: 0,
+        config_state_flags: 0,
+        core_temp_celsius: 0,
+        control_rate_profile_count: 1,
     }
 }
 
