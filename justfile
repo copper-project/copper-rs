@@ -1,6 +1,6 @@
 # CI-aligned helpers mirroring .github/workflows/general.yml
-BASE_FEATURES := "mock,perf-ui,image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug"
-WINDOWS_BASE_FEATURES := "mock,perf-ui,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode"
+BASE_FEATURES := "mock,image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug"
+WINDOWS_BASE_FEATURES := "mock,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode"
 export ROOT := `git rev-parse --show-toplevel`
 EMBEDDED_EXCLUDES := shell('python3 $1/support/ci/embedded_crates.py excludes', ROOT)
 
