@@ -24,7 +24,9 @@ embedded_features = "firmware"
 ### Hardware
 cu-mpu9250 = { path = "../../components/sources/cu_mpu9250", optional = true }
 cu-bdshot = { path = "../../components/bridges/cu_bdshot", optional = true }
-cu-crsf = { path = "../../components/bridges/cu_crsf", default-features = false, features = ["alloc"], optional = true }
+cu-crsf = { path = "../../components/bridges/cu_crsf", default-features = false, features = ["defmt", "alloc"], optional = true }
+cu-msp-bridge = { path = "../../components/bridges/cu_msp_bridge", default-features = false, features = ["defmt", "alloc"], optional = true }
+cu-msp-lib = { path = "../../components/libs/cu_msp_lib", default-features = false, features = ["bincode"] }
 cu-sdlogger = { path = "../../components/libs/cu_sdlogger", optional = true }
 cu-embedded-registry = { path = "../../components/libs/cu_embedded_registry", default-features = false, features = ["defmt"], optional = true }
 cu-logmon = { path = "../../components/monitors/cu_logmon", default-features = false, features = ["defmt"], optional = true }
@@ -54,7 +56,7 @@ cu29 = { path = "../../core/cu29", default-features = false, features = ["log-le
 cortex-m-rt = { version = "0.7", optional = true }
 defmt-rtt = { version = "1.1.0", optional = true }
 defmt = { version = "1.0", optional = true }
-panic-probe = { version = "1.0.0", optional = true }
+panic-probe = { version = "1.0.0", optional = true, features = ["print-defmt"] }
 buddy_system_allocator = { version = "0.11", default-features = false, features = ["use_spin"], optional = true }
 stm32h7xx-hal = { version = "0.16.0", default-features = false, features = ["stm32h743v", "rt", "defmt", "sdmmc", "sdmmc-fatfs"], optional = true }
 embedded-io = { version = "0.6", optional = true }
@@ -81,9 +83,11 @@ firmware = [
   "dep:cortex-m",
   "dep:cu-bdshot",
   "cu-bdshot/stm32h7",
+  "cu-bdshot/defmt",
   "dep:cu-ahrs",
   "dep:cu-mpu9250",
   "dep:cu-crsf",
+  "dep:cu-msp-bridge",
   "cu-crsf/defmt",
   "dep:cu-embedded-registry",
   "dep:cu-sdlogger",

@@ -15,23 +15,6 @@ pub enum DShotTelemetry {
     Event(u8),
 }
 
-#[cfg(feature = "defmt")]
-impl defmt::Format for DShotTelemetry {
-    fn format(&self, fmt: defmt::Formatter) {
-        match self {
-            Self::EncodingError => defmt::write!(fmt, "Encoding Error"),
-            Self::Erpm(v) => defmt::write!(fmt, "eRPM: {}", v),
-            Self::Amps(v) => defmt::write!(fmt, "Amps: {}", v),
-            Self::Temp(v) => defmt::write!(fmt, "Temp: {}", v),
-            Self::Voltage(v) => defmt::write!(fmt, "Voltage: {}", v),
-            Self::Debug1(v) => defmt::write!(fmt, "Debug 1: {}", v),
-            Self::Debug2(v) => defmt::write!(fmt, "Debug 2: {}", v),
-            Self::Debug3(v) => defmt::write!(fmt, "Debug 3: {}", v),
-            Self::Event(v) => defmt::write!(fmt, "Event: {}", v),
-        }
-    }
-}
-
 /// Command sent from Copper into the ESC bridge.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
 pub struct EscCommand {

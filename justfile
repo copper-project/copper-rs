@@ -212,7 +212,13 @@ wt branch:
   name="$(basename "{{branch}}")"
   dir="$(realpath ../copper-rs.${name})"
   echo "Adding worktree for branch '{{branch}}' at ${dir}"
-  git worktree add "${dir}" "{{branch}}"
+  if git show-ref --verify --quiet "refs/heads/{{branch}}"; then
+    git worktree add "${dir}" "{{branch}}"
+  elif git show-ref --verify --quiet "refs/remotes/origin/{{branch}}"; then
+    git worktree add -b "{{branch}}" "${dir}" "origin/{{branch}}"
+  else
+    git worktree add -b "{{branch}}" "${dir}"
+  fi
   if [[ -n "${ZELLIJ:-}" ]]; then
     zellij action new-tab --name "${name}"
     zellij action write-chars "cd ${dir};reset"

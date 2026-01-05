@@ -46,56 +46,14 @@ fw:
   set -euo pipefail
   cargo run --release --config .cargo/config-firmware.toml --no-default-features --features firmware -p cu-basic-fc --bin quad
 
+# Build firmware-only target using the firmware-specific Cargo config
+fwd:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cargo run --config .cargo/config-firmware.toml --no-default-features --features firmware -p cu-basic-fc --bin quad
+
 # Attach to the already-flashed target without rebuilding or flashing.
 attach:
   #!/usr/bin/env bash
   set -euo pipefail
   probe-rs attach --chip STM32H743VITx --protocol swd ../../target/thumbv7em-none-eabihf/release/quad
-
-# Reset the target without reflashing.
-reset:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  probe-rs reset --chip STM32H743VITx --protocol swd
-
-# Start RTT attach, then reset so logs show from boot (no reflashing).
-reset-attach:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  probe-rs attach --no-catch-hardfault --no-catch-reset --rtt-scan-memory --chip STM32H743VITx --protocol swd ../../target/thumbv7em-none-eabihf/release/quad &
-  attach_pid=$!
-  sleep 0.3
-  probe-rs reset --chip STM32H743VITx --protocol swd
-  wait "$attach_pid"
-
-# Dump fault status and core registers from a locked-up target (no reset).
-crashdump:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  gdb_bin=""
-  for candidate in "${GDB:-}" arm-none-eabi-gdb gdb-multiarch gdb; do
-    if [ -n "$candidate" ] && command -v "$candidate" >/dev/null 2>&1; then
-      gdb_bin="$candidate"
-      break
-    fi
-  done
-  if [ -z "$gdb_bin" ]; then
-    echo "No GDB found (tried \$GDB, arm-none-eabi-gdb, gdb-multiarch, gdb)."
-    exit 1
-  fi
-  probe-rs gdb --chip STM32H743VITx --protocol swd --gdb "$gdb_bin" ../../target/thumbv7em-none-eabihf/release/quad -- \
-    -q -batch \
-    -ex 'set pagination off' \
-    -ex 'set confirm off' \
-    -ex 'monitor halt' \
-    -ex 'info registers' \
-    -ex 'quit'
-  fault_regs="$(probe-rs read b32 0xE000ED24 7 --chip STM32H743VITx --protocol swd)"
-  read -r shcsr cfsr hfsr dfsr mmfar bfar afsr <<< "$fault_regs"
-  printf 'SHCSR: 0x%s\n' "$shcsr"
-  printf 'CFSR:  0x%s\n' "$cfsr"
-  printf 'HFSR:  0x%s\n' "$hfsr"
-  printf 'DFSR:  0x%s\n' "$dfsr"
-  printf 'MMFAR: 0x%s\n' "$mmfar"
-  printf 'BFAR:  0x%s\n' "$bfar"
-  printf 'AFSR:  0x%s\n' "$afsr"
