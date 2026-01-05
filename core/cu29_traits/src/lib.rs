@@ -30,6 +30,8 @@ use compact_str::CompactString;
 use cu29_clock::{PartialCuTimeRange, Tov};
 use serde::{Deserialize, Serialize};
 
+use alloc::boxed::Box;
+use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 #[cfg(not(feature = "std"))]
@@ -38,11 +40,96 @@ use core::fmt::{Debug, Display, Formatter};
 #[cfg(feature = "std")]
 use std::error::Error;
 
+// Type alias for the boxed error type to simplify conditional compilation
+#[cfg(feature = "std")]
+type DynError = dyn std::error::Error + Send + Sync + 'static;
+#[cfg(not(feature = "std"))]
+type DynError = dyn core::error::Error + Send + Sync + 'static;
+
+/// A simple wrapper around String that implements Error trait.
+/// Used for cloning and deserializing CuError causes.
+#[derive(Debug)]
+struct StringError(String);
+
+impl Display for StringError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for StringError {}
+
+#[cfg(not(feature = "std"))]
+impl core::error::Error for StringError {}
+
 /// Common copper Error type.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// This error type stores an optional cause as a boxed dynamic error,
+/// allowing for proper error chaining while maintaining Clone and
+/// Serialize/Deserialize support through custom implementations.
 pub struct CuError {
     message: String,
-    cause: Option<String>,
+    cause: Option<Box<DynError>>,
+}
+
+// Custom Debug implementation that formats cause as string
+impl Debug for CuError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("CuError")
+            .field("message", &self.message)
+            .field("cause", &self.cause.as_ref().map(|e| e.to_string()))
+            .finish()
+    }
+}
+
+// Custom Clone implementation - clones cause as StringError wrapper
+impl Clone for CuError {
+    fn clone(&self) -> Self {
+        CuError {
+            message: self.message.clone(),
+            cause: self
+                .cause
+                .as_ref()
+                .map(|e| Box::new(StringError(e.to_string())) as Box<DynError>),
+        }
+    }
+}
+
+// Custom Serialize - serializes cause as Option<String>
+impl Serialize for CuError {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("CuError", 2)?;
+        state.serialize_field("message", &self.message)?;
+        state.serialize_field("cause", &self.cause.as_ref().map(|e| e.to_string()))?;
+        state.end()
+    }
+}
+
+// Custom Deserialize - deserializes cause as StringError wrapper
+impl<'de> Deserialize<'de> for CuError {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct CuErrorHelper {
+            message: String,
+            cause: Option<String>,
+        }
+
+        let helper = CuErrorHelper::deserialize(deserializer)?;
+        Ok(CuError {
+            message: helper.message,
+            cause: helper
+                .cause
+                .map(|s| Box::new(StringError(s)) as Box<DynError>),
+        })
+    }
 }
 
 impl Display for CuError {
@@ -57,10 +144,20 @@ impl Display for CuError {
 }
 
 #[cfg(not(feature = "std"))]
-impl CoreError for CuError {}
+impl CoreError for CuError {
+    fn source(&self) -> Option<&(dyn CoreError + 'static)> {
+        self.cause
+            .as_deref()
+            .map(|e| e as &(dyn CoreError + 'static))
+    }
+}
 
 #[cfg(feature = "std")]
-impl Error for CuError {}
+impl Error for CuError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        self.cause.as_deref().map(|e| e as &(dyn Error + 'static))
+    }
+}
 
 impl From<&str> for CuError {
     fn from(s: &str) -> CuError {
@@ -81,17 +178,130 @@ impl From<String> for CuError {
 }
 
 impl CuError {
-    pub fn new_with_cause(message: &str, cause: impl Display) -> CuError {
+    /// Creates a new CuError from an interned string index.
+    /// Used by the cu_error! macro.
+    ///
+    /// The index is stored as a placeholder string `[interned:{index}]`.
+    /// Actual string resolution happens at logging time via the unified logger.
+    pub fn new(message_index: usize) -> CuError {
         CuError {
-            message: message.to_string(),
-            cause: Some(cause.to_string()),
+            message: format!("[interned:{}]", message_index),
+            cause: None,
         }
     }
 
+    /// Creates a new CuError with a message and an underlying cause.
+    ///
+    /// # Example
+    /// ```
+    /// use cu29_traits::CuError;
+    ///
+    /// let io_err = std::io::Error::other("io error");
+    /// let err = CuError::new_with_cause("Failed to read file", io_err);
+    /// ```
+    #[cfg(feature = "std")]
+    pub fn new_with_cause<E>(message: &str, cause: E) -> CuError
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        CuError {
+            message: message.to_string(),
+            cause: Some(Box::new(cause)),
+        }
+    }
+
+    /// Creates a new CuError with a message and an underlying cause.
+    #[cfg(not(feature = "std"))]
+    pub fn new_with_cause<E>(message: &str, cause: E) -> CuError
+    where
+        E: core::error::Error + Send + Sync + 'static,
+    {
+        CuError {
+            message: message.to_string(),
+            cause: Some(Box::new(cause)),
+        }
+    }
+
+    /// Adds or replaces the cause with a context string.
+    ///
+    /// This is useful for adding context to errors during propagation.
+    ///
+    /// # Example
+    /// ```
+    /// use cu29_traits::CuError;
+    ///
+    /// let err = CuError::from("base error").add_cause("additional context");
+    /// ```
     pub fn add_cause(mut self, context: &str) -> CuError {
-        self.cause = Some(context.into());
+        self.cause = Some(Box::new(StringError(context.to_string())));
         self
     }
+
+    /// Adds a cause error to this CuError (builder pattern).
+    ///
+    /// # Example
+    /// ```
+    /// use cu29_traits::CuError;
+    ///
+    /// let io_err = std::io::Error::other("io error");
+    /// let err = CuError::from("Operation failed").with_cause(io_err);
+    /// ```
+    #[cfg(feature = "std")]
+    pub fn with_cause<E>(mut self, cause: E) -> CuError
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        self.cause = Some(Box::new(cause));
+        self
+    }
+
+    /// Adds a cause error to this CuError (builder pattern).
+    #[cfg(not(feature = "std"))]
+    pub fn with_cause<E>(mut self, cause: E) -> CuError
+    where
+        E: core::error::Error + Send + Sync + 'static,
+    {
+        self.cause = Some(Box::new(cause));
+        self
+    }
+
+    /// Returns a reference to the underlying cause, if any.
+    pub fn cause(&self) -> Option<&(dyn core::error::Error + Send + Sync + 'static)> {
+        self.cause.as_deref()
+    }
+
+    /// Returns the error message.
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+}
+
+/// Creates a CuError with a message and cause in a single call.
+///
+/// This is a convenience function for use with `.map_err()`.
+///
+/// # Example
+/// ```
+/// use cu29_traits::with_cause;
+///
+/// let result: Result<(), std::io::Error> = Err(std::io::Error::other("io error"));
+/// let cu_result = result.map_err(|e| with_cause("Failed to read file", e));
+/// ```
+#[cfg(feature = "std")]
+pub fn with_cause<E>(message: &str, cause: E) -> CuError
+where
+    E: std::error::Error + Send + Sync + 'static,
+{
+    CuError::new_with_cause(message, cause)
+}
+
+/// Creates a CuError with a message and cause in a single call.
+#[cfg(not(feature = "std"))]
+pub fn with_cause<E>(message: &str, cause: E) -> CuError
+where
+    E: core::error::Error + Send + Sync + 'static,
+{
+    CuError::new_with_cause(message, cause)
 }
 
 // Generic Result type for copper.
@@ -214,12 +424,15 @@ impl<'de, Context> BorrowDecode<'de, Context> for CuCompactString {
 impl defmt::Format for CuError {
     fn format(&self, f: defmt::Formatter) {
         match &self.cause {
-            Some(c) => defmt::write!(
-                f,
-                "CuError {{ message: {}, cause: {} }}",
-                defmt::Display2Format(&self.message),
-                defmt::Display2Format(c),
-            ),
+            Some(c) => {
+                let cause_str = c.to_string();
+                defmt::write!(
+                    f,
+                    "CuError {{ message: {}, cause: {} }}",
+                    defmt::Display2Format(&self.message),
+                    defmt::Display2Format(&cause_str),
+                )
+            }
             None => defmt::write!(
                 f,
                 "CuError {{ message: {}, cause: None }}",
@@ -266,5 +479,118 @@ mod tests {
         let (decoded, _): (CuCompactString, usize) =
             decode_from_slice(&encoded, config).expect("Decoding failed");
         assert_eq!(cstr.0, decoded.0);
+    }
+}
+
+// Tests that require std feature
+#[cfg(all(test, feature = "std"))]
+mod std_tests {
+    use crate::{CuError, with_cause};
+
+    #[test]
+    fn test_cuerror_from_str() {
+        let err = CuError::from("test error");
+        assert_eq!(err.message(), "test error");
+        assert!(err.cause().is_none());
+    }
+
+    #[test]
+    fn test_cuerror_from_string() {
+        let err = CuError::from(String::from("test error"));
+        assert_eq!(err.message(), "test error");
+        assert!(err.cause().is_none());
+    }
+
+    #[test]
+    fn test_cuerror_new_index() {
+        let err = CuError::new(42);
+        assert_eq!(err.message(), "[interned:42]");
+        assert!(err.cause().is_none());
+    }
+
+    #[test]
+    fn test_cuerror_new_with_cause() {
+        let io_err = std::io::Error::other("io error");
+        let err = CuError::new_with_cause("wrapped error", io_err);
+        assert_eq!(err.message(), "wrapped error");
+        assert!(err.cause().is_some());
+        assert!(err.cause().unwrap().to_string().contains("io error"));
+    }
+
+    #[test]
+    fn test_cuerror_add_cause() {
+        let err = CuError::from("base error").add_cause("additional context");
+        assert_eq!(err.message(), "base error");
+        assert!(err.cause().is_some());
+        assert_eq!(err.cause().unwrap().to_string(), "additional context");
+    }
+
+    #[test]
+    fn test_cuerror_with_cause_method() {
+        let io_err = std::io::Error::other("io error");
+        let err = CuError::from("base error").with_cause(io_err);
+        assert_eq!(err.message(), "base error");
+        assert!(err.cause().is_some());
+    }
+
+    #[test]
+    fn test_cuerror_with_cause_free_function() {
+        let io_err = std::io::Error::other("io error");
+        let err = with_cause("wrapped", io_err);
+        assert_eq!(err.message(), "wrapped");
+        assert!(err.cause().is_some());
+    }
+
+    #[test]
+    fn test_cuerror_clone() {
+        let io_err = std::io::Error::other("io error");
+        let err = CuError::new_with_cause("test", io_err);
+        let cloned = err.clone();
+        assert_eq!(err.message(), cloned.message());
+        // Cause string representation should match
+        assert_eq!(
+            err.cause().map(|c| c.to_string()),
+            cloned.cause().map(|c| c.to_string())
+        );
+    }
+
+    #[test]
+    fn test_cuerror_serialize_deserialize_json() {
+        let io_err = std::io::Error::other("io error");
+        let err = CuError::new_with_cause("test", io_err);
+
+        let serialized = serde_json::to_string(&err).unwrap();
+        let deserialized: CuError = serde_json::from_str(&serialized).unwrap();
+
+        assert_eq!(err.message(), deserialized.message());
+        // Cause should be preserved as string
+        assert!(deserialized.cause().is_some());
+    }
+
+    #[test]
+    fn test_cuerror_serialize_deserialize_no_cause() {
+        let err = CuError::from("simple error");
+
+        let serialized = serde_json::to_string(&err).unwrap();
+        let deserialized: CuError = serde_json::from_str(&serialized).unwrap();
+
+        assert_eq!(err.message(), deserialized.message());
+        assert!(deserialized.cause().is_none());
+    }
+
+    #[test]
+    fn test_cuerror_display() {
+        let err = CuError::from("test error").add_cause("some context");
+        let display = format!("{}", err);
+        assert!(display.contains("test error"));
+        assert!(display.contains("some context"));
+    }
+
+    #[test]
+    fn test_cuerror_debug() {
+        let err = CuError::from("test error").add_cause("some context");
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("test error"));
+        assert!(debug.contains("some context"));
     }
 }

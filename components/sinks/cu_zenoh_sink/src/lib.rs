@@ -30,7 +30,7 @@ pub struct ZenohContext {
 }
 
 fn cu_error(msg: &str, error: ZenohError) -> CuError {
-    CuError::new_with_cause(msg, error.as_ref())
+    CuError::from(msg).add_cause(&error.to_string())
 }
 
 fn cu_error_map(msg: &str) -> impl FnOnce(ZenohError) -> CuError + '_ {

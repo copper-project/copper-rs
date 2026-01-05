@@ -173,7 +173,7 @@ impl CuTask for DynThreshold {
         {
             let mut dst = handle
                 .lock()
-                .map_err(|e| CuError::new_with_cause("Failed to lock buffer", e))?;
+                .map_err(|e| CuError::from("Failed to lock buffer").add_cause(&e.to_string()))?;
             let dst = dst.deref_mut().deref_mut();
 
             integral_image(src, &mut self.integral_img, self.width, self.height);
