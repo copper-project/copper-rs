@@ -59,7 +59,7 @@ buddy_system_allocator = { version = "0.11", default-features = false, features 
 stm32h7xx-hal = { version = "0.16.0", default-features = false, features = ["stm32h743v", "rt", "defmt", "sdmmc", "sdmmc-fatfs"], optional = true }
 embedded-io = { version = "0.6", optional = true }
 embedded-hal = { version = "0.2.7", optional = true }
-embedded-alloc = { version = "0.5", optional = true }
+embedded-alloc = { version = "0.7", optional = true }
 # Keep aligned with stm32h7xx-hal SDMMC support (pulls embedded-sdmmc 0.5).
 embedded-sdmmc = { version = "0.5", default-features = false, optional = true }
 cortex-m = { version = "0.7", features = ["critical-section-single-core"], optional = true }
