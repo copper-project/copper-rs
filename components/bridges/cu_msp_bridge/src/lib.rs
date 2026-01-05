@@ -172,10 +172,16 @@ where
 
     fn poll_serial(&mut self) -> CuResult<()> {
         loop {
+            if self.pending_responses.0.len() >= MAX_RESPONSES_PER_BATCH {
+                break;
+            }
             match self.serial.read(&mut self.read_buffer) {
                 Ok(0) => break,
                 Ok(n) => {
                     for &byte in &self.read_buffer[..n] {
+                        if self.pending_responses.0.len() >= MAX_RESPONSES_PER_BATCH {
+                            break;
+                        }
                         match self.parser.parse(byte) {
                             Ok(Some(packet)) => {
                                 let cmd = packet.cmd;
@@ -262,7 +268,8 @@ where
         let _ = tx_channels;
         let _ = rx_channels;
         let _ = config;
-        Ok(Self::from_serial(resources.serial.0))
+        let bridge = Self::from_serial(resources.serial.0);
+        Ok(bridge)
     }
 
     fn preprocess(&mut self, _clock: &RobotClock) -> CuResult<()> {

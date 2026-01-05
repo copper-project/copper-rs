@@ -10,7 +10,6 @@ use cortex_m::{asm, peripheral::SCB};
 use cortex_m_rt::{ExceptionFrame, entry, exception};
 use cu_sensor_payloads::ImuPayload;
 use cu29::prelude::*;
-use defmt::info;
 use defmt_rtt as _;
 use panic_probe as _;
 use spin::Mutex;
@@ -25,9 +24,43 @@ pub use resources::{
 #[global_allocator]
 static ALLOC: StdHeap<32> = StdHeap::empty();
 static mut HEAP_MEM: [u8; 256 * 1024] = [0; 256 * 1024];
+const HARDFAULT_MAGIC: u32 = 0xDEAD_BEEF;
+
+#[repr(C)]
+struct HardFaultSnapshot {
+    magic: u32,
+    pc: u32,
+    lr: u32,
+    sp: u32,
+    cfsr: u32,
+    hfsr: u32,
+    dfsr: u32,
+    mmfar: u32,
+    bfar: u32,
+    afsr: u32,
+}
+
+#[unsafe(link_section = ".uninit.cu_fault")]
+static mut LAST_HARDFAULT: HardFaultSnapshot = HardFaultSnapshot {
+    magic: 0,
+    pc: 0,
+    lr: 0,
+    sp: 0,
+    cfsr: 0,
+    hfsr: 0,
+    dfsr: 0,
+    mmfar: 0,
+    bfar: 0,
+    afsr: 0,
+};
 
 #[copper_runtime(config = "copperconfig.ron")]
 struct FlightControllerApp {}
+
+#[defmt::panic_handler]
+fn defmt_panic() -> ! {
+    panic_probe::hard_fault()
+}
 
 // Dummy IMU source placeholder.
 pub struct DummyImu;
@@ -62,6 +95,7 @@ impl CuTask for DummyImu {
 
 #[entry]
 fn main() -> ! {
+    report_last_fault();
     init_heap();
     defmt::info!("Heap initialized");
     log_heap_stats("after-init");
@@ -76,7 +110,8 @@ fn main() -> ! {
     let mut resources = match FlightControllerApp::init_resources() {
         Ok(resources) => resources,
         Err(e) => {
-            defmt::error!("Resource init failed: {:?}", e);
+            let _ = e;
+            defmt::error!("Resource init failed");
             loop {
                 asm::wfi();
             }
@@ -88,7 +123,8 @@ fn main() -> ! {
     let logger = match resources.resources.take(logger_key) {
         Ok(logger) => logger.0,
         Err(e) => {
-            defmt::error!("Logger resource missing: {:?}", e);
+            let _ = e;
+            defmt::error!("Logger resource missing");
             loop {
                 asm::wfi();
             }
@@ -97,20 +133,21 @@ fn main() -> ! {
     defmt::info!("Logger resource acquired");
 
     // Spin up Copper runtime with CRSF -> mapper -> sink graph.
-    info!("Building Copper runtime clock");
+    defmt::info!("Building Copper runtime clock");
     let clock = build_clock();
-    info!("Clock ready, constructing app");
+    defmt::info!("Clock ready, constructing app");
     let writer = Arc::new(Mutex::new(logger));
 
     match FlightControllerApp::new_with_resources(clock, writer, resources) {
         Ok(mut app) => {
-            info!("App constructed, starting Copper FC (H743, CRSF on UART6)...");
+            defmt::info!("App constructed, starting Copper FC (H743, CRSF on UART6)...");
             log_heap_stats("before-run");
             let _ = <FlightControllerApp as CuApplication<LogStorage, Logger>>::run(&mut app);
-            info!("Copper runtime returned unexpectedly");
+            defmt::info!("Copper runtime returned unexpectedly");
         }
         Err(e) => {
-            defmt::error!("App init failed: {:?}", e);
+            let _ = e;
+            defmt::error!("App init failed");
         }
     }
     loop {
@@ -135,21 +172,49 @@ fn build_clock() -> RobotClock {
     RobotClock::new_with_rtc(read_rtc_ns, sleep_ns)
 }
 
+fn report_last_fault() {
+    unsafe {
+        if LAST_HARDFAULT.magic == HARDFAULT_MAGIC {
+            defmt::error!(
+                "Last HardFault: pc=0x{:x} lr=0x{:x} sp=0x{:x}",
+                LAST_HARDFAULT.pc,
+                LAST_HARDFAULT.lr,
+                LAST_HARDFAULT.sp
+            );
+            defmt::error!(
+                "Last Fault status: CFSR=0x{:x} HFSR=0x{:x} DFSR=0x{:x} MMFAR=0x{:x} BFAR=0x{:x} AFSR=0x{:x}",
+                LAST_HARDFAULT.cfsr,
+                LAST_HARDFAULT.hfsr,
+                LAST_HARDFAULT.dfsr,
+                LAST_HARDFAULT.mmfar,
+                LAST_HARDFAULT.bfar,
+                LAST_HARDFAULT.afsr
+            );
+            LAST_HARDFAULT.magic = 0;
+        }
+    }
+}
+
 fn init_heap() {
     unsafe {
         let start = core::ptr::addr_of_mut!(HEAP_MEM) as usize;
         let size = core::mem::size_of::<[u8; 256 * 1024]>();
-        defmt::info!("Heap region start=0x{:x} size={}", start, size);
         ALLOC.lock().init(start, size);
+        defmt::info!("Heap region start={} size={}", start, size);
     }
 }
 
-fn log_heap_stats(tag: &str) {
+pub(crate) fn heap_stats() -> (usize, usize, usize, usize) {
     let heap = ALLOC.lock();
     let user = heap.stats_alloc_user();
     let allocated = heap.stats_alloc_actual();
     let total = heap.stats_total_bytes();
     let free = total.saturating_sub(allocated);
+    (user, allocated, total, free)
+}
+
+fn log_heap_stats(tag: &str) {
+    let (user, allocated, total, free) = heap_stats();
     defmt::info!(
         "Heap stats({}): user={} alloc={} total={} free={}",
         tag,
@@ -169,21 +234,20 @@ unsafe fn HardFault(ef: &ExceptionFrame) -> ! {
     let mmfar = scb.mmfar.read();
     let bfar = scb.bfar.read();
     let afsr = scb.afsr.read();
-    defmt::error!(
-        "HardFault: pc=0x{:x} lr=0x{:x} sp=0x{:x}",
-        ef.pc(),
-        ef.lr(),
-        cortex_m::register::msp::read()
-    );
-    defmt::error!(
-        "Fault status: CFSR=0x{:x} HFSR=0x{:x} DFSR=0x{:x} MMFAR=0x{:x} BFAR=0x{:x} AFSR=0x{:x}",
-        cfsr,
-        hfsr,
-        dfsr,
-        mmfar,
-        bfar,
-        afsr
-    );
+    unsafe {
+        LAST_HARDFAULT = HardFaultSnapshot {
+            magic: HARDFAULT_MAGIC,
+            pc: ef.pc(),
+            lr: ef.lr(),
+            sp: cortex_m::register::msp::read(),
+            cfsr,
+            hfsr,
+            dfsr,
+            mmfar,
+            bfar,
+            afsr,
+        };
+    }
     loop {
         asm::bkpt();
     }
