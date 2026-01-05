@@ -636,10 +636,6 @@ fn visit_table(
     }
 }
 
-fn is_auto_input_label(label: &str) -> bool {
-    label == "in" || label.starts_with("in.")
-}
-
 fn reorder_auto_input_rows(
     nodes: &mut [NodeRender],
     topology: &config::RenderTopology,
@@ -648,10 +644,8 @@ fn reorder_auto_input_rows(
     graph: &VisualGraph,
 ) {
     let mut inputs_by_id = HashMap::new();
-    let mut flavor_by_id = HashMap::new();
     for node in &topology.nodes {
         inputs_by_id.insert(node.id.clone(), node.inputs.clone());
-        flavor_by_id.insert(node.id.clone(), node.flavor);
     }
 
     let mut order_info_by_dst: HashMap<String, HashMap<String, (usize, f64)>> = HashMap::new();
@@ -659,9 +653,6 @@ fn reorder_auto_input_rows(
         let Some(dst_port) = cnx.dst_port.as_ref() else {
             continue;
         };
-        if !is_auto_input_label(dst_port) {
-            continue;
-        }
         let (Some(src_handle), Some(dst_handle)) =
             (node_handles.get(&cnx.src), node_handles.get(&cnx.dst))
         else {
@@ -699,22 +690,16 @@ fn reorder_auto_input_rows(
         let Some(node_id) = handle_to_id.get(&node.handle) else {
             continue;
         };
-        if !matches!(flavor_by_id.get(node_id), Some(config::Flavor::Task)) {
-            continue;
-        }
         let Some(inputs) = inputs_by_id.get(node_id) else {
             continue;
         };
         if inputs.len() <= 1 {
             continue;
         }
-        if inputs.iter().any(|label| !is_auto_input_label(label)) {
-            continue;
-        }
         let Some(order_info) = order_info_by_dst.get(node_id) else {
             continue;
         };
-        if inputs.iter().any(|label| !order_info.contains_key(label)) {
+        if order_info.len() < 2 {
             continue;
         }
 
@@ -722,7 +707,7 @@ fn reorder_auto_input_rows(
             .iter()
             .enumerate()
             .map(|(idx, label)| {
-                let (group_rank, src_y) = order_info.get(label).copied().unwrap_or((1, 0.0));
+                let (group_rank, src_y) = order_info.get(label).copied().unwrap_or((2, 0.0));
                 (group_rank, src_y, idx, label.clone())
             })
             .collect();
