@@ -673,7 +673,13 @@ fn reorder_auto_input_rows(
         let span_max_x = src_pos.x.max(dst_pos.x);
         let is_self = src_handle == dst_handle;
         let has_intermediate = !is_self
-            && span_has_intermediate(node_bounds, span_min_x, span_max_x, *src_handle, *dst_handle);
+            && span_has_intermediate(
+                node_bounds,
+                span_min_x,
+                span_max_x,
+                *src_handle,
+                *dst_handle,
+            );
         let is_reverse = src_pos.x > dst_pos.x;
         let is_detour = !is_self && (is_reverse || has_intermediate);
         let detour_above = is_detour && !is_reverse;
