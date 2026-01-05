@@ -3,7 +3,7 @@
 use crate::GreenLed;
 use crate::messages::{BodyCommand, BodyRateSetpoint, ControlInputs, FlightMode};
 use cu_ahrs::AhrsPose;
-use cu_bdshot::{EscCommand, EscTelemetry};
+use cu_bdshot::EscCommand;
 use cu_crsf::messages::RcChannelsPayload;
 use cu_msp_bridge::{MspRequestBatch, MspResponseBatch};
 use cu_msp_lib::structs::{MspDisplayPort, MspRequest};
@@ -173,43 +173,6 @@ impl CuTask for ThrottleToEsc {
         Ok(())
     }
 }
-
-pub struct TelemetryLogger<const ESC: usize> {}
-
-impl<const ESC: usize> Freezable for TelemetryLogger<ESC> {}
-
-impl<const ESC: usize> CuSinkTask for TelemetryLogger<ESC> {
-    type Resources<'r> = ();
-    type Input<'m> = CuMsg<EscTelemetry>;
-
-    fn new_with(
-        _config: Option<&ComponentConfig>,
-        _resources: Self::Resources<'_>,
-    ) -> CuResult<Self>
-    where
-        Self: Sized,
-    {
-        Ok(Self {})
-    }
-
-    fn process<'i>(&mut self, clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
-        if let Some(payload) = input.payload() {
-            info_rl!(&LOG_TELEMETRY, clock, input.tov, {
-                if let Some(sample) = payload.sample {
-                    defmt::info!("ESC{} telemetry {}", ESC, sample);
-                } else {
-                    defmt::info!("ESC{} telemetry missing", ESC);
-                }
-            });
-        }
-        Ok(())
-    }
-}
-
-pub type TelemetryLogger0 = TelemetryLogger<0>;
-pub type TelemetryLogger1 = TelemetryLogger<1>;
-pub type TelemetryLogger2 = TelemetryLogger<2>;
-pub type TelemetryLogger3 = TelemetryLogger<3>;
 
 pub struct MspNoopSource;
 

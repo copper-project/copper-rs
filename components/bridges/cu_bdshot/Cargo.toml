@@ -25,11 +25,10 @@ cortex-m = "0.7.7"
 serde = { workspace = true, features = ["derive"] }
 bincode = { workspace = true, features = ["alloc"] }
 spin = { workspace = true }
-defmt = { version = "1.0.1", optional = true }
 
 [features]
 default = []
 rp2350 = ["dep:rp235x-hal", "dep:pio", "dep:pio-proc"]
-defmt = ["dep:defmt", "stm32h7xx-hal/defmt"]
+defmt = ["stm32h7xx-hal/defmt"]
 stm32h7 = ["dep:stm32h7xx-hal", "defmt"]
 messages-only = []
