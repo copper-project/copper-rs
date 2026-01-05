@@ -2229,12 +2229,8 @@ mod tests {
     fn test_render_topology_multi_input_ports() {
         let mut config = CuConfig::default();
         let graph = config.get_graph_mut(None).unwrap();
-        let src1 = graph
-            .add_node(Node::new("src1", "tasks::Source1"))
-            .unwrap();
-        let src2 = graph
-            .add_node(Node::new("src2", "tasks::Source2"))
-            .unwrap();
+        let src1 = graph.add_node(Node::new("src1", "tasks::Source1")).unwrap();
+        let src2 = graph.add_node(Node::new("src2", "tasks::Source2")).unwrap();
         let dst = graph.add_node(Node::new("dst", "tasks::Dst")).unwrap();
         graph.connect(src1, dst, "msg::A").unwrap();
         graph.connect(src2, dst, "msg::B").unwrap();
