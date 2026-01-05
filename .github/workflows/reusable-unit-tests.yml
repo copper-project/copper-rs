@@ -21,17 +21,23 @@ jobs:
 
     runs-on: ${{ matrix.os }}
 
+    defaults:
+      run:
+        shell: bash
+
     env:
       CARGO_TERM_COLOR: always
       BASE_FEATURES: mock,image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      WORKSPACE_SCOPE: ${{ matrix.os == 'windows-latest' && 'core' || 'workspace' }}
 
     strategy:
       matrix:
-        # os: [ ubuntu-latest, macos-latest, windows-latest ]
-        os: [ ubuntu-latest, macos-latest ]
+        os: [ ubuntu-latest, macos-latest, windows-latest ]
         mode: [ debug, release, cuda-release ]
         exclude:
           - os: macos-latest
+            mode: cuda-release
+          - os: windows-latest
             mode: cuda-release
 
     steps:
@@ -54,8 +60,16 @@ jobs:
       - name: Install latest nextest
         uses: taiki-e/install-action@nextest
 
+      - name: Set workspace scope
+        run: |
+          if [[ "$WORKSPACE_SCOPE" == "workspace" ]]; then
+            echo "WORKSPACE_FLAG=--workspace" >> $GITHUB_ENV
+          else
+            echo "WORKSPACE_FLAG=" >> $GITHUB_ENV
+          fi
+
       - name: Install winget
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && env.WORKSPACE_SCOPE == 'workspace'
         uses: Cyberboss/install-winget@v1
 
       - name: Free Disk Space (Ubuntu)
@@ -83,7 +97,8 @@ jobs:
           sudo chown -R "$USER:$USER" /mnt/cargo-home /mnt/cargo-target /mnt/tmp
 
       - name: Install dependencies (Windows)
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && env.WORKSPACE_SCOPE == 'workspace'
+        shell: pwsh
         run: |
           # Verify winget availability
           if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
@@ -182,14 +197,9 @@ jobs:
           use-github-cache: false
           use-local-cache: false
 
-      - name: Set build mode (Linux / MacOS)
-        if: runner.os != 'Windows' && ( matrix.mode == 'release' || matrix.mode == 'cuda-release' )
+      - name: Set build mode
+        if: matrix.mode == 'release' || matrix.mode == 'cuda-release'
         run: echo "RELEASE_FLAG=--release" >> $GITHUB_ENV
-
-      - name: Set build mode (Windows)
-        if: runner.os == 'Windows' && ( matrix.mode == 'release' || matrix.mode == 'cuda-release' )
-        run: |
-          Add-Content -Path $env:GITHUB_ENV -Value "RELEASE_FLAG=--release"
 
       - name: Set features (Linux)
         if: runner.os == 'Linux'
@@ -212,25 +222,21 @@ jobs:
       - name: Set features (Windows)
         if: runner.os == 'Windows'
         run: |
-          $features = if ($env:matrix_mode -eq 'cuda-release') {
-            '--features mock,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode,cuda'
-          } else {
-            '--features mock,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode'
-          }
-          Add-Content -Path $env:GITHUB_ENV -Value "FEATURES_FLAG=$features"
+          echo "FEATURES_FLAG=" >> $GITHUB_ENV
 
       - name: Detect embedded-only crates
+        if: env.WORKSPACE_SCOPE == 'workspace'
         run: |
           EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
 
       # Run Clippy and build
       - name: Run clippy on (${{ matrix.os }} | ${{matrix.mode}})
-        run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG --workspace --all-targets $EMBEDDED_EXCLUDES -- --deny warnings
+        run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $EMBEDDED_EXCLUDES -- --deny warnings
       - name: Run clippy with all features on (${{ matrix.os }} | ${{matrix.mode}})
-        run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG --workspace --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES -- --deny warnings
+        run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES -- --deny warnings
       - name: Run build with all features on (${{ matrix.os }} | ${{matrix.mode}})
-        run: cargo +${{ inputs.toolchain }} build $RELEASE_FLAG --workspace --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES
+        run: cargo +${{ inputs.toolchain }} build $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES
 
       - name: Verify GStreamer linkage (macOS)
         if: runner.os == 'macOS'
@@ -248,26 +254,26 @@ jobs:
 
       - name: Run doctests on (${{ matrix.os }} | debug)
         if: matrix.mode == 'debug'
-        run: cargo +${{ inputs.toolchain }} test --doc --workspace $EMBEDDED_EXCLUDES --quiet
+        run: cargo +${{ inputs.toolchain }} test --doc $WORKSPACE_FLAG $EMBEDDED_EXCLUDES --quiet
 
       # Run Unit Tests
       - name: Run Unit Tests on (${{ matrix.os }} | ${{matrix.mode}})
-        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets --workspace $EMBEDDED_EXCLUDES
+        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $EMBEDDED_EXCLUDES
       - name: Run Unit Tests with all features on (${{ matrix.os }} | ${{matrix.mode}})
-        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets --workspace $FEATURES_FLAG $EMBEDDED_EXCLUDES
+        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
 
       # Run Project Generation Tests
       - name: Install cargo-generate on (${{ matrix.os }} | debug)
-        if: matrix.mode == 'debug'
+        if: matrix.mode == 'debug' && env.WORKSPACE_SCOPE == 'workspace'
         run: cargo +${{ inputs.toolchain }} install cargo-generate
 
       - name: Generate new project on (${{ matrix.os }} | debug)
-        if: matrix.mode == 'debug'
+        if: matrix.mode == 'debug' && env.WORKSPACE_SCOPE == 'workspace'
         run: |
           cd templates
           cargo +${{ inputs.toolchain }} generate -p cu_full --name test_project --destination . -d copper_source=local -d copper_root_path=../.. --silent
       - name: Build generated project on (${{ matrix.os }} | debug)
-        if: matrix.mode == 'debug'
+        if: matrix.mode == 'debug' && env.WORKSPACE_SCOPE == 'workspace'
         run: |
           cd templates/test_project
           cargo +${{ inputs.toolchain }} build
