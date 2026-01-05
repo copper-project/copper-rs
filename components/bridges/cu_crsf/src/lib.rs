@@ -177,7 +177,7 @@ where
 
     fn receive<'a, Payload>(
         &mut self,
-        _clock: &RobotClock,
+        clock: &RobotClock,
         channel: &'static BridgeChannel<<Self::Rx as BridgeChannelSet>::Id, Payload>,
         msg: &mut CuMsg<Payload>,
     ) -> CuResult<()>
@@ -185,6 +185,7 @@ where
         Payload: CuMsgPayload + 'a,
     {
         self.update()?;
+        msg.tov = Tov::Time(clock.now());
         match channel.id() {
             RxId::LqRx => {
                 if let Some(lq) = self.last_lq.as_ref() {

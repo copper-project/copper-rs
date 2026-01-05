@@ -300,13 +300,14 @@ where
 
     fn receive<'a, Payload>(
         &mut self,
-        _clock: &RobotClock,
+        clock: &RobotClock,
         channel: &'static BridgeChannel<<Self::Rx as BridgeChannelSet>::Id, Payload>,
         msg: &mut CuMsg<Payload>,
     ) -> CuResult<()>
     where
         Payload: CuMsgPayload + 'a,
     {
+        msg.tov = Tov::Time(clock.now());
         match channel.id() {
             RxId::Responses => {
                 let response_msg: &mut CuMsg<MspResponseBatch> = msg.downcast_mut()?;
