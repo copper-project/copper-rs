@@ -1740,28 +1740,51 @@ pub(crate) fn build_render_topology(graph: &CuGraph, bridges: &[BridgeConfig]) -
         });
     }
 
+    let mut auto_input_counts = vec![0usize; nodes.len()];
+    for edge in graph.0.edge_references() {
+        let cnx = edge.weight();
+        if let Some(&idx) = node_lookup.get(&cnx.dst)
+            && nodes[idx].flavor == Flavor::Task
+            && cnx.dst_channel.is_none()
+        {
+            auto_input_counts[idx] += 1;
+        }
+    }
+
+    let mut next_auto_input = vec![0usize; nodes.len()];
     let mut connections = Vec::new();
     for edge in graph.0.edge_references() {
         let cnx = edge.weight();
+        let src_port = cnx.src_channel.clone();
+        let mut dst_port = cnx.dst_channel.clone();
+
         if let Some(&idx) = node_lookup.get(&cnx.src) {
             let node = &mut nodes[idx];
-            if node.flavor == Flavor::Task && cnx.src_channel.is_none() && node.outputs.is_empty() {
-                node.outputs.push("out0".to_string());
+            if node.flavor == Flavor::Task && src_port.is_none() && node.outputs.is_empty() {
+                node.outputs.push("out".to_string());
             }
         }
         if let Some(&idx) = node_lookup.get(&cnx.dst) {
             let node = &mut nodes[idx];
-            if node.flavor == Flavor::Task && cnx.dst_channel.is_none() {
-                let next = format!("in{}", node.inputs.len());
-                node.inputs.push(next);
+            if node.flavor == Flavor::Task && dst_port.is_none() {
+                let count = auto_input_counts[idx];
+                let next = if count <= 1 {
+                    "in".to_string()
+                } else {
+                    let next = format!("in.{}", next_auto_input[idx]);
+                    next_auto_input[idx] += 1;
+                    next
+                };
+                node.inputs.push(next.clone());
+                dst_port = Some(next);
             }
         }
 
         connections.push(RenderConnection {
             src: cnx.src.clone(),
-            src_port: cnx.src_channel.clone(),
+            src_port,
             dst: cnx.dst.clone(),
-            dst_port: cnx.dst_channel.clone(),
+            dst_port,
             msg: cnx.msg.clone(),
         });
     }
@@ -2200,6 +2223,35 @@ mod tests {
             config.monitor.as_ref().unwrap().config.as_ref().unwrap().0["toto"].0,
             4u8.into()
         );
+    }
+
+    #[test]
+    #[cfg(feature = "std")]
+    fn test_render_topology_multi_input_ports() {
+        let mut config = CuConfig::default();
+        let graph = config.get_graph_mut(None).unwrap();
+        let src1 = graph.add_node(Node::new("src1", "tasks::Source1")).unwrap();
+        let src2 = graph.add_node(Node::new("src2", "tasks::Source2")).unwrap();
+        let dst = graph.add_node(Node::new("dst", "tasks::Dst")).unwrap();
+        graph.connect(src1, dst, "msg::A").unwrap();
+        graph.connect(src2, dst, "msg::B").unwrap();
+
+        let topology = build_render_topology(graph, &[]);
+        let dst_node = topology
+            .nodes
+            .iter()
+            .find(|node| node.id == "dst")
+            .expect("missing dst node");
+        assert_eq!(dst_node.inputs.len(), 2);
+
+        let mut dst_ports: Vec<_> = topology
+            .connections
+            .iter()
+            .filter(|cnx| cnx.dst == "dst")
+            .map(|cnx| cnx.dst_port.as_deref().expect("missing dst port"))
+            .collect();
+        dst_ports.sort();
+        assert_eq!(dst_ports, vec!["in.0", "in.1"]);
     }
 
     #[test]

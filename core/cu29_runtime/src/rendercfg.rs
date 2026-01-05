@@ -361,6 +361,9 @@ fn build_section_layout(
     graph.do_it(false, false, false, &mut null_backend);
     scale_layout_positions(&mut graph);
 
+    let node_bounds = collect_node_bounds(&nodes, &graph);
+    reorder_auto_input_rows(&mut nodes, &topology, &node_handles, &node_bounds, &graph);
+
     let mut min = Point::new(f64::INFINITY, f64::INFINITY);
     let mut max = Point::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
     for node in &nodes {
@@ -632,6 +635,143 @@ fn visit_table(
     }
 }
 
+fn reorder_auto_input_rows(
+    nodes: &mut [NodeRender],
+    topology: &config::RenderTopology,
+    node_handles: &HashMap<String, NodeHandle>,
+    node_bounds: &[NodeBounds],
+    graph: &VisualGraph,
+) {
+    let mut inputs_by_id = HashMap::new();
+    for node in &topology.nodes {
+        inputs_by_id.insert(node.id.clone(), node.inputs.clone());
+    }
+
+    let mut order_info_by_dst: HashMap<String, HashMap<String, (usize, f64)>> = HashMap::new();
+    for cnx in &topology.connections {
+        let Some(dst_port) = cnx.dst_port.as_ref() else {
+            continue;
+        };
+        let (Some(src_handle), Some(dst_handle)) =
+            (node_handles.get(&cnx.src), node_handles.get(&cnx.dst))
+        else {
+            continue;
+        };
+        let src_pos = graph.element(*src_handle).position().center();
+        let dst_pos = graph.element(*dst_handle).position().center();
+        let span_min_x = src_pos.x.min(dst_pos.x);
+        let span_max_x = src_pos.x.max(dst_pos.x);
+        let is_self = src_handle == dst_handle;
+        let has_intermediate = !is_self
+            && span_has_intermediate(
+                node_bounds,
+                span_min_x,
+                span_max_x,
+                *src_handle,
+                *dst_handle,
+            );
+        let is_reverse = src_pos.x > dst_pos.x;
+        let is_detour = !is_self && (is_reverse || has_intermediate);
+        let detour_above = is_detour && !is_reverse;
+        let group_rank = if detour_above { 0 } else { 1 };
+        order_info_by_dst
+            .entry(cnx.dst.clone())
+            .or_default()
+            .insert(dst_port.clone(), (group_rank, src_pos.y));
+    }
+
+    let mut handle_to_id = HashMap::new();
+    for (id, handle) in node_handles {
+        handle_to_id.insert(*handle, id.clone());
+    }
+
+    for node in nodes {
+        let Some(node_id) = handle_to_id.get(&node.handle) else {
+            continue;
+        };
+        let Some(inputs) = inputs_by_id.get(node_id) else {
+            continue;
+        };
+        if inputs.len() <= 1 {
+            continue;
+        }
+        let Some(order_info) = order_info_by_dst.get(node_id) else {
+            continue;
+        };
+        if order_info.len() < 2 {
+            continue;
+        }
+
+        let mut indexed: Vec<_> = inputs
+            .iter()
+            .enumerate()
+            .map(|(idx, label)| {
+                let (group_rank, src_y) = order_info.get(label).copied().unwrap_or((2, 0.0));
+                (group_rank, src_y, idx, label.clone())
+            })
+            .collect();
+        indexed.sort_by(|a, b| {
+            a.0.cmp(&b.0)
+                .then_with(|| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal))
+                .then_with(|| a.2.cmp(&b.2))
+        });
+
+        let mut order = HashMap::new();
+        for (pos, (_, _, _, label)) in indexed.into_iter().enumerate() {
+            order.insert(label, pos);
+        }
+        reorder_input_rows(&mut node.table, &order);
+    }
+}
+
+fn reorder_input_rows(table: &mut TableNode, order: &HashMap<String, usize>) {
+    let TableNode::Array(rows) = table else {
+        return;
+    };
+    if rows.len() < 2 {
+        return;
+    }
+    let TableNode::Array(columns) = &mut rows[1] else {
+        return;
+    };
+    if columns.is_empty() {
+        return;
+    }
+    let TableNode::Array(input_rows) = &mut columns[0] else {
+        return;
+    };
+    if input_rows.len() <= 2 {
+        return;
+    }
+
+    let header = input_rows[0].clone();
+    let mut inputs = Vec::new();
+    let mut placeholders = Vec::new();
+    for row in input_rows.iter().skip(1) {
+        match row {
+            TableNode::Cell(cell) if cell.port.is_some() => {
+                let label = cell.label();
+                let key = *order.get(&label).unwrap_or(&usize::MAX);
+                inputs.push((key, row.clone()));
+            }
+            _ => placeholders.push(row.clone()),
+        }
+    }
+    if inputs.len() <= 1 {
+        return;
+    }
+    inputs.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut new_rows = Vec::with_capacity(input_rows.len());
+    new_rows.push(header);
+    for (_, row) in inputs {
+        new_rows.push(row);
+    }
+    for row in placeholders {
+        new_rows.push(row);
+    }
+    *input_rows = new_rows;
+}
+
 /// Render each section and merge them into a single SVG canvas.
 fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
     let mut svg = SvgWriter::new();
@@ -651,7 +791,7 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
         } else {
             0.0
         };
-        let node_bounds = collect_node_bounds(section);
+        let node_bounds = collect_node_bounds(&section.nodes, &section.graph);
         let mut expanded_bounds = (min, max);
         let mut edge_paths: Vec<Vec<BezierSegment>> = Vec::with_capacity(section.edges.len());
         let mut edge_points: Vec<(Point, Point)> = Vec::with_capacity(section.edges.len());
@@ -686,7 +826,11 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
                 };
                 detour_above[idx] = above;
                 detour_base_y[idx] = base_y;
-                let plan = BackEdgePlan { idx, span };
+                let plan = BackEdgePlan {
+                    idx,
+                    span,
+                    order_y: dst_point.y,
+                };
                 if above {
                     back_plans_above.push(plan);
                 } else {
@@ -2132,6 +2276,7 @@ fn resolve_anchor(section: &SectionLayout, node: NodeHandle, port: Option<&Strin
 struct BackEdgePlan {
     idx: usize,
     span: f64,
+    order_y: f64,
 }
 
 struct NodeBounds {
@@ -2143,10 +2288,10 @@ struct NodeBounds {
     center_x: f64,
 }
 
-fn collect_node_bounds(section: &SectionLayout) -> Vec<NodeBounds> {
-    let mut bounds = Vec::with_capacity(section.nodes.len());
-    for node in &section.nodes {
-        let pos = section.graph.element(node.handle).position();
+fn collect_node_bounds(nodes: &[NodeRender], graph: &VisualGraph) -> Vec<NodeBounds> {
+    let mut bounds = Vec::with_capacity(nodes.len());
+    for node in nodes {
+        let pos = graph.element(node.handle).position();
         let (top_left, bottom_right) = pos.bbox(false);
         bounds.push(NodeBounds {
             handle: node.handle,
@@ -2193,7 +2338,12 @@ fn span_has_intermediate(
 
 fn assign_back_edge_offsets(plans: &[BackEdgePlan], offsets: &mut [f64]) {
     let mut plans = plans.to_vec();
-    plans.sort_by(|a, b| a.span.partial_cmp(&b.span).unwrap_or(Ordering::Equal));
+    plans.sort_by(|a, b| {
+        a.span
+            .partial_cmp(&b.span)
+            .unwrap_or(Ordering::Equal)
+            .then_with(|| a.order_y.partial_cmp(&b.order_y).unwrap_or(Ordering::Equal))
+    });
 
     let mut layer = 0usize;
     let mut last_span: Option<f64> = None;
