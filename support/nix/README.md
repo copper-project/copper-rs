@@ -58,7 +58,7 @@ cargo nextest run --workspace $FEATURES_FLAG
 
 ## Environment Variables
 
-- `FEATURES_FLAG`: Pre-configured feature set including `mock,perf-ui,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode` (plus `cuda` when enabled)
+- `FEATURES_FLAG`: Pre-configured feature set including `mock,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode` (plus `cuda` when enabled)
 - `LLVM_CONFIG`, `LIBCLANG_PATH`: LLVM/Clang configuration
 - Platform-specific library paths automatically configured
 

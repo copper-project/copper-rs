@@ -42,7 +42,7 @@ cargo nextest run --workspace --all-targets
 To run tests including specific features (matching the CI 'debug' mode non-CUDA features):
 
 ```bash
-cargo nextest run --workspace --all-targets --features macro_debug,mock,perf-ui,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode
+cargo nextest run --workspace --all-targets --features macro_debug,mock,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode
 ```
 
 ## Contribution Workflow
