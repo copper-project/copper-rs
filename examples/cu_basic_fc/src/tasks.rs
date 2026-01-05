@@ -227,14 +227,16 @@ enum StatusLabel {
     Disarmed,
     Angle,
     Air,
+    Position,
 }
 
 impl StatusLabel {
     const fn as_str(self) -> &'static str {
         match self {
-            StatusLabel::Disarmed => "XXX  ",
+            StatusLabel::Disarmed => " XXX ",
             StatusLabel::Angle => "ANGLE",
-            StatusLabel::Air => "AIR  ",
+            StatusLabel::Air => " AIR ",
+            StatusLabel::Position => " POS ",
         }
     }
 }
@@ -306,12 +308,14 @@ impl CuTask for VtxOsd {
             return Ok(());
         };
 
-        let label = if !ctrl.armed {
-            StatusLabel::Disarmed
-        } else if ctrl.mode == FlightMode::Acro {
-            StatusLabel::Air
+        let label = if ctrl.armed {
+            match ctrl.mode {
+                FlightMode::Acro => StatusLabel::Air,
+                FlightMode::Angle => StatusLabel::Angle,
+                FlightMode::PositionHold => StatusLabel::Position,
+            }
         } else {
-            StatusLabel::Angle
+            StatusLabel::Disarmed
         };
 
         let label_changed = self.last_label != Some(label);
