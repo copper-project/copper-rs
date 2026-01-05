@@ -911,7 +911,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 (
                     // Tasks keyframe restore code
                     quote! {
-                        tasks.#task_tuple_index.thaw(&mut decoder).map_err(|e| CuError::new_with_cause("Failed to thaw", e))?
+                        tasks.#task_tuple_index.thaw(&mut decoder).map_err(|e| CuError::from("Failed to thaw").add_cause(&e.to_string()))?
                     },
                     {  // Start calls
                         let monitoring_action = quote! {
