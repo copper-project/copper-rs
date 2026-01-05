@@ -1737,7 +1737,7 @@ impl From<MspPacket> for MspResponse {
 }
 
 #[cfg(test)]
-mod tests {
+mod msp_status_tests {
     use super::*;
 
     #[test]
