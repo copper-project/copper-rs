@@ -18,7 +18,6 @@ use std::path::PathBuf;
 use std::process::Command;
 use svg::Document;
 use svg::node::Node;
-use svg::node::Text as TextNode;
 use svg::node::element::path::Data;
 use svg::node::element::{
     Circle, Definitions, Element as SvgElement, Group, Image, Line, Marker, Path as SvgPath,
@@ -1701,9 +1700,8 @@ impl SvgWriter {
             return;
         }
 
-        let escaped = escape_xml(text);
         let weight = if bold { "bold" } else { "normal" };
-        let mut node = Text::new()
+        let node = Text::new(text)
             .set("x", pos.x)
             .set("y", pos.y)
             .set("text-anchor", anchor)
@@ -1712,7 +1710,6 @@ impl SvgWriter {
             .set("font-size", format!("{font_size}px"))
             .set("fill", color)
             .set("font-weight", weight);
-        node.append(TextNode::new(escaped));
         self.content.append(node);
 
         let size = get_size_for_str(text, font_size);
@@ -1735,9 +1732,8 @@ impl SvgWriter {
             return;
         }
 
-        let escaped = escape_xml(text);
         let weight = if bold { "bold" } else { "normal" };
-        let mut node = Text::new()
+        let node = Text::new(text)
             .set("x", pos.x)
             .set("y", pos.y)
             .set("text-anchor", anchor)
@@ -1750,7 +1746,6 @@ impl SvgWriter {
             .set("stroke-width", EDGE_LABEL_HALO_WIDTH)
             .set("paint-order", "stroke")
             .set("stroke-linejoin", "round");
-        node.append(TextNode::new(escaped));
         self.overlay.append(node);
 
         let size = get_size_for_str(text, font_size);
@@ -1826,9 +1821,8 @@ impl SvgWriter {
                     .set("stroke", "none");
                 self.overlay.append(label_path_el);
 
-                let escaped = escape_xml(&label.text);
                 let weight = if label.bold { "bold" } else { "normal" };
-                let mut text_path = TextPath::new()
+                let text_path = TextPath::new(label.text.as_str())
                     .set("href", format!("#{label_path_id}"))
                     .set("startOffset", "50%")
                     .set("text-anchor", "middle")
@@ -1841,8 +1835,7 @@ impl SvgWriter {
                     .set("stroke-width", EDGE_LABEL_HALO_WIDTH)
                     .set("paint-order", "stroke")
                     .set("stroke-linejoin", "round");
-                text_path.append(TextNode::new(escaped));
-                let mut text_node = Text::new();
+                let mut text_node = SvgElement::new("text");
                 text_node.append(text_path);
                 self.overlay.append(text_node);
             }
@@ -1876,21 +1869,6 @@ impl SvgWriter {
     }
 }
 
-fn escape_xml(input: &str) -> String {
-    let mut res = String::new();
-    for ch in input.chars() {
-        match ch {
-            '&' => res.push_str("&amp;"),
-            '<' => res.push_str("&lt;"),
-            '>' => res.push_str("&gt;"),
-            '"' => res.push_str("&quot;"),
-            '\'' => res.push_str("&apos;"),
-            _ => res.push(ch),
-        }
-    }
-    res
-}
-
 fn build_text_node(
     pos: Point,
     text: &str,
@@ -1900,9 +1878,8 @@ fn build_text_node(
     anchor: &str,
     family: FontFamily,
 ) -> Text {
-    let escaped = escape_xml(text);
     let weight = if bold { "bold" } else { "normal" };
-    let mut node = Text::new()
+    Text::new(text)
         .set("x", pos.x)
         .set("y", pos.y)
         .set("text-anchor", anchor)
@@ -1910,9 +1887,7 @@ fn build_text_node(
         .set("font-family", family.as_css())
         .set("font-size", format!("{font_size}px"))
         .set("fill", color)
-        .set("font-weight", weight);
-    node.append(TextNode::new(escaped));
-    node
+        .set("font-weight", weight)
 }
 
 fn svg_data_uri(svg: &str) -> String {
