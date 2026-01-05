@@ -1743,10 +1743,11 @@ pub(crate) fn build_render_topology(graph: &CuGraph, bridges: &[BridgeConfig]) -
     let mut auto_input_counts = vec![0usize; nodes.len()];
     for edge in graph.0.edge_references() {
         let cnx = edge.weight();
-        if let Some(&idx) = node_lookup.get(&cnx.dst) {
-            if nodes[idx].flavor == Flavor::Task && cnx.dst_channel.is_none() {
-                auto_input_counts[idx] += 1;
-            }
+        if let Some(&idx) = node_lookup.get(&cnx.dst)
+            && nodes[idx].flavor == Flavor::Task
+            && cnx.dst_channel.is_none()
+        {
+            auto_input_counts[idx] += 1;
         }
     }
 
