@@ -212,7 +212,9 @@ wt branch:
   name="$(basename "{{branch}}")"
   dir="$(realpath ../copper-rs.${name})"
   echo "Adding worktree for branch '{{branch}}' at ${dir}"
-  if git show-ref --verify --quiet "refs/heads/{{branch}}"; then
+  if [[ -e "${dir}" ]]; then
+    echo "Worktree already exists at ${dir}"
+  elif git show-ref --verify --quiet "refs/heads/{{branch}}"; then
     git worktree add "${dir}" "{{branch}}"
   elif git show-ref --verify --quiet "refs/remotes/origin/{{branch}}"; then
     git worktree add -b "{{branch}}" "${dir}" "origin/{{branch}}"
