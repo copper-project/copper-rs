@@ -1,4 +1,8 @@
-dag:
-  #!/bin/bash
-  cargo run -p cu29-runtime --bin cu29-rendercfg -- --open render_edge_cases.ron
+import "../../../justfile"
+
+# Render the edge-case test config for DAG visualization.
+dag-edge-cases:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	cargo run -p cu29-runtime --bin cu29-rendercfg -- --open render_edge_cases.ron
 

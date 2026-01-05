@@ -10,12 +10,49 @@ First off, thank you for considering contributing to Copper-rs! We welcome contr
     ```bash
     curl --proto '=https' --tlsv1.2 -sSf [https://sh.rustup.rs](https://sh.rustup.rs) | sh
     ```
+* **just:** We use [just](https://github.com/casey/just) as a command runner for common development tasks. Install it via cargo or your package manager:
+    ```bash
+    cargo install just
+    ```
 * **cargo-nextest:** For running tests efficiently.
     ```bash
     cargo install cargo-nextest
     ```
-* **Platform-Specific Dependencies:** Depending on your operating system and the features you intend to work with, you might need additional dependencies. Refer to the [Continuous Integration Setup](#continuous-integration-ci) section below for details extracted from our CI workflow. For Ubuntu 22.04, please checkout our [Dockerfile](support/docker/Dockerfile).
+* **typos:** For spell checking.
+    ```bash
+    cargo install typos-cli
+    ```
+* **Platform-Specific Dependencies:** Depending on your operating system and the features you intend to work with, you might need additional dependencies. For Ubuntu 22.04, please checkout our [Dockerfile](support/docker/Dockerfile).
 
+
+### Using justfile (Recommended)
+
+The project includes a `justfile` that mirrors the CI workflow. This is the recommended way to run checks locally before submitting a PR:
+
+```bash
+# Run the full CI-aligned check (lint + clippy + build + tests)
+just std-ci
+
+# Run only lint checks (formatting + typos)
+just lint
+
+# Run embedded/no_std CI checks
+just nostd-ci
+
+# Run in release mode
+just std-ci release
+
+# Run with CUDA features
+just std-ci cuda-release
+```
+
+The `just std-ci` command runs the same checks as CI, including:
+- Format check (`cargo +stable fmt --all -- --check`)
+- Typos check (`typos -c .config/_typos.toml`)
+- Clippy with `--deny warnings`
+- Build with all features
+- Unit tests with cargo-nextest
+- Project generation tests (debug mode only)
 
 ### Building the Project
 
@@ -39,10 +76,10 @@ We use cargo-nextest for running tests. To run all unit tests:
 cargo nextest run --workspace --all-targets
 ```
 
-To run tests including specific features (matching the CI 'debug' mode non-CUDA features):
+To run tests including specific features (matching the CI 'debug' mode on Linux):
 
 ```bash
-cargo nextest run --workspace --all-targets --features macro_debug,mock,perf-ui,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode
+cargo nextest run --workspace --all-targets --features mock,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
 ```
 
 ## Contribution Workflow
@@ -61,11 +98,13 @@ cargo nextest run --workspace --all-targets --features macro_debug,mock,perf-ui,
     ```
 4. **Make Changes**: Implement your feature or fix the bug. Write clear and concise code.
 
-5. **Run Checks**: Before committing, ensure your code adheres to the project's standards:
-    - **Formatting**: ```cargo fmt --all -- --check```
-    - **Clippy Lints**: ```cargo clippy --workspace --all-targets -- --deny warnings```
-    - **Tests**: ```cargo nextest run --workspace --all-targets``` (run with relevant features if applicable)
-    - **Typos**: Ensure you run a spell checker. We use ```typos --config .config/_typos.toml```.
+5. **Run Checks**: Before committing, ensure your code adheres to the project's standards. The easiest way is to run `just std-ci` which executes all CI checks. Alternatively, run individual checks:
+    - **All checks (recommended)**: ```just std-ci```
+    - **Lint only**: ```just lint``` (formatting + typos)
+    - **Formatting**: ```cargo +stable fmt --all -- --check```
+    - **Clippy Lints**: ```cargo +stable clippy --workspace --all-targets -- --deny warnings```
+    - **Tests**: ```cargo +stable nextest run --workspace --all-targets``` (run with relevant features if applicable)
+    - **Typos**: ```typos -c .config/_typos.toml```
 6. **Commit and push Changes**: Commit your changes with clear and descriptive commit messages. (Consider using [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/))
     ```bash
     git add .
