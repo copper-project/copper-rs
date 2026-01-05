@@ -97,10 +97,9 @@ macro_rules! impl_serial_wrapper_io {
             fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
                 let mut written = 0;
                 for &b in buf {
-                    match self.inner.write(b) {
+                    match nb::block!(self.inner.write(b)) {
                         Ok(()) => written += 1,
-                        Err(nb::Error::WouldBlock) => break,
-                        Err(nb::Error::Other(e)) => {
+                        Err(e) => {
                             defmt::error!("{} write err: {:?}", self.label, e);
                             return Err(SerialPortError::Other);
                         }

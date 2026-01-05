@@ -83,10 +83,12 @@
             type: "tasks::LedBeat",
             resources: { "led": "fc.green_led" },
         ),
-        (id: "tele0", type: "tasks::TelemetryLogger0"),
-        (id: "tele1", type: "tasks::TelemetryLogger1"),
-        (id: "tele2", type: "tasks::TelemetryLogger2"),
-        (id: "tele3", type: "tasks::TelemetryLogger3"),
+        (
+            id: "vtx_osd",
+            type: "tasks::VtxOsd",
+            config: { "cols": 53, "row": 13, "col_center": 26 },
+        ),
+        (id: "msp_rx", type: "tasks::MspNoopSink"),
     ],
 
     bridges: [
@@ -97,6 +99,15 @@
                 Rx ( id: "rc_rx" ),  // receiving RC Channels
                 Tx ( id: "lq_tx" ),  // Sending LineQuality back
             ],
+        ),
+        (
+           id: "vtx_msp",
+           type: "cu_msp_bridge::CuMspBridge<Uart2Port, SerialPortError>",
+           resources: { "serial": "fc.uart2" },
+           channels: [
+                Tx ( id: "requests" ),
+                Rx ( id: "responses" ),
+           ],
         ),
         (
            id: "bdshot",
@@ -131,6 +142,7 @@
         (src: "mapper", dst: "mixer1", msg: "crate::messages::ControlInputs"),
         (src: "mapper", dst: "mixer2", msg: "crate::messages::ControlInputs"),
         (src: "mapper", dst: "mixer3", msg: "crate::messages::ControlInputs"),
+        (src: "mapper", dst: "vtx_osd", msg: "crate::messages::ControlInputs"),
         (src: "rate", dst: "mixer0", msg: "crate::messages::BodyCommand"),
         (src: "rate", dst: "mixer1", msg: "crate::messages::BodyCommand"),
         (src: "rate", dst: "mixer2", msg: "crate::messages::BodyCommand"),
@@ -139,14 +151,12 @@
         (src: "mixer1", dst: "bdshot/esc1_tx", msg: "cu_bdshot::EscCommand"),
         (src: "mixer2", dst: "bdshot/esc2_tx", msg: "cu_bdshot::EscCommand"),
         (src: "mixer3", dst: "bdshot/esc3_tx", msg: "cu_bdshot::EscCommand"),
-        (src: "bdshot/esc0_rx", dst: "tele0", msg: "cu_bdshot::EscTelemetry"),
-        (src: "bdshot/esc1_rx", dst: "tele1", msg: "cu_bdshot::EscTelemetry"),
-        (src: "bdshot/esc2_rx", dst: "tele2", msg: "cu_bdshot::EscTelemetry"),
-        (src: "bdshot/esc3_rx", dst: "tele3", msg: "cu_bdshot::EscTelemetry"),
+        (src: "vtx_osd", dst: "vtx_msp/requests", msg: "cu_msp_bridge::MspRequestBatch"),
+        (src: "vtx_msp/responses", dst: "msp_rx", msg: "cu_msp_bridge::MspResponseBatch"),
     ],
-    monitor: (
-        type: "cu_logmon::CuLogMon",
-    ),
+    // monitor: (
+    //     type: "cu_logmon::CuLogMon",
+    // ),
     logging: (
         slab_size_mib: 16,
         section_size_mib: 4,

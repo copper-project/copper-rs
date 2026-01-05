@@ -18,6 +18,7 @@ use smallvec::SmallVec;
 
 #[derive(Clone, PartialEq)]
 pub struct MspPacketData(pub(crate) SmallVec<[u8; 256]>);
+const MSP_MAX_PAYLOAD_LEN: usize = 255;
 
 impl MspPacketData {
     pub(crate) fn new() -> MspPacketData {
@@ -252,6 +253,10 @@ impl MspParser {
                     let mut s = [0u8; core::mem::size_of::<u16>()];
                     s.copy_from_slice(data);
                     self.packet_data_length_remaining = u16::from_le_bytes(s).into();
+                    if self.packet_data_length_remaining > MSP_MAX_PAYLOAD_LEN {
+                        self.reset();
+                        return Err(MspPacketParseError::InvalidDataLength);
+                    }
                     self.packet_crc_v2.digest(data);
                     data.clear();
                     if self.packet_data_length_remaining == 0 {
