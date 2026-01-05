@@ -25,7 +25,7 @@ pfetch = "2.11.1"
 dotenvy = "0.15.7"
 libmacchina = "8.1.0"
 ansi-to-tui = "8.0.0"
-tui-widgets = "0.6.2"
+tui-widgets = "0.7.0"
 color-eyre = "0.6.4"
 gag = "1.0.0"
 log = { version = "0.4.27", features = ["std"], optional = true }

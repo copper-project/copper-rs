@@ -5,6 +5,41 @@ rc:
   #!/usr/bin/env bash
   cargo run -p cu-basic-fc --no-default-features --features sim --bin rc-tester
 
+logreader log="logs/embedded.copper":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  invocation_dir="{{invocation_directory()}}"
+  log="{{log}}"
+  if [[ "$log" != /* ]]; then
+    log="${invocation_dir}/${log}"
+  fi
+  RUST_BACKTRACE=1 cargo run -p cu-basic-fc --no-default-features --features logreader --bin quad-logreader -- "$log" extract-copperlists --export-format json
+
+fsck log="logs/embedded.copper":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  invocation_dir="{{invocation_directory()}}"
+  log="{{log}}"
+  if [[ "$log" != /* ]]; then
+    log="${invocation_dir}/${log}"
+  fi
+  RUST_BACKTRACE=1 cargo run -p cu-basic-fc --no-default-features --features logreader --bin quad-logreader -- "$log" fsck
+
+textlogs log="logs/embedded.copper" index="../../target/debug/cu29_log_index":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  invocation_dir="{{invocation_directory()}}"
+  log="{{log}}"
+  index="{{index}}"
+  if [[ "$log" != /* ]]; then
+    log="${invocation_dir}/${log}"
+  fi
+  if [[ "$index" != /* ]]; then
+    index="${invocation_dir}/${index}"
+  fi
+  [[ -e "$index" ]] || { echo "log index not found: $index" >&2; exit 1; }
+  RUST_BACKTRACE=1 cargo run -p cu-basic-fc --no-default-features --features logreader --bin quad-logreader -- "$log" extract-text-log "$index"
+
 # Build firmware-only target using the firmware-specific Cargo config
 fw:
   #!/usr/bin/env bash

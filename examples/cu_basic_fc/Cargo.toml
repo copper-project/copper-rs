@@ -61,7 +61,7 @@ buddy_system_allocator = { version = "0.11", default-features = false, features 
 stm32h7xx-hal = { version = "0.16.0", default-features = false, features = ["stm32h743v", "rt", "defmt", "sdmmc", "sdmmc-fatfs"], optional = true }
 embedded-io = { version = "0.6", optional = true }
 embedded-hal = { version = "0.2.7", optional = true }
-embedded-alloc = { version = "0.5", optional = true }
+embedded-alloc = { version = "0.7", optional = true }
 # Keep aligned with stm32h7xx-hal SDMMC support (pulls embedded-sdmmc 0.5).
 embedded-sdmmc = { version = "0.5", default-features = false, optional = true }
 cortex-m = { version = "0.7", features = ["critical-section-single-core"], optional = true }
@@ -88,11 +88,22 @@ firmware = [
   "dep:cu-mpu9250",
   "dep:cu-crsf",
   "dep:cu-msp-bridge",
+  "cu-crsf/defmt",
   "dep:cu-embedded-registry",
   "dep:cu-sdlogger",
   "dep:cu-logmon",
 ]
-logreader = ["dep:cu29-export"]
+logreader = [
+  "dep:cu29",
+  "cu29/std",
+  "bincode/std",
+  "serde/std",
+  "dep:cu29-export",
+  "dep:cu-crsf",
+  "dep:cu-bdshot",
+  "dep:cu-ahrs",
+  "cu-bdshot/messages-only",
+]
 sim = [
   "dep:cu29",
   "cu29/std",
@@ -116,10 +127,10 @@ name = "rc-tester"
 path = "src/sim/rc_tester.rs"
 required-features = ["sim"]
 
-# [[bin]]
-# name = "quad-logreader"
-# path = "src/logreader.rs"
-# required-features = ["logreader"]
+[[bin]]
+name = "quad-logreader"
+path = "src/logreader.rs"
+required-features = ["logreader"]
 
 # [[bin]]
 # name = "quad-sim"
