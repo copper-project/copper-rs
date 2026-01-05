@@ -102,7 +102,7 @@ impl MspStatusSensors {
     }
 
     pub fn to_bits(self) -> u16 {
-        (self.acc as u16) << 0
+        (self.acc as u16)
             | (self.baro as u16) << 1
             | (self.mag as u16) << 2
             | (self.gps as u16) << 3

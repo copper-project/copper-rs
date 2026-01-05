@@ -79,10 +79,12 @@ pub struct LedBeat {
 pub struct ControlSink {
     last_heap_log: Option<CuTime>,
 }
+
 impl Freezable for ControlSink {}
+
 impl CuSinkTask for ControlSink {
-    type Resources<'r> = ();
     type Input<'m> = CuMsg<ControlInputs>;
+    type Resources<'r> = ();
 
     fn new_with(
         _config: Option<&ComponentConfig>,
