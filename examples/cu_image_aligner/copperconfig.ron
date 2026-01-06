@@ -1,0 +1,57 @@
+(
+    tasks: [
+        (
+            id: "src_a",
+            type: "tasks::ImageSrcTask",
+            config: {
+                "width": 64,
+                "height": 48,
+                "base_value": 10,
+                "pool_id": "image_src_a",
+                "pool_size": 32,
+                "tov_offset_ms": 100,
+            },
+        ),
+        (
+            id: "src_b",
+            type: "tasks::ImageSrcTask",
+            config: {
+                "width": 64,
+                "height": 48,
+                "base_value": 200,
+                "pool_id": "image_src_b",
+                "pool_size": 32,
+                "tov_offset_ms": 100,
+            },
+        ),
+        (
+            id: "aligner",
+            type: "tasks::ImageAlignerTask",
+            config: {
+                "target_alignment_window_ms": 50,
+                "stale_data_horizon_ms": 500,
+            },
+        ),
+        (
+            id: "sink",
+            type: "tasks::AlignedImageSink",
+        ),
+    ],
+    cnx: [
+        (
+            src: "src_a",
+            dst: "aligner",
+            msg: "cu_sensor_payloads::CuImage<Vec<u8>>",
+        ),
+        (
+            src: "src_b",
+            dst: "aligner",
+            msg: "cu_sensor_payloads::CuImage<Vec<u8>>",
+        ),
+        (
+            src: "aligner",
+            dst: "sink",
+            msg: "(cu29::payload::CuArray<cu_sensor_payloads::CuImage<Vec<u8>>, 4>, cu29::payload::CuArray<cu_sensor_payloads::CuImage<Vec<u8>>, 4>)",
+        ),
+    ],
+)
