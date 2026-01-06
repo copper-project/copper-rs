@@ -97,6 +97,9 @@ impl Display for MspPacketParseError {
 #[cfg(feature = "std")]
 impl Error for MspPacketParseError {}
 
+#[cfg(not(feature = "std"))]
+impl core::error::Error for MspPacketParseError {}
+
 /// Packet's desired destination
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum MspPacketDirection {

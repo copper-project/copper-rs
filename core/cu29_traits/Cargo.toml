@@ -27,3 +27,6 @@ std = [
     "serde/std"
 ]
 defmt = ["dep:defmt"]  # this is only used for baremetal text logging
+
+[dev-dependencies]
+serde_json = "1.0"

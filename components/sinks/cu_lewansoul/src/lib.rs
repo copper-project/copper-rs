@@ -132,9 +132,9 @@ impl Lewansoul {
     #[allow(dead_code)]
     fn ping(&mut self, id: u8) -> CuResult<()> {
         self.send_packet(id, servo::SERVO_ID_READ, &[])
-            .map_err(|e| CuError::new_with_cause("IO Error trying to write to the SBUS", &e))?;
+            .map_err(|e| CuError::new_with_cause("IO Error trying to write to the SBUS", e))?;
         let response = self.read_response().map_err(|e| {
-            CuError::new_with_cause("IO Error trying to read the ping response from SBUS", &e)
+            CuError::new_with_cause("IO Error trying to read the ping response from SBUS", e)
         })?;
 
         if response.2[0] == id {
