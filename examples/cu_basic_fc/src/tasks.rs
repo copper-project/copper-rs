@@ -1,11 +1,11 @@
 #![allow(dead_code)]
 
-use cu_micoairh743::GreenLed;
 use crate::messages::{BodyCommand, BodyRateSetpoint, ControlInputs, FlightMode};
 use alloc::vec::Vec;
 use cu_ahrs::AhrsPose;
 use cu_bdshot::EscCommand;
 use cu_crsf::messages::RcChannelsPayload;
+use cu_micoairh743::GreenLed;
 use cu_msp_bridge::MspRequestBatch;
 use cu_msp_lib::structs::{MspDisplayPort, MspRequest, MspStatus, MspStatusSensors};
 use cu_pid::{PIDControlOutputPayload, PIDController};

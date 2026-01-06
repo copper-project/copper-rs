@@ -2,7 +2,7 @@
 #![doc = include_str!("../README.md")]
 
 use cortex_m::peripheral::DWT;
-use cu_bdshot::{register_stm32h7_board, Stm32H7Board, Stm32H7BoardResources};
+use cu_bdshot::{Stm32H7Board, Stm32H7BoardResources, register_stm32h7_board};
 use cu_sdlogger::{EMMCLogger, EMMCSectionStorage, ForceSyncSend, find_copper_partition};
 use cu29::resource::{ResourceBundle, ResourceManager};
 use cu29::{CuError, CuResult, bundle_resources};
