@@ -180,10 +180,7 @@ impl CuSrcTask for BatteryAdcSource {
     type Resources<'r> = battery_resources::Resources;
     type Output<'m> = output_msg!(BatteryVoltage);
 
-    fn new_with(
-        config: Option<&ComponentConfig>,
-        resources: Self::Resources<'_>,
-    ) -> CuResult<Self>
+    fn new_with(config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -191,8 +188,12 @@ impl CuSrcTask for BatteryAdcSource {
         let vbat_scale = cfg_u32(config, "vbat_scale", BATTERY_VBAT_SCALE_DEFAULT);
         let vbat_res_div_val =
             cfg_u32(config, "vbat_res_div_val", BATTERY_VBAT_RES_DIV_VAL_DEFAULT).max(1);
-        let vbat_res_div_mult =
-            cfg_u32(config, "vbat_res_div_mult", BATTERY_VBAT_RES_DIV_MULT_DEFAULT).max(1);
+        let vbat_res_div_mult = cfg_u32(
+            config,
+            "vbat_res_div_mult",
+            BATTERY_VBAT_RES_DIV_MULT_DEFAULT,
+        )
+        .max(1);
         Ok(Self {
             adc: resources.battery_adc.0,
             vref_mv,
