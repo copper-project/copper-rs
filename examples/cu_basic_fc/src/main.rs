@@ -8,6 +8,7 @@ use alloc::vec;
 use buddy_system_allocator::LockedHeap as StdHeap;
 use cortex_m::{asm, peripheral::SCB};
 use cortex_m_rt::{ExceptionFrame, entry, exception};
+use cu_micoairh743::{LogStorage, Logger, MicoAirH743Id};
 use cu_sensor_payloads::ImuPayload;
 use cu29::prelude::*;
 use defmt_rtt as _;
@@ -15,12 +16,7 @@ use panic_probe as _;
 use spin::Mutex;
 
 mod messages;
-mod resources;
 mod tasks;
-
-pub use resources::{
-    GreenLed, LogStorage, Logger, MicoAirH743Id, SerialPort, SerialPortError, Uart2Port, Uart6Port,
-};
 
 #[global_allocator]
 static ALLOC: StdHeap<32> = StdHeap::empty();
