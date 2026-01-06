@@ -128,8 +128,6 @@ impl_serial_wrapper_io!(pac::USART2);
 // Resource type aliases exposed by the bundle.
 pub type Uart6Port = SerialWrapper<pac::USART6>;
 pub type Uart2Port = SerialWrapper<pac::USART2>;
-/// Default serial port used by CRSF in the example firmware.
-pub type SerialPort = Uart6Port;
 
 /// Wraps HAL types that are only used from the single-threaded runtime.
 pub struct SingleThreaded<T>(T);
@@ -246,6 +244,8 @@ impl ResourceBundle for MicoAirH743 {
         _config: Option<&cu29::config::ComponentConfig>,
         manager: &mut ResourceManager,
     ) -> CuResult<()> {
+        // Here we bring up the entire board and register the resources.
+
         let mut cp = cortex_m::Peripherals::take()
             .ok_or_else(|| CuError::from("cortex-m peripherals already taken"))?;
         cp.SCB.enable_fpu();

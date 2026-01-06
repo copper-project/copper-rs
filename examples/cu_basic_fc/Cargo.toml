@@ -86,6 +86,7 @@ firmware = [
   "dep:cu-micoairh743",
   "cu-bdshot/stm32h7",
   "cu-bdshot/defmt",
+  "cu-micoairh743/defmt",
   "dep:cu-ahrs",
   "dep:cu-mpu9250",
   "dep:cu-crsf",

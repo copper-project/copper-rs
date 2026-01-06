@@ -4,7 +4,7 @@ Resource bundle for the MicoAir H743 flight controller board.
 
 ## What it provides
 
-- UART6 (`Uart6Port`, alias `SerialPort`) and UART2 (`Uart2Port`) with overrun logging
+- UART6 (`Uart6Port`) and UART2 (`Uart2Port`) with overrun logging
 - `SerialPortError` for embedded-io bridge error types
 - `GreenLed`
 - SDMMC logger (`Logger` + `LogStorage`, Copper partition)
