@@ -28,6 +28,7 @@
             type: "tasks::AttitudeController",
             config: {
                 "angle_limit_deg": 60.0,
+                "acro_rate_dps": 180.0,
                 "kp": 1.0,
                 "ki": 0.0,
                 "kd": 0.0,
@@ -37,10 +38,10 @@
             id: "rate",
             type: "tasks::RateController",
             config: {
-                "kp": 0.06,
+                "kp": 0.02,
                 "ki": 0.0,
-                "kd": 0.001,
-                "kp_yaw": 0.1652,
+                "kd": 0.0001,
+                "kp_yaw": 0.05,
                 "ki_yaw": 0.0,
                 "kd_yaw": 0.0,
             },
