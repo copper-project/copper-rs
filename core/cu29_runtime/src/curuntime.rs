@@ -40,9 +40,6 @@ use bincode::error::EncodeError;
 use bincode::{Decode, Encode};
 use core::fmt::Result as FmtResult;
 use core::fmt::{Debug, Formatter};
-use petgraph::prelude::*;
-use petgraph::visit::VisitMap;
-use petgraph::visit::Visitable;
 
 #[cfg(feature = "std")]
 use cu29_log_runtime::LoggerRuntime;
@@ -607,10 +604,7 @@ fn find_edge_with_plan_input_id(
     let input_node_id = input_step.node_id;
 
     graph
-        .0
-        .edges_connecting(input_node_id.into(), output_node_id.into())
-        .map(|edge| edge.id().index())
-        .next()
+        .edge_id_between(input_node_id, output_node_id)
         .expect("An edge connecting the input to the output should exist")
 }
 
@@ -638,11 +632,9 @@ fn plan_tasks_tree_branch(
     #[cfg(all(feature = "std", feature = "macro_debug"))]
     eprintln!("-- starting branch from node {starting_point}");
 
-    let mut visitor = Bfs::new(&graph.0, starting_point.into());
     let mut handled = false;
 
-    while let Some(node) = visitor.next(&graph.0) {
-        let id = node.index() as NodeId;
+    for id in graph.bfs_nodes(starting_point) {
         let node_ref = graph.get_node(id).unwrap();
         #[cfg(all(feature = "std", feature = "macro_debug"))]
         eprintln!("  Visiting node: {node_ref:?}");
@@ -655,11 +647,11 @@ fn plan_tasks_tree_branch(
             CuTaskType::Source => {
                 #[cfg(all(feature = "std", feature = "macro_debug"))]
                 eprintln!("    → Source node, assign output index {next_culist_output_index}");
+                let edge_id = graph.get_src_edges(id).unwrap()[0];
                 output_msg_index_type = Some((
                     next_culist_output_index,
                     graph
-                        .0
-                        .edge_weight(EdgeIndex::new(graph.get_src_edges(id).unwrap()[0]))
+                        .edge(edge_id)
                         .unwrap() // FIXME(gbin): Error handling
                         .msg
                         .clone(),
@@ -703,11 +695,11 @@ fn plan_tasks_tree_branch(
                         return (next_culist_output_index, handled);
                     }
                 }
+                let edge_id = graph.get_src_edges(id).unwrap()[0];
                 output_msg_index_type = Some((
                     next_culist_output_index,
                     graph
-                        .0
-                        .edge_weight(EdgeIndex::new(graph.get_src_edges(id).unwrap()[0])) // FIXME(gbin): Error handling and multimission
+                        .edge(edge_id) // FIXME(gbin): Error handling and multimission
                         .unwrap()
                         .msg
                         .clone(),
@@ -755,33 +747,22 @@ fn plan_tasks_tree_branch(
 pub fn compute_runtime_plan(graph: &CuGraph) -> CuResult<CuExecutionLoop> {
     #[cfg(all(feature = "std", feature = "macro_debug"))]
     eprintln!("[runtime plan]");
-    let visited = graph.0.visit_map();
     let mut plan = Vec::new();
     let mut next_culist_output_index = 0u32;
 
     let mut queue: VecDeque<NodeId> = graph
-        .node_indices()
-        .iter()
-        .filter(|&node| find_task_type_for_id(graph, node.index() as NodeId) == CuTaskType::Source)
-        .map(|node| node.index() as NodeId)
+        .node_ids()
+        .into_iter()
+        .filter(|&node_id| find_task_type_for_id(graph, node_id) == CuTaskType::Source)
         .collect();
 
     #[cfg(all(feature = "std", feature = "macro_debug"))]
     eprintln!("Initial source nodes: {queue:?}");
 
     while let Some(start_node) = queue.pop_front() {
-        if visited.is_visited(&start_node) {
-            #[cfg(all(feature = "std", feature = "macro_debug"))]
-            eprintln!("→ Skipping already visited source {start_node}");
-            continue;
-        }
-
         #[cfg(all(feature = "std", feature = "macro_debug"))]
         eprintln!("→ Starting BFS from source {start_node}");
-        let mut bfs = Bfs::new(&graph.0, start_node.into());
-
-        while let Some(node_index) = bfs.next(&graph.0) {
-            let node_id = node_index.index() as NodeId;
+        for node_id in graph.bfs_nodes(start_node) {
             let already_in_plan = plan
                 .iter()
                 .any(|unit| matches!(unit, CuExecutionUnit::Step(s) if s.node_id == node_id));
@@ -805,13 +786,10 @@ pub fn compute_runtime_plan(graph: &CuGraph) -> CuResult<CuExecutionLoop> {
 
             #[cfg(all(feature = "std", feature = "macro_debug"))]
             eprintln!("    ✓ Node {node_id} handled successfully, enqueueing neighbors");
-            for neighbor in graph.0.neighbors(node_index) {
-                if !visited.is_visited(&neighbor) {
-                    let nid = neighbor.index() as NodeId;
-                    #[cfg(all(feature = "std", feature = "macro_debug"))]
-                    eprintln!("      → Enqueueing neighbor {nid}");
-                    queue.push_back(nid);
-                }
+            for neighbor in graph.get_neighbor_ids(node_id, CuDirection::Outgoing) {
+                #[cfg(all(feature = "std", feature = "macro_debug"))]
+                eprintln!("      → Enqueueing neighbor {neighbor}");
+                queue.push_back(neighbor);
             }
         }
     }

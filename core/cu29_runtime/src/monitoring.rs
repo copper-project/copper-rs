@@ -8,7 +8,6 @@ use cu29_clock::{CuDuration, RobotClock};
 #[allow(unused_imports)]
 use cu29_log::CuLogLevel;
 use cu29_traits::{CuError, CuResult};
-use petgraph::visit::IntoEdgeReferences;
 use serde_derive::{Deserialize, Serialize};
 
 #[cfg(not(feature = "std"))]
@@ -112,8 +111,7 @@ pub fn build_monitor_topology(
         bridge_lookup.insert(bridge.id.as_str(), bridge);
     }
 
-    for edge in graph.0.edge_references() {
-        let cnx = edge.weight();
+    for cnx in graph.edges() {
         io_usage.entry(cnx.src.clone()).or_default().has_outgoing = true;
         io_usage.entry(cnx.dst.clone()).or_default().has_incoming = true;
     }
@@ -161,8 +159,7 @@ pub fn build_monitor_topology(
     }
 
     let mut connections = Vec::new();
-    for edge in graph.0.edge_references() {
-        let cnx = edge.weight();
+    for cnx in graph.edges() {
         let src = cnx.src.clone();
         let dst = cnx.dst.clone();
 
