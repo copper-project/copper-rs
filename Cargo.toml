@@ -74,6 +74,7 @@ members = [
     "examples/cu_standalone_structlog",
     "examples/cu_zenoh",
     "examples/cu_zenoh_ros",
+    "support/cu29_archive_bench",
 ]
 
 # put only the core crates here that are not platform specific
