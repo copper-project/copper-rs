@@ -88,7 +88,6 @@
             type: "tasks::VtxOsd",
             config: { "cols": 53, "row": 13, "col_center": 26 },
         ),
-        (id: "msp_rx", type: "tasks::MspNoopSink"),
     ],
 
     bridges: [
@@ -152,7 +151,6 @@
         (src: "mixer2", dst: "bdshot/esc2_tx", msg: "cu_bdshot::EscCommand"),
         (src: "mixer3", dst: "bdshot/esc3_tx", msg: "cu_bdshot::EscCommand"),
         (src: "vtx_osd", dst: "vtx_msp/requests", msg: "cu_msp_bridge::MspRequestBatch"),
-        (src: "vtx_msp/responses", dst: "msp_rx", msg: "cu_msp_bridge::MspResponseBatch"),
     ],
     // monitor: (
     //     type: "cu_logmon::CuLogMon",

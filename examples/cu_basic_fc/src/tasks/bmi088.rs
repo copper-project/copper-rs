@@ -102,7 +102,7 @@ where
     fn process<'o>(&mut self, clock: &RobotClock, output: &mut Self::Output<'o>) -> CuResult<()> {
         let tov = clock.now();
         let payload = self.driver.read_measure()?;
-        output.tov = Some(tov).into();
+        output.tov = Tov::Time(tov);
         output.set_payload(payload);
         Ok(())
     }

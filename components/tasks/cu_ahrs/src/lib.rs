@@ -197,6 +197,7 @@ impl CuTask for CuAhrs {
         input: &Self::Input<'_>,
         output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
+        output.tov = input.tov;
         let Some(payload) = input.payload() else {
             output.clear_payload();
             return Ok(());
