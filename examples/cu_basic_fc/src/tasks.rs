@@ -1,13 +1,16 @@
 #![allow(dead_code)]
 
-use crate::messages::{BodyCommand, BodyRateSetpoint, ControlInputs, FlightMode};
+use crate::messages::{BatteryVoltage, BodyCommand, BodyRateSetpoint, ControlInputs, FlightMode};
 use alloc::vec::Vec;
 use cu_ahrs::AhrsPose;
 use cu_bdshot::EscCommand;
 use cu_crsf::messages::RcChannelsPayload;
 use cu_micoairh743::GreenLed;
 use cu_msp_bridge::MspRequestBatch;
-use cu_msp_lib::structs::{MspDisplayPort, MspRequest, MspStatus, MspStatusSensors};
+use cu_msp_lib::structs::{
+    MspAnalog, MspBatteryState, MspDisplayPort, MspRequest, MspStatus, MspStatusSensors,
+    MspVoltageMeter,
+};
 use cu_pid::{PIDControlOutputPayload, PIDController};
 use cu_sensor_payloads::ImuPayload;
 use cu29::prelude::*;
@@ -23,10 +26,24 @@ const VTX_DRAW_PERIOD_MS: u64 = 250;
 // Matches Betaflight ARMING_DISABLE_FLAGS_COUNT (log2(ARM_SWITCH) + 1).
 const MSP_ARMING_DISABLE_FLAGS_COUNT: u8 = 29;
 const VTX_WATERMARK_LINES: [&str; 3] = [" /\\_/\\ ", "( O O )", " > ^ <  [CU29]"];
+const VTX_CELL_DIVISOR: u16 = 4;
+const VTX_SYM_VOLT: char = '\x06';
+const BATTERY_VREF_MV_DEFAULT: u32 = 3300;
+const BATTERY_VBAT_SCALE_DEFAULT: u32 = 110;
+const BATTERY_VBAT_RES_DIV_VAL_DEFAULT: u32 = 10;
+const BATTERY_VBAT_RES_DIV_MULT_DEFAULT: u32 = 1;
 
 resources!({
     led => Owned<spin::Mutex<GreenLed>>,
 });
+
+mod battery_resources {
+    use super::*;
+
+    resources!({
+        battery_adc => Owned<cu_micoairh743::BatteryAdc>,
+    });
+}
 
 struct LogRateLimiter {
     last: Option<CuTime>,
@@ -149,6 +166,76 @@ impl StatusLabel {
     }
 }
 
+pub struct BatteryAdcSource {
+    adc: cu_micoairh743::BatteryAdc,
+    vref_mv: u32,
+    vbat_scale: u32,
+    vbat_res_div_val: u32,
+    vbat_res_div_mult: u32,
+}
+
+impl Freezable for BatteryAdcSource {}
+
+impl CuSrcTask for BatteryAdcSource {
+    type Resources<'r> = battery_resources::Resources;
+    type Output<'m> = output_msg!(BatteryVoltage);
+
+    fn new_with(
+        config: Option<&ComponentConfig>,
+        resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
+    where
+        Self: Sized,
+    {
+        let vref_mv = cfg_u32(config, "vref_mv", BATTERY_VREF_MV_DEFAULT).max(1);
+        let vbat_scale = cfg_u32(config, "vbat_scale", BATTERY_VBAT_SCALE_DEFAULT);
+        let vbat_res_div_val =
+            cfg_u32(config, "vbat_res_div_val", BATTERY_VBAT_RES_DIV_VAL_DEFAULT).max(1);
+        let vbat_res_div_mult =
+            cfg_u32(config, "vbat_res_div_mult", BATTERY_VBAT_RES_DIV_MULT_DEFAULT).max(1);
+        Ok(Self {
+            adc: resources.battery_adc.0,
+            vref_mv,
+            vbat_scale,
+            vbat_res_div_val,
+            vbat_res_div_mult,
+        })
+    }
+
+    fn process(&mut self, clock: &RobotClock, output: &mut Self::Output<'_>) -> CuResult<()> {
+        let now = clock.now();
+        let raw = self.adc.read_raw_blocking();
+        let slope = self.adc.slope().max(1);
+        let raw_u64 = u64::from(raw);
+        let slope_u64 = u64::from(slope);
+        let vref_mv = u64::from(self.vref_mv);
+        let vbat_scale = u64::from(self.vbat_scale);
+        let vbat_res_div_val = u64::from(self.vbat_res_div_val);
+        let vbat_res_div_mult = u64::from(self.vbat_res_div_mult);
+
+        // Match Betaflight voltageAdcToVoltage: output in 0.01V steps.
+        let denom = slope_u64.saturating_mul(vbat_res_div_val).max(1);
+        let mut numer = raw_u64.saturating_mul(vbat_scale).saturating_mul(vref_mv);
+        numer /= 10;
+        let mut centivolts = (numer + denom / 2) / denom;
+        centivolts /= vbat_res_div_mult.max(1);
+        let centivolts = centivolts.min(u64::from(u16::MAX)) as u16;
+
+        output.set_payload(BatteryVoltage { centivolts });
+        output.tov = Tov::Time(now);
+        info_rl!(
+            &LOG_TELEMETRY,
+            now,
+            "vbat adc raw={} slope={} vref_mv={} centivolts={}",
+            raw,
+            slope,
+            self.vref_mv,
+            centivolts
+        );
+        Ok(())
+    }
+}
+
 pub struct VtxOsd {
     row: u8,
     cols: u8,
@@ -160,12 +247,13 @@ pub struct VtxOsd {
     last_heartbeat: Option<CuTime>,
     last_draw: Option<CuTime>,
     last_armed: bool,
+    last_voltage_centi: Option<u16>,
 }
 
 impl Freezable for VtxOsd {}
 
 impl CuTask for VtxOsd {
-    type Input<'m> = CuMsg<ControlInputs>;
+    type Input<'m> = input_msg!('m, ControlInputs, BatteryVoltage);
     type Output<'m> = CuMsg<MspRequestBatch>;
     type Resources<'r> = ();
 
@@ -196,6 +284,7 @@ impl CuTask for VtxOsd {
             last_heartbeat: None,
             last_draw: None,
             last_armed: false,
+            last_voltage_centi: None,
         })
     }
 
@@ -205,11 +294,16 @@ impl CuTask for VtxOsd {
         input: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
-        let tov_time = expect_tov_time(input.tov)?;
+        let (ctrl_msg, batt_msg) = *input;
+        let tov_time = expect_tov_time(ctrl_msg.tov)?;
         output.tov = Tov::Time(tov_time);
         let now = tov_time;
         let mut batch = MspRequestBatch::new();
-        let ctrl = input.payload();
+        let ctrl = ctrl_msg.payload();
+
+        if let Some(voltage) = batt_msg.payload() {
+            self.last_voltage_centi = Some(voltage.centivolts);
+        }
 
         if let Some(ctrl) = ctrl {
             self.last_armed = ctrl.armed;
@@ -267,6 +361,7 @@ impl CuTask for VtxOsd {
             batch.push(MspRequest::MspDisplayPort(MspDisplayPort::write_string(
                 self.row, col, 0, text,
             )));
+            self.push_cell_voltage(&mut batch);
             self.push_watermark(&mut batch);
         }
 
@@ -276,6 +371,7 @@ impl CuTask for VtxOsd {
             .unwrap_or(true);
         if label_changed || draw_due {
             if !label_changed {
+                self.push_cell_voltage(&mut batch);
                 self.push_watermark(&mut batch);
             }
             batch.push(MspRequest::MspDisplayPort(MspDisplayPort::draw_screen()));
@@ -292,6 +388,43 @@ impl CuTask for VtxOsd {
 }
 
 impl VtxOsd {
+    fn push_cell_voltage(&self, batch: &mut MspRequestBatch) {
+        let row = self.row.saturating_add(1);
+        if row >= self.rows {
+            return;
+        }
+        let text = self.format_cell_voltage();
+        let width = text.len() as u8;
+        let col = if self.cols <= width {
+            0
+        } else {
+            let half = width / 2;
+            let mut col = self.col_center.saturating_sub(half);
+            if col.saturating_add(width) > self.cols {
+                col = self.cols.saturating_sub(width);
+            }
+            col
+        };
+        batch.push(MspRequest::MspDisplayPort(MspDisplayPort::write_string(
+            row,
+            col,
+            0,
+            text.as_str(),
+        )));
+    }
+
+    fn format_cell_voltage(&self) -> alloc::string::String {
+        match self.last_voltage_centi {
+            Some(total_centi) => {
+                let cell_centi = total_centi / VTX_CELL_DIVISOR;
+                let whole = cell_centi / 100;
+                let frac = cell_centi % 100;
+                alloc::format!("{whole}.{frac:02}{VTX_SYM_VOLT}")
+            }
+            None => alloc::format!("--.--{VTX_SYM_VOLT}"),
+        }
+    }
+
     fn push_watermark(&self, batch: &mut MspRequestBatch) {
         if self.rows == 0 || self.cols == 0 {
             return;
@@ -345,6 +478,114 @@ fn build_msp_status(armed: bool) -> MspStatus {
         core_temp_celsius: 0,
         control_rate_profile_count: 1,
     }
+}
+
+pub struct VtxMspResponder {
+    last_voltage_centi: Option<u16>,
+    battery_cells: Option<u8>,
+}
+
+impl Freezable for VtxMspResponder {}
+
+impl CuTask for VtxMspResponder {
+    type Input<'m> = input_msg!('m, MspRequestBatch, BatteryVoltage);
+    type Output<'m> = CuMsg<MspRequestBatch>;
+    type Resources<'r> = ();
+
+    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    where
+        Self: Sized,
+    {
+        let battery_cells = config
+            .and_then(|cfg| cfg.get::<u32>("battery_cells"))
+            .and_then(|cells| u8::try_from(cells).ok())
+            .filter(|cells| *cells > 0);
+        Ok(Self {
+            last_voltage_centi: None,
+            battery_cells,
+        })
+    }
+
+    fn process<'i, 'o>(
+        &mut self,
+        _clock: &RobotClock,
+        input: &Self::Input<'i>,
+        output: &mut Self::Output<'o>,
+    ) -> CuResult<()> {
+        let (req_msg, voltage_msg) = *input;
+        output.tov = req_msg.tov;
+
+        if let Some(voltage) = voltage_msg.payload() {
+            self.last_voltage_centi = Some(voltage.centivolts);
+        }
+
+        let mut batch = MspRequestBatch::new();
+        let Some(requests) = req_msg.payload() else {
+            output.clear_payload();
+            return Ok(());
+        };
+
+        let voltage_centi = self.last_voltage_centi.unwrap_or(0);
+        let voltage_decivolts = clamp_u8((voltage_centi + 5) / 10);
+        let cell_count = self
+            .battery_cells
+            .or_else(|| estimate_cell_count(voltage_centi));
+
+        let battery_state = MspBatteryState {
+            battery_cell_count: cell_count.unwrap_or(0),
+            battery_capacity: 0,
+            battery_voltage: voltage_decivolts,
+            mah_drawn: 0,
+            amperage: 0,
+            alerts: 0,
+            battery_voltage_mv: voltage_centi,
+        };
+        let analog = MspAnalog {
+            battery_voltage: voltage_decivolts,
+            mah_drawn: 0,
+            rssi: 0,
+            amperage: 0,
+            battery_voltage_mv: voltage_centi,
+        };
+        let voltage_meter = MspVoltageMeter {
+            id: 0,
+            value: voltage_decivolts,
+        };
+
+        for request in requests.iter() {
+            match request {
+                MspRequest::MspBatteryStateRequest => {
+                    batch.push(MspRequest::MspBatteryState(battery_state));
+                }
+                MspRequest::MspAnalogRequest => {
+                    batch.push(MspRequest::MspAnalog(analog));
+                }
+                MspRequest::MspVoltageMetersRequest => {
+                    batch.push(MspRequest::MspVoltageMeter(voltage_meter));
+                }
+                _ => {}
+            }
+        }
+
+        if batch.0.is_empty() {
+            output.clear_payload();
+        } else {
+            output.set_payload(batch);
+        }
+        Ok(())
+    }
+}
+
+fn clamp_u8(value: u16) -> u8 {
+    value.min(u16::from(u8::MAX)) as u8
+}
+
+fn estimate_cell_count(voltage_centi: u16) -> Option<u8> {
+    if voltage_centi == 0 {
+        return None;
+    }
+    let cells = (u32::from(voltage_centi) + 419) / 420;
+    Some(clamp_u8(cells.min(u32::from(u8::MAX)) as u16))
 }
 
 pub struct ImuLogger {
@@ -414,6 +655,7 @@ impl Freezable for FlightMode {}
 impl Freezable for ControlInputs {}
 impl Freezable for BodyRateSetpoint {}
 impl Freezable for BodyCommand {}
+impl Freezable for BatteryVoltage {}
 impl Freezable for LedBeat {}
 
 impl CuSinkTask for LedBeat {

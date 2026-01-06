@@ -472,6 +472,8 @@ pub struct MspAnalog {
     pub rssi: u16,
     /// Current in 0.01A steps, range is -320A to 320A
     pub amperage: i16,
+    /// Battery voltage in 0.01V steps
+    pub battery_voltage_mv: u16,
 }
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
@@ -512,6 +514,8 @@ pub struct MspBatteryState {
     pub amperage: i16,
 
     pub alerts: u8,
+    /// Battery voltage in 0.01V steps
+    pub battery_voltage_mv: u16,
 }
 
 impl MspBatteryState {
@@ -1245,7 +1249,12 @@ impl MspRc {
 pub enum MspRequest {
     #[default]
     Unknown,
-    MspBatteryState,
+    MspBatteryStateRequest,
+    MspBatteryState(MspBatteryState),
+    MspAnalogRequest,
+    MspAnalog(MspAnalog),
+    MspVoltageMetersRequest,
+    MspVoltageMeter(MspVoltageMeter),
     MspRc,
     MspSetRawRc(MspRc),
     MspRawImu,
@@ -1257,7 +1266,12 @@ pub enum MspRequest {
 impl MspRequest {
     pub fn command_code(&self) -> MspCommandCode {
         match self {
-            MspRequest::MspBatteryState => MspCommandCode::MSP_BATTERY_STATE,
+            MspRequest::MspBatteryStateRequest => MspCommandCode::MSP_BATTERY_STATE,
+            MspRequest::MspBatteryState(_) => MspCommandCode::MSP_BATTERY_STATE,
+            MspRequest::MspAnalogRequest => MspCommandCode::MSP_ANALOG,
+            MspRequest::MspAnalog(_) => MspCommandCode::MSP_ANALOG,
+            MspRequest::MspVoltageMetersRequest => MspCommandCode::MSP_VOLTAGE_METERS,
+            MspRequest::MspVoltageMeter(_) => MspCommandCode::MSP_VOLTAGE_METERS,
             MspRequest::MspRc => MspCommandCode::MSP_RC,
             MspRequest::MspSetRawRc(_) => MspCommandCode::MSP_SET_RAW_RC,
             MspRequest::MspRawImu => MspCommandCode::MSP_RAW_IMU,
@@ -1267,15 +1281,62 @@ impl MspRequest {
             _ => MspCommandCode::MSP_API_VERSION,
         }
     }
+
+    pub fn from_command_code(cmd: MspCommandCode) -> Option<Self> {
+        match cmd {
+            MspCommandCode::MSP_BATTERY_STATE => Some(MspRequest::MspBatteryStateRequest),
+            MspCommandCode::MSP_ANALOG => Some(MspRequest::MspAnalogRequest),
+            MspCommandCode::MSP_VOLTAGE_METERS => Some(MspRequest::MspVoltageMetersRequest),
+            MspCommandCode::MSP_RC => Some(MspRequest::MspRc),
+            MspCommandCode::MSP_RAW_IMU => Some(MspRequest::MspRawImu),
+            _ => None,
+        }
+    }
+
+    pub fn from_command_id(cmd: u16) -> Option<Self> {
+        let cmd = MspCommandCode::from_primitive(cmd)?;
+        Self::from_command_code(cmd)
+    }
 }
 
 impl From<MspRequest> for MspPacket {
     fn from(request: MspRequest) -> Self {
         match request {
-            MspRequest::MspBatteryState => MspPacket {
+            MspRequest::MspBatteryStateRequest => MspPacket {
                 cmd: MspCommandCode::MSP_BATTERY_STATE.to_primitive(),
                 direction: ToFlightController,
                 data: MspPacketData::new(), // empty
+            },
+            MspRequest::MspBatteryState(state) => MspPacket {
+                cmd: MspCommandCode::MSP_BATTERY_STATE.to_primitive(),
+                direction: FromFlightController,
+                data: state.pack().map_or_else(|_| MspPacketData::new(), |data| {
+                    MspPacketData(SmallVec::from_slice(data.as_slice()))
+                }),
+            },
+            MspRequest::MspAnalogRequest => MspPacket {
+                cmd: MspCommandCode::MSP_ANALOG.to_primitive(),
+                direction: ToFlightController,
+                data: MspPacketData::new(), // empty
+            },
+            MspRequest::MspAnalog(analog) => MspPacket {
+                cmd: MspCommandCode::MSP_ANALOG.to_primitive(),
+                direction: FromFlightController,
+                data: analog.pack().map_or_else(|_| MspPacketData::new(), |data| {
+                    MspPacketData(SmallVec::from_slice(data.as_slice()))
+                }),
+            },
+            MspRequest::MspVoltageMetersRequest => MspPacket {
+                cmd: MspCommandCode::MSP_VOLTAGE_METERS.to_primitive(),
+                direction: ToFlightController,
+                data: MspPacketData::new(), // empty
+            },
+            MspRequest::MspVoltageMeter(meter) => MspPacket {
+                cmd: MspCommandCode::MSP_VOLTAGE_METERS.to_primitive(),
+                direction: FromFlightController,
+                data: meter.pack().map_or_else(|_| MspPacketData::new(), |data| {
+                    MspPacketData(SmallVec::from_slice(data.as_slice()))
+                }),
             },
             MspRequest::MspRc => MspPacket {
                 cmd: MspCommandCode::MSP_RC.to_primitive(),
@@ -1322,10 +1383,41 @@ impl From<MspRequest> for MspPacket {
 impl From<&MspRequest> for MspPacket {
     fn from(request: &MspRequest) -> Self {
         match request {
-            MspRequest::MspBatteryState => MspPacket {
+            MspRequest::MspBatteryStateRequest => MspPacket {
                 cmd: MspCommandCode::MSP_BATTERY_STATE.to_primitive(),
                 direction: ToFlightController,
                 data: MspPacketData::new(), // empty
+            },
+            MspRequest::MspBatteryState(state) => MspPacket {
+                cmd: MspCommandCode::MSP_BATTERY_STATE.to_primitive(),
+                direction: FromFlightController,
+                data: state.pack().map_or_else(|_| MspPacketData::new(), |data| {
+                    MspPacketData::from(data.as_slice())
+                }),
+            },
+            MspRequest::MspAnalogRequest => MspPacket {
+                cmd: MspCommandCode::MSP_ANALOG.to_primitive(),
+                direction: ToFlightController,
+                data: MspPacketData::new(), // empty
+            },
+            MspRequest::MspAnalog(analog) => MspPacket {
+                cmd: MspCommandCode::MSP_ANALOG.to_primitive(),
+                direction: FromFlightController,
+                data: analog.pack().map_or_else(|_| MspPacketData::new(), |data| {
+                    MspPacketData::from(data.as_slice())
+                }),
+            },
+            MspRequest::MspVoltageMetersRequest => MspPacket {
+                cmd: MspCommandCode::MSP_VOLTAGE_METERS.to_primitive(),
+                direction: ToFlightController,
+                data: MspPacketData::new(), // empty
+            },
+            MspRequest::MspVoltageMeter(meter) => MspPacket {
+                cmd: MspCommandCode::MSP_VOLTAGE_METERS.to_primitive(),
+                direction: FromFlightController,
+                data: meter.pack().map_or_else(|_| MspPacketData::new(), |data| {
+                    MspPacketData::from(data.as_slice())
+                }),
             },
             MspRequest::MspRc => MspPacket {
                 cmd: MspCommandCode::MSP_RC.to_primitive(),
