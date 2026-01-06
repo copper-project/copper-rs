@@ -10,6 +10,10 @@ categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
+[package.metadata.copper]
+embedded_only = true
+embedded_target = "thumbv7em-none-eabihf"
+
 [features]
 default = ["defmt"]
 defmt = [
