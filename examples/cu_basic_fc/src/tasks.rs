@@ -22,6 +22,7 @@ const VTX_HEARTBEAT_PERIOD_MS: u64 = 1000;
 const VTX_DRAW_PERIOD_MS: u64 = 250;
 // Matches Betaflight ARMING_DISABLE_FLAGS_COUNT (log2(ARM_SWITCH) + 1).
 const MSP_ARMING_DISABLE_FLAGS_COUNT: u8 = 29;
+const VTX_WATERMARK_LINES: [&str; 3] = [" /\\_/\\ ", "( O O )", " > ^ <  [CU29]"];
 
 resources!({
     led => Owned<spin::Mutex<GreenLed>>,
@@ -151,7 +152,10 @@ impl StatusLabel {
 pub struct VtxOsd {
     row: u8,
     cols: u8,
+    rows: u8,
     col_center: u8,
+    watermark_row: u8,
+    watermark_col: u8,
     last_label: Option<StatusLabel>,
     last_heartbeat: Option<CuTime>,
     last_draw: Option<CuTime>,
@@ -170,14 +174,24 @@ impl CuTask for VtxOsd {
         Self: Sized,
     {
         let cols = cfg_u16(config, "cols", 53).max(1).min(u8::MAX as u16) as u8;
+        let rows = cfg_u16(config, "rows", 16).max(1).min(u8::MAX as u16) as u8;
         let default_center = (cols / 2) as u16;
         let col_center =
             cfg_u16(config, "col_center", default_center).min(cols.saturating_sub(1) as u16) as u8;
         let row = cfg_u16(config, "row", 13).min(u8::MAX as u16) as u8;
+        let watermark_height = VTX_WATERMARK_LINES.len() as u8;
+        let default_watermark_row = rows.saturating_sub(watermark_height);
+        let watermark_row = cfg_u16(config, "watermark_row", default_watermark_row as u16)
+            .min(rows.saturating_sub(1) as u16) as u8;
+        let watermark_col =
+            cfg_u16(config, "watermark_col", 0).min(cols.saturating_sub(1) as u16) as u8;
         Ok(Self {
             row,
             cols,
+            rows,
             col_center,
+            watermark_row,
+            watermark_col,
             last_label: None,
             last_heartbeat: None,
             last_draw: None,
@@ -253,6 +267,7 @@ impl CuTask for VtxOsd {
             batch.push(MspRequest::MspDisplayPort(MspDisplayPort::write_string(
                 self.row, col, 0, text,
             )));
+            self.push_watermark(&mut batch);
         }
 
         let draw_due = self
@@ -260,6 +275,9 @@ impl CuTask for VtxOsd {
             .map(|prev| now - prev >= CuDuration::from_millis(VTX_DRAW_PERIOD_MS))
             .unwrap_or(true);
         if label_changed || draw_due {
+            if !label_changed {
+                self.push_watermark(&mut batch);
+            }
             batch.push(MspRequest::MspDisplayPort(MspDisplayPort::draw_screen()));
             self.last_draw = Some(now);
         }
@@ -270,6 +288,35 @@ impl CuTask for VtxOsd {
             output.set_payload(batch);
         }
         Ok(())
+    }
+}
+
+impl VtxOsd {
+    fn push_watermark(&self, batch: &mut MspRequestBatch) {
+        if self.rows == 0 || self.cols == 0 {
+            return;
+        }
+        let col = self.watermark_col.min(self.cols.saturating_sub(1));
+        let available = self.cols.saturating_sub(col) as usize;
+        if available == 0 {
+            return;
+        }
+        for (idx, line) in VTX_WATERMARK_LINES.iter().enumerate() {
+            let row = self.watermark_row.saturating_add(idx as u8);
+            if row >= self.rows {
+                break;
+            }
+            let mut text = *line;
+            if text.len() > available {
+                text = &text[..available];
+            }
+            if text.is_empty() {
+                continue;
+            }
+            batch.push(MspRequest::MspDisplayPort(MspDisplayPort::write_string(
+                row, col, 0, text,
+            )));
+        }
     }
 }
 
