@@ -24,4 +24,4 @@ cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
 cu29-export = { workspace = true, optional = true }
 serde = { workspace = true }
-{{project-name|kebab_case}}-tasks = { path = "../../tasks/{{project-name|kebab_case}}-tasks" }
+{{project-name|kebab_case}}-tasks = { path = "../../tasks/{{project-name}}-tasks" }

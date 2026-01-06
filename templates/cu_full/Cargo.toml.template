@@ -1,8 +1,8 @@
 [workspace]
 members = [
-    "apps/{{project-name|kebab_case}}",
-    "libs/{{project-name|kebab_case}}-types",
-    "tasks/{{project-name|kebab_case}}-tasks",
+    "apps/{{project-name}}",
+    "libs/{{project-name}}-types",
+    "tasks/{{project-name}}-tasks",
 ]
 resolver = "2"
 

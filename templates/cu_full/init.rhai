@@ -1,13 +1,13 @@
 file::rename("Cargo.toml.template", "Cargo.toml");
 file::rename(
-    "apps/{{project-name|kebab_case}}/Cargo.toml.template",
-    "apps/{{project-name|kebab_case}}/Cargo.toml",
+    "apps/{{project-name}}/Cargo.toml.template",
+    "apps/{{project-name}}/Cargo.toml",
 );
 file::rename(
-    "libs/{{project-name|kebab_case}}-types/Cargo.toml.template",
-    "libs/{{project-name|kebab_case}}-types/Cargo.toml",
+    "libs/{{project-name}}-types/Cargo.toml.template",
+    "libs/{{project-name}}-types/Cargo.toml",
 );
 file::rename(
-    "tasks/{{project-name|kebab_case}}-tasks/Cargo.toml.template",
-    "tasks/{{project-name|kebab_case}}-tasks/Cargo.toml",
+    "tasks/{{project-name}}-tasks/Cargo.toml.template",
+    "tasks/{{project-name}}-tasks/Cargo.toml",
 );

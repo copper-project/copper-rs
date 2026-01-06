@@ -5,4 +5,4 @@ edition = "2021"
 
 [dependencies]
 cu29 = { workspace = true }
-{{project-name|kebab_case}}-types = { path = "../../libs/{{project-name|kebab_case}}-types" }
+{{project-name|kebab_case}}-types = { path = "../../libs/{{project-name}}-types" }

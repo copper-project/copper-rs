@@ -4,4 +4,4 @@ set -euo pipefail
 # A shortcut to build the dot file of the execution DAG.
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
-{{copper_root_path}}/target/debug/cu29-rendercfg apps/{{project-name|kebab_case}}/config/copperconfig.ron --open
+{{copper_root_path}}/target/debug/cu29-rendercfg apps/{{project-name}}/config/copperconfig.ron --open
