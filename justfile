@@ -84,6 +84,7 @@ std-ci mode="debug": lint
 	fi
 
 # Run RTSan on a single app (defaults to cu-caterpillar).
+# RTSan reports violations to stderr; tweak RTSAN_OPTIONS if you need to keep running.
 rtsan-smoke pkg="cu-caterpillar" bin="cu-caterpillar" args="" options="halt_on_error=false":
 	#!/usr/bin/env bash
 	set -euo pipefail
