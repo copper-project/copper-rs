@@ -6,7 +6,7 @@
 [![dependency status](https://deps.rs/repo/github/copper-project/copper-rs/status.svg)](https://deps.rs/repo/github/copper-project/copper-rs)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Discord](https://img.shields.io/discord/1305916875741597826?logo=discord)](https://discord.gg/VkCG7Sb9Kw)
-[![Wikis](https://img.shields.io/badge/Wikis-8A2BE2)](https://github.com/copper-project/copper-rs/wiki)
+[![Documentation](https://img.shields.io/badge/Wikis-8A2BE2)](https://github.com/copper-project/copper-rs/wiki)
 
 <blockquote>
 🤖&nbsp&nbsp&nbsp&nbsp
