@@ -75,6 +75,7 @@ std-ci mode="debug": lint
 		fi
 		(
 			cd templates
+			rm -rf test_project
 			cargo +stable generate -p cu_full --name test_project --destination . -d copper_source=local -d copper_root_path=../.. --silent
 		)
 		(
