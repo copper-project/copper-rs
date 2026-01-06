@@ -1,1 +1,1 @@
-Helpers moved to `scripts/` at the workspace root.
+Helpers moved to `justfile` at the workspace root.

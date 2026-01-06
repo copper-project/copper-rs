@@ -1,7 +1,0 @@
-#!/bin/bash
-set -euo pipefail
-
-# A small shortcut be able to extract your copperlists from the application logs.
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT_DIR"
-RUST_BACKTRACE=1 cargo run --features=logreader -p {{project-name|kebab_case}} --bin {{project-name|kebab_case}}-logreader logs/{{project-name|kebab_case}}.copper extract-copperlists

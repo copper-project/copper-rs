@@ -8,7 +8,7 @@ This template bootstraps a multi-crate Copper workspace intended to scale beyond
 - `tasks/{{project-name}}-tasks/`: Copper task implementations.
 - `libs/{{project-name}}-types/`: shared message types.
 - `docs/`: design notes and project docs.
-- `scripts/`: automation helpers like `log`, `cl`, and `rcfg`.
+- `justfile`: automation helpers like `just log`, `just cl`, and `just rcfg`.
 
 ## Quick start
 
