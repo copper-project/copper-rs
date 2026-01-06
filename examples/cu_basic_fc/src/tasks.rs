@@ -759,6 +759,7 @@ pub struct AttitudeController {
     angle_limit_rad: f32,
     rate_limit_rad: f32,
     acro_rate_rad: f32,
+    acro_expo: f32,
     dt_fallback: CuDuration,
     last_time: Option<CuTime>,
     last_mode: FlightMode,
@@ -778,6 +779,7 @@ impl CuTask for AttitudeController {
         let angle_limit_rad = cfg_f32(config, "angle_limit_deg", 25.0).to_radians();
         let rate_limit_rad = cfg_f32(config, "rate_limit_dps", 180.0).to_radians();
         let acro_rate_rad = cfg_f32(config, "acro_rate_dps", 360.0).to_radians();
+        let acro_expo = normalize_expo(cfg_f32(config, "acro_expo", 0.0));
         let kp = cfg_f32(config, "kp", 4.0);
         let ki = cfg_f32(config, "ki", 0.0);
         let kd = cfg_f32(config, "kd", 0.0);
@@ -812,6 +814,7 @@ impl CuTask for AttitudeController {
             angle_limit_rad,
             rate_limit_rad,
             acro_rate_rad,
+            acro_expo,
             dt_fallback,
             last_time: None,
             last_mode: FlightMode::Angle,
@@ -876,15 +879,18 @@ impl CuTask for AttitudeController {
             } else {
                 self.roll_pid.reset();
                 self.pitch_pid.reset();
+                let roll_cmd = apply_expo(ctrl.roll, self.acro_expo);
+                let pitch_cmd = apply_expo(ctrl.pitch, self.acro_expo);
                 (
-                    (ctrl.roll * self.acro_rate_rad).clamp(-self.acro_rate_rad, self.acro_rate_rad),
-                    (ctrl.pitch * self.acro_rate_rad)
+                    (roll_cmd * self.acro_rate_rad).clamp(-self.acro_rate_rad, self.acro_rate_rad),
+                    (pitch_cmd * self.acro_rate_rad)
                         .clamp(-self.acro_rate_rad, self.acro_rate_rad),
                 )
             };
 
+        let yaw_cmd = apply_expo(ctrl.yaw, self.acro_expo);
         let yaw_rate =
-            (ctrl.yaw * self.acro_rate_rad).clamp(-self.acro_rate_rad, self.acro_rate_rad);
+            (yaw_cmd * self.acro_rate_rad).clamp(-self.acro_rate_rad, self.acro_rate_rad);
 
         output.tov = output_tov;
         output.set_payload(BodyRateSetpoint {
@@ -1226,6 +1232,17 @@ fn dt_or_fallback(last_time: &mut Option<CuTime>, now: CuTime, fallback: CuDurat
         Some(duration) if duration > CuDuration::MIN => duration,
         _ => fallback,
     }
+}
+
+fn normalize_expo(raw: f32) -> f32 {
+    let expo = if raw > 1.0 { raw / 100.0 } else { raw };
+    expo.clamp(0.0, 1.0)
+}
+
+fn apply_expo(value: f32, expo: f32) -> f32 {
+    let abs = value.abs();
+    let weight = expo * abs * abs * abs + (1.0 - expo);
+    value * weight
 }
 
 fn cfg_f32(config: Option<&ComponentConfig>, key: &str, default: f32) -> f32 {
