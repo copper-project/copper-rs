@@ -45,6 +45,8 @@
                 "kp_yaw": 0.05,
                 "ki_yaw": 0.0,
                 "kd_yaw": 0.0,
+                "airmode": true,
+                "airmode_start_throttle_percent": 25.0,
             },
         ),
         (
