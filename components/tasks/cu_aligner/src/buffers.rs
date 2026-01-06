@@ -120,11 +120,8 @@ macro_rules! alignment_buffers {
             /// Call this to be sure we discard the old/ non relevant data
             #[allow(dead_code)]
             pub fn purge(&mut self, now: cu29::clock::CuTime) {
-                let horizon_time = if now >= self.stale_data_horizon {
-                    now - self.stale_data_horizon
-                } else {
-                    cu29::clock::CuDuration::MIN
-                };
+                use cu29::prelude::SaturatingSub;
+                let horizon_time = now.saturating_sub(self.stale_data_horizon);
                 // purge all the stale data from the TimeboundCircularBuffers first
                 $(self.$name.purge(horizon_time);)*
             }
@@ -134,6 +131,7 @@ macro_rules! alignment_buffers {
             pub fn get_latest_aligned_data(
                 &mut self,
             ) -> Option<($(impl Iterator<Item = &cu29::cutask::CuStampedData<$payload, CuMsgMetadata>>),*)> {
+                use cu29::prelude::SaturatingSub;
                 // Now find the min of the max of the last time for all buffers
                 // meaning the most recent time at which all buffers have data
                 let most_recent_time = [
@@ -148,11 +146,8 @@ macro_rules! alignment_buffers {
 
                 let most_recent_time = most_recent_time.unwrap();
 
-                let time_to_get_complete_window = if most_recent_time >= self.target_alignment_window {
-                    most_recent_time - self.target_alignment_window
-                } else {
-                    cu29::clock::CuDuration::MIN
-                };
+                let time_to_get_complete_window =
+                    most_recent_time.saturating_sub(self.target_alignment_window);
                 Some(($(self.$name.iter_window(time_to_get_complete_window, most_recent_time)),*))
             }
         }
