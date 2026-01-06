@@ -1,11 +1,6 @@
-use bincode::{Decode, Encode};
 use cu29::prelude::*;
 
-// Define a message type
-#[derive(Default, Debug, Clone, Encode, Decode, Serialize)]
-pub struct MyPayload {
-    value: i32,
-}
+pub use {{project-name|snake_case}}_types::MyPayload;
 
 // Defines a source (ie. driver)
 #[derive(Default)]

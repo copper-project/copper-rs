@@ -1,3 +1,0 @@
-#!/bin/bash
-# A small shortcut be able to extract your copperlists from the application logs.
-RUST_BACKTRACE=1 cargo run --features=logreader --bin {{project-name | kebab_case}}-logreader logs/{{project-name | kebab_case}}.copper extract-copperlist

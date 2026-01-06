@@ -1,5 +1,3 @@
-pub mod tasks;
-
 use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
 use std::thread::sleep;
@@ -8,7 +6,7 @@ use std::path::{Path,PathBuf};
 
 const PREALLOCATED_STORAGE_SIZE: Option<usize> = Some(1024 * 1024 * 100);
 
-#[copper_runtime(config = "copperconfig.ron")]
+#[copper_runtime(config = "config/copperconfig.ron")]
 struct {{project-name | upper_camel_case}}Application {}
 
 fn main() {
