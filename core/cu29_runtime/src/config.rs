@@ -13,9 +13,9 @@ use hashbrown::HashMap;
 pub use petgraph::Direction::Incoming;
 pub use petgraph::Direction::Outgoing;
 use petgraph::stable_graph::{EdgeIndex, NodeIndex, StableDiGraph};
-use petgraph::visit::EdgeRef;
 #[cfg(feature = "std")]
 use petgraph::visit::IntoEdgeReferences;
+use petgraph::visit::{Bfs, EdgeRef};
 use ron::extensions::Extensions;
 use ron::value::Value as RonValue;
 use ron::{Number, Options};
@@ -628,6 +628,43 @@ impl CuGraph {
             .neighbors_directed(node_id.into(), dir.into())
             .map(|petgraph_index| petgraph_index.index() as NodeId)
             .collect()
+    }
+
+    #[allow(dead_code)]
+    pub fn node_ids(&self) -> Vec<NodeId> {
+        self.0
+            .node_indices()
+            .map(|index| index.index() as NodeId)
+            .collect()
+    }
+
+    #[allow(dead_code)]
+    pub fn edge_id_between(&self, source: NodeId, target: NodeId) -> Option<usize> {
+        self.0
+            .find_edge(source.into(), target.into())
+            .map(|edge| edge.index())
+    }
+
+    #[allow(dead_code)]
+    pub fn edge(&self, edge_id: usize) -> Option<&Cnx> {
+        self.0.edge_weight(EdgeIndex::new(edge_id))
+    }
+
+    #[allow(dead_code)]
+    pub fn edges(&self) -> impl Iterator<Item = &Cnx> {
+        self.0
+            .edge_indices()
+            .filter_map(|edge| self.0.edge_weight(edge))
+    }
+
+    #[allow(dead_code)]
+    pub fn bfs_nodes(&self, start: NodeId) -> Vec<NodeId> {
+        let mut visitor = Bfs::new(&self.0, start.into());
+        let mut nodes = Vec::new();
+        while let Some(node) = visitor.next(&self.0) {
+            nodes.push(node.index() as NodeId);
+        }
+        nodes
     }
 
     #[allow(dead_code)]

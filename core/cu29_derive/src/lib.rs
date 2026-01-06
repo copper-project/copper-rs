@@ -2504,12 +2504,7 @@ fn build_culist_tuple_default(all_msgs_types_in_culist_order: &[Type]) -> ItemIm
 
 fn collect_bridge_channel_usage(graph: &CuGraph) -> HashMap<BridgeChannelKey, String> {
     let mut usage = HashMap::new();
-    for edge_idx in graph.0.edge_indices() {
-        let cnx = graph
-            .0
-            .edge_weight(edge_idx)
-            .expect("Edge should exist while collecting bridge usage")
-            .clone();
+    for cnx in graph.edges() {
         if let Some(channel) = &cnx.src_channel {
             let key = BridgeChannelKey {
                 bridge_id: cnx.src.clone(),
@@ -3082,13 +3077,7 @@ fn build_execution_plan(
         }
     }
 
-    for edge_idx in graph.0.edge_indices() {
-        let cnx = graph
-            .0
-            .edge_weight(edge_idx)
-            .expect("Edge should exist while building plan")
-            .clone();
-
+    for cnx in graph.edges() {
         let src_plan = if let Some(channel) = &cnx.src_channel {
             let key = BridgeChannelKey {
                 bridge_id: cnx.src.clone(),
