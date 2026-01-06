@@ -1,17 +1,17 @@
 [package]
-name = "{{project-name|kebab_case}}"
+name = "{{project-name|kebab_case}}-demo"
 version = "0.1.0"
 edition = "2021"
-default-run = "{{project-name|kebab_case}}"
+default-run = "{{project-name|kebab_case}}-demo"
 
 # The main executable of your application
 [[bin]]
-name = "{{project-name|kebab_case}}"
+name = "{{project-name|kebab_case}}-demo"
 path = "src/main.rs"
 
 # A custom made log reader application for your application.
 [[bin]]
-name = "{{project-name|kebab_case}}-logreader"
+name = "{{project-name|kebab_case}}-demo-logreader"
 path = "src/logreader.rs"
 required-features = ["logreader"]
 

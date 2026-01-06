@@ -4,16 +4,22 @@
 log:
   #!/usr/bin/env bash
   set -euo pipefail
-  RUST_BACKTRACE=1 cargo run --features=logreader -p {{project-name|kebab_case}} --bin {{project-name|kebab_case}}-logreader logs/{{project-name|kebab_case}}.copper extract-text-log target/debug/cu29_log_index
+  APP_NAME="${APP_NAME:-{{project-name|kebab_case}}}"
+  APP_DIR="${APP_DIR:-{{project-name}}}"
+  RUST_BACKTRACE=1 cargo run --features=logreader -p "$APP_NAME" --bin "${APP_NAME}-logreader" logs/"${APP_NAME}".copper extract-text-log target/debug/cu29_log_index
 
 # Extract CopperLists from the log output.
 cl:
   #!/usr/bin/env bash
   set -euo pipefail
-  RUST_BACKTRACE=1 cargo run --features=logreader -p {{project-name|kebab_case}} --bin {{project-name|kebab_case}}-logreader logs/{{project-name|kebab_case}}.copper extract-copperlists
+  APP_NAME="${APP_NAME:-{{project-name|kebab_case}}}"
+  APP_DIR="${APP_DIR:-{{project-name}}}"
+  RUST_BACKTRACE=1 cargo run --features=logreader -p "$APP_NAME" --bin "${APP_NAME}-logreader" logs/"${APP_NAME}".copper extract-copperlists
 
 # Render the execution DAG from the app config.
 rcfg:
   #!/usr/bin/env bash
   set -euo pipefail
-  {{copper_root_path}}/target/debug/cu29-rendercfg apps/{{project-name}}/config/copperconfig.ron --open
+  APP_NAME="${APP_NAME:-{{project-name|kebab_case}}}"
+  APP_DIR="${APP_DIR:-{{project-name}}}"
+  {{copper_root_path}}/target/debug/cu29-rendercfg apps/"${APP_DIR}"/config/copperconfig.ron --open

@@ -4,10 +4,22 @@ file::rename(
     "apps/{{project-name}}/Cargo.toml",
 );
 file::rename(
-    "libs/{{project-name}}-types/Cargo.toml.template",
-    "libs/{{project-name}}-types/Cargo.toml",
+    "apps/{{project-name}}-demo/Cargo.toml.template",
+    "apps/{{project-name}}-demo/Cargo.toml",
 );
 file::rename(
-    "tasks/{{project-name}}-tasks/Cargo.toml.template",
-    "tasks/{{project-name}}-tasks/Cargo.toml",
+    "components/payloads/{{project-name}}-types/Cargo.toml.template",
+    "components/payloads/{{project-name}}-types/Cargo.toml",
+);
+file::rename(
+    "components/sources/{{project-name}}-source/Cargo.toml.template",
+    "components/sources/{{project-name}}-source/Cargo.toml",
+);
+file::rename(
+    "components/tasks/{{project-name}}-processor/Cargo.toml.template",
+    "components/tasks/{{project-name}}-processor/Cargo.toml",
+);
+file::rename(
+    "components/sinks/{{project-name}}-sink/Cargo.toml.template",
+    "components/sinks/{{project-name}}-sink/Cargo.toml",
 );

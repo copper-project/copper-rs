@@ -1,8 +1,11 @@
 [workspace]
 members = [
     "apps/{{project-name}}",
-    "libs/{{project-name}}-types",
-    "tasks/{{project-name}}-tasks",
+    "apps/{{project-name}}-demo",
+    "components/payloads/{{project-name}}-types",
+    "components/sources/{{project-name}}-source",
+    "components/tasks/{{project-name}}-processor",
+    "components/sinks/{{project-name}}-sink",
 ]
 resolver = "2"
 

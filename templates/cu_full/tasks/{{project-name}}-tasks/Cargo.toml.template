@@ -1,8 +1,0 @@
-[package]
-name = "{{project-name|kebab_case}}-tasks"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-cu29 = { workspace = true }
-{{project-name|kebab_case}}-types = { path = "../../libs/{{project-name}}-types" }

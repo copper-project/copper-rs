@@ -3,20 +3,20 @@
     tasks: [
         (
             id: "src",
-            type: "{{project-name|snake_case}}_tasks::MySource",
+            type: "{{project-name|snake_case}}_source::MySource",
         ),
         (
             id: "t-0",
-            type: "{{project-name|snake_case}}_tasks::MyTask",
+            type: "{{project-name|snake_case}}_processor::MyTask",
         ),
         (
             id: "sink",
-            type: "{{project-name|snake_case}}_tasks::MySink",
+            type: "{{project-name|snake_case}}_sink::MySink",
         ),
      ],
     // Makes a connection from the source to the task and from the task to the sink.
     cnx: [
-        (src: "src",  dst: "t-0",   msg: "{{project-name|snake_case}}_tasks::MyPayload"),
-        (src: "t-0",  dst: "sink",   msg: "{{project-name|snake_case}}_tasks::MyPayload"),
+        (src: "src",  dst: "t-0",   msg: "{{project-name|snake_case}}_types::MyPayload"),
+        (src: "t-0",  dst: "sink",   msg: "{{project-name|snake_case}}_types::MyPayload"),
     ],
 )

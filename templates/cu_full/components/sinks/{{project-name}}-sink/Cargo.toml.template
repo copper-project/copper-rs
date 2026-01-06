@@ -1,0 +1,8 @@
+[package]
+name = "{{project-name|kebab_case}}-sink"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cu29 = { workspace = true }
+{{project-name|kebab_case}}-types = { path = "../../payloads/{{project-name}}-types" }
