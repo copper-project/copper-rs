@@ -9,6 +9,10 @@ UI and interfacing with monitoring systems.
 Common Message Payloads
 Those are for you to use in your tasks. They are used to pass data between tasks.
 
+## res
+
+Board-specific resource bundles.
+
 ## sinks
 
 Everything that is the final destination within the Copper DAG like actuation drivers or interfacing with external systems.

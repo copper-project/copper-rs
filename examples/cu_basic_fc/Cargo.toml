@@ -28,6 +28,7 @@ cu-crsf = { path = "../../components/bridges/cu_crsf", default-features = false,
 cu-msp-bridge = { path = "../../components/bridges/cu_msp_bridge", default-features = false, features = ["defmt", "alloc"], optional = true }
 cu-msp-lib = { path = "../../components/libs/cu_msp_lib", default-features = false, features = ["bincode"] }
 cu-sdlogger = { path = "../../components/libs/cu_sdlogger", optional = true }
+cu-micoairh743 = { path = "../../components/res/cu_micoairh743", optional = true }
 cu-embedded-registry = { path = "../../components/libs/cu_embedded_registry", default-features = false, features = ["defmt"], optional = true }
 cu-logmon = { path = "../../components/monitors/cu_logmon", default-features = false, features = ["defmt"], optional = true }
 cu-ahrs = { path = "../../components/tasks/cu_ahrs", default-features = false, features = ["defmt"], optional = true }
@@ -82,6 +83,7 @@ firmware = [
   "dep:embedded-sdmmc",
   "dep:cortex-m",
   "dep:cu-bdshot",
+  "dep:cu-micoairh743",
   "cu-bdshot/stm32h7",
   "cu-bdshot/defmt",
   "dep:cu-ahrs",

@@ -1,5 +1,8 @@
+#![no_std]
+#![doc = include_str!("../README.md")]
+
 use cortex_m::peripheral::DWT;
-use cu_bdshot::{Stm32H7Board, Stm32H7BoardResources, register_stm32h7_board};
+use cu_bdshot::{register_stm32h7_board, Stm32H7Board, Stm32H7BoardResources};
 use cu_sdlogger::{EMMCLogger, EMMCSectionStorage, ForceSyncSend, find_copper_partition};
 use cu29::resource::{ResourceBundle, ResourceManager};
 use cu29::{CuError, CuResult, bundle_resources};
@@ -18,10 +21,14 @@ use stm32h7xx_hal::{
     spi::{Config as SpiConfig, Mode, Phase, Polarity, SpiExt},
 };
 
+// Throttle UART overrun warnings to once per second.
 const UART_OVERRUN_LOG_PERIOD_SECS: u32 = 1;
+const UART6_BAUD: u32 = 420_000;
+const UART2_BAUD: u32 = 115_200;
 
 pub type SerialPortError = embedded_io::ErrorKind;
 
+/// UART wrapper implementing embedded-io traits with overrun throttling.
 pub struct SerialWrapper<U> {
     inner: Serial<U>,
     label: &'static str,
@@ -118,10 +125,13 @@ macro_rules! impl_serial_wrapper_io {
 impl_serial_wrapper_io!(pac::USART6);
 impl_serial_wrapper_io!(pac::USART2);
 
+// Resource type aliases exposed by the bundle.
 pub type Uart6Port = SerialWrapper<pac::USART6>;
 pub type Uart2Port = SerialWrapper<pac::USART2>;
+/// Default serial port used by CRSF in the example firmware.
 pub type SerialPort = Uart6Port;
 
+/// Wraps HAL types that are only used from the single-threaded runtime.
 pub struct SingleThreaded<T>(T);
 
 impl<T> SingleThreaded<T> {
@@ -223,9 +233,12 @@ fn init_sd_logger(
     Logger::new(bd, start, count)
 }
 
+/// Resource bundle for the MicoAir H743 board.
 pub struct MicoAirH743;
 
-bundle_resources!(MicoAirH743: Uart6, Uart2, GreenLed, Logger, Bmi088Spi, Bmi088AccCs, Bmi088GyrCs, Bmi088Delay);
+bundle_resources!(
+    MicoAirH743: Uart6, Uart2, GreenLed, Logger, Bmi088Spi, Bmi088AccCs, Bmi088GyrCs, Bmi088Delay
+);
 
 impl ResourceBundle for MicoAirH743 {
     fn build(
@@ -264,7 +277,7 @@ impl ResourceBundle for MicoAirH743 {
         let green_led = gpioe.pe6.into_push_pull_output();
 
         let overrun_period_cycles = sysclk_hz.saturating_mul(UART_OVERRUN_LOG_PERIOD_SECS);
-        let uart6_config = Config::default().baudrate(420_000.bps());
+        let uart6_config = Config::default().baudrate(UART6_BAUD.bps());
         let uart6 = SerialWrapper::new(
             dp.USART6
                 .serial(
@@ -278,7 +291,7 @@ impl ResourceBundle for MicoAirH743 {
             overrun_period_cycles,
         );
 
-        let uart2_config = Config::default().baudrate(115_200.bps());
+        let uart2_config = Config::default().baudrate(UART2_BAUD.bps());
         let uart2 = SerialWrapper::new(
             dp.USART2
                 .serial(

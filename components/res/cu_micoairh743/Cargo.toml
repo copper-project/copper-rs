@@ -1,0 +1,22 @@
+[package]
+name = "cu-micoairh743"
+description = "Copper resource bundle for the MicoAir H743 flight controller."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+cu29 = { path = "../../../core/cu29", version = "0.11.0", default-features = false, features = ["defmt"] }
+cu-bdshot = { path = "../../bridges/cu_bdshot", default-features = false, features = ["stm32h7", "defmt"] }
+cu-sdlogger = { path = "../../libs/cu_sdlogger" }
+cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
+defmt = "1.0"
+embedded-hal = { version = "0.2.7", default-features = false }
+embedded-io = { version = "0.6.1", default-features = false }
+spin = { workspace = true }
+stm32h7xx-hal = { version = "0.16.0", default-features = false, features = ["stm32h743v", "rt", "defmt", "sdmmc", "sdmmc-fatfs"] }

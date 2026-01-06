@@ -24,6 +24,7 @@ members = [
     "components/payloads/cu_ros_payloads",
     "components/payloads/cu_sensor_payloads",
     "components/payloads/cu_spatial_payloads",
+    "components/res/cu_micoairh743",
     "components/libs/cu_sdlogger",
     "components/bridges/cu_bdshot",
     "components/sinks/cu_iceoryx2_sink",

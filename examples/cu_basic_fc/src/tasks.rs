@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::GreenLed;
+use cu_micoairh743::GreenLed;
 use crate::messages::{BodyCommand, BodyRateSetpoint, ControlInputs, FlightMode};
 use alloc::vec::Vec;
 use cu_ahrs::AhrsPose;
@@ -357,10 +357,10 @@ impl CuSinkTask for ImuLogger {
 }
 
 pub type Bmi088Source = bmi088::Bmi088Source<
-    crate::resources::Bmi088Spi,
-    crate::resources::Bmi088AccCs,
-    crate::resources::Bmi088GyrCs,
-    crate::resources::Bmi088Delay,
+    cu_micoairh743::Bmi088Spi,
+    cu_micoairh743::Bmi088AccCs,
+    cu_micoairh743::Bmi088GyrCs,
+    cu_micoairh743::Bmi088Delay,
 >;
 
 impl Freezable for FlightMode {}

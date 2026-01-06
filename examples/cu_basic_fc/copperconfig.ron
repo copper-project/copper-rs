@@ -2,7 +2,7 @@
     resources: [
         (
             id: "fc",
-            provider: "crate::resources::MicoAirH743",
+            provider: "cu_micoairh743::MicoAirH743",
         ),
     ],
     tasks: [
@@ -92,7 +92,7 @@
 
     bridges: [
         (  id: "rc",
-           type: "cu_crsf::CrsfBridge<SerialPort, SerialPortError>",
+           type: "cu_crsf::CrsfBridge<cu_micoairh743::Uart6Port, cu_micoairh743::SerialPortError>",
            resources: { "serial": "fc.uart6" },
            channels: [
                 Rx ( id: "rc_rx" ),  // receiving RC Channels
@@ -101,7 +101,7 @@
         ),
         (
            id: "vtx_msp",
-           type: "cu_msp_bridge::CuMspBridge<Uart2Port, SerialPortError>",
+           type: "cu_msp_bridge::CuMspBridge<cu_micoairh743::Uart2Port, cu_micoairh743::SerialPortError>",
            resources: { "serial": "fc.uart2" },
            channels: [
                 Tx ( id: "requests" ),
