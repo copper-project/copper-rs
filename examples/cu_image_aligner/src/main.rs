@@ -1,0 +1,40 @@
+pub mod tasks;
+
+use cu29::prelude::*;
+use cu29_helpers::basic_copper_setup;
+use std::thread::sleep;
+use std::time::Duration;
+
+#[copper_runtime(config = "copperconfig.ron")]
+struct ImageAlignerApp {}
+
+const SLAB_SIZE: Option<usize> = Some(32 * 1024 * 1024);
+const ITERATIONS: usize = 20;
+
+fn main() {
+    let tmp_dir = tempfile::TempDir::new().expect("could not create a tmp dir");
+    let logger_path = tmp_dir.path().join("image-aligner.copper");
+    let copper_ctx =
+        basic_copper_setup(&logger_path, SLAB_SIZE, true, None).expect("Failed to setup logger.");
+    debug!("Logger created at {}.", path = logger_path);
+    debug!("Creating application...");
+
+    let mut application = ImageAlignerAppBuilder::new()
+        .with_context(&copper_ctx)
+        .build()
+        .expect("Failed to create runtime.");
+
+    let clock = copper_ctx.clock;
+    debug!("Running... starting clock: {}.", clock.now());
+
+    application
+        .start_all_tasks()
+        .expect("Failed to start tasks.");
+    for _ in 0..ITERATIONS {
+        application
+            .run_one_iteration()
+            .expect("Failed to run iteration.");
+    }
+    debug!("End of program: {}.", clock.now());
+    sleep(Duration::from_secs(1));
+}

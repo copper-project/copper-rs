@@ -57,6 +57,7 @@ members = [
     "examples/cu_config_gen",
     "examples/cu_config_variation",
     "examples/cu_dorabench",
+    "examples/cu_image_aligner",
     "examples/cu_iceoryx2",
     "examples/cu_logging_size",
     "examples/cu_msp_bridge_loopback",
@@ -154,6 +155,7 @@ compact_str = { version = "0.9", default-features = false, features = ["serde"] 
 
 # The derive pattern happens a lot across the codebase, this is a helper for that.
 derive_more = { version = "2.0", features = ["full"] }
+paste = { version = "1.0.15", default-features = false }
 
 # used across testing
 tempfile = "3.23"

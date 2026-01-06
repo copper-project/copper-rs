@@ -120,7 +120,11 @@ macro_rules! alignment_buffers {
             /// Call this to be sure we discard the old/ non relevant data
             #[allow(dead_code)]
             pub fn purge(&mut self, now: cu29::clock::CuTime) {
-                let horizon_time = now - self.stale_data_horizon;
+                let horizon_time = if now >= self.stale_data_horizon {
+                    now - self.stale_data_horizon
+                } else {
+                    cu29::clock::CuDuration::MIN
+                };
                 // purge all the stale data from the TimeboundCircularBuffers first
                 $(self.$name.purge(horizon_time);)*
             }
@@ -144,7 +148,11 @@ macro_rules! alignment_buffers {
 
                 let most_recent_time = most_recent_time.unwrap();
 
-                let time_to_get_complete_window = most_recent_time - self.target_alignment_window;
+                let time_to_get_complete_window = if most_recent_time >= self.target_alignment_window {
+                    most_recent_time - self.target_alignment_window
+                } else {
+                    cu29::clock::CuDuration::MIN
+                };
                 Some(($(self.$name.iter_window(time_to_get_complete_window, most_recent_time)),*))
             }
         }
