@@ -1058,7 +1058,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         quote! {
                             #call_sim_callback
                             if doit {
-                                if let Err(error) = tasks.#task_index.preprocess(clock) {
+                                let maybe_error = {
+                                    let _rt_guard = ::cu29::rtsan::ScopedSanitizeRealtime::default();
+                                    tasks.#task_index.preprocess(clock)
+                                };
+                                if let Err(error) = maybe_error {
                                     #monitoring_action
                                 }
                             }
@@ -1106,7 +1110,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         quote! {
                             #call_sim_callback
                             if doit {
-                                if let Err(error) = tasks.#task_index.postprocess(clock) {
+                                let maybe_error = {
+                                    let _rt_guard = ::cu29::rtsan::ScopedSanitizeRealtime::default();
+                                    tasks.#task_index.postprocess(clock)
+                                };
+                                if let Err(error) = maybe_error {
                                     #monitoring_action
                                 }
                             }
@@ -1191,7 +1199,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 quote! {
                     {
                         let bridge = &mut bridges.#bridge_index;
-                        if let Err(error) = bridge.preprocess(clock) {
+                        let maybe_error = {
+                            let _rt_guard = ::cu29::rtsan::ScopedSanitizeRealtime::default();
+                            bridge.preprocess(clock)
+                        };
+                        if let Err(error) = maybe_error {
                             let decision = monitor.process_error(#monitor_index, CuTaskState::Preprocess, &error);
                             match decision {
                                 Decision::Abort => {
@@ -1223,7 +1235,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 quote! {
                     {
                         let bridge = &mut bridges.#bridge_index;
-                        if let Err(error) = bridge.postprocess(clock) {
+                        let maybe_error = {
+                            let _rt_guard = ::cu29::rtsan::ScopedSanitizeRealtime::default();
+                            bridge.postprocess(clock)
+                        };
+                        if let Err(error) = maybe_error {
                             let decision = monitor.process_error(#monitor_index, CuTaskState::Postprocess, &error);
                             match decision {
                                 Decision::Abort => {
@@ -3288,7 +3304,12 @@ fn generate_task_execution_tokens(
                             #call_sim_callback
                             let cumsg_output = &mut msgs.#output_culist_index;
                             cumsg_output.metadata.process_time.start = clock.now().into();
-                            let maybe_error = if doit { #task_instance.process(clock, cumsg_output) } else { Ok(()) };
+                            let maybe_error = if doit {
+                                let _rt_guard = ::cu29::rtsan::ScopedSanitizeRealtime::default();
+                                #task_instance.process(clock, cumsg_output)
+                            } else {
+                                Ok(())
+                            };
                             cumsg_output.metadata.process_time.end = clock.now().into();
                             if let Err(error) = maybe_error {
                                 #monitoring_action
@@ -3370,7 +3391,12 @@ fn generate_task_execution_tokens(
                             let cumsg_input = &#inputs_type;
                             let cumsg_output = &mut msgs.#output_culist_index;
                             cumsg_output.metadata.process_time.start = clock.now().into();
-                            let maybe_error = if doit { #task_instance.process(clock, cumsg_input) } else { Ok(()) };
+                            let maybe_error = if doit {
+                                let _rt_guard = ::cu29::rtsan::ScopedSanitizeRealtime::default();
+                                #task_instance.process(clock, cumsg_input)
+                            } else {
+                                Ok(())
+                            };
                             cumsg_output.metadata.process_time.end = clock.now().into();
                             if let Err(error) = maybe_error {
                                 #monitoring_action
@@ -3463,7 +3489,12 @@ fn generate_task_execution_tokens(
                             let cumsg_input = &#inputs_type;
                             let cumsg_output = &mut msgs.#output_culist_index;
                             cumsg_output.metadata.process_time.start = clock.now().into();
-                            let maybe_error = if doit { #task_instance.process(clock, cumsg_input, cumsg_output) } else { Ok(()) };
+                            let maybe_error = if doit {
+                                let _rt_guard = ::cu29::rtsan::ScopedSanitizeRealtime::default();
+                                #task_instance.process(clock, cumsg_input, cumsg_output)
+                            } else {
+                                Ok(())
+                            };
                             cumsg_output.metadata.process_time.end = clock.now().into();
                             if let Err(error) = maybe_error {
                                 #monitoring_action
@@ -3503,11 +3534,14 @@ fn generate_bridge_rx_execution_tokens(
                 let bridge = &mut bridges.#bridge_tuple_index;
                 let cumsg_output = &mut msgs.#culist_index_ts;
                 cumsg_output.metadata.process_time.start = clock.now().into();
-                let maybe_error = bridge.receive(
-                    clock,
-                    &<#bridge_type as cu29::cubridge::CuBridge>::Rx::#const_ident,
-                    cumsg_output,
-                );
+                let maybe_error = {
+                    let _rt_guard = ::cu29::rtsan::ScopedSanitizeRealtime::default();
+                    bridge.receive(
+                        clock,
+                        &<#bridge_type as cu29::cubridge::CuBridge>::Rx::#const_ident,
+                        cumsg_output,
+                    )
+                };
                 cumsg_output.metadata.process_time.end = clock.now().into();
                 if let Err(error) = maybe_error {
                     let decision = monitor.process_error(#monitor_index, CuTaskState::Process, &error);
@@ -3562,11 +3596,15 @@ fn generate_bridge_tx_execution_tokens(
                 let cumsg_input = &mut msgs.#input_index;
                 // Stamp timing so monitors see consistent ranges for bridge Tx as well.
                 cumsg_input.metadata.process_time.start = clock.now().into();
-                if let Err(error) = bridge.send(
-                    clock,
-                    &<#bridge_type as cu29::cubridge::CuBridge>::Tx::#const_ident,
-                    &*cumsg_input,
-                ) {
+                let maybe_error = {
+                    let _rt_guard = ::cu29::rtsan::ScopedSanitizeRealtime::default();
+                    bridge.send(
+                        clock,
+                        &<#bridge_type as cu29::cubridge::CuBridge>::Tx::#const_ident,
+                        &*cumsg_input,
+                    )
+                };
+                if let Err(error) = maybe_error {
                     let decision = monitor.process_error(#monitor_index, CuTaskState::Process, &error);
                     match decision {
                         Decision::Abort => {
