@@ -1,2 +1,2 @@
 [template]
-sub_templates = ["cu_full"]
+sub_templates = ["cu_full", "cu_project"]

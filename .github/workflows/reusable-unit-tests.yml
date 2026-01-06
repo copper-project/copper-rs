@@ -267,13 +267,17 @@ jobs:
         if: matrix.mode == 'debug' && env.WORKSPACE_SCOPE == 'workspace'
         run: cargo +${{ inputs.toolchain }} install cargo-generate
 
-      - name: Generate new project on (${{ matrix.os }} | debug)
+      - name: Generate new templates on (${{ matrix.os }} | debug)
         if: matrix.mode == 'debug' && env.WORKSPACE_SCOPE == 'workspace'
         run: |
           cd templates
-          cargo +${{ inputs.toolchain }} generate -p cu_full --name test_project --destination . -d copper_source=local -d copper_root_path=../.. --silent
-      - name: Build generated project on (${{ matrix.os }} | debug)
+          rm -rf test_project test_workspace
+          cargo +${{ inputs.toolchain }} generate -p cu_project --name test_project --destination . -d copper_source=local -d copper_root_path=../.. --silent
+          cargo +${{ inputs.toolchain }} generate -p cu_full --name test_workspace --destination . -d copper_source=local -d copper_root_path=../.. --silent
+      - name: Build generated templates on (${{ matrix.os }} | debug)
         if: matrix.mode == 'debug' && env.WORKSPACE_SCOPE == 'workspace'
         run: |
           cd templates/test_project
+          cargo +${{ inputs.toolchain }} build
+          cd ../test_workspace
           cargo +${{ inputs.toolchain }} build

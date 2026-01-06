@@ -1,0 +1,19 @@
+# Project automation helpers.
+
+# Extract the structured log via the log reader.
+log:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  RUST_BACKTRACE=1 cargo run --features=logreader --bin {{project-name|kebab_case}}-logreader logs/{{project-name|kebab_case}}.copper extract-text-log target/debug/cu29_log_index
+
+# Extract CopperLists from the log output.
+cl:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  RUST_BACKTRACE=1 cargo run --features=logreader --bin {{project-name|kebab_case}}-logreader logs/{{project-name|kebab_case}}.copper extract-copperlists
+
+# Render the execution DAG from the app config.
+rcfg:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  {{copper_root_path}}/target/debug/cu29-rendercfg copperconfig.ron --open
