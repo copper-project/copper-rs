@@ -99,10 +99,6 @@
             type: "tasks::VtxOsd",
             config: { "cols": 53, "row": 13, "col_center": 26 },
         ),
-        (
-            id: "vtx_msp_responder",
-            type: "tasks::VtxMspResponder",
-        ),
     ],
 
     bridges: [
@@ -118,11 +114,9 @@
            id: "vtx_msp",
            type: "cu_msp_bridge::CuMspBridge<cu_micoairh743::Uart2Port, cu_micoairh743::SerialPortError>",
            resources: { "serial": "fc.uart2" },
-           config: { "v2_only": true, "force_v2_native": false, "log_msp_versions": true },
            channels: [
                 Tx ( id: "requests" ),
                 Rx ( id: "responses" ),
-                Rx ( id: "incoming" ),
            ],
         ),
         (
@@ -169,9 +163,6 @@
         (src: "mixer3", dst: "bdshot/esc3_tx", msg: "cu_bdshot::EscCommand"),
         (src: "battery_adc", dst: "vtx_osd", msg: "crate::messages::BatteryVoltage"),
         (src: "vtx_osd", dst: "vtx_msp/requests", msg: "cu_msp_bridge::MspRequestBatch"),
-        (src: "vtx_msp/incoming", dst: "vtx_msp_responder", msg: "cu_msp_bridge::MspRequestBatch"),
-        (src: "battery_adc", dst: "vtx_msp_responder", msg: "crate::messages::BatteryVoltage"),
-        (src: "vtx_msp_responder", dst: "vtx_msp/requests", msg: "cu_msp_bridge::MspRequestBatch"),
     ],
     monitor: (
          type: "cu_logmon::CuLogMon",

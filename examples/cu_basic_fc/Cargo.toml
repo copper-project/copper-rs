@@ -101,7 +101,6 @@ firmware = [
   "dep:cu-embedded-registry",
   "dep:cu-sdlogger",
   "dep:cu-logmon",
-  "cu-logmon/defmt",
 ]
 logreader = [
   "dep:cu29",

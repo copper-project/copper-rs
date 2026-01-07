@@ -37,7 +37,6 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu_msp_lib::structs::{MspRequest, MspResponse};
-use cu_msp_lib::{MspPacketDirection, MspParsedVersion, MspPacketInfo};
 use cu_msp_lib::{MspPacket, MspParser};
 use cu29::cubridge::{
     BridgeChannel, BridgeChannelConfig, BridgeChannelInfo, BridgeChannelSet, CuBridge,
@@ -54,23 +53,6 @@ use spin::Mutex;
 const READ_BUFFER_SIZE: usize = 512;
 const MAX_REQUESTS_PER_BATCH: usize = 8;
 const MAX_RESPONSES_PER_BATCH: usize = 16;
-
-fn should_send_v2_over_v1(request: &MspRequest) -> bool {
-    matches!(
-        request,
-        MspRequest::MspBatteryConfig(_)
-            | MspRequest::MspBatteryState(_)
-            | MspRequest::MspAnalog(_)
-            | MspRequest::MspVoltageMeterConfig(_)
-            | MspRequest::MspVoltageMeter(_)
-    )
-}
-
-fn cfg_bool(config: Option<&ComponentConfig>, key: &str, default: bool) -> bool {
-    config
-        .and_then(|cfg| cfg.get::<bool>(key))
-        .unwrap_or(default)
-}
 
 /// Batch of MSP requests transported over the bridge.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -147,7 +129,6 @@ tx_channels! {
 rx_channels! {
     pub struct RxChannels : RxId {
         responses => MspResponseBatch,
-        incoming => MspRequestBatch,
     }
 }
 
@@ -160,82 +141,25 @@ where
     parser: MspParser,
     read_buffer: [u8; READ_BUFFER_SIZE],
     pending_responses: MspResponseBatch,
-    pending_requests: MspRequestBatch,
     tx_buffer: SmallVec<[u8; 256]>,
-    v2_only: bool,
-    force_v2_native: bool,
-    prefer_v2_native: bool,
-    log_msp_versions: bool,
-    logged_v1: bool,
-    logged_v2_native: bool,
-    logged_v2_over_v1: bool,
-    logged_tx_v1: bool,
-    logged_tx_v2_native: bool,
-    logged_tx_v2_over_v1: bool,
 }
 
 impl<S, E> CuMspBridge<S, E>
 where
     S: Write<Error = E> + Read<Error = E>,
 {
-    fn from_serial(serial: S, v2_only: bool, force_v2_native: bool, log_msp_versions: bool) -> Self {
+    fn from_serial(serial: S) -> Self {
         Self {
             serial,
             parser: MspParser::new(),
             read_buffer: [0; READ_BUFFER_SIZE],
             pending_responses: MspResponseBatch::new(),
-            pending_requests: MspRequestBatch::new(),
             tx_buffer: SmallVec::new(),
-            v2_only,
-            force_v2_native,
-            prefer_v2_native: false,
-            log_msp_versions,
-            logged_v1: false,
-            logged_v2_native: false,
-            logged_v2_over_v1: false,
-            logged_tx_v1: false,
-            logged_tx_v2_native: false,
-            logged_tx_v2_over_v1: false,
         }
     }
 
     fn send_request(&mut self, request: &MspRequest) -> CuResult<()> {
         let packet: MspPacket = request.into();
-        if self.v2_only {
-            if self.force_v2_native || self.prefer_v2_native {
-                if self.log_msp_versions && !self.logged_tx_v2_native {
-                    self.logged_tx_v2_native = true;
-                    info!(
-                        "MSP bridge sending V2 native cmd={}",
-                        packet.cmd
-                    );
-                }
-                self.send_v2_native(&packet)?;
-            } else {
-                if self.log_msp_versions && !self.logged_tx_v2_over_v1 {
-                    self.logged_tx_v2_over_v1 = true;
-                    info!("MSP bridge sending V2-over-V1 cmd={}", packet.cmd);
-                }
-                self.send_v2_over_v1(&packet)?;
-            }
-        } else {
-            if self.log_msp_versions && !self.logged_tx_v1 {
-                self.logged_tx_v1 = true;
-                info!("MSP bridge sending V1 cmd={}", packet.cmd);
-            }
-            self.send_v1(&packet)?;
-            if should_send_v2_over_v1(request) {
-                if self.log_msp_versions && !self.logged_tx_v2_over_v1 {
-                    self.logged_tx_v2_over_v1 = true;
-                    info!("MSP bridge sending V2-over-V1 cmd={}", packet.cmd);
-                }
-                self.send_v2_over_v1(&packet)?;
-            }
-        }
-        Ok(())
-    }
-
-    fn send_v1(&mut self, packet: &MspPacket) -> CuResult<()> {
         let size = packet.packet_size_bytes();
         self.tx_buffer.resize(size, 0);
         packet.serialize(&mut self.tx_buffer).map_err(|err| {
@@ -246,110 +170,29 @@ where
             .map_err(|_| CuError::from("MSP bridge failed to write serial"))
     }
 
-    fn send_v2_over_v1(&mut self, packet: &MspPacket) -> CuResult<()> {
-        let size = packet.packet_size_bytes_v2_over_v1();
-        self.tx_buffer.resize(size, 0);
-        packet.serialize_v2_over_v1(&mut self.tx_buffer).map_err(|err| {
-            CuError::new_with_cause("MSP bridge failed to serialize v2 request", err)
-        })?;
-        self.serial
-            .write_all(&self.tx_buffer)
-            .map_err(|_| CuError::from("MSP bridge failed to write serial"))
-    }
-
-    fn send_v2_native(&mut self, packet: &MspPacket) -> CuResult<()> {
-        let size = packet.packet_size_bytes_v2();
-        self.tx_buffer.resize(size, 0);
-        packet.serialize_v2(&mut self.tx_buffer).map_err(|err| {
-            CuError::new_with_cause("MSP bridge failed to serialize v2 request", err)
-        })?;
-        self.serial
-            .write_all(&self.tx_buffer)
-            .map_err(|_| CuError::from("MSP bridge failed to write serial"))
-    }
-
-    fn note_incoming_version(&mut self, info: MspPacketInfo) {
-        match info.version {
-            MspParsedVersion::V1 => {
-                if self.log_msp_versions && !self.logged_v1 {
-                    self.logged_v1 = true;
-                    info!(
-                        "MSP bridge incoming V1 request cmd={}",
-                        info.cmd
-                    );
-                }
-            }
-            MspParsedVersion::V2Native => {
-                if !self.force_v2_native {
-                    self.prefer_v2_native = true;
-                }
-                if self.log_msp_versions && !self.logged_v2_native {
-                    self.logged_v2_native = true;
-                    info!(
-                        "MSP bridge incoming V2 native request cmd={}",
-                        info.cmd
-                    );
-                }
-            }
-            MspParsedVersion::V2OverV1 => {
-                if !self.force_v2_native {
-                    self.prefer_v2_native = false;
-                }
-                if self.log_msp_versions && !self.logged_v2_over_v1 {
-                    self.logged_v2_over_v1 = true;
-                    info!(
-                        "MSP bridge incoming V2-over-V1 request cmd={}",
-                        info.cmd
-                    );
-                }
-            }
-        }
-    }
-
     fn poll_serial(&mut self) -> CuResult<()> {
         loop {
-            if self.pending_responses.0.len() >= MAX_RESPONSES_PER_BATCH
-                || self.pending_requests.0.len() >= MAX_REQUESTS_PER_BATCH
-            {
+            if self.pending_responses.0.len() >= MAX_RESPONSES_PER_BATCH {
                 break;
             }
             match self.serial.read(&mut self.read_buffer) {
                 Ok(0) => break,
                 Ok(n) => {
-                    for i in 0..n {
-                        let byte = self.read_buffer[i];
-                        if self.pending_responses.0.len() >= MAX_RESPONSES_PER_BATCH
-                            || self.pending_requests.0.len() >= MAX_REQUESTS_PER_BATCH
-                        {
+                    for &byte in &self.read_buffer[..n] {
+                        if self.pending_responses.0.len() >= MAX_RESPONSES_PER_BATCH {
                             break;
                         }
                         match self.parser.parse(byte) {
                             Ok(Some(packet)) => {
-                                if packet.direction == MspPacketDirection::ToFlightController {
-                                    if let Some(info) = self.parser.last_packet_info() {
-                                        self.note_incoming_version(info);
-                                    }
-                                    if let Some(request) =
-                                        MspRequest::from_command_id(packet.cmd)
-                                    {
-                                        if self.pending_requests.0.len()
-                                            >= MAX_REQUESTS_PER_BATCH
-                                        {
-                                            break;
-                                        }
-                                        self.pending_requests.push(request);
-                                    }
-                                } else {
-                                    let cmd = packet.cmd;
-                                    let response = MspResponse::from(packet);
-                                    if matches!(response, MspResponse::Unknown) {
-                                        info!(
-                                            "MSP bridge unknown response cmd={}",
-                                            cmd
-                                        );
-                                    }
-                                    self.pending_responses.push(response);
+                                let cmd = packet.cmd;
+                                let response = MspResponse::from(packet);
+                                if matches!(response, MspResponse::Unknown) {
+                                    info!(
+                                        "MSP bridge unknown response cmd={}",
+                                        cmd
+                                    );
                                 }
+                                self.pending_responses.push(response);
                                 if self.pending_responses.0.len() >= MAX_RESPONSES_PER_BATCH {
                                     break;
                                 }
@@ -421,21 +264,8 @@ where
     {
         let _ = tx_channels;
         let _ = rx_channels;
-        let v2_only = cfg_bool(config, "v2_only", false);
-        let force_v2_native = cfg_bool(config, "force_v2_native", false);
-        let log_msp_versions = cfg_bool(config, "log_msp_versions", false);
-        info!(
-            "MSP bridge cfg v2_only={} force_v2_native={} log_msp_versions={}",
-            v2_only,
-            force_v2_native,
-            log_msp_versions
-        );
-        let bridge = Self::from_serial(
-            resources.serial.0,
-            v2_only,
-            force_v2_native,
-            log_msp_versions,
-        );
+        let _ = config;
+        let bridge = Self::from_serial(resources.serial.0);
         Ok(bridge)
     }
 
@@ -481,12 +311,6 @@ where
                 let mut batch = MspResponseBatch::new();
                 mem::swap(&mut batch, &mut self.pending_responses);
                 response_msg.set_payload(batch);
-            }
-            RxId::Incoming => {
-                let request_msg: &mut CuMsg<MspRequestBatch> = msg.downcast_mut()?;
-                let mut batch = MspRequestBatch::new();
-                mem::swap(&mut batch, &mut self.pending_requests);
-                request_msg.set_payload(batch);
             }
         }
         Ok(())
