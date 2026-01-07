@@ -8,8 +8,8 @@ use cu_crsf::messages::RcChannelsPayload;
 use cu_micoairh743::GreenLed;
 use cu_msp_bridge::MspRequestBatch;
 use cu_msp_lib::structs::{
-    MspAnalog, MspBatteryState, MspDisplayPort, MspRequest, MspStatus, MspStatusSensors,
-    MspVoltageMeter,
+    MspAnalog, MspBatteryConfig, MspBatteryState, MspDisplayPort, MspRequest, MspStatus,
+    MspStatusSensors, MspVoltageMeter, MspVoltageMeterConfig,
 };
 use cu_pid::{PIDControlOutputPayload, PIDController};
 use cu_sensor_payloads::ImuPayload;
@@ -32,6 +32,14 @@ const BATTERY_VREF_MV_DEFAULT: u32 = 3300;
 const BATTERY_VBAT_SCALE_DEFAULT: u32 = 210;
 const BATTERY_VBAT_RES_DIV_VAL_DEFAULT: u32 = 10;
 const BATTERY_VBAT_RES_DIV_MULT_DEFAULT: u32 = 1;
+const BATTERY_MIN_CELL_CENTIVOLTS_DEFAULT: u16 = 330;
+const BATTERY_MAX_CELL_CENTIVOLTS_DEFAULT: u16 = 420;
+const BATTERY_WARN_CELL_CENTIVOLTS_DEFAULT: u16 = 350;
+const BATTERY_VOLTAGE_METER_SOURCE_ADC: u8 = 1;
+const BATTERY_CURRENT_METER_SOURCE_NONE: u8 = 0;
+const MSP_VOLTAGE_METER_ID_BATTERY_1: u8 = 10;
+const MSP_VOLTAGE_METER_SENSOR_TYPE_ADC_RES_DIV: u8 = 0;
+const MSP_VOLTAGE_METER_ADC_SUBFRAME_LEN: u8 = 5;
 
 resources!({
     led => Owned<spin::Mutex<GreenLed>>,
@@ -484,6 +492,13 @@ fn build_msp_status(armed: bool) -> MspStatus {
 pub struct VtxMspResponder {
     last_voltage_centi: Option<u16>,
     battery_cells: Option<u8>,
+    vbat_scale: u8,
+    vbat_res_div_val: u8,
+    vbat_res_div_mult: u8,
+    battery_capacity: u16,
+    vbat_min_cell_centivolts: u16,
+    vbat_max_cell_centivolts: u16,
+    vbat_warn_cell_centivolts: u16,
 }
 
 impl Freezable for VtxMspResponder {}
@@ -497,6 +512,32 @@ impl CuTask for VtxMspResponder {
     where
         Self: Sized,
     {
+        let vbat_scale = cfg_u32(config, "vbat_scale", BATTERY_VBAT_SCALE_DEFAULT)
+            .min(u32::from(u8::MAX)) as u8;
+        let vbat_res_div_val =
+            cfg_u32(config, "vbat_res_div_val", BATTERY_VBAT_RES_DIV_VAL_DEFAULT)
+                .max(1)
+                .min(u32::from(u8::MAX)) as u8;
+        let vbat_res_div_mult =
+            cfg_u32(config, "vbat_res_div_mult", BATTERY_VBAT_RES_DIV_MULT_DEFAULT)
+                .max(1)
+                .min(u32::from(u8::MAX)) as u8;
+        let battery_capacity = cfg_u16(config, "battery_capacity_mah", 0);
+        let vbat_min_cell_centivolts = cfg_u16(
+            config,
+            "vbat_min_cell_centivolts",
+            BATTERY_MIN_CELL_CENTIVOLTS_DEFAULT,
+        );
+        let vbat_max_cell_centivolts = cfg_u16(
+            config,
+            "vbat_max_cell_centivolts",
+            BATTERY_MAX_CELL_CENTIVOLTS_DEFAULT,
+        );
+        let vbat_warn_cell_centivolts = cfg_u16(
+            config,
+            "vbat_warn_cell_centivolts",
+            BATTERY_WARN_CELL_CENTIVOLTS_DEFAULT,
+        );
         let battery_cells = config
             .and_then(|cfg| cfg.get::<u32>("battery_cells"))
             .and_then(|cells| u8::try_from(cells).ok())
@@ -504,6 +545,13 @@ impl CuTask for VtxMspResponder {
         Ok(Self {
             last_voltage_centi: None,
             battery_cells,
+            vbat_scale,
+            vbat_res_div_val,
+            vbat_res_div_mult,
+            battery_capacity,
+            vbat_min_cell_centivolts,
+            vbat_max_cell_centivolts,
+            vbat_warn_cell_centivolts,
         })
     }
 
@@ -531,15 +579,38 @@ impl CuTask for VtxMspResponder {
         let cell_count = self
             .battery_cells
             .or_else(|| estimate_cell_count(voltage_centi));
+        let min_cell_decivolts = clamp_u8((self.vbat_min_cell_centivolts + 5) / 10);
+        let max_cell_decivolts = clamp_u8((self.vbat_max_cell_centivolts + 5) / 10);
+        let warn_cell_decivolts = clamp_u8((self.vbat_warn_cell_centivolts + 5) / 10);
 
         let battery_state = MspBatteryState {
             battery_cell_count: cell_count.unwrap_or(0),
-            battery_capacity: 0,
+            battery_capacity: self.battery_capacity,
             battery_voltage: voltage_decivolts,
             mah_drawn: 0,
             amperage: 0,
             alerts: 0,
             battery_voltage_mv: voltage_centi,
+        };
+        let battery_config = MspBatteryConfig {
+            vbat_min_cell_voltage: min_cell_decivolts,
+            vbat_max_cell_voltage: max_cell_decivolts,
+            vbat_warning_cell_voltage: warn_cell_decivolts,
+            battery_capacity: self.battery_capacity,
+            voltage_meter_source: BATTERY_VOLTAGE_METER_SOURCE_ADC,
+            current_meter_source: BATTERY_CURRENT_METER_SOURCE_NONE,
+            vbat_min_cell_voltage_mv: self.vbat_min_cell_centivolts,
+            vbat_max_cell_voltage_mv: self.vbat_max_cell_centivolts,
+            vbat_warning_cell_voltage_mv: self.vbat_warn_cell_centivolts,
+        };
+        let voltage_meter_config = MspVoltageMeterConfig {
+            sensor_count: 1,
+            subframe_len: MSP_VOLTAGE_METER_ADC_SUBFRAME_LEN,
+            id: MSP_VOLTAGE_METER_ID_BATTERY_1,
+            sensor_type: MSP_VOLTAGE_METER_SENSOR_TYPE_ADC_RES_DIV,
+            vbat_scale: self.vbat_scale,
+            vbat_res_div_val: self.vbat_res_div_val,
+            vbat_res_div_mult: self.vbat_res_div_mult,
         };
         let analog = MspAnalog {
             battery_voltage: voltage_decivolts,
@@ -549,17 +620,23 @@ impl CuTask for VtxMspResponder {
             battery_voltage_mv: voltage_centi,
         };
         let voltage_meter = MspVoltageMeter {
-            id: 0,
+            id: MSP_VOLTAGE_METER_ID_BATTERY_1,
             value: voltage_decivolts,
         };
 
         for request in requests.iter() {
             match request {
+                MspRequest::MspBatteryConfigRequest => {
+                    batch.push(MspRequest::MspBatteryConfig(battery_config));
+                }
                 MspRequest::MspBatteryStateRequest => {
                     batch.push(MspRequest::MspBatteryState(battery_state));
                 }
                 MspRequest::MspAnalogRequest => {
                     batch.push(MspRequest::MspAnalog(analog));
+                }
+                MspRequest::MspVoltageMeterConfigRequest => {
+                    batch.push(MspRequest::MspVoltageMeterConfig(voltage_meter_config));
                 }
                 MspRequest::MspVoltageMetersRequest => {
                     batch.push(MspRequest::MspVoltageMeter(voltage_meter));

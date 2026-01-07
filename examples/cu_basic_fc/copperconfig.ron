@@ -118,6 +118,7 @@
            id: "vtx_msp",
            type: "cu_msp_bridge::CuMspBridge<cu_micoairh743::Uart2Port, cu_micoairh743::SerialPortError>",
            resources: { "serial": "fc.uart2" },
+           config: { "v2_only": true, "force_v2_native": true, "log_msp_versions": true },
            channels: [
                 Tx ( id: "requests" ),
                 Rx ( id: "responses" ),

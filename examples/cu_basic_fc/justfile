@@ -44,13 +44,13 @@ textlogs log="logs/embedded.copper" index="../../target/debug/cu29_log_index":
 fw:
   #!/usr/bin/env bash
   set -euo pipefail
-  cargo run --release --config .cargo/config-firmware.toml --no-default-features --features firmware -p cu-basic-fc --bin quad
+  cargo run --release --config .cargo/config-firmware.toml --no-default-features --features firmware,log-level-debug -p cu-basic-fc --bin quad
 
 # Build firmware-only target using the firmware-specific Cargo config
 fwd:
   #!/usr/bin/env bash
   set -euo pipefail
-  cargo run --config .cargo/config-firmware.toml --no-default-features --features firmware -p cu-basic-fc --bin quad
+  cargo run --config .cargo/config-firmware.toml --no-default-features --features firmware,log-level-debug -p cu-basic-fc --bin quad
 
 # Attach to the already-flashed target without rebuilding or flashing.
 attach:
