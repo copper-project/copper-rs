@@ -750,6 +750,7 @@ pub struct AttitudeController {
     angle_limit_rad: f32,
     rate_limit_rad: f32,
     acro_rate_rad: f32,
+    acro_expo: f32,
     dt_fallback: CuDuration,
     last_time: Option<CuTime>,
     last_mode: FlightMode,
@@ -769,6 +770,7 @@ impl CuTask for AttitudeController {
         let angle_limit_rad = cfg_f32(config, "angle_limit_deg", 25.0).to_radians();
         let rate_limit_rad = cfg_f32(config, "rate_limit_dps", 180.0).to_radians();
         let acro_rate_rad = cfg_f32(config, "acro_rate_dps", 360.0).to_radians();
+        let acro_expo = normalize_expo(cfg_f32(config, "acro_expo", 0.0));
         let kp = cfg_f32(config, "kp", 4.0);
         let ki = cfg_f32(config, "ki", 0.0);
         let kd = cfg_f32(config, "kd", 0.0);
@@ -803,6 +805,7 @@ impl CuTask for AttitudeController {
             angle_limit_rad,
             rate_limit_rad,
             acro_rate_rad,
+            acro_expo,
             dt_fallback,
             last_time: None,
             last_mode: FlightMode::Angle,
@@ -867,15 +870,17 @@ impl CuTask for AttitudeController {
             } else {
                 self.roll_pid.reset();
                 self.pitch_pid.reset();
+                let roll_cmd = apply_expo(ctrl.roll, self.acro_expo);
+                let pitch_cmd = apply_expo(ctrl.pitch, self.acro_expo);
                 (
-                    (ctrl.roll * self.acro_rate_rad).clamp(-self.acro_rate_rad, self.acro_rate_rad),
-                    (ctrl.pitch * self.acro_rate_rad)
-                        .clamp(-self.acro_rate_rad, self.acro_rate_rad),
+                    (roll_cmd * self.acro_rate_rad).clamp(-self.acro_rate_rad, self.acro_rate_rad),
+                    (pitch_cmd * self.acro_rate_rad).clamp(-self.acro_rate_rad, self.acro_rate_rad),
                 )
             };
 
+        let yaw_cmd = apply_expo(ctrl.yaw, self.acro_expo);
         let yaw_rate =
-            (ctrl.yaw * self.acro_rate_rad).clamp(-self.acro_rate_rad, self.acro_rate_rad);
+            (yaw_cmd * self.acro_rate_rad).clamp(-self.acro_rate_rad, self.acro_rate_rad);
 
         output.tov = output_tov;
         output.set_payload(BodyRateSetpoint {
@@ -894,6 +899,9 @@ pub struct RateController {
     output_limit: f32,
     dt_fallback: CuDuration,
     i_throttle_min: f32,
+    airmode_enabled: bool,
+    airmode_start_throttle: f32,
+    airmode_active: bool,
     last_time: Option<CuTime>,
 }
 
@@ -917,6 +925,9 @@ impl CuTask for RateController {
         let output_limit = cfg_f32(config, "output_limit", 1.0);
         let dt_fallback = CuDuration::from_millis(cfg_u32(config, "dt_ms", 10) as u64);
         let i_throttle_min = cfg_f32(config, "i_throttle_min", 0.05);
+        let airmode_enabled = cfg_bool(config, "airmode", false);
+        let airmode_start_throttle =
+            normalize_percent(cfg_f32(config, "airmode_start_throttle_percent", 25.0));
 
         let pid = |p: f32, i: f32, d: f32| {
             PIDController::new(
@@ -939,6 +950,9 @@ impl CuTask for RateController {
             output_limit,
             dt_fallback,
             i_throttle_min,
+            airmode_enabled,
+            airmode_start_throttle,
+            airmode_active: false,
             last_time: None,
         })
     }
@@ -972,13 +986,29 @@ impl CuTask for RateController {
             self.roll_pid.reset();
             self.pitch_pid.reset();
             self.yaw_pid.reset();
+            self.airmode_active = false;
             output.tov = output_tov;
             output.set_payload(BodyCommand::default());
             return Ok(());
         }
 
+        if self.airmode_enabled && throttle >= self.airmode_start_throttle {
+            self.airmode_active = true;
+        } else if !self.airmode_enabled {
+            self.airmode_active = false;
+        }
+
         let now = clock.now();
         let dt = dt_or_fallback(&mut self.last_time, now, self.dt_fallback);
+
+        if self.airmode_enabled && !self.airmode_active {
+            self.roll_pid.reset();
+            self.pitch_pid.reset();
+            self.yaw_pid.reset();
+            output.tov = output_tov;
+            output.set_payload(BodyCommand::default());
+            return Ok(());
+        }
 
         let roll_measure = imu.gyro_x.value - setpoint.roll;
         let pitch_measure = imu.gyro_y.value - setpoint.pitch;
@@ -1018,7 +1048,7 @@ impl CuTask for RateController {
             );
         });
 
-        if throttle < self.i_throttle_min {
+        if throttle < self.i_throttle_min && !self.airmode_active {
             self.roll_pid.reset_integral();
             self.pitch_pid.reset_integral();
             self.yaw_pid.reset_integral();
@@ -1206,6 +1236,21 @@ fn dt_or_fallback(last_time: &mut Option<CuTime>, now: CuTime, fallback: CuDurat
     }
 }
 
+fn normalize_percent(raw: f32) -> f32 {
+    let value = if raw > 1.0 { raw / 100.0 } else { raw };
+    value.clamp(0.0, 1.0)
+}
+
+fn normalize_expo(raw: f32) -> f32 {
+    normalize_percent(raw)
+}
+
+fn apply_expo(value: f32, expo: f32) -> f32 {
+    let abs = value.abs();
+    let weight = expo * abs * abs * abs + (1.0 - expo);
+    value * weight
+}
+
 fn cfg_f32(config: Option<&ComponentConfig>, key: &str, default: f32) -> f32 {
     config
         .and_then(|cfg| cfg.get::<f64>(key))
@@ -1223,6 +1268,12 @@ fn cfg_u16(config: Option<&ComponentConfig>, key: &str, default: u16) -> u16 {
     config
         .and_then(|cfg| cfg.get::<u32>(key))
         .map(|v| v.min(u16::MAX as u32) as u16)
+        .unwrap_or(default)
+}
+
+fn cfg_bool(config: Option<&ComponentConfig>, key: &str, default: bool) -> bool {
+    config
+        .and_then(|cfg| cfg.get::<bool>(key))
         .unwrap_or(default)
 }
 
