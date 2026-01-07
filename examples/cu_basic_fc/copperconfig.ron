@@ -152,9 +152,9 @@
         (src: "mixer3", dst: "bdshot/esc3_tx", msg: "cu_bdshot::EscCommand"),
         (src: "vtx_osd", dst: "vtx_msp/requests", msg: "cu_msp_bridge::MspRequestBatch"),
     ],
-    // monitor: (
-    //     type: "cu_logmon::CuLogMon",
-    // ),
+    monitor: (
+         type: "cu_logmon::CuLogMon",
+    ),
     logging: (
         slab_size_mib: 16,
         section_size_mib: 4,

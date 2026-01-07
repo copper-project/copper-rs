@@ -68,6 +68,10 @@ embedded-sdmmc = { version = "0.5", default-features = false, optional = true }
 cortex-m = { version = "0.7", features = ["critical-section-single-core"], optional = true }
 [features]
 default = ["sim"]
+textlogs = ["cu29/textlogs",
+            "cu-logmon/textlogs",
+            "cu-logmon/log-level-info"]
+
 firmware = [
   "dep:cu29",
   "cu29/defmt",
@@ -95,6 +99,7 @@ firmware = [
   "dep:cu-embedded-registry",
   "dep:cu-sdlogger",
   "dep:cu-logmon",
+  "cu-logmon/defmt",
 ]
 logreader = [
   "dep:cu29",

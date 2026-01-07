@@ -27,6 +27,7 @@ defmt = { version = "0.3", optional = true }
 [features]
 default = []
 std = ["cu29/std", "cu29-traits/std", "cu-sensor-payloads/std", "serde/std"]
+textlogs = ["cu29/textlogs", "cu-sensor-payloads/textlogs", "cu-embedded-registry/textlogs"]
 embedded-hal = []
 linux-embedded-hal = [
     "std",

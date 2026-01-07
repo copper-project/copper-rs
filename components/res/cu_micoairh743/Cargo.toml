@@ -22,6 +22,7 @@ defmt = [
   "cu-bdshot/defmt",
   "stm32h7xx-hal/defmt",
 ]
+textlogs = ["cu29/textlogs", "cu-bdshot/textlogs", "cu-sdlogger/textlogs"]
 
 [dependencies]
 cu29 = { path = "../../../core/cu29", version = "0.11.0", default-features = false }
