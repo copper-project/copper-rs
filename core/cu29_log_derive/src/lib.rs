@@ -3,12 +3,16 @@ extern crate proc_macro;
 use cu29_intern_strs::intern_string;
 use cu29_log::CuLogLevel;
 use proc_macro::TokenStream;
+#[cfg(feature = "textlogs")]
 use proc_macro_crate::{FoundCrate, crate_name};
-use proc_macro2::{Span, TokenStream as TokenStream2};
+#[cfg(feature = "textlogs")]
+use proc_macro2::Span;
+use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 #[allow(unused)]
 use syn::Token;
 use syn::parse::Parser;
+#[cfg(any(feature = "textlogs", debug_assertions))]
 use syn::spanned::Spanned;
 use syn::{Expr, ExprLit, Lit};
 
@@ -117,33 +121,44 @@ fn create_log_entry(input: TokenStream, level: CuLogLevel) -> TokenStream {
 
     // ---------- For baremetal: build a defmt format literal and arg list ----------
     // defmt line: "<msg> | a={:?}, b={:?}, arg0={:?} ..."
-    let defmt_fmt_lit = {
-        let mut s = msg_str.clone();
-        if !unnamed_params.is_empty() || !named_params.is_empty() {
-            s.push_str(" |");
-        }
-        for (i, _) in unnamed_params.iter().enumerate() {
-            use std::fmt::Write as _;
-            let _ = write!(&mut s, " arg{}={:?}", i, ());
-        }
-        for (name, _) in named_params.iter() {
-            let name_str = quote!(#name).to_string();
-            s.push(' ');
-            s.push_str(&name_str);
-            s.push_str("={:?}");
-        }
-        syn::LitStr::new(&s, msg_expr.span())
+    #[cfg(feature = "textlogs")]
+    let (defmt_fmt_lit, defmt_args_unnamed_ts, defmt_args_named_ts, defmt_available) = {
+        let defmt_fmt_lit = {
+            let mut s = msg_str.clone();
+            if !unnamed_params.is_empty() || !named_params.is_empty() {
+                s.push_str(" |");
+            }
+            for (i, _) in unnamed_params.iter().enumerate() {
+                use std::fmt::Write as _;
+                let _ = write!(&mut s, " arg{}={:?}", i, ());
+            }
+            for (name, _) in named_params.iter() {
+                let name_str = quote!(#name).to_string();
+                s.push(' ');
+                s.push_str(&name_str);
+                s.push_str("={:?}");
+            }
+            syn::LitStr::new(&s, msg_expr.span())
+        };
+
+        let defmt_args_unnamed_ts: Vec<TokenStream2> =
+            unnamed_params.iter().map(|e| quote! { #e }).collect();
+        let defmt_args_named_ts: Vec<TokenStream2> = named_params
+            .iter()
+            .map(|(_, rhs)| quote! { #rhs })
+            .collect();
+
+        let defmt_available = crate_name("defmt").is_ok();
+
+        (
+            defmt_fmt_lit,
+            defmt_args_unnamed_ts,
+            defmt_args_named_ts,
+            defmt_available,
+        )
     };
 
-    let defmt_args_unnamed_ts: Vec<TokenStream2> =
-        unnamed_params.iter().map(|e| quote! { #e }).collect();
-    let defmt_args_named_ts: Vec<TokenStream2> = named_params
-        .iter()
-        .map(|(_, rhs)| quote! { #rhs })
-        .collect();
-
-    let defmt_available = crate_name("defmt").is_ok();
-
+    #[cfg(feature = "textlogs")]
     fn defmt_macro_path(level: CuLogLevel) -> TokenStream2 {
         let macro_ident = match level {
             CuLogLevel::Debug => quote! { defmt_debug },
@@ -200,23 +215,20 @@ fn create_log_entry(input: TokenStream, level: CuLogLevel) -> TokenStream {
         }
     });
 
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "textlogs")]
     let defmt_macro: TokenStream2 = defmt_macro_path(level);
 
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "textlogs")]
     let maybe_inject_defmt: Option<TokenStream2> = if STD || !defmt_available {
         None // defmt is only emitted in no-std builds.
     } else {
         Some(quote! {
-             #[cfg(debug_assertions)]
-             {
-                 #defmt_macro!(#defmt_fmt_lit, #(#defmt_args_unnamed_ts,)* #(#defmt_args_named_ts,)*);
-             }
+            #defmt_macro!(#defmt_fmt_lit, #(#defmt_args_unnamed_ts,)* #(#defmt_args_named_ts,)*);
         })
     };
 
-    #[cfg(not(debug_assertions))]
-    let maybe_inject_defmt: Option<TokenStream2> = None; // ... neither in release mode
+    #[cfg(not(feature = "textlogs"))]
+    let maybe_inject_defmt: Option<TokenStream2> = None; // defmt emission disabled
 
     // Emit both: defmt (conditionally) + Copper structured logging
     quote! {{

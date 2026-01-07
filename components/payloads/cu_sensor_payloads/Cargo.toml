@@ -29,5 +29,6 @@ serde = { workspace = true }
 [features]
 default = ["std"]
 std = ["cu29/std", "cu29-clock/std"]
+textlogs = ["cu29/textlogs"]
 image = ["std", "dep:image"]
 kornia = ["std", "dep:kornia-image"]

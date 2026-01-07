@@ -28,6 +28,7 @@ proc-macro-crate = "3.1"
 default = ["std"]
 std = ["cu29-log/std"]
 defmt = ["cu29-log/defmt"]
+textlogs = []
 
 # enables a more verbose build log showing the index generation.
 macro_debug = ["cu29-intern-strs/macro_debug"]
