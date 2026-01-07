@@ -744,7 +744,7 @@ fn estimate_cell_count(voltage_centi: u16) -> Option<u8> {
     if voltage_centi == 0 {
         return None;
     }
-    let cells = (u32::from(voltage_centi) + 419) / 420;
+    let cells = u32::from(voltage_centi).div_ceil(420);
     Some(clamp_u8(cells.min(u32::from(u8::MAX)) as u16))
 }
 
