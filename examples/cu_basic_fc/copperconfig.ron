@@ -50,9 +50,9 @@
             id: "rate",
             type: "tasks::RateController",
             config: {
-                "kp": 0.02,
+                "kp": 0.04,
                 "ki": 0.0,
-                "kd": 0.0001,
+                "kd": 0.0005,
                 "kp_yaw": 0.05,
                 "ki_yaw": 0.0,
                 "kd_yaw": 0.0,

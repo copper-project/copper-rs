@@ -49,7 +49,7 @@ fw:
 fwr:
   #!/usr/bin/env bash
   set -euo pipefail
-  cargo run --release --config .cargo/config-firmware.toml --no-default-features --features firmware -p cu-basic-fc --bin quad
+  cargo run --profile screaming --config .cargo/config-firmware.toml --no-default-features --features firmware -p cu-basic-fc --bin quad
 
 # Debug (it won't be fast enough to run be at least you van debug the bringup).
 fwd:
