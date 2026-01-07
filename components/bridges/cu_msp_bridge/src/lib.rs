@@ -23,7 +23,7 @@ mod std_impl {
 // no-std implementation
 #[cfg(not(feature = "std"))]
 mod no_std_impl {
-    pub use alloc::{string::ToString, vec::Vec};
+    pub use alloc::vec::Vec;
     pub use core::mem;
 }
 
