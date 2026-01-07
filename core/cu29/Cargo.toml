@@ -35,8 +35,9 @@ ctrlc = { version = "3.5", optional = true }
 cu29-intern-strs = { workspace = true }
 
 [features]
-default = ["std"]
+default = ["std", "textlogs"]
 defmt = ["dep:defmt", "cu29-log/defmt", "cu29-log-derive/defmt", "cu29-runtime/defmt", "cu29-traits/defmt"]  # for baremetal text logging
+textlogs = ["cu29-log-derive/textlogs"]
 macro_debug = ["cu29-derive/macro_debug", "cu29-log-derive/macro_debug"]
 log-level-debug = ["cu29-log-derive/log-level-debug"]
 log-level-info = ["cu29-log-derive/log-level-info"]

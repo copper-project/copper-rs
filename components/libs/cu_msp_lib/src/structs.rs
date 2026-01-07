@@ -1265,6 +1265,10 @@ impl MspRc {
 pub enum MspRequest {
     #[default]
     Unknown,
+    MspApiVersionRequest,
+    MspApiVersion(MspApiVersion),
+    MspFcVersionRequest,
+    MspFlightControllerVersion(MspFlightControllerVersion),
     MspBatteryConfigRequest,
     MspBatteryConfig(MspBatteryConfig),
     MspBatteryStateRequest,
@@ -1286,6 +1290,10 @@ pub enum MspRequest {
 impl MspRequest {
     pub fn command_code(&self) -> MspCommandCode {
         match self {
+            MspRequest::MspApiVersionRequest => MspCommandCode::MSP_API_VERSION,
+            MspRequest::MspApiVersion(_) => MspCommandCode::MSP_API_VERSION,
+            MspRequest::MspFcVersionRequest => MspCommandCode::MSP_FC_VERSION,
+            MspRequest::MspFlightControllerVersion(_) => MspCommandCode::MSP_FC_VERSION,
             MspRequest::MspBatteryConfigRequest => MspCommandCode::MSP_BATTERY_CONFIG,
             MspRequest::MspBatteryConfig(_) => MspCommandCode::MSP_BATTERY_CONFIG,
             MspRequest::MspBatteryStateRequest => MspCommandCode::MSP_BATTERY_STATE,
@@ -1308,6 +1316,8 @@ impl MspRequest {
 
     pub fn from_command_code(cmd: MspCommandCode) -> Option<Self> {
         match cmd {
+            MspCommandCode::MSP_API_VERSION => Some(MspRequest::MspApiVersionRequest),
+            MspCommandCode::MSP_FC_VERSION => Some(MspRequest::MspFcVersionRequest),
             MspCommandCode::MSP_BATTERY_CONFIG => Some(MspRequest::MspBatteryConfigRequest),
             MspCommandCode::MSP_BATTERY_STATE => Some(MspRequest::MspBatteryStateRequest),
             MspCommandCode::MSP_ANALOG => Some(MspRequest::MspAnalogRequest),
@@ -1330,6 +1340,30 @@ impl MspRequest {
 impl From<MspRequest> for MspPacket {
     fn from(request: MspRequest) -> Self {
         match request {
+            MspRequest::MspApiVersionRequest => MspPacket {
+                cmd: MspCommandCode::MSP_API_VERSION.to_primitive(),
+                direction: ToFlightController,
+                data: MspPacketData::new(),
+            },
+            MspRequest::MspApiVersion(version) => MspPacket {
+                cmd: MspCommandCode::MSP_API_VERSION.to_primitive(),
+                direction: FromFlightController,
+                data: version.pack().map_or_else(|_| MspPacketData::new(), |data| {
+                    MspPacketData(SmallVec::from_slice(data.as_slice()))
+                }),
+            },
+            MspRequest::MspFcVersionRequest => MspPacket {
+                cmd: MspCommandCode::MSP_FC_VERSION.to_primitive(),
+                direction: ToFlightController,
+                data: MspPacketData::new(),
+            },
+            MspRequest::MspFlightControllerVersion(version) => MspPacket {
+                cmd: MspCommandCode::MSP_FC_VERSION.to_primitive(),
+                direction: FromFlightController,
+                data: version.pack().map_or_else(|_| MspPacketData::new(), |data| {
+                    MspPacketData(SmallVec::from_slice(data.as_slice()))
+                }),
+            },
             MspRequest::MspBatteryConfigRequest => MspPacket {
                 cmd: MspCommandCode::MSP_BATTERY_CONFIG.to_primitive(),
                 direction: ToFlightController,
@@ -1435,6 +1469,30 @@ impl From<MspRequest> for MspPacket {
 impl From<&MspRequest> for MspPacket {
     fn from(request: &MspRequest) -> Self {
         match request {
+            MspRequest::MspApiVersionRequest => MspPacket {
+                cmd: MspCommandCode::MSP_API_VERSION.to_primitive(),
+                direction: ToFlightController,
+                data: MspPacketData::new(),
+            },
+            MspRequest::MspApiVersion(version) => MspPacket {
+                cmd: MspCommandCode::MSP_API_VERSION.to_primitive(),
+                direction: FromFlightController,
+                data: version.pack().map_or_else(|_| MspPacketData::new(), |data| {
+                    MspPacketData::from(data.as_slice())
+                }),
+            },
+            MspRequest::MspFcVersionRequest => MspPacket {
+                cmd: MspCommandCode::MSP_FC_VERSION.to_primitive(),
+                direction: ToFlightController,
+                data: MspPacketData::new(),
+            },
+            MspRequest::MspFlightControllerVersion(version) => MspPacket {
+                cmd: MspCommandCode::MSP_FC_VERSION.to_primitive(),
+                direction: FromFlightController,
+                data: version.pack().map_or_else(|_| MspPacketData::new(), |data| {
+                    MspPacketData::from(data.as_slice())
+                }),
+            },
             MspRequest::MspBatteryConfigRequest => MspPacket {
                 cmd: MspCommandCode::MSP_BATTERY_CONFIG.to_primitive(),
                 direction: ToFlightController,

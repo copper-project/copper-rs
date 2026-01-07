@@ -118,7 +118,7 @@
            id: "vtx_msp",
            type: "cu_msp_bridge::CuMspBridge<cu_micoairh743::Uart2Port, cu_micoairh743::SerialPortError>",
            resources: { "serial": "fc.uart2" },
-           config: { "v2_only": true, "force_v2_native": true, "log_msp_versions": true },
+           config: { "v2_only": true, "force_v2_native": false, "log_msp_versions": true },
            channels: [
                 Tx ( id: "requests" ),
                 Rx ( id: "responses" ),
@@ -173,9 +173,9 @@
         (src: "battery_adc", dst: "vtx_msp_responder", msg: "crate::messages::BatteryVoltage"),
         (src: "vtx_msp_responder", dst: "vtx_msp/requests", msg: "cu_msp_bridge::MspRequestBatch"),
     ],
-    // monitor: (
-    //     type: "cu_logmon::CuLogMon",
-    // ),
+    monitor: (
+         type: "cu_logmon::CuLogMon",
+    ),
     logging: (
         slab_size_mib: 16,
         section_size_mib: 4,

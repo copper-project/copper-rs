@@ -13,7 +13,6 @@ repository.workspace = true
 [dependencies]
 cu29 = { path = "../../../core/cu29", version = "0.11.0", default-features = false }
 cu-msp-lib = { path = "../../libs/cu_msp_lib", version = "0.11.0", default-features = false, features = ["bincode"] }
-defmt = { version = "1.0", optional = true }
 serialport = { version = "4.8.1", optional = true }
 embedded-io = { version = "0.6.1", default-features = false }
 embedded-io-adapters = { version = "0.6.1", optional = true }
@@ -25,10 +24,11 @@ spin = { workspace = true }
 [features]
 default = ["std"]
 std = ["cu29/std", "cu-msp-lib/std", "embedded-io/std", "dep:embedded-io-adapters", "dep:serialport", "embedded-io-adapters/std"]
-defmt = ["dep:defmt", "embedded-io/defmt-03", "cu29/defmt"]
+defmt = ["embedded-io/defmt-03", "cu29/defmt"]
 alloc = ["embedded-io/alloc"]
 log-level-debug = ["cu29/log-level-debug"]
 log-level-info = ["cu29/log-level-info"]
 log-level-warning = ["cu29/log-level-warning"]
 log-level-error = ["cu29/log-level-error"]
 log-level-critical = ["cu29/log-level-critical"]
+textlogs = ["cu29/textlogs"]

@@ -68,6 +68,12 @@ embedded-sdmmc = { version = "0.5", default-features = false, optional = true }
 cortex-m = { version = "0.7", features = ["critical-section-single-core"], optional = true }
 [features]
 default = ["sim"]
+textlogs = ["cu29/textlogs",
+            "cu-msp-bridge/textlogs",
+            "cu-msp-bridge/log-level-info",
+            "cu-logmon/textlogs",
+            "cu-logmon/log-level-info"]
+
 firmware = [
   "dep:cu29",
   "cu29/defmt",
@@ -95,6 +101,7 @@ firmware = [
   "dep:cu-embedded-registry",
   "dep:cu-sdlogger",
   "dep:cu-logmon",
+  "cu-logmon/defmt",
 ]
 logreader = [
   "dep:cu29",
@@ -116,11 +123,6 @@ sim = [
   "dep:cu29-export",
   "dep:evdev",
 ]
-log-level-debug = ["cu29/log-level-debug", "cu-msp-bridge/log-level-debug"]
-log-level-info = ["cu29/log-level-info", "cu-msp-bridge/log-level-info"]
-log-level-warning = ["cu29/log-level-warning", "cu-msp-bridge/log-level-warning"]
-log-level-error = ["cu29/log-level-error", "cu-msp-bridge/log-level-error"]
-log-level-critical = ["cu29/log-level-critical", "cu-msp-bridge/log-level-critical"]
 
 [[bin]]
 name = "quad"

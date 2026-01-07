@@ -8,8 +8,9 @@ use cu_crsf::messages::RcChannelsPayload;
 use cu_micoairh743::GreenLed;
 use cu_msp_bridge::MspRequestBatch;
 use cu_msp_lib::structs::{
-    MspAnalog, MspBatteryConfig, MspBatteryState, MspDisplayPort, MspRequest, MspStatus,
-    MspStatusSensors, MspVoltageMeter, MspVoltageMeterConfig,
+    MspAnalog, MspApiVersion, MspBatteryConfig, MspBatteryState, MspDisplayPort,
+    MspFlightControllerVersion, MspRequest, MspStatus, MspStatusSensors, MspVoltageMeter,
+    MspVoltageMeterConfig,
 };
 use cu_pid::{PIDControlOutputPayload, PIDController};
 use cu_sensor_payloads::ImuPayload;
@@ -40,6 +41,12 @@ const BATTERY_CURRENT_METER_SOURCE_NONE: u8 = 0;
 const MSP_VOLTAGE_METER_ID_BATTERY_1: u8 = 10;
 const MSP_VOLTAGE_METER_SENSOR_TYPE_ADC_RES_DIV: u8 = 0;
 const MSP_VOLTAGE_METER_ADC_SUBFRAME_LEN: u8 = 5;
+const MSP_API_PROTOCOL_VERSION: u8 = 1;
+const MSP_API_VERSION_MAJOR: u8 = 1;
+const MSP_API_VERSION_MINOR: u8 = 47;
+const MSP_FC_VERSION_MAJOR: u8 = 4;
+const MSP_FC_VERSION_MINOR: u8 = 4;
+const MSP_FC_VERSION_PATCH: u8 = 0;
 
 resources!({
     led => Owned<spin::Mutex<GreenLed>>,
@@ -81,7 +88,7 @@ macro_rules! info_rl {
         }
     }};
     ($state:expr, $now:expr, $($arg:tt)+) => {{
-        info_rl!($state, $now, { defmt::info!($($arg)+); });
+        info_rl!($state, $now, { info!($($arg)+); });
     }};
 }
 
@@ -127,14 +134,7 @@ impl CuSinkTask for ControlSink {
             .map(|prev| now - prev >= CuDuration::from_millis(HEAP_LOG_PERIOD_MS))
             .unwrap_or(true)
         {
-            let (user, allocated, total, free) = crate::heap_stats();
-            defmt::info!(
-                "Heap stats(rt): user={} alloc={} total={} free={}",
-                user,
-                allocated,
-                total,
-                free
-            );
+            crate::log_heap_stats("control sink");
             self.last_heap_log = Some(now);
         }
 
@@ -612,6 +612,16 @@ impl CuTask for VtxMspResponder {
             vbat_res_div_val: self.vbat_res_div_val,
             vbat_res_div_mult: self.vbat_res_div_mult,
         };
+        let api_version = MspApiVersion {
+            protocol_version: MSP_API_PROTOCOL_VERSION,
+            api_version_major: MSP_API_VERSION_MAJOR,
+            api_version_minor: MSP_API_VERSION_MINOR,
+        };
+        let fc_version = MspFlightControllerVersion {
+            major: MSP_FC_VERSION_MAJOR,
+            minor: MSP_FC_VERSION_MINOR,
+            patch: MSP_FC_VERSION_PATCH,
+        };
         let analog = MspAnalog {
             battery_voltage: voltage_decivolts,
             mah_drawn: 0,
@@ -626,6 +636,12 @@ impl CuTask for VtxMspResponder {
 
         for request in requests.iter() {
             match request {
+                MspRequest::MspApiVersionRequest => {
+                    batch.push(MspRequest::MspApiVersion(api_version));
+                }
+                MspRequest::MspFcVersionRequest => {
+                    batch.push(MspRequest::MspFlightControllerVersion(fc_version));
+                }
                 MspRequest::MspBatteryConfigRequest => {
                     batch.push(MspRequest::MspBatteryConfig(battery_config));
                 }
@@ -702,7 +718,7 @@ impl CuSinkTask for ImuLogger {
                 let gy_dps = payload.gyro_y.get::<degree_per_second>();
                 let gz_dps = payload.gyro_z.get::<degree_per_second>();
                 let temp_c = payload.temperature.get::<degree_celsius>();
-                defmt::info!(
+                info!(
                     "imu ax={} m.s⁻² ay={} m.s⁻² az={} m.s⁻² gx={} deg.s⁻¹ gy={} deg.s⁻¹ gz={} deg.s⁻¹ t={} °C tov_kind={} tov_start_ns={} tov_end_ns={} tov_dt_us={}",
                     payload.accel_x.value,
                     payload.accel_y.value,
@@ -790,7 +806,7 @@ impl CuTask for RcMapper {
         let arm_cfg = config.and_then(|cfg| cfg.get::<u32>("arm_channel"));
         let mut arm_channel = arm_cfg.map(|v| v as usize).unwrap_or(3);
         if arm_channel > 15 {
-            defmt::info!(
+            warning!(
                 "rc mapper arm_channel {} out of range, clamping to 15",
                 arm_channel
             );
@@ -808,7 +824,7 @@ impl CuTask for RcMapper {
             .and_then(|cfg| cfg.get::<u32>("mode_mid_max"))
             .map(|v| v.min(u16::MAX as u32) as u16);
 
-        defmt::info!(
+        info!(
             "rc mapper cfg arm_channel={:?} arm_min={} arm_max={} mode_channel={:?} mode_low_max={} mode_mid_max={}",
             arm_cfg,
             arm_min,
@@ -885,7 +901,7 @@ impl CuTask for RcMapper {
                 .mode_channel
                 .and_then(|idx| channels.get(idx).copied())
                 .unwrap_or(0);
-            defmt::info!(
+            info!(
                 "rc ch0={} ch1={} ch2={} ch3={} ch4={} ch5={} ch6={} ch7={} ch8={} ch9={} ch10={} ch11={} ch12={} ch13={} ch14={} ch15={} arm_ch0={} arm_raw={} armed={} mode_ch0={} mode_raw={} mode={} mode_low_max={} mode_mid_max={}",
                 channels[0],
                 channels[1],
@@ -1010,11 +1026,9 @@ impl CuTask for ImuCalibrator {
                     self.bias[1].to_degrees(),
                     self.bias[2].to_degrees(),
                 ];
-                defmt::info!(
+                info!(
                     "imu gyro bias x={} deg.s⁻¹ y={} deg.s⁻¹ z={} deg.s⁻¹",
-                    bias_deg[0],
-                    bias_deg[1],
-                    bias_deg[2]
+                    bias_deg[0], bias_deg[1], bias_deg[2]
                 );
             }
 
@@ -1327,7 +1341,7 @@ impl CuTask for RateController {
             let gyro_roll = imu.gyro_x.value.to_degrees();
             let gyro_pitch = imu.gyro_y.value.to_degrees();
             let gyro_yaw = imu.gyro_z.value.to_degrees();
-            defmt::info!(
+            info!(
                 "rate_pid dt_us={} sp_r={} gyro_r={} out_r={} p_r={} i_r={} d_r={}",
                 dt.as_micros(),
                 sp_roll,
@@ -1337,23 +1351,13 @@ impl CuTask for RateController {
                 roll_out.i,
                 roll_out.d
             );
-            defmt::info!(
+            info!(
                 "rate_pid sp_p={} gyro_p={} out_p={} p_p={} i_p={} d_p={}",
-                sp_pitch,
-                gyro_pitch,
-                pitch_out.output,
-                pitch_out.p,
-                pitch_out.i,
-                pitch_out.d
+                sp_pitch, gyro_pitch, pitch_out.output, pitch_out.p, pitch_out.i, pitch_out.d
             );
-            defmt::info!(
+            info!(
                 "rate_pid sp_y={} gyro_y={} out_y={} p_y={} i_y={} d_y={}",
-                sp_yaw,
-                gyro_yaw,
-                yaw_out.output,
-                yaw_out.p,
-                yaw_out.i,
-                yaw_out.d
+                sp_yaw, gyro_yaw, yaw_out.output, yaw_out.p, yaw_out.i, yaw_out.d
             );
         });
 
@@ -1467,12 +1471,9 @@ impl CuTask for QuadXMixer {
         if self.motor_index == 0 {
             info_rl!(&LOG_MOTORS, ctrl_tov, {
                 let state = MOTOR_LOG.lock();
-                defmt::info!(
+                info!(
                     "motors cmd0={} cmd1={} cmd2={} cmd3={}",
-                    state.values[0],
-                    state.values[1],
-                    state.values[2],
-                    state.values[3]
+                    state.values[0], state.values[1], state.values[2], state.values[3]
                 );
             });
         }
@@ -1517,7 +1518,7 @@ fn expect_tov_time(tov: Tov) -> CuResult<CuTime> {
     match tov {
         Tov::Time(time) => Ok(time),
         Tov::Range(range) => {
-            defmt::info!(
+            info!(
                 "tov mismatch: expected time, got range start={} end={}",
                 range.start.as_nanos(),
                 range.end.as_nanos()
@@ -1525,7 +1526,7 @@ fn expect_tov_time(tov: Tov) -> CuResult<CuTime> {
             Err(CuError::from("Expected TOV::Time"))
         }
         Tov::None => {
-            defmt::info!("tov mismatch: expected time, got none");
+            info!("tov mismatch: expected time, got none");
             Err(CuError::from("Expected TOV::Time"))
         }
     }

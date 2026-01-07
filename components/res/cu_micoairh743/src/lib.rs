@@ -331,7 +331,10 @@ impl ResourceBundle for MicoAirH743 {
             overrun_period_cycles,
         );
 
-        let uart2_config = Config::default().baudrate(UART2_BAUD.bps());
+        let uart2_baud = _config
+            .and_then(|cfg| cfg.get::<u32>("uart2_baud"))
+            .unwrap_or(UART2_BAUD);
+        let uart2_config = Config::default().baudrate(uart2_baud.bps());
         let uart2 = SerialWrapper::new(
             dp.USART2
                 .serial(

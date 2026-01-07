@@ -205,7 +205,7 @@ where
             if self.force_v2_native || self.prefer_v2_native {
                 if self.log_msp_versions && !self.logged_tx_v2_native {
                     self.logged_tx_v2_native = true;
-                    warning!(
+                    info!(
                         "MSP bridge sending V2 native cmd={}",
                         packet.cmd
                     );
@@ -214,20 +214,20 @@ where
             } else {
                 if self.log_msp_versions && !self.logged_tx_v2_over_v1 {
                     self.logged_tx_v2_over_v1 = true;
-                    warning!("MSP bridge sending V2-over-V1 cmd={}", packet.cmd);
+                    info!("MSP bridge sending V2-over-V1 cmd={}", packet.cmd);
                 }
                 self.send_v2_over_v1(&packet)?;
             }
         } else {
             if self.log_msp_versions && !self.logged_tx_v1 {
                 self.logged_tx_v1 = true;
-                warning!("MSP bridge sending V1 cmd={}", packet.cmd);
+                info!("MSP bridge sending V1 cmd={}", packet.cmd);
             }
             self.send_v1(&packet)?;
             if should_send_v2_over_v1(request) {
                 if self.log_msp_versions && !self.logged_tx_v2_over_v1 {
                     self.logged_tx_v2_over_v1 = true;
-                    warning!("MSP bridge sending V2-over-V1 cmd={}", packet.cmd);
+                    info!("MSP bridge sending V2-over-V1 cmd={}", packet.cmd);
                 }
                 self.send_v2_over_v1(&packet)?;
             }
@@ -273,7 +273,7 @@ where
             MspParsedVersion::V1 => {
                 if self.log_msp_versions && !self.logged_v1 {
                     self.logged_v1 = true;
-                    warning!(
+                    info!(
                         "MSP bridge incoming V1 request cmd={}",
                         info.cmd
                     );
@@ -285,7 +285,7 @@ where
                 }
                 if self.log_msp_versions && !self.logged_v2_native {
                     self.logged_v2_native = true;
-                    warning!(
+                    info!(
                         "MSP bridge incoming V2 native request cmd={}",
                         info.cmd
                     );
@@ -297,7 +297,7 @@ where
                 }
                 if self.log_msp_versions && !self.logged_v2_over_v1 {
                     self.logged_v2_over_v1 = true;
-                    warning!(
+                    info!(
                         "MSP bridge incoming V2-over-V1 request cmd={}",
                         info.cmd
                     );
@@ -343,7 +343,7 @@ where
                                     let cmd = packet.cmd;
                                     let response = MspResponse::from(packet);
                                     if matches!(response, MspResponse::Unknown) {
-                                        warning!(
+                                        info!(
                                             "MSP bridge unknown response cmd={}",
                                             cmd
                                         );
@@ -356,7 +356,7 @@ where
                             }
                             Ok(None) => {}
                             Err(err) => {
-                                warning!("MSP bridge parser error: {}", err.to_string());
+                                info!("MSP bridge parser error: {}", err.to_string());
                             }
                         }
                     }
@@ -424,7 +424,7 @@ where
         let v2_only = cfg_bool(config, "v2_only", false);
         let force_v2_native = cfg_bool(config, "force_v2_native", false);
         let log_msp_versions = cfg_bool(config, "log_msp_versions", false);
-        warning!(
+        info!(
             "MSP bridge cfg v2_only={} force_v2_native={} log_msp_versions={}",
             v2_only,
             force_v2_native,

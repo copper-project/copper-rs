@@ -30,6 +30,12 @@ std = [
     "bincode/std",
     "serde/std",
 ]
+textlogs = [
+    "cu29/textlogs",
+    "cu-sensor-payloads/textlogs",
+    "cu-embedded-registry/textlogs",
+    "cu-mpu9250/textlogs",
+]
 
 [dependencies]
 cu29 = { path = "../../../core/cu29", version = "0.11.0", default-features = false }

@@ -12,7 +12,7 @@ It is designed to work both on `std` targets and in bare-metal builds that route
 
 ```toml
 [dependencies]
-cu_logmon = { version = "*", default-features = true } # disable default-features for no_std
+cu-logmon = { version = "*", default-features = true } # disable default-features for no_std
 ```
 
 In `copperconfig.ron`:
@@ -26,7 +26,7 @@ monitor: (
 For bare-metal targets, disable default features and enable `defmt`:
 
 ```toml
-cu_logmon = { version = "*", default-features = false, features = ["defmt"] }
+cu-logmon = { version = "*", default-features = false, features = ["defmt"] }
 ```
 
 ## Example
@@ -34,7 +34,7 @@ cu_logmon = { version = "*", default-features = false, features = ["defmt"] }
 Run the built-in demo (std targets):
 
 ```bash
-cargo run -p cu_logmon --example demo
+cargo run -p cu-logmon --example demo
 ```
 
 It simulates a 3-task pipeline at ~10 Hz and prints a one-line stat report every second.
@@ -44,7 +44,7 @@ It simulates a 3-task pipeline at ~10 Hz and prints a one-line stat report every
 There is also a minimal source->task->sink Copper app wired to `CuLogMon`:
 
 ```bash
-cargo run -p cu_logmon --example copper_app
+cargo run -p cu-logmon --example copper_app
 ```
 
 The runtime uses `copperconfig.ron` in this crate and logs to `logs/logmon_copper_app.copper`.
