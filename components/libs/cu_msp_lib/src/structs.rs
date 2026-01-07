@@ -1348,9 +1348,10 @@ impl From<MspRequest> for MspPacket {
             MspRequest::MspApiVersion(version) => MspPacket {
                 cmd: MspCommandCode::MSP_API_VERSION.to_primitive(),
                 direction: FromFlightController,
-                data: version.pack().map_or_else(|_| MspPacketData::new(), |data| {
-                    MspPacketData(SmallVec::from_slice(data.as_slice()))
-                }),
+                data: version.pack().map_or_else(
+                    |_| MspPacketData::new(),
+                    |data| MspPacketData(SmallVec::from_slice(data.as_slice())),
+                ),
             },
             MspRequest::MspFcVersionRequest => MspPacket {
                 cmd: MspCommandCode::MSP_FC_VERSION.to_primitive(),
@@ -1360,9 +1361,10 @@ impl From<MspRequest> for MspPacket {
             MspRequest::MspFlightControllerVersion(version) => MspPacket {
                 cmd: MspCommandCode::MSP_FC_VERSION.to_primitive(),
                 direction: FromFlightController,
-                data: version.pack().map_or_else(|_| MspPacketData::new(), |data| {
-                    MspPacketData(SmallVec::from_slice(data.as_slice()))
-                }),
+                data: version.pack().map_or_else(
+                    |_| MspPacketData::new(),
+                    |data| MspPacketData(SmallVec::from_slice(data.as_slice())),
+                ),
             },
             MspRequest::MspBatteryConfigRequest => MspPacket {
                 cmd: MspCommandCode::MSP_BATTERY_CONFIG.to_primitive(),
@@ -1372,9 +1374,10 @@ impl From<MspRequest> for MspPacket {
             MspRequest::MspBatteryConfig(config) => MspPacket {
                 cmd: MspCommandCode::MSP_BATTERY_CONFIG.to_primitive(),
                 direction: FromFlightController,
-                data: config.pack().map_or_else(|_| MspPacketData::new(), |data| {
-                    MspPacketData(SmallVec::from_slice(data.as_slice()))
-                }),
+                data: config.pack().map_or_else(
+                    |_| MspPacketData::new(),
+                    |data| MspPacketData(SmallVec::from_slice(data.as_slice())),
+                ),
             },
             MspRequest::MspBatteryStateRequest => MspPacket {
                 cmd: MspCommandCode::MSP_BATTERY_STATE.to_primitive(),
@@ -1384,9 +1387,10 @@ impl From<MspRequest> for MspPacket {
             MspRequest::MspBatteryState(state) => MspPacket {
                 cmd: MspCommandCode::MSP_BATTERY_STATE.to_primitive(),
                 direction: FromFlightController,
-                data: state.pack().map_or_else(|_| MspPacketData::new(), |data| {
-                    MspPacketData(SmallVec::from_slice(data.as_slice()))
-                }),
+                data: state.pack().map_or_else(
+                    |_| MspPacketData::new(),
+                    |data| MspPacketData(SmallVec::from_slice(data.as_slice())),
+                ),
             },
             MspRequest::MspAnalogRequest => MspPacket {
                 cmd: MspCommandCode::MSP_ANALOG.to_primitive(),
@@ -1396,9 +1400,10 @@ impl From<MspRequest> for MspPacket {
             MspRequest::MspAnalog(analog) => MspPacket {
                 cmd: MspCommandCode::MSP_ANALOG.to_primitive(),
                 direction: FromFlightController,
-                data: analog.pack().map_or_else(|_| MspPacketData::new(), |data| {
-                    MspPacketData(SmallVec::from_slice(data.as_slice()))
-                }),
+                data: analog.pack().map_or_else(
+                    |_| MspPacketData::new(),
+                    |data| MspPacketData(SmallVec::from_slice(data.as_slice())),
+                ),
             },
             MspRequest::MspVoltageMeterConfigRequest => MspPacket {
                 cmd: MspCommandCode::MSP_VOLTAGE_METER_CONFIG.to_primitive(),
@@ -1408,9 +1413,10 @@ impl From<MspRequest> for MspPacket {
             MspRequest::MspVoltageMeterConfig(config) => MspPacket {
                 cmd: MspCommandCode::MSP_VOLTAGE_METER_CONFIG.to_primitive(),
                 direction: FromFlightController,
-                data: config.pack().map_or_else(|_| MspPacketData::new(), |data| {
-                    MspPacketData(SmallVec::from_slice(data.as_slice()))
-                }),
+                data: config.pack().map_or_else(
+                    |_| MspPacketData::new(),
+                    |data| MspPacketData(SmallVec::from_slice(data.as_slice())),
+                ),
             },
             MspRequest::MspVoltageMetersRequest => MspPacket {
                 cmd: MspCommandCode::MSP_VOLTAGE_METERS.to_primitive(),
@@ -1420,9 +1426,10 @@ impl From<MspRequest> for MspPacket {
             MspRequest::MspVoltageMeter(meter) => MspPacket {
                 cmd: MspCommandCode::MSP_VOLTAGE_METERS.to_primitive(),
                 direction: FromFlightController,
-                data: meter.pack().map_or_else(|_| MspPacketData::new(), |data| {
-                    MspPacketData(SmallVec::from_slice(data.as_slice()))
-                }),
+                data: meter.pack().map_or_else(
+                    |_| MspPacketData::new(),
+                    |data| MspPacketData(SmallVec::from_slice(data.as_slice())),
+                ),
             },
             MspRequest::MspRc => MspPacket {
                 cmd: MspCommandCode::MSP_RC.to_primitive(),
@@ -1477,9 +1484,10 @@ impl From<&MspRequest> for MspPacket {
             MspRequest::MspApiVersion(version) => MspPacket {
                 cmd: MspCommandCode::MSP_API_VERSION.to_primitive(),
                 direction: FromFlightController,
-                data: version.pack().map_or_else(|_| MspPacketData::new(), |data| {
-                    MspPacketData::from(data.as_slice())
-                }),
+                data: version.pack().map_or_else(
+                    |_| MspPacketData::new(),
+                    |data| MspPacketData::from(data.as_slice()),
+                ),
             },
             MspRequest::MspFcVersionRequest => MspPacket {
                 cmd: MspCommandCode::MSP_FC_VERSION.to_primitive(),
@@ -1489,9 +1497,10 @@ impl From<&MspRequest> for MspPacket {
             MspRequest::MspFlightControllerVersion(version) => MspPacket {
                 cmd: MspCommandCode::MSP_FC_VERSION.to_primitive(),
                 direction: FromFlightController,
-                data: version.pack().map_or_else(|_| MspPacketData::new(), |data| {
-                    MspPacketData::from(data.as_slice())
-                }),
+                data: version.pack().map_or_else(
+                    |_| MspPacketData::new(),
+                    |data| MspPacketData::from(data.as_slice()),
+                ),
             },
             MspRequest::MspBatteryConfigRequest => MspPacket {
                 cmd: MspCommandCode::MSP_BATTERY_CONFIG.to_primitive(),
@@ -1501,9 +1510,10 @@ impl From<&MspRequest> for MspPacket {
             MspRequest::MspBatteryConfig(config) => MspPacket {
                 cmd: MspCommandCode::MSP_BATTERY_CONFIG.to_primitive(),
                 direction: FromFlightController,
-                data: config.pack().map_or_else(|_| MspPacketData::new(), |data| {
-                    MspPacketData::from(data.as_slice())
-                }),
+                data: config.pack().map_or_else(
+                    |_| MspPacketData::new(),
+                    |data| MspPacketData::from(data.as_slice()),
+                ),
             },
             MspRequest::MspBatteryStateRequest => MspPacket {
                 cmd: MspCommandCode::MSP_BATTERY_STATE.to_primitive(),
@@ -1513,9 +1523,10 @@ impl From<&MspRequest> for MspPacket {
             MspRequest::MspBatteryState(state) => MspPacket {
                 cmd: MspCommandCode::MSP_BATTERY_STATE.to_primitive(),
                 direction: FromFlightController,
-                data: state.pack().map_or_else(|_| MspPacketData::new(), |data| {
-                    MspPacketData::from(data.as_slice())
-                }),
+                data: state.pack().map_or_else(
+                    |_| MspPacketData::new(),
+                    |data| MspPacketData::from(data.as_slice()),
+                ),
             },
             MspRequest::MspAnalogRequest => MspPacket {
                 cmd: MspCommandCode::MSP_ANALOG.to_primitive(),
@@ -1525,9 +1536,10 @@ impl From<&MspRequest> for MspPacket {
             MspRequest::MspAnalog(analog) => MspPacket {
                 cmd: MspCommandCode::MSP_ANALOG.to_primitive(),
                 direction: FromFlightController,
-                data: analog.pack().map_or_else(|_| MspPacketData::new(), |data| {
-                    MspPacketData::from(data.as_slice())
-                }),
+                data: analog.pack().map_or_else(
+                    |_| MspPacketData::new(),
+                    |data| MspPacketData::from(data.as_slice()),
+                ),
             },
             MspRequest::MspVoltageMeterConfigRequest => MspPacket {
                 cmd: MspCommandCode::MSP_VOLTAGE_METER_CONFIG.to_primitive(),
@@ -1537,9 +1549,10 @@ impl From<&MspRequest> for MspPacket {
             MspRequest::MspVoltageMeterConfig(config) => MspPacket {
                 cmd: MspCommandCode::MSP_VOLTAGE_METER_CONFIG.to_primitive(),
                 direction: FromFlightController,
-                data: config.pack().map_or_else(|_| MspPacketData::new(), |data| {
-                    MspPacketData::from(data.as_slice())
-                }),
+                data: config.pack().map_or_else(
+                    |_| MspPacketData::new(),
+                    |data| MspPacketData::from(data.as_slice()),
+                ),
             },
             MspRequest::MspVoltageMetersRequest => MspPacket {
                 cmd: MspCommandCode::MSP_VOLTAGE_METERS.to_primitive(),
@@ -1549,9 +1562,10 @@ impl From<&MspRequest> for MspPacket {
             MspRequest::MspVoltageMeter(meter) => MspPacket {
                 cmd: MspCommandCode::MSP_VOLTAGE_METERS.to_primitive(),
                 direction: FromFlightController,
-                data: meter.pack().map_or_else(|_| MspPacketData::new(), |data| {
-                    MspPacketData::from(data.as_slice())
-                }),
+                data: meter.pack().map_or_else(
+                    |_| MspPacketData::new(),
+                    |data| MspPacketData::from(data.as_slice()),
+                ),
             },
             MspRequest::MspRc => MspPacket {
                 cmd: MspCommandCode::MSP_RC.to_primitive(),

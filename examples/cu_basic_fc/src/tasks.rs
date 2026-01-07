@@ -568,16 +568,18 @@ impl CuTask for VtxMspResponder {
     where
         Self: Sized,
     {
-        let vbat_scale = cfg_u32(config, "vbat_scale", BATTERY_VBAT_SCALE_DEFAULT)
+        let vbat_scale =
+            cfg_u32(config, "vbat_scale", BATTERY_VBAT_SCALE_DEFAULT).min(u32::from(u8::MAX)) as u8;
+        let vbat_res_div_val = cfg_u32(config, "vbat_res_div_val", BATTERY_VBAT_RES_DIV_VAL_DEFAULT)
+            .max(1)
             .min(u32::from(u8::MAX)) as u8;
-        let vbat_res_div_val =
-            cfg_u32(config, "vbat_res_div_val", BATTERY_VBAT_RES_DIV_VAL_DEFAULT)
-                .max(1)
-                .min(u32::from(u8::MAX)) as u8;
-        let vbat_res_div_mult =
-            cfg_u32(config, "vbat_res_div_mult", BATTERY_VBAT_RES_DIV_MULT_DEFAULT)
-                .max(1)
-                .min(u32::from(u8::MAX)) as u8;
+        let vbat_res_div_mult = cfg_u32(
+            config,
+            "vbat_res_div_mult",
+            BATTERY_VBAT_RES_DIV_MULT_DEFAULT,
+        )
+        .max(1)
+        .min(u32::from(u8::MAX)) as u8;
         let battery_capacity = cfg_u16(config, "battery_capacity_mah", 0);
         let vbat_min_cell_centivolts = cfg_u16(
             config,
@@ -718,7 +720,11 @@ impl CuTask for VtxMspResponder {
         }
 
         if !batch.0.is_empty() {
-            info!("MSP responder: sending {} responses, vbat={} cv", batch.0.len(), voltage_centi);
+            info!(
+                "MSP responder: sending {} responses, vbat={} cv",
+                batch.0.len(),
+                voltage_centi
+            );
         }
 
         if batch.0.is_empty() {
