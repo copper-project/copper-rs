@@ -117,6 +117,7 @@
            channels: [
                 Tx ( id: "requests" ),
                 Rx ( id: "responses" ),
+                Rx ( id: "incoming" ),
            ],
         ),
         (
@@ -162,6 +163,7 @@
         (src: "mixer2", dst: "bdshot/esc2_tx", msg: "cu_bdshot::EscCommand"),
         (src: "mixer3", dst: "bdshot/esc3_tx", msg: "cu_bdshot::EscCommand"),
         (src: "battery_adc", dst: "vtx_osd", msg: "crate::messages::BatteryVoltage"),
+        (src: "vtx_msp/incoming", dst: "vtx_osd", msg: "cu_msp_bridge::MspRequestBatch"),
         (src: "vtx_osd", dst: "vtx_msp/requests", msg: "cu_msp_bridge::MspRequestBatch"),
     ],
     monitor: (

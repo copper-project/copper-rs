@@ -262,7 +262,7 @@ pub struct VtxOsd {
 impl Freezable for VtxOsd {}
 
 impl CuTask for VtxOsd {
-    type Input<'m> = input_msg!('m, ControlInputs, BatteryVoltage);
+    type Input<'m> = input_msg!('m, ControlInputs, BatteryVoltage, MspRequestBatch);
     type Output<'m> = CuMsg<MspRequestBatch>;
     type Resources<'r> = ();
 
@@ -303,7 +303,7 @@ impl CuTask for VtxOsd {
         input: &Self::Input<'i>,
         output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
-        let (ctrl_msg, batt_msg) = *input;
+        let (ctrl_msg, batt_msg, incoming_msg) = *input;
         let tov_time = expect_tov_time(ctrl_msg.tov)?;
         output.tov = Tov::Time(tov_time);
         let now = tov_time;
@@ -312,6 +312,11 @@ impl CuTask for VtxOsd {
 
         if let Some(voltage) = batt_msg.payload() {
             self.last_voltage_centi = Some(voltage.centivolts);
+        }
+
+        // First, handle any incoming MSP requests (telemetry queries from VTX)
+        if let Some(incoming_requests) = incoming_msg.payload() {
+            self.handle_incoming_requests(&mut batch, incoming_requests);
         }
 
         if let Some(ctrl) = ctrl {
@@ -397,6 +402,57 @@ impl CuTask for VtxOsd {
 }
 
 impl VtxOsd {
+    fn handle_incoming_requests(&self, batch: &mut MspRequestBatch, requests: &MspRequestBatch) {
+        let voltage_centi = self.last_voltage_centi.unwrap_or(0);
+        let voltage_decivolts = clamp_u8((voltage_centi + 5) / 10);
+        let cell_count = estimate_cell_count(voltage_centi);
+
+        let battery_state = MspBatteryState {
+            battery_cell_count: cell_count.unwrap_or(0),
+            battery_capacity: 0,
+            battery_voltage: voltage_decivolts,
+            mah_drawn: 0,
+            amperage: 0,
+            alerts: 0,
+            battery_voltage_mv: voltage_centi,
+        };
+        let analog = MspAnalog {
+            battery_voltage: voltage_decivolts,
+            mah_drawn: 0,
+            rssi: 0,
+            amperage: 0,
+            battery_voltage_mv: voltage_centi,
+        };
+        let api_version = MspApiVersion {
+            protocol_version: MSP_API_PROTOCOL_VERSION,
+            api_version_major: MSP_API_VERSION_MAJOR,
+            api_version_minor: MSP_API_VERSION_MINOR,
+        };
+        let fc_version = MspFlightControllerVersion {
+            major: MSP_FC_VERSION_MAJOR,
+            minor: MSP_FC_VERSION_MINOR,
+            patch: MSP_FC_VERSION_PATCH,
+        };
+
+        for request in requests.iter() {
+            match request {
+                MspRequest::MspApiVersionRequest => {
+                    batch.push(MspRequest::MspApiVersion(api_version));
+                }
+                MspRequest::MspFcVersionRequest => {
+                    batch.push(MspRequest::MspFlightControllerVersion(fc_version));
+                }
+                MspRequest::MspBatteryStateRequest => {
+                    batch.push(MspRequest::MspBatteryState(battery_state));
+                }
+                MspRequest::MspAnalogRequest => {
+                    batch.push(MspRequest::MspAnalog(analog));
+                }
+                _ => {}
+            }
+        }
+    }
+
     fn push_cell_voltage(&self, batch: &mut MspRequestBatch) {
         let row = self.row.saturating_add(1);
         if row >= self.rows {
@@ -659,6 +715,10 @@ impl CuTask for VtxMspResponder {
                 }
                 _ => {}
             }
+        }
+
+        if !batch.0.is_empty() {
+            info!("MSP responder: sending {} responses, vbat={} cv", batch.0.len(), voltage_centi);
         }
 
         if batch.0.is_empty() {
