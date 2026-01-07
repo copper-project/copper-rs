@@ -29,7 +29,7 @@ const VTX_WATERMARK_LINES: [&str; 3] = [" /\\_/\\ ", "( O O )", " > ^ <  [CU29]"
 const VTX_CELL_DIVISOR: u16 = 4;
 const VTX_SYM_VOLT: char = '\x06';
 const BATTERY_VREF_MV_DEFAULT: u32 = 3300;
-const BATTERY_VBAT_SCALE_DEFAULT: u32 = 110;
+const BATTERY_VBAT_SCALE_DEFAULT: u32 = 210;
 const BATTERY_VBAT_RES_DIV_VAL_DEFAULT: u32 = 10;
 const BATTERY_VBAT_RES_DIV_MULT_DEFAULT: u32 = 1;
 

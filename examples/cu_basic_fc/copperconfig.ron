@@ -22,7 +22,7 @@
             resources: { "battery_adc": "fc.battery_adc" },
             config: {
                 "vref_mv": 3300,
-                "vbat_scale": 110,
+                "vbat_scale": 210,
                 "vbat_res_div_val": 10,
                 "vbat_res_div_mult": 1,
             },
