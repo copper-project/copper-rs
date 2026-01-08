@@ -216,10 +216,13 @@ wt branch:
     echo "Worktree already exists at ${dir}"
   elif git show-ref --verify --quiet "refs/heads/{{branch}}"; then
     git worktree add "${dir}" "{{branch}}"
+    cp AGENTS.md  "${dir}/" || true
   elif git show-ref --verify --quiet "refs/remotes/origin/{{branch}}"; then
     git worktree add -b "{{branch}}" "${dir}" "origin/{{branch}}"
+    cp AGENTS.md  "${dir}/" || true
   else
     git worktree add -b "{{branch}}" "${dir}"
+    cp AGENTS.md  "${dir}/" || true
   fi
   if [[ -n "${ZELLIJ:-}" ]]; then
     zellij action new-tab --name "${name}"
