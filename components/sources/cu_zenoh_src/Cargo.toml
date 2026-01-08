@@ -1,5 +1,5 @@
 [package]
-name = "cu-zenoh-sink"
+name = "cu-zenoh-src"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -8,9 +8,8 @@ keywords.workspace = true
 categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
-description = "Copper sink task for Zenoh."
+description = "Copper source task for Zenoh. It allows Copper to receive messages from Zenoh."
 
 [dependencies]
 zenoh = { version = "1.7" }
 cu29 = { workspace = true }
-

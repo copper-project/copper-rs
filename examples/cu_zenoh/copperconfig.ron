@@ -11,8 +11,20 @@
                 "topic": "copper/output",
             }
         ),
+        (
+            id: "task2",
+            type: "cu_zenoh::ExampleZenohSrc",
+            config: {
+                "topic": "copper/input",
+            }
+        ),
+        (
+            id: "task3",
+            type: "tasks::ExamplePrinter",
+        ),
      ],
     cnx: [
         (src: "task0", dst: "task1", msg: "i32"),
+        (src: "task2", dst: "task3", msg: "i32"),
     ]
 )

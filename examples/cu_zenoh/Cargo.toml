@@ -18,6 +18,6 @@ ignored = ["bincode", "cu-caterpillar", "cu-consolemon"]
 cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
 cu-zenoh-sink = { path = "../../components/sinks/cu_zenoh_sink", version = "0.11.0" }
+cu-zenoh-src = { path = "../../components/sources/cu_zenoh_src", version = "0.11.0" }
 tempfile = { workspace = true }
 serde = { workspace = true }
-

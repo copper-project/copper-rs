@@ -3,8 +3,10 @@ use cu29_helpers::basic_copper_setup;
 
 pub mod cu_zenoh {
     use cu_zenoh_sink::ZenohSink;
+    use cu_zenoh_src::ZenohSrc;
 
     pub type ExampleSink = ZenohSink<i32>;
+    pub type ExampleZenohSrc = ZenohSrc<i32>;
 }
 pub mod tasks {
     use std::time::Duration;
@@ -33,6 +35,32 @@ pub mod tasks {
             std::thread::sleep(Duration::from_secs(1));
             debug!("Sending value");
             new_msg.set_payload(42);
+            Ok(())
+        }
+    }
+
+    pub struct ExamplePrinter {}
+
+    impl Freezable for ExamplePrinter {}
+
+    impl CuSinkTask for ExamplePrinter {
+        type Resources<'r> = ();
+        type Input<'m> = input_msg!(i32);
+
+        fn new_with(
+            _config: Option<&ComponentConfig>,
+            _resources: Self::Resources<'_>,
+        ) -> CuResult<Self>
+        where
+            Self: Sized,
+        {
+            Ok(Self {})
+        }
+
+        fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
+            if let Some(payload) = input.payload() {
+                debug!("Received value from Zenoh: {}", payload);
+            }
             Ok(())
         }
     }
