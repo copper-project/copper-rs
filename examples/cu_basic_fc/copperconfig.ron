@@ -17,6 +17,17 @@
             },
         ),
         (
+            id: "battery_adc",
+            type: "tasks::BatteryAdcSource",
+            resources: { "battery_adc": "fc.battery_adc" },
+            config: {
+                "vref_mv": 3300,
+                "vbat_scale": 210,
+                "vbat_res_div_val": 10,
+                "vbat_res_div_mult": 1,
+            },
+        ),
+        (
             id: "imu_cal",
             type: "tasks::ImuCalibrator",
             config: { "cal_ms": 3000 },
@@ -110,6 +121,7 @@
            channels: [
                 Tx ( id: "requests" ),
                 Rx ( id: "responses" ),
+                Rx ( id: "incoming" ),
            ],
         ),
         (
@@ -154,6 +166,8 @@
         (src: "mixer1", dst: "bdshot/esc1_tx", msg: "cu_bdshot::EscCommand"),
         (src: "mixer2", dst: "bdshot/esc2_tx", msg: "cu_bdshot::EscCommand"),
         (src: "mixer3", dst: "bdshot/esc3_tx", msg: "cu_bdshot::EscCommand"),
+        (src: "battery_adc", dst: "vtx_osd", msg: "crate::messages::BatteryVoltage"),
+        (src: "vtx_msp/incoming", dst: "vtx_osd", msg: "cu_msp_bridge::MspRequestBatch"),
         (src: "vtx_osd", dst: "vtx_msp/requests", msg: "cu_msp_bridge::MspRequestBatch"),
     ],
     monitor: (

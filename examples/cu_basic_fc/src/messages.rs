@@ -33,3 +33,9 @@ pub struct BodyCommand {
     pub pitch: f32,
     pub yaw: f32,
 }
+
+#[derive(Debug, Default, Clone, Copy, Encode, Decode, Serialize)]
+pub struct BatteryVoltage {
+    /// Battery voltage in 0.01V steps.
+    pub centivolts: u16,
+}

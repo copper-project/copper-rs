@@ -23,7 +23,7 @@ mod std_impl {
 // no-std implementation
 #[cfg(not(feature = "std"))]
 mod no_std_impl {
-    pub use alloc::{string::ToString, vec::Vec};
+    pub use alloc::vec::Vec;
     pub use core::mem;
 }
 
@@ -37,7 +37,7 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu_msp_lib::structs::{MspRequest, MspResponse};
-use cu_msp_lib::{MspPacket, MspParser};
+use cu_msp_lib::{MspPacket, MspPacketDirection, MspParser};
 use cu29::cubridge::{
     BridgeChannel, BridgeChannelConfig, BridgeChannelInfo, BridgeChannelSet, CuBridge,
 };
@@ -129,6 +129,7 @@ tx_channels! {
 rx_channels! {
     pub struct RxChannels : RxId {
         responses => MspResponseBatch,
+        incoming => MspRequestBatch,
     }
 }
 
@@ -141,6 +142,7 @@ where
     parser: MspParser,
     read_buffer: [u8; READ_BUFFER_SIZE],
     pending_responses: MspResponseBatch,
+    pending_requests: MspRequestBatch,
     tx_buffer: SmallVec<[u8; 256]>,
 }
 
@@ -154,6 +156,7 @@ where
             parser: MspParser::new(),
             read_buffer: [0; READ_BUFFER_SIZE],
             pending_responses: MspResponseBatch::new(),
+            pending_requests: MspRequestBatch::new(),
             tx_buffer: SmallVec::new(),
         }
     }
@@ -172,38 +175,35 @@ where
 
     fn poll_serial(&mut self) -> CuResult<()> {
         loop {
-            if self.pending_responses.0.len() >= MAX_RESPONSES_PER_BATCH {
+            if self.pending_responses.0.len() >= MAX_RESPONSES_PER_BATCH
+                || self.pending_requests.0.len() >= MAX_REQUESTS_PER_BATCH
+            {
                 break;
             }
             match self.serial.read(&mut self.read_buffer) {
                 Ok(0) => break,
                 Ok(n) => {
                     for &byte in &self.read_buffer[..n] {
-                        if self.pending_responses.0.len() >= MAX_RESPONSES_PER_BATCH {
+                        if self.pending_responses.0.len() >= MAX_RESPONSES_PER_BATCH
+                            || self.pending_requests.0.len() >= MAX_REQUESTS_PER_BATCH
+                        {
                             break;
                         }
                         match self.parser.parse(byte) {
                             Ok(Some(packet)) => {
-                                let cmd = packet.cmd;
-                                let response = MspResponse::from(packet);
-                                if matches!(response, MspResponse::Unknown) {
-                                    cu29_log_derive::warning!(
-                                        "MSP bridge unknown response cmd={}",
-                                        cmd
-                                    );
-                                }
-                                self.pending_responses.push(response);
-                                if self.pending_responses.0.len() >= MAX_RESPONSES_PER_BATCH {
-                                    break;
+                                if packet.direction == MspPacketDirection::ToFlightController {
+                                    // This is an incoming request from the VTX
+                                    if let Some(request) = MspRequest::from_command_id(packet.cmd) {
+                                        self.pending_requests.push(request);
+                                    }
+                                } else {
+                                    // This is a response from the VTX
+                                    let response = MspResponse::from(packet);
+                                    self.pending_responses.push(response);
                                 }
                             }
                             Ok(None) => {}
-                            Err(err) => {
-                                cu29_log_derive::warning!(
-                                    "MSP bridge parser error: {}",
-                                    err.to_string()
-                                );
-                            }
+                            Err(_) => {}
                         }
                     }
                 }
@@ -314,6 +314,12 @@ where
                 let mut batch = MspResponseBatch::new();
                 mem::swap(&mut batch, &mut self.pending_responses);
                 response_msg.set_payload(batch);
+            }
+            RxId::Incoming => {
+                let request_msg: &mut CuMsg<MspRequestBatch> = msg.downcast_mut()?;
+                let mut batch = MspRequestBatch::new();
+                mem::swap(&mut batch, &mut self.pending_requests);
+                request_msg.set_payload(batch);
             }
         }
         Ok(())

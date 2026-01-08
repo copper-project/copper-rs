@@ -69,8 +69,11 @@ cortex-m = { version = "0.7", features = ["critical-section-single-core"], optio
 [features]
 default = ["sim"]
 textlogs = ["cu29/textlogs",
+            "cu-msp-bridge/textlogs",
+            "cu-msp-bridge/log-level-info",
             "cu-logmon/textlogs",
             "cu-logmon/log-level-info"]
+
 
 firmware = [
   "dep:cu29",
