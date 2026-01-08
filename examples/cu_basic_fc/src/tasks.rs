@@ -1498,7 +1498,7 @@ static MOTOR_LOG: spin::Mutex<MotorLogState> = spin::Mutex::new(MotorLogState::n
 pub struct QuadXMixer {
     motor_index: usize,
     props_out: bool,
-    airmode_idle: f32,  // Motor idle value when in airmode at low throttle (0.0-1.0)
+    airmode_idle: f32, // Motor idle value when in airmode at low throttle (0.0-1.0)
 }
 
 impl Freezable for QuadXMixer {}
@@ -1524,7 +1524,7 @@ impl CuTask for QuadXMixer {
         Ok(Self {
             motor_index,
             props_out,
-            airmode_idle: airmode_idle.clamp(0.0, 0.3),  // Max 30% idle
+            airmode_idle: airmode_idle.clamp(0.0, 0.3), // Max 30% idle
         })
     }
 
@@ -1557,7 +1557,7 @@ impl CuTask for QuadXMixer {
                 // When throttle < 50%, scale from idle to normal. Above 50%, normal mixing.
                 let motor = if throttle < 0.5 {
                     // Low throttle: blend from idle (at 0%) to normal (at 50%)
-                    let blend = throttle * 2.0;  // 0.0 at 0%, 1.0 at 50%
+                    let blend = throttle * 2.0; // 0.0 at 0%, 1.0 at 50%
                     let base = self.airmode_idle * (1.0 - blend) + throttle * blend;
                     (base + mix).clamp(0.0, 1.0)
                 } else {
