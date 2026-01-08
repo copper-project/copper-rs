@@ -155,14 +155,6 @@ pub fn log(entry: &mut CuLogEntry) -> CuResult<()> {
     if let Err(err) = writer.lock().unwrap().log(entry) {
         eprintln!("Failed to log data: {err}");
     }
-
-    // This is only for debug builds with standard textual logging implemented.
-    #[cfg(debug_assertions)]
-    {
-        // This scope is important :).
-        // if we have not passed a text logger in debug mode, it is ok just move along.
-    }
-
     Ok(())
 }
 
