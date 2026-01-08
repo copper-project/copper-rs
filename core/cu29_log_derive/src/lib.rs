@@ -125,12 +125,8 @@ fn create_log_entry(input: TokenStream, level: CuLogLevel) -> TokenStream {
     let (defmt_fmt_lit, defmt_args_unnamed_ts, defmt_args_named_ts, defmt_available) = {
         let defmt_fmt_lit = {
             let mut s = msg_str.clone();
-            if !unnamed_params.is_empty() || !named_params.is_empty() {
+            if !named_params.is_empty() {
                 s.push_str(" |");
-            }
-            for (i, _) in unnamed_params.iter().enumerate() {
-                use std::fmt::Write as _;
-                let _ = write!(&mut s, " arg{}={:?}", i, ());
             }
             for (name, _) in named_params.iter() {
                 let name_str = quote!(#name).to_string();
