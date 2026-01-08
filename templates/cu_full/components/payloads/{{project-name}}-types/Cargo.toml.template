@@ -1,8 +1,0 @@
-[package]
-name = "{{project-name|kebab_case}}-types"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-bincode = { workspace = true }
-serde = { workspace = true }

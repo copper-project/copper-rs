@@ -1,31 +1,20 @@
 # {{project-name}} Workspace
 
-This template bootstraps a multi-crate Copper workspace intended to scale beyond a single binary.
+This template bootstraps a Copper workspace with an app crate and a shared-components layout.
 
 ## Layout
 
-- `apps/{{project-name}}/`: primary app, log reader, and config.
-- `apps/{{project-name}}-demo/`: secondary app that reuses shared components.
-- `components/payloads/{{project-name}}-types/`: shared message types.
-- `components/sources/{{project-name}}-source/`: source task.
-- `components/tasks/{{project-name}}-processor/`: processing task.
-- `components/sinks/{{project-name}}-sink/`: sink task.
-- `docs/`: design notes and project docs.
-- `justfile`: automation helpers like `just log`, `just cl`, and `just rcfg` (set `APP_NAME={{project-name|kebab_case}}-demo APP_DIR={{project-name}}-demo` for the demo app).
+- `apps/README.md`: overview for app crates.
+- `apps/cu_example_app/`: primary app, local tasks/messages, config, and logs.
+- `components/bridges/cu_example_shared_bridge/`: shared bridge example crate.
+- `components/`: shared components by category (placeholders to extend).
+- `doc/`: design notes and project docs.
+- `justfile`: automation helpers like `just rcfg`.
 
 ## Quick start
 
 ```bash
-cargo run -p {{project-name|kebab_case}}
+cargo run -p cu_example_app
 ```
 
-Or run the demo app:
-
-```bash
-cargo run -p {{project-name|kebab_case}}-demo
-```
-
-The runtime configs live in:
-
-- `apps/{{project-name}}/config/copperconfig.ron`
-- `apps/{{project-name}}-demo/config/copperconfig.ron`
+The runtime config lives in `apps/cu_example_app/copperconfig.ron`.

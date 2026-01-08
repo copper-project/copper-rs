@@ -1,25 +1,9 @@
 file::rename("Cargo.toml.template", "Cargo.toml");
 file::rename(
-    "apps/{{project-name}}/Cargo.toml.template",
-    "apps/{{project-name}}/Cargo.toml",
+    "apps/cu_example_app/Cargo.toml.template",
+    "apps/cu_example_app/Cargo.toml",
 );
 file::rename(
-    "apps/{{project-name}}-demo/Cargo.toml.template",
-    "apps/{{project-name}}-demo/Cargo.toml",
-);
-file::rename(
-    "components/payloads/{{project-name}}-types/Cargo.toml.template",
-    "components/payloads/{{project-name}}-types/Cargo.toml",
-);
-file::rename(
-    "components/sources/{{project-name}}-source/Cargo.toml.template",
-    "components/sources/{{project-name}}-source/Cargo.toml",
-);
-file::rename(
-    "components/tasks/{{project-name}}-processor/Cargo.toml.template",
-    "components/tasks/{{project-name}}-processor/Cargo.toml",
-);
-file::rename(
-    "components/sinks/{{project-name}}-sink/Cargo.toml.template",
-    "components/sinks/{{project-name}}-sink/Cargo.toml",
+    "components/bridges/cu_example_shared_bridge/Cargo.toml.template",
+    "components/bridges/cu_example_shared_bridge/Cargo.toml",
 );

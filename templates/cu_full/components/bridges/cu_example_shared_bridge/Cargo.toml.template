@@ -1,0 +1,9 @@
+[package]
+name = "cu_example_shared_bridge"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cu29 = { workspace = true }
+bincode = { workspace = true }
+serde = { workspace = true }
