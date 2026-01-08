@@ -1058,9 +1058,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         quote! {
                             #call_sim_callback
                             if doit {
+                                cl_timeout.update_context(#mission_mod::TASKS_IDS[#index], CuTaskState::Preprocess, None::<&()>);
                                 if let Err(error) = tasks.#task_index.preprocess(clock) {
                                     #monitoring_action
                                 }
+                                cl_timeout.check_deadline()?;
                             }
                         }
                     },
@@ -1106,9 +1108,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         quote! {
                             #call_sim_callback
                             if doit {
+                                cl_timeout.update_context(#mission_mod::TASKS_IDS[#index], CuTaskState::Postprocess, None::<&()>);
                                 if let Err(error) = tasks.#task_index.postprocess(clock) {
                                     #monitoring_action
                                 }
+                                cl_timeout.check_deadline()?;
                             }
                         }
                     }
@@ -1191,6 +1195,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 quote! {
                     {
                         let bridge = &mut bridges.#bridge_index;
+                        cl_timeout.update_context(#mission_mod::TASKS_IDS[#monitor_index], CuTaskState::Preprocess, None::<&()>);
                         if let Err(error) = bridge.preprocess(clock) {
                             let decision = monitor.process_error(#monitor_index, CuTaskState::Preprocess, &error);
                             match decision {
@@ -1207,6 +1212,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 }
                             }
                         }
+                        cl_timeout.check_deadline()?;
                     }
                 }
             })
@@ -1223,6 +1229,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 quote! {
                     {
                         let bridge = &mut bridges.#bridge_index;
+                        cl_timeout.update_context(#mission_mod::TASKS_IDS[#monitor_index], CuTaskState::Postprocess, None::<&()>);
                         if let Err(error) = bridge.postprocess(clock) {
                             let decision = monitor.process_error(#monitor_index, CuTaskState::Postprocess, &error);
                             match decision {
@@ -1239,6 +1246,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 }
                             }
                         }
+                        cl_timeout.check_deadline()?;
                     }
                 }
             })
@@ -1517,6 +1525,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 // Pre-explode the runtime to avoid complexity with partial borrowing in the generated code.
                 let runtime = &mut self.copper_runtime;
+                let mut cl_timeout = runtime.copperlist_timeout_guard();
                 let clock = &runtime.clock;
                 let monitor = &mut runtime.monitor;
                 let tasks = &mut runtime.tasks;
@@ -1529,6 +1538,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 let culist = cl_manager.inner.create().expect("Ran out of space for copper lists"); // FIXME: error handling
                 let clid = culist.id;
+                cl_timeout.set_copperlist_id(clid);
                 kf_manager.reset(clid, clock); // beginning of processing, we empty the serialized frozen states of the tasks.
                 culist.change_state(cu29::copperlist::CopperListState::Processing);
                 culist.msgs.init_zeroed();
@@ -1536,7 +1546,9 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     let msgs = &mut culist.msgs.0;
                     #(#runtime_plan_code)*
                 } // drop(msgs);
+                cl_timeout.update_context("monitor::process_copperlist", CuTaskState::Process, None::<&()>);
                 monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
+                cl_timeout.check_deadline()?;
 
                 // here drop the payloads if we don't want them to be logged.
                 #(#preprocess_logging_calls)*
@@ -3276,12 +3288,20 @@ fn generate_task_execution_tokens(
                             kf_manager.freeze_task(clid, &#task_instance)?;
                             #call_sim_callback
                             let cumsg_output = &mut msgs.#output_culist_index;
+                            if doit {
+                                cl_timeout.update_context(
+                                    #mission_mod::TASKS_IDS[#tid],
+                                    CuTaskState::Process,
+                                    None::<&()>,
+                                );
+                            }
                             cumsg_output.metadata.process_time.start = clock.now().into();
                             let maybe_error = if doit { #task_instance.process(clock, cumsg_output) } else { Ok(()) };
                             cumsg_output.metadata.process_time.end = clock.now().into();
                             if let Err(error) = maybe_error {
                                 #monitoring_action
                             }
+                            cl_timeout.check_deadline()?;
                         }
                     },
                     logging_tokens,
@@ -3358,12 +3378,20 @@ fn generate_task_execution_tokens(
                             #call_sim_callback
                             let cumsg_input = &#inputs_type;
                             let cumsg_output = &mut msgs.#output_culist_index;
+                            if doit {
+                                cl_timeout.update_context(
+                                    #mission_mod::TASKS_IDS[#tid],
+                                    CuTaskState::Process,
+                                    Some(cumsg_input),
+                                );
+                            }
                             cumsg_output.metadata.process_time.start = clock.now().into();
                             let maybe_error = if doit { #task_instance.process(clock, cumsg_input) } else { Ok(()) };
                             cumsg_output.metadata.process_time.end = clock.now().into();
                             if let Err(error) = maybe_error {
                                 #monitoring_action
                             }
+                            cl_timeout.check_deadline()?;
                         }
                     },
                     quote! {},
@@ -3451,12 +3479,20 @@ fn generate_task_execution_tokens(
                             #call_sim_callback
                             let cumsg_input = &#inputs_type;
                             let cumsg_output = &mut msgs.#output_culist_index;
+                            if doit {
+                                cl_timeout.update_context(
+                                    #mission_mod::TASKS_IDS[#tid],
+                                    CuTaskState::Process,
+                                    Some(cumsg_input),
+                                );
+                            }
                             cumsg_output.metadata.process_time.start = clock.now().into();
                             let maybe_error = if doit { #task_instance.process(clock, cumsg_input, cumsg_output) } else { Ok(()) };
                             cumsg_output.metadata.process_time.end = clock.now().into();
                             if let Err(error) = maybe_error {
                                 #monitoring_action
                             }
+                            cl_timeout.check_deadline()?;
                         }
                     },
                     logging_tokens,
@@ -3491,6 +3527,11 @@ fn generate_bridge_rx_execution_tokens(
             {
                 let bridge = &mut bridges.#bridge_tuple_index;
                 let cumsg_output = &mut msgs.#culist_index_ts;
+                cl_timeout.update_context(
+                    #mission_mod::TASKS_IDS[#monitor_index],
+                    CuTaskState::Process,
+                    None::<&()>,
+                );
                 cumsg_output.metadata.process_time.start = clock.now().into();
                 let maybe_error = bridge.receive(
                     clock,
@@ -3518,6 +3559,7 @@ fn generate_bridge_rx_execution_tokens(
                         }
                     }
                 }
+                cl_timeout.check_deadline()?;
             }
         },
         quote! {},
@@ -3549,6 +3591,11 @@ fn generate_bridge_tx_execution_tokens(
             {
                 let bridge = &mut bridges.#bridge_tuple_index;
                 let cumsg_input = &mut msgs.#input_index;
+                cl_timeout.update_context(
+                    #mission_mod::TASKS_IDS[#monitor_index],
+                    CuTaskState::Process,
+                    Some(&*cumsg_input),
+                );
                 // Stamp timing so monitors see consistent ranges for bridge Tx as well.
                 cumsg_input.metadata.process_time.start = clock.now().into();
                 if let Err(error) = bridge.send(
@@ -3574,6 +3621,7 @@ fn generate_bridge_tx_execution_tokens(
                     }
                 }
                 cumsg_input.metadata.process_time.end = clock.now().into();
+                cl_timeout.check_deadline()?;
             }
         },
         quote! {},

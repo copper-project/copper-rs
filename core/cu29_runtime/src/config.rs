@@ -1092,6 +1092,11 @@ pub struct RuntimeConfig {
     /// The main usecase is to not waste cycles when the system doesn't need an unbounded execution rate.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rate_target_hz: Option<u64>,
+
+    /// Maximum allowed execution time for a full CopperList iteration, in milliseconds.
+    /// When exceeded, the runtime stops and reports the callback that was running.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub copperlist_timeout_ms: Option<u64>,
 }
 
 /// Missions are used to generate alternative DAGs within the same configuration.

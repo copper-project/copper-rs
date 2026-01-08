@@ -6,7 +6,7 @@ use crate::config::{ComponentConfig, CuDirection, DEFAULT_KEYFRAME_INTERVAL, Nod
 use crate::config::{CuConfig, CuGraph, NodeId, RuntimeConfig};
 use crate::copperlist::{CopperList, CopperListState, CuListZeroedInit, CuListsManager};
 use crate::cutask::{BincodeAdapter, Freezable};
-use crate::monitoring::{CuMonitor, build_monitor_topology};
+use crate::monitoring::{CuMonitor, CuTaskState, build_monitor_topology};
 use crate::resource::ResourceManager;
 use cu29_clock::{ClockProvider, CuTime, RobotClock};
 use cu29_traits::CuResult;
@@ -46,7 +46,14 @@ use cu29_log_runtime::LoggerRuntime;
 #[cfg(feature = "std")]
 use cu29_unifiedlog::UnifiedLoggerWrite;
 #[cfg(feature = "std")]
-use std::sync::{Arc, Mutex};
+use cu29_value::to_value;
+use serde::Serialize;
+#[cfg(feature = "std")]
+use std::io::Write;
+#[cfg(feature = "std")]
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
+#[cfg(feature = "std")]
+use std::time::{Duration, Instant};
 
 /// Just a simple struct to hold the various bits needed to run a Copper application.
 #[cfg(feature = "std")]
@@ -473,6 +480,10 @@ impl<
 
         Ok(runtime)
     }
+
+    pub fn copperlist_timeout_guard(&self) -> CopperlistTimeoutGuard {
+        CopperlistTimeoutGuard::new(self.runtime_config.copperlist_timeout_ms)
+    }
 }
 
 /// Copper tasks can be of 3 types:
@@ -798,6 +809,316 @@ pub fn compute_runtime_plan(graph: &CuGraph) -> CuResult<CuExecutionLoop> {
         steps: plan,
         loop_count: None,
     })
+}
+
+#[derive(Default)]
+pub struct CopperlistTimeoutGuard {
+    #[cfg(feature = "std")]
+    handle: Option<CopperlistTimeoutHandle>,
+}
+
+impl CopperlistTimeoutGuard {
+    pub fn new(timeout_ms: Option<u64>) -> Self {
+        #[cfg(feature = "std")]
+        {
+            if let Some(ms) = timeout_ms {
+                if ms == 0 {
+                    return Self::default();
+                }
+                let max_duration = Duration::from_millis(ms);
+                let watcher = CopperlistTimeoutWatcher::global();
+                let start = Instant::now();
+                let deadline = start + max_duration;
+                let iteration_id = watcher.start(deadline, start);
+                return Self {
+                    handle: Some(CopperlistTimeoutHandle {
+                        watcher,
+                        iteration_id,
+                        start,
+                        deadline,
+                        max_duration,
+                    }),
+                };
+            }
+        }
+        #[cfg(not(feature = "std"))]
+        let _ = timeout_ms;
+        Self::default()
+    }
+
+    pub fn set_copperlist_id(&mut self, clid: u32) {
+        #[cfg(feature = "std")]
+        if let Some(handle) = &self.handle {
+            handle.watcher.set_copperlist_id(handle.iteration_id, clid);
+        }
+        #[cfg(not(feature = "std"))]
+        let _ = clid;
+    }
+
+    pub fn update_context<T: Serialize>(
+        &mut self,
+        module: &str,
+        callback: CuTaskState,
+        input: Option<&T>,
+    ) {
+        #[cfg(feature = "std")]
+        if let Some(handle) = &self.handle {
+            let input = input.and_then(|value| format_input(value));
+            let backtrace = Some(format!("{:?}", std::backtrace::Backtrace::capture()));
+            handle.watcher.update_context(
+                handle.iteration_id,
+                module,
+                callback_name(callback),
+                input,
+                backtrace,
+            );
+        }
+        #[cfg(not(feature = "std"))]
+        let _ = (module, callback, input);
+    }
+
+    pub fn check_deadline(&self) -> CuResult<()> {
+        #[cfg(feature = "std")]
+        if let Some(handle) = &self.handle
+            && Instant::now() >= handle.deadline
+        {
+            let report = handle.watcher.format_report(
+                handle.iteration_id,
+                handle.max_duration,
+                handle.start.elapsed(),
+            );
+            return Err(CuError::from(report));
+        }
+        Ok(())
+    }
+}
+
+impl Drop for CopperlistTimeoutGuard {
+    fn drop(&mut self) {
+        #[cfg(feature = "std")]
+        if let Some(handle) = &self.handle {
+            handle.watcher.finish(handle.iteration_id);
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+struct CopperlistTimeoutHandle {
+    watcher: Arc<CopperlistTimeoutWatcher>,
+    iteration_id: u64,
+    start: Instant,
+    deadline: Instant,
+    max_duration: Duration,
+}
+
+#[cfg(feature = "std")]
+#[derive(Clone, Default)]
+struct CopperlistTimeoutInfo {
+    module: String,
+    callback: String,
+    input: Option<String>,
+    backtrace: Option<String>,
+    clid: Option<u32>,
+}
+
+#[cfg(feature = "std")]
+struct CopperlistTimeoutState {
+    active: bool,
+    deadline: Instant,
+    started_at: Instant,
+    iteration_id: u64,
+    info: CopperlistTimeoutInfo,
+}
+
+#[cfg(feature = "std")]
+struct CopperlistTimeoutWatcher {
+    state: Mutex<CopperlistTimeoutState>,
+    cv: Condvar,
+}
+
+#[cfg(feature = "std")]
+impl CopperlistTimeoutWatcher {
+    fn global() -> Arc<Self> {
+        static WATCHER: OnceLock<Arc<CopperlistTimeoutWatcher>> = OnceLock::new();
+        WATCHER
+            .get_or_init(|| {
+                let watcher = Arc::new(CopperlistTimeoutWatcher::new());
+                let thread_watcher = watcher.clone();
+                std::thread::Builder::new()
+                    .name("cu29-timeout-watchdog".to_string())
+                    .spawn(move || thread_watcher.watchdog_loop())
+                    .expect("failed to spawn copperlist watchdog");
+                watcher
+            })
+            .clone()
+    }
+
+    fn new() -> Self {
+        let now = Instant::now();
+        Self {
+            state: Mutex::new(CopperlistTimeoutState {
+                active: false,
+                deadline: now,
+                started_at: now,
+                iteration_id: 0,
+                info: CopperlistTimeoutInfo::default(),
+            }),
+            cv: Condvar::new(),
+        }
+    }
+
+    fn start(&self, deadline: Instant, started_at: Instant) -> u64 {
+        let mut state = self.state.lock().unwrap();
+        state.active = true;
+        state.deadline = deadline;
+        state.started_at = started_at;
+        state.iteration_id = state.iteration_id.wrapping_add(1);
+        state.info = CopperlistTimeoutInfo::default();
+        let iteration_id = state.iteration_id;
+        self.cv.notify_all();
+        iteration_id
+    }
+
+    fn finish(&self, iteration_id: u64) {
+        let mut state = self.state.lock().unwrap();
+        if state.iteration_id == iteration_id {
+            state.active = false;
+            self.cv.notify_all();
+        }
+    }
+
+    fn set_copperlist_id(&self, iteration_id: u64, clid: u32) {
+        let mut state = self.state.lock().unwrap();
+        if state.active && state.iteration_id == iteration_id {
+            state.info.clid = Some(clid);
+        }
+    }
+
+    fn update_context(
+        &self,
+        iteration_id: u64,
+        module: &str,
+        callback: &str,
+        input: Option<String>,
+        backtrace: Option<String>,
+    ) {
+        let mut state = self.state.lock().unwrap();
+        if state.active && state.iteration_id == iteration_id {
+            state.info.module.clear();
+            state.info.module.push_str(module);
+            state.info.callback.clear();
+            state.info.callback.push_str(callback);
+            state.info.input = input;
+            state.info.backtrace = backtrace;
+        }
+    }
+
+    fn format_report(&self, iteration_id: u64, max: Duration, elapsed: Duration) -> String {
+        let state = self.state.lock().unwrap();
+        if !state.active || state.iteration_id != iteration_id {
+            return format!(
+                "Copperlist timeout exceeded (max={} ms, elapsed={} ms).",
+                max.as_millis(),
+                elapsed.as_millis()
+            );
+        }
+        build_timeout_report(&state.info, max, elapsed)
+    }
+
+    fn watchdog_loop(self: Arc<Self>) {
+        loop {
+            let (deadline, iteration_id) = {
+                let mut state = self.state.lock().unwrap();
+                while !state.active {
+                    state = self.cv.wait(state).unwrap();
+                }
+                (state.deadline, state.iteration_id)
+            };
+
+            let now = Instant::now();
+            if now < deadline {
+                let wait = deadline - now;
+                let state = self.state.lock().unwrap();
+                let (state, wait_result) = self.cv.wait_timeout(state, wait).unwrap();
+                if !wait_result.timed_out() {
+                    continue;
+                }
+                drop(state);
+            }
+
+            let mut state = self.state.lock().unwrap();
+            if !state.active || state.iteration_id != iteration_id {
+                continue;
+            }
+            if Instant::now() < state.deadline {
+                continue;
+            }
+            let info = state.info.clone();
+            let elapsed = state.started_at.elapsed();
+            let max = state.deadline.saturating_duration_since(state.started_at);
+            state.active = false;
+            drop(state);
+
+            let report = build_timeout_report(&info, max, elapsed);
+            eprintln!("{report}");
+            let _ = std::io::stderr().flush();
+            std::process::exit(1);
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+fn callback_name(state: CuTaskState) -> &'static str {
+    match state {
+        CuTaskState::Start => "start",
+        CuTaskState::Preprocess => "preprocess",
+        CuTaskState::Process => "process",
+        CuTaskState::Postprocess => "postprocess",
+        CuTaskState::Stop => "stop",
+    }
+}
+
+#[cfg(feature = "std")]
+fn format_input<T: Serialize>(input: &T) -> Option<String> {
+    const MAX_INPUT_CHARS: usize = 4096;
+    match to_value(input) {
+        Ok(value) => {
+            let mut txt = value.to_string();
+            if txt.len() > MAX_INPUT_CHARS {
+                txt.truncate(MAX_INPUT_CHARS);
+                txt.push_str("... (truncated)");
+            }
+            Some(txt)
+        }
+        Err(err) => Some(format!("(input serialization failed: {err})")),
+    }
+}
+
+#[cfg(feature = "std")]
+fn build_timeout_report(info: &CopperlistTimeoutInfo, max: Duration, elapsed: Duration) -> String {
+    let mut report = String::new();
+    report.push_str(&format!(
+        "Copperlist timeout exceeded (max={} ms, elapsed={} ms).",
+        max.as_millis(),
+        elapsed.as_millis()
+    ));
+    if let Some(clid) = info.clid {
+        report.push_str(&format!("\nCopperlist id: {clid}"));
+    }
+    if !info.module.is_empty() {
+        report.push_str(&format!("\nModule: {}", info.module));
+    }
+    if !info.callback.is_empty() {
+        report.push_str(&format!("\nCallback: {}", info.callback));
+    }
+    match &info.input {
+        Some(input) => report.push_str(&format!("\nInput: {input}")),
+        None => report.push_str("\nInput: <none>"),
+    }
+    if let Some(backtrace) = &info.backtrace {
+        report.push_str(&format!("\nBacktrace:\n{backtrace}"));
+    }
+    report
 }
 
 //tests
