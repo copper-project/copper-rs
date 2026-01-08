@@ -1401,11 +1401,13 @@ impl CuTask for RateController {
             return Ok(());
         }
 
+        // Latch airmode active once throttle is raised (betaflight behavior)
         if self.airmode_enabled && throttle >= self.airmode_start_throttle {
             self.airmode_active = true;
         } else if !self.airmode_enabled {
             self.airmode_active = false;
         }
+        // Note: airmode_active stays true once activated until disarm
 
         let now = clock.now();
         let dt = dt_or_fallback(&mut self.last_time, now, self.dt_fallback);
@@ -1496,6 +1498,7 @@ static MOTOR_LOG: spin::Mutex<MotorLogState> = spin::Mutex::new(MotorLogState::n
 pub struct QuadXMixer {
     motor_index: usize,
     props_out: bool,
+    airmode_idle: f32,  // Motor idle value when in airmode at low throttle (0.0-1.0)
 }
 
 impl Freezable for QuadXMixer {}
@@ -1516,10 +1519,12 @@ impl CuTask for QuadXMixer {
         let props_out = config
             .and_then(|cfg| cfg.get::<bool>("props_out"))
             .unwrap_or(true);
+        let airmode_idle = cfg_f32(config, "airmode_idle_percent", 8.0) / 100.0;
 
         Ok(Self {
             motor_index,
             props_out,
+            airmode_idle: airmode_idle.clamp(0.0, 0.3),  // Max 30% idle
         })
     }
 
@@ -1547,7 +1552,19 @@ impl CuTask for QuadXMixer {
                 }
                 let mix = cmd.roll * roll_coeff + cmd.pitch * pitch_coeff + cmd.yaw * yaw_coeff;
                 let throttle = ctrl.throttle.clamp(0.0, 1.0);
-                let motor = (throttle + mix).clamp(0.0, 1.0);
+
+                // Apply airmode idle at low throttle (for control authority during power loops)
+                // When throttle < 50%, scale from idle to normal. Above 50%, normal mixing.
+                let motor = if throttle < 0.5 {
+                    // Low throttle: blend from idle (at 0%) to normal (at 50%)
+                    let blend = throttle * 2.0;  // 0.0 at 0%, 1.0 at 50%
+                    let base = self.airmode_idle * (1.0 - blend) + throttle * blend;
+                    (base + mix).clamp(0.0, 1.0)
+                } else {
+                    // High throttle: normal mixing
+                    (throttle + mix).clamp(0.0, 1.0)
+                };
+
                 let throttle_raw = (motor * 2047.0) as u16;
                 EscCommand {
                     throttle: throttle_raw.max(DSHOT_MIN_ARM_CMD),

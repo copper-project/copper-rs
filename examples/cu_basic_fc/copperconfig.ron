@@ -57,28 +57,28 @@
                 "ki_yaw": 0.0,
                 "kd_yaw": 0.0,
                 "airmode": true,
-                "airmode_start_throttle_percent": 25.0,
+                "airmode_start_throttle_percent": 20.0,  // 20% for 5" - latches on until disarm (well above 4.88% idle)
             },
         ),
         (
             id: "mixer0",
             type: "tasks::QuadXMixer",
-            config: { "motor_index": 0, "props_out": true },
+            config: { "motor_index": 0, "props_out": true, "airmode_idle_percent": 8.0 },
         ),
         (
             id: "mixer1",
             type: "tasks::QuadXMixer",
-            config: { "motor_index": 1, "props_out": true },
+            config: { "motor_index": 1, "props_out": true, "airmode_idle_percent": 8.0 },
         ),
         (
             id: "mixer2",
             type: "tasks::QuadXMixer",
-            config: { "motor_index": 2, "props_out": true },
+            config: { "motor_index": 2, "props_out": true, "airmode_idle_percent": 8.0 },
         ),
         (
             id: "mixer3",
             type: "tasks::QuadXMixer",
-            config: { "motor_index": 3, "props_out": true },
+            config: { "motor_index": 3, "props_out": true, "airmode_idle_percent": 8.0 },
         ),
         (
             id: "mapper",
