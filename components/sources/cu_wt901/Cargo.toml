@@ -33,7 +33,7 @@ cu29-helpers = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 embedded-hal = "1"
-linux-embedded-hal = "0.4.0"
+linux-embedded-hal = "0.4"
 i2cdev = "0.6.1"
 
 [build-dependencies]

@@ -21,8 +21,8 @@ uom = { version = "0.37", default-features = false, features = ["serde", "f32", 
 cu-embedded-registry = { path = "../../libs/cu_embedded_registry", default-features = false, features = ["alloc"] }
 embedded-hal-1 = { package = "embedded-hal", version = "1.0.0", default-features = false }
 embedded-hal = { version = "0.2.7", default-features = false }
-linux-embedded-hal = { version = "0.4.0", optional = true }
-defmt = { version = "0.3", optional = true }
+linux-embedded-hal = { version = "0.4", optional = true }
+defmt = { version = "1.0", optional = true }
 
 [features]
 default = []

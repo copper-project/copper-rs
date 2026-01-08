@@ -236,6 +236,14 @@ mod tests {
     #[derive(Debug, Clone, Copy)]
     struct TestError;
 
+    impl core::fmt::Display for TestError {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            write!(f, "test error")
+        }
+    }
+
+    impl core::error::Error for TestError {}
+
     impl embedded_io::Error for TestError {
         fn kind(&self) -> ErrorKind {
             ErrorKind::Other
@@ -250,7 +258,7 @@ mod tests {
 
     impl embedded_io::Write for MockSerial {
         fn write(&mut self, _buf: &[u8]) -> Result<usize, Self::Error> {
-            Ok(0)
+            Ok(_buf.len())
         }
 
         fn flush(&mut self) -> Result<(), Self::Error> {
