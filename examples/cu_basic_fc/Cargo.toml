@@ -66,6 +66,7 @@ embedded-alloc = { version = "0.7", optional = true }
 # Keep aligned with stm32h7xx-hal SDMMC support (pulls embedded-sdmmc 0.5).
 embedded-sdmmc = { version = "0.5", default-features = false, optional = true }
 cortex-m = { version = "0.7", features = ["critical-section-single-core"], optional = true }
+
 [features]
 default = ["sim"]
 textlogs = ["cu29/textlogs",
