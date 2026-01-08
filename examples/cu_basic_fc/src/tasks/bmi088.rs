@@ -4,7 +4,6 @@ use core::fmt::Debug;
 
 use cu_sensor_payloads::ImuPayload;
 use cu29::prelude::*;
-use defmt::Debug2Format;
 use embedded_hal::blocking::delay::DelayMs;
 use embedded_hal::blocking::spi::Transfer;
 use embedded_hal::digital::v2::OutputPin;
@@ -205,7 +204,7 @@ where
             .map_err(|err| map_error("bmi088 acc range", err))?;
         let acc_range_g = accel_range_g_from_reg(acc_range_reg);
         let acc_mps2_per_lsb = acc_range_g * 9.806_65 / 32_768.0;
-        defmt::info!(
+        debug!(
             "bmi088 accel range reg={} -> ±{}g",
             acc_range_reg,
             acc_range_g
@@ -275,7 +274,6 @@ enum SpiCsError<SpiErr, CsErr> {
 }
 
 fn map_error<E: Debug>(context: &'static str, err: E) -> CuError {
-    defmt::warn!("{} error: {:?}", context, Debug2Format(&err));
     CuError::from(context)
 }
 

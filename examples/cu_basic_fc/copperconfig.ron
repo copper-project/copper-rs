@@ -9,6 +9,7 @@
         (
             id: "bmi088",
             type: "tasks::Bmi088Source",
+            logging: (enabled: true),
             resources: {
                 "spi": "fc.bmi088_spi",
                 "acc_cs": "fc.bmi088_acc_cs",
@@ -19,6 +20,7 @@
         (
             id: "battery_adc",
             type: "tasks::BatteryAdcSource",
+            logging: (enabled: true),
             resources: { "battery_adc": "fc.battery_adc" },
             config: {
                 "vref_mv": 3300,
@@ -30,13 +32,14 @@
         (
             id: "imu_cal",
             type: "tasks::ImuCalibrator",
+            logging: (enabled: false),
             config: { "cal_ms": 3000 },
         ),
-        (id: "imu_logger", type: "tasks::ImuLogger"),
         (id: "ahrs", type: "cu_ahrs::CuAhrs"),
         (
             id: "attitude",
             type: "tasks::AttitudeController",
+            logging: (enabled: false),
             config: {
                 "angle_limit_deg": 60.0,
                 "acro_rate_dps": 180.0,
@@ -49,6 +52,7 @@
         (
             id: "rate",
             type: "tasks::RateController",
+            logging: (enabled: false),
             config: {
                 "kp": 0.04,
                 "ki": 0.0,
@@ -63,26 +67,31 @@
         (
             id: "mixer0",
             type: "tasks::QuadXMixer",
+            logging: (enabled: false),
             config: { "motor_index": 0, "props_out": true, "airmode_idle_percent": 8.0 },
         ),
         (
             id: "mixer1",
             type: "tasks::QuadXMixer",
+            logging: (enabled: false),
             config: { "motor_index": 1, "props_out": true, "airmode_idle_percent": 8.0 },
         ),
         (
             id: "mixer2",
             type: "tasks::QuadXMixer",
+            logging: (enabled: false),
             config: { "motor_index": 2, "props_out": true, "airmode_idle_percent": 8.0 },
         ),
         (
             id: "mixer3",
             type: "tasks::QuadXMixer",
+            logging: (enabled: false),
             config: { "motor_index": 3, "props_out": true, "airmode_idle_percent": 8.0 },
         ),
         (
             id: "mapper",
             type: "tasks::RcMapper",
+            logging: (enabled: false),
             config: {
                 "arm_channel": 4,
                 "arm_min": 1700,
@@ -92,22 +101,25 @@
                 "mode_mid_max": 1400,
             },
         ),
-        (id: "control_sink", type: "tasks::ControlSink"),
         (
             id: "led_blink",
             type: "tasks::LedBeat",
+            logging: (enabled: false),
             resources: { "led": "fc.green_led" },
         ),
         (
             id: "vtx_osd",
             type: "tasks::VtxOsd",
+            logging: (enabled: false),
             config: { "cols": 53, "row": 13, "col_center": 26 },
         ),
     ],
 
     bridges: [
-        (  id: "rc",
+        (  
+           id: "rc",
            type: "cu_crsf::CrsfBridge<cu_micoairh743::Uart6Port, cu_micoairh743::SerialPortError>",
+           logging: (enabled: true),
            resources: { "serial": "fc.uart6" },
            channels: [
                 Rx ( id: "rc_rx" ),  // receiving RC Channels
@@ -117,6 +129,7 @@
         (
            id: "vtx_msp",
            type: "cu_msp_bridge::CuMspBridge<cu_micoairh743::Uart2Port, cu_micoairh743::SerialPortError>",
+           logging: (enabled: false),
            resources: { "serial": "fc.uart2" },
            channels: [
                 Tx ( id: "requests" ),
@@ -127,6 +140,7 @@
         (
            id: "bdshot",
            type: "cu_bdshot::Stm32BdshotBridge",
+           logging: (enabled: true),
            channels: [
                 Tx ( id: "esc0_tx" ),
                 Tx ( id: "esc1_tx" ),
@@ -143,7 +157,6 @@
     cnx: [
         (src: "bmi088", dst: "imu_cal", msg: "cu_sensor_payloads::ImuPayload"),
         (src: "mapper", dst: "imu_cal", msg: "crate::messages::ControlInputs"),
-        (src: "imu_cal", dst: "imu_logger", msg: "cu_sensor_payloads::ImuPayload"),
         (src: "imu_cal", dst: "ahrs", msg: "cu_sensor_payloads::ImuPayload"),
         (src: "ahrs", dst: "attitude", msg: "cu_ahrs::AhrsPose"),
         (src: "mapper", dst: "attitude", msg: "crate::messages::ControlInputs"),
@@ -151,7 +164,6 @@
         (src: "imu_cal", dst: "rate", msg: "cu_sensor_payloads::ImuPayload"),
         (src: "mapper", dst: "rate", msg: "crate::messages::ControlInputs"),
         (src: "rc/rc_rx", dst: "mapper", msg: "cu_crsf::messages::RcChannelsPayload"),
-        (src: "mapper", dst: "control_sink", msg: "crate::messages::ControlInputs"),
         (src: "mapper", dst: "led_blink", msg: "crate::messages::ControlInputs"),
         (src: "mapper", dst: "mixer0", msg: "crate::messages::ControlInputs"),
         (src: "mapper", dst: "mixer1", msg: "crate::messages::ControlInputs"),
@@ -176,6 +188,6 @@
     logging: (
         slab_size_mib: 16,
         section_size_mib: 4,
-        enable_task_logging: false,
+        // enable_task_logging: false,
     ),
 )

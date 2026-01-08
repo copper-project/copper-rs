@@ -80,7 +80,7 @@ impl LogRateLimiter {
     }
 }
 
-macro_rules! info_rl {
+macro_rules! debug_rl {
     ($state:expr, $now:expr, { $($body:tt)* }) => {{
         let mut state = $state.lock();
         if state.should_log($now) {
@@ -88,7 +88,7 @@ macro_rules! info_rl {
         }
     }};
     ($state:expr, $now:expr, $($arg:tt)+) => {{
-        info_rl!($state, $now, { info!($($arg)+); });
+        debug_rl!($state, $now, { debug!($($arg)+); });
     }};
 }
 
@@ -102,57 +102,6 @@ static LOG_MOTORS: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter
 pub struct LedBeat {
     on: bool,
     led: spin::Mutex<GreenLed>,
-}
-
-pub struct ControlSink {
-    last_heap_log: Option<CuTime>,
-}
-
-impl Freezable for ControlSink {}
-
-impl CuSinkTask for ControlSink {
-    type Input<'m> = CuMsg<ControlInputs>;
-    type Resources<'r> = ();
-
-    fn new_with(
-        _config: Option<&ComponentConfig>,
-        _resources: Self::Resources<'_>,
-    ) -> CuResult<Self>
-    where
-        Self: Sized,
-    {
-        Ok(Self {
-            last_heap_log: None,
-        })
-    }
-
-    fn process<'i>(&mut self, _clock: &RobotClock, inputs: &Self::Input<'i>) -> CuResult<()> {
-        let now = expect_tov_time(inputs.tov)?;
-
-        if self
-            .last_heap_log
-            .map(|prev| now - prev >= CuDuration::from_millis(HEAP_LOG_PERIOD_MS))
-            .unwrap_or(true)
-        {
-            crate::log_heap_stats("control sink");
-            self.last_heap_log = Some(now);
-        }
-
-        if let Some(ctrl) = inputs.payload() {
-            info_rl!(
-                &LOG_CTRL,
-                now,
-                "ctrl roll={} pitch={} yaw={} thr={} armed={} mode={}",
-                ctrl.roll,
-                ctrl.pitch,
-                ctrl.yaw,
-                ctrl.throttle,
-                ctrl.armed,
-                mode_label(ctrl.mode)
-            );
-        }
-        Ok(())
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -232,7 +181,7 @@ impl CuSrcTask for BatteryAdcSource {
 
         output.set_payload(BatteryVoltage { centivolts });
         output.tov = Tov::Time(now);
-        info_rl!(
+        debug_rl!(
             &LOG_TELEMETRY,
             now,
             "vbat adc raw={} slope={} vref_mv={} centivolts={}",
@@ -720,7 +669,7 @@ impl CuTask for VtxMspResponder {
         }
 
         if !batch.0.is_empty() {
-            info!(
+            debug!(
                 "MSP responder: sending {} responses, vbat={} cv",
                 batch.0.len(),
                 voltage_centi
@@ -755,8 +704,8 @@ pub struct ImuLogger {
 impl Freezable for ImuLogger {}
 
 impl CuSinkTask for ImuLogger {
-    type Resources<'r> = ();
     type Input<'m> = CuMsg<ImuPayload>;
+    type Resources<'r> = ();
 
     fn new_with(
         _config: Option<&ComponentConfig>,
@@ -771,7 +720,7 @@ impl CuSinkTask for ImuLogger {
     fn process<'i>(&mut self, _clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
         if let Some(payload) = input.payload() {
             let tov_time = expect_tov_time(input.tov)?;
-            info_rl!(&LOG_IMU, tov_time, {
+            debug_rl!(&LOG_IMU, tov_time, {
                 let tov_kind = 1_u8;
                 let tov_start_ns = tov_time.as_nanos();
                 let tov_end_ns = tov_time.as_nanos();
@@ -784,7 +733,7 @@ impl CuSinkTask for ImuLogger {
                 let gy_dps = payload.gyro_y.get::<degree_per_second>();
                 let gz_dps = payload.gyro_z.get::<degree_per_second>();
                 let temp_c = payload.temperature.get::<degree_celsius>();
-                info!(
+                debug!(
                     "imu ax={} m.s⁻² ay={} m.s⁻² az={} m.s⁻² gx={} deg.s⁻¹ gy={} deg.s⁻¹ gz={} deg.s⁻¹ t={} °C tov_kind={} tov_start_ns={} tov_end_ns={} tov_dt_us={}",
                     payload.accel_x.value,
                     payload.accel_y.value,
@@ -961,13 +910,13 @@ impl CuTask for RcMapper {
             None => FlightMode::Angle,
         };
 
-        info_rl!(&LOG_RC, tov_time, {
+        debug_rl!(&LOG_RC, tov_time, {
             let mode_channel = self.mode_channel.unwrap_or(0);
             let mode_value = self
                 .mode_channel
                 .and_then(|idx| channels.get(idx).copied())
                 .unwrap_or(0);
-            info!(
+            debug!(
                 "rc ch0={} ch1={} ch2={} ch3={} ch4={} ch5={} ch6={} ch7={} ch8={} ch9={} ch10={} ch11={} ch12={} ch13={} ch14={} ch15={} arm_ch0={} arm_raw={} armed={} mode_ch0={} mode_raw={} mode={} mode_low_max={} mode_mid_max={}",
                 channels[0],
                 channels[1],
@@ -1432,7 +1381,7 @@ impl CuTask for RateController {
         let pitch_cmd = pitch_out.output;
         let yaw_cmd = yaw_out.output;
 
-        info_rl!(&LOG_RATE, ctrl_tov, {
+        debug_rl!(&LOG_RATE, ctrl_tov, {
             let sp_roll = setpoint.roll.to_degrees();
             let sp_pitch = setpoint.pitch.to_degrees();
             let sp_yaw = setpoint.yaw.to_degrees();
@@ -1582,9 +1531,9 @@ impl CuTask for QuadXMixer {
         }
 
         if self.motor_index == 0 {
-            info_rl!(&LOG_MOTORS, ctrl_tov, {
+            debug_rl!(&LOG_MOTORS, ctrl_tov, {
                 let state = MOTOR_LOG.lock();
-                info!(
+                debug!(
                     "motors cmd0={} cmd1={} cmd2={} cmd3={}",
                     state.values[0], state.values[1], state.values[2], state.values[3]
                 );
