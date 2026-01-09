@@ -67,7 +67,7 @@ fn main() -> ! {
         Ok(resources) => resources,
         Err(e) => {
             let _ = e;
-            defmt::error!("Resource init failed"); // defmt here because we don't have a copper logger yet.
+            defmt::error!("Resource init failed: {}", e); // defmt here because we don't have a copper logger yet.
             loop {
                 asm::wfi();
             }
