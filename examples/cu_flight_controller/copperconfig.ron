@@ -19,7 +19,7 @@
         ),
         (
             id: "battery_adc",
-            type: "tasks::BatteryAdcSource",
+            type: "tasks::battery::BatteryAdcSource",
             logging: (enabled: true),
             resources: { "battery_adc": "fc.battery_adc" },
             config: {
@@ -102,14 +102,14 @@
             },
         ),
         (
-            id: "led_blink",
-            type: "tasks::LedBeat",
+            id: "act_led",
+            type: "tasks::activity_led::ActivityLed",
             logging: (enabled: false),
             resources: { "led": "fc.green_led" },
         ),
         (
             id: "vtx_osd",
-            type: "tasks::VtxOsd",
+            type: "tasks::vtx::VtxOsd",
             logging: (enabled: false),
             config: { "cols": 53, "row": 13, "col_center": 26 },
         ),
@@ -164,7 +164,7 @@
         (src: "imu_cal", dst: "rate", msg: "cu_sensor_payloads::ImuPayload"),
         (src: "mapper", dst: "rate", msg: "crate::messages::ControlInputs"),
         (src: "rc/rc_rx", dst: "mapper", msg: "cu_crsf::messages::RcChannelsPayload"),
-        (src: "mapper", dst: "led_blink", msg: "crate::messages::ControlInputs"),
+        (src: "mapper", dst: "act_led", msg: "crate::messages::ControlInputs"),
         (src: "mapper", dst: "mixer0", msg: "crate::messages::ControlInputs"),
         (src: "mapper", dst: "mixer1", msg: "crate::messages::ControlInputs"),
         (src: "mapper", dst: "mixer2", msg: "crate::messages::ControlInputs"),
