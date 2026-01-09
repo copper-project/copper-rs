@@ -52,7 +52,7 @@ members = [
     "components/testing/cu_udp_inject",
     "examples/cu_elrs_bdshot_demo",
     "examples/cu_background_task",
-    "examples/cu_basic_fc",
+    "examples/cu_flight_controller",
     "examples/cu_bridge_test",
     "examples/cu_caterpillar",
     "examples/cu_config_gen",

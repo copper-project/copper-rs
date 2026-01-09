@@ -1,5 +1,5 @@
 [package]
-name = "cu-basic-fc"
+name = "cu-flight-controller"
 description = "This is a basic quadcopter Flight Controller implemented end to end using Copper components"
 version.workspace = true
 authors.workspace = true
@@ -13,7 +13,7 @@ repository.workspace = true
 
 [package.metadata.copper]
 embedded_only = true
-embedded_config = "examples/cu_basic_fc/.cargo/config-firmware.toml"
+embedded_config = "examples/cu_flight_controller/.cargo/config-firmware.toml"
 embedded_target = "thumbv7em-none-eabihf"
 embedded_no_default_features = true
 embedded_features = "firmware"
