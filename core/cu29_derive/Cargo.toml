@@ -39,3 +39,4 @@ default = ["std"]
 # enables a more verbose build log showing the code generation.
 macro_debug = ["cu29-runtime/macro_debug"]
 std = ["cu29-traits/std", "cu29-unifiedlog/std"]
+rtsan = []

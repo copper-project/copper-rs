@@ -89,6 +89,14 @@ std-ci mode="debug": lint
 		)
 	fi
 
+# Run RTSan on a single app (defaults to cu-caterpillar).
+# RTSan reports violations to stderr; tweak RTSAN_OPTIONS if you need to keep running.
+rtsan-smoke pkg="cu-caterpillar" bin="cu-caterpillar" args="" options="halt_on_error=false":
+	#!/usr/bin/env bash
+	set -euo pipefail
+	RTSAN_ENABLE=1 RTSAN_OPTIONS="{{options}}" \
+		cargo run -p "{{pkg}}" --features rtsan --bin "{{bin}}" -- {{args}}
+
 # Project-specific helpers now live in per-directory justfiles under examples/, components/, and support/.
 
 # Partition/format an SD card for Cu29 logging (destroys data).

@@ -23,6 +23,7 @@ cu29-traits = { workspace = true }
 cu29-unifiedlog = { workspace = true }
 cu29-value = { workspace = true }
 defmt = { version = "1.0", optional = true }
+rtsan-standalone = { workspace = true, optional = true }
 
 bincode = { workspace = true }
 serde = { workspace = true }
@@ -45,3 +46,4 @@ log-level-warning = ["cu29-log-derive/log-level-warning"]
 log-level-error = ["cu29-log-derive/log-level-error"]
 log-level-critical = ["cu29-log-derive/log-level-critical"]
 std = ["rayon", "ctrlc", "cu29-clock/std", "cu29-derive/std", "cu29-log-derive/std", "cu29-log/std", "cu29-log-runtime/std", "cu29-runtime/std", "cu29-traits/std", "cu29-unifiedlog/std", "cu29-value/std"]
+rtsan = ["dep:rtsan-standalone", "cu29-derive/rtsan"]
