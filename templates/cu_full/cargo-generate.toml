@@ -2,9 +2,9 @@
 pre = ["init.rhai"]
 
 [template]
-description = "A template for a Copper-based Rust project"
+description = "A template for a Copper-based Rust project and workspace"
 version = "0.1.0"
 
 [placeholders]
 copper_source = { prompt = "Select which Copper do you want to use: crates.io == latest stable from crates.io, git == master on the public git repo, local == your own local clone.", choices = ["crates.io", "git", "local"], default = "crates.io", type = "string" }
-copper_root_path = { prompt = "Enter the path to the Copper root directory:", default = "../..", type = "string" }
+copper_root_path = { prompt = "Enter the path to the Copper root directory (from the workspace root):", default = "../..", type = "string" }

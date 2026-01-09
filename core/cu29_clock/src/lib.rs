@@ -139,6 +139,19 @@ impl CuDuration {
     }
 }
 
+/// Saturating subtraction for time and duration types.
+pub trait SaturatingSub {
+    fn saturating_sub(self, other: Self) -> Self;
+}
+
+impl SaturatingSub for CuDuration {
+    fn saturating_sub(self, other: Self) -> Self {
+        let Self(lhs) = self;
+        let Self(rhs) = other;
+        CuDuration(lhs.saturating_sub(rhs))
+    }
+}
+
 /// bridge the API with standard Durations.
 #[cfg(feature = "std")]
 impl From<std::time::Duration> for CuDuration {

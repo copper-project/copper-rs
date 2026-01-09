@@ -74,8 +74,9 @@ macro_rules! define_task {
                 let tuple_of_iters = tuple_of_iters.unwrap();
 
                 // Populate the CuArray fields in the output message
+                let output_payload = output.payload_mut().get_or_insert_with(Default::default);
                 $(
-                    output.payload_mut().as_mut().unwrap().$index.fill_from_iter(tuple_of_iters.$index.map(|msg| *msg.payload().unwrap()));
+                    output_payload.$index.fill_from_iter(tuple_of_iters.$index.map(|msg| msg.payload().unwrap().clone()));
                 )*
                 Ok(())
             }
@@ -96,7 +97,6 @@ mod tests {
     use cu29::payload::CuArray;
 
     define_task!(AlignerTask, 0 => { 10, 5, f32 }, 1 => { 5, 10, i32 });
-
     #[test]
     fn test_aligner_smoketest() {
         let mut config = ComponentConfig::default();
@@ -112,5 +112,38 @@ mod tests {
         let clock = cu29::clock::RobotClock::new();
         let result = aligner.process(&clock, &input, &mut output);
         assert!(result.is_ok());
+    }
+    mod string_payload {
+        use super::*;
+        use cu29::clock::{CuDuration, Tov};
+
+        define_task!(StringAlignerTask, 0 => { 4, 4, String }, 1 => { 4, 4, String });
+
+        #[test]
+        fn test_aligner_string_payload() {
+            let mut config = ComponentConfig::default();
+            config.set("target_alignment_window_ms", 10);
+            config.set("stale_data_horizon_ms", 1000);
+            let mut aligner = StringAlignerTask::new(Some(&config)).unwrap();
+
+            let mut left = CuStampedData::<String, CuMsgMetadata>::new(Some("left".to_string()));
+            let mut right = CuStampedData::<String, CuMsgMetadata>::new(Some("right".to_string()));
+            let tov_time = CuDuration::from_millis(100);
+            left.tov = Tov::Time(tov_time);
+            right.tov = Tov::Time(tov_time);
+
+            let input: <StringAlignerTask as CuTask>::Input<'_> = (&left, &right);
+            let mut output =
+                CuStampedData::<(CuArray<String, 4>, CuArray<String, 4>), CuMsgMetadata>::default();
+
+            let clock = cu29::clock::RobotClock::new();
+            aligner.process(&clock, &input, &mut output).unwrap();
+
+            let payload = output.payload().unwrap();
+            assert_eq!(payload.0.len(), 1);
+            assert_eq!(payload.1.len(), 1);
+            assert_eq!(payload.0.as_slice()[0], "left");
+            assert_eq!(payload.1.as_slice()[0], "right");
+        }
     }
 }

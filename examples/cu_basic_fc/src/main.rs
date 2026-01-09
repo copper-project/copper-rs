@@ -8,6 +8,7 @@ use alloc::vec;
 use buddy_system_allocator::LockedHeap as StdHeap;
 use cortex_m::{asm, peripheral::SCB};
 use cortex_m_rt::{ExceptionFrame, entry, exception};
+use cu_micoairh743::{LogStorage, Logger, MicoAirH743Id};
 use cu_sensor_payloads::ImuPayload;
 use cu29::prelude::*;
 use defmt_rtt as _;
@@ -15,12 +16,7 @@ use panic_probe as _;
 use spin::Mutex;
 
 mod messages;
-mod resources;
 mod tasks;
-
-pub use resources::{
-    GreenLed, LogStorage, Logger, MicoAirH743Id, SerialPort, SerialPortError, Uart2Port, Uart6Port,
-};
 
 #[global_allocator]
 static ALLOC: StdHeap<32> = StdHeap::empty();
@@ -98,15 +94,6 @@ impl CuTask for DummyImu {
 fn main() -> ! {
     report_last_fault();
     init_heap();
-    defmt::info!("Heap initialized");
-    log_heap_stats("after-init");
-
-    // Smoke-test allocator.
-    let mut buf = alloc::vec![0u8; 1024];
-    for (i, b) in buf.iter_mut().enumerate() {
-        *b = (i & 0xFF) as u8;
-    }
-    defmt::info!("Heap alloc test passed: len={}", buf.len());
 
     let mut resources = match FlightControllerApp::init_resources() {
         Ok(resources) => resources,
@@ -118,37 +105,33 @@ fn main() -> ! {
             }
         }
     };
-    defmt::info!("Board resources initialized");
+    info!("Board resources initialized");
 
     let logger_key = app_resources::bundles::FC.key::<Logger, _>(MicoAirH743Id::Logger);
     let logger = match resources.resources.take(logger_key) {
         Ok(logger) => logger.0,
         Err(e) => {
             let _ = e;
-            defmt::error!("Logger resource missing");
+            error!("Logger resource missing");
             loop {
                 asm::wfi();
             }
         }
     };
-    defmt::info!("Logger resource acquired");
+    info!("Logger resource acquired");
 
     // Spin up Copper runtime with CRSF -> mapper -> sink graph.
-    defmt::info!("Building Copper runtime clock");
     let clock = build_clock();
-    defmt::info!("Clock ready, constructing app");
     let writer = Arc::new(Mutex::new(logger));
 
     match FlightControllerApp::new_with_resources(clock, writer, resources) {
         Ok(mut app) => {
-            defmt::info!("App constructed, starting Copper FC (H743, CRSF on UART6)...");
             log_heap_stats("before-run");
             let _ = <FlightControllerApp as CuApplication<LogStorage, Logger>>::run(&mut app);
-            defmt::info!("Copper runtime returned unexpectedly");
         }
         Err(e) => {
             let _ = e;
-            defmt::error!("App init failed");
+            error!("App init failed");
         }
     }
     loop {
@@ -216,13 +199,9 @@ pub(crate) fn heap_stats() -> (usize, usize, usize, usize) {
 
 fn log_heap_stats(tag: &str) {
     let (user, allocated, total, free) = heap_stats();
-    defmt::info!(
+    info!(
         "Heap stats({}): user={} alloc={} total={} free={}",
-        tag,
-        user,
-        allocated,
-        total,
-        free
+        tag, user, allocated, total, free
     );
 }
 

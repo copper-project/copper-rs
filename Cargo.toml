@@ -24,6 +24,7 @@ members = [
     "components/payloads/cu_ros_payloads",
     "components/payloads/cu_sensor_payloads",
     "components/payloads/cu_spatial_payloads",
+    "components/res/cu_micoairh743",
     "components/libs/cu_sdlogger",
     "components/bridges/cu_bdshot",
     "components/sinks/cu_iceoryx2_sink",
@@ -57,6 +58,7 @@ members = [
     "examples/cu_config_gen",
     "examples/cu_config_variation",
     "examples/cu_dorabench",
+    "examples/cu_image_aligner",
     "examples/cu_iceoryx2",
     "examples/cu_logging_size",
     "examples/cu_msp_bridge_loopback",
@@ -154,6 +156,7 @@ compact_str = { version = "0.9", default-features = false, features = ["serde"] 
 
 # The derive pattern happens a lot across the codebase, this is a helper for that.
 derive_more = { version = "2.0", features = ["full"] }
+paste = { version = "1.0.15", default-features = false }
 
 # used across testing
 tempfile = "3.23"
@@ -182,6 +185,5 @@ opt-level = 3
 lto = "fat"
 codegen-units = 1
 panic = "abort"
-strip = "symbols"  # or "debuginfo" or true
 debug = false
 incremental = false

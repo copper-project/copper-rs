@@ -2,7 +2,7 @@
     resources: [
         (
             id: "fc",
-            provider: "crate::resources::MicoAirH743",
+            provider: "cu_micoairh743::MicoAirH743",
         ),
     ],
     tasks: [
@@ -17,6 +17,17 @@
             },
         ),
         (
+            id: "battery_adc",
+            type: "tasks::BatteryAdcSource",
+            resources: { "battery_adc": "fc.battery_adc" },
+            config: {
+                "vref_mv": 3300,
+                "vbat_scale": 210,
+                "vbat_res_div_val": 10,
+                "vbat_res_div_mult": 1,
+            },
+        ),
+        (
             id: "imu_cal",
             type: "tasks::ImuCalibrator",
             config: { "cal_ms": 3000 },
@@ -28,6 +39,8 @@
             type: "tasks::AttitudeController",
             config: {
                 "angle_limit_deg": 60.0,
+                "acro_rate_dps": 180.0,
+                "acro_expo": 0.3,
                 "kp": 1.0,
                 "ki": 0.0,
                 "kd": 0.0,
@@ -37,33 +50,35 @@
             id: "rate",
             type: "tasks::RateController",
             config: {
-                "kp": 0.06,
+                "kp": 0.04,
                 "ki": 0.0,
-                "kd": 0.001,
-                "kp_yaw": 0.1652,
+                "kd": 0.0005,
+                "kp_yaw": 0.05,
                 "ki_yaw": 0.0,
                 "kd_yaw": 0.0,
+                "airmode": true,
+                "airmode_start_throttle_percent": 20.0,  // 20% for 5" - latches on until disarm (well above 4.88% idle)
             },
         ),
         (
             id: "mixer0",
             type: "tasks::QuadXMixer",
-            config: { "motor_index": 0, "props_out": true },
+            config: { "motor_index": 0, "props_out": true, "airmode_idle_percent": 8.0 },
         ),
         (
             id: "mixer1",
             type: "tasks::QuadXMixer",
-            config: { "motor_index": 1, "props_out": true },
+            config: { "motor_index": 1, "props_out": true, "airmode_idle_percent": 8.0 },
         ),
         (
             id: "mixer2",
             type: "tasks::QuadXMixer",
-            config: { "motor_index": 2, "props_out": true },
+            config: { "motor_index": 2, "props_out": true, "airmode_idle_percent": 8.0 },
         ),
         (
             id: "mixer3",
             type: "tasks::QuadXMixer",
-            config: { "motor_index": 3, "props_out": true },
+            config: { "motor_index": 3, "props_out": true, "airmode_idle_percent": 8.0 },
         ),
         (
             id: "mapper",
@@ -88,12 +103,11 @@
             type: "tasks::VtxOsd",
             config: { "cols": 53, "row": 13, "col_center": 26 },
         ),
-        (id: "msp_rx", type: "tasks::MspNoopSink"),
     ],
 
     bridges: [
         (  id: "rc",
-           type: "cu_crsf::CrsfBridge<SerialPort, SerialPortError>",
+           type: "cu_crsf::CrsfBridge<cu_micoairh743::Uart6Port, cu_micoairh743::SerialPortError>",
            resources: { "serial": "fc.uart6" },
            channels: [
                 Rx ( id: "rc_rx" ),  // receiving RC Channels
@@ -102,11 +116,12 @@
         ),
         (
            id: "vtx_msp",
-           type: "cu_msp_bridge::CuMspBridge<Uart2Port, SerialPortError>",
+           type: "cu_msp_bridge::CuMspBridge<cu_micoairh743::Uart2Port, cu_micoairh743::SerialPortError>",
            resources: { "serial": "fc.uart2" },
            channels: [
                 Tx ( id: "requests" ),
                 Rx ( id: "responses" ),
+                Rx ( id: "incoming" ),
            ],
         ),
         (
@@ -151,12 +166,13 @@
         (src: "mixer1", dst: "bdshot/esc1_tx", msg: "cu_bdshot::EscCommand"),
         (src: "mixer2", dst: "bdshot/esc2_tx", msg: "cu_bdshot::EscCommand"),
         (src: "mixer3", dst: "bdshot/esc3_tx", msg: "cu_bdshot::EscCommand"),
+        (src: "battery_adc", dst: "vtx_osd", msg: "crate::messages::BatteryVoltage"),
+        (src: "vtx_msp/incoming", dst: "vtx_osd", msg: "cu_msp_bridge::MspRequestBatch"),
         (src: "vtx_osd", dst: "vtx_msp/requests", msg: "cu_msp_bridge::MspRequestBatch"),
-        (src: "vtx_msp/responses", dst: "msp_rx", msg: "cu_msp_bridge::MspResponseBatch"),
     ],
-    // monitor: (
-    //     type: "cu_logmon::CuLogMon",
-    // ),
+    monitor: (
+         type: "cu_logmon::CuLogMon",
+    ),
     logging: (
         slab_size_mib: 16,
         section_size_mib: 4,

@@ -1,5 +1,12 @@
 You can find a collection of components for Copper in that subtree of the repo.
 
+## bridges
+
+A combination of sinks and sources to interface with external systems.
+
+## libs
+Supporting libraries for Copper.
+
 ## monitors
 
 UI and interfacing with monitoring systems.
@@ -9,17 +16,22 @@ UI and interfacing with monitoring systems.
 Common Message Payloads
 Those are for you to use in your tasks. They are used to pass data between tasks.
 
+## res
+
+Platform-specific resource bundles.
+Those are the HAL for a lot of sources and bridges.
+
 ## sinks
 
-Everything that is the final destination within the Copper DAG like actuation drivers or interfacing with external systems.
+Final destinations for Copper data, often on the actuation side of the robot.
 
 ## sources
 
-Everything that is creating data entering Copper like sensor drivers or external systems giving inputs to Copper.
+Sources of Copper data, often on the sensor side of the robot.
 
 ## tasks
 
-Internal tasks like algorithms producing an output out of an input.
+Internal tasks like computational processes & algorithms with an output out of an input.
 
 ## testing
 

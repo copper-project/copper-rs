@@ -1,6 +1,7 @@
 [default.extend-words]
 mis = "mis"
 ratatui = "ratatui"
+numer = "numer"
 thr = "thr"
 IST = "IST"
 iterm = "iterm"

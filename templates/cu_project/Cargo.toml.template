@@ -1,0 +1,31 @@
+[package]
+name = "{{project-name}}"
+version = "0.1.0"
+edition = "2021"
+default-run = "{{project-name|kebab_case}}"
+
+{% if copper_source == "local" %}
+{% comment %} We must be part of a root workspace if we're in the copper repo {% endcomment %}
+[workspace]
+{%endif %}
+# The main executable of your application
+[[bin]]
+name = "{{project-name|kebab_case}}"
+path = "src/main.rs"
+
+# A custom made log reader application for your application.
+[[bin]]
+name = "{{project-name|kebab_case}}-logreader"
+path = "src/logreader.rs"
+required-features = ["logreader"]
+
+[features]
+default = []
+logreader = ["dep:cu29-export"]
+
+[dependencies]
+cu29 = { {%if copper_source == "crates.io" %} version = "*" {%elsif copper_source == "git" %} git = "https://github.com/copper-project/copper-rs.git" {%elsif copper_source == "local" %}path = "{{copper_root_path}}/core/cu29" {%endif %} }
+bincode = { package = "cu-bincode", version = "2.0", default-features = false, features = ["derive", "alloc"] }
+serde = { version = "*", features = ["derive"] }
+cu29-helpers = { {%if copper_source == "crates.io" %}version = "*" {%elsif copper_source == "git" %} git = "https://github.com/copper-project/copper-rs.git" {%elsif copper_source == "local" %}path = "{{copper_root_path}}/core/cu29_helpers" {%endif %} }
+cu29-export = { {%if copper_source == "crates.io" %}version = "*" {%elsif copper_source == "git" %} git = "https://github.com/copper-project/copper-rs.git" {%elsif copper_source == "local" %}path = "{{copper_root_path}}/core/cu29_export" {%endif %}, optional = true }

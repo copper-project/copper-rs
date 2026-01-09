@@ -1,0 +1,16 @@
+[package]
+name = "cu_example_app"
+version = "0.1.0"
+edition = "2021"
+default-run = "cu_example_app"
+
+# The main executable of your application
+[[bin]]
+name = "cu_example_app"
+path = "src/main.rs"
+
+[dependencies]
+cu29 = { workspace = true }
+cu29-helpers = { workspace = true }
+bincode = { workspace = true }
+serde = { workspace = true }

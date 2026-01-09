@@ -40,17 +40,22 @@ textlogs log="logs/embedded.copper" index="../../target/debug/cu29_log_index":
   [[ -e "$index" ]] || { echo "log index not found: $index" >&2; exit 1; }
   RUST_BACKTRACE=1 cargo run -p cu-basic-fc --no-default-features --features logreader --bin quad-logreader -- "$log" extract-text-log "$index"
 
-# Build firmware-only target using the firmware-specific Cargo config
 fw:
   #!/usr/bin/env bash
   set -euo pipefail
-  cargo run --release --config .cargo/config-firmware.toml --no-default-features --features firmware -p cu-basic-fc --bin quad
+  cargo run --release --config .cargo/config-firmware.toml --no-default-features --features firmware,textlogs -p cu-basic-fc --bin quad
 
-# Build firmware-only target using the firmware-specific Cargo config
+# Release release. With no textlogs.
+fwr:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cargo run --profile screaming --config .cargo/config-firmware.toml --no-default-features --features firmware -p cu-basic-fc --bin quad
+
+# Debug (it won't be fast enough to run be at least you van debug the bringup).
 fwd:
   #!/usr/bin/env bash
   set -euo pipefail
-  cargo run --config .cargo/config-firmware.toml --no-default-features --features firmware -p cu-basic-fc --bin quad
+  cargo run --config .cargo/config-firmware.toml --no-default-features --features firmware,log-level-debug -p cu-basic-fc --bin quad
 
 # Attach to the already-flashed target without rebuilding or flashing.
 attach:

@@ -171,13 +171,14 @@ impl<P: BdshotBoardProvider> CuBridge for CuBdshotBridge<P> {
 
     fn receive<'a, Payload>(
         &mut self,
-        _clock: &RobotClock,
+        clock: &RobotClock,
         channel: &'static BridgeChannel<<Self::Rx as BridgeChannelSet>::Id, Payload>,
         msg: &mut CuMsg<Payload>,
     ) -> CuResult<()>
     where
         Payload: CuMsgPayload + 'a,
     {
+        msg.tov = Tov::Time(clock.now());
         let idx = channel.id().as_index();
         if idx >= P::Board::CHANNEL_COUNT {
             msg.clear_payload();

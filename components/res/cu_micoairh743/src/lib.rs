@@ -1,27 +1,36 @@
+#![no_std]
+#![doc = include_str!("../README.md")]
+
 use cortex_m::peripheral::DWT;
 use cu_bdshot::{Stm32H7Board, Stm32H7BoardResources, register_stm32h7_board};
 use cu_sdlogger::{EMMCLogger, EMMCSectionStorage, ForceSyncSend, find_copper_partition};
 use cu29::resource::{ResourceBundle, ResourceManager};
 use cu29::{CuError, CuResult, bundle_resources};
+use embedded_hal::adc::OneShot;
 use embedded_hal::blocking::delay::DelayMs;
 use embedded_hal::blocking::spi::Transfer;
 use embedded_hal::digital::v2::OutputPin;
 use spin::Mutex;
 use stm32h7xx_hal::{
+    adc,
     delay::Delay,
-    gpio::{Output, PushPull, Speed},
+    gpio::{Analog, Output, PushPull, Speed},
     nb, pac,
     prelude::*,
-    rcc,
+    rcc::{self, rec::AdcClkSel},
     sdmmc::{self, SdCard, Sdmmc, SdmmcBlockDevice},
     serial::{Error as UartError, Serial, config::Config},
     spi::{Config as SpiConfig, Mode, Phase, Polarity, SpiExt},
 };
 
+// Throttle UART overrun warnings to once per second.
 const UART_OVERRUN_LOG_PERIOD_SECS: u32 = 1;
+const UART6_BAUD: u32 = 420_000;
+const UART2_BAUD: u32 = 115_200;
 
 pub type SerialPortError = embedded_io::ErrorKind;
 
+/// UART wrapper implementing embedded-io traits with overrun throttling.
 pub struct SerialWrapper<U> {
     inner: Serial<U>,
     label: &'static str,
@@ -118,10 +127,11 @@ macro_rules! impl_serial_wrapper_io {
 impl_serial_wrapper_io!(pac::USART6);
 impl_serial_wrapper_io!(pac::USART2);
 
+// Resource type aliases exposed by the bundle.
 pub type Uart6Port = SerialWrapper<pac::USART6>;
 pub type Uart2Port = SerialWrapper<pac::USART2>;
-pub type SerialPort = Uart6Port;
 
+/// Wraps HAL types that are only used from the single-threaded runtime.
 pub struct SingleThreaded<T>(T);
 
 impl<T> SingleThreaded<T> {
@@ -177,6 +187,30 @@ pub type Bmi088Spi =
 pub type Bmi088AccCs = SingleThreaded<stm32h7xx_hal::gpio::gpiod::PD4<Output<PushPull>>>;
 pub type Bmi088GyrCs = SingleThreaded<stm32h7xx_hal::gpio::gpiod::PD5<Output<PushPull>>>;
 pub type Bmi088Delay = SingleThreaded<Delay>;
+pub type BatterySensePin = stm32h7xx_hal::gpio::gpioc::PC0<Analog>;
+
+pub struct BatteryAdc {
+    adc: adc::Adc<pac::ADC1, adc::Enabled>,
+    pin: BatterySensePin,
+}
+
+// Safety: the firmware uses a single-threaded runtime; no concurrent access.
+unsafe impl Send for BatteryAdc {}
+unsafe impl Sync for BatteryAdc {}
+
+impl BatteryAdc {
+    fn new(adc: adc::Adc<pac::ADC1, adc::Enabled>, pin: BatterySensePin) -> Self {
+        Self { adc, pin }
+    }
+
+    pub fn read_raw_blocking(&mut self) -> u32 {
+        nb::block!(self.adc.read(&mut self.pin)).unwrap_or(0)
+    }
+
+    pub fn slope(&self) -> u32 {
+        self.adc.slope()
+    }
+}
 
 type SdBlockDev = ForceSyncSend<SdmmcBlockDevice<Sdmmc<pac::SDMMC1, SdCard>>>;
 pub type LogStorage = EMMCSectionStorage<SdBlockDev>;
@@ -223,9 +257,12 @@ fn init_sd_logger(
     Logger::new(bd, start, count)
 }
 
+/// Resource bundle for the MicoAir H743 board.
 pub struct MicoAirH743;
 
-bundle_resources!(MicoAirH743: Uart6, Uart2, GreenLed, Logger, Bmi088Spi, Bmi088AccCs, Bmi088GyrCs, Bmi088Delay);
+bundle_resources!(
+    MicoAirH743: Uart6, Uart2, GreenLed, Logger, Bmi088Spi, Bmi088AccCs, Bmi088GyrCs, Bmi088Delay, BatteryAdc
+);
 
 impl ResourceBundle for MicoAirH743 {
     fn build(
@@ -233,6 +270,8 @@ impl ResourceBundle for MicoAirH743 {
         _config: Option<&cu29::config::ComponentConfig>,
         manager: &mut ResourceManager,
     ) -> CuResult<()> {
+        // Here we bring up the entire board and register the resources.
+
         let mut cp = cortex_m::Peripherals::take()
             .ok_or_else(|| CuError::from("cortex-m peripherals already taken"))?;
         cp.SCB.enable_fpu();
@@ -249,22 +288,36 @@ impl ResourceBundle for MicoAirH743 {
         let pwr = dp.PWR.constrain();
         let vos = pwr.freeze();
         let rcc = dp.RCC.constrain();
-        let ccdr = rcc
+        let mut ccdr = rcc
             .sys_ck(400.MHz())
             .pll1_q_ck(100.MHz())
             .freeze(vos, &dp.SYSCFG);
+        ccdr.peripheral.kernel_adc_clk_mux(AdcClkSel::Per);
         let sysclk_hz = ccdr.clocks.sys_ck().raw();
         let sdmmc1_rec = ccdr.peripheral.SDMMC1;
+        let mut delay = Delay::new(syst, ccdr.clocks);
 
         let gpioa = dp.GPIOA.split(ccdr.peripheral.GPIOA);
         let gpioc = dp.GPIOC.split(ccdr.peripheral.GPIOC);
         let gpiod = dp.GPIOD.split(ccdr.peripheral.GPIOD);
         let gpioe = dp.GPIOE.split(ccdr.peripheral.GPIOE);
+        let battery_pin = gpioc.pc0.into_analog();
 
         let green_led = gpioe.pe6.into_push_pull_output();
+        let mut adc1 = adc::Adc::adc1(
+            dp.ADC1,
+            4.MHz(),
+            &mut delay,
+            ccdr.peripheral.ADC12,
+            &ccdr.clocks,
+        )
+        .enable();
+        adc1.set_resolution(adc::Resolution::TwelveBit);
+        adc1.set_sample_time(adc::AdcSampleTime::T_64);
+        let battery_adc = BatteryAdc::new(adc1, battery_pin);
 
         let overrun_period_cycles = sysclk_hz.saturating_mul(UART_OVERRUN_LOG_PERIOD_SECS);
-        let uart6_config = Config::default().baudrate(420_000.bps());
+        let uart6_config = Config::default().baudrate(UART6_BAUD.bps());
         let uart6 = SerialWrapper::new(
             dp.USART6
                 .serial(
@@ -278,7 +331,10 @@ impl ResourceBundle for MicoAirH743 {
             overrun_period_cycles,
         );
 
-        let uart2_config = Config::default().baudrate(115_200.bps());
+        let uart2_baud = _config
+            .and_then(|cfg| cfg.get::<u32>("uart2_baud"))
+            .unwrap_or(UART2_BAUD);
+        let uart2_config = Config::default().baudrate(uart2_baud.bps());
         let uart2 = SerialWrapper::new(
             dp.USART2
                 .serial(
@@ -330,7 +386,7 @@ impl ResourceBundle for MicoAirH743 {
         let bmi088_spi = SingleThreaded::new(bmi088_spi);
         let bmi088_acc_cs = SingleThreaded::new(bmi088_acc_cs);
         let bmi088_gyr_cs = SingleThreaded::new(bmi088_gyr_cs);
-        let bmi088_delay = SingleThreaded::new(Delay::new(syst, ccdr.clocks));
+        let bmi088_delay = SingleThreaded::new(delay);
 
         let bdshot_resources = Stm32H7BoardResources {
             m1: gpioe.pe14,
@@ -351,6 +407,7 @@ impl ResourceBundle for MicoAirH743 {
         let bmi088_acc_cs_key = bundle.key(MicoAirH743Id::Bmi088AccCs);
         let bmi088_gyr_cs_key = bundle.key(MicoAirH743Id::Bmi088GyrCs);
         let bmi088_delay_key = bundle.key(MicoAirH743Id::Bmi088Delay);
+        let battery_adc_key = bundle.key(MicoAirH743Id::BatteryAdc);
 
         manager.add_owned(uart6_key, uart6)?;
         manager.add_owned(uart2_key, uart2)?;
@@ -360,6 +417,7 @@ impl ResourceBundle for MicoAirH743 {
         manager.add_owned(bmi088_acc_cs_key, bmi088_acc_cs)?;
         manager.add_owned(bmi088_gyr_cs_key, bmi088_gyr_cs)?;
         manager.add_owned(bmi088_delay_key, bmi088_delay)?;
+        manager.add_owned(battery_adc_key, battery_adc)?;
         Ok(())
     }
 }

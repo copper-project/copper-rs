@@ -75,10 +75,16 @@ std-ci mode="debug": lint
 		fi
 		(
 			cd templates
-			cargo +stable generate -p cu_full --name test_project --destination . -d copper_source=local -d copper_root_path=../.. --silent
+			rm -rf test_project test_workspace
+			cargo +stable generate -p cu_project --name test_project --destination . -d copper_source=local -d copper_root_path=../.. --silent
+			cargo +stable generate -p cu_full --name test_workspace --destination . -d copper_source=local -d copper_root_path=../.. --silent
 		)
 		(
 			cd templates/test_project
+			cargo +stable build
+		)
+		(
+			cd templates/test_workspace
 			cargo +stable build
 		)
 	fi

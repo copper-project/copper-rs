@@ -19,6 +19,7 @@ use smallvec::SmallVec;
 #[derive(Clone, PartialEq)]
 pub struct MspPacketData(pub(crate) SmallVec<[u8; 256]>);
 const MSP_MAX_PAYLOAD_LEN: usize = 255;
+const MSP_V2_FRAME_ID: u8 = 255;
 
 impl MspPacketData {
     pub(crate) fn new() -> MspPacketData {
@@ -123,6 +124,19 @@ impl MspPacketDirection {
     }
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum MspParsedVersion {
+    V1,
+    V2Native,
+    V2OverV1,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct MspPacketInfo {
+    pub version: MspParsedVersion,
+    pub cmd: u16,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 /// A decoded MSP packet, with a command code, direction and payload
 pub struct MspPacket {
@@ -162,6 +176,7 @@ pub struct MspParser {
     packet_data: MspPacketData,
     packet_crc: u8,
     packet_crc_v2: CRCu8,
+    last_packet_info: Option<MspPacketInfo>,
 }
 
 impl MspParser {
@@ -176,12 +191,17 @@ impl MspParser {
             packet_data: MspPacketData::new(),
             packet_crc: 0,
             packet_crc_v2: CRCu8::crc8dvb_s2(),
+            last_packet_info: None,
         }
     }
 
     /// Are we waiting for the header of a brand new packet?
     pub fn state_is_between_packets(&self) -> bool {
         self.state == MspParserState::Header1
+    }
+
+    pub fn last_packet_info(&self) -> Option<MspPacketInfo> {
+        self.last_packet_info
     }
 
     /// Parse the next input byte. Returns a valid packet whenever a full packet is received, otherwise
@@ -331,10 +351,55 @@ impl MspParser {
                 let mut n = MspPacketData::new();
                 mem::swap(&mut self.packet_data, &mut n);
 
-                let packet = MspPacket {
-                    cmd: self.packet_cmd,
-                    direction: self.packet_direction,
-                    data: n,
+                let packet = if self.packet_version == MspVersion::V1
+                    && self.packet_cmd == u16::from(MSP_V2_FRAME_ID)
+                {
+                    let raw = n.as_slice();
+                    if raw.len() < 6 {
+                        self.reset();
+                        return Err(MspPacketParseError::InvalidDataLength);
+                    }
+                    let cmd = u16::from_le_bytes([raw[1], raw[2]]);
+                    let payload_len = u16::from_le_bytes([raw[3], raw[4]]) as usize;
+                    let v2_end = 5 + payload_len;
+                    if raw.len() < v2_end + 1 {
+                        self.reset();
+                        return Err(MspPacketParseError::InvalidDataLength);
+                    }
+                    let v2_crc = raw[v2_end];
+                    let mut crc = CRCu8::crc8dvb_s2();
+                    crc.digest(&raw[..v2_end]);
+                    let calculated = crc.get_crc();
+                    if v2_crc != calculated {
+                        self.reset();
+                        return Err(MspPacketParseError::CrcMismatch {
+                            expected: v2_crc,
+                            calculated,
+                        });
+                    }
+                    self.last_packet_info = Some(MspPacketInfo {
+                        version: MspParsedVersion::V2OverV1,
+                        cmd,
+                    });
+                    MspPacket {
+                        cmd,
+                        direction: self.packet_direction,
+                        data: MspPacketData::from(&raw[5..v2_end]),
+                    }
+                } else {
+                    let version = match self.packet_version {
+                        MspVersion::V1 => MspParsedVersion::V1,
+                        MspVersion::V2 => MspParsedVersion::V2Native,
+                    };
+                    self.last_packet_info = Some(MspPacketInfo {
+                        version,
+                        cmd: self.packet_cmd,
+                    });
+                    MspPacket {
+                        cmd: self.packet_cmd,
+                        direction: self.packet_direction,
+                        data: n,
+                    }
                 };
 
                 self.reset();
@@ -375,6 +440,12 @@ impl MspPacket {
     pub fn packet_size_bytes_v2(&self) -> usize {
         let MspPacketData(data) = &self.data;
         9 + data.len()
+    }
+
+    /// Number of bytes that this packet requires to be packed as MSPv2 over MSPv1.
+    pub fn packet_size_bytes_v2_over_v1(&self) -> usize {
+        let MspPacketData(data) = &self.data;
+        12 + data.len()
     }
 
     /// Serialize to network bytes
@@ -424,6 +495,40 @@ impl MspPacket {
         let mut crc = CRCu8::crc8dvb_s2();
         crc.digest(&output[3..l - 1]);
         output[l - 1] = crc.get_crc();
+
+        Ok(())
+    }
+
+    /// Serialize to MSPv2-over-MSPv1 (MSP_V2_FRAME) bytes.
+    pub fn serialize_v2_over_v1(&self, output: &mut [u8]) -> Result<(), MspPacketParseError> {
+        let MspPacketData(data) = &self.data;
+        let l = output.len();
+
+        if l != self.packet_size_bytes_v2_over_v1() {
+            return Err(MspPacketParseError::OutputBufferSizeMismatch);
+        }
+
+        let v1_payload_len = data.len() + 6;
+        output[0] = b'$';
+        output[1] = b'M';
+        output[2] = self.direction.to_byte();
+        output[3] = v1_payload_len as u8;
+        output[4] = MSP_V2_FRAME_ID;
+
+        output[5] = 0; // flags
+        output[6..8].copy_from_slice(&self.cmd.to_le_bytes());
+        output[8..10].copy_from_slice(&(data.len() as u16).to_le_bytes());
+        output[10..10 + data.len()].copy_from_slice(data);
+
+        let mut crc_v2 = CRCu8::crc8dvb_s2();
+        crc_v2.digest(&output[5..10 + data.len()]);
+        output[10 + data.len()] = crc_v2.get_crc();
+
+        let mut crc = output[3] ^ output[4];
+        for b in &output[5..11 + data.len()] {
+            crc ^= *b;
+        }
+        output[l - 1] = crc;
 
         Ok(())
     }
