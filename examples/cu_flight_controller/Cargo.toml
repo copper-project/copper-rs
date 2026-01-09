@@ -31,6 +31,7 @@ cu-micoairh743 = { path = "../../components/res/cu_micoairh743", optional = true
 cu-embedded-registry = { path = "../../components/libs/cu_embedded_registry", default-features = false, features = ["defmt"], optional = true }
 cu-logmon = { path = "../../components/monitors/cu_logmon", default-features = false, features = ["defmt", "color_log"], optional = true }
 cu-ahrs = { path = "../../components/tasks/cu_ahrs", default-features = false, features = ["defmt"], optional = true }
+cu-bmi088 = { path = "../../components/sources/cu_bmi088", default-features = false, features = ["defmt"], optional = true }
 
 ### Algos
 cu-pid = { path = "../../components/tasks/cu_pid", default-features = false, version = "0.11.0" }
@@ -95,6 +96,8 @@ firmware = [
   "cu-bdshot/defmt",
   "cu-micoairh743/defmt",
   "dep:cu-ahrs",
+  "dep:cu-bmi088",
+  "cu-bmi088/defmt",
   "dep:cu-crsf",
   "dep:cu-msp-bridge",
   "cu-crsf/defmt",

@@ -34,6 +34,7 @@ members = [
     "components/sinks/cu_zenoh_sink",
     "components/sinks/cu_zenoh_ros_sink",
     "components/sources/cu_ads7883",
+    "components/sources/cu_bmi088",
     "components/sources/cu_gstreamer",
     "components/sources/cu_hesai",
     "components/sources/cu_livox",

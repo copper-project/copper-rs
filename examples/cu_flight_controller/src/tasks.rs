@@ -18,8 +18,6 @@ use cu29::prelude::*;
 use uom::si::angular_velocity::degree_per_second;
 use uom::si::thermodynamic_temperature::degree_celsius;
 
-mod bmi088;
-
 const LOG_PERIOD_MS: u64 = 500;
 const HEAP_LOG_PERIOD_MS: u64 = 500;
 const VTX_HEARTBEAT_PERIOD_MS: u64 = 1000;
@@ -753,7 +751,7 @@ impl CuSinkTask for ImuLogger {
     }
 }
 
-pub type Bmi088Source = bmi088::Bmi088Source<
+pub type Bmi088Source = cu_bmi088::Bmi088Source<
     cu_micoairh743::Bmi088Spi,
     cu_micoairh743::Bmi088AccCs,
     cu_micoairh743::Bmi088GyrCs,
