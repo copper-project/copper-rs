@@ -25,7 +25,7 @@ ci:
   act -W .github/workflows/general.yml -j Unit-Tests --matrix os:ubuntu-latest --matrix mode:debug -P ubuntu-latest=ghcr.io/catthehacker/ubuntu:act-latest
 
 # Host target detection for cross-platform logreader builds
-host_target := `rustc -vV | sed -n 's/host: //p'`
+host_target := `rustc +stable -vV | sed -n 's/host: //p'`
 
 nostd-ci: lint
 	cargo +stable build --no-default-features
