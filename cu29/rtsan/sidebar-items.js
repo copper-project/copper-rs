@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["disable","enable","ensure_initialized","notify_blocking_call","realtime_enter","realtime_exit"],"struct":["ScopedDisabler","ScopedSanitizeRealtime"]};
