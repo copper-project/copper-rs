@@ -22,7 +22,6 @@ embedded_features = "firmware"
 ## Flight controller components
 
 ### Hardware
-cu-mpu9250 = { path = "../../components/sources/cu_mpu9250", optional = true }
 cu-bdshot = { path = "../../components/bridges/cu_bdshot", optional = true }
 cu-crsf = { path = "../../components/bridges/cu_crsf", default-features = false, features = ["defmt", "alloc"], optional = true }
 cu-msp-bridge = { path = "../../components/bridges/cu_msp_bridge", default-features = false, features = ["defmt", "alloc"], optional = true }
@@ -96,7 +95,6 @@ firmware = [
   "cu-bdshot/defmt",
   "cu-micoairh743/defmt",
   "dep:cu-ahrs",
-  "dep:cu-mpu9250",
   "dep:cu-crsf",
   "dep:cu-msp-bridge",
   "cu-crsf/defmt",
