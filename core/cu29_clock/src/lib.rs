@@ -355,7 +355,7 @@ impl OptionCuTime {
     }
 
     #[inline]
-    pub fn none() -> Self {
+    pub const fn none() -> Self {
         OptionCuTime(CuDuration(NONE_VALUE))
     }
 

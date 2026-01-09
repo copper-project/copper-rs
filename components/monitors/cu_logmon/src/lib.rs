@@ -228,7 +228,7 @@ impl CuMonitor for CuLogMon {
 
         if let Some(snapshot) = snapshot {
             let log_start = clock.recent();
-            let use_color = cfg!(all(feature = "std", feature = "color_log"));
+            let use_color = cfg!(feature = "color_log");
             let base = format!(
                 "[CL {}] rate {}.{} Hz | slowest {} {}us | e2e p50 {}us p90 {}us p99 {}us max {}us | log_overhead {}us",
                 snapshot.copperlist_index,
@@ -278,12 +278,13 @@ impl CuMonitor for CuLogMon {
         Ok(())
     }
 
-    fn process_error(&self, taskid: usize, step: CuTaskState, _error: &CuError) -> Decision {
+    fn process_error(&self, taskid: usize, step: CuTaskState, error: &CuError) -> Decision {
         let task_name = self.taskids.get(taskid).copied().unwrap_or("<??>");
-        info!(
-            "Task error {} during {}",
+        error!(
+            "Task {} @ {}: Error: {}.",
             task_name,
-            task_state_label(&step)
+            task_state_label(&step),
+            error,
         );
         Decision::Ignore
     }

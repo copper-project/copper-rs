@@ -3,7 +3,7 @@ import "../../justfile"
 # A quick test to see if the sim can pick up your RC.
 rc:
   #!/usr/bin/env bash
-  cargo run -p cu-basic-fc --no-default-features --features sim --bin rc-tester
+  cargo run -p cu-flight-controller --no-default-features --features sim --bin rc-tester
 
 logreader log="logs/embedded.copper":
   #!/usr/bin/env bash
@@ -13,7 +13,7 @@ logreader log="logs/embedded.copper":
   if [[ "$log" != /* ]]; then
     log="${invocation_dir}/${log}"
   fi
-  RUST_BACKTRACE=1 cargo run -p cu-basic-fc --no-default-features --features logreader --bin quad-logreader -- "$log" extract-copperlists --export-format json
+  RUST_BACKTRACE=1 cargo run -p cu-flight-controller --no-default-features --features logreader --bin quad-logreader -- "$log" extract-copperlists --export-format json
 
 fsck log="logs/embedded.copper":
   #!/usr/bin/env bash
@@ -23,7 +23,7 @@ fsck log="logs/embedded.copper":
   if [[ "$log" != /* ]]; then
     log="${invocation_dir}/${log}"
   fi
-  RUST_BACKTRACE=1 cargo run -p cu-basic-fc --no-default-features --features logreader --bin quad-logreader -- "$log" fsck
+  RUST_BACKTRACE=1 cargo run -p cu-flight-controller --no-default-features --features logreader --bin quad-logreader -- "$log" fsck
 
 textlogs log="logs/embedded.copper" index="../../target/debug/cu29_log_index":
   #!/usr/bin/env bash
@@ -38,24 +38,24 @@ textlogs log="logs/embedded.copper" index="../../target/debug/cu29_log_index":
     index="${invocation_dir}/${index}"
   fi
   [[ -e "$index" ]] || { echo "log index not found: $index" >&2; exit 1; }
-  RUST_BACKTRACE=1 cargo run -p cu-basic-fc --no-default-features --features logreader --bin quad-logreader -- "$log" extract-text-log "$index"
+  RUST_BACKTRACE=1 cargo run -p cu-flight-controller --no-default-features --features logreader --bin quad-logreader -- "$log" extract-text-log "$index"
 
 fw:
   #!/usr/bin/env bash
   set -euo pipefail
-  cargo run --release --config .cargo/config-firmware.toml --no-default-features --features firmware,textlogs -p cu-basic-fc --bin quad
+  cargo run --release --config .cargo/config-firmware.toml --no-default-features --features firmware,textlogs -p cu-flight-controller --bin quad
 
 # Release release. With no textlogs.
 fwr:
   #!/usr/bin/env bash
   set -euo pipefail
-  cargo run --profile screaming --config .cargo/config-firmware.toml --no-default-features --features firmware -p cu-basic-fc --bin quad
+  cargo run --profile screaming --config .cargo/config-firmware.toml --no-default-features --features firmware -p cu-flight-controller --bin quad
 
 # Debug (it won't be fast enough to run be at least you van debug the bringup).
 fwd:
   #!/usr/bin/env bash
   set -euo pipefail
-  cargo run --config .cargo/config-firmware.toml --no-default-features --features firmware,log-level-debug -p cu-basic-fc --bin quad
+  cargo run --config .cargo/config-firmware.toml --no-default-features --features firmware,log-level-debug -p cu-flight-controller --bin quad
 
 # Attach to the already-flashed target without rebuilding or flashing.
 attach:

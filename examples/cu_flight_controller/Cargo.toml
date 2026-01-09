@@ -1,5 +1,5 @@
 [package]
-name = "cu-basic-fc"
+name = "cu-flight-controller"
 description = "This is a basic quadcopter Flight Controller implemented end to end using Copper components"
 version.workspace = true
 authors.workspace = true
@@ -13,7 +13,7 @@ repository.workspace = true
 
 [package.metadata.copper]
 embedded_only = true
-embedded_config = "examples/cu_basic_fc/.cargo/config-firmware.toml"
+embedded_config = "examples/cu_flight_controller/.cargo/config-firmware.toml"
 embedded_target = "thumbv7em-none-eabihf"
 embedded_no_default_features = true
 embedded_features = "firmware"
@@ -22,7 +22,6 @@ embedded_features = "firmware"
 ## Flight controller components
 
 ### Hardware
-cu-mpu9250 = { path = "../../components/sources/cu_mpu9250", optional = true }
 cu-bdshot = { path = "../../components/bridges/cu_bdshot", optional = true }
 cu-crsf = { path = "../../components/bridges/cu_crsf", default-features = false, features = ["defmt", "alloc"], optional = true }
 cu-msp-bridge = { path = "../../components/bridges/cu_msp_bridge", default-features = false, features = ["defmt", "alloc"], optional = true }
@@ -30,8 +29,9 @@ cu-msp-lib = { path = "../../components/libs/cu_msp_lib", default-features = fal
 cu-sdlogger = { path = "../../components/libs/cu_sdlogger", optional = true }
 cu-micoairh743 = { path = "../../components/res/cu_micoairh743", optional = true }
 cu-embedded-registry = { path = "../../components/libs/cu_embedded_registry", default-features = false, features = ["defmt"], optional = true }
-cu-logmon = { path = "../../components/monitors/cu_logmon", default-features = false, features = ["defmt"], optional = true }
+cu-logmon = { path = "../../components/monitors/cu_logmon", default-features = false, features = ["defmt", "color_log"], optional = true }
 cu-ahrs = { path = "../../components/tasks/cu_ahrs", default-features = false, features = ["defmt"], optional = true }
+cu-bmi088 = { path = "../../components/sources/cu_bmi088", default-features = false, features = ["defmt"], optional = true }
 
 ### Algos
 cu-pid = { path = "../../components/tasks/cu_pid", default-features = false, version = "0.11.0" }
@@ -96,7 +96,8 @@ firmware = [
   "cu-bdshot/defmt",
   "cu-micoairh743/defmt",
   "dep:cu-ahrs",
-  "dep:cu-mpu9250",
+  "dep:cu-bmi088",
+  "cu-bmi088/defmt",
   "dep:cu-crsf",
   "dep:cu-msp-bridge",
   "cu-crsf/defmt",

@@ -9,7 +9,6 @@ use buddy_system_allocator::LockedHeap as StdHeap;
 use cortex_m::{asm, peripheral::SCB};
 use cortex_m_rt::{ExceptionFrame, entry, exception};
 use cu_micoairh743::{LogStorage, Logger, MicoAirH743Id};
-use cu_sensor_payloads::ImuPayload;
 use cu29::prelude::*;
 use defmt_rtt as _;
 use panic_probe as _;
@@ -59,37 +58,6 @@ fn defmt_panic() -> ! {
     panic_probe::hard_fault()
 }
 
-// Dummy IMU source placeholder.
-pub struct DummyImu;
-pub type RpMpu9250Source = DummyImu;
-impl Freezable for DummyImu {}
-
-impl CuTask for DummyImu {
-    type Resources<'r> = ();
-    type Input<'m> = ();
-    type Output<'m> = CuMsg<ImuPayload>;
-
-    fn new_with(
-        _config: Option<&ComponentConfig>,
-        _resources: Self::Resources<'_>,
-    ) -> CuResult<Self>
-    where
-        Self: Sized,
-    {
-        Ok(Self)
-    }
-
-    fn process<'i, 'o>(
-        &mut self,
-        _clock: &RobotClock,
-        _inputs: &Self::Input<'i>,
-        output: &mut Self::Output<'o>,
-    ) -> CuResult<()> {
-        output.clear_payload();
-        Ok(())
-    }
-}
-
 #[entry]
 fn main() -> ! {
     report_last_fault();
@@ -99,13 +67,12 @@ fn main() -> ! {
         Ok(resources) => resources,
         Err(e) => {
             let _ = e;
-            defmt::error!("Resource init failed");
+            defmt::error!("Resource init failed: {}", e); // defmt here because we don't have a copper logger yet.
             loop {
                 asm::wfi();
             }
         }
     };
-    info!("Board resources initialized");
 
     let logger_key = app_resources::bundles::FC.key::<Logger, _>(MicoAirH743Id::Logger);
     let logger = match resources.resources.take(logger_key) {
@@ -118,7 +85,6 @@ fn main() -> ! {
             }
         }
     };
-    info!("Logger resource acquired");
 
     // Spin up Copper runtime with CRSF -> mapper -> sink graph.
     let clock = build_clock();
