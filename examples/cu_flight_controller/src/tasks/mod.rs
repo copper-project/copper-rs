@@ -48,7 +48,9 @@ struct LogRateLimiter {
 
 impl LogRateLimiter {
     const fn new() -> Self {
-        Self { last: OptionCuTime::none() }
+        Self {
+            last: OptionCuTime::none(),
+        }
     }
 
     fn should_log(&mut self, now: CuTime) -> bool {
@@ -80,7 +82,6 @@ static LOG_RC: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::ne
 static LOG_RATE: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new());
 static LOG_MOTORS: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new());
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum StatusLabel {
     Disarmed,
@@ -99,7 +100,6 @@ impl StatusLabel {
         }
     }
 }
-
 
 fn clamp_u8(value: u16) -> u8 {
     value.min(u16::from(u8::MAX)) as u8

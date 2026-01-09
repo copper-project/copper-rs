@@ -1,10 +1,23 @@
-use alloc::vec::Vec;
-use cu29::prelude::*;
-use cu_msp_bridge::MspRequestBatch;
-use cu_msp_lib::structs::{MspAnalog, MspApiVersion, MspBatteryConfig, MspBatteryState, MspDisplayPort, MspFlightControllerVersion, MspRequest, MspStatus, MspStatusSensors, MspVoltageMeter, MspVoltageMeterConfig};
 use crate::messages::{BatteryVoltage, ControlInputs, FlightMode};
 use crate::tasks;
-use crate::tasks::{StatusLabel, BATTERY_CURRENT_METER_SOURCE_NONE, BATTERY_MAX_CELL_CENTIVOLTS_DEFAULT, BATTERY_MIN_CELL_CENTIVOLTS_DEFAULT, BATTERY_VBAT_RES_DIV_MULT_DEFAULT, BATTERY_VBAT_RES_DIV_VAL_DEFAULT, BATTERY_VBAT_SCALE_DEFAULT, BATTERY_VOLTAGE_METER_SOURCE_ADC, BATTERY_WARN_CELL_CENTIVOLTS_DEFAULT, MSP_API_PROTOCOL_VERSION, MSP_API_VERSION_MAJOR, MSP_API_VERSION_MINOR, MSP_ARMING_DISABLE_FLAGS_COUNT, MSP_FC_VERSION_MAJOR, MSP_FC_VERSION_MINOR, MSP_FC_VERSION_PATCH, MSP_VOLTAGE_METER_ADC_SUBFRAME_LEN, MSP_VOLTAGE_METER_ID_BATTERY_1, MSP_VOLTAGE_METER_SENSOR_TYPE_ADC_RES_DIV, VTX_CELL_DIVISOR, VTX_DRAW_PERIOD_MS, VTX_HEARTBEAT_PERIOD_MS, VTX_WATERMARK_LINES};
+use crate::tasks::{
+    BATTERY_CURRENT_METER_SOURCE_NONE, BATTERY_MAX_CELL_CENTIVOLTS_DEFAULT,
+    BATTERY_MIN_CELL_CENTIVOLTS_DEFAULT, BATTERY_VBAT_RES_DIV_MULT_DEFAULT,
+    BATTERY_VBAT_RES_DIV_VAL_DEFAULT, BATTERY_VBAT_SCALE_DEFAULT, BATTERY_VOLTAGE_METER_SOURCE_ADC,
+    BATTERY_WARN_CELL_CENTIVOLTS_DEFAULT, MSP_API_PROTOCOL_VERSION, MSP_API_VERSION_MAJOR,
+    MSP_API_VERSION_MINOR, MSP_ARMING_DISABLE_FLAGS_COUNT, MSP_FC_VERSION_MAJOR,
+    MSP_FC_VERSION_MINOR, MSP_FC_VERSION_PATCH, MSP_VOLTAGE_METER_ADC_SUBFRAME_LEN,
+    MSP_VOLTAGE_METER_ID_BATTERY_1, MSP_VOLTAGE_METER_SENSOR_TYPE_ADC_RES_DIV, StatusLabel,
+    VTX_CELL_DIVISOR, VTX_DRAW_PERIOD_MS, VTX_HEARTBEAT_PERIOD_MS, VTX_WATERMARK_LINES,
+};
+use alloc::vec::Vec;
+use cu_msp_bridge::MspRequestBatch;
+use cu_msp_lib::structs::{
+    MspAnalog, MspApiVersion, MspBatteryConfig, MspBatteryState, MspDisplayPort,
+    MspFlightControllerVersion, MspRequest, MspStatus, MspStatusSensors, MspVoltageMeter,
+    MspVoltageMeterConfig,
+};
+use cu29::prelude::*;
 
 const VTX_SYM_VOLT: char = '\x06';
 
@@ -33,11 +46,15 @@ impl CuTask for VtxOsd {
     where
         Self: Sized,
     {
-        let cols = tasks::cfg_u16(config, "cols", 53).max(1).min(u8::MAX as u16) as u8;
-        let rows = tasks::cfg_u16(config, "rows", 16).max(1).min(u8::MAX as u16) as u8;
+        let cols = tasks::cfg_u16(config, "cols", 53)
+            .max(1)
+            .min(u8::MAX as u16) as u8;
+        let rows = tasks::cfg_u16(config, "rows", 16)
+            .max(1)
+            .min(u8::MAX as u16) as u8;
         let default_center = (cols / 2) as u16;
-        let col_center =
-            tasks::cfg_u16(config, "col_center", default_center).min(cols.saturating_sub(1) as u16) as u8;
+        let col_center = tasks::cfg_u16(config, "col_center", default_center)
+            .min(cols.saturating_sub(1) as u16) as u8;
         let row = tasks::cfg_u16(config, "row", 13).min(u8::MAX as u16) as u8;
         let watermark_height = VTX_WATERMARK_LINES.len() as u8;
         let default_watermark_row = rows.saturating_sub(watermark_height);
@@ -331,11 +348,12 @@ impl CuTask for VtxMspResponder {
     where
         Self: Sized,
     {
-        let vbat_scale =
-            tasks::cfg_u32(config, "vbat_scale", BATTERY_VBAT_SCALE_DEFAULT).min(u32::from(u8::MAX)) as u8;
-        let vbat_res_div_val = tasks::cfg_u32(config, "vbat_res_div_val", BATTERY_VBAT_RES_DIV_VAL_DEFAULT)
-            .max(1)
+        let vbat_scale = tasks::cfg_u32(config, "vbat_scale", BATTERY_VBAT_SCALE_DEFAULT)
             .min(u32::from(u8::MAX)) as u8;
+        let vbat_res_div_val =
+            tasks::cfg_u32(config, "vbat_res_div_val", BATTERY_VBAT_RES_DIV_VAL_DEFAULT)
+                .max(1)
+                .min(u32::from(u8::MAX)) as u8;
         let vbat_res_div_mult = tasks::cfg_u32(
             config,
             "vbat_res_div_mult",
