@@ -188,6 +188,6 @@
   logging: (
     slab_size_mib: 16,
     section_size_mib: 4,
-    // enable_task_logging: false,
+    enable_task_logging: false,
   ),
 )
