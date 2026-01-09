@@ -9,7 +9,6 @@ use buddy_system_allocator::LockedHeap as StdHeap;
 use cortex_m::{asm, peripheral::SCB};
 use cortex_m_rt::{ExceptionFrame, entry, exception};
 use cu_micoairh743::{LogStorage, Logger, MicoAirH743Id};
-use cu_sensor_payloads::ImuPayload;
 use cu29::prelude::*;
 use defmt_rtt as _;
 use panic_probe as _;
