@@ -62,6 +62,40 @@ pub use cu29_runtime::rx_channels;
 pub use cu29_runtime::simulation;
 pub use cu29_runtime::tx_channels;
 
+#[cfg(feature = "rtsan")]
+pub mod rtsan {
+    pub use rtsan_standalone::*;
+}
+
+#[cfg(not(feature = "rtsan"))]
+pub mod rtsan {
+    use core::ffi::CStr;
+
+    #[derive(Default)]
+    pub struct ScopedSanitizeRealtime;
+
+    #[derive(Default)]
+    pub struct ScopedDisabler;
+
+    #[inline]
+    pub fn realtime_enter() {}
+
+    #[inline]
+    pub fn realtime_exit() {}
+
+    #[inline]
+    pub fn disable() {}
+
+    #[inline]
+    pub fn enable() {}
+
+    #[inline]
+    pub fn ensure_initialized() {}
+
+    #[allow(unused_variables)]
+    pub fn notify_blocking_call(_function_name: &'static CStr) {}
+}
+
 pub use bincode;
 pub use cu29_clock as clock;
 #[cfg(feature = "defmt")]

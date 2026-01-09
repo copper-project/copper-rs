@@ -7,6 +7,7 @@ fn main() {
     std::fs::write(out_dir.join("memory.x"), memory_x).unwrap();
     println!("cargo:rerun-if-changed=memory.x");
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=copperconfig.ron");
 
     println!(
         "cargo:rustc-env=LOG_INDEX_DIR={}",

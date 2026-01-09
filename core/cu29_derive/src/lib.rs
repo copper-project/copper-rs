@@ -43,6 +43,16 @@ fn return_error(msg: String) -> TokenStream {
         .into()
 }
 
+fn rtsan_guard_tokens() -> proc_macro2::TokenStream {
+    if cfg!(feature = "rtsan") {
+        quote! {
+            let _rt_guard = ::cu29::rtsan::ScopedSanitizeRealtime::default();
+        }
+    } else {
+        quote! {}
+    }
+}
+
 #[proc_macro]
 pub fn resources(input: TokenStream) -> TokenStream {
     resources::resources(input)
@@ -353,6 +363,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
     #[cfg(not(feature = "std"))]
     let std = false;
+
+    let rt_guard = rtsan_guard_tokens();
 
     // Custom parser for the attribute arguments
     let attribute_config_parser = parser(|meta| {
@@ -1058,7 +1070,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         quote! {
                             #call_sim_callback
                             if doit {
-                                if let Err(error) = tasks.#task_index.preprocess(clock) {
+                                let maybe_error = {
+                                    #rt_guard
+                                    tasks.#task_index.preprocess(clock)
+                                };
+                                if let Err(error) = maybe_error {
                                     #monitoring_action
                                 }
                             }
@@ -1106,7 +1122,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         quote! {
                             #call_sim_callback
                             if doit {
-                                if let Err(error) = tasks.#task_index.postprocess(clock) {
+                                let maybe_error = {
+                                    #rt_guard
+                                    tasks.#task_index.postprocess(clock)
+                                };
+                                if let Err(error) = maybe_error {
                                     #monitoring_action
                                 }
                             }
@@ -1191,7 +1211,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 quote! {
                     {
                         let bridge = &mut bridges.#bridge_index;
-                        if let Err(error) = bridge.preprocess(clock) {
+                        let maybe_error = {
+                            #rt_guard
+                            bridge.preprocess(clock)
+                        };
+                        if let Err(error) = maybe_error {
                             let decision = monitor.process_error(#monitor_index, CuTaskState::Preprocess, &error);
                             match decision {
                                 Decision::Abort => {
@@ -1223,7 +1247,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 quote! {
                     {
                         let bridge = &mut bridges.#bridge_index;
-                        if let Err(error) = bridge.postprocess(clock) {
+                        let maybe_error = {
+                            #rt_guard
+                            bridge.postprocess(clock)
+                        };
+                        if let Err(error) = maybe_error {
                             let decision = monitor.process_error(#monitor_index, CuTaskState::Postprocess, &error);
                             match decision {
                                 Decision::Abort => {
@@ -3208,6 +3236,7 @@ fn generate_task_execution_tokens(
     let tid = task_index;
     let task_enum_name = config_id_to_enum(&task_specs.ids[tid]);
     let enum_name = Ident::new(&task_enum_name, Span::call_site());
+    let rt_guard = rtsan_guard_tokens();
 
     match step.task_type {
         CuTaskType::Source => {
@@ -3277,7 +3306,12 @@ fn generate_task_execution_tokens(
                             #call_sim_callback
                             let cumsg_output = &mut msgs.#output_culist_index;
                             cumsg_output.metadata.process_time.start = clock.now().into();
-                            let maybe_error = if doit { #task_instance.process(clock, cumsg_output) } else { Ok(()) };
+                            let maybe_error = if doit {
+                                #rt_guard
+                                #task_instance.process(clock, cumsg_output)
+                            } else {
+                                Ok(())
+                            };
                             cumsg_output.metadata.process_time.end = clock.now().into();
                             if let Err(error) = maybe_error {
                                 #monitoring_action
@@ -3359,7 +3393,12 @@ fn generate_task_execution_tokens(
                             let cumsg_input = &#inputs_type;
                             let cumsg_output = &mut msgs.#output_culist_index;
                             cumsg_output.metadata.process_time.start = clock.now().into();
-                            let maybe_error = if doit { #task_instance.process(clock, cumsg_input) } else { Ok(()) };
+                            let maybe_error = if doit {
+                                #rt_guard
+                                #task_instance.process(clock, cumsg_input)
+                            } else {
+                                Ok(())
+                            };
                             cumsg_output.metadata.process_time.end = clock.now().into();
                             if let Err(error) = maybe_error {
                                 #monitoring_action
@@ -3452,7 +3491,12 @@ fn generate_task_execution_tokens(
                             let cumsg_input = &#inputs_type;
                             let cumsg_output = &mut msgs.#output_culist_index;
                             cumsg_output.metadata.process_time.start = clock.now().into();
-                            let maybe_error = if doit { #task_instance.process(clock, cumsg_input, cumsg_output) } else { Ok(()) };
+                            let maybe_error = if doit {
+                                #rt_guard
+                                #task_instance.process(clock, cumsg_input, cumsg_output)
+                            } else {
+                                Ok(())
+                            };
                             cumsg_output.metadata.process_time.end = clock.now().into();
                             if let Err(error) = maybe_error {
                                 #monitoring_action
@@ -3473,6 +3517,7 @@ fn generate_bridge_rx_execution_tokens(
     channel_index: usize,
     mission_mod: &Ident,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
+    let rt_guard = rtsan_guard_tokens();
     let bridge_tuple_index = int2sliceindex(bridge_spec.tuple_index as u32);
     let channel = &bridge_spec.rx_channels[channel_index];
     let culist_index = channel
@@ -3492,11 +3537,14 @@ fn generate_bridge_rx_execution_tokens(
                 let bridge = &mut bridges.#bridge_tuple_index;
                 let cumsg_output = &mut msgs.#culist_index_ts;
                 cumsg_output.metadata.process_time.start = clock.now().into();
-                let maybe_error = bridge.receive(
-                    clock,
-                    &<#bridge_type as cu29::cubridge::CuBridge>::Rx::#const_ident,
-                    cumsg_output,
-                );
+                let maybe_error = {
+                    #rt_guard
+                    bridge.receive(
+                        clock,
+                        &<#bridge_type as cu29::cubridge::CuBridge>::Rx::#const_ident,
+                        cumsg_output,
+                    )
+                };
                 cumsg_output.metadata.process_time.end = clock.now().into();
                 if let Err(error) = maybe_error {
                     let decision = monitor.process_error(#monitor_index, CuTaskState::Process, &error);
@@ -3530,6 +3578,7 @@ fn generate_bridge_tx_execution_tokens(
     channel_index: usize,
     mission_mod: &Ident,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
+    let rt_guard = rtsan_guard_tokens();
     let channel = &bridge_spec.tx_channels[channel_index];
     let monitor_index = syn::Index::from(
         channel
@@ -3551,11 +3600,15 @@ fn generate_bridge_tx_execution_tokens(
                 let cumsg_input = &mut msgs.#input_index;
                 // Stamp timing so monitors see consistent ranges for bridge Tx as well.
                 cumsg_input.metadata.process_time.start = clock.now().into();
-                if let Err(error) = bridge.send(
-                    clock,
-                    &<#bridge_type as cu29::cubridge::CuBridge>::Tx::#const_ident,
-                    &*cumsg_input,
-                ) {
+                let maybe_error = {
+                    #rt_guard
+                    bridge.send(
+                        clock,
+                        &<#bridge_type as cu29::cubridge::CuBridge>::Tx::#const_ident,
+                        &*cumsg_input,
+                    )
+                };
+                if let Err(error) = maybe_error {
                     let decision = monitor.process_error(#monitor_index, CuTaskState::Process, &error);
                     match decision {
                         Decision::Abort => {

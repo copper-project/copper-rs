@@ -107,11 +107,11 @@ impl<P: BdshotBoardProvider> CuBridge for CuBdshotBridge<P> {
             if ready {
                 break;
             }
-            info!("Waiting for ESCs startup {}...", i);
+            debug!("Waiting for ESCs startup {}...", i);
         }
 
         if !ready {
-            error!("ESC TIMEOUT");
+            error!("Timeout waiting for ESC to start up");
             return Err(CuError::from("Timeout waiting for ESC to start up"));
         }
 

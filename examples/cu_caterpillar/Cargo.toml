@@ -49,3 +49,4 @@ cu-rp-gpio = { path = "../../components/sinks/cu_rp_gpio", version = "0.11.0" }
 [features]
 default = ["mock"]
 mock = ["cu-rp-gpio/mock"]
+rtsan = ["cu29/rtsan"]
