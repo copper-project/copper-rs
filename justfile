@@ -24,6 +24,9 @@ typos:
 ci:
   act -W .github/workflows/general.yml -j Unit-Tests --matrix os:ubuntu-latest --matrix mode:debug -P ubuntu-latest=ghcr.io/catthehacker/ubuntu:act-latest
 
+# Host target detection for cross-platform logreader builds
+host_target := `rustc -vV | sed -n 's/host: //p'`
+
 nostd-ci: lint
 	cargo +stable build --no-default-features
 	cargo +stable nextest run --no-default-features
@@ -31,7 +34,7 @@ nostd-ci: lint
 	python3 support/ci/embedded_crates.py run --action build
 	cd examples/cu_rp2350_skeleton && cargo +stable clippy
 	cd examples/cu_rp2350_skeleton && cargo +stable build-arm
-	cd examples/cu_rp2350_skeleton && cargo +stable build-logreader
+	cd examples/cu_rp2350_skeleton && cargo +stable build --target={{host_target}} --no-default-features --features host --bin blinky-logreader
 
 # Std-specific CI flow (local, CI-aligned). Use mode=release or mode=cuda-release as needed.
 std-ci mode="debug": lint
