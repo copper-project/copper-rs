@@ -206,8 +206,7 @@ where
         let acc_mps2_per_lsb = acc_range_g * 9.806_65 / 32_768.0;
         debug!(
             "bmi088 accel range reg={} -> ±{}g",
-            acc_range_reg,
-            acc_range_g
+            acc_range_reg, acc_range_g
         );
 
         Ok(Self {
