@@ -21,3 +21,6 @@ packed_struct = { version = "0.10.1", default-features = false }
 default = ["std", "bincode"]
 std = ["serde/std", "smallvec/serde", "packed_struct/std"]
 bincode = ["dep:bincode"]
+
+[dev-dependencies]
+serialport = "4.3.0"

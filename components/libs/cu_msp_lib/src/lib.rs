@@ -432,6 +432,10 @@ impl Default for MspParser {
 impl MspPacket {
     /// Number of bytes that this packet requires to be packed
     pub fn packet_size_bytes(&self) -> usize {
+        if self.cmd > u16::from(MSP_V2_FRAME_ID) {
+            return self.packet_size_bytes_v2_over_v1();
+        }
+
         let MspPacketData(data) = &self.data;
         6 + data.len()
     }
@@ -450,6 +454,10 @@ impl MspPacket {
 
     /// Serialize to network bytes
     pub fn serialize(&self, output: &mut [u8]) -> Result<(), MspPacketParseError> {
+        if self.cmd > u16::from(MSP_V2_FRAME_ID) {
+            return self.serialize_v2_over_v1(output);
+        }
+
         let MspPacketData(data) = &self.data;
         let l = output.len();
 
