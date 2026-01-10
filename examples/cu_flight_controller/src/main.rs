@@ -124,23 +124,24 @@ fn build_clock() -> RobotClock {
 
 fn report_last_fault() {
     unsafe {
-        if LAST_HARDFAULT.magic == HARDFAULT_MAGIC {
+        let ptr = core::ptr::addr_of_mut!(LAST_HARDFAULT);
+        if (*ptr).magic == HARDFAULT_MAGIC {
             defmt::error!(
                 "Last HardFault: pc=0x{:x} lr=0x{:x} sp=0x{:x}",
-                LAST_HARDFAULT.pc,
-                LAST_HARDFAULT.lr,
-                LAST_HARDFAULT.sp
+                (*ptr).pc,
+                (*ptr).lr,
+                (*ptr).sp
             );
             defmt::error!(
                 "Last Fault status: CFSR=0x{:x} HFSR=0x{:x} DFSR=0x{:x} MMFAR=0x{:x} BFAR=0x{:x} AFSR=0x{:x}",
-                LAST_HARDFAULT.cfsr,
-                LAST_HARDFAULT.hfsr,
-                LAST_HARDFAULT.dfsr,
-                LAST_HARDFAULT.mmfar,
-                LAST_HARDFAULT.bfar,
-                LAST_HARDFAULT.afsr
+                (*ptr).cfsr,
+                (*ptr).hfsr,
+                (*ptr).dfsr,
+                (*ptr).mmfar,
+                (*ptr).bfar,
+                (*ptr).afsr
             );
-            LAST_HARDFAULT.magic = 0;
+            (*ptr).magic = 0;
         }
     }
 }
