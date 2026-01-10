@@ -454,6 +454,23 @@ pub struct MspAltitude {
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
 #[packed_struct(endian = "lsb")]
+pub struct MspSensorRangefinder {
+    pub quality: u8,
+    pub distance_mm: i32,
+}
+
+#[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
+#[packed_struct(endian = "lsb")]
+pub struct MspSensorOpticFlow {
+    pub quality: u8,
+    pub motion_x: i32,
+    pub motion_y: i32,
+}
+
+#[cfg_attr(feature = "bincode", derive(Decode, Encode))]
+#[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
+#[packed_struct(endian = "lsb")]
 pub struct MspBatteryConfig {
     pub vbat_min_cell_voltage: u8,
     pub vbat_max_cell_voltage: u8,
@@ -1285,6 +1302,8 @@ pub enum MspRequest {
     MspStatus(MspStatus),
     MspStatusEx(MspStatusEx),
     MspDisplayPort(MspDisplayPort),
+    MspSensorRangefinder(MspSensorRangefinder),
+    MspSensorOpticFlow(MspSensorOpticFlow),
 }
 
 impl MspRequest {
@@ -1310,6 +1329,8 @@ impl MspRequest {
             MspRequest::MspStatus(_) => MspCommandCode::MSP_STATUS,
             MspRequest::MspStatusEx(_) => MspCommandCode::MSP_STATUS_EX,
             MspRequest::MspDisplayPort(_) => MspCommandCode::MSP_DISPLAYPORT,
+            MspRequest::MspSensorRangefinder(_) => MspCommandCode::MSP2_SENSOR_RANGEFINDER,
+            MspRequest::MspSensorOpticFlow(_) => MspCommandCode::MSP2_SENSOR_OPTIC_FLOW,
             _ => MspCommandCode::MSP_API_VERSION,
         }
     }
@@ -1334,6 +1355,21 @@ impl MspRequest {
     pub fn from_command_id(cmd: u16) -> Option<Self> {
         let cmd = MspCommandCode::from_primitive(cmd)?;
         Self::from_command_code(cmd)
+    }
+
+    pub fn from_packet(packet: &MspPacket) -> Option<Self> {
+        let cmd = MspCommandCode::from_primitive(packet.cmd)?;
+        match cmd {
+            MspCommandCode::MSP2_SENSOR_RANGEFINDER => packet
+                .decode_as::<MspSensorRangefinder>()
+                .ok()
+                .map(MspRequest::MspSensorRangefinder),
+            MspCommandCode::MSP2_SENSOR_OPTIC_FLOW => packet
+                .decode_as::<MspSensorOpticFlow>()
+                .ok()
+                .map(MspRequest::MspSensorOpticFlow),
+            _ => Self::from_command_code(cmd),
+        }
     }
 }
 
@@ -1463,6 +1499,22 @@ impl From<MspRequest> for MspPacket {
                 cmd: MspCommandCode::MSP_DISPLAYPORT.to_primitive(),
                 direction: FromFlightController,
                 data: MspPacketData::from(displayport.as_bytes()),
+            },
+            MspRequest::MspSensorRangefinder(data) => MspPacket {
+                cmd: MspCommandCode::MSP2_SENSOR_RANGEFINDER.to_primitive(),
+                direction: ToFlightController,
+                data: data.pack().map_or_else(
+                    |_| MspPacketData::new(),
+                    |packed| MspPacketData::from(packed.as_slice()),
+                ),
+            },
+            MspRequest::MspSensorOpticFlow(data) => MspPacket {
+                cmd: MspCommandCode::MSP2_SENSOR_OPTIC_FLOW.to_primitive(),
+                direction: ToFlightController,
+                data: data.pack().map_or_else(
+                    |_| MspPacketData::new(),
+                    |packed| MspPacketData::from(packed.as_slice()),
+                ),
             },
             _ => MspPacket {
                 cmd: MspCommandCode::MSP_API_VERSION.to_primitive(),
@@ -1596,6 +1648,22 @@ impl From<&MspRequest> for MspPacket {
                 cmd: MspCommandCode::MSP_DISPLAYPORT.to_primitive(),
                 direction: FromFlightController,
                 data: MspPacketData::from(displayport.as_bytes()),
+            },
+            MspRequest::MspSensorRangefinder(data) => MspPacket {
+                cmd: MspCommandCode::MSP2_SENSOR_RANGEFINDER.to_primitive(),
+                direction: ToFlightController,
+                data: data.pack().map_or_else(
+                    |_| MspPacketData::new(),
+                    |packed| MspPacketData::from(packed.as_slice()),
+                ),
+            },
+            MspRequest::MspSensorOpticFlow(data) => MspPacket {
+                cmd: MspCommandCode::MSP2_SENSOR_OPTIC_FLOW.to_primitive(),
+                direction: ToFlightController,
+                data: data.pack().map_or_else(
+                    |_| MspPacketData::new(),
+                    |packed| MspPacketData::from(packed.as_slice()),
+                ),
             },
             _ => MspPacket {
                 cmd: MspCommandCode::MSP_API_VERSION.to_primitive(),

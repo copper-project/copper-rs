@@ -193,7 +193,7 @@ where
                             Ok(Some(packet)) => {
                                 if packet.direction == MspPacketDirection::ToFlightController {
                                     // This is an incoming request from the VTX
-                                    if let Some(request) = MspRequest::from_command_id(packet.cmd) {
+                                    if let Some(request) = MspRequest::from_packet(&packet) {
                                         self.pending_requests.push(request);
                                     }
                                 } else {
