@@ -1,5 +1,4 @@
 use super::*;
-use crate::debug_rl;
 
 resources!({
     battery_adc => Owned<cu_micoairh743::BatteryAdc>,
@@ -63,15 +62,6 @@ impl CuSrcTask for BatteryAdcSource {
 
         output.set_payload(BatteryVoltage { centivolts });
         output.tov = Tov::Time(now);
-        debug_rl!(
-            &LOG_TELEMETRY,
-            now,
-            "vbat adc raw={} slope={} vref_mv={} centivolts={}",
-            raw,
-            slope,
-            self.vref_mv,
-            centivolts
-        );
         Ok(())
     }
 }

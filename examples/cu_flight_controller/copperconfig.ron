@@ -113,6 +113,11 @@
             logging: (enabled: false),
             config: { "cols": 53, "row": 13, "col_center": 26 },
         ),
+        (
+            id: "flow_logger",
+            type: "tasks::flow_msp::FlowMspLogger",
+            logging: (enabled: false),
+        ),
     ],
 
     bridges: [
@@ -131,6 +136,17 @@
            type: "cu_msp_bridge::CuMspBridge<cu_micoairh743::Uart2Port, cu_micoairh743::SerialPortError>",
            logging: (enabled: false),
            resources: { "serial": "fc.uart2" },
+           channels: [
+                Tx ( id: "requests" ),
+                Rx ( id: "responses" ),
+                Rx ( id: "incoming" ),
+           ],
+        ),
+        (
+           id: "flow_msp",
+           type: "cu_msp_bridge::CuMspBridge<cu_micoairh743::Uart4Port, cu_micoairh743::SerialPortError>",
+           logging: (enabled: false),
+           resources: { "serial": "fc.uart4" },
            channels: [
                 Tx ( id: "requests" ),
                 Rx ( id: "responses" ),
@@ -181,6 +197,7 @@
         (src: "battery_adc", dst: "vtx_osd", msg: "crate::messages::BatteryVoltage"),
         (src: "vtx_msp/incoming", dst: "vtx_osd", msg: "cu_msp_bridge::MspRequestBatch"),
         (src: "vtx_osd", dst: "vtx_msp/requests", msg: "cu_msp_bridge::MspRequestBatch"),
+        (src: "flow_msp/incoming", dst: "flow_logger", msg: "cu_msp_bridge::MspRequestBatch"),
     ],
     monitor: (
          type: "cu_logmon::CuLogMon",
