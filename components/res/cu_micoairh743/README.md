@@ -4,7 +4,7 @@ Resource bundle for the MicoAir H743 flight controller board.
 
 ## What it provides
 
-- UART6 (`Uart6Port`) and UART2 (`Uart2Port`) with overrun logging
+- UART6 (`Uart6Port`), UART2 (`Uart2Port`), and UART4 (`Uart4Port`) with overrun logging
 - `SerialPortError` for embedded-io bridge error types
 - `GreenLed`
 - SDMMC logger (`Logger` + `LogStorage`, Copper partition)
@@ -40,3 +40,5 @@ The CRSF and MSP bridges in `copperconfig.ron` use the provided aliases:
     type: "cu_msp_bridge::CuMspBridge<cu_micoairh743::Uart2Port, cu_micoairh743::SerialPortError>",
 ),
 ```
+
+UART2 and UART4 default to 115200 baud (override with `uart2_baud` / `uart4_baud` in config).

@@ -27,6 +27,7 @@ use stm32h7xx_hal::{
 const UART_OVERRUN_LOG_PERIOD_SECS: u32 = 1;
 const UART6_BAUD: u32 = 420_000;
 const UART2_BAUD: u32 = 115_200;
+const UART4_BAUD: u32 = 115_200;
 
 pub type SerialPortError = embedded_io::ErrorKind;
 
@@ -126,10 +127,12 @@ macro_rules! impl_serial_wrapper_io {
 
 impl_serial_wrapper_io!(pac::USART6);
 impl_serial_wrapper_io!(pac::USART2);
+impl_serial_wrapper_io!(pac::UART4);
 
 // Resource type aliases exposed by the bundle.
 pub type Uart6Port = SerialWrapper<pac::USART6>;
 pub type Uart2Port = SerialWrapper<pac::USART2>;
+pub type Uart4Port = SerialWrapper<pac::UART4>;
 
 /// Wraps HAL types that are only used from the single-threaded runtime.
 pub struct SingleThreaded<T>(T);
@@ -261,7 +264,7 @@ fn init_sd_logger(
 pub struct MicoAirH743;
 
 bundle_resources!(
-    MicoAirH743: Uart6, Uart2, GreenLed, Logger, Bmi088Spi, Bmi088AccCs, Bmi088GyrCs, Bmi088Delay, BatteryAdc
+    MicoAirH743: Uart6, Uart2, Uart4, GreenLed, Logger, Bmi088Spi, Bmi088AccCs, Bmi088GyrCs, Bmi088Delay, BatteryAdc
 );
 
 impl ResourceBundle for MicoAirH743 {
@@ -348,6 +351,23 @@ impl ResourceBundle for MicoAirH743 {
             overrun_period_cycles,
         );
 
+        let uart4_baud = _config
+            .and_then(|cfg| cfg.get::<u32>("uart4_baud"))
+            .unwrap_or(UART4_BAUD);
+        let uart4_config = Config::default().baudrate(uart4_baud.bps());
+        let uart4 = SerialWrapper::new(
+            dp.UART4
+                .serial(
+                    (gpioa.pa0.into_alternate(), gpioa.pa1.into_alternate()),
+                    uart4_config,
+                    ccdr.peripheral.UART4,
+                    &ccdr.clocks,
+                )
+                .map_err(|_| CuError::from("uart4 init failed"))?,
+            "UART4",
+            overrun_period_cycles,
+        );
+
         let logger = init_sd_logger(
             dp.SDMMC1,
             sdmmc1_rec,
@@ -401,6 +421,7 @@ impl ResourceBundle for MicoAirH743 {
 
         let uart6_key = bundle.key(MicoAirH743Id::Uart6);
         let uart2_key = bundle.key(MicoAirH743Id::Uart2);
+        let uart4_key = bundle.key(MicoAirH743Id::Uart4);
         let led_key = bundle.key(MicoAirH743Id::GreenLed);
         let logger_key = bundle.key(MicoAirH743Id::Logger);
         let bmi088_spi_key = bundle.key(MicoAirH743Id::Bmi088Spi);
@@ -411,6 +432,7 @@ impl ResourceBundle for MicoAirH743 {
 
         manager.add_owned(uart6_key, uart6)?;
         manager.add_owned(uart2_key, uart2)?;
+        manager.add_owned(uart4_key, uart4)?;
         manager.add_owned(led_key, Mutex::new(green_led))?;
         manager.add_owned(logger_key, logger)?;
         manager.add_owned(bmi088_spi_key, bmi088_spi)?;
