@@ -186,6 +186,9 @@ pub enum MspCommandCode {
 
     MSP2_INAV_SERVO_MIXER = 0x2020,
     MSP2_INAV_SET_SERVO_MIXER = 0x2021,
+
+    MSP2_SENSOR_RANGEFINDER = 0x1F01,
+    MSP2_SENSOR_OPTIC_FLOW = 0x1F02,
 }
 
 impl MspCommandCode {
