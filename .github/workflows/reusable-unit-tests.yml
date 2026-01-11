@@ -161,7 +161,7 @@ jobs:
         if: runner.os != 'macOS' && matrix.mode == 'cuda-release'
         with:
           cuda: 12.6.1
-          log-file-suffix: '${{ matrix.os }}-${{ matrix.mode }}-cuda.txt'
+          log-file-suffix: 'clippy-${{ matrix.os }}-${{ matrix.mode }}.txt'
           use-github-cache: false
           use-local-cache: false
 
@@ -369,7 +369,7 @@ jobs:
         if: runner.os != 'macOS' && matrix.mode == 'cuda-release'
         with:
           cuda: 12.6.1
-          log-file-suffix: '${{ matrix.os }}-${{ matrix.mode }}-cuda.txt'
+          log-file-suffix: 'build-${{ matrix.os }}-${{ matrix.mode }}.txt'
           use-github-cache: false
           use-local-cache: false
 
@@ -575,7 +575,7 @@ jobs:
         if: runner.os != 'macOS' && matrix.mode == 'cuda-release'
         with:
           cuda: 12.6.1
-          log-file-suffix: '${{ matrix.os }}-${{ matrix.mode }}-cuda.txt'
+          log-file-suffix: 'tests-${{ matrix.os }}-${{ matrix.mode }}.txt'
           use-github-cache: false
           use-local-cache: false
 
