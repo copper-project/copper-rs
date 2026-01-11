@@ -162,9 +162,30 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Free Disk Space (Ubuntu)
+        if: runner.os == 'Linux'
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: true
+
       - name: Configure CARGO_TARGET_DIR
         if: inputs.cargo_target_dir != ''
         run: echo "CARGO_TARGET_DIR=${{ inputs.cargo_target_dir }}" >> $GITHUB_ENV
+
+      - name: Linux-only Cargo paths
+        if: runner.os == 'Linux' && inputs.linux_cargo_paths
+        run: |
+          echo "CARGO_TARGET_DIR=/mnt/cargo-target" >> $GITHUB_ENV
+          echo "CARGO_HOME=/mnt/cargo-home" >> $GITHUB_ENV
+          echo "TMPDIR=/mnt/tmp" >> $GITHUB_ENV
+          sudo mkdir -p /mnt/cargo-home /mnt/cargo-target /mnt/tmp
+          sudo chown -R "$USER:$USER" /mnt/cargo-home /mnt/cargo-target /mnt/tmp
 
       - uses: dtolnay/rust-toolchain@master
         with:
@@ -179,15 +200,6 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/master' }}
           cache-targets: "false"
           cache-bin: "false"
-
-      - name: Linux-only Cargo paths
-        if: runner.os == 'Linux' && inputs.linux_cargo_paths
-        run: |
-          echo "CARGO_TARGET_DIR=/mnt/cargo-target" >> $GITHUB_ENV
-          echo "CARGO_HOME=/mnt/cargo-home" >> $GITHUB_ENV
-          echo "TMPDIR=/mnt/tmp" >> $GITHUB_ENV
-          sudo mkdir -p /mnt/cargo-home /mnt/cargo-target /mnt/tmp
-          sudo chown -R "$USER:$USER" /mnt/cargo-home /mnt/cargo-target /mnt/tmp
 
       - name: Cache apt packages (Linux)
         if: runner.os == 'Linux'
@@ -341,9 +353,30 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Free Disk Space (Ubuntu)
+        if: runner.os == 'Linux'
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: true
+
       - name: Configure CARGO_TARGET_DIR
         if: inputs.cargo_target_dir != ''
         run: echo "CARGO_TARGET_DIR=${{ inputs.cargo_target_dir }}" >> $GITHUB_ENV
+
+      - name: Linux-only Cargo paths
+        if: runner.os == 'Linux' && inputs.linux_cargo_paths
+        run: |
+          echo "CARGO_TARGET_DIR=/mnt/cargo-target" >> $GITHUB_ENV
+          echo "CARGO_HOME=/mnt/cargo-home" >> $GITHUB_ENV
+          echo "TMPDIR=/mnt/tmp" >> $GITHUB_ENV
+          sudo mkdir -p /mnt/cargo-home /mnt/cargo-target /mnt/tmp
+          sudo chown -R "$USER:$USER" /mnt/cargo-home /mnt/cargo-target /mnt/tmp
 
       - uses: dtolnay/rust-toolchain@master
         with:
@@ -358,15 +391,6 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/master' }}
           cache-targets: "false"
           cache-bin: "false"
-
-      - name: Linux-only Cargo paths
-        if: runner.os == 'Linux' && inputs.linux_cargo_paths
-        run: |
-          echo "CARGO_TARGET_DIR=/mnt/cargo-target" >> $GITHUB_ENV
-          echo "CARGO_HOME=/mnt/cargo-home" >> $GITHUB_ENV
-          echo "TMPDIR=/mnt/tmp" >> $GITHUB_ENV
-          sudo mkdir -p /mnt/cargo-home /mnt/cargo-target /mnt/tmp
-          sudo chown -R "$USER:$USER" /mnt/cargo-home /mnt/cargo-target /mnt/tmp
 
       - name: Cache apt packages (Linux)
         if: runner.os == 'Linux'
@@ -549,9 +573,30 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Free Disk Space (Ubuntu)
+        if: runner.os == 'Linux'
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: true
+
       - name: Configure CARGO_TARGET_DIR
         if: inputs.cargo_target_dir != ''
         run: echo "CARGO_TARGET_DIR=${{ inputs.cargo_target_dir }}" >> $GITHUB_ENV
+
+      - name: Linux-only Cargo paths
+        if: runner.os == 'Linux' && inputs.linux_cargo_paths
+        run: |
+          echo "CARGO_TARGET_DIR=/mnt/cargo-target" >> $GITHUB_ENV
+          echo "CARGO_HOME=/mnt/cargo-home" >> $GITHUB_ENV
+          echo "TMPDIR=/mnt/tmp" >> $GITHUB_ENV
+          sudo mkdir -p /mnt/cargo-home /mnt/cargo-target /mnt/tmp
+          sudo chown -R "$USER:$USER" /mnt/cargo-home /mnt/cargo-target /mnt/tmp
 
       - uses: dtolnay/rust-toolchain@master
         with:
@@ -569,15 +614,6 @@ jobs:
 
       - name: Install latest nextest
         uses: taiki-e/install-action@nextest
-
-      - name: Linux-only Cargo paths
-        if: runner.os == 'Linux' && inputs.linux_cargo_paths
-        run: |
-          echo "CARGO_TARGET_DIR=/mnt/cargo-target" >> $GITHUB_ENV
-          echo "CARGO_HOME=/mnt/cargo-home" >> $GITHUB_ENV
-          echo "TMPDIR=/mnt/tmp" >> $GITHUB_ENV
-          sudo mkdir -p /mnt/cargo-home /mnt/cargo-target /mnt/tmp
-          sudo chown -R "$USER:$USER" /mnt/cargo-home /mnt/cargo-target /mnt/tmp
 
       - name: Cache apt packages (Linux)
         if: runner.os == 'Linux'
@@ -726,9 +762,30 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Free Disk Space (Ubuntu)
+        if: runner.os == 'Linux'
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: true
+
       - name: Configure CARGO_TARGET_DIR
         if: inputs.cargo_target_dir != ''
         run: echo "CARGO_TARGET_DIR=${{ inputs.cargo_target_dir }}" >> $GITHUB_ENV
+
+      - name: Linux-only Cargo paths
+        if: runner.os == 'Linux' && inputs.linux_cargo_paths
+        run: |
+          echo "CARGO_TARGET_DIR=/mnt/cargo-target" >> $GITHUB_ENV
+          echo "CARGO_HOME=/mnt/cargo-home" >> $GITHUB_ENV
+          echo "TMPDIR=/mnt/tmp" >> $GITHUB_ENV
+          sudo mkdir -p /mnt/cargo-home /mnt/cargo-target /mnt/tmp
+          sudo chown -R "$USER:$USER" /mnt/cargo-home /mnt/cargo-target /mnt/tmp
 
       - uses: dtolnay/rust-toolchain@master
         with:
@@ -743,15 +800,6 @@ jobs:
           save-if: false
           cache-targets: "false"
           cache-bin: "false"
-
-      - name: Linux-only Cargo paths
-        if: runner.os == 'Linux' && inputs.linux_cargo_paths
-        run: |
-          echo "CARGO_TARGET_DIR=/mnt/cargo-target" >> $GITHUB_ENV
-          echo "CARGO_HOME=/mnt/cargo-home" >> $GITHUB_ENV
-          echo "TMPDIR=/mnt/tmp" >> $GITHUB_ENV
-          sudo mkdir -p /mnt/cargo-home /mnt/cargo-target /mnt/tmp
-          sudo chown -R "$USER:$USER" /mnt/cargo-home /mnt/cargo-target /mnt/tmp
 
       - name: Cache apt packages (Linux)
         if: runner.os == 'Linux'
