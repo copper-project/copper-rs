@@ -64,22 +64,25 @@ jobs:
           docker-images: true
           swap-storage: true
 
-      - name: Install winget
-        if: runner.os == 'Windows'
-        uses: Cyberboss/install-winget@v1
-
-      - name: Install dependencies (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
-              Write-Host "winget is not installed or available."
-              exit 1
-          }
-          Invoke-WebRequest -Uri https://npcap.com/dist/npcap-sdk-1.13.zip -OutFile npcap-sdk.zip
-          Expand-Archive -Path npcap-sdk.zip -DestinationPath $env:USERPROFILE\npcap-sdk
-          Remove-Item npcap-sdk.zip
-          winget install DaiyuuNobori.Win10Pcap --accept-source-agreements --accept-package-agreements
+      # TODO: Investigate winget installation failure (HRESULT: 0x80073D02)
+      # Windows dependencies are only needed for workspace scope, but Windows uses 'core' scope.
+      # Commenting out for now - these are handled in clippy/build/tests jobs with proper WORKSPACE_SCOPE check.
+      # - name: Install winget
+      #   if: runner.os == 'Windows'
+      #   uses: Cyberboss/install-winget@v1
+      #
+      # - name: Install dependencies (Windows)
+      #   if: runner.os == 'Windows'
+      #   shell: pwsh
+      #   run: |
+      #     if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
+      #         Write-Host "winget is not installed or available."
+      #         exit 1
+      #     }
+      #     Invoke-WebRequest -Uri https://npcap.com/dist/npcap-sdk-1.13.zip -OutFile npcap-sdk.zip
+      #     Expand-Archive -Path npcap-sdk.zip -DestinationPath $env:USERPROFILE\npcap-sdk
+      #     Remove-Item npcap-sdk.zip
+      #     winget install DaiyuuNobori.Win10Pcap --accept-source-agreements --accept-package-agreements
 
       - name: Cache apt packages (Linux)
         if: runner.os == 'Linux'
