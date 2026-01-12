@@ -64,6 +64,12 @@ macro_rules! input_msg {
 // A convenience macro to get from a payload to a proper CuMsg used as output.
 #[macro_export]
 macro_rules! output_msg {
+    ($lt:lifetime, $first:ty, $($rest:ty),+) => {
+        ( CuMsg<$first>, $( CuMsg<$rest> ),+ )
+    };
+    ($first:ty, $($rest:ty),+) => {
+        ( CuMsg<$first>, $( CuMsg<$rest> ),+ )
+    };
     ($ty:ty) => {
         CuMsg<$ty>
     };

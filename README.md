@@ -200,7 +200,6 @@ impl CuSrcTask for FlippingSource {
     }
 }
 
-
 fn main() {
 
     // Copper uses a special log format called "unified logger" that is optimized for writing. It stores the messages between tasks 
