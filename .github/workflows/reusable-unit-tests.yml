@@ -15,16 +15,9 @@ on:
         type: boolean
         default: false
 
-env:
-  CARGO_TERM_COLOR: always
-  BASE_FEATURES: mock,image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
-
 jobs:
-  # ===========================================================================
-  # Clippy - Fast feedback with fail-fast (per OS x mode)
-  # ===========================================================================
-  clippy:
-    name: Clippy (${{ matrix.os }} | ${{ matrix.mode }})
+  unit:
+    name: Unit Checks / ${{ matrix.task }} (${{ matrix.os }}, ${{ matrix.mode }})
     runs-on: ${{ matrix.os }}
 
     defaults:
@@ -32,136 +25,46 @@ jobs:
         shell: bash
 
     env:
+      CARGO_TERM_COLOR: always
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+      BASE_FEATURES: mock,image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: ${{ matrix.os == 'windows-latest' && 'core' || 'workspace' }}
 
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        mode: [debug, release]
-        include:
-          - os: ubuntu-latest
+        os: [ ubuntu-latest, macos-latest, windows-latest ]
+        mode: [ debug, release, cuda-release ]
+        task: [ clippy, build, test ]
+        exclude:
+          - os: macos-latest
+            mode: cuda-release
+          - os: windows-latest
             mode: cuda-release
 
     steps:
       - uses: actions/checkout@v6
-
-      - name: Free Disk Space (Ubuntu)
-        if: runner.os == 'Linux'
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: false
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: false
-          docker-images: true
-          swap-storage: true
-
       - name: Configure CARGO_TARGET_DIR
         if: inputs.cargo_target_dir != ''
         run: echo "CARGO_TARGET_DIR=${{ inputs.cargo_target_dir }}" >> $GITHUB_ENV
-
-      - name: Linux-only Cargo paths
-        if: runner.os == 'Linux' && inputs.linux_cargo_paths
-        run: |
-          echo "CARGO_TARGET_DIR=/mnt/cargo-target" >> $GITHUB_ENV
-          echo "CARGO_HOME=/mnt/cargo-home" >> $GITHUB_ENV
-          echo "TMPDIR=/mnt/tmp" >> $GITHUB_ENV
-          sudo mkdir -p /mnt/cargo-home /mnt/cargo-target /mnt/tmp
-          sudo chown -R "$USER:$USER" /mnt/cargo-home /mnt/cargo-target /mnt/tmp
-
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ inputs.toolchain }}
           components: rustc,cargo,rust-std,rustfmt,clippy
-
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.9
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: clippy-${{ matrix.mode }}
+          prefix-key: ${{ matrix.mode }}
           shared-key: rust-${{ matrix.os }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
           cache-targets: "false"
           cache-bin: "false"
-
-      - name: Cache apt packages (Linux)
-        if: runner.os == 'Linux'
-        uses: actions/cache@v5
-        with:
-          path: /var/cache/apt/archives
-          key: ${{ runner.os }}-apt-gstreamer-${{ hashFiles('.github/workflows/reusable-unit-tests.yml') }}
-
-      - name: Install dependencies (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            pkg-config \
-            libudev-dev \
-            libpcap-dev \
-            libglib2.0-dev \
-            clang \
-            libclang-dev \
-            libgstreamer1.0-dev \
-            libgstreamer-plugins-base1.0-dev \
-            libgstreamer-plugins-bad1.0-dev \
-            gstreamer1.0-plugins-base \
-            gstreamer1.0-plugins-good \
-            gstreamer1.0-plugins-bad \
-            gstreamer1.0-plugins-ugly \
-            gstreamer1.0-libav \
-            gstreamer1.0-tools \
-            gstreamer1.0-x \
-            gstreamer1.0-alsa \
-            gstreamer1.0-gl \
-            gstreamer1.0-gtk3 \
-            gstreamer1.0-qt5 \
-            gstreamer1.0-pulseaudio
-
-      - name: Install GStreamer (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew update
-          brew install \
-            gstreamer \
-            gst-plugins-base \
-            gst-plugins-good \
-            gst-plugins-bad \
-            gst-plugins-ugly \
-            gst-libav \
-            gst-plugins-rs \
-            gtk+3 \
-            qt@5
-          echo "DYLD_LIBRARY_PATH=/opt/homebrew/opt/gstreamer/lib:/usr/local/opt/gstreamer/lib:$DYLD_LIBRARY_PATH" >> $GITHUB_ENV
-          echo "PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig:/opt/homebrew/opt/gstreamer/lib/pkgconfig:$(brew --prefix qt@5)/lib/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
-
-      - name: Install winget
-        if: runner.os == 'Windows' && env.WORKSPACE_SCOPE == 'workspace'
-        uses: Cyberboss/install-winget@v1
-
-      - name: Install dependencies (Windows)
-        if: runner.os == 'Windows' && env.WORKSPACE_SCOPE == 'workspace'
-        shell: pwsh
-        run: |
-          if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
-              Write-Host "winget is not installed or available."
-              exit 1
-          }
-          Invoke-WebRequest -Uri https://npcap.com/dist/npcap-sdk-1.13.zip -OutFile npcap-sdk.zip
-          Expand-Archive -Path npcap-sdk.zip -DestinationPath $env:USERPROFILE\npcap-sdk
-          Remove-Item npcap-sdk.zip
-          winget install DaiyuuNobori.Win10Pcap --accept-source-agreements --accept-package-agreements
-          echo "LIB=$env:USERPROFILE\npcap-sdk\Lib\x64" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
-
-      - name: Install CUDA
-        uses: Jimver/cuda-toolkit@v0.2.30
-        if: runner.os != 'macOS' && matrix.mode == 'cuda-release'
-        with:
-          cuda: 12.6.1
-          log-file-suffix: 'clippy-${{ matrix.os }}-${{ matrix.mode }}.txt'
-          use-github-cache: false
-          use-local-cache: false
+      - name: Install latest nextest
+        if: matrix.task == 'test'
+        uses: taiki-e/install-action@nextest
 
       - name: Set workspace scope
         run: |
@@ -171,85 +74,24 @@ jobs:
             echo "WORKSPACE_FLAG=" >> $GITHUB_ENV
           fi
 
-      - name: Set build mode
-        if: matrix.mode == 'release' || matrix.mode == 'cuda-release'
-        run: echo "RELEASE_FLAG=--release" >> $GITHUB_ENV
-
-      - name: Set features (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          if [[ '${{ matrix.mode }}' == 'cuda-release' ]]; then
-            echo "FEATURES_FLAG=--features $BASE_FEATURES,python,cuda" >> $GITHUB_ENV
-          else
-            echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
-          fi
-
-      - name: Set features (MacOS)
-        if: runner.os == 'macOS'
-        run: |
-          if [[ '${{ matrix.mode }}' == 'cuda-release' ]]; then
-            echo "FEATURES_FLAG=--features $BASE_FEATURES,cuda" >> $GITHUB_ENV
-          else
-            echo "FEATURES_FLAG=--features $BASE_FEATURES" >> $GITHUB_ENV
-          fi
-
-      - name: Set features (Windows)
-        if: runner.os == 'Windows'
-        run: echo "FEATURES_FLAG=" >> $GITHUB_ENV
-
-      - name: Detect embedded-only crates
-        if: env.WORKSPACE_SCOPE == 'workspace'
-        run: |
-          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
-          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
-
-      - name: Run clippy (${{ matrix.os }} | ${{ matrix.mode }})
-        run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $EMBEDDED_EXCLUDES -- --deny warnings
-
-      - name: Run clippy with all features (${{ matrix.os }} | ${{ matrix.mode }})
-        run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES -- --deny warnings
-
-  # ===========================================================================
-  # Phase 3: Build - Full build with all features (per OS x mode)
-  # ===========================================================================
-  build:
-    name: Build (${{ matrix.os }} | ${{ matrix.mode }})
-    needs: clippy
-    runs-on: ${{ matrix.os }}
-
-    defaults:
-      run:
-        shell: bash
-
-    env:
-      WORKSPACE_SCOPE: ${{ matrix.os == 'windows-latest' && 'core' || 'workspace' }}
-
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        mode: [debug, release]
-        include:
-          - os: ubuntu-latest
-            mode: cuda-release
-
-    steps:
-      - uses: actions/checkout@v6
+      - name: Install winget
+        if: runner.os == 'Windows' && env.WORKSPACE_SCOPE == 'workspace'
+        uses: Cyberboss/install-winget@v1
 
       - name: Free Disk Space (Ubuntu)
         if: runner.os == 'Linux'
         uses: jlumbroso/free-disk-space@main
         with:
+          # this might remove tools that are actually needed,
+          # if set to "true" but frees about 6 GB
           tool-cache: false
           android: true
           dotnet: true
           haskell: true
+          # do not remove large-packages, as it is necessary
           large-packages: false
           docker-images: true
           swap-storage: true
-
-      - name: Configure CARGO_TARGET_DIR
-        if: inputs.cargo_target_dir != ''
-        run: echo "CARGO_TARGET_DIR=${{ inputs.cargo_target_dir }}" >> $GITHUB_ENV
 
       - name: Linux-only Cargo paths
         if: runner.os == 'Linux' && inputs.linux_cargo_paths
@@ -260,19 +102,26 @@ jobs:
           sudo mkdir -p /mnt/cargo-home /mnt/cargo-target /mnt/tmp
           sudo chown -R "$USER:$USER" /mnt/cargo-home /mnt/cargo-target /mnt/tmp
 
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ inputs.toolchain }}
-          components: rustc,cargo,rust-std,rustfmt,clippy
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows' && env.WORKSPACE_SCOPE == 'workspace'
+        shell: pwsh
+        run: |
+          # Verify winget availability
+          if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
+              Write-Host "winget is not installed or available."
+              exit 1
+          }
 
-      - name: Setup rust-cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: build-${{ matrix.mode }}
-          shared-key: rust-${{ matrix.os }}
-          save-if: ${{ github.ref == 'refs/heads/master' }}
-          cache-targets: "false"
-          cache-bin: "false"
+          # Install PCAP SDK
+          Invoke-WebRequest -Uri https://npcap.com/dist/npcap-sdk-1.13.zip -OutFile npcap-sdk.zip
+          Expand-Archive -Path npcap-sdk.zip -DestinationPath $env:USERPROFILE\npcap-sdk
+          Remove-Item npcap-sdk.zip
+
+          # Install Win10Pcap (if winget is available)
+          winget install DaiyuuNobori.Win10Pcap --accept-source-agreements --accept-package-agreements
+
+          # Set PCAP library path
+          echo "LIB=$env:USERPROFILE\npcap-sdk\Lib\x64" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
 
       - name: Cache apt packages (Linux)
         if: runner.os == 'Linux'
@@ -330,6 +179,7 @@ jobs:
         run: |
           echo "Checking GStreamer version..."
           pkg-config --modversion gstreamer-1.0 || { echo "GStreamer not found!"; }
+
           echo "Checking GStreamer library path..."
           if [[ -d "/opt/homebrew/opt/gstreamer/lib" ]]; then
             echo "GStreamer is installed at /opt/homebrew/opt/gstreamer/lib"
@@ -337,45 +187,21 @@ jobs:
           else
             echo "GStreamer libraries missing!"
           fi
+
           echo "Checking PKG_CONFIG_PATH..."
           echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
+
           echo "Checking DYLD_LIBRARY_PATH..."
           echo "DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH"
-
-      - name: Install winget
-        if: runner.os == 'Windows' && env.WORKSPACE_SCOPE == 'workspace'
-        uses: Cyberboss/install-winget@v1
-
-      - name: Install dependencies (Windows)
-        if: runner.os == 'Windows' && env.WORKSPACE_SCOPE == 'workspace'
-        shell: pwsh
-        run: |
-          if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
-              Write-Host "winget is not installed or available."
-              exit 1
-          }
-          Invoke-WebRequest -Uri https://npcap.com/dist/npcap-sdk-1.13.zip -OutFile npcap-sdk.zip
-          Expand-Archive -Path npcap-sdk.zip -DestinationPath $env:USERPROFILE\npcap-sdk
-          Remove-Item npcap-sdk.zip
-          winget install DaiyuuNobori.Win10Pcap --accept-source-agreements --accept-package-agreements
-          echo "LIB=$env:USERPROFILE\npcap-sdk\Lib\x64" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
 
       - name: Install CUDA
         uses: Jimver/cuda-toolkit@v0.2.30
         if: runner.os != 'macOS' && matrix.mode == 'cuda-release'
         with:
           cuda: 12.6.1
-          log-file-suffix: 'build-${{ matrix.os }}-${{ matrix.mode }}.txt'
+          log-file-suffix: '${{ matrix.os }}-${{ matrix.mode }}-cuda.txt'
           use-github-cache: false
           use-local-cache: false
-
-      - name: Set workspace scope
-        run: |
-          if [[ "$WORKSPACE_SCOPE" == "workspace" ]]; then
-            echo "WORKSPACE_FLAG=--workspace" >> $GITHUB_ENV
-          else
-            echo "WORKSPACE_FLAG=" >> $GITHUB_ENV
-          fi
 
       - name: Set build mode
         if: matrix.mode == 'release' || matrix.mode == 'cuda-release'
@@ -401,7 +227,8 @@ jobs:
 
       - name: Set features (Windows)
         if: runner.os == 'Windows'
-        run: echo "FEATURES_FLAG=" >> $GITHUB_ENV
+        run: |
+          echo "FEATURES_FLAG=" >> $GITHUB_ENV
 
       - name: Detect embedded-only crates
         if: env.WORKSPACE_SCOPE == 'workspace'
@@ -409,29 +236,24 @@ jobs:
           EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
 
-      - name: Build with all features (${{ matrix.os }} | ${{ matrix.mode }})
+      - name: Run clippy on (${{ matrix.os }} | ${{ matrix.mode }})
+        if: matrix.task == 'clippy'
+        run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $EMBEDDED_EXCLUDES -- --deny warnings
+      - name: Run clippy with all features on (${{ matrix.os }} | ${{ matrix.mode }})
+        if: matrix.task == 'clippy'
+        run: cargo +${{ inputs.toolchain }} clippy $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES -- --deny warnings
+      - name: Run build with all features on (${{ matrix.os }} | ${{ matrix.mode }})
+        if: matrix.task == 'build'
         run: cargo +${{ inputs.toolchain }} build $RELEASE_FLAG $WORKSPACE_FLAG --all-targets $FEATURES_FLAG $EMBEDDED_EXCLUDES
+      - name: Run doctests on (${{ matrix.os }} | debug)
+        if: matrix.task == 'test' && matrix.mode == 'debug'
+        run: cargo +${{ inputs.toolchain }} test --doc $WORKSPACE_FLAG $EMBEDDED_EXCLUDES --quiet
+      - name: Run Unit Tests on (${{ matrix.os }} | ${{ matrix.mode }})
+        if: matrix.task == 'test'
+        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $EMBEDDED_EXCLUDES
 
-      - name: Verify GStreamer linkage (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          TARGET_DIR=target/debug
-          if [[ "$RELEASE_FLAG" == "--release" ]]; then
-            TARGET_DIR=target/release
-          fi
-          echo "Checking linked libraries in $TARGET_DIR..."
-          if ls "$TARGET_DIR"/deps/cu_gstreamer-* 1> /dev/null 2>&1; then
-            otool -L "$TARGET_DIR"/deps/cu_gstreamer-* | grep libgstapp || { echo "libgstapp is not linked!"; }
-          else
-            echo "cu_gstreamer binary not found, skipping otool check."
-          fi
-
-  # ===========================================================================
-  # Phase 4a: Tests - Run unit tests (per OS x mode)
-  # ===========================================================================
-  tests:
-    name: Tests (${{ matrix.os }} | ${{ matrix.mode }})
-    needs: build
+  tests-features:
+    name: Unit Tests (all features)
     runs-on: ${{ matrix.os }}
 
     defaults:
@@ -439,35 +261,71 @@ jobs:
         shell: bash
 
     env:
+      CARGO_TERM_COLOR: always
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+      BASE_FEATURES: mock,image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
       WORKSPACE_SCOPE: ${{ matrix.os == 'windows-latest' && 'core' || 'workspace' }}
 
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        mode: [debug, release]
-        include:
-          - os: ubuntu-latest
+        os: [ ubuntu-latest, macos-latest, windows-latest ]
+        mode: [ debug, release, cuda-release ]
+        exclude:
+          - os: macos-latest
+            mode: cuda-release
+          - os: windows-latest
             mode: cuda-release
 
     steps:
       - uses: actions/checkout@v6
+      - name: Configure CARGO_TARGET_DIR
+        if: inputs.cargo_target_dir != ''
+        run: echo "CARGO_TARGET_DIR=${{ inputs.cargo_target_dir }}" >> $GITHUB_ENV
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          components: rustc,cargo,rust-std,rustfmt,clippy
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.9
+      - name: Setup rust-cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: ${{ matrix.mode }}
+          shared-key: rust-${{ matrix.os }}
+          save-if: ${{ github.ref == 'refs/heads/master' }}
+          cache-targets: "false"
+          cache-bin: "false"
+      - name: Install latest nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Set workspace scope
+        run: |
+          if [[ "$WORKSPACE_SCOPE" == "workspace" ]]; then
+            echo "WORKSPACE_FLAG=--workspace" >> $GITHUB_ENV
+          else
+            echo "WORKSPACE_FLAG=" >> $GITHUB_ENV
+          fi
+
+      - name: Install winget
+        if: runner.os == 'Windows' && env.WORKSPACE_SCOPE == 'workspace'
+        uses: Cyberboss/install-winget@v1
 
       - name: Free Disk Space (Ubuntu)
         if: runner.os == 'Linux'
         uses: jlumbroso/free-disk-space@main
         with:
+          # this might remove tools that are actually needed,
+          # if set to "true" but frees about 6 GB
           tool-cache: false
           android: true
           dotnet: true
           haskell: true
+          # do not remove large-packages, as it is necessary
           large-packages: false
           docker-images: true
           swap-storage: true
-
-      - name: Configure CARGO_TARGET_DIR
-        if: inputs.cargo_target_dir != ''
-        run: echo "CARGO_TARGET_DIR=${{ inputs.cargo_target_dir }}" >> $GITHUB_ENV
 
       - name: Linux-only Cargo paths
         if: runner.os == 'Linux' && inputs.linux_cargo_paths
@@ -478,22 +336,26 @@ jobs:
           sudo mkdir -p /mnt/cargo-home /mnt/cargo-target /mnt/tmp
           sudo chown -R "$USER:$USER" /mnt/cargo-home /mnt/cargo-target /mnt/tmp
 
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ inputs.toolchain }}
-          components: rustc,cargo,rust-std,rustfmt,clippy
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows' && env.WORKSPACE_SCOPE == 'workspace'
+        shell: pwsh
+        run: |
+          # Verify winget availability
+          if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
+              Write-Host "winget is not installed or available."
+              exit 1
+          }
 
-      - name: Setup rust-cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: build-${{ matrix.mode }}
-          shared-key: rust-${{ matrix.os }}
-          save-if: false
-          cache-targets: "false"
-          cache-bin: "false"
+          # Install PCAP SDK
+          Invoke-WebRequest -Uri https://npcap.com/dist/npcap-sdk-1.13.zip -OutFile npcap-sdk.zip
+          Expand-Archive -Path npcap-sdk.zip -DestinationPath $env:USERPROFILE\npcap-sdk
+          Remove-Item npcap-sdk.zip
 
-      - name: Install latest nextest
-        uses: taiki-e/install-action@nextest
+          # Install Win10Pcap (if winget is available)
+          winget install DaiyuuNobori.Win10Pcap --accept-source-agreements --accept-package-agreements
+
+          # Set PCAP library path
+          echo "LIB=$env:USERPROFILE\npcap-sdk\Lib\x64" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
 
       - name: Cache apt packages (Linux)
         if: runner.os == 'Linux'
@@ -546,40 +408,34 @@ jobs:
           echo "DYLD_LIBRARY_PATH=/opt/homebrew/opt/gstreamer/lib:/usr/local/opt/gstreamer/lib:$DYLD_LIBRARY_PATH" >> $GITHUB_ENV
           echo "PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig:/opt/homebrew/opt/gstreamer/lib/pkgconfig:$(brew --prefix qt@5)/lib/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
 
-      - name: Install winget
-        if: runner.os == 'Windows' && env.WORKSPACE_SCOPE == 'workspace'
-        uses: Cyberboss/install-winget@v1
-
-      - name: Install dependencies (Windows)
-        if: runner.os == 'Windows' && env.WORKSPACE_SCOPE == 'workspace'
-        shell: pwsh
+      - name: Debug GStreamer Installation
+        if: runner.os == 'macOS'
         run: |
-          if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
-              Write-Host "winget is not installed or available."
-              exit 1
-          }
-          Invoke-WebRequest -Uri https://npcap.com/dist/npcap-sdk-1.13.zip -OutFile npcap-sdk.zip
-          Expand-Archive -Path npcap-sdk.zip -DestinationPath $env:USERPROFILE\npcap-sdk
-          Remove-Item npcap-sdk.zip
-          winget install DaiyuuNobori.Win10Pcap --accept-source-agreements --accept-package-agreements
-          echo "LIB=$env:USERPROFILE\npcap-sdk\Lib\x64" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          echo "Checking GStreamer version..."
+          pkg-config --modversion gstreamer-1.0 || { echo "GStreamer not found!"; }
+
+          echo "Checking GStreamer library path..."
+          if [[ -d "/opt/homebrew/opt/gstreamer/lib" ]]; then
+            echo "GStreamer is installed at /opt/homebrew/opt/gstreamer/lib"
+            ls -l /opt/homebrew/opt/gstreamer/lib | head
+          else
+            echo "GStreamer libraries missing!"
+          fi
+
+          echo "Checking PKG_CONFIG_PATH..."
+          echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
+
+          echo "Checking DYLD_LIBRARY_PATH..."
+          echo "DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH"
 
       - name: Install CUDA
         uses: Jimver/cuda-toolkit@v0.2.30
         if: runner.os != 'macOS' && matrix.mode == 'cuda-release'
         with:
           cuda: 12.6.1
-          log-file-suffix: 'tests-${{ matrix.os }}-${{ matrix.mode }}.txt'
+          log-file-suffix: '${{ matrix.os }}-${{ matrix.mode }}-cuda.txt'
           use-github-cache: false
           use-local-cache: false
-
-      - name: Set workspace scope
-        run: |
-          if [[ "$WORKSPACE_SCOPE" == "workspace" ]]; then
-            echo "WORKSPACE_FLAG=--workspace" >> $GITHUB_ENV
-          else
-            echo "WORKSPACE_FLAG=" >> $GITHUB_ENV
-          fi
 
       - name: Set build mode
         if: matrix.mode == 'release' || matrix.mode == 'cuda-release'
@@ -605,7 +461,8 @@ jobs:
 
       - name: Set features (Windows)
         if: runner.os == 'Windows'
-        run: echo "FEATURES_FLAG=" >> $GITHUB_ENV
+        run: |
+          echo "FEATURES_FLAG=" >> $GITHUB_ENV
 
       - name: Detect embedded-only crates
         if: env.WORKSPACE_SCOPE == 'workspace'
@@ -613,18 +470,11 @@ jobs:
           EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
 
-      - name: Run Unit Tests (${{ matrix.os }} | ${{ matrix.mode }})
-        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $EMBEDDED_EXCLUDES
-
-      - name: Run Unit Tests with all features (${{ matrix.os }} | ${{ matrix.mode }})
+      - name: Run Unit Tests with all features on (${{ matrix.os }} | ${{ matrix.mode }})
         run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
 
-  # ===========================================================================
-  # Phase 4b: Doctests - Run doctests (debug mode only, parallel with tests)
-  # ===========================================================================
-  doctests:
-    name: Doctests (${{ matrix.os }})
-    needs: build
+  templates:
+    name: Templates (debug)
     runs-on: ${{ matrix.os }}
 
     defaults:
@@ -632,173 +482,62 @@ jobs:
         shell: bash
 
     env:
-      WORKSPACE_SCOPE: ${{ matrix.os == 'windows-latest' && 'core' || 'workspace' }}
+      CARGO_TERM_COLOR: always
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+      BASE_FEATURES: mock,image,kornia,gst,faer,nalgebra,glam,debug_pane,bincode,log-level-debug
+      WORKSPACE_SCOPE: workspace
 
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ ubuntu-latest, macos-latest ]
+        mode: [ debug ]
 
     steps:
       - uses: actions/checkout@v6
-
-      - name: Free Disk Space (Ubuntu)
-        if: runner.os == 'Linux'
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: false
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: false
-          docker-images: true
-          swap-storage: true
-
       - name: Configure CARGO_TARGET_DIR
         if: inputs.cargo_target_dir != ''
         run: echo "CARGO_TARGET_DIR=${{ inputs.cargo_target_dir }}" >> $GITHUB_ENV
-
-      - name: Linux-only Cargo paths
-        if: runner.os == 'Linux' && inputs.linux_cargo_paths
-        run: |
-          echo "CARGO_TARGET_DIR=/mnt/cargo-target" >> $GITHUB_ENV
-          echo "CARGO_HOME=/mnt/cargo-home" >> $GITHUB_ENV
-          echo "TMPDIR=/mnt/tmp" >> $GITHUB_ENV
-          sudo mkdir -p /mnt/cargo-home /mnt/cargo-target /mnt/tmp
-          sudo chown -R "$USER:$USER" /mnt/cargo-home /mnt/cargo-target /mnt/tmp
-
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ inputs.toolchain }}
           components: rustc,cargo,rust-std,rustfmt,clippy
-
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.9
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: build-debug
-          shared-key: rust-${{ matrix.os }}
-          save-if: false
-          cache-targets: "false"
-          cache-bin: "false"
-
-      - name: Cache apt packages (Linux)
-        if: runner.os == 'Linux'
-        uses: actions/cache@v5
-        with:
-          path: /var/cache/apt/archives
-          key: ${{ runner.os }}-apt-gstreamer-${{ hashFiles('.github/workflows/reusable-unit-tests.yml') }}
-
-      - name: Install dependencies (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            pkg-config \
-            libudev-dev \
-            libpcap-dev \
-            libglib2.0-dev \
-            clang \
-            libclang-dev \
-            libgstreamer1.0-dev \
-            libgstreamer-plugins-base1.0-dev \
-            libgstreamer-plugins-bad1.0-dev \
-            gstreamer1.0-plugins-base \
-            gstreamer1.0-plugins-good \
-            gstreamer1.0-plugins-bad \
-            gstreamer1.0-plugins-ugly \
-            gstreamer1.0-libav \
-            gstreamer1.0-tools \
-            gstreamer1.0-x \
-            gstreamer1.0-alsa \
-            gstreamer1.0-gl \
-            gstreamer1.0-gtk3 \
-            gstreamer1.0-qt5 \
-            gstreamer1.0-pulseaudio
-
-      - name: Install GStreamer (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew update
-          brew install \
-            gstreamer \
-            gst-plugins-base \
-            gst-plugins-good \
-            gst-plugins-bad \
-            gst-plugins-ugly \
-            gst-libav \
-            gst-plugins-rs \
-            gtk+3 \
-            qt@5
-          echo "DYLD_LIBRARY_PATH=/opt/homebrew/opt/gstreamer/lib:/usr/local/opt/gstreamer/lib:$DYLD_LIBRARY_PATH" >> $GITHUB_ENV
-          echo "PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig:/opt/homebrew/opt/gstreamer/lib/pkgconfig:$(brew --prefix qt@5)/lib/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
-
-      - name: Install winget
-        if: runner.os == 'Windows' && env.WORKSPACE_SCOPE == 'workspace'
-        uses: Cyberboss/install-winget@v1
-
-      - name: Install dependencies (Windows)
-        if: runner.os == 'Windows' && env.WORKSPACE_SCOPE == 'workspace'
-        shell: pwsh
-        run: |
-          if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
-              Write-Host "winget is not installed or available."
-              exit 1
-          }
-          Invoke-WebRequest -Uri https://npcap.com/dist/npcap-sdk-1.13.zip -OutFile npcap-sdk.zip
-          Expand-Archive -Path npcap-sdk.zip -DestinationPath $env:USERPROFILE\npcap-sdk
-          Remove-Item npcap-sdk.zip
-          winget install DaiyuuNobori.Win10Pcap --accept-source-agreements --accept-package-agreements
-          echo "LIB=$env:USERPROFILE\npcap-sdk\Lib\x64" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
-
-      - name: Set workspace scope
-        run: |
-          if [[ "$WORKSPACE_SCOPE" == "workspace" ]]; then
-            echo "WORKSPACE_FLAG=--workspace" >> $GITHUB_ENV
-          else
-            echo "WORKSPACE_FLAG=" >> $GITHUB_ENV
-          fi
-
-      - name: Detect embedded-only crates
-        if: env.WORKSPACE_SCOPE == 'workspace'
-        run: |
-          EXCLUDES=$(python3 support/ci/embedded_crates.py excludes)
-          echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
-
-      - name: Run doctests (${{ matrix.os }} | debug)
-        run: cargo +${{ inputs.toolchain }} test --doc $WORKSPACE_FLAG $EMBEDDED_EXCLUDES --quiet
-
-  # ===========================================================================
-  # Phase 5: Templates - Independent path (debug only, non-Windows)
-  # ===========================================================================
-  templates:
-    name: Templates (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-
-    defaults:
-      run:
-        shell: bash
-
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ inputs.toolchain }}
-          components: rustc,cargo,rust-std,rustfmt,clippy
-
-      - name: Setup rust-cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: templates
+          prefix-key: ${{ matrix.mode }}
           shared-key: rust-${{ matrix.os }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
           cache-targets: "false"
           cache-bin: "false"
 
+      - name: Free Disk Space (Ubuntu)
+        if: runner.os == 'Linux'
+        uses: jlumbroso/free-disk-space@main
+        with:
+          # this might remove tools that are actually needed,
+          # if set to "true" but frees about 6 GB
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          # do not remove large-packages, as it is necessary
+          large-packages: false
+          docker-images: true
+          swap-storage: true
+
+      - name: Linux-only Cargo paths
+        if: runner.os == 'Linux' && inputs.linux_cargo_paths
+        run: |
+          echo "CARGO_TARGET_DIR=/mnt/cargo-target" >> $GITHUB_ENV
+          echo "CARGO_HOME=/mnt/cargo-home" >> $GITHUB_ENV
+          echo "TMPDIR=/mnt/tmp" >> $GITHUB_ENV
+          sudo mkdir -p /mnt/cargo-home /mnt/cargo-target /mnt/tmp
+          sudo chown -R "$USER:$USER" /mnt/cargo-home /mnt/cargo-target /mnt/tmp
+
       - name: Cache apt packages (Linux)
         if: runner.os == 'Linux'
         uses: actions/cache@v5
@@ -850,17 +589,36 @@ jobs:
           echo "DYLD_LIBRARY_PATH=/opt/homebrew/opt/gstreamer/lib:/usr/local/opt/gstreamer/lib:$DYLD_LIBRARY_PATH" >> $GITHUB_ENV
           echo "PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig:/opt/homebrew/opt/gstreamer/lib/pkgconfig:$(brew --prefix qt@5)/lib/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
 
-      - name: Install cargo-generate
+      - name: Debug GStreamer Installation
+        if: runner.os == 'macOS'
+        run: |
+          echo "Checking GStreamer version..."
+          pkg-config --modversion gstreamer-1.0 || { echo "GStreamer not found!"; }
+
+          echo "Checking GStreamer library path..."
+          if [[ -d "/opt/homebrew/opt/gstreamer/lib" ]]; then
+            echo "GStreamer is installed at /opt/homebrew/opt/gstreamer/lib"
+            ls -l /opt/homebrew/opt/gstreamer/lib | head
+          else
+            echo "GStreamer libraries missing!"
+          fi
+
+          echo "Checking PKG_CONFIG_PATH..."
+          echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
+
+          echo "Checking DYLD_LIBRARY_PATH..."
+          echo "DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH"
+
+      - name: Install cargo-generate on (${{ matrix.os }} | debug)
         run: cargo +${{ inputs.toolchain }} install cargo-generate
 
-      - name: Generate new templates
+      - name: Generate new templates on (${{ matrix.os }} | debug)
         run: |
           cd templates
           rm -rf test_project test_workspace
           cargo +${{ inputs.toolchain }} generate -p cu_project --name test_project --destination . -d copper_source=local -d copper_root_path=../.. --silent
           cargo +${{ inputs.toolchain }} generate -p cu_full --name test_workspace --destination . -d copper_source=local -d copper_root_path=../.. --silent
-
-      - name: Build generated templates
+      - name: Build generated templates on (${{ matrix.os }} | debug)
         run: |
           cd templates/test_project
           cargo +${{ inputs.toolchain }} build

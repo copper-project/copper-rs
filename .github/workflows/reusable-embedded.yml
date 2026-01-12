@@ -11,119 +11,73 @@ on:
         type: string
         default: ""
 
-env:
-  CARGO_TERM_COLOR: always
-
 jobs:
-  # ===========================================================================
-  # Job 1: Core no-std build and tests
-  # ===========================================================================
-  core-nostd:
+  nostd:
     name: Core no-std
     runs-on: ubuntu-latest
+    env:
+      CARGO_TERM_COLOR: always
 
     steps:
       - uses: actions/checkout@v6
-
       - name: Configure CARGO_TARGET_DIR
         if: inputs.cargo_target_dir != ''
         run: echo "CARGO_TARGET_DIR=${{ inputs.cargo_target_dir }}" >> $GITHUB_ENV
-
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ inputs.toolchain }}
-          components: rustc,cargo,rust-std,rustfmt,clippy
-
-      - name: Setup rust-cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: embedded-core
-          shared-key: rust-ubuntu-latest
-          save-if: ${{ github.ref == 'refs/heads/master' }}
-          cache-targets: "false"
-          cache-bin: "false"
-
-      - name: Install latest nextest
-        uses: taiki-e/install-action@nextest
-
-      - name: Check compilation of core with no-std
-        run: cargo +${{ inputs.toolchain }} build --no-default-features
-
-      - name: Unit tests of core with no-std
-        run: cargo +${{ inputs.toolchain }} nextest run --no-default-features
-
-  # ===========================================================================
-  # Job 2: Embedded crates clippy and build (all targets)
-  # ===========================================================================
-  embedded-crates:
-    name: Embedded crates
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Configure CARGO_TARGET_DIR
-        if: inputs.cargo_target_dir != ''
-        run: echo "CARGO_TARGET_DIR=${{ inputs.cargo_target_dir }}" >> $GITHUB_ENV
-
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ inputs.toolchain }}
           targets: aarch64-unknown-none,thumbv7em-none-eabihf,thumbv8m.main-none-eabihf,riscv32imac-unknown-none-elf
           components: rustc,cargo,rust-std,rustfmt,clippy
+      - name: Install latest nextest
+        uses: taiki-e/install-action@nextest
+      - name: Check compilation of core with no-std
+        run: cargo +${{ inputs.toolchain }} build --no-default-features
+      - name: Unit tests of core with no-std
+        run: cargo +${{ inputs.toolchain }} nextest run --no-default-features
 
-      - name: Setup rust-cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: embedded-crates
-          shared-key: rust-ubuntu-latest
-          save-if: ${{ github.ref == 'refs/heads/master' }}
-          cache-targets: "false"
-          cache-bin: "false"
-
-      - name: Clippy embedded-only crates
-        run: python3 support/ci/embedded_crates.py run --action clippy --toolchain ${{ inputs.toolchain }}
-
-      - name: Build embedded-only crates
-        run: python3 support/ci/embedded_crates.py run --action build --toolchain ${{ inputs.toolchain }}
-
-  # ===========================================================================
-  # Job 3: RP2350 example
-  # ===========================================================================
-  rp2350:
-    name: RP2350 example
+  embedded-crates:
+    name: Embedded crates
     runs-on: ubuntu-latest
+    env:
+      CARGO_TERM_COLOR: always
 
     steps:
       - uses: actions/checkout@v6
-
       - name: Configure CARGO_TARGET_DIR
         if: inputs.cargo_target_dir != ''
         run: echo "CARGO_TARGET_DIR=${{ inputs.cargo_target_dir }}" >> $GITHUB_ENV
-
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ inputs.toolchain }}
-          targets: thumbv8m.main-none-eabihf
+          targets: aarch64-unknown-none,thumbv7em-none-eabihf,thumbv8m.main-none-eabihf,riscv32imac-unknown-none-elf
           components: rustc,cargo,rust-std,rustfmt,clippy
+      - name: Clippy embedded-only crates
+        run: python3 support/ci/embedded_crates.py run --action clippy --toolchain ${{ inputs.toolchain }}
+      - name: Build embedded-only crates
+        run: python3 support/ci/embedded_crates.py run --action build --toolchain ${{ inputs.toolchain }}
 
-      - name: Setup rust-cache
-        uses: Swatinem/rust-cache@v2
+  rp2350:
+    name: RP2350 skeleton
+    runs-on: ubuntu-latest
+    env:
+      CARGO_TERM_COLOR: always
+
+    steps:
+      - uses: actions/checkout@v6
+      - name: Configure CARGO_TARGET_DIR
+        if: inputs.cargo_target_dir != ''
+        run: echo "CARGO_TARGET_DIR=${{ inputs.cargo_target_dir }}" >> $GITHUB_ENV
+      - uses: dtolnay/rust-toolchain@master
         with:
-          prefix-key: embedded-rp2350
-          shared-key: rust-ubuntu-latest
-          save-if: ${{ github.ref == 'refs/heads/master' }}
-          cache-targets: "false"
-          cache-bin: "false"
-
-      - name: Clippy rp2350 example
+          toolchain: ${{ inputs.toolchain }}
+          targets: aarch64-unknown-none,thumbv7em-none-eabihf,thumbv8m.main-none-eabihf,riscv32imac-unknown-none-elf
+          components: rustc,cargo,rust-std,rustfmt,clippy
+      - name: Clippy an rp2350 example
         working-directory: examples/cu_rp2350_skeleton
         run: cargo +${{ inputs.toolchain }} clippy
-
-      - name: Cross compile rp2350 example with Arm
+      - name: Cross compile an rp2350 example with Arm
         working-directory: examples/cu_rp2350_skeleton
         run: cargo +${{ inputs.toolchain }} build-arm
-
-      - name: Compile the logreader for rp2350 example (host)
+      - name: Compile the logreader for the rp2350 example (host)
         working-directory: examples/cu_rp2350_skeleton
         run: cargo +${{ inputs.toolchain }} build-logreader
