@@ -19,6 +19,7 @@ jobs:
       CARGO_TERM_COLOR: always
 
     steps:
+      - uses: actions/checkout@v6
       - uses: ./.github/actions/embedded-rust-setup
         with:
           toolchain: ${{ inputs.toolchain }}
@@ -38,6 +39,7 @@ jobs:
       CARGO_TERM_COLOR: always
 
     steps:
+      - uses: actions/checkout@v6
       - uses: ./.github/actions/embedded-rust-setup
         with:
           toolchain: ${{ inputs.toolchain }}
@@ -55,6 +57,7 @@ jobs:
       CARGO_TERM_COLOR: always
 
     steps:
+      - uses: actions/checkout@v6
       - uses: ./.github/actions/embedded-rust-setup
         with:
           toolchain: ${{ inputs.toolchain }}
