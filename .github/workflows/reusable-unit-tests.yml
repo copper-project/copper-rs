@@ -199,7 +199,7 @@ jobs:
         if: runner.os != 'macOS' && matrix.mode == 'cuda-debug'
         with:
           cuda: 12.6.1
-          log-file-suffix: '${{ matrix.os }}-${{ matrix.mode }}-cuda.txt'
+          log-file-suffix: '${{ matrix.os }}-${{ matrix.mode }}-${{ matrix.task }}-cuda.txt'
           use-github-cache: false
           use-local-cache: false
 
@@ -429,7 +429,7 @@ jobs:
         if: runner.os != 'macOS' && matrix.mode == 'cuda-debug'
         with:
           cuda: 12.6.1
-          log-file-suffix: '${{ matrix.os }}-${{ matrix.mode }}-cuda.txt'
+          log-file-suffix: '${{ matrix.os }}-${{ matrix.mode }}-tests-features-cuda.txt'
           use-github-cache: false
           use-local-cache: false
 
