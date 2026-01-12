@@ -1,5 +1,6 @@
 .idea
 /target
+/build
 /cu29_export.so
 /AGENTS.md
 
