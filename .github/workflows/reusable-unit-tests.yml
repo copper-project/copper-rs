@@ -157,22 +157,31 @@ jobs:
             gstreamer1.0-qt5 \
             gstreamer1.0-pulseaudio
 
-      - name: Install GStreamer (macOS)
+      - name: Install GStreamer (macOS, cached)
+        if: runner.os == 'macOS'
+        uses: gerlero/brew-install@v1
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+        with:
+          cache: true
+          packages: |
+            gstreamer
+            gst-plugins-base
+            gst-plugins-good
+            gst-plugins-bad
+            gst-plugins-ugly
+            gst-libav
+            gst-plugins-rs
+            gtk+3
+            qt@5
+
+      - name: Export GStreamer env (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew update
-          brew install \
-            gstreamer \
-            gst-plugins-base \
-            gst-plugins-good \
-            gst-plugins-bad \
-            gst-plugins-ugly \
-            gst-libav \
-            gst-plugins-rs \
-            gtk+3 \
-            qt@5
+          QT_PREFIX="$(brew --prefix qt@5)"
           echo "DYLD_LIBRARY_PATH=/opt/homebrew/opt/gstreamer/lib:/usr/local/opt/gstreamer/lib:$DYLD_LIBRARY_PATH" >> $GITHUB_ENV
-          echo "PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig:/opt/homebrew/opt/gstreamer/lib/pkgconfig:$(brew --prefix qt@5)/lib/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig:/opt/homebrew/opt/gstreamer/lib/pkgconfig:${QT_PREFIX}/lib/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
 
       - name: Debug GStreamer Installation
         if: runner.os == 'macOS'
