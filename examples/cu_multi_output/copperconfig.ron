@@ -28,4 +28,7 @@
         (src: "loopback", dst: "int_sink", msg: "i32", missions: ["loopback"]),
         (src: "src", dst: "bool_sink", msg: "bool", missions: ["loopback"]),
     ],
+    monitor: (
+        type: "cu_consolemon::CuConsoleMon",
+    )
 )
