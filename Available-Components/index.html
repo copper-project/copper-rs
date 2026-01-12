@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><link rel="canonical" href="https://copper-project.github.io/copper-rs/Available-Components/" />
+      <link rel="shortcut icon" href="../img/favicon.ico" />
+    <title>Available Components - Copper Wiki</title>
+    <link rel="stylesheet" href="../css/theme.css" />
+    <link rel="stylesheet" href="../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Available Components";
+        var mkdocs_page_input_path = "Available-Components.md";
+        var mkdocs_page_url = "/copper-rs/Available-Components/";
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href=".." class="icon icon-home"> Copper Wiki
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption"><span class="caption-text">Start</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="..">Home</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Project-Templates/">Project Templates</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Copper-Application-Overview/">Copper Application Overview</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Build-and-Deploy-a-Copper-Application/">Build and Deploy a Copper Application</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Copper-RON-Configuration-Reference/">Copper Configuration file Reference</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Task-Automation-with-Just/">Task Automation with just</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Concepts</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../Copper-Runtime-Overview/">Copper Runtime Overview</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Config-and-Missions-Visualization/">Copper Configuration and Mission Visualization</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Task-Lifecycle/">Copper Tasks lifecycle overview</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../CuBridge-Concept/">Copper Bridge concept</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Resources/">Resources</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Modular-Configuration/">Modular Configuration</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Embedded</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../Baremetal-Development/">Baremetal Development</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Supported-Platforms/">Supported Platforms</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Reference</span></p>
+              <ul class="current">
+                  <li class="toctree-l1"><a class="reference internal" href="../SDK-Features/">SDK Features</a>
+                  </li>
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Available Components</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../FAQ/">FAQ</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Roadmap/">Roadmap</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Copper-Release-Notes/">Copper Release Notes</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">External</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="" href="https://github.com/copper-project/copper-rs">Source code on GitHub</a>
+                  </li>
+                  <li class="toctree-l1"><a class="" href="https://docs.rs/cu29">API docs on docs.rs</a>
+                  </li>
+                  <li class="toctree-l1"><a class="" href="https://crates.io/crates/cu29">Crates.io</a>
+                  </li>
+                  <li class="toctree-l1"><a class="" href="https://discord.gg/VkCG7Sb9Kw">Discord</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="..">Copper Wiki</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">Reference</li>
+      <li class="breadcrumb-item active">Available Components</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/copper-project/copper-rs/edit/master/docs/Available-Components.md" class="icon icon-github"> Edit on GitHub</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <table style="border-collapse:collapse; width:100%;">
+  <thead style="background:#1f3f1f; color:white;">
+    <tr>
+      <th style="padding:8px; border:1px solid #444;">Category</th>
+      <th style="padding:8px; border:1px solid #444;">Type</th>
+      <th style="padding:8px; border:1px solid #444;"> </th>
+      <th style="padding:8px; border:1px solid #444;">Description</th>
+      <th style="padding:8px; border:1px solid #444;">Crate Name</th>
+      <th style="padding:8px; border:1px solid #444;">std</th>
+      <th style="padding:8px; border:1px solid #444;">no_std</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr style="background:#1a1a1a;">
+      <td style="padding:8px; border:1px solid #444;">Board Bundles</td>
+      <td style="padding:8px; border:1px solid #444;">Flight Controller</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;"><img style="width:140px; height:90px; object-fit:contain;" src="imgs/micoairh742.webp" alt="MicoAir H743 board"/></td>
+      <td style="padding:8px; border:1px solid #444;"><a href="https://github.com/copper-project/copper-rs/tree/master/components/res/cu_micoairh743">MicoAir H743 HAL bundle</a></td>
+      <td style="padding:8px; border:1px solid #444;"><code>cu-micoairh743</code></td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;">❌</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+    </tr>
+    <tr style="background:#111;">
+      <td rowspan="10" style="padding:8px; border:1px solid #444;">Sensors</td>
+      <td style="padding:8px; border:1px solid #444;">Lidar</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;"><img style="width:140px; height:90px; object-fit:contain;" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_vlp16/doc/vlp16.jpg?raw=true"/></td>
+      <td style="padding:8px; border:1px solid #444;"><a href="https://github.com/copper-project/copper-rs/tree/master/components/sources/cu_vlp16">Velodyne/Ouster VLP16</a></td>
+      <td style="padding:8px; border:1px solid #444;"><code>cu-vlp16</code></td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;">❌</td>
+    </tr>
+    <tr style="background:#1a1a1a;">
+      <td style="padding:8px; border:1px solid #444;">Lidar</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;"><img style="width:140px; height:90px; object-fit:contain;" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_hesai/doc/XT32-16.png?raw=true"/></td>
+      <td style="padding:8px; border:1px solid #444;"><a href="https://github.com/copper-project/copper-rs/tree/master/components/sources/cu_hesai">Hesai/XT32</a></td>
+      <td style="padding:8px; border:1px solid #444;"><code>cu-hesai</code></td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;">❌</td>
+    </tr>
+    <tr style="background:#111;">
+      <td style="padding:8px; border:1px solid #444;">Lidar</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;">N/A</td>
+      <td style="padding:8px; border:1px solid #444;"><a href="https://github.com/copper-project/copper-rs/tree/master/components/sources/cu_livox">Livox Tele15</a></td>
+      <td style="padding:8px; border:1px solid #444;"><code>cu-livox</code></td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;">❌</td>
+    </tr>
+    <tr style="background:#1a1a1a;">
+      <td style="padding:8px; border:1px solid #444;">Video Camera</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;"><img style="width:140px; height:90px; object-fit:contain;" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_v4l/doc/camera.png?raw=true"/></td>
+      <td style="padding:8px; border:1px solid #444;"><a href="https://github.com/copper-project/copper-rs/tree/master/components/sources/cu_v4l">Video4Linux</a></td>
+      <td style="padding:8px; border:1px solid #444;"><code>cu-v4l</code></td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;">❌</td>
+    </tr>
+    <tr style="background:#111;">
+      <td style="padding:8px; border:1px solid #444;">Video Camera</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;"><img style="width:140px; height:90px; object-fit:contain;" src="https://gstreamer.freedesktop.org/data/images/artwork/gstreamer-logo-75.png" alt="GStreamer logo"/></td>
+      <td style="padding:8px; border:1px solid #444;"><a href="https://github.com/copper-project/copper-rs/tree/master/components/sources/cu_gstreamer">GStreamer appsink source</a></td>
+      <td style="padding:8px; border:1px solid #444;"><code>cu-gstreamer</code></td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;">❌</td>
+    </tr>
+    <tr style="background:#1a1a1a;">
+      <td style="padding:8px; border:1px solid #444;">IMU</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;"><img style="width:140px; height:90px; object-fit:contain;" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_wt901/doc/wt901.jpg?raw=true"/></td>
+      <td style="padding:8px; border:1px solid #444;"><a href="https://github.com/copper-project/copper-rs/tree/master/components/sources/cu_wt901">WitMotion WT901</a></td>
+      <td style="padding:8px; border:1px solid #444;"><code>cu-wt901</code></td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;">❌</td>
+    </tr>
+    <tr style="background:#111;">
+      <td style="padding:8px; border:1px solid #444;">IMU</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;">N/A</td>
+      <td style="padding:8px; border:1px solid #444;"><a href="https://github.com/copper-project/copper-rs/tree/master/components/sources/cu_bmi088">Bosch BMI088 6-axis IMU</a></td>
+      <td style="padding:8px; border:1px solid #444;"><code>cu-bmi088</code></td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+    </tr>
+    <tr style="background:#1a1a1a;">
+      <td style="padding:8px; border:1px solid #444;">IMU</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;">N/A</td>
+      <td style="padding:8px; border:1px solid #444;"><a href="https://github.com/copper-project/copper-rs/tree/master/components/sources/cu_mpu9250">InvenSense MPU9250 IMU</a></td>
+      <td style="padding:8px; border:1px solid #444;"><code>cu-mpu9250</code></td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+    </tr>
+    <tr style="background:#111;">
+      <td style="padding:8px; border:1px solid #444;">ADC/Position</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;"><img style="width:140px; height:90px; object-fit:contain;" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_ads7883/doc/ads7883-scale.jpg?raw=true"/></td>
+      <td style="padding:8px; border:1px solid #444;"><a href="https://github.com/copper-project/copper-rs/tree/master/components/sources/cu_ads7883">ADS 7883 3MPSPS SPI ADC</a></td>
+      <td style="padding:8px; border:1px solid #444;"><code>cu-ads7883</code></td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;">❌</td>
+    </tr>
+    <tr style="background:#1a1a1a;">
+      <td style="padding:8px; border:1px solid #444;">Encoder</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;"><img style="width:140px; height:90px; object-fit:contain;" src="https://github.com/copper-project/copper-rs/blob/master/components/sources/cu_rp_encoder/doc/encoder.jpg?raw=true"/></td>
+      <td style="padding:8px; border:1px solid #444;"><a href="https://github.com/copper-project/copper-rs/tree/master/components/sources/cu_rp_encoder">Generic Directional Wheel encoder</a></td>
+      <td style="padding:8px; border:1px solid #444;"><code>cu-rp-encoder</code></td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;">❌</td>
+    </tr>
+    <tr style="background:#1a1a1a;">
+      <td rowspan="3" style="padding:8px; border:1px solid #444;">Actuators</td>
+      <td style="padding:8px; border:1px solid #444;">GPIO</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;"><img style="width:140px; height:90px; object-fit:contain;" src="https://github.com/copper-project/copper-rs/blob/master/components/sinks/cu_rp_gpio/doc/rp.jpg?raw=true"/></td>
+      <td style="padding:8px; border:1px solid #444;"><a href="https://github.com/copper-project/copper-rs/tree/master/components/sinks/cu_rp_gpio">Raspberry Pi GPIO</a></td>
+      <td style="padding:8px; border:1px solid #444;"><code>cu-rp-gpio</code></td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;">❌</td>
+    </tr>
+    <tr style="background:#111;">
+      <td style="padding:8px; border:1px solid #444;">Servo</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;"><img style="width:140px; height:90px; object-fit:contain;" src="https://github.com/copper-project/copper-rs/blob/master/components/sinks/cu_lewansoul/doc/lewansoul.jpg?raw=true"/></td>
+      <td style="padding:8px; border:1px solid #444;"><a href="https://github.com/copper-project/copper-rs/tree/master/components/sinks/cu_lewansoul">Lewansoul Servo Bus (LX-16A, etc.)</a></td>
+      <td style="padding:8px; border:1px solid #444;"><code>cu-lewansoul</code></td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;">❌</td>
+    </tr>
+    <tr style="background:#1a1a1a;">
+      <td style="padding:8px; border:1px solid #444;">DC Motor Driver</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;"><img style="width:140px; height:90px; object-fit:contain;" src="https://github.com/copper-project/copper-rs/blob/master/components/sinks/cu_rp_sn754410/doc/sn754410.jpeg?raw=true"/></td>
+      <td style="padding:8px; border:1px solid #444;"><a href="https://github.com/copper-project/copper-rs/tree/master/components/sinks/cu_rp_sn754410">Half-H Driver for CD Motors</a></td>
+      <td style="padding:8px; border:1px solid #444;"><code>cu-rp-sn754410</code></td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;">❌</td>
+    </tr>
+    <tr style="background:#1a1a1a;">
+      <td rowspan="6">Algorithms</td>
+      <td style="padding:8px; border:1px solid #444;">Attitude Estimation</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;">N/A</td>
+      <td style="padding:8px; border:1px solid #444;"><a href="https://github.com/copper-project/copper-rs/tree/master/components/tasks/cu_ahrs">AHRS (attitude estimation)</a></td>
+      <td style="padding:8px; border:1px solid #444;"><code>cu-ahrs</code></td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+    </tr>
+    <tr style="background:#111;">
+      <td style="padding:8px; border:1px solid #444;">PID Controller</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;"><img style="width:140px; height:90px; object-fit:contain;" src="https://github.com/copper-project/copper-rs/blob/master/components/tasks/cu_pid/doc/pid.png?raw=true"/></td>
+      <td style="padding:8px; border:1px solid #444;"><a href="https://github.com/copper-project/copper-rs/tree/master/components/tasks/cu_pid">PID Controller</a></td>
+      <td style="padding:8px; border:1px solid #444;"><code>cu-pid</code></td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+    </tr>
+    <tr style="background:#1a1a1a;">
+      <td style="padding:8px; border:1px solid #444;">Time Alignment</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;">N/A</td>
+      <td style="padding:8px; border:1px solid #444;"><a href="https://github.com/copper-project/copper-rs/tree/master/components/tasks/cu_aligner">Message time aligner</a></td>
+      <td style="padding:8px; border:1px solid #444;"><code>cu-aligner</code></td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;">❌</td>
+    </tr>
+    <tr style="background:#111;">
+      <td style="padding:8px; border:1px solid #444;">AprilTag Detection</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;">N/A</td>
+      <td style="padding:8px; border:1px solid #444;"><a href="https://github.com/copper-project/copper-rs/tree/master/components/tasks/cu_apriltag">AprilTag detection and pose</a></td>
+      <td style="padding:8px; border:1px solid #444;"><code>cu-apriltag</code></td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;">❌</td>
+    </tr>
+    <tr style="background:#1a1a1a;">
+      <td style="padding:8px; border:1px solid #444;">Image Processing</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;">N/A</td>
+      <td style="padding:8px; border:1px solid #444;"><a href="https://github.com/copper-project/copper-rs/tree/master/components/tasks/cu_dynthreshold">Dynamic image thresholding</a></td>
+      <td style="padding:8px; border:1px solid #444;"><code>cu-dynthreshold</code></td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;">❌</td>
+    </tr>
+    <tr style="background:#111;">
+      <td style="padding:8px; border:1px solid #444;">Rate Limiter</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;">N/A</td>
+      <td style="padding:8px; border:1px solid #444;"><a href="https://github.com/copper-project/copper-rs/tree/master/components/tasks/cu_ratelimit">Rate limiting task</a></td>
+      <td style="padding:8px; border:1px solid #444;"><code>cu-ratelimit</code></td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;">❌</td>
+    </tr>
+    <tr style="background:#111;">
+      <td rowspan="2">Monitors</td>
+      <td style="padding:8px; border:1px solid #444;">TUI Monitor</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;"><img style="width:140px; height:90px; object-fit:contain;" src="https://github.com/copper-project/copper-rs/blob/master/components/monitors/cu_consolemon/doc/tasks.png?raw=true"/></td>
+      <td style="padding:8px; border:1px solid #444;"><a href="https://github.com/copper-project/copper-rs/tree/master/components/monitors/cu_consolemon">Console based monitor</a></td>
+      <td style="padding:8px; border:1px solid #444;"><code>cu-consolemon</code></td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;">❌</td>
+    </tr>
+    <tr style="background:#1a1a1a;">
+      <td style="padding:8px; border:1px solid #444;">Log Monitor</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;">N/A</td>
+      <td style="padding:8px; border:1px solid #444;"><a href="https://github.com/copper-project/copper-rs/tree/master/components/monitors/cu_logmon">Lightweight log monitor</a></td>
+      <td style="padding:8px; border:1px solid #444;"><code>cu-logmon</code></td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+    </tr>
+    <tr style="background:#111;">
+      <td rowspan="4">Middleware</td>
+      <td style="padding:8px; border:1px solid #444;">IPC</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;"><img style="width:140px; height:90px; object-fit:contain;" src="https://zenoh.io/img/zenoh-dragon-bg-150x163.png"/></td>
+      <td style="padding:8px; border:1px solid #444;"><a href="https://github.com/copper-project/copper-rs/tree/master/components/sinks/cu_msp_sink">Zenoh sink</a></td>
+      <td style="padding:8px; border:1px solid #444;"><code>cu-zenoh-sink</code></td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;">❌</td>
+    </tr>
+    <tr style="background:#111;">
+      <td style="padding:8px; border:1px solid #444;">IPC</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;"><img style="width:140px; height:90px; object-fit:contain;" src="https://user-images.githubusercontent.com/8661268/114321508-64a6b000-9b1b-11eb-95ef-b84c91387cff.png"/></td>
+      <td style="padding:8px; border:1px solid #444;"><a href="https://github.com/copper-project/copper-rs/tree/master/components/sources/cu_iceoryx2_src">Iceroryx2 source</a><br/><a href="https://github.com/copper-project/copper-rs/tree/master/components/sinks/cu_iceoryx2_sink">Iceroryx2 sink</a></td>
+      <td style="padding:8px; border:1px solid #444;"><code>cu-iceoryx2-src</code><br/><code>cu-iceoryx2-sink</code></td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;">❌</td>
+    </tr>
+    <tr style="background:#1a1a1a;">
+      <td style="padding:8px; border:1px solid #444;">ROS2 (Humble+)</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;"><img style="width:140px; height:90px; object-fit:contain;" src="https://github.com/copper-project/copper-rs/blob/master/components/sinks/cu_zenoh_ros_sink/doc/ROS2.png?raw=true"/></td>
+      <td style="padding:8px; border:1px solid #444;"><a href="https://github.com/copper-project/copper-rs/tree/master/components/sinks/cu_zenoh_ros_sink">ROS2 sink over Zenoh</a></td>
+      <td style="padding:8px; border:1px solid #444;"><code>cu-zenoh-ros-sink</code></td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;">❌</td>
+    </tr>
+    <tr style="background:#111;">
+      <td style="padding:8px; border:1px solid #444;">Aero IPC (MSP)</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;"><img style="width:140px; height:90px; object-fit:contain;" src="imgs/multiwii.png" alt="MultiWii / MSP"/></td>
+      <td style="padding:8px; border:1px solid #444;"><a href="https://github.com/copper-project/copper-rs/tree/master/components/bridges/cu_msp_bridge">MSP bridge (serial)</a></td>
+      <td style="padding:8px; border:1px solid #444;"><code>cu-msp-bridge</code></td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+    </tr>
+    <tr style="background:#111;">
+      <td rowspan="2">Bridges</td>
+      <td style="padding:8px; border:1px solid #444;">ELRS / CRSF Radio</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;"><img style="width:140px; height:90px; object-fit:contain;" src="imgs/elrs-receiver.png" alt="ELRS receiver"/></td>
+      <td style="padding:8px; border:1px solid #444;"><a href="https://github.com/copper-project/copper-rs/tree/master/components/bridges/cu_crsf">ELRS/CRSF bridge</a></td>
+      <td style="padding:8px; border:1px solid #444;"><code>cu-crsf</code></td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+    </tr>
+    <tr style="background:#1a1a1a;">
+      <td style="padding:8px; border:1px solid #444;">Bidirectional DSHOT ESCs</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;"><img style="width:140px; height:90px; object-fit:contain;" src="imgs/bdshot-esc.jpg" alt="iFlight Blitz E55R ESC"/></td>
+      <td style="padding:8px; border:1px solid #444;"><a href="https://github.com/copper-project/copper-rs/tree/master/components/bridges/cu_bdshot">BDShot ESC bridge</a></td>
+      <td style="padding:8px; border:1px solid #444;"><code>cu-bdshot</code></td>
+      <td style="padding:8px; border:1px solid #444; text-align:center;">❌</td>
+      <td style="padding:8px; border:1px solid #444; text-align:center; color:#8bc34a;">✅</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Legend: ✅ supported, ❌ not supported/desktop-only.</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../SDK-Features/" class="btn btn-neutral float-left" title="SDK Features"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../FAQ/" class="btn btn-neutral float-right" title="FAQ">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/copper-project/copper-rs" class="fa fa-github" style="color: #fcfcfc"> GitHub</a>
+        </span>
+    
+    
+      <span><a href="../SDK-Features/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../FAQ/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "..";</script>
+    <script src="../js/theme_extra.js"></script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

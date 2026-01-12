@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><link rel="canonical" href="https://copper-project.github.io/copper-rs/Copper-Runtime-Overview/" />
+      <link rel="shortcut icon" href="../img/favicon.ico" />
+    <title>Copper Runtime Overview - Copper Wiki</title>
+    <link rel="stylesheet" href="../css/theme.css" />
+    <link rel="stylesheet" href="../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Copper Runtime Overview";
+        var mkdocs_page_input_path = "Copper-Runtime-Overview.md";
+        var mkdocs_page_url = "/copper-rs/Copper-Runtime-Overview/";
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href=".." class="icon icon-home"> Copper Wiki
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption"><span class="caption-text">Start</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="..">Home</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Project-Templates/">Project Templates</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Copper-Application-Overview/">Copper Application Overview</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Build-and-Deploy-a-Copper-Application/">Build and Deploy a Copper Application</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Copper-RON-Configuration-Reference/">Copper Configuration file Reference</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Task-Automation-with-Just/">Task Automation with just</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Concepts</span></p>
+              <ul class="current">
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Copper Runtime Overview</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#task-graph">Task Graph</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#runtime-generator">Runtime Generator</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#zero-copy-data-logging">Zero-Copy Data Logging</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#fast-structured-logging">Fast Structured Logging</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#sdk-capabilities">SDK Capabilities</a>
+    </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Config-and-Missions-Visualization/">Copper Configuration and Mission Visualization</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Task-Lifecycle/">Copper Tasks lifecycle overview</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../CuBridge-Concept/">Copper Bridge concept</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Resources/">Resources</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Modular-Configuration/">Modular Configuration</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Embedded</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../Baremetal-Development/">Baremetal Development</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Supported-Platforms/">Supported Platforms</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Reference</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../SDK-Features/">SDK Features</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Available-Components/">Available Components</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../FAQ/">FAQ</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Roadmap/">Roadmap</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Copper-Release-Notes/">Copper Release Notes</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">External</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="" href="https://github.com/copper-project/copper-rs">Source code on GitHub</a>
+                  </li>
+                  <li class="toctree-l1"><a class="" href="https://docs.rs/cu29">API docs on docs.rs</a>
+                  </li>
+                  <li class="toctree-l1"><a class="" href="https://crates.io/crates/cu29">Crates.io</a>
+                  </li>
+                  <li class="toctree-l1"><a class="" href="https://discord.gg/VkCG7Sb9Kw">Discord</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="..">Copper Wiki</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">Concepts</li>
+      <li class="breadcrumb-item active">Copper Runtime Overview</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/copper-project/copper-rs/edit/master/docs/Copper-Runtime-Overview.md" class="icon icon-github"> Edit on GitHub</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="copper-runtime-overview">Copper Runtime Overview<a class="headerlink" href="#copper-runtime-overview" title="Permanent link">&para;</a></h1>
+<p>Copper is a deterministic, data-oriented runtime for robotics. You describe your system declaratively, Copper compiles the schedule, and every run is bit-for-bit reproducible.</p>
+<h2 id="task-graph">Task Graph<a class="headerlink" href="#task-graph" title="Permanent link">&para;</a></h2>
+<p>The task graph defines your system topology, inter-task communication, and message types. It is expressed in RON and drives how Copper builds the runtime.</p>
+<p>See <a href="../Copper-RON-Configuration-Reference/">Copper RON Configuration Reference</a> for the full schema.</p>
+<h2 id="runtime-generator">Runtime Generator<a class="headerlink" href="#runtime-generator" title="Permanent link">&para;</a></h2>
+<p>Copper creates an execution plan from the task graph metadata. It preallocates a "Copper List" so execution stays cache-friendly and deterministic.</p>
+<h2 id="zero-copy-data-logging">Zero-Copy Data Logging<a class="headerlink" href="#zero-copy-data-logging" title="Permanent link">&para;</a></h2>
+<p>Messages between tasks are recorded without copying data. Logs can be replayed exactly, making debugging and certification practical.</p>
+<h2 id="fast-structured-logging">Fast Structured Logging<a class="headerlink" href="#fast-structured-logging" title="Permanent link">&para;</a></h2>
+<p>Structured log strings are interned and indexed at compile time. Runtime logging avoids string construction overhead and keeps hot paths fast.</p>
+<h2 id="sdk-capabilities">SDK Capabilities<a class="headerlink" href="#sdk-capabilities" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Task interface and lifecycle traits for implementing new algorithms, sensors, and actuators.</li>
+<li>Compile-time runtime generation with deterministic scheduling.</li>
+<li>Log readers that export Copper logs using Rust Serde formats.</li>
+<li>Structured log reader for efficient debug and telemetry data.</li>
+<li>A growing set of components and drivers (see <a href="../Available-Components/">Available Components</a>).</li>
+<li>Deterministic log replay and resimulation.</li>
+<li>A minimal simulation environment for hardware-free testing.</li>
+</ul>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../Task-Automation-with-Just/" class="btn btn-neutral float-left" title="Task Automation with just"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../Config-and-Missions-Visualization/" class="btn btn-neutral float-right" title="Copper Configuration and Mission Visualization">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/copper-project/copper-rs" class="fa fa-github" style="color: #fcfcfc"> GitHub</a>
+        </span>
+    
+    
+      <span><a href="../Task-Automation-with-Just/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../Config-and-Missions-Visualization/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "..";</script>
+    <script src="../js/theme_extra.js"></script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

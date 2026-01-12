@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><link rel="canonical" href="https://copper-project.github.io/copper-rs/Project-Templates/" />
+      <link rel="shortcut icon" href="../img/favicon.ico" />
+    <title>Project Templates - Copper Wiki</title>
+    <link rel="stylesheet" href="../css/theme.css" />
+    <link rel="stylesheet" href="../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Project Templates";
+        var mkdocs_page_input_path = "Project-Templates.md";
+        var mkdocs_page_url = "/copper-rs/Project-Templates/";
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href=".." class="icon icon-home"> Copper Wiki
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption"><span class="caption-text">Start</span></p>
+              <ul class="current">
+                  <li class="toctree-l1"><a class="reference internal" href="..">Home</a>
+                  </li>
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Project Templates</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#prerequisites">Prerequisites</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#choose-a-template">Choose a template</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#generate-from-a-local-checkout">Generate from a local checkout</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#template-variables">Template variables</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#shortcuts">Shortcuts</a>
+    </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Copper-Application-Overview/">Copper Application Overview</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Build-and-Deploy-a-Copper-Application/">Build and Deploy a Copper Application</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Copper-RON-Configuration-Reference/">Copper Configuration file Reference</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Task-Automation-with-Just/">Task Automation with just</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Concepts</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../Copper-Runtime-Overview/">Copper Runtime Overview</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Config-and-Missions-Visualization/">Copper Configuration and Mission Visualization</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Task-Lifecycle/">Copper Tasks lifecycle overview</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../CuBridge-Concept/">Copper Bridge concept</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Resources/">Resources</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Modular-Configuration/">Modular Configuration</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Embedded</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../Baremetal-Development/">Baremetal Development</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Supported-Platforms/">Supported Platforms</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Reference</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../SDK-Features/">SDK Features</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Available-Components/">Available Components</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../FAQ/">FAQ</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Roadmap/">Roadmap</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Copper-Release-Notes/">Copper Release Notes</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">External</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="" href="https://github.com/copper-project/copper-rs">Source code on GitHub</a>
+                  </li>
+                  <li class="toctree-l1"><a class="" href="https://docs.rs/cu29">API docs on docs.rs</a>
+                  </li>
+                  <li class="toctree-l1"><a class="" href="https://crates.io/crates/cu29">Crates.io</a>
+                  </li>
+                  <li class="toctree-l1"><a class="" href="https://discord.gg/VkCG7Sb9Kw">Discord</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="..">Copper Wiki</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">Start</li>
+      <li class="breadcrumb-item active">Project Templates</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/copper-project/copper-rs/edit/master/docs/Project-Templates.md" class="icon icon-github"> Edit on GitHub</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="project-templates">Project Templates<a class="headerlink" href="#project-templates" title="Permanent link">&para;</a></h1>
+<p>Copper ships templates to bootstrap new projects quickly. Use them to get a runnable task graph, logging setup, and basic app layout in minutes.</p>
+<h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Rust toolchain (rustup)</li>
+<li><code>cargo-generate</code>: <code>cargo install cargo-generate</code></li>
+<li>Optional: <code>just</code> for helper commands (see <a href="../Task-Automation-with-Just/">Task Automation with just</a>)</li>
+</ul>
+<h2 id="choose-a-template">Choose a template<a class="headerlink" href="#choose-a-template" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Template</th>
+<th>Use it for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cu_project</code></td>
+<td>Single-crate project for quick experiments.</td>
+</tr>
+<tr>
+<td><code>cu_full</code></td>
+<td>Multi-crate workspace with <code>apps/</code> and <code>components/</code>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="generate-from-a-local-checkout">Generate from a local checkout<a class="headerlink" href="#generate-from-a-local-checkout" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Clone the repo and move into the templates directory:</li>
+</ol>
+<pre><code class="language-bash">git clone https://github.com/copper-project/copper-rs
+cd copper-rs/templates
+</code></pre>
+<ol>
+<li>Generate a workspace or single-crate project:</li>
+</ol>
+<pre><code class="language-bash"># Workspace template
+cargo +stable generate \
+    --path cu_full \
+    --name my_workspace \
+    --destination . \
+    --define copper_source=local \
+    --define copper_root_path=../..
+
+# Single-crate template
+cargo +stable generate \
+    --path cu_project \
+    --name my_project \
+    --destination . \
+    --define copper_source=local \
+    --define copper_root_path=../..
+</code></pre>
+<ol>
+<li>Move into the generated project and run it:</li>
+</ol>
+<pre><code class="language-bash">cd ../my_workspace
+cargo run -p my-workspace
+
+# or for the single-crate project
+cd ../my_project
+cargo run
+</code></pre>
+<h3 id="template-variables">Template variables<a class="headerlink" href="#template-variables" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>copper_source=local</code>: use the local <code>copper-rs</code> checkout.</li>
+<li><code>copper_root_path=../..</code>: path from the generated project back to the Copper repo root. Adjust if your layout differs.</li>
+</ul>
+<p>If you omit <code>--name</code> or <code>--define</code>, <code>cargo-generate</code> will prompt you interactively.</p>
+<h2 id="shortcuts">Shortcuts<a class="headerlink" href="#shortcuts" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>cargo cunew</code> is an alias for <code>cargo generate</code>.</li>
+<li>The <code>templates/justfile</code> includes <code>just gen-workspace</code> and <code>just gen-project</code> for standard names.</li>
+</ul>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href=".." class="btn btn-neutral float-left" title="Home"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../Copper-Application-Overview/" class="btn btn-neutral float-right" title="Copper Application Overview">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/copper-project/copper-rs" class="fa fa-github" style="color: #fcfcfc"> GitHub</a>
+        </span>
+    
+    
+      <span><a href=".." style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../Copper-Application-Overview/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "..";</script>
+    <script src="../js/theme_extra.js"></script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

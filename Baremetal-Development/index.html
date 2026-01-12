@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><link rel="canonical" href="https://copper-project.github.io/copper-rs/Baremetal-Development/" />
+      <link rel="shortcut icon" href="../img/favicon.ico" />
+    <title>Baremetal Development - Copper Wiki</title>
+    <link rel="stylesheet" href="../css/theme.css" />
+    <link rel="stylesheet" href="../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Baremetal Development";
+        var mkdocs_page_input_path = "Baremetal-Development.md";
+        var mkdocs_page_url = "/copper-rs/Baremetal-Development/";
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href=".." class="icon icon-home"> Copper Wiki
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption"><span class="caption-text">Start</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="..">Home</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Project-Templates/">Project Templates</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Copper-Application-Overview/">Copper Application Overview</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Build-and-Deploy-a-Copper-Application/">Build and Deploy a Copper Application</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Copper-RON-Configuration-Reference/">Copper Configuration file Reference</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Task-Automation-with-Just/">Task Automation with just</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Concepts</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../Copper-Runtime-Overview/">Copper Runtime Overview</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Config-and-Missions-Visualization/">Copper Configuration and Mission Visualization</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Task-Lifecycle/">Copper Tasks lifecycle overview</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../CuBridge-Concept/">Copper Bridge concept</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Resources/">Resources</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Modular-Configuration/">Modular Configuration</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Embedded</span></p>
+              <ul class="current">
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Baremetal Development</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#getting-started">Getting Started</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#hardware-reference-platform">Hardware (reference platform)</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#base-board">Base board</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#extension-boards-to-get-a-sdcard-slot-to-be-able-to-log-with-copper">Extension boards to get a sdcard slot (to be able to log with Copper).</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#adafruit-proto-doubler-optional">Adafruit Proto Doubler (optional)</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#debug-probe-hw">Debug Probe HW</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#debug-probe-cable-and-setup">Debug probe cable and setup.</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#software">Software</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#quick-sanity-check">Quick sanity check</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#run-the-plain-copper-example">Run the plain Copper example.</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#run-the-copper-example-with-the-debug-probe">Run the Copper example with the debug probe.</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#extract-the-logs">Extract the logs.</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#resim">Resim</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#caveats">Caveats</a>
+    </li>
+        </ul>
+    </li>
+        </ul>
+    </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Supported-Platforms/">Supported Platforms</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Reference</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../SDK-Features/">SDK Features</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Available-Components/">Available Components</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../FAQ/">FAQ</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Roadmap/">Roadmap</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Copper-Release-Notes/">Copper Release Notes</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">External</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="" href="https://github.com/copper-project/copper-rs">Source code on GitHub</a>
+                  </li>
+                  <li class="toctree-l1"><a class="" href="https://docs.rs/cu29">API docs on docs.rs</a>
+                  </li>
+                  <li class="toctree-l1"><a class="" href="https://crates.io/crates/cu29">Crates.io</a>
+                  </li>
+                  <li class="toctree-l1"><a class="" href="https://discord.gg/VkCG7Sb9Kw">Discord</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="..">Copper Wiki</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">Embedded</li>
+      <li class="breadcrumb-item active">Baremetal Development</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/copper-project/copper-rs/edit/master/docs/Baremetal-Development.md" class="icon icon-github"> Edit on GitHub</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="baremetal-development-with-copper">Baremetal Development with Copper<a class="headerlink" href="#baremetal-development-with-copper" title="Permanent link">&para;</a></h1>
+<p>Copper can also be deployed on baremetal ie. <code>no-std</code> on an MCU.</p>
+<p>The main advantage is that algorithms can be written to be usable on both normal (on an OS) and baremetal.
+The underlying logging format is also the same so you can extract the logs, replay in simulation what happened on the
+device, and debug with the comfort of a full local environment development and debugger.</p>
+<h2 id="getting-started">Getting Started<a class="headerlink" href="#getting-started" title="Permanent link">&para;</a></h2>
+<h3 id="hardware-reference-platform">Hardware (reference platform)<a class="headerlink" href="#hardware-reference-platform" title="Permanent link">&para;</a></h3>
+<p>We chose a beefed-up RP2350B-based board as a reference platform. 
+It is very well-documented, relatively cheap, and a lot of peripherals and accessories are available.</p>
+<p>Overview:</p>
+<p><img alt="baremetal-w-camera.jpg" height="600" src="imgs/baremetal-w-camera.jpg"/></p>
+<p>Note: we are not affiliated with any of those vendors or HW manufacturers. We just like them.</p>
+<blockquote>
+<p>If you want to receive the <strong>whole kit ready to be deployed with Copper</strong>: all soldered with the debug probe, 
+a debug cable and tested. We can send you one: Ping us directly at info@copper-robotics.com.</p>
+</blockquote>
+<h4 id="base-board">Base board<a class="headerlink" href="#base-board" title="Permanent link">&para;</a></h4>
+<p>It is a <code>Pimoroni Pico plus 2W</code>.</p>
+<p><img alt="ppico_plus_2_pinout_diagram.webp" height="600" src="imgs/ppico_plus_2_pinout_diagram.webp"/></p>
+<p>Out of the box it has:
+- Powered by RP2350B (Dual Arm Cortex M33 running at up to 150MHz with 520KB of SRAM)
+- 16MB of QSPI flash supporting XiP
+- 8MB of PSRAM
+- USB-C connector for power, programming, and data transfer
+- Qw/ST (Qwiic/STEMMA QT) compatible I2C connector
+- 3 pin debug connector (JST-SH)
+- Reset and BOOT buttons (the BOOT button can also be used as a user button)
+- User LED indicator (addressable through the wifi chip though)
+- On-board 3V3 regulator (max regulator current output 600mA)
+- Input voltage range 3V - 5.5V </p>
+<p>You can buy it here:
+https://www.adafruit.com/product/6243</p>
+<p>From the UK here:
+https://shop.pimoroni.com/products/pimoroni-pico-plus-2-w?variant=42182811942995</p>
+<p>If you don't care about the Wi-Fi, you can opt for a simple plus 2: https://shop.pimoroni.com/products/pimoroni-pico-plus-2?variant=42092668289107</p>
+<h4 id="extension-boards-to-get-a-sdcard-slot-to-be-able-to-log-with-copper">Extension boards to get a sdcard slot (to be able to log with Copper).<a class="headerlink" href="#extension-boards-to-get-a-sdcard-slot-to-be-able-to-log-with-copper" title="Permanent link">&para;</a></h4>
+<p>Adafruit PiCowBell Camera Breakout (Here the 160 deg wide lens version):
+https://www.adafruit.com/product/5947</p>
+<p>If you don't care about a camera: Adafruit PiCowbell Adalogger for Pico - MicroSD, RTC &amp; STEMMA QT
+https://www.adafruit.com/product/5703a</p>
+<p>Or a simple, more compact alternative a break-out board just for the SD Card:</p>
+<p><img alt="sdcard-breakout.jpg" height="400" src="imgs/sdcard-breakout.jpg"/></p>
+<h4 id="adafruit-proto-doubler-optional">Adafruit Proto Doubler (optional)<a class="headerlink" href="#adafruit-proto-doubler-optional" title="Permanent link">&para;</a></h4>
+<p><img alt="proto-doubler.jpg" height="400" src="imgs/proto-doubler.jpg"/></p>
+<p>This is a very nice addition for a bench setup. It allows you to connect the extension boards side by side with an extra
+row of pins you can use directly and some prototyping space underneath.</p>
+<p>https://www.adafruit.com/product/5906</p>
+<h4 id="debug-probe-hw">Debug Probe HW<a class="headerlink" href="#debug-probe-hw" title="Permanent link">&para;</a></h4>
+<p>It is highly recommended to use a debug probe: you'll be able to see the Copper structured logs in real-time, 
+deploy from <code>cargo run</code> without having to reset the probe, set breakpoints etc...</p>
+<p>We recommend a CMSIS-DAP compliant debugger like the DAPLink-based ones: https://developer.arm.com/documentation/101451/0100/About-CMSIS-DAP because it works right out of the box with <code>probe-rs</code>, a Rust embedded probe tooling support.</p>
+<p>We had success with this one: https://github.com/WeActStudio/WeActStudio.MiniDebugger</p>
+<p>It is compact, with USB-C (most of the commercial probes are like tanks with USB-A), can provide a 5V power supply, and is straightforward to use.</p>
+<blockquote>
+<p>Be sure to buy the <strong>DapLink Version</strong> (not the ST-Link one).</p>
+</blockquote>
+<p><img alt="debugger.jpg" height="400" src="imgs/debugger.jpg"/></p>
+<h4 id="debug-probe-cable-and-setup">Debug probe cable and setup.<a class="headerlink" href="#debug-probe-cable-and-setup" title="Permanent link">&para;</a></h4>
+<p><img alt="debugger-connector.png" src="../imgs/debugger-connector.png" /></p>
+<p>There are 2 connectors to connect:
+ - power
+ - debug</p>
+<h5 id="power">Power<a class="headerlink" href="#power" title="Permanent link">&para;</a></h5>
+<p>This allows you to just have to plug in a single USB-C connector <strong>on the probe side</strong> and the board will power itself up.</p>
+<p><img alt="power.jpg" src="imgs/power.jpg" width="1000"/></p>
+<p>This is the 5V connection on the probe side (see the picture above).
+You need to connect that to the VB (VBUS) pin on the board side. (NOT VS).</p>
+<h5 id="debug">Debug<a class="headerlink" href="#debug" title="Permanent link">&para;</a></h5>
+<p>You now have to connect the SWDIO SWCLK and GND pins on the probe side to the SWDIO SWCLK and GND pins on the board side.
+Ideally, you want to crimp a JST-SH connector to the probe wires to be able to plug it directly into the board.</p>
+<p><img alt="debug-connection-probe.jpg" src="imgs/debug-connection-probe.jpg" width="500"/>
+<img alt="debug-connection-board.jpg" src="imgs/debug-connection-board.jpg" width="500"/></p>
+<h5 id="extra-leds-optional">Extra LEDs (optional)<a class="headerlink" href="#extra-leds-optional" title="Permanent link">&para;</a></h5>
+<p>You can, for example, use some already made LED + resistor called lilypads: https://shop.pimoroni.com/en-us/products/lilypad-led-5pcs</p>
+<p><img alt="led1.jpg" height="300" src="imgs/led1.jpg"/></p>
+<p>Here on plugged between pin 20 and GND. Ready to go for the rp2350 copper example.</p>
+<p><img alt="led2.jpg" height="300" src="imgs/led2.jpg"/></p>
+<h3 id="software">Software<a class="headerlink" href="#software" title="Permanent link">&para;</a></h3>
+<h4 id="quick-sanity-check">Quick sanity check<a class="headerlink" href="#quick-sanity-check" title="Permanent link">&para;</a></h4>
+<p>Plug in your debugger and run <code>dmesg</code>, check to see if the board is detected.</p>
+<p><img alt="dmesg.png" src="../imgs/dmesg.png" /></p>
+<p>Install probe-rs: <code>cargo install probe-rs-tools --locked</code></p>
+<p>Now check with <code>probe-rs</code> to see if the probe can connect to the board.</p>
+<p>First with a <code>probe-rs list</code> to see if the probe is detected and accessible.
+Then with <code>probe-rs info --protocol swd</code> to dump the target debug information.</p>
+<p>It should look like this:</p>
+<p><img alt="target-recognized.png" src="../imgs/target-recognized.png" /></p>
+<p>If not, check if your user has the right permissions to access the device. For example, you might want to add raw access to the USB devices with:</p>
+<pre><code>$ cat /etc/udev/rules.d/60-cmsis-dap.rules
+
+# ARM mbed CMSIS-DAP (WeAct MiniDebugger DAPLink) VID:PID 0d28:0204
+SUBSYSTEM==&quot;usb&quot;, ATTR{idVendor}==&quot;0d28&quot;, ATTR{idProduct}==&quot;0204&quot;, MODE=&quot;0660&quot;, TAG+=&quot;uaccess&quot;
+SUBSYSTEM==&quot;hidraw&quot;, ATTRS{idVendor}==&quot;0d28&quot;, ATTRS{idProduct}==&quot;0204&quot;, MODE=&quot;0660&quot;, TAG+=&quot;uaccess&quot;
+</code></pre>
+<p>Also, double-check your cable.</p>
+<h4 id="run-the-plain-copper-example">Run the plain Copper example.<a class="headerlink" href="#run-the-plain-copper-example" title="Permanent link">&para;</a></h4>
+<p>In <code>/examples/cu_rp2350_skeleton</code> you can find a fully working example that will just flip the GPIO 21 and log the result on the SD card.</p>
+<p>First, plug an SD card on your computer and run the formatting script on it:
+<code>support/mk_cu29_sdcard.sh &lt;path to sdcard block device&gt;</code> </p>
+<p>You need <code>wipefs</code> and <code>sgdisk</code> installed for that (on Arch Linux, <code>sudo pacman -S util-linux gptfdisk</code>)</p>
+<blockquote>
+<p>TRIPLE-CHECK THAT PATH TO THE SD CARD BLOCK DEVICE IS CORRECT, it will wipe out any disk you point it to.</p>
+</blockquote>
+<p>Here I monitor dmesg to see on which block device the SD card reader shows up and format it:</p>
+<p><img alt="sdcard-format.png" src="../imgs/sdcard-format.png" /></p>
+<p>You can also run into user rights issues, this one you can sudo out of it <code>sudo support/mk_cu29_sdcard.sh &lt;YOUR DEVICE&gt;</code></p>
+<h4 id="run-the-copper-example-with-the-debug-probe">Run the Copper example with the debug probe.<a class="headerlink" href="#run-the-copper-example-with-the-debug-probe" title="Permanent link">&para;</a></h4>
+<p>go to <code>/examples/cu_rp2350_skeleton</code> and run <code>cargo run-arm</code></p>
+<p>You should see the Copper text logs streaming right through the debugger. With it finding the SD card and starting to log on it.
+The LED on GPIO 21 should blink.</p>
+<p><img alt="running-embedded-copper.png" src="../imgs/running-embedded-copper.png" /></p>
+<h4 id="extract-the-logs">Extract the logs.<a class="headerlink" href="#extract-the-logs" title="Permanent link">&para;</a></h4>
+<p>If you want to see the tasks data logs (copperlists), directly dump the partition to a file (basically recreating a slab):</p>
+<pre><code>$ # here substiture with your own device, probably the same as the one you formatted the sdcard with
+$ pv /dev/sdb2 &gt; logs/blinky_0.copper
+</code></pre>
+<p>Then you can dump the logs with exactly like a standard Copper log file, note we made also a shortcut for the log reader:
+Note: no _0 suffix here, the log reader figures out the slab number automatically.</p>
+<pre><code>$ cargo run-logreader extract-copperlists logs/blinky.copper
+</code></pre>
+<h4 id="resim">Resim<a class="headerlink" href="#resim" title="Permanent link">&para;</a></h4>
+<p>If you check the src/tasks.rs file, you'll see that the tasks are just standard Copper tasks.
+You can resimulate the log the same way as any other Copper programs (+/- managing the std/no-std variations), check the <code>examples</code> folder for resim examples.</p>
+<h4 id="caveats">Caveats<a class="headerlink" href="#caveats" title="Permanent link">&para;</a></h4>
+<p>The logs don't get closed correctly, it should not prevent you from reading them but it is annoying. You can implement a button to drop the Copper instance and force the correct closure of the logs.</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../Modular-Configuration/" class="btn btn-neutral float-left" title="Modular Configuration"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../Supported-Platforms/" class="btn btn-neutral float-right" title="Supported Platforms">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/copper-project/copper-rs" class="fa fa-github" style="color: #fcfcfc"> GitHub</a>
+        </span>
+    
+    
+      <span><a href="../Modular-Configuration/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../Supported-Platforms/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "..";</script>
+    <script src="../js/theme_extra.js"></script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

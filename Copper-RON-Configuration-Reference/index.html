@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><link rel="canonical" href="https://copper-project.github.io/copper-rs/Copper-RON-Configuration-Reference/" />
+      <link rel="shortcut icon" href="../img/favicon.ico" />
+    <title>Copper Configuration file Reference - Copper Wiki</title>
+    <link rel="stylesheet" href="../css/theme.css" />
+    <link rel="stylesheet" href="../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Copper Configuration file Reference";
+        var mkdocs_page_input_path = "Copper-RON-Configuration-Reference.md";
+        var mkdocs_page_url = "/copper-rs/Copper-RON-Configuration-Reference/";
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href=".." class="icon icon-home"> Copper Wiki
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption"><span class="caption-text">Start</span></p>
+              <ul class="current">
+                  <li class="toctree-l1"><a class="reference internal" href="..">Home</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Project-Templates/">Project Templates</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Copper-Application-Overview/">Copper Application Overview</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Build-and-Deploy-a-Copper-Application/">Build and Deploy a Copper Application</a>
+                  </li>
+                  <li class="toctree-l1 current"><a class="reference internal current" href="#">Copper Configuration file Reference</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#basic-structure">Basic Structure</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#tasks">Tasks</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#connections">Connections</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#monitoring">Monitoring</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#logging">Logging</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#runtime-settings">Runtime Settings</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#missions">Missions</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#modular-configuration">Modular Configuration</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#example">Example</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#further-reading">Further Reading</a>
+    </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Task-Automation-with-Just/">Task Automation with just</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Concepts</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../Copper-Runtime-Overview/">Copper Runtime Overview</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Config-and-Missions-Visualization/">Copper Configuration and Mission Visualization</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Task-Lifecycle/">Copper Tasks lifecycle overview</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../CuBridge-Concept/">Copper Bridge concept</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Resources/">Resources</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Modular-Configuration/">Modular Configuration</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Embedded</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../Baremetal-Development/">Baremetal Development</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Supported-Platforms/">Supported Platforms</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Reference</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../SDK-Features/">SDK Features</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Available-Components/">Available Components</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../FAQ/">FAQ</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Roadmap/">Roadmap</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../Copper-Release-Notes/">Copper Release Notes</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">External</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="" href="https://github.com/copper-project/copper-rs">Source code on GitHub</a>
+                  </li>
+                  <li class="toctree-l1"><a class="" href="https://docs.rs/cu29">API docs on docs.rs</a>
+                  </li>
+                  <li class="toctree-l1"><a class="" href="https://crates.io/crates/cu29">Crates.io</a>
+                  </li>
+                  <li class="toctree-l1"><a class="" href="https://discord.gg/VkCG7Sb9Kw">Discord</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="..">Copper Wiki</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href=".." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">Start</li>
+      <li class="breadcrumb-item active">Copper Configuration file Reference</li>
+    <li class="wy-breadcrumbs-aside">
+          <a href="https://github.com/copper-project/copper-rs/edit/master/docs/Copper-RON-Configuration-Reference.md" class="icon icon-github"> Edit on GitHub</a>
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="copper-ron-configuration-reference">Copper RON Configuration Reference<a class="headerlink" href="#copper-ron-configuration-reference" title="Permanent link">&para;</a></h1>
+<p>This guide explains how to configure a Copper application using RON files. It summarises the available sections and options based on the source code and example configurations.</p>
+<h2 id="basic-structure">Basic Structure<a class="headerlink" href="#basic-structure" title="Permanent link">&para;</a></h2>
+<p>A Copper configuration is a RON file containing tasks, connections and optional sections such as monitoring, logging or runtime settings. The minimal form looks like:</p>
+<pre><code class="language-ron">(
+    tasks: [],
+    cnx: [],
+)
+</code></pre>
+<p>Most examples name the file <code>copperconfig.ron</code> and reference it with the <code>#[copper_runtime(config = "...")]</code> attribute.</p>
+<h2 id="tasks">Tasks<a class="headerlink" href="#tasks" title="Permanent link">&para;</a></h2>
+<p>Tasks are declared under the <code>tasks</code> array. Each task entry is a tuple with the following fields:</p>
+<ul>
+<li><code>id</code> – unique identifier of the task.</li>
+<li><code>type</code> – fully qualified Rust type of the task implementation.</li>
+<li><code>config</code> <em>(optional)</em> – map of parameters passed to the task.</li>
+<li><code>missions</code> <em>(optional)</em> – list of mission ids in which this task is active.</li>
+<li><code>background</code> <em>(optional)</em> – when set to <code>true</code>, the task runs on a background thread.</li>
+<li><code>logging</code> <em>(optional)</em> – <code>{ enabled: bool }</code> to enable or disable message logging for this task.</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-ron">(
+    id: &quot;task1&quot;,
+    type: &quot;tasks::ExampleTask&quot;,
+    background: true,
+    logging: (enabled: false),
+)
+</code></pre>
+<h2 id="connections">Connections<a class="headerlink" href="#connections" title="Permanent link">&para;</a></h2>
+<p>Connections are declared under <code>cnx</code> as tuples describing edges between tasks:</p>
+<ul>
+<li><code>src</code> – id of the source task.</li>
+<li><code>dst</code> – id of the destination task.</li>
+<li><code>msg</code> – Rust type of the message carried.</li>
+<li><code>missions</code> <em>(optional)</em> – restrict the connection to specific missions.</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-ron">(src: &quot;task0&quot;, dst: &quot;task1&quot;, msg: &quot;i32&quot;)
+</code></pre>
+<h2 id="monitoring">Monitoring<a class="headerlink" href="#monitoring" title="Permanent link">&para;</a></h2>
+<p>The optional <code>monitor</code> section selects a monitoring component and its parameters:</p>
+<pre><code class="language-ron">monitor: (
+    type: &quot;cu_consolemon::CuConsoleMon&quot;,
+    config: { &quot;verbosity&quot;: 2 },
+)
+</code></pre>
+<h2 id="logging">Logging<a class="headerlink" href="#logging" title="Permanent link">&para;</a></h2>
+<p>The <code>logging</code> section tunes Copper’s structured log. Options mirror the fields of <code>LoggingConfig</code> defined in <code>core/cu29_runtime/src/config.rs</code>:</p>
+<ul>
+<li><code>enable_task_logging</code> – controls per-task logging (defaults to <code>true</code>).</li>
+<li><code>slab_size_mib</code> – size of each memory mapped slab in MiB.</li>
+<li><code>section_size_mib</code> – pre‑allocated size per log section in MiB.</li>
+<li><code>keyframe_interval</code> – number of copperlists between two keyframes (default <code>100</code>).</li>
+</ul>
+<p>Example from <code>examples/cu_logging_size</code>:</p>
+<pre><code class="language-ron">logging: (
+    slab_size_mib: 1024,
+    section_size_mib: 100,
+)
+</code></pre>
+<p>The library validates that <code>section_size_mib</code> does not exceed <code>slab_size_mib</code>.</p>
+<h2 id="runtime-settings">Runtime Settings<a class="headerlink" href="#runtime-settings" title="Permanent link">&para;</a></h2>
+<p>Runtime behaviour can be adjusted with the <code>runtime</code> section. Currently only <code>rate_target_hz</code> is available:</p>
+<pre><code class="language-ron">runtime: (
+    rate_target_hz: 2,
+)
+</code></pre>
+<p>This acts as a rate limiter for Copper list execution.</p>
+<h2 id="missions">Missions<a class="headerlink" href="#missions" title="Permanent link">&para;</a></h2>
+<p>Configurations may define multiple missions, each representing an alternative task graph:</p>
+<pre><code class="language-ron">missions: [ (id: &quot;A&quot;), (id: &quot;B&quot;) ]
+</code></pre>
+<p>Tasks and connections can specify a <code>missions</code> array to belong only to selected missions. See <code>examples/cu_missions/copperconfig.ron</code> for a complete example.</p>
+<h2 id="modular-configuration">Modular Configuration<a class="headerlink" href="#modular-configuration" title="Permanent link">&para;</a></h2>
+<p>Copper supports composition of configurations using the <code>includes</code> section. Each include specifies a path and optional parameter substitutions:</p>
+<pre><code class="language-ron">includes: [
+    (
+        path: &quot;base.ron&quot;,
+        params: { &quot;id&quot;: &quot;left&quot;, &quot;pin&quot;: 4 },
+    ),
+]
+</code></pre>
+<p>Included files are processed recursively. Parameters are substituted in the included text using the <code>{{param}}</code> syntax. Merging behaviour and further details are described in <code>doc/modular_config.md</code>.</p>
+<h2 id="example">Example<a class="headerlink" href="#example" title="Permanent link">&para;</a></h2>
+<p>A more complete configuration demonstrating several features is provided in <code>examples/modular_config_example/main_config.ron</code>:</p>
+<pre><code class="language-ron">(
+    tasks: [],
+    cnx: [],
+    monitor: ( type: &quot;cu_consolemon::CuConsoleMon&quot; ),
+    logging: ( file: &quot;robot.copper&quot;, level: &quot;debug&quot; ),
+    includes: [
+        ( path: &quot;base.ron&quot;, params: {} ),
+        ( path: &quot;motors.ron&quot;, params: { &quot;id&quot;: &quot;left&quot;,  &quot;pin&quot;: 4, &quot;direction&quot;: &quot;forward&quot; } ),
+        ( path: &quot;motors.ron&quot;, params: { &quot;id&quot;: &quot;right&quot;, &quot;pin&quot;: 5, &quot;direction&quot;: &quot;reverse&quot; } ),
+    ],
+)
+</code></pre>
+<h2 id="further-reading">Further Reading<a class="headerlink" href="#further-reading" title="Permanent link">&para;</a></h2>
+<p>For advanced composition rules and best practices see the <a href="../Modular-Configuration/">Modular Configuration guide</a>.</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../Build-and-Deploy-a-Copper-Application/" class="btn btn-neutral float-left" title="Build and Deploy a Copper Application"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../Task-Automation-with-Just/" class="btn btn-neutral float-right" title="Task Automation with just">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+        <span>
+          <a href="https://github.com/copper-project/copper-rs" class="fa fa-github" style="color: #fcfcfc"> GitHub</a>
+        </span>
+    
+    
+      <span><a href="../Build-and-Deploy-a-Copper-Application/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../Task-Automation-with-Just/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "..";</script>
+    <script src="../js/theme_extra.js"></script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>
