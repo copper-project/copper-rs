@@ -10,7 +10,7 @@ impl Freezable for IntegerSrcTask {}
 impl CuSrcTask for IntegerSrcTask {
     type Resources<'r> = ();
     type Output<'m> = output_msg!(i32);
-    fn new_with(
+    fn new(
         _config: Option<&ComponentConfig>,
         _resources: Self::Resources<'_>,
     ) -> CuResult<Self> {
@@ -34,7 +34,7 @@ impl Freezable for FloatSrcTask {}
 impl CuSrcTask for FloatSrcTask {
     type Resources<'r> = ();
     type Output<'m> = output_msg!(f32);
-    fn new_with(
+    fn new(
         _config: Option<&ComponentConfig>,
         _resources: Self::Resources<'_>,
     ) -> CuResult<Self> {
@@ -57,7 +57,7 @@ impl CuSinkTask for MergingSinkTask {
     type Resources<'r> = ();
     /// The input is an i32 from the IntegerSrcTask and a f32 from the FloatSrcTask.
     type Input<'m> = input_msg!('m, i32, f32);
-    fn new_with(
+    fn new(
         _config: Option<&ComponentConfig>,
         _resources: Self::Resources<'_>,
     ) -> CuResult<Self> {
@@ -88,7 +88,7 @@ impl CuTask for MergerTask {
     /// The output is a tuple of i32 and f32.
     type Output<'m> = output_msg!((i32, f32));
 
-    fn new_with(
+    fn new(
         _config: Option<&ComponentConfig>,
         _resources: Self::Resources<'_>,
     ) -> CuResult<Self> {
@@ -118,7 +118,7 @@ impl CuSinkTask for MergedSinkTask {
     type Resources<'r> = ();
     type Input<'m> = input_msg!((i32, f32));
 
-    fn new_with(
+    fn new(
         _config: Option<&ComponentConfig>,
         _resources: Self::Resources<'_>,
     ) -> CuResult<Self> {

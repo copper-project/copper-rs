@@ -275,7 +275,7 @@ mod tasks {
         type Resources<'r> = ();
         type Output<'m> = CuMsg<MspRequestBatch>;
 
-        fn new_with(
+        fn new(
             _config: Option<&ComponentConfig>,
             _resources: Self::Resources<'_>,
         ) -> CuResult<Self> {
@@ -306,7 +306,7 @@ mod tasks {
         type Resources<'r> = ();
         type Input<'m> = CuMsg<MspResponseBatch>;
 
-        fn new_with(
+        fn new(
             _config: Option<&ComponentConfig>,
             _resources: Self::Resources<'_>,
         ) -> CuResult<Self> {

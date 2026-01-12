@@ -13,7 +13,7 @@ pub mod tasks {
         type Resources<'r> = ();
         type Output<'m> = output_msg!(i32);
 
-        fn new_with(
+        fn new(
             _config: Option<&ComponentConfig>,
             _resources: Self::Resources<'_>,
         ) -> CuResult<Self>
@@ -38,7 +38,7 @@ pub mod tasks {
         type Input<'m> = input_msg!(i32);
         type Output<'m> = output_msg!(i32);
 
-        fn new_with(
+        fn new(
             _config: Option<&ComponentConfig>,
             _resources: Self::Resources<'_>,
         ) -> CuResult<Self>
@@ -67,7 +67,7 @@ pub mod tasks {
         type Resources<'r> = ();
         type Input<'m> = input_msg!(i32);
 
-        fn new_with(
+        fn new(
             _config: Option<&ComponentConfig>,
             _resources: Self::Resources<'_>,
         ) -> CuResult<Self>

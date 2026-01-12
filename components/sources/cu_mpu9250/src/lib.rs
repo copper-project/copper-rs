@@ -120,7 +120,7 @@ where
     type Resources<'r> = ();
     type Output<'m> = output_msg!(ImuPayload);
 
-    fn new_with(
+    fn new(
         config: Option<&ComponentConfig>,
         _resources: Self::Resources<'_>,
     ) -> CuResult<Self> {

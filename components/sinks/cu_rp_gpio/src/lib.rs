@@ -57,7 +57,7 @@ impl CuSinkTask for RPGpio {
     type Resources<'r> = ();
     type Input<'m> = input_msg!(RPGpioPayload);
 
-    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {

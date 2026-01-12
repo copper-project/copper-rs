@@ -14,7 +14,7 @@ impl CuSinkTask for ActivityLed {
     type Input<'m> = CuMsg<ControlInputs>;
     type Resources<'r> = Resources;
 
-    fn new_with(_config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {

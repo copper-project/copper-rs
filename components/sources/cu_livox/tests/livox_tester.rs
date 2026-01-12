@@ -14,7 +14,7 @@ impl CuSinkTask for LivoxTestSink {
     type Resources<'r> = ();
     type Input<'m> = input_msg!(LidarCuMsgPayload);
 
-    fn new_with(
+    fn new(
         _config: Option<&ComponentConfig>,
         _resources: Self::Resources<'_>,
     ) -> CuResult<Self>

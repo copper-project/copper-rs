@@ -28,7 +28,7 @@ impl CuSrcTask for ImageSrcTask {
     type Resources<'r> = ();
     type Output<'m> = output_msg!(CuImage<Vec<u8>>);
 
-    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -106,7 +106,7 @@ impl CuSinkTask for AlignedImageSink {
         CuArray<CuImage<Vec<u8>>, OUTPUT_CAP>
     ));
 
-    fn new_with(
+    fn new(
         _config: Option<&ComponentConfig>,
         _resources: Self::Resources<'_>,
     ) -> CuResult<Self>

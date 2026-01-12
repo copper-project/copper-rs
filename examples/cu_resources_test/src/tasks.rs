@@ -15,7 +15,7 @@ impl CuSrcTask for TriggerTask {
     type Output<'m> = CuMsg<Tick>;
     type Resources<'r> = ();
 
-    fn new_with(
+    fn new(
         _config: Option<&ComponentConfig>,
         _resources: Self::Resources<'_>,
     ) -> CuResult<Self> {
@@ -43,7 +43,7 @@ impl CuTask for SensorTask {
     type Input<'m> = CuMsg<Tick>;
     type Output<'m> = CuMsg<BusReading>;
 
-    fn new_with(
+    fn new(
         _config: Option<&ComponentConfig>,
         resources: Self::Resources<'_>,
     ) -> CuResult<Self> {
@@ -101,7 +101,7 @@ impl CuSinkTask for InspectorTask {
     type Input<'m> = CuMsg<BusReading>;
     type Resources<'r> = InspectorResources;
 
-    fn new_with(
+    fn new(
         _config: Option<&ComponentConfig>,
         resources: Self::Resources<'_>,
     ) -> CuResult<Self> {

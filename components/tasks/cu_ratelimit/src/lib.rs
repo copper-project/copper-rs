@@ -36,7 +36,7 @@ where
     type Input<'m> = input_msg!(T);
     type Output<'m> = output_msg!(T);
 
-    fn new_with(
+    fn new(
         config: Option<&ComponentConfig>,
         _resources: Self::Resources<'_>,
     ) -> CuResult<Self> {
@@ -89,7 +89,7 @@ mod tests {
     fn create_test_ratelimiter(rate: f64) -> CuRateLimit<i32> {
         let mut cfg = ComponentConfig::new();
         cfg.set("rate", rate);
-        CuRateLimit::new(Some(&cfg)).unwrap()
+        CuRateLimit::new(Some(&cfg), ()).unwrap()
     }
 
     #[test]

@@ -13,7 +13,7 @@ impl CuSinkTask for WT910TestSink {
     type Resources<'r> = ();
     type Input<'m> = input_msg!(PositionalReadingsPayload);
 
-    fn new_with(
+    fn new(
         _config: Option<&ComponentConfig>,
         _resources: Self::Resources<'_>,
     ) -> CuResult<Self>

@@ -18,7 +18,7 @@ impl CuSrcTask for MySource {
     type Resources<'r> = ();
     type Output<'m> = output_msg!(MyPayload);
 
-    fn new_with(
+    fn new(
         _config: Option<&ComponentConfig>,
         _resources: Self::Resources<'_>,
     ) -> CuResult<Self>
@@ -50,7 +50,7 @@ impl CuTask for MyTask {
     type Input<'m> = input_msg!(MyPayload);
     type Output<'m> = output_msg!(MyPayload);
 
-    fn new_with(
+    fn new(
         _config: Option<&ComponentConfig>,
         _resources: Self::Resources<'_>,
     ) -> CuResult<Self>
@@ -86,7 +86,7 @@ impl CuSinkTask for MySink {
     type Resources<'r> = ();
     type Input<'m> = input_msg!('m, MyPayload, MyPayload);
 
-    fn new_with(
+    fn new(
         _config: Option<&ComponentConfig>,
         _resources: Self::Resources<'_>,
     ) -> CuResult<Self>

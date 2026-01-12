@@ -19,7 +19,7 @@ pub mod tasks {
         type Resources<'r> = ();
         type Output<'m> = output_msg!(i8);
 
-        fn new_with(
+        fn new(
             _config: Option<&ComponentConfig>,
             _resources: Self::Resources<'_>,
         ) -> CuResult<Self>

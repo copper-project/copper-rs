@@ -161,24 +161,11 @@ pub trait CuBridge: Freezable {
     /// Resources required by the bridge.
     type Resources<'r>;
 
-    /// Backward-compatible constructor for bridges that do not require resources.
-    fn new(
-        config: Option<&ComponentConfig>,
-        tx_channels: &[BridgeChannelConfig<<Self::Tx as BridgeChannelSet>::Id>],
-        rx_channels: &[BridgeChannelConfig<<Self::Rx as BridgeChannelSet>::Id>],
-    ) -> CuResult<Self>
-    where
-        Self: Sized,
-        for<'r> Self::Resources<'r>: Default,
-    {
-        Self::new_with(config, tx_channels, rx_channels, Default::default())
-    }
-
     /// Constructs a new bridge.
     ///
     /// The runtime passes the bridge-level configuration plus the per-channel descriptors
     /// so the implementation can cache settings such as QoS, IDs, baud rates, etc.
-    fn new_with(
+    fn new(
         config: Option<&ComponentConfig>,
         tx_channels: &[BridgeChannelConfig<<Self::Tx as BridgeChannelSet>::Id>],
         rx_channels: &[BridgeChannelConfig<<Self::Rx as BridgeChannelSet>::Id>],
@@ -584,7 +571,7 @@ mod tests {
         type Tx = TxChannels;
         type Rx = RxChannels;
 
-        fn new_with(
+        fn new(
             config: Option<&ComponentConfig>,
             _tx_channels: &[BridgeChannelConfig<TxId>],
             _rx_channels: &[BridgeChannelConfig<RxId>],
@@ -716,7 +703,8 @@ mod tests {
             Some("custom/motor".to_string())
         );
 
-        let mut bridge = ExampleBridge::new(Some(&bridge_cfg), &tx_descriptors, &rx_descriptors)
+        let mut bridge =
+            ExampleBridge::new(Some(&bridge_cfg), &tx_descriptors, &rx_descriptors, ())
             .expect("bridge should build");
 
         assert_eq!(bridge.port, "ttyUSB0");

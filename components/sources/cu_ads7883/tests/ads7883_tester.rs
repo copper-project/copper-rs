@@ -12,7 +12,7 @@ impl Freezable for ADS78883TestSink {}
 impl CuSinkTask for ADS78883TestSink {
     type Resources<'r> = ();
     type Input<'m> = input_msg!(ADSReadingPayload);
-    fn new_with(
+    fn new(
         _config: Option<&ComponentConfig>,
         _resources: Self::Resources<'_>,
     ) -> CuResult<Self>

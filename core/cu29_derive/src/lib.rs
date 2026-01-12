@@ -657,7 +657,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         let rx_channels: &[cu29::cubridge::BridgeChannelConfig<
                             <<#bridge_type as cu29::cubridge::CuBridge>::Rx as cu29::cubridge::BridgeChannelSet>::Id,
                         >] = &[#(#rx_configs),*];
-                        <#bridge_type as cu29::cubridge::CuBridge>::new_with(
+                        <#bridge_type as cu29::cubridge::CuBridge>::new(
                             bridge_cfg.config.as_ref(),
                             tx_channels,
                             rx_channels,
@@ -786,7 +786,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 resources,
                                 #mapping_ref,
                             ).map_err(|e| e.add_cause(#additional_error_info))?;
-                            <#ty>::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
+                            <#ty>::new(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
                         }
                     },
                     CuTaskType::Regular => {
@@ -808,7 +808,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         inner: inner_resources,
                                         threadpool,
                                     };
-                                    <#ty>::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
+                                    <#ty>::new(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
                                 }
                             }
                         } else {
@@ -818,7 +818,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         resources,
                                         #mapping_ref,
                                     ).map_err(|e| e.add_cause(#additional_error_info))?;
-                                    <#ty>::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
+                                    <#ty>::new(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
                                 }
                             }
                         }
@@ -829,7 +829,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 resources,
                                 #mapping_ref,
                             ).map_err(|e| e.add_cause(#additional_error_info))?;
-                            <#ty>::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
+                            <#ty>::new(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
                         }
                     },
                 }
@@ -855,7 +855,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 resources,
                                 #mapping_ref,
                             ).map_err(|e| e.add_cause(#additional_error_info))?;
-                            #task_type::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
+                            #task_type::new(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
                         }
                     },
                     CuTaskType::Regular => {
@@ -877,7 +877,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         inner: inner_resources,
                                         threadpool,
                                     };
-                                    #task_type::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
+                                    #task_type::new(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
                                 }
                             }
                         } else {
@@ -887,7 +887,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         resources,
                                         #mapping_ref,
                                     ).map_err(|e| e.add_cause(#additional_error_info))?;
-                                    #task_type::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
+                                    #task_type::new(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
                                 }
                             }
                         }
@@ -898,7 +898,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 resources,
                                 #mapping_ref,
                             ).map_err(|e| e.add_cause(#additional_error_info))?;
-                            #task_type::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
+                            #task_type::new(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
                         }
                     },
                 }

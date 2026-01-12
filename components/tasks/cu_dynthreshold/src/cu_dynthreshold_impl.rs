@@ -119,7 +119,7 @@ impl CuTask for DynThreshold {
     type Input<'m> = input_msg!(CuGstBuffer);
     type Output<'m> = output_msg!(CuImage<Vec<u8>>);
 
-    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -226,7 +226,7 @@ mod tests {
         config.set("height", height as u32);
         config.set("block_radius", block_radius as u32);
 
-        let mut dynthresh = DynThreshold::new(Some(&config))?;
+        let mut dynthresh = DynThreshold::new(Some(&config), ())?;
 
         let input_data = vec![
             128, 128, 130, 130, // L1

@@ -22,7 +22,7 @@ impl Freezable for MySource {}
 impl CuSrcTask for MySource {
     type Resources<'r> = ();
     type Output<'m> = output_msg!(MyMsg);
-    fn new_with(
+    fn new(
         _config: Option<&ComponentConfig>,
         _resources: Self::Resources<'_>,
     ) -> CuResult<Self> {
@@ -46,7 +46,7 @@ impl CuTask for Doubler {
     type Input<'m> = input_msg!(MyMsg);
     type Output<'m> = output_msg!(MyMsg);
 
-    fn new_with(
+    fn new(
         _config: Option<&ComponentConfig>,
         _resources: Self::Resources<'_>,
     ) -> CuResult<Self> {
@@ -75,7 +75,7 @@ impl CuSinkTask for MySink {
     type Resources<'r> = ();
     type Input<'m> = input_msg!(MyMsg);
 
-    fn new_with(
+    fn new(
         _config: Option<&ComponentConfig>,
         _resources: Self::Resources<'_>,
     ) -> CuResult<Self> {

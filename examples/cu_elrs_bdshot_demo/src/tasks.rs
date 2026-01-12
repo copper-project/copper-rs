@@ -15,7 +15,7 @@ impl CuTask for ThrottleControl {
     type Input<'m> = CuMsg<RcChannelsPayload>;
     type Output<'m> = CuMsg<EscCommand>;
 
-    fn new_with(
+    fn new(
         _config: Option<&ComponentConfig>,
         _resources: Self::Resources<'_>,
     ) -> CuResult<Self> {
@@ -60,7 +60,7 @@ impl<const ESC: usize> CuSinkTask for TelemetrySink<ESC> {
     type Input<'m> = CuMsg<EscTelemetry>;
     type Resources<'r> = ();
 
-    fn new_with(
+    fn new(
         _config: Option<&ComponentConfig>,
         _resources: Self::Resources<'_>,
     ) -> CuResult<Self> {

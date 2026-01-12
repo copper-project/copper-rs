@@ -25,7 +25,7 @@ impl CuSrcTask for CaterpillarSource {
     type Resources<'r> = ();
     type Output<'m> = output_msg!(RPGpioPayload);
 
-    fn new_with(
+    fn new(
         _config: Option<&ComponentConfig>,
         _resources: Self::Resources<'_>,
     ) -> CuResult<Self>
@@ -54,7 +54,7 @@ impl CuTask for CaterpillarTask {
     type Input<'m> = input_msg!(RPGpioPayload);
     type Output<'m> = output_msg!(RPGpioPayload);
 
-    fn new_with(
+    fn new(
         _config: Option<&ComponentConfig>,
         _resources: Self::Resources<'_>,
     ) -> CuResult<Self>
