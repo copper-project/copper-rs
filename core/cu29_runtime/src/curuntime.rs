@@ -671,7 +671,9 @@ fn plan_tasks_tree_branch(
                         .unwrap_or_else(|| panic!("Missing edge {edge_id} for node {id}"));
                     let pid = graph
                         .get_node_id_by_name(edge.src.as_str())
-                        .unwrap_or_else(|| panic!("Missing source node '{}' for edge {edge_id}", edge.src));
+                        .unwrap_or_else(|| {
+                            panic!("Missing source node '{}' for edge {edge_id}", edge.src)
+                        });
                     let output_pack = find_output_pack_from_nodeid(pid, plan);
                     if let Some(output_pack) = output_pack {
                         #[cfg(all(feature = "std", feature = "macro_debug"))]
@@ -715,7 +717,9 @@ fn plan_tasks_tree_branch(
                         .unwrap_or_else(|| panic!("Missing edge {edge_id} for node {id}"));
                     let pid = graph
                         .get_node_id_by_name(edge.src.as_str())
-                        .unwrap_or_else(|| panic!("Missing source node '{}' for edge {edge_id}", edge.src));
+                        .unwrap_or_else(|| {
+                            panic!("Missing source node '{}' for edge {edge_id}", edge.src)
+                        });
                     let output_pack = find_output_pack_from_nodeid(pid, plan);
                     if let Some(output_pack) = output_pack {
                         #[cfg(all(feature = "std", feature = "macro_debug"))]
