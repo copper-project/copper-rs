@@ -114,7 +114,7 @@ fn collect_output_ports(graph: &CuGraph, node_id: NodeId) -> Vec<(String, String
         seen.push(edge.msg.clone());
         let mut port_label = String::from("out");
         port_label.push_str(&port_idx.to_string());
-        port_label.push(':');
+        port_label.push_str(": ");
         port_label.push_str(edge.msg.as_str());
         outputs.push((edge.msg.clone(), port_label));
         port_idx += 1;

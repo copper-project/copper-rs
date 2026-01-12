@@ -1788,7 +1788,7 @@ pub(crate) fn build_render_topology(graph: &CuGraph, bridges: &[BridgeConfig]) -
         {
             let port_map = &mut output_port_lookup[idx];
             if !port_map.contains_key(&cnx.msg) {
-                let label = format!("out{}:{}", port_map.len(), cnx.msg);
+                let label = format!("out{}: {}", port_map.len(), cnx.msg);
                 port_map.insert(cnx.msg.clone(), label.clone());
                 nodes[idx].outputs.push(label);
             }
