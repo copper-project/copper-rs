@@ -30,7 +30,7 @@ use cu29_log_runtime::log_debug_mode;
 use cu29_value::to_value;
 
 use alloc::boxed::Box;
-use alloc::collections::VecDeque;
+use alloc::collections::{BTreeSet, VecDeque};
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -845,6 +845,32 @@ pub fn compute_runtime_plan(graph: &CuGraph) -> CuResult<CuExecutionLoop> {
                 queue.push_back(neighbor);
             }
         }
+    }
+
+    let mut planned_nodes = BTreeSet::new();
+    for unit in &plan {
+        if let CuExecutionUnit::Step(step) = unit {
+            planned_nodes.insert(step.node_id);
+        }
+    }
+
+    let mut missing = Vec::new();
+    for node_id in graph.node_ids() {
+        if !planned_nodes.contains(&node_id) {
+            if let Some(node) = graph.get_node(node_id) {
+                missing.push(node.get_id().to_string());
+            } else {
+                missing.push(format!("node_id_{node_id}"));
+            }
+        }
+    }
+
+    if !missing.is_empty() {
+        missing.sort();
+        return Err(CuError::from(format!(
+            "Execution plan could not include all nodes. Missing: {}. Check for loopback or missing source connections.",
+            missing.join(", ")
+        )));
     }
 
     Ok(CuExecutionLoop {
