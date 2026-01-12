@@ -1,0 +1,196 @@
+name: Rust CI Setup
+description: Common Rust CI setup for copper-rs workflows.
+inputs:
+  toolchain:
+    description: Rust toolchain to install.
+    required: true
+  cargo_target_dir:
+    description: Optional CARGO_TARGET_DIR override.
+    required: false
+    default: ""
+  linux_cargo_paths:
+    description: Use Linux-only cargo paths.
+    required: false
+    default: "false"
+  cache_prefix:
+    description: Rust cache prefix key.
+    required: true
+  cache_shared_key:
+    description: Rust cache shared key.
+    required: true
+  install_nextest:
+    description: Whether to install nextest.
+    required: false
+    default: "false"
+  set_workspace_flag:
+    description: Whether to set WORKSPACE_FLAG from WORKSPACE_SCOPE.
+    required: false
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v6
+    - name: Configure CARGO_TARGET_DIR
+      if: inputs.cargo_target_dir != ''
+      shell: bash
+      run: echo "CARGO_TARGET_DIR=${{ inputs.cargo_target_dir }}" >> "$GITHUB_ENV"
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ inputs.toolchain }}
+        components: rustc,cargo,rust-std,rustfmt,clippy
+    - name: Run sccache-cache
+      uses: mozilla-actions/sccache-action@v0.0.9
+    - name: Setup rust-cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        prefix-key: ${{ inputs.cache_prefix }}
+        shared-key: ${{ inputs.cache_shared_key }}
+        save-if: ${{ github.ref == 'refs/heads/master' }}
+        cache-targets: "false"
+        cache-bin: "false"
+    - name: Install latest nextest
+      if: inputs.install_nextest == 'true'
+      uses: taiki-e/install-action@nextest
+
+    - name: Set workspace scope
+      if: inputs.set_workspace_flag == 'true'
+      shell: bash
+      run: |
+        if [[ "${WORKSPACE_SCOPE}" == "workspace" ]]; then
+          echo "WORKSPACE_FLAG=--workspace" >> "$GITHUB_ENV"
+        else
+          echo "WORKSPACE_FLAG=" >> "$GITHUB_ENV"
+        fi
+
+    - name: Install winget
+      if: runner.os == 'Windows' && env.WORKSPACE_SCOPE == 'workspace'
+      uses: Cyberboss/install-winget@v1
+
+    - name: Free Disk Space (Ubuntu)
+      if: runner.os == 'Linux'
+      uses: jlumbroso/free-disk-space@main
+      with:
+        # this might remove tools that are actually needed,
+        # if set to "true" but frees about 6 GB
+        tool-cache: false
+        android: true
+        dotnet: true
+        haskell: true
+        # do not remove large-packages, as it is necessary
+        large-packages: false
+        docker-images: true
+        swap-storage: true
+
+    - name: Linux-only Cargo paths
+      if: runner.os == 'Linux' && inputs.linux_cargo_paths == 'true'
+      shell: bash
+      run: |
+        echo "CARGO_TARGET_DIR=/mnt/cargo-target" >> "$GITHUB_ENV"
+        echo "CARGO_HOME=/mnt/cargo-home" >> "$GITHUB_ENV"
+        echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
+        sudo mkdir -p /mnt/cargo-home /mnt/cargo-target /mnt/tmp
+        sudo chown -R "$USER:$USER" /mnt/cargo-home /mnt/cargo-target /mnt/tmp
+
+    - name: Install dependencies (Windows)
+      if: runner.os == 'Windows' && env.WORKSPACE_SCOPE == 'workspace'
+      shell: pwsh
+      run: |
+        # Verify winget availability
+        if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
+            Write-Host "winget is not installed or available."
+            exit 1
+        }
+
+        # Install PCAP SDK
+        Invoke-WebRequest -Uri https://npcap.com/dist/npcap-sdk-1.13.zip -OutFile npcap-sdk.zip
+        Expand-Archive -Path npcap-sdk.zip -DestinationPath $env:USERPROFILE\npcap-sdk
+        Remove-Item npcap-sdk.zip
+
+        # Install Win10Pcap (if winget is available)
+        winget install DaiyuuNobori.Win10Pcap --accept-source-agreements --accept-package-agreements
+
+        # Set PCAP library path
+        echo "LIB=$env:USERPROFILE\npcap-sdk\Lib\x64" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+    - name: Cache apt packages (Linux)
+      if: runner.os == 'Linux'
+      uses: actions/cache@v5
+      with:
+        path: /var/cache/apt/archives
+        key: ${{ runner.os }}-apt-gstreamer-${{ hashFiles('.github/actions/rust-ci-setup/action.yml') }}
+
+    - name: Install dependencies (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          pkg-config \
+          libudev-dev \
+          libpcap-dev \
+          libglib2.0-dev \
+          clang \
+          libclang-dev \
+          libgstreamer1.0-dev \
+          libgstreamer-plugins-base1.0-dev \
+          libgstreamer-plugins-bad1.0-dev \
+          gstreamer1.0-plugins-base \
+          gstreamer1.0-plugins-good \
+          gstreamer1.0-plugins-bad \
+          gstreamer1.0-plugins-ugly \
+          gstreamer1.0-libav \
+          gstreamer1.0-tools \
+          gstreamer1.0-x \
+          gstreamer1.0-alsa \
+          gstreamer1.0-gl \
+          gstreamer1.0-gtk3 \
+          gstreamer1.0-qt5 \
+          gstreamer1.0-pulseaudio
+
+    - name: Install GStreamer (macOS, cached)
+      if: runner.os == 'macOS'
+      uses: gerlero/brew-install@v1
+      env:
+        HOMEBREW_NO_AUTO_UPDATE: "1"
+        HOMEBREW_NO_INSTALL_CLEANUP: "1"
+      with:
+        cache: true
+        packages: |
+          gstreamer
+          gst-plugins-base
+          gst-plugins-good
+          gst-plugins-bad
+          gst-plugins-ugly
+          gst-libav
+          gst-plugins-rs
+          gtk+3
+          qt@5
+
+    - name: Export GStreamer env (macOS)
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        QT_PREFIX="$(brew --prefix qt@5)"
+        echo "DYLD_LIBRARY_PATH=/opt/homebrew/opt/gstreamer/lib:/usr/local/opt/gstreamer/lib:$DYLD_LIBRARY_PATH" >> "$GITHUB_ENV"
+        echo "PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig:/opt/homebrew/opt/gstreamer/lib/pkgconfig:${QT_PREFIX}/lib/pkgconfig:$PKG_CONFIG_PATH" >> "$GITHUB_ENV"
+
+    - name: Debug GStreamer Installation
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        echo "Checking GStreamer version..."
+        pkg-config --modversion gstreamer-1.0 || { echo "GStreamer not found!"; }
+
+        echo "Checking GStreamer library path..."
+        if [[ -d "/opt/homebrew/opt/gstreamer/lib" ]]; then
+          echo "GStreamer is installed at /opt/homebrew/opt/gstreamer/lib"
+          ls -l /opt/homebrew/opt/gstreamer/lib | head
+        else
+          echo "GStreamer libraries missing!"
+        fi
+
+        echo "Checking PKG_CONFIG_PATH..."
+        echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
+
+        echo "Checking DYLD_LIBRARY_PATH..."
+        echo "DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH"
