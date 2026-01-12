@@ -36,10 +36,7 @@ where
     type Input<'m> = input_msg!(T);
     type Output<'m> = output_msg!(T);
 
-    fn new_with(
-        config: Option<&ComponentConfig>,
-        _resources: Self::Resources<'_>,
-    ) -> CuResult<Self> {
+    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self> {
         let hz = config
             .and_then(|cfg| cfg.get::<f64>("rate"))
             .ok_or("Missing required 'rate' config for CuRateLimiter")?;
@@ -89,7 +86,7 @@ mod tests {
     fn create_test_ratelimiter(rate: f64) -> CuRateLimit<i32> {
         let mut cfg = ComponentConfig::new();
         cfg.set("rate", rate);
-        CuRateLimit::new(Some(&cfg)).unwrap()
+        CuRateLimit::new(Some(&cfg), ()).unwrap()
     }
 
     #[test]

@@ -898,10 +898,7 @@ mod tests {
     impl CuSrcTask for TestSource {
         type Resources<'r> = ();
         type Output<'m> = ();
-        fn new_with(
-            _config: Option<&ComponentConfig>,
-            _resources: Self::Resources<'_>,
-        ) -> CuResult<Self>
+        fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
         where
             Self: Sized,
         {
@@ -925,10 +922,7 @@ mod tests {
         type Resources<'r> = ();
         type Input<'m> = ();
 
-        fn new_with(
-            _config: Option<&ComponentConfig>,
-            _resources: Self::Resources<'_>,
-        ) -> CuResult<Self>
+        fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
         where
             Self: Sized,
         {
@@ -968,8 +962,8 @@ mod tests {
         _resources: &mut ResourceManager,
     ) -> CuResult<Tasks> {
         Ok((
-            TestSource::new(all_instances_configs[0])?,
-            TestSink::new(all_instances_configs[1])?,
+            TestSource::new(all_instances_configs[0], ())?,
+            TestSink::new(all_instances_configs[1], ())?,
         ))
     }
 
@@ -979,8 +973,8 @@ mod tests {
         _resources: &mut ResourceManager,
     ) -> CuResult<Tasks> {
         Ok((
-            TestSource::new(all_instances_configs[0])?,
-            TestSink::new(all_instances_configs[1])?,
+            TestSource::new(all_instances_configs[0], ())?,
+            TestSink::new(all_instances_configs[1], ())?,
         ))
     }
 

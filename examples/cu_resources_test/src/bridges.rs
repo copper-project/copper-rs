@@ -68,7 +68,7 @@ impl CuBridge for StatsBridge {
     type Rx = RxChannels;
     type Resources<'r> = StatsBridgeResources;
 
-    fn new_with(
+    fn new(
         _config: Option<&ComponentConfig>,
         tx_channels: &[BridgeChannelConfig<<Self::Tx as BridgeChannelSet>::Id>],
         _rx_channels: &[BridgeChannelConfig<<Self::Rx as BridgeChannelSet>::Id>],

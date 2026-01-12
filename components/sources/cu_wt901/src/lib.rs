@@ -225,10 +225,7 @@ impl CuSrcTask for WT901 {
     type Resources<'r> = ();
     type Output<'m> = output_msg!(PositionalReadingsPayload);
 
-    fn new_with(
-        _config: Option<&ComponentConfig>,
-        _resources: Self::Resources<'_>,
-    ) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {

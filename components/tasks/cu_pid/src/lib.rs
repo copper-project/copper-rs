@@ -157,7 +157,7 @@ where
     type Input<'m> = input_msg!(I);
     type Output<'m> = output_msg!(PIDControlOutputPayload);
 
-    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {

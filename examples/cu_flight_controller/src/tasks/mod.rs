@@ -123,10 +123,7 @@ impl CuSinkTask for ImuLogger {
     type Input<'m> = CuMsg<ImuPayload>;
     type Resources<'r> = ();
 
-    fn new_with(
-        _config: Option<&ComponentConfig>,
-        _resources: Self::Resources<'_>,
-    ) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -202,7 +199,7 @@ impl CuTask for RcMapper {
     type Output<'m> = CuMsg<ControlInputs>;
     type Resources<'r> = ();
 
-    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -362,7 +359,7 @@ impl CuTask for ImuCalibrator {
     type Output<'m> = CuMsg<ImuPayload>;
     type Resources<'r> = ();
 
-    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -509,7 +506,7 @@ impl CuTask for AttitudeController {
     type Output<'m> = CuMsg<BodyRateSetpoint>;
     type Resources<'r> = ();
 
-    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -658,7 +655,7 @@ impl CuTask for RateController {
     type Output<'m> = CuMsg<BodyCommand>;
     type Resources<'r> = ();
 
-    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -845,7 +842,7 @@ impl CuTask for QuadXMixer {
     type Output<'m> = CuMsg<EscCommand>;
     type Resources<'r> = ();
 
-    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {

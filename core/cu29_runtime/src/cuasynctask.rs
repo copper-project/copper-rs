@@ -38,7 +38,7 @@ where
         resources: T::Resources<'_>,
         tp: Arc<ThreadPool>,
     ) -> CuResult<Self> {
-        let task = Arc::new(Mutex::new(T::new_with(config, resources)?));
+        let task = Arc::new(Mutex::new(T::new(config, resources)?));
         let output = Arc::new(Mutex::new(CuMsg::default()));
         Ok(Self {
             task,
@@ -69,11 +69,11 @@ where
     type Input<'m> = T::Input<'m>;
     type Output<'m> = T::Output<'m>;
 
-    fn new_with(config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
-        let task = Arc::new(Mutex::new(T::new_with(config, resources.inner)?));
+        let task = Arc::new(Mutex::new(T::new(config, resources.inner)?));
         let output = Arc::new(Mutex::new(CuMsg::default()));
         Ok(Self {
             task,
@@ -182,10 +182,7 @@ mod tests {
         type Input<'m> = input_msg!(u32);
         type Output<'m> = output_msg!(u32);
 
-        fn new_with(
-            _config: Option<&ComponentConfig>,
-            _resources: Self::Resources<'_>,
-        ) -> CuResult<Self>
+        fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
         where
             Self: Sized,
         {
@@ -241,10 +238,7 @@ mod tests {
         type Input<'m> = input_msg!(u32);
         type Output<'m> = output_msg!(u32);
 
-        fn new_with(
-            _config: Option<&ComponentConfig>,
-            _resources: Self::Resources<'_>,
-        ) -> CuResult<Self>
+        fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
         where
             Self: Sized,
         {

@@ -78,7 +78,7 @@ impl<const N: usize> CuSrcTask for CuGStreamer<N> {
     type Resources<'r> = ();
     type Output<'m> = output_msg!(CuGstBuffer);
 
-    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {

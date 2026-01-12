@@ -166,10 +166,7 @@ impl CuTask for AprilTags {
     type Input<'m> = input_msg!(CuImage<Vec<u8>>);
     type Output<'m> = output_msg!(AprilTagDetections);
 
-    fn new_with(
-        _config: Option<&ComponentConfig>,
-        _resources: Self::Resources<'_>,
-    ) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -192,10 +189,7 @@ impl CuTask for AprilTags {
     type Input<'m> = input_msg!(CuImage<Vec<u8>>);
     type Output<'m> = output_msg!(AprilTagDetections);
 
-    fn new_with(
-        _config: Option<&ComponentConfig>,
-        _resources: Self::Resources<'_>,
-    ) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -333,7 +327,7 @@ mod tests {
         config.set("cy", 520.0);
         config.set("family", "tag16h5".to_string());
 
-        let mut task = AprilTags::new(Some(&config))?;
+        let mut task = AprilTags::new(Some(&config), ())?;
         let input = CuMsg::<CuImage<Vec<u8>>>::new(Some(cuimage));
         let mut output = CuMsg::<AprilTagDetections>::default();
 

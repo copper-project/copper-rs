@@ -31,7 +31,7 @@
 //!         Ok(Self { bus: mgr.borrow(key)? })
 //!     }
 //! }
-//! pub fn new_with(_cfg: Option<&ComponentConfig>, res: TelemetryResources<'_>) -> CuResult<Self> {
+//! pub fn new(_cfg: Option<&ComponentConfig>, res: TelemetryResources<'_>) -> CuResult<Self> {
 //!     Ok(Self { bus: res.bus })
 //! }
 //! ```

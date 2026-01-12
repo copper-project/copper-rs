@@ -93,7 +93,7 @@ impl CuSrcTask for ADS7883 {
     type Resources<'r> = ();
     type Output<'m> = output_msg!(ADSReadingPayload);
 
-    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -177,7 +177,7 @@ pub mod test_support {
         type Resources<'r> = ();
         type Input<'m> = input_msg!(ADSReadingPayload);
 
-        fn new_with(
+        fn new(
             _config: Option<&ComponentConfig>,
             _resources: Self::Resources<'_>,
         ) -> CuResult<Self> {

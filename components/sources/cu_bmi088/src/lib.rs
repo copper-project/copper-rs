@@ -134,7 +134,7 @@ where
     type Resources<'r> = Resources<SPI, ACC, GYR, D>;
     type Output<'m> = output_msg!(ImuPayload);
 
-    fn new_with(_config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
