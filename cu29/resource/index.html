@@ -27,7 +27,7 @@ bus <code>Arc</code>) can be bound to multiple consumers.</p>
         <span class="prelude-val">Ok</span>(<span class="self">Self </span>{ bus: mgr.borrow(key)<span class="question-mark">? </span>})
     }
 }
-<span class="kw">pub fn </span>new_with(_cfg: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>ComponentConfig&gt;, res: TelemetryResources&lt;<span class="lifetime">'_</span>&gt;) -&gt; CuResult&lt;<span class="self">Self</span>&gt; {
+<span class="kw">pub fn </span>new(_cfg: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>ComponentConfig&gt;, res: TelemetryResources&lt;<span class="lifetime">'_</span>&gt;) -&gt; CuResult&lt;<span class="self">Self</span>&gt; {
     <span class="prelude-val">Ok</span>(<span class="self">Self </span>{ bus: res.bus })
 }</code></pre></div>
 <p>Otherwise, use config to point to the right board resource and you’re done.</p>
