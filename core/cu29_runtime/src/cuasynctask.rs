@@ -1,6 +1,7 @@
 use crate::config::ComponentConfig;
 use crate::cutask::{CuMsg, CuMsgPayload, CuTask, Freezable};
 use cu29_clock::{CuTime, RobotClock};
+use cu29_log_runtime::{CulistContextGuard, current_culistid};
 use cu29_traits::CuResult;
 use rayon::ThreadPool;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -116,6 +117,7 @@ where
         *real_output = buffered_output.clone();
 
         // immediately requeue a task based on the new input
+        let culistid = current_culistid();
         self.tp.spawn_fifo({
             let clock = clock.clone();
             let input = (*input).clone();
@@ -123,6 +125,7 @@ where
             let task = self.task.clone();
             let state = self.state.clone();
             move || {
+                let _culist_guard = CulistContextGuard::new(culistid);
                 let input_ref: &CuMsg<I> = &input;
                 let mut output: MutexGuard<CuMsg<O>> = output.lock().unwrap();
 

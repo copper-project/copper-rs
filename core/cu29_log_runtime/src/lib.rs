@@ -3,11 +3,17 @@
 extern crate alloc;
 
 use cu29_clock::RobotClock;
-use cu29_log::CuLogEntry;
 #[allow(unused_imports)]
 use cu29_log::CuLogLevel;
+use cu29_log::{CULISTID_UNKNOWN, CuLogEntry};
 use cu29_traits::{CuResult, WriteStream};
 use log::Log;
+
+#[cfg(feature = "std")]
+use std::cell::Cell;
+
+#[cfg(not(feature = "std"))]
+use core::sync::atomic::{AtomicU32, Ordering};
 
 #[cfg(not(feature = "std"))]
 mod imp {
@@ -56,6 +62,70 @@ static WRITER: OnceLock<WriterPair> = OnceLock::new();
 #[cfg(debug_assertions)]
 #[cfg(feature = "std")]
 pub static EXTRA_TEXT_LOGGER: RwLock<Option<Box<dyn Log + 'static>>> = RwLock::new(None);
+
+#[cfg(feature = "std")]
+thread_local! {
+    static CURRENT_CULISTID: Cell<u32> = const { Cell::new(CULISTID_UNKNOWN) };
+}
+
+#[cfg(not(feature = "std"))]
+// no_std fallback uses a global atomic; suitable for single-threaded targets.
+static CURRENT_CULISTID: AtomicU32 = AtomicU32::new(CULISTID_UNKNOWN);
+
+/// Returns the current CopperList id for this execution context.
+#[inline]
+pub fn current_culistid() -> u32 {
+    #[cfg(feature = "std")]
+    {
+        CURRENT_CULISTID.with(|id| id.get())
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        CURRENT_CULISTID.load(Ordering::SeqCst)
+    }
+}
+
+/// Sets the current CopperList id, returning the previous value.
+#[inline]
+pub fn set_current_culistid(culistid: u32) -> u32 {
+    #[cfg(feature = "std")]
+    {
+        CURRENT_CULISTID.with(|id| {
+            let prev = id.get();
+            id.set(culistid);
+            prev
+        })
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        CURRENT_CULISTID.swap(culistid, Ordering::SeqCst)
+    }
+}
+
+/// Guard that restores the previous CopperList id on drop.
+pub struct CulistContextGuard {
+    previous: u32,
+}
+
+impl CulistContextGuard {
+    pub fn new(culistid: u32) -> Self {
+        let previous = set_current_culistid(culistid);
+        Self { previous }
+    }
+}
+
+impl Drop for CulistContextGuard {
+    fn drop(&mut self) {
+        set_current_culistid(self.previous);
+    }
+}
+
+/// Runs a closure with the provided CopperList id set as current.
+#[inline]
+pub fn with_culistid<R>(culistid: u32, f: impl FnOnce() -> R) -> R {
+    let _guard = CulistContextGuard::new(culistid);
+    f()
+}
 
 pub struct NullLog;
 impl Log for NullLog {
@@ -147,6 +217,7 @@ pub fn log(entry: &mut CuLogEntry) -> CuResult<()> {
     }
     let (writer, clock) = d.unwrap();
     entry.time = clock.now();
+    entry.culistid = current_culistid();
 
     #[cfg(not(feature = "std"))]
     writer.lock().log(entry)?;
@@ -329,10 +400,28 @@ impl WriteStream<CuLogEntry> for SimpleFileWriter {
 #[cfg(test)]
 mod tests {
     use crate::CuLogEntry;
+    use crate::CulistContextGuard;
+    #[cfg(feature = "std")]
+    use crate::LoggerRuntime;
+    #[cfg(feature = "std")]
+    use crate::NullLog;
+    use crate::current_culistid;
+    #[cfg(feature = "std")]
+    use crate::log;
+    use crate::set_current_culistid;
     use bincode::config::standard;
+    #[cfg(feature = "std")]
+    use cu29_clock::RobotClock;
+    use cu29_log::CULISTID_UNKNOWN;
     use cu29_log::CuLogLevel;
+    #[cfg(feature = "std")]
+    use cu29_traits::WriteStream;
     use cu29_value::Value;
     use smallvec::smallvec;
+    #[cfg(feature = "std")]
+    use std::sync::{Arc, Barrier, Mutex, OnceLock};
+    #[cfg(feature = "std")]
+    use std::thread;
 
     #[cfg(not(feature = "std"))]
     use alloc::string::ToString;
@@ -345,10 +434,72 @@ mod tests {
             msg_index: 1,
             paramname_indexes: smallvec![2, 3],
             params: smallvec![Value::String("test".to_string())],
+            culistid: CULISTID_UNKNOWN,
         };
         let encoded = bincode::encode_to_vec(&log_entry, standard()).unwrap();
         let decoded_tuple: (CuLogEntry, usize) =
             bincode::decode_from_slice(&encoded, standard()).unwrap();
         assert_eq!(log_entry, decoded_tuple.0);
+    }
+
+    #[test]
+    fn test_culist_context_guard() {
+        let original = current_culistid();
+        {
+            let _guard = CulistContextGuard::new(42);
+            assert_eq!(current_culistid(), 42);
+        }
+        assert_eq!(current_culistid(), original);
+        let prev = set_current_culistid(7);
+        assert_eq!(prev, original);
+        assert_eq!(current_culistid(), 7);
+        set_current_culistid(original);
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_thread_local_culistid_logging() {
+        static TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        let _guard = TEST_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
+
+        #[derive(Debug)]
+        struct CulistCapture {
+            culistids: Arc<Mutex<Vec<u32>>>,
+        }
+
+        impl WriteStream<CuLogEntry> for CulistCapture {
+            fn log(&mut self, obj: &CuLogEntry) -> cu29_traits::CuResult<()> {
+                self.culistids.lock().unwrap().push(obj.culistid);
+                Ok(())
+            }
+        }
+
+        let culistids = Arc::new(Mutex::new(Vec::new()));
+        let writer = CulistCapture {
+            culistids: culistids.clone(),
+        };
+        let _runtime = LoggerRuntime::init(RobotClock::default(), writer, None::<NullLog>);
+
+        let barrier = Arc::new(Barrier::new(3));
+        let mut handles = Vec::new();
+        for culistid in [10u32, 20u32] {
+            let barrier = barrier.clone();
+            let handle = thread::spawn(move || {
+                set_current_culistid(culistid);
+                barrier.wait();
+                let mut entry = CuLogEntry::new(1, CuLogLevel::Info);
+                log(&mut entry).unwrap();
+            });
+            handles.push(handle);
+        }
+
+        barrier.wait();
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        let mut values = culistids.lock().unwrap().clone();
+        values.sort();
+        assert_eq!(values, vec![10, 20]);
     }
 }

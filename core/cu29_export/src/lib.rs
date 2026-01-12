@@ -352,6 +352,11 @@ mod python {
             self.inner.msg_index
         }
 
+        /// Returns the CopperList id associated with this log entry.
+        pub fn culistid(&self) -> u32 {
+            self.inner.culistid
+        }
+
         /// Returns the index of the parameter names in the vector of interned strings.
         pub fn paramname_indexes(&self) -> Vec<u32> {
             self.inner.paramname_indexes.iter().copied().collect()

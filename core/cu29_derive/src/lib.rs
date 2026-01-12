@@ -1640,6 +1640,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 kf_manager.reset(clid, clock); // beginning of processing, we empty the serialized frozen states of the tasks.
                 culist.change_state(cu29::copperlist::CopperListState::Processing);
                 culist.msgs.init_zeroed();
+                let _culist_guard = ::cu29::prelude::CulistContextGuard::new(clid);
                 {
                     let msgs = &mut culist.msgs.0;
                     #(#runtime_plan_code)*
@@ -1651,6 +1652,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 cl_manager.end_of_processing(clid)?;
                 kf_manager.end_of_processing(clid)?;
+                drop(_culist_guard);
 
                 // Postprocess calls can happen at any time, just packed them up at the end.
                 #(#postprocess_calls)*

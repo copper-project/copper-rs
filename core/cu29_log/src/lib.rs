@@ -62,6 +62,7 @@ impl CuLogLevel {
 
 #[allow(dead_code)]
 pub const ANONYMOUS: u32 = 0;
+pub const CULISTID_UNKNOWN: u32 = u32::MAX;
 
 pub const MAX_LOG_PARAMS_ON_STACK: usize = 10;
 
@@ -82,6 +83,9 @@ pub struct CuLogEntry {
 
     // Serializable values for the parameters (Values are acting like an Any Value).
     pub params: SmallVec<[Value; MAX_LOG_PARAMS_ON_STACK]>,
+
+    // CopperList id associated with this log entry.
+    pub culistid: u32,
 }
 
 impl Encode for CuLogEntry {
@@ -102,6 +106,8 @@ impl Encode for CuLogEntry {
         for param in &self.params {
             param.encode(encoder)?;
         }
+
+        self.culistid.encode(encoder)?;
 
         Ok(())
     }
@@ -135,12 +141,25 @@ impl<Context> Decode<Context> for CuLogEntry {
             params.push(Value::decode(decoder)?);
         }
 
+        let culistid = match u32::decode(decoder) {
+            Ok(value) => value,
+            Err(bincode::error::DecodeError::UnexpectedEnd { .. }) => CULISTID_UNKNOWN,
+            #[cfg(feature = "std")]
+            Err(bincode::error::DecodeError::Io { inner, .. })
+                if inner.kind() == std::io::ErrorKind::UnexpectedEof =>
+            {
+                CULISTID_UNKNOWN
+            }
+            Err(err) => return Err(err),
+        };
+
         Ok(CuLogEntry {
             time,
             level,
             msg_index,
             paramname_indexes,
             params,
+            culistid,
         })
     }
 }
@@ -150,8 +169,8 @@ impl Display for CuLogEntry {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(
             f,
-            "CuLogEntry {{ level: {:?}, msg_index: {}, paramname_indexes: {:?}, params: {:?} }}",
-            self.level, self.msg_index, self.paramname_indexes, self.params
+            "CuLogEntry {{ level: {:?}, msg_index: {}, culistid: {}, paramname_indexes: {:?}, params: {:?} }}",
+            self.level, self.msg_index, self.culistid, self.paramname_indexes, self.params
         )
     }
 }
@@ -166,6 +185,7 @@ impl CuLogEntry {
             msg_index,
             paramname_indexes: SmallVec::new(),
             params: SmallVec::new(),
+            culistid: CULISTID_UNKNOWN,
         }
     }
 
@@ -326,6 +346,9 @@ macro_rules! defmt_error {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bincode::config::standard;
+    use bincode::enc::{Encode, Encoder};
+    use bincode::error::EncodeError;
 
     #[test]
     fn test_log_level_ordering() {
@@ -383,5 +406,62 @@ mod tests {
         let entry = CuLogEntry::new(42, CuLogLevel::Warning);
         assert_eq!(entry.level, CuLogLevel::Warning);
         assert_eq!(entry.msg_index, 42);
+        assert_eq!(entry.culistid, CULISTID_UNKNOWN);
+    }
+
+    #[test]
+    fn test_cu_log_entry_culistid_roundtrip() {
+        let mut entry = CuLogEntry::new(1, CuLogLevel::Info);
+        entry.culistid = 42;
+        entry.add_param(ANONYMOUS, Value::U32(7));
+        let encoded = bincode::encode_to_vec(&entry, standard()).unwrap();
+        let decoded: (CuLogEntry, usize) =
+            bincode::decode_from_slice(&encoded, standard()).unwrap();
+        assert_eq!(decoded.0, entry);
+    }
+
+    #[test]
+    fn test_decode_legacy_log_entry_defaults_culistid() {
+        struct LegacyEntry<'a> {
+            time: CuTime,
+            level: CuLogLevel,
+            msg_index: u32,
+            paramname_indexes: &'a [u32],
+            params: &'a [Value],
+        }
+
+        impl Encode for LegacyEntry<'_> {
+            fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+                self.time.encode(encoder)?;
+                (self.level as u8).encode(encoder)?;
+                self.msg_index.encode(encoder)?;
+
+                (self.paramname_indexes.len() as u64).encode(encoder)?;
+                for &index in self.paramname_indexes {
+                    index.encode(encoder)?;
+                }
+
+                (self.params.len() as u64).encode(encoder)?;
+                for param in self.params {
+                    param.encode(encoder)?;
+                }
+                Ok(())
+            }
+        }
+
+        let mut entry = CuLogEntry::new(7, CuLogLevel::Warning);
+        entry.add_param(ANONYMOUS, Value::String("legacy".into()));
+        entry.culistid = 123;
+        let legacy = LegacyEntry {
+            time: entry.time,
+            level: entry.level,
+            msg_index: entry.msg_index,
+            paramname_indexes: &entry.paramname_indexes,
+            params: &entry.params,
+        };
+        let encoded = bincode::encode_to_vec(legacy, standard()).unwrap();
+        let decoded: (CuLogEntry, usize) =
+            bincode::decode_from_slice(&encoded, standard()).unwrap();
+        assert_eq!(decoded.0.culistid, CULISTID_UNKNOWN);
     }
 }

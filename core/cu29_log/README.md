@@ -106,6 +106,7 @@ Each log entry contains:
 - A timestamp (`CuTime`)
 - Log level (`CuLogLevel`)
 - Message index (interned string reference)
+- CopperList id (`culistid`, defaults to `CULISTID_UNKNOWN` outside CopperList processing)
 - Parameter names and values (stored efficiently using `SmallVec`)
 
 ### Log Storage and Retrieval

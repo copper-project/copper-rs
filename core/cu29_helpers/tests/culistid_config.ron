@@ -1,0 +1,9 @@
+(
+    tasks: [
+        (id: "src", type: "crate::tasks::TestSrc"),
+        (id: "sink", type: "crate::tasks::TestSink"),
+    ],
+    cnx: [
+        (src: "src", dst: "sink", msg: "u32"),
+    ],
+)

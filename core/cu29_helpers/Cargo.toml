@@ -22,6 +22,7 @@ simplelog = "0.12"
 
 # this is for the integration tests
 [dev-dependencies]
+cu29 = { workspace = true }
 cu29-log-derive = { workspace = true }
 cu29-value = { workspace = true }
 serde = { workspace = true }
@@ -30,4 +31,3 @@ tempfile = { workspace = true }
 [features]
 default = ["std"]
 std = ["cu29-traits/std", "cu29-unifiedlog/std", "cu29-log/std", "cu29-log-runtime/std", "cu29-runtime/std", "cu29-clock/std"]
-
