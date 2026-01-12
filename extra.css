@@ -1,0 +1,37 @@
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: #0b0e14;
+  --md-default-fg-color: #e6e6e6;
+  --md-default-fg-color--light: #c9c9c9;
+  --md-default-fg-color--lighter: #a0a0a0;
+  --md-default-fg-color--lightest: #7a7a7a;
+  --md-typeset-color: #e6e6e6;
+  --md-typeset-a-color: #5eead4;
+  --md-code-bg-color: #141823;
+  --md-code-fg-color: #e6e6e6;
+  --md-accent-fg-color: #5eead4;
+  --md-primary-fg-color: #0b0e14;
+  --md-primary-bg-color: #e6e6e6;
+  --md-footer-bg-color: #0b0e14;
+  --md-footer-bg-color--dark: #0b0e14;
+}
+
+body {
+  background: #0b0e14;
+}
+
+.md-header {
+  background-color: #0b0e14;
+}
+
+.md-nav {
+  background-color: #0b0e14;
+}
+
+.md-typeset a {
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
+}
+
+.md-typeset table:not([class]) {
+  background-color: #0f131c;
+}
