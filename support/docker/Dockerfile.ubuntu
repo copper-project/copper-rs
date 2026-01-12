@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.6.1-devel-ubuntu22.04
+FROM ubuntu:22.04
 
 # Install necessary system apt libs
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -12,14 +12,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libssl-dev \
     clang \
+    libclang-dev \
     # Adding GStreamer dependencies
     libgstreamer1.0-dev \
+    libgstreamer-plugins-base1.0-dev \
+    libgstreamer-plugins-bad1.0-dev \
     gstreamer1.0-plugins-base \
     gstreamer1.0-plugins-good \
     gstreamer1.0-plugins-bad \
     gstreamer1.0-plugins-ugly \
+    gstreamer1.0-libav \
     gstreamer1.0-tools \
-    libgstreamer-plugins-base1.0-dev \
+    gstreamer1.0-x \
+    gstreamer1.0-alsa \
+    gstreamer1.0-gl \
+    gstreamer1.0-gtk3 \
+    gstreamer1.0-qt5 \
+    gstreamer1.0-pulseaudio \
     # Clean up
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -36,11 +45,7 @@ RUN curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C ${CARGO_HOME:-~/
 RUN cargo install cargo-generate 
 
 # Set environment variables for build modes and features
-ENV FEATURES_FLAG="--features mock,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode,cuda"
-
-ENV CUDA_HOME=/usr/local/cuda
-ENV PATH=${CUDA_HOME}/bin:${PATH}
-ENV LD_LIBRARY_PATH=${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}
+ENV FEATURES_FLAG="--features mock,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode"
 
 # Set up entry environment
 WORKDIR /home/copper-rs

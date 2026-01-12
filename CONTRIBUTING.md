@@ -22,7 +22,7 @@ First off, thank you for considering contributing to Copper-rs! We welcome contr
     ```bash
     cargo install typos-cli
     ```
-* **Platform-Specific Dependencies:** Depending on your operating system and the features you intend to work with, you might need additional dependencies. For Ubuntu 22.04, please checkout our [Dockerfile](support/docker/Dockerfile).
+* **Platform-Specific Dependencies:** Depending on your operating system and the features you intend to work with, you might need additional dependencies. For Ubuntu 22.04, please checkout our [Dockerfile](support/docker/Dockerfile.ubuntu).
 
 
 ### Using justfile (Recommended)
