@@ -1,7 +1,11 @@
 FROM ubuntu:22.04
 
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Etc/UTC
+
 # Install necessary system apt libs
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    tzdata \
     git \
     curl \
     build-essential \
@@ -29,6 +33,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gstreamer1.0-gtk3 \
     gstreamer1.0-qt5 \
     gstreamer1.0-pulseaudio \
+    && ln -fs /usr/share/zoneinfo/$TZ /etc/localtime \
+    && dpkg-reconfigure -f noninteractive tzdata \
     # Clean up
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
