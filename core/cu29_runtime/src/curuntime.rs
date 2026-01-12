@@ -819,10 +819,7 @@ mod tests {
     impl CuSrcTask for TestSource {
         type Resources<'r> = ();
         type Output<'m> = ();
-        fn new(
-            _config: Option<&ComponentConfig>,
-            _resources: Self::Resources<'_>,
-        ) -> CuResult<Self>
+        fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
         where
             Self: Sized,
         {
@@ -846,10 +843,7 @@ mod tests {
         type Resources<'r> = ();
         type Input<'m> = ();
 
-        fn new(
-            _config: Option<&ComponentConfig>,
-            _resources: Self::Resources<'_>,
-        ) -> CuResult<Self>
+        fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
         where
             Self: Sized,
         {

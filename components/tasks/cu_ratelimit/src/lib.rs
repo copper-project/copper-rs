@@ -36,10 +36,7 @@ where
     type Input<'m> = input_msg!(T);
     type Output<'m> = output_msg!(T);
 
-    fn new(
-        config: Option<&ComponentConfig>,
-        _resources: Self::Resources<'_>,
-    ) -> CuResult<Self> {
+    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self> {
         let hz = config
             .and_then(|cfg| cfg.get::<f64>("rate"))
             .ok_or("Missing required 'rate' config for CuRateLimiter")?;

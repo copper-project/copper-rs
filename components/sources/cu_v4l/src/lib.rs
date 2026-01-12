@@ -15,10 +15,7 @@ mod empty_impl {
         type Resources<'r> = ();
         type Output<'m> = output_msg!(CuImage<Vec<u8>>);
 
-        fn new(
-            _config: Option<&ComponentConfig>,
-            _resources: Self::Resources<'_>,
-        ) -> CuResult<Self>
+        fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
         where
             Self: Sized,
         {
@@ -77,10 +74,7 @@ mod linux_impl {
         type Resources<'r> = ();
         type Output<'m> = output_msg!(CuImage<Vec<u8>>);
 
-        fn new(
-            _config: Option<&ComponentConfig>,
-            _resources: Self::Resources<'_>,
-        ) -> CuResult<Self>
+        fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
         where
             Self: Sized,
         {

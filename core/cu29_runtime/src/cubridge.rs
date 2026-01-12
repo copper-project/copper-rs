@@ -705,7 +705,7 @@ mod tests {
 
         let mut bridge =
             ExampleBridge::new(Some(&bridge_cfg), &tx_descriptors, &rx_descriptors, ())
-            .expect("bridge should build");
+                .expect("bridge should build");
 
         assert_eq!(bridge.port, "ttyUSB0");
 

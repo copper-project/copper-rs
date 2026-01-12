@@ -106,10 +106,7 @@ impl CuSinkTask for AlignedImageSink {
         CuArray<CuImage<Vec<u8>>, OUTPUT_CAP>
     ));
 
-    fn new(
-        _config: Option<&ComponentConfig>,
-        _resources: Self::Resources<'_>,
-    ) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {

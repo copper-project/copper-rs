@@ -279,10 +279,7 @@ pub trait CuSrcTask: Freezable {
 
     /// Here you need to initialize everything your task will need for the duration of its lifetime.
     /// The config allows you to access the configuration of the task.
-    fn new(
-        _config: Option<&ComponentConfig>,
-        _resources: Self::Resources<'_>,
-    ) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized;
 
@@ -325,10 +322,7 @@ pub trait CuTask: Freezable {
 
     /// Here you need to initialize everything your task will need for the duration of its lifetime.
     /// The config allows you to access the configuration of the task.
-    fn new(
-        _config: Option<&ComponentConfig>,
-        _resources: Self::Resources<'_>,
-    ) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized;
 
@@ -375,10 +369,7 @@ pub trait CuSinkTask: Freezable {
 
     /// Here you need to initialize everything your task will need for the duration of its lifetime.
     /// The config allows you to access the configuration of the task.
-    fn new(
-        _config: Option<&ComponentConfig>,
-        _resources: Self::Resources<'_>,
-    ) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized;
 

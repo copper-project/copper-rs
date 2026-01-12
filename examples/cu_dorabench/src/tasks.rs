@@ -16,10 +16,7 @@ impl<const S: usize> CuSrcTask for DoraSource<S> {
     type Resources<'r> = ();
     type Output<'m> = output_msg!(DoraPayload);
 
-    fn new(
-        _config: Option<&ComponentConfig>,
-        _resources: Self::Resources<'_>,
-    ) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -44,10 +41,7 @@ impl<const S: usize> CuSinkTask for DoraSink<S> {
     type Resources<'r> = ();
     type Input<'m> = input_msg!(DoraPayload);
 
-    fn new(
-        _config: Option<&ComponentConfig>,
-        _resources: Self::Resources<'_>,
-    ) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {

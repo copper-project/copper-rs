@@ -123,10 +123,7 @@ impl CuSinkTask for ImuLogger {
     type Input<'m> = CuMsg<ImuPayload>;
     type Resources<'r> = ();
 
-    fn new(
-        _config: Option<&ComponentConfig>,
-        _resources: Self::Resources<'_>,
-    ) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {

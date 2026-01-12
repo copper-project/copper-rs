@@ -166,10 +166,7 @@ impl CuTask for AprilTags {
     type Input<'m> = input_msg!(CuImage<Vec<u8>>);
     type Output<'m> = output_msg!(AprilTagDetections);
 
-    fn new(
-        _config: Option<&ComponentConfig>,
-        _resources: Self::Resources<'_>,
-    ) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -192,10 +189,7 @@ impl CuTask for AprilTags {
     type Input<'m> = input_msg!(CuImage<Vec<u8>>);
     type Output<'m> = output_msg!(AprilTagDetections);
 
-    fn new(
-        _config: Option<&ComponentConfig>,
-        _resources: Self::Resources<'_>,
-    ) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
