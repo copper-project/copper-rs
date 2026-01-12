@@ -66,6 +66,7 @@ members = [
     "examples/cu_monitoring",
     "examples/cu_min_baremetal",
     "examples/cu_missions",
+    "examples/cu_multi_output",
     "examples/cu_multisources",
     "examples/cu_multisources_structs",
     "examples/cu_resources_test",

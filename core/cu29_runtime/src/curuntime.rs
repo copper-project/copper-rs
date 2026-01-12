@@ -30,7 +30,7 @@ use cu29_log_runtime::log_debug_mode;
 use cu29_value::to_value;
 
 use alloc::boxed::Box;
-use alloc::collections::VecDeque;
+use alloc::collections::{BTreeSet, VecDeque};
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -486,6 +486,20 @@ pub enum CuTaskType {
     Sink,
 }
 
+#[derive(Debug, Clone)]
+pub struct CuOutputPack {
+    pub culist_index: u32,
+    pub msg_types: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CuInputMsg {
+    pub culist_index: u32,
+    pub msg_type: String,
+    pub src_port: usize,
+    pub edge_id: usize,
+}
+
 /// This structure represents a step in the execution plan.
 pub struct CuExecutionStep {
     /// NodeId: node id of the task to execute
@@ -496,10 +510,10 @@ pub struct CuExecutionStep {
     pub task_type: CuTaskType,
 
     /// the indices in the copper list of the input messages and their types
-    pub input_msg_indices_types: Vec<(u32, String)>,
+    pub input_msg_indices_types: Vec<CuInputMsg>,
 
     /// the index in the copper list of the output message and its type
-    pub output_msg_index_type: Option<(u32, String)>,
+    pub output_msg_pack: Option<CuOutputPack>,
 }
 
 impl Debug for CuExecutionStep {
@@ -514,9 +528,7 @@ impl Debug for CuExecutionStep {
             )
             .as_str(),
         )?;
-        f.write_str(
-            format!("       output_msg_type: {:?}\n", self.output_msg_index_type).as_str(),
-        )?;
+        f.write_str(format!("       output_msg_pack: {:?}\n", self.output_msg_pack).as_str())?;
         Ok(())
     }
 }
@@ -556,20 +568,20 @@ pub enum CuExecutionUnit {
     Loop(CuExecutionLoop),
 }
 
-fn find_output_index_type_from_nodeid(
+fn find_output_pack_from_nodeid(
     node_id: NodeId,
     steps: &Vec<CuExecutionUnit>,
-) -> Option<(u32, String)> {
+) -> Option<CuOutputPack> {
     for step in steps {
         match step {
             CuExecutionUnit::Loop(loop_unit) => {
-                if let Some(index) = find_output_index_type_from_nodeid(node_id, &loop_unit.steps) {
-                    return Some(index);
+                if let Some(output_pack) = find_output_pack_from_nodeid(node_id, &loop_unit.steps) {
+                    return Some(output_pack);
                 }
             }
             CuExecutionUnit::Step(step) => {
                 if step.node_id == node_id {
-                    return step.output_msg_index_type.clone();
+                    return step.output_msg_pack.clone();
                 }
             }
         }
@@ -587,40 +599,28 @@ pub fn find_task_type_for_id(graph: &CuGraph, node_id: NodeId) -> CuTaskType {
     }
 }
 
-/// This function gets the input node by using the input step plan id, to get the edge that
-/// connects the input to the output in the config graph
-fn find_edge_with_plan_input_id(
-    plan: &[CuExecutionUnit],
-    graph: &CuGraph,
-    plan_id: u32,
-    output_node_id: NodeId,
-) -> usize {
-    let input_node = plan
-        .get(plan_id as usize)
-        .expect("Input step should've been added to plan before the step that receives the input");
-    let CuExecutionUnit::Step(input_step) = input_node else {
-        panic!("Expected input to be from a step, not a loop");
-    };
-    let input_node_id = input_step.node_id;
-
-    graph
-        .edge_id_between(input_node_id, output_node_id)
-        .expect("An edge connecting the input to the output should exist")
+/// The connection id used here is the index of the config graph edge that equates to the wanted
+/// connection.
+fn sort_inputs_by_cnx_id(input_msg_indices_types: &mut [CuInputMsg]) {
+    input_msg_indices_types.sort_by_key(|input| input.edge_id);
 }
 
-/// The connection id used here is the index of the config graph edge that equates to the wanted
-/// connection
-fn sort_inputs_by_cnx_id(
-    input_msg_indices_types: &mut [(u32, String)],
-    plan: &[CuExecutionUnit],
-    graph: &CuGraph,
-    curr_node_id: NodeId,
-) {
-    input_msg_indices_types.sort_by(|(a_index, _), (b_index, _)| {
-        let a_edge_id = find_edge_with_plan_input_id(plan, graph, *a_index, curr_node_id);
-        let b_edge_id = find_edge_with_plan_input_id(plan, graph, *b_index, curr_node_id);
-        a_edge_id.cmp(&b_edge_id)
-    });
+fn collect_output_msg_types(graph: &CuGraph, node_id: NodeId) -> Vec<String> {
+    let mut edge_ids = graph.get_src_edges(node_id).unwrap_or_default();
+    edge_ids.sort();
+
+    let mut msg_types = Vec::new();
+    let mut seen = Vec::new();
+    for edge_id in edge_ids {
+        if let Some(edge) = graph.edge(edge_id) {
+            if seen.iter().any(|msg| msg == &edge.msg) {
+                continue;
+            }
+            seen.push(edge.msg.clone());
+            msg_types.push(edge.msg.clone());
+        }
+    }
+    msg_types
 }
 /// Explores a subbranch and build the partial plan out of it.
 fn plan_tasks_tree_branch(
@@ -639,76 +639,129 @@ fn plan_tasks_tree_branch(
         #[cfg(all(feature = "std", feature = "macro_debug"))]
         eprintln!("  Visiting node: {node_ref:?}");
 
-        let mut input_msg_indices_types: Vec<(u32, String)> = Vec::new();
-        let output_msg_index_type: Option<(u32, String)>;
+        let mut input_msg_indices_types: Vec<CuInputMsg> = Vec::new();
+        let output_msg_pack: Option<CuOutputPack>;
         let task_type = find_task_type_for_id(graph, id);
 
         match task_type {
             CuTaskType::Source => {
                 #[cfg(all(feature = "std", feature = "macro_debug"))]
                 eprintln!("    → Source node, assign output index {next_culist_output_index}");
-                let edge_id = graph.get_src_edges(id).unwrap()[0];
-                output_msg_index_type = Some((
-                    next_culist_output_index,
-                    graph
-                        .edge(edge_id)
-                        .unwrap() // FIXME(gbin): Error handling
-                        .msg
-                        .clone(),
-                ));
+                let msg_types = collect_output_msg_types(graph, id);
+                if msg_types.is_empty() {
+                    panic!(
+                        "Source node '{}' has no outgoing connections",
+                        node_ref.get_id()
+                    );
+                }
+                output_msg_pack = Some(CuOutputPack {
+                    culist_index: next_culist_output_index,
+                    msg_types,
+                });
                 next_culist_output_index += 1;
             }
             CuTaskType::Sink => {
-                let parents: Vec<NodeId> = graph.get_neighbor_ids(id, CuDirection::Incoming);
+                let mut edge_ids = graph.get_dst_edges(id).unwrap_or_default();
+                edge_ids.sort();
                 #[cfg(all(feature = "std", feature = "macro_debug"))]
-                eprintln!("    → Sink with parents: {parents:?}");
-                for parent in parents {
-                    let pid = parent;
-                    let index_type = find_output_index_type_from_nodeid(pid, plan);
-                    if let Some(index_type) = index_type {
+                eprintln!("    → Sink with incoming edges: {edge_ids:?}");
+                for edge_id in edge_ids {
+                    let edge = graph
+                        .edge(edge_id)
+                        .unwrap_or_else(|| panic!("Missing edge {edge_id} for node {id}"));
+                    let pid = graph
+                        .get_node_id_by_name(edge.src.as_str())
+                        .unwrap_or_else(|| {
+                            panic!("Missing source node '{}' for edge {edge_id}", edge.src)
+                        });
+                    let output_pack = find_output_pack_from_nodeid(pid, plan);
+                    if let Some(output_pack) = output_pack {
                         #[cfg(all(feature = "std", feature = "macro_debug"))]
-                        eprintln!("      ✓ Input from {pid} ready: {index_type:?}");
-                        input_msg_indices_types.push(index_type);
+                        eprintln!("      ✓ Input from {pid} ready: {output_pack:?}");
+                        let msg_type = edge.msg.as_str();
+                        let src_port = output_pack
+                            .msg_types
+                            .iter()
+                            .position(|msg| msg == msg_type)
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "Missing output port for message type '{msg_type}' on node {pid}"
+                                )
+                            });
+                        input_msg_indices_types.push(CuInputMsg {
+                            culist_index: output_pack.culist_index,
+                            msg_type: msg_type.to_string(),
+                            src_port,
+                            edge_id,
+                        });
                     } else {
                         #[cfg(all(feature = "std", feature = "macro_debug"))]
                         eprintln!("      ✗ Input from {pid} not ready, returning");
                         return (next_culist_output_index, handled);
                     }
                 }
-                output_msg_index_type = Some((next_culist_output_index, "()".to_string()));
+                output_msg_pack = Some(CuOutputPack {
+                    culist_index: next_culist_output_index,
+                    msg_types: Vec::from(["()".to_string()]),
+                });
                 next_culist_output_index += 1;
             }
             CuTaskType::Regular => {
-                let parents: Vec<NodeId> = graph.get_neighbor_ids(id, CuDirection::Incoming);
+                let mut edge_ids = graph.get_dst_edges(id).unwrap_or_default();
+                edge_ids.sort();
                 #[cfg(all(feature = "std", feature = "macro_debug"))]
-                eprintln!("    → Regular task with parents: {parents:?}");
-                for parent in parents {
-                    let pid = parent;
-                    let index_type = find_output_index_type_from_nodeid(pid, plan);
-                    if let Some(index_type) = index_type {
+                eprintln!("    → Regular task with incoming edges: {edge_ids:?}");
+                for edge_id in edge_ids {
+                    let edge = graph
+                        .edge(edge_id)
+                        .unwrap_or_else(|| panic!("Missing edge {edge_id} for node {id}"));
+                    let pid = graph
+                        .get_node_id_by_name(edge.src.as_str())
+                        .unwrap_or_else(|| {
+                            panic!("Missing source node '{}' for edge {edge_id}", edge.src)
+                        });
+                    let output_pack = find_output_pack_from_nodeid(pid, plan);
+                    if let Some(output_pack) = output_pack {
                         #[cfg(all(feature = "std", feature = "macro_debug"))]
-                        eprintln!("      ✓ Input from {pid} ready: {index_type:?}");
-                        input_msg_indices_types.push(index_type);
+                        eprintln!("      ✓ Input from {pid} ready: {output_pack:?}");
+                        let msg_type = edge.msg.as_str();
+                        let src_port = output_pack
+                            .msg_types
+                            .iter()
+                            .position(|msg| msg == msg_type)
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "Missing output port for message type '{msg_type}' on node {pid}"
+                                )
+                            });
+                        input_msg_indices_types.push(CuInputMsg {
+                            culist_index: output_pack.culist_index,
+                            msg_type: msg_type.to_string(),
+                            src_port,
+                            edge_id,
+                        });
                     } else {
                         #[cfg(all(feature = "std", feature = "macro_debug"))]
                         eprintln!("      ✗ Input from {pid} not ready, returning");
                         return (next_culist_output_index, handled);
                     }
                 }
-                let edge_id = graph.get_src_edges(id).unwrap()[0];
-                output_msg_index_type = Some((
-                    next_culist_output_index,
-                    graph
-                        .edge(edge_id) // FIXME(gbin): Error handling and multimission
-                        .unwrap()
-                        .msg
-                        .clone(),
-                ));
+                let msg_types = collect_output_msg_types(graph, id);
+                if msg_types.is_empty() {
+                    panic!(
+                        "Regular node '{}' has no outgoing connections",
+                        node_ref.get_id()
+                    );
+                }
+                output_msg_pack = Some(CuOutputPack {
+                    culist_index: next_culist_output_index,
+                    msg_types,
+                });
                 next_culist_output_index += 1;
             }
         }
 
-        sort_inputs_by_cnx_id(&mut input_msg_indices_types, plan, graph, id);
+        sort_inputs_by_cnx_id(&mut input_msg_indices_types);
 
         if let Some(pos) = plan
             .iter()
@@ -729,7 +782,7 @@ fn plan_tasks_tree_branch(
                 node: node_ref.clone(),
                 task_type,
                 input_msg_indices_types,
-                output_msg_index_type,
+                output_msg_pack,
             };
             plan.push(CuExecutionUnit::Step(step));
         }
@@ -792,6 +845,32 @@ pub fn compute_runtime_plan(graph: &CuGraph) -> CuResult<CuExecutionLoop> {
                 queue.push_back(neighbor);
             }
         }
+    }
+
+    let mut planned_nodes = BTreeSet::new();
+    for unit in &plan {
+        if let CuExecutionUnit::Step(step) = unit {
+            planned_nodes.insert(step.node_id);
+        }
+    }
+
+    let mut missing = Vec::new();
+    for node_id in graph.node_ids() {
+        if !planned_nodes.contains(&node_id) {
+            if let Some(node) = graph.get_node(node_id) {
+                missing.push(node.get_id().to_string());
+            } else {
+                missing.push(format!("node_id_{node_id}"));
+            }
+        }
+    }
+
+    if !missing.is_empty() {
+        missing.sort();
+        return Err(CuError::from(format!(
+            "Execution plan could not include all nodes. Missing: {}. Check for loopback or missing source connections.",
+            missing.join(", ")
+        )));
     }
 
     Ok(CuExecutionLoop {
@@ -1064,8 +1143,100 @@ mod tests {
 
         // since the src2 connection was added before src1 connection, the src2 type should be
         // first
-        assert_eq!(sink_step.input_msg_indices_types[0].1, src2_type);
-        assert_eq!(sink_step.input_msg_indices_types[1].1, src1_type);
+        assert_eq!(sink_step.input_msg_indices_types[0].msg_type, src2_type);
+        assert_eq!(sink_step.input_msg_indices_types[1].msg_type, src1_type);
+    }
+
+    #[test]
+    fn test_runtime_output_ports_unique_ordered() {
+        let mut config = CuConfig::default();
+        let graph = config.get_graph_mut(None).unwrap();
+        let src_id = graph.add_node(Node::new("src", "Source")).unwrap();
+        let dst_a_id = graph.add_node(Node::new("dst_a", "SinkA")).unwrap();
+        let dst_b_id = graph.add_node(Node::new("dst_b", "SinkB")).unwrap();
+        let dst_a2_id = graph.add_node(Node::new("dst_a2", "SinkA2")).unwrap();
+        let dst_c_id = graph.add_node(Node::new("dst_c", "SinkC")).unwrap();
+
+        graph.connect(src_id, dst_a_id, "msg::A").unwrap();
+        graph.connect(src_id, dst_b_id, "msg::B").unwrap();
+        graph.connect(src_id, dst_a2_id, "msg::A").unwrap();
+        graph.connect(src_id, dst_c_id, "msg::C").unwrap();
+
+        let runtime = compute_runtime_plan(graph).unwrap();
+        let src_step = runtime
+            .steps
+            .iter()
+            .find_map(|step| match step {
+                CuExecutionUnit::Step(step) if step.node_id == src_id => Some(step),
+                _ => None,
+            })
+            .unwrap();
+
+        let output_pack = src_step.output_msg_pack.as_ref().unwrap();
+        assert_eq!(output_pack.msg_types, vec!["msg::A", "msg::B", "msg::C"]);
+
+        let dst_a_step = runtime
+            .steps
+            .iter()
+            .find_map(|step| match step {
+                CuExecutionUnit::Step(step) if step.node_id == dst_a_id => Some(step),
+                _ => None,
+            })
+            .unwrap();
+        let dst_b_step = runtime
+            .steps
+            .iter()
+            .find_map(|step| match step {
+                CuExecutionUnit::Step(step) if step.node_id == dst_b_id => Some(step),
+                _ => None,
+            })
+            .unwrap();
+        let dst_a2_step = runtime
+            .steps
+            .iter()
+            .find_map(|step| match step {
+                CuExecutionUnit::Step(step) if step.node_id == dst_a2_id => Some(step),
+                _ => None,
+            })
+            .unwrap();
+        let dst_c_step = runtime
+            .steps
+            .iter()
+            .find_map(|step| match step {
+                CuExecutionUnit::Step(step) if step.node_id == dst_c_id => Some(step),
+                _ => None,
+            })
+            .unwrap();
+
+        assert_eq!(dst_a_step.input_msg_indices_types[0].src_port, 0);
+        assert_eq!(dst_b_step.input_msg_indices_types[0].src_port, 1);
+        assert_eq!(dst_a2_step.input_msg_indices_types[0].src_port, 0);
+        assert_eq!(dst_c_step.input_msg_indices_types[0].src_port, 2);
+    }
+
+    #[test]
+    fn test_runtime_output_ports_fanout_single() {
+        let mut config = CuConfig::default();
+        let graph = config.get_graph_mut(None).unwrap();
+        let src_id = graph.add_node(Node::new("src", "Source")).unwrap();
+        let dst_a_id = graph.add_node(Node::new("dst_a", "SinkA")).unwrap();
+        let dst_b_id = graph.add_node(Node::new("dst_b", "SinkB")).unwrap();
+
+        graph.connect(src_id, dst_a_id, "i32").unwrap();
+        graph.connect(src_id, dst_b_id, "i32").unwrap();
+
+        let runtime = compute_runtime_plan(graph).unwrap();
+        let src_step = runtime
+            .steps
+            .iter()
+            .find_map(|step| match step {
+                CuExecutionUnit::Step(step) if step.node_id == src_id => Some(step),
+                _ => None,
+            })
+            .unwrap();
+
+        let output_pack = src_step.output_msg_pack.as_ref().unwrap();
+        assert_eq!(output_pack.msg_types, vec!["i32"]);
     }
 
     #[test]
@@ -1104,8 +1275,8 @@ mod tests {
             })
             .unwrap();
 
-        assert_eq!(broadcast_step.input_msg_indices_types[0].1, "i32");
-        assert_eq!(broadcast_step.input_msg_indices_types[1].1, "f32");
+        assert_eq!(broadcast_step.input_msg_indices_types[0].msg_type, "i32");
+        assert_eq!(broadcast_step.input_msg_indices_types[1].msg_type, "f32");
     }
 
     #[test]
@@ -1144,7 +1315,7 @@ mod tests {
             })
             .unwrap();
 
-        assert_eq!(broadcast_step.input_msg_indices_types[0].1, "i32");
-        assert_eq!(broadcast_step.input_msg_indices_types[1].1, "f32");
+        assert_eq!(broadcast_step.input_msg_indices_types[0].msg_type, "i32");
+        assert_eq!(broadcast_step.input_msg_indices_types[1].msg_type, "f32");
     }
 }
