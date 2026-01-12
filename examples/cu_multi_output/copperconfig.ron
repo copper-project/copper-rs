@@ -1,0 +1,11 @@
+(
+    tasks: [
+        (id: "src", type: "tasks::MultiOutSrc"),
+        (id: "int_sink", type: "tasks::IntSink"),
+        (id: "bool_sink", type: "tasks::BoolSink"),
+    ],
+    cnx: [
+        (src: "src", dst: "int_sink", msg: "i32"),
+        (src: "src", dst: "bool_sink", msg: "bool"),
+    ],
+)

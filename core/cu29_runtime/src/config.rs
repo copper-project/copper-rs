@@ -1777,6 +1777,24 @@ pub(crate) fn build_render_topology(graph: &CuGraph, bridges: &[BridgeConfig]) -
         });
     }
 
+    let mut output_port_lookup: Vec<HashMap<String, String>> = vec![HashMap::new(); nodes.len()];
+    let mut output_edges: Vec<_> = graph.0.edge_references().collect();
+    output_edges.sort_by_key(|edge| edge.id().index());
+    for edge in output_edges {
+        let cnx = edge.weight();
+        if let Some(&idx) = node_lookup.get(&cnx.src)
+            && nodes[idx].flavor == Flavor::Task
+            && cnx.src_channel.is_none()
+        {
+            let port_map = &mut output_port_lookup[idx];
+            if !port_map.contains_key(&cnx.msg) {
+                let label = format!("out{}:{}", port_map.len(), cnx.msg);
+                port_map.insert(cnx.msg.clone(), label.clone());
+                nodes[idx].outputs.push(label);
+            }
+        }
+    }
+
     let mut auto_input_counts = vec![0usize; nodes.len()];
     for edge in graph.0.edge_references() {
         let cnx = edge.weight();
@@ -1792,13 +1810,13 @@ pub(crate) fn build_render_topology(graph: &CuGraph, bridges: &[BridgeConfig]) -
     let mut connections = Vec::new();
     for edge in graph.0.edge_references() {
         let cnx = edge.weight();
-        let src_port = cnx.src_channel.clone();
+        let mut src_port = cnx.src_channel.clone();
         let mut dst_port = cnx.dst_channel.clone();
 
         if let Some(&idx) = node_lookup.get(&cnx.src) {
             let node = &mut nodes[idx];
-            if node.flavor == Flavor::Task && src_port.is_none() && node.outputs.is_empty() {
-                node.outputs.push("out".to_string());
+            if node.flavor == Flavor::Task && src_port.is_none() {
+                src_port = output_port_lookup[idx].get(&cnx.msg).cloned();
             }
         }
         if let Some(&idx) = node_lookup.get(&cnx.dst) {

@@ -200,7 +200,6 @@ impl CuSrcTask for FlippingSource {
     }
 }
 
-
 fn main() {
 
     // Copper uses a special log format called "unified logger" that is optimized for writing. It stores the messages between tasks 
@@ -236,6 +235,27 @@ fn main() {
 
 But this is a very minimal example for a task; please see [lifecycle](https://github.com/copper-project/copper-rs/wiki/Task-Lifecycle) for a more complete explanation
 of a task lifecycle.
+
+#### Multiple Outputs Per Task
+
+Tasks can emit multiple messages per cycle by listing multiple payload types:
+
+```rust,ignore
+type Output<'m> = output_msg!(i32, bool);
+
+fn process(&mut self, _clock: &RobotClock, output: &mut Self::Output<'_>) -> CuResult<()> {
+    output.0.set_payload(42);
+    output.1.set_payload(true);
+    Ok(())
+}
+```
+
+Connections still use `(src, dst, msg)` only. Output ports are selected by `msg` type:
+- Each unique `msg` type in a task's outgoing `cnx` entries becomes one output port.
+- Port ordering follows the first appearance order in `cnx` for that source task.
+- Fan-out with the same `msg` type shares the same output port.
+
+Limitation: A task cannot expose two distinct output ports with the same payload type.
 
 ### Modular Configuration
 
