@@ -35,13 +35,13 @@ jobs:
       fail-fast: false
       matrix:
         os: [ ubuntu-latest, macos-latest, windows-latest ]
-        mode: [ debug, release, cuda-release ]
+        mode: [ debug, cuda-debug ]
         task: [ clippy, build, test ]
         exclude:
           - os: macos-latest
-            mode: cuda-release
+            mode: cuda-debug
           - os: windows-latest
-            mode: cuda-release
+            mode: cuda-debug
 
     steps:
       - uses: actions/checkout@v6
@@ -196,21 +196,17 @@ jobs:
 
       - name: Install CUDA
         uses: Jimver/cuda-toolkit@v0.2.30
-        if: runner.os != 'macOS' && matrix.mode == 'cuda-release'
+        if: runner.os != 'macOS' && matrix.mode == 'cuda-debug'
         with:
           cuda: 12.6.1
           log-file-suffix: '${{ matrix.os }}-${{ matrix.mode }}-cuda.txt'
           use-github-cache: false
           use-local-cache: false
 
-      - name: Set build mode
-        if: matrix.mode == 'release' || matrix.mode == 'cuda-release'
-        run: echo "RELEASE_FLAG=--release" >> $GITHUB_ENV
-
       - name: Set features (Linux)
         if: runner.os == 'Linux'
         run: |
-          if [[ '${{ matrix.mode }}' == 'cuda-release' ]]; then
+          if [[ '${{ matrix.mode }}' == 'cuda-debug' ]]; then
             echo "FEATURES_FLAG=--features $BASE_FEATURES,python,cuda" >> $GITHUB_ENV
           else
             echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
@@ -219,7 +215,7 @@ jobs:
       - name: Set features (MacOS)
         if: runner.os == 'macOS'
         run: |
-          if [[ '${{ matrix.mode }}' == 'cuda-release' ]]; then
+          if [[ '${{ matrix.mode }}' == 'cuda-debug' ]]; then
             echo "FEATURES_FLAG=--features $BASE_FEATURES,cuda" >> $GITHUB_ENV
           else
             echo "FEATURES_FLAG=--features $BASE_FEATURES" >> $GITHUB_ENV
@@ -271,12 +267,12 @@ jobs:
       fail-fast: false
       matrix:
         os: [ ubuntu-latest, macos-latest, windows-latest ]
-        mode: [ debug, release, cuda-release ]
+        mode: [ debug, cuda-debug ]
         exclude:
           - os: macos-latest
-            mode: cuda-release
+            mode: cuda-debug
           - os: windows-latest
-            mode: cuda-release
+            mode: cuda-debug
 
     steps:
       - uses: actions/checkout@v6
@@ -430,21 +426,17 @@ jobs:
 
       - name: Install CUDA
         uses: Jimver/cuda-toolkit@v0.2.30
-        if: runner.os != 'macOS' && matrix.mode == 'cuda-release'
+        if: runner.os != 'macOS' && matrix.mode == 'cuda-debug'
         with:
           cuda: 12.6.1
           log-file-suffix: '${{ matrix.os }}-${{ matrix.mode }}-cuda.txt'
           use-github-cache: false
           use-local-cache: false
 
-      - name: Set build mode
-        if: matrix.mode == 'release' || matrix.mode == 'cuda-release'
-        run: echo "RELEASE_FLAG=--release" >> $GITHUB_ENV
-
       - name: Set features (Linux)
         if: runner.os == 'Linux'
         run: |
-          if [[ '${{ matrix.mode }}' == 'cuda-release' ]]; then
+          if [[ '${{ matrix.mode }}' == 'cuda-debug' ]]; then
             echo "FEATURES_FLAG=--features $BASE_FEATURES,python,cuda" >> $GITHUB_ENV
           else
             echo "FEATURES_FLAG=--features $BASE_FEATURES,python" >> $GITHUB_ENV
@@ -453,7 +445,7 @@ jobs:
       - name: Set features (MacOS)
         if: runner.os == 'macOS'
         run: |
-          if [[ '${{ matrix.mode }}' == 'cuda-release' ]]; then
+          if [[ '${{ matrix.mode }}' == 'cuda-debug' ]]; then
             echo "FEATURES_FLAG=--features $BASE_FEATURES,cuda" >> $GITHUB_ENV
           else
             echo "FEATURES_FLAG=--features $BASE_FEATURES" >> $GITHUB_ENV
