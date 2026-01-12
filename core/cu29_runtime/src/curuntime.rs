@@ -497,6 +497,7 @@ pub struct CuInputMsg {
     pub culist_index: u32,
     pub msg_type: String,
     pub src_port: usize,
+    pub edge_id: usize,
 }
 
 /// This structure represents a step in the execution plan.
@@ -598,40 +599,10 @@ pub fn find_task_type_for_id(graph: &CuGraph, node_id: NodeId) -> CuTaskType {
     }
 }
 
-/// This function gets the input node by using the input step plan id, to get the edge that
-/// connects the input to the output in the config graph
-fn find_edge_with_plan_input_id(
-    plan: &[CuExecutionUnit],
-    graph: &CuGraph,
-    plan_id: u32,
-    output_node_id: NodeId,
-) -> usize {
-    let input_node = plan
-        .get(plan_id as usize)
-        .expect("Input step should've been added to plan before the step that receives the input");
-    let CuExecutionUnit::Step(input_step) = input_node else {
-        panic!("Expected input to be from a step, not a loop");
-    };
-    let input_node_id = input_step.node_id;
-
-    graph
-        .edge_id_between(input_node_id, output_node_id)
-        .expect("An edge connecting the input to the output should exist")
-}
-
 /// The connection id used here is the index of the config graph edge that equates to the wanted
-/// connection
-fn sort_inputs_by_cnx_id(
-    input_msg_indices_types: &mut [CuInputMsg],
-    plan: &[CuExecutionUnit],
-    graph: &CuGraph,
-    curr_node_id: NodeId,
-) {
-    input_msg_indices_types.sort_by(|a, b| {
-        let a_edge_id = find_edge_with_plan_input_id(plan, graph, a.culist_index, curr_node_id);
-        let b_edge_id = find_edge_with_plan_input_id(plan, graph, b.culist_index, curr_node_id);
-        a_edge_id.cmp(&b_edge_id)
-    });
+/// connection.
+fn sort_inputs_by_cnx_id(input_msg_indices_types: &mut [CuInputMsg]) {
+    input_msg_indices_types.sort_by_key(|input| input.edge_id);
 }
 
 fn collect_output_msg_types(graph: &CuGraph, node_id: NodeId) -> Vec<String> {
@@ -690,19 +661,22 @@ fn plan_tasks_tree_branch(
                 next_culist_output_index += 1;
             }
             CuTaskType::Sink => {
-                let parents: Vec<NodeId> = graph.get_neighbor_ids(id, CuDirection::Incoming);
+                let mut edge_ids = graph.get_dst_edges(id).unwrap_or_default();
+                edge_ids.sort();
                 #[cfg(all(feature = "std", feature = "macro_debug"))]
-                eprintln!("    → Sink with parents: {parents:?}");
-                for parent in parents {
-                    let pid = parent;
+                eprintln!("    → Sink with incoming edges: {edge_ids:?}");
+                for edge_id in edge_ids {
+                    let edge = graph
+                        .edge(edge_id)
+                        .unwrap_or_else(|| panic!("Missing edge {edge_id} for node {id}"));
+                    let pid = graph
+                        .get_node_id_by_name(edge.src.as_str())
+                        .unwrap_or_else(|| panic!("Missing source node '{}' for edge {edge_id}", edge.src));
                     let output_pack = find_output_pack_from_nodeid(pid, plan);
                     if let Some(output_pack) = output_pack {
                         #[cfg(all(feature = "std", feature = "macro_debug"))]
                         eprintln!("      ✓ Input from {pid} ready: {output_pack:?}");
-                        let msg_type =
-                            graph.get_connection_msg_type(pid, id).unwrap_or_else(|| {
-                                panic!("Missing connection type from node {pid} to {id}")
-                            });
+                        let msg_type = edge.msg.as_str();
                         let src_port = output_pack
                             .msg_types
                             .iter()
@@ -716,6 +690,7 @@ fn plan_tasks_tree_branch(
                             culist_index: output_pack.culist_index,
                             msg_type: msg_type.to_string(),
                             src_port,
+                            edge_id,
                         });
                     } else {
                         #[cfg(all(feature = "std", feature = "macro_debug"))]
@@ -730,19 +705,22 @@ fn plan_tasks_tree_branch(
                 next_culist_output_index += 1;
             }
             CuTaskType::Regular => {
-                let parents: Vec<NodeId> = graph.get_neighbor_ids(id, CuDirection::Incoming);
+                let mut edge_ids = graph.get_dst_edges(id).unwrap_or_default();
+                edge_ids.sort();
                 #[cfg(all(feature = "std", feature = "macro_debug"))]
-                eprintln!("    → Regular task with parents: {parents:?}");
-                for parent in parents {
-                    let pid = parent;
+                eprintln!("    → Regular task with incoming edges: {edge_ids:?}");
+                for edge_id in edge_ids {
+                    let edge = graph
+                        .edge(edge_id)
+                        .unwrap_or_else(|| panic!("Missing edge {edge_id} for node {id}"));
+                    let pid = graph
+                        .get_node_id_by_name(edge.src.as_str())
+                        .unwrap_or_else(|| panic!("Missing source node '{}' for edge {edge_id}", edge.src));
                     let output_pack = find_output_pack_from_nodeid(pid, plan);
                     if let Some(output_pack) = output_pack {
                         #[cfg(all(feature = "std", feature = "macro_debug"))]
                         eprintln!("      ✓ Input from {pid} ready: {output_pack:?}");
-                        let msg_type =
-                            graph.get_connection_msg_type(pid, id).unwrap_or_else(|| {
-                                panic!("Missing connection type from node {pid} to {id}")
-                            });
+                        let msg_type = edge.msg.as_str();
                         let src_port = output_pack
                             .msg_types
                             .iter()
@@ -756,6 +734,7 @@ fn plan_tasks_tree_branch(
                             culist_index: output_pack.culist_index,
                             msg_type: msg_type.to_string(),
                             src_port,
+                            edge_id,
                         });
                     } else {
                         #[cfg(all(feature = "std", feature = "macro_debug"))]
@@ -778,7 +757,7 @@ fn plan_tasks_tree_branch(
             }
         }
 
-        sort_inputs_by_cnx_id(&mut input_msg_indices_types, plan, graph, id);
+        sort_inputs_by_cnx_id(&mut input_msg_indices_types);
 
         if let Some(pos) = plan
             .iter()

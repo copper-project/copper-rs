@@ -28,7 +28,8 @@ pub mod tasks {
             Ok(Self {})
         }
 
-        fn process(&mut self, _clock: &RobotClock, output: &mut Self::Output<'_>) -> CuResult<()> {
+        fn process(&mut self, clock: &RobotClock, output: &mut Self::Output<'_>) -> CuResult<()> {
+            output.0.tov = Tov::Time(clock.now());
             output.0.set_payload(42);
             output.1.set_payload(true);
             Ok(())
@@ -82,6 +83,94 @@ pub mod tasks {
         fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
             if let Some(value) = input.payload() {
                 LAST_BOOL.store(*value, Ordering::SeqCst);
+            }
+            Ok(())
+        }
+    }
+
+    pub struct BothSink {}
+
+    impl Freezable for BothSink {}
+
+    impl CuSinkTask for BothSink {
+        type Resources<'r> = ();
+        type Input<'m> = input_msg!('m, i32, bool);
+
+        fn new_with(
+            _config: Option<&ComponentConfig>,
+            _resources: Self::Resources<'_>,
+        ) -> CuResult<Self>
+        where
+            Self: Sized,
+        {
+            Ok(Self {})
+        }
+
+        fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
+            let (int_msg, bool_msg): (&CuMsg<i32>, &CuMsg<bool>) = *input;
+            if let Some(value) = int_msg.payload() {
+                LAST_I32.store(*value, Ordering::SeqCst);
+            }
+            if let Some(value) = bool_msg.payload() {
+                LAST_BOOL.store(*value, Ordering::SeqCst);
+            }
+            Ok(())
+        }
+    }
+
+    pub struct DropBoolSink {}
+
+    impl Freezable for DropBoolSink {}
+
+    impl CuSinkTask for DropBoolSink {
+        type Resources<'r> = ();
+        type Input<'m> = input_msg!(bool);
+
+        fn new_with(
+            _config: Option<&ComponentConfig>,
+            _resources: Self::Resources<'_>,
+        ) -> CuResult<Self>
+        where
+            Self: Sized,
+        {
+            Ok(Self {})
+        }
+
+        fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
+            let _ = input.payload();
+            Ok(())
+        }
+    }
+
+    pub struct LoopbackTask {}
+
+    impl Freezable for LoopbackTask {}
+
+    impl CuTask for LoopbackTask {
+        type Resources<'r> = ();
+        type Input<'m> = input_msg!(i32);
+        type Output<'m> = output_msg!(i32);
+
+        fn new_with(
+            _config: Option<&ComponentConfig>,
+            _resources: Self::Resources<'_>,
+        ) -> CuResult<Self>
+        where
+            Self: Sized,
+        {
+            Ok(Self {})
+        }
+
+        fn process(
+            &mut self,
+            _clock: &RobotClock,
+            input: &Self::Input<'_>,
+            output: &mut Self::Output<'_>,
+        ) -> CuResult<()> {
+            if let Some(value) = input.payload() {
+                output.set_payload(*value);
+            } else {
+                output.clear_payload();
             }
             Ok(())
         }
