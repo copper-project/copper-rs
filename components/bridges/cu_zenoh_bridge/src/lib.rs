@@ -102,14 +102,14 @@ where
     }
 
     fn parse_default_wire_format(config: Option<&ComponentConfig>) -> CuResult<WireFormat> {
-        if let Some(config) = config {
-            if let Some(raw) = config.get::<String>("wire_format") {
-                return WireFormat::parse(&raw).ok_or_else(|| {
-                    CuError::from(format!(
-                        "ZenohBridge: Unsupported wire_format '{raw}', expected bincode/json/cbor"
-                    ))
-                });
-            }
+        if let Some(config) = config
+            && let Some(raw) = config.get::<String>("wire_format")
+        {
+            return WireFormat::parse(&raw).ok_or_else(|| {
+                CuError::from(format!(
+                    "ZenohBridge: Unsupported wire_format '{raw}', expected bincode/json/cbor"
+                ))
+            });
         }
         Ok(WireFormat::Bincode)
     }
@@ -130,14 +130,14 @@ where
         channel: &BridgeChannelConfig<Id>,
         default: WireFormat,
     ) -> CuResult<WireFormat> {
-        if let Some(config) = channel.config.as_ref() {
-            if let Some(raw) = config.get::<String>("wire_format") {
-                return WireFormat::parse(&raw).ok_or_else(|| {
-                    CuError::from(format!(
-                        "ZenohBridge: Unsupported wire_format '{raw}', expected bincode/json/cbor"
-                    ))
-                });
-            }
+        if let Some(config) = channel.config.as_ref()
+            && let Some(raw) = config.get::<String>("wire_format")
+        {
+            return WireFormat::parse(&raw).ok_or_else(|| {
+                CuError::from(format!(
+                    "ZenohBridge: Unsupported wire_format '{raw}', expected bincode/json/cbor"
+                ))
+            });
         }
         Ok(default)
     }
