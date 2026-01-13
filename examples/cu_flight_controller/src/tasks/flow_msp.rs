@@ -10,7 +10,10 @@ impl CuSinkTask for FlowMspLogger {
     type Input<'m> = CuMsg<MspRequestBatch>;
     type Resources<'r> = ();
 
-    fn new_with(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new_with(
+        _config: Option<&ComponentConfig>,
+        _resources: Self::Resources<'_>,
+    ) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -27,16 +30,13 @@ impl CuSinkTask for FlowMspLogger {
                 MspRequest::MspSensorOpticFlow(flow) => {
                     debug!(
                         "                                                                              msp flow q={} dx={} dy={}",
-                        flow.quality,
-                        flow.motion_x,
-                        flow.motion_y
+                        flow.quality, flow.motion_x, flow.motion_y
                     );
                 }
                 MspRequest::MspSensorRangefinder(range) => {
                     debug!(
                         "msp range q={} dist_mm={}",
-                        range.quality,
-                        range.distance_mm
+                        range.quality, range.distance_mm
                     );
                 }
                 _ => {}
