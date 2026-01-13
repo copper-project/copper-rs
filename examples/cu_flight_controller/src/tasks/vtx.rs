@@ -42,7 +42,7 @@ impl CuTask for VtxOsd {
     type Output<'m> = CuMsg<MspRequestBatch>;
     type Resources<'r> = ();
 
-    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -344,7 +344,7 @@ impl CuTask for VtxMspResponder {
     type Output<'m> = CuMsg<MspRequestBatch>;
     type Resources<'r> = ();
 
-    fn new_with(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {

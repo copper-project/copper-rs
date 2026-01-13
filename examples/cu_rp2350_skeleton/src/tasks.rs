@@ -58,7 +58,7 @@ impl Freezable for BooleanSource {}
 impl CuSrcTask for BooleanSource {
     type Resources<'r> = ();
     type Output<'m> = output_msg!(bool);
-    fn new_with(_: Option<&ComponentConfig>, _: Self::Resources<'_>) -> CuResult<Self> {
+    fn new(_: Option<&ComponentConfig>, _: Self::Resources<'_>) -> CuResult<Self> {
         Ok(Self { state: false })
     }
     fn process(&mut self, clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
@@ -78,7 +78,7 @@ impl Freezable for LEDSink {}
 impl CuSinkTask for LEDSink {
     type Resources<'r> = ();
     type Input<'m> = input_msg!(bool);
-    fn new_with(_: Option<&ComponentConfig>, _: Self::Resources<'_>) -> CuResult<Self> {
+    fn new(_: Option<&ComponentConfig>, _: Self::Resources<'_>) -> CuResult<Self> {
         Ok(Self)
     }
     fn process(&mut self, _: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {

@@ -102,6 +102,34 @@ rtsan-smoke pkg="cu-caterpillar" bin="cu-caterpillar" args="" options="halt_on_e
 
 # Project-specific helpers now live in per-directory justfiles under examples/, components/, and support/.
 
+# Build and open the generated wiki + API docs locally.
+docs:
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	if ! command -v mkdocs >/dev/null; then
+		echo "mkdocs not found. Install it with: python3 -m pip install --upgrade pip mkdocs" >&2
+		exit 1
+	fi
+
+	RUSTDOCFLAGS="--enable-index-page -Zunstable-options" cargo +nightly doc --no-deps
+	python3 support/ci/wiki_site.py
+	mkdocs build -f build/wiki/mkdocs.yml
+
+	mkdir -p build/wiki/site/api
+	cp -R target/doc/* build/wiki/site/api/
+
+	site_path="build/wiki/site/index.html"
+	if [[ "$(uname -s)" == "Darwin" ]]; then
+		open "$site_path"
+	elif command -v xdg-open >/dev/null; then
+		xdg-open "$site_path"
+	elif command -v python3 >/dev/null; then
+		python3 -m webbrowser "file://${PWD}/${site_path}"
+	else
+		echo "Open ${site_path} in your browser."
+	fi
+
 # Partition/format an SD card for Cu29 logging (destroys data).
 mkpartition dev:
 	#!/usr/bin/env bash

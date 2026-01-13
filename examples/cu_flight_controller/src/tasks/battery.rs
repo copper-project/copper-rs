@@ -18,7 +18,7 @@ impl CuSrcTask for BatteryAdcSource {
     type Output<'m> = output_msg!(BatteryVoltage);
     type Resources<'r> = battery::Resources;
 
-    fn new_with(config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {

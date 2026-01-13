@@ -256,7 +256,7 @@ where
     type Tx = TxChannels;
     type Rx = RxChannels;
 
-    fn new_with(
+    fn new(
         config: Option<&ComponentConfig>,
         tx_channels: &[BridgeChannelConfig<<Self::Tx as BridgeChannelSet>::Id>],
         rx_channels: &[BridgeChannelConfig<<Self::Rx as BridgeChannelSet>::Id>],

@@ -142,7 +142,6 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
             use cu29::bincode::de::Decoder;
             use cu29::bincode::error::DecodeError;
             use cu29::copperlist::CopperList;
-            use cu29::prelude::CuStampedData;
             use cu29::prelude::ErasedCuStampedData;
             use cu29::prelude::ErasedCuStampedDataSet;
             use cu29::prelude::MatchingTasks;
@@ -169,43 +168,73 @@ fn gen_culist_support(
 ) -> proc_macro2::TokenStream {
     #[cfg(feature = "macro_debug")]
     eprintln!("[Extract msgs types]");
-    let all_msgs_types_in_culist_order = extract_msg_types(runtime_plan);
+    let output_packs = extract_output_packs(runtime_plan);
+    let slot_types: Vec<Type> = output_packs.iter().map(|pack| pack.slot_type()).collect();
 
-    let culist_size = all_msgs_types_in_culist_order.len();
-    let task_indices: Vec<_> = culist_indices_in_plan_order
-        .iter()
-        .map(|i| syn::Index::from(*i))
-        .collect();
+    let culist_size = output_packs.len();
 
     #[cfg(feature = "macro_debug")]
     eprintln!("[build the copperlist struct]");
-    let msgs_types_tuple: TypeTuple = build_culist_tuple(&all_msgs_types_in_culist_order);
+    let msgs_types_tuple: TypeTuple = build_culist_tuple(&slot_types);
 
     #[cfg(feature = "macro_debug")]
     eprintln!("[build the copperlist tuple bincode support]");
-    let msgs_types_tuple_encode = build_culist_tuple_encode(&all_msgs_types_in_culist_order);
-    let msgs_types_tuple_decode = build_culist_tuple_decode(&all_msgs_types_in_culist_order);
+    let msgs_types_tuple_encode = build_culist_tuple_encode(&slot_types);
+    let msgs_types_tuple_decode = build_culist_tuple_decode(&slot_types);
 
     #[cfg(feature = "macro_debug")]
     eprintln!("[build the copperlist tuple debug support]");
-    let msgs_types_tuple_debug = build_culist_tuple_debug(&all_msgs_types_in_culist_order);
+    let msgs_types_tuple_debug = build_culist_tuple_debug(&slot_types);
 
     #[cfg(feature = "macro_debug")]
     eprintln!("[build the copperlist tuple serialize support]");
-    let msgs_types_tuple_serialize = build_culist_tuple_serialize(&all_msgs_types_in_culist_order);
+    let msgs_types_tuple_serialize = build_culist_tuple_serialize(&slot_types);
 
     #[cfg(feature = "macro_debug")]
     eprintln!("[build the default tuple support]");
-    let msgs_types_tuple_default = build_culist_tuple_default(&all_msgs_types_in_culist_order);
+    let msgs_types_tuple_default = build_culist_tuple_default(&slot_types);
 
     #[cfg(feature = "macro_debug")]
     eprintln!("[build erasedcumsgs]");
 
-    let erasedmsg_trait_impl = build_culist_erasedcumsgs(&all_msgs_types_in_culist_order);
+    let erasedmsg_trait_impl = build_culist_erasedcumsgs(&output_packs);
 
+    let metadata_accessors: Vec<proc_macro2::TokenStream> = culist_indices_in_plan_order
+        .iter()
+        .map(|idx| {
+            let slot_index = syn::Index::from(*idx);
+            let pack = output_packs
+                .get(*idx)
+                .unwrap_or_else(|| panic!("Missing output pack for index {idx}"));
+            if pack.is_multi() {
+                quote! { &culist.msgs.0.#slot_index.0.metadata }
+            } else {
+                quote! { &culist.msgs.0.#slot_index.metadata }
+            }
+        })
+        .collect();
+    let mut zeroed_init_tokens: Vec<proc_macro2::TokenStream> = Vec::new();
+    for idx in culist_indices_in_plan_order {
+        let slot_index = syn::Index::from(*idx);
+        let pack = output_packs
+            .get(*idx)
+            .unwrap_or_else(|| panic!("Missing output pack for index {idx}"));
+        if pack.is_multi() {
+            for port_idx in 0..pack.msg_types.len() {
+                let port_index = syn::Index::from(port_idx);
+                zeroed_init_tokens.push(quote! {
+                    self.0.#slot_index.#port_index.metadata.status_txt = CuCompactString::default();
+                });
+            }
+        } else {
+            zeroed_init_tokens.push(quote! {
+                self.0.#slot_index.metadata.status_txt = CuCompactString::default();
+            });
+        }
+    }
     let collect_metadata_function = quote! {
         pub fn collect_metadata<'a>(culist: &'a CuList) -> [&'a CuMsgMetadata; #culist_size] {
-            [#( &culist.msgs.0.#task_indices.metadata, )*]
+            [#( #metadata_accessors, )*]
         }
     };
 
@@ -214,21 +243,46 @@ fn gen_culist_support(
         .map(|(_, name)| name.clone())
         .collect();
 
-    let methods = task_member_names.iter().map(|(node_id, name)| {
+    let mut methods = Vec::new();
+    for (node_id, name) in task_member_names {
         let output_position = node_output_positions
             .get(node_id)
             .unwrap_or_else(|| panic!("Task {name} (id: {node_id}) not found in execution order"));
+        let pack = output_packs
+            .get(*output_position)
+            .unwrap_or_else(|| panic!("Missing output pack for task {name}"));
+        let slot_index = syn::Index::from(*output_position);
 
-        let fn_name = format_ident!("get_{}_output", name);
-        let payload_type = all_msgs_types_in_culist_order[*output_position].clone();
-        let index = syn::Index::from(*output_position);
-        quote! {
-            #[allow(dead_code)]
-            pub fn #fn_name(&self) -> &CuMsg<#payload_type> {
-                &self.0.#index
+        if pack.msg_types.len() == 1 {
+            let fn_name = format_ident!("get_{}_output", name);
+            let payload_type = pack.msg_types.first().unwrap();
+            methods.push(quote! {
+                #[allow(dead_code)]
+                pub fn #fn_name(&self) -> &CuMsg<#payload_type> {
+                    &self.0.#slot_index
+                }
+            });
+        } else {
+            let outputs_fn = format_ident!("get_{}_outputs", name);
+            let slot_type = pack.slot_type();
+            for (port_idx, payload_type) in pack.msg_types.iter().enumerate() {
+                let fn_name = format_ident!("get_{}_output_{}", name, port_idx);
+                let port_index = syn::Index::from(port_idx);
+                methods.push(quote! {
+                    #[allow(dead_code)]
+                    pub fn #fn_name(&self) -> &CuMsg<#payload_type> {
+                        &self.0.#slot_index.#port_index
+                    }
+                });
             }
+            methods.push(quote! {
+                #[allow(dead_code)]
+                pub fn #outputs_fn(&self) -> &#slot_type {
+                    &self.0.#slot_index
+                }
+            });
         }
-    });
+    }
 
     // This generates a way to get the metadata of every single message of a culist at low cost
     quote! {
@@ -277,7 +331,7 @@ fn gen_culist_support(
 
         impl CuListZeroedInit for CuStampedDataSet {
             fn init_zeroed(&mut self) {
-                #(self.0.#task_indices.metadata.status_txt = CuCompactString::default();)*
+                #(#zeroed_init_tokens)*
             }
         }
     }
@@ -305,12 +359,22 @@ fn gen_sim_support(
                 let inputs: Vec<Type> = step
                     .input_msg_indices_types
                     .iter()
-                    .map(|(_, t)| parse_str::<Type>(format!("CuMsg<{t}>").as_str()).unwrap())
+                    .map(|input| {
+                        parse_str::<Type>(format!("CuMsg<{}>", input.msg_type).as_str()).unwrap()
+                    })
                     .collect();
-                let output: Option<Type> = step
-                    .output_msg_index_type
-                    .as_ref()
-                    .map(|(_, t)| parse_str::<Type>(format!("CuMsg<{t}>").as_str()).unwrap());
+                let output: Option<Type> = step.output_msg_pack.as_ref().map(|pack| {
+                    let msg_types: Vec<Type> = pack
+                        .msg_types
+                        .iter()
+                        .map(|msg_type| {
+                            parse_str::<Type>(msg_type.as_str()).unwrap_or_else(|_| {
+                                panic!("Could not transform {msg_type} into a message Rust type.")
+                            })
+                        })
+                        .collect();
+                    build_output_slot_type(&msg_types)
+                });
                 let no_output = parse_str::<Type>("CuMsg<()>").unwrap();
                 let output = output.as_ref().unwrap_or(&no_output);
 
@@ -657,7 +721,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         let rx_channels: &[cu29::cubridge::BridgeChannelConfig<
                             <<#bridge_type as cu29::cubridge::CuBridge>::Rx as cu29::cubridge::BridgeChannelSet>::Id,
                         >] = &[#(#rx_configs),*];
-                        <#bridge_type as cu29::cubridge::CuBridge>::new_with(
+                        <#bridge_type as cu29::cubridge::CuBridge>::new(
                             bridge_cfg.config.as_ref(),
                             tx_channels,
                             rx_channels,
@@ -786,7 +850,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 resources,
                                 #mapping_ref,
                             ).map_err(|e| e.add_cause(#additional_error_info))?;
-                            <#ty>::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
+                            <#ty as CuSrcTask>::new(all_instances_configs[#index], resources)
+                                .map_err(|e| e.add_cause(#additional_error_info))?
                         }
                     },
                     CuTaskType::Regular => {
@@ -808,7 +873,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         inner: inner_resources,
                                         threadpool,
                                     };
-                                    <#ty>::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
+                                    <#ty as CuTask>::new(all_instances_configs[#index], resources)
+                                        .map_err(|e| e.add_cause(#additional_error_info))?
                                 }
                             }
                         } else {
@@ -818,7 +884,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         resources,
                                         #mapping_ref,
                                     ).map_err(|e| e.add_cause(#additional_error_info))?;
-                                    <#ty>::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
+                                    <#ty as CuTask>::new(all_instances_configs[#index], resources)
+                                        .map_err(|e| e.add_cause(#additional_error_info))?
                                 }
                             }
                         }
@@ -829,7 +896,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 resources,
                                 #mapping_ref,
                             ).map_err(|e| e.add_cause(#additional_error_info))?;
-                            <#ty>::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
+                            <#ty as CuSinkTask>::new(all_instances_configs[#index], resources)
+                                .map_err(|e| e.add_cause(#additional_error_info))?
                         }
                     },
                 }
@@ -855,7 +923,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 resources,
                                 #mapping_ref,
                             ).map_err(|e| e.add_cause(#additional_error_info))?;
-                            #task_type::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
+                            <#task_type as CuSrcTask>::new(all_instances_configs[#index], resources)
+                                .map_err(|e| e.add_cause(#additional_error_info))?
                         }
                     },
                     CuTaskType::Regular => {
@@ -877,7 +946,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         inner: inner_resources,
                                         threadpool,
                                     };
-                                    #task_type::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
+                                    <#task_type as CuTask>::new(all_instances_configs[#index], resources)
+                                        .map_err(|e| e.add_cause(#additional_error_info))?
                                 }
                             }
                         } else {
@@ -887,7 +957,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                         resources,
                                         #mapping_ref,
                                     ).map_err(|e| e.add_cause(#additional_error_info))?;
-                                    #task_type::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
+                                    <#task_type as CuTask>::new(all_instances_configs[#index], resources)
+                                        .map_err(|e| e.add_cause(#additional_error_info))?
                                 }
                             }
                         }
@@ -898,7 +969,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 resources,
                                 #mapping_ref,
                             ).map_err(|e| e.add_cause(#additional_error_info))?;
-                            #task_type::new_with(all_instances_configs[#index], resources).map_err(|e| e.add_cause(#additional_error_info))?
+                            <#task_type as CuSinkTask>::new(all_instances_configs[#index], resources)
+                                .map_err(|e| e.add_cause(#additional_error_info))?
                         }
                     },
                 }
@@ -1281,6 +1353,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let mut postprocess_calls = task_postprocess_calls;
         postprocess_calls.extend(bridge_postprocess_calls);
 
+        let output_pack_sizes = collect_output_pack_sizes(&culist_plan);
         let runtime_plan_code_and_logging: Vec<(
             proc_macro2::TokenStream,
             proc_macro2::TokenStream,
@@ -1297,7 +1370,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         step.task_type,
                         step.node_id,
                         step.input_msg_indices_types,
-                        step.output_msg_index_type
+                        step.output_msg_pack
                     );
 
                     match &culist_exec_entities[step.node_id as usize].kind {
@@ -1305,6 +1378,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             step,
                             *task_index,
                             &task_specs,
+                            &output_pack_sizes,
                             sim_mode,
                             &mission_mod,
                         ),
@@ -1313,7 +1387,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                             channel_index,
                         } => {
                             let spec = &culist_bridge_specs[*bridge_index];
-                            generate_bridge_rx_execution_tokens(spec, *channel_index, &mission_mod)
+                            generate_bridge_rx_execution_tokens(
+                                step,
+                                spec,
+                                *channel_index,
+                                &mission_mod,
+                            )
                         }
                         ExecutionEntityKind::BridgeTx {
                             bridge_index,
@@ -1324,6 +1403,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 step,
                                 spec,
                                 *channel_index,
+                                &output_pack_sizes,
                                 &mission_mod,
                             )
                         }
@@ -2358,43 +2438,92 @@ impl CuTaskSpecSet {
     }
 }
 
-fn extract_msg_types(runtime_plan: &CuExecutionLoop) -> Vec<Type> {
-    runtime_plan
+#[derive(Clone)]
+struct OutputPack {
+    msg_types: Vec<Type>,
+}
+
+impl OutputPack {
+    fn slot_type(&self) -> Type {
+        build_output_slot_type(&self.msg_types)
+    }
+
+    fn is_multi(&self) -> bool {
+        self.msg_types.len() > 1
+    }
+}
+
+fn build_output_slot_type(msg_types: &[Type]) -> Type {
+    if msg_types.is_empty() {
+        parse_quote! { () }
+    } else if msg_types.len() == 1 {
+        let msg_type = msg_types.first().unwrap();
+        parse_quote! { CuMsg<#msg_type> }
+    } else {
+        parse_quote! { ( #( CuMsg<#msg_types> ),* ) }
+    }
+}
+
+fn extract_output_packs(runtime_plan: &CuExecutionLoop) -> Vec<OutputPack> {
+    let mut packs: Vec<(u32, OutputPack)> = runtime_plan
         .steps
         .iter()
         .filter_map(|unit| match unit {
             CuExecutionUnit::Step(step) => {
-                if let Some((_, output_msg_type)) = &step.output_msg_index_type {
-                    Some(
-                        parse_str::<Type>(output_msg_type.as_str()).unwrap_or_else(|_| {
-                            panic!(
-                                "Could not transform {output_msg_type} into a message Rust type."
-                            )
-                        }),
-                    )
+                if let Some(output_pack) = &step.output_msg_pack {
+                    let msg_types: Vec<Type> = output_pack
+                        .msg_types
+                        .iter()
+                        .map(|output_msg_type| {
+                            parse_str::<Type>(output_msg_type.as_str()).unwrap_or_else(|_| {
+                                panic!(
+                                    "Could not transform {output_msg_type} into a message Rust type."
+                                )
+                            })
+                        })
+                        .collect();
+                    Some((output_pack.culist_index, OutputPack { msg_types }))
                 } else {
                     None
                 }
             }
             CuExecutionUnit::Loop(_) => todo!("Needs to be implemented"),
         })
-        .collect()
+        .collect();
+
+    packs.sort_by_key(|(index, _)| *index);
+    packs.into_iter().map(|(_, pack)| pack).collect()
 }
 
-/// Builds the tuple of the CuList as a tuple off all the messages types.
-fn build_culist_tuple(all_msgs_types_in_culist_order: &[Type]) -> TypeTuple {
-    if all_msgs_types_in_culist_order.is_empty() {
+fn collect_output_pack_sizes(runtime_plan: &CuExecutionLoop) -> Vec<usize> {
+    let mut sizes: Vec<(u32, usize)> = runtime_plan
+        .steps
+        .iter()
+        .filter_map(|unit| match unit {
+            CuExecutionUnit::Step(step) => step
+                .output_msg_pack
+                .as_ref()
+                .map(|output_pack| (output_pack.culist_index, output_pack.msg_types.len())),
+            CuExecutionUnit::Loop(_) => todo!("Needs to be implemented"),
+        })
+        .collect();
+
+    sizes.sort_by_key(|(index, _)| *index);
+    sizes.into_iter().map(|(_, size)| size).collect()
+}
+
+/// Builds the tuple of the CuList as a tuple off all the output slots.
+fn build_culist_tuple(slot_types: &[Type]) -> TypeTuple {
+    if slot_types.is_empty() {
         parse_quote! { () }
     } else {
-        parse_quote! {
-            ( #( CuMsg<#all_msgs_types_in_culist_order> ),* )
-        }
+        parse_quote! { ( #( #slot_types ),* ) }
     }
 }
 
 /// This is the bincode encoding part of the CuStampedDataSet
-fn build_culist_tuple_encode(all_msgs_types_in_culist_order: &[Type]) -> ItemImpl {
-    let indices: Vec<usize> = (0..all_msgs_types_in_culist_order.len()).collect();
+fn build_culist_tuple_encode(slot_types: &[Type]) -> ItemImpl {
+    let indices: Vec<usize> = (0..slot_types.len()).collect();
 
     // Generate the `self.#i.encode(encoder)?` for each tuple index, including `()` types
     let encode_fields: Vec<_> = indices
@@ -2416,15 +2545,14 @@ fn build_culist_tuple_encode(all_msgs_types_in_culist_order: &[Type]) -> ItemImp
 }
 
 /// This is the bincode decoding part of the CuStampedDataSet
-fn build_culist_tuple_decode(all_msgs_types_in_culist_order: &[Type]) -> ItemImpl {
-    let indices: Vec<usize> = (0..all_msgs_types_in_culist_order.len()).collect();
+fn build_culist_tuple_decode(slot_types: &[Type]) -> ItemImpl {
+    let indices: Vec<usize> = (0..slot_types.len()).collect();
 
-    // Generate the `CuStampedData::<T>::decode(decoder)?` for each tuple index
     let decode_fields: Vec<_> = indices
         .iter()
         .map(|i| {
-            let t = &all_msgs_types_in_culist_order[*i];
-            quote! { CuMsg::<#t>::decode(decoder)? }
+            let slot_type = &slot_types[*i];
+            quote! { <#slot_type as Decode<()>>::decode(decoder)? }
         })
         .collect();
 
@@ -2439,15 +2567,21 @@ fn build_culist_tuple_decode(all_msgs_types_in_culist_order: &[Type]) -> ItemImp
     }
 }
 
-fn build_culist_erasedcumsgs(all_msgs_types_in_culist_order: &[Type]) -> ItemImpl {
-    let indices: Vec<usize> = (0..all_msgs_types_in_culist_order.len()).collect();
-    let casted_fields: Vec<_> = indices
-        .iter()
-        .map(|i| {
-            let idx = syn::Index::from(*i);
-            quote! { &self.0.#idx as &dyn ErasedCuStampedData }
-        })
-        .collect();
+fn build_culist_erasedcumsgs(output_packs: &[OutputPack]) -> ItemImpl {
+    let mut casted_fields: Vec<proc_macro2::TokenStream> = Vec::new();
+    for (idx, pack) in output_packs.iter().enumerate() {
+        let slot_index = syn::Index::from(idx);
+        if pack.is_multi() {
+            for port_idx in 0..pack.msg_types.len() {
+                let port_index = syn::Index::from(port_idx);
+                casted_fields.push(quote! {
+                    &self.0.#slot_index.#port_index as &dyn ErasedCuStampedData
+                });
+            }
+        } else {
+            casted_fields.push(quote! { &self.0.#slot_index as &dyn ErasedCuStampedData });
+        }
+    }
     parse_quote! {
         impl ErasedCuStampedDataSet for CuStampedDataSet {
             fn cumsgs(&self) -> Vec<&dyn ErasedCuStampedData> {
@@ -2459,8 +2593,8 @@ fn build_culist_erasedcumsgs(all_msgs_types_in_culist_order: &[Type]) -> ItemImp
     }
 }
 
-fn build_culist_tuple_debug(all_msgs_types_in_culist_order: &[Type]) -> ItemImpl {
-    let indices: Vec<usize> = (0..all_msgs_types_in_culist_order.len()).collect();
+fn build_culist_tuple_debug(slot_types: &[Type]) -> ItemImpl {
+    let indices: Vec<usize> = (0..slot_types.len()).collect();
 
     let debug_fields: Vec<_> = indices
         .iter()
@@ -2482,9 +2616,9 @@ fn build_culist_tuple_debug(all_msgs_types_in_culist_order: &[Type]) -> ItemImpl
 }
 
 /// This is the serde serialization part of the CuStampedDataSet
-fn build_culist_tuple_serialize(all_msgs_types_in_culist_order: &[Type]) -> ItemImpl {
-    let indices: Vec<usize> = (0..all_msgs_types_in_culist_order.len()).collect();
-    let tuple_len = all_msgs_types_in_culist_order.len();
+fn build_culist_tuple_serialize(slot_types: &[Type]) -> ItemImpl {
+    let indices: Vec<usize> = (0..slot_types.len()).collect();
+    let tuple_len = slot_types.len();
 
     // Generate the serialization for each tuple field
     let serialize_fields: Vec<_> = indices
@@ -2511,11 +2645,10 @@ fn build_culist_tuple_serialize(all_msgs_types_in_culist_order: &[Type]) -> Item
 }
 
 /// This is the default implementation for CuStampedDataSet
-fn build_culist_tuple_default(all_msgs_types_in_culist_order: &[Type]) -> ItemImpl {
-    // Generate the serialization for each tuple field
-    let default_fields: Vec<_> = all_msgs_types_in_culist_order
+fn build_culist_tuple_default(slot_types: &[Type]) -> ItemImpl {
+    let default_fields: Vec<_> = slot_types
         .iter()
-        .map(|msg_type| quote! { CuStampedData::<#msg_type, CuMsgMetadata>::default() })
+        .map(|slot_type| quote! { <#slot_type as Default>::default() })
         .collect();
 
     parse_quote! {
@@ -2603,6 +2736,7 @@ fn build_bridge_specs(
                         direction: BridgeChannelDirection::Rx,
                     };
                     if let Some(msg_type) = channel_usage.get(&key) {
+                        let msg_type_name = msg_type.clone();
                         let msg_type = parse_str::<Type>(msg_type).unwrap_or_else(|err| {
                             panic!(
                                 "Could not parse message type '{msg_type}' for bridge '{}' channel '{}': {err}",
@@ -2615,6 +2749,7 @@ fn build_bridge_specs(
                             id: id.clone(),
                             const_ident,
                             msg_type,
+                            msg_type_name,
                             config_index: channel_index,
                             plan_node_id: None,
                             culist_index: None,
@@ -2629,6 +2764,7 @@ fn build_bridge_specs(
                         direction: BridgeChannelDirection::Tx,
                     };
                     if let Some(msg_type) = channel_usage.get(&key) {
+                        let msg_type_name = msg_type.clone();
                         let msg_type = parse_str::<Type>(msg_type).unwrap_or_else(|err| {
                             panic!(
                                 "Could not parse message type '{msg_type}' for bridge '{}' channel '{}': {err}",
@@ -2641,6 +2777,7 @@ fn build_bridge_specs(
                             id: id.clone(),
                             const_ident,
                             msg_type,
+                            msg_type_name,
                             config_index: channel_index,
                             plan_node_id: None,
                             culist_index: None,
@@ -3171,13 +3308,14 @@ fn collect_culist_metadata(
 
     for unit in &runtime_plan.steps {
         if let CuExecutionUnit::Step(step) = unit
-            && let Some((output_idx, _)) = &step.output_msg_index_type
+            && let Some(output_pack) = &step.output_msg_pack
         {
-            culist_order.push(*output_idx as usize);
+            let output_idx = output_pack.culist_index;
+            culist_order.push(output_idx as usize);
             match &exec_entities[step.node_id as usize].kind {
                 ExecutionEntityKind::Task { .. } => {
                     if let Some(original_node_id) = plan_to_original.get(&step.node_id) {
-                        node_output_positions.insert(*original_node_id, *output_idx as usize);
+                        node_output_positions.insert(*original_node_id, output_idx as usize);
                     }
                 }
                 ExecutionEntityKind::BridgeRx {
@@ -3185,7 +3323,7 @@ fn collect_culist_metadata(
                     channel_index,
                 } => {
                     bridge_specs[*bridge_index].rx_channels[*channel_index].culist_index =
-                        Some(*output_idx as usize);
+                        Some(output_idx as usize);
                 }
                 ExecutionEntityKind::BridgeTx { .. } => {}
             }
@@ -3217,6 +3355,7 @@ fn generate_task_execution_tokens(
     step: &CuExecutionStep,
     task_index: usize,
     task_specs: &CuTaskSpecSet,
+    output_pack_sizes: &[usize],
     sim_mode: bool,
     mission_mod: &Ident,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
@@ -3228,7 +3367,7 @@ fn generate_task_execution_tokens(
         step.task_type,
         step.node_id,
         step.input_msg_indices_types,
-        step.output_msg_index_type
+        step.output_msg_pack
     );
     let comment_tokens = quote! {{
         let _ = stringify!(#comment_str);
@@ -3238,281 +3377,330 @@ fn generate_task_execution_tokens(
     let enum_name = Ident::new(&task_enum_name, Span::call_site());
     let rt_guard = rtsan_guard_tokens();
 
+    let output_pack = step
+        .output_msg_pack
+        .as_ref()
+        .expect("Task should have an output message pack.");
+    let output_culist_index = int2sliceindex(output_pack.culist_index);
+    let output_ports: Vec<syn::Index> = (0..output_pack.msg_types.len())
+        .map(syn::Index::from)
+        .collect();
+    let output_clear_payload = if output_ports.len() == 1 {
+        quote! { cumsg_output.clear_payload(); }
+    } else {
+        quote! { #(cumsg_output.#output_ports.clear_payload();)* }
+    };
+    let output_start_time = if output_ports.len() == 1 {
+        quote! { cumsg_output.metadata.process_time.start = clock.now().into(); }
+    } else {
+        quote! {
+            let start_time = clock.now().into();
+            #(cumsg_output.#output_ports.metadata.process_time.start = start_time;)*
+        }
+    };
+    let output_end_time = if output_ports.len() == 1 {
+        quote! { cumsg_output.metadata.process_time.end = clock.now().into(); }
+    } else {
+        quote! {
+            let end_time = clock.now().into();
+            #(cumsg_output.#output_ports.metadata.process_time.end = end_time;)*
+        }
+    };
+
     match step.task_type {
         CuTaskType::Source => {
-            if let Some((output_index, _)) = &step.output_msg_index_type {
-                let output_culist_index = int2sliceindex(*output_index);
-
-                let monitoring_action = quote! {
-                    debug!("Task {}: Error during process: {}", #mission_mod::TASKS_IDS[#tid], &error);
-                    let decision = monitor.process_error(#tid, CuTaskState::Process, &error);
-                    match decision {
-                        Decision::Abort => {
-                            debug!("Process: ABORT decision from monitoring. Task '{}' errored out \
-                                    during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#tid], clid);
-                            monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
-                            cl_manager.end_of_processing(clid)?;
-                            return Ok(());
-                        }
-                        Decision::Ignore => {
-                            debug!("Process: IGNORE decision from monitoring. Task '{}' errored out \
-                                    during process. The runtime will continue with a forced empty message.", #mission_mod::TASKS_IDS[#tid]);
-                            let cumsg_output = &mut msgs.#output_culist_index;
-                            cumsg_output.clear_payload();
-                        }
-                        Decision::Shutdown => {
-                            debug!("Process: SHUTDOWN decision from monitoring. Task '{}' errored out \
-                                    during process. The runtime cannot continue.", #mission_mod::TASKS_IDS[#tid]);
-                            return Err(CuError::new_with_cause("Task errored out during process.", error));
-                        }
+            let monitoring_action = quote! {
+                debug!("Task {}: Error during process: {}", #mission_mod::TASKS_IDS[#tid], &error);
+                let decision = monitor.process_error(#tid, CuTaskState::Process, &error);
+                match decision {
+                    Decision::Abort => {
+                        debug!("Process: ABORT decision from monitoring. Task '{}' errored out \
+                                during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#tid], clid);
+                        monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
+                        cl_manager.end_of_processing(clid)?;
+                        return Ok(());
                     }
-                };
-
-                let call_sim_callback = if sim_mode {
-                    quote! {
-                        let doit = {
-                            let cumsg_output = &mut msgs.#output_culist_index;
-                            let state = CuTaskCallbackState::Process((), cumsg_output);
-                            let ovr = sim_callback(SimStep::#enum_name(state));
-
-                            if let SimOverride::Errored(reason) = ovr  {
-                                let error: CuError = reason.into();
-                                #monitoring_action
-                                false
-                            } else {
-                                ovr == SimOverride::ExecuteByRuntime
-                            }
-                        };
+                    Decision::Ignore => {
+                        debug!("Process: IGNORE decision from monitoring. Task '{}' errored out \
+                                during process. The runtime will continue with a forced empty message.", #mission_mod::TASKS_IDS[#tid]);
+                        let cumsg_output = &mut msgs.#output_culist_index;
+                        #output_clear_payload
                     }
-                } else {
-                    quote! { let doit = true; }
-                };
-
-                let logging_tokens = if !task_specs.logging_enabled[tid] {
-                    let output_culist_index = int2sliceindex(*output_index);
-                    quote! {
-                        let mut cumsg_output = &mut culist.msgs.0.#output_culist_index;
-                        cumsg_output.clear_payload();
+                    Decision::Shutdown => {
+                        debug!("Process: SHUTDOWN decision from monitoring. Task '{}' errored out \
+                                during process. The runtime cannot continue.", #mission_mod::TASKS_IDS[#tid]);
+                        return Err(CuError::new_with_cause("Task errored out during process.", error));
                     }
-                } else {
-                    quote!()
-                };
+                }
+            };
 
-                (
-                    quote! {
-                        {
-                            #comment_tokens
-                            kf_manager.freeze_task(clid, &#task_instance)?;
-                            #call_sim_callback
-                            let cumsg_output = &mut msgs.#output_culist_index;
-                            cumsg_output.metadata.process_time.start = clock.now().into();
-                            let maybe_error = if doit {
-                                #rt_guard
-                                #task_instance.process(clock, cumsg_output)
-                            } else {
-                                Ok(())
-                            };
-                            cumsg_output.metadata.process_time.end = clock.now().into();
-                            if let Err(error) = maybe_error {
-                                #monitoring_action
-                            }
+            let call_sim_callback = if sim_mode {
+                quote! {
+                    let doit = {
+                        let cumsg_output = &mut msgs.#output_culist_index;
+                        let state = CuTaskCallbackState::Process((), cumsg_output);
+                        let ovr = sim_callback(SimStep::#enum_name(state));
+
+                        if let SimOverride::Errored(reason) = ovr  {
+                            let error: CuError = reason.into();
+                            #monitoring_action
+                            false
+                        } else {
+                            ovr == SimOverride::ExecuteByRuntime
                         }
-                    },
-                    logging_tokens,
-                )
+                    };
+                }
             } else {
-                panic!("Source task should have an output message index.");
-            }
+                quote! { let doit = true; }
+            };
+
+            let logging_tokens = if !task_specs.logging_enabled[tid] {
+                quote! {
+                    let mut cumsg_output = &mut culist.msgs.0.#output_culist_index;
+                    #output_clear_payload
+                }
+            } else {
+                quote!()
+            };
+
+            (
+                quote! {
+                    {
+                        #comment_tokens
+                        kf_manager.freeze_task(clid, &#task_instance)?;
+                        #call_sim_callback
+                        let cumsg_output = &mut msgs.#output_culist_index;
+                        #output_start_time
+                        let maybe_error = if doit {
+                            #rt_guard
+                            #task_instance.process(clock, cumsg_output)
+                        } else {
+                            Ok(())
+                        };
+                        #output_end_time
+                        if let Err(error) = maybe_error {
+                            #monitoring_action
+                        }
+                    }
+                },
+                logging_tokens,
+            )
         }
         CuTaskType::Sink => {
-            if let Some((output_index, _)) = &step.output_msg_index_type {
-                let output_culist_index = int2sliceindex(*output_index);
-                let indices = step
-                    .input_msg_indices_types
-                    .iter()
-                    .map(|(index, _)| int2sliceindex(*index));
-
-                let monitoring_action = quote! {
-                    debug!("Task {}: Error during process: {}", #mission_mod::TASKS_IDS[#tid], &error);
-                    let decision = monitor.process_error(#tid, CuTaskState::Process, &error);
-                    match decision {
-                        Decision::Abort => {
-                            debug!("Process: ABORT decision from monitoring. Task '{}' errored out \
-                                    during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#tid], clid);
-                            monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
-                            cl_manager.end_of_processing(clid)?;
-                            return Ok(());
-                        }
-                        Decision::Ignore => {
-                            debug!("Process: IGNORE decision from monitoring. Task '{}' errored out \
-                                    during process. The runtime will continue with a forced empty message.", #mission_mod::TASKS_IDS[#tid]);
-                            let cumsg_output = &mut msgs.#output_culist_index;
-                            cumsg_output.clear_payload();
-                        }
-                        Decision::Shutdown => {
-                            debug!("Process: SHUTDOWN decision from monitoring. Task '{}' errored out \
-                                    during process. The runtime cannot continue.", #mission_mod::TASKS_IDS[#tid]);
-                            return Err(CuError::new_with_cause("Task errored out during process.", error));
-                        }
+            let input_exprs: Vec<proc_macro2::TokenStream> = step
+                .input_msg_indices_types
+                .iter()
+                .map(|input| {
+                    let input_index = int2sliceindex(input.culist_index);
+                    let output_size = output_pack_sizes
+                        .get(input.culist_index as usize)
+                        .copied()
+                        .unwrap_or_else(|| {
+                            panic!(
+                                "Missing output pack size for culist index {}",
+                                input.culist_index
+                            )
+                        });
+                    if output_size > 1 {
+                        let port_index = syn::Index::from(input.src_port);
+                        quote! { msgs.#input_index.#port_index }
+                    } else {
+                        quote! { msgs.#input_index }
                     }
-                };
-
-                let inputs_type = if indices.len() == 1 {
-                    quote! { #(msgs.#indices)* }
-                } else {
-                    quote! { (#(&msgs.#indices),*) }
-                };
-
-                let call_sim_callback = if sim_mode {
-                    quote! {
-                        let doit = {
-                            let cumsg_input = &#inputs_type;
-                            let cumsg_output = &mut msgs.#output_culist_index;
-                            let state = CuTaskCallbackState::Process(cumsg_input, cumsg_output);
-                            let ovr = sim_callback(SimStep::#enum_name(state));
-
-                            if let SimOverride::Errored(reason) = ovr  {
-                                let error: CuError = reason.into();
-                                #monitoring_action
-                                false
-                            } else {
-                                ovr == SimOverride::ExecuteByRuntime
-                            }
-                        };
-                    }
-                } else {
-                    quote! { let doit = true; }
-                };
-
-                (
-                    quote! {
-                        {
-                            #comment_tokens
-                            kf_manager.freeze_task(clid, &#task_instance)?;
-                            #call_sim_callback
-                            let cumsg_input = &#inputs_type;
-                            let cumsg_output = &mut msgs.#output_culist_index;
-                            cumsg_output.metadata.process_time.start = clock.now().into();
-                            let maybe_error = if doit {
-                                #rt_guard
-                                #task_instance.process(clock, cumsg_input)
-                            } else {
-                                Ok(())
-                            };
-                            cumsg_output.metadata.process_time.end = clock.now().into();
-                            if let Err(error) = maybe_error {
-                                #monitoring_action
-                            }
-                        }
-                    },
-                    quote! {},
-                )
+                })
+                .collect();
+            let inputs_type = if input_exprs.len() == 1 {
+                let input = input_exprs.first().unwrap();
+                quote! { #input }
             } else {
-                panic!("Sink tasks should have a virtual output message index.");
-            }
+                quote! { (#(&#input_exprs),*) }
+            };
+
+            let monitoring_action = quote! {
+                debug!("Task {}: Error during process: {}", #mission_mod::TASKS_IDS[#tid], &error);
+                let decision = monitor.process_error(#tid, CuTaskState::Process, &error);
+                match decision {
+                    Decision::Abort => {
+                        debug!("Process: ABORT decision from monitoring. Task '{}' errored out \
+                                during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#tid], clid);
+                        monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
+                        cl_manager.end_of_processing(clid)?;
+                        return Ok(());
+                    }
+                    Decision::Ignore => {
+                        debug!("Process: IGNORE decision from monitoring. Task '{}' errored out \
+                                during process. The runtime will continue with a forced empty message.", #mission_mod::TASKS_IDS[#tid]);
+                        let cumsg_output = &mut msgs.#output_culist_index;
+                        #output_clear_payload
+                    }
+                    Decision::Shutdown => {
+                        debug!("Process: SHUTDOWN decision from monitoring. Task '{}' errored out \
+                                during process. The runtime cannot continue.", #mission_mod::TASKS_IDS[#tid]);
+                        return Err(CuError::new_with_cause("Task errored out during process.", error));
+                    }
+                }
+            };
+
+            let call_sim_callback = if sim_mode {
+                quote! {
+                    let doit = {
+                        let cumsg_input = &#inputs_type;
+                        let cumsg_output = &mut msgs.#output_culist_index;
+                        let state = CuTaskCallbackState::Process(cumsg_input, cumsg_output);
+                        let ovr = sim_callback(SimStep::#enum_name(state));
+
+                        if let SimOverride::Errored(reason) = ovr  {
+                            let error: CuError = reason.into();
+                            #monitoring_action
+                            false
+                        } else {
+                            ovr == SimOverride::ExecuteByRuntime
+                        }
+                    };
+                }
+            } else {
+                quote! { let doit = true; }
+            };
+
+            (
+                quote! {
+                    {
+                        #comment_tokens
+                        kf_manager.freeze_task(clid, &#task_instance)?;
+                        #call_sim_callback
+                        let cumsg_input = &#inputs_type;
+                        let cumsg_output = &mut msgs.#output_culist_index;
+                        #output_start_time
+                        let maybe_error = if doit {
+                            #rt_guard
+                            #task_instance.process(clock, cumsg_input)
+                        } else {
+                            Ok(())
+                        };
+                        #output_end_time
+                        if let Err(error) = maybe_error {
+                            #monitoring_action
+                        }
+                    }
+                },
+                quote! {},
+            )
         }
         CuTaskType::Regular => {
-            if let Some((output_index, _)) = &step.output_msg_index_type {
-                let output_culist_index = int2sliceindex(*output_index);
-                let indices = step
-                    .input_msg_indices_types
-                    .iter()
-                    .map(|(index, _)| int2sliceindex(*index));
-
-                let monitoring_action = quote! {
-                    debug!("Task {}: Error during process: {}", #mission_mod::TASKS_IDS[#tid], &error);
-                    let decision = monitor.process_error(#tid, CuTaskState::Process, &error);
-                    match decision {
-                        Decision::Abort => {
-                            debug!("Process: ABORT decision from monitoring. Task '{}' errored out \
-                                    during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#tid], clid);
-                            monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
-                            cl_manager.end_of_processing(clid)?;
-                            return Ok(());
-                        }
-                        Decision::Ignore => {
-                            debug!("Process: IGNORE decision from monitoring. Task '{}' errored out \
-                                    during process. The runtime will continue with a forced empty message.", #mission_mod::TASKS_IDS[#tid]);
-                            let cumsg_output = &mut msgs.#output_culist_index;
-                            cumsg_output.clear_payload();
-                        }
-                        Decision::Shutdown => {
-                            debug!("Process: SHUTDOWN decision from monitoring. Task '{}' errored out \
-                                    during process. The runtime cannot continue.", #mission_mod::TASKS_IDS[#tid]);
-                            return Err(CuError::new_with_cause("Task errored out during process.", error));
-                        }
+            let input_exprs: Vec<proc_macro2::TokenStream> = step
+                .input_msg_indices_types
+                .iter()
+                .map(|input| {
+                    let input_index = int2sliceindex(input.culist_index);
+                    let output_size = output_pack_sizes
+                        .get(input.culist_index as usize)
+                        .copied()
+                        .unwrap_or_else(|| {
+                            panic!(
+                                "Missing output pack size for culist index {}",
+                                input.culist_index
+                            )
+                        });
+                    if output_size > 1 {
+                        let port_index = syn::Index::from(input.src_port);
+                        quote! { msgs.#input_index.#port_index }
+                    } else {
+                        quote! { msgs.#input_index }
                     }
-                };
-
-                let inputs_type = if indices.len() == 1 {
-                    quote! { #(msgs.#indices)* }
-                } else {
-                    quote! { (#(&msgs.#indices),*) }
-                };
-
-                let call_sim_callback = if sim_mode {
-                    quote! {
-                        let doit = {
-                            let cumsg_input = &#inputs_type;
-                            let cumsg_output = &mut msgs.#output_culist_index;
-                            let state = CuTaskCallbackState::Process(cumsg_input, cumsg_output);
-                            let ovr = sim_callback(SimStep::#enum_name(state));
-
-                            if let SimOverride::Errored(reason) = ovr  {
-                                let error: CuError = reason.into();
-                                #monitoring_action
-                                false
-                            }
-                            else {
-                                ovr == SimOverride::ExecuteByRuntime
-                            }
-                        };
-                    }
-                } else {
-                    quote! { let doit = true; }
-                };
-
-                let logging_tokens = if !task_specs.logging_enabled[tid] {
-                    let output_culist_index = int2sliceindex(*output_index);
-                    quote! {
-                        let mut cumsg_output = &mut culist.msgs.0.#output_culist_index;
-                        cumsg_output.clear_payload();
-                    }
-                } else {
-                    quote!()
-                };
-
-                (
-                    quote! {
-                        {
-                            #comment_tokens
-                            kf_manager.freeze_task(clid, &#task_instance)?;
-                            #call_sim_callback
-                            let cumsg_input = &#inputs_type;
-                            let cumsg_output = &mut msgs.#output_culist_index;
-                            cumsg_output.metadata.process_time.start = clock.now().into();
-                            let maybe_error = if doit {
-                                #rt_guard
-                                #task_instance.process(clock, cumsg_input, cumsg_output)
-                            } else {
-                                Ok(())
-                            };
-                            cumsg_output.metadata.process_time.end = clock.now().into();
-                            if let Err(error) = maybe_error {
-                                #monitoring_action
-                            }
-                        }
-                    },
-                    logging_tokens,
-                )
+                })
+                .collect();
+            let inputs_type = if input_exprs.len() == 1 {
+                let input = input_exprs.first().unwrap();
+                quote! { #input }
             } else {
-                panic!("Regular task should have an output message index.");
-            }
+                quote! { (#(&#input_exprs),*) }
+            };
+
+            let monitoring_action = quote! {
+                debug!("Task {}: Error during process: {}", #mission_mod::TASKS_IDS[#tid], &error);
+                let decision = monitor.process_error(#tid, CuTaskState::Process, &error);
+                match decision {
+                    Decision::Abort => {
+                        debug!("Process: ABORT decision from monitoring. Task '{}' errored out \
+                                during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#tid], clid);
+                        monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
+                        cl_manager.end_of_processing(clid)?;
+                        return Ok(());
+                    }
+                    Decision::Ignore => {
+                        debug!("Process: IGNORE decision from monitoring. Task '{}' errored out \
+                                during process. The runtime will continue with a forced empty message.", #mission_mod::TASKS_IDS[#tid]);
+                        let cumsg_output = &mut msgs.#output_culist_index;
+                        #output_clear_payload
+                    }
+                    Decision::Shutdown => {
+                        debug!("Process: SHUTDOWN decision from monitoring. Task '{}' errored out \
+                                during process. The runtime cannot continue.", #mission_mod::TASKS_IDS[#tid]);
+                        return Err(CuError::new_with_cause("Task errored out during process.", error));
+                    }
+                }
+            };
+
+            let call_sim_callback = if sim_mode {
+                quote! {
+                    let doit = {
+                        let cumsg_input = &#inputs_type;
+                        let cumsg_output = &mut msgs.#output_culist_index;
+                        let state = CuTaskCallbackState::Process(cumsg_input, cumsg_output);
+                        let ovr = sim_callback(SimStep::#enum_name(state));
+
+                        if let SimOverride::Errored(reason) = ovr  {
+                            let error: CuError = reason.into();
+                            #monitoring_action
+                            false
+                        }
+                        else {
+                            ovr == SimOverride::ExecuteByRuntime
+                        }
+                    };
+                }
+            } else {
+                quote! { let doit = true; }
+            };
+
+            let logging_tokens = if !task_specs.logging_enabled[tid] {
+                quote! {
+                    let mut cumsg_output = &mut culist.msgs.0.#output_culist_index;
+                    #output_clear_payload
+                }
+            } else {
+                quote!()
+            };
+
+            (
+                quote! {
+                    {
+                        #comment_tokens
+                        kf_manager.freeze_task(clid, &#task_instance)?;
+                        #call_sim_callback
+                        let cumsg_input = &#inputs_type;
+                        let cumsg_output = &mut msgs.#output_culist_index;
+                        #output_start_time
+                        let maybe_error = if doit {
+                            #rt_guard
+                            #task_instance.process(clock, cumsg_input, cumsg_output)
+                        } else {
+                            Ok(())
+                        };
+                        #output_end_time
+                        if let Err(error) = maybe_error {
+                            #monitoring_action
+                        }
+                    }
+                },
+                logging_tokens,
+            )
         }
     }
 }
 
 fn generate_bridge_rx_execution_tokens(
+    step: &CuExecutionStep,
     bridge_spec: &BridgeSpec,
     channel_index: usize,
     mission_mod: &Ident,
@@ -3520,10 +3708,27 @@ fn generate_bridge_rx_execution_tokens(
     let rt_guard = rtsan_guard_tokens();
     let bridge_tuple_index = int2sliceindex(bridge_spec.tuple_index as u32);
     let channel = &bridge_spec.rx_channels[channel_index];
-    let culist_index = channel
-        .culist_index
-        .unwrap_or_else(|| panic!("Bridge Rx channel missing output index"));
-    let culist_index_ts = int2sliceindex(culist_index as u32);
+    let output_pack = step
+        .output_msg_pack
+        .as_ref()
+        .expect("Bridge Rx channel missing output pack");
+    let port_index = output_pack
+        .msg_types
+        .iter()
+        .position(|msg| msg == &channel.msg_type_name)
+        .unwrap_or_else(|| {
+            panic!(
+                "Bridge Rx channel '{}' missing output port for '{}'",
+                channel.id, channel.msg_type_name
+            )
+        });
+    let culist_index_ts = int2sliceindex(output_pack.culist_index);
+    let output_ref = if output_pack.msg_types.len() == 1 {
+        quote! { &mut msgs.#culist_index_ts }
+    } else {
+        let port_index = syn::Index::from(port_index);
+        quote! { &mut msgs.#culist_index_ts.#port_index }
+    };
     let monitor_index = syn::Index::from(
         channel
             .monitor_index
@@ -3535,7 +3740,7 @@ fn generate_bridge_rx_execution_tokens(
         quote! {
             {
                 let bridge = &mut bridges.#bridge_tuple_index;
-                let cumsg_output = &mut msgs.#culist_index_ts;
+                let cumsg_output = #output_ref;
                 cumsg_output.metadata.process_time.start = clock.now().into();
                 let maybe_error = {
                     #rt_guard
@@ -3557,7 +3762,7 @@ fn generate_bridge_rx_execution_tokens(
                         }
                         Decision::Ignore => {
                             debug!("Process: IGNORE decision from monitoring. Task '{}' errored out during process. The runtime will continue with a forced empty message.", #mission_mod::TASKS_IDS[#monitor_index]);
-                            let cumsg_output = &mut msgs.#culist_index_ts;
+                            let cumsg_output = #output_ref;
                             cumsg_output.clear_payload();
                         }
                         Decision::Shutdown => {
@@ -3576,6 +3781,7 @@ fn generate_bridge_tx_execution_tokens(
     step: &CuExecutionStep,
     bridge_spec: &BridgeSpec,
     channel_index: usize,
+    output_pack_sizes: &[usize],
     mission_mod: &Ident,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     let rt_guard = rtsan_guard_tokens();
@@ -3585,11 +3791,26 @@ fn generate_bridge_tx_execution_tokens(
             .monitor_index
             .expect("Bridge Tx channel missing monitor index"),
     );
-    let input_index = step
+    let input = step
         .input_msg_indices_types
         .first()
-        .map(|(idx, _)| int2sliceindex(*idx))
         .expect("Bridge Tx channel should have exactly one input");
+    let input_index = int2sliceindex(input.culist_index);
+    let output_size = output_pack_sizes
+        .get(input.culist_index as usize)
+        .copied()
+        .unwrap_or_else(|| {
+            panic!(
+                "Missing output pack size for culist index {}",
+                input.culist_index
+            )
+        });
+    let input_ref = if output_size > 1 {
+        let port_index = syn::Index::from(input.src_port);
+        quote! { &mut msgs.#input_index.#port_index }
+    } else {
+        quote! { &mut msgs.#input_index }
+    };
     let bridge_tuple_index = int2sliceindex(bridge_spec.tuple_index as u32);
     let bridge_type = &bridge_spec.type_path;
     let const_ident = &channel.const_ident;
@@ -3597,7 +3818,7 @@ fn generate_bridge_tx_execution_tokens(
         quote! {
             {
                 let bridge = &mut bridges.#bridge_tuple_index;
-                let cumsg_input = &mut msgs.#input_index;
+                let cumsg_input = #input_ref;
                 // Stamp timing so monitors see consistent ranges for bridge Tx as well.
                 cumsg_input.metadata.process_time.start = clock.now().into();
                 let maybe_error = {
@@ -3652,6 +3873,7 @@ struct BridgeChannelSpec {
     const_ident: Ident,
     #[allow(dead_code)]
     msg_type: Type,
+    msg_type_name: String,
     config_index: usize,
     plan_node_id: Option<NodeId>,
     culist_index: Option<usize>,
