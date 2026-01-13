@@ -6,7 +6,7 @@ use bincode::{Decode, Encode};
 use cu_sensor_payloads::ImuPayload;
 use cu29::prelude::*;
 use dcmimu::DCMIMU;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use uom::si::acceleration::meter_per_second_squared;
 use uom::si::angular_velocity::radian_per_second;
 
@@ -17,7 +17,7 @@ use core::mem::size_of;
 use core::ptr;
 
 /// Pose expressed as Euler angles (radians) using the aerospace body frame.
-#[derive(Debug, Clone, Copy, Default, Encode, Decode, Serialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, Encode, Decode, Serialize, Deserialize, PartialEq)]
 pub struct AhrsPose {
     pub roll: f32,
     pub pitch: f32,

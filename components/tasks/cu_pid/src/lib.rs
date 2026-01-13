@@ -9,13 +9,13 @@ use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use core::marker::PhantomData;
 use cu29::prelude::*;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[cfg(not(feature = "std"))]
 use alloc::format;
 
 /// Output of the PID controller.
-#[derive(Debug, Default, Clone, Encode, Decode, Serialize)]
+#[derive(Debug, Default, Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct PIDControlOutputPayload {
     /// Proportional term
     pub p: f32,

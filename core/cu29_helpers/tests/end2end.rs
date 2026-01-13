@@ -15,7 +15,7 @@ use cu29_log_runtime::log;
 #[allow(unused_imports)]
 use cu29_log_runtime::log_debug_mode;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 
 // Those should be in cu29_log_runtime but got moved here to avoid circular dependencies
@@ -28,7 +28,7 @@ fn log_derive_end2end() {
     let _ = basic_copper_setup(&log_path, None, true, None).expect("Failed to setup logger.");
     debug!("Logger created at {}.", log_path);
 
-    #[derive(Serialize)]
+    #[derive(Serialize, Deserialize)]
     struct Test {
         a: i32,
         b: i32,

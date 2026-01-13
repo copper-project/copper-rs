@@ -12,6 +12,7 @@ use cu29_traits::{
     COMPACT_STRING_CAPACITY, CuCompactString, CuError, CuMsgMetadataTrait, CuResult,
     ErasedCuStampedData, Metadata,
 };
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use alloc::format;
@@ -19,12 +20,18 @@ use core::fmt::{Debug, Display, Formatter, Result as FmtResult};
 
 /// The state of a task.
 // Everything that is stateful in copper for zero copy constraints need to be restricted to this trait.
-pub trait CuMsgPayload: Default + Debug + Clone + Encode + Decode<()> + Serialize + Sized {}
+pub trait CuMsgPayload:
+    Default + Debug + Clone + Encode + Decode<()> + Serialize + DeserializeOwned + Sized
+{
+}
 
 pub trait CuMsgPack {}
 
 // Also anything that follows this contract can be a payload (blanket implementation)
-impl<T: Default + Debug + Clone + Encode + Decode<()> + Serialize + Sized> CuMsgPayload for T {}
+impl<T> CuMsgPayload for T where
+    T: Default + Debug + Clone + Encode + Decode<()> + Serialize + DeserializeOwned + Sized
+{
+}
 
 macro_rules! impl_cu_msg_pack {
     ($($name:ident),+) => {
@@ -117,7 +124,11 @@ impl Display for CuMsgMetadata {
 }
 
 /// CuMsg is the envelope holding the msg payload and the metadata between tasks.
-#[derive(Default, Debug, Clone, bincode::Encode, bincode::Decode, Serialize)]
+#[derive(Default, Debug, Clone, bincode::Encode, bincode::Decode, Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "T: Serialize, M: Serialize",
+    deserialize = "T: DeserializeOwned, M: DeserializeOwned"
+))]
 pub struct CuStampedData<T, M>
 where
     T: CuMsgPayload,

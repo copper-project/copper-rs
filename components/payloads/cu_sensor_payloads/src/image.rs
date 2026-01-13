@@ -13,9 +13,9 @@ use image::{ImageBuffer, Pixel};
 use kornia_image::Image;
 #[cfg(feature = "kornia")]
 use kornia_image::allocator::ImageAllocator;
-use serde::{Serialize, Serializer};
+use serde::{Deserialize, Serialize, Serializer};
 
-#[derive(Default, Debug, Encode, Decode, Clone, Copy, Serialize)]
+#[derive(Default, Debug, Encode, Decode, Clone, Copy, Serialize, Deserialize)]
 pub struct CuImageBufferFormat {
     pub width: u32,
     pub height: u32,
@@ -50,6 +50,27 @@ impl Decode<()> for CuImage<Vec<u8>> {
             seq,
             format,
             buffer_handle,
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for CuImage<Vec<u8>> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct CuImageWire {
+            seq: u64,
+            format: CuImageBufferFormat,
+            handle: Vec<u8>,
+        }
+
+        let wire = CuImageWire::deserialize(deserializer)?;
+        Ok(Self {
+            seq: wire.seq,
+            format: wire.format,
+            buffer_handle: CuHandle::new_detached(wire.handle),
         })
     }
 }
