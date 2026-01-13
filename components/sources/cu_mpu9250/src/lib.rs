@@ -7,6 +7,7 @@ use core::fmt::Debug;
 use alloc::format;
 use core::marker::PhantomData;
 use cu_embedded_registry as reg;
+use serde::Deserialize;
 pub use cu_sensor_payloads::ImuPayload;
 use cu29::prelude::*;
 use embedded_hal_1 as eh1;
