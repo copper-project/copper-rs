@@ -8,7 +8,7 @@ use bincode::{Decode, Encode};
 use circular_buffer::CircularBuffer;
 use gstreamer::{Buffer, BufferRef, Caps, FlowSuccess, Pipeline, parse};
 use gstreamer_app::{AppSink, AppSinkCallbacks};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
@@ -27,6 +27,16 @@ impl Serialize for CuGstBuffer {
             .map_readable()
             .map_err(|_| serde::ser::Error::custom("Could not map readable"))?
             .serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for CuGstBuffer {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let data = Vec::<u8>::deserialize(deserializer)?;
+        Ok(CuGstBuffer(Buffer::from_slice(data)))
     }
 }
 
