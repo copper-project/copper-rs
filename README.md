@@ -5,7 +5,7 @@
 ![](https://img.shields.io/badge/Rust-1.80+-orange.svg)
 [![dependency status](https://deps.rs/repo/github/copper-project/copper-rs/status.svg)](https://deps.rs/repo/github/copper-project/copper-rs)
 [![Discord](https://img.shields.io/discord/1305916875741597826?logo=discord)](https://discord.gg/VkCG7Sb9Kw)
-[![Documentation](https://img.shields.io/badge/docs-available-brightgreen)](https://github.com/copper-project/copper-rs/wiki)
+[![Documentation](https://img.shields.io/badge/docs-available-brightgreen)](https://copper-project.github.io/copper-rs)
 
 <blockquote>
 🤖&nbsp&nbsp&nbsp&nbsp
@@ -50,23 +50,25 @@ The source code for this demo is available in the [examples/cu_rp_balancebot](ex
 
 ## Get Started
 
-- Start a new project from templates: [Project Templates](https://github.com/copper-project/copper-rs/wiki/Project-Templates)
-- See a full task graph + runtime walkthrough: [Copper Application Overview](https://github.com/copper-project/copper-rs/wiki/Copper-Application-Overview)
-- Build and deploy an application: [Build and Deploy a Copper Application](https://github.com/copper-project/copper-rs/wiki/Build-and-Deploy-a-Copper-Application)
-- RON configuration reference: [Copper RON Configuration Reference](https://github.com/copper-project/copper-rs/wiki/Copper-RON-Configuration-Reference)
+- Start a new project from templates: [Project Templates](https://copper-project.github.io/copper-rs/Project-Templates)
+- See a full task graph + runtime walkthrough: [Copper Application Overview](https://copper-project.github.io/copper-rs/Copper-Application-Overview)
+- Build and deploy an application: [Build and Deploy a Copper Application](https://copper-project.github.io/copper-rs/Build-and-Deploy-a-Copper-Application)
+- RON configuration reference: [Copper RON Configuration Reference](https://copper-project.github.io/copper-rs/Copper-RON-Configuration-Reference)
 
 ## Documentation
 
-- Runtime concepts and SDK features: [Copper Runtime Overview](https://github.com/copper-project/copper-rs/wiki/Copper-Runtime-Overview)
-- Task lifecycle: [Task Lifecycle](https://github.com/copper-project/copper-rs/wiki/Task-Lifecycle)
-- Modular configuration: [Modular Configuration](https://github.com/copper-project/copper-rs/wiki/Modular-Configuration)
-- Task automation: [Task Automation with just](https://github.com/copper-project/copper-rs/wiki/Task-Automation-with-Just)
-- Supported platforms: [Supported Platforms](https://github.com/copper-project/copper-rs/wiki/Supported-Platforms)
-- Bare-metal development: [Baremetal Development](https://github.com/copper-project/copper-rs/wiki/Baremetal-Development)
-- Available components: [Available Components](https://github.com/copper-project/copper-rs/wiki/Available-Components)
-- FAQ: [FAQ](https://github.com/copper-project/copper-rs/wiki/FAQ)
-- Release notes: [Copper Release Notes](https://github.com/copper-project/copper-rs/wiki/Copper-Release-Notes)
-- Roadmap: [Roadmap](https://github.com/copper-project/copper-rs/wiki/Roadmap)
+[Link to the full documentation](https://copper-project.github.io/copper-rs/) 
+
+- Runtime concepts and SDK features: [Copper Runtime Overview](https://copper-project.github.io/copper-rs/Copper-Runtime-Overview)
+- Task lifecycle: [Task Lifecycle](https://copper-project.github.io/copper-rs/Task-Lifecycle)
+- Modular configuration: [Modular Configuration](https://copper-project.github.io/copper-rs/Modular-Configuration)
+- Task automation: [Task Automation with just](https://copper-project.github.io/copper-rs/Task-Automation-with-Just)
+- Supported platforms: [Supported Platforms](https://copper-project.github.io/copper-rs/Supported-Platforms)
+- Bare-metal development: [Baremetal Development](https://copper-project.github.io/copper-rs/Baremetal-Development)
+- Available components: [Available Components](https://copper-project.github.io/copper-rs/Available-Components)
+- FAQ: [FAQ](https://copper-project.github.io/copper-rs/FAQ)
+- Release notes: [Copper Release Notes](https://copper-project.github.io/copper-rs/Copper-Release-Notes)
+- Roadmap: [Roadmap](https://copper-project.github.io/copper-rs/Roadmap)
 
 ## Project
 

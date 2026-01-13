@@ -1,0 +1,22 @@
+name: Embedded Rust Setup
+description: Common embedded Rust setup for copper-rs workflows.
+inputs:
+  toolchain:
+    description: Rust toolchain to install.
+    required: true
+  cargo_target_dir:
+    description: Optional CARGO_TARGET_DIR override.
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Configure CARGO_TARGET_DIR
+      if: inputs.cargo_target_dir != ''
+      shell: bash
+      run: echo "CARGO_TARGET_DIR=${{ inputs.cargo_target_dir }}" >> "$GITHUB_ENV"
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ inputs.toolchain }}
+        targets: aarch64-unknown-none,thumbv7em-none-eabihf,thumbv8m.main-none-eabihf,riscv32imac-unknown-none-elf
+        components: rustc,cargo,rust-std,rustfmt,clippy

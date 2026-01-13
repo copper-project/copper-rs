@@ -158,7 +158,13 @@ def _write_mkdocs_config(
         "site_dir: site",
         "use_directory_urls: true",
         "theme:",
-        "  name: readthedocs",
+        "  name: material",
+        "  palette:",
+        "    - scheme: slate",
+        "      primary: black",
+        "      accent: teal",
+        "extra_css:",
+        "  - extra.css",
         "markdown_extensions:",
         "  - tables",
         "  - fenced_code",
@@ -168,6 +174,49 @@ def _write_mkdocs_config(
     ]
     lines.extend(_dump_nav(nav, indent=1))
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _write_extra_css(docs_dir: Path) -> None:
+    css = """
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: #0b0e14;
+  --md-default-fg-color: #e6e6e6;
+  --md-default-fg-color--light: #c9c9c9;
+  --md-default-fg-color--lighter: #a0a0a0;
+  --md-default-fg-color--lightest: #7a7a7a;
+  --md-typeset-color: #e6e6e6;
+  --md-typeset-a-color: #5eead4;
+  --md-code-bg-color: #141823;
+  --md-code-fg-color: #e6e6e6;
+  --md-accent-fg-color: #5eead4;
+  --md-primary-fg-color: #0b0e14;
+  --md-primary-bg-color: #e6e6e6;
+  --md-footer-bg-color: #0b0e14;
+  --md-footer-bg-color--dark: #0b0e14;
+}
+
+body {
+  background: #0b0e14;
+}
+
+.md-header {
+  background-color: #0b0e14;
+}
+
+.md-nav {
+  background-color: #0b0e14;
+}
+
+.md-typeset a {
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
+}
+
+.md-typeset table:not([class]) {
+  background-color: #0f131c;
+}
+"""
+    (docs_dir / "extra.css").write_text(css.lstrip(), encoding="utf-8")
 
 
 def _resolve_workdir(repo_root: Path, workdir: str) -> Path:
@@ -219,6 +268,7 @@ def main() -> None:
         home.rename(docs_dir / "index.md")
 
     _rewrite_markdown_files(docs_dir, pages)
+    _write_extra_css(docs_dir)
 
     sidebar_path = src_dir / "_Sidebar.md"
     if sidebar_path.exists():

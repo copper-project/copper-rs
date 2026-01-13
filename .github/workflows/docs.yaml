@@ -29,7 +29,7 @@ jobs:
         with:
           python-version: "3.x"
       - name: Install MkDocs
-        run: python -m pip install --upgrade pip mkdocs
+        run: python -m pip install --upgrade pip mkdocs mkdocs-material
       - name: Prepare wiki sources
         run: python support/ci/wiki_site.py
       - name: Build wiki site
