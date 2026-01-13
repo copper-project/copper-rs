@@ -3,7 +3,7 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29::prelude::*;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serialport::{DataBits, FlowControl, Parity, SerialPort, StopBits};
 use std::io::{self, Read, Write};
 use std::time::Duration;
@@ -176,7 +176,7 @@ impl Freezable for Lewansoul {
     // This driver is stateless as the IDs are recreate at new time, we keep the default implementation.
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ServoPositionsPayload {
     pub positions: [Angle; MAX_SERVOS],
 }

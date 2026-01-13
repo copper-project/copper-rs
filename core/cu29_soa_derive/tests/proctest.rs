@@ -2,9 +2,9 @@
 mod tests {
     use bincode::{Decode, Encode};
     use cu29_soa_derive::Soa;
-    use serde_derive::Serialize;
+    use serde_derive::{Deserialize, Serialize};
 
-    #[derive(Debug, Clone, Default, PartialEq, Soa, Encode, Decode, Serialize)]
+    #[derive(Debug, Clone, Default, PartialEq, Soa, Encode, Decode, Serialize, Deserialize)]
     pub struct Xyz {
         x: f32,
         y: f32,
@@ -100,14 +100,14 @@ mod tests {
         assert_eq!(distances[2], 0.0);
     }
 
-    #[derive(Debug, Clone, Default, PartialEq, Soa, Encode, Decode, Serialize)]
+    #[derive(Debug, Clone, Default, PartialEq, Soa, Encode, Decode, Serialize, Deserialize)]
     pub struct Color {
         r: f32,
         g: f32,
         b: f32,
     }
 
-    #[derive(Debug, Default, PartialEq, Soa, Serialize)]
+    #[derive(Debug, Default, PartialEq, Soa, Serialize, Deserialize)]
     pub struct Both {
         xyz: Xyz,
         color: Color,

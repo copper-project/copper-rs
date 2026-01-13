@@ -307,7 +307,7 @@ mod tests {
 
     #[test]
     fn ser_smoke_test() {
-        #[derive(Serialize)]
+        #[derive(Serialize, Deserialize)]
         struct Foo {
             a: u32,
             b: String,
@@ -358,7 +358,7 @@ mod tests {
 
     #[test]
     fn serialize_from_enum() {
-        #[derive(Serialize)]
+        #[derive(Serialize, Deserialize)]
         enum Foo {
             Bar,
             Baz(u8),
