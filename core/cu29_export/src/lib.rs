@@ -418,6 +418,7 @@ mod python {
 mod tests {
     use super::*;
     use bincode::{Decode, Encode, encode_into_slice};
+    use serde::Deserialize;
     use std::env;
     use std::fs;
     use std::io::Cursor;
