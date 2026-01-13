@@ -1,0 +1,31 @@
+[package]
+name = "cu-zenoh-bridge-demo"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "Ping/pong demo over Zenoh bridge with multiple wire formats."
+
+publish = false
+
+default-run = "zenoh-ping"
+
+[dependencies]
+cu29 = { workspace = true }
+cu29-helpers = { workspace = true }
+cu-zenoh-bridge = { path = "../../components/bridges/cu_zenoh_bridge", version = "0.11.0" }
+serde = { workspace = true }
+bincode = { workspace = true }
+tempfile = { workspace = true }
+
+[[bin]]
+name = "zenoh-ping"
+path = "src/bin/ping.rs"
+
+[[bin]]
+name = "zenoh-pong"
+path = "src/bin/pong.rs"
