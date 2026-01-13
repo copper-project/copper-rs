@@ -1,4 +1,8 @@
 (
+  missions: [
+    (id: "default"),
+    (id: "flow"),
+  ],
   resources: [
   (
       id: "fc",
@@ -116,6 +120,7 @@
   (
       id: "flow_logger",
       type: "tasks::flow_msp::FlowMspLogger",
+      missions: ["flow"],
       logging: (enabled: false),
     ),
   ],
@@ -145,6 +150,7 @@
   (
       id: "flow_msp",
       type: "cu_msp_bridge::CuMspBridge<cu_micoairh743::Uart4Port, cu_micoairh743::SerialPortError>",
+      missions: ["flow"],
       logging: (enabled: false),
       resources: { "serial": "fc.uart4" },
       channels: [
@@ -197,7 +203,7 @@
   (src: "battery_adc", dst: "vtx_osd", msg: "crate::messages::BatteryVoltage"),
   (src: "vtx_msp/incoming", dst: "vtx_osd", msg: "cu_msp_bridge::MspRequestBatch"),
   (src: "vtx_osd", dst: "vtx_msp/requests", msg: "cu_msp_bridge::MspRequestBatch"),
-  (src: "flow_msp/incoming", dst: "flow_logger", msg: "cu_msp_bridge::MspRequestBatch"),
+  (src: "flow_msp/incoming", dst: "flow_logger", msg: "cu_msp_bridge::MspRequestBatch", missions: ["flow"]),
   ],
   monitor: (
     type: "cu_logmon::CuLogMon",
