@@ -15,7 +15,7 @@
 <a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span>core::iter::{Chain, Rev};
 <a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span>core::slice::{Iter <span class="kw">as </span>SliceIter, IterMut <span class="kw">as </span>SliceIterMut};
 <a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>cu29_traits::{CopperListTuple, ErasedCuStampedData, ErasedCuStampedDataSet};
-<a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span>serde_derive::Serialize;
+<a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span>serde_derive::{Deserialize, Serialize};
 <a href=#19 id=19 data-nosnippet>19</a>
 <a href=#20 id=20 data-nosnippet>20</a><span class="kw">const </span>MAX_TASKS: usize = <span class="number">512</span>;
 <a href=#21 id=21 data-nosnippet>21</a>
@@ -28,7 +28,7 @@
 <a href=#28 id=28 data-nosnippet>28</a>}
 <a href=#29 id=29 data-nosnippet>29</a>
 <a href=#30 id=30 data-nosnippet>30</a><span class="doccomment">/// Those are the possible states along the lifetime of a CopperList.
-<a href=#31 id=31 data-nosnippet>31</a></span><span class="attr">#[derive(Debug, Encode, Decode, Serialize, PartialEq, Copy, Clone)]
+<a href=#31 id=31 data-nosnippet>31</a></span><span class="attr">#[derive(Debug, Encode, Decode, Serialize, Deserialize, PartialEq, Copy, Clone)]
 <a href=#32 id=32 data-nosnippet>32</a></span><span class="kw">pub enum </span>CopperListState {
 <a href=#33 id=33 data-nosnippet>33</a>    Free,
 <a href=#34 id=34 data-nosnippet>34</a>    Initialized,
@@ -49,7 +49,7 @@
 <a href=#49 id=49 data-nosnippet>49</a>    }
 <a href=#50 id=50 data-nosnippet>50</a>}
 <a href=#51 id=51 data-nosnippet>51</a>
-<a href=#52 id=52 data-nosnippet>52</a><span class="attr">#[derive(Debug, Encode, Decode, Serialize)]
+<a href=#52 id=52 data-nosnippet>52</a><span class="attr">#[derive(Debug, Encode, Decode, Serialize, Deserialize)]
 <a href=#53 id=53 data-nosnippet>53</a></span><span class="kw">pub struct </span>CopperList&lt;P: CopperListTuple&gt; {
 <a href=#54 id=54 data-nosnippet>54</a>    <span class="kw">pub </span>id: u32,
 <a href=#55 id=55 data-nosnippet>55</a>    state: CopperListState,
@@ -290,9 +290,9 @@
 <a href=#290 id=290 data-nosnippet>290</a></span><span class="kw">mod </span>tests {
 <a href=#291 id=291 data-nosnippet>291</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
 <a href=#292 id=292 data-nosnippet>292</a>    <span class="kw">use </span>cu29_traits::{ErasedCuStampedData, ErasedCuStampedDataSet, MatchingTasks};
-<a href=#293 id=293 data-nosnippet>293</a>    <span class="kw">use </span>serde::{Serialize, Serializer};
+<a href=#293 id=293 data-nosnippet>293</a>    <span class="kw">use </span>serde::{Deserialize, Serialize, Serializer};
 <a href=#294 id=294 data-nosnippet>294</a>
-<a href=#295 id=295 data-nosnippet>295</a>    <span class="attr">#[derive(Debug, Encode, Decode, PartialEq, Clone, Copy, Serialize, Default)]
+<a href=#295 id=295 data-nosnippet>295</a>    <span class="attr">#[derive(Debug, Encode, Decode, PartialEq, Clone, Copy, Serialize, Deserialize, Default)]
 <a href=#296 id=296 data-nosnippet>296</a>    </span><span class="kw">struct </span>CuStampedDataSet(i32);
 <a href=#297 id=297 data-nosnippet>297</a>
 <a href=#298 id=298 data-nosnippet>298</a>    <span class="kw">impl </span>ErasedCuStampedDataSet <span class="kw">for </span>CuStampedDataSet {
