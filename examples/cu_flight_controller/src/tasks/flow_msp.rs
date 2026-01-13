@@ -10,10 +10,7 @@ impl CuSinkTask for FlowMspLogger {
     type Input<'m> = CuMsg<MspRequestBatch>;
     type Resources<'r> = ();
 
-    fn new(
-        _config: Option<&ComponentConfig>,
-        _resources: Self::Resources<'_>,
-    ) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
