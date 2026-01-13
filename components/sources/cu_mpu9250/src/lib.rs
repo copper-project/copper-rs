@@ -20,7 +20,7 @@ fn map_debug_error<E: Debug>(context: &str, err: E) -> CuError {
     CuError::from(format!("{context}: {err:?}"))
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 #[repr(u8)]
 pub enum WhoAmI {
     Mpu9250 = 0x71,

@@ -509,7 +509,7 @@ mod tests {
     }
 
     // This is normally generated at compile time in CuPayload.
-    #[derive(Debug, PartialEq, Clone, Copy, Serialize, Encode, Decode, Default)]
+    #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize, Encode, Decode, Default)]
     struct MyMsgs((u8, i32, f32));
 
     impl ErasedCuStampedDataSet for MyMsgs {

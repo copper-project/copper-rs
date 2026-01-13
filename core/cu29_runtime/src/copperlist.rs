@@ -15,7 +15,7 @@ use core::fmt::Display;
 use core::iter::{Chain, Rev};
 use core::slice::{Iter as SliceIter, IterMut as SliceIterMut};
 use cu29_traits::{CopperListTuple, ErasedCuStampedData, ErasedCuStampedDataSet};
-use serde_derive::Serialize;
+use serde_derive::{Deserialize, Serialize};
 
 const MAX_TASKS: usize = 512;
 
@@ -28,7 +28,7 @@ pub struct CopperLiskMask {
 }
 
 /// Those are the possible states along the lifetime of a CopperList.
-#[derive(Debug, Encode, Decode, Serialize, PartialEq, Copy, Clone)]
+#[derive(Debug, Encode, Decode, Serialize, Deserialize, PartialEq, Copy, Clone)]
 pub enum CopperListState {
     Free,
     Initialized,
@@ -49,7 +49,7 @@ impl Display for CopperListState {
     }
 }
 
-#[derive(Debug, Encode, Decode, Serialize)]
+#[derive(Debug, Encode, Decode, Serialize, Deserialize)]
 pub struct CopperList<P: CopperListTuple> {
     pub id: u32,
     state: CopperListState,
@@ -290,9 +290,9 @@ impl<P: CopperListTuple, const N: usize> CuListsManager<P, N> {
 mod tests {
     use super::*;
     use cu29_traits::{ErasedCuStampedData, ErasedCuStampedDataSet, MatchingTasks};
-    use serde::{Serialize, Serializer};
+    use serde::{Deserialize, Serialize, Serializer};
 
-    #[derive(Debug, Encode, Decode, PartialEq, Clone, Copy, Serialize, Default)]
+    #[derive(Debug, Encode, Decode, PartialEq, Clone, Copy, Serialize, Deserialize, Default)]
     struct CuStampedDataSet(i32);
 
     impl ErasedCuStampedDataSet for CuStampedDataSet {

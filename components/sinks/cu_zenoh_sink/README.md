@@ -1,5 +1,7 @@
 ## This is an outgoing bridge towards Zenoh
 
+Note: This sink is deprecated in favor of the bidirectional `cu-zenoh-bridge` component.
+
 It allows you to send Copper messages to external systems via [Zenoh](https://zenoh.io/).
 
 ### Config
