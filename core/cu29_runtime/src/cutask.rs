@@ -125,12 +125,10 @@ impl Display for CuMsgMetadata {
 
 /// CuMsg is the envelope holding the msg payload and the metadata between tasks.
 #[derive(Default, Debug, Clone, bincode::Encode, bincode::Decode, Serialize, Deserialize)]
-#[serde(
-    bound(
-        serialize = "T: Serialize, M: Serialize",
-        deserialize = "T: DeserializeOwned, M: DeserializeOwned"
-    )
-)]
+#[serde(bound(
+    serialize = "T: Serialize, M: Serialize",
+    deserialize = "T: DeserializeOwned, M: DeserializeOwned"
+))]
 pub struct CuStampedData<T, M>
 where
     T: CuMsgPayload,
