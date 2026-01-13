@@ -1,4 +1,6 @@
-use cu29::cubridge::{BridgeChannel, BridgeChannelConfig, BridgeChannelInfo, BridgeChannelSet, CuBridge};
+use cu29::cubridge::{
+    BridgeChannel, BridgeChannelConfig, BridgeChannelInfo, BridgeChannelSet, CuBridge,
+};
 use cu29::prelude::*;
 use serde::{Deserialize, Serialize};
 use zenoh::bytes::Encoding;
@@ -39,7 +41,8 @@ struct ZenohChannelConfig<Id: Copy> {
     wire_format: WireFormat,
 }
 
-type ZenohSubscriber = zenoh::pubsub::Subscriber<zenoh::handlers::FifoChannelHandler<zenoh::sample::Sample>>;
+type ZenohSubscriber =
+    zenoh::pubsub::Subscriber<zenoh::handlers::FifoChannelHandler<zenoh::sample::Sample>>;
 
 struct ZenohTxChannel<Id: Copy> {
     id: Id,
@@ -86,16 +89,12 @@ where
         if let Some(config) = config {
             if let Some(path) = config.get::<String>("zenoh_config_file") {
                 return Config::from_file(&path).map_err(|e| {
-                    CuError::from(format!(
-                        "ZenohBridge: Failed to read config file: {e}"
-                    ))
+                    CuError::from(format!("ZenohBridge: Failed to read config file: {e}"))
                 });
             }
             if let Some(json) = config.get::<String>("zenoh_config_json") {
                 return Config::from_json5(&json).map_err(|e| {
-                    CuError::from(format!(
-                        "ZenohBridge: Failed to parse config json: {e}"
-                    ))
+                    CuError::from(format!("ZenohBridge: Failed to parse config json: {e}"))
                 });
             }
         }
@@ -123,10 +122,7 @@ where
             .map(|route| route.into_owned())
             .ok_or_else(|| {
                 let id = channel.channel.id;
-                CuError::from(format!(
-                    "ZenohBridge: Missing route for channel {:?}",
-                    id
-                ))
+                CuError::from(format!("ZenohBridge: Missing route for channel {:?}", id))
             })
     }
 
@@ -167,9 +163,9 @@ where
         match wire_format {
             WireFormat::Bincode => {
                 let (decoded, _): (CuMsg<Payload>, usize) =
-                    bincode::decode_from_slice(bytes, bincode::config::standard()).map_err(|e| {
-                        CuError::new_with_cause("ZenohBridge: bincode decode failed", e)
-                    })?;
+                    bincode::decode_from_slice(bytes, bincode::config::standard()).map_err(
+                        |e| CuError::new_with_cause("ZenohBridge: bincode decode failed", e),
+                    )?;
                 Ok(decoded)
             }
             WireFormat::Json => serde_json::from_slice(bytes)
@@ -298,8 +294,8 @@ where
             .ctx
             .as_mut()
             .ok_or_else(|| CuError::from("ZenohBridge: Context not initialized"))?;
-        let tx_channel = Self::find_tx_channel_mut(&mut ctx.tx_channels, channel.id())
-            .ok_or_else(|| {
+        let tx_channel =
+            Self::find_tx_channel_mut(&mut ctx.tx_channels, channel.id()).ok_or_else(|| {
                 CuError::from(format!(
                     "ZenohBridge: Unknown Tx channel {:?}",
                     channel.id()
@@ -330,8 +326,8 @@ where
             .ctx
             .as_mut()
             .ok_or_else(|| CuError::from("ZenohBridge: Context not initialized"))?;
-        let rx_channel = Self::find_rx_channel_mut(&mut ctx.rx_channels, channel.id())
-            .ok_or_else(|| {
+        let rx_channel =
+            Self::find_rx_channel_mut(&mut ctx.rx_channels, channel.id()).ok_or_else(|| {
                 CuError::from(format!(
                     "ZenohBridge: Unknown Rx channel {:?}",
                     channel.id()

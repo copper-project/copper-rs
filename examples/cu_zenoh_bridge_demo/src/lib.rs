@@ -19,8 +19,8 @@ pub mod messages {
 
 pub mod bridges {
     use super::messages;
-    use cu29::prelude::*;
     use cu_zenoh_bridge::ZenohBridge;
+    use cu29::prelude::*;
 
     tx_channels! {
         pub struct DemoTxChannels : DemoTxId {
