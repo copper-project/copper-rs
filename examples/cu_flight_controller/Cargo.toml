@@ -24,7 +24,7 @@ embedded_features = "firmware"
 ## Flight controller components
 
 ### Hardware
-cu-bdshot = { path = "../../components/bridges/cu_bdshot", optional = true }
+cu-bdshot = { path = "../../components/bridges/cu_bdshot", default-features = false, optional = true }
 cu-crsf = { path = "../../components/bridges/cu_crsf", default-features = false, features = ["defmt", "alloc"], optional = true }
 cu-msp-bridge = { path = "../../components/bridges/cu_msp_bridge", default-features = false, features = ["defmt", "alloc"], optional = true }
 cu-msp-lib = { path = "../../components/libs/cu_msp_lib", default-features = false, features = ["bincode"] }
