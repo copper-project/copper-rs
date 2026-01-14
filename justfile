@@ -14,7 +14,7 @@ lint:
 	just typos
 
 # Formatting check only
-fmt-check:
+fmt-check: check-format-tools
 	cargo +stable fmt --all -- --check
 	git ls-files -z '*.toml' | xargs -0 taplo format --check
 	git ls-files -z '*.ron' ':!examples/modular_config_example/motors.ron' | xargs -0 -n 1 ronfmt
@@ -22,11 +22,29 @@ fmt-check:
 	git diff --exit-code -- '*.ron'
 
 # Apply formatting to Rust, TOML, and RON files
-fmt:
+fmt: check-format-tools
 	cargo +stable fmt --all
 	git ls-files -z '*.toml' | xargs -0 taplo format
 	git ls-files -z '*.ron' ':!examples/modular_config_example/motors.ron' | xargs -0 -n 1 ronfmt
 	find . -name '*.ron.bak' -type f -delete
+
+check-format-tools:
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	missing=0
+	if ! command -v taplo >/dev/null 2>&1; then
+		echo "Missing taplo (taplo-cli). Install with: cargo install --locked taplo-cli"
+		missing=1
+	fi
+	if ! command -v ronfmt >/dev/null 2>&1; then
+		echo "Missing ronfmt. Install with: cargo install ronfmt"
+		missing=1
+	fi
+
+	if [[ "$missing" -ne 0 ]]; then
+		exit 1
+	fi
 
 # Typo check only
 typos:
