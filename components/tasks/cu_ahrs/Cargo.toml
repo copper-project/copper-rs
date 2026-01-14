@@ -13,28 +13,23 @@ repository.workspace = true
 [features]
 default = ["std"]
 rp2350-demo = [
-    "defmt",
-    "defmt-rtt",
-    "panic-probe",
-    "cortex-m",
-    "cortex-m-rt",
-    "embedded-hal",
-    "rp235x-hal",
-    "cu-embedded-registry",
-    "mpu9250",
-    "dep:cu-mpu9250",
+  "defmt",
+  "defmt-rtt",
+  "panic-probe",
+  "cortex-m",
+  "cortex-m-rt",
+  "embedded-hal",
+  "rp235x-hal",
+  "cu-embedded-registry",
+  "mpu9250",
+  "dep:cu-mpu9250",
 ]
-std = [
-    "cu29/std",
-    "cu-sensor-payloads/std",
-    "bincode/std",
-    "serde/std",
-]
+std = ["cu29/std", "cu-sensor-payloads/std", "bincode/std", "serde/std"]
 textlogs = [
-    "cu29/textlogs",
-    "cu-sensor-payloads/textlogs",
-    "cu-embedded-registry/textlogs",
-    "cu-mpu9250/textlogs",
+  "cu29/textlogs",
+  "cu-sensor-payloads/textlogs",
+  "cu-embedded-registry/textlogs",
+  "cu-mpu9250/textlogs",
 ]
 
 [dependencies]
@@ -43,15 +38,27 @@ cu-sensor-payloads = { path = "../../payloads/cu_sensor_payloads", version = "0.
 bincode = { workspace = true }
 serde = { workspace = true }
 dcmimu = "0.3.0"
-uom = { version = "0.37", default-features = false, features = ["serde", "f32", "si", "autoconvert"] }
+uom = { version = "0.37", default-features = false, features = [
+  "serde",
+  "f32",
+  "si",
+  "autoconvert",
+] }
 defmt = { version = "1.0", optional = true }
 defmt-rtt = { version = "1.1", optional = true }
-panic-probe = { version = "1.0", features = ["defmt", "print-defmt"], optional = true }
+panic-probe = { version = "1.0", features = [
+  "defmt",
+  "print-defmt",
+], optional = true }
 cortex-m = { version = "0.7", optional = true }
 cortex-m-rt = { version = "0.7", optional = true }
 embedded-hal = { version = "1.0.0", optional = true }
 mpu9250 = { version = "0.25.0", default-features = false, optional = true }
-rp235x-hal = { version = "0.3", features = ["rt", "critical-section-impl", "defmt"], optional = true }
+rp235x-hal = { version = "0.3", features = [
+  "rt",
+  "critical-section-impl",
+  "defmt",
+], optional = true }
 cu-embedded-registry = { path = "../../libs/cu_embedded_registry", version = "0.12.0", default-features = false, optional = true }
 cu-mpu9250 = { path = "../../sources/cu_mpu9250", version = "0.12.0", default-features = false, optional = true }
 

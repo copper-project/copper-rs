@@ -184,10 +184,14 @@
     },
   },
 }"#,
-            }
+            },
         ),
     ],
     cnx: [
-        (src: "source", dst: "publisher", msg: "i8"),
-    ]
-) 
+        (
+            src: "source",
+            dst: "publisher",
+            msg: "i8",
+        ),
+    ],
+)

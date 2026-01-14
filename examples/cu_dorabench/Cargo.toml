@@ -15,11 +15,11 @@ repository.workspace = true
 publish = false
 [package.metadata.cargo-machete]
 ignored = [
-    "cu29-log",
-    "cu29-log-runtime",
-    "cu29-unifiedlog",
-    "cu-consolemon",
-    "copper-traits",
+  "cu29-log",
+  "cu29-log-runtime",
+  "cu29-unifiedlog",
+  "cu-consolemon",
+  "copper-traits",
 ] # proc macro and console
 
 [[bin]]
@@ -38,4 +38,3 @@ cu29-helpers = { workspace = true }
 cu29-export = { workspace = true, features = ["python"] }
 serde = { workspace = true }
 cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.12.0" }
-

@@ -8,11 +8,16 @@
             id: "dst",
             type: "tasks::FortyKSink",
         ),
-     ],
-    cnx: [
-        (src: "src",  dst: "dst",   msg: "crate::tasks::DoraPayload"),
     ],
-    logging: ( keyframe_interval: 10000, 
-               section_size_mib:  1,  // 1 MiB sections oO
+    cnx: [
+        (
+            src: "src",
+            dst: "dst",
+            msg: "crate::tasks::DoraPayload",
+        ),
+    ],
+    logging: (
+        keyframe_interval: 10000,
+        section_size_mib: 1,
     ),
 )

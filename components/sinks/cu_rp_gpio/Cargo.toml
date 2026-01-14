@@ -11,7 +11,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [package.metadata.cargo-machete]
-ignored = ["cu29-log", "cu29-log-runtime"]  # proc macro
+ignored = ["cu29-log", "cu29-log-runtime"] # proc macro
 
 [dependencies]
 cu29 = { workspace = true }

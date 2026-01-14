@@ -17,15 +17,22 @@ bincode = { workspace = true }
 serde = { workspace = true }
 smallvec = { workspace = true }
 
-cu-spatial-payloads = { path = "../../payloads/cu_spatial_payloads", version = "0.12.0", features = ["glam"] }
+cu-spatial-payloads = { path = "../../payloads/cu_spatial_payloads", version = "0.12.0", features = [
+  "glam",
+] }
 
-petgraph = "0.8.1"  # For transform tree management
-thiserror = "2.0"   # For error handling
-rand = "0.9.0"      # For random number generation in cache cleanup
+petgraph = "0.8.1" # For transform tree management
+thiserror = "2.0" # For error handling
+rand = "0.9.0" # For random number generation in cache cleanup
 dashmap = "6.1.0"
 num-traits = "0.2.18" # For numeric trait implementations
-glam = { version = "0.30", features = ["serde", "bytemuck"] } # For optimized math operations
-arrayvec = { version = "0.7.6", features = ["serde"] }    # For stack-allocated strings
+glam = { version = "0.30", features = [
+  "serde",
+  "bytemuck",
+] } # For optimized math operations
+arrayvec = { version = "0.7.6", features = [
+  "serde",
+] } # For stack-allocated strings
 
 [features]
 default = []

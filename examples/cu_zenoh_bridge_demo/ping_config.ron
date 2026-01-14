@@ -3,45 +3,105 @@
         (
             id: "ping_src",
             type: "tasks::PingSource",
-            config: { "label": "ping" },
+            config: {"label": "ping"},
         ),
         (
             id: "pong_sink_bin",
             type: "tasks::PongSink",
-            config: { "label": "pong-bincode" },
+            config: {"label": "pong-bincode"},
         ),
         (
             id: "pong_sink_json",
             type: "tasks::PongSink",
-            config: { "label": "pong-json" },
+            config: {"label": "pong-json"},
         ),
         (
             id: "pong_sink_cbor",
             type: "tasks::PongSink",
-            config: { "label": "pong-cbor" },
+            config: {"label": "pong-cbor"},
         ),
     ],
     bridges: [
         (
             id: "zenoh",
             type: "bridges::DemoZenohBridge",
-            config: { "wire_format": "bincode" },
+            config: {"wire_format": "bincode"},
             channels: [
-                Tx(id: "ping_bin", route: "demo/ping/bin", config: { "wire_format": "bincode" }),
-                Tx(id: "ping_json", route: "demo/ping/json", config: { "wire_format": "json" }),
-                Tx(id: "ping_cbor", route: "demo/ping/cbor", config: { "wire_format": "cbor" }),
-                Rx(id: "pong_bin", route: "demo/pong/bin", config: { "wire_format": "bincode" }),
-                Rx(id: "pong_json", route: "demo/pong/json", config: { "wire_format": "json" }),
-                Rx(id: "pong_cbor", route: "demo/pong/cbor", config: { "wire_format": "cbor" }),
+                Tx(
+                    id: "ping_bin",
+                    route: "demo/ping/bin",
+                    config: {
+                        "wire_format": "bincode",
+                    },
+                ),
+                Tx(
+                    id: "ping_json",
+                    route: "demo/ping/json",
+                    config: {
+                        "wire_format": "json",
+                    },
+                ),
+                Tx(
+                    id: "ping_cbor",
+                    route: "demo/ping/cbor",
+                    config: {
+                        "wire_format": "cbor",
+                    },
+                ),
+                Rx(
+                    id: "pong_bin",
+                    route: "demo/pong/bin",
+                    config: {
+                        "wire_format": "bincode",
+                    },
+                ),
+                Rx(
+                    id: "pong_json",
+                    route: "demo/pong/json",
+                    config: {
+                        "wire_format": "json",
+                    },
+                ),
+                Rx(
+                    id: "pong_cbor",
+                    route: "demo/pong/cbor",
+                    config: {
+                        "wire_format": "cbor",
+                    },
+                ),
             ],
         ),
     ],
     cnx: [
-        (src: "ping_src", dst: "zenoh/ping_bin", msg: "messages::Ping"),
-        (src: "ping_src", dst: "zenoh/ping_json", msg: "messages::Ping"),
-        (src: "ping_src", dst: "zenoh/ping_cbor", msg: "messages::Ping"),
-        (src: "zenoh/pong_bin", dst: "pong_sink_bin", msg: "messages::Pong"),
-        (src: "zenoh/pong_json", dst: "pong_sink_json", msg: "messages::Pong"),
-        (src: "zenoh/pong_cbor", dst: "pong_sink_cbor", msg: "messages::Pong"),
+        (
+            src: "ping_src",
+            dst: "zenoh/ping_bin",
+            msg: "messages::Ping",
+        ),
+        (
+            src: "ping_src",
+            dst: "zenoh/ping_json",
+            msg: "messages::Ping",
+        ),
+        (
+            src: "ping_src",
+            dst: "zenoh/ping_cbor",
+            msg: "messages::Ping",
+        ),
+        (
+            src: "zenoh/pong_bin",
+            dst: "pong_sink_bin",
+            msg: "messages::Pong",
+        ),
+        (
+            src: "zenoh/pong_json",
+            dst: "pong_sink_json",
+            msg: "messages::Pong",
+        ),
+        (
+            src: "zenoh/pong_cbor",
+            dst: "pong_sink_cbor",
+            msg: "messages::Pong",
+        ),
     ],
 )

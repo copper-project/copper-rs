@@ -1,8 +1,5 @@
 (
-    missions: [
-        (id: "A"),
-        (id: "B"),
-    ],
+    missions: [(id: "A"), (id: "B")],
     resources: [
         (
             id: "global",
@@ -11,26 +8,29 @@
         (
             id: "board_a",
             provider: "crate::resources::BoardBundle",
-            config: { "label": "alpha-bus", "offset": 10 },
+            config: {
+                "label": "alpha-bus",
+                "offset": 10,
+            },
             missions: ["A"],
         ),
         (
             id: "board_b",
             provider: "crate::resources::BoardBundle",
-            config: { "label": "beta-bus", "offset": -3 },
+            config: {
+                "label": "beta-bus",
+                "offset": -3,
+            },
             missions: ["B"],
         ),
         (
             id: "extras_b",
             provider: "crate::resources::ExtraBundle",
-            config: { "note": "mission-b-note" },
+            config: {"note": "mission-b-note"},
             missions: ["B"],
         ),
     ],
-    logging: (
-        // Disable task logging to keep the example lightweight.
-        enable_task_logging: false,
-    ),
+    logging: (enable_task_logging: false),
     tasks: [
         (
             id: "sensor_a",
@@ -95,7 +95,10 @@
                 "tag": "board_a.tag",
                 "global": "global.log",
             },
-            channels: [ Rx ( id: "stats_rx" ), Tx ( id: "stats_tx" ) ],
+            channels: [
+                Rx(id: "stats_rx"),
+                Tx(id: "stats_tx"),
+            ],
         ),
         (
             id: "stats_b",
@@ -106,15 +109,48 @@
                 "tag": "board_b.tag",
                 "global": "global.log",
             },
-            channels: [ Rx ( id: "stats_rx" ), Tx ( id: "stats_tx" ) ],
+            channels: [
+                Rx(id: "stats_rx"),
+                Tx(id: "stats_tx"),
+            ],
         ),
     ],
     cnx: [
-        (src: "trigger_a", dst: "sensor_a", msg: "tasks::Tick", missions: ["A"]),
-        (src: "sensor_a", dst: "stats_a/stats_tx", msg: "bridges::BusReading", missions: ["A"]),
-        (src: "stats_a/stats_rx", dst: "inspector_a", msg: "bridges::BusReading", missions: ["A"]),
-        (src: "trigger_b", dst: "sensor_b", msg: "tasks::Tick", missions: ["B"]),
-        (src: "sensor_b", dst: "stats_b/stats_tx", msg: "bridges::BusReading", missions: ["B"]),
-        (src: "stats_b/stats_rx", dst: "inspector_b", msg: "bridges::BusReading", missions: ["B"]),
+        (
+            src: "trigger_a",
+            dst: "sensor_a",
+            msg: "tasks::Tick",
+            missions: ["A"],
+        ),
+        (
+            src: "sensor_a",
+            dst: "stats_a/stats_tx",
+            msg: "bridges::BusReading",
+            missions: ["A"],
+        ),
+        (
+            src: "stats_a/stats_rx",
+            dst: "inspector_a",
+            msg: "bridges::BusReading",
+            missions: ["A"],
+        ),
+        (
+            src: "trigger_b",
+            dst: "sensor_b",
+            msg: "tasks::Tick",
+            missions: ["B"],
+        ),
+        (
+            src: "sensor_b",
+            dst: "stats_b/stats_tx",
+            msg: "bridges::BusReading",
+            missions: ["B"],
+        ),
+        (
+            src: "stats_b/stats_rx",
+            dst: "inspector_b",
+            msg: "bridges::BusReading",
+            missions: ["B"],
+        ),
     ],
 )

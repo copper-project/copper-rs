@@ -8,11 +8,12 @@
             id: "rerun",
             type: "RerunPlyViz",
         ),
-     ],
-    cnx: [
-        (src: "src",  dst: "rerun",   msg: "cu_hesai::LidarCuMsgPayload"),
     ],
-    // monitor: (
-    //               type: "cu_consolemon::CuConsoleMon",
-    //          )
+    cnx: [
+        (
+            src: "src",
+            dst: "rerun",
+            msg: "cu_hesai::LidarCuMsgPayload",
+        ),
+    ],
 )

@@ -8,11 +8,16 @@
             id: "dst",
             type: "tasks::LEDSink",
         ),
-     ],
-    cnx: [
-        (src: "src",  dst: "dst",   msg: "bool"),
     ],
-    logging: ( keyframe_interval: 10000, 
-               section_size_mib:  1,
+    cnx: [
+        (
+            src: "src",
+            dst: "dst",
+            msg: "bool",
+        ),
+    ],
+    logging: (
+        keyframe_interval: 10000,
+        section_size_mib: 1,
     ),
 )

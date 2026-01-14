@@ -3,40 +3,100 @@
         (
             id: "responder_bin",
             type: "tasks::PongResponder",
-            config: { "label": "pong-bincode" },
+            config: {"label": "pong-bincode"},
         ),
         (
             id: "responder_json",
             type: "tasks::PongResponder",
-            config: { "label": "pong-json" },
+            config: {"label": "pong-json"},
         ),
         (
             id: "responder_cbor",
             type: "tasks::PongResponder",
-            config: { "label": "pong-cbor" },
+            config: {"label": "pong-cbor"},
         ),
     ],
     bridges: [
         (
             id: "zenoh",
             type: "bridges::DemoZenohBridge",
-            config: { "wire_format": "bincode" },
+            config: {"wire_format": "bincode"},
             channels: [
-                Rx(id: "ping_bin", route: "demo/ping/bin", config: { "wire_format": "bincode" }),
-                Rx(id: "ping_json", route: "demo/ping/json", config: { "wire_format": "json" }),
-                Rx(id: "ping_cbor", route: "demo/ping/cbor", config: { "wire_format": "cbor" }),
-                Tx(id: "pong_bin", route: "demo/pong/bin", config: { "wire_format": "bincode" }),
-                Tx(id: "pong_json", route: "demo/pong/json", config: { "wire_format": "json" }),
-                Tx(id: "pong_cbor", route: "demo/pong/cbor", config: { "wire_format": "cbor" }),
+                Rx(
+                    id: "ping_bin",
+                    route: "demo/ping/bin",
+                    config: {
+                        "wire_format": "bincode",
+                    },
+                ),
+                Rx(
+                    id: "ping_json",
+                    route: "demo/ping/json",
+                    config: {
+                        "wire_format": "json",
+                    },
+                ),
+                Rx(
+                    id: "ping_cbor",
+                    route: "demo/ping/cbor",
+                    config: {
+                        "wire_format": "cbor",
+                    },
+                ),
+                Tx(
+                    id: "pong_bin",
+                    route: "demo/pong/bin",
+                    config: {
+                        "wire_format": "bincode",
+                    },
+                ),
+                Tx(
+                    id: "pong_json",
+                    route: "demo/pong/json",
+                    config: {
+                        "wire_format": "json",
+                    },
+                ),
+                Tx(
+                    id: "pong_cbor",
+                    route: "demo/pong/cbor",
+                    config: {
+                        "wire_format": "cbor",
+                    },
+                ),
             ],
         ),
     ],
     cnx: [
-        (src: "zenoh/ping_bin", dst: "responder_bin", msg: "messages::Ping"),
-        (src: "responder_bin", dst: "zenoh/pong_bin", msg: "messages::Pong"),
-        (src: "zenoh/ping_json", dst: "responder_json", msg: "messages::Ping"),
-        (src: "responder_json", dst: "zenoh/pong_json", msg: "messages::Pong"),
-        (src: "zenoh/ping_cbor", dst: "responder_cbor", msg: "messages::Ping"),
-        (src: "responder_cbor", dst: "zenoh/pong_cbor", msg: "messages::Pong"),
+        (
+            src: "zenoh/ping_bin",
+            dst: "responder_bin",
+            msg: "messages::Ping",
+        ),
+        (
+            src: "responder_bin",
+            dst: "zenoh/pong_bin",
+            msg: "messages::Pong",
+        ),
+        (
+            src: "zenoh/ping_json",
+            dst: "responder_json",
+            msg: "messages::Ping",
+        ),
+        (
+            src: "responder_json",
+            dst: "zenoh/pong_json",
+            msg: "messages::Pong",
+        ),
+        (
+            src: "zenoh/ping_cbor",
+            dst: "responder_cbor",
+            msg: "messages::Ping",
+        ),
+        (
+            src: "responder_cbor",
+            dst: "zenoh/pong_cbor",
+            msg: "messages::Pong",
+        ),
     ],
 )

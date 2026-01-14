@@ -1,7 +1,5 @@
 (
-    runtime: (
-        rate_target_hz: 2,
-    ),
+    runtime: (rate_target_hz: 2),
     tasks: [
         (
             id: "task0",
@@ -10,18 +8,23 @@
         (
             id: "task1",
             type: "tasks::ExampleTask",
-            logging: (
-                enabled: false,
-            )
-
+            logging: (enabled: false),
         ),
         (
             id: "task2",
             type: "tasks::ExampleSink",
         ),
-     ],
+    ],
     cnx: [
-        (src: "task0", dst: "task1", msg: "i32"),
-        (src: "task1", dst: "task2", msg: "i32"),
+        (
+            src: "task0",
+            dst: "task1",
+            msg: "i32",
+        ),
+        (
+            src: "task1",
+            dst: "task2",
+            msg: "i32",
+        ),
     ],
 )

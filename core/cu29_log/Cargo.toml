@@ -17,11 +17,11 @@ serde = { workspace = true }
 cu29-value = { workspace = true }
 cu29-traits = { workspace = true }
 cu29-clock = { workspace = true }
-strfmt = { version = "0.2", optional = true }  # strfmt is std only
+strfmt = { version = "0.2", optional = true } # strfmt is std only
 smallvec = { workspace = true }
 defmt = { version = "1.0", optional = true }
 
 [features]
 default = ["std"]
 std = ["cu29-clock/std", "cu29-traits/std", "cu29-value/std", "dep:strfmt"]
-defmt = ["dep:defmt"]  # this is only used for baremetal text logging
+defmt = ["dep:defmt"]                                                       # this is only used for baremetal text logging

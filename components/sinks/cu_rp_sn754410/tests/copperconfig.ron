@@ -8,8 +8,12 @@
             id: "pwm",
             type: "cu_rp_sn754410_new::SN754410",
         ),
-     ],
+    ],
     cnx: [
-        (src: "src",  dst: "pwm",   msg: "cu_rp_sn754410_new::MotorPayload"),
+        (
+            src: "src",
+            dst: "pwm",
+            msg: "cu_rp_sn754410_new::MotorPayload",
+        ),
     ],
 )

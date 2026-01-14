@@ -28,4 +28,4 @@ cu29-helpers = { workspace = true }
 cfg_aliases = "0.2.1"
 
 [features]
-gst = [ "dep:gstreamer", "dep:gstreamer-app" ]
+gst = ["dep:gstreamer", "dep:gstreamer-app"]
