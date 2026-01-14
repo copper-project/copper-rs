@@ -16,7 +16,7 @@ embedded_target = "thumbv8m.main-none-eabihf"
 embedded_features = "rp2350"
 
 [dependencies]
-cu29 = { path = "../../../core/cu29", version="0.11.0", default-features = false }
+cu29 = { path = "../../../core/cu29", version="0.12.0", default-features = false }
 rp235x-hal = { version = "0.3", features = ["critical-section-impl"], optional = true }
 pio = { version = "=0.2.1", optional = true }  # Needed
 pio-proc = { version = "=0.2.1", optional = true }
@@ -27,7 +27,7 @@ bincode = { workspace = true, features = ["alloc"] }
 spin = { workspace = true }
 
 [features]
-default = []
+default = ["messages-only"]
 rp2350 = ["dep:rp235x-hal", "dep:pio", "dep:pio-proc"]
 defmt = ["stm32h7xx-hal/defmt"]
 stm32h7 = ["dep:stm32h7xx-hal", "defmt"]
