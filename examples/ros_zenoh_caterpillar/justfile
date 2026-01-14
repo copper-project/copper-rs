@@ -3,8 +3,23 @@ import "../../justfile"
 ros-zenoh-caterpillar-run:
 	#!/usr/bin/env bash
 	set -euo pipefail
+	spdlog_dir="{{invocation_directory()}}/.deps/lib"
+	mkdir -p "$spdlog_dir"
+	if [[ ! -e "$spdlog_dir/libspdlog.so.1.16" ]]; then
+		ln -sf /usr/lib/libspdlog.so.1.17 "$spdlog_dir/libspdlog.so.1.16"
+	fi
+	if [[ ! -e "$spdlog_dir/libpython3.13.so.1.0" ]]; then
+		ln -sf /usr/lib/libpython3.12.so.1.0 "$spdlog_dir/libpython3.13.so.1.0"
+	fi
+	if [[ ! -e "$spdlog_dir/libpython3.13.so" ]]; then
+		ln -sf /usr/lib/libpython3.12.so "$spdlog_dir/libpython3.13.so"
+	fi
+	export LD_LIBRARY_PATH="$spdlog_dir:${LD_LIBRARY_PATH:-}"
+	export LIBRARY_PATH="$spdlog_dir:${LIBRARY_PATH:-}"
 	rm -rf build/ install/ log/
 	colcon build
+	export COLCON_TRACE=""
+	export COLCON_PYTHON_EXECUTABLE="${COLCON_PYTHON_EXECUTABLE:-}"
 	source install/setup.bash
 	export ROS_DOMAIN_ID=42
 	export RMW_IMPLEMENTATION=rmw_zenoh_cpp
@@ -12,6 +27,7 @@ ros-zenoh-caterpillar-run:
 	read -n1 -r -p "Press any key to continue..."
 	echo
 	echo "Starting all nodes..."
+	ros2 run gpio_caterpillar stats_node &
 	ros2 run gpio_caterpillar propagate_node gpio_node_1 flip_topic_1 flip_topic_2 &
 	ros2 run gpio_caterpillar actuation_node gpio_node_1 4 &
 	ros2 run gpio_caterpillar propagate_node gpio_node_2 flip_topic_2 flip_topic_3 &
