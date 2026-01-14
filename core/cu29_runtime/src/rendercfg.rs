@@ -44,6 +44,7 @@ const COPPER_LOGO_SVG: &str = include_str!("../assets/cu29.svg");
 
 // Color palette and fills.
 const BORDER_COLOR: &str = "#999999";
+const BACKGROUND_COLOR: &str = "#ffffff";
 const HEADER_BG: &str = "#f4f4f4";
 const DIM_GRAY: &str = "dimgray";
 const LIGHT_GRAY: &str = "lightgray";
@@ -2421,6 +2422,13 @@ impl SvgWriter {
             self.view_size.y + GRAPH_MARGIN
         };
 
+        let background = Rectangle::new()
+            .set("x", 0)
+            .set("y", 0)
+            .set("width", width)
+            .set("height", height)
+            .set("fill", BACKGROUND_COLOR);
+
         Document::new()
             .set("width", width)
             .set("height", height)
@@ -2428,6 +2436,7 @@ impl SvgWriter {
             .set("xmlns", "http://www.w3.org/2000/svg")
             .set("xmlns:xlink", "http://www.w3.org/1999/xlink")
             .add(self.defs)
+            .add(background)
             .add(self.content)
             .add(self.overlay)
             .to_string()
