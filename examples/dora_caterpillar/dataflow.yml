@@ -1,0 +1,176 @@
+nodes:
+  - id: src
+    build: cargo build --release
+    path: ./target/release/dora-caterpillat
+    inputs:
+      tick: dora/timer/millis/1
+    outputs:
+      - out
+      - stats
+
+  - id: ct-0
+    build: cargo build --release
+    path: ./target/release/dora-caterpillat
+    inputs:
+      in: src/out
+    outputs:
+      - chain
+      - gpio
+      - stats
+
+  - id: gpio-0
+    build: cargo build --release
+    path: ./target/release/dora-caterpillat
+    inputs:
+      in: ct-0/gpio
+    outputs:
+      - stats
+
+  - id: ct-1
+    build: cargo build --release
+    path: ./target/release/dora-caterpillat
+    inputs:
+      in: ct-0/chain
+    outputs:
+      - chain
+      - gpio
+      - stats
+
+  - id: gpio-1
+    build: cargo build --release
+    path: ./target/release/dora-caterpillat
+    inputs:
+      in: ct-1/gpio
+    outputs:
+      - stats
+
+  - id: ct-2
+    build: cargo build --release
+    path: ./target/release/dora-caterpillat
+    inputs:
+      in: ct-1/chain
+    outputs:
+      - chain
+      - gpio
+      - stats
+
+  - id: gpio-2
+    build: cargo build --release
+    path: ./target/release/dora-caterpillat
+    inputs:
+      in: ct-2/gpio
+    outputs:
+      - stats
+
+  - id: ct-3
+    build: cargo build --release
+    path: ./target/release/dora-caterpillat
+    inputs:
+      in: ct-2/chain
+    outputs:
+      - chain
+      - gpio
+      - stats
+
+  - id: gpio-3
+    build: cargo build --release
+    path: ./target/release/dora-caterpillat
+    inputs:
+      in: ct-3/gpio
+    outputs:
+      - stats
+
+  - id: ct-4
+    build: cargo build --release
+    path: ./target/release/dora-caterpillat
+    inputs:
+      in: ct-3/chain
+    outputs:
+      - chain
+      - gpio
+      - stats
+
+  - id: gpio-4
+    build: cargo build --release
+    path: ./target/release/dora-caterpillat
+    inputs:
+      in: ct-4/gpio
+    outputs:
+      - stats
+
+  - id: ct-5
+    build: cargo build --release
+    path: ./target/release/dora-caterpillat
+    inputs:
+      in: ct-4/chain
+    outputs:
+      - chain
+      - gpio
+      - stats
+
+  - id: gpio-5
+    build: cargo build --release
+    path: ./target/release/dora-caterpillat
+    inputs:
+      in: ct-5/gpio
+    outputs:
+      - stats
+
+  - id: ct-6
+    build: cargo build --release
+    path: ./target/release/dora-caterpillat
+    inputs:
+      in: ct-5/chain
+    outputs:
+      - chain
+      - gpio
+      - stats
+
+  - id: gpio-6
+    build: cargo build --release
+    path: ./target/release/dora-caterpillat
+    inputs:
+      in: ct-6/gpio
+    outputs:
+      - stats
+
+  - id: ct-7
+    build: cargo build --release
+    path: ./target/release/dora-caterpillat
+    inputs:
+      in: ct-6/chain
+    outputs:
+      - gpio
+      - stats
+
+  - id: gpio-7
+    build: cargo build --release
+    path: ./target/release/dora-caterpillat
+    inputs:
+      in: ct-7/gpio
+    outputs:
+      - stats
+      - end2end
+
+  - id: stats
+    build: cargo build --release
+    path: ./target/release/dora-caterpillat
+    inputs:
+      src: src/stats
+      ct-0: ct-0/stats
+      gpio-0: gpio-0/stats
+      ct-1: ct-1/stats
+      gpio-1: gpio-1/stats
+      ct-2: ct-2/stats
+      gpio-2: gpio-2/stats
+      ct-3: ct-3/stats
+      gpio-3: gpio-3/stats
+      ct-4: ct-4/stats
+      gpio-4: gpio-4/stats
+      ct-5: ct-5/stats
+      gpio-5: gpio-5/stats
+      ct-6: ct-6/stats
+      gpio-6: gpio-6/stats
+      ct-7: ct-7/stats
+      gpio-7: gpio-7/stats
+      End2End: gpio-7/end2end
