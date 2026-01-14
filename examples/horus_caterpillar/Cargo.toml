@@ -1,0 +1,11 @@
+[package]
+name = "horus-caterpillar"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+resolver = "2"
+
+[dependencies]
+horus = { git = "https://github.com/softmata/horus", tag = "v0.1.6" }
+serde = { version = "1", features = ["derive"] }
