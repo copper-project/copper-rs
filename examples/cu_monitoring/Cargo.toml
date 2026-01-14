@@ -17,4 +17,4 @@ cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
 tempfile = { workspace = true }
 serde = { workspace = true }
-cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.11.0" }
+cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.12.0" }

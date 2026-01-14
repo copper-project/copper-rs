@@ -25,7 +25,7 @@ cu29 = { path = "../../core/cu29", default-features = false, features = [
   "log-level-debug",
   "textlogs",
 ] }
-cu-bdshot = { path = "../../components/bridges/cu_bdshot", features = [
+cu-bdshot = { path = "../../components/bridges/cu_bdshot", default-features = false, features = [
   "rp2350",
 ] }
 cu-crsf = { path = "../../components/bridges/cu_crsf", default-features = false, features = [

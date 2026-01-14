@@ -16,6 +16,6 @@ std = ["cu29/std", "bincode/std", "serde/std"]
 textlogs = ["cu29/textlogs"]
 
 [dependencies]
-cu29 = { path = "../../../core/cu29", version = "0.11.0", default-features = false }
+cu29 = { path = "../../../core/cu29", version = "0.12.0", default-features = false }
 bincode = { workspace = true }
 serde = { workspace = true }

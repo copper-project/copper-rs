@@ -11,6 +11,8 @@ homepage.workspace = true
 repository.workspace = true
 # default-run = "quad-sim"
 
+publish = false
+
 [package.metadata.copper]
 embedded_only = true
 embedded_config = "examples/cu_flight_controller/.cargo/config-firmware.toml"
@@ -22,7 +24,7 @@ embedded_features = "firmware"
 ## Flight controller components
 
 ### Hardware
-cu-bdshot = { path = "../../components/bridges/cu_bdshot", optional = true }
+cu-bdshot = { path = "../../components/bridges/cu_bdshot", default-features = false, optional = true }
 cu-crsf = { path = "../../components/bridges/cu_crsf", default-features = false, features = [
   "defmt",
   "alloc",
@@ -51,8 +53,8 @@ cu-bmi088 = { path = "../../components/sources/cu_bmi088", default-features = fa
 ], optional = true }
 
 ### Algos
-cu-pid = { path = "../../components/tasks/cu_pid", default-features = false, version = "0.11.0" }
-cu-sensor-payloads = { path = "../../components/payloads/cu_sensor_payloads", default-features = false, version = "0.11.0" }
+cu-pid = { path = "../../components/tasks/cu_pid", default-features = false, version = "0.12.0" }
+cu-sensor-payloads = { path = "../../components/payloads/cu_sensor_payloads", default-features = false, version = "0.12.0" }
 bincode = { workspace = true }
 serde = { workspace = true }
 cu29-unifiedlog = { path = "../../core/cu29_unifiedlog", default-features = false, features = [
