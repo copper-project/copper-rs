@@ -19,7 +19,7 @@ embedded_target = "thumbv8m.main-none-eabihf"
 [dependencies]
 buddy_system_allocator = { version = "0.12", default-features = false, features = ["use_spin"] }
 cu29 = { path = "../../core/cu29", default-features = false, features = ["defmt", "log-level-debug", "textlogs"] }
-cu-bdshot = { path = "../../components/bridges/cu_bdshot", features = ["rp2350"] }
+cu-bdshot = { path = "../../components/bridges/cu_bdshot", default-features = false, features = ["rp2350"] }
 cu-crsf = { path = "../../components/bridges/cu_crsf", default-features = false, features = ["defmt", "alloc"] }
 cu-sdlogger = { path = "../../components/libs/cu_sdlogger", default-features = false, features = ["eh1"] }
 cortex-m-rt = "0.7"
