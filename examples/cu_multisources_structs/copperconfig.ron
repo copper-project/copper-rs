@@ -1,4 +1,3 @@
-// A sample configuration to get you started.
 (
     tasks: [
         (
@@ -21,12 +20,27 @@
             id: "t-1",
             type: "tasks::MyTask",
         ),
-     ],
-    // Makes a connection from the source to the task and from the task to the sink.
+    ],
     cnx: [
-        (src: "src",  dst: "t-0",   msg: "crate::tasks::MyPayload"),
-        (src: "t-0",  dst: "sink",   msg: "crate::tasks::MyPayload"),
-        (src: "src1",  dst: "t-1",   msg: "crate::tasks::MyPayload"),
-       (src: "t-1",  dst: "sink",   msg: "crate::tasks::MyPayload"),
+        (
+            src: "src",
+            dst: "t-0",
+            msg: "crate::tasks::MyPayload",
+        ),
+        (
+            src: "t-0",
+            dst: "sink",
+            msg: "crate::tasks::MyPayload",
+        ),
+        (
+            src: "src1",
+            dst: "t-1",
+            msg: "crate::tasks::MyPayload",
+        ),
+        (
+            src: "t-1",
+            dst: "sink",
+            msg: "crate::tasks::MyPayload",
+        ),
     ],
 )

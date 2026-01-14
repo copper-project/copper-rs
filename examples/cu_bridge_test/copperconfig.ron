@@ -28,27 +28,73 @@
         (
             id: "alpha",
             type: "bridges::AlphaBridge",
-            missions: ["BridgeOnlyAB", "BridgeLoopback", "BridgeToSink", "BridgeTaskSame", "BridgeFanout"],
+            missions: [
+                "BridgeOnlyAB",
+                "BridgeLoopback",
+                "BridgeToSink",
+                "BridgeTaskSame",
+                "BridgeFanout",
+            ],
             channels: [
-                Rx ( id: "ingress", route: "alpha/ingress" ),
-                Rx ( id: "loop_in", route: "alpha/loop_in" ),
-                Rx ( id: "to_sink", route: "alpha/to_sink" ),
-                Rx ( id: "chain_in", route: "alpha/chain_in" ),
-                Tx ( id: "loop_out", route: "alpha/loop_out" ), // overrides macro default
-                Tx ( id: "chain_out", route: "alpha/chain_out" ),
+                Rx(
+                    id: "ingress",
+                    route: "alpha/ingress",
+                ),
+                Rx(
+                    id: "loop_in",
+                    route: "alpha/loop_in",
+                ),
+                Rx(
+                    id: "to_sink",
+                    route: "alpha/to_sink",
+                ),
+                Rx(
+                    id: "chain_in",
+                    route: "alpha/chain_in",
+                ),
+                Tx(
+                    id: "loop_out",
+                    route: "alpha/loop_out",
+                ),
+                Tx(
+                    id: "chain_out",
+                    route: "alpha/chain_out",
+                ),
             ],
         ),
         (
             id: "beta",
             type: "bridges::BetaBridge",
-            missions: ["BridgeOnlyAB", "SourceToBridge", "BridgeFanout"],
+            missions: [
+                "BridgeOnlyAB",
+                "SourceToBridge",
+                "BridgeFanout",
+            ],
             channels: [
-                Tx ( id: "egress", route: "beta/egress" ),
-                Tx ( id: "from_src", route: "beta/from_src" ), // overrides macro default
-                Tx ( id: "from_alpha_ingress", route: "beta/from_alpha_ingress" ),
-                Tx ( id: "from_alpha_loop", route: "beta/from_alpha_loop" ),
-                Tx ( id: "from_alpha_sink", route: "beta/from_alpha_sink" ),
-                Tx ( id: "from_alpha_chain", route: "beta/from_alpha_chain" ),
+                Tx(
+                    id: "egress",
+                    route: "beta/egress",
+                ),
+                Tx(
+                    id: "from_src",
+                    route: "beta/from_src",
+                ),
+                Tx(
+                    id: "from_alpha_ingress",
+                    route: "beta/from_alpha_ingress",
+                ),
+                Tx(
+                    id: "from_alpha_loop",
+                    route: "beta/from_alpha_loop",
+                ),
+                Tx(
+                    id: "from_alpha_sink",
+                    route: "beta/from_alpha_sink",
+                ),
+                Tx(
+                    id: "from_alpha_chain",
+                    route: "beta/from_alpha_chain",
+                ),
             ],
         ),
     ],
@@ -114,7 +160,4 @@
             missions: ["BridgeFanout"],
         ),
     ],
-    // monitor: (
-    //       type: "cu_consolemon::CuConsoleMon",
-    // ),
 )

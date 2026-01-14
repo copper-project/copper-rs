@@ -11,9 +11,7 @@
         (
             id: "gpio-0",
             type: "cu_rp_gpio::RPGpio",
-            config: {
-                "pin": 4,
-            },
+            config: {"pin": 4},
         ),
         (
             id: "ct-1",
@@ -22,9 +20,7 @@
         (
             id: "gpio-1",
             type: "cu_rp_gpio::RPGpio",
-            config: {
-                "pin": 17,
-            },
+            config: {"pin": 17},
         ),
         (
             id: "ct-2",
@@ -33,9 +29,7 @@
         (
             id: "gpio-2",
             type: "cu_rp_gpio::RPGpio",
-            config: {
-                "pin": 27,
-            },
+            config: {"pin": 27},
         ),
         (
             id: "ct-3",
@@ -44,9 +38,7 @@
         (
             id: "gpio-3",
             type: "cu_rp_gpio::RPGpio",
-            config: {
-                "pin": 22,
-            },
+            config: {"pin": 22},
         ),
         (
             id: "ct-4",
@@ -55,9 +47,7 @@
         (
             id: "gpio-4",
             type: "cu_rp_gpio::RPGpio",
-            config: {
-                "pin": 5,
-            },
+            config: {"pin": 5},
         ),
         (
             id: "ct-5",
@@ -66,9 +56,7 @@
         (
             id: "gpio-5",
             type: "cu_rp_gpio::RPGpio",
-            config: {
-                "pin": 6,
-            },
+            config: {"pin": 6},
         ),
         (
             id: "ct-6",
@@ -77,9 +65,7 @@
         (
             id: "gpio-6",
             type: "cu_rp_gpio::RPGpio",
-            config: {
-                "pin": 19,
-            },
+            config: {"pin": 19},
         ),
         (
             id: "ct-7",
@@ -88,37 +74,97 @@
         (
             id: "gpio-7",
             type: "cu_rp_gpio::RPGpio",
-            config: {
-                "pin": 26,
-            },
+            config: {"pin": 26},
         ),
-     ],
-    cnx: [
-        // Make a caterpillar by propagating messages from the source to the GPIOs
-        (src: "src",  dst: "ct-0",   msg: "cu_rp_gpio::RPGpioPayload"),
-        (src: "ct-0", dst: "ct-1",   msg: "cu_rp_gpio::RPGpioPayload"),
-        (src: "ct-1", dst: "ct-2",   msg: "cu_rp_gpio::RPGpioPayload"),
-        (src: "ct-2", dst: "ct-3",   msg: "cu_rp_gpio::RPGpioPayload"),
-        (src: "ct-3", dst: "ct-4",   msg: "cu_rp_gpio::RPGpioPayload"),
-        (src: "ct-4", dst: "ct-5",   msg: "cu_rp_gpio::RPGpioPayload"),
-        (src: "ct-5", dst: "ct-6",   msg: "cu_rp_gpio::RPGpioPayload"),
-        (src: "ct-6", dst: "ct-7",   msg: "cu_rp_gpio::RPGpioPayload"),
-
-        (src: "ct-0", dst: "gpio-0", msg: "cu_rp_gpio::RPGpioPayload"),
-        (src: "ct-1", dst: "gpio-1", msg: "cu_rp_gpio::RPGpioPayload"),
-        (src: "ct-2", dst: "gpio-2", msg: "cu_rp_gpio::RPGpioPayload"),
-        (src: "ct-3", dst: "gpio-3", msg: "cu_rp_gpio::RPGpioPayload"),
-        (src: "ct-4", dst: "gpio-4", msg: "cu_rp_gpio::RPGpioPayload"),
-        (src: "ct-5", dst: "gpio-5", msg: "cu_rp_gpio::RPGpioPayload"),
-        (src: "ct-6", dst: "gpio-6", msg: "cu_rp_gpio::RPGpioPayload"),
-        (src: "ct-7", dst: "gpio-7", msg: "cu_rp_gpio::RPGpioPayload"),
     ],
-    // This is going REALLY fast, adapt the pace of the logging to the rate of output.
-    logging: ( keyframe_interval: 10000,  // wait 10000 cycles to record a keyframe (~every 1/10 second at the observed rate)
-               slab_size_mib:     1024,   // allocate space on disk by the Gibibyte
-               section_size_mib:  100,    // allocate for the copperlists in the logs by 100MB at a time.
+    cnx: [
+        (
+            src: "src",
+            dst: "ct-0",
+            msg: "cu_rp_gpio::RPGpioPayload",
+        ),
+        (
+            src: "ct-0",
+            dst: "ct-1",
+            msg: "cu_rp_gpio::RPGpioPayload",
+        ),
+        (
+            src: "ct-1",
+            dst: "ct-2",
+            msg: "cu_rp_gpio::RPGpioPayload",
+        ),
+        (
+            src: "ct-2",
+            dst: "ct-3",
+            msg: "cu_rp_gpio::RPGpioPayload",
+        ),
+        (
+            src: "ct-3",
+            dst: "ct-4",
+            msg: "cu_rp_gpio::RPGpioPayload",
+        ),
+        (
+            src: "ct-4",
+            dst: "ct-5",
+            msg: "cu_rp_gpio::RPGpioPayload",
+        ),
+        (
+            src: "ct-5",
+            dst: "ct-6",
+            msg: "cu_rp_gpio::RPGpioPayload",
+        ),
+        (
+            src: "ct-6",
+            dst: "ct-7",
+            msg: "cu_rp_gpio::RPGpioPayload",
+        ),
+        (
+            src: "ct-0",
+            dst: "gpio-0",
+            msg: "cu_rp_gpio::RPGpioPayload",
+        ),
+        (
+            src: "ct-1",
+            dst: "gpio-1",
+            msg: "cu_rp_gpio::RPGpioPayload",
+        ),
+        (
+            src: "ct-2",
+            dst: "gpio-2",
+            msg: "cu_rp_gpio::RPGpioPayload",
+        ),
+        (
+            src: "ct-3",
+            dst: "gpio-3",
+            msg: "cu_rp_gpio::RPGpioPayload",
+        ),
+        (
+            src: "ct-4",
+            dst: "gpio-4",
+            msg: "cu_rp_gpio::RPGpioPayload",
+        ),
+        (
+            src: "ct-5",
+            dst: "gpio-5",
+            msg: "cu_rp_gpio::RPGpioPayload",
+        ),
+        (
+            src: "ct-6",
+            dst: "gpio-6",
+            msg: "cu_rp_gpio::RPGpioPayload",
+        ),
+        (
+            src: "ct-7",
+            dst: "gpio-7",
+            msg: "cu_rp_gpio::RPGpioPayload",
+        ),
+    ],
+    logging: (
+        keyframe_interval: 10000,
+        slab_size_mib: 1024,
+        section_size_mib: 100,
     ),
     monitor: (
-                  type: "cu_consolemon::CuConsoleMon",
-             )
+        type: "cu_consolemon::CuConsoleMon",
+    ),
 )

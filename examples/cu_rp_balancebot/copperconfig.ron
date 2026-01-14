@@ -3,9 +3,7 @@
         (
             id: "balpos",
             type: "cu_ads7883_new::ADS7883",
-
         ),
-
         (
             id: "railpos",
             type: "cu_rp_encoder::Encoder",
@@ -14,54 +12,70 @@
                 "dat_pin": 20,
             },
         ),
-
         (
             id: "balpos_pid",
             type: "tasks::BalPID",
             config: {
-                "kp": 0.015, // 0.02 1 / 168 ticks = .00593
+                "kp": 0.015,
                 "kd": 0.01,
                 "ki": 0.0,
-                "setpoint": 3072.0, // the perfect sim
-                "cutoff": 170.0, // cut off if the measured value is outside of +/- 170 ticks around the setpoint
+                "setpoint": 3072.0,
+                "cutoff": 170.0,
             },
         ),
-
         (
             id: "railpos_pid",
             type: "tasks::PosPID",
             config: {
-                "kp": 0.0005, // 0.02 1 / 168 ticks = .00593
+                "kp": 0.0005,
                 "kd": 0.8,
                 "ki": 0.0,
                 "setpoint": 0.0,
-                "cutoff": 1000.0, // cut off if the it is about to hit the side of the rail
+                "cutoff": 1000.0,
                 "sampling_ms": 100,
             },
         ),
-
         (
             id: "merge_pids",
             type: "tasks::PIDMerger",
         ),
-
         (
             id: "motor",
             type: "cu_rp_sn754410_new::SN754410",
             config: {
-                 "deadzone": 0.3, // this is the minimum value for the motor to move.
-                 "dryrun": false,
+                "deadzone": 0.3,
+                "dryrun": false,
             },
         ),
-     ],
+    ],
     cnx: [
-        (src: "balpos",  dst: "balpos_pid",   msg: "cu_ads7883_new::ADSReadingPayload"),
-        (src: "railpos",  dst: "railpos_pid",   msg: "cu_rp_encoder::EncoderPayload"),
-        (src: "balpos_pid", dst: "merge_pids", msg:"cu_pid::PIDControlOutputPayload"),
-        (src: "railpos_pid", dst: "merge_pids", msg:"cu_pid::PIDControlOutputPayload"),
-        (src: "merge_pids", dst: "motor", msg:"cu_rp_sn754410_new::MotorPayload"),
+        (
+            src: "balpos",
+            dst: "balpos_pid",
+            msg: "cu_ads7883_new::ADSReadingPayload",
+        ),
+        (
+            src: "railpos",
+            dst: "railpos_pid",
+            msg: "cu_rp_encoder::EncoderPayload",
+        ),
+        (
+            src: "balpos_pid",
+            dst: "merge_pids",
+            msg: "cu_pid::PIDControlOutputPayload",
+        ),
+        (
+            src: "railpos_pid",
+            dst: "merge_pids",
+            msg: "cu_pid::PIDControlOutputPayload",
+        ),
+        (
+            src: "merge_pids",
+            dst: "motor",
+            msg: "cu_rp_sn754410_new::MotorPayload",
+        ),
     ],
     monitor: (
-          type: "cu_consolemon::CuConsoleMon",
-    )
+        type: "cu_consolemon::CuConsoleMon",
+    ),
 )

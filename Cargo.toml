@@ -1,101 +1,101 @@
 [workspace]
 
 members = [
-    "core/cu29",
-    "core/cu29_clock",
-    "core/cu29_derive",
-    "core/cu29_export",
-    "core/cu29_helpers",
-    "core/cu29_intern_strs",
-    "core/cu29_log",
-    "core/cu29_log_derive",
-    "core/cu29_log_runtime",
-    "core/cu29_runtime",
-    "core/cu29_soa_derive",
-    "core/cu29_traits",
-    "core/cu29_unifiedlog",
-    "components/bridges/cu_crsf",
-    "components/bridges/cu_msp_bridge",
-    "components/bridges/cu_zenoh_bridge",
-    "components/libs/cu_msp_lib",
-    "components/libs/cu_embedded_registry",
-    "components/libs/cu_transform",
-    "components/monitors/cu_consolemon",
-    "components/monitors/cu_logmon",
-    "components/payloads/cu_ros_payloads",
-    "components/payloads/cu_sensor_payloads",
-    "components/payloads/cu_spatial_payloads",
-    "components/res/cu_micoairh743",
-    "components/libs/cu_sdlogger",
-    "components/bridges/cu_bdshot",
-    "components/sinks/cu_iceoryx2_sink",
-    "components/sinks/cu_rp_gpio",
-    "components/sinks/cu_rp_sn754410",
-    "components/sinks/cu_lewansoul",
-    "components/sinks/cu_zenoh_sink",
-    "components/sinks/cu_zenoh_ros_sink",
-    "components/sources/cu_ads7883",
-    "components/sources/cu_bmi088",
-    "components/sources/cu_gstreamer",
-    "components/sources/cu_hesai",
-    "components/sources/cu_livox",
-    "components/sources/cu_mpu9250",
-    "components/sources/cu_iceoryx2_src",
-    "components/sources/cu_v4l",
-    "components/sources/cu_vlp16",
-    "components/sources/cu_wt901",
-    "components/sources/cu_rp_encoder",
-    "components/tasks/cu_aligner",
-    "components/tasks/cu_ahrs",
-    "components/tasks/cu_apriltag",
-    "components/tasks/cu_dynthreshold",
-    "components/tasks/cu_pid",
-    "components/tasks/cu_ratelimit",
-    "components/testing/cu_udp_inject",
-    "examples/cu_elrs_bdshot_demo",
-    "examples/cu_background_task",
-    "examples/cu_flight_controller",
-    "examples/cu_bridge_test",
-    "examples/cu_caterpillar",
-    "examples/cu_config_gen",
-    "examples/cu_config_variation",
-    "examples/cu_dorabench",
-    "examples/cu_image_aligner",
-    "examples/cu_iceoryx2",
-    "examples/cu_logging_size",
-    "examples/cu_msp_bridge_loopback",
-    "examples/cu_monitoring",
-    "examples/cu_min_baremetal",
-    "examples/cu_missions",
-    "examples/cu_multi_output",
-    "examples/cu_multisources",
-    "examples/cu_multisources_structs",
-    "examples/cu_resources_test",
-    "examples/cu_nologging_task",
-    "examples/cu_rate_target",
-    "examples/cu_pointclouds",
-    "examples/cu_rp_balancebot",
-    "examples/cu_run_in_sim",
-    "examples/cu_standalone_structlog",
-    "examples/cu_zenoh",
-    "examples/cu_zenoh_bridge_demo",
-    "examples/cu_zenoh_ros",
+  "core/cu29",
+  "core/cu29_clock",
+  "core/cu29_derive",
+  "core/cu29_export",
+  "core/cu29_helpers",
+  "core/cu29_intern_strs",
+  "core/cu29_log",
+  "core/cu29_log_derive",
+  "core/cu29_log_runtime",
+  "core/cu29_runtime",
+  "core/cu29_soa_derive",
+  "core/cu29_traits",
+  "core/cu29_unifiedlog",
+  "components/bridges/cu_crsf",
+  "components/bridges/cu_msp_bridge",
+  "components/bridges/cu_zenoh_bridge",
+  "components/libs/cu_msp_lib",
+  "components/libs/cu_embedded_registry",
+  "components/libs/cu_transform",
+  "components/monitors/cu_consolemon",
+  "components/monitors/cu_logmon",
+  "components/payloads/cu_ros_payloads",
+  "components/payloads/cu_sensor_payloads",
+  "components/payloads/cu_spatial_payloads",
+  "components/res/cu_micoairh743",
+  "components/libs/cu_sdlogger",
+  "components/bridges/cu_bdshot",
+  "components/sinks/cu_iceoryx2_sink",
+  "components/sinks/cu_rp_gpio",
+  "components/sinks/cu_rp_sn754410",
+  "components/sinks/cu_lewansoul",
+  "components/sinks/cu_zenoh_sink",
+  "components/sinks/cu_zenoh_ros_sink",
+  "components/sources/cu_ads7883",
+  "components/sources/cu_bmi088",
+  "components/sources/cu_gstreamer",
+  "components/sources/cu_hesai",
+  "components/sources/cu_livox",
+  "components/sources/cu_mpu9250",
+  "components/sources/cu_iceoryx2_src",
+  "components/sources/cu_v4l",
+  "components/sources/cu_vlp16",
+  "components/sources/cu_wt901",
+  "components/sources/cu_rp_encoder",
+  "components/tasks/cu_aligner",
+  "components/tasks/cu_ahrs",
+  "components/tasks/cu_apriltag",
+  "components/tasks/cu_dynthreshold",
+  "components/tasks/cu_pid",
+  "components/tasks/cu_ratelimit",
+  "components/testing/cu_udp_inject",
+  "examples/cu_elrs_bdshot_demo",
+  "examples/cu_background_task",
+  "examples/cu_flight_controller",
+  "examples/cu_bridge_test",
+  "examples/cu_caterpillar",
+  "examples/cu_config_gen",
+  "examples/cu_config_variation",
+  "examples/cu_dorabench",
+  "examples/cu_image_aligner",
+  "examples/cu_iceoryx2",
+  "examples/cu_logging_size",
+  "examples/cu_msp_bridge_loopback",
+  "examples/cu_monitoring",
+  "examples/cu_min_baremetal",
+  "examples/cu_missions",
+  "examples/cu_multi_output",
+  "examples/cu_multisources",
+  "examples/cu_multisources_structs",
+  "examples/cu_resources_test",
+  "examples/cu_nologging_task",
+  "examples/cu_rate_target",
+  "examples/cu_pointclouds",
+  "examples/cu_rp_balancebot",
+  "examples/cu_run_in_sim",
+  "examples/cu_standalone_structlog",
+  "examples/cu_zenoh",
+  "examples/cu_zenoh_bridge_demo",
+  "examples/cu_zenoh_ros",
 ]
 
 # put only the core crates here that are not platform specific
 default-members = [
-    "core/cu29",
-    "core/cu29_clock",
-    "core/cu29_derive",
-    "core/cu29_export",
-    "core/cu29_intern_strs",
-    "core/cu29_log",
-    "core/cu29_log_derive",
-    "core/cu29_log_runtime",
-    "core/cu29_runtime",
-    "core/cu29_soa_derive",
-    "core/cu29_traits",
-    "core/cu29_unifiedlog",
+  "core/cu29",
+  "core/cu29_clock",
+  "core/cu29_derive",
+  "core/cu29_export",
+  "core/cu29_intern_strs",
+  "core/cu29_log",
+  "core/cu29_log_derive",
+  "core/cu29_log_runtime",
+  "core/cu29_runtime",
+  "core/cu29_soa_derive",
+  "core/cu29_traits",
+  "core/cu29_unifiedlog",
 ]
 
 resolver = "2"
@@ -123,7 +123,7 @@ cu29 = { path = "core/cu29", version = "0.11.0" } # default std
 cu29-clock = { path = "core/cu29_clock", default-features = false, version = "0.11.0" }
 cu29-derive = { path = "core/cu29_derive", default-features = false, version = "0.11.0" }
 cu29-export = { path = "core/cu29_export", version = "0.11.0" } # std only
-cu29-helpers = { path = "core/cu29_helpers", version = "0.11.0" }  # std only
+cu29-helpers = { path = "core/cu29_helpers", version = "0.11.0" } # std only
 cu29-intern-strs = { path = "core/cu29_intern_strs", version = "0.11.0" } # std only
 cu29-log = { path = "core/cu29_log", default-features = false, version = "0.11.0" }
 cu29-log-derive = { path = "core/cu29_log_derive", default-features = false, version = "0.11.0" }
@@ -131,7 +131,9 @@ cu29-log-runtime = { path = "core/cu29_log_runtime", default-features = false, v
 cu29-runtime = { path = "core/cu29_runtime", default-features = false, version = "0.11.0" }
 cu29-soa-derive = { path = "core/cu29_soa_derive", default-features = false, version = "0.11.0" }
 cu29-traits = { path = "core/cu29_traits", default-features = false, version = "0.11.0" }
-cu29-unifiedlog = { path = "core/cu29_unifiedlog", default-features = false, features = ["compact"], version = "0.11.0" }
+cu29-unifiedlog = { path = "core/cu29_unifiedlog", default-features = false, features = [
+  "compact",
+], version = "0.11.0" }
 cu29-value = { path = "core/cu29_value", default-features = false, version = "0.11.0" }
 
 # Payload definitions
@@ -139,9 +141,17 @@ cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads", version 
 cu-ros-payloads = { path = "components/payloads/cu_ros_payloads", version = "0.11.0" }
 
 # External serialization
-bincode = { package = "cu-bincode", version = "2.0", default-features = false, features = ["derive", "alloc"] }
-serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
-erased-serde = { version = "0.4", default-features = false, features = ["alloc"] }
+bincode = { package = "cu-bincode", version = "2.0", default-features = false, features = [
+  "derive",
+  "alloc",
+] }
+serde = { version = "1.0", default-features = false, features = [
+  "derive",
+  "alloc",
+] }
+erased-serde = { version = "0.4", default-features = false, features = [
+  "alloc",
+] }
 serde_derive = { version = "1.0", features = ["default"] }
 
 # External CLI
@@ -156,7 +166,9 @@ syn = { version = "2.0", features = ["full"] } # proc macros
 uom = { version = "0.37", features = ["serde"] }
 
 # Compact strings support
-compact_str = { version = "0.9", default-features = false, features = ["serde"] }
+compact_str = { version = "0.9", default-features = false, features = [
+  "serde",
+] }
 
 # The derive pattern happens a lot across the codebase, this is a helper for that.
 derive_more = { version = "2.0", features = ["full"] }
@@ -168,7 +180,11 @@ tempfile = "3.23"
 spin = { version = "0.10" } # should be removed when std is on, but cargo is bad at negative features
 
 # rerun
-rerun = { version = "0.28", default-features = false, features = ["sdk", "server", "log"] }
+rerun = { version = "0.28", default-features = false, features = [
+  "sdk",
+  "server",
+  "log",
+] }
 
 # smallvec to avoid heap allocations
 smallvec = { version = "1.15", default-features = false, features = ["serde"] }
@@ -181,7 +197,7 @@ rtsan-standalone = "0.3.0"
 
 # HashMap that is fast and has no std dependency
 hashbrown = { version = "0.16", features = ["serde"] }
-syntect = "5.3" # default features pull bincode 1.x for dump support; required by our format helpers
+syntect = "5.3"                                        # default features pull bincode 1.x for dump support; required by our format helpers
 
 [profile.screaming]
 inherits = "release"

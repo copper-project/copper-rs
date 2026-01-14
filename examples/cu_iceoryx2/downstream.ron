@@ -3,9 +3,7 @@
         (
             id: "src",
             type: "cu_iceoryx2::MyIceoryxSrc",
-            config: {
-                "service": "Flippy",
-            },
+            config: {"service": "Flippy"},
         ),
         (
             id: "task",
@@ -14,16 +12,22 @@
         (
             id: "gpio-0",
             type: "cu_rp_gpio::RPGpio",
-            config: {
-                "pin": 4,
-            },
+            config: {"pin": 4},
         ),
-     ],
+    ],
     cnx: [
-        (src: "src",  dst: "task",   msg: "cu_rp_gpio::RPGpioPayload"),
-        (src: "task",  dst: "gpio-0",   msg: "cu_rp_gpio::RPGpioPayload"),
+        (
+            src: "src",
+            dst: "task",
+            msg: "cu_rp_gpio::RPGpioPayload",
+        ),
+        (
+            src: "task",
+            dst: "gpio-0",
+            msg: "cu_rp_gpio::RPGpioPayload",
+        ),
     ],
     monitor: (
-                  type: "cu_consolemon::CuConsoleMon",
-             )
+        type: "cu_consolemon::CuConsoleMon",
+    ),
 )

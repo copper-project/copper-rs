@@ -25,10 +25,7 @@ Node graph visualization for tui-rs
 """
 documentation = "https://docs.rs/tui-nodes/0.1.1/tui-nodes/"
 readme = "README.md"
-keywords = [
-    "tui",
-    "terminal",
-]
+keywords = ["tui", "terminal"]
 license = "MIT"
 repository = "https://git.sr.ht/~jaxter184/tui-nodes"
 

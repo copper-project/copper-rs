@@ -11,16 +11,22 @@
         (
             id: "sink",
             type: "cu_iceoryx2::MyIceoryxSink",
-            config: {
-                "service": "Flippy",
-            },
+            config: {"service": "Flippy"},
         ),
-     ],
+    ],
     cnx: [
-        (src: "src",  dst: "task",   msg: "cu_rp_gpio::RPGpioPayload"),
-        (src: "task", dst: "sink",   msg: "cu_rp_gpio::RPGpioPayload"),
+        (
+            src: "src",
+            dst: "task",
+            msg: "cu_rp_gpio::RPGpioPayload",
+        ),
+        (
+            src: "task",
+            dst: "sink",
+            msg: "cu_rp_gpio::RPGpioPayload",
+        ),
     ],
     monitor: (
-                  type: "cu_consolemon::CuConsoleMon",
-             )
+        type: "cu_consolemon::CuConsoleMon",
+    ),
 )

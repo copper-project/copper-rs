@@ -1,7 +1,5 @@
 (
-    missions: [ (id: "A"),
-                (id: "B"),
-              ],
+    missions: [(id: "A"), (id: "B")],
     tasks: [
         (
             id: "src",
@@ -21,11 +19,31 @@
             id: "sink",
             type: "tasks::ExampleSink",
         ),
-     ],
+    ],
     cnx: [
-        (src: "src", dst: "taskA", msg: "i32", missions: ["A"]),
-        (src: "src", dst: "taskB", msg: "i32", missions: ["B"]),
-        (src: "taskA", dst: "sink", msg: "i32", missions: ["A"]),
-        (src: "taskB", dst: "sink", msg: "i32", missions: ["B"]),
+        (
+            src: "src",
+            dst: "taskA",
+            msg: "i32",
+            missions: ["A"],
+        ),
+        (
+            src: "src",
+            dst: "taskB",
+            msg: "i32",
+            missions: ["B"],
+        ),
+        (
+            src: "taskA",
+            dst: "sink",
+            msg: "i32",
+            missions: ["A"],
+        ),
+        (
+            src: "taskB",
+            dst: "sink",
+            msg: "i32",
+            missions: ["B"],
+        ),
     ],
 )

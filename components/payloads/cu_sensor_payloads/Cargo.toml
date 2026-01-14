@@ -16,12 +16,14 @@ cu29-soa-derive = { workspace = true }
 cu29-clock = { path = "../../../core/cu29_clock", version = "0.11.0", default-features = false }
 cu29 = { path = "../../../core/cu29", version = "0.11.0", default-features = false }
 uom = { version = "0.37", default-features = false, features = [
-    "serde",
-    "f32",
-    "si",
-    "autoconvert",
+  "serde",
+  "f32",
+  "si",
+  "autoconvert",
 ] }
-derive_more = { version = "2.0.1", default-features = false, features = ["full"] }
+derive_more = { version = "2.0.1", default-features = false, features = [
+  "full",
+] }
 image = { version = "0.25.6", optional = true }
 kornia-image = { version = "0.1.10", optional = true }
 serde = { workspace = true }

@@ -13,11 +13,11 @@ default-run = "balancebot-sim"
 
 [package.metadata.cargo-machete]
 ignored = [
-    "cu-consolemon",
-    "cu29-log",
-    "cu29-log-runtime",
-    "cu29-unifiedlog",
-    "copper-traits",
+  "cu-consolemon",
+  "cu29-log",
+  "cu29-log-runtime",
+  "cu29-unifiedlog",
+  "copper-traits",
 ] # proc macro and console
 
 [dependencies]
@@ -29,7 +29,7 @@ serde = { workspace = true }
 cu-ads7883-new = { path = "../../components/sources/cu_ads7883", version = "0.11.0" }
 cu-rp-sn754410-new = { path = "../../components/sinks/cu_rp_sn754410", version = "0.11.0" }
 cu-rp-encoder = { path = "../../components/sources/cu_rp_encoder", version = "0.11.0" }
-cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.11.0" } # needed
+cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.11.0" }    # needed
 cu-pid = { path = "../../components/tasks/cu_pid", version = "0.11.0" }
 
 # Log reader depencies
@@ -37,31 +37,42 @@ cu29-export = { workspace = true, optional = true }
 
 # Sim dependencies
 bevy = { version = "0.17.3", default-features = false, features = [
-    "x11",
-    "wayland",
-    "default_font",
-    "bevy_render",
-    "bevy_window",
-    "bevy_core_pipeline",
-    "bevy_pbr",
-    "bevy_scene",
-    "bevy_sprite",
-    "bevy_gltf",
-    "animation",
-    "bevy_picking",
-    "bevy_mesh_picking_backend",
-    "tonemapping_luts",
-    "bevy_ui",
-    "bevy_ui_render",
-    "ktx2",
-    "jpeg",
-    "png",
-    "zstd_rust",
-    "trace",
-    "reflect_auto_register",
+  "x11",
+  "wayland",
+  "default_font",
+  "bevy_render",
+  "bevy_window",
+  "bevy_core_pipeline",
+  "bevy_pbr",
+  "bevy_scene",
+  "bevy_sprite",
+  "bevy_gltf",
+  "animation",
+  "bevy_picking",
+  "bevy_mesh_picking_backend",
+  "tonemapping_luts",
+  "bevy_ui",
+  "bevy_ui_render",
+  "ktx2",
+  "jpeg",
+  "png",
+  "zstd_rust",
+  "trace",
+  "reflect_auto_register",
 ], optional = true }
-avian3d = { version = "0.4.1", default-features = false, features = ["bevy_scene", "collider-from-mesh", "debug-plugin", "parallel", "f32", "3d", "parry-f32", "xpbd_joints"], optional = true }
-cached-path = { version = "0.10.0", features=["progress-bar"], optional = true }
+avian3d = { version = "0.4.1", default-features = false, features = [
+  "bevy_scene",
+  "collider-from-mesh",
+  "debug-plugin",
+  "parallel",
+  "f32",
+  "3d",
+  "parry-f32",
+  "xpbd_joints",
+], optional = true }
+cached-path = { version = "0.10.0", features = [
+  "progress-bar",
+], optional = true }
 bevy_anti_alias = { version = "0.17.3", optional = true }
 bevy_utils = { version = "0.17.3", features = ["debug"] }
 
@@ -71,11 +82,11 @@ default = ["logreader", "sim"]
 logreader = ["dep:cu29-export"]
 # dependencies to build to matrix for copper
 sim = [
-    "dep:bevy",
-    "dep:bevy_anti_alias",
-    "dep:avian3d",
-    "dep:cached-path",
-    "dep:cu29-export",
+  "dep:bevy",
+  "dep:bevy_anti_alias",
+  "dep:avian3d",
+  "dep:cached-path",
+  "dep:cu29-export",
 ] # required for exporting simulation data
 
 [[bin]]

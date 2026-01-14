@@ -23,24 +23,48 @@ embedded_features = "firmware"
 
 ### Hardware
 cu-bdshot = { path = "../../components/bridges/cu_bdshot", optional = true }
-cu-crsf = { path = "../../components/bridges/cu_crsf", default-features = false, features = ["defmt", "alloc"], optional = true }
-cu-msp-bridge = { path = "../../components/bridges/cu_msp_bridge", default-features = false, features = ["defmt", "alloc"], optional = true }
-cu-msp-lib = { path = "../../components/libs/cu_msp_lib", default-features = false, features = ["bincode"] }
+cu-crsf = { path = "../../components/bridges/cu_crsf", default-features = false, features = [
+  "defmt",
+  "alloc",
+], optional = true }
+cu-msp-bridge = { path = "../../components/bridges/cu_msp_bridge", default-features = false, features = [
+  "defmt",
+  "alloc",
+], optional = true }
+cu-msp-lib = { path = "../../components/libs/cu_msp_lib", default-features = false, features = [
+  "bincode",
+] }
 cu-sdlogger = { path = "../../components/libs/cu_sdlogger", optional = true }
 cu-micoairh743 = { path = "../../components/res/cu_micoairh743", optional = true }
-cu-embedded-registry = { path = "../../components/libs/cu_embedded_registry", default-features = false, features = ["defmt"], optional = true }
-cu-logmon = { path = "../../components/monitors/cu_logmon", default-features = false, features = ["defmt", "color_log"], optional = true }
-cu-ahrs = { path = "../../components/tasks/cu_ahrs", default-features = false, features = ["defmt"], optional = true }
-cu-bmi088 = { path = "../../components/sources/cu_bmi088", default-features = false, features = ["defmt"], optional = true }
+cu-embedded-registry = { path = "../../components/libs/cu_embedded_registry", default-features = false, features = [
+  "defmt",
+], optional = true }
+cu-logmon = { path = "../../components/monitors/cu_logmon", default-features = false, features = [
+  "defmt",
+  "color_log",
+], optional = true }
+cu-ahrs = { path = "../../components/tasks/cu_ahrs", default-features = false, features = [
+  "defmt",
+], optional = true }
+cu-bmi088 = { path = "../../components/sources/cu_bmi088", default-features = false, features = [
+  "defmt",
+], optional = true }
 
 ### Algos
 cu-pid = { path = "../../components/tasks/cu_pid", default-features = false, version = "0.11.0" }
 cu-sensor-payloads = { path = "../../components/payloads/cu_sensor_payloads", default-features = false, version = "0.11.0" }
 bincode = { workspace = true }
 serde = { workspace = true }
-cu29-unifiedlog = { path = "../../core/cu29_unifiedlog", default-features = false, features = ["compact"] }
+cu29-unifiedlog = { path = "../../core/cu29_unifiedlog", default-features = false, features = [
+  "compact",
+] }
 spin = { workspace = true }
-uom = { version = "0.37", default-features = false, features = ["serde", "f32", "si", "autoconvert"] }
+uom = { version = "0.37", default-features = false, features = [
+  "serde",
+  "f32",
+  "si",
+  "autoconvert",
+] }
 
 # --> host dependencies <--
 
@@ -48,32 +72,74 @@ uom = { version = "0.37", default-features = false, features = ["serde", "f32", 
 cu29-export = { workspace = true, optional = true }
 
 ## Sim dependencies
-bevy = { version = "0.17.3", default-features = false, features = ["x11", "wayland", "default_font", "bevy_render", "bevy_window", "bevy_core_pipeline", "bevy_pbr", "bevy_scene", "bevy_sprite", "bevy_gltf", "animation", "bevy_picking", "bevy_mesh_picking_backend", "tonemapping_luts", "bevy_ui", "ktx2", "jpeg", "png", "zstd_rust"], optional = true }
-avian3d = { version = "0.4.1", default-features = false, features = ["bevy_scene", "collider-from-mesh", "debug-plugin", "parallel", "f32", "3d", "parry-f32"], optional = true }
+bevy = { version = "0.17.3", default-features = false, features = [
+  "x11",
+  "wayland",
+  "default_font",
+  "bevy_render",
+  "bevy_window",
+  "bevy_core_pipeline",
+  "bevy_pbr",
+  "bevy_scene",
+  "bevy_sprite",
+  "bevy_gltf",
+  "animation",
+  "bevy_picking",
+  "bevy_mesh_picking_backend",
+  "tonemapping_luts",
+  "bevy_ui",
+  "ktx2",
+  "jpeg",
+  "png",
+  "zstd_rust",
+], optional = true }
+avian3d = { version = "0.4.1", default-features = false, features = [
+  "bevy_scene",
+  "collider-from-mesh",
+  "debug-plugin",
+  "parallel",
+  "f32",
+  "3d",
+  "parry-f32",
+], optional = true }
 cached-path = { version = "0.10.0", optional = true }
 evdev = { version = "0.13.2", optional = true }
 
-cu29 = { path = "../../core/cu29", default-features = false, features = ["log-level-debug"], optional = true }
+cu29 = { path = "../../core/cu29", default-features = false, features = [
+  "log-level-debug",
+], optional = true }
 cortex-m-rt = { version = "0.7", optional = true }
 defmt-rtt = { version = "1.1.0", optional = true }
 defmt = { version = "1.0", optional = true }
 panic-probe = { version = "1.0.0", optional = true, features = ["print-defmt"] }
-buddy_system_allocator = { version = "0.12", default-features = false, features = ["use_spin"], optional = true }
-stm32h7xx-hal = { version = "0.16.0", default-features = false, features = ["stm32h743v", "rt", "defmt", "sdmmc", "sdmmc-fatfs"], optional = true }
+buddy_system_allocator = { version = "0.12", default-features = false, features = [
+  "use_spin",
+], optional = true }
+stm32h7xx-hal = { version = "0.16.0", default-features = false, features = [
+  "stm32h743v",
+  "rt",
+  "defmt",
+  "sdmmc",
+  "sdmmc-fatfs",
+], optional = true }
 embedded-io = { version = "0.6", optional = true }
 embedded-hal = { version = "0.2.7", optional = true }
 embedded-alloc = { version = "0.7", optional = true }
 # Keep aligned with stm32h7xx-hal SDMMC support (pulls embedded-sdmmc 0.5).
 embedded-sdmmc = { version = "0.5", default-features = false, optional = true }
-cortex-m = { version = "0.7", features = ["critical-section-single-core"], optional = true }
+cortex-m = { version = "0.7", features = [
+  "critical-section-single-core",
+], optional = true }
 
 [features]
 default = ["sim"]
-textlogs = ["cu29/textlogs",
-            "cu-msp-bridge/textlogs",
-            "cu-msp-bridge/log-level-info",
-            "cu-logmon/textlogs",
-            "cu-logmon/log-level-info"]
+textlogs = [
+  "cu29/textlogs",
+  "cu-msp-bridge/textlogs",
+  "cu-msp-bridge/log-level-info",
+  "cu-logmon/textlogs",
+  "cu-logmon/log-level-info",
+]
 
 
 firmware = [

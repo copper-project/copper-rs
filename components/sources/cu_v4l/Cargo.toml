@@ -22,4 +22,3 @@ v4l = "0.14.0"
 [dev-dependencies]
 rerun = { workspace = true }
 simplelog = "0.12.2"
-

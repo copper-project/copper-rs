@@ -12,11 +12,7 @@ repository.workspace = true
 
 [features]
 default = ["std"]
-std = [
-    "cu29/std",
-    "bincode/std",
-    "serde/std",
-]
+std = ["cu29/std", "bincode/std", "serde/std"]
 textlogs = ["cu29/textlogs"]
 
 [dependencies]

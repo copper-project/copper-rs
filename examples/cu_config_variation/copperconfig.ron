@@ -7,12 +7,14 @@
         (
             id: "dst",
             type: "cu_rp_gpio::RPGpio",
-            config: {
-                "pin": 4,
-            },
+            config: {"pin": 4},
         ),
-     ],
+    ],
     cnx: [
-        (src: "src",  dst: "dst",   msg: "cu_rp_gpio::RPGpioPayload"),
+        (
+            src: "src",
+            dst: "dst",
+            msg: "cu_rp_gpio::RPGpioPayload",
+        ),
     ],
 )

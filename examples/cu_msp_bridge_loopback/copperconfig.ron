@@ -24,10 +24,10 @@
         (
             id: "msp_bridge",
             type: "cu_msp_bridge::CuMspBridgeStd",
-            resources: { "serial": "fc.serial" },
+            resources: {"serial": "fc.serial"},
             channels: [
-                Tx ( id: "requests" ),
-                Rx ( id: "responses" ),
+                Tx(id: "requests"),
+                Rx(id: "responses"),
             ],
         ),
     ],

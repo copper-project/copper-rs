@@ -8,8 +8,12 @@
             id: "tester",
             type: "cu_ads7883_new::test_support::ADS78883TestSink",
         ),
-     ],
+    ],
     cnx: [
-        (src: "src",  dst: "tester",   msg: "cu_ads7883_new::ADSReadingPayload"),
+        (
+            src: "src",
+            dst: "tester",
+            msg: "cu_ads7883_new::ADSReadingPayload",
+        ),
     ],
 )

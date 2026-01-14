@@ -20,4 +20,7 @@ tempfile = { workspace = true }
 serde = { workspace = true }
 
 [package.metadata.cargo-machete]
-ignored = ["cu-caterpillar", "cu-rp-gpio"] # copperconfig.ron use caterpillar and rp-gpio as an example
+ignored = [
+  "cu-caterpillar",
+  "cu-rp-gpio",
+] # copperconfig.ron use caterpillar and rp-gpio as an example

@@ -21,7 +21,7 @@ required-features = ["std"]
 cu29-clock = { workspace = true }
 cu29-log = { workspace = true }
 cu29-log-derive = { workspace = true }
-cu29-log-runtime = { workspace = true }  # needed
+cu29-log-runtime = { workspace = true }      # needed
 cu29-traits = { workspace = true }
 cu29-unifiedlog = { workspace = true }
 cu29-value = { workspace = true }
@@ -35,7 +35,12 @@ serde = { workspace = true }
 smallvec = { workspace = true }
 arrayvec = { version = "0.7", default-features = false, features = ["serde"] }
 html-escape = { version = "0.2", default-features = false }
-petgraph = { version = "0.8", default-features = false, features = ["serde", "serde-1", "serde_derive", "stable_graph"] }
+petgraph = { version = "0.8", default-features = false, features = [
+  "serde",
+  "serde-1",
+  "serde_derive",
+  "stable_graph",
+] }
 ron = { version = "0.12", default-features = false }
 hashbrown = { workspace = true }
 paste = { workspace = true }
@@ -43,22 +48,44 @@ layout = { package = "layout-rs", version = "0.1.3", optional = true }
 svg = { version = "0.18", optional = true }
 
 # std only dependencies
-clap = { workspace = true, optional = true }             # CLI
-rayon = { workspace = true, optional = true }            # Used for async tasks
-tempfile = { workspace = true, optional = true }         # only used in CLI for svg generation
-object-pool = { version = "0.6", optional = true }  # used for large object pooling, this will never happen in no-std
+clap = { workspace = true, optional = true }       # CLI
+rayon = { workspace = true, optional = true }      # Used for async tasks
+tempfile = { workspace = true, optional = true }   # only used in CLI for svg generation
+object-pool = { version = "0.6", optional = true } # used for large object pooling, this will never happen in no-std
 
 # no std only dependencies
 spin = { workspace = true } # should be removed when std is on, but cargo is bad at negative features
-libm = { version = "0.2" } # f64 math for 32 bit platforms
+libm = { version = "0.2" }  # f64 math for 32 bit platforms
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
-cudarc = { version = "0.18", optional = true, features = ["cuda-version-from-build-system"] }
+cudarc = { version = "0.18", optional = true, features = [
+  "cuda-version-from-build-system",
+] }
 
 [features]
 default = ["std"]
-defmt = ["dep:defmt", "cu29-log/defmt", "cu29-log-derive/defmt", "cu29-traits/defmt"]
+defmt = [
+  "dep:defmt",
+  "cu29-log/defmt",
+  "cu29-log-derive/defmt",
+  "cu29-traits/defmt",
+]
 cuda = ["dep:cudarc"]
 macro_debug = []
-std = ["dep:clap", "dep:rayon", "dep:tempfile", "dep:object-pool", "dep:layout", "dep:svg", "ron/std", "cu29-clock/std", "cu29-log/std", "cu29-log-runtime/std", "cu29-traits/std", "cu29-unifiedlog/std", "cu29-value/std", "petgraph/std"]
+std = [
+  "dep:clap",
+  "dep:rayon",
+  "dep:tempfile",
+  "dep:object-pool",
+  "dep:layout",
+  "dep:svg",
+  "ron/std",
+  "cu29-clock/std",
+  "cu29-log/std",
+  "cu29-log-runtime/std",
+  "cu29-traits/std",
+  "cu29-unifiedlog/std",
+  "cu29-value/std",
+  "petgraph/std",
+]
 memory_monitoring = []

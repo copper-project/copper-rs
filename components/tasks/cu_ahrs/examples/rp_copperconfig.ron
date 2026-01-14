@@ -11,11 +11,25 @@
                 gyro_sample_delay_ms: 10,
             ),
         ),
-        (id: "ahrs", type: "cu_ahrs::CuAhrs"),
-        (id: "sink", type: "tasks::RpySink"),
+        (
+            id: "ahrs",
+            type: "cu_ahrs::CuAhrs",
+        ),
+        (
+            id: "sink",
+            type: "tasks::RpySink",
+        ),
     ],
     cnx: [
-        (src: "mpu", dst: "ahrs", msg: "cu_sensor_payloads::ImuPayload"),
-        (src: "ahrs", dst: "sink", msg: "cu_ahrs::AhrsPose"),
+        (
+            src: "mpu",
+            dst: "ahrs",
+            msg: "cu_sensor_payloads::ImuPayload",
+        ),
+        (
+            src: "ahrs",
+            dst: "sink",
+            msg: "cu_ahrs::AhrsPose",
+        ),
     ],
 )

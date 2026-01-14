@@ -13,4 +13,3 @@ description = "Copper sink task for Zenoh."
 [dependencies]
 zenoh = { version = "1.4.0" }
 cu29 = { workspace = true }
-

@@ -9,7 +9,11 @@
             type: "FlippingSourceTwo",
         ),
     ],
-     cnx: [
-        (src: "src",  dst: "gpio",   msg: "MyMsg"),
+    cnx: [
+        (
+            src: "src",
+            dst: "gpio",
+            msg: "MyMsg",
+        ),
     ],
 )

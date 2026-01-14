@@ -7,10 +7,14 @@ target = "thumbv7em-none-eabihf"
 
 [target.thumbv7em-none-eabihf]
 rustflags = [
-    "-C", "link-arg=-Tlink.x",
-    "-C", "link-arg=-Tdefmt.x",
-    "-C", "target-cpu=cortex-m7",
-    "-C", "panic=abort",
+  "-C",
+  "link-arg=-Tlink.x",
+  "-C",
+  "link-arg=-Tdefmt.x",
+  "-C",
+  "target-cpu=cortex-m7",
+  "-C",
+  "panic=abort",
 ]
 
 runner = "probe-rs run --chip STM32H743VITx --protocol swd --speed 8000"

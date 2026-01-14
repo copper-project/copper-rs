@@ -9,10 +9,7 @@
         level: "debug",
     ),
     includes: [
-        (
-            path: "base.ron",
-            params: {},
-        ),
+        (path: "base.ron", params: {}),
         (
             path: "motors.ron",
             params: {

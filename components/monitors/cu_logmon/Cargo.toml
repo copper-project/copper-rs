@@ -22,7 +22,9 @@ spin = { workspace = true }
 
 [dev-dependencies]
 log = "0.4"
-cu29 = { path = "../../../core/cu29", version = "0.11.0", default-features = false, features = ["log-level-info"] }
+cu29 = { path = "../../../core/cu29", version = "0.11.0", default-features = false, features = [
+  "log-level-info",
+] }
 cu29-helpers = { path = "../../../core/cu29_helpers", version = "0.11.0" }
 serde = { workspace = true }
 
