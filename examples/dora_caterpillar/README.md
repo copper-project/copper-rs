@@ -23,3 +23,4 @@ cargo install dora-cli --version 0.4.0 --locked
 - Requires `dora-cli` 0.4.0 or newer (matches `dora-node-api`).
 - The dataflow uses `dora/timer/millis/1` to drive the source node.
 - End-to-end latency reports src -> gpio-7 in the `End2End` row.
+- Per-task rows report hop latency: `receiver_now - sender_timestamp`.

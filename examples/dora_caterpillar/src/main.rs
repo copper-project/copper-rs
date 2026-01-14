@@ -1,6 +1,6 @@
 use dora_node_api::arrow::array::UInt64Array;
 use dora_node_api::dora_core::config::DataId;
-use dora_node_api::{DoraNode, Event, EventStream, MetadataParameters};
+use dora_node_api::{DoraNode, Event, EventStream, Metadata, MetadataParameters};
 use eyre::{ContextCompat, Result, bail};
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -78,15 +78,18 @@ fn run_source(node: &mut DoraNode, events: &mut EventStream) -> Result<()> {
 
     while let Some(event) = events.recv() {
         match event {
-            Event::Input { .. } => {
-                let tick_start = Instant::now();
+            Event::Input { metadata, .. } => {
+                let recv_ns = now_ns();
+                let sender_ns = metadata_ns(&metadata).unwrap_or(recv_ns);
+                let hop_latency = recv_ns.saturating_sub(sender_ns);
+                send_stat(node, &stats_id, hop_latency)?;
+
                 state = !state;
                 seq = seq.wrapping_add(1);
-                let msg = UInt64Array::from(vec![seq, state as u64, now_ns()]);
+                let send_ns = now_ns();
+                let msg = UInt64Array::from(vec![seq, state as u64, send_ns, send_ns]);
 
                 node.send_output(out_id.clone(), MetadataParameters::default(), msg)?;
-                let duration_ns = tick_start.elapsed().as_nanos() as u64;
-                send_stat(node, &stats_id, duration_ns)?;
             }
             Event::Stop(_) => break,
             _ => {}
@@ -105,19 +108,19 @@ fn run_chain(node: &mut DoraNode, events: &mut EventStream, index: usize) -> Res
     while let Some(event) = events.recv() {
         match event {
             Event::Input { data, .. } => {
-                let tick_start = Instant::now();
-                let (seq, state, origin_ns) = decode_msg(&data)?;
-
+                let (seq, state, origin_ns, last_send_ns) = decode_msg(&data)?;
+                let hop_latency = now_ns().saturating_sub(last_send_ns);
                 if send_chain {
-                    let msg = UInt64Array::from(vec![seq, state, origin_ns]);
+                    let send_ns = now_ns();
+                    let msg = UInt64Array::from(vec![seq, state, origin_ns, send_ns]);
                     node.send_output(chain_id.clone(), MetadataParameters::default(), msg)?;
                 }
 
-                let msg = UInt64Array::from(vec![seq, state, origin_ns]);
+                let send_ns = now_ns();
+                let msg = UInt64Array::from(vec![seq, state, origin_ns, send_ns]);
                 node.send_output(gpio_id.clone(), MetadataParameters::default(), msg)?;
 
-                let duration_ns = tick_start.elapsed().as_nanos() as u64;
-                send_stat(node, &stats_id, duration_ns)?;
+                send_stat(node, &stats_id, hop_latency)?;
             }
             Event::Stop(_) => break,
             _ => {}
@@ -135,16 +138,15 @@ fn run_gpio(node: &mut DoraNode, events: &mut EventStream, index: usize) -> Resu
     while let Some(event) = events.recv() {
         match event {
             Event::Input { data, .. } => {
-                let tick_start = Instant::now();
-                let (_, _, origin_ns) = decode_msg(&data)?;
+                let (_, _, origin_ns, last_send_ns) = decode_msg(&data)?;
+                let hop_latency = now_ns().saturating_sub(last_send_ns);
 
                 if record_end2end {
                     let end_to_end = now_ns().saturating_sub(origin_ns);
                     send_stat(node, &end2end_id, end_to_end)?;
                 }
 
-                let duration_ns = tick_start.elapsed().as_nanos() as u64;
-                send_stat(node, &stats_id, duration_ns)?;
+                send_stat(node, &stats_id, hop_latency)?;
             }
             Event::Stop(_) => break,
             _ => {}
@@ -171,15 +173,20 @@ fn run_stats(events: &mut EventStream) -> Result<()> {
     Ok(())
 }
 
-fn decode_msg(data: &dora_node_api::ArrowData) -> Result<(u64, u64, u64)> {
+fn decode_msg(data: &dora_node_api::ArrowData) -> Result<(u64, u64, u64, u64)> {
     let array = data
         .as_any()
         .downcast_ref::<UInt64Array>()
         .context("expected UInt64Array for caterpillar message")?;
-    if array.len() < 3 {
-        bail!("caterpillar message requires 3 u64 values");
+    if array.len() < 4 {
+        bail!("caterpillar message requires 4 u64 values");
     }
-    Ok((array.value(0), array.value(1), array.value(2)))
+    Ok((
+        array.value(0),
+        array.value(1),
+        array.value(2),
+        array.value(3),
+    ))
 }
 
 fn decode_stat(data: &dora_node_api::ArrowData) -> Result<u64> {
@@ -204,6 +211,16 @@ fn now_ns() -> u64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_else(|_| Duration::from_secs(0))
         .as_nanos() as u64
+}
+
+fn metadata_ns(metadata: &Metadata) -> Option<u64> {
+    metadata
+        .timestamp()
+        .get_time()
+        .to_system_time()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .map(|duration| duration.as_nanos() as u64)
 }
 
 struct StatsStore {
