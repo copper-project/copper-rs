@@ -1,31 +1,15 @@
 use dora_node_api::arrow::array::UInt64Array;
 use dora_node_api::dora_core::config::DataId;
 use dora_node_api::{DoraNode, Event, EventStream, Metadata, MetadataParameters};
-use eyre::{ContextCompat, Result, bail};
+use eyre::{bail, ContextCompat, Result};
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const CHAIN_LEN: usize = 8;
 const TASK_COUNT: usize = 1 + CHAIN_LEN + CHAIN_LEN;
 const TASK_ORDER: [&str; TASK_COUNT + 1] = [
-    "src",
-    "ct-0",
-    "gpio-0",
-    "ct-1",
-    "gpio-1",
-    "ct-2",
-    "gpio-2",
-    "ct-3",
-    "gpio-3",
-    "ct-4",
-    "gpio-4",
-    "ct-5",
-    "gpio-5",
-    "ct-6",
-    "gpio-6",
-    "ct-7",
-    "gpio-7",
-    "End2End",
+    "src", "ct-0", "gpio-0", "ct-1", "gpio-1", "ct-2", "gpio-2", "ct-3", "gpio-3", "ct-4",
+    "gpio-4", "ct-5", "gpio-5", "ct-6", "gpio-6", "ct-7", "gpio-7", "End2End",
 ];
 
 fn main() -> Result<()> {
@@ -61,7 +45,9 @@ impl Role {
             }
         }
         if let Some(rest) = id.strip_prefix("gpio-") {
-            let index: usize = rest.parse().map_err(|_| eyre::eyre!("invalid gpio index"))?;
+            let index: usize = rest
+                .parse()
+                .map_err(|_| eyre::eyre!("invalid gpio index"))?;
             if index < CHAIN_LEN {
                 return Ok(Self::Gpio(index));
             }
