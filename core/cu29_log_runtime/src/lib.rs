@@ -12,8 +12,8 @@ use log::Log;
 #[cfg(feature = "std")]
 use std::cell::Cell;
 
-#[cfg(all(not(feature = "std"), target_has_atomic = "32"))]
-use core::sync::atomic::{AtomicU32, Ordering};
+#[cfg(not(feature = "std"))]
+use portable_atomic::{AtomicU32, Ordering};
 
 #[cfg(not(feature = "std"))]
 mod imp {
@@ -68,8 +68,8 @@ thread_local! {
     static CURRENT_CULISTID: Cell<u32> = const { Cell::new(CULISTID_UNKNOWN) };
 }
 
-#[cfg(all(not(feature = "std"), target_has_atomic = "32"))]
-// no_std fallback uses a global atomic; suitable for single-threaded targets.
+#[cfg(not(feature = "std"))]
+// no_std uses a global atomic; portable-atomic covers targets without native atomics.
 static CURRENT_CULISTID: AtomicU32 = AtomicU32::new(CULISTID_UNKNOWN);
 
 /// Returns the current CopperList id for this execution context.
@@ -79,13 +79,9 @@ pub fn current_culistid() -> u32 {
     {
         CURRENT_CULISTID.with(|id| id.get())
     }
-    #[cfg(all(not(feature = "std"), target_has_atomic = "32"))]
+    #[cfg(not(feature = "std"))]
     {
         CURRENT_CULISTID.load(Ordering::SeqCst)
-    }
-    #[cfg(all(not(feature = "std"), not(target_has_atomic = "32")))]
-    {
-        CULISTID_UNKNOWN
     }
 }
 
@@ -100,14 +96,9 @@ pub fn set_current_culistid(culistid: u32) -> u32 {
             prev
         })
     }
-    #[cfg(all(not(feature = "std"), target_has_atomic = "32"))]
+    #[cfg(not(feature = "std"))]
     {
         CURRENT_CULISTID.swap(culistid, Ordering::SeqCst)
-    }
-    #[cfg(all(not(feature = "std"), not(target_has_atomic = "32")))]
-    {
-        let _ = culistid;
-        CULISTID_UNKNOWN
     }
 }
 

@@ -22,10 +22,18 @@ bincode = { workspace = true }
 smallvec = { workspace = true }
 spin = { workspace = true }
 log = { version = "0.4", default-features = false }
+portable-atomic = { version = "1.11", default-features = false, features = ["fallback"] }
 
 [dev-dependencies]
 cu29-value = { workspace = true }
 
 [features]
 default = ["std"]
-std = ["cu29-log/std", "cu29-traits/std", "cu29-clock/std", "bincode/std"]
+std = [
+    "cu29-log/std",
+    "cu29-traits/std",
+    "cu29-clock/std",
+    "bincode/std",
+    "portable-atomic/std",
+    "portable-atomic/require-cas",
+]
