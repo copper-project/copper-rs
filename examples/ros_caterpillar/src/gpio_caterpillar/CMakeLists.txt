@@ -8,21 +8,36 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
-find_package(std_msgs REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
+
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/CaterpillarMsg.msg"
+  "msg/StatSample.msg"
+)
+
+ament_export_dependencies(rosidl_default_runtime)
 
 add_executable(flip_node src/flip_node.cpp)
-ament_target_dependencies(flip_node rclcpp std_msgs)
+ament_target_dependencies(flip_node rclcpp)
+rosidl_target_interfaces(flip_node ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
 add_executable(propagate_node src/propagate_node.cpp)
-ament_target_dependencies(propagate_node rclcpp std_msgs)
+ament_target_dependencies(propagate_node rclcpp)
+rosidl_target_interfaces(propagate_node ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
 add_executable(actuation_node src/actuation_node.cpp)
-ament_target_dependencies(actuation_node rclcpp std_msgs)
+ament_target_dependencies(actuation_node rclcpp)
+rosidl_target_interfaces(actuation_node ${PROJECT_NAME} "rosidl_typesupport_cpp")
+
+add_executable(stats_node src/stats_node.cpp)
+ament_target_dependencies(stats_node rclcpp)
+rosidl_target_interfaces(stats_node ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
 install(TARGETS
   flip_node
   propagate_node
   actuation_node
+  stats_node
   DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
