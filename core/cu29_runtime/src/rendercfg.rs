@@ -13,6 +13,7 @@ use layout::core::style::{LineStyleKind, StyleAttr};
 use layout::std_shapes::shapes::{Arrow, Element, LineEndKind, RecordDef, ShapeKind};
 use layout::topo::layout::VisualGraph;
 use std::cmp::Ordering;
+use std::collections::{BTreeSet, HashSet};
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
@@ -51,6 +52,11 @@ const BRIDGE_HEADER_BG: &str = "#f7d7e4";
 const SOURCE_HEADER_BG: &str = "#ddefc7";
 const SINK_HEADER_BG: &str = "#cce0ff";
 const TASK_HEADER_BG: &str = "#fde7c2";
+const RESOURCE_TITLE_BG: &str = "#eef1f6";
+const RESOURCE_EXCLUSIVE_BG: &str = "#e3f4e7";
+const RESOURCE_SHARED_BG: &str = "#fff0d9";
+const RESOURCE_UNUSED_BG: &str = "#f1f1f1";
+const RESOURCE_UNUSED_TEXT: &str = "#8d8d8d";
 const COPPER_LINK_COLOR: &str = "#0000E0";
 const EDGE_COLOR_PALETTE: [&str; 10] = [
     "#1F77B4", "#FF7F0E", "#2CA02C", "#D62728", "#9467BD", "#8C564B", "#E377C2", "#7F7F7F",
@@ -62,6 +68,8 @@ const EDGE_COLOR_ORDER: [usize; 10] = [0, 2, 1, 9, 7, 8, 3, 5, 6, 4];
 const GRAPH_MARGIN: f64 = 20.0;
 const CLUSTER_MARGIN: f64 = 20.0;
 const SECTION_SPACING: f64 = 60.0;
+const RESOURCE_TABLE_MARGIN: f64 = 18.0;
+const RESOURCE_TABLE_GAP: f64 = 12.0;
 const BOX_SHAPE_PADDING: f64 = 10.0;
 const CELL_PADDING: f64 = 6.0;
 const CELL_LINE_SPACING: f64 = 2.0;
@@ -105,6 +113,12 @@ const LEGEND_ITEMS: [(&str, &str); 4] = [
     ("Task", TASK_HEADER_BG),
     ("Sink", SINK_HEADER_BG),
     ("Bridge", BRIDGE_HEADER_BG),
+];
+const RESOURCE_LEGEND_TITLE: &str = "Resources";
+const RESOURCE_LEGEND_ITEMS: [(&str, &str); 3] = [
+    ("Exclusive", RESOURCE_EXCLUSIVE_BG),
+    ("Shared", RESOURCE_SHARED_BG),
+    ("Unused", RESOURCE_UNUSED_BG),
 ];
 
 #[derive(Parser)]
@@ -194,9 +208,10 @@ fn open_svg(path: &std::path::Path) -> std::io::Result<()> {
 /// Run the full render pipeline and return SVG bytes for the CLI.
 fn render_config_svg(config: &config::CuConfig, mission_id: Option<&str>) -> CuResult<Vec<u8>> {
     let sections = build_sections(config, mission_id)?;
+    let resource_catalog = collect_resource_catalog(config)?;
     let mut layouts = Vec::new();
     for section in sections {
-        layouts.push(build_section_layout(config, &section)?);
+        layouts.push(build_section_layout(config, &section, &resource_catalog)?);
     }
 
     Ok(render_sections_to_svg(&layouts).into_bytes())
@@ -210,6 +225,7 @@ fn build_sections<'a>(
     let sections = match (&config.graphs, mission_id) {
         (ConfigGraphs::Simple(graph), _) => vec![SectionRef {
             label: Some("Default".to_string()),
+            mission_id: None,
             graph,
         }],
         (ConfigGraphs::Missions(graphs), Some(id)) => {
@@ -218,6 +234,7 @@ fn build_sections<'a>(
                 .ok_or_else(|| CuError::from(format!("Mission {id} not found")))?;
             vec![SectionRef {
                 label: Some(id.to_string()),
+                mission_id: Some(id.to_string()),
                 graph,
             }]
         }
@@ -228,6 +245,7 @@ fn build_sections<'a>(
                 .into_iter()
                 .map(|(label, graph)| SectionRef {
                     label: Some(label.clone()),
+                    mission_id: Some(label.clone()),
                     graph,
                 })
                 .collect()
@@ -241,6 +259,7 @@ fn build_sections<'a>(
 fn build_section_layout(
     config: &config::CuConfig,
     section: &SectionRef<'_>,
+    resource_catalog: &HashMap<String, BTreeSet<String>>,
 ) -> CuResult<SectionLayout> {
     let mut topology = build_render_topology(section.graph, &config.bridges);
     topology.sort_connections();
@@ -386,6 +405,8 @@ fn build_section_layout(
         port_anchors.insert(node.handle, anchors);
     }
 
+    let resource_tables = build_resource_tables(config, section, resource_catalog)?;
+
     Ok(SectionLayout {
         label: section.label.clone(),
         graph,
@@ -393,7 +414,268 @@ fn build_section_layout(
         edges,
         bounds: (min, max),
         port_anchors,
+        resource_tables,
     })
+}
+
+fn collect_resource_catalog(
+    config: &config::CuConfig,
+) -> CuResult<HashMap<String, BTreeSet<String>>> {
+    let bundle_ids: HashSet<String> = config
+        .resources
+        .iter()
+        .map(|bundle| bundle.id.clone())
+        .collect();
+    let mut catalog: HashMap<String, BTreeSet<String>> = HashMap::new();
+
+    let mut collect_graph = |graph: &config::CuGraph| -> CuResult<()> {
+        for (_, node) in graph.get_all_nodes() {
+            let Some(resources) = node.get_resources() else {
+                continue;
+            };
+            for path in resources.values() {
+                let (bundle_id, resource_name) = parse_resource_path(path)?;
+                if !bundle_ids.contains(&bundle_id) {
+                    return Err(CuError::from(format!(
+                        "Resource '{}' references unknown bundle '{}'",
+                        path, bundle_id
+                    )));
+                }
+                catalog.entry(bundle_id).or_default().insert(resource_name);
+            }
+        }
+        Ok(())
+    };
+
+    match &config.graphs {
+        ConfigGraphs::Simple(graph) => collect_graph(graph)?,
+        ConfigGraphs::Missions(graphs) => {
+            for graph in graphs.values() {
+                collect_graph(graph)?;
+            }
+        }
+    }
+
+    Ok(catalog)
+}
+
+fn build_resource_tables(
+    config: &config::CuConfig,
+    section: &SectionRef<'_>,
+    resource_catalog: &HashMap<String, BTreeSet<String>>,
+) -> CuResult<Vec<ResourceTable>> {
+    let owners_by_bundle = collect_graph_resource_owners(section.graph)?;
+    let mission_id = section.mission_id.as_deref();
+    let mut tables = Vec::new();
+
+    for bundle in &config.resources {
+        if !bundle_applies(&bundle.missions, mission_id) {
+            continue;
+        }
+        let resources = resource_catalog
+            .get(&bundle.id)
+            .map(|set| set.iter().cloned().collect::<Vec<_>>())
+            .unwrap_or_default();
+        let table = build_resource_table(bundle, &resources, owners_by_bundle.get(&bundle.id));
+        let size = record_size(&table, Orientation::TopToBottom);
+        tables.push(ResourceTable { table, size });
+    }
+
+    Ok(tables)
+}
+
+fn build_resource_table(
+    bundle: &config::ResourceBundleConfig,
+    resources: &[String],
+    owners_by_resource: Option<&HashMap<String, Vec<ResourceOwner>>>,
+) -> TableNode {
+    let mut rows = Vec::new();
+    let provider_label = wrap_type_label(
+        &strip_type_params(bundle.provider.as_str()),
+        TYPE_WRAP_WIDTH,
+    );
+    let header_lines = vec![
+        CellLine::new(format!("Bundle: {}", bundle.id), "black", true, FONT_SIZE),
+        CellLine::code(provider_label, DIM_GRAY, false, TYPE_FONT_SIZE),
+    ];
+    rows.push(TableNode::Cell(
+        TableCell::new(header_lines)
+            .with_background(RESOURCE_TITLE_BG)
+            .with_align(TextAlign::Center),
+    ));
+
+    let mut resource_column = Vec::new();
+    let mut users_column = Vec::new();
+    resource_column.push(TableNode::Cell(
+        TableCell::single_line_sized("Resource", "black", false, PORT_HEADER_FONT_SIZE)
+            .with_background(HEADER_BG)
+            .with_align(TextAlign::Left),
+    ));
+    users_column.push(TableNode::Cell(
+        TableCell::single_line_sized("Used by", "black", false, PORT_HEADER_FONT_SIZE)
+            .with_background(HEADER_BG)
+            .with_align(TextAlign::Left),
+    ));
+
+    if resources.is_empty() {
+        let resource_cell =
+            TableCell::single_line_sized(PLACEHOLDER_TEXT, LIGHT_GRAY, false, PORT_VALUE_FONT_SIZE)
+                .with_background(RESOURCE_UNUSED_BG)
+                .with_border_width(VALUE_BORDER_WIDTH)
+                .with_align(TextAlign::Left);
+        let owners_cell = TableCell::single_line_sized(
+            "unused",
+            RESOURCE_UNUSED_TEXT,
+            false,
+            PORT_VALUE_FONT_SIZE,
+        )
+        .with_border_width(VALUE_BORDER_WIDTH)
+        .with_align(TextAlign::Left);
+        resource_column.push(TableNode::Cell(resource_cell));
+        users_column.push(TableNode::Cell(owners_cell));
+    } else {
+        for resource in resources {
+            let owners = owners_by_resource
+                .and_then(|map| map.get(resource))
+                .cloned()
+                .unwrap_or_default();
+            let usage = resource_usage(&owners);
+            let resource_label = format!("{}.{}", bundle.id, resource);
+            let resource_cell = TableCell::new(vec![CellLine::code(
+                resource_label,
+                "black",
+                false,
+                PORT_VALUE_FONT_SIZE,
+            )])
+            .with_background(resource_usage_color(usage))
+            .with_border_width(VALUE_BORDER_WIDTH)
+            .with_align(TextAlign::Left);
+            let owners_cell = TableCell::new(format_resource_owners(&owners, usage))
+                .with_border_width(VALUE_BORDER_WIDTH)
+                .with_align(TextAlign::Left);
+            resource_column.push(TableNode::Cell(resource_cell));
+            users_column.push(TableNode::Cell(owners_cell));
+        }
+    }
+
+    rows.push(TableNode::Array(vec![
+        TableNode::Array(resource_column),
+        TableNode::Array(users_column),
+    ]));
+
+    TableNode::Array(rows)
+}
+
+fn collect_graph_resource_owners(
+    graph: &config::CuGraph,
+) -> CuResult<HashMap<String, HashMap<String, Vec<ResourceOwner>>>> {
+    let mut owners: HashMap<String, HashMap<String, Vec<ResourceOwner>>> = HashMap::new();
+    for (_, node) in graph.get_all_nodes() {
+        let Some(resources) = node.get_resources() else {
+            continue;
+        };
+        let owner = ResourceOwner {
+            name: node.get_id(),
+            flavor: node.get_flavor(),
+        };
+        for path in resources.values() {
+            let (bundle_id, resource_name) = parse_resource_path(path)?;
+            owners
+                .entry(bundle_id)
+                .or_default()
+                .entry(resource_name)
+                .or_default()
+                .push(owner.clone());
+        }
+    }
+
+    for bundle in owners.values_mut() {
+        for list in bundle.values_mut() {
+            dedup_owners(list);
+        }
+    }
+
+    Ok(owners)
+}
+
+fn dedup_owners(owners: &mut Vec<ResourceOwner>) {
+    owners.sort_by(|a, b| {
+        flavor_rank(a.flavor)
+            .cmp(&flavor_rank(b.flavor))
+            .then_with(|| a.name.cmp(&b.name))
+    });
+    owners.dedup_by(|a, b| a.flavor == b.flavor && a.name == b.name);
+}
+
+fn flavor_rank(flavor: config::Flavor) -> u8 {
+    match flavor {
+        config::Flavor::Task => 0,
+        config::Flavor::Bridge => 1,
+    }
+}
+
+fn resource_usage(owners: &[ResourceOwner]) -> ResourceUsage {
+    match owners.len() {
+        0 => ResourceUsage::Unused,
+        1 => ResourceUsage::Exclusive,
+        _ => ResourceUsage::Shared,
+    }
+}
+
+fn resource_usage_color(usage: ResourceUsage) -> &'static str {
+    match usage {
+        ResourceUsage::Exclusive => RESOURCE_EXCLUSIVE_BG,
+        ResourceUsage::Shared => RESOURCE_SHARED_BG,
+        ResourceUsage::Unused => RESOURCE_UNUSED_BG,
+    }
+}
+
+fn format_resource_owners(owners: &[ResourceOwner], usage: ResourceUsage) -> Vec<CellLine> {
+    if owners.is_empty() && matches!(usage, ResourceUsage::Unused) {
+        return vec![CellLine::new(
+            "unused",
+            RESOURCE_UNUSED_TEXT,
+            false,
+            PORT_VALUE_FONT_SIZE,
+        )];
+    }
+
+    owners
+        .iter()
+        .map(|owner| {
+            let (label, color) = match owner.flavor {
+                config::Flavor::Task => (format!("task: {}", owner.name), "black"),
+                config::Flavor::Bridge => (format!("bridge: {}", owner.name), DIM_GRAY),
+            };
+            CellLine::code(label, color, false, PORT_VALUE_FONT_SIZE)
+        })
+        .collect()
+}
+
+fn bundle_applies(missions: &Option<Vec<String>>, mission_id: Option<&str>) -> bool {
+    match mission_id {
+        None => true,
+        Some(id) => missions
+            .as_ref()
+            .map(|list| list.iter().any(|m| m == id))
+            .unwrap_or(true),
+    }
+}
+
+fn parse_resource_path(path: &str) -> CuResult<(String, String)> {
+    let (bundle_id, name) = path.split_once('.').ok_or_else(|| {
+        CuError::from(format!(
+            "Resource '{path}' is missing a bundle prefix (expected bundle.resource)"
+        ))
+    })?;
+
+    if bundle_id.is_empty() || name.is_empty() {
+        return Err(CuError::from(format!(
+            "Resource '{path}' must use the 'bundle.resource' format"
+        )));
+    }
+
+    Ok((bundle_id.to_string(), name.to_string()))
 }
 
 /// Build the record table for a node and capture port ids for routing.
@@ -880,6 +1162,23 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
             edge_paths.push(path);
         }
 
+        let mut resource_table_positions: Vec<(Point, &ResourceTable)> = Vec::new();
+        if !section.resource_tables.is_empty() {
+            let content_left = expanded_bounds.0.x;
+            let content_bottom = expanded_bounds.1.y;
+            let mut max_table_width: f64 = 0.0;
+            let mut cursor_table_y = content_bottom + RESOURCE_TABLE_MARGIN;
+            for table in &section.resource_tables {
+                let top_left = Point::new(content_left, cursor_table_y);
+                resource_table_positions.push((top_left, table));
+                cursor_table_y += table.size.y + RESOURCE_TABLE_GAP;
+                max_table_width = max_table_width.max(table.size.x);
+            }
+            let tables_bottom = cursor_table_y - RESOURCE_TABLE_GAP;
+            expanded_bounds.1.y = expanded_bounds.1.y.max(tables_bottom);
+            expanded_bounds.1.x = expanded_bounds.1.x.max(content_left + max_table_width);
+        }
+
         let section_min = Point::new(
             expanded_bounds.0.x - cluster_margin,
             expanded_bounds.0.y - cluster_margin,
@@ -929,6 +1228,15 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
                 Point::new(label_pos.x, label_pos.y - label_size.y / 2.0).sub(Point::new(2.0, 2.0)),
                 Point::new(label_pos.x + label_size.x, label_pos.y + label_size.y / 2.0)
                     .add(Point::new(2.0, 2.0)),
+            ));
+        }
+
+        for (top_left, table) in &resource_table_positions {
+            let top_left = top_left.add(content_offset);
+            let bottom_right = Point::new(top_left.x + table.size.x, top_left.y + table.size.y);
+            blocked_boxes.push((
+                top_left.sub(Point::new(4.0, 4.0)),
+                bottom_right.add(Point::new(4.0, 4.0)),
             ));
         }
 
@@ -1085,6 +1393,10 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
             draw_node_table(&mut svg, node, element, content_offset);
         }
 
+        for (top_left, table) in &resource_table_positions {
+            draw_resource_table(&mut svg, table, top_left.add(content_offset));
+        }
+
         cursor_y += (section_max.y - section_min.y) + SECTION_SPACING;
     }
 
@@ -1111,6 +1423,33 @@ fn draw_node_table(svg: &mut SvgWriter, node: &NodeRender, element: &Element, of
     visit_table(
         &node.table,
         element.orientation,
+        center,
+        size,
+        &mut renderer,
+    );
+    svg.draw_rect(
+        top_left,
+        size,
+        Some(BORDER_COLOR),
+        OUTER_BORDER_WIDTH,
+        None,
+        0.0,
+    );
+}
+
+fn draw_resource_table(svg: &mut SvgWriter, table: &ResourceTable, top_left: Point) {
+    let size = table.size;
+    let center = Point::new(top_left.x + size.x / 2.0, top_left.y + size.y / 2.0);
+    svg.draw_rect(top_left, size, None, 0.0, Some("white"), 0.0);
+
+    let mut renderer = TableRenderer {
+        svg,
+        node_left_x: top_left.x,
+        node_right_x: top_left.x + size.x,
+    };
+    visit_table(
+        &table.table,
+        Orientation::TopToBottom,
         center,
         size,
         &mut renderer,
@@ -1198,6 +1537,46 @@ fn draw_legend(svg: &mut SvgWriter, top_y: f64, content_right: f64) -> f64 {
             FontFamily::Sans,
         );
         cursor_y += item_height + LEGEND_ROW_GAP;
+    }
+
+    if !RESOURCE_LEGEND_ITEMS.is_empty() {
+        cursor_y += LEGEND_SECTION_GAP;
+        let title_y = cursor_y + LEGEND_FONT_SIZE as f64 / 2.0;
+        svg.draw_text(
+            Point::new(top_left.x + LEGEND_PADDING, title_y),
+            RESOURCE_LEGEND_TITLE,
+            LEGEND_FONT_SIZE,
+            DIM_GRAY,
+            true,
+            "start",
+            FontFamily::Sans,
+        );
+        cursor_y += LEGEND_FONT_SIZE as f64 + LEGEND_ROW_GAP;
+
+        for (label, color) in RESOURCE_LEGEND_ITEMS {
+            let center_y = cursor_y + item_height / 2.0;
+            let swatch_top = center_y - LEGEND_SWATCH_SIZE / 2.0;
+            let swatch_left = top_left.x + LEGEND_PADDING;
+            svg.draw_rect(
+                Point::new(swatch_left, swatch_top),
+                Point::new(LEGEND_SWATCH_SIZE, LEGEND_SWATCH_SIZE),
+                Some(BORDER_COLOR),
+                0.6,
+                Some(color),
+                2.0,
+            );
+            let text_x = swatch_left + LEGEND_SWATCH_SIZE + 4.0;
+            svg.draw_text(
+                Point::new(text_x, center_y),
+                label,
+                LEGEND_FONT_SIZE,
+                "black",
+                false,
+                "start",
+                FontFamily::Sans,
+            );
+            cursor_y += item_height + LEGEND_ROW_GAP;
+        }
     }
 
     cursor_y += LEGEND_SECTION_GAP;
@@ -1309,6 +1688,16 @@ fn measure_legend() -> LegendMetrics {
         max_line_width = max_line_width.max(line_width);
     }
 
+    if !RESOURCE_LEGEND_ITEMS.is_empty() {
+        let section_width = get_size_for_str(RESOURCE_LEGEND_TITLE, LEGEND_FONT_SIZE).x;
+        max_line_width = max_line_width.max(section_width);
+        for (label, _) in RESOURCE_LEGEND_ITEMS {
+            let label_width = get_size_for_str(label, LEGEND_FONT_SIZE).x;
+            let line_width = LEGEND_SWATCH_SIZE + 4.0 + label_width;
+            max_line_width = max_line_width.max(line_width);
+        }
+    }
+
     let credit_left = "Created with";
     let credit_link = "Copper-rs";
     let credit_version = format!("v{}", env!("CARGO_PKG_VERSION"));
@@ -1328,6 +1717,17 @@ fn measure_legend() -> LegendMetrics {
     } else {
         0.0
     };
+    let resource_count = RESOURCE_LEGEND_ITEMS.len() as f64;
+    let resource_height = if resource_count > 0.0 {
+        resource_count * item_height + (resource_count - 1.0) * LEGEND_ROW_GAP
+    } else {
+        0.0
+    };
+    let resource_section_height = if resource_count > 0.0 {
+        LEGEND_SECTION_GAP + LEGEND_FONT_SIZE as f64 + LEGEND_ROW_GAP + resource_height
+    } else {
+        0.0
+    };
     let credit_height = LEGEND_LOGO_SIZE.max(LEGEND_FONT_SIZE as f64);
     let height = LEGEND_PADDING
         + LEGEND_BOTTOM_PADDING
@@ -1335,6 +1735,7 @@ fn measure_legend() -> LegendMetrics {
         + LEGEND_ROW_GAP
         + items_height
         + LEGEND_ROW_GAP
+        + resource_section_height
         + LEGEND_SECTION_GAP
         + credit_height;
 
@@ -1392,6 +1793,7 @@ fn format_mission_list(graphs: &HashMap<String, config::CuGraph>) -> String {
 
 struct SectionRef<'a> {
     label: Option<String>,
+    mission_id: Option<String>,
     graph: &'a config::CuGraph,
 }
 
@@ -1402,11 +1804,30 @@ struct SectionLayout {
     edges: Vec<RenderEdge>,
     bounds: (Point, Point),
     port_anchors: HashMap<NodeHandle, HashMap<String, Point>>,
+    resource_tables: Vec<ResourceTable>,
 }
 
 struct NodeRender {
     handle: NodeHandle,
     table: TableNode,
+}
+
+struct ResourceTable {
+    table: TableNode,
+    size: Point,
+}
+
+#[derive(Clone)]
+struct ResourceOwner {
+    name: String,
+    flavor: config::Flavor,
+}
+
+#[derive(Clone, Copy)]
+enum ResourceUsage {
+    Exclusive,
+    Shared,
+    Unused,
 }
 
 struct RenderEdge {

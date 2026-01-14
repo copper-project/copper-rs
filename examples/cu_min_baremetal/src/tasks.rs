@@ -5,7 +5,7 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29::prelude::*;
-use serde::Serializer;
+use serde::{Deserialize, Serialize, Serializer};
 
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
@@ -91,5 +91,15 @@ impl Serialize for DoraPayload {
     {
         // Not needed for this benchmark.
         _serializer.serialize_bytes(&self.0)
+    }
+}
+
+impl<'de> Deserialize<'de> for DoraPayload {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let bytes = Vec::<u8>::deserialize(deserializer)?;
+        Ok(DoraPayload(bytes))
     }
 }

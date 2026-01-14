@@ -3,7 +3,7 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu29::prelude::*;
-use serde::Serializer;
+use serde::{Deserialize, Serialize, Serializer};
 use std::sync::Arc;
 
 pub struct DoraSource<const S: usize> {
@@ -85,7 +85,17 @@ impl Serialize for DoraPayload {
     where
         S: Serializer,
     {
-        // Not needed for this benchmark.
-        todo!()
+        let data = self.0.with_inner(|inner| inner.to_vec());
+        _serializer.serialize_bytes(&data)
+    }
+}
+
+impl<'de> Deserialize<'de> for DoraPayload {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let data = Vec::<u8>::deserialize(deserializer)?;
+        Ok(DoraPayload(CuHandle::new_detached(data)))
     }
 }

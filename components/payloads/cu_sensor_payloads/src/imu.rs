@@ -2,7 +2,7 @@ use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use uom::si::acceleration::meter_per_second_squared;
 use uom::si::angular_velocity::radian_per_second;
 use uom::si::f32::{Acceleration, AngularVelocity, MagneticFluxDensity, ThermodynamicTemperature};
@@ -10,7 +10,7 @@ use uom::si::magnetic_flux_density::microtesla;
 use uom::si::thermodynamic_temperature::degree_celsius;
 
 /// Standardized IMU payload carrying acceleration, angular velocity, and optional magnetometer data.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ImuPayload {
     pub accel_x: Acceleration,
     pub accel_y: Acceleration,
@@ -118,7 +118,7 @@ impl Decode<()> for ImuPayload {
 }
 
 /// Magnetometer payload split from the main IMU data for composition.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MagnetometerPayload {
     pub mag_x: MagneticFluxDensity,
     pub mag_y: MagneticFluxDensity,
@@ -184,7 +184,7 @@ impl Decode<()> for MagnetometerPayload {
 }
 
 /// Combined payload allowing optional magnetometer data.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ImuWithMagPayload {
     pub imu: ImuPayload,
     pub mag: Option<MagnetometerPayload>,

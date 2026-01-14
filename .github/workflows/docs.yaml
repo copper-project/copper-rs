@@ -20,12 +20,26 @@ jobs:
           profile: minimal
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y libudev-dev
-      - name: Run docs
+      - name: Build API docs
         run: cargo +nightly doc --no-deps
         env:
           RUSTDOCFLAGS: --enable-index-page -Zunstable-options
-      - name: Deploy docs preview to GitHub Pages
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Install MkDocs
+        run: python -m pip install --upgrade pip mkdocs mkdocs-material
+      - name: Prepare wiki sources
+        run: python support/ci/wiki_site.py
+      - name: Build wiki site
+        run: mkdocs build -f build/wiki/mkdocs.yml
+      - name: Stage API docs
+        run: |
+          mkdir -p build/wiki/site/api
+          cp -R target/doc/* build/wiki/site/api/
+      - name: Deploy wiki to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./target/doc
+          publish_dir: ./build/wiki/site

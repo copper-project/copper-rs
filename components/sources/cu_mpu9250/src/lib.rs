@@ -11,6 +11,7 @@ pub use cu_sensor_payloads::ImuPayload;
 use cu29::prelude::*;
 use embedded_hal_1 as eh1;
 use mpu9250::{Device, Imu as ImuOnly, Marg, Mpu9250, NineDOFDevice};
+use serde::Deserialize;
 
 pub mod embedded_hal;
 
@@ -20,7 +21,7 @@ fn map_debug_error<E: Debug>(context: &str, err: E) -> CuError {
     CuError::from(format!("{context}: {err:?}"))
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 #[repr(u8)]
 pub enum WhoAmI {
     Mpu9250 = 0x71,

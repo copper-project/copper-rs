@@ -75,6 +75,7 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
     let name = &input.ident;
     let module_name = format_ident!("{}_soa", name.to_string().to_lowercase());
     let soa_struct_name = format_ident!("{}Soa", name);
+    let soa_struct_wire_name = format_ident!("{}SoaWire", name);
 
     let data = match &input.data {
         Data::Struct(data) => data,
@@ -174,6 +175,7 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
             use bincode::enc::Encoder;
             use bincode::de::Decoder;
             use bincode::error::{DecodeError, EncodeError};
+            use serde::Deserialize;
             use serde::Serialize;
             use serde::Serializer;
             use serde::ser::SerializeStruct;
@@ -332,6 +334,55 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                         state.serialize_field(stringify!(#field_names), &self.#field_names[..self.len])?;
                     )*
                     state.end()
+                }
+            }
+
+            impl<'de, const N: usize> Deserialize<'de> for #soa_struct_name<N>
+            where
+                #(
+                    #field_types: Deserialize<'de> + Default,
+                )*
+            {
+                fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+                where
+                    D: serde::Deserializer<'de>,
+                {
+                    #[derive(Deserialize)]
+                    struct #soa_struct_wire_name {
+                        len: usize,
+                        #( #field_names: Vec<#field_types>, )*
+                    }
+
+                    let wire = #soa_struct_wire_name::deserialize(deserializer)?;
+                    let #soa_struct_wire_name { len, #( #field_names ),* } = wire;
+
+                    if len > N {
+                        return Err(serde::de::Error::custom(format!(
+                            "len {} exceeds capacity {}",
+                            len,
+                            N
+                        )));
+                    }
+
+                    #(
+                        if #field_names.len() != len {
+                            return Err(serde::de::Error::custom(format!(
+                                "field {} has length {} but len is {}",
+                                stringify!(#field_names),
+                                #field_names.len(),
+                                len
+                            )));
+                        }
+                    )*
+
+                    let mut result = Self::default();
+                    result.len = len;
+                    #(
+                        for (idx, value) in #field_names.into_iter().enumerate() {
+                            result.#field_names[idx] = value;
+                        }
+                    )*
+                    Ok(result)
                 }
             }
 

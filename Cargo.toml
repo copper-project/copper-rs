@@ -16,6 +16,7 @@ members = [
     "core/cu29_unifiedlog",
     "components/bridges/cu_crsf",
     "components/bridges/cu_msp_bridge",
+    "components/bridges/cu_zenoh_bridge",
     "components/libs/cu_msp_lib",
     "components/libs/cu_embedded_registry",
     "components/libs/cu_transform",
@@ -77,6 +78,7 @@ members = [
     "examples/cu_run_in_sim",
     "examples/cu_standalone_structlog",
     "examples/cu_zenoh",
+    "examples/cu_zenoh_bridge_demo",
     "examples/cu_zenoh_ros",
 ]
 
