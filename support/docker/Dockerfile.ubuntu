@@ -8,6 +8,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tzdata \
     git \
     curl \
+    python3 \
+    python3-pip \
     build-essential \
     pkg-config \
     libudev-dev \
@@ -44,11 +46,26 @@ RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 ENV CARGO_TERM_COLOR=always
 
+# Install Rust toolchains, components, and embedded targets used in CI
+RUN rustup toolchain install stable beta \
+    && rustup component add rustfmt clippy --toolchain stable \
+    && rustup component add rustfmt clippy --toolchain beta \
+    && rustup target add aarch64-unknown-none thumbv7em-none-eabihf thumbv8m.main-none-eabihf riscv32imac-unknown-none-elf --toolchain stable \
+    && rustup target add aarch64-unknown-none thumbv7em-none-eabihf thumbv8m.main-none-eabihf riscv32imac-unknown-none-elf --toolchain beta
+
 # Install nextest
 RUN curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C ${CARGO_HOME:-~/.cargo}/bin
 
 # Install additional tools needed for the CI
-RUN cargo install cargo-generate 
+RUN cargo install cargo-generate \
+    && cargo install --locked taplo-cli \
+    && cargo install ronfmt \
+    && cargo install cargo-deny \
+    && cargo install typos-cli \
+    && cargo install sccache
+
+# Install MkDocs tooling used in docs workflow
+RUN python3 -m pip install --no-cache-dir --upgrade pip mkdocs mkdocs-material
 
 # Set environment variables for build modes and features
 ENV FEATURES_FLAG="--features mock,image,kornia,python,gst,faer,nalgebra,glam,debug_pane,bincode"
