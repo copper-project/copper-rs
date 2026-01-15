@@ -70,14 +70,13 @@ impl CuBridge for StatsBridge {
 
     fn new(
         _config: Option<&ComponentConfig>,
-        tx_channels: &[BridgeChannelConfig<<Self::Tx as BridgeChannelSet>::Id>],
+        _tx_channels: &[BridgeChannelConfig<<Self::Tx as BridgeChannelSet>::Id>],
         _rx_channels: &[BridgeChannelConfig<<Self::Rx as BridgeChannelSet>::Id>],
         resources: Self::Resources<'_>,
     ) -> CuResult<Self>
     where
         Self: Sized,
     {
-        let _ = tx_channels;
         Ok(Self {
             bus: resources.bus,
             tag: resources.tag,

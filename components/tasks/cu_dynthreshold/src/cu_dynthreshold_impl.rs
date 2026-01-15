@@ -93,12 +93,8 @@ fn adaptive_threshold(
             // Number of pixels in the block, adjusted for edge cases.
             let w = ((y_high - y_low + 1) * (x_high - x_low + 1)) as u32;
             let sum = sum_image_pixels(integral, x_low, y_low, x_high, y_high, width + 1);
-
-            if current_pixel * w > sum {
-                dst.put_pixel(x, y, width, 255);
-            } else {
-                dst.put_pixel(x, y, width, 0);
-            }
+            let value = if current_pixel * w > sum { 255 } else { 0 };
+            dst.put_pixel(x, y, width, value);
         }
     }
 }
@@ -147,21 +143,21 @@ impl CuTask for DynThreshold {
         input: &Self::Input<'_>,
         output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
-        if input.payload().is_none() {
+        let Some(buffer_hold) = input.payload() else {
             debug!("DynThreshold: No payload in input message, skipping.");
             return Ok(());
-        }
-        let buffer_hold = input.payload().ok_or(CuError::from("No payload"))?;
+        };
         let buffer_hold = buffer_hold
             .as_ref()
             .map_readable()
             .map_err(|e| CuError::new_with_cause("Could not map the gstreamer buffer", e))?;
         let src = buffer_hold.as_slice();
 
-        if src.len() != (self.width * self.height) as usize {
+        let expected_len = (self.width * self.height) as usize;
+        if src.len() != expected_len {
             return Err(CuError::from(format!(
                 "Input buffer size does not match the expected size {}, slice {}",
-                self.width * self.height,
+                expected_len,
                 src.len(),
             )));
         }

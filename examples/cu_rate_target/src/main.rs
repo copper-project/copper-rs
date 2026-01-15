@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 pub mod tasks {
     use cu29::prelude::*;
 
-    pub struct ExampleSrc {}
+    pub struct ExampleSrc;
 
     impl Freezable for ExampleSrc {}
 
@@ -18,7 +18,7 @@ pub mod tasks {
         where
             Self: Sized,
         {
-            Ok(Self {})
+            Ok(Self)
         }
 
         fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
@@ -27,7 +27,7 @@ pub mod tasks {
         }
     }
 
-    pub struct ExampleTask {}
+    pub struct ExampleTask;
 
     impl Freezable for ExampleTask {}
 
@@ -40,7 +40,7 @@ pub mod tasks {
         where
             Self: Sized,
         {
-            Ok(Self {})
+            Ok(Self)
         }
 
         fn process(
@@ -55,7 +55,7 @@ pub mod tasks {
         }
     }
 
-    pub struct ExampleSink {}
+    pub struct ExampleSink;
 
     impl Freezable for ExampleSink {}
 
@@ -67,7 +67,7 @@ pub mod tasks {
         where
             Self: Sized,
         {
-            Ok(Self {})
+            Ok(Self)
         }
 
         fn process(&mut self, _clock: &RobotClock, _input: &Self::Input<'_>) -> CuResult<()> {

@@ -10,7 +10,7 @@ pub mod tasks {
     use cu29::prelude::*;
     use std::sync::atomic::Ordering;
 
-    pub struct MultiOutSrc {}
+    pub struct MultiOutSrc;
 
     impl Freezable for MultiOutSrc {}
 
@@ -22,7 +22,7 @@ pub mod tasks {
         where
             Self: Sized,
         {
-            Ok(Self {})
+            Ok(Self)
         }
 
         fn process(&mut self, clock: &RobotClock, output: &mut Self::Output<'_>) -> CuResult<()> {
@@ -33,7 +33,7 @@ pub mod tasks {
         }
     }
 
-    pub struct IntSink {}
+    pub struct IntSink;
 
     impl Freezable for IntSink {}
 
@@ -45,7 +45,7 @@ pub mod tasks {
         where
             Self: Sized,
         {
-            Ok(Self {})
+            Ok(Self)
         }
 
         fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
@@ -56,7 +56,7 @@ pub mod tasks {
         }
     }
 
-    pub struct BoolSink {}
+    pub struct BoolSink;
 
     impl Freezable for BoolSink {}
 
@@ -68,7 +68,7 @@ pub mod tasks {
         where
             Self: Sized,
         {
-            Ok(Self {})
+            Ok(Self)
         }
 
         fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
@@ -79,7 +79,7 @@ pub mod tasks {
         }
     }
 
-    pub struct BothSink {}
+    pub struct BothSink;
 
     impl Freezable for BothSink {}
 
@@ -91,7 +91,7 @@ pub mod tasks {
         where
             Self: Sized,
         {
-            Ok(Self {})
+            Ok(Self)
         }
 
         fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
@@ -106,7 +106,7 @@ pub mod tasks {
         }
     }
 
-    pub struct DropBoolSink {}
+    pub struct DropBoolSink;
 
     impl Freezable for DropBoolSink {}
 
@@ -118,7 +118,7 @@ pub mod tasks {
         where
             Self: Sized,
         {
-            Ok(Self {})
+            Ok(Self)
         }
 
         fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
@@ -127,7 +127,7 @@ pub mod tasks {
         }
     }
 
-    pub struct LoopbackTask {}
+    pub struct LoopbackTask;
 
     impl Freezable for LoopbackTask {}
 
@@ -140,7 +140,7 @@ pub mod tasks {
         where
             Self: Sized,
         {
-            Ok(Self {})
+            Ok(Self)
         }
 
         fn process(

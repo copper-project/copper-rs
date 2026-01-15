@@ -1,6 +1,6 @@
 use cu29::prelude::*;
 
-pub struct ExampleSrc {}
+pub struct ExampleSrc;
 
 impl Freezable for ExampleSrc {}
 
@@ -12,7 +12,7 @@ impl CuSrcTask for ExampleSrc {
     where
         Self: Sized,
     {
-        Ok(Self {})
+        Ok(Self)
     }
 
     fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
@@ -21,7 +21,7 @@ impl CuSrcTask for ExampleSrc {
     }
 }
 
-pub struct ExampleTaskA {}
+pub struct ExampleTaskA;
 
 impl Freezable for ExampleTaskA {}
 
@@ -34,7 +34,7 @@ impl CuTask for ExampleTaskA {
     where
         Self: Sized,
     {
-        Ok(Self {})
+        Ok(Self)
     }
 
     fn process(
@@ -49,7 +49,7 @@ impl CuTask for ExampleTaskA {
     }
 }
 
-pub struct ExampleTaskB {}
+pub struct ExampleTaskB;
 
 impl Freezable for ExampleTaskB {}
 
@@ -62,7 +62,7 @@ impl CuTask for ExampleTaskB {
     where
         Self: Sized,
     {
-        Ok(Self {})
+        Ok(Self)
     }
 
     fn process(
@@ -77,7 +77,7 @@ impl CuTask for ExampleTaskB {
     }
 }
 
-pub struct ExampleSink {}
+pub struct ExampleSink;
 
 impl Freezable for ExampleSink {}
 
@@ -89,7 +89,7 @@ impl CuSinkTask for ExampleSink {
     where
         Self: Sized,
     {
-        Ok(Self {})
+        Ok(Self)
     }
 
     fn process(&mut self, _clock: &RobotClock, _input: &Self::Input<'_>) -> CuResult<()> {

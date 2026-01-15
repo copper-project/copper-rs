@@ -80,8 +80,8 @@ pub struct Lewansoul {
 impl Lewansoul {
     fn send_packet(&mut self, id: u8, command: u8, data: &[u8]) -> io::Result<()> {
         let mut packet = vec![0x55, 0x55, id, data.len() as u8 + 3, command];
-        packet.extend(data.iter());
-        let checksum = compute_checksum(packet[2..].iter().cloned());
+        packet.extend_from_slice(data);
+        let checksum = compute_checksum(packet[2..].iter().copied());
         packet.push(checksum);
 
         // println!("Packet: {:02x?}", packet);
@@ -160,10 +160,10 @@ impl Lewansoul {
         let mut remaining = vec![0; length as usize - 2]; // -2 for length itself already read + command already read
         self.port.read_exact(&mut remaining)?;
         let checksum = compute_checksum(
-            &mut header[2..]
+            header[2..]
                 .iter()
                 .chain(remaining[..remaining.len() - 1].iter())
-                .cloned(),
+                .copied(),
         );
         if checksum != *remaining.last().unwrap() {
             return Err(io::Error::other("Invalid checksum"));
@@ -217,17 +217,16 @@ impl CuSinkTask for Lewansoul {
 
         let mut ids = [0u8; 8];
         for (i, id) in ids.iter_mut().enumerate() {
-            let servo = kv.get(format!("servo{i}").as_str());
-            if servo.is_none() {
-                if i == 0 {
+            match kv.get(format!("servo{i}").as_str()) {
+                Some(servo) => *id = servo.clone().into(),
+                None if i == 0 => {
                     return Err(
                         "You need to specify at least one servo ID to address (as \"servo0\")"
                             .into(),
                     );
                 }
-                break;
+                None => break,
             }
-            *id = servo.unwrap().clone().into();
         }
 
         let port = serialport::new(serial_dev.as_str(), SERIAL_SPEED)

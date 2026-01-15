@@ -11,7 +11,7 @@ pub mod tasks {
 
     use cu29::prelude::*;
 
-    pub struct ExampleSrc {}
+    pub struct ExampleSrc;
 
     impl Freezable for ExampleSrc {}
 
@@ -23,7 +23,7 @@ pub mod tasks {
         where
             Self: Sized,
         {
-            Ok(Self {})
+            Ok(Self)
         }
 
         fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
@@ -52,11 +52,7 @@ fn main() {
         .expect("Failed to create application.");
     debug!("Running... starting clock: {}.", clock.now());
 
-    let outcome = application.run();
-    match outcome {
-        Ok(_result) => {}
-        Err(error) => {
-            debug!("Application Ended: {}", error)
-        }
+    if let Err(error) = application.run() {
+        debug!("Application Ended: {}", error)
     }
 }

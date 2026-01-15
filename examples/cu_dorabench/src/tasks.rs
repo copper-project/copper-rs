@@ -81,12 +81,12 @@ impl Encode for DoraPayload {
 }
 
 impl Serialize for DoraPayload {
-    fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
         let data = self.0.with_inner(|inner| inner.to_vec());
-        _serializer.serialize_bytes(&data)
+        serializer.serialize_bytes(&data)
     }
 }
 

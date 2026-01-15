@@ -19,11 +19,7 @@ fn main() {
         .build()
         .expect("Failed to create application.");
 
-    let outcome = application.run();
-    match outcome {
-        Ok(_result) => {}
-        Err(error) => {
-            debug!("Application Ended: {}", error)
-        }
+    if let Err(error) = application.run() {
+        debug!("Application Ended: {}", error)
     }
 }

@@ -248,15 +248,13 @@ where
                 // update the status of the pid.
                 let state = self.pid.next_control_output(measure, dt);
                 // But safety check if the input is within operational margins and cut power if it is not.
-                if measure > self.setpoint + self.cutoff {
-                    return Err(
-                        format!("{} > {} (cutoff)", measure, self.setpoint + self.cutoff).into(),
-                    );
+                let upper_limit = self.setpoint + self.cutoff;
+                let lower_limit = self.setpoint - self.cutoff;
+                if measure > upper_limit {
+                    return Err(format!("{} > {} (cutoff)", measure, upper_limit).into());
                 }
-                if measure < self.setpoint - self.cutoff {
-                    return Err(
-                        format!("{} < {} (cutoff)", measure, self.setpoint - self.cutoff).into(),
-                    );
+                if measure < lower_limit {
+                    return Err(format!("{} < {} (cutoff)", measure, lower_limit).into());
                 }
                 output.metadata.set_status(format!(
                     "{:>5.2} {:>5.2} {:>5.2} {:>5.2}",

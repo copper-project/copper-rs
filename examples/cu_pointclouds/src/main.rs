@@ -36,12 +36,10 @@ impl CuSinkTask for RerunPlyViz {
     }
 
     fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
-        let payload = input.payload();
-        if payload.is_none() {
+        let Some(payload) = input.payload() else {
             // Depending on the race condition, we might get an empty payload.
             return Ok(());
-        }
-        let payload = payload.unwrap();
+        };
         let points: Vec<Position3D> = payload
             .iter()
             .map(|p| {

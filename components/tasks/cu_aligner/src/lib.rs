@@ -35,13 +35,22 @@ macro_rules! define_task {
                 Self: Sized,
             {
                 let config = config.ok_or_else(|| cu29::CuError::from("Config Missing"))?;
-                let target_alignment_window: u64 =
-                    config.get::<u32>("target_alignment_window_ms").ok_or_else(|| cu29::CuError::from("Missing target_alignment_window"))?.into();
-                let stale_data_horizon: u64 =
-                    config.get::<u32>("stale_data_horizon_ms").ok_or_else(|| cu29::CuError::from("Missing stale_data_horizon"))?.into();
+                let target_alignment_window_ms: u64 = config
+                    .get::<u32>("target_alignment_window_ms")
+                    .ok_or_else(|| cu29::CuError::from("Missing target_alignment_window"))?
+                    .into();
+                let stale_data_horizon_ms: u64 = config
+                    .get::<u32>("stale_data_horizon_ms")
+                    .ok_or_else(|| cu29::CuError::from("Missing stale_data_horizon"))?
+                    .into();
+
+                let target_alignment_window =
+                    cu29_clock::CuDuration(target_alignment_window_ms * 1_000_000);
+                let stale_data_horizon =
+                    cu29_clock::CuDuration(stale_data_horizon_ms * 1_000_000);
 
                 Ok(Self {
-                    aligner: AlignmentBuffers::new(cu29_clock::CuDuration(target_alignment_window as u64 * 1_000_000),cu29_clock::CuDuration(stale_data_horizon as u64 * 1_000_000)),
+                    aligner: AlignmentBuffers::new(target_alignment_window, stale_data_horizon),
                 })
             }
 
@@ -65,13 +74,10 @@ macro_rules! define_task {
                 }
 
 
-                let tuple_of_iters = self.aligner.get_latest_aligned_data();
-                if tuple_of_iters.is_none() {
-                    return Ok(());
-                }
-
                 // this is a tuple of iterators of CuStampedDataSet
-                let tuple_of_iters = tuple_of_iters.unwrap();
+                let Some(tuple_of_iters) = self.aligner.get_latest_aligned_data() else {
+                    return Ok(());
+                };
 
                 // Populate the CuArray fields in the output message
                 let output_payload = output.payload_mut().get_or_insert_with(Default::default);

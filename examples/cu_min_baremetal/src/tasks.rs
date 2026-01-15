@@ -85,12 +85,12 @@ impl Encode for DoraPayload {
 }
 
 impl Serialize for DoraPayload {
-    fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
         // Not needed for this benchmark.
-        _serializer.serialize_bytes(&self.0)
+        serializer.serialize_bytes(&self.0)
     }
 }
 

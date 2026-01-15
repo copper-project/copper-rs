@@ -146,29 +146,25 @@ fn main() {
     // the standard version
     use cu29_helpers::basic_copper_setup;
     use std::fs;
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
 
     const SLAB_SIZE: Option<usize> = Some(4096 * 1024 * 1024);
 
-    let logger_path = "logs/nostd.copper";
-    if let Some(parent) = Path::new(logger_path).parent() {
+    let logger_path = PathBuf::from("logs/nostd.copper");
+    if let Some(parent) = logger_path.parent() {
         if !parent.exists() {
             fs::create_dir_all(parent).expect("Failed to create logs directory");
         }
     }
 
-    let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), SLAB_SIZE, true, None)
-        .expect("Failed to setup logger.");
+    let copper_ctx =
+        basic_copper_setup(&logger_path, SLAB_SIZE, true, None).expect("Failed to setup logger.");
     let mut application = MinimalNoStdAppBuilder::new()
         .with_context(&copper_ctx)
         .build()
         .expect("Failed to create application.");
 
-    let outcome = application.run();
-    match outcome {
-        Ok(_result) => {}
-        Err(error) => {
-            debug!("Application Ended: {}", error)
-        }
+    if let Err(error) = application.run() {
+        debug!("Application Ended: {}", error)
     }
 }

@@ -22,7 +22,7 @@ struct CuMspBridgeLoopbackApp {}
 
 fn main() {
     if let Err(err) = drive() {
-        error!("cu-msp-bridge-loopback failed: {}", err.to_string());
+        error!("cu-msp-bridge-loopback failed: {}", err);
         std::process::exit(1);
     }
 }
