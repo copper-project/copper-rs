@@ -23,6 +23,12 @@ public:
     }
 
 private:
+    static uint64_t now_ns() {
+        return std::chrono::duration_cast<std::chrono::nanoseconds>(
+                   std::chrono::steady_clock::now().time_since_epoch())
+            .count();
+    }
+
     static std::string task_from_input(const std::string &input_topic) {
         const std::string prefix = "flip_topic_";
         if (input_topic.rfind(prefix, 0) == 0) {
@@ -44,13 +50,13 @@ private:
     }
 
     void topic_callback(const gpio_caterpillar::msg::CaterpillarMsg::SharedPtr msg) {
-        auto tick_start = std::chrono::steady_clock::now();
+        auto now = now_ns();
+        auto hop_ns = now - msg->last_ns;
+        publish_stat(static_cast<uint64_t>(hop_ns));
+
+        msg->last_ns = now;
         actuation_publisher_->publish(*msg);  // Actuate GPIO
         publisher_->publish(*msg);           // Propagate the same value to the next node
-        auto tick_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                           std::chrono::steady_clock::now() - tick_start)
-                           .count();
-        publish_stat(static_cast<uint64_t>(tick_ns));
     }
 
     std::string task_name_;
