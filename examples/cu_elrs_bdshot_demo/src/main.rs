@@ -263,8 +263,9 @@ fn quick_memory_test() {
 }
 
 fn mem_stats() {
-    let current = ALLOC.lock().stats_alloc_actual();
-    let total = ALLOC.lock().stats_total_bytes();
+    let heap = ALLOC.lock();
+    let current = heap.stats_alloc_actual();
+    let total = heap.stats_total_bytes();
     info!("heap: current={}", current);
     info!("heap: total={}", total);
 }
