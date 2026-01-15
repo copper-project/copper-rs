@@ -74,7 +74,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#copper-full-determinism" class="md-skip">
+        <a href="#copper-fully-deterministic" class="md-skip">
           Skip to content
         </a>
       
@@ -1174,10 +1174,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#copper-full-determinism" class="md-nav__link">
+  <a href="#copper-fully-deterministic" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Copper [Full determinism]
+        Copper [Fully deterministic]
       
     </span>
   </a>
@@ -1196,10 +1196,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#dora-rs-no-determinism" class="md-nav__link">
+  <a href="#dora-rs-non-deterministic-logging" class="md-nav__link">
     <span class="md-ellipsis">
       
-        dora-rs [No determinism]
+        dora-rs [Non-deterministic logging]
       
     </span>
   </a>
@@ -1240,51 +1240,64 @@
   <h1>Benchmarks</h1>
 
 <p>Those are the results from the Copper Caterpillar benchmark, stress testing the latency overhead of robotics middleware.</p>
+<p><strong>Lower is better. LOG SCALE</strong></p>
+<p><img width="1080" height="456" alt="image" src="https://github.com/user-attachments/assets/2426bb62-4a80-4d7e-b163-965987e946bd" /></p>
 <p>Conditions: if possible the framework needs to deterministically log every single task output.</p>
-<h2 id="copper-full-determinism">Copper [Full determinism]<a class="headerlink" href="#copper-full-determinism" title="Permanent link">&para;</a></h2>
-<pre><code>Task     Min        Max         Mean   Stddev  Ø Jitter  Max Jitter
-src      9 ns       16.250 µs   15 ns  17 ns   6 ns      16.240 µs
-ct-0     0 ns       165.630 µs  7 ns   48 ns   5 ns      165.630 µs
-gpio-0   0 ns       7.245 µs    6 ns   10 ns   4 ns      7.235 µs
-ct-1     0 ns       20.766 µs   7 ns   16 ns   6 ns      20.766 µs
-gpio-1   0 ns       11.942 µs   6 ns   10 ns   4 ns      11.932 µs
-ct-2     0 ns       19.377 µs   7 ns   15 ns   6 ns      19.367 µs
-gpio-2   0 ns       5.706 µs    6 ns   10 ns   4 ns      5.696 µs
-ct-3     0 ns       15.909 µs   17 ns  18 ns   7 ns      15.889 µs
-gpio-3   0 ns       8.764 µs    6 ns   9 ns    4 ns      8.754 µs
-ct-4     0 ns       29.120 µs   17 ns  21 ns   7 ns      29.100 µs
-gpio-4   0 ns       6.335 µs    6 ns   9 ns    4 ns      6.326 µs
-ct-5     0 ns       15.930 µs   6 ns   13 ns   4 ns      15.930 µs
-gpio-5   0 ns       10.043 µs   6 ns   10 ns   4 ns      10.043 µs
-ct-6     0 ns       12.841 µs   17 ns  16 ns   7 ns      12.821 µs
-gpio-6   0 ns       33.927 µs   16 ns  20 ns   5 ns      33.907 µs
-ct-7     0 ns       55.633 µs   6 ns   22 ns   4 ns      55.623 µs
-gpio-7   0 ns       29.910 µs   6 ns   13 ns   4 ns      29.901 µs
-
-End2End  200 ns     165.930 µs  269 ns 111 ns  29 ns     165.651 µs
+<h2 id="copper-fully-deterministic">Copper [Fully deterministic]<a class="headerlink" href="#copper-fully-deterministic" title="Permanent link">&para;</a></h2>
+<p>Vanilla Copper Application and config.</p>
+<p><a href="https://github.com/copper-project/copper-rs/tree/master/examples/cu_caterpillar">Benchmark code</a></p>
+<pre><code>Task          Min           Max         Mean       Stddev     Jitter      Max Jitter
+src           9 ns         23.041 µs    13 ns      19 ns      5 ns        23.031 µs
+ct-0          0 ns         16.193 µs     6 ns      13 ns      4 ns        16.193 µs
+gpio-0        0 ns         34.756 µs     6 ns      14 ns      4 ns        34.755 µs
+ct-1          0 ns         35.496 µs     6 ns      16 ns      4 ns        35.496 µs
+gpio-1        0 ns         15.233 µs     6 ns      11 ns      4 ns        15.233 µs
+ct-2          0 ns         20.621 µs     6 ns      15 ns      4 ns        20.611 µs
+gpio-2        0 ns         14.514 µs     6 ns      10 ns      4 ns        14.514 µs
+ct-3          0 ns         26.080 µs     6 ns      15 ns      4 ns        26.071 µs
+gpio-3        0 ns          7.008 µs     6 ns       9 ns      4 ns         6.998 µs
+ct-4          0 ns         33.777 µs     6 ns      16 ns      4 ns        33.776 µs
+gpio-4        0 ns         14.244 µs     6 ns      10 ns      4 ns        14.244 µs
+ct-5          0 ns         18.352 µs     6 ns      15 ns      4 ns        18.342 µs
+gpio-5        0 ns         17.163 µs     6 ns      12 ns      4 ns        17.153 µs
+ct-6          0 ns         34.556 µs     6 ns      14 ns      4 ns        34.556 µs
+gpio-6        0 ns         16.063 µs     6 ns      11 ns      4 ns        16.063 µs
+ct-7          0 ns         38.995 µs     6 ns      17 ns      4 ns        38.986 µs
+gpio-7        0 ns         28.249 µs     6 ns      14 ns      4 ns        28.240 µs
+End2End     200 ns         39.215 µs   218 ns      73 ns      7 ns        38.995 µs
 </code></pre>
+<p>Ran with:</p>
+<pre><code class="language-Bash">cd examples/cu_caterpillar
+cargo build --profile screaming
+sudo chrt -f 80 ../../target/screaming/cu-caterpillar
+</code></pre>
+<p>Note: at that scale we are measuring how much it takes to ... measure time. Copper has basically 0 overhead lockless comms.</p>
 <h2 id="ros2-jazzy-non-deterministic-logging">ROS2 Jazzy [Non-deterministic logging]<a class="headerlink" href="#ros2-jazzy-non-deterministic-logging" title="Permanent link">&para;</a></h2>
-<pre><code>Task            Min         Max       Mean      Stddev     Jitter  Max Jitter
-  src        5.460 us   21.790 us  14.099 us    4.173 us   4.198 us   13.190 us
-  ct-0       7.520 us   49.600 us  29.072 us   12.604 us   7.505 us   24.061 us
-  gpio-0        10 ns       50 ns      31 ns       11 ns      11 ns       20 ns
-  ct-1      11.710 us   34.420 us  20.132 us    7.503 us   6.819 us   21.090 us
-  gpio-1        30 ns       50 ns      39 ns        8 ns       8 ns       20 ns
-  ct-2       9.350 us   37.721 us  25.131 us    9.852 us   6.979 us   23.881 us
-  gpio-2        20 ns       90 ns      41 ns       21 ns      25 ns       60 ns
-  ct-3       5.981 us   37.481 us  21.899 us    8.878 us   6.963 us   26.421 us
-  gpio-3        10 ns       80 ns      42 ns       23 ns      23 ns       50 ns
-  ct-4       6.440 us   38.940 us  27.459 us    9.692 us   6.069 us   27.270 us
-  gpio-4        20 ns       50 ns      31 ns        7 ns       8 ns       30 ns
-  ct-5      10.680 us   53.521 us  24.401 us   11.248 us   7.042 us   40.491 us
-  gpio-5        10 ns       50 ns      28 ns       10 ns       8 ns       20 ns
-  ct-6       6.990 us   37.771 us  23.076 us    8.659 us   5.643 us   19.719 us
-  gpio-6        20 ns       50 ns      33 ns        8 ns       6 ns       20 ns
-  ct-7       8.200 us   34.681 us  17.586 us    8.328 us   6.202 us   25.721 us
-  gpio-7        20 ns       90 ns      43 ns       21 ns      17 ns       60 ns
-  End2End  531.307 us  372.774 ms  64.145 ms  116.788 ms  28.675 ms   99.990 ms
+<p>Vanilla out of the box config.</p>
+<p><a href="https://github.com/copper-project/copper-rs/tree/master/examples/ros_caterpillar">Benchmark code</a></p>
+<pre><code>Task            Min         Max        Mean      Stddev      Jitter  Max Jitter
+src        9.640 us  109.382 us   39.887 us   14.000 us   12.896 us   73.961 us
+ct-0      33.870 us  200.652 us  118.628 us   39.627 us   37.286 us  145.231 us
+gpio-0    36.481 us  179.183 us  112.441 us   36.312 us   34.283 us  112.872 us
+ct-1      38.330 us  195.153 us  114.098 us   34.291 us   32.761 us  117.882 us
+gpio-1    33.331 us  186.943 us  115.215 us   34.760 us   32.096 us  119.911 us
+ct-2      49.851 us  187.203 us  127.321 us   37.011 us   34.523 us  123.021 us
+gpio-2    49.080 us  227.773 us  116.513 us   33.809 us   32.018 us  104.222 us
+ct-3      53.601 us  201.662 us  117.278 us   34.520 us   32.005 us  112.642 us
+gpio-3    44.470 us  165.552 us  104.015 us   27.142 us   24.574 us   95.052 us
+ct-4      53.880 us  171.622 us  113.354 us   30.828 us   26.051 us  100.452 us
+gpio-4    45.360 us  157.232 us   98.470 us   25.799 us   24.251 us   75.520 us
+ct-5      57.451 us  165.253 us  110.800 us   26.610 us   25.607 us   83.361 us
+gpio-5    43.031 us  189.073 us   98.054 us   29.255 us   26.550 us  122.702 us
+ct-6      51.251 us  222.393 us  106.866 us   30.459 us   27.673 us   99.251 us
+gpio-6    35.740 us  156.332 us   94.196 us   29.924 us   26.729 us   92.701 us
+ct-7      36.560 us  171.342 us   98.403 us   30.115 us   28.064 us  123.923 us
+gpio-7    40.851 us  140.922 us   94.233 us   23.581 us   23.390 us   86.100 us
+End2End  489.747 us    1.363 ms    1.001 ms  266.350 us  244.091 us  770.909 us
 </code></pre>
-<h2 id="dora-rs-no-determinism">dora-rs [No determinism]<a class="headerlink" href="#dora-rs-no-determinism" title="Permanent link">&para;</a></h2>
+<h2 id="dora-rs-non-deterministic-logging">dora-rs [Non-deterministic logging]<a class="headerlink" href="#dora-rs-non-deterministic-logging" title="Permanent link">&para;</a></h2>
+<p>Vanilla out of the box config.</p>
+<p><a href="https://github.com/copper-project/copper-rs/tree/master/examples/dora_caterpillar">Benchmark code</a></p>
 <pre><code>Task            Min         Max        Mean     Stddev     Jitter  Max Jitter
 src       12.473 us  138.856 us   27.583 us   7.937 us   7.367 us  113.012 us
 ct-0      23.050 us  232.393 us   38.916 us   9.426 us   7.147 us  200.693 us
@@ -1306,6 +1319,8 @@ gpio-7    22.860 us  395.534 us   38.793 us   9.949 us   6.704 us  352.914 us
 End2End  262.093 us  737.848 us  357.926 us  43.518 us  30.188 us  377.285 us
 </code></pre>
 <h2 id="horus-deterministic">Horus [Deterministic]<a class="headerlink" href="#horus-deterministic" title="Permanent link">&para;</a></h2>
+<p>Deterministic configuration.</p>
+<p><a href="https://github.com/copper-project/copper-rs/tree/master/examples/horus_caterpillar">Benchmark code</a></p>
 <pre><code>Task            Min         Max        Mean     Stddev     Jitter  Max Jitter
 src        1.220 us   27.061 us    8.272 us   4.609 us   4.063 us   24.080 us
 ct-0       9.721 us  146.672 us   46.122 us  21.992 us  20.485 us  127.672 us
