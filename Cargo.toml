@@ -188,6 +188,7 @@ rerun = { version = "0.28", default-features = false, features = [
 
 # smallvec to avoid heap allocations
 smallvec = { version = "1.15", default-features = false, features = ["serde"] }
+heapless = { version = "0.9", default-features = false, features = ["serde"] }
 
 # rayon for thread pools and such.
 rayon = "1.11"

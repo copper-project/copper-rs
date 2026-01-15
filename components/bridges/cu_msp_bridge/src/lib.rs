@@ -37,7 +37,7 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use cu_msp_lib::structs::{MspRequest, MspResponse};
-use cu_msp_lib::{MspPacket, MspPacketDirection, MspParser};
+use cu_msp_lib::{MSP_MAX_PAYLOAD_LEN, MspPacket, MspPacketDirection, MspParser};
 use cu29::cubridge::{
     BridgeChannel, BridgeChannelConfig, BridgeChannelInfo, BridgeChannelSet, CuBridge,
 };
@@ -46,25 +46,28 @@ use cu29::prelude::*;
 use cu29::resource::ResourceBundle;
 use cu29::resource::{Owned, ResourceBindings, ResourceManager};
 use embedded_io::{ErrorType, Read, Write};
+use heapless::Vec as HeaplessVec;
 use serde::{Deserialize, Serialize};
-use smallvec::SmallVec;
 use spin::Mutex;
 
 const READ_BUFFER_SIZE: usize = 512;
 const MAX_REQUESTS_PER_BATCH: usize = 8;
 const MAX_RESPONSES_PER_BATCH: usize = 16;
+const TX_BUFFER_CAPACITY: usize = MSP_MAX_PAYLOAD_LEN + 12;
 
 /// Batch of MSP requests transported over the bridge.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct MspRequestBatch(pub SmallVec<[MspRequest; MAX_REQUESTS_PER_BATCH]>);
+pub struct MspRequestBatch(pub HeaplessVec<MspRequest, MAX_REQUESTS_PER_BATCH>);
 
 impl MspRequestBatch {
     pub fn new() -> Self {
-        Self(SmallVec::new())
+        Self(HeaplessVec::new())
     }
 
-    pub fn push(&mut self, req: MspRequest) {
-        self.0.push(req);
+    pub fn push(&mut self, req: MspRequest) -> CuResult<()> {
+        self.0
+            .push(req)
+            .map_err(|_| CuError::from("MSP request batch overflow"))
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &MspRequest> {
@@ -81,21 +84,40 @@ impl Encode for MspRequestBatch {
 impl Decode<()> for MspRequestBatch {
     fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let values = <Vec<MspRequest> as Decode<()>>::decode(decoder)?;
-        Ok(Self(values.into()))
+        let count = values.len();
+        if count > MAX_REQUESTS_PER_BATCH {
+            return Err(DecodeError::ArrayLengthMismatch {
+                required: MAX_REQUESTS_PER_BATCH,
+                found: count,
+            });
+        }
+        let mut batch = MspRequestBatch::new();
+        for value in values {
+            batch
+                .0
+                .push(value)
+                .map_err(|_| DecodeError::ArrayLengthMismatch {
+                    required: MAX_REQUESTS_PER_BATCH,
+                    found: count,
+                })?;
+        }
+        Ok(batch)
     }
 }
 
 /// Batch of MSP responses collected by the bridge.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct MspResponseBatch(pub SmallVec<[MspResponse; MAX_RESPONSES_PER_BATCH]>);
+pub struct MspResponseBatch(pub HeaplessVec<MspResponse, MAX_RESPONSES_PER_BATCH>);
 
 impl MspResponseBatch {
     pub fn new() -> Self {
-        Self(SmallVec::new())
+        Self(HeaplessVec::new())
     }
 
-    pub fn push(&mut self, resp: MspResponse) {
-        self.0.push(resp);
+    pub fn push(&mut self, resp: MspResponse) -> CuResult<()> {
+        self.0
+            .push(resp)
+            .map_err(|_| CuError::from("MSP response batch overflow"))
     }
 
     pub fn clear(&mut self) {
@@ -116,7 +138,24 @@ impl Encode for MspResponseBatch {
 impl Decode<()> for MspResponseBatch {
     fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let values = <Vec<MspResponse> as Decode<()>>::decode(decoder)?;
-        Ok(Self(values.into()))
+        let count = values.len();
+        if count > MAX_RESPONSES_PER_BATCH {
+            return Err(DecodeError::ArrayLengthMismatch {
+                required: MAX_RESPONSES_PER_BATCH,
+                found: count,
+            });
+        }
+        let mut batch = MspResponseBatch::new();
+        for value in values {
+            batch
+                .0
+                .push(value)
+                .map_err(|_| DecodeError::ArrayLengthMismatch {
+                    required: MAX_RESPONSES_PER_BATCH,
+                    found: count,
+                })?;
+        }
+        Ok(batch)
     }
 }
 
@@ -143,7 +182,7 @@ where
     read_buffer: [u8; READ_BUFFER_SIZE],
     pending_responses: MspResponseBatch,
     pending_requests: MspRequestBatch,
-    tx_buffer: SmallVec<[u8; 256]>,
+    tx_buffer: HeaplessVec<u8, TX_BUFFER_CAPACITY>,
 }
 
 impl<S, E> CuMspBridge<S, E>
@@ -157,19 +196,23 @@ where
             read_buffer: [0; READ_BUFFER_SIZE],
             pending_responses: MspResponseBatch::new(),
             pending_requests: MspRequestBatch::new(),
-            tx_buffer: SmallVec::new(),
+            tx_buffer: HeaplessVec::new(),
         }
     }
 
     fn send_request(&mut self, request: &MspRequest) -> CuResult<()> {
         let packet: MspPacket = request.into();
         let size = packet.packet_size_bytes();
-        self.tx_buffer.resize(size, 0);
-        packet.serialize(&mut self.tx_buffer).map_err(|err| {
-            CuError::new_with_cause("MSP bridge failed to serialize request", err)
-        })?;
+        self.tx_buffer
+            .resize(size, 0)
+            .map_err(|_| CuError::from("MSP bridge tx buffer too small"))?;
+        packet
+            .serialize(self.tx_buffer.as_mut_slice())
+            .map_err(|err| {
+                CuError::new_with_cause("MSP bridge failed to serialize request", err)
+            })?;
         self.serial
-            .write_all(&self.tx_buffer)
+            .write_all(self.tx_buffer.as_slice())
             .map_err(|_| CuError::from("MSP bridge failed to write serial"))
     }
 
@@ -194,12 +237,12 @@ where
                                 if packet.direction == MspPacketDirection::ToFlightController {
                                     // This is an incoming request from the VTX
                                     if let Some(request) = MspRequest::from_packet(&packet) {
-                                        self.pending_requests.push(request);
+                                        self.pending_requests.push(request)?;
                                     }
                                 } else {
                                     // This is a response from the VTX
                                     let response = MspResponse::from(packet);
-                                    self.pending_responses.push(response);
+                                    self.pending_responses.push(response)?;
                                 }
                             }
                             Ok(None) => {}

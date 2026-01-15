@@ -96,7 +96,7 @@ impl CuTask for VtxOsd {
 
         // First, handle any incoming MSP requests (telemetry queries from VTX)
         if let Some(incoming_requests) = incoming_msg.payload() {
-            self.handle_incoming_requests(&mut batch, incoming_requests);
+            self.handle_incoming_requests(&mut batch, incoming_requests)?;
         }
 
         if let Some(ctrl) = ctrl {
@@ -108,8 +108,8 @@ impl CuTask for VtxOsd {
             .map(|prev| now - prev >= CuDuration::from_millis(VTX_HEARTBEAT_PERIOD_MS))
             .unwrap_or(true);
         if heartbeat_due {
-            batch.push(MspRequest::MspDisplayPort(MspDisplayPort::heartbeat()));
-            batch.push(MspRequest::MspStatus(build_msp_status(self.last_armed)));
+            batch.push(MspRequest::MspDisplayPort(MspDisplayPort::heartbeat()))?;
+            batch.push(MspRequest::MspStatus(build_msp_status(self.last_armed)))?;
             self.last_heartbeat = Some(now);
         }
 
@@ -151,12 +151,12 @@ impl CuTask for VtxOsd {
         };
 
         if label_changed {
-            batch.push(MspRequest::MspDisplayPort(MspDisplayPort::clear_screen()));
+            batch.push(MspRequest::MspDisplayPort(MspDisplayPort::clear_screen()))?;
             batch.push(MspRequest::MspDisplayPort(MspDisplayPort::write_string(
                 self.row, col, 0, text,
-            )));
-            self.push_cell_voltage(&mut batch);
-            self.push_watermark(&mut batch);
+            )))?;
+            self.push_cell_voltage(&mut batch)?;
+            self.push_watermark(&mut batch)?;
         }
 
         let draw_due = self
@@ -165,10 +165,10 @@ impl CuTask for VtxOsd {
             .unwrap_or(true);
         if label_changed || draw_due {
             if !label_changed {
-                self.push_cell_voltage(&mut batch);
-                self.push_watermark(&mut batch);
+                self.push_cell_voltage(&mut batch)?;
+                self.push_watermark(&mut batch)?;
             }
-            batch.push(MspRequest::MspDisplayPort(MspDisplayPort::draw_screen()));
+            batch.push(MspRequest::MspDisplayPort(MspDisplayPort::draw_screen()))?;
             self.last_draw = Some(now);
         }
 
@@ -182,7 +182,11 @@ impl CuTask for VtxOsd {
 }
 
 impl VtxOsd {
-    fn handle_incoming_requests(&self, batch: &mut MspRequestBatch, requests: &MspRequestBatch) {
+    fn handle_incoming_requests(
+        &self,
+        batch: &mut MspRequestBatch,
+        requests: &MspRequestBatch,
+    ) -> CuResult<()> {
         let voltage_centi = self.last_voltage_centi.unwrap_or(0);
         let voltage_decivolts = tasks::clamp_u8((voltage_centi + 5) / 10);
         let cell_count = tasks::estimate_cell_count(voltage_centi);
@@ -217,26 +221,27 @@ impl VtxOsd {
         for request in requests.iter() {
             match request {
                 MspRequest::MspApiVersionRequest => {
-                    batch.push(MspRequest::MspApiVersion(api_version));
+                    batch.push(MspRequest::MspApiVersion(api_version))?;
                 }
                 MspRequest::MspFcVersionRequest => {
-                    batch.push(MspRequest::MspFlightControllerVersion(fc_version));
+                    batch.push(MspRequest::MspFlightControllerVersion(fc_version))?;
                 }
                 MspRequest::MspBatteryStateRequest => {
-                    batch.push(MspRequest::MspBatteryState(battery_state));
+                    batch.push(MspRequest::MspBatteryState(battery_state))?;
                 }
                 MspRequest::MspAnalogRequest => {
-                    batch.push(MspRequest::MspAnalog(analog));
+                    batch.push(MspRequest::MspAnalog(analog))?;
                 }
                 _ => {}
             }
         }
+        Ok(())
     }
 
-    fn push_cell_voltage(&self, batch: &mut MspRequestBatch) {
+    fn push_cell_voltage(&self, batch: &mut MspRequestBatch) -> CuResult<()> {
         let row = self.row.saturating_add(1);
         if row >= self.rows {
-            return;
+            return Ok(());
         }
         let text = self.format_cell_voltage();
         let width = text.len() as u8;
@@ -255,7 +260,8 @@ impl VtxOsd {
             col,
             0,
             text.as_str(),
-        )));
+        )))?;
+        Ok(())
     }
 
     fn format_cell_voltage(&self) -> alloc::string::String {
@@ -270,14 +276,14 @@ impl VtxOsd {
         }
     }
 
-    fn push_watermark(&self, batch: &mut MspRequestBatch) {
+    fn push_watermark(&self, batch: &mut MspRequestBatch) -> CuResult<()> {
         if self.rows == 0 || self.cols == 0 {
-            return;
+            return Ok(());
         }
         let col = self.watermark_col.min(self.cols.saturating_sub(1));
         let available = self.cols.saturating_sub(col) as usize;
         if available == 0 {
-            return;
+            return Ok(());
         }
         for (idx, line) in VTX_WATERMARK_LINES.iter().enumerate() {
             let row = self.watermark_row.saturating_add(idx as u8);
@@ -293,8 +299,9 @@ impl VtxOsd {
             }
             batch.push(MspRequest::MspDisplayPort(MspDisplayPort::write_string(
                 row, col, 0, text,
-            )));
+            )))?;
         }
+        Ok(())
     }
 }
 
@@ -476,25 +483,25 @@ impl CuTask for VtxMspResponder {
         for request in requests.iter() {
             match request {
                 MspRequest::MspApiVersionRequest => {
-                    batch.push(MspRequest::MspApiVersion(api_version));
+                    batch.push(MspRequest::MspApiVersion(api_version))?;
                 }
                 MspRequest::MspFcVersionRequest => {
-                    batch.push(MspRequest::MspFlightControllerVersion(fc_version));
+                    batch.push(MspRequest::MspFlightControllerVersion(fc_version))?;
                 }
                 MspRequest::MspBatteryConfigRequest => {
-                    batch.push(MspRequest::MspBatteryConfig(battery_config));
+                    batch.push(MspRequest::MspBatteryConfig(battery_config))?;
                 }
                 MspRequest::MspBatteryStateRequest => {
-                    batch.push(MspRequest::MspBatteryState(battery_state));
+                    batch.push(MspRequest::MspBatteryState(battery_state))?;
                 }
                 MspRequest::MspAnalogRequest => {
-                    batch.push(MspRequest::MspAnalog(analog));
+                    batch.push(MspRequest::MspAnalog(analog))?;
                 }
                 MspRequest::MspVoltageMeterConfigRequest => {
-                    batch.push(MspRequest::MspVoltageMeterConfig(voltage_meter_config));
+                    batch.push(MspRequest::MspVoltageMeterConfig(voltage_meter_config))?;
                 }
                 MspRequest::MspVoltageMetersRequest => {
-                    batch.push(MspRequest::MspVoltageMeter(voltage_meter));
+                    batch.push(MspRequest::MspVoltageMeter(voltage_meter))?;
                 }
                 _ => {}
             }
