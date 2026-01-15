@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::MspPacketDirection::{FromFlightController, ToFlightController};
 use crate::commands::MspCommandCode;
-use crate::{MspPacket, MspPacketData};
+use crate::{MSP_MAX_PAYLOAD_LEN, MspPacket, MspPacketData, MspPacketDataBuffer};
 
 use alloc::{borrow::ToOwned, string::String, vec::Vec};
 
@@ -13,7 +13,6 @@ use alloc::{borrow::ToOwned, string::String, vec::Vec};
 use bincode::{Decode, Encode};
 use packed_struct::types::bits::ByteArray;
 use packed_struct::{PackedStruct, PackingError, PrimitiveEnum};
-use smallvec::SmallVec;
 
 #[cfg_attr(feature = "bincode", derive(Decode, Encode))]
 #[derive(PackedStruct, Serialize, Deserialize, Debug, Copy, Clone, Default)]
@@ -200,21 +199,21 @@ impl MspStatus {
         if self.extra_flight_mode_flags.len() > 15 {
             return Err(PackingError::InvalidValue);
         }
-        let mut data = SmallVec::<[u8; 256]>::new();
-        data.extend_from_slice(&self.cycle_time.to_le_bytes());
-        data.extend_from_slice(&self.i2c_errors.to_le_bytes());
-        data.extend_from_slice(&u16::from(self.sensors).to_le_bytes());
-        data.extend_from_slice(&self.flight_mode_flags.to_le_bytes());
-        data.push(self.current_pid_profile_index);
-        data.extend_from_slice(&self.average_system_load_percent.to_le_bytes());
-        data.extend_from_slice(&self.gyro_cycle_time.to_le_bytes());
-        data.push(self.extra_flight_mode_flags.len() as u8);
-        data.extend_from_slice(&self.extra_flight_mode_flags);
-        data.push(self.arming_disable_flags_count);
-        data.extend_from_slice(&self.arming_disable_flags.to_le_bytes());
-        data.push(self.config_state_flags);
-        data.extend_from_slice(&self.core_temp_celsius.to_le_bytes());
-        data.push(self.control_rate_profile_count);
+        let mut data = MspPacketDataBuffer::new();
+        extend_payload(&mut data, &self.cycle_time.to_le_bytes())?;
+        extend_payload(&mut data, &self.i2c_errors.to_le_bytes())?;
+        extend_payload(&mut data, &u16::from(self.sensors).to_le_bytes())?;
+        extend_payload(&mut data, &self.flight_mode_flags.to_le_bytes())?;
+        push_payload(&mut data, self.current_pid_profile_index)?;
+        extend_payload(&mut data, &self.average_system_load_percent.to_le_bytes())?;
+        extend_payload(&mut data, &self.gyro_cycle_time.to_le_bytes())?;
+        push_payload(&mut data, self.extra_flight_mode_flags.len() as u8)?;
+        extend_payload(&mut data, &self.extra_flight_mode_flags)?;
+        push_payload(&mut data, self.arming_disable_flags_count)?;
+        extend_payload(&mut data, &self.arming_disable_flags.to_le_bytes())?;
+        push_payload(&mut data, self.config_state_flags)?;
+        extend_payload(&mut data, &self.core_temp_celsius.to_le_bytes())?;
+        push_payload(&mut data, self.control_rate_profile_count)?;
 
         Ok(MspPacketData(data))
     }
@@ -261,25 +260,57 @@ impl MspStatusEx {
         if self.extra_flight_mode_flags.len() > 15 {
             return Err(PackingError::InvalidValue);
         }
-        let mut data = SmallVec::<[u8; 256]>::new();
-        data.extend_from_slice(&self.cycle_time.to_le_bytes());
-        data.extend_from_slice(&self.i2c_errors.to_le_bytes());
-        data.extend_from_slice(&u16::from(self.sensors).to_le_bytes());
-        data.extend_from_slice(&self.flight_mode_flags.to_le_bytes());
-        data.push(self.current_pid_profile_index);
-        data.extend_from_slice(&self.average_system_load_percent.to_le_bytes());
-        data.push(self.max_profile_count);
-        data.push(self.current_control_rate_profile_index);
-        data.push(self.extra_flight_mode_flags.len() as u8);
-        data.extend_from_slice(&self.extra_flight_mode_flags);
-        data.push(self.arming_disable_flags_count);
-        data.extend_from_slice(&self.arming_disable_flags.to_le_bytes());
-        data.push(self.config_state_flags);
-        data.extend_from_slice(&self.core_temp_celsius.to_le_bytes());
-        data.push(self.control_rate_profile_count);
+        let mut data = MspPacketDataBuffer::new();
+        extend_payload(&mut data, &self.cycle_time.to_le_bytes())?;
+        extend_payload(&mut data, &self.i2c_errors.to_le_bytes())?;
+        extend_payload(&mut data, &u16::from(self.sensors).to_le_bytes())?;
+        extend_payload(&mut data, &self.flight_mode_flags.to_le_bytes())?;
+        push_payload(&mut data, self.current_pid_profile_index)?;
+        extend_payload(&mut data, &self.average_system_load_percent.to_le_bytes())?;
+        push_payload(&mut data, self.max_profile_count)?;
+        push_payload(&mut data, self.current_control_rate_profile_index)?;
+        push_payload(&mut data, self.extra_flight_mode_flags.len() as u8)?;
+        extend_payload(&mut data, &self.extra_flight_mode_flags)?;
+        push_payload(&mut data, self.arming_disable_flags_count)?;
+        extend_payload(&mut data, &self.arming_disable_flags.to_le_bytes())?;
+        push_payload(&mut data, self.config_state_flags)?;
+        extend_payload(&mut data, &self.core_temp_celsius.to_le_bytes())?;
+        push_payload(&mut data, self.control_rate_profile_count)?;
 
         Ok(MspPacketData(data))
     }
+}
+
+fn push_payload(data: &mut MspPacketDataBuffer, value: u8) -> Result<(), PackingError> {
+    let next_len = data.len() + 1;
+    if next_len > MSP_MAX_PAYLOAD_LEN {
+        return Err(PackingError::BufferSizeMismatch {
+            expected: MSP_MAX_PAYLOAD_LEN,
+            actual: next_len,
+        });
+    }
+    data.push(value)
+        .map_err(|_| PackingError::BufferSizeMismatch {
+            expected: MSP_MAX_PAYLOAD_LEN,
+            actual: next_len,
+        })?;
+    Ok(())
+}
+
+fn extend_payload(data: &mut MspPacketDataBuffer, bytes: &[u8]) -> Result<(), PackingError> {
+    let next_len = data.len() + bytes.len();
+    if next_len > MSP_MAX_PAYLOAD_LEN {
+        return Err(PackingError::BufferSizeMismatch {
+            expected: MSP_MAX_PAYLOAD_LEN,
+            actual: next_len,
+        });
+    }
+    data.extend_from_slice(bytes)
+        .map_err(|_| PackingError::BufferSizeMismatch {
+            expected: MSP_MAX_PAYLOAD_LEN,
+            actual: next_len,
+        })?;
+    Ok(())
 }
 
 fn read_u8(data: &[u8], offset: &mut usize) -> Result<u8, PackingError> {
@@ -1386,7 +1417,7 @@ impl From<MspRequest> for MspPacket {
                 direction: FromFlightController,
                 data: version.pack().map_or_else(
                     |_| MspPacketData::new(),
-                    |data| MspPacketData(SmallVec::from_slice(data.as_slice())),
+                    |data| MspPacketData::from(data.as_slice()),
                 ),
             },
             MspRequest::MspFcVersionRequest => MspPacket {
@@ -1399,7 +1430,7 @@ impl From<MspRequest> for MspPacket {
                 direction: FromFlightController,
                 data: version.pack().map_or_else(
                     |_| MspPacketData::new(),
-                    |data| MspPacketData(SmallVec::from_slice(data.as_slice())),
+                    |data| MspPacketData::from(data.as_slice()),
                 ),
             },
             MspRequest::MspBatteryConfigRequest => MspPacket {
@@ -1412,7 +1443,7 @@ impl From<MspRequest> for MspPacket {
                 direction: FromFlightController,
                 data: config.pack().map_or_else(
                     |_| MspPacketData::new(),
-                    |data| MspPacketData(SmallVec::from_slice(data.as_slice())),
+                    |data| MspPacketData::from(data.as_slice()),
                 ),
             },
             MspRequest::MspBatteryStateRequest => MspPacket {
@@ -1425,7 +1456,7 @@ impl From<MspRequest> for MspPacket {
                 direction: FromFlightController,
                 data: state.pack().map_or_else(
                     |_| MspPacketData::new(),
-                    |data| MspPacketData(SmallVec::from_slice(data.as_slice())),
+                    |data| MspPacketData::from(data.as_slice()),
                 ),
             },
             MspRequest::MspAnalogRequest => MspPacket {
@@ -1438,7 +1469,7 @@ impl From<MspRequest> for MspPacket {
                 direction: FromFlightController,
                 data: analog.pack().map_or_else(
                     |_| MspPacketData::new(),
-                    |data| MspPacketData(SmallVec::from_slice(data.as_slice())),
+                    |data| MspPacketData::from(data.as_slice()),
                 ),
             },
             MspRequest::MspVoltageMeterConfigRequest => MspPacket {
@@ -1451,7 +1482,7 @@ impl From<MspRequest> for MspPacket {
                 direction: FromFlightController,
                 data: config.pack().map_or_else(
                     |_| MspPacketData::new(),
-                    |data| MspPacketData(SmallVec::from_slice(data.as_slice())),
+                    |data| MspPacketData::from(data.as_slice()),
                 ),
             },
             MspRequest::MspVoltageMetersRequest => MspPacket {
@@ -1464,7 +1495,7 @@ impl From<MspRequest> for MspPacket {
                 direction: FromFlightController,
                 data: meter.pack().map_or_else(
                     |_| MspPacketData::new(),
-                    |data| MspPacketData(SmallVec::from_slice(data.as_slice())),
+                    |data| MspPacketData::from(data.as_slice()),
                 ),
             },
             MspRequest::MspRc => MspPacket {
@@ -1477,7 +1508,7 @@ impl From<MspRequest> for MspPacket {
                 MspPacket {
                     cmd: MspCommandCode::MSP_SET_RAW_RC.to_primitive(),
                     direction: ToFlightController,
-                    data: MspPacketData(SmallVec::from_slice(data.as_slice())),
+                    data: MspPacketData::from(data.as_slice()),
                 }
             }
             MspRequest::MspRawImu => MspPacket {
@@ -1791,7 +1822,7 @@ impl MspResponse {
             value: &T,
         ) -> Result<MspPacketData, PackingError> {
             let packed = value.pack()?;
-            Ok(MspPacketData(SmallVec::from_slice(packed.as_bytes_slice())))
+            Ok(MspPacketData::from(packed.as_bytes_slice()))
         }
 
         match self {

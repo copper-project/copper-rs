@@ -13,17 +13,18 @@ use core::{
 use std::error::Error;
 
 use crc_any::CRCu8;
+use heapless::Vec as HeaplessVec;
 use packed_struct::PackedStruct;
-use smallvec::SmallVec;
 
 #[derive(Clone, PartialEq)]
-pub struct MspPacketData(pub(crate) SmallVec<[u8; 256]>);
-const MSP_MAX_PAYLOAD_LEN: usize = 255;
+pub struct MspPacketData(pub(crate) MspPacketDataBuffer);
+pub const MSP_MAX_PAYLOAD_LEN: usize = 255;
 const MSP_V2_FRAME_ID: u8 = 255;
+pub(crate) type MspPacketDataBuffer = HeaplessVec<u8, MSP_MAX_PAYLOAD_LEN>;
 
 impl MspPacketData {
     pub(crate) fn new() -> MspPacketData {
-        MspPacketData(SmallVec::new())
+        MspPacketData(MspPacketDataBuffer::new())
     }
 
     pub fn as_mut_slice(&mut self) -> &mut [u8] {
@@ -50,7 +51,9 @@ impl Debug for MspPacketData {
 
 impl From<&[u8]> for MspPacketData {
     fn from(data: &[u8]) -> Self {
-        MspPacketData(SmallVec::from_slice(data))
+        let data = MspPacketDataBuffer::from_slice(data)
+            .expect("MSP packet payload exceeds MSP_MAX_PAYLOAD_LEN");
+        MspPacketData(data)
     }
 }
 
@@ -254,9 +257,16 @@ impl MspParser {
             }
 
             MspParserState::CommandV2 => {
-                let MspPacketData(data) = &mut self.packet_data;
-                data.push(input);
+                let overflow = {
+                    let MspPacketData(data) = &mut self.packet_data;
+                    data.push(input).is_err()
+                };
+                if overflow {
+                    self.reset();
+                    return Err(MspPacketParseError::InvalidDataLength);
+                }
 
+                let MspPacketData(data) = &mut self.packet_data;
                 if data.len() == 2 {
                     let mut s = [0u8; core::mem::size_of::<u16>()];
                     s.copy_from_slice(data);
@@ -269,9 +279,16 @@ impl MspParser {
             }
 
             MspParserState::DataLengthV2 => {
-                let MspPacketData(data) = &mut self.packet_data;
-                data.push(input);
+                let overflow = {
+                    let MspPacketData(data) = &mut self.packet_data;
+                    data.push(input).is_err()
+                };
+                if overflow {
+                    self.reset();
+                    return Err(MspPacketParseError::InvalidDataLength);
+                }
 
+                let MspPacketData(data) = &mut self.packet_data;
                 if data.len() == 2 {
                     let mut s = [0u8; core::mem::size_of::<u16>()];
                     s.copy_from_slice(data);
@@ -291,8 +308,14 @@ impl MspParser {
             }
 
             MspParserState::DataV2 => {
-                let MspPacketData(data) = &mut self.packet_data;
-                data.push(input);
+                let overflow = {
+                    let MspPacketData(data) = &mut self.packet_data;
+                    data.push(input).is_err()
+                };
+                if overflow {
+                    self.reset();
+                    return Err(MspPacketParseError::InvalidDataLength);
+                }
                 self.packet_data_length_remaining -= 1;
 
                 if self.packet_data_length_remaining == 0 {
@@ -321,8 +344,14 @@ impl MspParser {
             }
 
             MspParserState::Data => {
-                let MspPacketData(data) = &mut self.packet_data;
-                data.push(input);
+                let overflow = {
+                    let MspPacketData(data) = &mut self.packet_data;
+                    data.push(input).is_err()
+                };
+                if overflow {
+                    self.reset();
+                    return Err(MspPacketParseError::InvalidDataLength);
+                }
                 self.packet_data_length_remaining -= 1;
 
                 self.packet_crc ^= input;
@@ -560,13 +589,12 @@ impl MspPacket {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use smallvec::smallvec;
     #[test]
     fn test_serialize() {
         let packet = MspPacket {
             cmd: 2,
             direction: MspPacketDirection::ToFlightController,
-            data: MspPacketData(smallvec![0xbe, 0xef]),
+            data: MspPacketData::from(&[0xbeu8, 0xef][..]),
         };
 
         let size = packet.packet_size_bytes();
@@ -619,7 +647,7 @@ mod tests {
             let packet = MspPacket {
                 cmd: 1,
                 direction: MspPacketDirection::ToFlightController,
-                data: MspPacketData(smallvec![0x00, 0x00, 0x00]),
+                data: MspPacketData::from(&[0x00u8, 0x00, 0x00][..]),
             };
             roundtrip(&packet);
         }
@@ -637,7 +665,7 @@ mod tests {
             let packet = MspPacket {
                 cmd: 100,
                 direction: MspPacketDirection::Unsupported,
-                data: MspPacketData(smallvec![0x44, 0x20, 0x00, 0x80]),
+                data: MspPacketData::from(&[0x44u8, 0x20, 0x00, 0x80][..]),
             };
             roundtrip(&packet);
         }
