@@ -40,12 +40,12 @@ fn main() {
     {
         let graph = copperconfig.get_graph_mut(None).unwrap();
         let node_indices = graph.node_indices();
-        node_indices.iter().for_each(|node_index| {
+        for node_index in node_indices.iter() {
             let node = graph.get_node_mut(node_index.index() as NodeId).unwrap();
             if node.get_id() == "dst" {
                 node.set_param("pin", 42);
             }
-        });
+        }
 
         let mut application = MyAppBuilder::new()
             .with_context(&copper_ctx)
