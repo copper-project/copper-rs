@@ -141,11 +141,10 @@ impl Drop for LoggerRuntime {
 /// It moves entry by design, it will be absorbed in the queue.
 #[inline(always)]
 pub fn log(entry: &mut CuLogEntry) -> CuResult<()> {
-    let d = WRITER.get().map(|(writer, clock)| (writer, clock));
-    if d.is_none() {
-        return Err("Logger not initialized.".into());
-    }
-    let (writer, clock) = d.unwrap();
+    let (writer, clock) = match WRITER.get() {
+        Some((writer, clock)) => (writer, clock),
+        None => return Err("Logger not initialized.".into()),
+    };
     entry.time = clock.now();
 
     #[cfg(not(feature = "std"))]
@@ -179,55 +178,47 @@ pub fn log_debug_mode(
 #[cfg(feature = "std")]
 fn extra_log(entry: &mut CuLogEntry, format_str: &str, param_names: &[&str]) -> CuResult<()> {
     let guarded_logger = EXTRA_TEXT_LOGGER.read().unwrap();
-    if guarded_logger.is_none() {
+    let Some(logger) = guarded_logger.as_ref() else {
         return Ok(());
-    }
+    };
 
-    if let Some(logger) = guarded_logger.as_ref() {
-        let fstr = format_str.to_string();
-        // transform the slice into a hashmap
-        let params: Vec<String> = entry.params.iter().map(|v| v.to_string()).collect();
-        let named_params: Vec<(&str, String)> = param_names
-            .iter()
-            .zip(params.iter())
-            .map(|(name, value)| (*name, value.clone()))
-            .collect();
-        // build hashmap of string, string from named_paramgs
-        let named_params: HashMap<String, String> = named_params
-            .iter()
-            .map(|(k, v)| (k.to_string(), v.clone()))
-            .collect();
+    // transform the slice into a hashmap
+    let params: Vec<String> = entry.params.iter().map(|v| v.to_string()).collect();
+    let named_params: HashMap<String, String> = param_names
+        .iter()
+        .zip(params.iter())
+        .map(|(name, value)| (name.to_string(), value.clone()))
+        .collect();
 
-        // Convert Copper log level to the standard log level
-        // Note: CuLogLevel::Critical is mapped to log::Level::Error because the `log` crate
-        // does not have a `Critical` level. `Error` is the highest severity level available
-        // in the `log` crate, making it the closest equivalent.
-        let log_level = match entry.level {
-            CuLogLevel::Debug => log::Level::Debug,
-            CuLogLevel::Info => log::Level::Info,
-            CuLogLevel::Warning => log::Level::Warn,
-            CuLogLevel::Error => log::Level::Error,
-            CuLogLevel::Critical => log::Level::Error,
-        };
+    // Convert Copper log level to the standard log level
+    // Note: CuLogLevel::Critical is mapped to log::Level::Error because the `log` crate
+    // does not have a `Critical` level. `Error` is the highest severity level available
+    // in the `log` crate, making it the closest equivalent.
+    let log_level = match entry.level {
+        CuLogLevel::Debug => log::Level::Debug,
+        CuLogLevel::Info => log::Level::Info,
+        CuLogLevel::Warning => log::Level::Warn,
+        CuLogLevel::Error => log::Level::Error,
+        CuLogLevel::Critical => log::Level::Error,
+    };
 
-        let logline = format_logline(
-            entry.time,
-            entry.level,
-            &fstr,
-            params.as_slice(),
-            &named_params,
-        )?;
-        logger.log(
-            &log::Record::builder()
-                .args(format_args!("{logline}"))
-                .level(log_level)
-                .target("cu29_log")
-                .module_path_static(Some("cu29_log"))
-                .file_static(Some("cu29_log"))
-                .line(Some(0))
-                .build(),
-        );
-    }
+    let logline = format_logline(
+        entry.time,
+        entry.level,
+        format_str,
+        params.as_slice(),
+        &named_params,
+    )?;
+    logger.log(
+        &log::Record::builder()
+            .args(format_args!("{logline}"))
+            .level(log_level)
+            .target("cu29_log")
+            .module_path_static(Some("cu29_log"))
+            .file_static(Some("cu29_log"))
+            .line(Some(0))
+            .build(),
+    );
     Ok(())
 }
 // This is an adaptation of the Iowriter from bincode.
