@@ -1,5 +1,6 @@
 mod fsck;
 
+use bincode::Decode;
 use bincode::config::standard;
 use bincode::decode_from_std_read;
 use bincode::error::DecodeError;
@@ -129,57 +130,37 @@ where
 
     Ok(())
 }
+fn read_next_entry<T: Decode<()>>(src: &mut impl Read) -> Option<T> {
+    let entry = decode_from_std_read::<T, _, _>(src, standard());
+    match entry {
+        Ok(entry) => Some(entry),
+        Err(DecodeError::UnexpectedEnd { .. }) => None,
+        Err(DecodeError::Io { inner, additional }) => {
+            if inner.kind() == std::io::ErrorKind::UnexpectedEof {
+                None
+            } else {
+                println!("Error {inner:?} additional:{additional}");
+                None
+            }
+        }
+        Err(e) => {
+            println!("Error {e:?}");
+            None
+        }
+    }
+}
+
 /// Extracts the copper lists from a binary representation.
 /// P is the Payload determined by the configuration of the application.
 pub fn copperlists_reader<P: CopperListTuple>(
     mut src: impl Read,
 ) -> impl Iterator<Item = CopperList<P>> {
-    std::iter::from_fn(move || {
-        let entry = decode_from_std_read::<CopperList<P>, _, _>(&mut src, standard());
-        match entry {
-            Ok(entry) => Some(entry),
-            Err(e) => match e {
-                DecodeError::UnexpectedEnd { .. } => None,
-                DecodeError::Io { inner, additional } => {
-                    if inner.kind() == std::io::ErrorKind::UnexpectedEof {
-                        None
-                    } else {
-                        println!("Error {inner:?} additional:{additional}");
-                        None
-                    }
-                }
-                _ => {
-                    println!("Error {e:?}");
-                    None
-                }
-            },
-        }
-    })
+    std::iter::from_fn(move || read_next_entry::<CopperList<P>>(&mut src))
 }
 
 /// Extracts the keyframes from the log.
 pub fn keyframes_reader(mut src: impl Read) -> impl Iterator<Item = KeyFrame> {
-    std::iter::from_fn(move || {
-        let entry = decode_from_std_read::<KeyFrame, _, _>(&mut src, standard());
-        match entry {
-            Ok(entry) => Some(entry),
-            Err(e) => match e {
-                DecodeError::UnexpectedEnd { .. } => None,
-                DecodeError::Io { inner, additional } => {
-                    if inner.kind() == std::io::ErrorKind::UnexpectedEof {
-                        None
-                    } else {
-                        println!("Error {inner:?} additional:{additional}");
-                        None
-                    }
-                }
-                _ => {
-                    println!("Error {e:?}");
-                    None
-                }
-            },
-        }
-    })
+    std::iter::from_fn(move || read_next_entry::<KeyFrame>(&mut src))
 }
 
 pub fn structlog_reader(mut src: impl Read) -> impl Iterator<Item = CuResult<CuLogEntry>> {
