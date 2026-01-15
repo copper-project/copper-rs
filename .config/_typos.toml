@@ -6,6 +6,7 @@ thr = "thr"
 IST = "IST"
 iterm = "iterm"
 NED = "NED"
+arange = "arange"
 
 [files]
 extend-exclude = ["patches/*", "components/payloads/cu_ros_payloads/**"]
