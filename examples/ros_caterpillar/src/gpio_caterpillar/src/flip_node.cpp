@@ -33,7 +33,9 @@ private:
         auto tick_start = std::chrono::steady_clock::now();
         auto message = gpio_caterpillar::msg::CaterpillarMsg();
         message.state = flip_count_ % 2 == 0;
-        message.origin_ns = now_ns();
+        auto now = now_ns();
+        message.origin_ns = now;
+        message.last_ns = now;
         message.seq = seq_++;
         publisher_->publish(message);
         auto tick_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(

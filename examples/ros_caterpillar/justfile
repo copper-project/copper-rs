@@ -8,19 +8,23 @@ ros-caterpillar-run:
 	if [[ ! -e "$spdlog_dir/libspdlog.so.1.16" ]]; then
 		ln -sf /usr/lib/libspdlog.so.1.17 "$spdlog_dir/libspdlog.so.1.16"
 	fi
-	if [[ ! -e "$spdlog_dir/libpython3.13.so.1.0" ]]; then
-		ln -sf /usr/lib/libpython3.12.so.1.0 "$spdlog_dir/libpython3.13.so.1.0"
-	fi
-	if [[ ! -e "$spdlog_dir/libpython3.13.so" ]]; then
-		ln -sf /usr/lib/libpython3.12.so "$spdlog_dir/libpython3.13.so"
-	fi
 	export LD_LIBRARY_PATH="$spdlog_dir:${LD_LIBRARY_PATH:-}"
 	export LIBRARY_PATH="$spdlog_dir:${LIBRARY_PATH:-}"
 	rm -rf build/ install/ log/
+	if [[ -z "${AMENT_PREFIX_PATH:-}" ]]; then
+		if [[ -f "/opt/ros/jazzy/setup.bash" ]]; then
+			set +u
+			source "/opt/ros/jazzy/setup.bash"
+			set -u
+		else
+			echo "ROS Jazzy environment not found. Source /opt/ros/jazzy/setup.bash before running." >&2
+			exit 1
+		fi
+	fi
 	colcon build
-	export COLCON_TRACE=""
-	export COLCON_PYTHON_EXECUTABLE="${COLCON_PYTHON_EXECUTABLE:-}"
+	set +u
 	source install/setup.bash
+	set -u
 	export ROS_DOMAIN_ID=42
 	echo "Starting all nodes..."
 	ros2 run gpio_caterpillar stats_node &

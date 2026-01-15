@@ -68,15 +68,13 @@ private:
     }
 
     void topic_callback(const gpio_caterpillar::msg::CaterpillarMsg::SharedPtr msg) {
-        auto tick_start = std::chrono::steady_clock::now();
+        auto now = now_ns();
         // digitalWrite(gpio_pin_, msg->data);
-        auto tick_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                           std::chrono::steady_clock::now() - tick_start)
-                           .count();
-        publish_stat(task_name_, static_cast<uint64_t>(tick_ns));
+        auto hop_ns = now - msg->last_ns;
+        publish_stat(task_name_, static_cast<uint64_t>(hop_ns));
 
         if (record_end_to_end_) {
-            auto end_to_end_ns = now_ns() - msg->origin_ns;
+            auto end_to_end_ns = now - msg->origin_ns;
             publish_stat("End2End", end_to_end_ns);
         }
     }
