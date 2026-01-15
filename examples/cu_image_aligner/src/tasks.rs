@@ -114,9 +114,8 @@ impl CuSinkTask for AlignedImageSink {
     }
 
     fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
-        let payload = match input.payload() {
-            Some(payload) => payload,
-            None => return Ok(()),
+        let Some(payload) = input.payload() else {
+            return Ok(());
         };
         let (left, right) = payload;
         let left_len = left.len();
