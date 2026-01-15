@@ -168,45 +168,47 @@ impl CuSinkTask for SN754410 {
         self.enable_pwms()
     }
     fn process(&mut self, clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
-        if let Some(power) = input.payload() {
-            if self.dryrun {
-                debug!(
-                    "In Dryrun mode ignore any command: power would have been {}.",
-                    power.power
-                );
-                self.stop()?;
-                return Ok(());
-            }
-            let deadzone_compensated = if power.power != 0.0f32 {
-                // proportinally on the [deadzone, 1.0] range
-                let deadzone = self.deadzone;
-                if power.power > 0.0 {
-                    deadzone + (1.0 - deadzone) * power.power
-                } else {
-                    -deadzone + (1.0 + deadzone) * power.power
-                }
-            } else {
-                power.power
-            };
-
-            if deadzone_compensated != self.current_power {
-                self.current_power = deadzone_compensated;
-                if deadzone_compensated > 0.0 {
-                    self.forward(self.current_power as f64)?;
-                } else if self.current_power < 0.0 {
-                    self.reverse(-self.current_power as f64)?;
-                } else {
-                    self.stop()?;
-                }
-                self.last_update = clock.now();
-            } else {
-                debug!("Power is the same {}, skipping.", deadzone_compensated);
-            }
-        } else {
+        let Some(power) = input.payload() else {
             debug!("No payload in the message, stopping for safety.");
             self.stop()?;
             return Err("Safety Mode.".into());
+        };
+
+        if self.dryrun {
+            debug!(
+                "In Dryrun mode ignore any command: power would have been {}.",
+                power.power
+            );
+            self.stop()?;
+            return Ok(());
         }
+
+        let deadzone_compensated = if power.power != 0.0f32 {
+            // proportinally on the [deadzone, 1.0] range
+            let deadzone = self.deadzone;
+            if power.power > 0.0 {
+                deadzone + (1.0 - deadzone) * power.power
+            } else {
+                -deadzone + (1.0 + deadzone) * power.power
+            }
+        } else {
+            power.power
+        };
+
+        if deadzone_compensated == self.current_power {
+            debug!("Power is the same {}, skipping.", deadzone_compensated);
+            return Ok(());
+        }
+
+        self.current_power = deadzone_compensated;
+        if deadzone_compensated > 0.0 {
+            self.forward(self.current_power as f64)?;
+        } else if self.current_power < 0.0 {
+            self.reverse(-self.current_power as f64)?;
+        } else {
+            self.stop()?;
+        }
+        self.last_update = clock.now();
         Ok(())
     }
 
