@@ -1206,17 +1206,6 @@
   
 </li>
       
-        <li class="md-nav__item">
-  <a href="#horus-deterministic" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Horus [Deterministic]
-      
-    </span>
-  </a>
-  
-</li>
-      
     </ul>
   
 </nav>
@@ -1241,7 +1230,7 @@
 
 <p>Those are the results from the Copper Caterpillar benchmark, stress testing the latency overhead of robotics middleware.</p>
 <p><strong>Lower is better. LOG SCALE</strong></p>
-<p><img width="1080" height="456" alt="image" src="https://github.com/user-attachments/assets/2426bb62-4a80-4d7e-b163-965987e946bd" /></p>
+<p><img width="1347" height="567" alt="perf" src="https://github.com/user-attachments/assets/f491eb85-4eb4-4de0-85e0-f0ab325af1f1" /></p>
 <p>Conditions: if possible the framework needs to deterministically log every single task output.</p>
 <h2 id="copper-fully-deterministic">Copper [Fully deterministic]<a class="headerlink" href="#copper-fully-deterministic" title="Permanent link">&para;</a></h2>
 <p>Vanilla Copper Application and config.</p>
@@ -1317,29 +1306,6 @@ gpio-6    20.870 us  139.071 us   37.288 us   7.741 us   6.436 us  108.250 us
 ct-7      23.641 us  142.061 us   39.581 us   8.026 us   6.685 us  112.720 us
 gpio-7    22.860 us  395.534 us   38.793 us   9.949 us   6.704 us  352.914 us
 End2End  262.093 us  737.848 us  357.926 us  43.518 us  30.188 us  377.285 us
-</code></pre>
-<h2 id="horus-deterministic">Horus [Deterministic]<a class="headerlink" href="#horus-deterministic" title="Permanent link">&para;</a></h2>
-<p>Deterministic configuration.</p>
-<p><a href="https://github.com/copper-project/copper-rs/tree/master/examples/horus_caterpillar">Benchmark code</a></p>
-<pre><code>Task            Min         Max        Mean     Stddev     Jitter  Max Jitter
-src        1.220 us   27.061 us    8.272 us   4.609 us   4.063 us   24.080 us
-ct-0       9.721 us  146.672 us   46.122 us  21.992 us  20.485 us  127.672 us
-gpio-0     8.030 us   57.831 us   15.542 us   4.239 us   3.148 us   48.431 us
-ct-1      15.890 us   88.622 us   29.116 us   6.739 us   5.514 us   71.131 us
-gpio-1     7.650 us   29.750 us   13.091 us   3.017 us   2.645 us   18.889 us
-ct-2      15.470 us   63.011 us   31.515 us   8.953 us   7.282 us   31.550 us
-gpio-2     7.320 us   23.930 us   12.511 us   2.303 us   2.220 us   12.500 us
-ct-3      14.650 us   39.570 us   25.065 us   4.301 us   4.245 us   16.880 us
-gpio-3    15.110 us   49.191 us   26.559 us   5.274 us   4.954 us   25.340 us
-ct-4       8.290 us   37.240 us   16.010 us   4.254 us   2.972 us   25.350 us
-gpio-4    13.740 us   41.741 us   23.890 us   4.413 us   4.082 us   21.011 us
-ct-5      21.210 us   59.641 us   36.434 us   6.586 us   6.296 us   27.211 us
-gpio-5     7.570 us   19.650 us   12.732 us   2.223 us   2.207 us    7.891 us
-ct-6      15.511 us   50.881 us   27.572 us   6.017 us   5.496 us   21.660 us
-gpio-6    14.800 us   50.081 us   26.643 us   5.679 us   4.614 us   21.921 us
-ct-7       7.930 us   16.660 us   13.347 us   2.195 us   2.164 us    7.150 us
-gpio-7    14.060 us   48.521 us   25.491 us   5.824 us   4.777 us   22.411 us
-End2End  130.702 us  429.196 us  252.409 us  55.615 us  54.088 us  289.394 us
 </code></pre>
 
 
