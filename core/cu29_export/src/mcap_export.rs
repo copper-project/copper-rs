@@ -61,8 +61,7 @@ fn option_cutime_to_nanos(opt: &cu29_clock::OptionCuTime) -> u64 {
 /// * `output_path` - Path to write the MCAP file
 ///
 /// # Type Parameters
-/// * `P` - The CopperListTuple type generated from the Copper configuration.
-///         Must implement `PayloadSchemas` to provide compile-time schema info.
+/// * `P` - The CopperListTuple type generated from the Copper configuration. Must implement `PayloadSchemas` to provide compile-time schema info.
 pub fn export_to_mcap<P, R>(src: R, output_path: &Path) -> CuResult<McapExportStats>
 where
     P: CopperListTuple + PayloadSchemas,
@@ -158,7 +157,7 @@ where
         let msgs = copperlist.cumsgs();
 
         for (idx, msg) in msgs.iter().enumerate() {
-            if let Some(ref channel_info) = channel_infos.get(idx).and_then(|c| c.as_ref()) {
+            if let Some(channel_info) = channel_infos.get(idx).and_then(|c| c.as_ref()) {
                 // Create message data structure
                 let msg_data = McapMessageData {
                     payload: msg.payload(),
@@ -295,11 +294,10 @@ pub fn mcap_info(mcap_path: &Path, show_schemas: bool, sample_messages: usize) -
         // Collect sample messages
         if sample_messages > 0 {
             let samples = sample_data.entry(msg.channel.topic.clone()).or_default();
-            if samples.len() < sample_messages {
-                if let Ok(json_str) = String::from_utf8(msg.data.to_vec()) {
+            if samples.len() < sample_messages
+                && let Ok(json_str) = String::from_utf8(msg.data.to_vec()) {
                     samples.push(json_str);
                 }
-            }
         }
     }
 
