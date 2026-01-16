@@ -14,3 +14,25 @@ resim:
 	#!/usr/bin/env bash
 	set -euo pipefail
 	RUST_BACKTRACE=1 cargo run --bin cu-caterpillar-resim logs/caterpillar.copper
+
+mcap:
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	copper_base="logs/caterpillar.copper"
+	mcap_file="logs/caterpillar.mcap"
+
+	echo "=========================================="
+	echo "Converting: ${copper_base} -> ${mcap_file}"
+	echo "=========================================="
+
+	# Export to MCAP (Copper will automatically find all _0, _1, _2... slabs)
+	cargo run --bin cu-caterpillar-logreader -- "${copper_base}" export-mcap --output "${mcap_file}"
+
+	echo ""
+	echo "=========================================="
+	echo "MCAP Info for: ${mcap_file}"
+	echo "=========================================="
+
+	# Run mcap-info to show the user what was created
+	cargo run --bin cu-caterpillar-logreader -- "${copper_base}" mcap-info "${mcap_file}"
