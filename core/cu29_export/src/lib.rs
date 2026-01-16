@@ -20,7 +20,9 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 #[cfg(feature = "mcap")]
-pub use mcap_export::{export_to_mcap, export_to_mcap_with_schemas, mcap_info, McapExportStats, PayloadSchemas};
+pub use mcap_export::{
+    McapExportStats, PayloadSchemas, export_to_mcap, export_to_mcap_with_schemas, mcap_info,
+};
 
 #[cfg(feature = "mcap")]
 pub use serde_to_jsonschema::trace_type_to_jsonschema;
@@ -285,10 +287,7 @@ where
 ///
 /// Uses the PayloadSchemas trait to get compile-time generated schemas.
 #[cfg(feature = "mcap")]
-fn export_to_mcap_impl<P>(
-    src: impl Read,
-    output: &Path,
-) -> CuResult<McapExportStats>
+fn export_to_mcap_impl<P>(src: impl Read, output: &Path) -> CuResult<McapExportStats>
 where
     P: CopperListTuple + mcap_export::PayloadSchemas,
 {

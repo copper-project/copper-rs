@@ -3,10 +3,12 @@
 //! This module provides functions to convert serde-reflection's `Format` and
 //! `ContainerFormat` types into JSON Schema (draft-07 compatible).
 
-use serde::de::DeserializeOwned;
 use serde::Serialize;
-use serde_json::{json, Map, Value};
-use serde_reflection::{ContainerFormat, Format, Named, Registry, Tracer, TracerConfig, VariantFormat};
+use serde::de::DeserializeOwned;
+use serde_json::{Map, Value, json};
+use serde_reflection::{
+    ContainerFormat, Format, Named, Registry, Tracer, TracerConfig, VariantFormat,
+};
 use std::collections::BTreeMap;
 
 /// Trace a type using serde-reflection and convert to JSON Schema.
@@ -31,7 +33,8 @@ where
         return json!({
             "$schema": "https://json-schema.org/draft-07/schema#",
             "description": format!("Schema generation failed: {}", e)
-        }).to_string();
+        })
+        .to_string();
     }
 
     let registry = match tracer.registry() {
@@ -40,7 +43,8 @@ where
             return json!({
                 "$schema": "https://json-schema.org/draft-07/schema#",
                 "description": format!("Registry extraction failed: {}", e)
-            }).to_string();
+            })
+            .to_string();
         }
     };
 
@@ -113,9 +117,7 @@ fn container_format_to_schema(container: &ContainerFormat, registry: &Registry) 
         ContainerFormat::UnitStruct => {
             json!({ "type": "null" })
         }
-        ContainerFormat::NewTypeStruct(format) => {
-            format_to_schema(format, registry)
-        }
+        ContainerFormat::NewTypeStruct(format) => format_to_schema(format, registry),
         ContainerFormat::TupleStruct(formats) => {
             let items: Vec<Value> = formats
                 .iter()
@@ -129,12 +131,8 @@ fn container_format_to_schema(container: &ContainerFormat, registry: &Registry) 
                 "maxItems": formats.len()
             })
         }
-        ContainerFormat::Struct(fields) => {
-            struct_to_schema(fields, registry)
-        }
-        ContainerFormat::Enum(variants) => {
-            enum_to_schema(variants, registry)
-        }
+        ContainerFormat::Struct(fields) => struct_to_schema(fields, registry),
+        ContainerFormat::Enum(variants) => enum_to_schema(variants, registry),
     }
 }
 

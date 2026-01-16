@@ -100,8 +100,8 @@ where
         .map_err(|e| CuError::new_with_cause("Failed to create MCAP output file", e))?;
     let writer = BufWriter::new(file);
 
-    let mut mcap_writer =
-        McapWriter::new(writer).map_err(|e| CuError::new_with_cause("Failed to create MCAP writer", e))?;
+    let mut mcap_writer = McapWriter::new(writer)
+        .map_err(|e| CuError::new_with_cause("Failed to create MCAP writer", e))?;
 
     // Build a map from task_id to schema
     let schema_map: BTreeMap<&str, &str> = schemas
@@ -120,18 +120,29 @@ where
                     "jsonschema",
                     schema_json.as_bytes(),
                 )
-                .map_err(|e| CuError::new_with_cause(&format!("Failed to add schema for {}", task_id), e))?;
+                .map_err(|e| {
+                    CuError::new_with_cause(&format!("Failed to add schema for {}", task_id), e)
+                })?;
 
             let channel_id = mcap_writer
-                .add_channel(schema_id, &format!("/{}", task_id), "json", &BTreeMap::new())
-                .map_err(|e| CuError::new_with_cause(&format!("Failed to add channel for {}", task_id), e))?;
+                .add_channel(
+                    schema_id,
+                    &format!("/{}", task_id),
+                    "json",
+                    &BTreeMap::new(),
+                )
+                .map_err(|e| {
+                    CuError::new_with_cause(&format!("Failed to add channel for {}", task_id), e)
+                })?;
 
             channel_infos.push(Some(ChannelInfo { channel_id }));
         } else {
             // No schema for this task - create channel without schema
             let channel_id = mcap_writer
                 .add_channel(0, &format!("/{}", task_id), "json", &BTreeMap::new())
-                .map_err(|e| CuError::new_with_cause(&format!("Failed to add channel for {}", task_id), e))?;
+                .map_err(|e| {
+                    CuError::new_with_cause(&format!("Failed to add channel for {}", task_id), e)
+                })?;
 
             channel_infos.push(Some(ChannelInfo { channel_id }));
         }
@@ -157,8 +168,9 @@ where
                 };
 
                 // Serialize to JSON
-                let json_data = serde_json::to_vec(&msg_data)
-                    .map_err(|e| CuError::new_with_cause("Failed to serialize message to JSON", e))?;
+                let json_data = serde_json::to_vec(&msg_data).map_err(|e| {
+                    CuError::new_with_cause("Failed to serialize message to JSON", e)
+                })?;
 
                 // Calculate timestamps
                 let publish_time = tov_to_nanos(&msg.tov());
@@ -214,7 +226,10 @@ impl std::fmt::Display for McapExportStats {
         write!(
             f,
             "MCAP Export: {} CopperLists → {} messages, {} channels, {} schemas",
-            self.copperlists_read, self.messages_written, self.channels_created, self.schemas_generated
+            self.copperlists_read,
+            self.messages_written,
+            self.channels_created,
+            self.schemas_generated
         )
     }
 }
@@ -235,7 +250,11 @@ pub fn mcap_info(mcap_path: &Path, show_schemas: bool, sample_messages: usize) -
 
     println!("=== MCAP File Info ===");
     println!("File: {}", mcap_path.display());
-    println!("Size: {} bytes ({:.2} MB)", data.len(), data.len() as f64 / 1_048_576.0);
+    println!(
+        "Size: {} bytes ({:.2} MB)",
+        data.len(),
+        data.len() as f64 / 1_048_576.0
+    );
     println!();
 
     // Track statistics
@@ -253,19 +272,24 @@ pub fn mcap_info(mcap_path: &Path, show_schemas: bool, sample_messages: usize) -
         let msg = msg_result.map_err(|e| CuError::new_with_cause("Failed to read message", e))?;
 
         total_messages += 1;
-        *messages_per_channel.entry(msg.channel.topic.clone()).or_insert(0) += 1;
+        *messages_per_channel
+            .entry(msg.channel.topic.clone())
+            .or_insert(0) += 1;
 
         // Track channel info
         let schema_name = msg.channel.schema.as_ref().map(|s| s.name.clone());
-        channels.entry(msg.channel.topic.clone())
+        channels
+            .entry(msg.channel.topic.clone())
             .or_insert_with(|| (msg.channel.message_encoding.clone(), schema_name.clone()));
 
         // Track schema info
         if let Some(schema) = &msg.channel.schema {
-            schemas.entry(schema.name.clone())
-                .or_insert_with(|| {
-                    (schema.encoding.clone(), String::from_utf8_lossy(&schema.data).to_string())
-                });
+            schemas.entry(schema.name.clone()).or_insert_with(|| {
+                (
+                    schema.encoding.clone(),
+                    String::from_utf8_lossy(&schema.data).to_string(),
+                )
+            });
         }
 
         // Collect sample messages
@@ -290,8 +314,14 @@ pub fn mcap_info(mcap_path: &Path, show_schemas: bool, sample_messages: usize) -
     println!("=== Channels ===");
     for (topic, (encoding, schema_name)) in &channels {
         let msg_count = messages_per_channel.get(topic).unwrap_or(&0);
-        let schema_info = schema_name.as_ref().map(|s| format!(" (schema: {})", s)).unwrap_or_default();
-        println!("  {} [{}]{}: {} messages", topic, encoding, schema_info, msg_count);
+        let schema_info = schema_name
+            .as_ref()
+            .map(|s| format!(" (schema: {})", s))
+            .unwrap_or_default();
+        println!(
+            "  {} [{}]{}: {} messages",
+            topic, encoding, schema_info, msg_count
+        );
     }
     println!();
 
@@ -303,7 +333,10 @@ pub fn mcap_info(mcap_path: &Path, show_schemas: bool, sample_messages: usize) -
             // Pretty print JSON if possible
             if encoding == "jsonschema" {
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data) {
-                    println!("{}", serde_json::to_string_pretty(&parsed).unwrap_or_else(|_| data.clone()));
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&parsed).unwrap_or_else(|_| data.clone())
+                    );
                 } else {
                     println!("{}", data);
                 }
@@ -322,11 +355,15 @@ pub fn mcap_info(mcap_path: &Path, show_schemas: bool, sample_messages: usize) -
             for (i, sample) in samples.iter().enumerate() {
                 // Pretty print JSON if possible
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(sample) {
-                    println!("  [{}] {}", i + 1, serde_json::to_string_pretty(&parsed)
-                        .unwrap_or_else(|_| sample.clone())
-                        .lines()
-                        .collect::<Vec<_>>()
-                        .join("\n      "));
+                    println!(
+                        "  [{}] {}",
+                        i + 1,
+                        serde_json::to_string_pretty(&parsed)
+                            .unwrap_or_else(|_| sample.clone())
+                            .lines()
+                            .collect::<Vec<_>>()
+                            .join("\n      ")
+                    );
                 } else {
                     println!("  [{}] {}", i + 1, sample);
                 }
@@ -341,9 +378,10 @@ pub fn mcap_info(mcap_path: &Path, show_schemas: bool, sample_messages: usize) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bincode::{config::standard, encode_into_slice, Decode, Encode};
+    use bincode::{Decode, Encode, config::standard, encode_into_slice};
     use cu29::prelude::{
-        CopperList, CuMsgMetadata, CuStampedData, ErasedCuStampedData, ErasedCuStampedDataSet, MatchingTasks,
+        CopperList, CuMsgMetadata, CuStampedData, ErasedCuStampedData, ErasedCuStampedDataSet,
+        MatchingTasks,
     };
     use cu29_clock::OptionCuTime;
     use serde::{Deserialize, Serialize};
@@ -434,7 +472,8 @@ mod tests {
                 name: format!("test_{}", i),
             });
             msgs.0.tov = Tov::Time(CuTime::from((i as u64) * 1_000_000_000));
-            msgs.0.metadata.process_time.start = OptionCuTime::from(CuTime::from((i as u64) * 1_000_000_000));
+            msgs.0.metadata.process_time.start =
+                OptionCuTime::from(CuTime::from((i as u64) * 1_000_000_000));
             msgs.0.metadata.process_time.end =
                 OptionCuTime::from(CuTime::from((i as u64) * 1_000_000_000 + 1000));
 
@@ -455,7 +494,8 @@ mod tests {
 
         // Export to MCAP using compile-time schemas
         let cursor = Cursor::new(&buffer[..offset]);
-        let stats = export_to_mcap::<TestMsgs, _>(cursor, &mcap_path).expect("Failed to export MCAP");
+        let stats =
+            export_to_mcap::<TestMsgs, _>(cursor, &mcap_path).expect("Failed to export MCAP");
 
         // Verify stats
         assert_eq!(stats.copperlists_read, 3);
@@ -480,7 +520,8 @@ mod tests {
         assert_eq!(messages.len(), 6);
 
         // Verify channel topics
-        let topics: std::collections::HashSet<_> = messages.iter().map(|m| m.channel.topic.as_str()).collect();
+        let topics: std::collections::HashSet<_> =
+            messages.iter().map(|m| m.channel.topic.as_str()).collect();
         assert!(topics.contains("/task_a"));
         assert!(topics.contains("/task_b"));
 
@@ -499,7 +540,8 @@ mod tests {
 
         // Verify we can parse the JSON data
         for msg in &messages {
-            let json: serde_json::Value = serde_json::from_slice(&msg.data).expect("Failed to parse message JSON");
+            let json: serde_json::Value =
+                serde_json::from_slice(&msg.data).expect("Failed to parse message JSON");
             assert!(json.get("tov").is_some());
             assert!(json.get("process_time").is_some());
         }
@@ -515,7 +557,8 @@ mod tests {
         // Parse and validate schema for TestPayloadA
         let (task_a_id, schema_a) = &schemas[0];
         assert_eq!(*task_a_id, "task_a");
-        let parsed_a: serde_json::Value = serde_json::from_str(schema_a).expect("Invalid JSON schema A");
+        let parsed_a: serde_json::Value =
+            serde_json::from_str(schema_a).expect("Invalid JSON schema A");
         assert_eq!(parsed_a["type"], "object");
         assert!(parsed_a["properties"]["value"].is_object());
         assert!(parsed_a["properties"]["name"].is_object());
@@ -523,7 +566,8 @@ mod tests {
         // Parse and validate schema for TestPayloadB
         let (task_b_id, schema_b) = &schemas[1];
         assert_eq!(*task_b_id, "task_b");
-        let parsed_b: serde_json::Value = serde_json::from_str(schema_b).expect("Invalid JSON schema B");
+        let parsed_b: serde_json::Value =
+            serde_json::from_str(schema_b).expect("Invalid JSON schema B");
         assert_eq!(parsed_b["type"], "object");
         assert!(parsed_b["properties"]["temperature"].is_object());
         assert!(parsed_b["properties"]["active"].is_object());

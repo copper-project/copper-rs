@@ -1,7 +1,7 @@
+use cu_rp_gpio::RPGpioPayload;
 use cu29::prelude::*;
 use cu29_export::run_cli;
 use cu29_export::serde_to_jsonschema::trace_type_to_jsonschema;
-use cu_rp_gpio::RPGpioPayload;
 
 gen_cumsgs!("copperconfig.ron");
 
@@ -11,10 +11,7 @@ impl PayloadSchemas for cumsgs::CuStampedDataSet {
         // All tasks in this example use RPGpioPayload
         let task_ids = <cumsgs::CuStampedDataSet as MatchingTasks>::get_all_task_ids();
         let schema = trace_type_to_jsonschema::<RPGpioPayload>();
-        task_ids
-            .iter()
-            .map(|&id| (id, schema.clone()))
-            .collect()
+        task_ids.iter().map(|&id| (id, schema.clone())).collect()
     }
 }
 
