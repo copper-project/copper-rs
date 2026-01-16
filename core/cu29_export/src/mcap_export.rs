@@ -295,9 +295,10 @@ pub fn mcap_info(mcap_path: &Path, show_schemas: bool, sample_messages: usize) -
         if sample_messages > 0 {
             let samples = sample_data.entry(msg.channel.topic.clone()).or_default();
             if samples.len() < sample_messages
-                && let Ok(json_str) = String::from_utf8(msg.data.to_vec()) {
-                    samples.push(json_str);
-                }
+                && let Ok(json_str) = String::from_utf8(msg.data.to_vec())
+            {
+                samples.push(json_str);
+            }
         }
     }
 
