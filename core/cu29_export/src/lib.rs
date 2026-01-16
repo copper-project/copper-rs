@@ -221,14 +221,9 @@ where
     };
 
     match args.command {
-        Command::ExtractTextLog { output } => {
-            // Write to output or stdout
-            let mut writer: Box<dyn Write> = if let Some(output) = output {
-                Box::new(std::fs::File::create(&output).expect("Failed to create output file"))
-            } else {
-                Box::new(std::io::stdout())
-            };
-            extract_low_level_cu29_log(&mut dl, &mut writer)?;
+        Command::ExtractTextLog { log_index } => {
+            let reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::StructuredLogLine);
+            textlog_dump(reader, &log_index)?;
         }
         Command::ExtractCopperlists { export_format } => {
             println!("Extracting copperlists with format: {export_format}");
