@@ -35,7 +35,10 @@ cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0
 cu-pid = { path = "../../components/tasks/cu_pid", version = "0.12.0" }
 
 # Log reader depencies
-cu29-export = { workspace = true, optional = true, features = ["python", "mcap"] }
+cu29-export = { workspace = true, optional = true, features = [
+  "python",
+  "mcap",
+] }
 
 # Sim dependencies
 bevy = { version = "0.17.3", default-features = false, features = [
