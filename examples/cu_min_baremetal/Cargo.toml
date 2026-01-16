@@ -41,7 +41,7 @@ spin = { workspace = true }
 embedded-alloc = "0.7"
 
 # host only
-cu29-export = { workspace = true, features = ["python"], optional = true }
+cu29-export = { workspace = true, features = ["python", "mcap"], optional = true }
 
 [features]
 default = ["std"]                                                         # Compile with --no-default-features to target no_std
