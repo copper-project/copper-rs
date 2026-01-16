@@ -16,8 +16,8 @@ publish = false
 # cu29 = { workspace = true, features = ["macro_debug"] }
 cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
-serde = { workspace = true }        # Keep
-cu29-export = { workspace = true }  # Keep
+serde = { workspace = true }                            # Keep
+cu29-export = { workspace = true, features = ["mcap"] } # Keep
 
 
 [[bin]]
