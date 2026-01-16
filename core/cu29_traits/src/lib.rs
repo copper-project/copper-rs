@@ -356,6 +356,24 @@ pub trait MatchingTasks {
     fn get_all_task_ids() -> &'static [&'static str];
 }
 
+/// Trait for providing JSON schemas for CopperList payload types.
+///
+/// This trait is implemented by the generated CuMsgs type via the `gen_cumsgs!` macro
+/// when MCAP export support is enabled. It provides compile-time schema information
+/// for each task's payload type, enabling proper schema generation for Foxglove.
+///
+/// The default implementation returns an empty vector for backwards compatibility
+/// with code that doesn't need MCAP export support.
+pub trait PayloadSchemas {
+    /// Returns a vector of (task_id, schema_json) pairs.
+    ///
+    /// Each entry corresponds to a task in the CopperList, in order.
+    /// The schema is a JSON Schema string generated from the payload type.
+    fn get_payload_schemas() -> Vec<(&'static str, String)> {
+        Vec::new()
+    }
+}
+
 /// A CopperListTuple needs to be encodable, decodable and fixed size in memory.
 pub trait CopperListTuple:
     bincode::Encode

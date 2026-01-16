@@ -18,6 +18,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 cu29 = { workspace = true }
+cu29-clock = { workspace = true }
 cu29-intern-strs = { workspace = true }
 clap = { workspace = true }
 bincode = { workspace = true }
@@ -36,3 +37,16 @@ fs_extra = "1.3"
 [features]
 default = []
 python = ["dep:pyo3"]
+mcap = ["dep:mcap", "dep:serde-reflection", "dep:erased-serde"]
+
+[dependencies.mcap]
+version = "0.24"
+optional = true
+
+[dependencies.serde-reflection]
+version = "0.4"
+optional = true
+
+[dependencies.erased-serde]
+version = "0.4"
+optional = true
