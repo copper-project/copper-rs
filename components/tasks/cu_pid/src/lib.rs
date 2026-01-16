@@ -105,6 +105,9 @@ impl PIDController {
         let error = self.setpoint - measurement;
         let CuDuration(elapsed) = self.elapsed;
         let dt = elapsed as f32 / 1_000_000f32; // the unit is kind of arbitrary.
+        if dt == 0.0 {
+            return self.last_output.clone();
+        }
 
         // Proportional term
         let p_unbounded = self.kp * error;
@@ -226,6 +229,7 @@ where
         input: &Self::Input<'_>,
         output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
+        output.tov = input.tov;
         match input.payload() {
             Some(payload) => {
                 let tov = match input.tov {

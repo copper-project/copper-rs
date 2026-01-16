@@ -38,8 +38,7 @@ impl CuTask for PIDMerger {
             Some(payload) => payload,
             None => return Err(CuError::from("Safety mode [rail].")),
         };
-        // Take the fastest measure as the reference time for the merge
-        output.tov = bal_pid_msg.tov;
+        output.tov = merge_tov(bal_pid_msg.tov, pos_pid_msg.tov);
         let composite_output = (bal_pid.output - pos_pid.output).clamp(-1.0, 1.0);
         output.set_payload(MotorPayload {
             power: composite_output,
@@ -49,5 +48,25 @@ impl CuTask for PIDMerger {
             .set_status(format!("Comp:{composite_output:.2}"));
 
         Ok(())
+    }
+}
+
+fn merge_tov(left: Tov, right: Tov) -> Tov {
+    match (left, right) {
+        (Tov::None, other) | (other, Tov::None) => other,
+        (Tov::Time(a), Tov::Time(b)) => {
+            let (start, end) = if a <= b { (a, b) } else { (b, a) };
+            Tov::Range(CuTimeRange { start, end })
+        }
+        (Tov::Range(range), Tov::Time(time)) | (Tov::Time(time), Tov::Range(range)) => {
+            Tov::Range(CuTimeRange {
+                start: range.start.min(time),
+                end: range.end.max(time),
+            })
+        }
+        (Tov::Range(left), Tov::Range(right)) => Tov::Range(CuTimeRange {
+            start: left.start.min(right.start),
+            end: left.end.max(right.end),
+        }),
     }
 }

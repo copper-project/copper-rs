@@ -36,6 +36,9 @@ struct Copper {
     copper_app: BalanceBotSim,
 }
 
+#[derive(Resource, Default)]
+struct LastCopperTick(Option<u64>);
+
 // Some default do nothing for out sources and sinks.
 // This is queried by the sim runtime to know what it should do
 // at any stage passed as a parameter to the enums
@@ -91,6 +94,7 @@ fn setup_copper(mut commands: Commands) {
         _copper_ctx: copper_ctx,
         copper_app,
     });
+    commands.insert_resource(LastCopperTick::default());
 }
 
 /// This is a bevy system to trigger the Copper application to run one iteration.
@@ -105,6 +109,7 @@ fn run_copper_callback(
     physics_time: Res<Time<Physics>>,
     robot_clock: ResMut<CopperMockClock>,
     mut copper_ctx: ResMut<Copper>,
+    mut last_tick: ResMut<LastCopperTick>,
     drag_state: Res<DragState>,
     mut exit_writer: MessageWriter<AppExit>,
 ) {
@@ -113,10 +118,14 @@ fn run_copper_callback(
         return;
     }
 
+    let current_time = physics_time.elapsed().as_nanos() as u64;
+    if last_tick.0 == Some(current_time) {
+        return;
+    }
+    last_tick.0 = Some(current_time);
+
     // Sync the copper clock to the simulated physics clock.
-    robot_clock
-        .clock
-        .set_value(physics_time.elapsed().as_nanos() as u64);
+    robot_clock.clock.set_value(current_time);
     let mut sim_callback = move |step: default::SimStep| -> SimOverride {
         match step {
             default::SimStep::Balpos(CuTaskCallbackState::Process(_, output)) => {
@@ -270,7 +279,7 @@ pub fn make_world(headless: bool) -> App {
 
     // set up all the systems related to copper and the glue logic.
     simulation.add_systems(Startup, setup_copper);
-    simulation.add_systems(Update, run_copper_callback);
+    simulation.add_systems(FixedUpdate, run_copper_callback);
     simulation.add_systems(PostUpdate, stop_copper_on_exit);
     world
 }
