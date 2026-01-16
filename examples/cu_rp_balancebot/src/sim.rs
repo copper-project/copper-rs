@@ -279,7 +279,7 @@ pub fn make_world(headless: bool) -> App {
 
     // set up all the systems related to copper and the glue logic.
     simulation.add_systems(Startup, setup_copper);
-    simulation.add_systems(Update, run_copper_callback);
+    simulation.add_systems(FixedUpdate, run_copper_callback);
     simulation.add_systems(PostUpdate, stop_copper_on_exit);
     world
 }
