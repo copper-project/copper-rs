@@ -317,7 +317,7 @@ fn setup_scene(
     let specular_map_handle = skybox_handle.clone(); // some quirk
 
     // Fiat Lux
-    commands.insert_resource(AmbientLight {
+    commands.insert_resource(GlobalAmbientLight {
         color: Color::srgb_u8(210, 220, 240),
         brightness: 1.0,
         affects_lightmapped_meshes: true,
@@ -379,11 +379,11 @@ fn setup_ui(mut commands: Commands) {
                 flex_direction: FlexDirection::Row,
                 justify_content: JustifyContent::SpaceBetween,
                 border: UiRect::all(Val::Px(2.0)),
+                border_radius: BorderRadius::all(Val::Px(10.0)),
                 ..default()
             },
             BackgroundColor(Color::srgba(0.25, 0.41, 0.88, 0.7)),
             BorderColor::all(Color::srgba(0.8, 0.8, 0.8, 0.7)),
-            BorderRadius::all(Val::Px(10.0)),
         ))
         .with_children(|parent| {
             // Left column
