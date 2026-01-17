@@ -80,9 +80,9 @@ pub fn process_predictions(
 
         // Extract keypoints (17 keypoints, each with x, y, confidence)
         let mut keypoints = [Keypoint::default(); NUM_KEYPOINTS];
-        for i in 0..NUM_KEYPOINTS {
+        for (i, kp) in keypoints.iter_mut().enumerate().take(NUM_KEYPOINTS) {
             let base = 5 + i * 3;
-            keypoints[i] = Keypoint::new(pred_vec[base], pred_vec[base + 1], pred_vec[base + 2]);
+            *kp = Keypoint::new(pred_vec[base], pred_vec[base + 1], pred_vec[base + 2]);
         }
 
         candidates.push(PoseCandidate {

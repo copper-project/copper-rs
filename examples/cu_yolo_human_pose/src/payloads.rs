@@ -7,13 +7,13 @@ pub const MAX_POSES: usize = 32;
 /// Number of keypoints in COCO pose format (YOLOv8-pose)
 pub const NUM_KEYPOINTS: usize = 17;
 
-/// COCO keypoint indices for reference:
-/// 0: nose, 1: left_eye, 2: right_eye, 3: left_ear, 4: right_ear,
-/// 5: left_shoulder, 6: right_shoulder, 7: left_elbow, 8: right_elbow,
-/// 9: left_wrist, 10: right_wrist, 11: left_hip, 12: right_hip,
-/// 13: left_knee, 14: right_knee, 15: left_ankle, 16: right_ankle
+// COCO keypoint indices for reference:
+// 0: nose, 1: left_eye, 2: right_eye, 3: left_ear, 4: right_ear,
+// 5: left_shoulder, 6: right_shoulder, 7: left_elbow, 8: right_elbow,
+// 9: left_wrist, 10: right_wrist, 11: left_hip, 12: right_hip,
+// 13: left_knee, 14: right_knee, 15: left_ankle, 16: right_ankle
 
-/// Skeleton connections for visualization (pairs of keypoint indices)
+// Skeleton connections for visualization (pairs of keypoint indices)
 pub const SKELETON_CONNECTIONS: [(usize, usize); 19] = [
     (0, 1),   // nose -> left_eye
     (0, 2),   // nose -> right_eye
@@ -89,6 +89,7 @@ impl CuPoses {
         Self { poses: Vec::new() }
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn push(&mut self, pose: Pose) -> Result<(), Pose> {
         if self.poses.len() >= MAX_POSES {
             return Err(pose);
