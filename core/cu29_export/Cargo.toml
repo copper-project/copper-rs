@@ -44,7 +44,7 @@ version = "0.24"
 optional = true
 
 [dependencies.serde-reflection]
-version = "0.4"
+version = "0.5"
 optional = true
 
 [dependencies.erased-serde]
