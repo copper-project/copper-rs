@@ -1,0 +1,47 @@
+[package]
+name = "cu-yolo-pose-demo"
+description = "YOLOv8 pose estimation demo using Candle and V4L camera input"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+publish = false
+
+[features]
+default = ["cpu"]
+cpu = []
+cuda = ["candle-core/cuda", "candle-nn/cuda"]
+
+[dependencies]
+cu29 = { workspace = true }
+cu29-helpers = { workspace = true }
+cu-v4l = { path = "../../components/sources/cu_v4l", version = "0.12.0" }
+cu-sensor-payloads = { path = "../../components/payloads/cu_sensor_payloads", version = "0.12.0" }
+cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.12.0" }
+
+# Candle ML framework
+candle-core = "0.8"
+candle-nn = "0.8"
+candle-transformers = "0.8"
+
+# Visualization
+rerun = { workspace = true }
+
+# Serialization
+bincode = { workspace = true }
+serde = { workspace = true }
+
+# Model download
+hf-hub = "0.3"
+
+# Misc
+tempfile = { workspace = true }
+env_logger = "0.11"
+
+[build-dependencies]
+hf-hub = "0.3"

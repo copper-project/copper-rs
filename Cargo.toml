@@ -80,6 +80,7 @@ members = [
   "examples/cu_zenoh",
   "examples/cu_zenoh_bridge_demo",
   "examples/cu_zenoh_ros",
+  "examples/cu_yolo_pose_demo",
 ]
 
 # put only the core crates here that are not platform specific
