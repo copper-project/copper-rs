@@ -46,11 +46,9 @@ use std::{collections::HashMap, io, thread};
 use tui_widgets::scrollview::{ScrollView, ScrollViewState};
 
 #[cfg(feature = "debug_pane")]
-const MENU_CONTENT: &str =
-    "   [1] SysInfo  [2] DAG  [3] Latencies  [4] Memory Pools  [5] CopperList  [6] Debug Output  [q] Quit | Scroll: hjkl or ↑↓←→   ";
+const MENU_CONTENT: &str = "   [1] SysInfo  [2] DAG  [3] Latencies  [4] Memory Pools  [5] CopperList  [6] Debug Output  [q] Quit | Scroll: hjkl or ↑↓←→   ";
 #[cfg(not(feature = "debug_pane"))]
-const MENU_CONTENT: &str =
-    "   [1] SysInfo  [2] DAG  [3] Latencies  [4] Memory Pools  [5] CopperList  [q] Quit | Scroll: hjkl or ↑↓←→   ";
+const MENU_CONTENT: &str = "   [1] SysInfo  [2] DAG  [3] Latencies  [4] Memory Pools  [5] CopperList  [q] Quit | Scroll: hjkl or ↑↓←→   ";
 
 const COPPERLIST_RATE_WINDOW: Duration = Duration::from_secs(1);
 
@@ -958,7 +956,7 @@ impl UI {
 
         let rows = vec![
             Row::new(vec![
-                Cell::from(Line::from("Copperlist size")),
+                Cell::from(Line::from("CL size (RAM)")),
                 Cell::from(Line::from(size_display).alignment(Alignment::Right)),
             ]),
             Row::new(vec![
@@ -966,12 +964,12 @@ impl UI {
                 Cell::from(Line::from(rate_display).alignment(Alignment::Right)),
             ]),
             Row::new(vec![
-                Cell::from(Line::from("Bandwidth (read+write)")),
+                Cell::from(Line::from("RAM BW (CL read+write)")),
                 Cell::from(Line::from(bandwidth_display).alignment(Alignment::Right)),
             ]),
         ];
 
-        let table = Table::new(rows, &[Constraint::Length(28), Constraint::Min(10)])
+        let table = Table::new(rows, &[Constraint::Length(24), Constraint::Length(12)])
             .header(header)
             .block(
                 Block::default()
@@ -979,7 +977,12 @@ impl UI {
                     .title(" CopperList Stats "),
             );
 
-        f.render_widget(table, area);
+        let layout = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Length(42), Constraint::Min(0)].as_ref())
+            .split(area);
+
+        f.render_widget(table, layout[0]);
     }
 
     fn draw_nodes(&mut self, f: &mut Frame, space: Rect) {
