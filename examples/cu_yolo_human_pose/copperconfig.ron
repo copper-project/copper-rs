@@ -4,7 +4,6 @@
             id: "camera",
             type: "cu_gstreamer::CuDefaultGStreamer",
             config: {
-                //"pipeline": "v4l2src device=/dev/video0 io-mode=2 ! videoconvert ! videoscale ! video/x-raw, format=NV12, width=640, height=360, framerate=30/1 ! appsink name=copper max-buffers=1 drop=true sync=false",
                 "pipeline": "v4l2src device=/dev/video0 ! videoconvert ! videoscale ! video/x-raw, format=NV12, width=640, height=360, framerate=30/1 ! appsink name=copper max-buffers=1 drop=true sync=false",
                 "caps": "video/x-raw, format=NV12, width=640, height=360",
                 "log_bus_messages": true,
