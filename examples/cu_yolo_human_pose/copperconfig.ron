@@ -1,0 +1,69 @@
+(
+    tasks: [
+        (
+            id: "camera",
+            type: "cu_gstreamer::CuDefaultGStreamer",
+            config: {
+                //"pipeline": "v4l2src device=/dev/video0 io-mode=2 ! videoconvert ! videoscale ! video/x-raw, format=NV12, width=640, height=360, framerate=30/1 ! appsink name=copper max-buffers=1 drop=true sync=false",
+                "pipeline": "v4l2src device=/dev/video0 ! videoconvert ! videoscale ! video/x-raw, format=NV12, width=640, height=360, framerate=30/1 ! appsink name=copper max-buffers=1 drop=true sync=false",
+                "caps": "video/x-raw, format=NV12, width=640, height=360",
+                "log_bus_messages": true,
+                "log_pad_events": true,
+                "log_src_pad_events": true,
+                "stop_timeout_ms": 2000,
+            },
+        ),
+        (
+            id: "gst_to_image",
+            type: "tasks::GstToCuImage",
+            config: {
+                "width": 640,
+                "height": 360,
+                "fourcc": "NV12",
+            },
+        ),
+        (
+            id: "yolo",
+            type: "tasks::YoloPose",
+            config: {
+                "variant": "yolov8n-pose",
+                "conf_threshold": 0.25,
+                "iou_threshold": 0.7,
+            },
+        ),
+        (
+            id: "viz",
+            type: "tasks::RerunPoseViz",
+        ),
+    ],
+    cnx: [
+        (
+            src: "camera",
+            dst: "gst_to_image",
+            msg: "cu_gstreamer::CuGstBuffer",
+        ),
+        (
+            src: "gst_to_image",
+            dst: "yolo",
+            msg: "cu_sensor_payloads::CuImage<Vec<u8>>",
+        ),
+        (
+            src: "gst_to_image",
+            dst: "viz",
+            msg: "cu_sensor_payloads::CuImage<Vec<u8>>",
+        ),
+        (
+            src: "yolo",
+            dst: "viz",
+            msg: "payloads::CuPoses",
+        ),
+    ],
+    logging: (
+        keyframe_interval: 1000,
+        slab_size_mib: 128,
+        section_size_mib: 16,
+    ),
+    monitor: (
+        type: "cu_consolemon::CuConsoleMon",
+    ),
+)

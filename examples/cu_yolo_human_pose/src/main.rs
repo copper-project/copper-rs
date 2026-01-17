@@ -1,7 +1,7 @@
 //! YOLOv8 Pose Estimation Demo for Copper
 //!
 //! This example demonstrates real-time pose estimation using:
-//! - V4L camera input
+//! - GStreamer (V4L2) camera input
 //! - YOLOv8-pose model via Candle (HuggingFace ML framework)
 //! - Rerun visualization for displaying results
 //!
@@ -9,10 +9,10 @@
 //!
 //! ```bash
 //! # CPU inference (default)
-//! cargo run -p cu-yolo-pose-demo
+//! cargo run -p cu-yolo-human-pose
 //!
 //! # CUDA inference (requires CUDA toolkit)
-//! cargo run -p cu-yolo-pose-demo --features cuda
+//! cargo run -p cu-yolo-human-pose --features cuda
 //! ```
 
 mod payloads;
@@ -26,7 +26,7 @@ use cu29_helpers::basic_copper_setup;
 pub use payloads::*;
 pub use tasks::*;
 
-const SLAB_SIZE: Option<usize> = Some(100 * 1024 * 1024); // 100 MiB
+const SLAB_SIZE: Option<usize> = Some(128 * 1024 * 1024); // 128 MiB
 
 #[copper_runtime(config = "copperconfig.ron")]
 struct YoloPoseDemoApplication {}
@@ -45,7 +45,7 @@ fn main() {
     println!("Starting Copper runtime...");
 
     // Initialize Copper context
-    let copper_ctx = basic_copper_setup(&logger_path, SLAB_SIZE, false, None)
+    let copper_ctx = basic_copper_setup(&logger_path, SLAB_SIZE, true, None)
         .expect("Failed to set up Copper context");
 
     println!("Building application...");

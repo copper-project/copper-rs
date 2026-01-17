@@ -4,10 +4,12 @@ use crate::payloads::{CuPoses, SKELETON_CONNECTIONS};
 use cu_sensor_payloads::CuImage;
 use cu29::prelude::*;
 use rerun::{
-    Boxes2D, Image, LineStrips2D, Points2D, RecordingStream, RecordingStreamBuilder, Vec2D,
-    components::ImageBuffer,
-    datatypes::{Blob, ImageFormat},
+    Boxes2D, ChannelDatatype, ColorModel, Image, LineStrips2D, Points2D, RecordingStream,
+    RecordingStreamBuilder, Vec2D,
 };
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+static IMAGE_LOG_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 /// Rerun visualization sink for pose estimation
 ///
@@ -16,6 +18,8 @@ use rerun::{
 pub struct RerunPoseViz {
     rec: RecordingStream,
 }
+
+const CAMERA_ENTITY: &str = "camera/image";
 
 impl Freezable for RerunPoseViz {}
 
@@ -80,21 +84,26 @@ impl RerunPoseViz {
             }
         });
 
-        // Create rerun image format for RGB
-        let format = rerun::components::ImageFormat(ImageFormat {
-            width,
-            height,
-            pixel_format: None,
-            color_model: Some(rerun::datatypes::ColorModel::RGB),
-            channel_datatype: Some(rerun::datatypes::ChannelDatatype::U8),
-        });
+        let log_idx = IMAGE_LOG_COUNT.fetch_add(1, Ordering::Relaxed);
+        if log_idx < 5 {
+            info!(
+                "rerun_viz: width={} height={} pixel_format={} rgb_len={}",
+                width,
+                height,
+                String::from_utf8_lossy(pixel_format),
+                rgb_data.len()
+            );
+        }
 
-        let blob = Blob::from(rgb_data);
-        let image_buffer = ImageBuffer::from(blob);
-        let rerun_image = Image::new(image_buffer, format);
+        let rerun_image = Image::from_color_model_and_bytes(
+            rgb_data,
+            [width, height],
+            ColorModel::RGB,
+            ChannelDatatype::U8,
+        );
 
         self.rec
-            .log("camera/image", &rerun_image)
+            .log(CAMERA_ENTITY, &rerun_image)
             .map_err(|e| CuError::new_with_cause("Failed to log image", e))?;
 
         Ok(())
@@ -103,16 +112,14 @@ impl RerunPoseViz {
     fn log_poses(&self, poses: &CuPoses) -> CuResult<()> {
         if poses.is_empty() {
             // Clear previous visualizations when no poses detected
+            let _ = self
+                .rec
+                .log(CAMERA_ENTITY, &Points2D::new(Vec::<Vec2D>::new()));
+            let _ = self
+                .rec
+                .log(CAMERA_ENTITY, &LineStrips2D::new(Vec::<Vec<Vec2D>>::new()));
             let _ = self.rec.log(
-                "camera/poses/keypoints",
-                &Points2D::new(Vec::<Vec2D>::new()),
-            );
-            let _ = self.rec.log(
-                "camera/poses/skeleton",
-                &LineStrips2D::new(Vec::<Vec<Vec2D>>::new()),
-            );
-            let _ = self.rec.log(
-                "camera/poses/boxes",
+                CAMERA_ENTITY,
                 &Boxes2D::from_centers_and_sizes(Vec::<Vec2D>::new(), Vec::<Vec2D>::new()),
             );
             return Ok(());
@@ -167,34 +174,36 @@ impl RerunPoseViz {
 
         // Log keypoints
         if !all_keypoints.is_empty() {
+            let radii = vec![rerun::Radius::new_scene_units(5.0); all_keypoints.len()];
             self.rec
                 .log(
-                    "camera/poses/keypoints",
+                    CAMERA_ENTITY,
                     &Points2D::new(all_keypoints)
                         .with_colors(keypoint_colors)
-                        .with_radii(std::iter::repeat(rerun::Radius::new_scene_units(5.0))),
+                        .with_radii(radii),
                 )
                 .map_err(|e| CuError::new_with_cause("Failed to log keypoints", e))?;
         }
 
         // Log skeleton
         if !skeleton_strips.is_empty() {
+            let skeleton_colors = vec![rerun::Color::from_rgb(255, 255, 0); skeleton_strips.len()];
             self.rec
                 .log(
-                    "camera/poses/skeleton",
-                    &LineStrips2D::new(skeleton_strips)
-                        .with_colors(std::iter::repeat(rerun::Color::from_rgb(255, 255, 0))),
+                    CAMERA_ENTITY,
+                    &LineStrips2D::new(skeleton_strips).with_colors(skeleton_colors),
                 )
                 .map_err(|e| CuError::new_with_cause("Failed to log skeleton", e))?;
         }
 
         // Log bounding boxes
         if !box_centers.is_empty() {
+            let box_colors = vec![rerun::Color::from_rgb(0, 255, 0); box_centers.len()];
             self.rec
                 .log(
-                    "camera/poses/boxes",
+                    CAMERA_ENTITY,
                     &Boxes2D::from_centers_and_sizes(box_centers, box_sizes)
-                        .with_colors(std::iter::repeat(rerun::Color::from_rgb(0, 255, 0))),
+                        .with_colors(box_colors),
                 )
                 .map_err(|e| CuError::new_with_cause("Failed to log boxes", e))?;
         }

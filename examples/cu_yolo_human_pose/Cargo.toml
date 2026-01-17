@@ -1,6 +1,6 @@
 [package]
-name = "cu-yolo-pose-demo"
-description = "YOLOv8 pose estimation demo using Candle and V4L camera input"
+name = "cu-yolo-human-pose"
+description = "YOLOv8 pose estimation demo using Candle and GStreamer camera input"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -18,16 +18,17 @@ cpu = []
 cuda = ["candle-core/cuda", "candle-nn/cuda"]
 
 [dependencies]
-cu29 = { workspace = true }
+cu29 = { workspace = true, features = ["log-level-info", "textlogs"] }
 cu29-helpers = { workspace = true }
-cu-v4l = { path = "../../components/sources/cu_v4l", version = "0.12.0" }
+cu-gstreamer = { path = "../../components/sources/cu_gstreamer", version = "0.12.0", features = ["gst"] }
 cu-sensor-payloads = { path = "../../components/payloads/cu_sensor_payloads", version = "0.12.0" }
 cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.12.0" }
+gstreamer = "0.24"
 
 # Candle ML framework
-candle-core = "0.8"
-candle-nn = "0.8"
-candle-transformers = "0.8"
+candle-core = { git = "https://github.com/huggingface/candle.git", branch = "main" }
+candle-nn = { git = "https://github.com/huggingface/candle.git", branch = "main" }
+candle-transformers = { git = "https://github.com/huggingface/candle.git", branch = "main" }
 
 # Visualization
 rerun = { workspace = true }
@@ -37,11 +38,11 @@ bincode = { workspace = true }
 serde = { workspace = true }
 
 # Model download
-hf-hub = "0.3"
+hf-hub = "0.4.3"
 
 # Misc
 tempfile = { workspace = true }
 env_logger = "0.11"
 
 [build-dependencies]
-hf-hub = "0.3"
+hf-hub = "0.4.3"
