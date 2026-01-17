@@ -74,7 +74,7 @@ uom = { version = "0.37", default-features = false, features = [
 cu29-export = { workspace = true, optional = true }
 
 ## Sim dependencies
-bevy = { version = "0.17.3", default-features = false, features = [
+bevy = { version = "0.18.0", default-features = false, features = [
   "x11",
   "wayland",
   "default_font",
@@ -85,9 +85,9 @@ bevy = { version = "0.17.3", default-features = false, features = [
   "bevy_scene",
   "bevy_sprite",
   "bevy_gltf",
-  "animation",
+  "gltf_animation",
   "bevy_picking",
-  "bevy_mesh_picking_backend",
+  "mesh_picking",
   "tonemapping_luts",
   "bevy_ui",
   "ktx2",
@@ -95,7 +95,7 @@ bevy = { version = "0.17.3", default-features = false, features = [
   "png",
   "zstd_rust",
 ], optional = true }
-avian3d = { version = "0.4.1", default-features = false, features = [
+avian3d = { version = "0.5.0", default-features = false, features = [
   "bevy_scene",
   "collider-from-mesh",
   "debug-plugin",
