@@ -1,8 +1,8 @@
 //! Rerun visualization sink for pose estimation results
 
 use crate::payloads::{CuPoses, SKELETON_CONNECTIONS};
-use cu29::prelude::*;
 use cu_sensor_payloads::CuImage;
+use cu29::prelude::*;
 use rerun::{
     Boxes2D, Image, LineStrips2D, Points2D, RecordingStream, RecordingStreamBuilder, Vec2D,
     components::ImageBuffer,
@@ -25,10 +25,7 @@ impl CuSinkTask for RerunPoseViz {
     // Use 'm lifetime and separate types for multiple inputs
     type Input<'m> = input_msg!('m, CuImage<Vec<u8>>, CuPoses);
 
-    fn new(
-        _config: Option<&ComponentConfig>,
-        _resources: Self::Resources<'_>,
-    ) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
@@ -106,9 +103,10 @@ impl RerunPoseViz {
     fn log_poses(&self, poses: &CuPoses) -> CuResult<()> {
         if poses.is_empty() {
             // Clear previous visualizations when no poses detected
-            let _ = self
-                .rec
-                .log("camera/poses/keypoints", &Points2D::new(Vec::<Vec2D>::new()));
+            let _ = self.rec.log(
+                "camera/poses/keypoints",
+                &Points2D::new(Vec::<Vec2D>::new()),
+            );
             let _ = self.rec.log(
                 "camera/poses/skeleton",
                 &LineStrips2D::new(Vec::<Vec<Vec2D>>::new()),

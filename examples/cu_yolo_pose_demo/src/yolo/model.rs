@@ -3,8 +3,8 @@
 //! Adapted from the candle-examples yolo-v8 implementation.
 //! See: https://github.com/huggingface/candle/tree/main/candle-examples/examples/yolo-v8
 
-use candle_core::{DType, IndexOp, Result, Tensor, D};
-use candle_nn::{batch_norm, conv2d, conv2d_no_bias, Conv2d, Conv2dConfig, Module, VarBuilder};
+use candle_core::{D, DType, IndexOp, Result, Tensor};
+use candle_nn::{Conv2d, Conv2dConfig, Module, VarBuilder, batch_norm, conv2d, conv2d_no_bias};
 
 /// Model size multipliers for different YOLOv8 variants
 #[derive(Clone, Copy, PartialEq, Debug)]

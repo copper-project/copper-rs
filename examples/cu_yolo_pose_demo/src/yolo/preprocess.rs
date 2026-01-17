@@ -144,13 +144,7 @@ fn bgr_to_rgb(data: &[u8], _width: usize, _height: usize) -> Vec<u8> {
 }
 
 /// Simple bilinear resize for RGB images
-fn resize_rgb(
-    data: &[u8],
-    src_w: usize,
-    src_h: usize,
-    dst_w: usize,
-    dst_h: usize,
-) -> Vec<u8> {
+fn resize_rgb(data: &[u8], src_w: usize, src_h: usize, dst_w: usize, dst_h: usize) -> Vec<u8> {
     let mut result = Vec::with_capacity(dst_w * dst_h * 3);
 
     let x_ratio = src_w as f32 / dst_w as f32;

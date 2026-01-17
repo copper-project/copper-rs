@@ -3,7 +3,7 @@
 //! Handles decoding model output, non-maximum suppression, and
 //! conversion to CuPoses payload format.
 
-use crate::payloads::{CuPoses, Keypoint, Pose, NUM_KEYPOINTS};
+use crate::payloads::{CuPoses, Keypoint, NUM_KEYPOINTS, Pose};
 use candle_core::{Device, IndexOp, Tensor};
 
 /// Process raw model predictions into structured pose data
@@ -96,7 +96,11 @@ pub fn process_predictions(
     }
 
     // Sort by confidence descending
-    candidates.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+    candidates.sort_by(|a, b| {
+        b.confidence
+            .partial_cmp(&a.confidence)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     // Apply NMS
     let mut keep = vec![true; candidates.len()];
@@ -132,11 +136,7 @@ pub fn process_predictions(
         // Scale keypoints back to original image coordinates
         let mut scaled_keypoints = [Keypoint::default(); NUM_KEYPOINTS];
         for (j, kp) in candidate.keypoints.iter().enumerate() {
-            scaled_keypoints[j] = Keypoint::new(
-                kp.x * w_ratio,
-                kp.y * h_ratio,
-                kp.confidence,
-            );
+            scaled_keypoints[j] = Keypoint::new(kp.x * w_ratio, kp.y * h_ratio, kp.confidence);
         }
 
         let pose = Pose {

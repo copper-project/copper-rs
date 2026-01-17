@@ -44,5 +44,7 @@
             msg: "payloads::CuPoses",
         ),
     ],
-    monitor: (type: "cu_consolemon::CuConsoleMon"),
+    monitor: (
+        type: "cu_consolemon::CuConsoleMon",
+    ),
 )

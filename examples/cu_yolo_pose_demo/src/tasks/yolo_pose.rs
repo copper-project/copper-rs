@@ -4,8 +4,8 @@ use crate::payloads::CuPoses;
 use crate::yolo::{Multiples, YoloV8Pose, preprocess_image, process_predictions};
 use candle_core::{DType, Device};
 use candle_nn::{Module, VarBuilder};
-use cu29::prelude::*;
 use cu_sensor_payloads::CuImage;
+use cu29::prelude::*;
 
 /// YOLOv8 Pose estimation task
 ///
@@ -49,7 +49,7 @@ impl CuTask for YoloPose {
                 return Err(CuError::from(format!(
                     "Unknown variant: {}. Use yolov8[n|s|m|l|x]-pose",
                     variant
-                )))
+                )));
             }
         };
 
