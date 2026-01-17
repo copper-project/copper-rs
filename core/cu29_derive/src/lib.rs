@@ -2223,7 +2223,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #bridges_instanciator
 
                 pub fn monitor_instanciator(config: &CuConfig) -> #monitor_type {
-                    #monitor_type::new(config, #mission_mod::TASKS_IDS).expect("Failed to create the given monitor.")
+                    let mut monitor = #monitor_type::new(config, #mission_mod::TASKS_IDS)
+                        .expect("Failed to create the given monitor.");
+                    let copperlist_info = ::cu29::monitoring::CopperListInfo::new(
+                        core::mem::size_of::<CuList>(),
+                        #DEFAULT_CLNB,
+                    );
+                    monitor.set_copperlist_info(copperlist_info);
+                    monitor
                 }
 
                 // The application for this mission

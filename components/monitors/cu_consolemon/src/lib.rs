@@ -11,7 +11,8 @@ use cu29::clock::{CuDuration, RobotClock};
 use cu29::config::CuConfig;
 use cu29::cutask::CuMsgMetadata;
 use cu29::monitoring::{
-    ComponentKind, CuDurationStatistics, CuMonitor, CuTaskState, Decision, MonitorTopology,
+    ComponentKind, CopperListInfo, CuDurationStatistics, CuMonitor, CuTaskState, Decision,
+    MonitorTopology,
 };
 use cu29::prelude::{CuCompactString, CuTime, pool};
 use cu29::{CuError, CuResult};
@@ -45,19 +46,21 @@ use std::{collections::HashMap, io, thread};
 use tui_widgets::scrollview::{ScrollView, ScrollViewState};
 
 #[cfg(feature = "debug_pane")]
-const MENU_CONTENT: &str = "   [1] SysInfo  [2] DAG  [3] Latencies  [4] Memory Pools [5] Debug Output  [q] Quit | Scroll: hjkl or ↑↓←→   ";
+const MENU_CONTENT: &str = "   [1] SysInfo  [2] DAG  [3] Latencies  [4] Memory Pools  [5] CopperList  [6] Debug Output  [q] Quit | Scroll: hjkl or ↑↓←→   ";
 #[cfg(not(feature = "debug_pane"))]
-const MENU_CONTENT: &str =
-    "   [1] SysInfo  [2] DAG  [3] Latencies  [4] Memory Pools [q] Quit | Scroll: hjkl or ↑↓←→   ";
+const MENU_CONTENT: &str = "   [1] SysInfo  [2] DAG  [3] Latencies  [4] Memory Pools  [5] CopperList  [q] Quit | Scroll: hjkl or ↑↓←→   ";
+
+const COPPERLIST_RATE_WINDOW: Duration = Duration::from_secs(1);
 
 #[derive(PartialEq)]
 enum Screen {
     Neofetch,
     Dag,
     Latency,
+    MemoryPools,
+    CopperList,
     #[cfg(feature = "debug_pane")]
     DebugOutput,
-    MemoryPools,
 }
 
 struct TaskStats {
@@ -140,6 +143,56 @@ impl PoolStats {
     }
 }
 
+struct CopperListStats {
+    size_bytes: usize,
+    total_copperlists: u64,
+    window_copperlists: u64,
+    last_rate_at: Instant,
+    rate_hz: f64,
+}
+
+impl CopperListStats {
+    fn new() -> Self {
+        Self {
+            size_bytes: 0,
+            total_copperlists: 0,
+            window_copperlists: 0,
+            last_rate_at: Instant::now(),
+            rate_hz: 0.0,
+        }
+    }
+
+    fn set_info(&mut self, info: CopperListInfo) {
+        self.size_bytes = info.size_bytes;
+        let _ = info.count;
+    }
+
+    fn update_rate(&mut self) {
+        self.total_copperlists = self.total_copperlists.saturating_add(1);
+        self.window_copperlists = self.window_copperlists.saturating_add(1);
+
+        let now = Instant::now();
+        let elapsed = now.duration_since(self.last_rate_at);
+        if elapsed >= COPPERLIST_RATE_WINDOW {
+            let elapsed_secs = elapsed.as_secs_f64();
+            self.rate_hz = if elapsed_secs > 0.0 {
+                self.window_copperlists as f64 / elapsed_secs
+            } else {
+                0.0
+            };
+            self.window_copperlists = 0;
+            self.last_rate_at = now;
+        }
+    }
+
+    fn bandwidth_bytes_per_sec(&self) -> f64 {
+        if self.size_bytes == 0 {
+            return 0.0;
+        }
+        (self.size_bytes as f64) * self.rate_hz * 2.0
+    }
+}
+
 fn compute_end_to_end_latency(msgs: &[&CuMsgMetadata]) -> CuDuration {
     let start = msgs.first().map(|m| m.process_time.start);
     let end = msgs.last().map(|m| m.process_time.end);
@@ -151,6 +204,21 @@ fn compute_end_to_end_latency(msgs: &[&CuMsgMetadata]) -> CuDuration {
             _ => CuDuration::MIN,
         },
         _ => CuDuration::MIN,
+    }
+}
+
+fn format_bytes(bytes: f64) -> String {
+    const UNITS: [&str; 4] = ["B", "KiB", "MiB", "GiB"];
+    let mut value = bytes;
+    let mut unit_idx = 0;
+    while value >= 1024.0 && unit_idx < UNITS.len() - 1 {
+        value /= 1024.0;
+        unit_idx += 1;
+    }
+    if unit_idx == 0 {
+        format!("{:.0} {}", value, UNITS[unit_idx])
+    } else {
+        format!("{:.2} {}", value, UNITS[unit_idx])
     }
 }
 
@@ -562,6 +630,7 @@ pub struct CuConsoleMon {
     task_statuses: Arc<Mutex<Vec<TaskStatus>>>,
     ui_handle: Option<JoinHandle<()>>,
     pool_stats: Arc<Mutex<Vec<PoolStats>>>,
+    copperlist_stats: Arc<Mutex<CopperListStats>>,
     quitting: Arc<AtomicBool>,
     topology: Option<MonitorTopology>,
 }
@@ -588,6 +657,7 @@ struct UI {
     #[cfg(feature = "debug_pane")]
     debug_output: Option<debug_pane::DebugLog>,
     pool_stats: Arc<Mutex<Vec<PoolStats>>>,
+    copperlist_stats: Arc<Mutex<CopperListStats>>,
 }
 
 impl UI {
@@ -603,6 +673,7 @@ impl UI {
         error_redirect: gag::BufferRedirect,
         debug_output: Option<debug_pane::DebugLog>,
         pool_stats: Arc<Mutex<Vec<PoolStats>>>,
+        copperlist_stats: Arc<Mutex<CopperListStats>>,
         topology: Option<MonitorTopology>,
     ) -> UI {
         init_error_hooks();
@@ -624,6 +695,7 @@ impl UI {
             error_redirect,
             debug_output,
             pool_stats,
+            copperlist_stats,
         }
     }
 
@@ -635,6 +707,7 @@ impl UI {
         task_statuses: Arc<Mutex<Vec<TaskStatus>>>,
         quitting: Arc<AtomicBool>,
         pool_stats: Arc<Mutex<Vec<PoolStats>>>,
+        copperlist_stats: Arc<Mutex<CopperListStats>>,
         topology: Option<MonitorTopology>,
     ) -> UI {
         init_error_hooks();
@@ -654,6 +727,7 @@ impl UI {
             quitting,
             nodes_scrollable_widget_state,
             pool_stats,
+            copperlist_stats,
         }
     }
 
@@ -856,6 +930,61 @@ impl UI {
         f.render_widget(table, area);
     }
 
+    fn draw_copperlist_stats(&self, f: &mut Frame, area: Rect) {
+        let stats = self.copperlist_stats.lock().unwrap();
+        let size_display = if stats.size_bytes > 0 {
+            format_bytes(stats.size_bytes as f64)
+        } else {
+            "unknown".to_string()
+        };
+        let rate_display = format!("{:.2} Hz", stats.rate_hz);
+        let bandwidth_display = if stats.size_bytes > 0 {
+            format!("{}/s", format_bytes(stats.bandwidth_bytes_per_sec()))
+        } else {
+            "n/a".to_string()
+        };
+
+        let header_cells = ["Metric", "Value"].iter().map(|h| {
+            Cell::from(Line::from(*h)).style(
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )
+        });
+
+        let header = Row::new(header_cells).bottom_margin(1);
+
+        let rows = vec![
+            Row::new(vec![
+                Cell::from(Line::from("CL size (RAM)")),
+                Cell::from(Line::from(size_display).alignment(Alignment::Right)),
+            ]),
+            Row::new(vec![
+                Cell::from(Line::from("Observed rate")),
+                Cell::from(Line::from(rate_display).alignment(Alignment::Right)),
+            ]),
+            Row::new(vec![
+                Cell::from(Line::from("RAM BW (CL read+write)")),
+                Cell::from(Line::from(bandwidth_display).alignment(Alignment::Right)),
+            ]),
+        ];
+
+        let table = Table::new(rows, &[Constraint::Length(24), Constraint::Length(12)])
+            .header(header)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" CopperList Stats "),
+            );
+
+        let layout = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Length(42), Constraint::Min(0)].as_ref())
+            .split(area);
+
+        f.render_widget(table, layout[0]);
+    }
+
     fn draw_nodes(&mut self, f: &mut Frame, space: Rect) {
         NodesScrollableWidget {
             _marker: Default::default(),
@@ -906,6 +1035,7 @@ impl UI {
             }
             Screen::Latency => self.draw_latency_table(f, layout[1]),
             Screen::MemoryPools => self.draw_memory_pools(f, layout[1]),
+            Screen::CopperList => self.draw_copperlist_stats(f, layout[1]),
             #[cfg(feature = "debug_pane")]
             Screen::DebugOutput => self.draw_debug_output(f, layout[1]),
         };
@@ -935,8 +1065,9 @@ impl UI {
                         KeyCode::Char('2') => self.active_screen = Screen::Dag,
                         KeyCode::Char('3') => self.active_screen = Screen::Latency,
                         KeyCode::Char('4') => self.active_screen = Screen::MemoryPools,
+                        KeyCode::Char('5') => self.active_screen = Screen::CopperList,
                         #[cfg(feature = "debug_pane")]
-                        KeyCode::Char('5') => self.active_screen = Screen::DebugOutput,
+                        KeyCode::Char('6') => self.active_screen = Screen::DebugOutput,
                         KeyCode::Char('r') => {
                             if self.active_screen == Screen::Latency {
                                 self.task_stats.lock().unwrap().reset()
@@ -1016,11 +1147,17 @@ impl CuMonitor for CuConsoleMon {
             ui_handle: None,
             quitting: Arc::new(AtomicBool::new(false)),
             pool_stats: Arc::new(Mutex::new(Vec::new())),
+            copperlist_stats: Arc::new(Mutex::new(CopperListStats::new())),
             topology: None,
         })
     }
     fn set_topology(&mut self, topology: MonitorTopology) {
         self.topology = Some(topology);
+    }
+
+    fn set_copperlist_info(&mut self, info: CopperListInfo) {
+        let mut stats = self.copperlist_stats.lock().unwrap();
+        stats.set_info(info);
     }
 
     fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
@@ -1034,6 +1171,7 @@ impl CuMonitor for CuConsoleMon {
         let task_stats_ui = self.task_stats.clone();
         let error_states = self.task_statuses.clone();
         let pool_stats_ui = self.pool_stats.clone();
+        let copperlist_stats_ui = self.copperlist_stats.clone();
         let quitting = self.quitting.clone();
         let topology = self.topology.clone();
 
@@ -1070,6 +1208,7 @@ impl CuMonitor for CuConsoleMon {
                     error_redirect,
                     None,
                     pool_stats_ui,
+                    copperlist_stats_ui,
                     topology.clone(),
                 );
 
@@ -1115,6 +1254,7 @@ impl CuMonitor for CuConsoleMon {
                     error_states,
                     quitting,
                     pool_stats_ui,
+                    copperlist_stats_ui,
                     topology,
                 );
                 if let Err(err) = ui.run_app(&mut terminal) {
@@ -1139,6 +1279,10 @@ impl CuMonitor for CuConsoleMon {
         {
             let mut task_stats = self.task_stats.lock().unwrap();
             task_stats.update(msgs);
+        }
+        {
+            let mut copperlist_stats = self.copperlist_stats.lock().unwrap();
+            copperlist_stats.update_rate();
         }
         {
             let mut task_statuses = self.task_statuses.lock().unwrap();

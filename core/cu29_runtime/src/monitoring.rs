@@ -91,6 +91,18 @@ pub struct MonitorTopology {
     pub connections: Vec<MonitorConnection>,
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CopperListInfo {
+    pub size_bytes: usize,
+    pub count: usize,
+}
+
+impl CopperListInfo {
+    pub const fn new(size_bytes: usize, count: usize) -> Self {
+        Self { size_bytes, count }
+    }
+}
+
 #[derive(Default, Debug, Clone, Copy)]
 struct NodeIoUsage {
     has_incoming: bool,
@@ -237,6 +249,8 @@ pub trait CuMonitor: Sized {
         Self: Sized;
 
     fn set_topology(&mut self, _topology: MonitorTopology) {}
+
+    fn set_copperlist_info(&mut self, _info: CopperListInfo) {}
 
     fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
         Ok(())
