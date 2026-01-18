@@ -9,6 +9,7 @@ use object_pool::{Pool, ReusableOwned};
 use smallvec::SmallVec;
 use std::alloc::{Layout, alloc, dealloc};
 use std::fmt::Debug;
+use std::mem::{align_of, size_of};
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -554,10 +555,27 @@ pub struct AlignedBuffer<E: ElementType> {
 
 impl<E: ElementType> AlignedBuffer<E> {
     pub fn new(num_elements: usize, alignment: usize) -> Self {
-        let layout = Layout::from_size_align(num_elements * size_of::<E>(), alignment).unwrap();
-        let ptr = unsafe { alloc(layout) as *mut E };
-        if ptr.is_null() {
+        let alignment = alignment.max(align_of::<E>());
+        let alloc_size = num_elements
+            .checked_mul(size_of::<E>())
+            .expect("AlignedBuffer allocation size overflow");
+        let layout = Layout::from_size_align(alloc_size, alignment).unwrap();
+        let ptr = if alloc_size == 0 {
+            std::ptr::NonNull::dangling().as_ptr()
+        } else {
+            // SAFETY: layout describes a valid, non-zero allocation request.
+            unsafe { alloc(layout) as *mut E }
+        };
+        if alloc_size != 0 && ptr.is_null() {
             panic!("Failed to allocate memory");
+        }
+        if alloc_size != 0 {
+            // SAFETY: ptr is valid for writes of `num_elements` elements.
+            unsafe {
+                for i in 0..num_elements {
+                    std::ptr::write(ptr.add(i), E::default());
+                }
+            }
         }
         Self {
             ptr,
@@ -571,22 +589,23 @@ impl<E: ElementType> Deref for AlignedBuffer<E> {
     type Target = [E];
 
     fn deref(&self) -> &Self::Target {
+        // SAFETY: `new` initializes all elements and keeps the pointer aligned.
         unsafe { std::slice::from_raw_parts(self.ptr, self.size) }
     }
 }
 
 impl<E: ElementType> DerefMut for AlignedBuffer<E> {
     fn deref_mut(&mut self) -> &mut Self::Target {
+        // SAFETY: `new` initializes all elements and keeps the pointer aligned.
         unsafe { std::slice::from_raw_parts_mut(self.ptr, self.size) }
     }
 }
 
 impl<E: ElementType> Drop for AlignedBuffer<E> {
     fn drop(&mut self) {
-        if !self.ptr.is_null() {
-            unsafe {
-                dealloc(self.ptr as *mut u8, self.layout);
-            }
+        if self.layout.size() != 0 {
+            // SAFETY: `ptr` was allocated with `layout` in `new`.
+            unsafe { dealloc(self.ptr as *mut u8, self.layout) }
         }
     }
 }
