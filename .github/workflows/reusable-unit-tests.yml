@@ -62,6 +62,20 @@ jobs:
           log-file-suffix: '${{ matrix.os }}-${{ matrix.mode }}-${{ matrix.task }}-cuda.txt'
           use-github-cache: false
           use-local-cache: false
+      - name: Set CUDA compute capability (CI)
+        if: runner.os == 'Linux' && matrix.mode == 'cuda-debug'
+        shell: bash
+        run: |
+          if command -v nvcc >/dev/null 2>&1; then
+            CAP=$(nvcc --list-gpu-code | awk -F_ '/sm_/ {print $2}' | sort -n | tail -1)
+            if [[ -n "$CAP" ]]; then
+              echo "CUDA_COMPUTE_CAP=$CAP" >> $GITHUB_ENV
+            else
+              echo "CUDA_COMPUTE_CAP=86" >> $GITHUB_ENV
+            fi
+          else
+            echo "CUDA_COMPUTE_CAP=86" >> $GITHUB_ENV
+          fi
 
       - name: Set features (Linux)
         if: runner.os == 'Linux'
@@ -153,6 +167,20 @@ jobs:
           log-file-suffix: '${{ matrix.os }}-${{ matrix.mode }}-tests-features-cuda.txt'
           use-github-cache: false
           use-local-cache: false
+      - name: Set CUDA compute capability (CI)
+        if: runner.os == 'Linux' && matrix.mode == 'cuda-debug'
+        shell: bash
+        run: |
+          if command -v nvcc >/dev/null 2>&1; then
+            CAP=$(nvcc --list-gpu-code | awk -F_ '/sm_/ {print $2}' | sort -n | tail -1)
+            if [[ -n "$CAP" ]]; then
+              echo "CUDA_COMPUTE_CAP=$CAP" >> $GITHUB_ENV
+            else
+              echo "CUDA_COMPUTE_CAP=86" >> $GITHUB_ENV
+            fi
+          else
+            echo "CUDA_COMPUTE_CAP=86" >> $GITHUB_ENV
+          fi
 
       - name: Set features (Linux)
         if: runner.os == 'Linux'
