@@ -23,12 +23,6 @@ use std::path::{Path, PathBuf};
 #[copper_runtime(config = "copperconfig.ron", sim_mode = true)]
 struct BalanceBotSim {}
 
-// Encapsulate the Copper mock clock as a Bevy resource
-#[derive(Resource)]
-struct CopperMockClock {
-    clock: RobotClockMock,
-}
-
 // Encapsulate the Copper runtime as a Bevy resource
 #[derive(Resource)]
 struct Copper {
@@ -64,8 +58,12 @@ fn setup_copper(mut commands: Commands) {
         fs::create_dir_all(parent).expect("Failed to create logs directory");
     }
 
-    // here we set up a mock clock so the simulation can take control of it.
-    let (robot_clock, mock) = RobotClock::mock();
+    // NOTE: temporary hack to surface non-zero latencies in consolemon while in sim.
+    // Using a real clock means latencies reflect wall-clock, not physics time; please revert to a driven mock clock later.
+    eprintln!(
+        "[WARNING] BalanceBot sim using real RobotClock; revert when sim clock driving is fixed."
+    );
+    let robot_clock = RobotClock::new();
     let copper_ctx = basic_copper_setup(
         &PathBuf::from(logger_path),
         LOG_SLAB_SIZE,
@@ -89,7 +87,6 @@ fn setup_copper(mut commands: Commands) {
         .expect("Failed to start all tasks.");
 
     // save all this in resources so we can grab them later during the simulation.
-    commands.insert_resource(CopperMockClock { clock: mock });
     commands.insert_resource(Copper {
         _copper_ctx: copper_ctx,
         copper_app,
@@ -107,7 +104,6 @@ fn run_copper_callback(
         Query<&Transform, With<Rod>>,
     )>,
     physics_time: Res<Time<Physics>>,
-    robot_clock: ResMut<CopperMockClock>,
     mut copper_ctx: ResMut<Copper>,
     mut last_tick: ResMut<LastCopperTick>,
     drag_state: Res<DragState>,
@@ -124,8 +120,7 @@ fn run_copper_callback(
     }
     last_tick.0 = Some(current_time);
 
-    // Sync the copper clock to the simulated physics clock.
-    robot_clock.clock.set_value(current_time);
+    let clock = copper_ctx._copper_ctx.clock.clone();
     let mut sim_callback = move |step: default::SimStep| -> SimOverride {
         match step {
             default::SimStep::Balpos(CuTaskCallbackState::Process(_, output)) => {
@@ -144,7 +139,7 @@ fn run_copper_callback(
                 // Convert the angle from radians to the actual adc value from the sensor
                 let analog_value = (angle_radians / (2.0 * std::f32::consts::PI) * 4096.0) as u16;
                 output.set_payload(ADSReadingPayload { analog_value });
-                output.tov = robot_clock.clock.now().into();
+                output.tov = clock.now().into();
                 SimOverride::ExecutedBySim
             }
             default::SimStep::Balpos(_) => SimOverride::ExecutedBySim,
@@ -155,7 +150,7 @@ fn run_copper_callback(
                     bindings.single_mut().expect("Failed to get cart transform");
                 let ticks = (cart_transform.translation.x * 2000.0) as i32;
                 output.set_payload(EncoderPayload { ticks });
-                output.tov = robot_clock.clock.now().into();
+                output.tov = clock.now().into();
                 SimOverride::ExecutedBySim
             }
             default::SimStep::Railpos(_) => SimOverride::ExecutedBySim,
