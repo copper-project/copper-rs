@@ -1197,10 +1197,11 @@
   <h1>Copper Configuration and Mission Visualization</h1>
 
 <p>In order to visualize a configuration and the mission you can use this command:</p>
-<pre><code class="language-bash">cargo run -p cu29-runtime --bin cu29-rendercfg -- examples/cu_bridge_test/copperconfig.ron
+<pre><code class="language-bash">cd examples/cu_bridge_test
+just dag
 </code></pre>
-<p>It should produce a file in the current directory called <code>output.svg</code> containing a graph like this with all the missions:</p>
-<p><img width="744" height="1778" alt="image" src="https://github.com/user-attachments/assets/a7f881fc-3868-43c3-b609-6b93839aa449" /></p>
+<p>It should produce a file in the current directory called <code>output.svg</code> containing a graph like this with all the missions:
+<img width="949" height="1777" alt="image" src="https://github.com/user-attachments/assets/f7781f70-fde3-42a6-a1dc-fd9bfff390b1" /></p>
 <p>You can also list the missions from the config or only render a specific mission check <code>--help</code> for details:</p>
 <pre><code>$ cargo run -p cu29-runtime --bin cu29-rendercfg -- --help
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.15s
