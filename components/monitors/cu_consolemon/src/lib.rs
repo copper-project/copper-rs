@@ -45,14 +45,79 @@ use std::time::{Duration, Instant};
 use std::{collections::HashMap, io, thread};
 use tui_widgets::scrollview::{ScrollView, ScrollViewState};
 
+#[derive(Clone, Copy)]
+struct TabDef {
+    screen: Screen,
+    label: &'static str,
+    key: &'static str,
+}
+
 #[cfg(feature = "debug_pane")]
-const MENU_CONTENT: &str = "   [1] SysInfo  [2] DAG  [3] Latencies  [4] Memory Pools  [5] CopperList  [6] Debug Output  [q] Quit | Scroll: hjkl or ↑↓←→   ";
+const TAB_DEFS: &[TabDef] = &[
+    TabDef {
+        screen: Screen::Neofetch,
+        label: "SYS",
+        key: "1",
+    },
+    TabDef {
+        screen: Screen::Dag,
+        label: "DAG",
+        key: "2",
+    },
+    TabDef {
+        screen: Screen::Latency,
+        label: "LAT",
+        key: "3",
+    },
+    TabDef {
+        screen: Screen::MemoryPools,
+        label: "POOLS",
+        key: "4",
+    },
+    TabDef {
+        screen: Screen::CopperList,
+        label: "CLIST",
+        key: "5",
+    },
+    TabDef {
+        screen: Screen::DebugOutput,
+        label: "DEBUG",
+        key: "6",
+    },
+];
+
 #[cfg(not(feature = "debug_pane"))]
-const MENU_CONTENT: &str = "   [1] SysInfo  [2] DAG  [3] Latencies  [4] Memory Pools  [5] CopperList  [q] Quit | Scroll: hjkl or ↑↓←→   ";
+const TAB_DEFS: &[TabDef] = &[
+    TabDef {
+        screen: Screen::Neofetch,
+        label: "SYS",
+        key: "1",
+    },
+    TabDef {
+        screen: Screen::Dag,
+        label: "DAG",
+        key: "2",
+    },
+    TabDef {
+        screen: Screen::Latency,
+        label: "LAT",
+        key: "3",
+    },
+    TabDef {
+        screen: Screen::MemoryPools,
+        label: "POOLS",
+        key: "4",
+    },
+    TabDef {
+        screen: Screen::CopperList,
+        label: "CLIST",
+        key: "5",
+    },
+];
 
 const COPPERLIST_RATE_WINDOW: Duration = Duration::from_secs(1);
 
-#[derive(PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 enum Screen {
     Neofetch,
     Dag,
@@ -996,26 +1061,119 @@ impl UI {
         )
     }
 
+    fn render_tabs(&self, f: &mut Frame, area: Rect) {
+        let base_bg = Color::Rgb(16, 18, 20);
+        let active_bg = Color::Rgb(56, 110, 120);
+        let inactive_bg = Color::Rgb(40, 44, 52);
+        let active_fg = Color::Rgb(245, 246, 247);
+        let inactive_fg = Color::Rgb(198, 200, 204);
+        let key_fg = Color::Rgb(255, 208, 128);
+
+        let mut spans = Vec::new();
+        spans.push(Span::styled(" ", Style::default().bg(base_bg)));
+
+        for tab in TAB_DEFS {
+            let is_active = self.active_screen == tab.screen;
+            let bg = if is_active { active_bg } else { inactive_bg };
+            let fg = if is_active { active_fg } else { inactive_fg };
+            let label_style = if is_active {
+                Style::default().fg(fg).bg(bg).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(fg).bg(bg)
+            };
+
+            spans.push(Span::styled("", Style::default().fg(bg).bg(base_bg)));
+            spans.push(Span::styled(" ", Style::default().bg(bg)));
+            spans.push(Span::styled(
+                tab.key,
+                Style::default()
+                    .fg(key_fg)
+                    .bg(bg)
+                    .add_modifier(Modifier::BOLD),
+            ));
+            spans.push(Span::styled(" ", Style::default().bg(bg)));
+            spans.push(Span::styled(tab.label, label_style));
+            spans.push(Span::styled(" ", Style::default().bg(bg)));
+            spans.push(Span::styled("", Style::default().fg(bg).bg(base_bg)));
+            spans.push(Span::styled(" ", Style::default().bg(base_bg)));
+        }
+
+        let tabs = Paragraph::new(Line::from(spans))
+            .style(Style::default().bg(base_bg))
+            .block(
+                Block::default()
+                    .borders(Borders::BOTTOM)
+                    .style(Style::default().bg(base_bg)),
+            );
+        f.render_widget(tabs, area);
+    }
+
+    fn render_help(&self, f: &mut Frame, area: Rect) {
+        let base_bg = Color::Rgb(18, 16, 22);
+        let key_fg = Color::Rgb(248, 231, 176);
+        let text_fg = Color::Rgb(236, 236, 236);
+
+        let mut spans = Vec::new();
+        spans.push(Span::styled(" ", Style::default().bg(base_bg)));
+
+        let tab_hint = if cfg!(feature = "debug_pane") {
+            "1-6"
+        } else {
+            "1-5"
+        };
+
+        let segments = [
+            (tab_hint, "Tabs", Color::Rgb(86, 114, 98)),
+            ("r", "Reset latency", Color::Rgb(136, 92, 78)),
+            ("hjkl/←↑→↓", "Scroll", Color::Rgb(92, 102, 150)),
+            ("q", "Quit", Color::Rgb(124, 118, 76)),
+        ];
+
+        for (key, label, bg) in segments {
+            spans.push(Span::styled("", Style::default().fg(bg).bg(base_bg)));
+            spans.push(Span::styled(" ", Style::default().bg(bg)));
+            spans.push(Span::styled(
+                key,
+                Style::default()
+                    .fg(key_fg)
+                    .bg(bg)
+                    .add_modifier(Modifier::BOLD),
+            ));
+            spans.push(Span::styled(" ", Style::default().bg(bg)));
+            spans.push(Span::styled(
+                label,
+                Style::default().fg(text_fg).bg(bg),
+            ));
+            spans.push(Span::styled(" ", Style::default().bg(bg)));
+            spans.push(Span::styled("", Style::default().fg(bg).bg(base_bg)));
+            spans.push(Span::styled(" ", Style::default().bg(base_bg)));
+        }
+
+        let help = Paragraph::new(Line::from(spans))
+            .style(Style::default().bg(base_bg))
+            .block(
+                Block::default()
+                    .borders(Borders::TOP)
+                    .style(Style::default().bg(base_bg)),
+            );
+        f.render_widget(help, area);
+    }
+
     fn draw(&mut self, f: &mut Frame) {
         let layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints(
                 [
-                    Constraint::Length(3), // For the top menu bar
-                    Constraint::Min(0),    // For the main content
+                    Constraint::Length(2), // Top tabs
+                    Constraint::Min(0),    // Main content
+                    Constraint::Length(2), // Bottom help bar
                 ]
                 .as_ref(),
             )
             .split(f.area());
 
-        let menu = Paragraph::new(MENU_CONTENT)
-            .style(
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::ITALIC),
-            )
-            .block(Block::default().borders(Borders::BOTTOM));
-        f.render_widget(menu, layout[0]);
+        self.render_tabs(f, layout[0]);
+        self.render_help(f, layout[2]);
 
         match self.active_screen {
             Screen::Neofetch => {
