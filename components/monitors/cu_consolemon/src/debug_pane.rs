@@ -2,7 +2,7 @@ use crate::UI;
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::prelude::Stylize;
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
 use std::sync::atomic::Ordering;
 use std::sync::mpsc::SendError;
 use {
@@ -145,7 +145,8 @@ impl UIExt for UI {
                 Block::default()
                     .title(" Debug Output ")
                     .title_bottom(format!("{} log entries", debug_output.debug_log.len()))
-                    .borders(Borders::ALL),
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded),
             );
             f.render_widget(p, area);
         } else {

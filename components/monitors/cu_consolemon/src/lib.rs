@@ -31,7 +31,7 @@ use ratatui::prelude::{Backend, Rect};
 use ratatui::prelude::{Stylize, Widget};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, StatefulWidget, Table};
+use ratatui::widgets::{Block, BorderType, Borders, Cell, Paragraph, Row, StatefulWidget, Table};
 use ratatui::{Frame, Terminal};
 use std::backtrace::Backtrace;
 use std::fmt::{Display, Formatter};
@@ -908,7 +908,12 @@ impl UI {
             ],
         )
         .header(header)
-        .block(Block::default().borders(Borders::ALL).title(" Latencies "));
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .title(" Latencies "),
+        );
 
         f.render_widget(table, area);
     }
@@ -989,6 +994,7 @@ impl UI {
         .block(
             Block::default()
                 .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
                 .title(" Memory Pools "),
         );
 
@@ -1039,6 +1045,7 @@ impl UI {
             .block(
                 Block::default()
                     .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
                     .title(" CopperList Stats "),
             );
 
@@ -1140,10 +1147,7 @@ impl UI {
                     .add_modifier(Modifier::BOLD),
             ));
             spans.push(Span::styled(" ", Style::default().bg(bg)));
-            spans.push(Span::styled(
-                label,
-                Style::default().fg(text_fg).bg(bg),
-            ));
+            spans.push(Span::styled(label, Style::default().fg(text_fg).bg(bg)));
             spans.push(Span::styled(" ", Style::default().bg(bg)));
             spans.push(Span::styled("", Style::default().fg(bg).bg(base_bg)));
             spans.push(Span::styled(" ", Style::default().bg(base_bg)));
@@ -1184,7 +1188,8 @@ impl UI {
                 let p = Paragraph::new::<Text>(text).block(
                     Block::default()
                         .title(" System Info ")
-                        .borders(Borders::ALL),
+                        .borders(Borders::ALL)
+                        .border_type(BorderType::Rounded),
                 );
                 f.render_widget(p, layout[1]);
             }
