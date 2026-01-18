@@ -1,6 +1,6 @@
 [package]
-name = "cu-yolo-human-pose"
-description = "YOLOv8 pose estimation demo using Candle and GStreamer camera input"
+name = "cu-human-pose"
+description = "Pose estimation demo using Candle and GStreamer camera input"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

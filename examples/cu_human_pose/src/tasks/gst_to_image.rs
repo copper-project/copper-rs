@@ -3,6 +3,8 @@
 use cu_gstreamer::CuGstBuffer;
 use cu_sensor_payloads::{CuImage, CuImageBufferFormat};
 use cu29::prelude::*;
+use std::ops::DerefMut;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 static GST_LOG_COUNT: AtomicUsize = AtomicUsize::new(0);
@@ -12,6 +14,7 @@ pub struct GstToCuImage {
     height: u32,
     stride: u32,
     pixel_format: [u8; 4],
+    pool: Arc<CuHostMemoryPool<Vec<u8>>>,
     last_payload_ns: Option<u64>,
     last_warn_ns: u64,
 }
@@ -49,11 +52,21 @@ impl CuTask for GstToCuImage {
             .get::<u32>("stride")
             .unwrap_or_else(|| default_stride(width, pixel_format));
 
+        // Calculate buffer size based on pixel format
+        let buffer_size = compute_buffer_size(height, stride, pixel_format);
+        let pool_size = config.get::<u32>("pool_size").unwrap_or(4) as usize;
+        let pool_id = config
+            .get::<String>("pool_id")
+            .unwrap_or_else(|| "gst_image_pool".to_string());
+
+        let pool = CuHostMemoryPool::new(&pool_id, pool_size, || vec![0u8; buffer_size])?;
+
         Ok(Self {
             width,
             height,
             stride,
             pixel_format,
+            pool,
             last_payload_ns: None,
             last_warn_ns: 0,
         })
@@ -110,6 +123,19 @@ impl CuTask for GstToCuImage {
             )));
         }
 
+        // Acquire a buffer from the pool instead of allocating
+        let handle = self
+            .pool
+            .acquire()
+            .ok_or_else(|| CuError::from("Failed to acquire buffer from image pool"))?;
+
+        // Copy the source data into the pooled buffer
+        handle.with_inner_mut(|inner| {
+            let dest = inner.deref_mut();
+            let copy_len = src.len().min(dest.len());
+            dest[..copy_len].copy_from_slice(&src[..copy_len]);
+        });
+
         let image = CuImage::new(
             CuImageBufferFormat {
                 width: self.width,
@@ -117,7 +143,7 @@ impl CuTask for GstToCuImage {
                 stride: self.stride,
                 pixel_format: self.pixel_format,
             },
-            CuHandle::new_detached(src.to_vec()),
+            handle,
         );
         output.tov = input.tov;
         output.set_payload(image);
@@ -141,4 +167,24 @@ fn fourcc_to_bytes(fourcc: &str) -> CuResult<[u8; 4]> {
     let mut out = [0u8; 4];
     out.copy_from_slice(&bytes[0..4]);
     Ok(out)
+}
+
+/// Compute the buffer size in bytes for a given image format.
+fn compute_buffer_size(height: u32, stride: u32, pixel_format: [u8; 4]) -> usize {
+    match &pixel_format {
+        // NV12/NV21: Y plane (stride * height) + UV plane (stride * height/2)
+        b"NV12" | b"NV21" => (stride * height + stride * height / 2) as usize,
+        // I420/YV12: Y plane + U plane (stride/2 * height/2) + V plane (stride/2 * height/2)
+        b"I420" | b"YV12" => (stride * height + stride * height / 2) as usize,
+        // YUYV/UYVY: 2 bytes per pixel, packed
+        b"YUYV" | b"UYVY" => (stride * height) as usize,
+        // RGB/BGR 24-bit
+        b"BGR3" | b"RGB3" | b"BGR " | b"RGB " => (stride * height) as usize,
+        // RGBA/BGRA 32-bit
+        b"RGBA" | b"BGRA" => (stride * height) as usize,
+        // Grayscale
+        b"GRAY" | b"Y800" => (stride * height) as usize,
+        // Default fallback: assume stride already accounts for bytes per row
+        _ => (stride * height) as usize,
+    }
 }
