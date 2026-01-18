@@ -555,26 +555,24 @@ pub struct AlignedBuffer<E: ElementType> {
 
 impl<E: ElementType> AlignedBuffer<E> {
     pub fn new(num_elements: usize, alignment: usize) -> Self {
+        assert!(
+            num_elements > 0 && size_of::<E>() > 0,
+            "AlignedBuffer requires a non-zero element count and non-zero-sized element type"
+        );
         let alignment = alignment.max(align_of::<E>());
         let alloc_size = num_elements
             .checked_mul(size_of::<E>())
             .expect("AlignedBuffer allocation size overflow");
         let layout = Layout::from_size_align(alloc_size, alignment).unwrap();
-        let ptr = if alloc_size == 0 {
-            std::ptr::NonNull::dangling().as_ptr()
-        } else {
-            // SAFETY: layout describes a valid, non-zero allocation request.
-            unsafe { alloc(layout) as *mut E }
-        };
-        if alloc_size != 0 && ptr.is_null() {
+        // SAFETY: layout describes a valid, non-zero allocation request.
+        let ptr = unsafe { alloc(layout) as *mut E };
+        if ptr.is_null() {
             panic!("Failed to allocate memory");
         }
-        if alloc_size != 0 {
-            // SAFETY: ptr is valid for writes of `num_elements` elements.
-            unsafe {
-                for i in 0..num_elements {
-                    std::ptr::write(ptr.add(i), E::default());
-                }
+        // SAFETY: ptr is valid for writes of `num_elements` elements.
+        unsafe {
+            for i in 0..num_elements {
+                std::ptr::write(ptr.add(i), E::default());
             }
         }
         Self {
@@ -603,10 +601,8 @@ impl<E: ElementType> DerefMut for AlignedBuffer<E> {
 
 impl<E: ElementType> Drop for AlignedBuffer<E> {
     fn drop(&mut self) {
-        if self.layout.size() != 0 {
-            // SAFETY: `ptr` was allocated with `layout` in `new`.
-            unsafe { dealloc(self.ptr as *mut u8, self.layout) }
-        }
+        // SAFETY: `ptr` was allocated with `layout` in `new`.
+        unsafe { dealloc(self.ptr as *mut u8, self.layout) }
     }
 }
 
