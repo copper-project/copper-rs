@@ -20,7 +20,7 @@ impl<'a> NodeLayout<'a> {
     pub fn new(size: (u16, u16)) -> Self {
         Self {
             size,
-            border_type: BorderType::Plain,
+            border_type: BorderType::Rounded,
             title: Line::default(),
             border_style: Style::default(),
         }
