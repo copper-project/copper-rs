@@ -134,17 +134,84 @@ pub trait CuPayloadSize {
     }
 }
 
-impl<T> CuPayloadSize for T
-where
-    T: crate::cutask::CuMsgPayload,
-{
+impl<T: CuPayloadSize> CuPayloadSize for Option<T> {
     fn raw_bytes(&self) -> usize {
-        core::mem::size_of::<T>()
+        self.as_ref().map_or(0, CuPayloadSize::raw_bytes)
+    }
+
+    fn handle_bytes(&self) -> usize {
+        self.as_ref().map_or(0, CuPayloadSize::handle_bytes)
     }
 }
 
-// NOTE: CuPayloadSize is blanket-implemented for CuMsgPayload types.
-// If you need handle-aware sizing for container payloads, implement CuPayloadSize for them explicitly.
+macro_rules! impl_tuple_payload_size {
+    ($($name:ident),+) => {
+        impl<$($name: CuPayloadSize),+> CuPayloadSize for ($($name,)+) {
+            fn raw_bytes(&self) -> usize {
+                let ($($name,)+) = self;
+                0 $(+ $name.raw_bytes())+
+            }
+
+            fn handle_bytes(&self) -> usize {
+                let ($($name,)+) = self;
+                0 $(+ $name.handle_bytes())+
+            }
+        }
+    };
+}
+
+#[allow(non_snake_case)]
+impl_tuple_payload_size!(T1, T2);
+#[allow(non_snake_case)]
+impl_tuple_payload_size!(T1, T2, T3);
+#[allow(non_snake_case)]
+impl_tuple_payload_size!(T1, T2, T3, T4);
+#[allow(non_snake_case)]
+impl_tuple_payload_size!(T1, T2, T3, T4, T5);
+
+impl<T: CuPayloadSize> CuPayloadSize for alloc::vec::Vec<T> {
+    fn raw_bytes(&self) -> usize {
+        self.iter().map(CuPayloadSize::raw_bytes).sum()
+    }
+
+    fn handle_bytes(&self) -> usize {
+        self.iter().map(CuPayloadSize::handle_bytes).sum()
+    }
+}
+
+impl<T: CuPayloadSize, const N: usize> CuPayloadSize for [T; N] {
+    fn raw_bytes(&self) -> usize {
+        self.iter().map(CuPayloadSize::raw_bytes).sum()
+    }
+
+    fn handle_bytes(&self) -> usize {
+        self.iter().map(CuPayloadSize::handle_bytes).sum()
+    }
+}
+
+impl CuPayloadSize for () {
+    fn raw_bytes(&self) -> usize {
+        0
+    }
+}
+
+macro_rules! impl_primitive_payload_size {
+    ($($ty:ty),+) => {
+        $(
+            impl CuPayloadSize for $ty {
+                fn raw_bytes(&self) -> usize {
+                    core::mem::size_of::<$ty>()
+                }
+            }
+        )+
+    };
+}
+
+impl_primitive_payload_size!(
+    bool, u8, u16, u32, u64, u128, usize,
+    i8, i16, i32, i64, i128, isize,
+    f32, f64
+);
 
 #[derive(Default, Debug, Clone, Copy)]
 struct NodeIoUsage {

@@ -5,6 +5,7 @@ use bincode::{Decode, Encode};
 use cu29::prelude::*;
 use serde::{Deserialize, Serialize, Serializer};
 use std::sync::Arc;
+use cu29::monitoring::CuPayloadSize;
 
 pub struct DoraSource<const S: usize> {
     pub pool: Arc<CuHostMemoryPool<Vec<u8>>>,
@@ -97,5 +98,15 @@ impl<'de> Deserialize<'de> for DoraPayload {
     {
         let data = Vec::<u8>::deserialize(deserializer)?;
         Ok(DoraPayload(CuHandle::new_detached(data)))
+    }
+}
+
+impl CuPayloadSize for DoraPayload {
+    fn raw_bytes(&self) -> usize {
+        self.0.handle_bytes()
+    }
+
+    fn handle_bytes(&self) -> usize {
+        self.0.handle_bytes()
     }
 }
