@@ -3,7 +3,7 @@ use crate::cutask::{CuMsg, CuMsgPayload, CuTask, Freezable};
 use cu29_clock::{CuTime, RobotClock};
 use cu29_traits::CuResult;
 use rayon::ThreadPool;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex};
 
 struct AsyncState {
     processing: bool,
@@ -124,12 +124,8 @@ where
             let state = self.state.clone();
             move || {
                 let input_ref: &CuMsg<I> = &input;
-                let mut output: MutexGuard<CuMsg<O>> = output.lock().unwrap();
-
-                // Safety: because copied the input and output, their lifetime are bound to the task and we control its lifetime.
-                let input_ref: &CuMsg<I> = unsafe { std::mem::transmute(input_ref) };
-                let output_ref: &mut MutexGuard<CuMsg<O>> =
-                    unsafe { std::mem::transmute(&mut output) };
+                let mut output_guard = output.lock().unwrap();
+                let output_ref: &mut CuMsg<O> = &mut output_guard;
 
                 // Track the actual processing interval so replay can honor it.
                 if output_ref.metadata.process_time.start.is_none() {
