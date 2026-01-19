@@ -208,12 +208,13 @@ pub fn stream_write<E: Encode, S: SectionStorage>(
 }
 
 /// A wrapper around the unifiedlogger that implements the Write trait.
-struct LogStream<S: SectionStorage, L: UnifiedLogWrite<S>> {
+pub struct LogStream<S: SectionStorage, L: UnifiedLogWrite<S>> {
     entry_type: UnifiedLogType,
     parent_logger: Arc<Mutex<L>>,
     current_section: SectionHandle<S>,
     current_position: usize,
     minimum_allocation_amount: usize,
+    last_log_bytes: usize,
 }
 
 impl<S: SectionStorage, L: UnifiedLogWrite<S>> LogStream<S, L> {
@@ -239,6 +240,7 @@ impl<S: SectionStorage, L: UnifiedLogWrite<S>> LogStream<S, L> {
             current_section: section,
             current_position: 0,
             minimum_allocation_amount,
+            last_log_bytes: 0,
         })
     }
 }
@@ -262,6 +264,8 @@ impl<E: Encode, S: SectionStorage, L: UnifiedLogWrite<S>> WriteStream<E> for Log
             Ok(nb_bytes) => {
                 self.current_position += nb_bytes;
                 self.current_section.header.used += nb_bytes as u32;
+                self.last_log_bytes = nb_bytes;
+                // Track encoded bytes so monitoring can compute actual bytes written.
                 Ok(())
             }
             Err(e) => match e {
@@ -292,6 +296,7 @@ impl<E: Encode, S: SectionStorage, L: UnifiedLogWrite<S>> WriteStream<E> for Log
 
                     self.current_position += result;
                     self.current_section.header.used += result as u32;
+                    self.last_log_bytes = result;
                     Ok(())
                 }
                 _ => {
@@ -302,6 +307,10 @@ impl<E: Encode, S: SectionStorage, L: UnifiedLogWrite<S>> WriteStream<E> for Log
                 }
             },
         }
+    }
+
+    fn last_log_bytes(&self) -> Option<usize> {
+        Some(self.last_log_bytes)
     }
 }
 

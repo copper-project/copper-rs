@@ -103,6 +103,49 @@ impl CopperListInfo {
     }
 }
 
+/// Reported data about CopperList IO for a single iteration.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CopperListIoStats {
+    /// CopperList struct size in RAM (excluding dynamic payloads/handles)
+    pub raw_culist_bytes: u64,
+    /// Bytes held by payloads that will be serialized (currently: pooled handles, vecs, slices)
+    pub handle_bytes: u64,
+    /// Bytes produced by bincode serialization of the CopperList
+    pub encoded_culist_bytes: u64,
+    /// Bytes produced by bincode serialization of the KeyFrame (0 if none)
+    pub keyframe_bytes: u64,
+    /// Cumulative bytes written to the structured log stream so far
+    pub structured_log_bytes_total: u64,
+    /// CopperList identifier for reference in monitors
+    pub culistid: u32,
+}
+
+/// Lightweight trait to estimate the amount of data a payload will contribute when serialized.
+/// Default implementations return the stack size; specific types override to report dynamic data.
+pub trait CuPayloadSize {
+    /// Total bytes represented by the payload in memory (stack + heap backing).
+    fn raw_bytes(&self) -> usize {
+        core::mem::size_of_val(self)
+    }
+
+    /// Bytes that correspond to reusable/pooled handles (used for IO budgeting).
+    fn handle_bytes(&self) -> usize {
+        0
+    }
+}
+
+impl<T> CuPayloadSize for T
+where
+    T: crate::cutask::CuMsgPayload,
+{
+    fn raw_bytes(&self) -> usize {
+        core::mem::size_of::<T>()
+    }
+}
+
+// NOTE: CuPayloadSize is blanket-implemented for CuMsgPayload types.
+// If you need handle-aware sizing for container payloads, implement CuPayloadSize for them explicitly.
+
 #[derive(Default, Debug, Clone, Copy)]
 struct NodeIoUsage {
     has_incoming: bool,
@@ -258,6 +301,9 @@ pub trait CuMonitor: Sized {
 
     /// Callback that will be trigger at the end of every copperlist (before, on or after the serialization).
     fn process_copperlist(&self, msgs: &[&CuMsgMetadata]) -> CuResult<()>;
+
+    /// Called when the runtime finishes serializing a CopperList, giving IO accounting data.
+    fn observe_copperlist_io(&self, _stats: CopperListIoStats) {}
 
     /// Callbacked when a Task errored out. The runtime requires an immediate decision.
     fn process_error(&self, taskid: usize, step: CuTaskState, error: &CuError) -> Decision;

@@ -238,6 +238,44 @@ fn gen_culist_support(
         }
     };
 
+    let payload_bytes_accumulators: Vec<proc_macro2::TokenStream> = culist_indices_in_plan_order
+        .iter()
+        .map(|idx| {
+            let slot_index = syn::Index::from(*idx);
+            let pack = output_packs
+                .get(*idx)
+                .unwrap_or_else(|| panic!("Missing output pack for index {idx}"));
+            if pack.is_multi() {
+                let iter = (0..pack.msg_types.len()).map(|port_idx| {
+                    let port_index = syn::Index::from(port_idx);
+                    quote! {
+                        if let Some(payload) = culist.msgs.0.#slot_index.#port_index.payload() {
+                            raw += cu29::monitoring::CuPayloadSize::raw_bytes(payload);
+                            handles += cu29::monitoring::CuPayloadSize::handle_bytes(payload);
+                        }
+                    }
+                });
+                quote! { #(#iter)* }
+            } else {
+                quote! {
+                    if let Some(payload) = culist.msgs.0.#slot_index.payload() {
+                        raw += cu29::monitoring::CuPayloadSize::raw_bytes(payload);
+                        handles += cu29::monitoring::CuPayloadSize::handle_bytes(payload);
+                    }
+                }
+            }
+        })
+        .collect();
+
+    let compute_payload_bytes_fn = quote! {
+        pub fn compute_payload_bytes(culist: &CuList) -> (u64, u64) {
+            let mut raw: usize = 0;
+            let mut handles: usize = 0;
+            #(#payload_bytes_accumulators)*
+            (raw as u64, handles as u64)
+        }
+    };
+
     let task_name_literals: Vec<String> = task_member_names
         .iter()
         .map(|(_, name)| name.clone())
@@ -287,6 +325,7 @@ fn gen_culist_support(
     // This generates a way to get the metadata of every single message of a culist at low cost
     quote! {
         #collect_metadata_function
+        #compute_payload_bytes_fn
 
         pub struct CuStampedDataSet(pub #msgs_types_tuple);
 
@@ -1648,6 +1687,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     let msgs = &mut culist.msgs.0;
                     #(#runtime_plan_code)*
                 } // drop(msgs);
+                let (raw_payload_bytes, handle_bytes) = #mission_mod::compute_payload_bytes(&culist);
                 monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
 
                 // here drop the payloads if we don't want them to be logged.
@@ -1655,6 +1695,15 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 cl_manager.end_of_processing(clid)?;
                 kf_manager.end_of_processing(clid)?;
+                let stats = cu29::monitoring::CopperListIoStats {
+                    raw_culist_bytes: core::mem::size_of::<CuList>() as u64 + raw_payload_bytes,
+                    handle_bytes,
+                    encoded_culist_bytes: cl_manager.last_encoded_bytes,
+                    keyframe_bytes: kf_manager.last_encoded_bytes,
+                    structured_log_bytes_total: 0, // TODO: track structured log stream bytes
+                    culistid: clid,
+                };
+                monitor.observe_copperlist_io(stats);
 
                 // Postprocess calls can happen at any time, just packed them up at the end.
                 #(#postprocess_calls)*

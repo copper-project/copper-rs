@@ -11,7 +11,7 @@ use cu29::clock::{CuDuration, RobotClock};
 use cu29::config::CuConfig;
 use cu29::cutask::CuMsgMetadata;
 use cu29::monitoring::{
-    ComponentKind, CopperListInfo, CuDurationStatistics, CuMonitor, CuTaskState, Decision,
+    ComponentKind, CopperListInfo, CopperListIoStats, CuDurationStatistics, CuMonitor, CuTaskState, Decision,
     MonitorTopology,
 };
 use cu29::prelude::{CuCompactString, CuTime, pool};
@@ -210,6 +210,10 @@ impl PoolStats {
 
 struct CopperListStats {
     size_bytes: usize,
+    raw_culist_bytes: u64,
+    handle_bytes: u64,
+    encoded_bytes: u64,
+    keyframe_bytes: u64,
     total_copperlists: u64,
     window_copperlists: u64,
     last_rate_at: Instant,
@@ -220,6 +224,10 @@ impl CopperListStats {
     fn new() -> Self {
         Self {
             size_bytes: 0,
+            raw_culist_bytes: 0,
+            handle_bytes: 0,
+            encoded_bytes: 0,
+            keyframe_bytes: 0,
             total_copperlists: 0,
             window_copperlists: 0,
             last_rate_at: Instant::now(),
@@ -230,6 +238,13 @@ impl CopperListStats {
     fn set_info(&mut self, info: CopperListInfo) {
         self.size_bytes = info.size_bytes;
         let _ = info.count;
+    }
+
+    fn update_io(&mut self, stats: cu29::monitoring::CopperListIoStats) {
+        self.raw_culist_bytes = stats.raw_culist_bytes;
+        self.handle_bytes = stats.handle_bytes;
+        self.encoded_bytes = stats.encoded_culist_bytes;
+        self.keyframe_bytes = stats.keyframe_bytes;
     }
 
     fn update_rate(&mut self) {
@@ -251,10 +266,15 @@ impl CopperListStats {
     }
 
     fn bandwidth_bytes_per_sec(&self) -> f64 {
-        if self.size_bytes == 0 {
+        let raw_total = if self.raw_culist_bytes > 0 {
+            self.raw_culist_bytes
+        } else {
+            self.size_bytes as u64
+        };
+        if raw_total == 0 {
             return 0.0;
         }
-        (self.size_bytes as f64) * self.rate_hz * 2.0
+        (raw_total as f64) * self.rate_hz
     }
 }
 
@@ -1008,11 +1028,43 @@ impl UI {
         } else {
             "unknown".to_string()
         };
-        let rate_display = format!("{:.2} Hz", stats.rate_hz);
-        let bandwidth_display = if stats.size_bytes > 0 {
-            format!("{}/s", format_bytes(stats.bandwidth_bytes_per_sec()))
+        let raw_total = stats.raw_culist_bytes.max(stats.size_bytes as u64);
+        let handles_display = if stats.handle_bytes > 0 {
+            format_bytes(stats.handle_bytes as f64)
+        } else {
+            "0 B".to_string()
+        };
+        let raw_total_display = if raw_total > 0 {
+            format_bytes(raw_total as f64)
+        } else {
+            "unknown".to_string()
+        };
+        let encoded_display = if stats.encoded_bytes > 0 {
+            format_bytes(stats.encoded_bytes as f64)
         } else {
             "n/a".to_string()
+        };
+        let efficiency_display = if raw_total > 0 && stats.encoded_bytes > 0 {
+            let ratio = (stats.encoded_bytes as f64) / (raw_total as f64);
+            format!("{:.1}%", ratio * 100.0)
+        } else {
+            "n/a".to_string()
+        };
+        let rate_display = format!("{:.2} Hz", stats.rate_hz);
+        let raw_bw = if raw_total > 0 {
+            format!("{}/s", format_bytes((raw_total as f64) * stats.rate_hz))
+        } else {
+            "n/a".to_string()
+        };
+        let encoded_bw = if stats.encoded_bytes > 0 {
+            format!("{}/s", format_bytes((stats.encoded_bytes as f64) * stats.rate_hz))
+        } else {
+            "n/a".to_string()
+        };
+        let keyframe_display = if stats.keyframe_bytes > 0 {
+            format_bytes(stats.keyframe_bytes as f64)
+        } else {
+            "0 B".to_string()
         };
 
         let header_cells = ["Metric", "Value"].iter().map(|h| {
@@ -1025,36 +1077,91 @@ impl UI {
 
         let header = Row::new(header_cells).bottom_margin(1);
 
-        let rows = vec![
-            Row::new(vec![
-                Cell::from(Line::from("CL size (RAM)")),
-                Cell::from(Line::from(size_display).alignment(Alignment::Right)),
-            ]),
+        let spacer = Row::new(vec![
+            Cell::from(Line::from(" ")),
+            Cell::from(Line::from(" ")),
+        ]);
+
+        let rate_style = Style::default().fg(Color::Cyan);
+        let mem_rows = vec![
             Row::new(vec![
                 Cell::from(Line::from("Observed rate")),
                 Cell::from(Line::from(rate_display).alignment(Alignment::Right)),
+            ])
+            .style(rate_style),
+            spacer.clone(),
+            Row::new(vec![
+                Cell::from(Line::from("CopperList size")),
+                Cell::from(Line::from(size_display).alignment(Alignment::Right)),
             ]),
             Row::new(vec![
-                Cell::from(Line::from("RAM BW (CL read+write)")),
-                Cell::from(Line::from(bandwidth_display).alignment(Alignment::Right)),
+                Cell::from(Line::from("Pool memory used")),
+                Cell::from(Line::from(handles_display).alignment(Alignment::Right)),
+            ]),
+            Row::new(vec![
+                Cell::from(Line::from("Keyframe size")),
+                Cell::from(Line::from(keyframe_display).alignment(Alignment::Right)),
+            ]),
+            Row::new(vec![
+                Cell::from(Line::from("Raw total (CL+payload)")),
+                Cell::from(Line::from(raw_total_display).alignment(Alignment::Right)),
+            ]),
+            spacer.clone(),
+            Row::new(vec![
+                Cell::from(Line::from("RAM BW (raw)")),
+                Cell::from(Line::from(raw_bw).alignment(Alignment::Right)),
             ]),
         ];
 
-        let table = Table::new(rows, &[Constraint::Length(24), Constraint::Length(12)])
+        let disk_rows = vec![
+            Row::new(vec![
+                Cell::from(Line::from("Encoded (bincode)")),
+                Cell::from(Line::from(encoded_display).alignment(Alignment::Right)),
+            ]),
+            Row::new(vec![
+                Cell::from(Line::from("Bincode efficiency")),
+                Cell::from(Line::from(efficiency_display).alignment(Alignment::Right)),
+            ]),
+            Row::new(vec![
+                Cell::from(Line::from(" ")),
+                Cell::from(Line::from(" ")),
+            ]),
+            Row::new(vec![
+                Cell::from(Line::from(" ")),
+                Cell::from(Line::from(" ")),
+            ]),
+            spacer.clone(),
+            Row::new(vec![
+                Cell::from(Line::from("Disk BW (encoded)")),
+                Cell::from(Line::from(encoded_bw).alignment(Alignment::Right)),
+            ]),
+        ];
+
+        let mem_table = Table::new(mem_rows, &[Constraint::Length(24), Constraint::Length(12)])
+            .header(header.clone())
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
+                    .title(" Memory BW "),
+            );
+
+        let disk_table = Table::new(disk_rows, &[Constraint::Length(24), Constraint::Length(12)])
             .header(header)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded)
-                    .title(" CopperList Stats "),
+                    .title(" Disk / Encoding "),
             );
 
         let layout = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Length(42), Constraint::Min(0)].as_ref())
+            .constraints([Constraint::Length(42), Constraint::Length(42)].as_ref())
             .split(area);
 
-        f.render_widget(table, layout[0]);
+        f.render_widget(mem_table, layout[0]);
+        f.render_widget(disk_table, layout[1]);
     }
 
     fn draw_nodes(&mut self, f: &mut Frame, space: Rect) {
@@ -1321,6 +1428,11 @@ impl CuMonitor for CuConsoleMon {
     fn set_copperlist_info(&mut self, info: CopperListInfo) {
         let mut stats = self.copperlist_stats.lock().unwrap();
         stats.set_info(info);
+    }
+
+    fn observe_copperlist_io(&self, stats: CopperListIoStats) {
+        let mut cl_stats = self.copperlist_stats.lock().unwrap();
+        cl_stats.update_io(stats);
     }
 
     fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
