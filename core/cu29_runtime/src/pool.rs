@@ -370,6 +370,7 @@ mod cuda {
             self.inner.len()
         }
 
+        // SAFETY: HostSlice requires the returned slice to remain valid for 'b.
         unsafe fn stream_synced_slice<'b>(
             &'b self,
             stream: &'b CudaStream,
@@ -377,6 +378,7 @@ mod cuda {
             (self.inner.deref(), SyncOnDrop::sync_stream(stream))
         }
 
+        // SAFETY: This wrapper cannot provide mutable access; callers must not rely on this.
         unsafe fn stream_synced_mut_slice<'b>(
             &'b mut self,
             _stream: &'b CudaStream,
@@ -395,6 +397,7 @@ mod cuda {
             self.inner.len()
         }
 
+        // SAFETY: HostSlice requires the returned slice to remain valid for 'b.
         unsafe fn stream_synced_slice<'b>(
             &'b self,
             stream: &'b CudaStream,
@@ -402,6 +405,7 @@ mod cuda {
             (self.inner.deref(), SyncOnDrop::sync_stream(stream))
         }
 
+        // SAFETY: HostSlice requires the returned slice to remain valid for 'b.
         unsafe fn stream_synced_mut_slice<'b>(
             &'b mut self,
             stream: &'b CudaStream,

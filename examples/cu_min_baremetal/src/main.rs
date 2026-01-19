@@ -110,13 +110,16 @@ impl UnifiedLogWrite<MySectionStorage> for MyEmbeddedLogger {
 const HEAP_SIZE: usize = 128usize * 1024usize;
 
 #[cfg(not(feature = "std"))]
+// SAFETY: Entry point is defined by the target runtime and must not be mangled.
 #[unsafe(no_mangle)]
 pub extern "C" fn main() {
     // the no std version
 
+    // SAFETY: Reserve a dedicated heap region in .bss for the allocator.
     #[unsafe(link_section = ".bss.heap")]
     static mut HEAP: [u8; HEAP_SIZE] = [0; HEAP_SIZE];
 
+    // SAFETY: HEAP is a unique static buffer used only to initialize the allocator.
     unsafe {
         ALLOC.init(addr_of_mut!(HEAP) as usize, HEAP_SIZE);
     }

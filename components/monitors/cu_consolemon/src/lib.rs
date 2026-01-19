@@ -1703,10 +1703,12 @@ fn should_start_ui() -> bool {
     {
         use std::os::unix::io::AsRawFd;
         let stdin_fd = stdin().as_raw_fd();
+        // SAFETY: tcgetpgrp only reads process group state for a valid fd.
         let fg_pgrp = unsafe { libc::tcgetpgrp(stdin_fd) };
         if fg_pgrp == -1 {
             return false;
         }
+        // SAFETY: getpgrp has no safety requirements beyond being called in a process.
         let pgrp = unsafe { libc::getpgrp() };
         if fg_pgrp != pgrp {
             return false;

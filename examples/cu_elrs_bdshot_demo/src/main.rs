@@ -42,6 +42,7 @@ mod tasks;
 #[copper_runtime(config = "copperconfig.ron")]
 struct BdshotDemoApp {}
 
+// SAFETY: The RP2350 boot ROM expects the image definition in .start_block.
 #[unsafe(link_section = ".start_block")]
 #[used]
 static IMAGE_DEF: hal::block::ImageDef = hal::block::ImageDef::secure_exe();
@@ -230,6 +231,7 @@ where
     F: Function,
     P: PullType,
 {
+    // SAFETY: These linker symbols delimit a valid PSRAM heap region.
     unsafe extern "C" {
         static mut __psram_heap_start__: u8;
         static mut __psram_heap_end__: u8;
@@ -237,6 +239,7 @@ where
 
     let _ = cs1.into_function::<FunctionXipCs1>();
 
+    // SAFETY: We only touch the XIP control block and initialize the heap once.
     unsafe {
         let xip = &*pac::XIP_CTRL::ptr();
         xip.ctrl().modify(|_, w| w.writable_m1().set_bit());

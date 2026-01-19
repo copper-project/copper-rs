@@ -16,6 +16,7 @@ pub trait PixelWriteAccess<U> {
 impl<U: Copy, T: AsRef<[U]>> PixelReadAccess<U> for T {
     #[inline]
     fn get_pixel(&self, x: usize, y: usize, width: usize) -> U {
+        // SAFETY: Callers ensure x,y are in bounds for the underlying slice.
         unsafe {
             let slice = self.as_ref();
             *slice.get_unchecked(x + y * width)
@@ -26,6 +27,7 @@ impl<U: Copy, T: AsRef<[U]>> PixelReadAccess<U> for T {
 impl<U: Copy, T: AsMut<[U]>> PixelWriteAccess<U> for T {
     #[inline]
     fn put_pixel(&mut self, x: usize, y: usize, width: usize, value: U) {
+        // SAFETY: Callers ensure x,y are in bounds for the underlying slice.
         unsafe {
             *self.as_mut().get_unchecked_mut(x + y * width) = value;
         }

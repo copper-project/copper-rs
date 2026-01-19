@@ -47,6 +47,7 @@ where
 macro_rules! build_ch {
     ($prog:expr, $sm:ident, $pin:expr, $d:expr, $f:expr) => {{
         #[allow(clippy::macro_metavars_in_unsafe)]
+        // SAFETY: The installed PIO program remains valid for the lifetime of the state machine.
         let (sm, rx, tx) = PIOBuilder::from_installed_program(unsafe { $prog.share() })
             .set_pins($pin, 1)
             .out_pins($pin, 1)

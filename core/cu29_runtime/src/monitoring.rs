@@ -360,8 +360,11 @@ impl<A: GlobalAlloc> CountingAlloc<A> {
     }
 }
 
+// SAFETY: Delegates allocation/deallocation to the inner allocator while tracking sizes.
 unsafe impl<A: GlobalAlloc> GlobalAlloc for CountingAlloc<A> {
+    // SAFETY: Callers uphold the GlobalAlloc contract; we delegate to the inner allocator.
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        // SAFETY: Forwarding to the inner allocator preserves GlobalAlloc invariants.
         let p = unsafe { self.inner.alloc(layout) };
         if !p.is_null() {
             self.allocated.fetch_add(layout.size(), Ordering::SeqCst);
@@ -369,10 +372,10 @@ unsafe impl<A: GlobalAlloc> GlobalAlloc for CountingAlloc<A> {
         p
     }
 
+    // SAFETY: Callers uphold the GlobalAlloc contract; we delegate to the inner allocator.
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        unsafe {
-            self.inner.dealloc(ptr, layout);
-        }
+        // SAFETY: Forwarding to the inner allocator preserves GlobalAlloc invariants.
+        unsafe { self.inner.dealloc(ptr, layout) }
         self.deallocated.fetch_add(layout.size(), Ordering::SeqCst);
     }
 }

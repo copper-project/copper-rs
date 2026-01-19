@@ -144,8 +144,9 @@ fn image_from_cuimage<A>(cu_image: &CuImage<A>) -> ManuallyDrop<Image>
 where
     A: ArrayLike<Element = u8>,
 {
+    // SAFETY: We hand AprilTag a view into CuImage's buffer and prevent it from freeing memory.
     unsafe {
-        // Try to emulate what the C code is doing on the heap to avoid double free
+        // Try to emulate what the C code is doing on the heap to avoid double free.
         let buffer_ptr = cu_image.buffer_handle.with_inner(|inner| inner.as_ptr());
         let low_level_img = Box::new(image_u8_t {
             buf: buffer_ptr as *mut u8,

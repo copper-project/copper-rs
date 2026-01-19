@@ -570,7 +570,7 @@ mod tests {
         // Build a minimal index on the fly so tests don't depend on build-time artifacts.
         let fake_out_dir = tmpdir.path().join("build").join("out").join("dir");
         fs::create_dir_all(&fake_out_dir).unwrap();
-        // Explicit unsafe block needed by Rust 2024 for this unsafe API.
+        // SAFETY: Tests run single-threaded here and we only read the variable after setting it.
         unsafe {
             env::set_var("LOG_INDEX_DIR", &fake_out_dir);
         }

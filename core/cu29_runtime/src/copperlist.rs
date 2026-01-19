@@ -136,6 +136,7 @@ impl<P: CopperListTuple, const N: usize> CuListsManager<P, N> {
     where
         P: CuListZeroedInit,
     {
+        // SAFETY: We allocate zeroed memory and immediately initialize required fields.
         let data = unsafe {
             let layout = Layout::new::<[CopperList<P>; N]>();
             let ptr = alloc_zeroed(layout) as *mut [CopperList<P>; N];

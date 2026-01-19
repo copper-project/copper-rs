@@ -57,7 +57,7 @@ pub struct Stm32H7Board {
     t1_high: u32,
 }
 
-// Safe in this context: the board is registered once and used on a single core.
+// SAFETY: The board is registered once and used on a single core with no concurrent access.
 unsafe impl Send for Stm32H7Board {}
 
 struct Motors {
@@ -114,6 +114,7 @@ impl BdshotBoard for Stm32H7Board {
     const CHANNEL_COUNT: usize = 4;
 
     fn exchange(&mut self, channel: usize, frame: u32) -> Option<DShotTelemetry> {
+        // SAFETY: gpioe points to the GPIOE register block for the lifetime of the board.
         let gpioe = unsafe { &*self.gpioe };
         let mask = *MOTOR_TELE_MASKS.get(channel)?;
         let moder_mask = MOTOR_MODER_MASKS[channel];
@@ -198,9 +199,10 @@ fn drive_signal_level(gpioe: &hal::pac::gpioe::RegisterBlock, mask: u32, high: b
     } else {
         (0, mask)
     };
-    gpioe
-        .bsrr
-        .write(|w| unsafe { w.bits(set_mask | (reset_mask << 16)) });
+    gpioe.bsrr.write(|w| {
+        // SAFETY: Writing raw bits to BSRR is the expected HAL usage.
+        unsafe { w.bits(set_mask | (reset_mask << 16)) }
+    });
 }
 
 fn send_frame(
@@ -337,10 +339,16 @@ fn decode_telemetry(
 
 fn set_mode_input(gpioe: &hal::pac::gpioe::RegisterBlock, moder_mask: u32, pupdr_mask: u32) {
     let moder = gpioe.moder.read().bits() & !moder_mask;
-    gpioe.moder.write(|w| unsafe { w.bits(moder) });
+    gpioe.moder.write(|w| {
+        // SAFETY: Writing raw bits to MODER is required for GPIO mode configuration.
+        unsafe { w.bits(moder) }
+    });
 
     let pupdr = gpioe.pupdr.read().bits() & !pupdr_mask;
-    gpioe.pupdr.write(|w| unsafe { w.bits(pupdr) });
+    gpioe.pupdr.write(|w| {
+        // SAFETY: Writing raw bits to PUPDR is required for GPIO pull configuration.
+        unsafe { w.bits(pupdr) }
+    });
 }
 
 fn set_mode_output(
@@ -350,10 +358,14 @@ fn set_mode_output(
     pupdr_mask: u32,
 ) {
     let moder = gpioe.moder.read().bits() & !moder_mask;
-    gpioe
-        .moder
-        .write(|w| unsafe { w.bits(moder | moder_output) });
+    gpioe.moder.write(|w| {
+        // SAFETY: Writing raw bits to MODER is required for GPIO mode configuration.
+        unsafe { w.bits(moder | moder_output) }
+    });
 
     let pupdr = gpioe.pupdr.read().bits() & !pupdr_mask;
-    gpioe.pupdr.write(|w| unsafe { w.bits(pupdr) });
+    gpioe.pupdr.write(|w| {
+        // SAFETY: Writing raw bits to PUPDR is required for GPIO pull configuration.
+        unsafe { w.bits(pupdr) }
+    });
 }

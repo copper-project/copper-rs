@@ -152,6 +152,7 @@ struct SlabEntry {
 impl Drop for SlabEntry {
     fn drop(&mut self) {
         self.flush_until(self.current_global_position);
+        // SAFETY: We own the mapping and must drop it before trimming the file.
         unsafe { ManuallyDrop::drop(&mut self.mmap_buffer) };
         self.file
             .set_len(self.current_global_position as u64)
@@ -165,8 +166,10 @@ impl Drop for SlabEntry {
 
 impl SlabEntry {
     fn new(file: File, page_size: usize) -> Self {
-        let mmap_buffer =
-            ManuallyDrop::new(unsafe { MmapMut::map_mut(&file).expect("Failed to map file") });
+        let mmap_buffer = ManuallyDrop::new(
+            // SAFETY: The file descriptor is valid and mapping is confined to this struct.
+            unsafe { MmapMut::map_mut(&file).expect("Failed to map file") },
+        );
         Self {
             file,
             mmap_buffer,
@@ -311,7 +314,7 @@ impl SlabEntry {
         let end_of_section = self.current_global_position + requested_section_size;
         let user_buffer = &mut self.mmap_buffer[self.current_global_position..end_of_section];
 
-        // here we have the guarantee for exclusive access to that memory for the lifetime of the handle, the borrow checker cannot understand that ever.
+        // SAFETY: We have exclusive access to user_buffer for the handle's lifetime.
         let handle_buffer =
             unsafe { from_raw_parts_mut(user_buffer.as_mut_ptr(), user_buffer.len()) };
         let storage = MmapSectionStorage::new(handle_buffer, block_size as usize);
@@ -511,6 +514,7 @@ fn open_slab_index(
 
     let file_path = build_slab_path(base_file_path, slab_index);
     let file = options.open(file_path)?;
+    // SAFETY: The file is kept open for the lifetime of the mapping.
     let mmap = unsafe { Mmap::map(&file) }?;
     let mut prolog = 0u16;
     let mut maybe_main_header: Option<MainHeader> = None;

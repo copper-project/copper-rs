@@ -125,9 +125,12 @@ where
             "STRIDE must equal WIDTH for ImageBuffer compatibility."
         );
 
-        let raw_pixels: &[P::Subpixel] = self.buffer_handle.with_inner(|inner| unsafe {
-            let data: &[u8] = inner;
-            core::slice::from_raw_parts(data.as_ptr() as *const P::Subpixel, data.len())
+        let raw_pixels: &[P::Subpixel] = self.buffer_handle.with_inner(|inner| {
+            // SAFETY: The buffer is contiguous, aligned for P::Subpixel (typically u8), and large enough.
+            unsafe {
+                let data: &[u8] = inner;
+                core::slice::from_raw_parts(data.as_ptr() as *const P::Subpixel, data.len())
+            }
         });
         ImageBuffer::from_raw(width, height, raw_pixels)
             .ok_or("Could not create the image:: buffer".into())
@@ -147,14 +150,18 @@ where
         );
 
         let size = width * height * C;
-        let raw_pixels: &[T] = self.buffer_handle.with_inner(|inner| unsafe {
-            let data: &[u8] = inner;
-            core::slice::from_raw_parts(
-                data.as_ptr() as *const T,
-                data.len() / core::mem::size_of::<T>(),
-            )
+        let raw_pixels: &[T] = self.buffer_handle.with_inner(|inner| {
+            // SAFETY: The buffer is aligned for T, its length is a multiple of T, and it lives long enough.
+            unsafe {
+                let data: &[u8] = inner;
+                core::slice::from_raw_parts(
+                    data.as_ptr() as *const T,
+                    data.len() / core::mem::size_of::<T>(),
+                )
+            }
         });
 
+        // SAFETY: raw_pixels points to size elements laid out for the requested shape.
         unsafe { Image::from_raw_parts([height, width].into(), raw_pixels.as_ptr(), size, k) }
             .map_err(|e| CuError::new_with_cause("Could not create a Kornia Image", e))
     }

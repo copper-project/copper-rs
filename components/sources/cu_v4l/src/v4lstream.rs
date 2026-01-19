@@ -91,6 +91,7 @@ impl CuV4LStream {
     }
 
     fn buffer_desc(&self) -> v4l2_buffer {
+        // SAFETY: v4l2_buffer is a C struct and zeroed defaults are valid.
         v4l2_buffer {
             type_: self.v4l_buf_type as u32,
             memory: Memory::UserPtr as u32,
@@ -101,6 +102,7 @@ impl CuV4LStream {
     // From v4l::Arena
 
     fn requestbuffers_desc(&self) -> v4l2_requestbuffers {
+        // SAFETY: v4l2_requestbuffers is a C struct and zeroed defaults are valid.
         v4l2_requestbuffers {
             type_: self.v4l_buf_type as u32,
             memory: Memory::UserPtr as u32,
@@ -110,10 +112,12 @@ impl CuV4LStream {
 
     pub fn allocate_request_buffers(&mut self, count: u32) -> io::Result<u32> {
         // we need to get the maximum buffer size from the format first
+        // SAFETY: v4l2_format is a C struct and zeroed defaults are valid.
         let mut v4l2_fmt = v4l2_format {
             type_: self.v4l_buf_type as u32,
             ..unsafe { mem::zeroed() }
         };
+        // SAFETY: ioctl expects a valid fd and a mutable v4l2_format pointer.
         unsafe {
             v4l2::ioctl(
                 self.v4l_handle.fd(),
@@ -126,6 +130,7 @@ impl CuV4LStream {
             count,
             ..self.requestbuffers_desc()
         };
+        // SAFETY: ioctl expects a valid fd and a mutable v4l2_requestbuffers pointer.
         unsafe {
             v4l2::ioctl(
                 self.v4l_handle.fd(),
@@ -144,6 +149,7 @@ impl CuV4LStream {
             count: 0,
             ..self.requestbuffers_desc()
         };
+        // SAFETY: ioctl expects a valid fd and a mutable v4l2_requestbuffers pointer.
         unsafe {
             v4l2::ioctl(
                 self.v4l_handle.fd(),
@@ -184,6 +190,7 @@ impl Stream for CuV4LStream {
 
         self.arena_last_freed_up_index = 0;
 
+        // SAFETY: ioctl expects a valid fd and a mutable buffer type pointer.
         unsafe {
             let mut type_ = self.v4l_buf_type as u32;
             v4l2::ioctl(
@@ -197,6 +204,7 @@ impl Stream for CuV4LStream {
     }
 
     fn stop(&mut self) -> io::Result<()> {
+        // SAFETY: ioctl expects a valid fd and a mutable buffer type pointer.
         unsafe {
             let mut type_ = self.v4l_buf_type as u32;
             v4l2::ioctl(
@@ -227,6 +235,7 @@ impl CaptureStream<'_> for CuV4LStream {
                 ..self.buffer_desc()
             }
         });
+        // SAFETY: ioctl expects a valid fd and a mutable v4l2_buffer pointer.
         unsafe {
             v4l2::ioctl(
                 self.v4l_handle.fd(),
@@ -251,6 +260,7 @@ impl CaptureStream<'_> for CuV4LStream {
             return Err(io::Error::new(io::ErrorKind::TimedOut, "VIDIOC_DQBUF"));
         }
 
+        // SAFETY: ioctl expects a valid fd and a mutable v4l2_buffer pointer.
         unsafe {
             v4l2::ioctl(
                 self.v4l_handle.fd(),

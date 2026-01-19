@@ -39,8 +39,9 @@ pub struct SerialWrapper<U> {
     overrun_period_cycles: u32,
 }
 
-// Safety: the firmware uses a single-threaded runtime; no concurrent access.
+// SAFETY: The firmware uses a single-threaded runtime; no concurrent access.
 unsafe impl<U> Send for SerialWrapper<U> {}
+// SAFETY: The firmware uses a single-threaded runtime; no concurrent access.
 unsafe impl<U> Sync for SerialWrapper<U> {}
 
 impl<U> SerialWrapper<U> {
@@ -143,8 +144,9 @@ impl<T> SingleThreaded<T> {
     }
 }
 
-// Safety: the firmware uses a single-threaded runtime; no concurrent access.
+// SAFETY: The firmware uses a single-threaded runtime; no concurrent access.
 unsafe impl<T> Send for SingleThreaded<T> {}
+// SAFETY: The firmware uses a single-threaded runtime; no concurrent access.
 unsafe impl<T> Sync for SingleThreaded<T> {}
 
 impl<T> Transfer<u8> for SingleThreaded<T>
@@ -197,8 +199,9 @@ pub struct BatteryAdc {
     pin: BatterySensePin,
 }
 
-// Safety: the firmware uses a single-threaded runtime; no concurrent access.
+// SAFETY: The firmware uses a single-threaded runtime; no concurrent access.
 unsafe impl Send for BatteryAdc {}
+// SAFETY: The firmware uses a single-threaded runtime; no concurrent access.
 unsafe impl Sync for BatteryAdc {}
 
 impl BatteryAdc {

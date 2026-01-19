@@ -9,6 +9,7 @@ use iceoryx2::service::port_factory::publish_subscribe::PortFactory;
 #[derive(Clone, Debug, Default, Decode, Encode)]
 pub struct IceorixCuMsg<P: CuMsgPayload>(CuMsg<P>);
 
+// SAFETY: IceorixCuMsg is a transparent wrapper over CuMsg with no extra invariants.
 unsafe impl<P: CuMsgPayload> ZeroCopySend for IceorixCuMsg<P> {}
 /// This is a sink task that sends messages to an iceoryx2 service.
 /// P is the payload type of the messages.

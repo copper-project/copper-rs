@@ -138,7 +138,7 @@ impl Freezable for CuAhrs {
         &self,
         encoder: &mut E,
     ) -> Result<(), bincode::error::EncodeError> {
-        // Safety: DCMIMU is a plain-old-data struct of floats; we snapshot its bytes to preserve filter state.
+        // SAFETY: DCMIMU is a plain-old-data struct of floats; we snapshot its bytes to preserve state.
         let bytes = unsafe {
             core::slice::from_raw_parts(
                 (&self.dcm as *const DCMIMU) as *const u8,
@@ -158,7 +158,7 @@ impl Freezable for CuAhrs {
         let raw: Vec<u8> = Decode::decode(decoder)?;
         let expected = size_of::<DCMIMU>();
         if raw.len() == expected {
-            // Safety: we created the vector ourselves from a previous freeze; copy bytes back.
+            // SAFETY: We created the vector ourselves from a previous freeze; copy bytes back.
             unsafe {
                 let ptr = (&mut self.dcm as *mut DCMIMU) as *mut u8;
                 ptr::copy_nonoverlapping(raw.as_ptr(), ptr, expected);
