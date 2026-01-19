@@ -33,14 +33,14 @@ impl CuTask for GstToCuImage {
         let config = config.ok_or_else(|| CuError::from("GstToCuImage requires configuration"))?;
 
         let width = config
-            .get::<u32>("width")
+            .get::<u32>("width")?
             .ok_or_else(|| CuError::from("GstToCuImage requires width"))?;
         let height = config
-            .get::<u32>("height")
+            .get::<u32>("height")?
             .ok_or_else(|| CuError::from("GstToCuImage requires height"))?;
-        let fourcc = if let Some(fourcc) = config.get::<String>("fourcc") {
+        let fourcc = if let Some(fourcc) = config.get::<String>("fourcc")? {
             fourcc
-        } else if let Some(pixel_format) = config.get::<String>("pixel_format") {
+        } else if let Some(pixel_format) = config.get::<String>("pixel_format")? {
             pixel_format
         } else {
             return Err(CuError::from(
@@ -49,14 +49,14 @@ impl CuTask for GstToCuImage {
         };
         let pixel_format = fourcc_to_bytes(&fourcc)?;
         let stride = config
-            .get::<u32>("stride")
+            .get::<u32>("stride")?
             .unwrap_or_else(|| default_stride(width, pixel_format));
 
         // Calculate buffer size based on pixel format
         let buffer_size = compute_buffer_size(height, stride, pixel_format);
-        let pool_size = config.get::<u32>("pool_size").unwrap_or(4) as usize;
+        let pool_size = config.get::<u32>("pool_size")?.unwrap_or(4) as usize;
         let pool_id = config
-            .get::<String>("pool_id")
+            .get::<String>("pool_id")?
             .unwrap_or_else(|| "gst_image_pool".to_string());
 
         let pool = CuHostMemoryPool::new(&pool_id, pool_size, || vec![0u8; buffer_size])?;

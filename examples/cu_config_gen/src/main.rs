@@ -18,5 +18,10 @@ fn main() {
 
     graph.connect(n2, n1, "imgmsgpkg::Image").unwrap();
     graph.connect(n1, n3, "imgmsgpkg::Image").unwrap();
-    println!("{}", copperconfig.serialize_ron());
+    println!(
+        "{}",
+        copperconfig
+            .serialize_ron()
+            .expect("Failed to serialize configuration")
+    );
 }

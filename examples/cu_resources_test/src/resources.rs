@@ -68,10 +68,16 @@ impl ResourceBundle for BoardBundle {
         config: Option<&cu29::config::ComponentConfig>,
         manager: &mut ResourceManager,
     ) -> CuResult<()> {
-        let label: String = config
-            .and_then(|cfg| cfg.get("label"))
-            .unwrap_or_else(|| format!("{}-bus", bundle.bundle_id()));
-        let offset: i64 = config.and_then(|cfg| cfg.get("offset")).unwrap_or(0);
+        let label: String = match config {
+            Some(cfg) => cfg
+                .get::<String>("label")?
+                .unwrap_or_else(|| format!("{}-bus", bundle.bundle_id())),
+            None => format!("{}-bus", bundle.bundle_id()),
+        };
+        let offset: i64 = match config {
+            Some(cfg) => cfg.get::<i64>("offset")?.unwrap_or(0),
+            None => 0,
+        };
 
         let bus_key = bundle.key(BoardBundleId::Bus);
         let counter_key = bundle.key(BoardBundleId::Counter);
@@ -95,9 +101,12 @@ impl ResourceBundle for ExtraBundle {
         config: Option<&cu29::config::ComponentConfig>,
         manager: &mut ResourceManager,
     ) -> CuResult<()> {
-        let note: String = config
-            .and_then(|cfg| cfg.get("note"))
-            .unwrap_or_else(|| format!("{}-note", bundle.bundle_id()));
+        let note: String = match config {
+            Some(cfg) => cfg
+                .get::<String>("note")?
+                .unwrap_or_else(|| format!("{}-note", bundle.bundle_id())),
+            None => format!("{}-note", bundle.bundle_id()),
+        };
         let note_key = bundle.key(ExtraBundleId::Note);
         manager.add_owned(note_key, note)?;
         Ok(())

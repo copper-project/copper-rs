@@ -66,9 +66,12 @@ pub mod tasks {
         where
             Self: Sized,
         {
-            let label = config
-                .and_then(|cfg| cfg.get::<String>("label"))
-                .unwrap_or_else(|| "ping".to_string());
+            let label = match config {
+                Some(cfg) => cfg
+                    .get::<String>("label")?
+                    .unwrap_or_else(|| "ping".to_string()),
+                None => "ping".to_string(),
+            };
             Ok(Self { seq: 0, label })
         }
 
@@ -98,9 +101,12 @@ pub mod tasks {
         where
             Self: Sized,
         {
-            let label = config
-                .and_then(|cfg| cfg.get::<String>("label"))
-                .unwrap_or_else(|| "pong".to_string());
+            let label = match config {
+                Some(cfg) => cfg
+                    .get::<String>("label")?
+                    .unwrap_or_else(|| "pong".to_string()),
+                None => "pong".to_string(),
+            };
             Ok(Self { label })
         }
 
@@ -137,9 +143,12 @@ pub mod tasks {
         where
             Self: Sized,
         {
-            let label = config
-                .and_then(|cfg| cfg.get::<String>("label"))
-                .unwrap_or_else(|| "sink".to_string());
+            let label = match config {
+                Some(cfg) => cfg
+                    .get::<String>("label")?
+                    .unwrap_or_else(|| "sink".to_string()),
+                None => "sink".to_string(),
+            };
             Ok(Self { label })
         }
 

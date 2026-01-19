@@ -72,7 +72,7 @@ where
         let config = config.ok_or(CuError::from("ZenohRosSink: Missing configuration"))?;
 
         // Get json zenoh config
-        let session_config = match config.get::<String>("zenoh_config_json") {
+        let session_config = match config.get::<String>("zenoh_config_json")? {
             Some(json) => Config::from_json5(&json)
                 .map_err(cu_error_map("ZenohRosSink: Failed to create zenoh config"))?,
             None => Config::default(),
@@ -82,10 +82,10 @@ where
             _marker: Default::default(),
             config: ZenohRosConfig {
                 session: session_config,
-                domain_id: config.get::<u32>("domain_id").unwrap_or(0),
-                namespace: config.get::<String>("namespace").unwrap_or("node".into()),
-                node: config.get::<String>("node").unwrap_or("node".into()),
-                topic: config.get::<String>("topic").unwrap_or("copper".into()),
+                domain_id: config.get::<u32>("domain_id")?.unwrap_or(0),
+                namespace: config.get::<String>("namespace")?.unwrap_or("node".into()),
+                node: config.get::<String>("node")?.unwrap_or("node".into()),
+                topic: config.get::<String>("topic")?.unwrap_or("copper".into()),
             },
             ctx: None,
         })

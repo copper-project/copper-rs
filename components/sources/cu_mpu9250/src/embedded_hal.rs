@@ -36,18 +36,24 @@ pub struct EmbeddedHalSettings {
 }
 
 impl EmbeddedHalSettings {
-    pub fn from_config(config: Option<&ComponentConfig>) -> Self {
-        let gyro_cal_ms = config
-            .and_then(|cfg| cfg.get("gyro_cal_ms"))
-            .unwrap_or(DEFAULT_GYRO_CAL_MS);
-        let gyro_sample_delay_ms = config
-            .and_then(|cfg| cfg.get("gyro_sample_delay_ms"))
-            .unwrap_or(DEFAULT_GYRO_SAMPLE_DELAY_MS);
+    pub fn from_config(config: Option<&ComponentConfig>) -> CuResult<Self> {
+        let gyro_cal_ms = match config {
+            Some(cfg) => cfg
+                .get::<u32>("gyro_cal_ms")?
+                .unwrap_or(DEFAULT_GYRO_CAL_MS),
+            None => DEFAULT_GYRO_CAL_MS,
+        };
+        let gyro_sample_delay_ms = match config {
+            Some(cfg) => cfg
+                .get::<u32>("gyro_sample_delay_ms")?
+                .unwrap_or(DEFAULT_GYRO_SAMPLE_DELAY_MS),
+            None => DEFAULT_GYRO_SAMPLE_DELAY_MS,
+        };
 
-        Self {
+        Ok(Self {
             gyro_cal_ms,
             gyro_sample_delay_ms,
-        }
+        })
     }
 }
 

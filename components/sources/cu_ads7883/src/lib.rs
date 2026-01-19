@@ -100,9 +100,9 @@ impl CuSrcTask for ADS7883 {
         match config {
             #[allow(unused_variables)]
             Some(config) => {
-                let maybe_string: Option<String> = config.get::<String>("spi_dev");
+                let maybe_string: Option<String> = config.get::<String>("spi_dev")?;
                 let maybe_spidev: Option<&str> = maybe_string.as_deref();
-                let maybe_max_speed_hz: Option<u32> = config.get("max_speed_hz");
+                let maybe_max_speed_hz: Option<u32> = config.get("max_speed_hz")?;
 
                 #[cfg(hardware)]
                 let spi = open_spi(maybe_spidev, maybe_max_speed_hz).map_err(|e| {

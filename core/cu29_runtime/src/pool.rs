@@ -549,16 +549,20 @@ mod cuda {
         where
             O: ArrayLike<Element = E>,
         {
-            let device_lock = device_handle.lock().unwrap();
-            let mut host_lock = host_handle.lock().unwrap();
+            let device_lock = device_handle.lock().map_err(|e| {
+                CuError::from("Device handle mutex poisoned").add_cause(&e.to_string())
+            })?;
+            let mut host_lock = host_handle.lock().map_err(|e| {
+                CuError::from("Host handle mutex poisoned").add_cause(&e.to_string())
+            })?;
             let src = match &*device_lock {
                 CuHandleInner::Pooled(source) => source.as_cuda_slice(),
                 CuHandleInner::Detached(source) => source.as_cuda_slice(),
             };
             let mut wrapper = Self::get_host_slice_mut_wrapper(&mut *host_lock);
-            self.stream
-                .memcpy_dtoh(src, &mut wrapper)
-                .expect("Failed to copy data from device to host");
+            self.stream.memcpy_dtoh(src, &mut wrapper).map_err(|e| {
+                CuError::from("Failed to copy data from device to host").add_cause(&e.to_string())
+            })?;
             Ok(())
         }
     }

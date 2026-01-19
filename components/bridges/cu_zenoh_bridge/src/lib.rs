@@ -87,12 +87,12 @@ where
 {
     fn parse_session_config(config: Option<&ComponentConfig>) -> CuResult<Config> {
         if let Some(config) = config {
-            if let Some(path) = config.get::<String>("zenoh_config_file") {
+            if let Some(path) = config.get::<String>("zenoh_config_file")? {
                 return Config::from_file(&path).map_err(|e| {
                     CuError::from(format!("ZenohBridge: Failed to read config file: {e}"))
                 });
             }
-            if let Some(json) = config.get::<String>("zenoh_config_json") {
+            if let Some(json) = config.get::<String>("zenoh_config_json")? {
                 return Config::from_json5(&json).map_err(|e| {
                     CuError::from(format!("ZenohBridge: Failed to parse config json: {e}"))
                 });
@@ -103,7 +103,7 @@ where
 
     fn parse_default_wire_format(config: Option<&ComponentConfig>) -> CuResult<WireFormat> {
         if let Some(config) = config
-            && let Some(raw) = config.get::<String>("wire_format")
+            && let Some(raw) = config.get::<String>("wire_format")?
         {
             return WireFormat::parse(&raw).ok_or_else(|| {
                 CuError::from(format!(
@@ -131,7 +131,7 @@ where
         default: WireFormat,
     ) -> CuResult<WireFormat> {
         if let Some(config) = channel.config.as_ref()
-            && let Some(raw) = config.get::<String>("wire_format")
+            && let Some(raw) = config.get::<String>("wire_format")?
         {
             return WireFormat::parse(&raw).ok_or_else(|| {
                 CuError::from(format!(

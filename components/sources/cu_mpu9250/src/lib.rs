@@ -122,17 +122,20 @@ where
     type Output<'m> = output_msg!(ImuPayload);
 
     fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self> {
-        let settings = embedded_hal::EmbeddedHalSettings::from_config(config);
+        let settings = embedded_hal::EmbeddedHalSettings::from_config(config)?;
 
-        let spi_slot = config
-            .and_then(|cfg| cfg.get::<u32>("spi_slot"))
-            .unwrap_or(0) as usize;
-        let cs_slot = config
-            .and_then(|cfg| cfg.get::<u32>("cs_slot"))
-            .unwrap_or(0) as usize;
-        let delay_slot = config
-            .and_then(|cfg| cfg.get::<u32>("delay_slot"))
-            .unwrap_or(0) as usize;
+        let spi_slot = match config {
+            Some(cfg) => cfg.get::<u32>("spi_slot")?.unwrap_or(0) as usize,
+            None => 0,
+        };
+        let cs_slot = match config {
+            Some(cfg) => cfg.get::<u32>("cs_slot")?.unwrap_or(0) as usize,
+            None => 0,
+        };
+        let delay_slot = match config {
+            Some(cfg) => cfg.get::<u32>("delay_slot")?.unwrap_or(0) as usize,
+            None => 0,
+        };
 
         let spi: SPI = reg::take_spi(spi_slot).ok_or_else(|| {
             CuError::from(format!(

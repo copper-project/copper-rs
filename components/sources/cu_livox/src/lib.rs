@@ -36,7 +36,9 @@ impl CuSrcTask for Tele15 {
         Self: Sized,
     {
         let addr: SocketAddr = if let Some(cfg) = config {
-            let addr_str = cfg.get("socket_addr").unwrap_or(DEFAULT_ADDR.to_string());
+            let addr_str = cfg
+                .get::<String>("socket_addr")?
+                .unwrap_or(DEFAULT_ADDR.to_string());
             addr_str.as_str().parse().unwrap()
         } else {
             DEFAULT_ADDR.parse().unwrap()

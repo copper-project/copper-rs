@@ -101,7 +101,7 @@ impl<const N: usize> CuSrcTask for CuGStreamer<N> {
 
         let config = config.ok_or_else(|| CuError::from("No config provided."))?;
 
-        let pipeline = if let Some(pipeline_str) = config.get::<String>("pipeline") {
+        let pipeline = if let Some(pipeline_str) = config.get::<String>("pipeline")? {
             debug!("Creating with pipeline: {}", &pipeline_str);
             let pipeline = parse::launch(pipeline_str.as_str())
                 .map_err(|e| CuError::new_with_cause("Failed to parse pipeline.", e))?;
@@ -109,7 +109,7 @@ impl<const N: usize> CuSrcTask for CuGStreamer<N> {
         } else {
             Err(CuError::from("No pipeline provided."))
         }?;
-        let caps_str = if let Some(caps_str) = config.get::<String>("caps") {
+        let caps_str = if let Some(caps_str) = config.get::<String>("caps")? {
             debug!("Creating with caps: {}", &caps_str);
             Ok(caps_str)
         } else {

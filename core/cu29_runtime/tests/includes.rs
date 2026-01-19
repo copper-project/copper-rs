@@ -110,7 +110,11 @@ mod tests {
         let (_, node) = all_nodes[0];
         assert_eq!(node.get_id(), "task_42");
         assert_eq!(node.get_type(), "tasks::Task42");
-        assert_eq!(node.get_param::<i32>("param_value").unwrap(), 100);
+        assert_eq!(
+            node.get_param::<i32>("param_value")
+                .expect("param_value lookup failed"),
+            Some(100)
+        );
     }
 
     #[test]
@@ -271,7 +275,12 @@ mod tests {
             .1;
 
         assert_eq!(common_task.get_type(), "tasks::MainTask");
-        assert_eq!(common_task.get_param::<i32>("param").unwrap(), 20);
+        assert_eq!(
+            common_task
+                .get_param::<i32>("param")
+                .expect("param lookup failed"),
+            Some(20)
+        );
 
         assert_eq!(
             config.monitor.as_ref().unwrap().get_type(),
@@ -425,7 +434,11 @@ mod tests {
             assert_eq!(camera.get_type(), "cu_camera::Camera");
 
             let expected_port = format!("/dev/video{id}");
-            assert_eq!(camera.get_param::<String>("port").unwrap(), expected_port);
+            let port = camera
+                .get_param::<String>("port")
+                .expect("port lookup failed")
+                .expect("missing port");
+            assert_eq!(port, expected_port);
         }
 
         // Verify detector tasks with correct thresholds
@@ -442,7 +455,10 @@ mod tests {
             let detector = detect_task.unwrap();
             assert_eq!(detector.get_type(), "cu_detector::Detector");
 
-            let threshold = detector.get_param::<f64>("threshold").unwrap();
+            let threshold = detector
+                .get_param::<f64>("threshold")
+                .expect("threshold lookup failed")
+                .expect("missing threshold");
             assert_eq!(threshold, expected_thresholds[id]);
         }
 

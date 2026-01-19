@@ -121,12 +121,16 @@ impl CuTask for DynThreshold {
     where
         Self: Sized,
     {
-        let config = config.expect("No config provided");
-        let width = config.get::<u32>("width").expect("No width provided");
-        let height = config.get::<u32>("height").expect("No height provided");
+        let config = config.ok_or_else(|| CuError::from("No config provided"))?;
+        let width = config
+            .get::<u32>("width")?
+            .ok_or_else(|| CuError::from("No width provided"))?;
+        let height = config
+            .get::<u32>("height")?
+            .ok_or_else(|| CuError::from("No height provided"))?;
         let block_radius = config
-            .get::<u32>("block_radius")
-            .expect("No block_radius provided");
+            .get::<u32>("block_radius")?
+            .ok_or_else(|| CuError::from("No block_radius provided"))?;
 
         let pool =
             CuHostMemoryPool::new("dynthreshold", 3, || vec![0u8; (width * height) as usize])?;

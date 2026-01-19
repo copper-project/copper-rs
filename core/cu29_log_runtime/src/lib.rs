@@ -89,7 +89,7 @@ impl LoggerRuntime {
             #[cfg(not(feature = "std"))]
             let mut writer_guard = writer.lock();
             #[cfg(feature = "std")]
-            let mut writer_guard = writer.lock().unwrap();
+            let mut writer_guard = writer.lock().unwrap_or_else(|e| e.into_inner());
             *writer_guard = Box::new(destination);
         } else {
             #[cfg(not(feature = "std"))]
@@ -161,7 +161,13 @@ pub fn log(entry: &mut CuLogEntry) -> CuResult<()> {
 
     #[cfg(feature = "std")]
     {
-        let mut guard = writer.lock().unwrap();
+        let mut guard = match writer.lock() {
+            Ok(guard) => guard,
+            Err(err) => {
+                eprintln!("cu29_log: Logger mutex poisoned, recovering.");
+                err.into_inner()
+            }
+        };
         if let Err(err) = guard.log(entry) {
             eprintln!("Failed to log data: {err}");
         } else if let Some(bytes) = guard.last_log_bytes() {
