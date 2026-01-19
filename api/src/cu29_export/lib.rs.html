@@ -570,7 +570,7 @@
 <a href=#570 id=570 data-nosnippet>570</a>        <span class="comment">// Build a minimal index on the fly so tests don't depend on build-time artifacts.
 <a href=#571 id=571 data-nosnippet>571</a>        </span><span class="kw">let </span>fake_out_dir = tmpdir.path().join(<span class="string">"build"</span>).join(<span class="string">"out"</span>).join(<span class="string">"dir"</span>);
 <a href=#572 id=572 data-nosnippet>572</a>        fs::create_dir_all(<span class="kw-2">&amp;</span>fake_out_dir).unwrap();
-<a href=#573 id=573 data-nosnippet>573</a>        <span class="comment">// Explicit unsafe block needed by Rust 2024 for this unsafe API.
+<a href=#573 id=573 data-nosnippet>573</a>        <span class="comment">// SAFETY: Tests run single-threaded here and we only read the variable after setting it.
 <a href=#574 id=574 data-nosnippet>574</a>        </span><span class="kw">unsafe </span>{
 <a href=#575 id=575 data-nosnippet>575</a>            env::set_var(<span class="string">"LOG_INDEX_DIR"</span>, <span class="kw-2">&amp;</span>fake_out_dir);
 <a href=#576 id=576 data-nosnippet>576</a>        }
