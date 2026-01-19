@@ -90,6 +90,8 @@ pub trait ArrayLike: Deref<Target = [Self::Element]> + DerefMut + Debug + Sync +
     type Element: ElementType;
 }
 
+use crate::monitoring::CuPayloadSize;
+
 /// A Handle to a Buffer.
 /// For onboard usages, the buffer should be Pooled (ie, coming from a preallocated pool).
 /// The Detached version is for offline usages where we don't really need a pool to deserialize them.
@@ -160,6 +162,19 @@ impl<T: ArrayLike> CuHandle<T> {
     pub fn with_inner_mut<R>(&self, f: impl FnOnce(&mut CuHandleInner<T>) -> R) -> R {
         let mut lock = self.lock().unwrap();
         f(&mut *lock)
+    }
+}
+
+impl<T> CuPayloadSize for CuHandle<T>
+where
+    T: ArrayLike,
+{
+    fn raw_bytes(&self) -> usize {
+        self.lock().unwrap().deref().len() * size_of::<T::Element>()
+    }
+
+    fn handle_bytes(&self) -> usize {
+        self.raw_bytes()
     }
 }
 

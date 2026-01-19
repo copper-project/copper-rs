@@ -313,6 +313,10 @@ pub trait WriteStream<E: Encode>: Debug + Send + Sync {
     fn flush(&mut self) -> CuResult<()> {
         Ok(())
     }
+    /// Optional byte count of the last successful `log` call, if the implementation can report it.
+    fn last_log_bytes(&self) -> Option<usize> {
+        None
+    }
 }
 
 /// Defines the types of what can be logged in the unified logger.

@@ -61,6 +61,8 @@ pub struct CopperListsManager<P: CopperListTuple + Default, const NBCL: usize> {
     pub inner: CuListsManager<P, NBCL>,
     /// Logger for the copper lists (messages between tasks)
     pub logger: Option<Box<dyn WriteStream<CopperList<P>>>>,
+    /// Last encoded size returned by logger.log
+    pub last_encoded_bytes: u64,
 }
 
 impl<P: CopperListTuple + Default, const NBCL: usize> CopperListsManager<P, NBCL> {
@@ -75,6 +77,7 @@ impl<P: CopperListTuple + Default, const NBCL: usize> CopperListsManager<P, NBCL
                 if let Some(logger) = &mut self.logger {
                     cl.change_state(CopperListState::BeingSerialized);
                     logger.log(cl)?;
+                    self.last_encoded_bytes = logger.last_log_bytes().unwrap_or(0) as u64;
                 }
                 cl.change_state(CopperListState::Free);
                 nb_done += 1;
@@ -103,6 +106,9 @@ pub struct KeyFramesManager {
 
     /// Capture a keyframe only each...
     keyframe_interval: u32,
+
+    /// Bytes written by the last keyframe log
+    pub last_encoded_bytes: u64,
 }
 
 impl KeyFramesManager {
@@ -132,8 +138,12 @@ impl KeyFramesManager {
     pub fn end_of_processing(&mut self, culistid: u32) -> CuResult<()> {
         if self.is_keyframe(culistid) {
             let logger = self.logger.as_mut().unwrap();
-            logger.log(&self.inner)
+            logger.log(&self.inner)?;
+            self.last_encoded_bytes = logger.last_log_bytes().unwrap_or(0) as u64;
+            Ok(())
         } else {
+            // Not a keyframe for this CL; ensure we don't carry stale sizes forward.
+            self.last_encoded_bytes = 0;
             Ok(())
         }
     }
@@ -309,6 +319,7 @@ impl<
         let copperlists_manager = CopperListsManager {
             inner: CuListsManager::new(),
             logger: copperlists_logger,
+            last_encoded_bytes: 0,
         };
         #[cfg(target_os = "none")]
         {
@@ -324,6 +335,7 @@ impl<
             inner: KeyFrame::new(),
             logger: keyframes_logger,
             keyframe_interval,
+            last_encoded_bytes: 0,
         };
 
         let runtime_config = config.runtime.clone().unwrap_or_default();
@@ -441,6 +453,7 @@ impl<
         let copperlists_manager = CopperListsManager {
             inner: CuListsManager::new(),
             logger: copperlists_logger,
+            last_encoded_bytes: 0,
         };
         #[cfg(target_os = "none")]
         {
@@ -456,6 +469,7 @@ impl<
             inner: KeyFrame::new(),
             logger: keyframes_logger,
             keyframe_interval,
+            last_encoded_bytes: 0,
         };
 
         let runtime_config = config.runtime.clone().unwrap_or_default();
