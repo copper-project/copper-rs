@@ -2,10 +2,10 @@ use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
+use cu29::monitoring::CuPayloadSize;
 use cu29::prelude::*;
 use serde::{Deserialize, Serialize, Serializer};
 use std::sync::Arc;
-use cu29::monitoring::CuPayloadSize;
 
 pub struct DoraSource<const S: usize> {
     pub pool: Arc<CuHostMemoryPool<Vec<u8>>>,

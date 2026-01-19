@@ -2,7 +2,7 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
-use core::sync::atomic::{AtomicU64, Ordering};
+use core::sync::atomic::{AtomicUsize, Ordering};
 use cu29_clock::RobotClock;
 use cu29_log::CuLogEntry;
 #[allow(unused_imports)]
@@ -53,7 +53,7 @@ type LogWriter = Box<dyn WriteStream<CuLogEntry> + Send + 'static>;
 type WriterPair = (Mutex<LogWriter>, RobotClock);
 
 static WRITER: OnceLock<WriterPair> = OnceLock::new();
-static STRUCTURED_LOG_BYTES: AtomicU64 = AtomicU64::new(0);
+static STRUCTURED_LOG_BYTES: AtomicUsize = AtomicUsize::new(0);
 
 #[cfg(debug_assertions)]
 #[cfg(feature = "std")]
@@ -155,7 +155,7 @@ pub fn log(entry: &mut CuLogEntry) -> CuResult<()> {
         let mut guard = writer.lock();
         guard.log(entry)?;
         if let Some(bytes) = guard.last_log_bytes() {
-            STRUCTURED_LOG_BYTES.fetch_add(bytes as u64, Ordering::Relaxed);
+            STRUCTURED_LOG_BYTES.fetch_add(bytes, Ordering::Relaxed);
         }
     }
 
@@ -165,7 +165,7 @@ pub fn log(entry: &mut CuLogEntry) -> CuResult<()> {
         if let Err(err) = guard.log(entry) {
             eprintln!("Failed to log data: {err}");
         } else if let Some(bytes) = guard.last_log_bytes() {
-            STRUCTURED_LOG_BYTES.fetch_add(bytes as u64, Ordering::Relaxed);
+            STRUCTURED_LOG_BYTES.fetch_add(bytes, Ordering::Relaxed);
         }
     }
     Ok(())
@@ -173,7 +173,7 @@ pub fn log(entry: &mut CuLogEntry) -> CuResult<()> {
 
 /// Returns the total number of bytes written to the structured log stream.
 pub fn structured_log_bytes_total() -> u64 {
-    STRUCTURED_LOG_BYTES.load(Ordering::Relaxed)
+    STRUCTURED_LOG_BYTES.load(Ordering::Relaxed) as u64
 }
 
 /// This version of log is only compiled in debug mode

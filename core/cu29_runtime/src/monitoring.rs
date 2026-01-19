@@ -145,29 +145,25 @@ impl<T: CuPayloadSize> CuPayloadSize for Option<T> {
 }
 
 macro_rules! impl_tuple_payload_size {
-    ($($name:ident),+) => {
-        impl<$($name: CuPayloadSize),+> CuPayloadSize for ($($name,)+) {
+    ($($g:ident $p:ident),+) => {
+        impl<$($g: CuPayloadSize),+> CuPayloadSize for ($($g,)+) {
             fn raw_bytes(&self) -> usize {
-                let ($($name,)+) = self;
-                0 $(+ $name.raw_bytes())+
+                let ($($p,)+) = self;
+                0 $(+ $p.raw_bytes())+
             }
 
             fn handle_bytes(&self) -> usize {
-                let ($($name,)+) = self;
-                0 $(+ $name.handle_bytes())+
+                let ($($p,)+) = self;
+                0 $(+ $p.handle_bytes())+
             }
         }
     };
 }
 
-#[allow(non_snake_case)]
-impl_tuple_payload_size!(T1, T2);
-#[allow(non_snake_case)]
-impl_tuple_payload_size!(T1, T2, T3);
-#[allow(non_snake_case)]
-impl_tuple_payload_size!(T1, T2, T3, T4);
-#[allow(non_snake_case)]
-impl_tuple_payload_size!(T1, T2, T3, T4, T5);
+impl_tuple_payload_size!(A a, B b);
+impl_tuple_payload_size!(A a, B b, C c);
+impl_tuple_payload_size!(A a, B b, C c, D d);
+impl_tuple_payload_size!(A a, B b, C c, D d, E e);
 
 impl<T: CuPayloadSize> CuPayloadSize for alloc::vec::Vec<T> {
     fn raw_bytes(&self) -> usize {
@@ -208,9 +204,7 @@ macro_rules! impl_primitive_payload_size {
 }
 
 impl_primitive_payload_size!(
-    bool, u8, u16, u32, u64, u128, usize,
-    i8, i16, i32, i64, i128, isize,
-    f32, f64
+    bool, u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize, f32, f64
 );
 
 #[derive(Default, Debug, Clone, Copy)]
