@@ -9,6 +9,12 @@ use cu29::prelude::*;
 
 const BLK: usize = 512;
 
+/// Wrapper to share a block device behind `Arc` without adding locking.
+///
+/// # Safety
+/// This type provides unsynchronized interior mutability. Only use it when
+/// all access is externally serialized (single-threaded execution or a
+/// higher-level mutex).
 pub struct ForceSyncSend<T>(UnsafeCell<T>);
 impl<T> ForceSyncSend<T> {
     pub const fn new(inner: T) -> Self {
@@ -16,16 +22,20 @@ impl<T> ForceSyncSend<T> {
     }
     #[inline]
     fn inner(&self) -> &T {
+        // SAFETY: Callers must serialize access to avoid mutable aliasing.
         unsafe { &*self.0.get() }
     }
     #[inline]
     #[allow(clippy::mut_from_ref)]
     fn inner_mut(&self) -> &mut T {
+        // SAFETY: Callers must ensure exclusive access (no concurrent use).
         unsafe { &mut *self.0.get() }
     }
 }
-unsafe impl<T> Send for ForceSyncSend<T> {}
-unsafe impl<T> Sync for ForceSyncSend<T> {}
+// SAFETY: This wrapper does not synchronize access; callers must serialize use.
+unsafe impl<T: Send> Send for ForceSyncSend<T> {}
+// SAFETY: Sharing across threads is only safe if access is externally serialized.
+unsafe impl<T: Send> Sync for ForceSyncSend<T> {}
 
 impl<B: BlockDevice> BlockDevice for ForceSyncSend<B> {
     type Error = B::Error;
@@ -162,7 +172,7 @@ impl<BD: BlockDevice> EMMCSectionStorage<BD> {
     }
 }
 
-impl<BD: BlockDevice> SectionStorage for EMMCSectionStorage<BD> {
+impl<BD: BlockDevice + Send> SectionStorage for EMMCSectionStorage<BD> {
     fn initialize<E: Encode>(&mut self, header: &E) -> Result<usize, EncodeError> {
         self.post_update_header(header)?;
         Ok(SECTION_HEADER_COMPACT_SIZE as usize)
