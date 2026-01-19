@@ -14,7 +14,7 @@ use std::error::Error;
 
 use crc_any::CRCu8;
 use heapless::Vec as HeaplessVec;
-use packed_struct::PackedStruct;
+use packed_struct::{types::bits::ByteArray as PackedByteArray, PackedStruct};
 
 #[derive(Clone, PartialEq)]
 pub struct MspPacketData(pub(crate) MspPacketDataBuffer);
@@ -570,8 +570,12 @@ impl MspPacket {
         Ok(())
     }
 
-    pub fn decode_as<T: PackedStruct>(&self) -> Result<T, packed_struct::PackingError> {
-        let expected_size = core::mem::size_of::<T::ByteArray>();
+    pub fn decode_as<T>(&self) -> Result<T, packed_struct::PackingError>
+    where
+        T: PackedStruct,
+        for<'a> &'a T::ByteArray: TryFrom<&'a [u8]>,
+    {
+        let expected_size = <T::ByteArray as PackedByteArray>::len();
 
         if self.data.0.len() < expected_size {
             return Err(packed_struct::PackingError::BufferSizeMismatch {
@@ -580,7 +584,13 @@ impl MspPacket {
             });
         }
 
-        let byte_array: &T::ByteArray = unsafe { &*(self.data.0.as_ptr() as *const T::ByteArray) };
+        let data = &self.data.0[..expected_size];
+        let byte_array: &T::ByteArray = data
+            .try_into()
+            .map_err(|_| packed_struct::PackingError::BufferSizeMismatch {
+                expected: expected_size,
+                actual: data.len(),
+            })?;
 
         T::unpack(byte_array)
     }
