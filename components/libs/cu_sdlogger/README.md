@@ -5,7 +5,8 @@ Utilities for writing Copper unified logs to an SD/eMMC partition from embedded 
 ## What it provides
 - `find_copper_partition`: scan the GPT and return the start/length of the Cu29 partition.
 - `EMMCLogger`: `UnifiedLogWrite<EMMCSectionStorage<_>>` implementation that lays out the main header and log sections on a block device.
-- `EMMCSectionStorage`: section writer that encodes entries with bincode, plus `ForceSyncSend` to share block devices that are not `Sync`.
+- `EMMCSectionStorage`: section writer that encodes entries with bincode.
+- `ForceSyncSend`: wrapper for sharing block devices with serialized access.
 
 ## Usage
 ```rust
@@ -13,7 +14,7 @@ use cu_sdlogger::{find_copper_partition, EMMCLogger, EMMCSectionStorage, ForceSy
 use cu29::prelude::*;
 use embedded_sdmmc::SdCard;
 
-// 1) Wrap your block device if it is not Sync.
+// 1) Wrap your block device if it is not Sync and access is serialized.
 let sd = ForceSyncSend::new(SdCard::new(device, timer));
 
 // 2) Locate the Copper partition (GUID 29A2E0C9-0000-4C75-9229-000000000029).
@@ -33,4 +34,6 @@ logger.flush_section(&mut telem);
 Notes:
 - Blocks are assumed to be 512 bytes; the logger errors if it would run out of space.
 - `append` and `flush_section` use bincode encoding and update the section header to keep usage counters accurate.
+- `ForceSyncSend` does not provide locking; use it only with single-threaded or
+  externally synchronized access.
 - See `examples/cu_rp2350_skeleton` and `examples/cu_elrs_bdshot_demo` for full RP2350 setups that hand the logger to a `CuApplication`.
