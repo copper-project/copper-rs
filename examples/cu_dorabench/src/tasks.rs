@@ -99,13 +99,3 @@ impl<'de> Deserialize<'de> for DoraPayload {
         Ok(DoraPayload(CuHandle::new_detached(data)))
     }
 }
-
-impl CuPayloadSize for DoraPayload {
-    fn raw_bytes(&self) -> usize {
-        self.0.handle_bytes()
-    }
-
-    fn handle_bytes(&self) -> usize {
-        self.0.handle_bytes()
-    }
-}
