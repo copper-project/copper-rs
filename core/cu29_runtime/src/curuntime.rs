@@ -469,6 +469,7 @@ impl<
             inner: KeyFrame::new(),
             logger: keyframes_logger,
             keyframe_interval,
+            last_encoded_bytes: 0,
         };
 
         let runtime_config = config.runtime.clone().unwrap_or_default();
