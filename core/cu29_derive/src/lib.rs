@@ -1700,7 +1700,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     handle_bytes,
                     encoded_culist_bytes: cl_manager.last_encoded_bytes,
                     keyframe_bytes: kf_manager.last_encoded_bytes,
-                    structured_log_bytes_total: 0, // TODO: track structured log stream bytes
+                    structured_log_bytes_total: ::cu29::prelude::structured_log_bytes_total(),
                     culistid: clid,
                 };
                 monitor.observe_copperlist_io(stats);

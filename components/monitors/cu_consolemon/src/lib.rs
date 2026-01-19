@@ -70,18 +70,18 @@ const TAB_DEFS: &[TabDef] = &[
         key: "3",
     },
     TabDef {
-        screen: Screen::MemoryPools,
-        label: "POOLS",
+        screen: Screen::CopperList,
+        label: "BW",
         key: "4",
     },
     TabDef {
-        screen: Screen::CopperList,
-        label: "CLIST",
+        screen: Screen::MemoryPools,
+        label: "MEM",
         key: "5",
     },
     TabDef {
         screen: Screen::DebugOutput,
-        label: "DEBUG",
+        label: "LOG",
         key: "6",
     },
 ];
@@ -104,13 +104,13 @@ const TAB_DEFS: &[TabDef] = &[
         key: "3",
     },
     TabDef {
-        screen: Screen::MemoryPools,
-        label: "POOLS",
+        screen: Screen::CopperList,
+        label: "BW",
         key: "4",
     },
     TabDef {
-        screen: Screen::CopperList,
-        label: "CLIST",
+        screen: Screen::MemoryPools,
+        label: "MEM",
         key: "5",
     },
 ];
@@ -214,6 +214,8 @@ struct CopperListStats {
     handle_bytes: u64,
     encoded_bytes: u64,
     keyframe_bytes: u64,
+    structured_total_bytes: u64,
+    structured_bytes_per_cl: u64,
     total_copperlists: u64,
     window_copperlists: u64,
     last_rate_at: Instant,
@@ -228,6 +230,8 @@ impl CopperListStats {
             handle_bytes: 0,
             encoded_bytes: 0,
             keyframe_bytes: 0,
+            structured_total_bytes: 0,
+            structured_bytes_per_cl: 0,
             total_copperlists: 0,
             window_copperlists: 0,
             last_rate_at: Instant::now(),
@@ -245,6 +249,9 @@ impl CopperListStats {
         self.handle_bytes = stats.handle_bytes;
         self.encoded_bytes = stats.encoded_culist_bytes;
         self.keyframe_bytes = stats.keyframe_bytes;
+        let total = stats.structured_log_bytes_total;
+        self.structured_bytes_per_cl = total.saturating_sub(self.structured_total_bytes);
+        self.structured_total_bytes = total;
     }
 
     fn update_rate(&mut self) {
@@ -1034,8 +1041,11 @@ impl UI {
         } else {
             "0 B".to_string()
         };
-        let raw_total_display = if raw_total > 0 {
-            format_bytes(raw_total as f64)
+        let mem_total = raw_total
+            .saturating_add(stats.keyframe_bytes)
+            .saturating_add(stats.structured_bytes_per_cl);
+        let mem_total_display = if mem_total > 0 {
+            format_bytes(mem_total as f64)
         } else {
             "unknown".to_string()
         };
@@ -1051,8 +1061,8 @@ impl UI {
             "n/a".to_string()
         };
         let rate_display = format!("{:.2} Hz", stats.rate_hz);
-        let raw_bw = if raw_total > 0 {
-            format!("{}/s", format_bytes((raw_total as f64) * stats.rate_hz))
+        let raw_bw = if mem_total > 0 {
+            format!("{}/s", format_bytes((mem_total as f64) * stats.rate_hz))
         } else {
             "n/a".to_string()
         };
@@ -1065,6 +1075,16 @@ impl UI {
             format_bytes(stats.keyframe_bytes as f64)
         } else {
             "0 B".to_string()
+        };
+        let structured_display = if stats.structured_bytes_per_cl > 0 {
+            format_bytes(stats.structured_bytes_per_cl as f64)
+        } else {
+            "0 B".to_string()
+        };
+        let structured_bw = if stats.structured_bytes_per_cl > 0 {
+            format!("{}/s", format_bytes((stats.structured_bytes_per_cl as f64) * stats.rate_hz))
+        } else {
+            "n/a".to_string()
         };
 
         let header_cells = ["Metric", "Value"].iter().map(|h| {
@@ -1103,8 +1123,8 @@ impl UI {
                 Cell::from(Line::from(keyframe_display).alignment(Alignment::Right)),
             ]),
             Row::new(vec![
-                Cell::from(Line::from("Raw total (CL+payload)")),
-                Cell::from(Line::from(raw_total_display).alignment(Alignment::Right)),
+                Cell::from(Line::from("Mem total (CL+KF+SL)")),
+                Cell::from(Line::from(mem_total_display).alignment(Alignment::Right)),
             ]),
             spacer.clone(),
             Row::new(vec![
@@ -1115,24 +1135,24 @@ impl UI {
 
         let disk_rows = vec![
             Row::new(vec![
-                Cell::from(Line::from("Encoded (bincode)")),
+                Cell::from(Line::from("CL serialized size")),
                 Cell::from(Line::from(encoded_display).alignment(Alignment::Right)),
             ]),
             Row::new(vec![
-                Cell::from(Line::from("Bincode efficiency")),
+                Cell::from(Line::from("CL encoding efficiency")),
                 Cell::from(Line::from(efficiency_display).alignment(Alignment::Right)),
             ]),
             Row::new(vec![
-                Cell::from(Line::from(" ")),
-                Cell::from(Line::from(" ")),
+                Cell::from(Line::from("Structured log / CL")),
+                Cell::from(Line::from(structured_display).alignment(Alignment::Right)),
             ]),
             Row::new(vec![
-                Cell::from(Line::from(" ")),
-                Cell::from(Line::from(" ")),
+                Cell::from(Line::from("Structured BW")),
+                Cell::from(Line::from(structured_bw).alignment(Alignment::Right)),
             ]),
             spacer.clone(),
             Row::new(vec![
-                Cell::from(Line::from("Disk BW (encoded)")),
+                Cell::from(Line::from("Total disk BW")),
                 Cell::from(Line::from(encoded_bw).alignment(Alignment::Right)),
             ]),
         ];
@@ -1334,8 +1354,8 @@ impl UI {
                         KeyCode::Char('1') => self.active_screen = Screen::Neofetch,
                         KeyCode::Char('2') => self.active_screen = Screen::Dag,
                         KeyCode::Char('3') => self.active_screen = Screen::Latency,
-                        KeyCode::Char('4') => self.active_screen = Screen::MemoryPools,
-                        KeyCode::Char('5') => self.active_screen = Screen::CopperList,
+                        KeyCode::Char('4') => self.active_screen = Screen::CopperList,
+                        KeyCode::Char('5') => self.active_screen = Screen::MemoryPools,
                         #[cfg(feature = "debug_pane")]
                         KeyCode::Char('6') => self.active_screen = Screen::DebugOutput,
                         KeyCode::Char('r') => {

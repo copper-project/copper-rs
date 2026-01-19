@@ -8,6 +8,7 @@ use cu29_log::CuLogEntry;
 use cu29_log::CuLogLevel;
 use cu29_traits::{CuResult, WriteStream};
 use log::Log;
+use core::sync::atomic::{AtomicU64, Ordering};
 
 #[cfg(not(feature = "std"))]
 mod imp {
@@ -52,6 +53,7 @@ type LogWriter = Box<dyn WriteStream<CuLogEntry> + Send + 'static>;
 type WriterPair = (Mutex<LogWriter>, RobotClock);
 
 static WRITER: OnceLock<WriterPair> = OnceLock::new();
+static STRUCTURED_LOG_BYTES: AtomicU64 = AtomicU64::new(0);
 
 #[cfg(debug_assertions)]
 #[cfg(feature = "std")]
@@ -79,6 +81,7 @@ impl LoggerRuntime {
         #[allow(unused_variables)] extra_text_logger: Option<impl Log + 'static>,
     ) -> Self {
         let runtime = LoggerRuntime {};
+        STRUCTURED_LOG_BYTES.store(0, Ordering::Relaxed);
 
         // If WRITER is already initialized, update the inner value.
         // This should only be useful for unit testing.
@@ -148,13 +151,29 @@ pub fn log(entry: &mut CuLogEntry) -> CuResult<()> {
     entry.time = clock.now();
 
     #[cfg(not(feature = "std"))]
-    writer.lock().log(entry)?;
+    {
+        let mut guard = writer.lock();
+        guard.log(entry)?;
+        if let Some(bytes) = guard.last_log_bytes() {
+            STRUCTURED_LOG_BYTES.fetch_add(bytes as u64, Ordering::Relaxed);
+        }
+    }
 
     #[cfg(feature = "std")]
-    if let Err(err) = writer.lock().unwrap().log(entry) {
-        eprintln!("Failed to log data: {err}");
+    {
+        let mut guard = writer.lock().unwrap();
+        if let Err(err) = guard.log(entry) {
+            eprintln!("Failed to log data: {err}");
+        } else if let Some(bytes) = guard.last_log_bytes() {
+            STRUCTURED_LOG_BYTES.fetch_add(bytes as u64, Ordering::Relaxed);
+        }
     }
     Ok(())
+}
+
+/// Returns the total number of bytes written to the structured log stream.
+pub fn structured_log_bytes_total() -> u64 {
+    STRUCTURED_LOG_BYTES.load(Ordering::Relaxed)
 }
 
 /// This version of log is only compiled in debug mode
