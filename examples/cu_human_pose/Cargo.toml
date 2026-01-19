@@ -28,9 +28,9 @@ cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0
 gstreamer = "0.24"
 
 # Candle ML framework
-candle-core = { git = "https://github.com/huggingface/candle.git", branch = "main" }
-candle-nn = { git = "https://github.com/huggingface/candle.git", branch = "main" }
-candle-transformers = { git = "https://github.com/huggingface/candle.git", branch = "main" }
+candle-core = "0.9.2-alpha.2"
+candle-nn = "0.9.2-alpha.2"
+candle-transformers = "0.9.2-alpha.2"
 
 # Visualization
 rerun = { workspace = true }
