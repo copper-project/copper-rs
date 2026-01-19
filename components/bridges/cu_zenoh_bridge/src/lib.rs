@@ -151,7 +151,7 @@ where
                 .map_err(|e| CuError::new_with_cause("ZenohBridge: bincode encode failed", e)),
             WireFormat::Json => serde_json::to_vec(msg)
                 .map_err(|e| CuError::new_with_cause("ZenohBridge: json encode failed", e)),
-            WireFormat::Cbor => serde_cbor::to_vec(msg)
+            WireFormat::Cbor => minicbor_serde::to_vec(msg)
                 .map_err(|e| CuError::new_with_cause("ZenohBridge: cbor encode failed", e)),
         }
     }
@@ -170,7 +170,7 @@ where
             }
             WireFormat::Json => serde_json::from_slice(bytes)
                 .map_err(|e| CuError::new_with_cause("ZenohBridge: json decode failed", e)),
-            WireFormat::Cbor => serde_cbor::from_slice(bytes)
+            WireFormat::Cbor => minicbor_serde::from_slice(bytes)
                 .map_err(|e| CuError::new_with_cause("ZenohBridge: cbor decode failed", e)),
         }
     }
