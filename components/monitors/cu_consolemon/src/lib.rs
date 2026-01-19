@@ -11,8 +11,8 @@ use cu29::clock::{CuDuration, RobotClock};
 use cu29::config::CuConfig;
 use cu29::cutask::CuMsgMetadata;
 use cu29::monitoring::{
-    ComponentKind, CopperListInfo, CopperListIoStats, CuDurationStatistics, CuMonitor, CuTaskState, Decision,
-    MonitorTopology,
+    ComponentKind, CopperListInfo, CopperListIoStats, CuDurationStatistics, CuMonitor, CuTaskState,
+    Decision, MonitorTopology,
 };
 use cu29::prelude::{CuCompactString, CuTime, pool};
 use cu29::{CuError, CuResult};
@@ -270,18 +270,6 @@ impl CopperListStats {
             self.window_copperlists = 0;
             self.last_rate_at = now;
         }
-    }
-
-    fn bandwidth_bytes_per_sec(&self) -> f64 {
-        let raw_total = if self.raw_culist_bytes > 0 {
-            self.raw_culist_bytes
-        } else {
-            self.size_bytes as u64
-        };
-        if raw_total == 0 {
-            return 0.0;
-        }
-        (raw_total as f64) * self.rate_hz
     }
 }
 
@@ -1066,8 +1054,11 @@ impl UI {
         } else {
             "n/a".to_string()
         };
-        let encoded_bw = if stats.encoded_bytes > 0 {
-            format!("{}/s", format_bytes((stats.encoded_bytes as f64) * stats.rate_hz))
+        let _encoded_bw = if stats.encoded_bytes > 0 {
+            format!(
+                "{}/s",
+                format_bytes((stats.encoded_bytes as f64) * stats.rate_hz)
+            )
         } else {
             "n/a".to_string()
         };
@@ -1082,7 +1073,22 @@ impl UI {
             "0 B".to_string()
         };
         let structured_bw = if stats.structured_bytes_per_cl > 0 {
-            format!("{}/s", format_bytes((stats.structured_bytes_per_cl as f64) * stats.rate_hz))
+            format!(
+                "{}/s",
+                format_bytes((stats.structured_bytes_per_cl as f64) * stats.rate_hz)
+            )
+        } else {
+            "n/a".to_string()
+        };
+        let disk_total_bytes = stats
+            .encoded_bytes
+            .saturating_add(stats.keyframe_bytes)
+            .saturating_add(stats.structured_bytes_per_cl);
+        let disk_total_bw = if disk_total_bytes > 0 {
+            format!(
+                "{}/s",
+                format_bytes((disk_total_bytes as f64) * stats.rate_hz)
+            )
         } else {
             "n/a".to_string()
         };
@@ -1153,7 +1159,7 @@ impl UI {
             spacer.clone(),
             Row::new(vec![
                 Cell::from(Line::from("Total disk BW")),
-                Cell::from(Line::from(encoded_bw).alignment(Alignment::Right)),
+                Cell::from(Line::from(disk_total_bw).alignment(Alignment::Right)),
             ]),
         ];
 

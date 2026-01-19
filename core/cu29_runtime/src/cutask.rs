@@ -258,7 +258,6 @@ impl<T: CuMsgPayload + 'static> CuStampedData<T, CuMsgMetadata> {
     }
 }
 
-
 /// The internal state of a task needs to be serializable
 /// so the framework can take a snapshot of the task graph.
 pub trait Freezable {

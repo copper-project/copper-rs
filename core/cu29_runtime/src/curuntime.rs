@@ -142,6 +142,8 @@ impl KeyFramesManager {
             self.last_encoded_bytes = logger.last_log_bytes().unwrap_or(0) as u64;
             Ok(())
         } else {
+            // Not a keyframe for this CL; ensure we don't carry stale sizes forward.
+            self.last_encoded_bytes = 0;
             Ok(())
         }
     }

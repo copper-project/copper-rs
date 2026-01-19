@@ -2,13 +2,13 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
+use core::sync::atomic::{AtomicU64, Ordering};
 use cu29_clock::RobotClock;
 use cu29_log::CuLogEntry;
 #[allow(unused_imports)]
 use cu29_log::CuLogLevel;
 use cu29_traits::{CuResult, WriteStream};
 use log::Log;
-use core::sync::atomic::{AtomicU64, Ordering};
 
 #[cfg(not(feature = "std"))]
 mod imp {
