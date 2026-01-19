@@ -36,6 +36,7 @@ struct HardFaultSnapshot {
     afsr: u32,
 }
 
+// SAFETY: Keep the last hard fault snapshot in a no-init section across resets.
 #[unsafe(link_section = ".uninit.cu_fault")]
 static mut LAST_HARDFAULT: HardFaultSnapshot = HardFaultSnapshot {
     magic: 0,
@@ -123,6 +124,7 @@ fn build_clock() -> RobotClock {
 }
 
 fn report_last_fault() {
+    // SAFETY: Single-core firmware; only this function mutates the fault snapshot.
     unsafe {
         let ptr = core::ptr::addr_of_mut!(LAST_HARDFAULT);
         if (*ptr).magic == HARDFAULT_MAGIC {
@@ -147,6 +149,7 @@ fn report_last_fault() {
 }
 
 fn init_heap() {
+    // SAFETY: HEAP_MEM is a dedicated static buffer for the allocator.
     unsafe {
         let start = core::ptr::addr_of_mut!(HEAP_MEM) as usize;
         let size = core::mem::size_of::<[u8; 256 * 1024]>();
@@ -173,7 +176,9 @@ fn log_heap_stats(tag: &str) {
 }
 
 #[exception]
+// SAFETY: Only invoked by the MCU on a hard fault; must not return.
 unsafe fn HardFault(ef: &ExceptionFrame) -> ! {
+    // SAFETY: SCB is a valid core peripheral register block.
     let scb = unsafe { &*SCB::PTR };
     let cfsr = scb.cfsr.read();
     let hfsr = scb.hfsr.read();
@@ -181,6 +186,7 @@ unsafe fn HardFault(ef: &ExceptionFrame) -> ! {
     let mmfar = scb.mmfar.read();
     let bfar = scb.bfar.read();
     let afsr = scb.afsr.read();
+    // SAFETY: We record the fault snapshot into a reserved static buffer.
     unsafe {
         LAST_HARDFAULT = HardFaultSnapshot {
             magic: HARDFAULT_MAGIC,

@@ -13,6 +13,7 @@ mod firmware {
     use panic_probe as _;
     use rp235x_hal as hal;
 
+    // SAFETY: The RP2350 boot ROM expects the image definition in .start_block.
     #[unsafe(link_section = ".start_block")]
     #[used]
     pub static IMAGE_DEF: hal::block::ImageDef = hal::block::ImageDef::secure_exe();

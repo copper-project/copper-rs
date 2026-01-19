@@ -142,16 +142,20 @@ impl<T: Copy + Debug + Default + 'static> TransformInner<T> {
         // In practice, T will be f32 or f64
         if TypeId::of::<T>() == TypeId::of::<f32>() {
             // Convert to f32 matrix
+            // SAFETY: We just verified T == f32, so the layouts match.
             let mat_f32: [[f32; 4]; 4] = unsafe { std::mem::transmute_copy(&mat) };
             let glam_mat = Mat4::from_cols_array_2d(&mat_f32);
             let affine = Affine3A::from_mat4(glam_mat);
+            // SAFETY: We just verified T == f32, so this is the correct enum variant.
             unsafe { std::mem::transmute_copy(&TransformInner::<T>::F32(affine)) }
         } else if TypeId::of::<T>() == TypeId::of::<f64>() {
             // Convert to f64 matrix
+            // SAFETY: We just verified T == f64, so the layouts match.
             let mat_f64: [[f64; 4]; 4] = unsafe { std::mem::transmute_copy(&mat) };
             // let m = mat_f64;
             let glam_mat = DMat4::from_cols_array_2d(&mat_f64);
             let affine = DAffine3::from_mat4(glam_mat);
+            // SAFETY: We just verified T == f64, so this is the correct enum variant.
             unsafe { std::mem::transmute_copy(&TransformInner::<T>::F64(affine)) }
         } else {
             panic!("Transform3D only supports f32 and f64 types when using glam feature");
@@ -163,11 +167,13 @@ impl<T: Copy + Debug + Default + 'static> TransformInner<T> {
             TransformInner::F32(affine) => {
                 let mat = Mat4::from(affine);
                 let mat_array = mat.to_cols_array_2d();
+                // SAFETY: We only reach this arm when T == f32.
                 unsafe { std::mem::transmute_copy(&mat_array) }
             }
             TransformInner::F64(affine) => {
                 let mat = DMat4::from(affine);
                 let mat_array = mat.to_cols_array_2d();
+                // SAFETY: We only reach this arm when T == f64.
                 unsafe { std::mem::transmute_copy(&mat_array) }
             }
             TransformInner::_Phantom(_) => unreachable!(),

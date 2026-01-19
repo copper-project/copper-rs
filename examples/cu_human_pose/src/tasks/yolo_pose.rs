@@ -64,6 +64,7 @@ impl CuTask for YoloPose {
         let model_path = load_model_weights(&variant)?;
 
         // Load the model
+        // SAFETY: The safetensors file is memory-mapped and only read by VarBuilder.
         let vb = unsafe {
             VarBuilder::from_mmaped_safetensors(&[model_path], DType::F32, &device)
                 .map_err(|e| CuError::new_with_cause("Failed to load model weights", e))?

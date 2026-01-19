@@ -18,11 +18,13 @@ static mut GYRO_BIAS: [f32; 3] = [0.0; 3];
 
 /// Override the gyro bias that gets subtracted from every sample.
 pub fn set_gyro_bias(bias: [f32; 3]) {
+    // SAFETY: This module owns GYRO_BIAS and is used in a single-threaded context.
     unsafe { GYRO_BIAS = bias };
 }
 
 /// Read the current gyro bias that will be subtracted from measurements.
 pub fn gyro_bias() -> [f32; 3] {
+    // SAFETY: This module owns GYRO_BIAS and is used in a single-threaded context.
     unsafe { GYRO_BIAS }
 }
 
@@ -178,8 +180,6 @@ struct Eh0SpiBus<SPI> {
     inner: SPI,
 }
 
-unsafe impl<SPI: Send> Send for Eh0SpiBus<SPI> {}
-
 impl<SPI> Eh0SpiBus<SPI> {
     fn new(inner: SPI) -> Self {
         Self { inner }
@@ -212,8 +212,6 @@ where
 struct Eh0Cs<CS> {
     inner: CS,
 }
-
-unsafe impl<CS: Send> Send for Eh0Cs<CS> {}
 
 impl<CS> Eh0Cs<CS> {
     fn new(inner: CS) -> Self {

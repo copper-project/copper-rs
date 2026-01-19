@@ -215,6 +215,7 @@ impl<T: CuMsgPayload> CuStampedData<T, CuMsgMetadata> {
     /// The caller must guarantee that the message really contains a payload of type `U`. Failing
     /// to do so is undefined behaviour.
     pub unsafe fn assume_payload<U: CuMsgPayload>(&self) -> &CuMsg<U> {
+        // SAFETY: Caller guarantees that the underlying payload is of type U.
         unsafe { &*(self as *const CuMsg<T> as *const CuMsg<U>) }
     }
 
@@ -225,6 +226,7 @@ impl<T: CuMsgPayload> CuStampedData<T, CuMsgMetadata> {
     /// The caller must guarantee that mutating the returned message is sound for the actual
     /// payload type stored in the buffer.
     pub unsafe fn assume_payload_mut<U: CuMsgPayload>(&mut self) -> &mut CuMsg<U> {
+        // SAFETY: Caller guarantees that the underlying payload is of type U.
         unsafe { &mut *(self as *mut CuMsg<T> as *mut CuMsg<U>) }
     }
 }
@@ -241,7 +243,7 @@ impl<T: CuMsgPayload + 'static> CuStampedData<T, CuMsgMetadata> {
     /// Attempts to view this message as carrying payload `U`.
     pub fn downcast_ref<U: CuMsgPayload + 'static>(&self) -> CuResult<&CuMsg<U>> {
         if TypeId::of::<T>() == TypeId::of::<U>() {
-            // Safety: we just proved that T == U.
+            // SAFETY: We just proved that T == U.
             Ok(unsafe { self.assume_payload::<U>() })
         } else {
             Err(Self::downcast_err::<U>())
@@ -251,6 +253,7 @@ impl<T: CuMsgPayload + 'static> CuStampedData<T, CuMsgMetadata> {
     /// Mutable variant of [`downcast_ref`](Self::downcast_ref).
     pub fn downcast_mut<U: CuMsgPayload + 'static>(&mut self) -> CuResult<&mut CuMsg<U>> {
         if TypeId::of::<T>() == TypeId::of::<U>() {
+            // SAFETY: We just proved that T == U.
             Ok(unsafe { self.assume_payload_mut::<U>() })
         } else {
             Err(Self::downcast_err::<U>())
