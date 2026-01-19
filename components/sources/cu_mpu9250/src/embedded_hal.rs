@@ -180,9 +180,6 @@ struct Eh0SpiBus<SPI> {
     inner: SPI,
 }
 
-// SAFETY: Eh0SpiBus does not add interior mutability beyond SPI's Send guarantees.
-unsafe impl<SPI: Send> Send for Eh0SpiBus<SPI> {}
-
 impl<SPI> Eh0SpiBus<SPI> {
     fn new(inner: SPI) -> Self {
         Self { inner }
@@ -215,9 +212,6 @@ where
 struct Eh0Cs<CS> {
     inner: CS,
 }
-
-// SAFETY: Eh0Cs does not add interior mutability beyond CS's Send guarantees.
-unsafe impl<CS: Send> Send for Eh0Cs<CS> {}
 
 impl<CS> Eh0Cs<CS> {
     fn new(inner: CS) -> Self {
