@@ -3,12 +3,12 @@ import "../../justfile"
 cl:
 	#!/usr/bin/env bash
 	set -euo pipefail
-	RUST_BACKTRACE=1 cargo run --bin logreader /tmp/caterpillar.copper extract-copperlist
+	RUST_BACKTRACE=1 cargo run --bin cu-caterpillar-logreader logs/caterpillar.copper extract-copperlists
 
 logreader:
 	#!/usr/bin/env bash
 	set -euo pipefail
-	RUST_BACKTRACE=1 cargo run --bin cu-caterpillar-logreader logs/caterpillar.copper extract-log ../../target/debug/copper_log_index
+	RUST_BACKTRACE=1 cargo run --bin cu-caterpillar-logreader logs/caterpillar.copper extract-text-log ../../target/debug/cu29_log_index
 
 resim:
 	#!/usr/bin/env bash
