@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use bincode::{Decode, Encode};
+    use bincode::{Decode, Encode, config::standard, decode_from_slice, encode_to_vec};
     use cu29_soa_derive::Soa;
     use serde_derive::{Deserialize, Serialize};
 
@@ -109,8 +109,33 @@ mod tests {
 
     #[derive(Debug, Default, PartialEq, Soa, Serialize, Deserialize)]
     pub struct Both {
+        #[soa(nested)]
         xyz: Xyz,
+        #[soa(nested)]
         color: Color,
+    }
+
+    fn sample_point_cloud<const N: usize>() -> BothSoa<N> {
+        let mut point_cloud = BothSoa::<N>::default();
+
+        for i in 0..2 {
+            let i_f = i as f32;
+            point_cloud.push(Both {
+                xyz: Xyz {
+                    x: i_f + 1.0,
+                    y: i_f + 2.0,
+                    z: i_f + 3.0,
+                    i,
+                },
+                color: Color {
+                    r: i_f * 0.1,
+                    g: 0.5,
+                    b: 1.0 - i_f * 0.1,
+                },
+            });
+        }
+
+        point_cloud
     }
 
     #[test]
@@ -179,6 +204,56 @@ mod tests {
     }
 
     #[test]
+    fn test_both_soa_serde_roundtrip() {
+        let point_cloud = sample_point_cloud::<8>();
+
+        let json = serde_json::to_string(&point_cloud).expect("serialize BothSoa");
+        let decoded: BothSoa<8> = serde_json::from_str(&json).expect("deserialize BothSoa");
+
+        let len = point_cloud.len();
+        assert_eq!(decoded.len(), len);
+        for idx in 0..len {
+            assert_eq!(decoded.get(idx), point_cloud.get(idx));
+        }
+    }
+
+    #[test]
+    fn test_both_soa_rejects_mismatched_nested_len() {
+        let json = r#"{
+            "len": 2,
+            "xyz": {
+                "x": [1.0],
+                "y": [2.0],
+                "z": [3.0],
+                "i": [1]
+            },
+            "color": {
+                "r": [0.1, 0.2],
+                "g": [0.3, 0.4],
+                "b": [0.5, 0.6]
+            }
+        }"#;
+
+        let result: Result<BothSoa<4>, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_both_soa_bincode_roundtrip() {
+        let point_cloud = sample_point_cloud::<8>();
+
+        let encoded = encode_to_vec(&point_cloud, standard()).expect("encode BothSoa");
+        let (decoded, _): (BothSoa<8>, _) =
+            decode_from_slice(&encoded, standard()).expect("decode BothSoa");
+
+        let len = point_cloud.len();
+        assert_eq!(decoded.len(), len);
+        for idx in 0..len {
+            assert_eq!(decoded.get(idx), point_cloud.get(idx));
+        }
+    }
+
+    #[test]
     fn test_both_soa() {
         let mut point_cloud = BothSoa::<1000>::default();
 
@@ -202,25 +277,31 @@ mod tests {
 
         assert_eq!(point_cloud.len(), 100);
 
+        let len = point_cloud.len();
+
         // Spatial-only operations without loading color data
         // Calculate distances from origin using only xyz data (cache-efficient)
         let xyz_data = point_cloud.xyz();
-        let distances: Vec<f32> = xyz_data[..point_cloud.len()]
-            .iter()
-            .map(|point| (point.x.powi(2) + point.y.powi(2) + point.z.powi(2)).sqrt())
+        let xs = xyz_data.x();
+        let ys = xyz_data.y();
+        let zs = xyz_data.z();
+        let distances: Vec<f32> = (0..len)
+            .map(|idx| (xs[idx].powi(2) + ys[idx].powi(2) + zs[idx].powi(2)).sqrt())
             .collect();
 
-        assert_eq!(distances.len(), 100);
+        assert_eq!(distances.len(), len);
         assert!(distances[0] > 0.0);
 
         // Color-only operations without loading spatial data
         // Calculate average brightness using only color data
         let color_data = point_cloud.color();
-        let avg_brightness: f32 = color_data[..point_cloud.len()]
-            .iter()
-            .map(|color| (color.r + color.g + color.b) / 3.0)
+        let rs = color_data.r();
+        let gs = color_data.g();
+        let bs = color_data.b();
+        let avg_brightness: f32 = (0..len)
+            .map(|idx| (rs[idx] + gs[idx] + bs[idx]) / 3.0)
             .sum::<f32>()
-            / point_cloud.len() as f32;
+            / len as f32;
 
         assert!(avg_brightness > 0.0 && avg_brightness < 1.0);
 
@@ -246,16 +327,17 @@ mod tests {
 
         // Range operations for processing subsets
         // Process only points 10-20 using range accessors
-        let xyz_subset = point_cloud.xyz_range(10..20);
-        let subset_centroid_x: f32 = xyz_subset.iter().map(|p| p.x).sum::<f32>() / 10.0;
+        let xyz_data = point_cloud.xyz();
+        let xs = xyz_data.x();
+        let subset_centroid_x: f32 = xs[10..20].iter().sum::<f32>() / 10.0;
         assert!(subset_centroid_x != 0.0);
 
         // Independent field mutations
         // Modify only colors without affecting spatial data
-        let len = point_cloud.len();
         let color_data_mut = point_cloud.color_mut();
-        for color in &mut color_data_mut[..len] {
-            color.r *= 0.8; // Reduce red component
+        let reds = color_data_mut.r_mut();
+        for red in &mut reds[..len] {
+            *red *= 0.8; // Reduce red component
         }
 
         // Verify only colors changed, not spatial data
