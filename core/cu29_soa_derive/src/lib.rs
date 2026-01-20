@@ -79,6 +79,10 @@ use syn::{Attribute, Data, DeriveInput, Fields, Path, PathArguments, Type, parse
 /// ```
 /// For nested types from other crates, use absolute paths like `::other_crate::Type`
 /// so the generated storage path resolves correctly.
+/// Type aliases are not supported for `#[soa(nested)]` because storage names are derived from the
+/// final type identifier.
+/// Bincode encoding changed: SoA fields no longer include per-field length prefixes. Old blobs are
+/// not compatible with the new layout.
 ///
 /// Memory layout
 /// - Flat fields: `MyStructSoa<N>` stores `len` plus one `[T; N]` per field.
