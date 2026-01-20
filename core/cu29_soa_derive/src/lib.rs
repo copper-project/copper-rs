@@ -156,10 +156,10 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
         if path.leading_colon.is_some() {
             return path.clone();
         }
-        if let Some(first) = path.segments.first() {
-            if first.ident == "crate" {
-                return path.clone();
-            }
+        if let Some(first) = path.segments.first()
+            && first.ident == "crate"
+        {
+            return path.clone();
         }
         syn::parse_quote!(super::#path)
     }
