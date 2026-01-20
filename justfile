@@ -127,7 +127,7 @@ rtsan-smoke pkg="cu-caterpillar" bin="cu-caterpillar" args="" options="halt_on_e
 	#!/usr/bin/env bash
 	set -euo pipefail
 	RTSAN_ENABLE=1 RTSAN_OPTIONS="{{options}}" \
-		cargo run -p "{{pkg}}" --features rtsan --bin "{{bin}}" -- {{args}}
+		cargo run --profile screaming -p "{{pkg}}" --features rtsan --bin "{{bin}}" -- {{args}}
 
 # Project-specific helpers now live in per-directory justfiles under examples/, components/, and support/.
 
