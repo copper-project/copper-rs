@@ -125,7 +125,7 @@ mod tests {
                     x: i_f + 1.0,
                     y: i_f + 2.0,
                     z: i_f + 3.0,
-                    i: i as i32,
+                    i,
                 },
                 color: Color {
                     r: i_f * 0.1,
