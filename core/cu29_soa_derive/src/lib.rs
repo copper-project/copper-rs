@@ -77,6 +77,26 @@ use syn::{Attribute, Data, DeriveInput, Fields, Path, PathArguments, Type, parse
 /// }
 /// // ColoredPointSoa<N> stores position as XyzSoaStorage<N> and color as ColorSoaStorage<N>.
 /// ```
+///
+/// Memory layout
+/// - Flat fields: `MyStructSoa<N>` stores `len` plus one `[T; N]` per field.
+/// - Nested fields (`#[soa(nested)]`): the field is stored inline as `<Field>SoaStorage<N>`,
+///   so the top-level struct contains `len` plus nested storage(s) and the leaf arrays live
+///   in those nested storages.
+/// - `*SoaStorage<N>` has the same layout as `*Soa<N>` without the `len` field.
+/// ```ignore
+/// struct ColoredPointSoa<const N: usize> {
+///     len: usize,
+///     position: XyzSoaStorage<N>,
+///     color: ColorSoaStorage<N>,
+/// }
+/// struct XyzSoaStorage<const N: usize> {
+///     x: [f32; N],
+///     y: [f32; N],
+///     z: [f32; N],
+///     i: [i32; N],
+/// }
+/// ```
 #[proc_macro_derive(Soa, attributes(soa))]
 pub fn derive_soa(input: TokenStream) -> TokenStream {
     use syn::TypePath;
