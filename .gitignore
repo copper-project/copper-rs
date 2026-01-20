@@ -5,6 +5,7 @@
 /AGENTS.md
 
 *.copper
+*.mcap
 Cargo.lock
 
 # ROS stuff
