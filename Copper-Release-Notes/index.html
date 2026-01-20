@@ -76,7 +76,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#v0120-2026-01-15" class="md-skip">
+        <a href="#v0130-wip" class="md-skip">
           Skip to content
         </a>
       
@@ -1019,87 +1019,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#high-level" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        High Level
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#breaking-api-changes" class="md-nav__link">
     <span class="md-ellipsis">
       
         Breaking API Changes
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#new-features" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        New Features
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#flight-controller-sdk-mvp" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Flight Controller SDK (MVP+)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#enhancements" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Enhancements
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#bug-fixes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Bug Fixes
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dependency-updates" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Dependency Updates
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#special-thanks" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Special thanks
       
     </span>
   </a>
@@ -1315,87 +1238,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#high-level" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        High Level
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#breaking-api-changes" class="md-nav__link">
     <span class="md-ellipsis">
       
         Breaking API Changes
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#new-features" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        New Features
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#flight-controller-sdk-mvp" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Flight Controller SDK (MVP+)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#enhancements" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Enhancements
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#bug-fixes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Bug Fixes
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dependency-updates" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Dependency Updates
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#special-thanks" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Special thanks
       
     </span>
   </a>
@@ -1422,10 +1268,16 @@
   
 
 
+<h1 id="v0130-wip">v0.13.0 - WIP<a class="headerlink" href="#v0130-wip" title="Permanent link">&para;</a></h1>
+<h2 id="breaking-api-changes">Breaking API Changes<a class="headerlink" href="#breaking-api-changes" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="https://github.com/copper-project/copper-rs/pull/682">#682</a>: <code>ComponentConfig::get&lt;T&gt;()</code> and <code>Node::get_param&lt;T&gt;()</code> now return <code>Result&lt;Option&lt;T&gt;, ConfigError&gt;</code> instead of <code>Option&lt;T&gt;</code> to propagate type conversion errors; <code>CuConfig::serialize_ron()</code> and <code>deserialize_ron()</code> now return <code>CuResult</code> instead of panicking. See migration guide in the PR description.</li>
+</ul>
+<!-- v0.13.0 PR links -->
 <h1 id="v0120-2026-01-15">v0.12.0 - 2026-01-15<a class="headerlink" href="#v0120-2026-01-15" title="Permanent link">&para;</a></h1>
 <h2 id="high-level">High Level<a class="headerlink" href="#high-level" title="Permanent link">&para;</a></h2>
 <p>Resources are now first-class in Copper: you can describe hardware endpoints and shared system services in config, then bind them to tasks/bridges without rewriting code. Multi-output tasks land, mission/DAG rendering is clearer, and the flight controller stack is now a solid base for autonomous flying machines on off-the-shelf hardware.</p>
-<h2 id="breaking-api-changes">Breaking API Changes<a class="headerlink" href="#breaking-api-changes" title="Permanent link">&para;</a></h2>
+<h2 id="breaking-api-changes_1">Breaking API Changes<a class="headerlink" href="#breaking-api-changes_1" title="Permanent link">&para;</a></h2>
 <ul>
 <li>
 <p><strong>Resources are now explicit in task/bridge constructors</strong><br />
