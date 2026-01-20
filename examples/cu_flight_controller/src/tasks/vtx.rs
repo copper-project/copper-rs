@@ -46,22 +46,22 @@ impl CuTask for VtxOsd {
     where
         Self: Sized,
     {
-        let cols = tasks::cfg_u16(config, "cols", 53)
+        let cols = tasks::cfg_u16(config, "cols", 53)?
             .max(1)
             .min(u8::MAX as u16) as u8;
-        let rows = tasks::cfg_u16(config, "rows", 16)
+        let rows = tasks::cfg_u16(config, "rows", 16)?
             .max(1)
             .min(u8::MAX as u16) as u8;
         let default_center = (cols / 2) as u16;
-        let col_center = tasks::cfg_u16(config, "col_center", default_center)
+        let col_center = tasks::cfg_u16(config, "col_center", default_center)?
             .min(cols.saturating_sub(1) as u16) as u8;
-        let row = tasks::cfg_u16(config, "row", 13).min(u8::MAX as u16) as u8;
+        let row = tasks::cfg_u16(config, "row", 13)?.min(u8::MAX as u16) as u8;
         let watermark_height = VTX_WATERMARK_LINES.len() as u8;
         let default_watermark_row = rows.saturating_sub(watermark_height);
-        let watermark_row = tasks::cfg_u16(config, "watermark_row", default_watermark_row as u16)
+        let watermark_row = tasks::cfg_u16(config, "watermark_row", default_watermark_row as u16)?
             .min(rows.saturating_sub(1) as u16) as u8;
         let watermark_col =
-            tasks::cfg_u16(config, "watermark_col", 0).min(cols.saturating_sub(1) as u16) as u8;
+            tasks::cfg_u16(config, "watermark_col", 0)?.min(cols.saturating_sub(1) as u16) as u8;
         Ok(Self {
             row,
             cols,
@@ -355,39 +355,42 @@ impl CuTask for VtxMspResponder {
     where
         Self: Sized,
     {
-        let vbat_scale = tasks::cfg_u32(config, "vbat_scale", BATTERY_VBAT_SCALE_DEFAULT)
+        let vbat_scale = tasks::cfg_u32(config, "vbat_scale", BATTERY_VBAT_SCALE_DEFAULT)?
             .min(u32::from(u8::MAX)) as u8;
         let vbat_res_div_val =
-            tasks::cfg_u32(config, "vbat_res_div_val", BATTERY_VBAT_RES_DIV_VAL_DEFAULT)
+            tasks::cfg_u32(config, "vbat_res_div_val", BATTERY_VBAT_RES_DIV_VAL_DEFAULT)?
                 .max(1)
                 .min(u32::from(u8::MAX)) as u8;
         let vbat_res_div_mult = tasks::cfg_u32(
             config,
             "vbat_res_div_mult",
             BATTERY_VBAT_RES_DIV_MULT_DEFAULT,
-        )
+        )?
         .max(1)
         .min(u32::from(u8::MAX)) as u8;
-        let battery_capacity = tasks::cfg_u16(config, "battery_capacity_mah", 0);
+        let battery_capacity = tasks::cfg_u16(config, "battery_capacity_mah", 0)?;
         let vbat_min_cell_centivolts = tasks::cfg_u16(
             config,
             "vbat_min_cell_centivolts",
             BATTERY_MIN_CELL_CENTIVOLTS_DEFAULT,
-        );
+        )?;
         let vbat_max_cell_centivolts = tasks::cfg_u16(
             config,
             "vbat_max_cell_centivolts",
             BATTERY_MAX_CELL_CENTIVOLTS_DEFAULT,
-        );
+        )?;
         let vbat_warn_cell_centivolts = tasks::cfg_u16(
             config,
             "vbat_warn_cell_centivolts",
             BATTERY_WARN_CELL_CENTIVOLTS_DEFAULT,
-        );
-        let battery_cells = config
-            .and_then(|cfg| cfg.get::<u32>("battery_cells"))
-            .and_then(|cells| u8::try_from(cells).ok())
-            .filter(|cells| *cells > 0);
+        )?;
+        let battery_cells = match config {
+            Some(cfg) => cfg
+                .get::<u32>("battery_cells")?
+                .and_then(|cells| u8::try_from(cells).ok())
+                .filter(|cells| *cells > 0),
+            None => None,
+        };
         Ok(Self {
             last_voltage_centi: None,
             battery_cells,

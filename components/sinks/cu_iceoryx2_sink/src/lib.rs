@@ -38,7 +38,7 @@ where
         Self: Sized,
     {
         let config = config.ok_or_else(|| CuError::from("IceoryxSink: Missing configuration."))?;
-        let service_name_str = config.get::<String>("service").ok_or_else(|| {
+        let service_name_str = config.get::<String>("service")?.ok_or_else(|| {
             CuError::from("IceoryxSink: Configuration requires 'service' key (string).")
         })?;
 

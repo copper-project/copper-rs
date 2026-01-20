@@ -34,18 +34,18 @@ impl CuSrcTask for ImageSrcTask {
     {
         let config = config.ok_or_else(|| CuError::from("Missing config"))?;
         let width = config
-            .get::<u32>("width")
+            .get::<u32>("width")?
             .ok_or_else(|| CuError::from("Missing width"))?;
         let height = config
-            .get::<u32>("height")
+            .get::<u32>("height")?
             .ok_or_else(|| CuError::from("Missing height"))?;
-        let base_value = config.get::<u32>("base_value").unwrap_or(0) as u8;
-        let tov_offset_ms = config.get::<u32>("tov_offset_ms").unwrap_or(0);
+        let base_value = config.get::<u32>("base_value")?.unwrap_or(0) as u8;
+        let tov_offset_ms = config.get::<u32>("tov_offset_ms")?.unwrap_or(0);
         let pool_size = config
-            .get::<u32>("pool_size")
+            .get::<u32>("pool_size")?
             .unwrap_or((BUFFER_CAP + 1) as u32) as usize;
         let pool_id = config
-            .get::<String>("pool_id")
+            .get::<String>("pool_id")?
             .unwrap_or_else(|| "image_src_pool".to_string());
 
         if pool_size <= BUFFER_CAP {

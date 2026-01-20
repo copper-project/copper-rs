@@ -45,7 +45,7 @@ where
     {
         let config =
             config.ok_or_else(|| CuError::from("IceoryxSource: Missing configuration."))?;
-        let service_name_str = config.get::<String>("service").ok_or_else(|| {
+        let service_name_str = config.get::<String>("service")?.ok_or_else(|| {
             CuError::from("IceoryxSource: Configuration requires 'service' key (string).")
         })?;
 

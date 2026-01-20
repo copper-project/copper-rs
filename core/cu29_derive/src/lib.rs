@@ -1550,7 +1550,10 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         let config_load_stmt = if std {
             quote! {
                 let config = if let Some(overridden_config) = config_override {
-                    debug!("CuConfig: Overridden programmatically: {}", overridden_config.serialize_ron());
+                    let serialized = overridden_config
+                        .serialize_ron()
+                        .unwrap_or_else(|err| format!("<failed to serialize config: {err}>"));
+                    debug!("CuConfig: Overridden programmatically: {}", serialized);
                     overridden_config
                 } else if ::std::path::Path::new(config_filename).exists() {
                     debug!("CuConfig: Reading configuration from file: {}", config_filename);

@@ -204,7 +204,10 @@ impl CuTask for RcMapper {
     where
         Self: Sized,
     {
-        let arm_cfg = config.and_then(|cfg| cfg.get::<u32>("arm_channel"));
+        let arm_cfg = match config {
+            Some(cfg) => cfg.get::<u32>("arm_channel")?,
+            None => None,
+        };
         let mut arm_channel = arm_cfg.map(|v| v as usize).unwrap_or(3);
         if arm_channel > 15 {
             warning!(
@@ -213,17 +216,24 @@ impl CuTask for RcMapper {
             );
             arm_channel = 15;
         }
-        let arm_min = cfg_u16(config, "arm_min", 1700);
-        let arm_max = cfg_u16(config, "arm_max", 1811);
-        let mode_cfg = config
-            .and_then(|cfg| cfg.get::<u32>("mode_channel"))
-            .map(|v| v as usize);
-        let mode_low_max = config
-            .and_then(|cfg| cfg.get::<u32>("mode_low_max"))
-            .map(|v| v.min(u16::MAX as u32) as u16);
-        let mode_mid_max = config
-            .and_then(|cfg| cfg.get::<u32>("mode_mid_max"))
-            .map(|v| v.min(u16::MAX as u32) as u16);
+        let arm_min = cfg_u16(config, "arm_min", 1700)?;
+        let arm_max = cfg_u16(config, "arm_max", 1811)?;
+        let mode_cfg = match config {
+            Some(cfg) => cfg.get::<u32>("mode_channel")?.map(|v| v as usize),
+            None => None,
+        };
+        let mode_low_max = match config {
+            Some(cfg) => cfg
+                .get::<u32>("mode_low_max")?
+                .map(|v| v.min(u16::MAX as u32) as u16),
+            None => None,
+        };
+        let mode_mid_max = match config {
+            Some(cfg) => cfg
+                .get::<u32>("mode_mid_max")?
+                .map(|v| v.min(u16::MAX as u32) as u16),
+            None => None,
+        };
 
         info!(
             "rc mapper cfg arm_channel={:?} arm_min={} arm_max={} mode_channel={:?} mode_low_max={} mode_mid_max={}",
@@ -236,10 +246,10 @@ impl CuTask for RcMapper {
         );
 
         Ok(Self {
-            rc_min: cfg_u16(config, "rc_min", 172),
-            rc_mid: cfg_u16(config, "rc_mid", 992),
-            rc_max: cfg_u16(config, "rc_max", 1811),
-            deadband: cfg_u16(config, "rc_deadband", 0),
+            rc_min: cfg_u16(config, "rc_min", 172)?,
+            rc_mid: cfg_u16(config, "rc_mid", 992)?,
+            rc_max: cfg_u16(config, "rc_max", 1811)?,
+            deadband: cfg_u16(config, "rc_deadband", 0)?,
             arm_channel,
             arm_min,
             arm_max,
@@ -364,10 +374,10 @@ impl CuTask for ImuCalibrator {
     where
         Self: Sized,
     {
-        let cal_ms = cfg_u32(config, "cal_ms", 3000);
-        let sample_period_ms = cfg_u32(config, "sample_period_ms", 10);
+        let cal_ms = cfg_u32(config, "cal_ms", 3000)?;
+        let sample_period_ms = cfg_u32(config, "sample_period_ms", 10)?;
         let default_samples = (cal_ms / sample_period_ms.max(1)).max(1);
-        let required_samples = cfg_u32(config, "cal_samples", default_samples);
+        let required_samples = cfg_u32(config, "cal_samples", default_samples)?;
 
         Ok(Self {
             bias: [0.0; 3],
@@ -511,14 +521,14 @@ impl CuTask for AttitudeController {
     where
         Self: Sized,
     {
-        let angle_limit_rad = cfg_f32(config, "angle_limit_deg", 25.0).to_radians();
-        let rate_limit_rad = cfg_f32(config, "rate_limit_dps", 180.0).to_radians();
-        let acro_rate_rad = cfg_f32(config, "acro_rate_dps", 360.0).to_radians();
-        let acro_expo = normalize_expo(cfg_f32(config, "acro_expo", 0.0));
-        let kp = cfg_f32(config, "kp", 4.0);
-        let ki = cfg_f32(config, "ki", 0.0);
-        let kd = cfg_f32(config, "kd", 0.0);
-        let dt_fallback = CuDuration::from_millis(cfg_u32(config, "dt_ms", 10) as u64);
+        let angle_limit_rad = cfg_f32(config, "angle_limit_deg", 25.0)?.to_radians();
+        let rate_limit_rad = cfg_f32(config, "rate_limit_dps", 180.0)?.to_radians();
+        let acro_rate_rad = cfg_f32(config, "acro_rate_dps", 360.0)?.to_radians();
+        let acro_expo = normalize_expo(cfg_f32(config, "acro_expo", 0.0)?);
+        let kp = cfg_f32(config, "kp", 4.0)?;
+        let ki = cfg_f32(config, "ki", 0.0)?;
+        let kd = cfg_f32(config, "kd", 0.0)?;
+        let dt_fallback = CuDuration::from_millis(cfg_u32(config, "dt_ms", 10)? as u64);
 
         let roll_pid = PIDController::new(
             kp,
@@ -660,18 +670,18 @@ impl CuTask for RateController {
     where
         Self: Sized,
     {
-        let kp = cfg_f32(config, "kp", 0.15);
-        let ki = cfg_f32(config, "ki", 0.0);
-        let kd = cfg_f32(config, "kd", 0.0);
-        let kp_yaw = cfg_f32(config, "kp_yaw", kp);
-        let ki_yaw = cfg_f32(config, "ki_yaw", ki);
-        let kd_yaw = cfg_f32(config, "kd_yaw", kd);
-        let output_limit = cfg_f32(config, "output_limit", 1.0);
-        let dt_fallback = CuDuration::from_millis(cfg_u32(config, "dt_ms", 10) as u64);
-        let i_throttle_min = cfg_f32(config, "i_throttle_min", 0.05);
-        let airmode_enabled = cfg_bool(config, "airmode", false);
+        let kp = cfg_f32(config, "kp", 0.15)?;
+        let ki = cfg_f32(config, "ki", 0.0)?;
+        let kd = cfg_f32(config, "kd", 0.0)?;
+        let kp_yaw = cfg_f32(config, "kp_yaw", kp)?;
+        let ki_yaw = cfg_f32(config, "ki_yaw", ki)?;
+        let kd_yaw = cfg_f32(config, "kd_yaw", kd)?;
+        let output_limit = cfg_f32(config, "output_limit", 1.0)?;
+        let dt_fallback = CuDuration::from_millis(cfg_u32(config, "dt_ms", 10)? as u64);
+        let i_throttle_min = cfg_f32(config, "i_throttle_min", 0.05)?;
+        let airmode_enabled = cfg_bool(config, "airmode", false)?;
         let airmode_start_throttle =
-            normalize_percent(cfg_f32(config, "airmode_start_throttle_percent", 25.0));
+            normalize_percent(cfg_f32(config, "airmode_start_throttle_percent", 25.0)?);
 
         let pid = |p: f32, i: f32, d: f32| {
             PIDController::new(
@@ -847,14 +857,15 @@ impl CuTask for QuadXMixer {
     where
         Self: Sized,
     {
-        let motor_index = cfg_usize(config, "motor_index", 0);
+        let motor_index = cfg_usize(config, "motor_index", 0)?;
         if motor_index >= QUADX_MIX.len() {
             return Err(CuError::from("motor_index out of range for QuadX"));
         }
-        let props_out = config
-            .and_then(|cfg| cfg.get::<bool>("props_out"))
-            .unwrap_or(true);
-        let airmode_idle = cfg_f32(config, "airmode_idle_percent", 8.0) / 100.0;
+        let props_out = match config {
+            Some(cfg) => cfg.get::<bool>("props_out")?.unwrap_or(true),
+            None => true,
+        };
+        let airmode_idle = cfg_f32(config, "airmode_idle_percent", 8.0)? / 100.0;
 
         Ok(Self {
             motor_index,
@@ -1012,35 +1023,44 @@ fn apply_expo(value: f32, expo: f32) -> f32 {
     value * weight
 }
 
-fn cfg_f32(config: Option<&ComponentConfig>, key: &str, default: f32) -> f32 {
-    config
-        .and_then(|cfg| cfg.get::<f64>(key))
-        .map(|v| v as f32)
-        .unwrap_or(default)
+fn cfg_f32(config: Option<&ComponentConfig>, key: &str, default: f32) -> CuResult<f32> {
+    let value = match config {
+        Some(cfg) => cfg.get::<f64>(key)?,
+        None => None,
+    };
+    Ok(value.map(|v| v as f32).unwrap_or(default))
 }
 
-fn cfg_u32(config: Option<&ComponentConfig>, key: &str, default: u32) -> u32 {
-    config
-        .and_then(|cfg| cfg.get::<u32>(key))
-        .unwrap_or(default)
+fn cfg_u32(config: Option<&ComponentConfig>, key: &str, default: u32) -> CuResult<u32> {
+    let value = match config {
+        Some(cfg) => cfg.get::<u32>(key)?,
+        None => None,
+    };
+    Ok(value.unwrap_or(default))
 }
 
-fn cfg_u16(config: Option<&ComponentConfig>, key: &str, default: u16) -> u16 {
-    config
-        .and_then(|cfg| cfg.get::<u32>(key))
+fn cfg_u16(config: Option<&ComponentConfig>, key: &str, default: u16) -> CuResult<u16> {
+    let value = match config {
+        Some(cfg) => cfg.get::<u32>(key)?,
+        None => None,
+    };
+    Ok(value
         .map(|v| v.min(u16::MAX as u32) as u16)
-        .unwrap_or(default)
+        .unwrap_or(default))
 }
 
-fn cfg_bool(config: Option<&ComponentConfig>, key: &str, default: bool) -> bool {
-    config
-        .and_then(|cfg| cfg.get::<bool>(key))
-        .unwrap_or(default)
+fn cfg_bool(config: Option<&ComponentConfig>, key: &str, default: bool) -> CuResult<bool> {
+    let value = match config {
+        Some(cfg) => cfg.get::<bool>(key)?,
+        None => None,
+    };
+    Ok(value.unwrap_or(default))
 }
 
-fn cfg_usize(config: Option<&ComponentConfig>, key: &str, default: usize) -> usize {
-    config
-        .and_then(|cfg| cfg.get::<u32>(key))
-        .map(|v| v as usize)
-        .unwrap_or(default)
+fn cfg_usize(config: Option<&ComponentConfig>, key: &str, default: usize) -> CuResult<usize> {
+    let value = match config {
+        Some(cfg) => cfg.get::<u32>(key)?,
+        None => None,
+    };
+    Ok(value.map(|v| v as usize).unwrap_or(default))
 }

@@ -32,11 +32,11 @@ impl CuTask for YoloPose {
         let config = config.ok_or_else(|| CuError::from("YoloPose requires configuration"))?;
 
         let variant = config
-            .get::<String>("variant")
+            .get::<String>("variant")?
             .unwrap_or_else(|| "yolov8n-pose".to_string());
 
-        let conf_threshold = config.get::<f64>("conf_threshold").unwrap_or(0.25) as f32;
-        let iou_threshold = config.get::<f64>("iou_threshold").unwrap_or(0.7) as f32;
+        let conf_threshold = config.get::<f64>("conf_threshold")?.unwrap_or(0.25) as f32;
+        let iou_threshold = config.get::<f64>("iou_threshold")?.unwrap_or(0.7) as f32;
 
         // Determine model size from variant
         let multiples = match variant.as_str() {

@@ -74,9 +74,15 @@ impl ComponentConfig {
     }
 
     #[allow(dead_code)]
-    pub fn get<T: From<Value>>(&self, key: &str) -> Option<T> {
+    pub fn get<T>(&self, key: &str) -> Result<Option<T>, ConfigError>
+    where
+        T: for<'a> TryFrom<&'a Value, Error = ConfigError>,
+    {
         let ComponentConfig(config) = self;
-        config.get(key).map(|v| T::from(v.clone()))
+        match config.get(key) {
+            Some(value) => T::try_from(value).map(Some),
+            None => Ok(None),
+        }
     }
 
     #[allow(dead_code)]
@@ -97,6 +103,37 @@ impl ComponentConfig {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Value(RonValue);
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConfigError {
+    message: String,
+}
+
+impl ConfigError {
+    fn type_mismatch(expected: &'static str, value: &Value) -> Self {
+        ConfigError {
+            message: format!("Expected {expected} but got {value:?}"),
+        }
+    }
+}
+
+impl Display for ConfigError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for ConfigError {}
+
+#[cfg(not(feature = "std"))]
+impl core::error::Error for ConfigError {}
+
+impl From<ConfigError> for CuError {
+    fn from(err: ConfigError) -> Self {
+        CuError::from(err.to_string())
+    }
+}
+
 // Macro for implementing From<T> for Value where T is a numeric type
 macro_rules! impl_from_numeric_for_value {
     ($($source:ty),* $(,)?) => {
@@ -110,6 +147,18 @@ macro_rules! impl_from_numeric_for_value {
 
 // Implement From for common numeric types
 impl_from_numeric_for_value!(i8, i16, i32, i64, u8, u16, u32, u64, f32, f64);
+
+impl TryFrom<&Value> for bool {
+    type Error = ConfigError;
+
+    fn try_from(value: &Value) -> Result<Self, Self::Error> {
+        if let Value(RonValue::Bool(v)) = value {
+            Ok(*v)
+        } else {
+            Err(ConfigError::type_mismatch("bool", value))
+        }
+    }
+}
 
 impl From<Value> for bool {
     fn from(value: Value) -> Self {
@@ -150,6 +199,65 @@ macro_rules! impl_from_value_for_int {
 
 impl_from_value_for_int!(u8, i8, u16, i16, u32, i32, u64, i64);
 
+macro_rules! impl_try_from_value_for_int {
+    ($($target:ty),* $(,)?) => {
+        $(
+            impl TryFrom<&Value> for $target {
+                type Error = ConfigError;
+
+                fn try_from(value: &Value) -> Result<Self, Self::Error> {
+                    if let Value(RonValue::Number(num)) = value {
+                        match num {
+                            Number::I8(n) => Ok(*n as $target),
+                            Number::I16(n) => Ok(*n as $target),
+                            Number::I32(n) => Ok(*n as $target),
+                            Number::I64(n) => Ok(*n as $target),
+                            Number::U8(n) => Ok(*n as $target),
+                            Number::U16(n) => Ok(*n as $target),
+                            Number::U32(n) => Ok(*n as $target),
+                            Number::U64(n) => Ok(*n as $target),
+                            Number::F32(_) | Number::F64(_) | Number::__NonExhaustive(_) => {
+                                Err(ConfigError::type_mismatch("integer", value))
+                            }
+                        }
+                    } else {
+                        Err(ConfigError::type_mismatch("integer", value))
+                    }
+                }
+            }
+        )*
+    };
+}
+
+impl_try_from_value_for_int!(u8, i8, u16, i16, u32, i32, u64, i64);
+
+impl TryFrom<&Value> for f64 {
+    type Error = ConfigError;
+
+    fn try_from(value: &Value) -> Result<Self, Self::Error> {
+        if let Value(RonValue::Number(num)) = value {
+            let number = match num {
+                Number::I8(n) => *n as f64,
+                Number::I16(n) => *n as f64,
+                Number::I32(n) => *n as f64,
+                Number::I64(n) => *n as f64,
+                Number::U8(n) => *n as f64,
+                Number::U16(n) => *n as f64,
+                Number::U32(n) => *n as f64,
+                Number::U64(n) => *n as f64,
+                Number::F32(n) => n.0 as f64,
+                Number::F64(n) => n.0,
+                Number::__NonExhaustive(_) => {
+                    return Err(ConfigError::type_mismatch("number", value));
+                }
+            };
+            Ok(number)
+        } else {
+            Err(ConfigError::type_mismatch("number", value))
+        }
+    }
+}
+
 impl From<Value> for f64 {
     fn from(value: Value) -> Self {
         if let Value(RonValue::Number(num)) = value {
@@ -163,6 +271,18 @@ impl From<Value> for f64 {
 impl From<String> for Value {
     fn from(value: String) -> Self {
         Value(RonValue::String(value))
+    }
+}
+
+impl TryFrom<&Value> for String {
+    type Error = ConfigError;
+
+    fn try_from(value: &Value) -> Result<Self, Self::Error> {
+        if let Value(RonValue::String(s)) = value {
+            Ok(s.clone())
+        } else {
+            Err(ConfigError::type_mismatch("string", value))
+        }
     }
 }
 
@@ -346,11 +466,19 @@ impl Node {
     }
 
     #[allow(dead_code)]
-    pub fn get_param<T: From<Value>>(&self, key: &str) -> Option<T> {
-        let pc = self.config.as_ref()?;
+    pub fn get_param<T>(&self, key: &str) -> Result<Option<T>, ConfigError>
+    where
+        T: for<'a> TryFrom<&'a Value, Error = ConfigError>,
+    {
+        let pc = match self.config.as_ref() {
+            Some(pc) => pc,
+            None => return Ok(None),
+        };
         let ComponentConfig(pc) = pc;
-        let v = pc.get(key)?;
-        Some(T::from(v.clone()))
+        match pc.get(key) {
+            Some(v) => T::try_from(v).map(Some),
+            None => Ok(None),
+        }
     }
 
     #[allow(dead_code)]
@@ -1430,20 +1558,23 @@ impl CuConfig {
     }
 
     #[allow(dead_code)]
-    pub fn serialize_ron(&self) -> String {
+    pub fn serialize_ron(&self) -> CuResult<String> {
         let ron = Self::get_options();
         let pretty = ron::ser::PrettyConfig::default();
-        ron.to_string_pretty(&self, pretty).unwrap()
+        ron.to_string_pretty(&self, pretty)
+            .map_err(|e| CuError::from(format!("Error serializing configuration: {e}")))
     }
 
     #[allow(dead_code)]
-    pub fn deserialize_ron(ron: &str) -> Self {
-        match Self::get_options().from_str(ron) {
-            Ok(representation) => Self::deserialize_impl(representation).unwrap_or_else(|e| {
-                panic!("Error deserializing configuration: {e}");
-            }),
-            Err(e) => panic!("Syntax Error in config: {} at position {}", e.code, e.span),
-        }
+    pub fn deserialize_ron(ron: &str) -> CuResult<Self> {
+        let representation = Self::get_options().from_str(ron).map_err(|e| {
+            CuError::from(format!(
+                "Syntax Error in config: {} at position {}",
+                e.code, e.span
+            ))
+        })?;
+        Self::deserialize_impl(representation)
+            .map_err(|e| CuError::from(format!("Error deserializing configuration: {e}")))
     }
 
     fn deserialize_impl(representation: CuConfigRepresentation) -> Result<Self, String> {
@@ -1458,10 +1589,14 @@ impl CuConfig {
         output: &mut dyn std::io::Write,
         mission_id: Option<&str>,
     ) -> CuResult<()> {
-        writeln!(output, "digraph G {{").unwrap();
-        writeln!(output, "    graph [rankdir=LR, nodesep=0.8, ranksep=1.2];").unwrap();
-        writeln!(output, "    node [shape=plain, fontname=\"Noto Sans\"];").unwrap();
-        writeln!(output, "    edge [fontname=\"Noto Sans\"];").unwrap();
+        writeln!(output, "digraph G {{")
+            .map_err(|e| CuError::new_with_cause("Failed to write render output", e))?;
+        writeln!(output, "    graph [rankdir=LR, nodesep=0.8, ranksep=1.2];")
+            .map_err(|e| CuError::new_with_cause("Failed to write render output", e))?;
+        writeln!(output, "    node [shape=plain, fontname=\"Noto Sans\"];")
+            .map_err(|e| CuError::new_with_cause("Failed to write render output", e))?;
+        writeln!(output, "    edge [fontname=\"Noto Sans\"];")
+            .map_err(|e| CuError::new_with_cause("Failed to write render output", e))?;
 
         let sections = match (&self.graphs, mission_id) {
             (Simple(graph), _) => vec![RenderSection { label: None, graph }],
@@ -1491,7 +1626,8 @@ impl CuConfig {
             self.render_section(output, section.graph, section.label.as_deref())?;
         }
 
-        writeln!(output, "}}").unwrap();
+        writeln!(output, "}}")
+            .map_err(|e| CuError::new_with_cause("Failed to write render output", e))?;
         Ok(())
     }
 
@@ -1609,18 +1745,19 @@ impl CuConfig {
 
         let cluster_id = label.map(|lbl| format!("cluster_{}", sanitize_identifier(lbl)));
         if let Some(ref cluster_id) = cluster_id {
-            writeln!(output, "    subgraph \"{cluster_id}\" {{").unwrap();
+            writeln!(output, "    subgraph \"{cluster_id}\" {{")
+                .map_err(|e| CuError::new_with_cause("Failed to write render output", e))?;
             writeln!(
                 output,
                 "        label=<<B>Mission: {}</B>>;",
                 encode_text(label.unwrap())
             )
-            .unwrap();
+            .map_err(|e| CuError::new_with_cause("Failed to write render output", e))?;
             writeln!(
                 output,
                 "        labelloc=t; labeljust=l; color=\"#bbbbbb\"; style=\"rounded\"; margin=20;"
             )
-            .unwrap();
+            .map_err(|e| CuError::new_with_cause("Failed to write render output", e))?;
         }
         let indent = if cluster_id.is_some() {
             "        "
@@ -1694,7 +1831,8 @@ impl CuConfig {
                 format!("{node_prefix}{}", node.id)
             };
             let identifier = escape_dot_id(&identifier_raw);
-            writeln!(output, "{indent}\"{identifier}\" [label=<{label_html}>];").unwrap();
+            writeln!(output, "{indent}\"{identifier}\" [label=<{label_html}>];")
+                .map_err(|e| CuError::new_with_cause("Failed to write render output", e))?;
 
             id_lookup.insert(node.id.clone(), identifier);
             port_lookup.insert(
@@ -1730,11 +1868,12 @@ impl CuConfig {
                 output,
                 "{indent}\"{src_id}\"{src_suffix} -> \"{dst_id}\"{dst_suffix} [label=< <B><FONT COLOR=\"gray\">{msg}</FONT></B> >];"
             )
-            .unwrap();
+            .map_err(|e| CuError::new_with_cause("Failed to write render output", e))?;
         }
 
         if cluster_id.is_some() {
-            writeln!(output, "    }}").unwrap();
+            writeln!(output, "    }}")
+                .map_err(|e| CuError::new_with_cause("Failed to write render output", e))?;
         }
 
         Ok(())
@@ -2220,8 +2359,8 @@ mod tests {
             .add_node(Node::new("test2", "package::Plugin2"))
             .unwrap();
         graph.connect(n1, n2, "msgpkg::MsgType").unwrap();
-        let serialized = config.serialize_ron();
-        let deserialized = CuConfig::deserialize_ron(&serialized);
+        let serialized = config.serialize_ron().unwrap();
+        let deserialized = CuConfig::deserialize_ron(&serialized).unwrap();
         let graph = config.graphs.get_graph(None).unwrap();
         let deserialized_graph = deserialized.graphs.get_graph(None).unwrap();
         assert_eq!(graph.node_count(), deserialized_graph.node_count());
@@ -2235,30 +2374,31 @@ mod tests {
         let mut camera = Node::new("copper-camera", "camerapkg::Camera");
         camera.set_param::<Value>("resolution-height", 1080.into());
         graph.add_node(camera).unwrap();
-        let serialized = config.serialize_ron();
-        let config = CuConfig::deserialize_ron(&serialized);
+        let serialized = config.serialize_ron().unwrap();
+        let config = CuConfig::deserialize_ron(&serialized).unwrap();
         let deserialized = config.get_graph(None).unwrap();
-        assert_eq!(
-            deserialized
-                .get_node(0)
-                .unwrap()
-                .get_param::<i32>("resolution-height")
-                .unwrap(),
-            1080
-        );
+        let resolution = deserialized
+            .get_node(0)
+            .unwrap()
+            .get_param::<i32>("resolution-height")
+            .expect("resolution-height lookup failed");
+        assert_eq!(resolution, Some(1080));
     }
 
     #[test]
-    #[should_panic(expected = "Syntax Error in config: Expected opening `[` at position 1:9-1:10")]
     fn test_deserialization_error() {
         // Task needs to be an array, but provided tuple wrongfully
         let txt = r#"( tasks: (), cnx: [], monitor: (type: "ExampleMonitor", ) ) "#;
-        CuConfig::deserialize_ron(txt);
+        let err = CuConfig::deserialize_ron(txt).expect_err("expected deserialization error");
+        assert!(
+            err.to_string()
+                .contains("Syntax Error in config: Expected opening `[` at position 1:9-1:10")
+        );
     }
     #[test]
     fn test_missions() {
         let txt = r#"( missions: [ (id: "data_collection"), (id: "autonomous")])"#;
-        let config = CuConfig::deserialize_ron(txt);
+        let config = CuConfig::deserialize_ron(txt).unwrap();
         let graph = config.graphs.get_graph(Some("data_collection")).unwrap();
         assert!(graph.node_count() == 0);
         let graph = config.graphs.get_graph(Some("autonomous")).unwrap();
@@ -2268,12 +2408,12 @@ mod tests {
     #[test]
     fn test_monitor() {
         let txt = r#"( tasks: [], cnx: [], monitor: (type: "ExampleMonitor", ) ) "#;
-        let config = CuConfig::deserialize_ron(txt);
+        let config = CuConfig::deserialize_ron(txt).unwrap();
         assert_eq!(config.monitor.as_ref().unwrap().type_, "ExampleMonitor");
 
         let txt =
             r#"( tasks: [], cnx: [], monitor: (type: "ExampleMonitor", config: { "toto": 4, } )) "#;
-        let config = CuConfig::deserialize_ron(txt);
+        let config = CuConfig::deserialize_ron(txt).unwrap();
         assert_eq!(
             config.monitor.as_ref().unwrap().config.as_ref().unwrap().0["toto"].0,
             4u8.into()
@@ -2314,7 +2454,7 @@ mod tests {
         // Test with `enable_task_logging: false`
         let txt = r#"( tasks: [], cnx: [], logging: ( slab_size_mib: 1024, section_size_mib: 100, enable_task_logging: false ),) "#;
 
-        let config = CuConfig::deserialize_ron(txt);
+        let config = CuConfig::deserialize_ron(txt).unwrap();
         assert!(config.logging.is_some());
         let logging_config = config.logging.unwrap();
         assert_eq!(logging_config.slab_size_mib.unwrap(), 1024);
@@ -2324,7 +2464,7 @@ mod tests {
         // Test with `enable_task_logging` not provided
         let txt =
             r#"( tasks: [], cnx: [], logging: ( slab_size_mib: 1024, section_size_mib: 100, ),) "#;
-        let config = CuConfig::deserialize_ron(txt);
+        let config = CuConfig::deserialize_ron(txt).unwrap();
         assert!(config.logging.is_some());
         let logging_config = config.logging.unwrap();
         assert_eq!(logging_config.slab_size_mib.unwrap(), 1024);
@@ -2358,7 +2498,7 @@ mod tests {
         )
         "#;
 
-        let config = CuConfig::deserialize_ron(txt);
+        let config = CuConfig::deserialize_ron(txt).unwrap();
         assert_eq!(config.bridges.len(), 1);
         let bridge = &config.bridges[0];
         assert_eq!(bridge.id, "radio");
@@ -2428,12 +2568,12 @@ mod tests {
             ],
         });
 
-        let serialized = config.serialize_ron();
+        let serialized = config.serialize_ron().unwrap();
         assert!(
             serialized.contains("bridges"),
             "bridges section missing from serialized config"
         );
-        let deserialized = CuConfig::deserialize_ron(&serialized);
+        let deserialized = CuConfig::deserialize_ron(&serialized).unwrap();
         assert_eq!(deserialized.bridges.len(), 1);
         let bridge = &deserialized.bridges[0];
         assert_eq!(bridge.channels.len(), 2);
@@ -2466,7 +2606,7 @@ mod tests {
         )
         "#;
 
-        let config = CuConfig::deserialize_ron(txt);
+        let config = CuConfig::deserialize_ron(txt).unwrap();
         assert_eq!(config.resources.len(), 2);
         let fc = &config.resources[0];
         assert_eq!(fc.id, "fc");
@@ -2475,7 +2615,9 @@ mod tests {
         let baud: u32 = fc
             .config
             .as_ref()
-            .and_then(|cfg| cfg.get("baud"))
+            .expect("missing config")
+            .get::<u32>("baud")
+            .expect("baud lookup failed")
             .expect("missing baud");
         assert_eq!(baud, 921_600);
         let misc = &config.resources[1];
@@ -2496,8 +2638,8 @@ mod tests {
             missions: Some(vec!["m1".to_string()]),
         });
 
-        let serialized = config.serialize_ron();
-        let deserialized = CuConfig::deserialize_ron(&serialized);
+        let serialized = config.serialize_ron().unwrap();
+        let deserialized = CuConfig::deserialize_ron(&serialized).unwrap();
         assert_eq!(deserialized.resources.len(), 1);
         let res = &deserialized.resources[0];
         assert_eq!(res.id, "fc");
@@ -2506,7 +2648,9 @@ mod tests {
         let path: String = res
             .config
             .as_ref()
-            .and_then(|cfg| cfg.get("path"))
+            .expect("missing config")
+            .get::<String>("path")
+            .expect("path lookup failed")
             .expect("missing path");
         assert_eq!(path, "/dev/ttyACM0");
     }
@@ -2530,13 +2674,16 @@ mod tests {
         )
         "#;
 
-        let config = CuConfig::deserialize_ron(txt);
+        let config = CuConfig::deserialize_ron(txt).unwrap();
         let bridge = &config.bridges[0];
         match &bridge.channels[0] {
             BridgeChannelConfigRepresentation::Rx {
                 config: Some(cfg), ..
             } => {
-                let val: String = cfg.get("filter").expect("filter missing");
+                let val = cfg
+                    .get::<String>("filter")
+                    .expect("filter lookup failed")
+                    .expect("filter missing");
                 assert_eq!(val, "fast");
             }
             _ => panic!("expected Rx channel with config"),
@@ -2545,7 +2692,10 @@ mod tests {
             BridgeChannelConfigRepresentation::Tx {
                 config: Some(cfg), ..
             } => {
-                let rate: i32 = cfg.get("rate").expect("rate missing");
+                let rate = cfg
+                    .get::<i32>("rate")
+                    .expect("rate lookup failed")
+                    .expect("rate missing");
                 assert_eq!(rate, 100);
             }
             _ => panic!("expected Tx channel with config"),
@@ -2567,7 +2717,7 @@ mod tests {
         )
         "#;
 
-        let config = CuConfig::deserialize_ron(txt);
+        let config = CuConfig::deserialize_ron(txt).unwrap();
         let graph = config.graphs.get_graph(None).unwrap();
         let node = graph.get_node(0).expect("missing task node");
         let resources = node.get_resources().expect("missing resources map");
@@ -2577,8 +2727,8 @@ mod tests {
             Some("fc.gpio_imu")
         );
 
-        let serialized = config.serialize_ron();
-        let deserialized = CuConfig::deserialize_ron(&serialized);
+        let serialized = config.serialize_ron().unwrap();
+        let deserialized = CuConfig::deserialize_ron(&serialized).unwrap();
         let graph = deserialized.graphs.get_graph(None).unwrap();
         let node = graph.get_node(0).expect("missing task node");
         let resources = node
@@ -2614,8 +2764,8 @@ mod tests {
             }],
         });
 
-        let serialized = config.serialize_ron();
-        let deserialized = CuConfig::deserialize_ron(&serialized);
+        let serialized = config.serialize_ron().unwrap();
+        let deserialized = CuConfig::deserialize_ron(&serialized).unwrap();
         let graph = deserialized.graphs.get_graph(None).expect("missing graph");
         let bridge_id = graph
             .get_node_id_by_name("radio")
@@ -2682,13 +2832,12 @@ mod tests {
         (src: "bdshot/esc3_rx", dst: "tele3", msg: "cu_bdshot::EscTelemetry"),
     ],
 )"#;
-        let config = CuConfig::deserialize_ron(txt);
+        let config = CuConfig::deserialize_ron(txt).unwrap();
         assert_eq!(config.resources.len(), 1);
         assert_eq!(config.bridges.len(), 2);
     }
 
     #[test]
-    #[should_panic(expected = "channel 'motor' is Tx and cannot act as a source")]
     fn test_bridge_tx_cannot_be_source() {
         let txt = r#"
         (
@@ -2710,11 +2859,14 @@ mod tests {
         )
         "#;
 
-        CuConfig::deserialize_ron(txt);
+        let err = CuConfig::deserialize_ron(txt).expect_err("expected bridge source error");
+        assert!(
+            err.to_string()
+                .contains("channel 'motor' is Tx and cannot act as a source")
+        );
     }
 
     #[test]
-    #[should_panic(expected = "channel 'status' is Rx and cannot act as a destination")]
     fn test_bridge_rx_cannot_be_destination() {
         let txt = r#"
         (
@@ -2736,7 +2888,11 @@ mod tests {
         )
         "#;
 
-        CuConfig::deserialize_ron(txt);
+        let err = CuConfig::deserialize_ron(txt).expect_err("expected bridge destination error");
+        assert!(
+            err.to_string()
+                .contains("channel 'status' is Rx and cannot act as a destination")
+        );
     }
 
     #[test]
@@ -2744,13 +2900,13 @@ mod tests {
         // Test with valid logging configuration
         let txt =
             r#"( tasks: [], cnx: [], logging: ( slab_size_mib: 1024, section_size_mib: 100 ) )"#;
-        let config = CuConfig::deserialize_ron(txt);
+        let config = CuConfig::deserialize_ron(txt).unwrap();
         assert!(config.validate_logging_config().is_ok());
 
         // Test with invalid logging configuration
         let txt =
             r#"( tasks: [], cnx: [], logging: ( slab_size_mib: 100, section_size_mib: 1024 ) )"#;
-        let config = CuConfig::deserialize_ron(txt);
+        let config = CuConfig::deserialize_ron(txt).unwrap();
         assert!(config.validate_logging_config().is_err());
     }
 
@@ -2763,7 +2919,7 @@ mod tests {
             tasks: [(id: "src1", type: "a"), (id: "src2", type: "b"), (id: "sink", type: "c")],
             cnx: [(src: "src2", dst: "sink", msg: "msg1"), (src: "src1", dst: "sink", msg: "msg2")]
         )"#;
-        let config = CuConfig::deserialize_ron(txt);
+        let config = CuConfig::deserialize_ron(txt).unwrap();
         let graph = config.graphs.get_graph(None).unwrap();
         assert!(config.validate_logging_config().is_ok());
 
@@ -2799,7 +2955,7 @@ mod tests {
               )
               "#;
 
-        let config = CuConfig::deserialize_ron(txt);
+        let config = CuConfig::deserialize_ron(txt).unwrap();
         let m1_graph = config.graphs.get_graph(Some("m1")).unwrap();
         assert_eq!(m1_graph.edge_count(), 1);
         assert_eq!(m1_graph.node_count(), 2);
@@ -2839,9 +2995,9 @@ mod tests {
               )
               "#;
 
-        let config = CuConfig::deserialize_ron(txt);
-        let serialized = config.serialize_ron();
-        let deserialized = CuConfig::deserialize_ron(&serialized);
+        let config = CuConfig::deserialize_ron(txt).unwrap();
+        let serialized = config.serialize_ron().unwrap();
+        let deserialized = CuConfig::deserialize_ron(&serialized).unwrap();
         let m1_graph = deserialized.graphs.get_graph(Some("m1")).unwrap();
         assert_eq!(m1_graph.edge_count(), 1);
         assert_eq!(m1_graph.node_count(), 2);
@@ -2862,7 +3018,7 @@ mod tests {
             cnx: [(src: "src2", dst: "sink", msg: "msg1"), (src: "src1", dst: "sink", msg: "msg2")],
             logging: ( keyframe_interval: 314 )
         )"#;
-        let config = CuConfig::deserialize_ron(txt);
+        let config = CuConfig::deserialize_ron(txt).unwrap();
         let logging_config = config.logging.unwrap();
         assert_eq!(logging_config.keyframe_interval.unwrap(), 314);
     }
@@ -2876,7 +3032,7 @@ mod tests {
             cnx: [(src: "src2", dst: "sink", msg: "msg1"), (src: "src1", dst: "sink", msg: "msg2")],
             logging: ( slab_size_mib: 200, section_size_mib: 1024, )
         )"#;
-        let config = CuConfig::deserialize_ron(txt);
+        let config = CuConfig::deserialize_ron(txt).unwrap();
         let logging_config = config.logging.unwrap();
         assert_eq!(logging_config.keyframe_interval.unwrap(), 100);
     }

@@ -26,12 +26,17 @@ impl CuSrcTask for Vlp16 {
     where
         Self: Sized,
     {
-        let config: &ComponentConfig = config.expect("Vlp16 requires a config");
+        let config: &ComponentConfig =
+            config.ok_or_else(|| CuError::from("Vlp16 requires a config"))?;
         let listen_addr: String = config
-            .get("listen_addr")
+            .get::<String>("listen_addr")?
             .unwrap_or("0.0.0.0:2368".to_string());
-        let return_type: String = config.get("return_type").unwrap_or("last".to_string());
-        let test_mode: String = config.get("test_mode").unwrap_or("false".to_string());
+        let return_type: String = config
+            .get::<String>("return_type")?
+            .unwrap_or("last".to_string());
+        let test_mode: String = config
+            .get::<String>("test_mode")?
+            .unwrap_or("false".to_string());
         let velo_config = match return_type.as_str() {
             "strongest" => Config16::new_vlp_16_strongest(),
             "last" => Config16::new_vlp_16_last(),

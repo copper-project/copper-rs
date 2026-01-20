@@ -138,8 +138,8 @@ impl CuSinkTask for SN754410 {
     {
         let (deadzone, dryrun) = match config {
             Some(config) => (
-                config.get::<f64>("deadzone").unwrap_or(0.0) as f32,
-                config.get::<bool>("dryrun").unwrap_or(false),
+                config.get::<f64>("deadzone")?.unwrap_or(0.0) as f32,
+                config.get::<bool>("dryrun")?.unwrap_or(false),
             ),
             None => (0.0, false),
         };

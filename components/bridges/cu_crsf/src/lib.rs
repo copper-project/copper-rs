@@ -241,14 +241,14 @@ impl ResourceBundle for StdSerialBundle {
                 bundle.bundle_id()
             ))
         })?;
-        let path = cfg.get::<String>(SERIAL_PATH_KEY).ok_or_else(|| {
+        let path = cfg.get::<String>(SERIAL_PATH_KEY)?.ok_or_else(|| {
             CuError::from(format!(
                 "CRSF serial bundle `{}` missing `serial_path` entry",
                 bundle.bundle_id()
             ))
         })?;
-        let baud = cfg.get::<u32>(SERIAL_BAUD_KEY).unwrap_or(420_000);
-        let timeout_ms = cfg.get::<u32>(SERIAL_TIMEOUT_KEY).unwrap_or(100) as u64;
+        let baud = cfg.get::<u32>(SERIAL_BAUD_KEY)?.unwrap_or(420_000);
+        let timeout_ms = cfg.get::<u32>(SERIAL_TIMEOUT_KEY)?.unwrap_or(100) as u64;
 
         let serial = std_serial::open(&path, baud, timeout_ms).map_err(|err| {
             CuError::from(format!(

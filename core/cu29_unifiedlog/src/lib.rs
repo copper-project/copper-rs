@@ -226,7 +226,10 @@ impl<S: SectionStorage, L: UnifiedLogWrite<S>> LogStream<S, L> {
         #[cfg(feature = "std")]
         let section = parent_logger
             .lock()
-            .expect("Could not lock a section at MmapStream creation")
+            .map_err(|e| {
+                CuError::from("Could not lock a section at LogStream creation")
+                    .add_cause(e.to_string().as_str())
+            })?
             .add_section(entry_type, minimum_allocation_amount)?;
 
         #[cfg(not(feature = "std"))]
@@ -290,9 +293,15 @@ impl<E: Encode, S: SectionStorage, L: UnifiedLogWrite<S>> WriteStream<E> for Log
                     self.current_section = logger_guard
                         .add_section(self.entry_type, self.minimum_allocation_amount)?;
 
-                    let result = self.current_section.append(obj).expect(
-                        "Failed to encode object in a newly minted section. Unrecoverable failure.",
-                    ); // If we fail just after creating a section, there is not much we can do, we need to bail.
+                    let result = self
+                        .current_section
+                        .append(obj)
+                        .map_err(|e| {
+                            CuError::from(
+                                "Failed to encode object in a newly minted section. Unrecoverable failure.",
+                            )
+                            .add_cause(e.to_string().as_str())
+                        })?; // If we fail just after creating a section, there is not much we can do.
 
                     self.current_position += result;
                     self.current_section.header.used += result as u32;

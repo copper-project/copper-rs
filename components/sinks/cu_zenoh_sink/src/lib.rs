@@ -53,13 +53,15 @@ where
         let config = config.ok_or(CuError::from("ZenohSink: Missing configuration"))?;
 
         // Get json zenoh config
-        let session_config = match config.get::<String>("zenoh_config_file") {
+        let session_config = match config.get::<String>("zenoh_config_file")? {
             Some(path) => Config::from_file(&path)
                 .map_err(cu_error_map("ZenohSink: Failed to create zenoh config"))?,
             None => Config::default(),
         };
 
-        let topic = config.get::<String>("topic").unwrap_or("copper".to_owned());
+        let topic = config
+            .get::<String>("topic")?
+            .unwrap_or("copper".to_owned());
 
         Ok(Self {
             _marker: Default::default(),

@@ -112,11 +112,16 @@ mod tests {
             .1;
 
         assert_eq!(left_motor.get_type(), "tasks::RPGpio");
-        assert_eq!(left_motor.get_param::<i32>("pin").unwrap(), 4);
         assert_eq!(
-            left_motor.get_param::<String>("direction").unwrap(),
-            "forward"
+            left_motor
+                .get_param::<i32>("pin")
+                .expect("pin lookup failed"),
+            Some(4)
         );
+        let left_direction = left_motor
+            .get_param::<String>("direction")
+            .expect("direction lookup failed");
+        assert_eq!(left_direction.as_deref(), Some("forward"));
 
         // Verify parameter substitution for the right motor
         let right_motor = all_nodes
@@ -126,11 +131,16 @@ mod tests {
             .1;
 
         assert_eq!(right_motor.get_type(), "tasks::RPGpio");
-        assert_eq!(right_motor.get_param::<i32>("pin").unwrap(), 5);
         assert_eq!(
-            right_motor.get_param::<String>("direction").unwrap(),
-            "reverse"
+            right_motor
+                .get_param::<i32>("pin")
+                .expect("pin lookup failed"),
+            Some(5)
         );
+        let right_direction = right_motor
+            .get_param::<String>("direction")
+            .expect("direction lookup failed");
+        assert_eq!(right_direction.as_deref(), Some("reverse"));
 
         // Get the graph and verify connections
         let graph = config.graphs.get_graph(None).unwrap();
@@ -294,7 +304,12 @@ mod tests {
             .1;
 
         assert_eq!(front_sensor.get_type(), "tasks::SensorInfrared");
-        assert_eq!(front_sensor.get_param::<i32>("rate").unwrap(), 20);
+        assert_eq!(
+            front_sensor
+                .get_param::<i32>("rate")
+                .expect("rate lookup failed"),
+            Some(20)
+        );
 
         // Verify rear sensor parameters
         let rear_sensor = all_nodes
@@ -304,7 +319,12 @@ mod tests {
             .1;
 
         assert_eq!(rear_sensor.get_type(), "tasks::SensorUltrasonic");
-        assert_eq!(rear_sensor.get_param::<i32>("rate").unwrap(), 10);
+        assert_eq!(
+            rear_sensor
+                .get_param::<i32>("rate")
+                .expect("rate lookup failed"),
+            Some(10)
+        );
 
         // Verify front processor parameters
         let front_processor = all_nodes
@@ -313,7 +333,12 @@ mod tests {
             .unwrap()
             .1;
 
-        assert_eq!(front_processor.get_param::<f64>("threshold").unwrap(), 0.75);
+        assert_eq!(
+            front_processor
+                .get_param::<f64>("threshold")
+                .expect("threshold lookup failed"),
+            Some(0.75)
+        );
 
         // Verify rear processor parameters
         let rear_processor = all_nodes
@@ -322,7 +347,12 @@ mod tests {
             .unwrap()
             .1;
 
-        assert_eq!(rear_processor.get_param::<f64>("threshold").unwrap(), 0.5);
+        assert_eq!(
+            rear_processor
+                .get_param::<f64>("threshold")
+                .expect("threshold lookup failed"),
+            Some(0.5)
+        );
 
         // Get the graph and verify connections
         let graph = config.graphs.get_graph(None).unwrap();
@@ -450,8 +480,16 @@ mod tests {
             .1;
 
         assert_eq!(source.get_type(), "tasks::CustomSource");
-        assert_eq!(source.get_param::<String>("param").unwrap(), "custom");
-        assert!(source.get_param::<bool>("additional").unwrap());
+        let source_param = source
+            .get_param::<String>("param")
+            .expect("param lookup failed");
+        assert_eq!(source_param.as_deref(), Some("custom"));
+        assert_eq!(
+            source
+                .get_param::<bool>("additional")
+                .expect("additional lookup failed"),
+            Some(true)
+        );
 
         // Verify processor remains from base config
         let processor = all_nodes

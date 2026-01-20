@@ -407,11 +407,11 @@ impl ResourceBundle for StdSerialBundle {
             ))
         })?;
         let device = cfg
-            .get::<String>(DEVICE_KEY)
+            .get::<String>(DEVICE_KEY)?
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| DEFAULT_DEVICE.to_string());
-        let baudrate = cfg.get::<u32>(BAUD_KEY).unwrap_or(DEFAULT_BAUDRATE);
-        let timeout_ms = cfg.get::<u64>(TIMEOUT_KEY).unwrap_or(DEFAULT_TIMEOUT_MS);
+        let baudrate = cfg.get::<u32>(BAUD_KEY)?.unwrap_or(DEFAULT_BAUDRATE);
+        let timeout_ms = cfg.get::<u64>(TIMEOUT_KEY)?.unwrap_or(DEFAULT_TIMEOUT_MS);
 
         let serial = std_serial::open(&device, baudrate, timeout_ms).map_err(|err| {
             CuError::from(format!(

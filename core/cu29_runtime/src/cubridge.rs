@@ -579,7 +579,7 @@ mod tests {
         ) -> CuResult<Self> {
             let mut instance = ExampleBridge::default();
             if let Some(cfg) = config
-                && let Some(port) = cfg.get::<String>("port")
+                && let Some(port) = cfg.get::<String>("port")?
             {
                 instance.port = port;
             }

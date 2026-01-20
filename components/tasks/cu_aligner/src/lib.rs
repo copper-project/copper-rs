@@ -36,11 +36,11 @@ macro_rules! define_task {
             {
                 let config = config.ok_or_else(|| cu29::CuError::from("Config Missing"))?;
                 let target_alignment_window_ms: u64 = config
-                    .get::<u32>("target_alignment_window_ms")
+                    .get::<u32>("target_alignment_window_ms")?
                     .ok_or_else(|| cu29::CuError::from("Missing target_alignment_window"))?
                     .into();
                 let stale_data_horizon_ms: u64 = config
-                    .get::<u32>("stale_data_horizon_ms")
+                    .get::<u32>("stale_data_horizon_ms")?
                     .ok_or_else(|| cu29::CuError::from("Missing stale_data_horizon"))?
                     .into();
 

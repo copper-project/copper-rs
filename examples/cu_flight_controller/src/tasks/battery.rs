@@ -22,15 +22,15 @@ impl CuSrcTask for BatteryAdcSource {
     where
         Self: Sized,
     {
-        let vref_mv = cfg_u32(config, "vref_mv", BATTERY_VREF_MV_DEFAULT).max(1);
-        let vbat_scale = cfg_u32(config, "vbat_scale", BATTERY_VBAT_SCALE_DEFAULT);
+        let vref_mv = cfg_u32(config, "vref_mv", BATTERY_VREF_MV_DEFAULT)?.max(1);
+        let vbat_scale = cfg_u32(config, "vbat_scale", BATTERY_VBAT_SCALE_DEFAULT)?;
         let vbat_res_div_val =
-            cfg_u32(config, "vbat_res_div_val", BATTERY_VBAT_RES_DIV_VAL_DEFAULT).max(1);
+            cfg_u32(config, "vbat_res_div_val", BATTERY_VBAT_RES_DIV_VAL_DEFAULT)?.max(1);
         let vbat_res_div_mult = cfg_u32(
             config,
             "vbat_res_div_mult",
             BATTERY_VBAT_RES_DIV_MULT_DEFAULT,
-        )
+        )?
         .max(1);
         Ok(Self {
             adc: resources.battery_adc.0,

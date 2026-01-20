@@ -195,14 +195,16 @@ impl CuTask for AprilTags {
         Self: Sized,
     {
         if let Some(config) = _config {
-            let family_cfg: String = config.get("family").unwrap_or(FAMILY.to_string());
+            let family_cfg = config
+                .get::<String>("family")?
+                .unwrap_or(FAMILY.to_string());
             let family: Family = family_cfg.parse().unwrap();
-            let bits_corrected: u32 = config.get("bits_corrected").unwrap_or(1);
-            let tagsize = config.get("tag_size").unwrap_or(TAG_SIZE);
-            let fx = config.get("fx").unwrap_or(FX);
-            let fy = config.get("fy").unwrap_or(FY);
-            let cx = config.get("cx").unwrap_or(CX);
-            let cy = config.get("cy").unwrap_or(CY);
+            let bits_corrected: u32 = config.get::<u32>("bits_corrected")?.unwrap_or(1);
+            let tagsize = config.get::<f64>("tag_size")?.unwrap_or(TAG_SIZE);
+            let fx = config.get::<f64>("fx")?.unwrap_or(FX);
+            let fy = config.get::<f64>("fy")?.unwrap_or(FY);
+            let cx = config.get::<f64>("cx")?.unwrap_or(CX);
+            let cy = config.get::<f64>("cy")?.unwrap_or(CY);
             let tag_params = TagParams {
                 fx,
                 fy,

@@ -64,7 +64,7 @@ impl<P: BdshotBoardProvider> CuBridge for CuBdshotBridge<P> {
             active[ch.channel.id.as_index()] = true;
         }
         let send_interval = if let Some(cfg) = config {
-            if let Some(rate_hz) = cfg.get::<f64>("rate_hz") {
+            if let Some(rate_hz) = cfg.get::<f64>("rate_hz")? {
                 if rate_hz <= 0.0 {
                     return Err(CuError::from("BDShot rate_hz must be > 0"));
                 }

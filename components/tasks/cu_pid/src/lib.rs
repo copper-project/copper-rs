@@ -168,31 +168,30 @@ where
             Some(config) => {
                 debug!("PIDTask config loaded");
                 let setpoint: f32 = config
-                    .get::<f64>("setpoint")
+                    .get::<f64>("setpoint")?
                     .ok_or("'setpoint' not found in config")?
                     as f32;
 
-                let cutoff: f32 = config.get::<f64>("cutoff").ok_or(
+                let cutoff: f32 = config.get::<f64>("cutoff")?.ok_or(
                     "'cutoff' not found in config, please set an operating +/- limit on the input.",
                 )? as f32;
 
                 // p is mandatory
-                let kp = if let Some(kp) = config.get::<f64>("kp") {
-                    Ok(kp as f32)
-                } else {
-                    Err(CuError::from(
+                let kp = match config.get::<f64>("kp")? {
+                    Some(kp) => Ok(kp as f32),
+                    None => Err(CuError::from(
                         "'kp' not found in the config. We need at least 'kp' to make the PID algorithm work.",
-                    ))
+                    )),
                 }?;
 
-                let p_limit = getcfg(config, "pl", 2.0f32);
-                let ki = getcfg(config, "ki", 0.0f32);
-                let i_limit = getcfg(config, "il", 1.0f32);
-                let kd = getcfg(config, "kd", 0.0f32);
-                let d_limit = getcfg(config, "dl", 2.0f32);
-                let output_limit = getcfg(config, "ol", 1.0f32);
+                let p_limit = getcfg(config, "pl", 2.0f32)?;
+                let ki = getcfg(config, "ki", 0.0f32)?;
+                let i_limit = getcfg(config, "il", 1.0f32)?;
+                let kd = getcfg(config, "kd", 0.0f32)?;
+                let d_limit = getcfg(config, "dl", 2.0f32)?;
+                let output_limit = getcfg(config, "ol", 1.0f32)?;
 
-                let sampling = if let Some(value) = config.get::<u32>("sampling_ms") {
+                let sampling = if let Some(value) = config.get::<u32>("sampling_ms")? {
                     CuDuration::from(value as u64 * 1_000_000u64)
                 } else {
                     CuDuration::default()
@@ -301,10 +300,9 @@ where
 }
 
 // Small helper befause we do this again and again
-fn getcfg(config: &ComponentConfig, key: &str, default: f32) -> f32 {
-    if let Some(value) = config.get::<f64>(key) {
-        value as f32
-    } else {
-        default
-    }
+fn getcfg(config: &ComponentConfig, key: &str, default: f32) -> Result<f32, ConfigError> {
+    Ok(config
+        .get::<f64>(key)?
+        .map(|value| value as f32)
+        .unwrap_or(default))
 }

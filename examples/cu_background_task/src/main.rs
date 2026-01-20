@@ -43,7 +43,10 @@ pub mod tasks {
         where
             Self: Sized,
         {
-            let sleep_duration_ms: u64 = config.unwrap().get("sleep_duration_ms").unwrap();
+            let config = config.ok_or_else(|| CuError::from("Missing config"))?;
+            let sleep_duration_ms = config
+                .get::<u64>("sleep_duration_ms")?
+                .ok_or_else(|| CuError::from("Missing sleep_duration_ms"))?;
             Ok(Self { sleep_duration_ms })
         }
 

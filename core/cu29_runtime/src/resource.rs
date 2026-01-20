@@ -410,10 +410,13 @@ impl ResourceBundle for ThreadPoolBundle {
         use rayon::ThreadPoolBuilder;
 
         const DEFAULT_THREADS: usize = 2;
-        let threads: usize = config
-            .and_then(|cfg| cfg.get::<u64>("threads"))
-            .map(|v| v as usize)
-            .unwrap_or(DEFAULT_THREADS);
+        let threads: usize = match config {
+            Some(cfg) => cfg
+                .get::<u64>("threads")?
+                .map(|v| v as usize)
+                .unwrap_or(DEFAULT_THREADS),
+            None => DEFAULT_THREADS,
+        };
 
         let pool = ThreadPoolBuilder::new()
             .num_threads(threads)

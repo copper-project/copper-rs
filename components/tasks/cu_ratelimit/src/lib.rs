@@ -37,9 +37,12 @@ where
     type Output<'m> = output_msg!(T);
 
     fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self> {
-        let hz = config
-            .and_then(|cfg| cfg.get::<f64>("rate"))
-            .ok_or("Missing required 'rate' config for CuRateLimiter")?;
+        let hz = match config {
+            Some(cfg) => cfg
+                .get::<f64>("rate")?
+                .ok_or("Missing required 'rate' config for CuRateLimiter")?,
+            None => return Err("Missing required 'rate' config for CuRateLimiter".into()),
+        };
         let interval_ns = (1e9 / hz) as u64;
         Ok(Self {
             _marker: PhantomData,
