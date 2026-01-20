@@ -124,6 +124,7 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
             use core::fmt::Formatter;
             use core::fmt::Result as FmtResult;
             use alloc::vec;
+            use alloc::vec::Vec;
         }
     } else {
         quote! {
@@ -238,6 +239,8 @@ fn gen_culist_support(
         }
     };
 
+    let cumsg_count: usize = output_packs.iter().map(|pack| pack.msg_types.len()).sum();
+
     let payload_bytes_accumulators: Vec<proc_macro2::TokenStream> = culist_indices_in_plan_order
         .iter()
         .map(|idx| {
@@ -267,12 +270,55 @@ fn gen_culist_support(
         })
         .collect();
 
+    let payload_raw_bytes_accumulators: Vec<proc_macro2::TokenStream> = output_packs
+        .iter()
+        .enumerate()
+        .map(|(slot_idx, pack)| {
+            let slot_index = syn::Index::from(slot_idx);
+            if pack.is_multi() {
+                let iter = (0..pack.msg_types.len()).map(|port_idx| {
+                    let port_index = syn::Index::from(port_idx);
+                    quote! {
+                        if let Some(payload) = self.0.#slot_index.#port_index.payload() {
+                            bytes.push(Some(
+                                cu29::monitoring::CuPayloadSize::raw_bytes(payload) as u64
+                            ));
+                        } else {
+                            bytes.push(None);
+                        }
+                    }
+                });
+                quote! { #(#iter)* }
+            } else {
+                quote! {
+                    if let Some(payload) = self.0.#slot_index.payload() {
+                        bytes.push(Some(
+                            cu29::monitoring::CuPayloadSize::raw_bytes(payload) as u64
+                        ));
+                    } else {
+                        bytes.push(None);
+                    }
+                }
+            }
+        })
+        .collect();
+
     let compute_payload_bytes_fn = quote! {
         pub fn compute_payload_bytes(culist: &CuList) -> (u64, u64) {
             let mut raw: usize = 0;
             let mut handles: usize = 0;
             #(#payload_bytes_accumulators)*
             (raw as u64, handles as u64)
+        }
+    };
+
+    let payload_raw_bytes_impl = quote! {
+        impl ::cu29::CuPayloadRawBytes for CuStampedDataSet {
+            fn payload_raw_bytes(&self) -> Vec<Option<u64>> {
+                let mut bytes: Vec<Option<u64>> = Vec::with_capacity(#cumsg_count);
+                #(#payload_raw_bytes_accumulators)*
+                bytes
+            }
         }
     };
 
@@ -344,6 +390,8 @@ fn gen_culist_support(
                 &mut self.0
             }
         }
+
+        #payload_raw_bytes_impl
 
         impl MatchingTasks for CuStampedDataSet {
             #[allow(dead_code)]

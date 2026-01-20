@@ -12,17 +12,20 @@ use layout::core::geometry::{Point, get_size_for_str, pad_shape_scalar};
 use layout::core::style::{LineStyleKind, StyleAttr};
 use layout::std_shapes::shapes::{Arrow, Element, LineEndKind, RecordDef, ShapeKind};
 use layout::topo::layout::VisualGraph;
+use serde::Deserialize;
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashSet};
+use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
 use svg::Document;
 use svg::node::Node;
+use svg::node::Text as SvgTextNode;
 use svg::node::element::path::Data;
 use svg::node::element::{
     Circle, Definitions, Element as SvgElement, Group, Image, Line, Marker, Path as SvgPath,
-    Polygon, Rectangle, Text, TextPath,
+    Polygon, Rectangle, Text, TextPath, Title,
 };
 use tempfile::Builder;
 
@@ -41,6 +44,7 @@ const MODULE_TRUNC_MARKER: &str = "…";
 const MODULE_SEPARATOR: &str = "⠶";
 const PLACEHOLDER_TEXT: &str = "\u{2014}";
 const COPPER_LOGO_SVG: &str = include_str!("../assets/cu29.svg");
+const LOGSTATS_SCHEMA_VERSION: u32 = 1;
 
 // Color palette and fills.
 const BORDER_COLOR: &str = "#999999";
@@ -58,6 +62,7 @@ const RESOURCE_EXCLUSIVE_BG: &str = "#e3f4e7";
 const RESOURCE_SHARED_BG: &str = "#fff0d9";
 const RESOURCE_UNUSED_BG: &str = "#f1f1f1";
 const RESOURCE_UNUSED_TEXT: &str = "#8d8d8d";
+const PERF_TITLE_BG: &str = "#eaf2ff";
 const COPPER_LINK_COLOR: &str = "#0000E0";
 const EDGE_COLOR_PALETTE: [&str; 10] = [
     "#1F77B4", "#FF7F0E", "#2CA02C", "#D62728", "#9467BD", "#8C564B", "#E377C2", "#7F7F7F",
@@ -84,6 +89,18 @@ const EDGE_LABEL_FIT_RATIO: f64 = 0.8;
 const EDGE_LABEL_OFFSET: f64 = 8.0;
 const EDGE_LABEL_LIGHTEN: f64 = 0.35;
 const EDGE_LABEL_HALO_WIDTH: f64 = 3.0;
+const EDGE_HITBOX_STROKE_WIDTH: usize = 12;
+const EDGE_HITBOX_OPACITY: f64 = 0.01;
+const EDGE_TOOLTIP_CSS: &str = r#"
+.edge-hover .edge-tooltip {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease-out;
+}
+.edge-hover:hover .edge-tooltip {
+  opacity: 1;
+}
+"#;
 const DETOUR_LABEL_CLEARANCE: f64 = 6.0;
 const BACK_EDGE_STACK_SPACING: f64 = 16.0;
 const BACK_EDGE_NODE_GAP: f64 = 12.0;
@@ -93,6 +110,16 @@ const INTERMEDIATE_X_EPS: f64 = 6.0;
 const EDGE_STUB_LEN: f64 = 32.0;
 const EDGE_STUB_MIN: f64 = 18.0;
 const EDGE_PORT_HANDLE: f64 = 12.0;
+const TOOLTIP_FONT_SIZE: usize = 9;
+const TOOLTIP_PADDING: f64 = 6.0;
+const TOOLTIP_LINE_GAP: f64 = 2.0;
+const TOOLTIP_RADIUS: f64 = 3.0;
+const TOOLTIP_OFFSET_X: f64 = 12.0;
+const TOOLTIP_OFFSET_Y: f64 = 12.0;
+const TOOLTIP_BORDER_WIDTH: f64 = 1.0;
+const TOOLTIP_BG: &str = "#fff7d1";
+const TOOLTIP_BORDER: &str = "#d9c37f";
+const TOOLTIP_TEXT: &str = "#111111";
 const PORT_DOT_RADIUS: f64 = 2.6;
 const PORT_LINE_GAP: f64 = 2.8;
 const LEGEND_TITLE_SIZE: usize = 11;
@@ -128,6 +155,9 @@ struct Args {
     /// Config file name
     #[clap(value_parser)]
     config: PathBuf,
+    /// Log statistics JSON file to enrich the DAG
+    #[clap(long)]
+    logstats: Option<PathBuf>,
     /// Mission id to render (omit to render every mission)
     #[clap(long)]
     mission: Option<String>,
@@ -161,7 +191,18 @@ fn main() -> std::io::Result<()> {
         }
     };
 
-    let graph_svg = match render_config_svg(&config, mission.as_deref()) {
+    let logstats = match args.logstats.as_ref() {
+        Some(path) => match load_logstats(path, &config, args.mission.as_deref()) {
+            Ok(stats) => Some(stats),
+            Err(err) => {
+                eprintln!("{err}");
+                std::process::exit(1);
+            }
+        },
+        None => None,
+    };
+
+    let graph_svg = match render_config_svg(&config, mission.as_deref(), logstats.as_ref()) {
         Ok(svg) => svg,
         Err(err) => {
             eprintln!("{err}");
@@ -207,15 +248,91 @@ fn open_svg(path: &std::path::Path) -> std::io::Result<()> {
 }
 
 /// Run the full render pipeline and return SVG bytes for the CLI.
-fn render_config_svg(config: &config::CuConfig, mission_id: Option<&str>) -> CuResult<Vec<u8>> {
+fn render_config_svg(
+    config: &config::CuConfig,
+    mission_id: Option<&str>,
+    logstats: Option<&LogStatsIndex>,
+) -> CuResult<Vec<u8>> {
     let sections = build_sections(config, mission_id)?;
     let resource_catalog = collect_resource_catalog(config)?;
     let mut layouts = Vec::new();
+    let mut logstats_applied = false;
     for section in sections {
-        layouts.push(build_section_layout(config, &section, &resource_catalog)?);
+        let section_logstats =
+            logstats.filter(|stats| stats.applies_to(section.mission_id.as_deref()));
+        if section_logstats.is_some() {
+            logstats_applied = true;
+        }
+        layouts.push(build_section_layout(
+            config,
+            &section,
+            &resource_catalog,
+            section_logstats,
+        )?);
+    }
+    if logstats.is_some() && !logstats_applied {
+        eprintln!("Warning: logstats did not match any rendered mission");
     }
 
     Ok(render_sections_to_svg(&layouts).into_bytes())
+}
+
+fn load_logstats(
+    path: &PathBuf,
+    config: &config::CuConfig,
+    expected_mission: Option<&str>,
+) -> CuResult<LogStatsIndex> {
+    let contents = fs::read_to_string(path)
+        .map_err(|e| CuError::new_with_cause("Failed to read logstats file", e))?;
+    let logstats: LogStats = serde_json::from_str(&contents)
+        .map_err(|e| CuError::new_with_cause("Failed to parse logstats JSON", e))?;
+
+    if logstats.schema_version != LOGSTATS_SCHEMA_VERSION {
+        eprintln!(
+            "Warning: logstats schema version {} does not match renderer {}",
+            logstats.schema_version, LOGSTATS_SCHEMA_VERSION
+        );
+    }
+
+    if let Ok(signature) = build_graph_signature(config, logstats.mission.as_deref()) {
+        if signature != logstats.config_signature {
+            eprintln!(
+                "Warning: logstats signature mismatch (expected {}, got {})",
+                signature, logstats.config_signature
+            );
+        }
+    } else {
+        eprintln!("Warning: unable to validate logstats signature");
+    }
+
+    if expected_mission.is_some()
+        && mission_key(expected_mission) != mission_key(logstats.mission.as_deref())
+    {
+        eprintln!(
+            "Warning: logstats mission '{}' does not match requested mission '{}'",
+            logstats.mission.as_deref().unwrap_or("default"),
+            expected_mission.unwrap_or("default")
+        );
+    }
+
+    let edge_map = logstats
+        .edges
+        .into_iter()
+        .map(|edge| {
+            let key = EdgeStatsKey {
+                src: edge.src.clone(),
+                dst: edge.dst.clone(),
+                msg: edge.msg.clone(),
+            };
+            (key, edge)
+        })
+        .collect();
+
+    Ok(LogStatsIndex {
+        mission: logstats.mission,
+        edges: edge_map,
+        perf: logstats.perf,
+    })
 }
 
 /// Normalize mission selection into a list of sections to render.
@@ -261,6 +378,7 @@ fn build_section_layout(
     config: &config::CuConfig,
     section: &SectionRef<'_>,
     resource_catalog: &HashMap<String, BTreeSet<String>>,
+    logstats: Option<&LogStatsIndex>,
 ) -> CuResult<SectionLayout> {
     let mut topology = build_render_topology(section.graph, &config.bridges);
     topology.sort_connections();
@@ -349,6 +467,16 @@ fn build_section_layout(
             &dst_port,
         );
         graph.add_edge(arrow.clone(), *src_handle, *dst_handle);
+        let edge_stats = logstats.and_then(|stats| {
+            stats
+                .edges
+                .get(&EdgeStatsKey {
+                    src: cnx.src.clone(),
+                    dst: cnx.dst.clone(),
+                    msg: cnx.msg.clone(),
+                })
+                .cloned()
+        });
         let group_key = EdgeGroupKey {
             src: *src_handle,
             src_port: src_port.clone(),
@@ -374,6 +502,7 @@ fn build_section_layout(
             color_idx,
             src_port,
             dst_port,
+            stats: edge_stats,
         });
     }
 
@@ -407,6 +536,7 @@ fn build_section_layout(
     }
 
     let resource_tables = build_resource_tables(config, section, resource_catalog)?;
+    let perf_table = logstats.map(|stats| build_perf_table(&stats.perf));
 
     Ok(SectionLayout {
         label: section.label.clone(),
@@ -416,6 +546,7 @@ fn build_section_layout(
         bounds: (min, max),
         port_anchors,
         resource_tables,
+        perf_table,
     })
 }
 
@@ -565,6 +696,77 @@ fn build_resource_table(
     ]));
 
     TableNode::Array(rows)
+}
+
+fn build_perf_table(perf: &PerfStats) -> ResourceTable {
+    let header_lines = vec![CellLine::new("Log Performance", "black", true, FONT_SIZE)];
+    let mut rows = Vec::new();
+    rows.push(TableNode::Cell(
+        TableCell::new(header_lines)
+            .with_background(PERF_TITLE_BG)
+            .with_align(TextAlign::Center),
+    ));
+
+    let mut metric_column = Vec::new();
+    let mut value_column = Vec::new();
+    metric_column.push(TableNode::Cell(
+        TableCell::single_line_sized("Metric", "black", false, PORT_HEADER_FONT_SIZE)
+            .with_background(HEADER_BG)
+            .with_align(TextAlign::Left),
+    ));
+    value_column.push(TableNode::Cell(
+        TableCell::single_line_sized("Value", "black", false, PORT_HEADER_FONT_SIZE)
+            .with_background(HEADER_BG)
+            .with_align(TextAlign::Left),
+    ));
+
+    let sample_text = format!("{}/{}", perf.valid_time_samples, perf.samples);
+    let metrics = [
+        ("Samples (valid/total)", sample_text),
+        (
+            "End-to-end mean",
+            format_duration_ns_f64(perf.end_to_end.mean_ns),
+        ),
+        (
+            "End-to-end min",
+            format_duration_ns_u64(perf.end_to_end.min_ns),
+        ),
+        (
+            "End-to-end max",
+            format_duration_ns_u64(perf.end_to_end.max_ns),
+        ),
+        (
+            "End-to-end sigma",
+            format_duration_ns_f64(perf.end_to_end.stddev_ns),
+        ),
+        ("Jitter mean", format_duration_ns_f64(perf.jitter.mean_ns)),
+        (
+            "Jitter sigma",
+            format_duration_ns_f64(perf.jitter.stddev_ns),
+        ),
+    ];
+
+    for (label, value) in metrics {
+        metric_column.push(TableNode::Cell(
+            TableCell::single_line_sized(label, "black", false, PORT_VALUE_FONT_SIZE)
+                .with_border_width(VALUE_BORDER_WIDTH)
+                .with_align(TextAlign::Left),
+        ));
+        value_column.push(TableNode::Cell(
+            TableCell::single_line_sized(&value, "black", false, PORT_VALUE_FONT_SIZE)
+                .with_border_width(VALUE_BORDER_WIDTH)
+                .with_align(TextAlign::Left),
+        ));
+    }
+
+    rows.push(TableNode::Array(vec![
+        TableNode::Array(metric_column),
+        TableNode::Array(value_column),
+    ]));
+
+    let table = TableNode::Array(rows);
+    let size = record_size(&table, Orientation::TopToBottom);
+    ResourceTable { table, size }
 }
 
 fn collect_graph_resource_owners(
@@ -1163,15 +1365,23 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
             edge_paths.push(path);
         }
 
-        let mut resource_table_positions: Vec<(Point, &ResourceTable)> = Vec::new();
-        if !section.resource_tables.is_empty() {
+        let mut info_tables: Vec<&ResourceTable> = Vec::new();
+        if let Some(table) = &section.perf_table {
+            info_tables.push(table);
+        }
+        for table in &section.resource_tables {
+            info_tables.push(table);
+        }
+
+        let mut info_table_positions: Vec<(Point, &ResourceTable)> = Vec::new();
+        if !info_tables.is_empty() {
             let content_left = expanded_bounds.0.x;
             let content_bottom = expanded_bounds.1.y;
             let mut max_table_width: f64 = 0.0;
             let mut cursor_table_y = content_bottom + RESOURCE_TABLE_MARGIN;
-            for table in &section.resource_tables {
+            for table in &info_tables {
                 let top_left = Point::new(content_left, cursor_table_y);
-                resource_table_positions.push((top_left, table));
+                info_table_positions.push((top_left, *table));
                 cursor_table_y += table.size.y + RESOURCE_TABLE_GAP;
                 max_table_width = max_table_width.max(table.size.x);
             }
@@ -1232,7 +1442,7 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
             ));
         }
 
-        for (top_left, table) in &resource_table_positions {
+        for (top_left, table) in &info_table_positions {
             let top_left = top_left.add(content_offset);
             let bottom_right = Point::new(top_left.x + table.size.x, top_left.y + table.size.y);
             blocked_boxes.push((
@@ -1386,7 +1596,15 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
             };
 
             let edge_look = colored_edge_style(&edge.arrow.look, line_color);
-            svg.draw_arrow(&path, dashed, (start, end), &edge_look, label.as_ref());
+            let tooltip = edge.stats.as_ref().map(format_edge_tooltip);
+            svg.draw_arrow(
+                &path,
+                dashed,
+                (start, end),
+                &edge_look,
+                label.as_ref(),
+                tooltip.as_deref(),
+            );
         }
 
         for node in &section.nodes {
@@ -1394,7 +1612,7 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
             draw_node_table(&mut svg, node, element, content_offset);
         }
 
-        for (top_left, table) in &resource_table_positions {
+        for (top_left, table) in &info_table_positions {
             draw_resource_table(&mut svg, table, top_left.add(content_offset));
         }
 
@@ -1806,6 +2024,7 @@ struct SectionLayout {
     bounds: (Point, Point),
     port_anchors: HashMap<NodeHandle, HashMap<String, Point>>,
     resource_tables: Vec<ResourceTable>,
+    perf_table: Option<ResourceTable>,
 }
 
 struct NodeRender {
@@ -1831,6 +2050,57 @@ enum ResourceUsage {
     Unused,
 }
 
+#[derive(Clone, Deserialize)]
+struct LogStats {
+    schema_version: u32,
+    config_signature: String,
+    mission: Option<String>,
+    edges: Vec<EdgeLogStats>,
+    perf: PerfStats,
+}
+
+#[derive(Clone, Deserialize)]
+struct EdgeLogStats {
+    src: String,
+    dst: String,
+    msg: String,
+    samples: u64,
+    none_samples: u64,
+    valid_time_samples: u64,
+    total_raw_bytes: u64,
+    avg_raw_bytes: Option<f64>,
+    rate_hz: Option<f64>,
+    throughput_bytes_per_sec: Option<f64>,
+}
+
+#[derive(Clone, Deserialize)]
+struct PerfStats {
+    samples: u64,
+    valid_time_samples: u64,
+    end_to_end: DurationStats,
+    jitter: DurationStats,
+}
+
+#[derive(Clone, Deserialize)]
+struct DurationStats {
+    min_ns: Option<u64>,
+    max_ns: Option<u64>,
+    mean_ns: Option<f64>,
+    stddev_ns: Option<f64>,
+}
+
+struct LogStatsIndex {
+    mission: Option<String>,
+    edges: HashMap<EdgeStatsKey, EdgeLogStats>,
+    perf: PerfStats,
+}
+
+impl LogStatsIndex {
+    fn applies_to(&self, mission_id: Option<&str>) -> bool {
+        mission_key(self.mission.as_deref()) == mission_key(mission_id)
+    }
+}
+
 struct RenderEdge {
     src: NodeHandle,
     dst: NodeHandle,
@@ -1839,12 +2109,20 @@ struct RenderEdge {
     color_idx: usize,
     src_port: Option<String>,
     dst_port: Option<String>,
+    stats: Option<EdgeLogStats>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 struct EdgeGroupKey {
     src: NodeHandle,
     src_port: Option<String>,
+    msg: String,
+}
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+struct EdgeStatsKey {
+    src: String,
+    dst: String,
     msg: String,
 }
 
@@ -2173,6 +2451,10 @@ impl SvgWriter {
             );
         defs.append(start_marker);
         defs.append(end_marker);
+        let mut style = SvgElement::new("style");
+        style.assign("type", "text/css");
+        style.append(SvgTextNode::new(EDGE_TOOLTIP_CSS));
+        defs.append(style);
 
         Self {
             content: Group::new(),
@@ -2326,6 +2608,7 @@ impl SvgWriter {
         head: (bool, bool),
         look: &StyleAttr,
         label: Option<&ArrowLabel>,
+        tooltip: Option<&str>,
     ) {
         if path.is_empty() {
             return;
@@ -2346,7 +2629,7 @@ impl SvgWriter {
         let mut path_el = SvgPath::new()
             .set("id", path_id.clone())
             .set("d", path_data)
-            .set("stroke", stroke_color)
+            .set("stroke", stroke_color.clone())
             .set("stroke-width", look.line_width)
             .set("fill", "none");
         if dashed {
@@ -2405,6 +2688,13 @@ impl SvgWriter {
                 text_node.append(text_path);
                 self.overlay.append(text_node);
             }
+        }
+
+        if let Some(tooltip) = tooltip {
+            let (hover_group, tooltip_top_left, tooltip_size) =
+                build_edge_hover_overlay(path, tooltip, &stroke_color, look.line_width);
+            self.grow_window(tooltip_top_left, tooltip_size);
+            self.overlay.append(hover_group);
         }
 
         self.counter += 1;
@@ -3542,5 +3832,307 @@ fn scale_layout_positions(graph: &mut VisualGraph) {
         let center = graph.element(handle).position().center();
         let scaled = Point::new(center.x * LAYOUT_SCALE_X, center.y * LAYOUT_SCALE_Y);
         graph.element_mut(handle).position_mut().move_to(scaled);
+    }
+}
+
+fn build_edge_hover_overlay(
+    path: &[BezierSegment],
+    tooltip: &str,
+    stroke_color: &str,
+    line_width: usize,
+) -> (Group, Point, Point) {
+    let flat_tooltip = flatten_tooltip(tooltip);
+    let hitbox_width = line_width.max(EDGE_HITBOX_STROKE_WIDTH);
+    let mut hover_group = Group::new().set("class", "edge-hover");
+    let mut hitbox_el = SvgPath::new()
+        .set("d", build_path_data(path))
+        .set("title", flat_tooltip)
+        .set("stroke", stroke_color)
+        .set("stroke-opacity", EDGE_HITBOX_OPACITY)
+        .set("stroke-width", hitbox_width)
+        .set("fill", "none")
+        .set("pointer-events", "stroke")
+        .set("cursor", "help");
+    hitbox_el.append(Title::new(tooltip));
+    hover_group.append(hitbox_el);
+
+    let (tooltip_group, tooltip_top_left, tooltip_size) = build_edge_tooltip_group(path, tooltip);
+    hover_group.append(tooltip_group);
+
+    (hover_group, tooltip_top_left, tooltip_size)
+}
+
+fn build_edge_tooltip_group(path: &[BezierSegment], tooltip: &str) -> (Group, Point, Point) {
+    let lines: Vec<&str> = if tooltip.is_empty() {
+        vec![""]
+    } else {
+        tooltip.lines().collect()
+    };
+    let line_height = tooltip_line_height();
+    let mut max_width: f64 = 0.0;
+    for line in &lines {
+        let size = get_size_for_str(line, TOOLTIP_FONT_SIZE);
+        max_width = max_width.max(size.x);
+    }
+    let content_height = line_height * (lines.len() as f64);
+    let box_width = max_width + TOOLTIP_PADDING * 2.0;
+    let box_height = content_height + TOOLTIP_PADDING * 2.0;
+    let anchor = tooltip_anchor_for_path(path);
+    let top_left = Point::new(
+        anchor.x + TOOLTIP_OFFSET_X,
+        anchor.y - TOOLTIP_OFFSET_Y - box_height,
+    );
+
+    let mut group = Group::new()
+        .set("class", "edge-tooltip")
+        .set("pointer-events", "none");
+    let rect = Rectangle::new()
+        .set("x", top_left.x)
+        .set("y", top_left.y)
+        .set("width", box_width)
+        .set("height", box_height)
+        .set("rx", TOOLTIP_RADIUS)
+        .set("ry", TOOLTIP_RADIUS)
+        .set("fill", TOOLTIP_BG)
+        .set("stroke", TOOLTIP_BORDER)
+        .set("stroke-width", TOOLTIP_BORDER_WIDTH);
+    group.append(rect);
+
+    let text_x = top_left.x + TOOLTIP_PADDING;
+    let mut text_y = top_left.y + TOOLTIP_PADDING;
+    for line in lines {
+        let text = Text::new(line)
+            .set("x", text_x)
+            .set("y", text_y)
+            .set("dominant-baseline", "hanging")
+            .set("font-family", MONO_FONT_FAMILY)
+            .set("font-size", format!("{TOOLTIP_FONT_SIZE}px"))
+            .set("fill", TOOLTIP_TEXT);
+        group.append(text);
+        text_y += line_height;
+    }
+
+    (group, top_left, Point::new(box_width, box_height))
+}
+
+fn tooltip_line_height() -> f64 {
+    TOOLTIP_FONT_SIZE as f64 + TOOLTIP_LINE_GAP
+}
+
+fn tooltip_anchor_for_path(path: &[BezierSegment]) -> Point {
+    let mut min = Point::new(f64::INFINITY, f64::INFINITY);
+    let mut max = Point::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
+    for segment in path {
+        for point in [segment.start, segment.c1, segment.c2, segment.end] {
+            min.x = min.x.min(point.x);
+            min.y = min.y.min(point.y);
+            max.x = max.x.max(point.x);
+            max.y = max.y.max(point.y);
+        }
+    }
+    if !min.x.is_finite() || !min.y.is_finite() {
+        return Point::new(0.0, 0.0);
+    }
+    Point::new((min.x + max.x) / 2.0, (min.y + max.y) / 2.0)
+}
+
+fn format_edge_tooltip(stats: &EdgeLogStats) -> String {
+    [
+        format!("Message: {}", stats.msg),
+        format!(
+            "Message size (avg): {}",
+            format_bytes_opt(stats.avg_raw_bytes)
+        ),
+        format!(
+            "Rate: {}",
+            format_rate_bytes_per_sec(stats.throughput_bytes_per_sec)
+        ),
+        format!(
+            "None: {}",
+            format_none_ratio(stats.none_samples, stats.samples)
+        ),
+        format!("Message rate: {}", format_rate_hz(stats.rate_hz)),
+        format!(
+            "Total bytes: {}",
+            format_bytes(stats.total_raw_bytes as f64)
+        ),
+        format!(
+            "Time samples: {}/{}",
+            stats.valid_time_samples, stats.samples
+        ),
+    ]
+    .join("\n")
+}
+
+fn flatten_tooltip(tooltip: &str) -> String {
+    tooltip.lines().collect::<Vec<_>>().join(" | ")
+}
+
+fn format_none_ratio(none_samples: u64, samples: u64) -> String {
+    if samples == 0 {
+        return "n/a".to_string();
+    }
+    let ratio = (none_samples as f64) / (samples as f64) * 100.0;
+    format!("{ratio:.1}% ({none_samples}/{samples})")
+}
+
+fn format_rate_hz(rate: Option<f64>) -> String {
+    rate.map_or_else(|| "n/a".to_string(), |value| format!("{value:.2} Hz"))
+}
+
+fn format_rate_bytes_per_sec(value: Option<f64>) -> String {
+    value.map_or_else(|| "n/a".to_string(), format_rate_units)
+}
+
+fn format_rate_units(bytes: f64) -> String {
+    const UNITS: [&str; 4] = ["B/s", "KB/s", "MB/s", "GB/s"];
+    let mut value = bytes;
+    let mut unit_idx = 0;
+    while value >= 1000.0 && unit_idx < UNITS.len() - 1 {
+        value /= 1000.0;
+        unit_idx += 1;
+    }
+    let formatted = if unit_idx == 0 {
+        format!("{value:.0}")
+    } else if value < 10.0 {
+        format!("{value:.2}")
+    } else if value < 100.0 {
+        format!("{value:.1}")
+    } else {
+        format!("{value:.0}")
+    };
+    format!("{formatted} {}", UNITS[unit_idx])
+}
+
+fn format_bytes_opt(value: Option<f64>) -> String {
+    value.map_or_else(|| "n/a".to_string(), format_bytes)
+}
+
+fn format_bytes(bytes: f64) -> String {
+    const UNITS: [&str; 4] = ["B", "KiB", "MiB", "GiB"];
+    let mut value = bytes;
+    let mut unit_idx = 0;
+    while value >= 1024.0 && unit_idx < UNITS.len() - 1 {
+        value /= 1024.0;
+        unit_idx += 1;
+    }
+    if unit_idx == 0 {
+        format!("{value:.0} {}", UNITS[unit_idx])
+    } else {
+        format!("{value:.2} {}", UNITS[unit_idx])
+    }
+}
+
+fn format_duration_ns_f64(value: Option<f64>) -> String {
+    value.map_or_else(|| "n/a".to_string(), format_duration_ns)
+}
+
+fn format_duration_ns_u64(value: Option<u64>) -> String {
+    value.map_or_else(
+        || "n/a".to_string(),
+        |nanos| format_duration_ns(nanos as f64),
+    )
+}
+
+fn format_duration_ns(nanos: f64) -> String {
+    if nanos >= 1_000_000_000.0 {
+        format!("{:.3} s", nanos / 1_000_000_000.0)
+    } else if nanos >= 1_000_000.0 {
+        format!("{:.3} ms", nanos / 1_000_000.0)
+    } else if nanos >= 1_000.0 {
+        format!("{:.3} us", nanos / 1_000.0)
+    } else {
+        format!("{nanos:.0} ns")
+    }
+}
+
+fn mission_key(mission: Option<&str>) -> String {
+    match mission {
+        Some(value) if value != "default" => value.to_string(),
+        _ => "default".to_string(),
+    }
+}
+
+fn build_graph_signature(config: &config::CuConfig, mission: Option<&str>) -> CuResult<String> {
+    let graph = config.get_graph(mission)?;
+    let mut parts = Vec::new();
+    parts.push(format!("mission={}", mission.unwrap_or("default")));
+
+    let mut nodes: Vec<_> = graph.get_all_nodes();
+    nodes.sort_by(|a, b| a.1.get_id().cmp(&b.1.get_id()));
+    for (_, node) in nodes {
+        parts.push(format!(
+            "node|{}|{}|{}",
+            node.get_id(),
+            node.get_type(),
+            flavor_label(node.get_flavor())
+        ));
+    }
+
+    let mut edges: Vec<String> = graph
+        .edges()
+        .map(|cnx| {
+            format!(
+                "edge|{}|{}|{}",
+                format_endpoint(cnx.src.as_str(), cnx.src_channel.as_deref()),
+                format_endpoint(cnx.dst.as_str(), cnx.dst_channel.as_deref()),
+                cnx.msg
+            )
+        })
+        .collect();
+    edges.sort();
+    parts.extend(edges);
+
+    let joined = parts.join("\n");
+    Ok(format!("fnv1a64:{:016x}", fnv1a64(joined.as_bytes())))
+}
+
+fn format_endpoint(node: &str, channel: Option<&str>) -> String {
+    match channel {
+        Some(ch) => format!("{node}/{ch}"),
+        None => node.to_string(),
+    }
+}
+
+fn flavor_label(flavor: config::Flavor) -> &'static str {
+    match flavor {
+        config::Flavor::Task => "task",
+        config::Flavor::Bridge => "bridge",
+    }
+}
+
+fn fnv1a64(data: &[u8]) -> u64 {
+    const OFFSET_BASIS: u64 = 0xcbf29ce484222325;
+    const PRIME: u64 = 0x100000001b3;
+    let mut hash = OFFSET_BASIS;
+    for byte in data {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(PRIME);
+    }
+    hash
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tooltip_formats_missing_values() {
+        let stats = EdgeLogStats {
+            src: "a".to_string(),
+            dst: "b".to_string(),
+            msg: "Msg".to_string(),
+            samples: 0,
+            none_samples: 0,
+            valid_time_samples: 0,
+            total_raw_bytes: 0,
+            avg_raw_bytes: None,
+            rate_hz: None,
+            throughput_bytes_per_sec: None,
+        };
+        let tooltip = format_edge_tooltip(&stats);
+        assert!(tooltip.contains("Message size (avg): n/a"));
+        assert!(tooltip.contains("Rate: n/a"));
+        assert!(tooltip.contains("None: n/a"));
     }
 }

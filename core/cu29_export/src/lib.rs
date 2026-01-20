@@ -1,4 +1,5 @@
 mod fsck;
+pub mod logstats;
 
 #[cfg(feature = "mcap")]
 pub mod mcap_export;
@@ -17,6 +18,7 @@ use cu29_intern_strs::read_interned_strings;
 use fsck::check;
 #[cfg(feature = "mcap")]
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
+use logstats::{compute_logstats, write_logstats};
 use std::fmt::{Display, Formatter};
 #[cfg(feature = "mcap")]
 use std::io::IsTerminal;
@@ -72,6 +74,18 @@ pub enum Command {
         #[arg(short, long, action = clap::ArgAction::Count)]
         verbose: u8,
     },
+    /// Export log statistics to JSON for offline DAG rendering.
+    LogStats {
+        /// Output JSON file path
+        #[arg(short, long, default_value = "cu29_logstats.json")]
+        output: PathBuf,
+        /// Config file used to map outputs to edges
+        #[arg(long, default_value = "copperconfig.ron")]
+        config: PathBuf,
+        /// Mission id to use when reading the config
+        #[arg(long)]
+        mission: Option<String>,
+    },
     /// Export copperlists to MCAP format (requires 'mcap' feature)
     #[cfg(feature = "mcap")]
     ExportMcap {
@@ -106,7 +120,7 @@ pub enum Command {
 #[cfg(feature = "mcap")]
 pub fn run_cli<P>() -> CuResult<()>
 where
-    P: CopperListTuple + mcap_export::PayloadSchemas,
+    P: CopperListTuple + CuPayloadRawBytes + mcap_export::PayloadSchemas,
 {
     run_cli_inner::<P>()
 }
@@ -116,7 +130,7 @@ where
 #[cfg(not(feature = "mcap"))]
 pub fn run_cli<P>() -> CuResult<()>
 where
-    P: CopperListTuple,
+    P: CopperListTuple + CuPayloadRawBytes,
 {
     run_cli_inner::<P>()
 }
@@ -124,7 +138,7 @@ where
 #[cfg(feature = "mcap")]
 fn run_cli_inner<P>() -> CuResult<()>
 where
-    P: CopperListTuple + mcap_export::PayloadSchemas,
+    P: CopperListTuple + CuPayloadRawBytes + mcap_export::PayloadSchemas,
 {
     let args = LogReaderCli::parse();
     let unifiedlog_base = args.unifiedlog_base;
@@ -190,6 +204,20 @@ where
                 return value;
             }
         }
+        Command::LogStats {
+            output,
+            config,
+            mission,
+        } => {
+            let config_path = config
+                .to_str()
+                .ok_or_else(|| CuError::from("Config path is not valid UTF-8"))?;
+            let cfg = read_configuration(config_path)
+                .map_err(|e| CuError::new_with_cause("Failed to read configuration", e))?;
+            let reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
+            let stats = compute_logstats::<P>(reader, &cfg, mission.as_deref())?;
+            write_logstats(&stats, &output)?;
+        }
         #[cfg(feature = "mcap")]
         Command::ExportMcap {
             output,
@@ -236,7 +264,7 @@ where
 #[cfg(not(feature = "mcap"))]
 fn run_cli_inner<P>() -> CuResult<()>
 where
-    P: CopperListTuple,
+    P: CopperListTuple + CuPayloadRawBytes,
 {
     let args = LogReaderCli::parse();
     let unifiedlog_base = args.unifiedlog_base;
@@ -301,6 +329,20 @@ where
             if let Some(value) = check::<P>(&mut dl, verbose) {
                 return value;
             }
+        }
+        Command::LogStats {
+            output,
+            config,
+            mission,
+        } => {
+            let config_path = config
+                .to_str()
+                .ok_or_else(|| CuError::from("Config path is not valid UTF-8"))?;
+            let cfg = read_configuration(config_path)
+                .map_err(|e| CuError::new_with_cause("Failed to read configuration", e))?;
+            let reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
+            let stats = compute_logstats::<P>(reader, &cfg, mission.as_deref())?;
+            write_logstats(&stats, &output)?;
         }
     }
 

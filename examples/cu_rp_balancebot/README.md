@@ -59,3 +59,4 @@ $ cargo run --bin balancebot-logreader --release
 - `just balancebot-dump-text-logs` — extract human-readable logs from `logs/balance.copper` into `../../target/debug/cu29_log_index/strings.bin`.
 - `just balancebot-fsck` — integrity check of `logs/balance.copper`.
 - `just balancebot-set-pwm-permissions` — fix PWM sysfs permissions on the target (requires appropriate privileges).
+- `just dag-logstats balancebot-logreader logs/balance_0.copper` — generate logstats and open an annotated DAG SVG for the current `copperconfig.ron`.
