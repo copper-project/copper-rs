@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use bincode::{Decode, Encode};
+    use bincode::{Decode, Encode, config::standard, decode_from_slice, encode_to_vec};
     use cu29_soa_derive::Soa;
     use serde_derive::{Deserialize, Serialize};
 
@@ -115,6 +115,29 @@ mod tests {
         color: Color,
     }
 
+    fn sample_point_cloud<const N: usize>() -> BothSoa<N> {
+        let mut point_cloud = BothSoa::<N>::default();
+
+        for i in 0..2 {
+            let i_f = i as f32;
+            point_cloud.push(Both {
+                xyz: Xyz {
+                    x: i_f + 1.0,
+                    y: i_f + 2.0,
+                    z: i_f + 3.0,
+                    i: i as i32,
+                },
+                color: Color {
+                    r: i_f * 0.1,
+                    g: 0.5,
+                    b: 1.0 - i_f * 0.1,
+                },
+            });
+        }
+
+        point_cloud
+    }
+
     #[test]
     fn test_serialization() {
         // Test serialization of XyzSoa
@@ -178,6 +201,56 @@ mod tests {
         assert!(color_json.contains("\"r\":"));
         assert!(color_json.contains("\"g\":"));
         assert!(color_json.contains("\"b\":"));
+    }
+
+    #[test]
+    fn test_both_soa_serde_roundtrip() {
+        let point_cloud = sample_point_cloud::<8>();
+
+        let json = serde_json::to_string(&point_cloud).expect("serialize BothSoa");
+        let decoded: BothSoa<8> = serde_json::from_str(&json).expect("deserialize BothSoa");
+
+        let len = point_cloud.len();
+        assert_eq!(decoded.len(), len);
+        for idx in 0..len {
+            assert_eq!(decoded.get(idx), point_cloud.get(idx));
+        }
+    }
+
+    #[test]
+    fn test_both_soa_rejects_mismatched_nested_len() {
+        let json = r#"{
+            "len": 2,
+            "xyz": {
+                "x": [1.0],
+                "y": [2.0],
+                "z": [3.0],
+                "i": [1]
+            },
+            "color": {
+                "r": [0.1, 0.2],
+                "g": [0.3, 0.4],
+                "b": [0.5, 0.6]
+            }
+        }"#;
+
+        let result: Result<BothSoa<4>, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_both_soa_bincode_roundtrip() {
+        let point_cloud = sample_point_cloud::<8>();
+
+        let encoded = encode_to_vec(&point_cloud, standard()).expect("encode BothSoa");
+        let (decoded, _): (BothSoa<8>, _) =
+            decode_from_slice(&encoded, standard()).expect("decode BothSoa");
+
+        let len = point_cloud.len();
+        assert_eq!(decoded.len(), len);
+        for idx in 0..len {
+            assert_eq!(decoded.get(idx), point_cloud.get(idx));
+        }
     }
 
     #[test]

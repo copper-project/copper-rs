@@ -77,6 +77,8 @@ use syn::{Attribute, Data, DeriveInput, Fields, Path, PathArguments, Type, parse
 /// }
 /// // ColoredPointSoa<N> stores position as XyzSoaStorage<N> and color as ColorSoaStorage<N>.
 /// ```
+/// For nested types from other crates, use absolute paths like `::other_crate::Type`
+/// so the generated storage path resolves correctly.
 ///
 /// Memory layout
 /// - Flat fields: `MyStructSoa<N>` stores `len` plus one `[T; N]` per field.
@@ -84,6 +86,30 @@ use syn::{Attribute, Data, DeriveInput, Fields, Path, PathArguments, Type, parse
 ///   so the top-level struct contains `len` plus nested storage(s) and the leaf arrays live
 ///   in those nested storages.
 /// - `*SoaStorage<N>` has the same layout as `*Soa<N>` without the `len` field.
+///
+/// ASCII layouts
+/// ```text
+/// Flat:
+///   MyStructSoa<N>
+///   +-----+------------------+------------------+
+///   | len | a: [i32; N]       | b: [f32; N]      |
+///   +-----+------------------+------------------+
+///
+/// Nested:
+///   ColoredPointSoa<N>
+///   +-----+---------------------+---------------------+
+///   | len | position: XyzSoaStorage<N> | color: ColorSoaStorage<N> |
+///   +-----+---------------------+---------------------+
+///                |                               |
+///                v                               v
+///        XyzSoaStorage<N>                 ColorSoaStorage<N>
+///        +------------------+             +------------------+
+///        | x: [f32; N]       |             | r: [f32; N]       |
+///        | y: [f32; N]       |             | g: [f32; N]       |
+///        | z: [f32; N]       |             | b: [f32; N]       |
+///        | i: [i32; N]       |             +------------------+
+///        +------------------+
+/// ```
 /// ```ignore
 /// struct ColoredPointSoa<const N: usize> {
 ///     len: usize,
@@ -176,10 +202,17 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
         if path.leading_colon.is_some() {
             return path.clone();
         }
-        if let Some(first) = path.segments.first()
-            && first.ident == "crate"
-        {
-            return path.clone();
+        if let Some(first) = path.segments.first() {
+            if first.ident == "crate" {
+                return path.clone();
+            }
+            if first.ident == "self" {
+                let mut path = path.clone();
+                if let Some(segment) = path.segments.first_mut() {
+                    segment.ident = format_ident!("super");
+                }
+                return path;
+            }
         }
         syn::parse_quote!(super::#path)
     }
@@ -437,14 +470,22 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
             soa_apply_args.push(quote!(self.#name[_idx].clone()));
             soa_apply_sets.push(quote!(self.#name[_idx] = #name;));
 
-            storage_encode_fields.push(quote!(self.#name[..len].encode(encoder)?;));
+            storage_encode_fields.push(quote! {
+                for _idx in 0..len {
+                    self.#name[_idx].encode(encoder)?;
+                }
+            });
             storage_decode_fields.push(quote! {
                 for _idx in 0..len {
                     result.#name[_idx] = Decode::decode(decoder)?;
                 }
             });
 
-            soa_encode_fields.push(quote!(self.#name[..self.len].encode(encoder)?;));
+            soa_encode_fields.push(quote! {
+                for _idx in 0..self.len {
+                    self.#name[_idx].encode(encoder)?;
+                }
+            });
             soa_decode_fields.push(quote! {
                 for _idx in 0..result.len {
                     result.#name[_idx] = Decode::decode(decoder)?;
@@ -749,10 +790,7 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
             }
 
             impl<const N: usize> Clone for #soa_struct_name<N>
-            where
-                #(
-                    #field_types: Clone,
-                )*
+            #storage_clone_where
             {
                 fn clone(&self) -> Self {
                     Self {
