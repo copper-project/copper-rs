@@ -213,6 +213,9 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                 }
                 return path;
             }
+            if first.ident == "std" || first.ident == "core" || first.ident == "alloc" {
+                return path.clone();
+            }
         }
         syn::parse_quote!(super::#path)
     }
