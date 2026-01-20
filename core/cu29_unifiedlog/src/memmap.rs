@@ -642,6 +642,30 @@ impl MmapUnifiedLoggerRead {
         &self.main_header
     }
 
+    pub fn scan_section_bytes(&mut self, datalogtype: UnifiedLogType) -> CuResult<u64> {
+        let mut total = 0u64;
+
+        loop {
+            if self.current_reading_position >= self.current_mmap_buffer.len() {
+                self.next_slab().map_err(|e| {
+                    CuError::new_with_cause("Failed to read next slab, is the log complete?", e)
+                })?;
+            }
+
+            let header = self.read_section_header()?;
+
+            if header.entry_type == UnifiedLogType::LastEntry {
+                return Ok(total);
+            }
+
+            if header.entry_type == datalogtype {
+                total = total.saturating_add(header.used as u64);
+            }
+
+            self.current_reading_position += header.offset_to_next_section as usize;
+        }
+    }
+
     /// Reads the section content from the section header pos.
     fn read_section_content(&mut self, header: &SectionHeader) -> CuResult<Vec<u8>> {
         // TODO: we could optimize by asking the buffer to fill
