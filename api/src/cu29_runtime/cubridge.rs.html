@@ -579,8 +579,8 @@
 <a href=#579 id=579 data-nosnippet>579</a>        ) -&gt; CuResult&lt;<span class="self">Self</span>&gt; {
 <a href=#580 id=580 data-nosnippet>580</a>            <span class="kw">let </span><span class="kw-2">mut </span>instance = ExampleBridge::default();
 <a href=#581 id=581 data-nosnippet>581</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(cfg) = config
-<a href=#582 id=582 data-nosnippet>582</a>                &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(port) = cfg.get::&lt;String&gt;(<span class="string">"port"</span>)
-<a href=#583 id=583 data-nosnippet>583</a>            {
+<a href=#582 id=582 data-nosnippet>582</a>                &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(port) = cfg.get::&lt;String&gt;(<span class="string">"port"</span>)<span class="question-mark">?
+<a href=#583 id=583 data-nosnippet>583</a>            </span>{
 <a href=#584 id=584 data-nosnippet>584</a>                instance.port = port;
 <a href=#585 id=585 data-nosnippet>585</a>            }
 <a href=#586 id=586 data-nosnippet>586</a>            <span class="prelude-val">Ok</span>(instance)
