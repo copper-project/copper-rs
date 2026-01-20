@@ -1,4 +1,9 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Build a fixed sized SoA (Structure of Arrays) from a struct. The outputted SoA will be suitable for in place storage in messages and should be easier for the compiler to vectorize."><title>Soa in cu29_soa_derive - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-77263533.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="cu29_soa_derive" data-themes="" data-resource-suffix="" data-rustdoc-version="1.95.0-nightly (d940e5684 2026-01-19)" data-channel="nightly" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-b897f86f.js" data-settings-js="settings-c38705f0.js" ><script src="../static.files/storage-e2aeef58.js"></script><script defer src="sidebar-items.js"></script><script defer src="../static.files/main-7bab91a1.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-ffcac47a.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc derive"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Soa</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../cu29_soa_derive/index.html">cu29_<wbr>soa_<wbr>derive</a><span class="version">0.12.0</span></h2></div><div class="sidebar-elems"><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="index.html">cu29_soa_derive</a></div><h1>Derive Macro <span class="derive">Soa</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/cu29_soa_derive/lib.rs.html#69-405">Source</a> </span></div><pre class="rust item-decl"><code>#[derive(Soa)]</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Build a fixed sized SoA (Structure of Arrays) from a struct.
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Build a fixed sized SoA (Structure of Arrays) from a struct. The outputted SoA will be suitable for in place storage in messages and should be easier for the compiler to vectorize."><title>Soa in cu29_soa_derive - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-77263533.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="cu29_soa_derive" data-themes="" data-resource-suffix="" data-rustdoc-version="1.95.0-nightly (d940e5684 2026-01-19)" data-channel="nightly" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-b897f86f.js" data-settings-js="settings-c38705f0.js" ><script src="../static.files/storage-e2aeef58.js"></script><script defer src="sidebar-items.js"></script><script defer src="../static.files/main-7bab91a1.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-ffcac47a.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc derive"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Soa</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../cu29_soa_derive/index.html">cu29_<wbr>soa_<wbr>derive</a><span class="version">0.12.0</span></h2></div><div class="sidebar-elems"><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="index.html">cu29_soa_derive</a></div><h1>Derive Macro <span class="derive">Soa</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/cu29_soa_derive/lib.rs.html#131-875">Source</a> </span></div><pre class="rust item-decl"><code>#[derive(Soa)]
+{
+    <span class="comment">// Attributes available to this derive:</span>
+    #[soa]
+}
+</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Build a fixed sized SoA (Structure of Arrays) from a struct.
 The outputted SoA will be suitable for in place storage in messages and should be
 easier for the compiler to vectorize.</p>
 <p>for example:</p>
@@ -39,4 +44,60 @@ soa1.b_range_mut(<span class="number">0</span>..<span class="number">4</span>)[<
 
 <div class="example-wrap ignore"><a href="#" class="tooltip" title="This example is not tested">ⓘ</a><pre class="rust rust-example-rendered"><code>soa1.apply(|a, b| {
    (a + <span class="number">1</span>, b + <span class="number">1.0</span>)
-});</code></pre></div></div></details></section></div></main></body></html>
+});</code></pre></div>
+<p>You can also compose nested SoAs by annotating fields with <code>#[soa(nested)]</code>:</p>
+
+<div class="example-wrap ignore"><a href="#" class="tooltip" title="This example is not tested">ⓘ</a><pre class="rust rust-example-rendered"><code><span class="attr">#[derive(Soa)]
+</span><span class="kw">struct </span>ColoredPoint {
+    <span class="attr">#[soa(nested)]
+    </span>position: Xyz,
+    <span class="attr">#[soa(nested)]
+    </span>color: Color,
+}
+<span class="comment">// ColoredPointSoa&lt;N&gt; stores position as XyzSoaStorage&lt;N&gt; and color as ColorSoaStorage&lt;N&gt;.</span></code></pre></div>
+<p>For nested types from other crates, use absolute paths like <code>::other_crate::Type</code>
+so the generated storage path resolves correctly.
+Type aliases are not supported for <code>#[soa(nested)]</code> because storage names are derived from the
+final type identifier.
+Bincode encoding changed: SoA fields no longer include per-field length prefixes. Old blobs are
+not compatible with the new layout.</p>
+<p>Memory layout</p>
+<ul>
+<li>Flat fields: <code>MyStructSoa&lt;N&gt;</code> stores <code>len</code> plus one <code>[T; N]</code> per field.</li>
+<li>Nested fields (<code>#[soa(nested)]</code>): the field is stored inline as <code>&lt;Field&gt;SoaStorage&lt;N&gt;</code>,
+so the top-level struct contains <code>len</code> plus nested storage(s) and the leaf arrays live
+in those nested storages.</li>
+<li><code>*SoaStorage&lt;N&gt;</code> has the same layout as <code>*Soa&lt;N&gt;</code> without the <code>len</code> field.</li>
+</ul>
+<p>ASCII layouts</p>
+<div class="example-wrap"><pre class="language-text"><code>Flat:
+  MyStructSoa&lt;N&gt;
+  +-----+------------------+------------------+
+  | len | a: [i32; N]       | b: [f32; N]      |
+  +-----+------------------+------------------+
+
+Nested:
+  ColoredPointSoa&lt;N&gt;
+  +-----+---------------------+---------------------+
+  | len | position: XyzSoaStorage&lt;N&gt; | color: ColorSoaStorage&lt;N&gt; |
+  +-----+---------------------+---------------------+
+               |                               |
+               v                               v
+       XyzSoaStorage&lt;N&gt;                 ColorSoaStorage&lt;N&gt;
+       +------------------+             +------------------+
+       | x: [f32; N]       |             | r: [f32; N]       |
+       | y: [f32; N]       |             | g: [f32; N]       |
+       | z: [f32; N]       |             | b: [f32; N]       |
+       | i: [i32; N]       |             +------------------+
+       +------------------+</code></pre></div>
+<div class="example-wrap ignore"><a href="#" class="tooltip" title="This example is not tested">ⓘ</a><pre class="rust rust-example-rendered"><code><span class="kw">struct </span>ColoredPointSoa&lt;<span class="kw">const </span>N: usize&gt; {
+    len: usize,
+    position: XyzSoaStorage&lt;N&gt;,
+    color: ColorSoaStorage&lt;N&gt;,
+}
+<span class="kw">struct </span>XyzSoaStorage&lt;<span class="kw">const </span>N: usize&gt; {
+    x: [f32; N],
+    y: [f32; N],
+    z: [f32; N],
+    i: [i32; N],
+}</code></pre></div></div></details></section></div></main></body></html>
