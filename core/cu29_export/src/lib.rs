@@ -358,13 +358,7 @@ fn make_progress_bar(total_bytes: u64) -> ProgressBar {
 
 #[cfg(feature = "mcap")]
 fn should_show_progress(force_progress: bool, quiet: bool) -> bool {
-    if quiet {
-        return false;
-    }
-    if force_progress {
-        return true;
-    }
-    std::io::stderr().is_terminal()
+    !quiet && (force_progress || std::io::stderr().is_terminal())
 }
 
 #[cfg(feature = "mcap")]
