@@ -3,7 +3,7 @@ mod format;
 use format::{highlight_rust_code, rustfmt_generated_code};
 use proc_macro::TokenStream;
 use quote::{ToTokens, format_ident, quote};
-use syn::{Data, DeriveInput, Fields, Type, parse_macro_input};
+use syn::{Attribute, Data, DeriveInput, Fields, Path, PathArguments, Type, parse_macro_input};
 
 /// Build a fixed sized SoA (Structure of Arrays) from a struct.
 /// The outputted SoA will be suitable for in place storage in messages and should be
@@ -65,7 +65,19 @@ use syn::{Data, DeriveInput, Fields, Type, parse_macro_input};
 ///    (a + 1, b + 1.0)
 /// });
 /// ```
-#[proc_macro_derive(Soa)]
+///
+/// You can also compose nested SoAs by annotating fields with `#[soa(nested)]`:
+/// ```ignore
+/// #[derive(Soa)]
+/// struct ColoredPoint {
+///     #[soa(nested)]
+///     position: Xyz,
+///     #[soa(nested)]
+///     color: Color,
+/// }
+/// // ColoredPointSoa<N> stores position as XyzSoaStorage<N> and color as ColorSoaStorage<N>.
+/// ```
+#[proc_macro_derive(Soa, attributes(soa))]
 pub fn derive_soa(input: TokenStream) -> TokenStream {
     use syn::TypePath;
 
@@ -75,6 +87,9 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
     let name = &input.ident;
     let module_name = format_ident!("{}_soa", name.to_string().to_lowercase());
     let soa_struct_name = format_ident!("{}Soa", name);
+    let soa_storage_name = format_ident!("{}SoaStorage", name);
+    let soa_storage_wire_name = format_ident!("{}SoaStorageWire", name);
+    let soa_storage_serde_name = format_ident!("{}SoaStorageSerde", name);
     let soa_struct_wire_name = format_ident!("{}SoaWire", name);
 
     let data = match &input.data {
@@ -86,11 +101,18 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
         _ => panic!("Only named fields are supported"),
     };
 
-    let mut field_names = vec![];
-    let mut field_names_mut = vec![];
-    let mut field_names_range = vec![];
-    let mut field_names_range_mut = vec![];
-    let mut field_types = vec![];
+    struct FieldInfo {
+        name: syn::Ident,
+        name_mut: syn::Ident,
+        name_range: syn::Ident,
+        name_range_mut: syn::Ident,
+        ty: syn::Type,
+        nested: bool,
+        storage_path: Option<syn::Path>,
+        storage_wire_path: Option<syn::Path>,
+    }
+
+    let mut field_infos = Vec::new();
     let mut unique_imports = vec![];
     let mut unique_import_names = vec![];
 
@@ -116,16 +138,89 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
         )
     }
 
-    for field in fields {
-        let field_name = field.ident.as_ref().unwrap();
-        let field_type = &field.ty;
-        field_names.push(field_name);
-        field_names_mut.push(format_ident!("{}_mut", field_name));
-        field_names_range.push(format_ident!("{}_range", field_name));
-        field_names_range_mut.push(format_ident!("{}_range_mut", field_name));
-        field_types.push(field_type);
+    fn parse_soa_nested(attrs: &[Attribute]) -> Result<bool, syn::Error> {
+        let mut nested = false;
+        for attr in attrs {
+            if attr.path().is_ident("soa") {
+                attr.parse_nested_meta(|meta| {
+                    if meta.path.is_ident("nested") {
+                        nested = true;
+                        Ok(())
+                    } else {
+                        Err(meta.error("unsupported #[soa] option, expected `nested`"))
+                    }
+                })?;
+            }
+        }
+        Ok(nested)
+    }
 
-        if let Type::Path(TypePath { path, .. }) = field_type {
+    fn qualify_path(path: &Path) -> Path {
+        if path.leading_colon.is_some() {
+            return path.clone();
+        }
+        if let Some(first) = path.segments.first() {
+            if first.ident == "crate" {
+                return path.clone();
+            }
+        }
+        syn::parse_quote!(super::#path)
+    }
+
+    fn storage_paths(field_type: &Type) -> Result<(Path, Path), syn::Error> {
+        let Type::Path(type_path) = field_type else {
+            return Err(syn::Error::new_spanned(
+                field_type,
+                "expected a path type for #[soa(nested)]",
+            ));
+        };
+
+        let mut storage_path = type_path.path.clone();
+        let last_segment = storage_path
+            .segments
+            .last_mut()
+            .ok_or_else(|| syn::Error::new_spanned(field_type, "expected a non-empty type path"))?;
+        if !matches!(last_segment.arguments, PathArguments::None) {
+            return Err(syn::Error::new_spanned(
+                field_type,
+                "generic types are not supported with #[soa(nested)]",
+            ));
+        }
+        let base_ident = last_segment.ident.clone();
+        last_segment.ident = format_ident!("{}SoaStorage", base_ident);
+
+        let mut storage_wire_path = type_path.path.clone();
+        let last_wire_segment = storage_wire_path
+            .segments
+            .last_mut()
+            .ok_or_else(|| syn::Error::new_spanned(field_type, "expected a non-empty type path"))?;
+        last_wire_segment.ident = format_ident!("{}SoaStorageWire", base_ident);
+
+        Ok((
+            qualify_path(&storage_path),
+            qualify_path(&storage_wire_path),
+        ))
+    }
+
+    for field in fields {
+        let field_name = field.ident.as_ref().unwrap().clone();
+        let field_type = field.ty.clone();
+        let nested = match parse_soa_nested(&field.attrs) {
+            Ok(value) => value,
+            Err(err) => return err.to_compile_error().into(),
+        };
+        let (storage_path, storage_wire_path) = if nested {
+            match storage_paths(&field_type) {
+                Ok((storage_path, storage_wire_path)) => {
+                    (Some(storage_path), Some(storage_wire_path))
+                }
+                Err(err) => return err.to_compile_error().into(),
+            }
+        } else {
+            (None, None)
+        };
+
+        if let Type::Path(TypePath { path, .. }) = &field_type {
             let type_name = path.segments.last().unwrap().ident.to_string();
             let path_str = path.to_token_stream().to_string();
 
@@ -134,10 +229,25 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                 unique_import_names.push(path_str);
             }
         }
+
+        field_infos.push(FieldInfo {
+            name: field_name.clone(),
+            name_mut: format_ident!("{}_mut", field_name),
+            name_range: format_ident!("{}_range", field_name),
+            name_range_mut: format_ident!("{}_range_mut", field_name),
+            ty: field_type,
+            nested,
+            storage_path,
+            storage_wire_path,
+        });
     }
 
+    let field_names: Vec<_> = field_infos.iter().map(|info| &info.name).collect();
+    let field_types: Vec<_> = field_infos.iter().map(|info| &info.ty).collect();
+
     let soa_struct_name_iterator = format_ident!("{}Iterator", name);
-    let field_count = field_names.len() + 1; // +1 for the len field
+    let storage_field_count = field_names.len();
+    let field_count = storage_field_count + 1; // +1 for the len field
 
     let iterator = quote! {
         pub struct #soa_struct_name_iterator<'a, const N: usize> {
@@ -169,6 +279,260 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
         }
     };
 
+    let mut soa_field_decls = Vec::new();
+    let mut storage_field_decls = Vec::new();
+    let mut soa_new_inits = Vec::new();
+    let mut storage_new_inits = Vec::new();
+    let mut soa_default_inits = Vec::new();
+    let mut storage_default_inits = Vec::new();
+    let mut soa_push_fields = Vec::new();
+    let mut soa_pop_fields = Vec::new();
+    let mut soa_set_fields = Vec::new();
+    let mut soa_get_fields = Vec::new();
+    let mut soa_apply_args = Vec::new();
+    let mut soa_apply_sets = Vec::new();
+    let mut soa_accessors = Vec::new();
+    let mut storage_accessors = Vec::new();
+    let mut soa_encode_fields = Vec::new();
+    let mut soa_decode_fields = Vec::new();
+    let mut storage_encode_fields = Vec::new();
+    let mut storage_decode_fields = Vec::new();
+    let mut storage_get_fields = Vec::new();
+    let mut storage_set_fields = Vec::new();
+    let mut storage_serialize_fields = Vec::new();
+    let mut soa_serialize_fields = Vec::new();
+    let mut storage_clone_bounds = Vec::new();
+    let mut storage_serialize_bounds = Vec::new();
+    let mut soa_serialize_bounds = Vec::new();
+    let mut soa_deserialize_bounds = Vec::new();
+    let mut storage_wire_fields = Vec::new();
+    let mut storage_wire_checks = Vec::new();
+    let mut storage_wire_assignments = Vec::new();
+    let mut soa_wire_fields = Vec::new();
+    let mut soa_wire_checks = Vec::new();
+    let mut soa_wire_assignments = Vec::new();
+
+    for info in &field_infos {
+        let name = &info.name;
+        let ty = &info.ty;
+        let name_mut = &info.name_mut;
+        let name_range = &info.name_range;
+        let name_range_mut = &info.name_range_mut;
+        let serde_name = format_ident!("{}_serde", name);
+
+        if info.nested {
+            let storage_path = info
+                .storage_path
+                .as_ref()
+                .expect("nested field missing storage path");
+            let storage_wire_path = info
+                .storage_wire_path
+                .as_ref()
+                .expect("nested field missing storage wire path");
+
+            let field_decl = quote!(pub #name: #storage_path<N>);
+            storage_field_decls.push(field_decl.clone());
+            soa_field_decls.push(field_decl);
+
+            let new_init = quote!(#name: #storage_path::<N>::new(default.#name.clone()));
+            storage_new_inits.push(new_init.clone());
+            soa_new_inits.push(new_init);
+
+            let default_init = quote!(#name: #storage_path::<N>::default());
+            storage_default_inits.push(default_init.clone());
+            soa_default_inits.push(default_init);
+
+            storage_clone_bounds.push(quote!(#storage_path<N>: Clone,));
+
+            let accessors = quote! {
+                pub fn #name(&self) -> &#storage_path<N> {
+                    &self.#name
+                }
+
+                pub fn #name_mut(&mut self) -> &mut #storage_path<N> {
+                    &mut self.#name
+                }
+            };
+            storage_accessors.push(accessors.clone());
+            soa_accessors.push(accessors);
+
+            storage_get_fields.push(quote!(#name: self.#name.get(index),));
+            storage_set_fields.push(quote!(self.#name.set(index, value.#name.clone());));
+
+            soa_get_fields.push(quote!(#name: self.#name.get(index),));
+            soa_set_fields.push(quote!(self.#name.set(index, value.#name.clone());));
+
+            soa_push_fields.push(quote!(self.#name.set(self.len, value.#name.clone());));
+            soa_pop_fields.push(quote!(#name: self.#name.get(self.len),));
+
+            soa_apply_args.push(quote!(self.#name.get(_idx)));
+            soa_apply_sets.push(quote!(self.#name.set(_idx, #name);));
+
+            storage_encode_fields.push(quote!(self.#name.encode_len(encoder, len)?;));
+            storage_decode_fields
+                .push(quote!(result.#name = #storage_path::<N>::decode_len(decoder, len)?;));
+
+            soa_encode_fields.push(quote!(self.#name.encode_len(encoder, self.len)?;));
+            soa_decode_fields
+                .push(quote!(result.#name = #storage_path::<N>::decode_len(decoder, result.len)?;));
+
+            storage_serialize_fields.push(quote! {
+                {
+                    let #serde_name = self.storage.#name.serialize_len(self.len);
+                    state.serialize_field(stringify!(#name), &#serde_name)?;
+                }
+            });
+            soa_serialize_fields.push(quote! {
+                {
+                    let #serde_name = self.#name.serialize_len(self.len);
+                    state.serialize_field(stringify!(#name), &#serde_name)?;
+                }
+            });
+
+            storage_wire_fields.push(quote!(#name: #storage_wire_path,));
+            storage_wire_assignments.push(quote!(
+                result.#name = #storage_path::<N>::from_wire(#name, len)
+                    .map_err(|err| format!("field {}: {}", stringify!(#name), err))?;
+            ));
+
+            soa_wire_fields.push(quote!(#name: #storage_wire_path,));
+            soa_wire_assignments.push(quote!(
+                result.#name = #storage_path::<N>::from_wire(#name, len)
+                    .map_err(|err| serde::de::Error::custom(format!(
+                        "field {}: {}",
+                        stringify!(#name),
+                        err
+                    )))?;
+            ));
+        } else {
+            let field_decl = quote!(pub #name: [#ty; N]);
+            storage_field_decls.push(field_decl.clone());
+            soa_field_decls.push(field_decl);
+
+            let new_init = quote!(#name: from_fn(|_| default.#name.clone()));
+            storage_new_inits.push(new_init.clone());
+            soa_new_inits.push(new_init);
+
+            let default_init = quote!(#name: from_fn(|_| #ty::default()));
+            storage_default_inits.push(default_init.clone());
+            soa_default_inits.push(default_init);
+
+            storage_clone_bounds.push(quote!(#ty: Clone,));
+
+            let accessors = quote! {
+                pub fn #name(&self) -> &[#ty] {
+                    &self.#name
+                }
+
+                pub fn #name_mut(&mut self) -> &mut [#ty] {
+                    &mut self.#name
+                }
+
+                pub fn #name_range(&self, range: std::ops::Range<usize>) -> &[#ty] {
+                    &self.#name[range]
+                }
+
+                pub fn #name_range_mut(&mut self, range: std::ops::Range<usize>) -> &mut [#ty] {
+                    &mut self.#name[range]
+                }
+            };
+            storage_accessors.push(accessors.clone());
+            soa_accessors.push(accessors);
+
+            storage_get_fields.push(quote!(#name: self.#name[index].clone(),));
+            storage_set_fields.push(quote!(self.#name[index] = value.#name.clone();));
+
+            soa_get_fields.push(quote!(#name: self.#name[index].clone(),));
+            soa_set_fields.push(quote!(self.#name[index] = value.#name.clone();));
+
+            soa_push_fields.push(quote!(self.#name[self.len] = value.#name.clone();));
+            soa_pop_fields.push(quote!(#name: self.#name[self.len].clone(),));
+
+            soa_apply_args.push(quote!(self.#name[_idx].clone()));
+            soa_apply_sets.push(quote!(self.#name[_idx] = #name;));
+
+            storage_encode_fields.push(quote!(self.#name[..len].encode(encoder)?;));
+            storage_decode_fields.push(quote! {
+                for _idx in 0..len {
+                    result.#name[_idx] = Decode::decode(decoder)?;
+                }
+            });
+
+            soa_encode_fields.push(quote!(self.#name[..self.len].encode(encoder)?;));
+            soa_decode_fields.push(quote! {
+                for _idx in 0..result.len {
+                    result.#name[_idx] = Decode::decode(decoder)?;
+                }
+            });
+
+            storage_serialize_fields.push(quote! {
+                state.serialize_field(stringify!(#name), &self.storage.#name[..self.len])?;
+            });
+            soa_serialize_fields.push(quote! {
+                state.serialize_field(stringify!(#name), &self.#name[..self.len])?;
+            });
+
+            storage_serialize_bounds.push(quote!(#ty: Serialize,));
+            soa_serialize_bounds.push(quote!(#ty: Serialize,));
+            soa_deserialize_bounds.push(quote!(#ty: Deserialize<'de> + Default,));
+
+            storage_wire_fields.push(quote!(#name: Vec<#ty>,));
+            storage_wire_checks.push(quote! {
+                if #name.len() != len {
+                    return Err(format!(
+                        "field {} has length {} but len is {}",
+                        stringify!(#name),
+                        #name.len(),
+                        len
+                    ));
+                }
+            });
+            storage_wire_assignments.push(quote! {
+                for (idx, value) in #name.into_iter().enumerate() {
+                    result.#name[idx] = value;
+                }
+            });
+
+            soa_wire_fields.push(quote!(#name: Vec<#ty>,));
+            soa_wire_checks.push(quote! {
+                if #name.len() != len {
+                    return Err(serde::de::Error::custom(format!(
+                        "field {} has length {} but len is {}",
+                        stringify!(#name),
+                        #name.len(),
+                        len
+                    )));
+                }
+            });
+            soa_wire_assignments.push(quote! {
+                for (idx, value) in #name.into_iter().enumerate() {
+                    result.#name[idx] = value;
+                }
+            });
+        }
+    }
+
+    let storage_clone_where = if storage_clone_bounds.is_empty() {
+        quote!()
+    } else {
+        quote!(where #(#storage_clone_bounds)*)
+    };
+    let storage_serialize_where = if storage_serialize_bounds.is_empty() {
+        quote!()
+    } else {
+        quote!(where #(#storage_serialize_bounds)*)
+    };
+    let soa_serialize_where = if soa_serialize_bounds.is_empty() {
+        quote!()
+    } else {
+        quote!(where #(#soa_serialize_bounds)*)
+    };
+    let soa_deserialize_where = if soa_deserialize_bounds.is_empty() {
+        quote!()
+    } else {
+        quote!(where #(#soa_deserialize_bounds)*)
+    };
+
     let expanded = quote! {
         #visibility mod #module_name {
             use bincode::{Decode, Encode};
@@ -184,15 +548,131 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
             use core::array::from_fn;
 
             #[derive(Debug)]
+            #visibility struct #soa_storage_name<const N: usize> {
+                #(#storage_field_decls,)*
+            }
+
+            #[doc(hidden)]
+            #[derive(Deserialize)]
+            #visibility struct #soa_storage_wire_name {
+                #(#storage_wire_fields)*
+            }
+
+            #[doc(hidden)]
+            #visibility struct #soa_storage_serde_name<'a, const N: usize> {
+                storage: &'a #soa_storage_name<N>,
+                len: usize,
+            }
+
+            impl<const N: usize> #soa_storage_name<N> {
+                pub fn new(default: super::#name) -> Self {
+                    Self {
+                        #(#storage_new_inits,)*
+                    }
+                }
+
+                pub fn set(&mut self, index: usize, value: super::#name) {
+                    assert!(index < N, "Index out of bounds");
+                    #(#storage_set_fields)*
+                }
+
+                pub fn get(&self, index: usize) -> super::#name {
+                    assert!(index < N, "Index out of bounds");
+                    super::#name {
+                        #(#storage_get_fields)*
+                    }
+                }
+
+                pub fn encode_len<E: Encoder>(
+                    &self,
+                    encoder: &mut E,
+                    len: usize,
+                ) -> Result<(), EncodeError> {
+                    #(#storage_encode_fields)*
+                    Ok(())
+                }
+
+                pub fn decode_len<D: Decoder<Context = ()>>(
+                    decoder: &mut D,
+                    len: usize,
+                ) -> Result<Self, DecodeError> {
+                    let mut result = Self::default();
+                    #(#storage_decode_fields)*
+                    Ok(result)
+                }
+
+                pub fn serialize_len(&self, len: usize) -> #soa_storage_serde_name<'_, N> {
+                    #soa_storage_serde_name {
+                        storage: self,
+                        len,
+                    }
+                }
+
+                pub fn from_wire(wire: #soa_storage_wire_name, len: usize) -> Result<Self, String> {
+                    let #soa_storage_wire_name { #( #field_names ),* } = wire;
+
+                    if len > N {
+                        return Err(format!(
+                            "len {} exceeds capacity {}",
+                            len,
+                            N
+                        ));
+                    }
+
+                    #(#storage_wire_checks)*
+
+                    let mut result = Self::default();
+                    #(#storage_wire_assignments)*
+                    Ok(result)
+                }
+
+                #(#storage_accessors)*
+            }
+
+            impl<'a, const N: usize> Serialize for #soa_storage_serde_name<'a, N>
+            #storage_serialize_where
+            {
+                fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+                where
+                    S: Serializer,
+                {
+                    let mut state = serializer.serialize_struct(
+                        stringify!(#soa_storage_name),
+                        #storage_field_count,
+                    )?;
+                    #(#storage_serialize_fields)*
+                    state.end()
+                }
+            }
+
+            impl<const N: usize> Default for #soa_storage_name<N> {
+                fn default() -> Self {
+                    Self {
+                        #(#storage_default_inits,)*
+                    }
+                }
+            }
+
+            impl<const N: usize> Clone for #soa_storage_name<N>
+            #storage_clone_where
+            {
+                fn clone(&self) -> Self {
+                    Self {
+                        #( #field_names: self.#field_names.clone(), )*
+                    }
+                }
+            }
+
+            #[derive(Debug)]
             #visibility struct #soa_struct_name<const N: usize> {
                 pub len: usize,
-                #(pub #field_names: [#field_types; N], )*
+                #(#soa_field_decls,)*
             }
 
             impl<const N: usize> #soa_struct_name<N> {
                 pub fn new(default: super::#name) -> Self {
                     Self {
-                        #( #field_names: from_fn(|_| default.#field_names.clone()), )*
+                        #(#soa_new_inits,)*
                         len: 0,
                     }
                 }
@@ -207,7 +687,7 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
 
                 pub fn push(&mut self, value: super::#name) {
                     if self.len < N {
-                        #( self.#field_names[self.len] = value.#field_names.clone(); )*
+                        #(#soa_push_fields)*
                         self.len += 1;
                     } else {
                         panic!("Capacity exceeded")
@@ -220,20 +700,20 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                     } else {
                         self.len -= 1;
                         Some(super::#name {
-                            #( #field_names: self.#field_names[self.len].clone(), )*
+                            #(#soa_pop_fields)*
                         })
                     }
                 }
 
                 pub fn set(&mut self, index: usize, value: super::#name) {
                     assert!(index < self.len, "Index out of bounds");
-                    #( self.#field_names[index] = value.#field_names.clone(); )*
+                    #(#soa_set_fields)*
                 }
 
                 pub fn get(&self, index: usize) -> super::#name {
                     assert!(index < self.len, "Index out of bounds");
                     super::#name {
-                        #( #field_names: self.#field_names[index].clone(), )*
+                        #(#soa_get_fields)*
                     }
                 }
 
@@ -243,11 +723,9 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                 {
                     // don't use something common like i here.
                     for _idx in 0..self.len {
-                        let result = f(#(self.#field_names[_idx].clone()),*);
+                        let result = f(#(#soa_apply_args),*);
                         let (#(#field_names),*) = result;
-                        #(
-                            self.#field_names[_idx] = #field_names;
-                        )*
+                        #(#soa_apply_sets)*
                     }
                 }
 
@@ -255,29 +733,13 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                     #soa_struct_name_iterator::new(self)
                 }
 
-                #(
-                    pub fn #field_names(&self) -> &[#field_types] {
-                        &self.#field_names
-                    }
-
-                    pub fn #field_names_mut(&mut self) -> &mut [#field_types] {
-                        &mut self.#field_names
-                    }
-
-                    pub fn #field_names_range(&self, range: std::ops::Range<usize>) -> &[#field_types] {
-                        &self.#field_names[range]
-                    }
-
-                    pub fn #field_names_range_mut(&mut self, range: std::ops::Range<usize>) -> &mut [#field_types] {
-                        &mut self.#field_names[range]
-                    }
-                )*
+                #(#soa_accessors)*
             }
 
             impl<const N: usize> Encode for #soa_struct_name<N> {
                 fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
                     self.len.encode(encoder)?;
-                    #( self.#field_names[..self.len].encode(encoder)?; )*
+                    #(#soa_encode_fields)*
                     Ok(())
                 }
             }
@@ -286,11 +748,7 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                 fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
                     let mut result = Self::default();
                     result.len = Decode::decode(decoder)?;
-                    #(
-                        for _idx in 0..result.len {
-                            result.#field_names[_idx] = Decode::decode(decoder)?;
-                        }
-                    )*
+                    #(#soa_decode_fields)*
                     Ok(result)
                 }
             }
@@ -298,7 +756,7 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
             impl<const N: usize> Default for #soa_struct_name<N> {
                 fn default() -> Self {
                     Self {
-                        #( #field_names: from_fn(|_| #field_types::default()), )*
+                        #(#soa_default_inits,)*
                         len: 0,
                     }
                 }
@@ -319,29 +777,22 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
             }
 
             impl<const N: usize> Serialize for #soa_struct_name<N>
-            where
-                #(
-                    #field_types: Serialize,
-                )*
+            #soa_serialize_where
             {
                 fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
                 where
                     S: Serializer,
                 {
-                    let mut state = serializer.serialize_struct(stringify!(#soa_struct_name), #field_count)?;
+                    let mut state =
+                        serializer.serialize_struct(stringify!(#soa_struct_name), #field_count)?;
                     state.serialize_field("len", &self.len)?;
-                    #(
-                        state.serialize_field(stringify!(#field_names), &self.#field_names[..self.len])?;
-                    )*
+                    #(#soa_serialize_fields)*
                     state.end()
                 }
             }
 
             impl<'de, const N: usize> Deserialize<'de> for #soa_struct_name<N>
-            where
-                #(
-                    #field_types: Deserialize<'de> + Default,
-                )*
+            #soa_deserialize_where
             {
                 fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
                 where
@@ -350,7 +801,7 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                     #[derive(Deserialize)]
                     struct #soa_struct_wire_name {
                         len: usize,
-                        #( #field_names: Vec<#field_types>, )*
+                        #(#soa_wire_fields)*
                     }
 
                     let wire = #soa_struct_wire_name::deserialize(deserializer)?;
@@ -364,32 +815,20 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
                         )));
                     }
 
-                    #(
-                        if #field_names.len() != len {
-                            return Err(serde::de::Error::custom(format!(
-                                "field {} has length {} but len is {}",
-                                stringify!(#field_names),
-                                #field_names.len(),
-                                len
-                            )));
-                        }
-                    )*
+                    #(#soa_wire_checks)*
 
                     let mut result = Self::default();
                     result.len = len;
-                    #(
-                        for (idx, value) in #field_names.into_iter().enumerate() {
-                            result.#field_names[idx] = value;
-                        }
-                    )*
+                    #(#soa_wire_assignments)*
                     Ok(result)
                 }
             }
 
             #iterator
-
         }
         #visibility use #module_name::#soa_struct_name;
+        #visibility use #module_name::#soa_storage_name;
+        #visibility use #module_name::#soa_storage_wire_name;
     };
 
     let tokens: TokenStream = expanded.into();
