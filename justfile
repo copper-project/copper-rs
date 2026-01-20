@@ -272,11 +272,11 @@ dag mission="":
 
 	cd "{{ROOT}}"
 	mission_value="{{mission}}"
-	mission_arg=()
 	if [[ -n "$mission_value" ]]; then
-		mission_arg=(--mission "$mission_value")
+		cargo run -p cu29-runtime --bin cu29-rendercfg -- --mission "$mission_value" --open "$cfg_path"
+	else
+		cargo run -p cu29-runtime --bin cu29-rendercfg -- --open "$cfg_path"
 	fi
-	cargo run -p cu29-runtime --bin cu29-rendercfg -- "${mission_arg[@]}" --open "$cfg_path"
 
 # Helpers for managing git worktrees for different branches.
 wt branch:
