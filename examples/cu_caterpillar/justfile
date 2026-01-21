@@ -1,10 +1,12 @@
 import "../../justfile"
 
+# Extract copperlists from the caterpillar log.
 cl:
 	#!/usr/bin/env bash
 	set -euo pipefail
 	RUST_BACKTRACE=1 cargo run --profile screaming --bin cu-caterpillar-logreader logs/caterpillar.copper extract-copperlists
 
+# Extract a text log using the caterpillar logreader.
 logreader:
 	#!/usr/bin/env bash
 	set -euo pipefail
@@ -69,11 +71,13 @@ dag-logstats bin="cu-caterpillar-logreader" log="logs/caterpillar.copper" missio
 		)
 	fi
 
+# Run the resim binary against the recorded caterpillar log.
 resim:
 	#!/usr/bin/env bash
 	set -euo pipefail
 	RUST_BACKTRACE=1 cargo run --profile screaming --bin cu-caterpillar-resim logs/caterpillar.copper
 
+# Convert the caterpillar log to MCAP and show a summary.
 mcap:
 	#!/usr/bin/env bash
 	set -euo pipefail

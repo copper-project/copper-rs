@@ -1,10 +1,12 @@
 import "../../justfile"
 
+# Extract a text log using the balancebot logreader.
 balancebot-dump-text-logs:
 	#!/usr/bin/env bash
 	set -euo pipefail
 	cargo run --bin balancebot-logreader --profile screaming -- logs/balance.copper extract-text-log ../../target/debug/cu29_log_index/strings.bin
 
+# Run fsck against the balancebot copper log.
 balancebot-fsck:
 	#!/usr/bin/env bash
 	set -euo pipefail
@@ -69,6 +71,7 @@ dag-logstats bin="balancebot-logreader" log="logs/balance.copper" mission="" out
 		)
 	fi
 
+# Set permissions on balancebot PWM sysfs entries.
 balancebot-set-pwm-permissions:
 	#!/usr/bin/env bash
 	set -euo pipefail
@@ -85,6 +88,7 @@ balancebot-set-pwm-permissions:
 	chmod 0660 /sys/class/pwm/pwmchip0/unexport
 	chown root:wheel /sys/class/pwm/pwmchip0/unexport
 
+# Convert the balancebot log to MCAP and show a summary.
 mcap:
 	#!/usr/bin/env bash
 	set -euo pipefail
