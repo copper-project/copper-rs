@@ -278,65 +278,6 @@ dag mission="":
 		cargo run -p cu29-runtime --bin cu29-rendercfg -- --open "$cfg_path"
 	fi
 
-# Render a DAG with log-derived statistics. Requires explicit bin=<logreader>.
-dag-logstats bin log="logs/embedded.copper" mission="" out="target/cu29_logstats.json":
-	#!/usr/bin/env bash
-	set -euo pipefail
-
-	bin_name="{{bin}}"
-	[[ -n "$bin_name" ]] || { echo "bin is required"; exit 1; }
-
-	invocation_dir="{{invocation_directory()}}"
-	cfg_path="${invocation_dir}/copperconfig.ron"
-	if [[ ! -f "$cfg_path" ]]; then
-		echo "No copperconfig.ron found in ${invocation_dir}" >&2
-		exit 1
-	fi
-
-	log_path="{{log}}"
-	if [[ "$log_path" != /* ]]; then
-		log_path="${invocation_dir}/${log_path}"
-	fi
-	log_base="$log_path"
-	if [[ "$log_base" == *_0.copper ]]; then
-		log_base="${log_base%_0.copper}.copper"
-	fi
-	if [[ "$log_base" == *.copper ]]; then
-		log_slab="${log_base%.copper}_0.copper"
-	else
-		log_slab="${log_base}_0.copper"
-	fi
-	[[ -f "$log_base" || -f "$log_slab" ]] || { echo "Log file not found: $log_path" >&2; exit 1; }
-
-	out_path="{{out}}"
-	if [[ "$out_path" != /* ]]; then
-		out_path="${invocation_dir}/${out_path}"
-	fi
-	mkdir -p "$(dirname "$out_path")"
-
-	mission_value="{{mission}}"
-	if [[ -n "$mission_value" ]]; then
-		(
-			cd "$invocation_dir"
-			cargo run --bin "$bin_name" -- "$log_base" log-stats --config "$cfg_path" --output "$out_path" --mission "$mission_value"
-		)
-
-		(
-			cd "{{ROOT}}"
-			cargo run -p cu29-runtime --bin cu29-rendercfg -- --logstats "$out_path" --open "$cfg_path" --mission "$mission_value"
-		)
-	else
-		(
-			cd "$invocation_dir"
-			cargo run --bin "$bin_name" -- "$log_base" log-stats --config "$cfg_path" --output "$out_path"
-		)
-
-		(
-			cd "{{ROOT}}"
-			cargo run -p cu29-runtime --bin cu29-rendercfg -- --logstats "$out_path" --open "$cfg_path"
-		)
-	fi
-
 # Helpers for managing git worktrees for different branches.
 wt branch:
   #!/usr/bin/env bash
