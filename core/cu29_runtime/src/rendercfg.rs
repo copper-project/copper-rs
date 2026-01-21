@@ -328,16 +328,7 @@ fn load_logstats(
     let edge_map = logstats
         .edges
         .into_iter()
-        .map(|edge| {
-            let key = EdgeStatsKey {
-                src: edge.src.clone(),
-                src_channel: edge.src_channel.clone(),
-                dst: edge.dst.clone(),
-                dst_channel: edge.dst_channel.clone(),
-                msg: edge.msg.clone(),
-            };
-            (key, edge)
-        })
+        .map(|edge| (EdgeStatsKey::from_edge(&edge), edge))
         .collect();
 
     Ok(LogStatsIndex {
@@ -479,32 +470,7 @@ fn build_section_layout(
             &dst_port,
         );
         graph.add_edge(arrow.clone(), *src_handle, *dst_handle);
-        let edge_stats = logstats.and_then(|stats| {
-            let key = EdgeStatsKey {
-                src: cnx.src.clone(),
-                src_channel: cnx.src_channel.clone(),
-                dst: cnx.dst.clone(),
-                dst_channel: cnx.dst_channel.clone(),
-                msg: cnx.msg.clone(),
-            };
-            stats
-                .edges
-                .get(&key)
-                .or_else(|| {
-                    if key.src_channel.is_some() || key.dst_channel.is_some() {
-                        stats.edges.get(&EdgeStatsKey {
-                            src: key.src.clone(),
-                            src_channel: None,
-                            dst: key.dst.clone(),
-                            dst_channel: None,
-                            msg: key.msg.clone(),
-                        })
-                    } else {
-                        None
-                    }
-                })
-                .cloned()
-        });
+        let edge_stats = logstats.and_then(|stats| stats.edge_stats_for(cnx));
         let group_key = EdgeGroupKey {
             src: *src_handle,
             src_port: src_port.clone(),
@@ -2125,6 +2091,24 @@ impl LogStatsIndex {
     fn applies_to(&self, mission_id: Option<&str>) -> bool {
         mission_key(self.mission.as_deref()) == mission_key(mission_id)
     }
+
+    fn edge_stats_for(&self, cnx: &config::RenderConnection) -> Option<EdgeLogStats> {
+        let key = EdgeStatsKey::from_connection(cnx);
+        self.edge_stats_for_key(&key)
+    }
+
+    fn edge_stats_for_key(&self, key: &EdgeStatsKey) -> Option<EdgeLogStats> {
+        self.edges
+            .get(key)
+            .or_else(|| {
+                if key.src_channel.is_some() || key.dst_channel.is_some() {
+                    self.edges.get(&key.without_channels())
+                } else {
+                    None
+                }
+            })
+            .cloned()
+    }
 }
 
 struct RenderEdge {
@@ -2152,6 +2136,38 @@ struct EdgeStatsKey {
     dst: String,
     dst_channel: Option<String>,
     msg: String,
+}
+
+impl EdgeStatsKey {
+    fn from_edge(edge: &EdgeLogStats) -> Self {
+        Self {
+            src: edge.src.clone(),
+            src_channel: edge.src_channel.clone(),
+            dst: edge.dst.clone(),
+            dst_channel: edge.dst_channel.clone(),
+            msg: edge.msg.clone(),
+        }
+    }
+
+    fn from_connection(cnx: &config::RenderConnection) -> Self {
+        Self {
+            src: cnx.src.clone(),
+            src_channel: cnx.src_channel.clone(),
+            dst: cnx.dst.clone(),
+            dst_channel: cnx.dst_channel.clone(),
+            msg: cnx.msg.clone(),
+        }
+    }
+
+    fn without_channels(&self) -> Self {
+        Self {
+            src: self.src.clone(),
+            src_channel: None,
+            dst: self.dst.clone(),
+            dst_channel: None,
+            msg: self.msg.clone(),
+        }
+    }
 }
 
 #[derive(Clone)]
