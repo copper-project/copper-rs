@@ -4,6 +4,7 @@ WINDOWS_BASE_FEATURES := "mock,image,kornia,python,gst,faer,nalgebra,glam,debug_
 export ROOT := `git rev-parse --show-toplevel`
 EMBEDDED_EXCLUDES := shell('python3 $1/support/ci/embedded_crates.py excludes', ROOT)
 
+# Default to the CI-aligned std workflow.
 default:
 	just std-ci
 
@@ -28,6 +29,7 @@ fmt: check-format-tools
 	git ls-files -z '*.ron' ':!examples/modular_config_example/motors.ron' | xargs -0 -n 1 ronfmt
 	rg --files -g '*.ron.bak' | xargs rm -f
 
+# Ensure the formatters needed by fmt/fmt-check are installed.
 check-format-tools:
 	#!/usr/bin/env bash
 	set -euo pipefail
@@ -53,12 +55,14 @@ check-format-tools:
 typos:
 	typos -c .config/_typos.toml
 
+# Run the Unit-Tests job locally via act (debug/ubuntu matrix).
 ci:
   act -W .github/workflows/general.yml -j Unit-Tests --matrix os:ubuntu-latest --matrix mode:debug -P ubuntu-latest=ghcr.io/catthehacker/ubuntu:act-latest
 
 # Host target detection for cross-platform logreader builds
 host_target := `rustc +stable -vV | sed -n 's/host: //p'`
 
+# Run the no_std/embedded CI flow locally.
 nostd-ci: lint
 	cargo +stable build --no-default-features
 	cargo +stable nextest run --no-default-features

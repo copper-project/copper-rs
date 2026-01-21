@@ -1,4 +1,5 @@
 import "../../../justfile"
 
+# Run the MSP dump example against a serial device.
 msp-dump:
 	cargo run --example msp_dump -- /dev/ttyACM0 115200

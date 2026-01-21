@@ -1,10 +1,12 @@
 import "../../justfile"
 
+# Generate a flamegraph for the standardlog benchmark binary.
 profile-standardlog:
 	#!/usr/bin/env bash
 	set -euo pipefail
 	CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --bin standardlog_perf
 
+# Generate a flamegraph for the structlog benchmark binary.
 profile-structlog:
 	#!/usr/bin/env bash
 	set -euo pipefail

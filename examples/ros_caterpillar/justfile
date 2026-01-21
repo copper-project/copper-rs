@@ -1,5 +1,6 @@
 import "../../justfile"
 
+# Build and launch the ROS caterpillar nodes locally.
 ros-caterpillar-run:
 	#!/usr/bin/env bash
 	set -euo pipefail
