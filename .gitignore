@@ -1,4 +1,6 @@
 .idea
+.code
+.DS_Store
 /target
 /build
 /cu29_export.so
@@ -6,6 +8,7 @@
 
 *.copper
 *.mcap
+cu29_logstats.json
 Cargo.lock
 
 # ROS stuff

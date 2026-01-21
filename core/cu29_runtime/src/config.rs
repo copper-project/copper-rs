@@ -1698,8 +1698,12 @@ pub(crate) struct RenderNode {
 pub(crate) struct RenderConnection {
     pub src: String,
     pub src_port: Option<String>,
+    #[allow(dead_code)]
+    pub src_channel: Option<String>,
     pub dst: String,
     pub dst_port: Option<String>,
+    #[allow(dead_code)]
+    pub dst_channel: Option<String>,
     pub msg: String,
 }
 
@@ -1977,8 +1981,10 @@ pub(crate) fn build_render_topology(graph: &CuGraph, bridges: &[BridgeConfig]) -
         connections.push(RenderConnection {
             src: cnx.src.clone(),
             src_port,
+            src_channel: cnx.src_channel.clone(),
             dst: cnx.dst.clone(),
             dst_port,
+            dst_channel: cnx.dst_channel.clone(),
             msg: cnx.msg.clone(),
         });
     }
