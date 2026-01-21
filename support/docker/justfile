@@ -1,20 +1,24 @@
 import "../../justfile"
 
+# Build the base Ubuntu devcontainer image.
 docker-build-env:
 	#!/usr/bin/env bash
 	set -euo pipefail
 	docker build -f Dockerfile.ubuntu -t copper-rs-env .
 
+# Build the CUDA-enabled Ubuntu devcontainer image.
 docker-build-cuda-env:
 	#!/usr/bin/env bash
 	set -euo pipefail
 	docker build -f Dockerfile.ubuntu-cuda -t copper-rs-cuda-env .
 
+# Run the base devcontainer image with the repo mounted.
 docker-run-env:
 	#!/usr/bin/env bash
 	set -euo pipefail
 	docker run -it -entrypoint="" --mount type=bind,source="$(pwd)"/../..,target=/home/copper-rs copper-rs-env
 
+# Run the CUDA devcontainer image with the repo mounted.
 docker-run-cuda-env:
 	#!/usr/bin/env bash
 	set -euo pipefail

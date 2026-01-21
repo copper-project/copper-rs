@@ -1,5 +1,6 @@
 import "../../../justfile"
 
+# Emit a markdown table of RIHS01 type hashes from installed ROS messages.
 ros-rihs01-hashes:
 	#!/usr/bin/env bash
 	set -euo pipefail

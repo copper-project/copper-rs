@@ -1,20 +1,24 @@
 # Template generation helpers for local testing.
 
+# Generate the single-project template into templates/test_project.
 gen-project:
   #!/usr/bin/env bash
   set -euo pipefail
   rm -rf test_project
   cargo +stable generate -p cu_project --name test_project --destination . -d copper_source=local -d copper_root_path=../..
 
+# Generate the workspace template into templates/test_workspace.
 gen-workspace:
   #!/usr/bin/env bash
   set -euo pipefail
   rm -rf test_workspace
   cargo +stable generate -p cu_full --name test_workspace --destination . -d copper_source=local -d copper_root_path=../..
 
+# Generate both template variants.
 gen-all:
   just gen-project
   just gen-workspace
 
+# Remove generated template outputs.
 clean-generated:
   rm -rf test_project test_workspace

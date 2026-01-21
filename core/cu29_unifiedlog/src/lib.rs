@@ -332,9 +332,8 @@ impl<S: SectionStorage, L: UnifiedLogWrite<S>> Drop for LogStream<S, L> {
         let mut logger_guard = self.parent_logger.lock();
 
         #[cfg(feature = "std")]
-        let mut logger_guard = match logger_guard {
-            Ok(g) => g,
-            Err(_) => return,
+        let Ok(mut logger_guard) = logger_guard else {
+            return;
         };
         logger_guard.flush_section(&mut self.current_section);
         #[cfg(feature = "std")]

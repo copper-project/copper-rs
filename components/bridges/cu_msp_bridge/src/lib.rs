@@ -223,34 +223,30 @@ where
             {
                 break;
             }
-            match self.serial.read(&mut self.read_buffer) {
-                Ok(0) => break,
-                Ok(n) => {
-                    for &byte in &self.read_buffer[..n] {
-                        if self.pending_responses.0.len() >= MAX_RESPONSES_PER_BATCH
-                            || self.pending_requests.0.len() >= MAX_REQUESTS_PER_BATCH
-                        {
-                            break;
+            let Ok(n) = self.serial.read(&mut self.read_buffer) else {
+                break;
+            };
+            if n == 0 {
+                break;
+            }
+            for &byte in &self.read_buffer[..n] {
+                if self.pending_responses.0.len() >= MAX_RESPONSES_PER_BATCH
+                    || self.pending_requests.0.len() >= MAX_REQUESTS_PER_BATCH
+                {
+                    break;
+                }
+                if let Ok(Some(packet)) = self.parser.parse(byte) {
+                    if packet.direction == MspPacketDirection::ToFlightController {
+                        // This is an incoming request from the VTX
+                        if let Some(request) = MspRequest::from_packet(&packet) {
+                            self.pending_requests.push(request)?;
                         }
-                        match self.parser.parse(byte) {
-                            Ok(Some(packet)) => {
-                                if packet.direction == MspPacketDirection::ToFlightController {
-                                    // This is an incoming request from the VTX
-                                    if let Some(request) = MspRequest::from_packet(&packet) {
-                                        self.pending_requests.push(request)?;
-                                    }
-                                } else {
-                                    // This is a response from the VTX
-                                    let response = MspResponse::from(packet);
-                                    self.pending_responses.push(response)?;
-                                }
-                            }
-                            Ok(None) => {}
-                            Err(_) => {}
-                        }
+                    } else {
+                        // This is a response from the VTX
+                        let response = MspResponse::from(packet);
+                        self.pending_responses.push(response)?;
                     }
                 }
-                Err(_) => break,
             }
         }
         Ok(())

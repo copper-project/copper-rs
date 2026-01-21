@@ -71,12 +71,9 @@ fn main() {
 
     // Run the main loop
     loop {
-        match application.run_one_iteration() {
-            Ok(_) => {}
-            Err(e) => {
-                eprintln!("Error during iteration: {:?}", e);
-                break;
-            }
+        if let Err(e) = application.run_one_iteration() {
+            eprintln!("Error during iteration: {:?}", e);
+            break;
         }
     }
 }

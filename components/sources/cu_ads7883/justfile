@@ -1,5 +1,6 @@
 import "../../../justfile"
 
+# Build and deploy the ADS7883 tests to the copper7 target.
 deploy-cu-ads7883-tests:
 	#!/usr/bin/env bash
 	set -euo pipefail
