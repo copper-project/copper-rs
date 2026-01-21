@@ -28,15 +28,13 @@ pub fn process_predictions(
     let mut poses = CuPoses::new();
 
     // Move to CPU for processing
-    let predictions = match predictions.to_device(&Device::Cpu) {
-        Ok(p) => p,
-        Err(_) => return poses,
+    let Ok(predictions) = predictions.to_device(&Device::Cpu) else {
+        return poses;
     };
 
     // Expected shape: (56, num_preds) where 56 = 4 (bbox) + 1 (conf) + 51 (17*3 keypoints)
-    let (pred_size, num_preds) = match predictions.dims2() {
-        Ok(dims) => dims,
-        Err(_) => return poses,
+    let Ok((pred_size, num_preds)) = predictions.dims2() else {
+        return poses;
     };
 
     // Validate prediction size: 4 + 1 + 17*3 = 56
@@ -51,14 +49,12 @@ pub fn process_predictions(
     let mut candidates: Vec<PoseCandidate> = Vec::new();
 
     for idx in 0..num_preds {
-        let pred = match predictions.i((.., idx)) {
-            Ok(p) => p,
-            Err(_) => continue,
+        let Ok(pred) = predictions.i((.., idx)) else {
+            continue;
         };
 
-        let pred_vec: Vec<f32> = match pred.to_vec1() {
-            Ok(v) => v,
-            Err(_) => continue,
+        let Ok(pred_vec) = pred.to_vec1() else {
+            continue;
         };
 
         let confidence = pred_vec[4];

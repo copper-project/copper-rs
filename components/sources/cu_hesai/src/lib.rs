@@ -94,51 +94,50 @@ impl CuSrcTask for Xt32 {
     fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
         let payload = new_msg.payload_mut().insert(LidarCuMsgPayload::default());
         let mut buf = [0u8; 1500];
-        match self.socket.read(&mut buf) {
-            Ok(size) => {
-                let lidar_packet = parser::parse_packet(&buf[..size])
-                    .map_err(|e| CuError::new_with_cause("Failed to parse Hesai UDP packet", e))?;
-                // this is the reference point for the block timings
-                let t6 = lidar_packet
-                    .block_ts(&self.reftime)
-                    .map_err(|e| CuError::new_with_cause("Failed to get block timings", e))?[5]; // 0 == channel 1, 5 == channel 6
-
-                let mut min_tov = CuTime::MAX;
-                let mut max_tov = CuTime::MIN;
-
-                // let is_dual = lidar_packet.header.is_dual_return(); TODO: add dual return support
-                for block in lidar_packet.blocks.iter() {
-                    let azimuth = block.azimuth();
-                    block.channels.iter().enumerate().for_each(|(i, c)| {
-                        let elevation = self.channel_elevations[i];
-                        let d = c.distance();
-                        let r = c.reflectivity();
-
-                        let (x, y, z) = spherical_to_cartesian(azimuth, elevation, d);
-                        let t = channel_time(t6, i as u64);
-                        // TODO: we can precompute that from the packet itself in one shot.
-                        if t < min_tov {
-                            min_tov = t;
-                        } else if t > max_tov {
-                            max_tov = t;
-                        }
-                        payload.push(PointCloud::new_uom(t, x, y, z, r, None));
-                    });
-                }
-
-                let tov_range = CuTimeRange {
-                    start: min_tov,
-                    end: max_tov,
-                };
-                new_msg.tov = Tov::Range(tov_range); // take the oldest timestamp
-            }
+        let size = match self.socket.read(&mut buf) {
+            Ok(size) => size,
             Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
                 // Handle no data available (non-blocking behavior)
                 new_msg.clear_payload();
                 return Ok(());
             }
             Err(e) => return Err(CuError::new_with_cause("IO Error on UDP socket", e)), // Handle other errors
+        };
+        let lidar_packet = parser::parse_packet(&buf[..size])
+            .map_err(|e| CuError::new_with_cause("Failed to parse Hesai UDP packet", e))?;
+        // this is the reference point for the block timings
+        let t6 = lidar_packet
+            .block_ts(&self.reftime)
+            .map_err(|e| CuError::new_with_cause("Failed to get block timings", e))?[5]; // 0 == channel 1, 5 == channel 6
+
+        let mut min_tov = CuTime::MAX;
+        let mut max_tov = CuTime::MIN;
+
+        // let is_dual = lidar_packet.header.is_dual_return(); TODO: add dual return support
+        for block in lidar_packet.blocks.iter() {
+            let azimuth = block.azimuth();
+            block.channels.iter().enumerate().for_each(|(i, c)| {
+                let elevation = self.channel_elevations[i];
+                let d = c.distance();
+                let r = c.reflectivity();
+
+                let (x, y, z) = spherical_to_cartesian(azimuth, elevation, d);
+                let t = channel_time(t6, i as u64);
+                // TODO: we can precompute that from the packet itself in one shot.
+                if t < min_tov {
+                    min_tov = t;
+                } else if t > max_tov {
+                    max_tov = t;
+                }
+                payload.push(PointCloud::new_uom(t, x, y, z, r, None));
+            });
         }
+
+        let tov_range = CuTimeRange {
+            start: min_tov,
+            end: max_tov,
+        };
+        new_msg.tov = Tov::Range(tov_range); // take the oldest timestamp
         Ok(())
     }
 }

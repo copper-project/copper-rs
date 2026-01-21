@@ -64,42 +64,31 @@ fn main() -> ! {
     report_last_fault();
     init_heap();
 
-    let mut resources = match FlightControllerApp::init_resources() {
-        Ok(resources) => resources,
-        Err(e) => {
-            let _ = e;
-            defmt::error!("Resource init failed: {}", e); // defmt here because we don't have a copper logger yet.
-            loop {
-                asm::wfi();
-            }
+    let mut resources = FlightControllerApp::init_resources().unwrap_or_else(|e| {
+        defmt::error!("Resource init failed: {}", e); // defmt here because we don't have a copper logger yet.
+        loop {
+            asm::wfi();
         }
-    };
+    });
 
     let logger_key = app_resources::bundles::FC.key::<Logger, _>(MicoAirH743Id::Logger);
-    let logger = match resources.resources.take(logger_key) {
-        Ok(logger) => logger.0,
-        Err(e) => {
-            let _ = e;
-            error!("Logger resource missing");
-            loop {
-                asm::wfi();
-            }
+    let logger = resources.resources.take(logger_key).unwrap_or_else(|_e| {
+        error!("Logger resource missing");
+        loop {
+            asm::wfi();
         }
-    };
+    });
+    let logger = logger.0;
 
     // Spin up Copper runtime with CRSF -> mapper -> sink graph.
     let clock = build_clock();
     let writer = Arc::new(Mutex::new(logger));
 
-    match FlightControllerApp::new_with_resources(clock, writer, resources) {
-        Ok(mut app) => {
-            log_heap_stats("before-run");
-            let _ = <FlightControllerApp as CuApplication<LogStorage, Logger>>::run(&mut app);
-        }
-        Err(e) => {
-            let _ = e;
-            error!("App init failed");
-        }
+    if let Ok(mut app) = FlightControllerApp::new_with_resources(clock, writer, resources) {
+        log_heap_stats("before-run");
+        let _ = <FlightControllerApp as CuApplication<LogStorage, Logger>>::run(&mut app);
+    } else {
+        error!("App init failed");
     }
     loop {
         asm::wfi();

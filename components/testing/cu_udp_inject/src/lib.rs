@@ -32,9 +32,8 @@ impl PcapStreamer {
     /// Returns false if the end of the pcap file is reached
     pub fn send_next<const PS: usize>(&mut self) -> CuResult<bool> {
         // Get the next packet and check for end of stream
-        let packet = match self.capture.next_packet() {
-            Ok(packet) => packet,
-            Err(_) => return Ok(false), // End of the stream
+        let Ok(packet) = self.capture.next_packet() else {
+            return Ok(false); // End of the stream
         };
 
         // Assume 42-byte header (Ethernet + IP + UDP) and an optional 4-byte FCS

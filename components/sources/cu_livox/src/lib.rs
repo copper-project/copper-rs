@@ -62,29 +62,28 @@ impl CuSrcTask for Tele15 {
     fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
         let payload = new_msg.payload_mut().insert(LidarCuMsgPayload::default());
         let mut buf = [0u8; 1500];
-        match self.socket.read(&mut buf) {
-            Ok(size) => {
-                let lidar_packet = parser::parse_frame(&buf[..size])
-                    .map_err(|e| CuError::new_with_cause("Failed to parse Livox UDP packet", e))?;
-
-                // let is_dual = lidar_packet.header.is_dual_return(); TODO: add dual return support
-                for pt in lidar_packet.points.iter() {
-                    payload.push(PointCloud::new_uom(
-                        lidar_packet.header.timestamp(),
-                        pt.x(),
-                        pt.y(),
-                        pt.z(),
-                        pt.reflectivity(),
-                        None,
-                    ));
-                }
-            }
+        let size = match self.socket.read(&mut buf) {
+            Ok(size) => size,
             Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
                 // Handle no data available (non-blocking behavior)
                 new_msg.clear_payload();
                 return Ok(());
             }
             Err(e) => return Err(CuError::new_with_cause("IO Error on UDP socket", e)), // Handle other errors
+        };
+        let lidar_packet = parser::parse_frame(&buf[..size])
+            .map_err(|e| CuError::new_with_cause("Failed to parse Livox UDP packet", e))?;
+
+        // let is_dual = lidar_packet.header.is_dual_return(); TODO: add dual return support
+        for pt in lidar_packet.points.iter() {
+            payload.push(PointCloud::new_uom(
+                lidar_packet.header.timestamp(),
+                pt.x(),
+                pt.y(),
+                pt.z(),
+                pt.reflectivity(),
+                None,
+            ));
         }
         Ok(())
     }
