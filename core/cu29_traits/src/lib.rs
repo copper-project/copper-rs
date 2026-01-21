@@ -355,6 +355,13 @@ pub trait ErasedCuStampedDataSet {
     fn cumsgs(&self) -> Vec<&dyn ErasedCuStampedData>;
 }
 
+/// Provides per-output raw payload sizes aligned with `ErasedCuStampedDataSet::cumsgs` order.
+pub trait CuPayloadRawBytes {
+    /// Returns raw payload sizes (stack + heap) for each output message.
+    /// `None` indicates the payload was not produced for that output.
+    fn payload_raw_bytes(&self) -> Vec<Option<u64>>;
+}
+
 /// Trait to trace back from the CopperList the origin of the messages
 pub trait MatchingTasks {
     fn get_all_task_ids() -> &'static [&'static str];
