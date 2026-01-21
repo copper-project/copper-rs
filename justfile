@@ -18,7 +18,7 @@ fmt-check: check-format-tools
 	cargo +stable fmt --all -- --check
 	git ls-files -z '*.toml' | xargs -0 taplo format --check
 	git ls-files -z '*.ron' ':!examples/modular_config_example/motors.ron' | xargs -0 -n 1 ronfmt
-	find . -name '*.ron.bak' -type f -delete
+	rg --files -g '*.ron.bak' | xargs rm -f
 	git diff --exit-code -- '*.ron'
 
 # Apply formatting to Rust, TOML, and RON files
@@ -26,7 +26,7 @@ fmt: check-format-tools
 	cargo +stable fmt --all
 	git ls-files -z '*.toml' | xargs -0 taplo format
 	git ls-files -z '*.ron' ':!examples/modular_config_example/motors.ron' | xargs -0 -n 1 ronfmt
-	find . -name '*.ron.bak' -type f -delete
+	rg --files -g '*.ron.bak' | xargs rm -f
 
 check-format-tools:
 	#!/usr/bin/env bash
@@ -38,10 +38,13 @@ check-format-tools:
 		missing=1
 	fi
 	if ! command -v ronfmt >/dev/null 2>&1; then
-		echo "Missing ronfmt. Install with: cargo install ronfmt"
+		echo "Missing ronfmt. Install with: cargo install --locked ronfmt"
 		missing=1
 	fi
-
+	if ! command -v rg > /dev/null 2>&1; then
+		echo "Missing rg. Install with: cargo install --locked rg"
+		missing=1
+	fi
 	if [[ "$missing" -ne 0 ]]; then
 		exit 1
 	fi

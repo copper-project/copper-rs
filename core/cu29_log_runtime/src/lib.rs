@@ -144,9 +144,8 @@ impl Drop for LoggerRuntime {
 /// It moves entry by design, it will be absorbed in the queue.
 #[inline(always)]
 pub fn log(entry: &mut CuLogEntry) -> CuResult<()> {
-    let (writer, clock) = match WRITER.get() {
-        Some((writer, clock)) => (writer, clock),
-        None => return Err("Logger not initialized.".into()),
+    let Some((writer, clock)) = WRITER.get() else {
+        return Err("Logger not initialized.".into());
     };
     entry.time = clock.now();
 
@@ -161,13 +160,10 @@ pub fn log(entry: &mut CuLogEntry) -> CuResult<()> {
 
     #[cfg(feature = "std")]
     {
-        let mut guard = match writer.lock() {
-            Ok(guard) => guard,
-            Err(err) => {
-                eprintln!("cu29_log: Logger mutex poisoned, recovering.");
-                err.into_inner()
-            }
-        };
+        let mut guard = writer.lock().unwrap_or_else(|err| {
+            eprintln!("cu29_log: Logger mutex poisoned, recovering.");
+            err.into_inner()
+        });
         if let Err(err) = guard.log(entry) {
             eprintln!("Failed to log data: {err}");
         } else if let Some(bytes) = guard.last_log_bytes() {
