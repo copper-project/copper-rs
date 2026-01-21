@@ -1,5 +1,6 @@
 import "../justfile"
 
+# Cross-compile armv7 binaries and deploy them to copper7.
 cross-armv7-deploy:
 	#!/usr/bin/env bash
 	set -euo pipefail
@@ -8,6 +9,7 @@ cross-armv7-deploy:
 	find target/armv7-unknown-linux-gnueabihf/release -maxdepth 1 -type f -executable -exec scp -r {} gbin@copper7:copper/ \;
 	scp copper_derive_test/copperconfig.ron gbin@copper7:copper
 
+# Cross-compile riscv64 binaries and deploy them to copperv.
 cross-riscv64-deploy:
 	#!/usr/bin/env bash
 	set -euo pipefail

@@ -1,5 +1,6 @@
 import "../../../justfile"
 
+# Build and deploy the SN754410 tests to the copper7 target.
 deploy-cu-sn754410-tests:
 	#!/usr/bin/env bash
 	set -euo pipefail
