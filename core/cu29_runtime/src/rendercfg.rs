@@ -3885,12 +3885,10 @@ fn build_edge_hover_overlay(
     stroke_color: &str,
     line_width: usize,
 ) -> (Group, Point, Point) {
-    let flat_tooltip = flatten_tooltip(tooltip);
     let hitbox_width = line_width.max(EDGE_HITBOX_STROKE_WIDTH);
     let mut hover_group = Group::new().set("class", "edge-hover");
     let mut hitbox_el = SvgPath::new()
         .set("d", build_path_data(path))
-        .set("title", flat_tooltip)
         .set("stroke", stroke_color)
         .set("stroke-opacity", EDGE_HITBOX_OPACITY)
         .set("stroke-width", hitbox_width)
@@ -4017,10 +4015,6 @@ fn format_edge_tooltip(stats: &EdgeLogStats) -> String {
         ),
     ]
     .join("\n")
-}
-
-fn flatten_tooltip(tooltip: &str) -> String {
-    tooltip.lines().collect::<Vec<_>>().join(" | ")
 }
 
 fn format_none_ratio(none_samples: u64, samples: u64) -> String {
