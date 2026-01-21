@@ -26,9 +26,9 @@ use ratatui::crossterm::terminal::{
 };
 use ratatui::crossterm::tty::IsTty;
 use ratatui::crossterm::{event, execute};
-use ratatui::layout::{Alignment, Constraint, Direction, Layout, Size};
+use ratatui::layout::{Alignment, Constraint, Direction, Layout, Position, Size};
+use ratatui::prelude::Stylize;
 use ratatui::prelude::{Backend, Rect};
-use ratatui::prelude::{Stylize, Widget};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, BorderType, Borders, Cell, Paragraph, Row, StatefulWidget, Table};
@@ -372,6 +372,49 @@ struct DisplayNode {
     outputs: Vec<String>,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct GraphCacheKey {
+    area: Size,
+    node_count: usize,
+    connection_count: usize,
+}
+
+impl GraphCacheKey {
+    fn new(area: Size, node_count: usize, connection_count: usize) -> Self {
+        Self {
+            area,
+            node_count,
+            connection_count,
+        }
+    }
+}
+
+struct GraphCache {
+    graph: Option<NodeGraph<'static>>,
+    content_size: Size,
+    key: Option<GraphCacheKey>,
+    dirty: bool,
+}
+
+impl GraphCache {
+    fn new() -> Self {
+        Self {
+            graph: None,
+            content_size: Size::new(0, 0),
+            key: None,
+            dirty: true,
+        }
+    }
+
+    fn mark_dirty(&mut self) {
+        self.dirty = true;
+    }
+
+    fn needs_rebuild(&self, key: GraphCacheKey) -> bool {
+        self.dirty || self.graph.is_none() || self.key != Some(key)
+    }
+}
+
 struct NodesScrollableWidgetState {
     display_nodes: Vec<DisplayNode>,
     connections: Vec<Connection>,
@@ -379,6 +422,7 @@ struct NodesScrollableWidgetState {
     status_index_map: Vec<Option<usize>>,
     task_count: usize,
     nodes_scrollable_state: ScrollViewState,
+    graph_cache: GraphCache,
 }
 
 impl NodesScrollableWidgetState {
@@ -482,29 +526,139 @@ impl NodesScrollableWidgetState {
         NodesScrollableWidgetState {
             display_nodes,
             connections,
-            nodes_scrollable_state: ScrollViewState::default(),
             statuses: errors,
             status_index_map,
             task_count: task_ids.len(),
+            nodes_scrollable_state: ScrollViewState::default(),
+            graph_cache: GraphCache::new(),
         }
+    }
+
+    fn mark_graph_dirty(&mut self) {
+        self.graph_cache.mark_dirty();
+    }
+
+    fn ensure_graph_cache(&mut self, area: Rect) -> Size {
+        let key = self.graph_cache_key(area);
+        if self.graph_cache.needs_rebuild(key) {
+            self.rebuild_graph_cache(area, key);
+        }
+        self.graph_cache.content_size
+    }
+
+    fn graph(&self) -> &NodeGraph<'static> {
+        self.graph_cache
+            .graph
+            .as_ref()
+            .expect("graph cache must be initialized before render")
+    }
+
+    fn graph_cache_key(&self, area: Rect) -> GraphCacheKey {
+        GraphCacheKey::new(
+            Size::new(area.width, area.height),
+            self.display_nodes.len(),
+            self.connections.len(),
+        )
+    }
+
+    fn rebuild_graph_cache(&mut self, area: Rect, key: GraphCacheKey) {
+        let node_count = self.display_nodes.len().max(1);
+        let content_width = (node_count as u16)
+            .saturating_mul(NODE_WIDTH + 20)
+            .max(NODE_WIDTH);
+        let max_ports = self
+            .display_nodes
+            .iter()
+            .map(|node| node.inputs.len().max(node.outputs.len()))
+            .max()
+            .unwrap_or_default();
+        let content_height =
+            (((max_ports + NODE_PORT_ROW_OFFSET) as u16) * 12).max(NODE_HEIGHT * 6);
+
+        let mut content_size = Size::new(content_width, content_height);
+        let mut graph = NodeGraph::new(
+            self.build_node_layouts(),
+            self.connections.clone(),
+            content_size.width as usize,
+            content_size.height as usize,
+        );
+        graph.calculate();
+
+        if self.display_nodes.is_empty() {
+            content_size = Size::new(area.width.max(NODE_WIDTH), area.height.max(NODE_HEIGHT));
+            graph = NodeGraph::new(
+                self.build_node_layouts(),
+                self.connections.clone(),
+                content_size.width as usize,
+                content_size.height as usize,
+            );
+            graph.calculate();
+        } else {
+            let bounds = graph.content_bounds();
+            let desired_width = bounds
+                .width
+                .saturating_add(GRAPH_WIDTH_PADDING)
+                .max(NODE_WIDTH);
+            let desired_height = bounds
+                .height
+                .saturating_add(GRAPH_HEIGHT_PADDING)
+                .max(NODE_HEIGHT);
+            if desired_width != content_size.width || desired_height != content_size.height {
+                content_size = Size::new(desired_width, desired_height);
+                graph = NodeGraph::new(
+                    self.build_node_layouts(),
+                    self.connections.clone(),
+                    content_size.width as usize,
+                    content_size.height as usize,
+                );
+                graph.calculate();
+            }
+        }
+
+        self.graph_cache.graph = Some(graph);
+        self.graph_cache.content_size = content_size;
+        self.graph_cache.key = Some(key);
+        self.graph_cache.dirty = false;
+
+        self.clamp_scroll_offset(area, content_size);
+    }
+
+    fn build_node_layouts(&self) -> Vec<NodeLayout<'static>> {
+        self.display_nodes
+            .iter()
+            .map(|node| {
+                let ports = node.inputs.len().max(node.outputs.len());
+                let content_rows = ports + NODE_PORT_ROW_OFFSET;
+                let height = (content_rows as u16).saturating_add(2).max(NODE_HEIGHT);
+                let mut title_line: Line<'static> = Line::default();
+                title_line.spans.push(Span::styled(
+                    format!(" {}", node.node_type),
+                    Style::default().fg(node.node_type.color()),
+                ));
+                title_line.spans.push(Span::styled(
+                    format!(" {} ", node.id),
+                    Style::default().fg(Color::White),
+                ));
+                NodeLayout::new((NODE_WIDTH, height)).with_title_line(title_line)
+            })
+            .collect()
+    }
+
+    fn clamp_scroll_offset(&mut self, area: Rect, content_size: Size) {
+        let max_x = content_size
+            .width
+            .saturating_sub(area.width.saturating_sub(1));
+        let max_y = content_size
+            .height
+            .saturating_sub(area.height.saturating_sub(1));
+        let offset = self.nodes_scrollable_state.offset();
+        let clamped = Position::new(offset.x.min(max_x), offset.y.min(max_y));
+        self.nodes_scrollable_state.set_offset(clamped);
     }
 }
 
 struct NodesScrollableWidget<'a> {
     _marker: PhantomData<&'a ()>,
-}
-
-struct GraphWrapper<'a> {
-    inner: NodeGraph<'a>,
-}
-
-impl Widget for GraphWrapper<'_> {
-    fn render(self, area: Rect, buf: &mut Buffer)
-    where
-        Self: Sized,
-    {
-        self.inner.render(area, buf, &mut ())
-    }
 }
 
 const NODE_WIDTH: u16 = 29;
@@ -540,164 +694,103 @@ impl StatefulWidget for NodesScrollableWidget<'_> {
     type State = NodesScrollableWidgetState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        let build_node_layouts = || {
-            state
-                .display_nodes
-                .iter()
-                .map(|node| {
-                    let ports = node.inputs.len().max(node.outputs.len());
-                    let content_rows = ports + NODE_PORT_ROW_OFFSET;
-                    let height = (content_rows as u16).saturating_add(2).max(NODE_HEIGHT);
-                    let mut title_line = Line::default();
-                    title_line.spans.push(Span::styled(
-                        format!(" {}", node.node_type),
-                        Style::default().fg(node.node_type.color()),
-                    ));
-                    title_line.spans.push(Span::styled(
-                        format!(" {} ", node.id),
-                        Style::default().fg(Color::White),
-                    ));
-                    NodeLayout::new((NODE_WIDTH, height)).with_title_line(title_line)
-                })
-                .collect::<Vec<_>>()
-        };
-
-        let node_count = state.display_nodes.len().max(1);
-        let content_width = (node_count as u16)
-            .saturating_mul(NODE_WIDTH + 20)
-            .max(NODE_WIDTH);
-        let max_ports = state
-            .display_nodes
-            .iter()
-            .map(|node| node.inputs.len().max(node.outputs.len()))
-            .max()
-            .unwrap_or_default();
-        // Give extra vertical room so long connections can route without aliasing
-        let content_height =
-            (((max_ports + NODE_PORT_ROW_OFFSET) as u16) * 12).max(NODE_HEIGHT * 6);
-        let connections = state.connections.clone();
-        let build_graph = |width: u16, height: u16| {
-            NodeGraph::new(
-                build_node_layouts(),
-                connections.clone(),
-                width as usize,
-                height as usize,
-            )
-        };
-        let mut graph = build_graph(content_width, content_height);
-        graph.calculate();
-        let mut content_size = Size::new(content_width, content_height);
-        if state.display_nodes.is_empty() {
-            content_size = Size::new(area.width.max(NODE_WIDTH), area.height.max(NODE_HEIGHT));
-            graph = build_graph(content_size.width, content_size.height);
-            graph.calculate();
-        } else {
-            let bounds = graph.content_bounds();
-            let desired_width = bounds
-                .width
-                .saturating_add(GRAPH_WIDTH_PADDING)
-                .max(NODE_WIDTH);
-            let desired_height = bounds
-                .height
-                .saturating_add(GRAPH_HEIGHT_PADDING)
-                .max(NODE_HEIGHT);
-            if desired_width != content_size.width || desired_height != content_size.height {
-                content_size = Size::new(desired_width, desired_height);
-                graph = build_graph(content_size.width, content_size.height);
-                graph.calculate();
-            }
-        }
+        let content_size = state.ensure_graph_cache(area);
         let mut scroll_view = ScrollView::new(content_size);
-        let zones = graph.split(scroll_view.area());
 
         {
-            let mut statuses = state.statuses.lock().unwrap();
-            if statuses.len() <= state.task_count {
-                statuses.resize(state.task_count + 1, TaskStatus::default());
-            }
-            for (idx, ea_zone) in zones.into_iter().enumerate() {
-                let fallback_idx = state.task_count;
-                let status_idx = state
-                    .status_index_map
-                    .get(idx)
-                    .and_then(|opt| *opt)
-                    .unwrap_or(fallback_idx);
-                let safe_index = if status_idx < statuses.len() {
-                    status_idx
-                } else {
-                    statuses.len() - 1
-                };
-                let status = &mut statuses[safe_index];
-                let s = &state.display_nodes[idx].type_label;
-                let status_line = if status.is_error {
-                    format!("❌ {}", status.error)
-                } else {
-                    format!("✓ {}", status.status_txt)
-                };
+            let graph = state.graph();
+            let zones = graph.split(scroll_view.area());
 
-                let label_width = (NODE_WIDTH_CONTENT as usize).saturating_sub(2);
-                let type_label = clip_tail(s, label_width);
-                let status_text = clip_tail(&status_line, label_width);
-                let base_style = if status.is_error {
-                    Style::default().fg(Color::Red)
-                } else {
-                    Style::default().fg(Color::Green)
-                };
-                let mut lines: Vec<Line> = Vec::new();
-                lines.push(Line::styled(format!(" {}", type_label), base_style));
-                lines.push(Line::styled(format!(" {}", status_text), base_style));
-
-                let max_ports = state.display_nodes[idx]
-                    .inputs
-                    .len()
-                    .max(state.display_nodes[idx].outputs.len());
-                if max_ports > 0 {
-                    let left_width = (NODE_WIDTH_CONTENT as usize - 2) / 2;
-                    let right_width = NODE_WIDTH_CONTENT as usize - 2 - left_width;
-                    let input_style = Style::default().fg(Color::Yellow);
-                    let output_style = Style::default().fg(Color::Cyan);
-                    let dotted_style = Style::default().fg(Color::DarkGray);
-                    for port_idx in 0..max_ports {
-                        let input = state.display_nodes[idx]
-                            .inputs
-                            .get(port_idx)
-                            .map(|label| clip_tail(label, left_width))
-                            .unwrap_or_default();
-                        let output = state.display_nodes[idx]
-                            .outputs
-                            .get(port_idx)
-                            .map(|label| clip_tail(label, right_width))
-                            .unwrap_or_default();
-                        let mut port_line = Line::default();
-                        port_line.spans.push(Span::styled(
-                            format!(" {:<left_width$}", input, left_width = left_width),
-                            input_style,
-                        ));
-                        port_line.spans.push(Span::styled("┆", dotted_style));
-                        port_line.spans.push(Span::styled(
-                            format!("{:>right_width$}", output, right_width = right_width),
-                            output_style,
-                        ));
-                        lines.push(port_line);
-                    }
+            {
+                let mut statuses = state.statuses.lock().unwrap();
+                if statuses.len() <= state.task_count {
+                    statuses.resize(state.task_count + 1, TaskStatus::default());
                 }
+                for (idx, ea_zone) in zones.into_iter().enumerate() {
+                    let fallback_idx = state.task_count;
+                    let status_idx = state
+                        .status_index_map
+                        .get(idx)
+                        .and_then(|opt| *opt)
+                        .unwrap_or(fallback_idx);
+                    let safe_index = if status_idx < statuses.len() {
+                        status_idx
+                    } else {
+                        statuses.len() - 1
+                    };
+                    let status = &mut statuses[safe_index];
+                    let s = &state.display_nodes[idx].type_label;
+                    let status_line = if status.is_error {
+                        format!("❌ {}", status.error)
+                    } else {
+                        format!("✓ {}", status.status_txt)
+                    };
 
-                let txt = Text::from(lines);
-                let paragraph = Paragraph::new(txt);
-                status.is_error = false; // reset if it was displayed
-                scroll_view.render_widget(paragraph, ea_zone);
+                    let label_width = (NODE_WIDTH_CONTENT as usize).saturating_sub(2);
+                    let type_label = clip_tail(s, label_width);
+                    let status_text = clip_tail(&status_line, label_width);
+                    let base_style = if status.is_error {
+                        Style::default().fg(Color::Red)
+                    } else {
+                        Style::default().fg(Color::Green)
+                    };
+                    let mut lines: Vec<Line> = Vec::new();
+                    lines.push(Line::styled(format!(" {}", type_label), base_style));
+                    lines.push(Line::styled(format!(" {}", status_text), base_style));
+
+                    let max_ports = state.display_nodes[idx]
+                        .inputs
+                        .len()
+                        .max(state.display_nodes[idx].outputs.len());
+                    if max_ports > 0 {
+                        let left_width = (NODE_WIDTH_CONTENT as usize - 2) / 2;
+                        let right_width = NODE_WIDTH_CONTENT as usize - 2 - left_width;
+                        let input_style = Style::default().fg(Color::Yellow);
+                        let output_style = Style::default().fg(Color::Cyan);
+                        let dotted_style = Style::default().fg(Color::DarkGray);
+                        for port_idx in 0..max_ports {
+                            let input = state.display_nodes[idx]
+                                .inputs
+                                .get(port_idx)
+                                .map(|label| clip_tail(label, left_width))
+                                .unwrap_or_default();
+                            let output = state.display_nodes[idx]
+                                .outputs
+                                .get(port_idx)
+                                .map(|label| clip_tail(label, right_width))
+                                .unwrap_or_default();
+                            let mut port_line = Line::default();
+                            port_line.spans.push(Span::styled(
+                                format!(" {:<left_width$}", input, left_width = left_width),
+                                input_style,
+                            ));
+                            port_line.spans.push(Span::styled("┆", dotted_style));
+                            port_line.spans.push(Span::styled(
+                                format!("{:>right_width$}", output, right_width = right_width),
+                                output_style,
+                            ));
+                            lines.push(port_line);
+                        }
+                    }
+
+                    let txt = Text::from(lines);
+                    let paragraph = Paragraph::new(txt);
+                    status.is_error = false; // reset if it was displayed
+                    scroll_view.render_widget(paragraph, ea_zone);
+                }
             }
+
+            scroll_view.render_widget(
+                graph,
+                Rect {
+                    x: 0,
+                    y: 0,
+                    width: content_size.width,
+                    height: content_size.height,
+                },
+            );
         }
 
-        scroll_view.render_widget(
-            GraphWrapper { inner: graph },
-            Rect {
-                x: 0,
-                y: 0,
-                width: content_size.width,
-                height: content_size.height,
-            },
-        );
         scroll_view.render(area, buf, &mut state.nodes_scrollable_state);
     }
 }
@@ -1411,8 +1504,11 @@ impl UI {
                         _ => {}
                     },
 
-                    #[cfg(feature = "debug_pane")]
                     Event::Resize(_columns, rows) => {
+                        self.nodes_scrollable_widget_state.mark_graph_dirty();
+                        #[cfg(not(feature = "debug_pane"))]
+                        let _ = rows;
+                        #[cfg(feature = "debug_pane")]
                         if let Some(debug_output) = self.debug_output.as_mut() {
                             debug_output.max_rows.store(rows, Ordering::SeqCst)
                         }
