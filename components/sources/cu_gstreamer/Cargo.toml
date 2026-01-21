@@ -15,10 +15,10 @@ repository.workspace = true
 cu29 = { workspace = true }
 bincode = { workspace = true }
 circular-buffer = "1.1.0"
-gstreamer = { version = "0.24", optional = true }
-gstreamer-app = { version = "0.24", optional = true }
+gstreamer = { version = "0.24", default-features = false, optional = true }
+gstreamer-app = { version = "0.24", default-features = false, optional = true }
 tempfile = { workspace = true }
-serde = { version = "1.0.219", features = ["derive"] }
+serde = { workspace = true }
 
 [dev-dependencies]
 rerun = { workspace = true }
