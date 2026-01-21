@@ -209,14 +209,7 @@ where
             config,
             mission,
         } => {
-            let config_path = config
-                .to_str()
-                .ok_or_else(|| CuError::from("Config path is not valid UTF-8"))?;
-            let cfg = read_configuration(config_path)
-                .map_err(|e| CuError::new_with_cause("Failed to read configuration", e))?;
-            let reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
-            let stats = compute_logstats::<P>(reader, &cfg, mission.as_deref())?;
-            write_logstats(&stats, &output)?;
+            run_logstats::<P>(dl, output, config, mission)?;
         }
         #[cfg(feature = "mcap")]
         Command::ExportMcap {
@@ -335,18 +328,30 @@ where
             config,
             mission,
         } => {
-            let config_path = config
-                .to_str()
-                .ok_or_else(|| CuError::from("Config path is not valid UTF-8"))?;
-            let cfg = read_configuration(config_path)
-                .map_err(|e| CuError::new_with_cause("Failed to read configuration", e))?;
-            let reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
-            let stats = compute_logstats::<P>(reader, &cfg, mission.as_deref())?;
-            write_logstats(&stats, &output)?;
+            run_logstats::<P>(dl, output, config, mission)?;
         }
     }
 
     Ok(())
+}
+
+fn run_logstats<P>(
+    dl: UnifiedLoggerRead,
+    output: PathBuf,
+    config: PathBuf,
+    mission: Option<String>,
+) -> CuResult<()>
+where
+    P: CopperListTuple + CuPayloadRawBytes,
+{
+    let config_path = config
+        .to_str()
+        .ok_or_else(|| CuError::from("Config path is not valid UTF-8"))?;
+    let cfg = read_configuration(config_path)
+        .map_err(|e| CuError::new_with_cause("Failed to read configuration", e))?;
+    let reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
+    let stats = compute_logstats::<P>(reader, &cfg, mission.as_deref())?;
+    write_logstats(&stats, &output)
 }
 
 /// Helper function for MCAP export.

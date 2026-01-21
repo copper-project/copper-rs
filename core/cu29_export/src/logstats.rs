@@ -26,7 +26,11 @@ pub struct LogStats {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EdgeLogStats {
     pub src: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub src_channel: Option<String>,
     pub dst: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dst_channel: Option<String>,
     pub msg: String,
     pub samples: u64,
     pub none_samples: u64,
@@ -56,7 +60,9 @@ pub struct DurationStats {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct EdgeKey {
     src: String,
+    src_channel: Option<String>,
     dst: String,
+    dst_channel: Option<String>,
     msg: String,
 }
 
@@ -124,7 +130,9 @@ impl EdgeAccumulator {
 
         EdgeLogStats {
             src: key.src,
+            src_channel: key.src_channel,
             dst: key.dst,
+            dst_channel: key.dst_channel,
             msg: key.msg,
             samples: self.samples,
             none_samples: self.none_samples,
@@ -163,11 +171,7 @@ impl PerfAccumulator {
 
     fn finalize(&self) -> PerfStats {
         let end_to_end = duration_stats_from(&self.stats);
-        let jitter = if self.stats.len() >= 2 {
-            jitter_stats_from(&self.stats)
-        } else {
-            DurationStats::default()
-        };
+        let jitter = jitter_stats_from(&self.stats);
 
         PerfStats {
             samples: self.samples,
@@ -186,9 +190,10 @@ pub fn compute_logstats<P>(
 where
     P: CopperListTuple + CuPayloadRawBytes,
 {
-    let signature = build_graph_signature(config, mission)?;
-    let output_slots = build_output_slots(config, mission)?;
-    let mut edge_accumulators = build_edge_accumulators(config, mission)?;
+    let graph = config.get_graph(mission)?;
+    let signature = build_graph_signature(graph, mission);
+    let output_slots = build_output_slots(graph)?;
+    let mut edge_accumulators = build_edge_accumulators(graph);
     let mut perf = PerfAccumulator::new();
     let mut warned_lengths = false;
 
@@ -196,22 +201,18 @@ where
         let payload_sizes = culist.msgs.payload_raw_bytes();
         let cumsgs = culist.msgs.cumsgs();
 
-        if !warned_lengths
-            && (payload_sizes.len() != cumsgs.len() || payload_sizes.len() != output_slots.len())
-        {
+        let payload_len = payload_sizes.len();
+        let msg_len = cumsgs.len();
+        let slot_len = output_slots.len();
+        if !warned_lengths && (payload_len != msg_len || payload_len != slot_len) {
             eprintln!(
                 "Warning: output mapping length mismatch (sizes={}, msgs={}, slots={})",
-                payload_sizes.len(),
-                cumsgs.len(),
-                output_slots.len()
+                payload_len, msg_len, slot_len
             );
             warned_lengths = true;
         }
 
-        let count = payload_sizes
-            .len()
-            .min(cumsgs.len())
-            .min(output_slots.len());
+        let count = payload_len.min(msg_len).min(slot_len);
 
         for idx in 0..count {
             let slot = &output_slots[idx];
@@ -252,11 +253,11 @@ pub fn write_logstats(stats: &LogStats, path: &Path) -> CuResult<()> {
     Ok(())
 }
 
-fn build_output_slots(config: &CuConfig, mission: Option<&str>) -> CuResult<Vec<OutputSlot>> {
-    let graph = config.get_graph(mission)?;
+fn build_output_slots(graph: &CuGraph) -> CuResult<Vec<OutputSlot>> {
     let packs = collect_output_packs(graph)?;
     let edges_by_src = build_edges_by_src_msg(graph);
-    let mut slots = Vec::new();
+    let total_msgs: usize = packs.iter().map(|pack| pack.msg_types.len()).sum();
+    let mut slots = Vec::with_capacity(total_msgs);
 
     for pack in packs {
         for msg in pack.msg_types {
@@ -274,21 +275,19 @@ fn build_output_slots(config: &CuConfig, mission: Option<&str>) -> CuResult<Vec<
     Ok(slots)
 }
 
-fn build_edge_accumulators(
-    config: &CuConfig,
-    mission: Option<&str>,
-) -> CuResult<HashMap<EdgeKey, EdgeAccumulator>> {
-    let graph = config.get_graph(mission)?;
+fn build_edge_accumulators(graph: &CuGraph) -> HashMap<EdgeKey, EdgeAccumulator> {
     let mut acc = HashMap::new();
     for cnx in graph.edges() {
         let key = EdgeKey {
             src: cnx.src.clone(),
+            src_channel: cnx.src_channel.clone(),
             dst: cnx.dst.clone(),
+            dst_channel: cnx.dst_channel.clone(),
             msg: cnx.msg.clone(),
         };
         acc.entry(key).or_default();
     }
-    Ok(acc)
+    acc
 }
 
 fn build_edges_by_src_msg(graph: &CuGraph) -> HashMap<SrcMsgKey, Vec<EdgeKey>> {
@@ -300,7 +299,9 @@ fn build_edges_by_src_msg(graph: &CuGraph) -> HashMap<SrcMsgKey, Vec<EdgeKey>> {
         };
         let edge = EdgeKey {
             src: cnx.src.clone(),
+            src_channel: cnx.src_channel.clone(),
             dst: cnx.dst.clone(),
+            dst_channel: cnx.dst_channel.clone(),
             msg: cnx.msg.clone(),
         };
         map.entry(key).or_default().push(edge);
@@ -359,11 +360,7 @@ fn compute_end_to_end_latency(
     let end = msgs
         .last()
         .and_then(|msg| extract_end_time_ns(msg.metadata()))?;
-
-    if end < start {
-        return None;
-    }
-    Some(CuDuration::from_nanos(end - start))
+    end.checked_sub(start).map(CuDuration::from_nanos)
 }
 
 fn extract_start_time_ns(meta: &dyn CuMsgMetadataTrait) -> Option<u64> {
@@ -391,6 +388,9 @@ fn duration_stats_from(stats: &CuDurationStatistics) -> DurationStats {
 }
 
 fn jitter_stats_from(stats: &CuDurationStatistics) -> DurationStats {
+    if stats.len() < 2 {
+        return DurationStats::default();
+    }
     DurationStats {
         min_ns: Some(stats.jitter_min().as_nanos()),
         max_ns: Some(stats.jitter_max().as_nanos()),
@@ -399,8 +399,7 @@ fn jitter_stats_from(stats: &CuDurationStatistics) -> DurationStats {
     }
 }
 
-fn build_graph_signature(config: &CuConfig, mission: Option<&str>) -> CuResult<String> {
-    let graph = config.get_graph(mission)?;
+fn build_graph_signature(graph: &CuGraph, mission: Option<&str>) -> String {
     let mut parts = Vec::new();
     parts.push(format!("mission={}", mission.unwrap_or("default")));
 
@@ -430,7 +429,7 @@ fn build_graph_signature(config: &CuConfig, mission: Option<&str>) -> CuResult<S
     parts.extend(edges);
 
     let joined = parts.join("\n");
-    Ok(format!("fnv1a64:{:016x}", fnv1a64(joined.as_bytes())))
+    format!("fnv1a64:{:016x}", fnv1a64(joined.as_bytes()))
 }
 
 fn flavor_label(flavor: Flavor) -> &'static str {
@@ -465,7 +464,9 @@ mod tests {
     fn edge_key() -> EdgeKey {
         EdgeKey {
             src: "src".to_string(),
+            src_channel: None,
             dst: "dst".to_string(),
+            dst_channel: None,
             msg: "Msg".to_string(),
         }
     }

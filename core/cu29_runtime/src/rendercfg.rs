@@ -17,7 +17,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashSet};
 use std::fs;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use svg::Document;
 use svg::node::Node;
@@ -191,7 +191,7 @@ fn main() -> std::io::Result<()> {
         }
     };
 
-    let logstats = match args.logstats.as_ref() {
+    let logstats = match args.logstats.as_deref() {
         Some(path) => match load_logstats(path, &config, args.mission.as_deref()) {
             Ok(stats) => Some(stats),
             Err(err) => {
@@ -278,7 +278,7 @@ fn render_config_svg(
 }
 
 fn load_logstats(
-    path: &PathBuf,
+    path: &Path,
     config: &config::CuConfig,
     expected_mission: Option<&str>,
 ) -> CuResult<LogStatsIndex> {
@@ -321,7 +321,9 @@ fn load_logstats(
         .map(|edge| {
             let key = EdgeStatsKey {
                 src: edge.src.clone(),
+                src_channel: edge.src_channel.clone(),
                 dst: edge.dst.clone(),
+                dst_channel: edge.dst_channel.clone(),
                 msg: edge.msg.clone(),
             };
             (key, edge)
@@ -468,12 +470,28 @@ fn build_section_layout(
         );
         graph.add_edge(arrow.clone(), *src_handle, *dst_handle);
         let edge_stats = logstats.and_then(|stats| {
+            let key = EdgeStatsKey {
+                src: cnx.src.clone(),
+                src_channel: cnx.src_channel.clone(),
+                dst: cnx.dst.clone(),
+                dst_channel: cnx.dst_channel.clone(),
+                msg: cnx.msg.clone(),
+            };
             stats
                 .edges
-                .get(&EdgeStatsKey {
-                    src: cnx.src.clone(),
-                    dst: cnx.dst.clone(),
-                    msg: cnx.msg.clone(),
+                .get(&key)
+                .or_else(|| {
+                    if key.src_channel.is_some() || key.dst_channel.is_some() {
+                        stats.edges.get(&EdgeStatsKey {
+                            src: key.src.clone(),
+                            src_channel: None,
+                            dst: key.dst.clone(),
+                            dst_channel: None,
+                            msg: key.msg.clone(),
+                        })
+                    } else {
+                        None
+                    }
                 })
                 .cloned()
         });
@@ -1365,23 +1383,19 @@ fn render_sections_to_svg(sections: &[SectionLayout]) -> String {
             edge_paths.push(path);
         }
 
-        let mut info_tables: Vec<&ResourceTable> = Vec::new();
-        if let Some(table) = &section.perf_table {
-            info_tables.push(table);
-        }
-        for table in &section.resource_tables {
-            info_tables.push(table);
-        }
-
         let mut info_table_positions: Vec<(Point, &ResourceTable)> = Vec::new();
-        if !info_tables.is_empty() {
+        if section.perf_table.is_some() || !section.resource_tables.is_empty() {
             let content_left = expanded_bounds.0.x;
             let content_bottom = expanded_bounds.1.y;
             let mut max_table_width: f64 = 0.0;
             let mut cursor_table_y = content_bottom + RESOURCE_TABLE_MARGIN;
-            for table in &info_tables {
+            for table in section
+                .perf_table
+                .iter()
+                .chain(section.resource_tables.iter())
+            {
                 let top_left = Point::new(content_left, cursor_table_y);
-                info_table_positions.push((top_left, *table));
+                info_table_positions.push((top_left, table));
                 cursor_table_y += table.size.y + RESOURCE_TABLE_GAP;
                 max_table_width = max_table_width.max(table.size.x);
             }
@@ -2062,7 +2076,9 @@ struct LogStats {
 #[derive(Clone, Deserialize)]
 struct EdgeLogStats {
     src: String,
+    src_channel: Option<String>,
     dst: String,
+    dst_channel: Option<String>,
     msg: String,
     samples: u64,
     none_samples: u64,
@@ -2122,7 +2138,9 @@ struct EdgeGroupKey {
 #[derive(Clone, Hash, PartialEq, Eq)]
 struct EdgeStatsKey {
     src: String,
+    src_channel: Option<String>,
     dst: String,
+    dst_channel: Option<String>,
     msg: String,
 }
 
@@ -4046,10 +4064,10 @@ fn format_duration_ns(nanos: f64) -> String {
     }
 }
 
-fn mission_key(mission: Option<&str>) -> String {
+fn mission_key(mission: Option<&str>) -> &str {
     match mission {
-        Some(value) if value != "default" => value.to_string(),
-        _ => "default".to_string(),
+        Some(value) if value != "default" => value,
+        _ => "default",
     }
 }
 
@@ -4120,7 +4138,9 @@ mod tests {
     fn tooltip_formats_missing_values() {
         let stats = EdgeLogStats {
             src: "a".to_string(),
+            src_channel: None,
             dst: "b".to_string(),
+            dst_channel: None,
             msg: "Msg".to_string(),
             samples: 0,
             none_samples: 0,
