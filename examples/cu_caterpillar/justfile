@@ -98,4 +98,4 @@ mcap:
 	echo "=========================================="
 
 	# Run mcap-info to show the user what was created
-	cargo run -r --bin cu-caterpillar-logreader --profile screaming -- "${copper_base}" mcap-info "${mcap_file}"
+	cargo run --bin cu-caterpillar-logreader --profile screaming -- "${copper_base}" mcap-info "${mcap_file}"
