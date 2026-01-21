@@ -91,6 +91,8 @@ const EDGE_LABEL_LIGHTEN: f64 = 0.35;
 const EDGE_LABEL_HALO_WIDTH: f64 = 3.0;
 const EDGE_HITBOX_STROKE_WIDTH: usize = 12;
 const EDGE_HITBOX_OPACITY: f64 = 0.01;
+const EDGE_HOVER_POINT_RADIUS: f64 = 2.4;
+const EDGE_HOVER_POINT_STROKE_WIDTH: f64 = 1.0;
 const EDGE_TOOLTIP_CSS: &str = r#"
 .edge-hover .edge-tooltip {
   opacity: 0;
@@ -99,6 +101,14 @@ const EDGE_TOOLTIP_CSS: &str = r#"
 }
 .edge-hover:hover .edge-tooltip {
   opacity: 1;
+}
+.edge-hover .edge-hover-point {
+  opacity: 0.65;
+  pointer-events: none;
+  transition: opacity 120ms ease-out;
+}
+.edge-hover:hover .edge-hover-point {
+  opacity: 0.95;
 }
 "#;
 const DETOUR_LABEL_CLEARANCE: f64 = 6.0;
@@ -3873,6 +3883,17 @@ fn build_edge_hover_overlay(
         .set("cursor", "help");
     hitbox_el.append(Title::new(tooltip));
     hover_group.append(hitbox_el);
+
+    let anchor = tooltip_anchor_for_path(path);
+    let hover_point = Circle::new()
+        .set("class", "edge-hover-point")
+        .set("cx", anchor.x)
+        .set("cy", anchor.y)
+        .set("r", EDGE_HOVER_POINT_RADIUS)
+        .set("fill", BACKGROUND_COLOR)
+        .set("stroke", stroke_color)
+        .set("stroke-width", EDGE_HOVER_POINT_STROKE_WIDTH);
+    hover_group.append(hover_point);
 
     let (tooltip_group, tooltip_top_left, tooltip_size) = build_edge_tooltip_group(path, tooltip);
     hover_group.append(tooltip_group);
