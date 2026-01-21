@@ -386,8 +386,8 @@ struct GraphCache {
     dirty: bool,
 }
 
-impl Default for GraphCache {
-    fn default() -> Self {
+impl GraphCache {
+    fn new() -> Self {
         Self {
             graph: None,
             content_size: Size::ZERO,
@@ -398,10 +398,6 @@ impl Default for GraphCache {
 }
 
 impl GraphCache {
-    fn mark_dirty(&mut self) {
-        self.dirty = true;
-    }
-
     fn needs_rebuild(&self, key: GraphCacheKey) -> bool {
         self.dirty || self.graph.is_none() || self.key != Some(key)
     }
@@ -522,12 +518,12 @@ impl NodesScrollableWidgetState {
             status_index_map,
             task_count: task_ids.len(),
             nodes_scrollable_state: ScrollViewState::default(),
-            graph_cache: GraphCache::default(),
+            graph_cache: GraphCache::new(),
         }
     }
 
     fn mark_graph_dirty(&mut self) {
-        self.graph_cache.mark_dirty();
+        self.graph_cache.dirty = true;
     }
 
     fn ensure_graph_cache(&mut self, area: Rect) -> Size {
@@ -565,26 +561,24 @@ impl NodesScrollableWidgetState {
     }
 
     fn rebuild_graph_cache(&mut self, area: Rect, key: GraphCacheKey) {
-        let node_count = self.display_nodes.len().max(1);
-        let content_width = (node_count as u16)
-            .saturating_mul(NODE_WIDTH + 20)
-            .max(NODE_WIDTH);
-        let max_ports = self
-            .display_nodes
-            .iter()
-            .map(|node| node.inputs.len().max(node.outputs.len()))
-            .max()
-            .unwrap_or_default();
-        let content_height =
-            (((max_ports + NODE_PORT_ROW_OFFSET) as u16) * 12).max(NODE_HEIGHT * 6);
-
-        let mut content_size = Size::new(content_width, content_height);
-        let mut graph = self.build_graph(content_size);
-
-        if self.display_nodes.is_empty() {
-            content_size = Size::new(area.width.max(NODE_WIDTH), area.height.max(NODE_HEIGHT));
-            graph = self.build_graph(content_size);
+        let content_size = if self.display_nodes.is_empty() {
+            Size::new(area.width.max(NODE_WIDTH), area.height.max(NODE_HEIGHT))
         } else {
+            let node_count = self.display_nodes.len();
+            let content_width = (node_count as u16)
+                .saturating_mul(NODE_WIDTH + 20)
+                .max(NODE_WIDTH);
+            let max_ports = self
+                .display_nodes
+                .iter()
+                .map(|node| node.inputs.len().max(node.outputs.len()))
+                .max()
+                .unwrap_or_default();
+            let content_height =
+                (((max_ports + NODE_PORT_ROW_OFFSET) as u16) * 12).max(NODE_HEIGHT * 6);
+
+            let initial_size = Size::new(content_width, content_height);
+            let graph = self.build_graph(initial_size);
             let bounds = graph.content_bounds();
             let desired_width = bounds
                 .width
@@ -594,14 +588,10 @@ impl NodesScrollableWidgetState {
                 .height
                 .saturating_add(GRAPH_HEIGHT_PADDING)
                 .max(NODE_HEIGHT);
-            let desired_size = Size::new(desired_width, desired_height);
-            if desired_size != content_size {
-                content_size = desired_size;
-                graph = self.build_graph(content_size);
-            }
-        }
+            Size::new(desired_width, desired_height)
+        };
 
-        self.graph_cache.graph = Some(graph);
+        self.graph_cache.graph = Some(self.build_graph(content_size));
         self.graph_cache.content_size = content_size;
         self.graph_cache.key = Some(key);
         self.graph_cache.dirty = false;
@@ -616,15 +606,13 @@ impl NodesScrollableWidgetState {
                 let ports = node.inputs.len().max(node.outputs.len());
                 let content_rows = ports + NODE_PORT_ROW_OFFSET;
                 let height = (content_rows as u16).saturating_add(2).max(NODE_HEIGHT);
-                let mut title_line: Line<'static> = Line::default();
-                title_line.spans.push(Span::styled(
-                    format!(" {}", node.node_type),
-                    Style::default().fg(node.node_type.color()),
-                ));
-                title_line.spans.push(Span::styled(
-                    format!(" {} ", node.id),
-                    Style::default().fg(Color::White),
-                ));
+                let title_line = Line::from(vec![
+                    Span::styled(
+                        format!(" {}", node.node_type),
+                        Style::default().fg(node.node_type.color()),
+                    ),
+                    Span::styled(format!(" {} ", node.id), Style::default().fg(Color::White)),
+                ]);
                 NodeLayout::new((NODE_WIDTH, height)).with_title_line(title_line)
             })
             .collect()
