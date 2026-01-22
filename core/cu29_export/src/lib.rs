@@ -136,6 +136,7 @@ fn build_read_logger(unifiedlog_base: &Path) -> CuResult<UnifiedLoggerRead> {
         )),
     }
 }
+
 /// This is a generator for a main function to build a log extractor.
 /// It depends on the specific type of the CopperList payload that is determined at compile time from the configuration.
 ///
