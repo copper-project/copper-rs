@@ -668,7 +668,7 @@ mod python {
             Value::U64(u) => Ok(u.into_pyobject(py)?.into()),
             Value::I64(i) => Ok(i.into_pyobject(py)?.into()),
             Value::F64(f) => Ok(f.into_pyobject(py)?.into()),
-            Value::Bool(b) => Ok(b.into_pyobject(py)?.into()),
+            Value::Bool(b) => Ok(b.into_pyobject(py)?.to_owned().into()),
             Value::CuTime(t) => Ok(t.0.into_pyobject(py)?.into()),
             Value::Bytes(b) => Ok(b.into_pyobject(py)?.into()),
             Value::Char(c) => Ok(c.into_pyobject(py)?.into()),
@@ -688,9 +688,9 @@ mod python {
             Value::F32(f) => Ok(f.into_pyobject(py)?.into()),
             Value::Option(o) => match o.as_ref() {
                 Some(value) => value_to_py(value, py),
-                None => Ok(py.None().into()),
+                None => Ok(py.None()),
             },
-            Value::Unit => Ok(py.None().into()),
+            Value::Unit => Ok(py.None()),
             Value::Newtype(v) => value_to_py(v, py),
             Value::Seq(s) => {
                 let items: Vec<Py<PyAny>> = s
