@@ -133,7 +133,11 @@ where
         let buffered_output = self
             .output
             .lock()
-            .map_err(|_| CuError::from("Async task output mutex poisoned"))?;
+            .map_err(|_| {
+                let error = CuError::from("Async task output mutex poisoned");
+                record_async_error(&self.state, error.clone());
+                error
+            })?;
         *real_output = buffered_output.clone();
 
         // immediately requeue a task based on the new input
