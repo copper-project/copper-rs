@@ -62,7 +62,10 @@ fn create_log_entry(input: TokenStream, level: CuLogLevel) -> TokenStream {
     use syn::{Expr, ExprAssign, ExprLit, Lit, Token};
 
     let parser = syn::punctuated::Punctuated::<Expr, Token![,]>::parse_terminated;
-    let exprs = parser.parse(input).expect("Failed to parse input");
+    let exprs = match parser.parse(input) {
+        Ok(exprs) => exprs,
+        Err(err) => return err.to_compile_error().into(),
+    };
     let mut exprs_iter = exprs.iter();
 
     #[cfg(not(feature = "std"))]
@@ -70,16 +73,38 @@ fn create_log_entry(input: TokenStream, level: CuLogLevel) -> TokenStream {
     #[cfg(feature = "std")]
     const STD: bool = true;
 
-    let msg_expr = exprs_iter.next().expect("Expected at least one expression");
+    let msg_expr = match exprs_iter.next() {
+        Some(expr) => expr,
+        None => {
+            return syn::Error::new(
+                proc_macro2::Span::call_site(),
+                "Expected at least one expression",
+            )
+            .to_compile_error()
+            .into();
+        }
+    };
     let (index, msg_str) = if let Expr::Lit(ExprLit {
         lit: Lit::Str(msg), ..
     }) = msg_expr
     {
         let s = msg.value();
-        let index = intern_string(&s).expect("Failed to insert log string.");
+        let index = match intern_string(&s) {
+            Some(index) => index,
+            None => {
+                return syn::Error::new_spanned(msg_expr, "Failed to intern log string.")
+                    .to_compile_error()
+                    .into();
+            }
+        };
         (index, s)
     } else {
-        panic!("The first parameter of the argument needs to be a string literal.");
+        return syn::Error::new_spanned(
+            msg_expr,
+            "The first parameter of the argument needs to be a string literal.",
+        )
+        .to_compile_error()
+        .into();
     };
 
     let level_ident = match level {
@@ -110,14 +135,22 @@ fn create_log_entry(input: TokenStream, level: CuLogLevel) -> TokenStream {
         }
     });
 
-    let named_prints = named_params.iter().map(|(name, value)| {
-        let idx = intern_string(quote!(#name).to_string().as_str())
-            .expect("Failed to insert log string.");
-        quote! {
+    let mut named_prints = Vec::with_capacity(named_params.len());
+    for (name, value) in &named_params {
+        let name_str = quote!(#name).to_string();
+        let idx = match intern_string(&name_str) {
+            Some(idx) => idx,
+            None => {
+                return syn::Error::new_spanned(name, "Failed to intern log parameter name.")
+                    .to_compile_error()
+                    .into();
+            }
+        };
+        named_prints.push(quote! {
             let param = to_value(#value).expect("Failed to convert a parameter to a Value");
             log_entry.add_param(#idx, param);
-        }
-    });
+        });
+    }
 
     // ---------- For baremetal: build a defmt format literal and arg list ----------
     // defmt line: "<msg> | a={:?}, b={:?}, arg0={:?} ..."
@@ -385,16 +418,30 @@ pub fn critical(input: TokenStream) -> TokenStream {
 /// will store "my string" in the interned string db at compile time and return the index of the string.
 #[proc_macro]
 pub fn intern(input: TokenStream) -> TokenStream {
-    let expr = syn::parse::<Expr>(input).expect("Failed to parse input as expression");
-    let (index, _msg) = if let Expr::Lit(ExprLit {
+    let expr = match syn::parse::<Expr>(input) {
+        Ok(expr) => expr,
+        Err(err) => return err.to_compile_error().into(),
+    };
+    let index = if let Expr::Lit(ExprLit {
         lit: Lit::Str(msg), ..
-    }) = expr
+    }) = &expr
     {
         let msg = msg.value();
-        let index = intern_string(&msg).expect("Failed to insert log string.");
-        (index, msg)
+        match intern_string(&msg) {
+            Some(index) => index,
+            None => {
+                return syn::Error::new_spanned(&expr, "Failed to intern log string.")
+                    .to_compile_error()
+                    .into();
+            }
+        }
     } else {
-        panic!("The first parameter of the argument needs to be a string literal.");
+        return syn::Error::new_spanned(
+            &expr,
+            "The first parameter of the argument needs to be a string literal.",
+        )
+        .to_compile_error()
+        .into();
     };
     quote! { #index }.into()
 }
