@@ -19,6 +19,7 @@ use fsck::check;
 #[cfg(feature = "mcap")]
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 use logstats::{compute_logstats, write_logstats};
+use serde::Serialize;
 use std::fmt::{Display, Formatter};
 #[cfg(feature = "mcap")]
 use std::io::IsTerminal;
@@ -113,6 +114,29 @@ pub enum Command {
     },
 }
 
+fn write_json_pretty<T: Serialize + ?Sized>(value: &T) -> CuResult<()> {
+    serde_json::to_writer_pretty(std::io::stdout(), value)
+        .map_err(|e| CuError::new_with_cause("Failed to write JSON output", e))
+}
+
+fn write_json<T: Serialize + ?Sized>(value: &T) -> CuResult<()> {
+    serde_json::to_writer(std::io::stdout(), value)
+        .map_err(|e| CuError::new_with_cause("Failed to write JSON output", e))
+}
+
+fn build_read_logger(unifiedlog_base: &Path) -> CuResult<UnifiedLoggerRead> {
+    let logger = UnifiedLoggerBuilder::new()
+        .file_base_name(unifiedlog_base)
+        .build()
+        .map_err(|e| CuError::new_with_cause("Failed to create logger", e))?;
+    match logger {
+        UnifiedLogger::Read(dl) => Ok(dl),
+        UnifiedLogger::Write(_) => Err(CuError::from(
+            "Expected read-only unified logger in export CLI",
+        )),
+    }
+}
+
 /// This is a generator for a main function to build a log extractor.
 /// It depends on the specific type of the CopperList payload that is determined at compile time from the configuration.
 ///
@@ -143,13 +167,7 @@ where
     let args = LogReaderCli::parse();
     let unifiedlog_base = args.unifiedlog_base;
 
-    let UnifiedLogger::Read(mut dl) = UnifiedLoggerBuilder::new()
-        .file_base_name(&unifiedlog_base)
-        .build()
-        .expect("Failed to create logger")
-    else {
-        panic!("Failed to create logger");
-    };
+    let mut dl = build_read_logger(&unifiedlog_base)?;
 
     match args.command {
         Command::ExtractTextLog { log_index } => {
@@ -164,7 +182,7 @@ where
             match export_format {
                 ExportFormat::Json => {
                     for entry in iter {
-                        serde_json::to_writer_pretty(std::io::stdout(), &entry).unwrap();
+                        write_json_pretty(&entry)?;
                     }
                 }
                 ExportFormat::Csv => {
@@ -190,7 +208,7 @@ where
                                 }
                                 let metadata = msg.metadata();
                                 print!("{}, {}, ", metadata.process_time(), msg.tov());
-                                serde_json::to_writer(std::io::stdout(), payload).unwrap(); // TODO: escape for CSV
+                                write_json(payload)?; // TODO: escape for CSV
                                 first = false;
                             }
                         }
@@ -262,13 +280,7 @@ where
     let args = LogReaderCli::parse();
     let unifiedlog_base = args.unifiedlog_base;
 
-    let UnifiedLogger::Read(mut dl) = UnifiedLoggerBuilder::new()
-        .file_base_name(&unifiedlog_base)
-        .build()
-        .expect("Failed to create logger")
-    else {
-        panic!("Failed to create logger");
-    };
+    let mut dl = build_read_logger(&unifiedlog_base)?;
 
     match args.command {
         Command::ExtractTextLog { log_index } => {
@@ -283,7 +295,7 @@ where
             match export_format {
                 ExportFormat::Json => {
                     for entry in iter {
-                        serde_json::to_writer_pretty(std::io::stdout(), &entry).unwrap();
+                        write_json_pretty(&entry)?;
                     }
                 }
                 ExportFormat::Csv => {
@@ -309,7 +321,7 @@ where
                                 }
                                 let metadata = msg.metadata();
                                 print!("{}, {}, ", metadata.process_time(), msg.tov());
-                                serde_json::to_writer(std::io::stdout(), payload).unwrap();
+                                write_json(payload)?;
                                 first = false;
                             }
                         }
@@ -578,12 +590,17 @@ mod python {
         let all_strings = read_interned_strings(Path::new(index_path))
             .map_err(|e| PyIOError::new_err(e.to_string()))?;
 
-        let UnifiedLogger::Read(dl) = UnifiedLoggerBuilder::new()
+        let logger = UnifiedLoggerBuilder::new()
             .file_base_name(Path::new(unified_src_path))
             .build()
-            .expect("Failed to create logger")
-        else {
-            panic!("Failed to create logger");
+            .map_err(|e| PyIOError::new_err(e.to_string()))?;
+        let dl = match logger {
+            UnifiedLogger::Read(dl) => dl,
+            UnifiedLogger::Write(_) => {
+                return Err(PyIOError::new_err(
+                    "Expected read-only unified logger for Python export",
+                ));
+            }
         };
 
         let reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::StructuredLogLine);
@@ -604,7 +621,7 @@ mod python {
     #[pymethods]
     impl PyCuLogEntry {
         /// Returns the timestamp of the log entry.
-        pub fn ts<'a>(&self, py: Python<'a>) -> Bound<'a, PyDelta> {
+        pub fn ts<'a>(&self, py: Python<'a>) -> PyResult<Bound<'a, PyDelta>> {
             let nanoseconds: u64 = self.inner.time.into();
 
             // Convert nanoseconds to seconds and microseconds
@@ -612,7 +629,7 @@ mod python {
             let seconds = (nanoseconds / 1_000_000_000) as i32;
             let microseconds = ((nanoseconds % 1_000_000_000) / 1_000) as i32;
 
-            PyDelta::new(py, days, seconds, microseconds, false).unwrap()
+            PyDelta::new(py, days, seconds, microseconds, false)
         }
 
         /// Returns the index of the message in the vector of interned strings.
@@ -626,8 +643,12 @@ mod python {
         }
 
         /// Returns the parameters of this log line
-        pub fn params(&self) -> Vec<Py<PyAny>> {
-            self.inner.params.iter().map(value_to_py).collect()
+        pub fn params(&self, py: Python<'_>) -> PyResult<Vec<Py<PyAny>>> {
+            self.inner
+                .params
+                .iter()
+                .map(|value| value_to_py(value, py))
+                .collect()
         }
     }
 
@@ -641,43 +662,44 @@ mod python {
         Ok(())
     }
 
-    fn value_to_py(value: &cu29::prelude::Value) -> Py<PyAny> {
+    fn value_to_py(value: &cu29::prelude::Value, py: Python<'_>) -> PyResult<Py<PyAny>> {
         match value {
-            Value::String(s) => Python::attach(|py| s.into_pyobject(py).unwrap().into()),
-            Value::U64(u) => Python::attach(|py| u.into_pyobject(py).unwrap().into()),
-            Value::I64(i) => Python::attach(|py| i.into_pyobject(py).unwrap().into()),
-            Value::F64(f) => Python::attach(|py| f.into_pyobject(py).unwrap().into()),
-            Value::Bool(b) => Python::attach(|py| b.into_pyobject(py).unwrap().to_owned().into()),
-            Value::CuTime(t) => Python::attach(|py| t.0.into_pyobject(py).unwrap().into()),
-            Value::Bytes(b) => Python::attach(|py| b.into_pyobject(py).unwrap().into()),
-            Value::Char(c) => Python::attach(|py| c.into_pyobject(py).unwrap().into()),
-            Value::I8(i) => Python::attach(|py| i.into_pyobject(py).unwrap().into()),
-            Value::U8(u) => Python::attach(|py| u.into_pyobject(py).unwrap().into()),
-            Value::I16(i) => Python::attach(|py| i.into_pyobject(py).unwrap().into()),
-            Value::U16(u) => Python::attach(|py| u.into_pyobject(py).unwrap().into()),
-            Value::I32(i) => Python::attach(|py| i.into_pyobject(py).unwrap().into()),
-            Value::U32(u) => Python::attach(|py| u.into_pyobject(py).unwrap().into()),
-            Value::Map(m) => Python::attach(|py| {
+            Value::String(s) => Ok(s.into_pyobject(py)?.into()),
+            Value::U64(u) => Ok(u.into_pyobject(py)?.into()),
+            Value::I64(i) => Ok(i.into_pyobject(py)?.into()),
+            Value::F64(f) => Ok(f.into_pyobject(py)?.into()),
+            Value::Bool(b) => Ok(b.into_pyobject(py)?.to_owned().into()),
+            Value::CuTime(t) => Ok(t.0.into_pyobject(py)?.into()),
+            Value::Bytes(b) => Ok(b.into_pyobject(py)?.into()),
+            Value::Char(c) => Ok(c.into_pyobject(py)?.into()),
+            Value::I8(i) => Ok(i.into_pyobject(py)?.into()),
+            Value::U8(u) => Ok(u.into_pyobject(py)?.into()),
+            Value::I16(i) => Ok(i.into_pyobject(py)?.into()),
+            Value::U16(u) => Ok(u.into_pyobject(py)?.into()),
+            Value::I32(i) => Ok(i.into_pyobject(py)?.into()),
+            Value::U32(u) => Ok(u.into_pyobject(py)?.into()),
+            Value::Map(m) => {
                 let dict = PyDict::new(py);
                 for (k, v) in m.iter() {
-                    dict.set_item(value_to_py(k), value_to_py(v)).unwrap();
+                    dict.set_item(value_to_py(k, py)?, value_to_py(v, py)?)?;
                 }
-                dict.into_pyobject(py).unwrap().into()
-            }),
-            Value::F32(f) => Python::attach(|py| f.into_pyobject(py).unwrap().into()),
-            Value::Option(o) => Python::attach(|py| {
-                if o.is_none() {
-                    py.None()
-                } else {
-                    o.clone().map(|v| value_to_py(&v)).unwrap()
-                }
-            }),
-            Value::Unit => Python::attach(|py| py.None()),
-            Value::Newtype(v) => value_to_py(v),
-            Value::Seq(s) => Python::attach(|py| {
-                let list = PyList::new(py, s.iter().map(value_to_py)).unwrap();
-                list.into_pyobject(py).unwrap().into()
-            }),
+                Ok(dict.into_pyobject(py)?.into())
+            }
+            Value::F32(f) => Ok(f.into_pyobject(py)?.into()),
+            Value::Option(o) => match o.as_ref() {
+                Some(value) => value_to_py(value, py),
+                None => Ok(py.None()),
+            },
+            Value::Unit => Ok(py.None()),
+            Value::Newtype(v) => value_to_py(v, py),
+            Value::Seq(s) => {
+                let items: Vec<Py<PyAny>> = s
+                    .iter()
+                    .map(|value| value_to_py(value, py))
+                    .collect::<PyResult<_>>()?;
+                let list = PyList::new(py, items)?;
+                Ok(list.into_pyobject(py)?.into())
+            }
         }
     }
 }
