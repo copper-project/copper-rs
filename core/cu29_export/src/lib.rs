@@ -124,6 +124,19 @@ fn write_json<T: Serialize + ?Sized>(value: &T) -> CuResult<()> {
         .map_err(|e| CuError::new_with_cause("Failed to write JSON output", e))
 }
 
+fn build_read_logger(unifiedlog_base: &Path) -> CuResult<UnifiedLoggerRead> {
+    let logger = UnifiedLoggerBuilder::new()
+        .file_base_name(unifiedlog_base)
+        .build()
+        .map_err(|e| CuError::new_with_cause("Failed to create logger", e))?;
+    match logger {
+        UnifiedLogger::Read(dl) => Ok(dl),
+        UnifiedLogger::Write(_) => Err(CuError::from(
+            "Expected read-only unified logger in export CLI",
+        )),
+    }
+}
+
 /// This is a generator for a main function to build a log extractor.
 /// It depends on the specific type of the CopperList payload that is determined at compile time from the configuration.
 ///
@@ -154,18 +167,7 @@ where
     let args = LogReaderCli::parse();
     let unifiedlog_base = args.unifiedlog_base;
 
-    let dl = UnifiedLoggerBuilder::new()
-        .file_base_name(&unifiedlog_base)
-        .build()
-        .map_err(|e| CuError::new_with_cause("Failed to create logger", e))?;
-    let mut dl = match dl {
-        UnifiedLogger::Read(dl) => dl,
-        UnifiedLogger::Write(_) => {
-            return Err(CuError::from(
-                "Expected read-only unified logger in export CLI",
-            ));
-        }
-    };
+    let mut dl = build_read_logger(&unifiedlog_base)?;
 
     match args.command {
         Command::ExtractTextLog { log_index } => {
@@ -278,18 +280,7 @@ where
     let args = LogReaderCli::parse();
     let unifiedlog_base = args.unifiedlog_base;
 
-    let dl = UnifiedLoggerBuilder::new()
-        .file_base_name(&unifiedlog_base)
-        .build()
-        .map_err(|e| CuError::new_with_cause("Failed to create logger", e))?;
-    let mut dl = match dl {
-        UnifiedLogger::Read(dl) => dl,
-        UnifiedLogger::Write(_) => {
-            return Err(CuError::from(
-                "Expected read-only unified logger in export CLI",
-            ));
-        }
-    };
+    let mut dl = build_read_logger(&unifiedlog_base)?;
 
     match args.command {
         Command::ExtractTextLog { log_index } => {
