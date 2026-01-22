@@ -5,7 +5,7 @@ extern crate alloc;
 use cu29_clock::RobotClock;
 use cu29_log_runtime::LoggerRuntime;
 use cu29_runtime::curuntime::CopperContext;
-use cu29_traits::{CuResult, UnifiedLogType};
+use cu29_traits::{CuError, CuResult, UnifiedLogType, with_cause};
 use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder, stream_write};
 use simplelog::TermLogger;
 #[cfg(debug_assertions)]
@@ -34,15 +34,20 @@ pub fn basic_copper_setup(
     clock: Option<RobotClock>,
 ) -> CuResult<CopperContext> {
     let preallocated_size = slab_size.unwrap_or(1024 * 1024 * 10);
-    let UnifiedLogger::Write(logger) = UnifiedLoggerBuilder::new()
+    let logger = UnifiedLoggerBuilder::new()
         .write(true)
         .create(true)
         .file_base_name(unifiedlogger_output_base_name)
         .preallocated_size(preallocated_size)
         .build()
-        .expect("Failed to create logger")
-    else {
-        panic!("Failed to create logger")
+        .map_err(|e| with_cause("Failed to create unified logger", e))?;
+    let logger = match logger {
+        UnifiedLogger::Write(logger) => logger,
+        UnifiedLogger::Read(_) => {
+            return Err(CuError::from(
+                "UnifiedLoggerBuilder did not create a write-capable logger",
+            ));
+        }
     };
     let unified_logger = Arc::new(Mutex::new(logger));
     let structured_stream = stream_write(
