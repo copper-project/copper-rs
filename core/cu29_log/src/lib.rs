@@ -226,9 +226,25 @@ pub fn format_logline(
 /// This basically translates the world of copper logs to text logs.
 #[cfg(feature = "std")]
 pub fn rebuild_logline(all_interned_strings: &[String], entry: &CuLogEntry) -> CuResult<String> {
-    let format_string = &all_interned_strings[entry.msg_index as usize];
-    let mut anon_params: Vec<String> = Vec::new();
-    let mut named_params = HashMap::new();
+    let format_string = all_interned_strings
+        .get(entry.msg_index as usize)
+        .ok_or_else(|| {
+            cu29_traits::CuError::from(format!(
+                "Invalid message index {} (interned strings length {})",
+                entry.msg_index,
+                all_interned_strings.len()
+            ))
+        })?;
+    if entry.paramname_indexes.len() != entry.params.len() {
+        return Err(cu29_traits::CuError::from(format!(
+            "Mismatched parameter metadata: {} names for {} params",
+            entry.paramname_indexes.len(),
+            entry.params.len()
+        )));
+    }
+
+    let mut anon_params = Vec::with_capacity(entry.params.len());
+    let mut named_params = HashMap::with_capacity(entry.params.len());
 
     for (i, param) in entry.params.iter().enumerate() {
         let param_as_string = format!("{param}");
@@ -237,7 +253,16 @@ pub fn rebuild_logline(all_interned_strings: &[String], entry: &CuLogEntry) -> C
             anon_params.push(param_as_string);
         } else {
             // Named parameter
-            let name = all_interned_strings[entry.paramname_indexes[i] as usize].clone();
+            let name = all_interned_strings
+                .get(entry.paramname_indexes[i] as usize)
+                .ok_or_else(|| {
+                    cu29_traits::CuError::from(format!(
+                        "Invalid parameter name index {} (interned strings length {})",
+                        entry.paramname_indexes[i],
+                        all_interned_strings.len()
+                    ))
+                })?
+                .clone();
             named_params.insert(name, param_as_string);
         }
     }
