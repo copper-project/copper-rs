@@ -26,7 +26,7 @@ thiserror = "2.0" # For error handling
 rand = "0.9.0" # For random number generation in cache cleanup
 dashmap = "6.1.0"
 num-traits = "0.2.18" # For numeric trait implementations
-glam = { version = "0.30", features = [
+glam = { version = "0.31", features = [
   "serde",
   "bytemuck",
 ] } # For optimized math operations
