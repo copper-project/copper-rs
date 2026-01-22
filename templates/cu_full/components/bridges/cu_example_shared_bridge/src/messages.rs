@@ -1,5 +1,4 @@
 use bincode::{Decode, Encode};
-use cu29::prelude::*;
 use serde::{Deserialize, Serialize};
 
 // Shared bridge message type
