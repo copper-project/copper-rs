@@ -212,7 +212,7 @@ Supports modular configuration with includes and multiple missions per binary.
 - **sources/**: Sensor drivers (IMU, cameras, LiDAR, encoders)
 - **sinks/**: Actuator drivers (GPIO, motors, servos)
 - **tasks/**: Processing algorithms (PID, AHRS, alignment, rate limiting)
-- **bridges/**: Protocol adapters (Zenoh, MSP, CRSF, BDSHOT)
+- **bridges/**: Protocol adapters (Zenoh, Iceoryx2, MSP, CRSF, BDSHOT)
 - **payloads/**: Common message types (`cu_sensor_payloads`, `cu_ros_payloads`, `cu_spatial_payloads`)
 - **res/**: Platform-specific resource bundles (e.g., `cu_micoairh743`)
 - **libs/**: Reusable libraries (transforms, loggers, embedded registry)
@@ -225,7 +225,7 @@ Demonstrates various use cases from minimal to complex:
 - **cu_rp_balancebot**: Complete balance bot with Bevy simulation
 - **cu_flight_controller**: Flight controller application
 - **cu_min_baremetal**: Minimal bare-metal example
-- **cu_iceoryx2**: Iceoryx2 integration demo
+- **cu_iceoryx2_bridge_demo**: Iceoryx2 bridge ping/pong demo
 - **cu_zenoh**: Zenoh middleware integration
 
 ### Support (`support/`)

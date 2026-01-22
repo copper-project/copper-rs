@@ -1,0 +1,37 @@
+(
+    tasks: [
+        (
+            id: "pong_task",
+            type: "tasks::PongResponder",
+            config: {"label": "pong"},
+        ),
+    ],
+    bridges: [
+        (
+            id: "iceoryx2",
+            type: "bridges::DemoIceoryx2Bridge",
+            channels: [
+                Rx(
+                    id: "ping",
+                    route: "demo/ping",
+                ),
+                Tx(
+                    id: "pong",
+                    route: "demo/pong",
+                ),
+            ],
+        ),
+    ],
+    cnx: [
+        (
+            src: "iceoryx2/ping",
+            dst: "pong_task",
+            msg: "messages::Ping",
+        ),
+        (
+            src: "pong_task",
+            dst: "iceoryx2/pong",
+            msg: "messages::Pong",
+        ),
+    ],
+)
