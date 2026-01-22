@@ -1,13 +1,24 @@
 use crate::config::ComponentConfig;
 use crate::cutask::{CuMsg, CuMsgPayload, CuTask, Freezable};
 use cu29_clock::{CuTime, RobotClock};
-use cu29_traits::CuResult;
+use cu29_traits::{CuError, CuResult};
 use rayon::ThreadPool;
 use std::sync::{Arc, Mutex};
 
 struct AsyncState {
     processing: bool,
     ready_at: Option<CuTime>,
+    last_error: Option<CuError>,
+}
+
+fn record_async_error(state: &Mutex<AsyncState>, error: CuError) {
+    let mut guard = match state.lock() {
+        Ok(guard) => guard,
+        Err(poison) => poison.into_inner(),
+    };
+    guard.processing = false;
+    guard.ready_at = None;
+    guard.last_error = Some(error);
 }
 
 pub struct CuAsyncTask<T, O>
@@ -46,6 +57,7 @@ where
             state: Arc::new(Mutex::new(AsyncState {
                 processing: false,
                 ready_at: None,
+                last_error: None,
             })),
             tp,
         })
@@ -81,6 +93,7 @@ where
             state: Arc::new(Mutex::new(AsyncState {
                 processing: false,
                 ready_at: None,
+                last_error: None,
             })),
             tp: resources.threadpool,
         })
@@ -93,7 +106,12 @@ where
         real_output: &mut Self::Output<'o>,
     ) -> CuResult<()> {
         {
-            let mut state = self.state.lock().unwrap();
+            let mut state = self.state.lock().map_err(|_| {
+                CuError::from("Async task state mutex poisoned while scheduling background work")
+            })?;
+            if let Some(error) = state.last_error.take() {
+                return Err(error);
+            }
             if state.processing {
                 // background task still running
                 return Ok(());
@@ -112,7 +130,11 @@ where
         }
 
         // clone the last finished output (if any) as the visible result for this polling round
-        let buffered_output = self.output.lock().unwrap();
+        let buffered_output = self.output.lock().map_err(|_| {
+            let error = CuError::from("Async task output mutex poisoned");
+            record_async_error(&self.state, error.clone());
+            error
+        })?;
         *real_output = buffered_output.clone();
 
         // immediately requeue a task based on the new input
@@ -124,27 +146,48 @@ where
             let state = self.state.clone();
             move || {
                 let input_ref: &CuMsg<I> = &input;
-                let mut output_guard = output.lock().unwrap();
+                let mut output_guard = match output.lock() {
+                    Ok(guard) => guard,
+                    Err(_) => {
+                        record_async_error(
+                            &state,
+                            CuError::from("Async task output mutex poisoned"),
+                        );
+                        return;
+                    }
+                };
                 let output_ref: &mut CuMsg<O> = &mut output_guard;
 
                 // Track the actual processing interval so replay can honor it.
                 if output_ref.metadata.process_time.start.is_none() {
                     output_ref.metadata.process_time.start = clock.now().into();
                 }
-                task.lock()
-                    .unwrap()
-                    .process(&clock, input_ref, output_ref)
-                    .unwrap();
-                let end_from_metadata: Option<CuTime> = output_ref.metadata.process_time.end.into();
-                let end_time = end_from_metadata.unwrap_or_else(|| {
-                    let now = clock.now();
-                    output_ref.metadata.process_time.end = now.into();
-                    now
-                });
+                let task_result = match task.lock() {
+                    Ok(mut task_guard) => task_guard.process(&clock, input_ref, output_ref),
+                    Err(poison) => Err(CuError::from(format!(
+                        "Async task mutex poisoned: {poison}"
+                    ))),
+                };
 
-                let mut guard = state.lock().unwrap();
-                guard.processing = false; // Mark processing as done
-                guard.ready_at = Some(end_time);
+                let mut guard = state.lock().unwrap_or_else(|poison| poison.into_inner());
+                guard.processing = false;
+
+                match task_result {
+                    Ok(()) => {
+                        let end_from_metadata: Option<CuTime> =
+                            output_ref.metadata.process_time.end.into();
+                        let end_time = end_from_metadata.unwrap_or_else(|| {
+                            let now = clock.now();
+                            output_ref.metadata.process_time.end = now.into();
+                            now
+                        });
+                        guard.ready_at = Some(end_time);
+                    }
+                    Err(error) => {
+                        guard.ready_at = None;
+                        guard.last_error = Some(error);
+                    }
+                }
             }
         });
         Ok(())

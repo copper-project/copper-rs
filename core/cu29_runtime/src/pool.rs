@@ -11,7 +11,7 @@ use std::alloc::{Layout, alloc, dealloc};
 use std::fmt::Debug;
 use std::mem::{align_of, size_of};
 use std::ops::{Deref, DerefMut};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 type PoolID = ArrayString<64>;
 
@@ -33,12 +33,19 @@ pub trait PoolMonitor: Send + Sync {
 static POOL_REGISTRY: OnceLock<Mutex<HashMap<String, Arc<dyn PoolMonitor>>>> = OnceLock::new();
 const MAX_POOLS: usize = 16;
 
+fn lock_unpoison<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    match mutex.lock() {
+        Ok(guard) => guard,
+        Err(poison) => poison.into_inner(),
+    }
+}
+
 // Register a pool to the global registry.
 fn register_pool(pool: Arc<dyn PoolMonitor>) {
     POOL_REGISTRY
         .get_or_init(|| Mutex::new(HashMap::new()))
         .lock()
-        .unwrap()
+        .unwrap_or_else(|poison| poison.into_inner())
         .insert(pool.id().to_string(), pool);
 }
 
@@ -49,7 +56,7 @@ type PoolStats = (PoolID, usize, usize, usize);
 pub fn pools_statistics() -> SmallVec<[PoolStats; MAX_POOLS]> {
     // Safely get the registry, returning empty stats if not initialized.
     let registry_lock = match POOL_REGISTRY.get() {
-        Some(lock) => lock.lock().unwrap(),
+        Some(lock) => lock_unpoison(lock),
         None => return SmallVec::new(), // Return empty if registry is not initialized
     };
     let mut result = SmallVec::with_capacity(MAX_POOLS);
@@ -154,13 +161,13 @@ impl<T: ArrayLike> CuHandle<T> {
 
     /// Safely access the inner value, applying a closure to it.
     pub fn with_inner<R>(&self, f: impl FnOnce(&CuHandleInner<T>) -> R) -> R {
-        let lock = self.lock().unwrap();
+        let lock = lock_unpoison(&self.0);
         f(&*lock)
     }
 
     /// Mutably access the inner value, applying a closure to it.
     pub fn with_inner_mut<R>(&self, f: impl FnOnce(&mut CuHandleInner<T>) -> R) -> R {
-        let mut lock = self.lock().unwrap();
+        let mut lock = lock_unpoison(&self.0);
         f(&mut *lock)
     }
 }
@@ -170,7 +177,7 @@ where
     T: ArrayLike,
 {
     fn raw_bytes(&self) -> usize {
-        self.lock().unwrap().deref().len() * size_of::<T::Element>()
+        lock_unpoison(&self.0).deref().len() * size_of::<T::Element>()
     }
 
     fn handle_bytes(&self) -> usize {
@@ -183,7 +190,7 @@ where
     <T as ArrayLike>::Element: 'static,
 {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        let inner = self.lock().unwrap();
+        let inner = lock_unpoison(&self.0);
         match inner.deref() {
             CuHandleInner::Pooled(pooled) => pooled.deref().encode(encoder),
             CuHandleInner::Detached(detached) => detached.encode(encoder),
@@ -287,8 +294,8 @@ impl<T: ArrayLike> CuPool<T> for CuHostMemoryPool<T> {
     fn copy_from<O: ArrayLike<Element = T::Element>>(&self, from: &mut CuHandle<O>) -> CuHandle<T> {
         let to_handle = self.acquire().expect("No available buffers in the pool");
 
-        match from.lock().unwrap().deref() {
-            CuHandleInner::Detached(source) => match to_handle.lock().unwrap().deref_mut() {
+        match lock_unpoison(&from.0).deref() {
+            CuHandleInner::Detached(source) => match lock_unpoison(&to_handle.0).deref_mut() {
                 CuHandleInner::Detached(destination) => {
                     destination.copy_from_slice(source);
                 }
@@ -296,7 +303,7 @@ impl<T: ArrayLike> CuPool<T> for CuHostMemoryPool<T> {
                     destination.copy_from_slice(source);
                 }
             },
-            CuHandleInner::Pooled(source) => match to_handle.lock().unwrap().deref_mut() {
+            CuHandleInner::Pooled(source) => match lock_unpoison(&to_handle.0).deref_mut() {
                 CuHandleInner::Detached(destination) => {
                     destination.copy_from_slice(source);
                 }
@@ -514,8 +521,8 @@ mod cuda {
             let to_handle = self.acquire().expect("No available buffers in the pool");
 
             {
-                let from_lock = from_handle.lock().unwrap();
-                let mut to_lock = to_handle.lock().unwrap();
+                let from_lock = lock_unpoison(&from_handle.0);
+                let mut to_lock = lock_unpoison(&to_handle.0);
 
                 match &mut *to_lock {
                     CuHandleInner::Detached(CudaSliceWrapper(to)) => {
