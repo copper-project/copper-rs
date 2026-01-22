@@ -125,7 +125,10 @@ impl KeyFramesManager {
     pub fn freeze_task(&mut self, culistid: u32, task: &impl Freezable) -> CuResult<usize> {
         if self.is_keyframe(culistid) {
             if self.inner.culistid != culistid {
-                panic!("Freezing task for a different culistid");
+                return Err(CuError::from(format!(
+                    "Freezing task for culistid {} but current keyframe is {}",
+                    culistid, self.inner.culistid
+                )));
             }
             self.inner
                 .add_frozen_task(task)
