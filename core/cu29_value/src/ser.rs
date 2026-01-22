@@ -378,7 +378,10 @@ impl ser::SerializeMap for SerializeMap {
         value: &T,
     ) -> Result<(), Self::Error> {
         let value = value.serialize(Serializer)?;
-        self.map.insert(self.key.take().unwrap(), value);
+        let key = self.key.take().ok_or_else(|| {
+            SerializerError::Custom("serialize_value called before serialize_key".to_string())
+        })?;
+        self.map.insert(key, value);
         Ok(())
     }
 
