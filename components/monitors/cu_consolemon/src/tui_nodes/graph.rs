@@ -238,12 +238,18 @@ impl<'a> ratatui::widgets::StatefulWidget for NodeGraph<'a> {
     type State = ();
 
     fn render(self, area: Rect, buf: &mut Buffer, _state: &mut Self::State) {
+        self.render_into(area, buf);
+    }
+}
+
+impl<'a> NodeGraph<'a> {
+    fn render_into(&self, area: Rect, buf: &mut Buffer) {
         // draw connections
         self.conn_layout.render(area, buf);
         self.draw_loop_connections(area, buf);
 
         // draw nodes
-        'node: for (idx_node, ea_node) in self.nodes.into_iter().enumerate() {
+        'node: for (idx_node, ea_node) in self.nodes.iter().enumerate() {
             if let Some(mut pos) = self.placements.get(&idx_node).copied() {
                 if pos.right() > area.width || pos.bottom() > area.height {
                     continue 'node;
@@ -317,9 +323,7 @@ impl<'a> ratatui::widgets::StatefulWidget for NodeGraph<'a> {
             }
         }
     }
-}
 
-impl<'a> NodeGraph<'a> {
     fn draw_loop_connections(&self, area: Rect, buf: &mut Buffer) {
         for conn in &self.loop_connections {
             if let Some(rect) = self.placements.get(&conn.from_node).copied() {
@@ -410,6 +414,12 @@ impl<'a> NodeGraph<'a> {
             area,
         );
         draw_corner(buf, left_x, end_y_i, set.top_left, style, area);
+    }
+}
+
+impl<'a> Widget for &'a NodeGraph<'a> {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        self.render_into(area, buf);
     }
 }
 
