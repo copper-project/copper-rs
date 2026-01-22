@@ -144,11 +144,19 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
 
     let data = match &input.data {
         Data::Struct(data) => data,
-        _ => panic!("Only structs are supported"),
+        _ => {
+            return syn::Error::new_spanned(&input, "Only structs are supported")
+                .to_compile_error()
+                .into();
+        }
     };
     let fields = match &data.fields {
         Fields::Named(fields) => &fields.named,
-        _ => panic!("Only named fields are supported"),
+        _ => {
+            return syn::Error::new_spanned(&data.fields, "Only named fields are supported")
+                .to_compile_error()
+                .into();
+        }
     };
 
     struct FieldInfo {
@@ -260,7 +268,14 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
     }
 
     for field in fields {
-        let field_name = field.ident.as_ref().unwrap().clone();
+        let field_name = match &field.ident {
+            Some(ident) => ident.clone(),
+            None => {
+                return syn::Error::new_spanned(field, "Only named fields are supported")
+                    .to_compile_error()
+                    .into();
+            }
+        };
         let field_type = field.ty.clone();
         let nested = match parse_soa_nested(&field.attrs) {
             Ok(value) => value,
@@ -278,7 +293,12 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
         };
 
         if let Type::Path(TypePath { path, .. }) = &field_type {
-            let type_name = path.segments.last().unwrap().ident.to_string();
+            let Some(last_segment) = path.segments.last() else {
+                return syn::Error::new_spanned(path, "expected a non-empty type path")
+                    .to_compile_error()
+                    .into();
+            };
+            let type_name = last_segment.ident.to_string();
             let path_str = path.to_token_stream().to_string();
 
             if !is_primitive(&type_name) && !unique_import_names.contains(&path_str) {
