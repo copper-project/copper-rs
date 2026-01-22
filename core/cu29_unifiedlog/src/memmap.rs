@@ -352,26 +352,30 @@ pub struct MmapUnifiedLoggerWrite {
 
 fn build_slab_path(base_file_path: &Path, slab_index: usize) -> io::Result<PathBuf> {
     let mut file_path = base_file_path.to_path_buf();
-    let file_name = file_path.file_name().ok_or_else(|| {
+    let stem = file_path.file_stem().ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
             "Base file path has no file name",
         )
     })?;
-    let file_name = file_name.to_str().ok_or_else(|| {
+    let stem = stem.to_str().ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
             "Base file name is not valid UTF-8",
         )
     })?;
-    let mut parts = file_name.split('.').collect::<Vec<&str>>();
-    let extension = parts.pop().filter(|ext| !ext.is_empty()).ok_or_else(|| {
+    let extension = file_path.extension().ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
             "Base file path has no extension",
         )
     })?;
-    let stem = parts.join(".");
+    let extension = extension.to_str().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Base file extension is not valid UTF-8",
+        )
+    })?;
     if stem.is_empty() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
