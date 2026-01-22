@@ -59,7 +59,8 @@ impl SectionStorage for MmapSectionStorage {
     }
 
     fn flush(&mut self) -> CuResult<usize> {
-        todo!()
+        // Flushing is handled at the slab level for mmap-backed storage.
+        Ok(self.offset)
     }
 }
 
@@ -119,15 +120,19 @@ impl MmapUnifiedLoggerBuilder {
         let page_size = page_size::get();
 
         if self.write && self.create {
-            let ulw = MmapUnifiedLoggerWrite::new(
-                &self
-                    .file_base_name
-                    .expect("This unified logger has no filename."),
-                self.preallocated_size
-                    .expect("This unified logger has no preallocated size."),
-                page_size,
-            );
-
+            let file_path = self.file_base_name.ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "File path is required for write mode",
+                )
+            })?;
+            let preallocated_size = self.preallocated_size.ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "Preallocated size is required for write mode",
+                )
+            })?;
+            let ulw = MmapUnifiedLoggerWrite::new(&file_path, preallocated_size, page_size)?;
             Ok(MmapUnifiedLogger::Write(ulw))
         } else {
             let file_path = self.file_base_name.ok_or_else(|| {
@@ -154,9 +159,9 @@ impl Drop for SlabEntry {
         self.flush_until(self.current_global_position);
         // SAFETY: We own the mapping and must drop it before trimming the file.
         unsafe { ManuallyDrop::drop(&mut self.mmap_buffer) };
-        self.file
-            .set_len(self.current_global_position as u64)
-            .expect("Failed to trim datalogger file");
+        if let Err(error) = self.file.set_len(self.current_global_position as u64) {
+            eprintln!("Failed to trim datalogger file: {}", error);
+        }
 
         if !self.sections_offsets_in_flight.is_empty() {
             eprintln!("Error: Slab not full flushed.");
@@ -165,12 +170,13 @@ impl Drop for SlabEntry {
 }
 
 impl SlabEntry {
-    fn new(file: File, page_size: usize) -> Self {
+    fn new(file: File, page_size: usize) -> io::Result<Self> {
         let mmap_buffer = ManuallyDrop::new(
             // SAFETY: The file descriptor is valid and mapping is confined to this struct.
-            unsafe { MmapMut::map_mut(&file).expect("Failed to map file") },
+            unsafe { MmapMut::map_mut(&file) }
+                .map_err(|e| io::Error::new(e.kind(), format!("Failed to map file: {e}")))?,
         );
-        Self {
+        Ok(Self {
             file,
             mmap_buffer,
             current_global_position: 0,
@@ -178,7 +184,7 @@ impl SlabEntry {
             flushed_until_offset: 0,
             page_size,
             temporary_end_marker: None,
-        }
+        })
     }
 
     /// Unsure the underlying mmap is flush to disk until the given position.
@@ -344,33 +350,60 @@ pub struct MmapUnifiedLoggerWrite {
     front_slab_suffix: usize,
 }
 
-fn build_slab_path(base_file_path: &Path, slab_index: usize) -> PathBuf {
+fn build_slab_path(base_file_path: &Path, slab_index: usize) -> io::Result<PathBuf> {
     let mut file_path = base_file_path.to_path_buf();
-    let file_name = file_path
-        .file_name()
-        .expect("Invalid base file path")
-        .to_str()
-        .expect("Could not translate the filename OsStr to str");
-    let mut file_name = file_name.split('.').collect::<Vec<&str>>();
-    let extension = file_name.pop().expect("Could not find the file extension.");
-    let file_name = file_name.join(".");
-    let file_name = format!("{file_name}_{slab_index}.{extension}");
+    let file_name = file_path.file_name().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Base file path has no file name",
+        )
+    })?;
+    let file_name = file_name.to_str().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Base file name is not valid UTF-8",
+        )
+    })?;
+    let mut parts = file_name.split('.').collect::<Vec<&str>>();
+    let extension = parts.pop().filter(|ext| !ext.is_empty()).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Base file path has no extension",
+        )
+    })?;
+    let stem = parts.join(".");
+    if stem.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Base file name is empty",
+        ));
+    }
+    let file_name = format!("{stem}_{slab_index}.{extension}");
     file_path.set_file_name(file_name);
-    file_path
+    Ok(file_path)
 }
 
-fn make_slab_file(base_file_path: &Path, slab_size: usize, slab_suffix: usize) -> File {
-    let file_path = build_slab_path(base_file_path, slab_suffix);
+fn make_slab_file(base_file_path: &Path, slab_size: usize, slab_suffix: usize) -> io::Result<File> {
+    let file_path = build_slab_path(base_file_path, slab_suffix)?;
     let file = OpenOptions::new()
         .read(true)
         .write(true)
         .create(true)
         .truncate(true)
         .open(&file_path)
-        .unwrap_or_else(|_| panic!("Failed to open file: {}", file_path.display()));
-    file.set_len(slab_size as u64)
-        .expect("Failed to set file length");
-    file
+        .map_err(|e| {
+            io::Error::new(
+                e.kind(),
+                format!("Failed to open file {}: {e}", file_path.display()),
+            )
+        })?;
+    file.set_len(slab_size as u64).map_err(|e| {
+        io::Error::new(
+            e.kind(),
+            format!("Failed to set file length for {}: {e}", file_path.display()),
+        )
+    })?;
+    Ok(file)
 }
 
 impl UnifiedLogWrite<MmapSectionStorage> for MmapUnifiedLoggerWrite {
@@ -389,7 +422,7 @@ impl UnifiedLogWrite<MmapSectionStorage> for MmapUnifiedLoggerWrite {
         match maybe_section {
             AllocatedSection::NoMoreSpace => {
                 // move the front slab to the back slab.
-                let new_slab = SlabEntry::new(self.next_slab(), self.front_slab.page_size);
+                let new_slab = self.create_slab()?;
                 // keep the slab until all its sections has been flushed.
                 self.back_slabs
                     .push(mem::replace(&mut self.front_slab, new_slab));
@@ -431,15 +464,16 @@ impl UnifiedLogWrite<MmapSectionStorage> for MmapUnifiedLoggerWrite {
 }
 
 impl MmapUnifiedLoggerWrite {
-    fn next_slab(&mut self) -> File {
-        self.front_slab_suffix += 1;
-
-        make_slab_file(&self.base_file_path, self.slab_size, self.front_slab_suffix)
+    fn next_slab(&mut self) -> io::Result<File> {
+        let next_suffix = self.front_slab_suffix + 1;
+        let file = make_slab_file(&self.base_file_path, self.slab_size, next_suffix)?;
+        self.front_slab_suffix = next_suffix;
+        Ok(file)
     }
 
-    fn new(base_file_path: &Path, slab_size: usize, page_size: usize) -> Self {
-        let file = make_slab_file(base_file_path, slab_size, 0);
-        let mut front_slab = SlabEntry::new(file, page_size);
+    fn new(base_file_path: &Path, slab_size: usize, page_size: usize) -> io::Result<Self> {
+        let file = make_slab_file(base_file_path, slab_size, 0)?;
+        let mut front_slab = SlabEntry::new(file, page_size)?;
 
         // This is the first slab so add the main header.
         let main_header = MainHeader {
@@ -448,17 +482,17 @@ impl MmapUnifiedLoggerWrite {
             page_size: page_size as u16,
         };
         let nb_bytes = encode_into_slice(&main_header, &mut front_slab.mmap_buffer[..], standard())
-            .expect("Failed to encode main header");
+            .map_err(|e| io::Error::other(format!("Failed to encode main header: {e}")))?;
         assert!(nb_bytes < page_size);
         front_slab.current_global_position = page_size; // align to the next page
 
-        Self {
+        Ok(Self {
             front_slab,
             back_slabs: Vec::new(),
             base_file_path: base_file_path.to_path_buf(),
             slab_size,
             front_slab_suffix: 0,
-        }
+        })
     }
 
     fn garbage_collect_backslabs(&mut self) {
@@ -471,7 +505,7 @@ impl MmapUnifiedLoggerWrite {
             Ok(_) => Ok(()),
             Err(_) => {
                 // Not enough space in the current slab, roll to a new one.
-                let new_slab = SlabEntry::new(self.next_slab(), self.front_slab.page_size);
+                let new_slab = self.create_slab()?;
                 self.back_slabs
                     .push(mem::replace(&mut self.front_slab, new_slab));
                 self.front_slab.write_end_marker(temporary)
@@ -485,6 +519,14 @@ impl MmapUnifiedLoggerWrite {
             self.front_slab.sections_offsets_in_flight.clone(),
             self.back_slabs.len(),
         )
+    }
+
+    fn create_slab(&mut self) -> CuResult<SlabEntry> {
+        let file = self
+            .next_slab()
+            .map_err(|e| CuError::new_with_cause("Failed to create slab file", e))?;
+        SlabEntry::new(file, self.front_slab.page_size)
+            .map_err(|e| CuError::new_with_cause("Failed to create slab memory map", e))
     }
 }
 
@@ -512,17 +554,27 @@ fn open_slab_index(
     let mut options = OpenOptions::new();
     let options = options.read(true);
 
-    let file_path = build_slab_path(base_file_path, slab_index);
-    let file = options.open(file_path)?;
+    let file_path = build_slab_path(base_file_path, slab_index)?;
+    let file = options.open(&file_path).map_err(|e| {
+        io::Error::new(
+            e.kind(),
+            format!("Failed to open slab file {}: {e}", file_path.display()),
+        )
+    })?;
     // SAFETY: The file is kept open for the lifetime of the mapping.
-    let mmap = unsafe { Mmap::map(&file) }?;
+    let mmap = unsafe { Mmap::map(&file) }
+        .map_err(|e| io::Error::new(e.kind(), format!("Failed to map slab file: {e}")))?;
     let mut prolog = 0u16;
     let mut maybe_main_header: Option<MainHeader> = None;
     if slab_index == 0 {
         let main_header: MainHeader;
         let _read: usize;
-        (main_header, _read) =
-            decode_from_slice(&mmap[..], standard()).expect("Failed to decode main header");
+        (main_header, _read) = decode_from_slice(&mmap[..], standard()).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Failed to decode main header: {e}"),
+            )
+        })?;
         if main_header.magic != MAIN_MAGIC {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -617,10 +669,13 @@ impl UnifiedLogRead for MmapUnifiedLoggerRead {
 impl MmapUnifiedLoggerRead {
     pub fn new(base_file_path: &Path) -> io::Result<Self> {
         let (file, mmap, prolog, header) = open_slab_index(base_file_path, 0)?;
+        let main_header = header.ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidData, "Missing main header in slab 0")
+        })?;
 
         Ok(Self {
             base_file_path: base_file_path.to_path_buf(),
-            main_header: header.expect("UnifiedLoggerRead needs a header"),
+            main_header,
             current_file: file,
             current_mmap_buffer: mmap,
             current_slab_index: 0,
