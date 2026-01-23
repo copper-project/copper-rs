@@ -20,7 +20,7 @@ use cu29::{CuError, CuResult};
 use debug_pane::UIExt;
 use ratatui::backend::CrosstermBackend;
 use ratatui::buffer::Buffer;
-use ratatui::crossterm::event::{DisableMouseCapture, EnableMouseCapture, Event, KeyCode};
+use ratatui::crossterm::event::{DisableMouseCapture, Event, KeyCode};
 use ratatui::crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
@@ -1738,7 +1738,8 @@ fn init_error_hooks() {
 
 fn setup_terminal() -> io::Result<()> {
     enable_raw_mode()?;
-    execute!(stdout(), EnterAlternateScreen, EnableMouseCapture)?;
+    // Avoid enabling mouse capture so terminal selection works (e.g., LOG panel copy).
+    execute!(stdout(), EnterAlternateScreen)?;
     Ok(())
 }
 
