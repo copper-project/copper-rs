@@ -1,19 +1,19 @@
 import "../../justfile"
 
 # Extract a text log using the balancebot logreader.
-balancebot-dump-text-logs:
+text-logs:
 	#!/usr/bin/env bash
 	set -euo pipefail
 	cargo run --bin balancebot-logreader --profile screaming -- logs/balance.copper extract-text-log ../../target/debug/cu29_log_index/strings.bin
 
 # Run fsck against the balancebot copper log.
-balancebot-fsck:
+fsck:
 	#!/usr/bin/env bash
 	set -euo pipefail
 	cargo run --bin balancebot-logreader --profile screaming -- logs/balance.copper fsck
 
 # Render a DAG with log-derived statistics. Requires explicit bin=<logreader>.
-dag-logstats bin="balancebot-logreader" log="logs/balance.copper" mission="" out="target/cu29_logstats.json":
+dag-stats bin="balancebot-logreader" log="logs/balance.copper" mission="" out="target/cu29_logstats.json":
 	#!/usr/bin/env bash
 	set -euo pipefail
 
@@ -110,3 +110,9 @@ mcap:
 
 	# Run mcap-info to show the user what was created
 	cargo run --bin balancebot-logreader --profile screaming -- "${copper_base}" mcap-info "${mcap_file}"
+
+resim:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cargo run --bin balancebot-resim --profile screaming 
+    
