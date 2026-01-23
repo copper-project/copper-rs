@@ -1,6 +1,3 @@
-mod format;
-#[cfg(feature = "macro_debug")]
-use format::{highlight_rust_code, rustfmt_generated_code};
 use proc_macro::TokenStream;
 use quote::{ToTokens, format_ident, quote};
 use syn::{Attribute, Data, DeriveInput, Fields, Path, PathArguments, Type, parse_macro_input};
@@ -884,12 +881,5 @@ pub fn derive_soa(input: TokenStream) -> TokenStream {
 
     let tokens: TokenStream = expanded.into();
 
-    #[cfg(feature = "macro_debug")]
-    {
-        let formatted_code = rustfmt_generated_code(tokens.to_string());
-        eprintln!("\n     ===    Gen. SOA     ===\n");
-        eprintln!("{}", highlight_rust_code(formatted_code));
-        eprintln!("\n     === === === === === ===\n");
-    }
     tokens
 }

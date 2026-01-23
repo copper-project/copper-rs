@@ -128,6 +128,34 @@ std-ci mode="debug": lint
 		)
 	fi
 
+# Proc-macro expansion helpers (cargo-expand).
+check-expand:
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	if ! cargo +stable expand --version >/dev/null 2>&1; then
+		echo "Missing cargo-expand. Install with: cargo install cargo-expand"
+		exit 1
+	fi
+
+# Inspect expanded output of cu29-deriva in the target
+expand-runtime pkg bin features="": check-expand
+	# Usage: just expand-runtime pkg=<crate> bin=<bin> [features=feat1,feat2]
+	#!/usr/bin/env bash
+	set -euo pipefail
+
+	features_flag=""
+	if [[ -n "{{features}}" ]]; then
+	features_flag="--features {{features}}"
+	fi
+
+	cargo +stable expand -p "{{pkg}}" --bin "{{bin}}" $features_flag
+
+# expand macro of cu29-soa-derive test target 
+expand-soa test="proctest": check-expand
+	# Usage: just expand-soa [test=proctest]
+	cargo +stable expand -p cu29-soa-derive --test "{{test}}"
+
 # Run RTSan on a single app (defaults to cu-caterpillar).
 # RTSan reports violations to stderr; tweak RTSAN_OPTIONS if you need to keep running.
 rtsan-smoke pkg="cu-caterpillar" bin="cu-caterpillar" args="" options="halt_on_error=false":
