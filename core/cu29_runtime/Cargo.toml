@@ -68,6 +68,13 @@ cudarc = { version = "0.19", optional = true, default-features = false, features
   "cuda-version-from-build-system",
 ] }
 
+[dev-dependencies]
+cu29 = { workspace = true }
+cu29-log-derive = { workspace = true }
+cu29-value = { workspace = true }
+serde = { workspace = true }
+tempfile = { workspace = true }
+
 [features]
 default = ["std"]
 defmt = [
@@ -96,3 +103,4 @@ std = [
   "petgraph/std",
 ]
 memory_monitoring = []
+bridge-sim-callbacks = []

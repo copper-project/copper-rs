@@ -431,6 +431,7 @@ fn gen_culist_support(
 fn gen_sim_support(
     runtime_plan: &CuExecutionLoop,
     exec_entities: &[ExecutionEntity],
+    bridge_specs: &[BridgeSpec],
 ) -> proc_macro2::TokenStream {
     #[cfg(feature = "macro_debug")]
     eprintln!("[Sim: Build SimEnum]");
@@ -438,56 +439,94 @@ fn gen_sim_support(
         .steps
         .iter()
         .filter_map(|unit| match unit {
-            CuExecutionUnit::Step(step) => {
-                if !matches!(
-                    exec_entities[step.node_id as usize].kind,
-                    ExecutionEntityKind::Task { .. }
-                ) {
-                    return None;
-                }
-                let enum_entry_name = config_id_to_enum(step.node.get_id().as_str());
-                let enum_ident = Ident::new(&enum_entry_name, Span::call_site());
-                let inputs: Vec<Type> = step
-                    .input_msg_indices_types
-                    .iter()
-                    .map(|input| {
-                        parse_str::<Type>(format!("CuMsg<{}>", input.msg_type).as_str()).unwrap()
-                    })
-                    .collect();
-                let output: Option<Type> = step.output_msg_pack.as_ref().map(|pack| {
-                    let msg_types: Vec<Type> = pack
-                        .msg_types
+            CuExecutionUnit::Step(step) => match &exec_entities[step.node_id as usize].kind {
+                ExecutionEntityKind::Task { .. } => {
+                    let enum_entry_name = config_id_to_enum(step.node.get_id().as_str());
+                    let enum_ident = Ident::new(&enum_entry_name, Span::call_site());
+                    let inputs: Vec<Type> = step
+                        .input_msg_indices_types
                         .iter()
-                        .map(|msg_type| {
-                            parse_str::<Type>(msg_type.as_str()).unwrap_or_else(|_| {
-                                panic!("Could not transform {msg_type} into a message Rust type.")
-                            })
+                        .map(|input| {
+                            parse_str::<Type>(format!("CuMsg<{}>", input.msg_type).as_str()).unwrap()
                         })
                         .collect();
-                    build_output_slot_type(&msg_types)
-                });
-                let no_output = parse_str::<Type>("CuMsg<()>").unwrap();
-                let output = output.as_ref().unwrap_or(&no_output);
+                    let output: Option<Type> = step.output_msg_pack.as_ref().map(|pack| {
+                        let msg_types: Vec<Type> = pack
+                            .msg_types
+                            .iter()
+                            .map(|msg_type| {
+                                parse_str::<Type>(msg_type.as_str()).unwrap_or_else(|_| {
+                                    panic!("Could not transform {msg_type} into a message Rust type.")
+                                })
+                            })
+                            .collect();
+                        build_output_slot_type(&msg_types)
+                    });
+                    let no_output = parse_str::<Type>("CuMsg<()>").unwrap();
+                    let output = output.as_ref().unwrap_or(&no_output);
 
-                let inputs_type = if inputs.is_empty() {
-                    quote! { () }
-                } else if inputs.len() == 1 {
-                    let input = inputs.first().unwrap();
-                    quote! { &'a #input }
-                } else {
-                    quote! { &'a (#(&'a #inputs),*) }
-                };
+                    let inputs_type = if inputs.is_empty() {
+                        quote! { () }
+                    } else if inputs.len() == 1 {
+                        let input = inputs.first().unwrap();
+                        quote! { &'a #input }
+                    } else {
+                        quote! { &'a (#(&'a #inputs),*) }
+                    };
 
-                Some(quote! {
-                    #enum_ident(CuTaskCallbackState<#inputs_type, &'a mut #output>)
-                })
-            }
+                    Some(quote! {
+                        #enum_ident(CuTaskCallbackState<#inputs_type, &'a mut #output>)
+                    })
+                }
+                ExecutionEntityKind::BridgeRx { bridge_index, channel_index } => {
+                    let bridge_spec = &bridge_specs[*bridge_index];
+                    let channel = &bridge_spec.rx_channels[*channel_index];
+                    let enum_entry_name = config_id_to_enum(&format!("{}_rx_{}", bridge_spec.id, channel.id));
+                    let enum_ident = Ident::new(&enum_entry_name, Span::call_site());
+                    let channel_type: Type = parse_str::<Type>(channel.msg_type_name.as_str()).unwrap();
+                    let bridge_type = &bridge_spec.type_path;
+                    let _const_ident = &channel.const_ident;
+                    Some(quote! {
+                        #enum_ident {
+                            channel: &'static cu29::cubridge::BridgeChannel<< <#bridge_type as cu29::cubridge::CuBridge>::Rx as cu29::cubridge::BridgeChannelSet >::Id, #channel_type>,
+                            msg: &'a mut CuMsg<#channel_type>,
+                        }
+                    })
+                }
+                ExecutionEntityKind::BridgeTx { bridge_index, channel_index } => {
+                    let bridge_spec = &bridge_specs[*bridge_index];
+                    let channel = &bridge_spec.tx_channels[*channel_index];
+                    let enum_entry_name = config_id_to_enum(&format!("{}_tx_{}", bridge_spec.id, channel.id));
+                    let enum_ident = Ident::new(&enum_entry_name, Span::call_site());
+                    let channel_type: Type = parse_str::<Type>(channel.msg_type_name.as_str()).unwrap();
+                    let bridge_type = &bridge_spec.type_path;
+                    let _const_ident = &channel.const_ident;
+                    Some(quote! {
+                        #enum_ident {
+                            channel: &'static cu29::cubridge::BridgeChannel<< <#bridge_type as cu29::cubridge::CuBridge>::Tx as cu29::cubridge::BridgeChannelSet >::Id, #channel_type>,
+                            msg: &'a CuMsg<#channel_type>,
+                        }
+                    })
+                }
+            },
             CuExecutionUnit::Loop(_) => {
                 todo!("Needs to be implemented")
             }
         })
         .collect();
+
+    // bridge lifecycle variants (one per bridge)
     let mut variants = plan_enum;
+
+    // add bridge lifecycle variants
+    for bridge_spec in bridge_specs {
+        let enum_entry_name = config_id_to_enum(&format!("{}_bridge", bridge_spec.id));
+        let enum_ident = Ident::new(&enum_entry_name, Span::call_site());
+        variants.push(quote! {
+            #enum_ident(cu29::simulation::CuBridgeLifecycleState)
+        });
+    }
+
     variants.push(quote! { __Phantom(core::marker::PhantomData<&'a ()>) });
     quote! {
         // not used if sim is not generated but this is ok.
@@ -1307,8 +1346,35 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     spec.monitor_index
                         .expect("Bridge missing monitor index for start"),
                 );
+                let enum_ident = Ident::new(
+                    &config_id_to_enum(&format!("{}_bridge", spec.id)),
+                    Span::call_site(),
+                );
+                let call_sim = if sim_mode {
+                    quote! {
+                        let doit = {
+                            let state = SimStep::#enum_ident(cu29::simulation::CuBridgeLifecycleState::Start);
+                            let ovr = sim_callback(state);
+                            if let SimOverride::Errored(reason) = ovr {
+                                let error: CuError = reason.into();
+                                let decision = self.copper_runtime.monitor.process_error(#monitor_index, CuTaskState::Start, &error);
+                                match decision {
+                                    Decision::Abort => { debug!("Start: ABORT decision from monitoring. Task '{}' errored out during start. Aborting all the other starts.", #mission_mod::TASKS_IDS[#monitor_index]); return Ok(()); }
+                                    Decision::Ignore => { debug!("Start: IGNORE decision from monitoring. Task '{}' errored out during start. The runtime will continue.", #mission_mod::TASKS_IDS[#monitor_index]); false }
+                                    Decision::Shutdown => { debug!("Start: SHUTDOWN decision from monitoring. Task '{}' errored out during start. The runtime cannot continue.", #mission_mod::TASKS_IDS[#monitor_index]); return Err(CuError::new_with_cause("Task errored out during start.", error)); }
+                                }
+                            } else {
+                                ovr == SimOverride::ExecuteByRuntime
+                            }
+                        };
+                    }
+                } else {
+                    quote! { let doit = true; }
+                };
                 quote! {
                     {
+                        #call_sim
+                        if !doit { return Ok(()); }
                         let bridge = &mut self.copper_runtime.bridges.#bridge_index;
                         if let Err(error) = bridge.start(&self.copper_runtime.clock) {
                             let decision = self.copper_runtime.monitor.process_error(#monitor_index, CuTaskState::Start, &error);
@@ -1339,8 +1405,35 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     spec.monitor_index
                         .expect("Bridge missing monitor index for stop"),
                 );
+                let enum_ident = Ident::new(
+                    &config_id_to_enum(&format!("{}_bridge", spec.id)),
+                    Span::call_site(),
+                );
+                let call_sim = if sim_mode {
+                    quote! {
+                        let doit = {
+                            let state = SimStep::#enum_ident(cu29::simulation::CuBridgeLifecycleState::Stop);
+                            let ovr = sim_callback(state);
+                            if let SimOverride::Errored(reason) = ovr {
+                                let error: CuError = reason.into();
+                                let decision = self.copper_runtime.monitor.process_error(#monitor_index, CuTaskState::Stop, &error);
+                                match decision {
+                                    Decision::Abort => { debug!("Stop: ABORT decision from monitoring. Task '{}' errored out during stop. Aborting all the other stops.", #mission_mod::TASKS_IDS[#monitor_index]); return Ok(()); }
+                                    Decision::Ignore => { debug!("Stop: IGNORE decision from monitoring. Task '{}' errored out during stop. The runtime will continue.", #mission_mod::TASKS_IDS[#monitor_index]); false }
+                                    Decision::Shutdown => { debug!("Stop: SHUTDOWN decision from monitoring. Task '{}' errored out during stop. The runtime cannot continue.", #mission_mod::TASKS_IDS[#monitor_index]); return Err(CuError::new_with_cause("Task errored out during stop.", error)); }
+                                }
+                            } else {
+                                ovr == SimOverride::ExecuteByRuntime
+                            }
+                        };
+                    }
+                } else {
+                    quote! { let doit = true; }
+                };
                 quote! {
                     {
+                        #call_sim
+                        if !doit { return Ok(()); }
                         let bridge = &mut self.copper_runtime.bridges.#bridge_index;
                         if let Err(error) = bridge.stop(&self.copper_runtime.clock) {
                             let decision = self.copper_runtime.monitor.process_error(#monitor_index, CuTaskState::Stop, &error);
@@ -1371,8 +1464,35 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     spec.monitor_index
                         .expect("Bridge missing monitor index for preprocess"),
                 );
+                let enum_ident = Ident::new(
+                    &config_id_to_enum(&format!("{}_bridge", spec.id)),
+                    Span::call_site(),
+                );
+                let call_sim = if sim_mode {
+                    quote! {
+                        let doit = {
+                            let state = SimStep::#enum_ident(cu29::simulation::CuBridgeLifecycleState::Preprocess);
+                            let ovr = sim_callback(state);
+                            if let SimOverride::Errored(reason) = ovr {
+                                let error: CuError = reason.into();
+                                let decision = monitor.process_error(#monitor_index, CuTaskState::Preprocess, &error);
+                                match decision {
+                                    Decision::Abort => { debug!("Preprocess: ABORT decision from monitoring. Task '{}' errored out during preprocess. Aborting all the other starts.", #mission_mod::TASKS_IDS[#monitor_index]); return Ok(()); }
+                                    Decision::Ignore => { debug!("Preprocess: IGNORE decision from monitoring. Task '{}' errored out during preprocess. The runtime will continue.", #mission_mod::TASKS_IDS[#monitor_index]); false }
+                                    Decision::Shutdown => { debug!("Preprocess: SHUTDOWN decision from monitoring. Task '{}' errored out during preprocess. The runtime cannot continue.", #mission_mod::TASKS_IDS[#monitor_index]); return Err(CuError::new_with_cause("Task errored out during preprocess.", error)); }
+                                }
+                            } else {
+                                ovr == SimOverride::ExecuteByRuntime
+                            }
+                        };
+                    }
+                } else {
+                    quote! { let doit = true; }
+                };
                 quote! {
                     {
+                        #call_sim
+                        if !doit { return Ok(()); }
                         let bridge = &mut bridges.#bridge_index;
                         let maybe_error = {
                             #rt_guard
@@ -1407,8 +1527,35 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     spec.monitor_index
                         .expect("Bridge missing monitor index for postprocess"),
                 );
+                let enum_ident = Ident::new(
+                    &config_id_to_enum(&format!("{}_bridge", spec.id)),
+                    Span::call_site(),
+                );
+                let call_sim = if sim_mode {
+                    quote! {
+                        let doit = {
+                            let state = SimStep::#enum_ident(cu29::simulation::CuBridgeLifecycleState::Postprocess);
+                            let ovr = sim_callback(state);
+                            if let SimOverride::Errored(reason) = ovr {
+                                let error: CuError = reason.into();
+                                let decision = monitor.process_error(#monitor_index, CuTaskState::Postprocess, &error);
+                                match decision {
+                                    Decision::Abort => { debug!("Postprocess: ABORT decision from monitoring. Task '{}' errored out during postprocess. Aborting all the other starts.", #mission_mod::TASKS_IDS[#monitor_index]); return Ok(()); }
+                                    Decision::Ignore => { debug!("Postprocess: IGNORE decision from monitoring. Task '{}' errored out during postprocess. The runtime will continue.", #mission_mod::TASKS_IDS[#monitor_index]); false }
+                                    Decision::Shutdown => { debug!("Postprocess: SHUTDOWN decision from monitoring. Task '{}' errored out during postprocess. The runtime cannot continue.", #mission_mod::TASKS_IDS[#monitor_index]); return Err(CuError::new_with_cause("Task errored out during postprocess.", error)); }
+                                }
+                            } else {
+                                ovr == SimOverride::ExecuteByRuntime
+                            }
+                        };
+                    }
+                } else {
+                    quote! { let doit = true; }
+                };
                 quote! {
                     {
+                        #call_sim
+                        if !doit { return Ok(()); }
                         let bridge = &mut bridges.#bridge_index;
                         let maybe_error = {
                             #rt_guard
@@ -1483,6 +1630,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 spec,
                                 *channel_index,
                                 &mission_mod,
+                                sim_mode,
                             )
                         }
                         ExecutionEntityKind::BridgeTx {
@@ -1496,6 +1644,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                                 *channel_index,
                                 &output_pack_sizes,
                                 &mission_mod,
+                                sim_mode,
                             )
                         }
                     }
@@ -1507,7 +1656,11 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             .collect();
 
         let sim_support = if sim_mode {
-            Some(gen_sim_support(&culist_plan, &culist_exec_entities))
+            Some(gen_sim_support(
+                &culist_plan,
+                &culist_exec_entities,
+                &culist_bridge_specs,
+            ))
         } else {
             None
         };
@@ -1578,6 +1731,19 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         });
 
+        let sim_callback_on_new_bridges = culist_bridge_specs.iter().map(|spec| {
+            let enum_ident = Ident::new(
+                &config_id_to_enum(&format!("{}_bridge", spec.id)),
+                Span::call_site(),
+            );
+            let cfg_index = syn::Index::from(spec.config_index);
+            quote! {
+                sim_callback(SimStep::#enum_ident(
+                    cu29::simulation::CuBridgeLifecycleState::New(config.bridges[#cfg_index].config.clone())
+                ));
+            }
+        });
+
         let sim_callback_on_new = if sim_mode {
             Some(quote! {
                 let graph = config.get_graph(Some(#mission)).expect("Could not find the mission #mission");
@@ -1587,6 +1753,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     .map(|(_, node)| node.get_instance_config())
                     .collect();
                 #(#sim_callback_on_new_calls)*
+                #(#sim_callback_on_new_bridges)*
             })
         } else {
             None
@@ -2151,6 +2318,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 use cu29::simulation::CuSimSrcTask;
                 use cu29::simulation::CuSimSinkTask;
                 use cu29::prelude::app::CuSimApplication;
+                use cu29::cubridge::BridgeChannelSet;
             })
         } else {
             None
@@ -3815,6 +3983,7 @@ fn generate_bridge_rx_execution_tokens(
     bridge_spec: &BridgeSpec,
     channel_index: usize,
     mission_mod: &Ident,
+    sim_mode: bool,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     let rt_guard = rtsan_guard_tokens();
     let bridge_tuple_index = int2sliceindex(bridge_spec.tuple_index as u32);
@@ -3847,22 +4016,21 @@ fn generate_bridge_rx_execution_tokens(
     );
     let bridge_type = &bridge_spec.type_path;
     let const_ident = &channel.const_ident;
-    (
+    let enum_ident = Ident::new(
+        &config_id_to_enum(&format!("{}_rx_{}", bridge_spec.id, channel.id)),
+        Span::call_site(),
+    );
+
+    let call_sim_callback = if sim_mode {
         quote! {
-            {
-                let bridge = &mut bridges.#bridge_tuple_index;
-                let cumsg_output = #output_ref;
-                cumsg_output.metadata.process_time.start = clock.now().into();
-                let maybe_error = {
-                    #rt_guard
-                    bridge.receive(
-                        clock,
-                        &<#bridge_type as cu29::cubridge::CuBridge>::Rx::#const_ident,
-                        cumsg_output,
-                    )
+            let doit = {
+                let state = SimStep::#enum_ident {
+                    channel: &<#bridge_type as cu29::cubridge::CuBridge>::Rx::#const_ident,
+                    msg: cumsg_output,
                 };
-                cumsg_output.metadata.process_time.end = clock.now().into();
-                if let Err(error) = maybe_error {
+                let ovr = sim_callback(state);
+                if let SimOverride::Errored(reason) = ovr {
+                    let error: CuError = reason.into();
                     let decision = monitor.process_error(#monitor_index, CuTaskState::Process, &error);
                     match decision {
                         Decision::Abort => {
@@ -3873,12 +4041,56 @@ fn generate_bridge_rx_execution_tokens(
                         }
                         Decision::Ignore => {
                             debug!("Process: IGNORE decision from monitoring. Task '{}' errored out during process. The runtime will continue with a forced empty message.", #mission_mod::TASKS_IDS[#monitor_index]);
-                            let cumsg_output = #output_ref;
                             cumsg_output.clear_payload();
+                            false
                         }
                         Decision::Shutdown => {
                             debug!("Process: SHUTDOWN decision from monitoring. Task '{}' errored out during process. The runtime cannot continue.", #mission_mod::TASKS_IDS[#monitor_index]);
                             return Err(CuError::new_with_cause("Task errored out during process.", error));
+                        }
+                    }
+                } else {
+                    ovr == SimOverride::ExecuteByRuntime
+                }
+            };
+        }
+    } else {
+        quote! { let doit = true; }
+    };
+    (
+        quote! {
+            {
+                let bridge = &mut bridges.#bridge_tuple_index;
+                let cumsg_output = #output_ref;
+                #call_sim_callback
+                if doit {
+                    cumsg_output.metadata.process_time.start = clock.now().into();
+                    let maybe_error = {
+                        #rt_guard
+                        bridge.receive(
+                            clock,
+                            &<#bridge_type as cu29::cubridge::CuBridge>::Rx::#const_ident,
+                            cumsg_output,
+                        )
+                    };
+                    cumsg_output.metadata.process_time.end = clock.now().into();
+                    if let Err(error) = maybe_error {
+                        let decision = monitor.process_error(#monitor_index, CuTaskState::Process, &error);
+                        match decision {
+                            Decision::Abort => {
+                                debug!("Process: ABORT decision from monitoring. Task '{}' errored out during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#monitor_index], clid);
+                                monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
+                                cl_manager.end_of_processing(clid)?;
+                                return Ok(());
+                            }
+                            Decision::Ignore => {
+                                debug!("Process: IGNORE decision from monitoring. Task '{}' errored out during process. The runtime will continue with a forced empty message.", #mission_mod::TASKS_IDS[#monitor_index]);
+                                cumsg_output.clear_payload();
+                            }
+                            Decision::Shutdown => {
+                                debug!("Process: SHUTDOWN decision from monitoring. Task '{}' errored out during process. The runtime cannot continue.", #mission_mod::TASKS_IDS[#monitor_index]);
+                                return Err(CuError::new_with_cause("Task errored out during process.", error));
+                            }
                         }
                     }
                 }
@@ -3894,6 +4106,7 @@ fn generate_bridge_tx_execution_tokens(
     channel_index: usize,
     output_pack_sizes: &[usize],
     mission_mod: &Ident,
+    sim_mode: bool,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     let rt_guard = rtsan_guard_tokens();
     let channel = &bridge_spec.tx_channels[channel_index];
@@ -3925,22 +4138,21 @@ fn generate_bridge_tx_execution_tokens(
     let bridge_tuple_index = int2sliceindex(bridge_spec.tuple_index as u32);
     let bridge_type = &bridge_spec.type_path;
     let const_ident = &channel.const_ident;
-    (
+    let enum_ident = Ident::new(
+        &config_id_to_enum(&format!("{}_tx_{}", bridge_spec.id, channel.id)),
+        Span::call_site(),
+    );
+
+    let call_sim_callback = if sim_mode {
         quote! {
-            {
-                let bridge = &mut bridges.#bridge_tuple_index;
-                let cumsg_input = #input_ref;
-                // Stamp timing so monitors see consistent ranges for bridge Tx as well.
-                cumsg_input.metadata.process_time.start = clock.now().into();
-                let maybe_error = {
-                    #rt_guard
-                    bridge.send(
-                        clock,
-                        &<#bridge_type as cu29::cubridge::CuBridge>::Tx::#const_ident,
-                        &*cumsg_input,
-                    )
+            let doit = {
+                let state = SimStep::#enum_ident {
+                    channel: &<#bridge_type as cu29::cubridge::CuBridge>::Tx::#const_ident,
+                    msg: &*cumsg_input,
                 };
-                if let Err(error) = maybe_error {
+                let ovr = sim_callback(state);
+                if let SimOverride::Errored(reason) = ovr  {
+                    let error: CuError = reason.into();
                     let decision = monitor.process_error(#monitor_index, CuTaskState::Process, &error);
                     match decision {
                         Decision::Abort => {
@@ -3951,14 +4163,58 @@ fn generate_bridge_tx_execution_tokens(
                         }
                         Decision::Ignore => {
                             debug!("Process: IGNORE decision from monitoring. Task '{}' errored out during process. The runtime will continue with a forced empty message.", #mission_mod::TASKS_IDS[#monitor_index]);
+                            false
                         }
                         Decision::Shutdown => {
                             debug!("Process: SHUTDOWN decision from monitoring. Task '{}' errored out during process. The runtime cannot continue.", #mission_mod::TASKS_IDS[#monitor_index]);
                             return Err(CuError::new_with_cause("Task errored out during process.", error));
                         }
                     }
+                } else {
+                    ovr == SimOverride::ExecuteByRuntime
                 }
-                cumsg_input.metadata.process_time.end = clock.now().into();
+            };
+        }
+    } else {
+        quote! { let doit = true; }
+    };
+    (
+        quote! {
+            {
+                let bridge = &mut bridges.#bridge_tuple_index;
+                let cumsg_input = #input_ref;
+                // Stamp timing so monitors see consistent ranges for bridge Tx as well.
+                #call_sim_callback
+                if doit {
+                    cumsg_input.metadata.process_time.start = clock.now().into();
+                    let maybe_error = {
+                        #rt_guard
+                        bridge.send(
+                            clock,
+                            &<#bridge_type as cu29::cubridge::CuBridge>::Tx::#const_ident,
+                            &*cumsg_input,
+                        )
+                    };
+                    if let Err(error) = maybe_error {
+                        let decision = monitor.process_error(#monitor_index, CuTaskState::Process, &error);
+                        match decision {
+                            Decision::Abort => {
+                                debug!("Process: ABORT decision from monitoring. Task '{}' errored out during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#monitor_index], clid);
+                                monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
+                                cl_manager.end_of_processing(clid)?;
+                                return Ok(());
+                            }
+                            Decision::Ignore => {
+                                debug!("Process: IGNORE decision from monitoring. Task '{}' errored out during process. The runtime will continue with a forced empty message.", #mission_mod::TASKS_IDS[#monitor_index]);
+                            }
+                            Decision::Shutdown => {
+                                debug!("Process: SHUTDOWN decision from monitoring. Task '{}' errored out during process. The runtime cannot continue.", #mission_mod::TASKS_IDS[#monitor_index]);
+                                return Err(CuError::new_with_cause("Task errored out during process.", error));
+                            }
+                        }
+                    }
+                    cumsg_input.metadata.process_time.end = clock.now().into();
+                }
             }
         },
         quote! {},
