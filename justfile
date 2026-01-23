@@ -140,13 +140,13 @@ check-expand:
 
 # Inspect expanded output of cu29-deriva in the target
 expand-runtime pkg bin features="": check-expand
-	# Usage: just expand-runtime pkg=<crate> bin=<bin> [features=feat1,feat2]
 	#!/usr/bin/env bash
+	# Usage: just expand-runtime pkg=<crate> bin=<bin> [features=feat1,feat2]
 	set -euo pipefail
 
 	features_flag=""
 	if [[ -n "{{features}}" ]]; then
-	features_flag="--features {{features}}"
+	    features_flag="--features {{features}}"
 	fi
 
 	cargo +stable expand -p "{{pkg}}" --bin "{{bin}}" $features_flag
