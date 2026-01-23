@@ -438,7 +438,7 @@ fn gen_sim_support(
     let plan_enum: Vec<proc_macro2::TokenStream> = runtime_plan
         .steps
         .iter()
-        .filter_map(|unit| match unit {
+        .map(|unit| match unit {
             CuExecutionUnit::Step(step) => match &exec_entities[step.node_id as usize].kind {
                 ExecutionEntityKind::Task { .. } => {
                     let enum_entry_name = config_id_to_enum(step.node.get_id().as_str());
@@ -474,9 +474,9 @@ fn gen_sim_support(
                         quote! { &'a (#(&'a #inputs),*) }
                     };
 
-                    Some(quote! {
+                    quote! {
                         #enum_ident(CuTaskCallbackState<#inputs_type, &'a mut #output>)
-                    })
+                    }
                 }
                 ExecutionEntityKind::BridgeRx { bridge_index, channel_index } => {
                     let bridge_spec = &bridge_specs[*bridge_index];
@@ -486,12 +486,12 @@ fn gen_sim_support(
                     let channel_type: Type = parse_str::<Type>(channel.msg_type_name.as_str()).unwrap();
                     let bridge_type = &bridge_spec.type_path;
                     let _const_ident = &channel.const_ident;
-                    Some(quote! {
+                    quote! {
                         #enum_ident {
                             channel: &'static cu29::cubridge::BridgeChannel<< <#bridge_type as cu29::cubridge::CuBridge>::Rx as cu29::cubridge::BridgeChannelSet >::Id, #channel_type>,
                             msg: &'a mut CuMsg<#channel_type>,
                         }
-                    })
+                    }
                 }
                 ExecutionEntityKind::BridgeTx { bridge_index, channel_index } => {
                     let bridge_spec = &bridge_specs[*bridge_index];
@@ -501,12 +501,12 @@ fn gen_sim_support(
                     let channel_type: Type = parse_str::<Type>(channel.msg_type_name.as_str()).unwrap();
                     let bridge_type = &bridge_spec.type_path;
                     let _const_ident = &channel.const_ident;
-                    Some(quote! {
+                    quote! {
                         #enum_ident {
                             channel: &'static cu29::cubridge::BridgeChannel<< <#bridge_type as cu29::cubridge::CuBridge>::Tx as cu29::cubridge::BridgeChannelSet >::Id, #channel_type>,
                             msg: &'a CuMsg<#channel_type>,
                         }
-                    })
+                    }
                 }
             },
             CuExecutionUnit::Loop(_) => {

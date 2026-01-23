@@ -197,18 +197,18 @@ fn create_log_entry(input: TokenStream, level: CuLogLevel) -> TokenStream {
             CuLogLevel::Critical => quote! { defmt_error },
         };
 
-        let (base, use_prelude) = match crate_name("cu29") {
+        let (base, use_prelude) = match crate_name("cu29-log") {
             Ok(FoundCrate::Name(name)) => {
                 let ident = proc_macro2::Ident::new(&name, Span::call_site());
-                (quote! { ::#ident }, true)
+                (quote! { ::#ident }, false)
             }
-            Ok(FoundCrate::Itself) => (quote! { crate }, true),
-            Err(_) => match crate_name("cu29-log") {
+            Ok(FoundCrate::Itself) => (quote! { crate }, false),
+            Err(_) => match crate_name("cu29") {
                 Ok(FoundCrate::Name(name)) => {
                     let ident = proc_macro2::Ident::new(&name, Span::call_site());
-                    (quote! { ::#ident }, false)
+                    (quote! { ::#ident }, true)
                 }
-                Ok(FoundCrate::Itself) => (quote! { crate }, false),
+                Ok(FoundCrate::Itself) => (quote! { crate }, true),
                 Err(_) => (quote! { ::cu29_log }, false),
             },
         };
