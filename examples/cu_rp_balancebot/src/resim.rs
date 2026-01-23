@@ -109,7 +109,7 @@ fn main() {
     let mut reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
     let iter = copperlists_reader::<default::CuStampedDataSet>(&mut reader);
     for entry in iter {
-        println!("{entry:#?}");
+        // println!("{entry:#?}");
         if let Err(err) = run_one_copperlist(&mut copper_app, &mut robot_clock_mock, entry) {
             error!("Simulation replay stopped: {err}");
             eprintln!("Simulation replay stopped: {err}");
