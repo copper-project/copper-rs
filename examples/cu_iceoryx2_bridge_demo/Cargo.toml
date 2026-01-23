@@ -1,0 +1,31 @@
+[package]
+name = "cu-iceoryx2-bridge-demo"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "Ping/pong demo over Iceoryx2 bridge."
+
+publish = false
+
+default-run = "iceoryx2-ping"
+
+[dependencies]
+cu29 = { workspace = true }
+cu29-helpers = { workspace = true }
+cu-iceoryx2-bridge = { path = "../../components/bridges/cu_iceoryx2_bridge", version = "0.12.0" }
+serde = { workspace = true }
+bincode = { workspace = true }
+tempfile = { workspace = true }
+
+[[bin]]
+name = "iceoryx2-ping"
+path = "src/bin/ping.rs"
+
+[[bin]]
+name = "iceoryx2-pong"
+path = "src/bin/pong.rs"

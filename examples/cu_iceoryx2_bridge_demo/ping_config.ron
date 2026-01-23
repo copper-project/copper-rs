@@ -1,0 +1,42 @@
+(
+    tasks: [
+        (
+            id: "ping_src",
+            type: "tasks::PingSource",
+            config: {"label": "ping"},
+        ),
+        (
+            id: "pong_sink",
+            type: "tasks::PongSink",
+            config: {"label": "pong"},
+        ),
+    ],
+    bridges: [
+        (
+            id: "iceoryx2",
+            type: "bridges::DemoIceoryx2Bridge",
+            channels: [
+                Tx(
+                    id: "ping",
+                    route: "demo/ping",
+                ),
+                Rx(
+                    id: "pong",
+                    route: "demo/pong",
+                ),
+            ],
+        ),
+    ],
+    cnx: [
+        (
+            src: "ping_src",
+            dst: "iceoryx2/ping",
+            msg: "messages::Ping",
+        ),
+        (
+            src: "iceoryx2/pong",
+            dst: "pong_sink",
+            msg: "messages::Pong",
+        ),
+    ],
+)
