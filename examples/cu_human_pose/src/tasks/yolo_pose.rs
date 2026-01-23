@@ -88,8 +88,8 @@ impl CuTask for YoloPose {
         output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
         let Some(image) = input.payload() else {
-            // No image received, output empty poses
-            output.set_payload(CuPoses::new());
+            // No image received; don't emit poses to avoid clearing downstream overlays.
+            output.clear_payload();
             return Ok(());
         };
 
