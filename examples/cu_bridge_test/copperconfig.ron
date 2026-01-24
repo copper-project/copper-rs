@@ -27,7 +27,7 @@
     bridges: [
         (
             id: "alpha",
-            type: "bridges::AlphaBridge",
+            type: "bridge_defs::AlphaBridge",
             missions: [
                 "BridgeOnlyAB",
                 "BridgeLoopback",
@@ -64,7 +64,7 @@
         ),
         (
             id: "beta",
-            type: "bridges::BetaBridge",
+            type: "bridge_defs::BetaBridge",
             missions: [
                 "BridgeOnlyAB",
                 "SourceToBridge",

@@ -11,6 +11,9 @@ mod tasks;
 #[copper_runtime(config = "copperconfig.ron")]
 struct App {}
 
+// Export bridges under the module name referenced in copperconfig.
+pub use bridges;
+
 // Mission-specific builders emitted by the macro.
 use A::AppBuilder as AppBuilderA;
 use B::AppBuilder as AppBuilderB;
