@@ -1,11 +1,9 @@
 mod motor_model;
 pub mod tasks;
-use cu29::prelude::app::CuSimApplication;
 use cu29::prelude::*;
 use cu29_export::copperlists_reader;
 use cu29_export::keyframes_reader;
 use cu29_helpers::basic_copper_setup;
-use cu29_unifiedlog::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
 use std::path::{Path, PathBuf};
 
 // To enable resim, it is just your regular macro with sim_mode true
@@ -171,9 +169,9 @@ fn main() {
         panic!("Failed to create logger");
     };
     let mut reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
-    let mut iter = copperlists_reader::<default::CuStampedDataSet>(&mut reader).peekable();
+    let iter = copperlists_reader::<default::CuStampedDataSet>(&mut reader).peekable();
 
-    while let Some(entry) = iter.next() {
+    for entry in iter {
         // Apply keyframe that matches this CL id, if any.
         let pending_kf_ts = if let Some(kf) = kf_iter.peek() {
             if kf.culistid == entry.id {
