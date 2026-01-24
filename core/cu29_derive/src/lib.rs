@@ -1903,13 +1903,14 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     #(#runtime_plan_code)*
                 } // drop(msgs);
                 let (raw_payload_bytes, handle_bytes) = #mission_mod::compute_payload_bytes(&culist);
-                monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
+                let monitor_result = monitor.process_copperlist(&#mission_mod::collect_metadata(&culist));
 
                 // here drop the payloads if we don't want them to be logged.
                 #(#preprocess_logging_calls)*
 
                 cl_manager.end_of_processing(clid)?;
                 kf_manager.end_of_processing(clid)?;
+                monitor_result?;
                 let stats = cu29::monitoring::CopperListIoStats {
                     raw_culist_bytes: core::mem::size_of::<CuList>() as u64 + raw_payload_bytes,
                     handle_bytes,
@@ -3682,8 +3683,9 @@ fn generate_task_execution_tokens(
                     Decision::Abort => {
                         debug!("Process: ABORT decision from monitoring. Task '{}' errored out \
                                 during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#tid], clid);
-                        monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
+                        let monitor_result = monitor.process_copperlist(&#mission_mod::collect_metadata(&culist));
                         cl_manager.end_of_processing(clid)?;
+                        monitor_result?;
                         return Ok(());
                     }
                     Decision::Ignore => {
@@ -3789,8 +3791,9 @@ fn generate_task_execution_tokens(
                     Decision::Abort => {
                         debug!("Process: ABORT decision from monitoring. Task '{}' errored out \
                                 during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#tid], clid);
-                        monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
+                        let monitor_result = monitor.process_copperlist(&#mission_mod::collect_metadata(&culist));
                         cl_manager.end_of_processing(clid)?;
+                        monitor_result?;
                         return Ok(());
                     }
                     Decision::Ignore => {
@@ -3889,8 +3892,9 @@ fn generate_task_execution_tokens(
                     Decision::Abort => {
                         debug!("Process: ABORT decision from monitoring. Task '{}' errored out \
                                 during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#tid], clid);
-                        monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
+                        let monitor_result = monitor.process_copperlist(&#mission_mod::collect_metadata(&culist));
                         cl_manager.end_of_processing(clid)?;
+                        monitor_result?;
                         return Ok(());
                     }
                     Decision::Ignore => {
@@ -4022,8 +4026,10 @@ fn generate_bridge_rx_execution_tokens(
                     match decision {
                         Decision::Abort => {
                             debug!("Process: ABORT decision from monitoring. Task '{}' errored out during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#monitor_index], clid);
-                            monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
+                            let monitor_result =
+                                monitor.process_copperlist(&#mission_mod::collect_metadata(&culist));
                             cl_manager.end_of_processing(clid)?;
+                            monitor_result?;
                             return Ok(());
                         }
                         Decision::Ignore => {
@@ -4066,8 +4072,10 @@ fn generate_bridge_rx_execution_tokens(
                         match decision {
                             Decision::Abort => {
                                 debug!("Process: ABORT decision from monitoring. Task '{}' errored out during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#monitor_index], clid);
-                                monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
+                                let monitor_result = monitor
+                                    .process_copperlist(&#mission_mod::collect_metadata(&culist));
                                 cl_manager.end_of_processing(clid)?;
+                                monitor_result?;
                                 return Ok(());
                             }
                             Decision::Ignore => {
@@ -4144,8 +4152,10 @@ fn generate_bridge_tx_execution_tokens(
                     match decision {
                         Decision::Abort => {
                             debug!("Process: ABORT decision from monitoring. Task '{}' errored out during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#monitor_index], clid);
-                            monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
+                            let monitor_result =
+                                monitor.process_copperlist(&#mission_mod::collect_metadata(&culist));
                             cl_manager.end_of_processing(clid)?;
+                            monitor_result?;
                             return Ok(());
                         }
                         Decision::Ignore => {
@@ -4187,8 +4197,10 @@ fn generate_bridge_tx_execution_tokens(
                         match decision {
                             Decision::Abort => {
                                 debug!("Process: ABORT decision from monitoring. Task '{}' errored out during process. Skipping the processing of CL {}.", #mission_mod::TASKS_IDS[#monitor_index], clid);
-                                monitor.process_copperlist(&#mission_mod::collect_metadata(&culist))?;
+                                let monitor_result = monitor
+                                    .process_copperlist(&#mission_mod::collect_metadata(&culist));
                                 cl_manager.end_of_processing(clid)?;
+                                monitor_result?;
                                 return Ok(());
                             }
                             Decision::Ignore => {
