@@ -54,6 +54,27 @@ The `just std-ci` command runs the same checks as CI, including:
 - Unit tests with cargo-nextest
 - Project generation tests (debug mode only)
 
+### Proc-macro expansion (cargo expand)
+
+Prefer `cargo expand` when inspecting generated code from Copper proc-macros.
+Install it once with:
+
+```bash
+cargo install cargo-expand
+```
+
+Then use the root `justfile` helpers:
+
+```bash
+# Expand a crate that uses cu29_derive (provide your target)
+just expand-runtime pkg=<crate_name> bin=<bin_name> [features=<comma_separated_features>]
+
+# Expand the SoA derive tests (default target: proctest)
+just expand-soa
+```
+
+You can also run `cargo expand -p <crate> --bin <bin>` directly when preferred.
+
 ### Building the Project
 
 To build the project, navigate to the root directory and run:

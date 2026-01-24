@@ -22,7 +22,6 @@ itertools = "0.14"
 quote = { workspace = true }
 proc-macro2 = { workspace = true }
 syn = { workspace = true }
-syntect = { workspace = true }
 walkdir = "2.5"
 
 [build-dependencies]
