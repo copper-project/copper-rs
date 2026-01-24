@@ -245,7 +245,11 @@ fn line_selection_bounds(
         return None;
     }
 
-    let start_col = if line_index == start.row { start.col } else { 0 };
+    let start_col = if line_index == start.row {
+        start.col
+    } else {
+        0
+    };
     let mut end_col = if line_index == end.row {
         end.col
     } else {

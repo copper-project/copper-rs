@@ -70,9 +70,9 @@ impl DebugLog {
 
     pub fn wrapped_lines(&self, width: usize) -> Vec<String> {
         let mut wrapped = Vec::new();
-    if width == 0 {
+        if width == 0 {
             return wrapped;
-    }
+        }
 
         for entry in &self.debug_log {
             for line in entry.split('\n') {
