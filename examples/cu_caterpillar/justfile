@@ -16,6 +16,10 @@ fsck-resim:
 	set -euo pipefail
 	RUST_BACKTRACE=1 cargo run -r --bin cu-caterpillar-logreader logs/caterpillarresim.copper fsck
 
+cmp:
+  #!/usr/bin/env bash
+  cmp logs/caterpillar_0.copper logs/caterpillarresim_0.copper
+
 # Extract a text log using the caterpillar logreader.
 logreader:
 	#!/usr/bin/env bash
