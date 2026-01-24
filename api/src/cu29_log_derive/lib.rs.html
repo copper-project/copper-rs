@@ -197,18 +197,18 @@
 <a href=#197 id=197 data-nosnippet>197</a>            CuLogLevel::Critical =&gt; <span class="macro">quote!</span> { defmt_error },
 <a href=#198 id=198 data-nosnippet>198</a>        };
 <a href=#199 id=199 data-nosnippet>199</a>
-<a href=#200 id=200 data-nosnippet>200</a>        <span class="kw">let </span>(base, use_prelude) = <span class="kw">match </span>crate_name(<span class="string">"cu29"</span>) {
+<a href=#200 id=200 data-nosnippet>200</a>        <span class="kw">let </span>(base, use_prelude) = <span class="kw">match </span>crate_name(<span class="string">"cu29-log"</span>) {
 <a href=#201 id=201 data-nosnippet>201</a>            <span class="prelude-val">Ok</span>(FoundCrate::Name(name)) =&gt; {
 <a href=#202 id=202 data-nosnippet>202</a>                <span class="kw">let </span>ident = proc_macro2::Ident::new(<span class="kw-2">&amp;</span>name, Span::call_site());
-<a href=#203 id=203 data-nosnippet>203</a>                (<span class="macro">quote!</span> { ::#ident }, <span class="bool-val">true</span>)
+<a href=#203 id=203 data-nosnippet>203</a>                (<span class="macro">quote!</span> { ::#ident }, <span class="bool-val">false</span>)
 <a href=#204 id=204 data-nosnippet>204</a>            }
-<a href=#205 id=205 data-nosnippet>205</a>            <span class="prelude-val">Ok</span>(FoundCrate::Itself) =&gt; (<span class="macro">quote!</span> { <span class="kw">crate </span>}, <span class="bool-val">true</span>),
-<a href=#206 id=206 data-nosnippet>206</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="kw">match </span>crate_name(<span class="string">"cu29-log"</span>) {
+<a href=#205 id=205 data-nosnippet>205</a>            <span class="prelude-val">Ok</span>(FoundCrate::Itself) =&gt; (<span class="macro">quote!</span> { <span class="kw">crate </span>}, <span class="bool-val">false</span>),
+<a href=#206 id=206 data-nosnippet>206</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="kw">match </span>crate_name(<span class="string">"cu29"</span>) {
 <a href=#207 id=207 data-nosnippet>207</a>                <span class="prelude-val">Ok</span>(FoundCrate::Name(name)) =&gt; {
 <a href=#208 id=208 data-nosnippet>208</a>                    <span class="kw">let </span>ident = proc_macro2::Ident::new(<span class="kw-2">&amp;</span>name, Span::call_site());
-<a href=#209 id=209 data-nosnippet>209</a>                    (<span class="macro">quote!</span> { ::#ident }, <span class="bool-val">false</span>)
+<a href=#209 id=209 data-nosnippet>209</a>                    (<span class="macro">quote!</span> { ::#ident }, <span class="bool-val">true</span>)
 <a href=#210 id=210 data-nosnippet>210</a>                }
-<a href=#211 id=211 data-nosnippet>211</a>                <span class="prelude-val">Ok</span>(FoundCrate::Itself) =&gt; (<span class="macro">quote!</span> { <span class="kw">crate </span>}, <span class="bool-val">false</span>),
+<a href=#211 id=211 data-nosnippet>211</a>                <span class="prelude-val">Ok</span>(FoundCrate::Itself) =&gt; (<span class="macro">quote!</span> { <span class="kw">crate </span>}, <span class="bool-val">true</span>),
 <a href=#212 id=212 data-nosnippet>212</a>                <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; (<span class="macro">quote!</span> { ::cu29_log }, <span class="bool-val">false</span>),
 <a href=#213 id=213 data-nosnippet>213</a>            },
 <a href=#214 id=214 data-nosnippet>214</a>        };
