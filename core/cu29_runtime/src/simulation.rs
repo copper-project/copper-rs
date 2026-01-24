@@ -149,6 +149,24 @@ pub enum SimOverride {
     Errored(String),
 }
 
+/// Lifecycle callbacks for bridges when running in simulation.
+///
+/// These mirror the CuBridge trait hooks so a simulator can choose to
+/// bypass the real implementation (e.g. to avoid opening hardware) or
+/// inject faults.
+pub enum CuBridgeLifecycleState {
+    /// The bridge is about to be constructed. Gives access to config.
+    New(Option<ComponentConfig>),
+    /// The bridge is starting.
+    Start,
+    /// Called before the I/O cycle.
+    Preprocess,
+    /// Called after the I/O cycle.
+    Postprocess,
+    /// The bridge is stopping.
+    Stop,
+}
+
 /// This is a placeholder task for a source task for the simulations.
 /// It basically does nothing in place of a real driver so it won't try to initialize any hardware.
 pub struct CuSimSrcTask<T> {

@@ -1,0 +1,42 @@
+(
+    tasks: [
+        (
+            id: "src",
+            type: "MySrc",
+            run_in_sim: true,
+        ),
+        (
+            id: "sink",
+            type: "MySink",
+            run_in_sim: true,
+        ),
+    ],
+    bridges: [
+        (
+            id: "bridge",
+            type: "DummyBridge",
+            channels: [
+                Tx(
+                    id: "tx",
+                    msg: "Ping",
+                ),
+                Rx(
+                    id: "rx",
+                    msg: "Pong",
+                ),
+            ],
+        ),
+    ],
+    cnx: [
+        (
+            src: "src",
+            dst: "bridge/tx",
+            msg: "Ping",
+        ),
+        (
+            src: "bridge/rx",
+            dst: "sink",
+            msg: "Pong",
+        ),
+    ],
+)
