@@ -1,11 +1,11 @@
 mod motor_model;
 pub mod tasks;
+use cu29::prelude::app::CuSimApplication;
 use cu29::prelude::*;
 use cu29_export::copperlists_reader;
 use cu29_export::keyframes_reader;
 use cu29_helpers::basic_copper_setup;
 use cu29_unifiedlog::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
-use cu29::prelude::app::CuSimApplication;
 use std::path::{Path, PathBuf};
 
 // To enable resim, it is just your regular macro with sim_mode true
@@ -51,9 +51,9 @@ fn run_one_copperlist(
         match step {
             default::SimStep::Balpos(CuTaskCallbackState::Process(_, output)) => {
                 *output = msgs.get_balpos_output().clone();
-                if let Some(CuDuration(ts)) = Option::<CuTime>::from(
-                    msgs.get_balpos_output().metadata.process_time.start,
-                ) {
+                if let Some(CuDuration(ts)) =
+                    Option::<CuTime>::from(msgs.get_balpos_output().metadata.process_time.start)
+                {
                     clock_for_callbacks.set_value(ts);
                 }
                 SimOverride::ExecutedBySim
@@ -61,9 +61,9 @@ fn run_one_copperlist(
             default::SimStep::Balpos(_) => SimOverride::ExecutedBySim,
             default::SimStep::BalposPid(CuTaskCallbackState::Process(_, output)) => {
                 *output = msgs.get_balpos_pid_output().clone();
-                if let Some(CuDuration(ts)) = Option::<CuTime>::from(
-                    msgs.get_balpos_pid_output().metadata.process_time.start,
-                ) {
+                if let Some(CuDuration(ts)) =
+                    Option::<CuTime>::from(msgs.get_balpos_pid_output().metadata.process_time.start)
+                {
                     clock_for_callbacks.set_value(ts);
                 }
                 SimOverride::ExecutedBySim
@@ -71,9 +71,9 @@ fn run_one_copperlist(
             default::SimStep::BalposPid(_) => SimOverride::ExecutedBySim,
             default::SimStep::Railpos(CuTaskCallbackState::Process(_, output)) => {
                 *output = msgs.get_railpos_output().clone();
-                if let Some(CuDuration(ts)) = Option::<CuTime>::from(
-                    msgs.get_railpos_output().metadata.process_time.start,
-                ) {
+                if let Some(CuDuration(ts)) =
+                    Option::<CuTime>::from(msgs.get_railpos_output().metadata.process_time.start)
+                {
                     clock_for_callbacks.set_value(ts);
                 }
                 SimOverride::ExecutedBySim
@@ -91,9 +91,9 @@ fn run_one_copperlist(
             default::SimStep::RailposPid(_) => SimOverride::ExecutedBySim,
             default::SimStep::MergePids(CuTaskCallbackState::Process(_, output)) => {
                 *output = msgs.get_merge_pids_output().clone();
-                if let Some(CuDuration(ts)) = Option::<CuTime>::from(
-                    msgs.get_merge_pids_output().metadata.process_time.start,
-                ) {
+                if let Some(CuDuration(ts)) =
+                    Option::<CuTime>::from(msgs.get_merge_pids_output().metadata.process_time.start)
+                {
                     clock_for_callbacks.set_value(ts);
                 }
                 SimOverride::ExecutedBySim
@@ -103,9 +103,9 @@ fn run_one_copperlist(
                 // Replay the recorded motor output verbatim to keep logs bit-identical.
                 let _ = input; // input unused; we rely on recorded output
                 *output = msgs.get_motor_output().clone();
-                if let Some(CuDuration(ts)) = Option::<CuTime>::from(
-                    msgs.get_motor_output().metadata.process_time.start,
-                ) {
+                if let Some(CuDuration(ts)) =
+                    Option::<CuTime>::from(msgs.get_motor_output().metadata.process_time.start)
+                {
                     clock_for_callbacks.set_value(ts);
                 }
                 SimOverride::ExecutedBySim
@@ -191,12 +191,9 @@ fn main() {
             None
         };
 
-        if let Err(err) = run_one_copperlist(
-            &mut copper_app,
-            &mut robot_clock_mock,
-            entry,
-            pending_kf_ts,
-        ) {
+        if let Err(err) =
+            run_one_copperlist(&mut copper_app, &mut robot_clock_mock, entry, pending_kf_ts)
+        {
             error!("Simulation replay stopped: {err}");
             eprintln!("Simulation replay stopped: {err}");
             break;
