@@ -41,11 +41,17 @@ fn run_one_copperlist(
         match step {
             default::SimStep::Balpos(CuTaskCallbackState::Process(_, output)) => {
                 *output = msgs.get_balpos_output().clone();
+                let now = robot_clock.now();
+                output.metadata.process_time.start = now.into();
+                output.metadata.process_time.end = now.into();
                 SimOverride::ExecutedBySim
             }
             default::SimStep::Balpos(_) => SimOverride::ExecutedBySim,
             default::SimStep::Railpos(CuTaskCallbackState::Process(_, output)) => {
                 *output = msgs.get_railpos_output().clone();
+                let now = robot_clock.now();
+                output.metadata.process_time.start = now.into();
+                output.metadata.process_time.end = now.into();
                 SimOverride::ExecutedBySim
             }
             default::SimStep::Railpos(_) => SimOverride::ExecutedBySim,
@@ -53,8 +59,11 @@ fn run_one_copperlist(
                 // Here the Sim change stuff in the message, just redo the same thing
                 // so we can only show possible differences from copper's execution itself.
                 let maybe_motor_actuation = input.payload();
+                let now = robot_clock.now();
                 if let Some(motor_actuation) = maybe_motor_actuation {
                     if motor_actuation.power.is_nan() {
+                        output.metadata.process_time.start = now.into();
+                        output.metadata.process_time.end = now.into();
                         return SimOverride::ExecutedBySim;
                     }
                     let total_mass = motor_model::total_mass_kg();
@@ -64,6 +73,8 @@ fn run_one_copperlist(
                         .metadata
                         .set_status(format!("Applied force: {force_magnitude}"));
                 }
+                output.metadata.process_time.start = now.into();
+                output.metadata.process_time.end = now.into();
                 SimOverride::ExecutedBySim
             }
             default::SimStep::Motor(_) => SimOverride::ExecutedBySim,
