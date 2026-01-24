@@ -62,9 +62,59 @@ impl DebugLog {
         }
     }
 
+    #[allow(dead_code)]
     pub fn get_logs(&mut self) -> String {
         let logs = &self.debug_log;
         logs.concat_compact().to_string()
+    }
+
+    pub fn wrapped_lines(&self, width: usize) -> Vec<String> {
+        if width == 0 {
+            return Vec::new();
+        }
+
+        let mut wrapped = Vec::new();
+        let mut pending_line = String::new();
+        for entry in &self.debug_log {
+            for ch in entry.chars() {
+                match ch {
+                    '\n' => {
+                        push_wrapped_line(&mut wrapped, &pending_line, width);
+                        pending_line.clear();
+                    }
+                    '\r' => {}
+                    _ => pending_line.push(ch),
+                }
+            }
+        }
+
+        if !pending_line.is_empty() {
+            push_wrapped_line(&mut wrapped, &pending_line, width);
+        }
+
+        wrapped
+    }
+}
+
+fn push_wrapped_line(output: &mut Vec<String>, line: &str, width: usize) {
+    if line.is_empty() {
+        output.push(String::new());
+        return;
+    }
+
+    let mut chunk = String::new();
+    let mut count = 0;
+    for ch in line.chars() {
+        chunk.push(ch);
+        count += 1;
+        if count == width {
+            output.push(chunk);
+            chunk = String::new();
+            count = 0;
+        }
+    }
+    if !chunk.is_empty() {
+        output.push(chunk);
     }
 }
 
@@ -139,17 +189,33 @@ impl UIExt for UI {
                 .unwrap();
             debug_output.push_logs(error_buffer);
 
-            let debug_log = debug_output.get_logs();
+            let block = Block::default()
+                .title(" Debug Output ")
+                .title_bottom(format!("{} log entries", debug_output.debug_log.len()))
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded);
+            let inner = block.inner(area);
+            self.debug_output_area = Some(inner);
+            self.debug_output_lines = debug_output.wrapped_lines(inner.width as usize);
+            self.debug_output_visible_offset = self
+                .debug_output_lines
+                .len()
+                .saturating_sub(inner.height as usize);
+            if let Some((start, end)) = self.debug_selection.range()
+                && (start.row >= self.debug_output_lines.len()
+                    || end.row >= self.debug_output_lines.len())
+            {
+                self.debug_selection.clear();
+            }
 
-            let p = Paragraph::new(debug_log).block(
-                Block::default()
-                    .title(" Debug Output ")
-                    .title_bottom(format!("{} log entries", debug_output.debug_log.len()))
-                    .borders(Borders::ALL)
-                    .border_type(BorderType::Rounded),
-            );
+            let p = Paragraph::new(self.build_debug_output_text(inner)).block(block);
             f.render_widget(p, area);
         } else {
+            self.debug_output_area = None;
+            self.debug_output_visible_offset = 0;
+            self.debug_output_lines.clear();
+            self.debug_selection.clear();
+
             #[cfg(debug_assertions)]
             let text = "Text logger is disabled";
 
