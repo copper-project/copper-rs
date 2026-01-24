@@ -143,7 +143,7 @@ pub mod tasks {
     }
 }
 
-pub mod bridge_defs {
+pub mod bridges {
     use super::events;
     use super::messages;
     use cu29::prelude::*;
@@ -302,9 +302,6 @@ pub mod bridge_defs {
         }
     }
 }
-
-// Re-export bridges under a module name that matches the config paths.
-pub use bridge_defs as bridges;
 
 #[copper_runtime(config = "copperconfig.ron")]
 struct BridgeSchedulerApp {}

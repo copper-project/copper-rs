@@ -1490,7 +1490,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     {
                         #call_sim
                         if !doit { return Ok(()); }
-                        let bridge = &mut bridges.#bridge_index;
+                        let bridge = &mut __cu_bridges.#bridge_index;
                         let maybe_error = {
                             #rt_guard
                             bridge.preprocess(clock)
@@ -1553,7 +1553,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     {
                         #call_sim
                         if !doit { return Ok(()); }
-                        let bridge = &mut bridges.#bridge_index;
+                        let bridge = &mut __cu_bridges.#bridge_index;
                         kf_manager.freeze_any(clid, bridge)?;
                         let maybe_error = {
                             #rt_guard
@@ -1596,7 +1596,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             .map(|(index, _)| {
                 let bridge_tuple_index = syn::Index::from(index);
                 quote! {
-                    bridges.#bridge_tuple_index
+                    __cu_bridges.#bridge_tuple_index
                         .thaw(&mut decoder)
                         .map_err(|e| CuError::from("Failed to thaw bridge").add_cause(&e.to_string()))?
                 }
@@ -1901,7 +1901,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let clock = &runtime.clock;
                 let monitor = &mut runtime.monitor;
                 let tasks = &mut runtime.tasks;
-                let bridges = &mut runtime.bridges;
+                let __cu_bridges = &mut runtime.bridges;
                 let cl_manager = &mut runtime.copperlists_manager;
                 let kf_manager = &mut runtime.keyframes_manager;
 
@@ -1944,6 +1944,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let runtime = &mut self.copper_runtime;
                 let clock = &runtime.clock;
                 let tasks = &mut runtime.tasks;
+                let __cu_bridges = &mut runtime.bridges;
                 let config = cu29::bincode::config::standard();
                 let reader = cu29::bincode::de::read::SliceReader::new(&keyframe.serialized_tasks);
                 let mut decoder = DecoderImpl::new(reader, config, ());
@@ -4101,7 +4102,7 @@ fn generate_bridge_rx_execution_tokens(
     (
         quote! {
             {
-                let bridge = &mut bridges.#bridge_tuple_index;
+                let bridge = &mut __cu_bridges.#bridge_tuple_index;
                 let cumsg_output = #output_ref;
                 #call_sim_callback
                 if doit {
@@ -4222,7 +4223,7 @@ fn generate_bridge_tx_execution_tokens(
     (
         quote! {
             {
-                let bridge = &mut bridges.#bridge_tuple_index;
+                let bridge = &mut __cu_bridges.#bridge_tuple_index;
                 let cumsg_input = #input_ref;
                 // Stamp timing so monitors see consistent ranges for bridge Tx as well.
                 #call_sim_callback
