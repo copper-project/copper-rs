@@ -10,7 +10,6 @@ mod tasks;
 
 #[copper_runtime(config = "copperconfig.ron")]
 struct App {}
-
 // Mission-specific builders emitted by the macro.
 use A::AppBuilder as AppBuilderA;
 use B::AppBuilder as AppBuilderB;

@@ -7,6 +7,8 @@ extern crate alloc;
 pub use paste::paste as __cu29_paste;
 
 pub mod app;
+#[cfg(feature = "std")]
+mod app_sim;
 pub mod config;
 pub mod copperlist;
 #[cfg(feature = "std")]

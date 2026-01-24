@@ -1112,7 +1112,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             task_stop_calls,
             task_preprocess_calls,
             task_postprocess_calls,
-            ): (Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>) = itertools::multiunzip(
+        ): (Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>) = itertools::multiunzip(
             (0..task_specs.task_types.len())
             .map(|index| {
                 let task_index = int2sliceindex(index as u32);
@@ -1490,7 +1490,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     {
                         #call_sim
                         if !doit { return Ok(()); }
-                        let bridge = &mut bridges.#bridge_index;
+                        let bridge = &mut __cu_bridges.#bridge_index;
                         let maybe_error = {
                             #rt_guard
                             bridge.preprocess(clock)
@@ -1553,7 +1553,8 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                     {
                         #call_sim
                         if !doit { return Ok(()); }
-                        let bridge = &mut bridges.#bridge_index;
+                        let bridge = &mut __cu_bridges.#bridge_index;
+                        kf_manager.freeze_any(clid, bridge)?;
                         let maybe_error = {
                             #rt_guard
                             bridge.postprocess(clock)
@@ -1587,6 +1588,20 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         preprocess_calls.extend(task_preprocess_calls);
         let mut postprocess_calls = task_postprocess_calls;
         postprocess_calls.extend(bridge_postprocess_calls);
+
+        // Bridges are frozen alongside tasks; restore them in the same order.
+        let bridge_restore_code: Vec<proc_macro2::TokenStream> = culist_bridge_specs
+            .iter()
+            .enumerate()
+            .map(|(index, _)| {
+                let bridge_tuple_index = syn::Index::from(index);
+                quote! {
+                    __cu_bridges.#bridge_tuple_index
+                        .thaw(&mut decoder)
+                        .map_err(|e| CuError::from("Failed to thaw bridge").add_cause(&e.to_string()))?
+                }
+            })
+            .collect();
 
         let output_pack_sizes = collect_output_pack_sizes(&culist_plan);
         let runtime_plan_code_and_logging: Vec<(
@@ -1877,7 +1892,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         #[cfg(feature = "macro_debug")]
         eprintln!("[build the run methods]");
-        let run_methods = quote! {
+        let run_methods: proc_macro2::TokenStream = quote! {
 
             #run_one_iteration {
 
@@ -1886,7 +1901,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let clock = &runtime.clock;
                 let monitor = &mut runtime.monitor;
                 let tasks = &mut runtime.tasks;
-                let bridges = &mut runtime.bridges;
+                let __cu_bridges = &mut runtime.bridges;
                 let cl_manager = &mut runtime.copperlists_manager;
                 let kf_manager = &mut runtime.keyframes_manager;
 
@@ -1929,10 +1944,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let runtime = &mut self.copper_runtime;
                 let clock = &runtime.clock;
                 let tasks = &mut runtime.tasks;
+                let __cu_bridges = &mut runtime.bridges;
                 let config = cu29::bincode::config::standard();
                 let reader = cu29::bincode::de::read::SliceReader::new(&keyframe.serialized_tasks);
                 let mut decoder = DecoderImpl::new(reader, config, ());
                 #(#task_restore_code);*;
+                #(#bridge_restore_code);*;
                 Ok(())
             }
 
@@ -2118,6 +2135,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #init_resources_fn
 
                 #new_with_resources_fn
+
+                /// Mutable access to the underlying runtime (used by tools such as deterministic re-sim).
+                #[inline]
+                pub fn copper_runtime_mut(&mut self) -> &mut CuRuntime<#mission_mod::#tasks_type, #mission_mod::CuBridges, #mission_mod::CuStampedDataSet, #monitor_type, #DEFAULT_CLNB> {
+                    &mut self.copper_runtime
+                }
             }
         };
 
@@ -3265,8 +3288,8 @@ fn build_resources_module(
                     &mut manager,
                 )?;
             }
-        })
-        .collect::<Vec<_>>();
+            })
+            .collect::<Vec<_>>();
 
     let resources_instanciator = quote! {
         pub fn resources_instanciator(config: &CuConfig) -> CuResult<cu29::resource::ResourceManager> {
@@ -3642,6 +3665,16 @@ fn generate_task_execution_tokens(
     let task_enum_name = config_id_to_enum(&task_specs.ids[tid]);
     let enum_name = Ident::new(&task_enum_name, Span::call_site());
     let rt_guard = rtsan_guard_tokens();
+    let run_in_sim_flag = task_specs.run_in_sim_flags[tid];
+    let maybe_sim_tick = if sim_mode && !run_in_sim_flag {
+        quote! {
+            if !doit {
+                #task_instance.sim_tick();
+            }
+        }
+    } else {
+        quote!()
+    };
 
     let output_pack = step
         .output_msg_pack
@@ -3657,19 +3690,31 @@ fn generate_task_execution_tokens(
         quote! { #(cumsg_output.#output_ports.clear_payload();)* }
     };
     let output_start_time = if output_ports.len() == 1 {
-        quote! { cumsg_output.metadata.process_time.start = clock.now().into(); }
+        quote! {
+            if cumsg_output.metadata.process_time.start.is_none() {
+                cumsg_output.metadata.process_time.start = clock.now().into();
+            }
+        }
     } else {
         quote! {
             let start_time = clock.now().into();
-            #(cumsg_output.#output_ports.metadata.process_time.start = start_time;)*
+            #( if cumsg_output.#output_ports.metadata.process_time.start.is_none() {
+                cumsg_output.#output_ports.metadata.process_time.start = start_time;
+            } )*
         }
     };
     let output_end_time = if output_ports.len() == 1 {
-        quote! { cumsg_output.metadata.process_time.end = clock.now().into(); }
+        quote! {
+            if cumsg_output.metadata.process_time.end.is_none() {
+                cumsg_output.metadata.process_time.end = clock.now().into();
+            }
+        }
     } else {
         quote! {
             let end_time = clock.now().into();
-            #(cumsg_output.#output_ports.metadata.process_time.end = end_time;)*
+            #( if cumsg_output.#output_ports.metadata.process_time.end.is_none() {
+                cumsg_output.#output_ports.metadata.process_time.end = end_time;
+            } )*
         }
     };
 
@@ -3736,14 +3781,18 @@ fn generate_task_execution_tokens(
                         kf_manager.freeze_task(clid, &#task_instance)?;
                         #call_sim_callback
                         let cumsg_output = &mut msgs.#output_culist_index;
-                        #output_start_time
+                        #maybe_sim_tick
                         let maybe_error = if doit {
-                            #rt_guard
-                            #task_instance.process(clock, cumsg_output)
+                            #output_start_time
+                            let result = {
+                                #rt_guard
+                                #task_instance.process(clock, cumsg_output)
+                            };
+                            #output_end_time
+                            result
                         } else {
                             Ok(())
                         };
-                        #output_end_time
                         if let Err(error) = maybe_error {
                             #monitoring_action
                         }
@@ -3836,14 +3885,17 @@ fn generate_task_execution_tokens(
                         #call_sim_callback
                         let cumsg_input = &#inputs_type;
                         let cumsg_output = &mut msgs.#output_culist_index;
-                        #output_start_time
                         let maybe_error = if doit {
-                            #rt_guard
-                            #task_instance.process(clock, cumsg_input)
+                            #output_start_time
+                            let result = {
+                                #rt_guard
+                                #task_instance.process(clock, cumsg_input)
+                            };
+                            #output_end_time
+                            result
                         } else {
                             Ok(())
                         };
-                        #output_end_time
                         if let Err(error) = maybe_error {
                             #monitoring_action
                         }
@@ -3946,14 +3998,17 @@ fn generate_task_execution_tokens(
                         #call_sim_callback
                         let cumsg_input = &#inputs_type;
                         let cumsg_output = &mut msgs.#output_culist_index;
-                        #output_start_time
                         let maybe_error = if doit {
-                            #rt_guard
-                            #task_instance.process(clock, cumsg_input, cumsg_output)
+                            #output_start_time
+                            let result = {
+                                #rt_guard
+                                #task_instance.process(clock, cumsg_input, cumsg_output)
+                            };
+                            #output_end_time
+                            result
                         } else {
                             Ok(())
                         };
-                        #output_end_time
                         if let Err(error) = maybe_error {
                             #monitoring_action
                         }
@@ -4047,7 +4102,7 @@ fn generate_bridge_rx_execution_tokens(
     (
         quote! {
             {
-                let bridge = &mut bridges.#bridge_tuple_index;
+                let bridge = &mut __cu_bridges.#bridge_tuple_index;
                 let cumsg_output = #output_ref;
                 #call_sim_callback
                 if doit {
@@ -4168,12 +4223,14 @@ fn generate_bridge_tx_execution_tokens(
     (
         quote! {
             {
-                let bridge = &mut bridges.#bridge_tuple_index;
+                let bridge = &mut __cu_bridges.#bridge_tuple_index;
                 let cumsg_input = #input_ref;
                 // Stamp timing so monitors see consistent ranges for bridge Tx as well.
                 #call_sim_callback
                 if doit {
-                    cumsg_input.metadata.process_time.start = clock.now().into();
+                    if cumsg_input.metadata.process_time.start.is_none() {
+                        cumsg_input.metadata.process_time.start = clock.now().into();
+                    }
                     let maybe_error = {
                         #rt_guard
                         bridge.send(
@@ -4200,7 +4257,9 @@ fn generate_bridge_tx_execution_tokens(
                             }
                         }
                     }
-                    cumsg_input.metadata.process_time.end = clock.now().into();
+                    if cumsg_input.metadata.process_time.end.is_none() {
+                        cumsg_input.metadata.process_time.end = clock.now().into();
+                    }
                 }
             }
         },

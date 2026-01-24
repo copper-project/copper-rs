@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use avian3d::prelude::{Collider, Mass};
 
 const GRAVITY_M_S2: f32 = 9.81;

@@ -2,6 +2,7 @@ use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
 use std::time::Duration;
 
+// Expose the library's bridge definitions under the expected `bridges` module name.
 pub mod bridges {
     pub use cu_iceoryx2_bridge_demo::bridges::*;
 }

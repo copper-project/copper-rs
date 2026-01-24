@@ -4,13 +4,27 @@ import "../../justfile"
 cl:
 	#!/usr/bin/env bash
 	set -euo pipefail
-	RUST_BACKTRACE=1 cargo run --profile screaming --bin cu-caterpillar-logreader logs/caterpillar.copper extract-copperlists
+	RUST_BACKTRACE=1 cargo run -r --bin cu-caterpillar-logreader logs/caterpillar.copper extract-copperlists
+
+fsck:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	RUST_BACKTRACE=1 cargo run -r --bin cu-caterpillar-logreader logs/caterpillar.copper fsck
+
+fsck-resim:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	RUST_BACKTRACE=1 cargo run -r --bin cu-caterpillar-logreader logs/caterpillarresim.copper fsck
+
+cmp:
+  #!/usr/bin/env bash
+  cmp logs/caterpillar_0.copper logs/caterpillarresim_0.copper
 
 # Extract a text log using the caterpillar logreader.
 logreader:
 	#!/usr/bin/env bash
 	set -euo pipefail
-	RUST_BACKTRACE=1 cargo run --profile screaming --bin cu-caterpillar-logreader logs/caterpillar.copper extract-text-log ../../target/debug/cu29_log_index
+	RUST_BACKTRACE=1 cargo run -r --bin cu-caterpillar-logreader logs/caterpillar.copper extract-text-log ../../target/debug/cu29_log_index
 
 # Render a DAG with log-derived statistics. Requires explicit bin=<logreader>.
 dag-logstats bin="cu-caterpillar-logreader" log="logs/caterpillar.copper" mission="" out="target/cu29_logstats.json":

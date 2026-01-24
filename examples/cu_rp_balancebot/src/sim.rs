@@ -138,8 +138,11 @@ fn run_copper_callback(
 
                 // Convert the angle from radians to the actual adc value from the sensor
                 let analog_value = (angle_radians / (2.0 * std::f32::consts::PI) * 4096.0) as u16;
+                let now = clock.now();
                 output.set_payload(ADSReadingPayload { analog_value });
-                output.tov = clock.now().into();
+                output.tov = now.into();
+                output.metadata.process_time.start = now.into();
+                output.metadata.process_time.end = now.into();
                 SimOverride::ExecutedBySim
             }
             default::SimStep::Balpos(_) => SimOverride::ExecutedBySim,
@@ -149,8 +152,11 @@ fn run_copper_callback(
                 let (cart_transform, _, _) =
                     bindings.single_mut().expect("Failed to get cart transform");
                 let ticks = (cart_transform.translation.x * 2000.0) as i32;
+                let now = clock.now();
                 output.set_payload(EncoderPayload { ticks });
-                output.tov = clock.now().into();
+                output.tov = now.into();
+                output.metadata.process_time.start = now.into();
+                output.metadata.process_time.end = now.into();
                 SimOverride::ExecutedBySim
             }
             default::SimStep::Railpos(_) => SimOverride::ExecutedBySim,
@@ -162,6 +168,7 @@ fn run_copper_callback(
                     bindings.single_mut().expect("Failed to get cart force");
                 let maybe_motor_actuation = input.payload();
                 let override_motor = drag_state.override_motor;
+                let now = clock.now();
                 if override_motor {
                     if let Some(motor_actuation) = maybe_motor_actuation
                         && !motor_actuation.power.is_nan()
@@ -173,11 +180,15 @@ fn run_copper_callback(
                             .metadata
                             .set_status(format!("Applied force: {force_magnitude}"));
                     }
+                    output.metadata.process_time.start = now.into();
+                    output.metadata.process_time.end = now.into();
                     return SimOverride::ExecutedBySim;
                 }
                 if let Some(motor_actuation) = maybe_motor_actuation {
                     if motor_actuation.power.is_nan() {
                         cart_force.0 = Vector::ZERO;
+                        output.metadata.process_time.start = now.into();
+                        output.metadata.process_time.end = now.into();
                         return SimOverride::ExecutedBySim;
                     }
                     let total_mass = motor_model::total_mass_kg();
@@ -189,9 +200,13 @@ fn run_copper_callback(
                     output
                         .metadata
                         .set_status(format!("Applied force: {force_magnitude}"));
+                    output.metadata.process_time.start = now.into();
+                    output.metadata.process_time.end = now.into();
                     SimOverride::ExecutedBySim
                 } else {
                     cart_force.0 = Vector::ZERO;
+                    output.metadata.process_time.start = now.into();
+                    output.metadata.process_time.end = now.into();
                     SimOverride::Errored("Safety Mode.".into())
                 }
             }

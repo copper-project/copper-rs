@@ -101,6 +101,12 @@ pub struct KeyFramesManager {
     /// Where the serialized tasks are stored following the wave of execution of a CL.
     inner: KeyFrame,
 
+    /// Optional override for the timestamp to stamp the next keyframe (used by deterministic replay).
+    forced_timestamp: Option<CuTime>,
+
+    /// If set, reuse this keyframe verbatim (e.g., during replay) instead of re-freezing state.
+    locked: bool,
+
     /// Logger for the state of the tasks (frozen tasks)
     logger: Option<Box<dyn WriteStream<KeyFrame>>>,
 
@@ -118,12 +124,28 @@ impl KeyFramesManager {
 
     pub fn reset(&mut self, culistid: u32, clock: &RobotClock) {
         if self.is_keyframe(culistid) {
-            self.inner.reset(culistid, clock.now());
+            // If a recorded keyframe was preloaded for this CL, keep it as-is.
+            if self.locked && self.inner.culistid == culistid {
+                return;
+            }
+            let ts = self.forced_timestamp.take().unwrap_or_else(|| clock.now());
+            self.inner.reset(culistid, ts);
+            self.locked = false;
         }
+    }
+
+    /// Force the timestamp of the next keyframe to a given value.
+    #[cfg(feature = "std")]
+    pub fn set_forced_timestamp(&mut self, ts: CuTime) {
+        self.forced_timestamp = Some(ts);
     }
 
     pub fn freeze_task(&mut self, culistid: u32, task: &impl Freezable) -> CuResult<usize> {
         if self.is_keyframe(culistid) {
+            if self.locked {
+                // We are replaying a recorded keyframe verbatim; don't mutate it.
+                return Ok(0);
+            }
             if self.inner.culistid != culistid {
                 return Err(CuError::from(format!(
                     "Freezing task for culistid {} but current keyframe is {}",
@@ -138,17 +160,32 @@ impl KeyFramesManager {
         }
     }
 
+    /// Generic helper to freeze any `Freezable` state (task or bridge) into the current keyframe.
+    pub fn freeze_any(&mut self, culistid: u32, item: &impl Freezable) -> CuResult<usize> {
+        self.freeze_task(culistid, item)
+    }
+
     pub fn end_of_processing(&mut self, culistid: u32) -> CuResult<()> {
         if self.is_keyframe(culistid) {
             let logger = self.logger.as_mut().unwrap();
             logger.log(&self.inner)?;
             self.last_encoded_bytes = logger.last_log_bytes().unwrap_or(0) as u64;
+            // Clear the lock so the next CL can rebuild normally unless re-locked.
+            self.locked = false;
             Ok(())
         } else {
             // Not a keyframe for this CL; ensure we don't carry stale sizes forward.
             self.last_encoded_bytes = 0;
             Ok(())
         }
+    }
+
+    /// Preload a recorded keyframe so it is logged verbatim on the matching CL.
+    #[cfg(feature = "std")]
+    pub fn lock_keyframe(&mut self, keyframe: &KeyFrame) {
+        self.inner = keyframe.clone();
+        self.forced_timestamp = Some(keyframe.timestamp);
+        self.locked = true;
     }
 }
 
@@ -193,7 +230,7 @@ impl<CT, CB, P: CopperListTuple + CuListZeroedInit + Default, M: CuMonitor, cons
 /// A KeyFrame is recording a snapshot of the tasks state before a given copperlist.
 /// It is a double encapsulation: this one recording the culistid and another even in
 /// bincode in the serialized_tasks.
-#[derive(Encode, Decode)]
+#[derive(Clone, Encode, Decode)]
 pub struct KeyFrame {
     // This is the id of the copper list that this keyframe is associated with (recorded before the copperlist).
     pub culistid: u32,
@@ -339,6 +376,8 @@ impl<
             logger: keyframes_logger,
             keyframe_interval,
             last_encoded_bytes: 0,
+            forced_timestamp: None,
+            locked: false,
         };
 
         let runtime_config = config.runtime.clone().unwrap_or_default();
@@ -473,6 +512,8 @@ impl<
             logger: keyframes_logger,
             keyframe_interval,
             last_encoded_bytes: 0,
+            forced_timestamp: None,
+            locked: false,
         };
 
         let runtime_config = config.runtime.clone().unwrap_or_default();
