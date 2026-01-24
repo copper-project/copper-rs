@@ -1,6 +1,8 @@
 .idea
 .code
 .DS_Store
+.worktrees
+
 /target
 /build
 /cu29_export.so

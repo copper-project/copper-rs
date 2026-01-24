@@ -8,8 +8,6 @@ use std::{env, fmt::Display, str::FromStr};
 
 #[derive(Debug, PartialEq)]
 pub enum PfetchInfo {
-    Ascii,
-    Title,
     Os,
     Host,
     Kernel,
@@ -20,8 +18,6 @@ pub enum PfetchInfo {
     Editor,
     Wm,
     De,
-    Palette,
-    BlankLine,
 }
 
 impl Display for PfetchInfo {
@@ -35,8 +31,6 @@ impl FromStr for PfetchInfo {
 
     fn from_str(info: &str) -> Result<Self, Self::Err> {
         match info {
-            "ascii" => Ok(PfetchInfo::Ascii),
-            "title" => Ok(PfetchInfo::Title),
             "os" => Ok(PfetchInfo::Os),
             "host" => Ok(PfetchInfo::Host),
             "kernel" => Ok(PfetchInfo::Kernel),
@@ -47,7 +41,6 @@ impl FromStr for PfetchInfo {
             "editor" => Ok(PfetchInfo::Editor),
             "wm" => Ok(PfetchInfo::Wm),
             "de" => Ok(PfetchInfo::De),
-            "palette" => Ok(PfetchInfo::Palette),
             unknown_info => Err(format!("Unknown pfetch info: {unknown_info}")),
         }
     }
@@ -74,12 +67,6 @@ impl Default for Readouts {
 
 pub fn get_info(info: &PfetchInfo, readouts: &Readouts) -> Option<String> {
     match info {
-        PfetchInfo::Ascii => None,
-        PfetchInfo::Title => pfetch::user_at_hostname(
-            &readouts.general_readout,
-            &dotenvy::var("USER").ok(),
-            &dotenvy::var("HOSTNAME").ok(),
-        ),
         PfetchInfo::Os => pfetch::os(&readouts.general_readout),
         PfetchInfo::Host => pfetch::host(&readouts.general_readout),
         PfetchInfo::Kernel => pfetch::kernel(&readouts.kernel_readout),
@@ -90,8 +77,6 @@ pub fn get_info(info: &PfetchInfo, readouts: &Readouts) -> Option<String> {
         PfetchInfo::Editor => Some(env::var("EDITOR").unwrap_or_else(|_| "nvim".into())),
         PfetchInfo::Wm => pfetch::wm(&readouts.general_readout),
         PfetchInfo::De => pfetch::de(&readouts.general_readout),
-        PfetchInfo::Palette => Some("Color Palette".into()), // Simplified palette display
-        PfetchInfo::BlankLine => Some("".into()),
     }
 }
 
@@ -99,7 +84,7 @@ pub fn get_info(info: &PfetchInfo, readouts: &Readouts) -> Option<String> {
 pub fn pfetch_info() -> String {
     let readouts = Readouts::default();
 
-    let os = pfetch::os(&GeneralReadout::new()).unwrap_or_default();
+    let os = pfetch::os(&readouts.general_readout).unwrap_or_default();
 
     let all_infos = [
         PfetchInfo::Os,
@@ -119,15 +104,19 @@ pub fn pfetch_info() -> String {
         .iter()
         .filter_map(|info| match info {
             PfetchInfo::Os => Some((logo.primary_color, info.to_string(), os.clone())),
-            _ => get_info(info, &readouts).map(|info_str| match info {
-                PfetchInfo::Title => (logo.secondary_color, info_str, "".into()),
-                PfetchInfo::BlankLine => (logo.primary_color, "".into(), "".into()),
-                _ => (logo.primary_color, info.to_string(), info_str),
-            }),
+            _ => get_info(info, &readouts)
+                .map(|info_str| (logo.primary_color, info.to_string(), info_str)),
         })
         .collect();
 
     pfetch(gathered_pfetch_info, logo, true)
+}
+
+fn env_usize(name: &str, default: usize) -> usize {
+    dotenvy::var(name)
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(default)
 }
 
 fn pfetch(info: Vec<(Color, String, String)>, logo: Logo, logo_enabled: bool) -> String {
@@ -168,18 +157,9 @@ fn pfetch(info: Vec<(Color, String, String)>, logo: Logo, logo_enabled: bool) ->
         .max()
         .unwrap_or(0);
 
-    let padding1 = match dotenvy::var("PF_PAD1") {
-        Ok(padding0) => padding0.parse::<usize>().unwrap_or(0),
-        Err(_) => 0,
-    };
-    let padding2 = match dotenvy::var("PF_PAD2") {
-        Ok(padding1) => padding1.parse::<usize>().unwrap_or(0),
-        Err(_) => 3,
-    };
-    let padding3 = match dotenvy::var("PF_PAD3") {
-        Ok(padding2) => padding2.parse::<usize>().unwrap_or(0),
-        Err(_) => 1,
-    };
+    let padding1 = env_usize("PF_PAD1", 0);
+    let padding2 = env_usize("PF_PAD2", 3);
+    let padding3 = env_usize("PF_PAD3", 1);
 
     let mut pfetch_str = String::new();
 

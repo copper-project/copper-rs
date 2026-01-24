@@ -81,7 +81,6 @@ struct HelpHitbox {
     height: u16,
 }
 
-#[cfg(feature = "debug_pane")]
 const TAB_DEFS: &[TabDef] = &[
     TabDef {
         screen: Screen::Neofetch,
@@ -108,39 +107,11 @@ const TAB_DEFS: &[TabDef] = &[
         label: "MEM",
         key: "5",
     },
+    #[cfg(feature = "debug_pane")]
     TabDef {
         screen: Screen::DebugOutput,
         label: "LOG",
         key: "6",
-    },
-];
-
-#[cfg(not(feature = "debug_pane"))]
-const TAB_DEFS: &[TabDef] = &[
-    TabDef {
-        screen: Screen::Neofetch,
-        label: "SYS",
-        key: "1",
-    },
-    TabDef {
-        screen: Screen::Dag,
-        label: "DAG",
-        key: "2",
-    },
-    TabDef {
-        screen: Screen::Latency,
-        label: "LAT",
-        key: "3",
-    },
-    TabDef {
-        screen: Screen::CopperList,
-        label: "BW",
-        key: "4",
-    },
-    TabDef {
-        screen: Screen::MemoryPools,
-        label: "MEM",
-        key: "5",
     },
 ];
 
@@ -307,7 +278,6 @@ struct PoolStats {
     handles_in_use: usize,
     handles_per_second: usize,
     last_update: Instant,
-    prev_handles_in_use: usize,
 }
 
 impl PoolStats {
@@ -325,7 +295,6 @@ impl PoolStats {
             handles_in_use: total_size - space_left,
             handles_per_second: 0,
             last_update: Instant::now(),
-            prev_handles_in_use: 0,
         }
     }
 
@@ -337,7 +306,6 @@ impl PoolStats {
         if elapsed >= 1.0 {
             self.handles_per_second =
                 ((handles_in_use.abs_diff(self.handles_in_use)) as f32 / elapsed) as usize;
-            self.prev_handles_in_use = self.handles_in_use;
             self.last_update = now;
         }
 
@@ -380,7 +348,6 @@ impl CopperListStats {
 
     fn set_info(&mut self, info: CopperListInfo) {
         self.size_bytes = info.size_bytes;
-        let _ = info.count;
     }
 
     fn update_io(&mut self, stats: cu29::monitoring::CopperListIoStats) {
