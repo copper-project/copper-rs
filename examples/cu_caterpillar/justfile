@@ -6,6 +6,16 @@ cl:
 	set -euo pipefail
 	RUST_BACKTRACE=1 cargo run --profile screaming --bin cu-caterpillar-logreader logs/caterpillar.copper extract-copperlists
 
+fsck:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	RUST_BACKTRACE=1 cargo run --profile screaming --bin cu-caterpillar-logreader logs/caterpillar.copper fsck
+
+fsck-resim:
+	#!/usr/bin/env bash
+	set -euo pipefail
+	RUST_BACKTRACE=1 cargo run --profile screaming --bin cu-caterpillar-logreader logs/caterpillarresim.copper fsck
+
 # Extract a text log using the caterpillar logreader.
 logreader:
 	#!/usr/bin/env bash

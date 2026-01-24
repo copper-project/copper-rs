@@ -101,6 +101,9 @@ pub struct KeyFramesManager {
     /// Where the serialized tasks are stored following the wave of execution of a CL.
     inner: KeyFrame,
 
+    /// Optional override for the timestamp to stamp the next keyframe (used by deterministic replay).
+    forced_timestamp: Option<CuTime>,
+
     /// Logger for the state of the tasks (frozen tasks)
     logger: Option<Box<dyn WriteStream<KeyFrame>>>,
 
@@ -118,8 +121,18 @@ impl KeyFramesManager {
 
     pub fn reset(&mut self, culistid: u32, clock: &RobotClock) {
         if self.is_keyframe(culistid) {
-            self.inner.reset(culistid, clock.now());
+            let ts = self
+                .forced_timestamp
+                .take()
+                .unwrap_or_else(|| clock.now());
+            self.inner.reset(culistid, ts);
         }
+    }
+
+    /// Force the timestamp of the next keyframe to a given value.
+    #[cfg(feature = "std")]
+    pub fn set_forced_timestamp(&mut self, ts: CuTime) {
+        self.forced_timestamp = Some(ts);
     }
 
     pub fn freeze_task(&mut self, culistid: u32, task: &impl Freezable) -> CuResult<usize> {
@@ -339,6 +352,7 @@ impl<
             logger: keyframes_logger,
             keyframe_interval,
             last_encoded_bytes: 0,
+            forced_timestamp: None,
         };
 
         let runtime_config = config.runtime.clone().unwrap_or_default();
@@ -473,6 +487,7 @@ impl<
             logger: keyframes_logger,
             keyframe_interval,
             last_encoded_bytes: 0,
+            forced_timestamp: None,
         };
 
         let runtime_config = config.runtime.clone().unwrap_or_default();

@@ -3642,6 +3642,16 @@ fn generate_task_execution_tokens(
     let task_enum_name = config_id_to_enum(&task_specs.ids[tid]);
     let enum_name = Ident::new(&task_enum_name, Span::call_site());
     let rt_guard = rtsan_guard_tokens();
+    let run_in_sim_flag = task_specs.run_in_sim_flags[tid];
+    let maybe_sim_tick = if !run_in_sim_flag {
+        quote! {
+            if !doit {
+                #task_instance.sim_tick();
+            }
+        }
+    } else {
+        quote!()
+    };
 
     let output_pack = step
         .output_msg_pack
@@ -3657,19 +3667,31 @@ fn generate_task_execution_tokens(
         quote! { #(cumsg_output.#output_ports.clear_payload();)* }
     };
     let output_start_time = if output_ports.len() == 1 {
-        quote! { cumsg_output.metadata.process_time.start = clock.now().into(); }
+        quote! {
+            if cumsg_output.metadata.process_time.start.is_none() {
+                cumsg_output.metadata.process_time.start = clock.now().into();
+            }
+        }
     } else {
         quote! {
             let start_time = clock.now().into();
-            #(cumsg_output.#output_ports.metadata.process_time.start = start_time;)*
+            #( if cumsg_output.#output_ports.metadata.process_time.start.is_none() {
+                cumsg_output.#output_ports.metadata.process_time.start = start_time;
+            } )*
         }
     };
     let output_end_time = if output_ports.len() == 1 {
-        quote! { cumsg_output.metadata.process_time.end = clock.now().into(); }
+        quote! {
+            if cumsg_output.metadata.process_time.end.is_none() {
+                cumsg_output.metadata.process_time.end = clock.now().into();
+            }
+        }
     } else {
         quote! {
             let end_time = clock.now().into();
-            #(cumsg_output.#output_ports.metadata.process_time.end = end_time;)*
+            #( if cumsg_output.#output_ports.metadata.process_time.end.is_none() {
+                cumsg_output.#output_ports.metadata.process_time.end = end_time;
+            } )*
         }
     };
 
@@ -3736,14 +3758,18 @@ fn generate_task_execution_tokens(
                         kf_manager.freeze_task(clid, &#task_instance)?;
                         #call_sim_callback
                         let cumsg_output = &mut msgs.#output_culist_index;
-                        #output_start_time
+                        #maybe_sim_tick
                         let maybe_error = if doit {
-                            #rt_guard
-                            #task_instance.process(clock, cumsg_output)
+                            #output_start_time
+                            let result = {
+                                #rt_guard
+                                #task_instance.process(clock, cumsg_output)
+                            };
+                            #output_end_time
+                            result
                         } else {
                             Ok(())
                         };
-                        #output_end_time
                         if let Err(error) = maybe_error {
                             #monitoring_action
                         }
@@ -3836,14 +3862,17 @@ fn generate_task_execution_tokens(
                         #call_sim_callback
                         let cumsg_input = &#inputs_type;
                         let cumsg_output = &mut msgs.#output_culist_index;
-                        #output_start_time
                         let maybe_error = if doit {
-                            #rt_guard
-                            #task_instance.process(clock, cumsg_input)
+                            #output_start_time
+                            let result = {
+                                #rt_guard
+                                #task_instance.process(clock, cumsg_input)
+                            };
+                            #output_end_time
+                            result
                         } else {
                             Ok(())
                         };
-                        #output_end_time
                         if let Err(error) = maybe_error {
                             #monitoring_action
                         }
@@ -3946,14 +3975,17 @@ fn generate_task_execution_tokens(
                         #call_sim_callback
                         let cumsg_input = &#inputs_type;
                         let cumsg_output = &mut msgs.#output_culist_index;
-                        #output_start_time
                         let maybe_error = if doit {
-                            #rt_guard
-                            #task_instance.process(clock, cumsg_input, cumsg_output)
+                            #output_start_time
+                            let result = {
+                                #rt_guard
+                                #task_instance.process(clock, cumsg_input, cumsg_output)
+                            };
+                            #output_end_time
+                            result
                         } else {
                             Ok(())
                         };
-                        #output_end_time
                         if let Err(error) = maybe_error {
                             #monitoring_action
                         }
@@ -4173,7 +4205,9 @@ fn generate_bridge_tx_execution_tokens(
                 // Stamp timing so monitors see consistent ranges for bridge Tx as well.
                 #call_sim_callback
                 if doit {
-                    cumsg_input.metadata.process_time.start = clock.now().into();
+                    if cumsg_input.metadata.process_time.start.is_none() {
+                        cumsg_input.metadata.process_time.start = clock.now().into();
+                    }
                     let maybe_error = {
                         #rt_guard
                         bridge.send(
@@ -4200,7 +4234,9 @@ fn generate_bridge_tx_execution_tokens(
                             }
                         }
                     }
-                    cumsg_input.metadata.process_time.end = clock.now().into();
+                    if cumsg_input.metadata.process_time.end.is_none() {
+                        cumsg_input.metadata.process_time.end = clock.now().into();
+                    }
                 }
             }
         },
