@@ -69,37 +69,52 @@ impl DebugLog {
     }
 
     pub fn wrapped_lines(&self, width: usize) -> Vec<String> {
-        let mut wrapped = Vec::new();
         if width == 0 {
-            return wrapped;
+            return Vec::new();
         }
 
+        let mut wrapped = Vec::new();
+        let mut pending_line = String::new();
         for entry in &self.debug_log {
-            for line in entry.split('\n') {
-                let line = line.trim_end_matches('\r');
-                if line.is_empty() {
-                    wrapped.push(String::new());
-                    continue;
-                }
-
-                let mut current = String::new();
-                let mut count = 0;
-                for ch in line.chars() {
-                    current.push(ch);
-                    count += 1;
-                    if count == width {
-                        wrapped.push(current);
-                        current = String::new();
-                        count = 0;
+            for ch in entry.chars() {
+                match ch {
+                    '\n' => {
+                        push_wrapped_line(&mut wrapped, &pending_line, width);
+                        pending_line.clear();
                     }
-                }
-                if !current.is_empty() {
-                    wrapped.push(current);
+                    '\r' => {}
+                    _ => pending_line.push(ch),
                 }
             }
         }
 
+        if !pending_line.is_empty() {
+            push_wrapped_line(&mut wrapped, &pending_line, width);
+        }
+
         wrapped
+    }
+}
+
+fn push_wrapped_line(output: &mut Vec<String>, line: &str, width: usize) {
+    if line.is_empty() {
+        output.push(String::new());
+        return;
+    }
+
+    let mut chunk = String::new();
+    let mut count = 0;
+    for ch in line.chars() {
+        chunk.push(ch);
+        count += 1;
+        if count == width {
+            output.push(chunk);
+            chunk = String::new();
+            count = 0;
+        }
+    }
+    if !chunk.is_empty() {
+        output.push(chunk);
     }
 }
 
