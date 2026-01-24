@@ -112,13 +112,13 @@ use crate::cutask::CuMsgPack;
 
 use crate::cutask::{CuMsg, CuMsgPayload, CuSinkTask, CuSrcTask, Freezable};
 use crate::{input_msg, output_msg};
-use core::marker::PhantomData;
-use cu29_clock::RobotClock;
-use cu29_traits::CuResult;
 use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
+use core::marker::PhantomData;
+use cu29_clock::RobotClock;
+use cu29_traits::CuResult;
 
 /// This is the state that will be passed to the simulation support to hook
 /// into the lifecycle of the tasks.
@@ -212,10 +212,13 @@ impl<T: CuMsgPayload> CuSrcTask for CuSimSrcTask<T> {
 }
 
 impl<T> CuSimSrcTask<T> {
-    /// Advance internal state for deterministic keyframes when sim handles output.
-    pub fn sim_tick(&mut self) {
-        self.state = !self.state;
-    }
+    /// Placeholder hook for simulation-driven sources.
+    ///
+    /// In the sim placeholder we don't advance any internal state because the
+    /// simulator is responsible for providing deterministic outputs and state
+    /// snapshots are carried by the real task (when run_in_sim = true).
+    /// Keeping this as a no-op avoids baking any fake behavior into keyframes.
+    pub fn sim_tick(&mut self) {}
 }
 
 /// Helper to map a payload type (or tuple of payload types) to the corresponding `input_msg!` form.

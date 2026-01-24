@@ -1,10 +1,10 @@
 pub mod tasks;
-use cu29::prelude::*;
 use cu29::prelude::app::CuSimApplication;
+use cu29::prelude::*;
 use cu29_export::{copperlists_reader, keyframes_reader};
 use cu29_helpers::basic_copper_setup;
-use default::SimStep::{Gpio0, Gpio1, Gpio2, Gpio3, Gpio4, Gpio5, Gpio6, Gpio7, Src};
 use cu29_unifiedlog::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
+use default::SimStep::{Gpio0, Gpio1, Gpio2, Gpio3, Gpio4, Gpio5, Gpio6, Gpio7, Src};
 use std::path::{Path, PathBuf};
 
 // To enable resim, it is just your regular macro with sim_mode true
@@ -29,12 +29,10 @@ fn run_one_copperlist(
     let msgs = copper_list.msgs;
 
     if let Some(CuDuration(ts)) = pending_kf_ts {
-        // Align clock exactly to the recorded keyframe timestamp for this CL
-        // Also force the runtime to stamp the keyframe with this timestamp so it matches byte-for-byte.
+        // Align clock exactly to the recorded keyframe timestamp for this CL.
         copper_app
-            .copper_runtime
-            .keyframes_manager
-            .set_forced_timestamp(CuDuration(ts));
+            .copper_runtime_mut()
+            .set_forced_keyframe_timestamp(CuDuration(ts));
         robot_clock.set_value(ts);
     } else {
         let CuDuration(process_time) = msgs.get_src_output().metadata.process_time.start.unwrap();
@@ -42,8 +40,8 @@ fn run_one_copperlist(
     }
 
     let mut sim_callback = move |step: default::SimStep| -> SimOverride {
-        use default::SimStep::*;
         use CuTaskCallbackState::*;
+        use default::SimStep::*;
         match step {
             Src(Process(_, output)) => {
                 *output = msgs.get_src_output().clone();
@@ -182,10 +180,12 @@ fn main() {
         let pending_kf_ts = if let Some(kf) = kf_iter.peek() {
             if kf.culistid == entry.id {
                 let ts = kf.timestamp;
-                <CaterpillarReSim as CuSimApplication<MmapSectionStorage, MmapUnifiedLoggerWrite>>::restore_keyframe(
-                    &mut copper_app,
-                    kf,
-                )
+                // Lock the recorded keyframe so it is replayed verbatim; also restore live state.
+                copper_app.copper_runtime_mut().lock_keyframe(kf);
+                <CaterpillarReSim as CuSimApplication<
+                    MmapSectionStorage,
+                    MmapUnifiedLoggerWrite,
+                >>::restore_keyframe(&mut copper_app, kf)
                 .expect("Failed to restore keyframe state");
                 kf_iter.next();
                 Some(ts)

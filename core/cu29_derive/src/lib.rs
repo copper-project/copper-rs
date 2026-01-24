@@ -1112,7 +1112,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             task_stop_calls,
             task_preprocess_calls,
             task_postprocess_calls,
-            ): (Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>) = itertools::multiunzip(
+        ): (Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>) = itertools::multiunzip(
             (0..task_specs.task_types.len())
             .map(|index| {
                 let task_index = int2sliceindex(index as u32);
@@ -1554,6 +1554,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                         #call_sim
                         if !doit { return Ok(()); }
                         let bridge = &mut bridges.#bridge_index;
+                        kf_manager.freeze_any(clid, bridge)?;
                         let maybe_error = {
                             #rt_guard
                             bridge.postprocess(clock)
@@ -1587,6 +1588,20 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
         preprocess_calls.extend(task_preprocess_calls);
         let mut postprocess_calls = task_postprocess_calls;
         postprocess_calls.extend(bridge_postprocess_calls);
+
+        // Bridges are frozen alongside tasks; restore them in the same order.
+        let bridge_restore_code: Vec<proc_macro2::TokenStream> = culist_bridge_specs
+            .iter()
+            .enumerate()
+            .map(|(index, _)| {
+                let bridge_tuple_index = syn::Index::from(index);
+                quote! {
+                    bridges.#bridge_tuple_index
+                        .thaw(&mut decoder)
+                        .map_err(|e| CuError::from("Failed to thaw bridge").add_cause(&e.to_string()))?
+                }
+            })
+            .collect();
 
         let output_pack_sizes = collect_output_pack_sizes(&culist_plan);
         let runtime_plan_code_and_logging: Vec<(
@@ -1877,7 +1892,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
 
         #[cfg(feature = "macro_debug")]
         eprintln!("[build the run methods]");
-        let run_methods = quote! {
+        let run_methods: proc_macro2::TokenStream = quote! {
 
             #run_one_iteration {
 
@@ -1933,6 +1948,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 let reader = cu29::bincode::de::read::SliceReader::new(&keyframe.serialized_tasks);
                 let mut decoder = DecoderImpl::new(reader, config, ());
                 #(#task_restore_code);*;
+                #(#bridge_restore_code);*;
                 Ok(())
             }
 
@@ -2118,6 +2134,12 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
                 #init_resources_fn
 
                 #new_with_resources_fn
+
+                /// Mutable access to the underlying runtime (used by tools such as deterministic re-sim).
+                #[inline]
+                pub fn copper_runtime_mut(&mut self) -> &mut CuRuntime<#mission_mod::#tasks_type, #mission_mod::CuBridges, #mission_mod::CuStampedDataSet, #monitor_type, #DEFAULT_CLNB> {
+                    &mut self.copper_runtime
+                }
             }
         };
 
@@ -3265,8 +3287,8 @@ fn build_resources_module(
                     &mut manager,
                 )?;
             }
-        })
-        .collect::<Vec<_>>();
+            })
+            .collect::<Vec<_>>();
 
     let resources_instanciator = quote! {
         pub fn resources_instanciator(config: &CuConfig) -> CuResult<cu29::resource::ResourceManager> {
@@ -3643,7 +3665,7 @@ fn generate_task_execution_tokens(
     let enum_name = Ident::new(&task_enum_name, Span::call_site());
     let rt_guard = rtsan_guard_tokens();
     let run_in_sim_flag = task_specs.run_in_sim_flags[tid];
-    let maybe_sim_tick = if !run_in_sim_flag {
+    let maybe_sim_tick = if sim_mode && !run_in_sim_flag {
         quote! {
             if !doit {
                 #task_instance.sim_tick();
