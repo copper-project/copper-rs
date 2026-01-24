@@ -20,7 +20,9 @@ use cu29::{CuError, CuResult};
 use debug_pane::UIExt;
 use ratatui::backend::CrosstermBackend;
 use ratatui::buffer::Buffer;
-use ratatui::crossterm::event::{DisableMouseCapture, Event, KeyCode};
+use ratatui::crossterm::event::{
+    DisableMouseCapture, EnableMouseCapture, Event, KeyCode, MouseButton, MouseEventKind,
+};
 use ratatui::crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
@@ -45,11 +47,38 @@ use std::time::{Duration, Instant};
 use std::{collections::HashMap, io, thread};
 use tui_widgets::scrollview::{ScrollView, ScrollViewState};
 
+#[cfg(feature = "debug_pane")]
+use arboard::Clipboard;
+
 #[derive(Clone, Copy)]
 struct TabDef {
     screen: Screen,
     label: &'static str,
     key: &'static str,
+}
+
+#[derive(Clone, Copy)]
+struct TabHitbox {
+    screen: Screen,
+    x: u16,
+    y: u16,
+    width: u16,
+    height: u16,
+}
+
+#[derive(Clone, Copy)]
+enum HelpAction {
+    ResetLatency,
+    Quit,
+}
+
+#[derive(Clone, Copy)]
+struct HelpHitbox {
+    action: HelpAction,
+    x: u16,
+    y: u16,
+    width: u16,
+    height: u16,
 }
 
 #[cfg(feature = "debug_pane")]
@@ -126,6 +155,112 @@ enum Screen {
     CopperList,
     #[cfg(feature = "debug_pane")]
     DebugOutput,
+}
+
+#[cfg(feature = "debug_pane")]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct SelectionPoint {
+    row: usize,
+    col: usize,
+}
+
+#[cfg(feature = "debug_pane")]
+#[derive(Clone, Copy, Debug, Default)]
+struct DebugSelection {
+    anchor: Option<SelectionPoint>,
+    cursor: Option<SelectionPoint>,
+}
+
+#[cfg(feature = "debug_pane")]
+impl DebugSelection {
+    fn clear(&mut self) {
+        self.anchor = None;
+        self.cursor = None;
+    }
+
+    fn start(&mut self, point: SelectionPoint) {
+        self.anchor = Some(point);
+        self.cursor = Some(point);
+    }
+
+    fn update(&mut self, point: SelectionPoint) {
+        if self.anchor.is_some() {
+            self.cursor = Some(point);
+        }
+    }
+
+    fn range(&self) -> Option<(SelectionPoint, SelectionPoint)> {
+        let anchor = self.anchor?;
+        let cursor = self.cursor?;
+        if (anchor.row, anchor.col) <= (cursor.row, cursor.col) {
+            Some((anchor, cursor))
+        } else {
+            Some((cursor, anchor))
+        }
+    }
+}
+
+fn segment_width(key: &str, label: &str) -> u16 {
+    (6 + key.chars().count() + label.chars().count()) as u16
+}
+
+fn mouse_inside(mouse: &event::MouseEvent, x: u16, y: u16, width: u16, height: u16) -> bool {
+    mouse.column >= x && mouse.column < x + width && mouse.row >= y && mouse.row < y + height
+}
+
+#[cfg(feature = "debug_pane")]
+fn char_to_byte_index(text: &str, char_idx: usize) -> usize {
+    text.char_indices()
+        .nth(char_idx)
+        .map(|(idx, _)| idx)
+        .unwrap_or(text.len())
+}
+
+#[cfg(feature = "debug_pane")]
+fn slice_char_range(text: &str, start: usize, end: usize) -> (&str, &str, &str) {
+    let start_idx = char_to_byte_index(text, start);
+    let end_idx = char_to_byte_index(text, end);
+    let start_idx = start_idx.min(text.len());
+    let end_idx = end_idx.min(text.len());
+    let (start_idx, end_idx) = if start_idx <= end_idx {
+        (start_idx, end_idx)
+    } else {
+        (end_idx, start_idx)
+    };
+    (
+        &text[..start_idx],
+        &text[start_idx..end_idx],
+        &text[end_idx..],
+    )
+}
+
+#[cfg(feature = "debug_pane")]
+fn line_selection_bounds(
+    line_index: usize,
+    line_len: usize,
+    start: SelectionPoint,
+    end: SelectionPoint,
+) -> Option<(usize, usize)> {
+    if line_index < start.row || line_index > end.row {
+        return None;
+    }
+
+    let start_col = if line_index == start.row { start.col } else { 0 };
+    let mut end_col = if line_index == end.row {
+        end.col
+    } else {
+        line_len
+    };
+    if line_index == end.row {
+        end_col = end_col.saturating_add(1).min(line_len);
+    }
+    let start_col = start_col.min(line_len);
+    let end_col = end_col.min(line_len);
+    if start_col >= end_col {
+        return None;
+    }
+
+    Some((start_col, end_col))
 }
 
 struct TaskStats {
@@ -781,11 +916,23 @@ struct UI {
     sysinfo: String,
     task_stats: Arc<Mutex<TaskStats>>,
     quitting: Arc<AtomicBool>,
+    tab_hitboxes: Vec<TabHitbox>,
+    help_hitboxes: Vec<HelpHitbox>,
     nodes_scrollable_widget_state: NodesScrollableWidgetState,
     #[cfg(feature = "debug_pane")]
     error_redirect: gag::BufferRedirect,
     #[cfg(feature = "debug_pane")]
     debug_output: Option<debug_pane::DebugLog>,
+    #[cfg(feature = "debug_pane")]
+    debug_output_area: Option<Rect>,
+    #[cfg(feature = "debug_pane")]
+    debug_output_visible_offset: usize,
+    #[cfg(feature = "debug_pane")]
+    debug_output_lines: Vec<String>,
+    #[cfg(feature = "debug_pane")]
+    debug_selection: DebugSelection,
+    #[cfg(feature = "debug_pane")]
+    clipboard: Option<Clipboard>,
     pool_stats: Arc<Mutex<Vec<PoolStats>>>,
     copperlist_stats: Arc<Mutex<CopperListStats>>,
 }
@@ -821,9 +968,16 @@ impl UI {
             sysinfo: sysinfo::pfetch_info(),
             task_stats,
             quitting,
+            tab_hitboxes: Vec::new(),
+            help_hitboxes: Vec::new(),
             nodes_scrollable_widget_state,
             error_redirect,
             debug_output,
+            debug_output_area: None,
+            debug_output_visible_offset: 0,
+            debug_output_lines: Vec::new(),
+            debug_selection: DebugSelection::default(),
+            clipboard: None,
             pool_stats,
             copperlist_stats,
         }
@@ -855,6 +1009,8 @@ impl UI {
             sysinfo: sysinfo::pfetch_info(),
             task_stats,
             quitting,
+            tab_hitboxes: Vec::new(),
+            help_hitboxes: Vec::new(),
             nodes_scrollable_widget_state,
             pool_stats,
             copperlist_stats,
@@ -1251,7 +1407,7 @@ impl UI {
         )
     }
 
-    fn render_tabs(&self, f: &mut Frame, area: Rect) {
+    fn render_tabs(&mut self, f: &mut Frame, area: Rect) {
         let base_bg = Color::Rgb(16, 18, 20);
         let active_bg = Color::Rgb(56, 110, 120);
         let inactive_bg = Color::Rgb(40, 44, 52);
@@ -1260,7 +1416,10 @@ impl UI {
         let key_fg = Color::Rgb(255, 208, 128);
 
         let mut spans = Vec::new();
+        self.tab_hitboxes.clear();
+        let mut cursor_x = area.x;
         spans.push(Span::styled(" ", Style::default().bg(base_bg)));
+        cursor_x = cursor_x.saturating_add(1);
 
         for tab in TAB_DEFS {
             let is_active = self.active_screen == tab.screen;
@@ -1271,6 +1430,15 @@ impl UI {
             } else {
                 Style::default().fg(fg).bg(bg)
             };
+            let tab_width = segment_width(tab.key, tab.label);
+            self.tab_hitboxes.push(TabHitbox {
+                screen: tab.screen,
+                x: cursor_x,
+                y: area.y,
+                width: tab_width,
+                height: area.height,
+            });
+            cursor_x = cursor_x.saturating_add(tab_width);
 
             spans.push(Span::styled("", Style::default().fg(bg).bg(base_bg)));
             spans.push(Span::styled(" ", Style::default().bg(bg)));
@@ -1298,13 +1466,16 @@ impl UI {
         f.render_widget(tabs, area);
     }
 
-    fn render_help(&self, f: &mut Frame, area: Rect) {
+    fn render_help(&mut self, f: &mut Frame, area: Rect) {
         let base_bg = Color::Rgb(18, 16, 22);
         let key_fg = Color::Rgb(248, 231, 176);
         let text_fg = Color::Rgb(236, 236, 236);
 
         let mut spans = Vec::new();
+        self.help_hitboxes.clear();
+        let mut cursor_x = area.x;
         spans.push(Span::styled(" ", Style::default().bg(base_bg)));
+        cursor_x = cursor_x.saturating_add(1);
 
         let tab_hint = if cfg!(feature = "debug_pane") {
             "1-6"
@@ -1320,6 +1491,23 @@ impl UI {
         ];
 
         for (key, label, bg) in segments {
+            let segment_len = segment_width(key, label);
+            let action = match key {
+                "r" => Some(HelpAction::ResetLatency),
+                "q" => Some(HelpAction::Quit),
+                _ => None,
+            };
+            if let Some(action) = action {
+                self.help_hitboxes.push(HelpHitbox {
+                    action,
+                    x: cursor_x,
+                    y: area.y,
+                    width: segment_len,
+                    height: area.height,
+                });
+            }
+            cursor_x = cursor_x.saturating_add(segment_len);
+
             spans.push(Span::styled("", Style::default().fg(bg).bg(base_bg)));
             spans.push(Span::styled(" ", Style::default().bg(bg)));
             spans.push(Span::styled(
@@ -1385,6 +1573,232 @@ impl UI {
             #[cfg(feature = "debug_pane")]
             Screen::DebugOutput => self.draw_debug_output(f, layout[1]),
         };
+    }
+
+    fn handle_tab_click(&mut self, mouse: event::MouseEvent) {
+        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+            return;
+        }
+
+        for hitbox in &self.tab_hitboxes {
+            if mouse_inside(&mouse, hitbox.x, hitbox.y, hitbox.width, hitbox.height) {
+                self.active_screen = hitbox.screen;
+                break;
+            }
+        }
+    }
+
+    fn handle_help_click(&mut self, mouse: event::MouseEvent) -> bool {
+        if !matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+            return false;
+        }
+
+        for hitbox in &self.help_hitboxes {
+            if !mouse_inside(&mouse, hitbox.x, hitbox.y, hitbox.width, hitbox.height) {
+                continue;
+            }
+
+            match hitbox.action {
+                HelpAction::ResetLatency => {
+                    if self.active_screen == Screen::Latency {
+                        self.task_stats.lock().unwrap().reset();
+                    }
+                }
+                HelpAction::Quit => {
+                    self.quitting.store(true, Ordering::SeqCst);
+                }
+            }
+            return true;
+        }
+
+        false
+    }
+
+    fn handle_scroll_mouse(&mut self, mouse: event::MouseEvent) {
+        if self.active_screen != Screen::Dag {
+            return;
+        }
+
+        match mouse.kind {
+            MouseEventKind::ScrollDown => {
+                self.nodes_scrollable_widget_state
+                    .nodes_scrollable_state
+                    .scroll_down();
+            }
+            MouseEventKind::ScrollUp => {
+                self.nodes_scrollable_widget_state
+                    .nodes_scrollable_state
+                    .scroll_up();
+            }
+            MouseEventKind::ScrollRight => {
+                for _ in 0..5 {
+                    self.nodes_scrollable_widget_state
+                        .nodes_scrollable_state
+                        .scroll_right();
+                }
+            }
+            MouseEventKind::ScrollLeft => {
+                for _ in 0..5 {
+                    self.nodes_scrollable_widget_state
+                        .nodes_scrollable_state
+                        .scroll_left();
+                }
+            }
+            _ => {}
+        }
+    }
+
+    #[cfg(feature = "debug_pane")]
+    fn handle_mouse_event(&mut self, mouse: event::MouseEvent) {
+        self.handle_tab_click(mouse);
+        if self.handle_help_click(mouse) {
+            return;
+        }
+        self.handle_scroll_mouse(mouse);
+
+        if self.active_screen != Screen::DebugOutput {
+            return;
+        }
+
+        let Some(area) = self.debug_output_area else {
+            return;
+        };
+
+        if !mouse_inside(&mouse, area.x, area.y, area.width, area.height) {
+            if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) {
+                self.debug_selection.clear();
+            }
+            return;
+        }
+
+        let rel_row = (mouse.row - area.y) as usize;
+        let rel_col = (mouse.column - area.x) as usize;
+        let line_index = self.debug_output_visible_offset.saturating_add(rel_row);
+        let Some(line) = self.debug_output_lines.get(line_index) else {
+            return;
+        };
+        let line_len = line.chars().count();
+        let point = SelectionPoint {
+            row: line_index,
+            col: rel_col.min(line_len),
+        };
+
+        match mouse.kind {
+            MouseEventKind::Down(MouseButton::Left) => {
+                self.debug_selection.start(point);
+            }
+            MouseEventKind::Drag(MouseButton::Left) => {
+                self.debug_selection.update(point);
+            }
+            MouseEventKind::Up(MouseButton::Left) => {
+                self.debug_selection.update(point);
+                if let Some(text) = self.selected_debug_text() {
+                    self.copy_debug_text(text);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    #[cfg(not(feature = "debug_pane"))]
+    fn handle_mouse_event(&mut self, mouse: event::MouseEvent) {
+        self.handle_tab_click(mouse);
+        let _ = self.handle_help_click(mouse);
+        self.handle_scroll_mouse(mouse);
+    }
+
+    #[cfg(feature = "debug_pane")]
+    fn selected_debug_text(&self) -> Option<String> {
+        let (start, end) = self.debug_selection.range()?;
+        if start == end {
+            return None;
+        }
+        if self.debug_output_lines.is_empty() {
+            return None;
+        }
+        if start.row >= self.debug_output_lines.len() || end.row >= self.debug_output_lines.len() {
+            return None;
+        }
+
+        let mut selected = Vec::new();
+        for row in start.row..=end.row {
+            let line = &self.debug_output_lines[row];
+            let line_len = line.chars().count();
+            let Some((start_col, end_col)) = line_selection_bounds(row, line_len, start, end)
+            else {
+                selected.push(String::new());
+                continue;
+            };
+            let (_, selected_part, _) = slice_char_range(line, start_col, end_col);
+            selected.push(selected_part.to_string());
+        }
+        Some(selected.join("\n"))
+    }
+
+    #[cfg(feature = "debug_pane")]
+    fn copy_debug_text(&mut self, text: String) {
+        if text.is_empty() {
+            return;
+        }
+
+        if self.clipboard.is_none() {
+            match Clipboard::new() {
+                Ok(clipboard) => self.clipboard = Some(clipboard),
+                Err(err) => {
+                    eprintln!("CuConsoleMon clipboard init failed: {err}");
+                    return;
+                }
+            }
+        }
+
+        if let Some(clipboard) = self.clipboard.as_mut()
+            && let Err(err) = clipboard.set_text(text)
+        {
+            eprintln!("CuConsoleMon clipboard copy failed: {err}");
+        }
+    }
+
+    #[cfg(feature = "debug_pane")]
+    fn build_debug_output_text(&self, area: Rect) -> Text<'_> {
+        let mut rendered_lines = Vec::new();
+        let selection = self
+            .debug_selection
+            .range()
+            .filter(|(start, end)| start != end);
+        let selection_style = Style::default().bg(Color::Blue).fg(Color::Black);
+        let visible = self
+            .debug_output_lines
+            .iter()
+            .skip(self.debug_output_visible_offset)
+            .take(area.height as usize);
+
+        for (idx, line) in visible.enumerate() {
+            let line_index = self.debug_output_visible_offset + idx;
+            let spans = if let Some((start, end)) = selection {
+                let line_len = line.chars().count();
+                if let Some((start_col, end_col)) =
+                    line_selection_bounds(line_index, line_len, start, end)
+                {
+                    let (before, selected, after) = slice_char_range(line, start_col, end_col);
+                    let mut spans = Vec::new();
+                    if !before.is_empty() {
+                        spans.push(Span::raw(before.to_string()));
+                    }
+                    spans.push(Span::styled(selected.to_string(), selection_style));
+                    if !after.is_empty() {
+                        spans.push(Span::raw(after.to_string()));
+                    }
+                    spans
+                } else {
+                    vec![Span::raw(line.clone())]
+                }
+            } else {
+                vec![Span::raw(line.clone())]
+            };
+            rendered_lines.push(Line::from(spans));
+        }
+
+        Text::from(rendered_lines)
     }
 
     fn run_app<B: Backend<Error = io::Error>>(
@@ -1461,6 +1875,9 @@ impl UI {
                         _ => {}
                     },
 
+                    Event::Mouse(mouse) => {
+                        self.handle_mouse_event(mouse);
+                    }
                     Event::Resize(_columns, rows) => {
                         self.nodes_scrollable_widget_state.mark_graph_dirty();
                         #[cfg(not(feature = "debug_pane"))]
@@ -1738,8 +2155,8 @@ fn init_error_hooks() {
 
 fn setup_terminal() -> io::Result<()> {
     enable_raw_mode()?;
-    // Avoid enabling mouse capture so terminal selection works (e.g., LOG panel copy).
-    execute!(stdout(), EnterAlternateScreen)?;
+    // Enable mouse capture for in-app log selection.
+    execute!(stdout(), EnterAlternateScreen, EnableMouseCapture)?;
     Ok(())
 }
 
