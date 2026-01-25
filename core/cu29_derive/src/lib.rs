@@ -222,11 +222,17 @@ fn gen_culist_support(
                 let port_index = syn::Index::from(port_idx);
                 zeroed_init_tokens.push(quote! {
                     self.0.#slot_index.#port_index.metadata.status_txt = CuCompactString::default();
+                    self.0.#slot_index.#port_index.metadata.process_time.start =
+                        cu29::clock::OptionCuTime::none();
+                    self.0.#slot_index.#port_index.metadata.process_time.end =
+                        cu29::clock::OptionCuTime::none();
                 });
             }
         } else {
             zeroed_init_tokens.push(quote! {
                 self.0.#slot_index.metadata.status_txt = CuCompactString::default();
+                self.0.#slot_index.metadata.process_time.start = cu29::clock::OptionCuTime::none();
+                self.0.#slot_index.metadata.process_time.end = cu29::clock::OptionCuTime::none();
             });
         }
     }
