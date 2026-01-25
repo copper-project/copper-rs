@@ -19,6 +19,10 @@ mod payloads;
 mod tasks;
 mod yolo;
 
+use std::fs;
+use std::path::Path;
+use std::path::PathBuf;
+
 use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
 
@@ -26,29 +30,23 @@ use cu29_helpers::basic_copper_setup;
 pub use payloads::*;
 pub use tasks::*;
 
-const SLAB_SIZE: Option<usize> = Some(128 * 1024 * 1024); // 128 MiB
+const SLAB_SIZE: Option<usize> = Some(1024 * 1024 * 1024); // 1GB
 
 #[copper_runtime(config = "copperconfig.ron")]
 struct YoloPoseDemoApplication {}
 
 fn main() {
-    // Set up logging
-    env_logger::init();
-
     // Create temporary directory for Copper logs
-    let tmp_dir = tempfile::TempDir::new().expect("Could not create temp directory");
-    let logger_path = tmp_dir.path().join("yolo_pose.copper");
-
-    println!("YOLOv8 Pose Estimation Demo");
-    println!("===========================");
-    println!();
-    println!("Starting Copper runtime...");
+    let logger_path = "logs/human-pose.copper";
+    if let Some(parent) = Path::new(logger_path).parent()
+        && !parent.exists()
+    {
+        fs::create_dir_all(parent).expect("Failed to create logs directory");
+    }
 
     // Initialize Copper context
-    let copper_ctx = basic_copper_setup(&logger_path, SLAB_SIZE, true, None)
+    let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), SLAB_SIZE, true, None)
         .expect("Failed to set up Copper context");
-
-    println!("Building application...");
 
     // Build the application from RON config
     let mut application = YoloPoseDemoApplicationBuilder::new()
@@ -56,24 +54,12 @@ fn main() {
         .build()
         .expect("Failed to build application");
 
-    println!("Starting tasks...");
-
     // Start all tasks
     application
         .start_all_tasks()
         .expect("Failed to start tasks");
 
-    println!();
-    println!("Application running!");
-    println!("Open Rerun viewer to see pose estimation results.");
-    println!("Press Ctrl+C to stop.");
-    println!();
-
-    // Run the main loop
-    loop {
-        if let Err(e) = application.run_one_iteration() {
-            eprintln!("Error during iteration: {:?}", e);
-            break;
-        }
+    if let Err(e) = application.run() {
+        error!("Error during iteration: {}", e.to_string());
     }
 }
