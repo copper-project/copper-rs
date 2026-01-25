@@ -61,7 +61,5 @@
         keyframe_interval: 10000,
         section_size_mib: 32,
     ),
-    monitor: (
-        type: "cu_logmon::CuLogMon",
-    ),
+    monitor: (type: "cu_logmon::CuLogMon"),
 )
