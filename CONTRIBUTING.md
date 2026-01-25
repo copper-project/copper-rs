@@ -54,6 +54,28 @@ The `just std-ci` command runs the same checks as CI, including:
 - Unit tests with cargo-nextest
 - Project generation tests (debug mode only)
 
+### Pre-commit hooks (Recommended)
+
+To mirror the CI lint steps locally, you can install pre-commit hooks that run formatting and typos checks on each commit.
+
+1. Install `pre-commit` (via Homebrew or pip):
+    ```bash
+    brew install pre-commit
+    # or
+    python3 -m pip install pre-commit
+    ```
+2. Install the hook:
+    ```bash
+    pre-commit install
+    ```
+
+3. Run once to verify:
+    ```bash
+    pre-commit run -a
+    ```
+
+If you want to customize pre-commit, please modify `.pre-commit-config.yaml`.
+
 ### Proc-macro expansion (cargo expand)
 
 Prefer `cargo expand` when inspecting generated code from Copper proc-macros.
