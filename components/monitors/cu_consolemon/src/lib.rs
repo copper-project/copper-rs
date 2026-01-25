@@ -891,7 +891,7 @@ struct UI {
     help_hitboxes: Vec<HelpHitbox>,
     nodes_scrollable_widget_state: NodesScrollableWidgetState,
     #[cfg(feature = "debug_pane")]
-    error_redirect: gag::BufferRedirect,
+    error_redirect: Option<gag::BufferRedirect>,
     #[cfg(feature = "debug_pane")]
     debug_output: Option<debug_pane::DebugLog>,
     #[cfg(feature = "debug_pane")]
@@ -918,7 +918,7 @@ impl UI {
         task_stats: Arc<Mutex<TaskStats>>,
         task_statuses: Arc<Mutex<Vec<TaskStatus>>>,
         quitting: Arc<AtomicBool>,
-        error_redirect: gag::BufferRedirect,
+        error_redirect: Option<gag::BufferRedirect>,
         debug_output: Option<debug_pane::DebugLog>,
         pool_stats: Arc<Mutex<Vec<PoolStats>>>,
         copperlist_stats: Arc<Mutex<CopperListStats>>,
@@ -1938,7 +1938,15 @@ impl CuMonitor for CuConsoleMon {
             #[cfg(feature = "debug_pane")]
             {
                 // redirect stderr, so it doesn't pop in the terminal
-                let error_redirect = gag::BufferRedirect::stderr().unwrap();
+                let error_redirect = match gag::BufferRedirect::stderr() {
+                    Ok(redirect) => Some(redirect),
+                    Err(err) => {
+                        eprintln!(
+                            "Failed to redirect stderr for debug pane; continuing without redirect: {err}"
+                        );
+                        None
+                    }
+                };
 
                 let mut ui = UI::new(
                     config_dup,
