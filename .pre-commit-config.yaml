@@ -1,0 +1,8 @@
+repos:
+  - repo: local
+    hooks:
+      - id: copper-lint
+        name: copper fmt (rust/toml/ron) and typos
+        entry: just lint
+        language: system
+        pass_filenames: false
