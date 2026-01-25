@@ -9,13 +9,13 @@ use color_eyre::config::HookBuilder;
 use compact_str::{CompactString, ToCompactString};
 use cu29::clock::{CuDuration, RobotClock};
 use cu29::config::CuConfig;
+use cu29::config::Flavor;
+use cu29::curuntime::{CuExecutionUnit, compute_runtime_plan};
 use cu29::cutask::CuMsgMetadata;
-use cu29::curuntime::{compute_runtime_plan, CuExecutionUnit};
 use cu29::monitoring::{
     ComponentKind, CopperListInfo, CopperListIoStats, CuDurationStatistics, CuMonitor, CuTaskState,
     Decision, MonitorTopology,
 };
-use cu29::config::Flavor;
 use cu29::prelude::{CuCompactString, CuTime, pool};
 use cu29::{CuError, CuResult};
 #[cfg(feature = "debug_pane")]
@@ -2110,10 +2110,7 @@ impl Drop for TerminalRestoreGuard {
     }
 }
 
-fn build_culist_to_task_index(
-    config: &CuConfig,
-    task_ids: &[String],
-) -> CuResult<Vec<usize>> {
+fn build_culist_to_task_index(config: &CuConfig, task_ids: &[String]) -> CuResult<Vec<usize>> {
     let graph = config.get_graph(None)?;
     let plan = compute_runtime_plan(graph)?;
 
