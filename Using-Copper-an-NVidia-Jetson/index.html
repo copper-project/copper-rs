@@ -8,13 +8,9 @@
       
       
       
-        <link rel="canonical" href="https://copper-project.github.io/copper-rs/Supported-Platforms/">
+        <link rel="canonical" href="https://copper-project.github.io/copper-rs/Using-Copper-an-NVidia-Jetson/">
       
       
-        <link rel="prev" href="../Baremetal-Development/">
-      
-      
-        <link rel="next" href="../SDK-Features/">
       
       
         
@@ -25,7 +21,7 @@
     
     
       
-        <title>Supported Platforms - Copper Wiki</title>
+        <title>Using Copper an NVidia Jetson - Copper Wiki</title>
       
     
     
@@ -109,7 +105,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Supported Platforms
+              Using Copper an NVidia Jetson
             
           </span>
         </div>
@@ -682,20 +678,18 @@
       
   
   
-    
   
   
-  
     
     
     
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
         
           
           <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
@@ -716,7 +710,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -759,17 +753,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../Supported-Platforms/" class="md-nav__link">
         
   
   
@@ -785,7 +772,6 @@
   
 
       </a>
-      
     </li>
   
 
@@ -1194,44 +1180,35 @@
   
 
 
-  <h1>Supported Platforms</h1>
+  <h1>Using Copper an NVidia Jetson</h1>
 
-<p>Copper can be deployed on:</p>
-<table style="color: white; background-color: black; font-family: sans-serif;">
-  <tr>
-    <td style="text-align: center; padding: 12px;">
-      <img src="https://upload.wikimedia.org/wikipedia/commons/3/35/Tux.svg" width="50"/>
-    </td>
-    <td style="font-weight: bold; text-align: center;">Linux</td>
-    <td style="text-align: right; padding-left: 10px;">x86_64<br>armv7<br>aarch64<br>riscv64</td>
-  </tr>
-  <tr>
-    <td style="text-align: center; padding: 12px;">
-      <img src="https://upload.wikimedia.org/wikipedia/commons/3/31/Apple_logo_white.svg" width="50"/>
-    </td>
-    <td style="font-weight: bold; text-align: center;">macOS</td>
-    <td style="text-align: right; padding-left: 10px;">arm64</td>
-  </tr>
-  <tr>
-    <td style="text-align: center; padding: 12px;">
-      <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Windows_logo_-_2021_%28White%29.svg/768px-Windows_logo_-_2021_%28White%29.svg.png?20230326181935" width="50"/>
-    </td>
-    <td style="font-weight: bold; text-align: center;">Windows</td>
-    <td style="text-align: right; padding-left: 10px;">x86_64</td>
-  </tr>
-  <tr>
-    <td style="text-align: center; padding: 12px;">
-      <img src="https://upload.wikimedia.org/wikipedia/commons/d/d7/Android_robot.svg" width="50"/>
-    </td>
-    <td style="font-weight: bold; text-align: center;">Android</td>
-    <td style="text-align: right; padding-left: 10px;">arm64</td>
-  </tr>
-</table>
-
-<p>We also support the <a href="../Using-Copper-an-NVidia-Jetson/">nvidia jetson</a></p>
-<p>But can also run baremetal on microcontrollers. Here it is on our reference platform based on the RP2350, see 
-<a href="../Baremetal-Development/">Copper baremetal development</a> if you are interested to deploy Copper as an actual Operating System.</p>
-<p><img width="500" src="https://github.com/copper-project/copper-rs/wiki/imgs/baremetal-w-camera.jpg" alt="graph"/></p>
+<p>Installing Copper in the Jetson (of any type) is basically a matter of installing Rust.</p>
+<p>After the standard flashing and installation you just have to install rust itself:</p>
+<pre><code>$ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+$ source ~/.bashrc
+</code></pre>
+<p>Then some tooling depending of what you need, all of them are optional:</p>
+<pre><code class="language-bash">$ sudo apt install git
+$ cargo install just                                           # to use the justfiles in the repo
+$ sudo apt install libssl-dev; cargo install cargo-generate    # if you want to use the copper project and workspace templates
+</code></pre>
+<p>Clone the repo and test drive Copper with an example</p>
+<pre><code class="language-bash">$ git clone https://github.com/copper-project/copper-rs
+$ cd copper-rs/examples/cu_caterpillar
+$ cargo run -r
+</code></pre>
+<p>If you want to cross compile you will need to install the target for the jetson on you workstation, use musl so you are sure the executable is fully static:</p>
+<pre><code>## one your *workstation*
+$ rustup target add aarch64-unknown-linux-musl
+                                                     # the musl toolchain
+$ sudo apt install musl-tools gcc-aarch64-linux-gnu  # for debian/ubuntu
+                                                     # be sure you don't have the python dependency in the cu29-log 
+                                                     # extract in your Cargo.toml 
+$ cargo build --release --target aarch64-unknown-linux-musl
+$ scp ../../target/aarch64-unknown-linux-musl/release/cu-caterpillar jetson:
+$ ssh jetson
+$ ./cu-caterpillar
+</code></pre>
 
 
 
