@@ -2039,10 +2039,10 @@ impl CuMonitor for CuConsoleMon {
             let mut task_statuses = self.task_statuses.lock().unwrap();
             for (i, msg) in msgs.iter().enumerate() {
                 let CuCompactString(status_txt) = &msg.status_txt;
-                if let Some(&task_idx) = self.culist_to_task.get(i) {
-                    if task_idx < task_statuses.len() {
-                        task_statuses[task_idx].status_txt = status_txt.clone();
-                    }
+                if let Some(&task_idx) = self.culist_to_task.get(i)
+                    && task_idx < task_statuses.len()
+                {
+                    task_statuses[task_idx].status_txt = status_txt.clone();
                 }
             }
         }
@@ -2116,25 +2116,25 @@ fn build_culist_to_task_index(config: &CuConfig, task_ids: &[String]) -> CuResul
 
     let mut max_idx = 0usize;
     for unit in &plan.steps {
-        if let CuExecutionUnit::Step(step) = unit {
-            if let Some(output_pack) = &step.output_msg_pack {
-                max_idx = max_idx.max(output_pack.culist_index as usize);
-            }
+        if let CuExecutionUnit::Step(step) = unit
+            && let Some(output_pack) = &step.output_msg_pack
+        {
+            max_idx = max_idx.max(output_pack.culist_index as usize);
         }
     }
 
     let mut mapping = vec![usize::MAX; max_idx.saturating_add(1)];
 
     for unit in &plan.steps {
-        if let CuExecutionUnit::Step(step) = unit {
-            if let Some(output_pack) = &step.output_msg_pack {
-                if step.node.get_flavor() != Flavor::Task {
-                    continue;
-                }
-                let node_id = step.node.get_id();
-                if let Some(task_idx) = task_ids.iter().position(|id| id.as_str() == node_id) {
-                    mapping[output_pack.culist_index as usize] = task_idx;
-                }
+        if let CuExecutionUnit::Step(step) = unit
+            && let Some(output_pack) = &step.output_msg_pack
+        {
+            if step.node.get_flavor() != Flavor::Task {
+                continue;
+            }
+            let node_id = step.node.get_id();
+            if let Some(task_idx) = task_ids.iter().position(|id| id.as_str() == node_id) {
+                mapping[output_pack.culist_index as usize] = task_idx;
             }
         }
     }
