@@ -172,22 +172,26 @@ pub trait UIExt {
 impl UIExt for UI {
     fn update_debug_output(&mut self) {
         if let Some(debug_output) = self.debug_output.as_mut() {
-            let mut error_buffer = String::new();
-            self.error_redirect
-                .read_to_string(&mut error_buffer)
-                .unwrap();
-            debug_output.push_logs(error_buffer);
+            if let Some(error_redirect) = self.error_redirect.as_mut() {
+                let mut error_buffer = String::new();
+                if let Err(err) = error_redirect.read_to_string(&mut error_buffer) {
+                    eprintln!("Failed to read stderr buffer for debug pane: {err}");
+                }
+                debug_output.push_logs(error_buffer);
+            }
             debug_output.update_logs();
         }
     }
 
     fn draw_debug_output(&mut self, f: &mut Frame, area: Rect) {
         if let Some(debug_output) = self.debug_output.as_mut() {
-            let mut error_buffer = String::new();
-            self.error_redirect
-                .read_to_string(&mut error_buffer)
-                .unwrap();
-            debug_output.push_logs(error_buffer);
+            if let Some(error_redirect) = self.error_redirect.as_mut() {
+                let mut error_buffer = String::new();
+                if let Err(err) = error_redirect.read_to_string(&mut error_buffer) {
+                    eprintln!("Failed to read stderr buffer for debug pane: {err}");
+                }
+                debug_output.push_logs(error_buffer);
+            }
 
             let block = Block::default()
                 .title(" Debug Output ")
