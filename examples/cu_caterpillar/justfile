@@ -89,7 +89,7 @@ dag-logstats bin="cu-caterpillar-logreader" log="logs/caterpillar.copper" missio
 resim:
 	#!/usr/bin/env bash
 	set -euo pipefail
-	RUST_BACKTRACE=1 cargo run --profile screaming --bin cu-caterpillar-resim logs/caterpillar.copper
+	RUST_BACKTRACE=1 cargo run -r --bin cu-caterpillar-resim logs/caterpillar.copper
 
 # Convert the caterpillar log to MCAP and show a summary.
 mcap:

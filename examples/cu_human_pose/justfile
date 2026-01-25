@@ -1,6 +1,15 @@
+import "../../justfile"
+
 cuda:
   #!/usr/bin/env bash
   set -euo pipefail  
   ENABLE_HDR_WSI=0
   RUST_LOG=error,wgpu_hal=error,wgpu_core=error
-  cargo run --profile screaming --features cuda
+  cargo run -r --features cuda
+
+cuda-dbg:
+  #!/usr/bin/env bash
+  set -euo pipefail  
+  ENABLE_HDR_WSI=0
+  RUST_LOG=error,wgpu_hal=error,wgpu_core=error
+  cargo run --features cuda
