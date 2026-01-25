@@ -516,7 +516,7 @@ struct NodesScrollableWidgetState {
     connections: Vec<Connection>,
     statuses: Arc<Mutex<Vec<TaskStatus>>>,
     status_index_map: Vec<Option<usize>>,
-    status_count: usize,
+    task_count: usize,
     nodes_scrollable_state: ScrollViewState,
     graph_cache: GraphCache,
 }
@@ -526,7 +526,7 @@ impl NodesScrollableWidgetState {
         config: &CuConfig,
         errors: Arc<Mutex<Vec<TaskStatus>>>,
         mission: Option<&str>,
-        status_task_ids: &[String],
+        task_ids: &'static [&'static str],
         topology: Option<MonitorTopology>,
     ) -> Self {
         let topology = topology
@@ -536,11 +536,6 @@ impl NodesScrollableWidgetState {
         let mut display_nodes: Vec<DisplayNode> = Vec::new();
         let mut status_index_map = Vec::new();
         let mut node_lookup = HashMap::new();
-        let task_index_lookup: HashMap<&str, usize> = status_task_ids
-            .iter()
-            .enumerate()
-            .map(|(i, id)| (id.as_str(), i))
-            .collect();
 
         for node in topology.nodes.iter() {
             let node_type = match node.kind {
@@ -571,7 +566,7 @@ impl NodesScrollableWidgetState {
             node_lookup.insert(node.id.clone(), idx);
 
             let status_idx = match node.kind {
-                ComponentKind::Task => task_index_lookup.get(node.id.as_str()).cloned(),
+                ComponentKind::Task => task_ids.iter().position(|id| *id == node.id.as_str()),
                 ComponentKind::Bridge => None,
             };
             status_index_map.push(status_idx);
@@ -624,7 +619,7 @@ impl NodesScrollableWidgetState {
             connections,
             statuses: errors,
             status_index_map,
-            status_count: status_task_ids.len(),
+            task_count: task_ids.len(),
             nodes_scrollable_state: ScrollViewState::default(),
             graph_cache: GraphCache::new(),
         }
@@ -749,6 +744,7 @@ const NODE_WIDTH_CONTENT: u16 = NODE_WIDTH - 2;
 const NODE_HEIGHT: u16 = 5;
 const NODE_META_LINES: usize = 2;
 const NODE_PORT_ROW_OFFSET: usize = NODE_META_LINES;
+const MAX_CULIST_MAP: usize = 512;
 
 fn clip_tail(value: &str, max_chars: usize) -> String {
     if max_chars == 0 {
@@ -784,11 +780,11 @@ impl StatefulWidget for NodesScrollableWidget<'_> {
             let zones = graph.split(scroll_view.area());
 
             let mut statuses = state.statuses.lock().unwrap();
-            if statuses.len() <= state.status_count {
-                statuses.resize(state.status_count + 1, TaskStatus::default());
+            if statuses.len() <= state.task_count {
+                statuses.resize(state.task_count + 1, TaskStatus::default());
             }
             for (idx, ea_zone) in zones.into_iter().enumerate() {
-                let fallback_idx = state.status_count;
+                let fallback_idx = state.task_count;
                 let status_idx = state
                     .status_index_map
                     .get(idx)
@@ -866,7 +862,7 @@ pub struct CuConsoleMon {
     taskids: &'static [&'static str],
     task_stats: Arc<Mutex<TaskStats>>,
     task_statuses: Arc<Mutex<Vec<TaskStatus>>>,
-    culist_to_task: Vec<usize>,
+    culist_to_task: [usize; MAX_CULIST_MAP],
     ui_handle: Option<JoinHandle<()>>,
     pool_stats: Arc<Mutex<Vec<PoolStats>>>,
     copperlist_stats: Arc<Mutex<CopperListStats>>,
@@ -885,7 +881,7 @@ impl Drop for CuConsoleMon {
 }
 
 struct UI {
-    task_ids: Vec<String>,
+    task_ids: &'static [&'static str],
     active_screen: Screen,
     sysinfo: String,
     task_stats: Arc<Mutex<TaskStats>>,
@@ -928,17 +924,16 @@ impl UI {
         topology: Option<MonitorTopology>,
     ) -> UI {
         init_error_hooks();
-        let task_ids_vec: Vec<String> = task_ids.iter().map(|s| (*s).to_string()).collect();
         let nodes_scrollable_widget_state = NodesScrollableWidgetState::new(
             &config,
             task_statuses.clone(),
             mission,
-            &task_ids_vec,
+            task_ids,
             topology.clone(),
         );
 
         Self {
-            task_ids: task_ids_vec,
+            task_ids,
             active_screen: Screen::Neofetch,
             sysinfo: sysinfo::pfetch_info(),
             task_stats,
@@ -970,17 +965,16 @@ impl UI {
         topology: Option<MonitorTopology>,
     ) -> UI {
         init_error_hooks();
-        let task_ids_vec: Vec<String> = task_ids.iter().map(|s| (*s).to_string()).collect();
         let nodes_scrollable_widget_state = NodesScrollableWidgetState::new(
             &config,
             task_statuses.clone(),
             None,
-            &task_ids_vec,
+            task_ids,
             topology.clone(),
         );
 
         Self {
-            task_ids: task_ids_vec,
+            task_ids,
             active_screen: Screen::Neofetch,
             sysinfo: sysinfo::pfetch_info(),
             task_stats,
@@ -1024,7 +1018,7 @@ impl UI {
             .enumerate()
             .map(|(i, stat)| {
                 let cells = vec![
-                    Cell::from(Line::from(self.task_ids[i].as_str()).alignment(Alignment::Right))
+                    Cell::from(Line::from(self.task_ids[i]).alignment(Alignment::Right))
                         .light_blue(),
                     Cell::from(Line::from(stat.min().to_string()).alignment(Alignment::Right))
                         .style(Style::default()),
@@ -1876,9 +1870,10 @@ impl CuMonitor for CuConsoleMon {
     where
         Self: Sized,
     {
-        let task_id_strings: Vec<String> = taskids.iter().map(|s| (*s).to_string()).collect();
-        let culist_to_task =
-            build_culist_to_task_index(config, &task_id_strings).unwrap_or_default();
+        let mut culist_to_task = [usize::MAX; MAX_CULIST_MAP];
+        if let Ok(map) = build_culist_to_task_index(config, taskids) {
+            culist_to_task = map;
+        }
         let task_stats = Arc::new(Mutex::new(TaskStats::new(
             taskids.len(),
             CuDuration::from(Duration::from_secs(5)),
@@ -2040,6 +2035,7 @@ impl CuMonitor for CuConsoleMon {
             for (i, msg) in msgs.iter().enumerate() {
                 let CuCompactString(status_txt) = &msg.status_txt;
                 if let Some(&task_idx) = self.culist_to_task.get(i)
+                    && task_idx != usize::MAX
                     && task_idx < task_statuses.len()
                 {
                     task_statuses[task_idx].status_txt = status_txt.clone();
@@ -2110,20 +2106,14 @@ impl Drop for TerminalRestoreGuard {
     }
 }
 
-fn build_culist_to_task_index(config: &CuConfig, task_ids: &[String]) -> CuResult<Vec<usize>> {
+fn build_culist_to_task_index(
+    config: &CuConfig,
+    task_ids: &'static [&'static str],
+) -> CuResult<[usize; MAX_CULIST_MAP]> {
     let graph = config.get_graph(None)?;
     let plan = compute_runtime_plan(graph)?;
 
-    let mut max_idx = 0usize;
-    for unit in &plan.steps {
-        if let CuExecutionUnit::Step(step) = unit
-            && let Some(output_pack) = &step.output_msg_pack
-        {
-            max_idx = max_idx.max(output_pack.culist_index as usize);
-        }
-    }
-
-    let mut mapping = vec![usize::MAX; max_idx.saturating_add(1)];
+    let mut mapping = [usize::MAX; MAX_CULIST_MAP];
 
     for unit in &plan.steps {
         if let CuExecutionUnit::Step(step) = unit
@@ -2133,8 +2123,12 @@ fn build_culist_to_task_index(config: &CuConfig, task_ids: &[String]) -> CuResul
                 continue;
             }
             let node_id = step.node.get_id();
-            if let Some(task_idx) = task_ids.iter().position(|id| id.as_str() == node_id) {
-                mapping[output_pack.culist_index as usize] = task_idx;
+            let culist_idx = output_pack.culist_index as usize;
+            if culist_idx >= MAX_CULIST_MAP {
+                continue;
+            }
+            if let Some(task_idx) = task_ids.iter().position(|id| *id == node_id.as_str()) {
+                mapping[culist_idx] = task_idx;
             }
         }
     }
