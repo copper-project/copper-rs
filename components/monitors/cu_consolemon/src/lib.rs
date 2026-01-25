@@ -9,6 +9,8 @@ use color_eyre::config::HookBuilder;
 use compact_str::{CompactString, ToCompactString};
 use cu29::clock::{CuDuration, RobotClock};
 use cu29::config::CuConfig;
+use cu29::config::Flavor;
+use cu29::curuntime::{CuExecutionUnit, compute_runtime_plan};
 use cu29::cutask::CuMsgMetadata;
 use cu29::monitoring::{
     ComponentKind, CopperListInfo, CopperListIoStats, CuDurationStatistics, CuMonitor, CuTaskState,
@@ -534,11 +536,6 @@ impl NodesScrollableWidgetState {
         let mut display_nodes: Vec<DisplayNode> = Vec::new();
         let mut status_index_map = Vec::new();
         let mut node_lookup = HashMap::new();
-        let task_index_lookup: HashMap<&str, usize> = task_ids
-            .iter()
-            .enumerate()
-            .map(|(i, id)| (*id, i))
-            .collect();
 
         for node in topology.nodes.iter() {
             let node_type = match node.kind {
@@ -569,7 +566,7 @@ impl NodesScrollableWidgetState {
             node_lookup.insert(node.id.clone(), idx);
 
             let status_idx = match node.kind {
-                ComponentKind::Task => task_index_lookup.get(node.id.as_str()).cloned(),
+                ComponentKind::Task => task_ids.iter().position(|id| *id == node.id.as_str()),
                 ComponentKind::Bridge => None,
             };
             status_index_map.push(status_idx);
@@ -747,6 +744,7 @@ const NODE_WIDTH_CONTENT: u16 = NODE_WIDTH - 2;
 const NODE_HEIGHT: u16 = 5;
 const NODE_META_LINES: usize = 2;
 const NODE_PORT_ROW_OFFSET: usize = NODE_META_LINES;
+const MAX_CULIST_MAP: usize = 512;
 
 fn clip_tail(value: &str, max_chars: usize) -> String {
     if max_chars == 0 {
@@ -864,6 +862,7 @@ pub struct CuConsoleMon {
     taskids: &'static [&'static str],
     task_stats: Arc<Mutex<TaskStats>>,
     task_statuses: Arc<Mutex<Vec<TaskStatus>>>,
+    culist_to_task: [usize; MAX_CULIST_MAP],
     ui_handle: Option<JoinHandle<()>>,
     pool_stats: Arc<Mutex<Vec<PoolStats>>>,
     copperlist_stats: Arc<Mutex<CopperListStats>>,
@@ -1871,6 +1870,10 @@ impl CuMonitor for CuConsoleMon {
     where
         Self: Sized,
     {
+        let mut culist_to_task = [usize::MAX; MAX_CULIST_MAP];
+        if let Ok(map) = build_culist_to_task_index(config, taskids) {
+            culist_to_task = map;
+        }
         let task_stats = Arc::new(Mutex::new(TaskStats::new(
             taskids.len(),
             CuDuration::from(Duration::from_secs(5)),
@@ -1881,6 +1884,7 @@ impl CuMonitor for CuConsoleMon {
             taskids,
             task_stats,
             task_statuses: Arc::new(Mutex::new(vec![TaskStatus::default(); taskids.len()])),
+            culist_to_task,
             ui_handle: None,
             quitting: Arc::new(AtomicBool::new(false)),
             pool_stats: Arc::new(Mutex::new(Vec::new())),
@@ -2002,7 +2006,7 @@ impl CuMonitor for CuConsoleMon {
                     taskids,
                     task_stats_ui,
                     error_states,
-                    quitting,
+                    quitting.clone(),
                     pool_stats_ui,
                     copperlist_stats_ui,
                     topology,
@@ -2038,7 +2042,12 @@ impl CuMonitor for CuConsoleMon {
             let mut task_statuses = self.task_statuses.lock().unwrap();
             for (i, msg) in msgs.iter().enumerate() {
                 let CuCompactString(status_txt) = &msg.status_txt;
-                task_statuses[i].status_txt = status_txt.clone();
+                if let Some(&task_idx) = self.culist_to_task.get(i)
+                    && task_idx != usize::MAX
+                    && task_idx < task_statuses.len()
+                {
+                    task_statuses[task_idx].status_txt = status_txt.clone();
+                }
             }
         }
 
@@ -2103,6 +2112,36 @@ impl Drop for TerminalRestoreGuard {
     fn drop(&mut self) {
         let _ = restore_terminal();
     }
+}
+
+fn build_culist_to_task_index(
+    config: &CuConfig,
+    task_ids: &'static [&'static str],
+) -> CuResult<[usize; MAX_CULIST_MAP]> {
+    let graph = config.get_graph(None)?;
+    let plan = compute_runtime_plan(graph)?;
+
+    let mut mapping = [usize::MAX; MAX_CULIST_MAP];
+
+    for unit in &plan.steps {
+        if let CuExecutionUnit::Step(step) = unit
+            && let Some(output_pack) = &step.output_msg_pack
+        {
+            if step.node.get_flavor() != Flavor::Task {
+                continue;
+            }
+            let node_id = step.node.get_id();
+            let culist_idx = output_pack.culist_index as usize;
+            if culist_idx >= MAX_CULIST_MAP {
+                continue;
+            }
+            if let Some(task_idx) = task_ids.iter().position(|id| *id == node_id.as_str()) {
+                mapping[culist_idx] = task_idx;
+            }
+        }
+    }
+
+    Ok(mapping)
 }
 
 fn init_error_hooks() {
