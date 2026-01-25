@@ -10,10 +10,12 @@ use compact_str::{CompactString, ToCompactString};
 use cu29::clock::{CuDuration, RobotClock};
 use cu29::config::CuConfig;
 use cu29::cutask::CuMsgMetadata;
+use cu29::curuntime::{compute_runtime_plan, CuExecutionUnit};
 use cu29::monitoring::{
     ComponentKind, CopperListInfo, CopperListIoStats, CuDurationStatistics, CuMonitor, CuTaskState,
     Decision, MonitorTopology,
 };
+use cu29::config::Flavor;
 use cu29::prelude::{CuCompactString, CuTime, pool};
 use cu29::{CuError, CuResult};
 #[cfg(feature = "debug_pane")]
@@ -514,7 +516,7 @@ struct NodesScrollableWidgetState {
     connections: Vec<Connection>,
     statuses: Arc<Mutex<Vec<TaskStatus>>>,
     status_index_map: Vec<Option<usize>>,
-    task_count: usize,
+    status_count: usize,
     nodes_scrollable_state: ScrollViewState,
     graph_cache: GraphCache,
 }
@@ -524,7 +526,7 @@ impl NodesScrollableWidgetState {
         config: &CuConfig,
         errors: Arc<Mutex<Vec<TaskStatus>>>,
         mission: Option<&str>,
-        task_ids: &'static [&'static str],
+        status_task_ids: &[String],
         topology: Option<MonitorTopology>,
     ) -> Self {
         let topology = topology
@@ -534,10 +536,10 @@ impl NodesScrollableWidgetState {
         let mut display_nodes: Vec<DisplayNode> = Vec::new();
         let mut status_index_map = Vec::new();
         let mut node_lookup = HashMap::new();
-        let task_index_lookup: HashMap<&str, usize> = task_ids
+        let task_index_lookup: HashMap<&str, usize> = status_task_ids
             .iter()
             .enumerate()
-            .map(|(i, id)| (*id, i))
+            .map(|(i, id)| (id.as_str(), i))
             .collect();
 
         for node in topology.nodes.iter() {
@@ -622,7 +624,7 @@ impl NodesScrollableWidgetState {
             connections,
             statuses: errors,
             status_index_map,
-            task_count: task_ids.len(),
+            status_count: status_task_ids.len(),
             nodes_scrollable_state: ScrollViewState::default(),
             graph_cache: GraphCache::new(),
         }
@@ -782,11 +784,11 @@ impl StatefulWidget for NodesScrollableWidget<'_> {
             let zones = graph.split(scroll_view.area());
 
             let mut statuses = state.statuses.lock().unwrap();
-            if statuses.len() <= state.task_count {
-                statuses.resize(state.task_count + 1, TaskStatus::default());
+            if statuses.len() <= state.status_count {
+                statuses.resize(state.status_count + 1, TaskStatus::default());
             }
             for (idx, ea_zone) in zones.into_iter().enumerate() {
-                let fallback_idx = state.task_count;
+                let fallback_idx = state.status_count;
                 let status_idx = state
                     .status_index_map
                     .get(idx)
@@ -864,6 +866,7 @@ pub struct CuConsoleMon {
     taskids: &'static [&'static str],
     task_stats: Arc<Mutex<TaskStats>>,
     task_statuses: Arc<Mutex<Vec<TaskStatus>>>,
+    culist_to_task: Vec<usize>,
     ui_handle: Option<JoinHandle<()>>,
     pool_stats: Arc<Mutex<Vec<PoolStats>>>,
     copperlist_stats: Arc<Mutex<CopperListStats>>,
@@ -882,7 +885,7 @@ impl Drop for CuConsoleMon {
 }
 
 struct UI {
-    task_ids: &'static [&'static str],
+    task_ids: Vec<String>,
     active_screen: Screen,
     sysinfo: String,
     task_stats: Arc<Mutex<TaskStats>>,
@@ -925,16 +928,17 @@ impl UI {
         topology: Option<MonitorTopology>,
     ) -> UI {
         init_error_hooks();
+        let task_ids_vec: Vec<String> = task_ids.iter().map(|s| (*s).to_string()).collect();
         let nodes_scrollable_widget_state = NodesScrollableWidgetState::new(
             &config,
             task_statuses.clone(),
             mission,
-            task_ids,
+            &task_ids_vec,
             topology.clone(),
         );
 
         Self {
-            task_ids,
+            task_ids: task_ids_vec,
             active_screen: Screen::Neofetch,
             sysinfo: sysinfo::pfetch_info(),
             task_stats,
@@ -966,16 +970,17 @@ impl UI {
         topology: Option<MonitorTopology>,
     ) -> UI {
         init_error_hooks();
+        let task_ids_vec: Vec<String> = task_ids.iter().map(|s| (*s).to_string()).collect();
         let nodes_scrollable_widget_state = NodesScrollableWidgetState::new(
             &config,
             task_statuses.clone(),
             None,
-            task_ids,
+            &task_ids_vec,
             topology.clone(),
         );
 
         Self {
-            task_ids,
+            task_ids: task_ids_vec,
             active_screen: Screen::Neofetch,
             sysinfo: sysinfo::pfetch_info(),
             task_stats,
@@ -1019,7 +1024,7 @@ impl UI {
             .enumerate()
             .map(|(i, stat)| {
                 let cells = vec![
-                    Cell::from(Line::from(self.task_ids[i]).alignment(Alignment::Right))
+                    Cell::from(Line::from(self.task_ids[i].as_str()).alignment(Alignment::Right))
                         .light_blue(),
                     Cell::from(Line::from(stat.min().to_string()).alignment(Alignment::Right))
                         .style(Style::default()),
@@ -1871,6 +1876,9 @@ impl CuMonitor for CuConsoleMon {
     where
         Self: Sized,
     {
+        let task_id_strings: Vec<String> = taskids.iter().map(|s| (*s).to_string()).collect();
+        let culist_to_task =
+            build_culist_to_task_index(config, &task_id_strings).unwrap_or_default();
         let task_stats = Arc::new(Mutex::new(TaskStats::new(
             taskids.len(),
             CuDuration::from(Duration::from_secs(5)),
@@ -1881,6 +1889,7 @@ impl CuMonitor for CuConsoleMon {
             taskids,
             task_stats,
             task_statuses: Arc::new(Mutex::new(vec![TaskStatus::default(); taskids.len()])),
+            culist_to_task,
             ui_handle: None,
             quitting: Arc::new(AtomicBool::new(false)),
             pool_stats: Arc::new(Mutex::new(Vec::new())),
@@ -1994,7 +2003,7 @@ impl CuMonitor for CuConsoleMon {
                     taskids,
                     task_stats_ui,
                     error_states,
-                    quitting,
+                    quitting.clone(),
                     pool_stats_ui,
                     copperlist_stats_ui,
                     topology,
@@ -2030,7 +2039,11 @@ impl CuMonitor for CuConsoleMon {
             let mut task_statuses = self.task_statuses.lock().unwrap();
             for (i, msg) in msgs.iter().enumerate() {
                 let CuCompactString(status_txt) = &msg.status_txt;
-                task_statuses[i].status_txt = status_txt.clone();
+                if let Some(&task_idx) = self.culist_to_task.get(i) {
+                    if task_idx < task_statuses.len() {
+                        task_statuses[task_idx].status_txt = status_txt.clone();
+                    }
+                }
             }
         }
 
@@ -2095,6 +2108,41 @@ impl Drop for TerminalRestoreGuard {
     fn drop(&mut self) {
         let _ = restore_terminal();
     }
+}
+
+fn build_culist_to_task_index(
+    config: &CuConfig,
+    task_ids: &[String],
+) -> CuResult<Vec<usize>> {
+    let graph = config.get_graph(None)?;
+    let plan = compute_runtime_plan(graph)?;
+
+    let mut max_idx = 0usize;
+    for unit in &plan.steps {
+        if let CuExecutionUnit::Step(step) = unit {
+            if let Some(output_pack) = &step.output_msg_pack {
+                max_idx = max_idx.max(output_pack.culist_index as usize);
+            }
+        }
+    }
+
+    let mut mapping = vec![usize::MAX; max_idx.saturating_add(1)];
+
+    for unit in &plan.steps {
+        if let CuExecutionUnit::Step(step) = unit {
+            if let Some(output_pack) = &step.output_msg_pack {
+                if step.node.get_flavor() != Flavor::Task {
+                    continue;
+                }
+                let node_id = step.node.get_id();
+                if let Some(task_idx) = task_ids.iter().position(|id| id.as_str() == node_id) {
+                    mapping[output_pack.culist_index as usize] = task_idx;
+                }
+            }
+        }
+    }
+
+    Ok(mapping)
 }
 
 fn init_error_hooks() {
