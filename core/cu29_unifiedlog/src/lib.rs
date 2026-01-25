@@ -326,19 +326,22 @@ impl<E: Encode, S: SectionStorage, L: UnifiedLogWrite<S>> WriteStream<E> for Log
 impl<S: SectionStorage, L: UnifiedLogWrite<S>> Drop for LogStream<S, L> {
     fn drop(&mut self) {
         #[cfg(feature = "std")]
-        let logger_guard = self.parent_logger.lock();
+        match self.parent_logger.lock() {
+            Ok(mut logger_guard) => {
+                logger_guard.flush_section(&mut self.current_section);
+            }
+            Err(_) => {
+                // Only surface the warning when a real poisoning occurred.
+                if !std::thread::panicking() {
+                    eprintln!("⚠️ MmapStream::drop: logger mutex poisoned");
+                }
+            }
+        }
 
         #[cfg(not(feature = "std"))]
-        let mut logger_guard = self.parent_logger.lock();
-
-        #[cfg(feature = "std")]
-        let Ok(mut logger_guard) = logger_guard else {
-            return;
-        };
-        logger_guard.flush_section(&mut self.current_section);
-        #[cfg(feature = "std")]
-        if !std::thread::panicking() {
-            eprintln!("⚠️ MmapStream::drop: logger mutex poisoned");
+        {
+            let mut logger_guard = self.parent_logger.lock();
+            logger_guard.flush_section(&mut self.current_section);
         }
     }
 }
