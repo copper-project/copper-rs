@@ -32,7 +32,7 @@ mod imp {
     pub use std::sync::{Mutex, OnceLock};
 
     #[cfg(debug_assertions)]
-    pub use {cu29_log::format_logline, std::collections::HashMap, std::sync::RwLock};
+    pub use {std::collections::HashMap, strfmt::strfmt};
 }
 
 use imp::*;
@@ -50,14 +50,76 @@ impl WriteStream<CuLogEntry> for DummyWriteStream {
     }
 }
 type LogWriter = Box<dyn WriteStream<CuLogEntry> + Send + 'static>;
-type WriterPair = (Mutex<LogWriter>, RobotClock);
 
-static WRITER: OnceLock<WriterPair> = OnceLock::new();
-static STRUCTURED_LOG_BYTES: AtomicUsize = AtomicUsize::new(0);
+/// Callback signature: receives the structured entry plus its format string and param names.
+pub type LiveLogListener = Box<dyn Fn(&CuLogEntry, &str, &[&str]) + Send + Sync + 'static>;
 
-#[cfg(debug_assertions)]
 #[cfg(feature = "std")]
-pub static EXTRA_TEXT_LOGGER: RwLock<Option<Box<dyn Log + 'static>>> = RwLock::new(None);
+fn lock_mutex<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+#[cfg(all(feature = "std", debug_assertions))]
+pub fn format_message_only(
+    format_str: &str,
+    params: &[String],
+    named_params: &HashMap<String, String>,
+) -> CuResult<String> {
+    if format_str.contains("{}") {
+        let mut formatted = format_str.to_string();
+        for param in params.iter() {
+            if !formatted.contains("{}") {
+                break;
+            }
+            formatted = formatted.replacen("{}", param, 1);
+        }
+        if formatted.contains("{}") && !named_params.is_empty() {
+            let mut named = named_params.iter().collect::<Vec<_>>();
+            named.sort_by(|a, b| a.0.cmp(b.0));
+            for (_, value) in named {
+                if !formatted.contains("{}") {
+                    break;
+                }
+                formatted = formatted.replacen("{}", value, 1);
+            }
+        }
+        return Ok(formatted);
+    }
+
+    // Named replacement
+    imp::strfmt(format_str, named_params).map_err(|e| {
+        cu29_traits::CuError::new_with_cause(
+            format!(
+                "Failed to format log message: {format_str:?} with variables [{named_params:?}]"
+            )
+            .as_str(),
+            e,
+        )
+    })
+}
+
+#[cfg(not(feature = "std"))]
+fn lock_mutex<T>(m: &Mutex<T>) -> spin::MutexGuard<'_, T> {
+    m.lock()
+}
+
+/// Shared logging state reachable from the macro-generated calls.
+struct LoggerState {
+    writer: Mutex<LogWriter>,
+    clock: RobotClock,
+    live_listener: Mutex<Option<LiveLogListener>>,
+}
+
+impl core::fmt::Debug for LoggerState {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("LoggerState")
+            .field("clock", &self.clock)
+            .finish_non_exhaustive()
+    }
+}
+
+static LOGGER_STATE: OnceLock<LoggerState> = OnceLock::new();
+static STRUCTURED_LOG_BYTES: AtomicUsize = AtomicUsize::new(0);
 
 pub struct NullLog;
 impl Log for NullLog {
@@ -80,47 +142,63 @@ impl LoggerRuntime {
         destination: impl WriteStream<CuLogEntry> + 'static,
         #[allow(unused_variables)] extra_text_logger: Option<impl Log + 'static>,
     ) -> Self {
-        let runtime = LoggerRuntime {};
         STRUCTURED_LOG_BYTES.store(0, Ordering::Relaxed);
 
-        // If WRITER is already initialized, update the inner value.
-        // This should only be useful for unit testing.
-        if let Some((writer, _)) = WRITER.get() {
-            #[cfg(not(feature = "std"))]
-            let mut writer_guard = writer.lock();
-            #[cfg(feature = "std")]
-            let mut writer_guard = writer.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(state) = LOGGER_STATE.get() {
+            let mut writer_guard = lock_mutex(&state.writer);
             *writer_guard = Box::new(destination);
         } else {
-            #[cfg(not(feature = "std"))]
-            WRITER.call_once(|| (Mutex::new(Box::new(destination)), clock));
-            #[cfg(feature = "std")]
-            WRITER
-                .set((Mutex::new(Box::new(destination)), clock))
-                .unwrap();
-        }
-        #[cfg(debug_assertions)]
-        #[cfg(feature = "std")]
-        if let Some(logger) = extra_text_logger {
-            let mut extra_text_logger = EXTRA_TEXT_LOGGER.write().unwrap();
-            *extra_text_logger = Some(Box::new(logger) as Box<dyn Log>);
+            let state = LoggerState {
+                writer: Mutex::new(Box::new(destination)),
+                clock,
+                live_listener: Mutex::new(None),
+            };
+            LOGGER_STATE.set(state).unwrap();
         }
 
-        runtime
+        // If caller provided a default text logger (std + debug builds), install it as the live listener.
+        #[cfg(all(feature = "std", debug_assertions))]
+        if let Some(logger) = extra_text_logger {
+            register_live_log_listener(move |entry, format_str, param_names| {
+                // Build a text line from structured data—no parsing.
+                let params: Vec<String> = entry.params.iter().map(|v| v.to_string()).collect();
+                let named_params: HashMap<String, String> = param_names
+                    .iter()
+                    .zip(params.iter())
+                    .map(|(name, value)| (name.to_string(), value.clone()))
+                    .collect();
+                if let Ok(line) = format_message_only(format_str, params.as_slice(), &named_params)
+                {
+                    logger.log(
+                        &log::Record::builder()
+                            .args(format_args!("{line}"))
+                            .level(match entry.level {
+                                CuLogLevel::Debug => log::Level::Debug,
+                                CuLogLevel::Info => log::Level::Info,
+                                CuLogLevel::Warning => log::Level::Warn,
+                                CuLogLevel::Error => log::Level::Error,
+                                CuLogLevel::Critical => log::Level::Error,
+                            })
+                            .target("cu29_log")
+                            .module_path_static(Some("cu29_log"))
+                            .file_static(Some("cu29_log"))
+                            .line(Some(0))
+                            .build(),
+                    );
+                }
+            });
+        }
+
+        LoggerRuntime {}
     }
 
     pub fn flush(&self) {
         // no op in no_std TODO(gbin): check if it will be needed in no_std at some point.
-        #[cfg(feature = "std")]
-        if let Some((writer, _clock)) = WRITER.get() {
-            if let Ok(mut writer) = writer.lock() {
-                if let Err(err) = writer.flush() {
-                    eprintln!("cu29_log: Failed to flush writer: {err}");
-                }
-            } else {
-                eprintln!("cu29_log: Failed to lock writer.");
-            }
+        if let Some(state) = LOGGER_STATE.get() {
+            let mut writer = lock_mutex(&state.writer);
+            let _ = writer.flush(); // ignore errors in no_std
         } else {
+            #[cfg(feature = "std")]
             eprintln!("cu29_log: Logger not initialized.");
         }
     }
@@ -130,11 +208,8 @@ impl Drop for LoggerRuntime {
     fn drop(&mut self) {
         self.flush();
         // Assume on no-std that there is no buffering. TODO(gbin): check if this hold true.
-        #[cfg(feature = "std")]
-        if let Some((mutex, _clock)) = WRITER.get()
-            && let Ok(mut writer_guard) = mutex.lock()
-        {
-            // Replace the current WriteStream with a DummyWriteStream
+        if let Some(state) = LOGGER_STATE.get() {
+            let mut writer_guard = lock_mutex(&state.writer);
             *writer_guard = Box::new(DummyWriteStream);
         }
     }
@@ -143,34 +218,34 @@ impl Drop for LoggerRuntime {
 /// Function called from generated code to log data.
 /// It moves entry by design, it will be absorbed in the queue.
 #[inline(always)]
-pub fn log(entry: &mut CuLogEntry) -> CuResult<()> {
-    let Some((writer, clock)) = WRITER.get() else {
+fn log_inner(
+    entry: &mut CuLogEntry,
+    notify: bool,
+    format_str: &str,
+    param_names: &[&str],
+) -> CuResult<()> {
+    let Some(state) = LOGGER_STATE.get() else {
         return Err("Logger not initialized.".into());
     };
-    entry.time = clock.now();
+    entry.time = state.clock.now();
 
-    #[cfg(not(feature = "std"))]
-    {
-        let mut guard = writer.lock();
-        guard.log(entry)?;
-        if let Some(bytes) = guard.last_log_bytes() {
-            STRUCTURED_LOG_BYTES.fetch_add(bytes, Ordering::Relaxed);
-        }
+    let mut guard = lock_mutex(&state.writer);
+    guard.log(entry)?;
+    if let Some(bytes) = guard.last_log_bytes() {
+        STRUCTURED_LOG_BYTES.fetch_add(bytes, Ordering::Relaxed);
     }
 
-    #[cfg(feature = "std")]
-    {
-        let mut guard = writer.lock().unwrap_or_else(|err| {
-            eprintln!("cu29_log: Logger mutex poisoned, recovering.");
-            err.into_inner()
-        });
-        if let Err(err) = guard.log(entry) {
-            eprintln!("Failed to log data: {err}");
-        } else if let Some(bytes) = guard.last_log_bytes() {
-            STRUCTURED_LOG_BYTES.fetch_add(bytes, Ordering::Relaxed);
-        }
+    // Basic notification; richer context added in log_debug_mode.
+    if notify {
+        notify_live_listeners(entry, format_str, param_names);
     }
     Ok(())
+}
+
+/// Public entry point used in release / no-debug paths.
+#[inline(always)]
+pub fn log(entry: &mut CuLogEntry) -> CuResult<()> {
+    log_inner(entry, true, "", &[])
 }
 
 /// Returns the total number of bytes written to the structured log stream.
@@ -186,7 +261,8 @@ pub fn log_debug_mode(
     _format_str: &str, // this is the missing info at runtime.
     _param_names: &[&str],
 ) -> CuResult<()> {
-    log(entry)?;
+    // Write structured log but avoid double-notifying live listeners here.
+    log_inner(entry, false, "", &[])?;
 
     // and the bridging is only available in std.
     #[cfg(feature = "std")]
@@ -198,49 +274,38 @@ pub fn log_debug_mode(
 #[cfg(debug_assertions)]
 #[cfg(feature = "std")]
 fn extra_log(entry: &mut CuLogEntry, format_str: &str, param_names: &[&str]) -> CuResult<()> {
-    let guarded_logger = EXTRA_TEXT_LOGGER.read().unwrap();
-    let Some(logger) = guarded_logger.as_ref() else {
-        return Ok(());
-    };
+    // Legacy text logging now goes through the live listener; keep this as a thin shim.
+    notify_live_listeners(entry, format_str, param_names);
 
-    // transform the slice into a hashmap
-    let params: Vec<String> = entry.params.iter().map(|v| v.to_string()).collect();
-    let named_params: HashMap<String, String> = param_names
-        .iter()
-        .zip(params.iter())
-        .map(|(name, value)| (name.to_string(), value.clone()))
-        .collect();
-
-    // Convert Copper log level to the standard log level
-    // Note: CuLogLevel::Critical is mapped to log::Level::Error because the `log` crate
-    // does not have a `Critical` level. `Error` is the highest severity level available
-    // in the `log` crate, making it the closest equivalent.
-    let log_level = match entry.level {
-        CuLogLevel::Debug => log::Level::Debug,
-        CuLogLevel::Info => log::Level::Info,
-        CuLogLevel::Warning => log::Level::Warn,
-        CuLogLevel::Error => log::Level::Error,
-        CuLogLevel::Critical => log::Level::Error,
-    };
-
-    let logline = format_logline(
-        entry.time,
-        entry.level,
-        format_str,
-        params.as_slice(),
-        &named_params,
-    )?;
-    logger.log(
-        &log::Record::builder()
-            .args(format_args!("{logline}"))
-            .level(log_level)
-            .target("cu29_log")
-            .module_path_static(Some("cu29_log"))
-            .file_static(Some("cu29_log"))
-            .line(Some(0))
-            .build(),
-    );
     Ok(())
+}
+
+/// Register a live log listener; subsequent logs invoke `cb`. No-op if runtime not initialized.
+pub fn register_live_log_listener<F>(cb: F)
+where
+    F: Fn(&CuLogEntry, &str, &[&str]) + Send + Sync + 'static,
+{
+    if let Some(state) = LOGGER_STATE.get() {
+        let mut guard = lock_mutex(&state.live_listener);
+        *guard = Some(Box::new(cb));
+    }
+}
+
+/// Remove any registered live log listener. No-op if runtime not initialized.
+pub fn unregister_live_log_listener() {
+    if let Some(state) = LOGGER_STATE.get() {
+        let mut guard = lock_mutex(&state.live_listener);
+        *guard = None;
+    }
+}
+
+/// Notify registered listener if any.
+pub(crate) fn notify_live_listeners(entry: &CuLogEntry, format_str: &str, param_names: &[&str]) {
+    if let Some(state) = LOGGER_STATE.get() {
+        if let Some(cb) = lock_mutex(&state.live_listener).as_ref() {
+            cb(entry, format_str, param_names);
+        }
+    }
 }
 // This is an adaptation of the Iowriter from bincode.
 

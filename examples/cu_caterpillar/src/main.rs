@@ -18,7 +18,7 @@ fn main() {
         fs::create_dir_all(parent).expect("Failed to create logs directory");
     }
 
-    let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), SLAB_SIZE, false, None)
+    let copper_ctx = basic_copper_setup(&PathBuf::from(logger_path), SLAB_SIZE, true, None)
         .expect("Failed to setup logger.");
     let mut application = CaterpillarApplicationBuilder::new()
         .with_context(&copper_ctx)

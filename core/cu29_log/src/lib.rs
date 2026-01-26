@@ -66,7 +66,7 @@ pub const ANONYMOUS: u32 = 0;
 pub const MAX_LOG_PARAMS_ON_STACK: usize = 10;
 
 /// This is the basic structure for a log entry in Copper.
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CuLogEntry {
     // Approximate time when the log entry was created.
     pub time: CuTime,

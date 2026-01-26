@@ -2,11 +2,11 @@ use crate::UI;
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::prelude::Stylize;
+use ratatui::style::{Color, Style};
 use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
 use std::sync::atomic::Ordering;
 use std::sync::mpsc::SendError;
 use {
-    compact_str::CompactStringExt,
     log::{Level, LevelFilter, Log, Metadata, Record},
     std::collections::VecDeque,
     std::io::Read,
@@ -16,14 +16,28 @@ use {
 
 #[derive(Debug)]
 pub struct DebugLog {
-    debug_log: VecDeque<String>,
+    debug_log: VecDeque<StyledLine>,
     pub(crate) max_rows: AtomicU16,
-    rx: Receiver<String>,
+    rx: Receiver<StyledLine>,
+}
+
+#[derive(Clone, Debug)]
+pub struct StyledRun {
+    /// Inclusive start / exclusive end in character indices
+    pub start: usize,
+    pub end: usize,
+    pub style: Style,
+}
+
+#[derive(Clone, Debug)]
+pub struct StyledLine {
+    pub text: String,
+    pub runs: Vec<StyledRun>,
 }
 
 impl DebugLog {
     #[allow(dead_code)]
-    pub fn new(max_lines: u16) -> (Self, SyncSender<String>) {
+    pub fn new(max_lines: u16) -> (Self, SyncSender<StyledLine>) {
         let (tx, rx) = std::sync::mpsc::sync_channel(1000);
         (
             Self {
@@ -35,12 +49,11 @@ impl DebugLog {
         )
     }
 
-    pub fn push_logs(&mut self, logs: String) {
-        if logs.is_empty() {
+    pub fn push_line(&mut self, line: StyledLine) {
+        if line.text.is_empty() {
             return;
         }
-
-        self.debug_log.push_back(logs);
+        self.debug_log.push_back(line);
         let max_row = self.max_rows.load(Ordering::SeqCst) as usize;
         while self.debug_log.len() > max_row {
             self.debug_log.pop_front();
@@ -51,10 +64,6 @@ impl DebugLog {
         let max_row = self.max_rows.load(Ordering::SeqCst) as usize;
 
         for log in self.rx.try_iter() {
-            if log.is_empty() {
-                continue;
-            }
-
             self.debug_log.push_back(log);
             if self.debug_log.len() > max_row {
                 self.debug_log.pop_front();
@@ -63,58 +72,8 @@ impl DebugLog {
     }
 
     #[allow(dead_code)]
-    pub fn get_logs(&mut self) -> String {
-        let logs = &self.debug_log;
-        logs.concat_compact().to_string()
-    }
-
-    pub fn wrapped_lines(&self, width: usize) -> Vec<String> {
-        if width == 0 {
-            return Vec::new();
-        }
-
-        let mut wrapped = Vec::new();
-        let mut pending_line = String::new();
-        for entry in &self.debug_log {
-            for ch in entry.chars() {
-                match ch {
-                    '\n' => {
-                        push_wrapped_line(&mut wrapped, &pending_line, width);
-                        pending_line.clear();
-                    }
-                    '\r' => {}
-                    _ => pending_line.push(ch),
-                }
-            }
-        }
-
-        if !pending_line.is_empty() {
-            push_wrapped_line(&mut wrapped, &pending_line, width);
-        }
-
-        wrapped
-    }
-}
-
-fn push_wrapped_line(output: &mut Vec<String>, line: &str, width: usize) {
-    if line.is_empty() {
-        output.push(String::new());
-        return;
-    }
-
-    let mut chunk = String::new();
-    let mut count = 0;
-    for ch in line.chars() {
-        chunk.push(ch);
-        count += 1;
-        if count == width {
-            output.push(chunk);
-            chunk = String::new();
-            count = 0;
-        }
-    }
-    if !chunk.is_empty() {
-        output.push(chunk);
+    pub fn lines(&self) -> Vec<StyledLine> {
+        self.debug_log.iter().cloned().collect()
     }
 }
 
@@ -177,7 +136,18 @@ impl UIExt for UI {
                 if let Err(err) = error_redirect.read_to_string(&mut error_buffer) {
                     eprintln!("Failed to read stderr buffer for debug pane: {err}");
                 }
-                debug_output.push_logs(error_buffer);
+                if !error_buffer.is_empty() {
+                    for line in error_buffer.lines() {
+                        debug_output.push_line(StyledLine {
+                            text: line.to_string(),
+                            runs: vec![StyledRun {
+                                start: 0,
+                                end: line.chars().count(),
+                                style: Style::default().fg(Color::Red),
+                            }],
+                        });
+                    }
+                }
             }
             debug_output.update_logs();
         }
@@ -185,14 +155,6 @@ impl UIExt for UI {
 
     fn draw_debug_output(&mut self, f: &mut Frame, area: Rect) {
         if let Some(debug_output) = self.debug_output.as_mut() {
-            if let Some(error_redirect) = self.error_redirect.as_mut() {
-                let mut error_buffer = String::new();
-                if let Err(err) = error_redirect.read_to_string(&mut error_buffer) {
-                    eprintln!("Failed to read stderr buffer for debug pane: {err}");
-                }
-                debug_output.push_logs(error_buffer);
-            }
-
             let block = Block::default()
                 .title(" Debug Output ")
                 .title_bottom(format!("{} log entries", debug_output.debug_log.len()))
@@ -200,7 +162,7 @@ impl UIExt for UI {
                 .border_type(BorderType::Rounded);
             let inner = block.inner(area);
             self.debug_output_area = Some(inner);
-            self.debug_output_lines = debug_output.wrapped_lines(inner.width as usize);
+            self.debug_output_lines = debug_output.lines();
             self.debug_output_visible_offset = self
                 .debug_output_lines
                 .len()
