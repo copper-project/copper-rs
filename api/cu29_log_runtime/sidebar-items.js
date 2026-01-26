@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["log","log_debug_mode","structured_log_bytes_total"],"static":["EXTRA_TEXT_LOGGER"],"struct":["LoggerRuntime","NullLog","OwningIoWriter","SimpleFileWriter"]};
+window.SIDEBAR_ITEMS = {"fn":["format_message_only","log","log_debug_mode","register_live_log_listener","structured_log_bytes_total","unregister_live_log_listener"],"struct":["LoggerRuntime","NullLog","OwningIoWriter","SimpleFileWriter"],"type":["LiveLogListener"]};
