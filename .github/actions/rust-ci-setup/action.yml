@@ -39,14 +39,6 @@ runs:
         components: rustc,cargo,rust-std,rustfmt,clippy
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
-    - name: Setup rust-cache
-      uses: Swatinem/rust-cache@v2
-      with:
-        prefix-key: ${{ inputs.cache_prefix }}
-        shared-key: ${{ inputs.cache_shared_key }}
-        save-if: ${{ github.ref == 'refs/heads/master' }}
-        cache-targets: "false"
-        cache-bin: "false"
     - name: Install latest nextest
       if: inputs.install_nextest == 'true'
       uses: taiki-e/install-action@nextest
@@ -89,6 +81,15 @@ runs:
         echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
         sudo mkdir -p /mnt/cargo-home /mnt/cargo-target /mnt/tmp
         sudo chown -R "$USER:$USER" /mnt/cargo-home /mnt/cargo-target /mnt/tmp
+
+    - name: Setup rust-cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        prefix-key: ${{ inputs.cache_prefix }}
+        shared-key: ${{ inputs.cache_shared_key }}
+        save-if: ${{ github.ref == 'refs/heads/master' }}
+        cache-targets: "false"
+        cache-bin: "true"
 
     - name: Install dependencies (Windows)
       if: runner.os == 'Windows' && env.WORKSPACE_SCOPE == 'workspace'
