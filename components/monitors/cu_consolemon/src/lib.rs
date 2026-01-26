@@ -388,7 +388,7 @@ fn styled_line_from_structured(
         });
     }
 
-    let prefix = format!("{ts} {level_txt}: ");
+    let prefix = format!("{ts} {level_txt} ");
     let prefix_len = prefix.chars().count();
     let line_text = format!("{prefix}{msg_text}");
 

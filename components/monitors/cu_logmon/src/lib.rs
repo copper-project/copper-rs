@@ -239,7 +239,7 @@ impl CuMonitor for CuLogMon {
                 let ts_color = "\x1b[34m";
                 let ts = format_timestamp(entry.time);
                 println!(
-                    "{ts_color}{ts}{reset} {level_color}[{:?}]{reset}: {msg}",
+                    "{ts_color}{ts}{reset} {level_color}[{:?}]{reset} {msg}",
                     entry.level,
                     ts = ts,
                     ts_color = ts_color,

@@ -347,7 +347,7 @@ impl CuMonitor for NoMonitor {
 
             if let Ok(msg) = format_message_only(format_str, params.as_slice(), &named) {
                 let ts = format_timestamp(entry.time);
-                println!("{} [{:?}]: {}", ts, entry.level, msg);
+                println!("{} [{:?}] {}", ts, entry.level, msg);
             }
         });
         Ok(())
