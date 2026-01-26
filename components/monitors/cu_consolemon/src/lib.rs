@@ -321,23 +321,23 @@ fn build_message_with_runs(
     let mut idx = 0;
     let bytes = format_str.as_bytes();
     while idx < bytes.len() {
-        if bytes[idx] == b'{' {
-            if let Some(end) = format_str[idx + 1..].find('}') {
-                let end_idx = idx + 1 + end;
-                let placeholder = &format_str[idx + 1..end_idx];
-                let replacement_opt = if placeholder.is_empty() {
-                    anon_iter.next()
-                } else {
-                    named_params.get(placeholder)
-                };
-                if let Some(repl) = replacement_opt {
-                    let start = out.chars().count();
-                    out.push_str(repl);
-                    let end = out.chars().count();
-                    param_spans.push((start, end));
-                    idx = end_idx + 1;
-                    continue;
-                }
+        if bytes[idx] == b'{'
+            && let Some(end) = format_str[idx + 1..].find('}')
+        {
+            let end_idx = idx + 1 + end;
+            let placeholder = &format_str[idx + 1..end_idx];
+            let replacement_opt = if placeholder.is_empty() {
+                anon_iter.next()
+            } else {
+                named_params.get(placeholder)
+            };
+            if let Some(repl) = replacement_opt {
+                let start = out.chars().count();
+                out.push_str(repl);
+                let end = out.chars().count();
+                param_spans.push((start, end));
+                idx = end_idx + 1;
+                continue;
             }
         }
         out.push(format_str[idx..idx + 1].chars().next().unwrap());
