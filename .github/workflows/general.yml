@@ -32,10 +32,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - name: Install TOML/RON formatters
-        run: |
-          cargo install --locked taplo-cli
-          cargo install ronfmt
+      - name: Install taplo-cli
+        uses: taiki-e/install-action@v2
+        with:
+          tool: taplo-cli
+      - name: Install ronfmt
+        uses: taiki-e/install-action@v2
+        with:
+          tool: ronfmt
       - name: Check Rust formatting
         run: cargo +stable fmt --all -- --check
       - name: Check TOML formatting

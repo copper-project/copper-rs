@@ -251,7 +251,9 @@ jobs:
           install_nextest: "false"
 
       - name: Install cargo-generate on (${{ matrix.os }} | debug)
-        run: cargo +${{ inputs.toolchain }} install cargo-generate
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-generate
 
       - name: Generate new templates on (${{ matrix.os }} | debug)
         run: |
