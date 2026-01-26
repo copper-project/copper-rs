@@ -318,30 +318,36 @@ fn build_message_with_runs(
     let mut out = String::new();
     let mut param_spans = Vec::new();
     let mut anon_iter = params.iter();
-    let mut idx = 0;
-    let bytes = format_str.as_bytes();
-    while idx < bytes.len() {
-        if bytes[idx] == b'{'
-            && let Some(end) = format_str[idx + 1..].find('}')
-        {
-            let end_idx = idx + 1 + end;
-            let placeholder = &format_str[idx + 1..end_idx];
-            let replacement_opt = if placeholder.is_empty() {
-                anon_iter.next()
-            } else {
-                named_params.get(placeholder)
-            };
-            if let Some(repl) = replacement_opt {
-                let start = out.chars().count();
-                out.push_str(repl);
-                let end = out.chars().count();
-                param_spans.push((start, end));
-                idx = end_idx + 1;
-                continue;
+    let mut iter = format_str.char_indices().peekable();
+    while let Some((idx, ch)) = iter.next() {
+        if ch == '{' {
+            let start_idx = idx + ch.len_utf8();
+            if let Some(end) = format_str[start_idx..].find('}') {
+                let end_idx = start_idx + end;
+                let placeholder = &format_str[start_idx..end_idx];
+                let replacement_opt = if placeholder.is_empty() {
+                    anon_iter.next()
+                } else {
+                    named_params.get(placeholder)
+                };
+                if let Some(repl) = replacement_opt {
+                    let span_start = out.chars().count();
+                    out.push_str(repl);
+                    let span_end = out.chars().count();
+                    param_spans.push((span_start, span_end));
+                    let skip_to = end_idx + '}'.len_utf8();
+                    while let Some((next_idx, _)) = iter.peek().copied() {
+                        if next_idx < skip_to {
+                            iter.next();
+                        } else {
+                            break;
+                        }
+                    }
+                    continue;
+                }
             }
         }
-        out.push(format_str[idx..idx + 1].chars().next().unwrap());
-        idx += 1;
+        out.push(ch);
     }
     (out, param_spans)
 }
