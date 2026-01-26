@@ -8,6 +8,11 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+  CARGO_PROFILE_DEV_CODEGEN_UNITS: "16"
+  CARGO_PROFILE_TEST_CODEGEN_UNITS: "16"
+  CARGO_INCREMENTAL: "0"
 
 jobs:
   Unit-Tests:
@@ -32,10 +37,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - name: Install TOML/RON formatters
-        run: |
-          cargo install --locked taplo-cli
-          cargo install ronfmt
+      - name: Install taplo-cli
+        uses: taiki-e/install-action@v2
+        with:
+          tool: taplo-cli
+      - name: Install ronfmt
+        uses: taiki-e/install-action@v2
+        with:
+          tool: ronfmt
       - name: Check Rust formatting
         run: cargo +stable fmt --all -- --check
       - name: Check TOML formatting

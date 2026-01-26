@@ -7,6 +7,11 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+  CARGO_PROFILE_DEV_CODEGEN_UNITS: "16"
+  CARGO_PROFILE_TEST_CODEGEN_UNITS: "16"
+  CARGO_INCREMENTAL: "0"
 
 jobs:
   audit:
@@ -17,7 +22,9 @@ jobs:
         with:
           components: clippy, rustfmt
       - name: Install audit
-        run: cargo install cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
       - name: Run deny bans
         run: cargo deny check bans -c .config/deny.toml
       - name: Run deny sources

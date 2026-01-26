@@ -39,14 +39,6 @@ runs:
         components: rustc,cargo,rust-std,rustfmt,clippy
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.9
-    - name: Setup rust-cache
-      uses: Swatinem/rust-cache@v2
-      with:
-        prefix-key: ${{ inputs.cache_prefix }}
-        shared-key: ${{ inputs.cache_shared_key }}
-        save-if: ${{ github.ref == 'refs/heads/master' }}
-        cache-targets: "false"
-        cache-bin: "false"
     - name: Install latest nextest
       if: inputs.install_nextest == 'true'
       uses: taiki-e/install-action@nextest
@@ -90,6 +82,15 @@ runs:
         sudo mkdir -p /mnt/cargo-home /mnt/cargo-target /mnt/tmp
         sudo chown -R "$USER:$USER" /mnt/cargo-home /mnt/cargo-target /mnt/tmp
 
+    - name: Setup rust-cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        prefix-key: ${{ inputs.cache_prefix }}
+        shared-key: ${{ inputs.cache_shared_key }}
+        save-if: ${{ github.ref == 'refs/heads/master' }}
+        cache-targets: "false"
+        cache-bin: "true"
+
     - name: Install dependencies (Windows)
       if: runner.os == 'Windows' && env.WORKSPACE_SCOPE == 'workspace'
       shell: pwsh
@@ -110,13 +111,6 @@ runs:
 
         # Set PCAP library path
         echo "LIB=$env:USERPROFILE\npcap-sdk\Lib\x64" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
-
-    - name: Cache apt packages (Linux)
-      if: runner.os == 'Linux'
-      uses: actions/cache@v5
-      with:
-        path: /var/cache/apt/archives
-        key: ${{ runner.os }}-apt-gstreamer-${{ hashFiles('.github/actions/rust-ci-setup/action.yml') }}
 
     - name: Install dependencies (Linux)
       if: runner.os == 'Linux'
