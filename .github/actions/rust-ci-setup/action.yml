@@ -112,13 +112,6 @@ runs:
         # Set PCAP library path
         echo "LIB=$env:USERPROFILE\npcap-sdk\Lib\x64" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
 
-    - name: Cache apt packages (Linux)
-      if: runner.os == 'Linux'
-      uses: actions/cache@v5
-      with:
-        path: /var/cache/apt/archives
-        key: ${{ runner.os }}-apt-gstreamer-${{ hashFiles('.github/actions/rust-ci-setup/action.yml') }}
-
     - name: Install dependencies (Linux)
       if: runner.os == 'Linux'
       shell: bash
