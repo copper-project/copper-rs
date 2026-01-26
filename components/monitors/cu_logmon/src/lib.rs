@@ -12,10 +12,28 @@ use alloc::format;
 use alloc::vec;
 use alloc::vec::Vec;
 use cu29::prelude::*;
+#[cfg(all(feature = "std", debug_assertions))]
+use cu29_log_runtime::{
+    format_message_only, register_live_log_listener, unregister_live_log_listener,
+};
 use spin::Mutex;
+#[cfg(all(feature = "std", debug_assertions))]
+use std::collections::HashMap;
 
 const REPORT_INTERVAL_SECS: u64 = 1;
 const MAX_LATENCY_SECS: u64 = 5;
+
+#[cfg(all(feature = "std", debug_assertions))]
+fn format_timestamp(time: CuTime) -> String {
+    // Render CuTime (nanoseconds from an epoch) as HH:mm:ss.xxxx where xxxx is 1e-4 s.
+    let nanos = time.as_nanos();
+    let total_seconds = nanos / 1_000_000_000;
+    let hours = total_seconds / 3600;
+    let minutes = (total_seconds / 60) % 60;
+    let seconds = total_seconds % 60;
+    let fractional_1e4 = (nanos % 1_000_000_000) / 100_000; // 4 fractional digits.
+    format!("{hours:02}:{minutes:02}:{seconds:02}.{fractional_1e4:04}")
+}
 
 struct WindowState {
     total_copperlists: u64,
@@ -190,6 +208,47 @@ impl CuMonitor for CuLogMon {
         let mut window = self.window.lock();
         window.last_report_at = Some(clock.recent());
         info!("cu_logmon started ({} tasks)", self.taskids.len());
+
+        // Also listen to structured logs and print them with color.
+        #[cfg(all(feature = "std", debug_assertions))]
+        register_live_log_listener(|entry, format_str, param_names| {
+            const PARAM_COLOR: &str = "\x1b[36m"; // cyan
+            const RESET: &str = "\x1b[0m";
+
+            let params: Vec<String> = entry.params.iter().map(|v| v.to_string()).collect();
+            let colored_params: Vec<String> = params
+                .iter()
+                .map(|v| format!("{PARAM_COLOR}{v}{RESET}"))
+                .collect();
+            let colored_named: HashMap<String, String> = param_names
+                .iter()
+                .zip(params.iter())
+                .map(|(k, v)| (k.to_string(), format!("{PARAM_COLOR}{v}{RESET}")))
+                .collect();
+
+            if let Ok(msg) =
+                format_message_only(format_str, colored_params.as_slice(), &colored_named)
+            {
+                let level_color = match entry.level {
+                    CuLogLevel::Debug => "\x1b[32m",   // green
+                    CuLogLevel::Info => "\x1b[90m",    // gray
+                    CuLogLevel::Warning => "\x1b[93m", // yellow
+                    CuLogLevel::Error => "\x1b[91m",   // red
+                    CuLogLevel::Critical => "\x1b[91m",
+                };
+                let ts_color = "\x1b[34m";
+                let ts = format_timestamp(entry.time);
+                println!(
+                    "{ts_color}{ts}{reset} {level_color}[{:?}]{reset} {msg}",
+                    entry.level,
+                    ts = ts,
+                    ts_color = ts_color,
+                    level_color = level_color,
+                    reset = RESET,
+                    msg = msg
+                );
+            }
+        });
         Ok(())
     }
 
@@ -287,5 +346,11 @@ impl CuMonitor for CuLogMon {
             error,
         );
         Decision::Ignore
+    }
+
+    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        #[cfg(all(feature = "std", debug_assertions))]
+        unregister_live_log_listener();
+        Ok(())
     }
 }

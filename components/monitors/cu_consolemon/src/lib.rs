@@ -18,8 +18,9 @@ use cu29::monitoring::{
 };
 use cu29::prelude::{CuCompactString, CuTime, pool};
 use cu29::{CuError, CuResult};
+use cu29_log::CuLogLevel;
 #[cfg(feature = "debug_pane")]
-use debug_pane::UIExt;
+use debug_pane::{StyledLine, StyledRun, UIExt};
 use ratatui::backend::CrosstermBackend;
 use ratatui::buffer::Buffer;
 use ratatui::crossterm::event::{
@@ -238,6 +239,186 @@ fn line_selection_bounds(
     }
 
     Some((start_col, end_col))
+}
+
+#[cfg(feature = "debug_pane")]
+fn slice_chars_owned(text: &str, start: usize, end: usize) -> String {
+    let start_idx = char_to_byte_index(text, start);
+    let end_idx = char_to_byte_index(text, end);
+    text[start_idx.min(text.len())..end_idx.min(text.len())].to_string()
+}
+
+#[cfg(feature = "debug_pane")]
+fn spans_from_runs(line: &StyledLine) -> Vec<Span<'static>> {
+    if line.runs.is_empty() {
+        return vec![Span::raw(line.text.clone())];
+    }
+
+    let mut spans = Vec::new();
+    let mut cursor = 0usize;
+    let total_chars = line.text.chars().count();
+    let mut runs = line.runs.clone();
+    runs.sort_by_key(|r| r.start);
+
+    for run in runs {
+        let start = run.start.min(total_chars);
+        let end = run.end.min(total_chars);
+        if start > cursor {
+            let before = slice_chars_owned(&line.text, cursor, start);
+            if !before.is_empty() {
+                spans.push(Span::raw(before));
+            }
+        }
+        if end > start {
+            let segment = slice_chars_owned(&line.text, start, end);
+            spans.push(Span::styled(segment, run.style));
+        }
+        cursor = cursor.max(end);
+    }
+
+    if cursor < total_chars {
+        let tail = slice_chars_owned(&line.text, cursor, total_chars);
+        if !tail.is_empty() {
+            spans.push(Span::raw(tail));
+        }
+    }
+
+    spans
+}
+
+#[cfg(feature = "debug_pane")]
+fn color_for_level(level: CuLogLevel) -> Color {
+    match level {
+        CuLogLevel::Debug => Color::Green,
+        CuLogLevel::Info => Color::Gray,
+        CuLogLevel::Warning => Color::Yellow,
+        CuLogLevel::Error => Color::Red,
+        CuLogLevel::Critical => Color::Red,
+    }
+}
+
+#[cfg(feature = "debug_pane")]
+fn format_ts(time: CuTime) -> String {
+    let nanos = time.as_nanos();
+    let total_ms = nanos / 1_000_000;
+    let millis = total_ms % 1000;
+    let total_s = total_ms / 1000;
+    let secs = total_s % 60;
+    let mins = (total_s / 60) % 60;
+    let hours = (total_s / 3600) % 24;
+    format!("{hours:02}:{mins:02}:{secs:02}.{millis:03}")
+}
+
+#[cfg(feature = "debug_pane")]
+fn build_message_with_runs(
+    format_str: &str,
+    params: &[String],
+    named_params: &HashMap<String, String>,
+) -> (String, Vec<(usize, usize)>) {
+    let mut out = String::new();
+    let mut param_spans = Vec::new();
+    let mut anon_iter = params.iter();
+    let mut idx = 0;
+    let bytes = format_str.as_bytes();
+    while idx < bytes.len() {
+        if bytes[idx] == b'{'
+            && let Some(end) = format_str[idx + 1..].find('}')
+        {
+            let end_idx = idx + 1 + end;
+            let placeholder = &format_str[idx + 1..end_idx];
+            let replacement_opt = if placeholder.is_empty() {
+                anon_iter.next()
+            } else {
+                named_params.get(placeholder)
+            };
+            if let Some(repl) = replacement_opt {
+                let start = out.chars().count();
+                out.push_str(repl);
+                let end = out.chars().count();
+                param_spans.push((start, end));
+                idx = end_idx + 1;
+                continue;
+            }
+        }
+        out.push(format_str[idx..idx + 1].chars().next().unwrap());
+        idx += 1;
+    }
+    (out, param_spans)
+}
+
+#[cfg(feature = "debug_pane")]
+fn styled_line_from_structured(
+    time: CuTime,
+    level: CuLogLevel,
+    format_str: &str,
+    params: &[String],
+    named_params: &HashMap<String, String>,
+) -> StyledLine {
+    let ts = format_ts(time);
+    let level_txt = format!("[{:?}]", level);
+
+    let (msg_text, param_spans) = build_message_with_runs(format_str, params, named_params);
+    let mut msg_runs = Vec::new();
+    let mut cursor = 0usize;
+    let param_spans_sorted = {
+        let mut v = param_spans;
+        v.sort_by_key(|p| p.0);
+        v
+    };
+    for (start, end) in param_spans_sorted {
+        if start > cursor {
+            msg_runs.push(StyledRun {
+                start: cursor,
+                end: start,
+                style: Style::default().fg(Color::Gray),
+            });
+        }
+        msg_runs.push(StyledRun {
+            start,
+            end,
+            style: Style::default().fg(Color::Magenta),
+        });
+        cursor = end;
+    }
+    if cursor < msg_text.chars().count() {
+        msg_runs.push(StyledRun {
+            start: cursor,
+            end: msg_text.chars().count(),
+            style: Style::default().fg(Color::Gray),
+        });
+    }
+
+    let prefix = format!("{ts} {level_txt} ");
+    let prefix_len = prefix.chars().count();
+    let line_text = format!("{prefix}{msg_text}");
+
+    let mut runs = Vec::new();
+    let ts_len = ts.chars().count();
+    let level_start = ts_len + 1;
+    let level_end = level_start + level_txt.chars().count();
+
+    runs.push(StyledRun {
+        start: 0,
+        end: ts_len,
+        style: Style::default().fg(Color::Blue),
+    });
+    runs.push(StyledRun {
+        start: level_start,
+        end: level_end,
+        style: Style::default().fg(color_for_level(level)).bold(),
+    });
+    for run in msg_runs {
+        runs.push(StyledRun {
+            start: prefix_len + run.start,
+            end: prefix_len + run.end,
+            style: run.style,
+        });
+    }
+
+    StyledLine {
+        text: line_text,
+        runs,
+    }
 }
 
 struct TaskStats {
@@ -898,7 +1079,7 @@ struct UI {
     #[cfg(feature = "debug_pane")]
     debug_output_visible_offset: usize,
     #[cfg(feature = "debug_pane")]
-    debug_output_lines: Vec<String>,
+    debug_output_lines: Vec<debug_pane::StyledLine>,
     #[cfg(feature = "debug_pane")]
     debug_selection: DebugSelection,
     #[cfg(feature = "debug_pane")]
@@ -1647,7 +1828,7 @@ impl UI {
         let Some(line) = self.debug_output_lines.get(line_index) else {
             return;
         };
-        let line_len = line.chars().count();
+        let line_len = line.text.chars().count();
         let point = SelectionPoint {
             row: line_index,
             col: rel_col.min(line_len),
@@ -1693,13 +1874,13 @@ impl UI {
         let mut selected = Vec::new();
         for row in start.row..=end.row {
             let line = &self.debug_output_lines[row];
-            let line_len = line.chars().count();
+            let line_len = line.text.chars().count();
             let Some((start_col, end_col)) = line_selection_bounds(row, line_len, start, end)
             else {
                 selected.push(String::new());
                 continue;
             };
-            let (_, selected_part, _) = slice_char_range(line, start_col, end_col);
+            let (_, selected_part, _) = slice_char_range(&line.text, start_col, end_col);
             selected.push(selected_part.to_string());
         }
         Some(selected.join("\n"))
@@ -1745,11 +1926,12 @@ impl UI {
         for (idx, line) in visible.enumerate() {
             let line_index = self.debug_output_visible_offset + idx;
             let spans = if let Some((start, end)) = selection {
-                let line_len = line.chars().count();
+                let line_len = line.text.chars().count();
                 if let Some((start_col, end_col)) =
                     line_selection_bounds(line_index, line_len, start, end)
                 {
-                    let (before, selected, after) = slice_char_range(line, start_col, end_col);
+                    let (before, selected, after) =
+                        slice_char_range(&line.text, start_col, end_col);
                     let mut spans = Vec::new();
                     if !before.is_empty() {
                         spans.push(Span::raw(before.to_string()));
@@ -1760,10 +1942,10 @@ impl UI {
                     }
                     spans
                 } else {
-                    vec![Span::raw(line.clone())]
+                    spans_from_runs(line)
                 }
             } else {
-                vec![Span::raw(line.clone())]
+                spans_from_runs(line)
             };
             rendered_lines.push(Line::from(spans));
         }
@@ -1840,6 +2022,7 @@ impl UI {
                             }
                         }
                         KeyCode::Char('q') => {
+                            self.quitting.store(true, Ordering::SeqCst);
                             break;
                         }
                         _ => {}
@@ -1966,35 +2149,50 @@ impl CuMonitor for CuConsoleMon {
                     topology.clone(),
                 );
 
-                // Override the cu29-log-runtime Log Subscriber
                 #[cfg(debug_assertions)]
-                if cu29_log_runtime::EXTRA_TEXT_LOGGER
-                    .read()
-                    .unwrap()
-                    .is_some()
                 {
                     let max_lines = terminal.size().unwrap().height - 5;
-                    let (debug_log, tx) = debug_pane::DebugLog::new(max_lines);
+                    let (mut debug_log, tx) = debug_pane::DebugLog::new(max_lines);
 
-                    let log_subscriber = debug_pane::LogSubscriber::new(tx);
+                    cu29_log_runtime::register_live_log_listener(
+                        move |entry, format_str, param_names| {
+                            // Rebuild line from structured data, then push to bounded channel.
+                            let params: Vec<String> =
+                                entry.params.iter().map(|v| v.to_string()).collect();
+                            let named_params: HashMap<String, String> = param_names
+                                .iter()
+                                .zip(params.iter())
+                                .map(|(name, value)| (name.to_string(), value.clone()))
+                                .collect();
+                            let line = styled_line_from_structured(
+                                entry.time,
+                                entry.level,
+                                format_str,
+                                params.as_slice(),
+                                &named_params,
+                            );
+                            // Non-blocking: drop log if the bounded channel is full to avoid stalling the runtime.
+                            match tx.try_send(line) {
+                                Ok(_) => {}
+                                Err(std::sync::mpsc::TrySendError::Full(_)) => {}
+                                Err(std::sync::mpsc::TrySendError::Disconnected(_)) => {
+                                    // Receiver dropped; nothing else we can do.
+                                }
+                            }
+                        },
+                    );
 
-                    *cu29_log_runtime::EXTRA_TEXT_LOGGER.write().unwrap() =
-                        Some(Box::new(log_subscriber) as Box<dyn log::Log>);
-
-                    // Set up the terminal again, as there might be some logs which in the console before updating `EXTRA_TEXT_LOGGER`
-                    if let Err(err) = setup_terminal() {
-                        eprintln!("Failed to reinitialize terminal after log redirect: {err}");
-                    }
-
+                    // Drain any pending from the channel into the UI buffer once to size it.
+                    debug_log.update_logs();
                     ui.debug_output = Some(debug_log);
-                } else {
-                    println!("EXTRA_TEXT_LOGGER is none");
                 }
                 if let Err(err) = ui.run_app(&mut terminal) {
                     let _ = restore_terminal();
                     eprintln!("CuConsoleMon UI exited with error: {err}");
+                    cu29_log_runtime::unregister_live_log_listener();
                     return;
                 }
+                cu29_log_runtime::unregister_live_log_listener();
             }
 
             #[cfg(not(feature = "debug_pane"))]

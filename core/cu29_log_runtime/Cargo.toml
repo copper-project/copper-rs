@@ -22,10 +22,17 @@ bincode = { workspace = true }
 smallvec = { workspace = true }
 spin = { workspace = true }
 log = { version = "0.4", default-features = false }
+strfmt = { version = "0.2", optional = true }
 
 [dev-dependencies]
 cu29-value = { workspace = true }
 
 [features]
 default = ["std"]
-std = ["cu29-log/std", "cu29-traits/std", "cu29-clock/std", "bincode/std"]
+std = [
+  "cu29-log/std",
+  "cu29-traits/std",
+  "cu29-clock/std",
+  "bincode/std",
+  "dep:strfmt",
+]

@@ -18,6 +18,7 @@ debug_pane = ["dep:log", "dep:chrono", "dep:arboard"]
 [dependencies]
 cu29 = { workspace = true }
 cu29-log-runtime = { workspace = true }
+cu29-log = { workspace = true }
 compact_str = { workspace = true }
 ratatui = "0.30"
 pfetch-logo-parser = "0.1.1"

@@ -7,6 +7,10 @@ use crate::cutask::CuMsgMetadata;
 use cu29_clock::{CuDuration, RobotClock};
 #[allow(unused_imports)]
 use cu29_log::CuLogLevel;
+#[cfg(all(feature = "std", debug_assertions))]
+use cu29_log_runtime::{
+    format_message_only, register_live_log_listener, unregister_live_log_listener,
+};
 use cu29_traits::{CuError, CuResult};
 use serde_derive::{Deserialize, Serialize};
 
@@ -40,6 +44,18 @@ mod imp {
 }
 
 use imp::*;
+
+#[cfg(all(feature = "std", debug_assertions))]
+fn format_timestamp(time: CuDuration) -> String {
+    // Render CuTime/CuDuration as HH:mm:ss.xxxx (4 fractional digits of a second).
+    let nanos = time.as_nanos();
+    let total_seconds = nanos / 1_000_000_000;
+    let hours = total_seconds / 3600;
+    let minutes = (total_seconds / 60) % 60;
+    let seconds = total_seconds % 60;
+    let fractional_1e4 = (nanos % 1_000_000_000) / 100_000;
+    format!("{hours:02}:{minutes:02}:{seconds:02}.{fractional_1e4:04}")
+}
 
 /// The state of a task.
 #[derive(Debug, Serialize, Deserialize)]
@@ -319,6 +335,24 @@ impl CuMonitor for NoMonitor {
         Ok(NoMonitor {})
     }
 
+    fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        #[cfg(all(feature = "std", debug_assertions))]
+        register_live_log_listener(|entry, format_str, param_names| {
+            let params: Vec<String> = entry.params.iter().map(|v| v.to_string()).collect();
+            let named: Map<String, String> = param_names
+                .iter()
+                .zip(params.iter())
+                .map(|(k, v)| (k.to_string(), v.clone()))
+                .collect();
+
+            if let Ok(msg) = format_message_only(format_str, params.as_slice(), &named) {
+                let ts = format_timestamp(entry.time);
+                println!("{} [{:?}] {}", ts, entry.level, msg);
+            }
+        });
+        Ok(())
+    }
+
     fn process_copperlist(&self, _msgs: &[&CuMsgMetadata]) -> CuResult<()> {
         // By default, do nothing.
         Ok(())
@@ -327,6 +361,12 @@ impl CuMonitor for NoMonitor {
     fn process_error(&self, _taskid: usize, _step: CuTaskState, _error: &CuError) -> Decision {
         // By default, just try to continue.
         Decision::Ignore
+    }
+
+    fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
+        #[cfg(all(feature = "std", debug_assertions))]
+        unregister_live_log_listener();
+        Ok(())
     }
 }
 
