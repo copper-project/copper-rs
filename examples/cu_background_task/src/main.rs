@@ -7,7 +7,7 @@ pub mod tasks {
     use cu29::prelude::*;
     use std::thread::sleep;
 
-    pub struct ExampleSrc {}
+    pub struct ExampleSrc;
 
     impl Freezable for ExampleSrc {}
 
@@ -19,7 +19,7 @@ pub mod tasks {
         where
             Self: Sized,
         {
-            Ok(Self {})
+            Ok(Self)
         }
 
         fn process(&mut self, _clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
@@ -29,7 +29,7 @@ pub mod tasks {
     }
 
     pub struct ExampleTask {
-        sleep_duration_ms: u64,
+        sleep_duration: std::time::Duration,
     }
 
     impl Freezable for ExampleTask {}
@@ -47,7 +47,8 @@ pub mod tasks {
             let sleep_duration_ms = config
                 .get::<u64>("sleep_duration_ms")?
                 .ok_or_else(|| CuError::from("Missing sleep_duration_ms"))?;
-            Ok(Self { sleep_duration_ms })
+            let sleep_duration = std::time::Duration::from_millis(sleep_duration_ms);
+            Ok(Self { sleep_duration })
         }
 
         fn process(
@@ -62,16 +63,17 @@ pub mod tasks {
             // Emulate a long-running task
             debug!(
                 "Task is tasking a {}ms time to process input: {}",
-                self.sleep_duration_ms, &payload
+                self.sleep_duration.as_millis(),
+                &payload
             );
-            sleep(std::time::Duration::from_millis(self.sleep_duration_ms));
-            debug!("Task ({}ms) done.", self.sleep_duration_ms);
+            sleep(self.sleep_duration);
+            debug!("Task ({}ms) done.", self.sleep_duration.as_millis());
             output.set_payload(payload + 1);
             Ok(())
         }
     }
 
-    pub struct ExampleSink {}
+    pub struct ExampleSink;
 
     impl Freezable for ExampleSink {}
 
@@ -83,7 +85,7 @@ pub mod tasks {
         where
             Self: Sized,
         {
-            Ok(Self {})
+            Ok(Self)
         }
 
         fn process(&mut self, _clock: &RobotClock, _input: &Self::Input<'_>) -> CuResult<()> {
