@@ -301,10 +301,10 @@ pub fn unregister_live_log_listener() {
 
 /// Notify registered listener if any.
 pub(crate) fn notify_live_listeners(entry: &CuLogEntry, format_str: &str, param_names: &[&str]) {
-    if let Some(state) = LOGGER_STATE.get() {
-        if let Some(cb) = lock_mutex(&state.live_listener).as_ref() {
-            cb(entry, format_str, param_names);
-        }
+    if let Some(state) = LOGGER_STATE.get()
+        && let Some(cb) = lock_mutex(&state.live_listener).as_ref()
+    {
+        cb(entry, format_str, param_names);
     }
 }
 // This is an adaptation of the Iowriter from bincode.
