@@ -2,8 +2,6 @@ pub mod tasks;
 
 use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
-use std::thread::sleep;
-use std::time::Duration;
 
 #[copper_runtime(config = "copperconfig.ron")]
 struct ImageAlignerApp {}
@@ -36,5 +34,4 @@ fn main() {
             .expect("Failed to run iteration.");
     }
     debug!("End of program: {}.", clock.now());
-    sleep(Duration::from_secs(1));
 }

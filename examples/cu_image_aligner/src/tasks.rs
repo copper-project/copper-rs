@@ -2,7 +2,6 @@ use cu_aligner::define_task;
 use cu_sensor_payloads::{CuImage, CuImageBufferFormat};
 use cu29::payload::CuArray;
 use cu29::prelude::*;
-use std::ops::DerefMut;
 use std::sync::Arc;
 
 const BUFFER_CAP: usize = 16;
@@ -77,14 +76,10 @@ impl CuSrcTask for ImageSrcTask {
             .pool
             .acquire()
             .ok_or(CuError::from("Failed to acquire buffer from pool"))?;
-        {
-            let mut guard = handle
-                .lock()
-                .map_err(|e| CuError::from("Failed to lock buffer").add_cause(&e.to_string()))?;
-            let buffer = guard.deref_mut().deref_mut();
+        handle.with_inner_mut(|buffer| {
             let value = self.base_value.wrapping_add((self.seq % 64) as u8);
             buffer.fill(value);
-        }
+        });
 
         let mut image = CuImage::new(self.format, handle);
         image.seq = self.seq;
@@ -95,7 +90,7 @@ impl CuSrcTask for ImageSrcTask {
     }
 }
 
-pub struct AlignedImageSink {}
+pub struct AlignedImageSink;
 
 impl Freezable for AlignedImageSink {}
 
@@ -110,7 +105,7 @@ impl CuSinkTask for AlignedImageSink {
     where
         Self: Sized,
     {
-        Ok(Self {})
+        Ok(Self)
     }
 
     fn process(&mut self, _clock: &RobotClock, input: &Self::Input<'_>) -> CuResult<()> {
