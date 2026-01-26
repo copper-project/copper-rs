@@ -121,6 +121,16 @@ impl core::fmt::Debug for LoggerState {
 static LOGGER_STATE: OnceLock<LoggerState> = OnceLock::new();
 static STRUCTURED_LOG_BYTES: AtomicUsize = AtomicUsize::new(0);
 
+#[cfg(feature = "std")]
+fn init_logger_state(state: LoggerState) {
+    LOGGER_STATE.set(state).unwrap();
+}
+
+#[cfg(not(feature = "std"))]
+fn init_logger_state(state: LoggerState) {
+    LOGGER_STATE.call_once(|| state);
+}
+
 pub struct NullLog;
 impl Log for NullLog {
     fn enabled(&self, _metadata: &log::Metadata) -> bool {
@@ -153,7 +163,7 @@ impl LoggerRuntime {
                 clock,
                 live_listener: Mutex::new(None),
             };
-            LOGGER_STATE.set(state).unwrap();
+            init_logger_state(state);
         }
 
         // If caller provided a default text logger (std + debug builds), install it as the live listener.
@@ -300,11 +310,12 @@ pub fn unregister_live_log_listener() {
 }
 
 /// Notify registered listener if any.
+#[allow(clippy::collapsible_if)]
 pub(crate) fn notify_live_listeners(entry: &CuLogEntry, format_str: &str, param_names: &[&str]) {
-    if let Some(state) = LOGGER_STATE.get()
-        && let Some(cb) = lock_mutex(&state.live_listener).as_ref()
-    {
-        cb(entry, format_str, param_names);
+    if let Some(state) = LOGGER_STATE.get() {
+        if let Some(cb) = lock_mutex(&state.live_listener).as_ref() {
+            cb(entry, format_str, param_names);
+        }
     }
 }
 // This is an adaptation of the Iowriter from bincode.
