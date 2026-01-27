@@ -1,6 +1,6 @@
 #![allow(unused_lifetimes)]
 
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 use cu29::clock::CuDuration;
 use cu29::cutask::CuMsgMetadata;
 use cu29::prelude::*;
@@ -14,7 +14,7 @@ use std::{
 };
 
 // Bring the runtime modules generated in the library into scope for the macro below.
-use cu_bridge_test::{bridges, messages, tasks};
+use cu_bridge_test::{MissionArg, bridges, messages, tasks};
 
 const LOG_SLAB_SIZE: Option<usize> = Some(32 * 1024 * 1024);
 const INPUT_LOG: &str = "logs/cu_bridge_test.copper";
@@ -26,22 +26,6 @@ struct Cli {
     /// Mission graph to resimulate
     #[arg(value_enum, default_value_t = MissionArg::BridgeFanout, value_name = "MISSION")]
     mission: MissionArg,
-}
-
-#[derive(Copy, Clone, Debug, ValueEnum)]
-enum MissionArg {
-    #[value(name = "BridgeOnlyAB")]
-    BridgeOnlyAb,
-    #[value(name = "BridgeLoopback")]
-    BridgeLoopback,
-    #[value(name = "SourceToBridge")]
-    SourceToBridge,
-    #[value(name = "BridgeToSink")]
-    BridgeToSink,
-    #[value(name = "BridgeTaskSame")]
-    BridgeTaskSame,
-    #[value(name = "BridgeFanout")]
-    BridgeFanout,
 }
 
 // Enable simulation support for the existing copper runtime.
@@ -112,27 +96,33 @@ fn open_copperlist_reader(log_path: &Path) -> CuResult<UnifiedLoggerIOReader> {
     ))
 }
 
+macro_rules! resim_default {
+    ($app:ident, $ctx:expr, $clock:expr, $log_path:expr) => {{
+        let mut default_cb = |_step: $app::SimStep<'_>| SimOverride::ExecuteByRuntime;
+        let mut app = $app::BridgeSchedulerReSimBuilder::new()
+            .with_context($ctx)
+            .with_sim_callback(&mut default_cb)
+            .build()?;
+        app.start_all_tasks(&mut default_cb)?;
+
+        let mut reader = open_copperlist_reader($log_path)?;
+        for entry in copperlists_reader::<$app::CuStampedDataSet>(&mut reader) {
+            sync_robot_clock($app::collect_metadata(&entry), $clock);
+            let mut sim_cb = |_step: $app::SimStep<'_>| SimOverride::ExecuteByRuntime;
+            app.run_one_iteration(&mut sim_cb)?;
+        }
+
+        app.stop_all_tasks(&mut default_cb)?;
+        Ok(())
+    }};
+}
+
 fn resim_bridge_only_ab(
     ctx: &CopperContext,
     robot_clock: &RobotClockMock,
     log_path: &Path,
 ) -> CuResult<()> {
-    let mut default_cb = |_step: BridgeOnlyAB::SimStep<'_>| SimOverride::ExecuteByRuntime;
-    let mut app = BridgeOnlyAB::BridgeSchedulerReSimBuilder::new()
-        .with_context(ctx)
-        .with_sim_callback(&mut default_cb)
-        .build()?;
-    app.start_all_tasks(&mut default_cb)?;
-
-    let mut reader = open_copperlist_reader(log_path)?;
-    for entry in copperlists_reader::<BridgeOnlyAB::CuStampedDataSet>(&mut reader) {
-        sync_robot_clock(BridgeOnlyAB::collect_metadata(&entry), robot_clock);
-        let mut sim_cb = |_step: BridgeOnlyAB::SimStep<'_>| SimOverride::ExecuteByRuntime;
-        app.run_one_iteration(&mut sim_cb)?;
-    }
-
-    app.stop_all_tasks(&mut default_cb)?;
-    Ok(())
+    resim_default!(BridgeOnlyAB, ctx, robot_clock, log_path)
 }
 
 fn resim_bridge_loopback(
@@ -140,22 +130,7 @@ fn resim_bridge_loopback(
     robot_clock: &RobotClockMock,
     log_path: &Path,
 ) -> CuResult<()> {
-    let mut default_cb = |_step: BridgeLoopback::SimStep<'_>| SimOverride::ExecuteByRuntime;
-    let mut app = BridgeLoopback::BridgeSchedulerReSimBuilder::new()
-        .with_context(ctx)
-        .with_sim_callback(&mut default_cb)
-        .build()?;
-    app.start_all_tasks(&mut default_cb)?;
-
-    let mut reader = open_copperlist_reader(log_path)?;
-    for entry in copperlists_reader::<BridgeLoopback::CuStampedDataSet>(&mut reader) {
-        sync_robot_clock(BridgeLoopback::collect_metadata(&entry), robot_clock);
-        let mut sim_cb = |_step: BridgeLoopback::SimStep<'_>| SimOverride::ExecuteByRuntime;
-        app.run_one_iteration(&mut sim_cb)?;
-    }
-
-    app.stop_all_tasks(&mut default_cb)?;
-    Ok(())
+    resim_default!(BridgeLoopback, ctx, robot_clock, log_path)
 }
 
 fn resim_bridge_fanout(
@@ -163,22 +138,7 @@ fn resim_bridge_fanout(
     robot_clock: &RobotClockMock,
     log_path: &Path,
 ) -> CuResult<()> {
-    let mut default_cb = |_step: BridgeFanout::SimStep<'_>| SimOverride::ExecuteByRuntime;
-    let mut app = BridgeFanout::BridgeSchedulerReSimBuilder::new()
-        .with_context(ctx)
-        .with_sim_callback(&mut default_cb)
-        .build()?;
-    app.start_all_tasks(&mut default_cb)?;
-
-    let mut reader = open_copperlist_reader(log_path)?;
-    for entry in copperlists_reader::<BridgeFanout::CuStampedDataSet>(&mut reader) {
-        sync_robot_clock(BridgeFanout::collect_metadata(&entry), robot_clock);
-        let mut sim_cb = |_step: BridgeFanout::SimStep<'_>| SimOverride::ExecuteByRuntime;
-        app.run_one_iteration(&mut sim_cb)?;
-    }
-
-    app.stop_all_tasks(&mut default_cb)?;
-    Ok(())
+    resim_default!(BridgeFanout, ctx, robot_clock, log_path)
 }
 
 fn resim_source_to_bridge(

@@ -1,12 +1,29 @@
+use clap::ValueEnum;
 use cu29::cubridge::CuBridge;
 use cu29::prelude::*;
-use once_cell::sync::Lazy;
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
+
+#[derive(Copy, Clone, Debug, ValueEnum)]
+pub enum MissionArg {
+    #[value(name = "BridgeOnlyAB")]
+    BridgeOnlyAb,
+    #[value(name = "BridgeLoopback")]
+    BridgeLoopback,
+    #[value(name = "SourceToBridge")]
+    SourceToBridge,
+    #[value(name = "BridgeToSink")]
+    BridgeToSink,
+    #[value(name = "BridgeTaskSame")]
+    BridgeTaskSame,
+    #[value(name = "BridgeFanout")]
+    BridgeFanout,
+}
 
 mod events {
     use super::*;
 
-    pub static EVENT_LOG: Lazy<Mutex<Vec<&'static str>>> = Lazy::new(|| Mutex::new(Vec::new()));
+    pub static EVENT_LOG: LazyLock<Mutex<Vec<&'static str>>> =
+        LazyLock::new(|| Mutex::new(Vec::new()));
 
     pub fn record(event: &'static str) {
         // debug!("Event: {}", event);
