@@ -24,7 +24,6 @@ use std::io;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Instant;
 
 /// Result of a jump/step, useful for benchmarking cache effectiveness.
 #[derive(Debug, Clone)]
@@ -35,8 +34,6 @@ pub struct JumpOutcome {
     pub keyframe_culistid: Option<u32>,
     /// Number of copperlists replayed after the keyframe
     pub replayed: usize,
-    /// Wall-clock time spent in the jump
-    pub elapsed: std::time::Duration,
 }
 
 /// Metadata for one copperlist section (no payload kept).
@@ -365,15 +362,12 @@ where
             ));
         }
 
-        let t0 = Instant::now();
         let replayed = self.replay_range(replay_start, target_idx)?;
-        let elapsed = t0.elapsed();
 
         Ok(JumpOutcome {
             culistid: target_culistid,
             keyframe_culistid: keyframe_used,
             replayed,
-            elapsed,
         })
     }
 

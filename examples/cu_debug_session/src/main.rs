@@ -9,6 +9,7 @@ use cu29_helpers::basic_copper_setup;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
+use std::time::Instant;
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct CounterMsg {
@@ -215,6 +216,8 @@ fn run_debug_session() -> CuResult<()> {
     >::from_log(
         Path::new(LOG_PATH),
         app,
+        // `clock` is the handle the runtime reads; `clock_mock` lets the debugger
+        // set deterministic timestamps for replay and time-based seeks.
         clock.clone(),
         clock_mock.clone(),
         build_cb,
@@ -222,7 +225,9 @@ fn run_debug_session() -> CuResult<()> {
     )?;
 
     // Jump to CL7 (uses keyframe at CL6, replays 1 step)
+    let t0 = Instant::now();
     let jump7 = session.goto_cl(7)?;
+    let wall7 = t0.elapsed();
     let val7 = session
         .current_cl()?
         .as_ref()
@@ -235,11 +240,13 @@ fn run_debug_session() -> CuResult<()> {
     });
     println!(
         "[jump cl=7] locked keyframe {:?}, replayed {} CLs to reach CL7; expected sum {}, runtime sum {}, wall {:?}",
-        jump7.keyframe_culistid, jump7.replayed, val7, val7, jump7.elapsed
+        jump7.keyframe_culistid, jump7.replayed, val7, val7, wall7
     );
 
     // Step back to CL6 (exact keyframe)
+    let t0 = Instant::now();
     let jump6 = session.step(-1)?;
+    let wall6 = t0.elapsed();
     let val6 = session
         .current_cl()?
         .as_ref()
@@ -252,7 +259,7 @@ fn run_debug_session() -> CuResult<()> {
     });
     println!(
         "[step -1] landed on keyframe CL6 -> sum {}, replayed {}, wall {:?}",
-        val6, jump6.replayed, jump6.elapsed
+        val6, jump6.replayed, wall6
     );
 
     // Jump by timestamp: use timestamp of CL4
@@ -261,7 +268,9 @@ fn run_debug_session() -> CuResult<()> {
         Option::<CuTime>::from(cl4.msgs.get_src_output().metadata.process_time.start)
             .expect("timestamp for CL4")
     };
+    let t0 = Instant::now();
     let jump_ts = session.goto_time(ts4)?;
+    let wall_ts = t0.elapsed();
     let val4 = session
         .current_cl()?
         .as_ref()
@@ -274,14 +283,16 @@ fn run_debug_session() -> CuResult<()> {
         jump_ts.culistid,
         val4,
         jump_ts.replayed,
-        jump_ts.elapsed
+        wall_ts
     );
 
     // Forward one more to show cache-friendly stepping
+    let t0 = Instant::now();
     let jump5 = session.step(1)?;
+    let wall5 = t0.elapsed();
     println!(
         "[step +1] -> CL{} replayed {}, wall {:?}",
-        jump5.culistid, jump5.replayed, jump5.elapsed
+        jump5.culistid, jump5.replayed, wall5
     );
 
     Ok(())
