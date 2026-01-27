@@ -1,0 +1,60 @@
+name: Clear cache
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+jobs:
+  clear-cache:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clear cache
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const opts = {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            };
+
+            const cacheList = await github.rest.actions.getActionsCacheList({
+              per_page: 1,
+              ...opts,
+            });
+            const perPage = 100;
+            const pages = Math.ceil(cacheList.data.total_count / perPage);
+
+            const totalCount = cacheList.data.total_count;
+            let deleted = 0;
+            const intervalId = setInterval(() => {
+              console.log(`${deleted}/${totalCount}`);
+            }, 500);
+
+            for (let page = 1; page <= pages; page += 1) {
+              const cachePage = await github.rest.actions.getActionsCacheList({
+                per_page: perPage,
+                page,
+                ...opts,
+              });
+
+              await Promise.all(
+                cachePage.data.actions_caches.map((cache) =>
+                  github.rest.actions
+                    .deleteActionsCacheById({
+                      cache_id: cache.id,
+                      ...opts,
+                    })
+                    .then(() => {
+                      deleted += 1;
+                    })
+                )
+              );
+
+              if (page % 4 === 0) {
+                await new Promise((resolve) => setTimeout(resolve, 60_000));
+              }
+            }
+
+            clearInterval(intervalId);
