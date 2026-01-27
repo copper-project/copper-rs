@@ -24,3 +24,6 @@ ignored = [
   "cu-caterpillar",
   "cu-rp-gpio",
 ] # copperconfig.ron use caterpillar and rp-gpio as an example
+
+[package.metadata.cargo-shear]
+ignored = ["cu-caterpillar", "cu-rp-gpio", "serde"]

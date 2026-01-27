@@ -27,3 +27,6 @@ path = "src/main.rs"
 [[bin]]
 name = "logreader"
 path = "src/logreader.rs"
+
+[package.metadata.cargo-shear]
+ignored = ["serde"]

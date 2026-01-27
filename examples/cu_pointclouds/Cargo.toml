@@ -20,3 +20,6 @@ cu-udp-inject = { path = "../../components/testing/cu_udp_inject", version = "0.
 cu-sensor-payloads = { path = "../../components/payloads/cu_sensor_payloads", version = "0.12.0" }
 rerun = { workspace = true }
 serde = { workspace = true }
+
+[package.metadata.cargo-shear]
+ignored = ["serde"]

@@ -51,3 +51,6 @@ serde = { workspace = true }
 
 [features]
 default = []
+
+[package.metadata.cargo-shear]
+ignored = ["serde"]

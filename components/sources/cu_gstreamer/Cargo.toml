@@ -17,10 +17,10 @@ bincode = { workspace = true }
 circular-buffer = "1.1.0"
 gstreamer = { version = "0.24", default-features = false, optional = true }
 gstreamer-app = { version = "0.24", default-features = false, optional = true }
-tempfile = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]
+tempfile = { workspace = true }
 rerun = { workspace = true }
 cu29-helpers = { workspace = true }
 
