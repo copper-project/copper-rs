@@ -21,3 +21,6 @@ default = []
 std = ["cu29/std", "cu-sensor-payloads/std", "serde/std"]
 defmt = ["cu29/defmt"]
 textlogs = ["cu29/textlogs", "cu-sensor-payloads/textlogs"]
+
+[package.metadata.cargo-shear]
+ignored = ["serde"]
