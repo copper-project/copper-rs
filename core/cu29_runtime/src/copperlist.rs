@@ -49,7 +49,7 @@ impl Display for CopperListState {
     }
 }
 
-#[derive(Debug, Encode, Decode, Serialize, Deserialize)]
+#[derive(Debug, Encode, Decode, Serialize, Deserialize, Clone)]
 pub struct CopperList<P: CopperListTuple> {
     pub id: u32,
     state: CopperListState,

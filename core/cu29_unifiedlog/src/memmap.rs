@@ -601,6 +601,13 @@ pub struct MmapUnifiedLoggerRead {
     current_reading_position: usize,
 }
 
+/// Absolute position inside a unified log (slab index + byte offset).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LogPosition {
+    pub slab_index: usize,
+    pub offset: usize,
+}
+
 impl UnifiedLogRead for MmapUnifiedLoggerRead {
     fn read_next_section_type(&mut self, datalogtype: UnifiedLogType) -> CuResult<Option<Vec<u8>>> {
         // TODO: eventually implement a 0 copy of this too.
@@ -685,6 +692,32 @@ impl MmapUnifiedLoggerRead {
             current_slab_index: 0,
             current_reading_position: prolog as usize,
         })
+    }
+
+    /// Current cursor position (start of next section header).
+    pub fn position(&self) -> LogPosition {
+        LogPosition {
+            slab_index: self.current_slab_index,
+            offset: self.current_reading_position,
+        }
+    }
+
+    /// Seek to an absolute position (start of a section header).
+    pub fn seek(&mut self, pos: LogPosition) -> CuResult<()> {
+        if pos.slab_index != self.current_slab_index {
+            let (file, mmap, _prolog, _header) =
+                open_slab_index(&self.base_file_path, pos.slab_index).map_err(|e| {
+                    CuError::new_with_cause(
+                        &format!("Failed to open slab {} for seek", pos.slab_index),
+                        e,
+                    )
+                })?;
+            self.current_file = file;
+            self.current_mmap_buffer = mmap;
+            self.current_slab_index = pos.slab_index;
+        }
+        self.current_reading_position = pos.offset;
+        Ok(())
     }
 
     fn next_slab(&mut self) -> io::Result<()> {
