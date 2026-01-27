@@ -54,7 +54,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
-          cache_prefix: ${{ matrix.mode }}-${{ matrix.task }}
+          cache_prefix: ${{ matrix.mode }}
           cache_shared_key: rust-${{ matrix.os }}
           install_nextest: ${{ matrix.task == 'test' }}
 
@@ -159,7 +159,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
-          cache_prefix: ${{ matrix.mode }}-tests-features
+          cache_prefix: ${{ matrix.mode }}
           cache_shared_key: rust-${{ matrix.os }}
           install_nextest: "true"
 
@@ -246,7 +246,7 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
           linux_cargo_paths: ${{ inputs.linux_cargo_paths }}
-          cache_prefix: ${{ matrix.mode }}-templates
+          cache_prefix: ${{ matrix.mode }}
           cache_shared_key: rust-${{ matrix.os }}
           install_nextest: "false"
 
