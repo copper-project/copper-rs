@@ -3,8 +3,13 @@ use cu29::{CuResult, bundle_resources};
 use parking_lot::Mutex;
 use std::sync::Arc;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct SharedBus {
+    inner: Arc<SharedBusInner>,
+}
+
+#[derive(Debug)]
+struct SharedBusInner {
     label: String,
     value: Mutex<i64>,
 }
@@ -12,21 +17,23 @@ pub struct SharedBus {
 impl SharedBus {
     pub fn new(label: String) -> Self {
         Self {
-            label,
-            value: Mutex::new(0),
+            inner: Arc::new(SharedBusInner {
+                label,
+                value: Mutex::new(0),
+            }),
         }
     }
 
     pub fn set(&self, v: i64) {
-        *self.value.lock() = v;
+        *self.inner.value.lock() = v;
     }
 
     pub fn get(&self) -> i64 {
-        *self.value.lock()
+        *self.inner.value.lock()
     }
 
     pub fn label(&self) -> &str {
-        &self.label
+        &self.inner.label
     }
 }
 
@@ -47,9 +54,9 @@ impl OwnedCounter {
     }
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct GlobalLog {
-    entries: Mutex<Vec<String>>,
+    entries: Arc<Mutex<Vec<String>>>,
 }
 
 impl GlobalLog {
@@ -84,9 +91,10 @@ impl ResourceBundle for BoardBundle {
         let tag_key = bundle.key(BoardBundleId::Tag);
 
         let bus = Arc::new(SharedBus::new(label.clone()));
-        manager.add_shared(bus_key, Arc::new(bus))?;
+        manager.add_shared(bus_key, bus.clone())?;
         manager.add_owned(counter_key, OwnedCounter::new(offset))?;
-        manager.add_shared(tag_key, Arc::new(Arc::new(label)))?;
+        let tag = Arc::new(label);
+        manager.add_shared(tag_key, tag.clone())?;
         Ok(())
     }
 }
@@ -124,7 +132,8 @@ impl ResourceBundle for GlobalBundle {
         manager: &mut ResourceManager,
     ) -> CuResult<()> {
         let log_key = bundle.key(GlobalBundleId::Log);
-        manager.add_shared(log_key, Arc::new(Arc::new(GlobalLog::default())))?;
+        let log = Arc::new(GlobalLog::default());
+        manager.add_shared(log_key, log.clone())?;
         Ok(())
     }
 }
