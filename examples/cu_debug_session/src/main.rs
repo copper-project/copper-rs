@@ -1,3 +1,6 @@
+use cu29::bincode::de::Decoder;
+use cu29::bincode::enc::Encoder;
+use cu29::bincode::error::{DecodeError, EncodeError};
 use cu29::bincode::{Decode, Encode};
 use cu29::prelude::CopperList;
 use cu29::prelude::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
@@ -20,7 +23,16 @@ pub struct AccumMsg {
 pub struct CounterSrc {
     pub next: u32,
 }
-impl Freezable for CounterSrc {}
+impl Freezable for CounterSrc {
+    fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        Encode::encode(&self.next, encoder)
+    }
+
+    fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+        self.next = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 impl CuSrcTask for CounterSrc {
     type Resources<'r> = ();
     type Output<'m> = output_msg!(CounterMsg);
@@ -39,7 +51,16 @@ impl CuSrcTask for CounterSrc {
 pub struct Accumulator {
     pub sum: u32,
 }
-impl Freezable for Accumulator {}
+impl Freezable for Accumulator {
+    fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        Encode::encode(&self.sum, encoder)
+    }
+
+    fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+        self.sum = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 impl CuTask for Accumulator {
     type Resources<'r> = ();
     type Input<'m> = input_msg!(CounterMsg);
@@ -68,7 +89,16 @@ impl CuTask for Accumulator {
 pub struct SpySink {
     pub last: Option<u32>,
 }
-impl Freezable for SpySink {}
+impl Freezable for SpySink {
+    fn freeze<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        Encode::encode(&self.last, encoder)
+    }
+
+    fn thaw<D: Decoder>(&mut self, decoder: &mut D) -> Result<(), DecodeError> {
+        self.last = Decode::decode(decoder)?;
+        Ok(())
+    }
+}
 impl CuSinkTask for SpySink {
     type Resources<'r> = ();
     type Input<'m> = input_msg!(AccumMsg);
@@ -201,8 +231,6 @@ fn run_debug_session() -> CuResult<()> {
         .expect("payload at CL7");
     session.with_app(|app: &mut DebugApp| {
         let rt = app.copper_runtime_mut();
-        // Force state to recorded value to keep downstream steps aligned in the demo.
-        rt.tasks.1.sum = val7;
         assert_eq!(rt.tasks.1.sum, val7, "runtime state matches log at CL7");
     });
     println!(
@@ -220,7 +248,6 @@ fn run_debug_session() -> CuResult<()> {
         .expect("payload at CL6");
     session.with_app(|app: &mut DebugApp| {
         let rt = app.copper_runtime_mut();
-        rt.tasks.1.sum = val6;
         assert_eq!(rt.tasks.1.sum, val6, "keyframe state restored at CL6");
     });
     println!(
