@@ -21,48 +21,27 @@ impl CuSrcTask for ExampleSrc {
     }
 }
 
-pub struct ExampleTaskA;
-
-impl Freezable for ExampleTaskA {}
-
-impl CuTask for ExampleTaskA {
-    type Resources<'r> = ();
-    type Input<'m> = input_msg!(i32);
-    type Output<'m> = output_msg!(i32);
-
-    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
-    where
-        Self: Sized,
-    {
-        Ok(Self)
-    }
-
-    fn process(
-        &mut self,
-        _clock: &RobotClock,
-        input: &Self::Input<'_>,
-        output: &mut Self::Output<'_>,
-    ) -> CuResult<()> {
-        debug!("Processing from Mission A.");
-        output.set_payload(input.payload().unwrap() + 1);
-        Ok(())
-    }
+pub struct ExampleTask {
+    label: &'static str,
 }
 
-pub struct ExampleTaskB;
+impl Freezable for ExampleTask {}
 
-impl Freezable for ExampleTaskB {}
-
-impl CuTask for ExampleTaskB {
+impl CuTask for ExampleTask {
     type Resources<'r> = ();
     type Input<'m> = input_msg!(i32);
     type Output<'m> = output_msg!(i32);
 
-    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
-        Ok(Self)
+        let label = config
+            .and_then(|cfg| cfg.get::<String>("label").ok().flatten())
+            .unwrap_or_else(|| "Mission".to_string());
+        Ok(Self {
+            label: Box::leak(label.into_boxed_str()),
+        })
     }
 
     fn process(
@@ -71,7 +50,7 @@ impl CuTask for ExampleTaskB {
         input: &Self::Input<'_>,
         output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
-        debug!("Processing from Mission B.");
+        debug!("Processing from {}.", self.label);
         output.set_payload(input.payload().unwrap() + 1);
         Ok(())
     }
