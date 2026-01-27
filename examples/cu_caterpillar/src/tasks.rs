@@ -42,7 +42,7 @@ impl CuSrcTask for CaterpillarSource {
     }
 }
 
-pub struct CaterpillarTask {}
+pub struct CaterpillarTask;
 
 impl Freezable for CaterpillarTask {}
 
@@ -55,7 +55,7 @@ impl CuTask for CaterpillarTask {
     where
         Self: Sized,
     {
-        Ok(Self {})
+        Ok(Self)
     }
 
     fn process(
