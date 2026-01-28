@@ -1,0 +1,36 @@
+name: CodeQL
+
+on:
+  schedule:
+    - cron: "0 3 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyze (Rust)
+    runs-on: ubuntu-latest
+
+    env:
+      WORKSPACE_SCOPE: workspace
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+            show-progress: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: rust
+          build-mode: none
+          queries: security-extended,security-and-quality
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:rust"
