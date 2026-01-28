@@ -262,36 +262,71 @@ where
             .ok()
     }
 
+    /// Lower-bound lookup: return the first section whose `first_ts >= ts`.
+    /// If `ts` is earlier than the first section, return the first section.
+    /// Return `None` only when `ts` is beyond the last section's range.
     fn find_section_for_time(&self, ts: CuTime) -> Option<usize> {
-        // Fast path: sections are recorded in time order, so we can binary search.
-        if let Ok(idx) = self.sections.binary_search_by(|s| match (s.first_ts, s.last_ts) {
-            (Some(a), Some(b)) => {
-                if ts < a {
-                    std::cmp::Ordering::Greater
-                } else if ts > b {
+        if self.sections.is_empty() {
+            return None;
+        }
+
+        // Fast path when all sections carry timestamps.
+        if self.sections.iter().all(|s| s.first_ts.is_some()) {
+            let idx = match self.sections.binary_search_by(|s| {
+                let a = s.first_ts.unwrap();
+                if a < ts {
                     std::cmp::Ordering::Less
-                } else {
-                    std::cmp::Ordering::Equal
-                }
-            }
-            (Some(a), None) => {
-                if ts < a {
+                } else if a > ts {
                     std::cmp::Ordering::Greater
                 } else {
                     std::cmp::Ordering::Equal
                 }
+            }) {
+                Ok(i) => i,
+                Err(i) => i, // insertion point = first first_ts >= ts
+            };
+
+            if idx < self.sections.len() {
+                return Some(idx);
             }
-            _ => std::cmp::Ordering::Greater,
-        }) {
+
+            // ts is after the last section start; allow selecting the last section
+            // if the timestamp still lies inside its recorded range.
+            let last = self.sections.last().unwrap();
+            if let Some(last_ts) = last.last_ts {
+                if ts <= last_ts {
+                    return Some(self.sections.len() - 1);
+                }
+            }
+            return None;
+        }
+
+        // Fallback for sections missing timestamps: choose first window that contains ts;
+        // if ts is earlier than the first timestamped section, pick that section; otherwise
+        // only return None when ts is past the last known range.
+        if let Some(first_ts) = self.sections.first().and_then(|s| s.first_ts) {
+            if ts <= first_ts {
+                return Some(0);
+            }
+        }
+
+        if let Some(idx) = self
+            .sections
+            .iter()
+            .position(|s| match (s.first_ts, s.last_ts) {
+                (Some(a), Some(b)) => a <= ts && ts <= b,
+                (Some(a), None) => a <= ts,
+                _ => false,
+            })
+        {
             return Some(idx);
         }
 
-        // Fallback for sections missing timestamps.
-        self.sections.iter().position(|s| match (s.first_ts, s.last_ts) {
-            (Some(a), Some(b)) => a <= ts && ts <= b,
-            (Some(a), None) => a <= ts,
-            _ => false,
-        })
+        let last = self.sections.last().unwrap();
+        match last.last_ts {
+            Some(b) if ts <= b => Some(self.sections.len() - 1),
+            _ => None,
+        }
     }
 
     fn touch_cache(&mut self, key: usize) {
