@@ -1404,6 +1404,15 @@ impl MspRequest {
     }
 }
 
+fn pack_or_empty<T: PackedStruct>(value: Option<&T>) -> Result<MspPacketData, PackingError> {
+    if let Some(value) = value {
+        let packed = value.pack()?;
+        Ok(MspPacketData::from(packed.as_bytes_slice()))
+    } else {
+        Ok(MspPacketData::default())
+    }
+}
+
 impl From<MspRequest> for MspPacket {
     fn from(request: MspRequest) -> Self {
         match request {
@@ -1415,10 +1424,7 @@ impl From<MspRequest> for MspPacket {
             MspRequest::MspApiVersion(version) => MspPacket {
                 cmd: MspCommandCode::MSP_API_VERSION.to_primitive(),
                 direction: FromFlightController,
-                data: version.pack().map_or_else(
-                    |_| MspPacketData::new(),
-                    |data| MspPacketData::from(data.as_slice()),
-                ),
+                data: pack_or_empty(Some(&version)).unwrap_or_default(),
             },
             MspRequest::MspFcVersionRequest => MspPacket {
                 cmd: MspCommandCode::MSP_FC_VERSION.to_primitive(),
@@ -1428,10 +1434,7 @@ impl From<MspRequest> for MspPacket {
             MspRequest::MspFlightControllerVersion(version) => MspPacket {
                 cmd: MspCommandCode::MSP_FC_VERSION.to_primitive(),
                 direction: FromFlightController,
-                data: version.pack().map_or_else(
-                    |_| MspPacketData::new(),
-                    |data| MspPacketData::from(data.as_slice()),
-                ),
+                data: pack_or_empty(Some(&version)).unwrap_or_default(),
             },
             MspRequest::MspBatteryConfigRequest => MspPacket {
                 cmd: MspCommandCode::MSP_BATTERY_CONFIG.to_primitive(),
@@ -1441,10 +1444,7 @@ impl From<MspRequest> for MspPacket {
             MspRequest::MspBatteryConfig(config) => MspPacket {
                 cmd: MspCommandCode::MSP_BATTERY_CONFIG.to_primitive(),
                 direction: FromFlightController,
-                data: config.pack().map_or_else(
-                    |_| MspPacketData::new(),
-                    |data| MspPacketData::from(data.as_slice()),
-                ),
+                data: pack_or_empty(Some(&config)).unwrap_or_default(),
             },
             MspRequest::MspBatteryStateRequest => MspPacket {
                 cmd: MspCommandCode::MSP_BATTERY_STATE.to_primitive(),
@@ -1454,10 +1454,7 @@ impl From<MspRequest> for MspPacket {
             MspRequest::MspBatteryState(state) => MspPacket {
                 cmd: MspCommandCode::MSP_BATTERY_STATE.to_primitive(),
                 direction: FromFlightController,
-                data: state.pack().map_or_else(
-                    |_| MspPacketData::new(),
-                    |data| MspPacketData::from(data.as_slice()),
-                ),
+                data: pack_or_empty(Some(&state)).unwrap_or_default(),
             },
             MspRequest::MspAnalogRequest => MspPacket {
                 cmd: MspCommandCode::MSP_ANALOG.to_primitive(),
@@ -1467,10 +1464,7 @@ impl From<MspRequest> for MspPacket {
             MspRequest::MspAnalog(analog) => MspPacket {
                 cmd: MspCommandCode::MSP_ANALOG.to_primitive(),
                 direction: FromFlightController,
-                data: analog.pack().map_or_else(
-                    |_| MspPacketData::new(),
-                    |data| MspPacketData::from(data.as_slice()),
-                ),
+                data: pack_or_empty(Some(&analog)).unwrap_or_default(),
             },
             MspRequest::MspVoltageMeterConfigRequest => MspPacket {
                 cmd: MspCommandCode::MSP_VOLTAGE_METER_CONFIG.to_primitive(),
@@ -1480,10 +1474,7 @@ impl From<MspRequest> for MspPacket {
             MspRequest::MspVoltageMeterConfig(config) => MspPacket {
                 cmd: MspCommandCode::MSP_VOLTAGE_METER_CONFIG.to_primitive(),
                 direction: FromFlightController,
-                data: config.pack().map_or_else(
-                    |_| MspPacketData::new(),
-                    |data| MspPacketData::from(data.as_slice()),
-                ),
+                data: pack_or_empty(Some(&config)).unwrap_or_default(),
             },
             MspRequest::MspVoltageMetersRequest => MspPacket {
                 cmd: MspCommandCode::MSP_VOLTAGE_METERS.to_primitive(),
@@ -1493,10 +1484,7 @@ impl From<MspRequest> for MspPacket {
             MspRequest::MspVoltageMeter(meter) => MspPacket {
                 cmd: MspCommandCode::MSP_VOLTAGE_METERS.to_primitive(),
                 direction: FromFlightController,
-                data: meter.pack().map_or_else(
-                    |_| MspPacketData::new(),
-                    |data| MspPacketData::from(data.as_slice()),
-                ),
+                data: pack_or_empty(Some(&meter)).unwrap_or_default(),
             },
             MspRequest::MspRc => MspPacket {
                 cmd: MspCommandCode::MSP_RC.to_primitive(),
@@ -1534,18 +1522,12 @@ impl From<MspRequest> for MspPacket {
             MspRequest::MspSensorRangefinder(data) => MspPacket {
                 cmd: MspCommandCode::MSP2_SENSOR_RANGEFINDER.to_primitive(),
                 direction: ToFlightController,
-                data: data.pack().map_or_else(
-                    |_| MspPacketData::new(),
-                    |packed| MspPacketData::from(packed.as_slice()),
-                ),
+                data: pack_or_empty(Some(&data)).unwrap_or_default(),
             },
             MspRequest::MspSensorOpticFlow(data) => MspPacket {
                 cmd: MspCommandCode::MSP2_SENSOR_OPTIC_FLOW.to_primitive(),
                 direction: ToFlightController,
-                data: data.pack().map_or_else(
-                    |_| MspPacketData::new(),
-                    |packed| MspPacketData::from(packed.as_slice()),
-                ),
+                data: pack_or_empty(Some(&data)).unwrap_or_default(),
             },
             _ => MspPacket {
                 cmd: MspCommandCode::MSP_API_VERSION.to_primitive(),
@@ -1567,10 +1549,7 @@ impl From<&MspRequest> for MspPacket {
             MspRequest::MspApiVersion(version) => MspPacket {
                 cmd: MspCommandCode::MSP_API_VERSION.to_primitive(),
                 direction: FromFlightController,
-                data: version.pack().map_or_else(
-                    |_| MspPacketData::new(),
-                    |data| MspPacketData::from(data.as_slice()),
-                ),
+                data: pack_or_empty(Some(version)).unwrap_or_default(),
             },
             MspRequest::MspFcVersionRequest => MspPacket {
                 cmd: MspCommandCode::MSP_FC_VERSION.to_primitive(),
@@ -1580,10 +1559,7 @@ impl From<&MspRequest> for MspPacket {
             MspRequest::MspFlightControllerVersion(version) => MspPacket {
                 cmd: MspCommandCode::MSP_FC_VERSION.to_primitive(),
                 direction: FromFlightController,
-                data: version.pack().map_or_else(
-                    |_| MspPacketData::new(),
-                    |data| MspPacketData::from(data.as_slice()),
-                ),
+                data: pack_or_empty(Some(version)).unwrap_or_default(),
             },
             MspRequest::MspBatteryConfigRequest => MspPacket {
                 cmd: MspCommandCode::MSP_BATTERY_CONFIG.to_primitive(),
@@ -1593,10 +1569,7 @@ impl From<&MspRequest> for MspPacket {
             MspRequest::MspBatteryConfig(config) => MspPacket {
                 cmd: MspCommandCode::MSP_BATTERY_CONFIG.to_primitive(),
                 direction: FromFlightController,
-                data: config.pack().map_or_else(
-                    |_| MspPacketData::new(),
-                    |data| MspPacketData::from(data.as_slice()),
-                ),
+                data: pack_or_empty(Some(config)).unwrap_or_default(),
             },
             MspRequest::MspBatteryStateRequest => MspPacket {
                 cmd: MspCommandCode::MSP_BATTERY_STATE.to_primitive(),
@@ -1606,10 +1579,7 @@ impl From<&MspRequest> for MspPacket {
             MspRequest::MspBatteryState(state) => MspPacket {
                 cmd: MspCommandCode::MSP_BATTERY_STATE.to_primitive(),
                 direction: FromFlightController,
-                data: state.pack().map_or_else(
-                    |_| MspPacketData::new(),
-                    |data| MspPacketData::from(data.as_slice()),
-                ),
+                data: pack_or_empty(Some(state)).unwrap_or_default(),
             },
             MspRequest::MspAnalogRequest => MspPacket {
                 cmd: MspCommandCode::MSP_ANALOG.to_primitive(),
@@ -1619,10 +1589,7 @@ impl From<&MspRequest> for MspPacket {
             MspRequest::MspAnalog(analog) => MspPacket {
                 cmd: MspCommandCode::MSP_ANALOG.to_primitive(),
                 direction: FromFlightController,
-                data: analog.pack().map_or_else(
-                    |_| MspPacketData::new(),
-                    |data| MspPacketData::from(data.as_slice()),
-                ),
+                data: pack_or_empty(Some(analog)).unwrap_or_default(),
             },
             MspRequest::MspVoltageMeterConfigRequest => MspPacket {
                 cmd: MspCommandCode::MSP_VOLTAGE_METER_CONFIG.to_primitive(),
@@ -1632,10 +1599,7 @@ impl From<&MspRequest> for MspPacket {
             MspRequest::MspVoltageMeterConfig(config) => MspPacket {
                 cmd: MspCommandCode::MSP_VOLTAGE_METER_CONFIG.to_primitive(),
                 direction: FromFlightController,
-                data: config.pack().map_or_else(
-                    |_| MspPacketData::new(),
-                    |data| MspPacketData::from(data.as_slice()),
-                ),
+                data: pack_or_empty(Some(config)).unwrap_or_default(),
             },
             MspRequest::MspVoltageMetersRequest => MspPacket {
                 cmd: MspCommandCode::MSP_VOLTAGE_METERS.to_primitive(),
@@ -1645,10 +1609,7 @@ impl From<&MspRequest> for MspPacket {
             MspRequest::MspVoltageMeter(meter) => MspPacket {
                 cmd: MspCommandCode::MSP_VOLTAGE_METERS.to_primitive(),
                 direction: FromFlightController,
-                data: meter.pack().map_or_else(
-                    |_| MspPacketData::new(),
-                    |data| MspPacketData::from(data.as_slice()),
-                ),
+                data: pack_or_empty(Some(meter)).unwrap_or_default(),
             },
             MspRequest::MspRc => MspPacket {
                 cmd: MspCommandCode::MSP_RC.to_primitive(),
@@ -1683,18 +1644,12 @@ impl From<&MspRequest> for MspPacket {
             MspRequest::MspSensorRangefinder(data) => MspPacket {
                 cmd: MspCommandCode::MSP2_SENSOR_RANGEFINDER.to_primitive(),
                 direction: ToFlightController,
-                data: data.pack().map_or_else(
-                    |_| MspPacketData::new(),
-                    |packed| MspPacketData::from(packed.as_slice()),
-                ),
+                data: pack_or_empty(Some(data)).unwrap_or_default(),
             },
             MspRequest::MspSensorOpticFlow(data) => MspPacket {
                 cmd: MspCommandCode::MSP2_SENSOR_OPTIC_FLOW.to_primitive(),
                 direction: ToFlightController,
-                data: data.pack().map_or_else(
-                    |_| MspPacketData::new(),
-                    |packed| MspPacketData::from(packed.as_slice()),
-                ),
+                data: pack_or_empty(Some(data)).unwrap_or_default(),
             },
             _ => MspPacket {
                 cmd: MspCommandCode::MSP_API_VERSION.to_primitive(),
@@ -1761,60 +1716,191 @@ pub enum MspResponse {
     MspRc(MspRc),
 }
 
+macro_rules! msp_response_command_map {
+    ($($variant:ident => $cmd:ident),* $(,)?) => {
+        fn response_command_code(resp: &MspResponse) -> MspCommandCode {
+            match resp {
+                $(MspResponse::$variant(_) => MspCommandCode::$cmd,)*
+                MspResponse::Unknown => MspCommandCode::MSP_API_VERSION,
+            }
+        }
+    };
+}
+
+macro_rules! msp_response_decode_map {
+    ($($cmd:ident => $variant:ident : $ty:ty => |$packet:ident| $decode:expr),* $(,)?) => {
+        fn decode_response(cmd: MspCommandCode, packet: &MspPacket) -> MspResponse {
+            match cmd {
+                $(
+                    MspCommandCode::$cmd => {
+                        let $packet = packet;
+                        $decode
+                            .map(MspResponse::$variant)
+                            .unwrap_or(MspResponse::Unknown)
+                    }
+                )*
+                _ => MspResponse::Unknown,
+            }
+        }
+    };
+}
+
+msp_response_command_map!(
+    MspApiVersion => MSP_API_VERSION,
+    MspFlightControllerVariant => MSP_FC_VARIANT,
+    MspStatus => MSP_STATUS,
+    MspStatusEx => MSP_STATUS_EX,
+    MspBfConfig => MSP_BF_CONFIG,
+    MspRawImu => MSP_RAW_IMU,
+    MspDataFlashSummaryReply => MSP_DATAFLASH_SUMMARY,
+    MspDataFlashReply => MSP_DATAFLASH_READ,
+    MspDataFlashRead => MSP_DATAFLASH_READ,
+    MspAccTrim => MSP_ACC_TRIM,
+    MspIdent => MSP_IDENT,
+    MspMisc => MSP_MISC,
+    MspAttitude => MSP_ATTITUDE,
+    MspAltitude => MSP_ALTITUDE,
+    MspBatteryConfig => MSP_BATTERY_CONFIG,
+    MspVoltageMeterConfig => MSP_VOLTAGE_METER_CONFIG,
+    MspAnalog => MSP_ANALOG,
+    MspRssiConfig => MSP_RSSI_CONFIG,
+    MspVoltageMeter => MSP_VOLTAGE_METERS,
+    MspCurrentMeter => MSP_AMPERAGE_METER_CONFIG,
+    MspBatteryState => MSP_BATTERY_STATE,
+    MspRcTuning => MSP_RC_TUNING,
+    MspRxConfig => MSP_RX_CONFIG,
+    MspRcChannelValue => MSP_RX_MAP,
+    MspRcMappedChannel => MSP_SET_RX_MAP,
+    MspFeatures => MSP_FEATURE,
+    MspMotor => MSP_MOTOR,
+    MspMotor3DConfig => MSP_MOTOR_3D_CONFIG,
+    MspMotorConfig => MSP_MOTOR_CONFIG,
+    MspRcDeadband => MSP_RC_DEADBAND,
+    MspSensorAlignment => MSP_BOARD_ALIGNMENT,
+    MspAdvancedConfig => MSP_ADVANCED_CONFIG,
+    MspFilterConfig => MSP_FILTER_CONFIG,
+    MspPidAdvanced => MSP_PID_ADVANCED,
+    MspSensorConfig => MSP_SENSOR_CONFIG,
+    MspServos => MSP_SERVO,
+    MspMixerConfig => MSP_MIXER,
+    MspModeRange => MSP_MODE_RANGES,
+    MspSetModeRange => MSP_SET_MODE_RANGE,
+    MspOsdConfig => MSP_OSD_CONFIG,
+    MspSetGetOsdConfig => MSP_OSD_CONFIG,
+    MspSetOsdLayout => MSP_OSD_LAYOUT_CONFIG,
+    MspSetOsdLayoutItem => MSP2_INAV_OSD_SET_LAYOUT_ITEM,
+    MspOsdLayouts => MSP2_INAV_OSD_LAYOUTS,
+    MspSerialSetting => MSP2_SET_SERIAL_CONFIG,
+    MspSettingInfoRequest => MSP2_COMMON_SETTING,
+    MspSettingInfo => MSP2_COMMON_SETTING_INFO,
+    MspRc => MSP_RC,
+);
+
+msp_response_decode_map!(
+    MSP_API_VERSION => MspApiVersion: MspApiVersion => |packet| packet.decode_as::<MspApiVersion>(),
+    MSP_FC_VARIANT => MspFlightControllerVariant: MspFlightControllerVariant => |packet| {
+        packet.decode_as::<MspFlightControllerVariant>()
+    },
+    MSP_STATUS => MspStatus: MspStatus => |packet| MspStatus::from_bytes(packet.data.as_slice()),
+    MSP_STATUS_EX => MspStatusEx: MspStatusEx => |packet| {
+        MspStatusEx::from_bytes(packet.data.as_slice())
+    },
+    MSP_BF_CONFIG => MspBfConfig: MspBfConfig => |packet| packet.decode_as::<MspBfConfig>(),
+    MSP_RAW_IMU => MspRawImu: MspRawImu => |packet| packet.decode_as::<MspRawImu>(),
+    MSP_DATAFLASH_SUMMARY => MspDataFlashSummaryReply: MspDataFlashSummaryReply => |packet| {
+        packet.decode_as::<MspDataFlashSummaryReply>()
+    },
+    MSP_DATAFLASH_READ => MspDataFlashReply: MspDataFlashReply => |packet| {
+        packet.decode_as::<MspDataFlashReply>()
+    },
+    MSP_ACC_TRIM => MspAccTrim: MspAccTrim => |packet| packet.decode_as::<MspAccTrim>(),
+    MSP_IDENT => MspIdent: MspIdent => |packet| packet.decode_as::<MspIdent>(),
+    MSP_MISC => MspMisc: MspMisc => |packet| packet.decode_as::<MspMisc>(),
+    MSP_ATTITUDE => MspAttitude: MspAttitude => |packet| packet.decode_as::<MspAttitude>(),
+    MSP_ALTITUDE => MspAltitude: MspAltitude => |packet| packet.decode_as::<MspAltitude>(),
+    MSP_BATTERY_CONFIG => MspBatteryConfig: MspBatteryConfig => |packet| {
+        packet.decode_as::<MspBatteryConfig>()
+    },
+    MSP_VOLTAGE_METER_CONFIG => MspVoltageMeterConfig: MspVoltageMeterConfig => |packet| {
+        packet.decode_as::<MspVoltageMeterConfig>()
+    },
+    MSP_ANALOG => MspAnalog: MspAnalog => |packet| packet.decode_as::<MspAnalog>(),
+    MSP_RSSI_CONFIG => MspRssiConfig: MspRssiConfig => |packet| {
+        packet.decode_as::<MspRssiConfig>()
+    },
+    MSP_VOLTAGE_METERS => MspVoltageMeter: MspVoltageMeter => |packet| {
+        packet.decode_as::<MspVoltageMeter>()
+    },
+    MSP_AMPERAGE_METER_CONFIG => MspCurrentMeter: MspCurrentMeter => |packet| {
+        packet.decode_as::<MspCurrentMeter>()
+    },
+    MSP_BATTERY_STATE => MspBatteryState: MspBatteryState => |packet| {
+        packet.decode_as::<MspBatteryState>()
+    },
+    MSP_RC_TUNING => MspRcTuning: MspRcTuning => |packet| packet.decode_as::<MspRcTuning>(),
+    MSP_RX_CONFIG => MspRxConfig: MspRxConfig => |packet| packet.decode_as::<MspRxConfig>(),
+    MSP_RX_MAP => MspRcChannelValue: MspRcChannelValue => |packet| {
+        packet.decode_as::<MspRcChannelValue>()
+    },
+    MSP_SET_RX_MAP => MspRcMappedChannel: MspRcMappedChannel => |packet| {
+        packet.decode_as::<MspRcMappedChannel>()
+    },
+    MSP_FEATURE => MspFeatures: MspFeatures => |packet| packet.decode_as::<MspFeatures>(),
+    MSP_MOTOR => MspMotor: MspMotor => |packet| packet.decode_as::<MspMotor>(),
+    MSP_MOTOR_3D_CONFIG => MspMotor3DConfig: MspMotor3DConfig => |packet| {
+        packet.decode_as::<MspMotor3DConfig>()
+    },
+    MSP_MOTOR_CONFIG => MspMotorConfig: MspMotorConfig => |packet| {
+        packet.decode_as::<MspMotorConfig>()
+    },
+    MSP_RC_DEADBAND => MspRcDeadband: MspRcDeadband => |packet| packet.decode_as::<MspRcDeadband>(),
+    MSP_BOARD_ALIGNMENT => MspSensorAlignment: MspSensorAlignment => |packet| {
+        packet.decode_as::<MspSensorAlignment>()
+    },
+    MSP_ADVANCED_CONFIG => MspAdvancedConfig: MspAdvancedConfig => |packet| {
+        packet.decode_as::<MspAdvancedConfig>()
+    },
+    MSP_FILTER_CONFIG => MspFilterConfig: MspFilterConfig => |packet| {
+        packet.decode_as::<MspFilterConfig>()
+    },
+    MSP_PID_ADVANCED => MspPidAdvanced: MspPidAdvanced => |packet| {
+        packet.decode_as::<MspPidAdvanced>()
+    },
+    MSP_SENSOR_CONFIG => MspSensorConfig: MspSensorConfig => |packet| {
+        packet.decode_as::<MspSensorConfig>()
+    },
+    MSP_SERVO => MspServos: MspServos => |packet| packet.decode_as::<MspServos>(),
+    MSP_MIXER => MspMixerConfig: MspMixerConfig => |packet| packet.decode_as::<MspMixerConfig>(),
+    MSP_MODE_RANGES => MspModeRange: MspModeRange => |packet| packet.decode_as::<MspModeRange>(),
+    MSP_SET_MODE_RANGE => MspSetModeRange: MspSetModeRange => |packet| {
+        packet.decode_as::<MspSetModeRange>()
+    },
+    MSP_OSD_CONFIG => MspOsdConfig: MspOsdConfig => |packet| packet.decode_as::<MspOsdConfig>(),
+    MSP_OSD_LAYOUT_CONFIG => MspSetOsdLayout: MspSetOsdLayout => |packet| {
+        packet.decode_as::<MspSetOsdLayout>()
+    },
+    MSP2_INAV_OSD_SET_LAYOUT_ITEM => MspSetOsdLayoutItem: MspSetOsdLayoutItem => |packet| {
+        packet.decode_as::<MspSetOsdLayoutItem>()
+    },
+    MSP2_INAV_OSD_LAYOUTS => MspOsdLayouts: MspOsdLayouts => |packet| {
+        packet.decode_as::<MspOsdLayouts>()
+    },
+    MSP2_SET_SERIAL_CONFIG => MspSerialSetting: MspSerialSetting => |packet| {
+        packet.decode_as::<MspSerialSetting>()
+    },
+    MSP2_COMMON_SETTING => MspSettingInfoRequest: MspSettingInfoRequest => |packet| {
+        packet.decode_as::<MspSettingInfoRequest>()
+    },
+    MSP2_COMMON_SETTING_INFO => MspSettingInfo: MspSettingInfo => |packet| {
+        packet.decode_as::<MspSettingInfo>()
+    },
+    MSP_RC => MspRc: MspRc => |packet| packet.decode_as::<MspRc>(),
+);
+
 impl MspResponse {
     pub fn command_code(&self) -> MspCommandCode {
         // TODO: Not sure about all those mapping recheck them.
-        match self {
-            MspResponse::MspApiVersion(_) => MspCommandCode::MSP_API_VERSION,
-            MspResponse::MspFlightControllerVariant(_) => MspCommandCode::MSP_FC_VARIANT,
-            MspResponse::MspStatus(_) => MspCommandCode::MSP_STATUS,
-            MspResponse::MspStatusEx(_) => MspCommandCode::MSP_STATUS_EX,
-            MspResponse::MspBfConfig(_) => MspCommandCode::MSP_BF_CONFIG,
-            MspResponse::MspRawImu(_) => MspCommandCode::MSP_RAW_IMU,
-            MspResponse::MspDataFlashSummaryReply(_) => MspCommandCode::MSP_DATAFLASH_SUMMARY,
-            MspResponse::MspDataFlashReply(_) => MspCommandCode::MSP_DATAFLASH_READ,
-            MspResponse::MspDataFlashRead(_) => MspCommandCode::MSP_DATAFLASH_READ,
-            MspResponse::MspAccTrim(_) => MspCommandCode::MSP_ACC_TRIM,
-            MspResponse::MspIdent(_) => MspCommandCode::MSP_IDENT,
-            MspResponse::MspMisc(_) => MspCommandCode::MSP_MISC,
-            MspResponse::MspAttitude(_) => MspCommandCode::MSP_ATTITUDE,
-            MspResponse::MspAltitude(_) => MspCommandCode::MSP_ALTITUDE,
-            MspResponse::MspBatteryConfig(_) => MspCommandCode::MSP_BATTERY_CONFIG,
-            MspResponse::MspVoltageMeterConfig(_) => MspCommandCode::MSP_VOLTAGE_METER_CONFIG,
-            MspResponse::MspAnalog(_) => MspCommandCode::MSP_ANALOG,
-            MspResponse::MspRssiConfig(_) => MspCommandCode::MSP_RSSI_CONFIG,
-            MspResponse::MspVoltageMeter(_) => MspCommandCode::MSP_VOLTAGE_METERS,
-            MspResponse::MspCurrentMeter(_) => MspCommandCode::MSP_AMPERAGE_METER_CONFIG,
-            MspResponse::MspBatteryState(_) => MspCommandCode::MSP_BATTERY_STATE,
-            MspResponse::MspRcTuning(_) => MspCommandCode::MSP_RC_TUNING,
-            MspResponse::MspRxConfig(_) => MspCommandCode::MSP_RX_CONFIG,
-            MspResponse::MspRcChannelValue(_) => MspCommandCode::MSP_RX_MAP,
-            MspResponse::MspRcMappedChannel(_) => MspCommandCode::MSP_SET_RX_MAP,
-            MspResponse::MspFeatures(_) => MspCommandCode::MSP_FEATURE,
-            MspResponse::MspMotor(_) => MspCommandCode::MSP_MOTOR,
-            MspResponse::MspMotor3DConfig(_) => MspCommandCode::MSP_MOTOR_3D_CONFIG,
-            MspResponse::MspMotorConfig(_) => MspCommandCode::MSP_MOTOR_CONFIG,
-            MspResponse::MspRcDeadband(_) => MspCommandCode::MSP_RC_DEADBAND,
-            MspResponse::MspSensorAlignment(_) => MspCommandCode::MSP_BOARD_ALIGNMENT,
-            MspResponse::MspAdvancedConfig(_) => MspCommandCode::MSP_ADVANCED_CONFIG,
-            MspResponse::MspFilterConfig(_) => MspCommandCode::MSP_FILTER_CONFIG,
-            MspResponse::MspPidAdvanced(_) => MspCommandCode::MSP_PID_ADVANCED,
-            MspResponse::MspSensorConfig(_) => MspCommandCode::MSP_SENSOR_CONFIG,
-            MspResponse::MspServos(_) => MspCommandCode::MSP_SERVO,
-            MspResponse::MspMixerConfig(_) => MspCommandCode::MSP_MIXER,
-            MspResponse::MspModeRange(_) => MspCommandCode::MSP_MODE_RANGES,
-            MspResponse::MspSetModeRange(_) => MspCommandCode::MSP_SET_MODE_RANGE,
-            MspResponse::MspOsdConfig(_) => MspCommandCode::MSP_OSD_CONFIG,
-            MspResponse::MspSetGetOsdConfig(_) => MspCommandCode::MSP_OSD_CONFIG,
-            MspResponse::MspSetOsdLayout(_) => MspCommandCode::MSP_OSD_LAYOUT_CONFIG,
-            MspResponse::MspSetOsdLayoutItem(_) => MspCommandCode::MSP2_INAV_OSD_SET_LAYOUT_ITEM,
-            MspResponse::MspOsdLayouts(_) => MspCommandCode::MSP2_INAV_OSD_LAYOUTS,
-            MspResponse::MspSerialSetting(_) => MspCommandCode::MSP2_SET_SERIAL_CONFIG,
-            MspResponse::MspSettingInfoRequest(_) => MspCommandCode::MSP2_COMMON_SETTING,
-            MspResponse::MspSettingInfo(_) => MspCommandCode::MSP2_COMMON_SETTING_INFO,
-            MspResponse::MspRc(_) => MspCommandCode::MSP_RC,
-            MspResponse::Unknown => MspCommandCode::MSP_API_VERSION,
-        }
+        response_command_code(self)
     }
 
     pub fn to_bytes(&self) -> Result<MspPacketData, PackingError> {
@@ -1890,195 +1976,10 @@ impl From<MspResponse> for MspPacket {
 }
 impl From<MspPacket> for MspResponse {
     fn from(packet: MspPacket) -> Self {
-        let cmd = match MspCommandCode::from_primitive(packet.cmd) {
-            Some(cmd) => cmd,
-            None => return MspResponse::Unknown,
+        let Some(cmd) = MspCommandCode::from_primitive(packet.cmd) else {
+            return MspResponse::Unknown;
         };
-        match cmd {
-            MspCommandCode::MSP_API_VERSION => packet
-                .decode_as::<MspApiVersion>()
-                .map(MspResponse::MspApiVersion)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_FC_VARIANT => packet
-                .decode_as::<MspFlightControllerVariant>()
-                .map(MspResponse::MspFlightControllerVariant)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_STATUS => MspStatus::from_bytes(packet.data.as_slice())
-                .map(MspResponse::MspStatus)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_STATUS_EX => MspStatusEx::from_bytes(packet.data.as_slice())
-                .map(MspResponse::MspStatusEx)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_BF_CONFIG => packet
-                .decode_as::<MspBfConfig>()
-                .map(MspResponse::MspBfConfig)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_RAW_IMU => packet
-                .decode_as::<MspRawImu>()
-                .map(MspResponse::MspRawImu)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_DATAFLASH_SUMMARY => packet
-                .decode_as::<MspDataFlashSummaryReply>()
-                .map(MspResponse::MspDataFlashSummaryReply)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_DATAFLASH_READ => packet
-                .decode_as::<MspDataFlashReply>()
-                .map(MspResponse::MspDataFlashReply)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_ACC_TRIM => packet
-                .decode_as::<MspAccTrim>()
-                .map(MspResponse::MspAccTrim)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_IDENT => packet
-                .decode_as::<MspIdent>()
-                .map(MspResponse::MspIdent)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_MISC => packet
-                .decode_as::<MspMisc>()
-                .map(MspResponse::MspMisc)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_ATTITUDE => packet
-                .decode_as::<MspAttitude>()
-                .map(MspResponse::MspAttitude)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_ALTITUDE => packet
-                .decode_as::<MspAltitude>()
-                .map(MspResponse::MspAltitude)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_BATTERY_CONFIG => packet
-                .decode_as::<MspBatteryConfig>()
-                .map(MspResponse::MspBatteryConfig)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_VOLTAGE_METER_CONFIG => packet
-                .decode_as::<MspVoltageMeterConfig>()
-                .map(MspResponse::MspVoltageMeterConfig)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_ANALOG => packet
-                .decode_as::<MspAnalog>()
-                .map(MspResponse::MspAnalog)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_RSSI_CONFIG => packet
-                .decode_as::<MspRssiConfig>()
-                .map(MspResponse::MspRssiConfig)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_VOLTAGE_METERS => packet
-                .decode_as::<MspVoltageMeter>()
-                .map(MspResponse::MspVoltageMeter)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_AMPERAGE_METER_CONFIG => packet
-                .decode_as::<MspCurrentMeter>()
-                .map(MspResponse::MspCurrentMeter)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_BATTERY_STATE => packet
-                .decode_as::<MspBatteryState>()
-                .map(MspResponse::MspBatteryState)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_RC_TUNING => packet
-                .decode_as::<MspRcTuning>()
-                .map(MspResponse::MspRcTuning)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_RX_CONFIG => packet
-                .decode_as::<MspRxConfig>()
-                .map(MspResponse::MspRxConfig)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_RX_MAP => packet
-                .decode_as::<MspRcChannelValue>()
-                .map(MspResponse::MspRcChannelValue)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_SET_RX_MAP => packet
-                .decode_as::<MspRcMappedChannel>()
-                .map(MspResponse::MspRcMappedChannel)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_FEATURE => packet
-                .decode_as::<MspFeatures>()
-                .map(MspResponse::MspFeatures)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_MOTOR => packet
-                .decode_as::<MspMotor>()
-                .map(MspResponse::MspMotor)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_MOTOR_3D_CONFIG => packet
-                .decode_as::<MspMotor3DConfig>()
-                .map(MspResponse::MspMotor3DConfig)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_MOTOR_CONFIG => packet
-                .decode_as::<MspMotorConfig>()
-                .map(MspResponse::MspMotorConfig)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_RC_DEADBAND => packet
-                .decode_as::<MspRcDeadband>()
-                .map(MspResponse::MspRcDeadband)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_BOARD_ALIGNMENT => packet
-                .decode_as::<MspSensorAlignment>()
-                .map(MspResponse::MspSensorAlignment)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_ADVANCED_CONFIG => packet
-                .decode_as::<MspAdvancedConfig>()
-                .map(MspResponse::MspAdvancedConfig)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_FILTER_CONFIG => packet
-                .decode_as::<MspFilterConfig>()
-                .map(MspResponse::MspFilterConfig)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_PID_ADVANCED => packet
-                .decode_as::<MspPidAdvanced>()
-                .map(MspResponse::MspPidAdvanced)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_SENSOR_CONFIG => packet
-                .decode_as::<MspSensorConfig>()
-                .map(MspResponse::MspSensorConfig)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_SERVO => packet
-                .decode_as::<MspServos>()
-                .map(MspResponse::MspServos)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_MIXER => packet
-                .decode_as::<MspMixerConfig>()
-                .map(MspResponse::MspMixerConfig)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_MODE_RANGES => packet
-                .decode_as::<MspModeRange>()
-                .map(MspResponse::MspModeRange)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_SET_MODE_RANGE => packet
-                .decode_as::<MspSetModeRange>()
-                .map(MspResponse::MspSetModeRange)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_OSD_CONFIG => packet
-                .decode_as::<MspOsdConfig>()
-                .map(MspResponse::MspOsdConfig)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_OSD_LAYOUT_CONFIG => packet
-                .decode_as::<MspSetOsdLayout>()
-                .map(MspResponse::MspSetOsdLayout)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP2_INAV_OSD_SET_LAYOUT_ITEM => packet
-                .decode_as::<MspSetOsdLayoutItem>()
-                .map(MspResponse::MspSetOsdLayoutItem)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP2_INAV_OSD_LAYOUTS => packet
-                .decode_as::<MspOsdLayouts>()
-                .map(MspResponse::MspOsdLayouts)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP2_SET_SERIAL_CONFIG => packet
-                .decode_as::<MspSerialSetting>()
-                .map(MspResponse::MspSerialSetting)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP2_COMMON_SETTING => packet
-                .decode_as::<MspSettingInfoRequest>()
-                .map(MspResponse::MspSettingInfoRequest)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP2_COMMON_SETTING_INFO => packet
-                .decode_as::<MspSettingInfo>()
-                .map(MspResponse::MspSettingInfo)
-                .unwrap_or(MspResponse::Unknown),
-            MspCommandCode::MSP_RC => packet
-                .decode_as::<MspRc>()
-                .map(MspResponse::MspRc)
-                .unwrap_or(MspResponse::Unknown),
-            _ => MspResponse::Unknown,
-        }
+        decode_response(cmd, &packet)
     }
 }
 
