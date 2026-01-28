@@ -338,8 +338,7 @@ mod tests {
     use cu29::prelude::{CuApplication, CuResult};
     use cu29_helpers::basic_copper_setup;
     use cu29_unifiedlog::{UnifiedLoggerWrite, memmap::MmapSectionStorage};
-    use once_cell::sync::Lazy;
-    use std::sync::Mutex;
+    use std::sync::{LazyLock, Mutex};
     use tempfile::TempDir;
 
     use super::BridgeLoopback::BridgeSchedulerAppBuilder as BridgeLoopbackBuilder;
@@ -369,7 +368,7 @@ mod tests {
         events::take()
     }
 
-    static TEST_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+    static TEST_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
     #[test]
     fn bridge_only_ab_orders_bridges_like_sources_and_sinks() {
