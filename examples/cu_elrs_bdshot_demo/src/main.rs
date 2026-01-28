@@ -75,7 +75,7 @@ type ElrsRx = Pin<Gpio3, FunctionUartAux, PullUp>;
 type SerialPort = UartPeripheral<rp235x_hal::uart::Enabled, UART0, (ElrsTx, ElrsRx)>;
 type SerialPortError = rp235x_hal::uart::ReadErrorType;
 type SerialResourceInner = SerialPort;
-type SerialResource = cu_crsf::LockedSerial<SerialResourceInner>;
+type SerialResource = cu_serial_util::LockedSerial<SerialResourceInner>;
 
 #[entry]
 fn main() -> ! {

@@ -4,8 +4,6 @@ extern crate alloc;
 
 pub mod messages;
 
-pub use spin::Mutex;
-
 // std implementation
 #[cfg(feature = "std")]
 mod std_impl {
@@ -26,7 +24,7 @@ use cu29::prelude::*;
 #[cfg(feature = "std")]
 use cu29::resource::ResourceBundle;
 use cu29::resources;
-use embedded_io::{ErrorType, Read, Write};
+use embedded_io::{Read, Write};
 
 const READ_BUFFER_SIZE: usize = 1024;
 const PARSER_BUFFER_SIZE: usize = 1024;
@@ -87,10 +85,10 @@ where
                                 self.last_lq = Some(link_statistics);
                             }
                             Packet::RcChannels(channels) => {
-                                self.last_rc = Some(channels);
-                                for (i, value) in self.last_rc.iter().enumerate() {
-                                    debug!("RC Channel {}: {}", i, value.as_ref());
+                                for (i, value) in channels.iter().enumerate() {
+                                    debug!("RC Channel {}: {}", i, value);
                                 }
+                                self.last_rc = Some(channels);
                             }
                             _ => {
                                 info!("CRSF: Received other packet");
@@ -256,41 +254,11 @@ impl ResourceBundle for StdSerialBundle {
             ))
         })?;
         let key = bundle.key(StdSerialBundleId::Serial);
-        manager.add_owned(key, LockedSerial::new(serial))
-    }
-}
-
-pub struct LockedSerial<T>(pub Mutex<T>);
-
-impl<T> LockedSerial<T> {
-    pub fn new(inner: T) -> Self {
-        Self(Mutex::new(inner))
-    }
-}
-
-impl<T: ErrorType> ErrorType for LockedSerial<T> {
-    type Error = T::Error;
-}
-
-impl<T: Read> Read for LockedSerial<T> {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        let mut guard = self.0.lock();
-        guard.read(buf)
-    }
-}
-
-impl<T: Write> Write for LockedSerial<T> {
-    fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-        let mut guard = self.0.lock();
-        guard.write(buf)
-    }
-
-    fn flush(&mut self) -> Result<(), Self::Error> {
-        let mut guard = self.0.lock();
-        guard.flush()
+        manager.add_owned(key, cu_serial_util::LockedSerial::new(serial))
     }
 }
 
 /// Convenience alias for std targets.
 #[cfg(feature = "std")]
-pub type CrsfBridgeStd = CrsfBridge<LockedSerial<std_serial::StdSerial>, std::io::Error>;
+pub type CrsfBridgeStd =
+    CrsfBridge<cu_serial_util::LockedSerial<std_serial::StdSerial>, std::io::Error>;

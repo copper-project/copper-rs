@@ -20,6 +20,7 @@ members = [
   "components/bridges/cu_zenoh_bridge",
   "components/libs/cu_msp_lib",
   "components/libs/cu_embedded_registry",
+  "components/libs/cu_serial_util",
   "components/libs/cu_transform",
   "components/monitors/cu_consolemon",
   "components/monitors/cu_logmon",

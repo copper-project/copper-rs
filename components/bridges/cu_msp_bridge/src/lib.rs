@@ -45,79 +45,34 @@ use cu29::prelude::*;
 #[cfg(feature = "std")]
 use cu29::resource::ResourceBundle;
 use cu29::resource::{Owned, ResourceBindings, ResourceManager};
-use embedded_io::{ErrorType, Read, Write};
+use embedded_io::{Read, Write};
 use heapless::Vec as HeaplessVec;
 use serde::{Deserialize, Serialize};
-use spin::Mutex;
 
 const READ_BUFFER_SIZE: usize = 512;
 const MAX_REQUESTS_PER_BATCH: usize = 8;
 const MAX_RESPONSES_PER_BATCH: usize = 16;
 const TX_BUFFER_CAPACITY: usize = MSP_MAX_PAYLOAD_LEN + 12;
 
-/// Batch of MSP requests transported over the bridge.
+/// Batch of MSP messages transported over the bridge.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct MspRequestBatch(pub HeaplessVec<MspRequest, MAX_REQUESTS_PER_BATCH>);
+pub struct MspBatch<T, const N: usize>(pub HeaplessVec<T, N>);
 
-impl MspRequestBatch {
+impl<T, const N: usize> MspBatch<T, N> {
     pub fn new() -> Self {
         Self(HeaplessVec::new())
     }
 
-    pub fn push(&mut self, req: MspRequest) -> CuResult<()> {
-        self.0
-            .push(req)
-            .map_err(|_| CuError::from("MSP request batch overflow"))
+    pub fn push(&mut self, value: T, overflow_msg: &'static str) -> CuResult<()> {
+        self.0.push(value).map_err(|_| CuError::from(overflow_msg))
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &MspRequest> {
+    pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.0.iter()
     }
-}
 
-impl Encode for MspRequestBatch {
-    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        Encode::encode(&self.0.as_slice(), encoder)
-    }
-}
-
-impl Decode<()> for MspRequestBatch {
-    fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let values = <Vec<MspRequest> as Decode<()>>::decode(decoder)?;
-        let count = values.len();
-        if count > MAX_REQUESTS_PER_BATCH {
-            return Err(DecodeError::ArrayLengthMismatch {
-                required: MAX_REQUESTS_PER_BATCH,
-                found: count,
-            });
-        }
-        let mut batch = MspRequestBatch::new();
-        for value in values {
-            batch
-                .0
-                .push(value)
-                .map_err(|_| DecodeError::ArrayLengthMismatch {
-                    required: MAX_REQUESTS_PER_BATCH,
-                    found: count,
-                })?;
-        }
-        Ok(batch)
-    }
-}
-
-/// Batch of MSP responses collected by the bridge.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct MspResponseBatch(pub HeaplessVec<MspResponse, MAX_RESPONSES_PER_BATCH>);
-
-impl MspResponseBatch {
-    pub fn new() -> Self {
-        Self(HeaplessVec::new())
-    }
-
-    pub fn push(&mut self, resp: MspResponse) -> CuResult<()> {
-        self.0
-            .push(resp)
-            .map_err(|_| CuError::from("MSP response batch overflow"))
+    pub fn len(&self) -> usize {
+        self.0.len()
     }
 
     pub fn clear(&mut self) {
@@ -129,35 +84,47 @@ impl MspResponseBatch {
     }
 }
 
-impl Encode for MspResponseBatch {
+impl<T, const N: usize> Encode for MspBatch<T, N>
+where
+    T: Encode,
+{
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         Encode::encode(&self.0.as_slice(), encoder)
     }
 }
 
-impl Decode<()> for MspResponseBatch {
+impl<T, const N: usize> Decode<()> for MspBatch<T, N>
+where
+    T: Decode<()>,
+{
     fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let values = <Vec<MspResponse> as Decode<()>>::decode(decoder)?;
+        let values = <Vec<T> as Decode<()>>::decode(decoder)?;
         let count = values.len();
-        if count > MAX_RESPONSES_PER_BATCH {
+        if count > N {
             return Err(DecodeError::ArrayLengthMismatch {
-                required: MAX_RESPONSES_PER_BATCH,
+                required: N,
                 found: count,
             });
         }
-        let mut batch = MspResponseBatch::new();
+        let mut batch = MspBatch::new();
         for value in values {
             batch
                 .0
                 .push(value)
                 .map_err(|_| DecodeError::ArrayLengthMismatch {
-                    required: MAX_RESPONSES_PER_BATCH,
+                    required: N,
                     found: count,
                 })?;
         }
         Ok(batch)
     }
 }
+
+/// Batch of MSP requests transported over the bridge.
+pub type MspRequestBatch = MspBatch<MspRequest, MAX_REQUESTS_PER_BATCH>;
+
+/// Batch of MSP responses collected by the bridge.
+pub type MspResponseBatch = MspBatch<MspResponse, MAX_RESPONSES_PER_BATCH>;
 
 tx_channels! {
     pub struct TxChannels : TxId {
@@ -218,8 +185,8 @@ where
 
     fn poll_serial(&mut self) -> CuResult<()> {
         loop {
-            if self.pending_responses.0.len() >= MAX_RESPONSES_PER_BATCH
-                || self.pending_requests.0.len() >= MAX_REQUESTS_PER_BATCH
+            if self.pending_responses.len() >= MAX_RESPONSES_PER_BATCH
+                || self.pending_requests.len() >= MAX_REQUESTS_PER_BATCH
             {
                 break;
             }
@@ -230,8 +197,8 @@ where
                 break;
             }
             for &byte in &self.read_buffer[..n] {
-                if self.pending_responses.0.len() >= MAX_RESPONSES_PER_BATCH
-                    || self.pending_requests.0.len() >= MAX_REQUESTS_PER_BATCH
+                if self.pending_responses.len() >= MAX_RESPONSES_PER_BATCH
+                    || self.pending_requests.len() >= MAX_REQUESTS_PER_BATCH
                 {
                     break;
                 }
@@ -239,12 +206,14 @@ where
                     if packet.direction == MspPacketDirection::ToFlightController {
                         // This is an incoming request from the VTX
                         if let Some(request) = MspRequest::from_packet(&packet) {
-                            self.pending_requests.push(request)?;
+                            self.pending_requests
+                                .push(request, "MSP request batch overflow")?;
                         }
                     } else {
                         // This is a response from the VTX
                         let response = MspResponse::from(packet);
-                        self.pending_responses.push(response)?;
+                        self.pending_responses
+                            .push(response, "MSP response batch overflow")?;
                     }
                 }
             }
@@ -415,41 +384,11 @@ impl ResourceBundle for StdSerialBundle {
             ))
         })?;
         let key = bundle.key(StdSerialBundleId::Serial);
-        manager.add_owned(key, LockedSerial::new(serial))
-    }
-}
-
-pub struct LockedSerial<T>(pub Mutex<T>);
-
-impl<T> LockedSerial<T> {
-    pub fn new(inner: T) -> Self {
-        Self(Mutex::new(inner))
-    }
-}
-
-impl<T: ErrorType> ErrorType for LockedSerial<T> {
-    type Error = T::Error;
-}
-
-impl<T: Read> Read for LockedSerial<T> {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        let mut guard = self.0.lock();
-        guard.read(buf)
-    }
-}
-
-impl<T: Write> Write for LockedSerial<T> {
-    fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-        let mut guard = self.0.lock();
-        guard.write(buf)
-    }
-
-    fn flush(&mut self) -> Result<(), Self::Error> {
-        let mut guard = self.0.lock();
-        guard.flush()
+        manager.add_owned(key, cu_serial_util::LockedSerial::new(serial))
     }
 }
 
 /// Type alias for MSP bridge using standard I/O (for backward compatibility)
 #[cfg(feature = "std")]
-pub type CuMspBridgeStd = CuMspBridge<LockedSerial<std_serial::StdSerial>, std::io::Error>;
+pub type CuMspBridgeStd =
+    CuMspBridge<cu_serial_util::LockedSerial<std_serial::StdSerial>, std::io::Error>;
