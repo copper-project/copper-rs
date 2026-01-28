@@ -107,7 +107,7 @@ just extract-log /dev/sdX1 logs/embedded_0.copper
 - **cargo-nextest**: Fast test runner (install: `cargo install cargo-nextest`)
 - **typos-cli**: Spell checker (install: `cargo install typos-cli`)
 - **taplo-cli**: TOML formatter (install: `cargo install --locked taplo-cli`)
-- **ronfmt**: RON formatter (install: `cargo install ronfmt`)
+- **fmtron**: RON formatter (install: `cargo install fmtron`)
 - **cargo-generate**: Project template tool (install: `cargo install cargo-generate`)
 - **cargo-machete**: Unused dependency detection (install: `cargo install cargo-machete`)
 
@@ -306,7 +306,7 @@ Expand macro output for debugging: `cargo expand -p your-package`
 - **Task order matters**: Tasks execute in dependency order. Check the generated execution plan if tasks aren't running as expected.
 - **Resource lifetimes**: Resources must outlive task execution. Use `'r` lifetime parameters correctly.
 - **Feature conflicts**: Only one of `restore-state-*` features can be enabled at a time.
-- **RON syntax**: RON is similar to Rust but not identical. Use `ronfmt` to validate.
+- **RON syntax**: RON is similar to Rust but not identical. Use `fmtron` to validate.
 - **Frozen state**: Implement `Freezable` properly or replay will fail.
 
 ## Debugging Tips

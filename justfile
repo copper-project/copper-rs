@@ -18,7 +18,7 @@ lint:
 fmt-check: check-format-tools
 	cargo +stable fmt --all -- --check
 	git ls-files -z '*.toml' | xargs -0 taplo format --check
-	git ls-files -z '*.ron' ':!examples/modular_config_example/motors.ron' | xargs -0 -n 1 ronfmt
+	git ls-files -z '*.ron' ':!examples/modular_config_example/motors.ron' | xargs -0 -n 1 fmtron --input
 	rg --files -g '*.ron.bak' | xargs rm -f
 	git diff --exit-code -- '*.ron'
 
@@ -26,7 +26,7 @@ fmt-check: check-format-tools
 fmt: check-format-tools
 	cargo +stable fmt --all
 	git ls-files -z '*.toml' | xargs -0 taplo format
-	git ls-files -z '*.ron' ':!examples/modular_config_example/motors.ron' | xargs -0 -n 1 ronfmt
+	git ls-files -z '*.ron' ':!examples/modular_config_example/motors.ron' | xargs -0 -n 1 fmtron --input
 	rg --files -g '*.ron.bak' | xargs rm -f
 
 # Ensure the formatters needed by fmt/fmt-check are installed.
@@ -39,8 +39,8 @@ check-format-tools:
 		echo "Missing taplo (taplo-cli). Install with: cargo install --locked taplo-cli"
 		missing=1
 	fi
-	if ! command -v ronfmt >/dev/null 2>&1; then
-		echo "Missing ronfmt. Install with: cargo install --locked ronfmt"
+	if ! command -v fmtron >/dev/null 2>&1; then
+		echo "Missing fmtron. Install with: cargo install --locked fmtron"
 		missing=1
 	fi
 	if ! command -v rg > /dev/null 2>&1; then

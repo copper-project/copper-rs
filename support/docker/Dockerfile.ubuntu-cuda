@@ -59,7 +59,7 @@ RUN curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C ${CARGO_HOME:-~/
 # Install additional tools needed for the CI
 RUN cargo install cargo-generate \
     && cargo install --locked taplo-cli \
-    && cargo install ronfmt \
+    && cargo install fmtron \
     && cargo install cargo-deny \
     && cargo install typos-cli \
     && cargo install sccache
