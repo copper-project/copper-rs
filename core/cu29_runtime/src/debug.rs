@@ -293,7 +293,9 @@ where
             // ts is after the last section start; allow selecting the last section
             // if the timestamp still lies inside its recorded range.
             let last = self.sections.last().unwrap();
-            if let Some(last_ts) = last.last_ts && ts <= last_ts {
+            if let Some(last_ts) = last.last_ts
+                && ts <= last_ts
+            {
                 return Some(self.sections.len() - 1);
             }
             return None;
