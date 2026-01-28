@@ -61,6 +61,7 @@ struct CachedSection<P: CopperListTuple> {
 /// API generic: the caller can replay recorded outputs, poke clocks, or inject extra
 /// assertions inside the callback. `TF` extracts a timestamp from a copperlist to
 /// support time-based seeking.
+const DEFAULT_SECTION_CACHE_CAP: usize = 8;
 pub struct CuDebugSession<App, P, CB, TF, S, L>
 where
     P: CopperListTuple,
@@ -121,6 +122,31 @@ where
         ))
     }
 
+    /// Build a session directly from a log, with an explicit cache size.
+    pub fn from_log_with_cache_cap(
+        log_base: &Path,
+        app: App,
+        robot_clock: RobotClock,
+        clock_mock: RobotClockMock,
+        build_callback: CB,
+        time_of: TF,
+        cache_cap: usize,
+    ) -> CuResult<Self> {
+        let (sections, keyframes, total_entries) = index_log::<P, _>(log_base, &time_of)?;
+        Ok(Self::new_with_cache_cap(
+            log_base,
+            app,
+            robot_clock,
+            clock_mock,
+            sections,
+            total_entries,
+            keyframes,
+            build_callback,
+            time_of,
+            cache_cap,
+        ))
+    }
+
     /// Create a new session from prebuilt indices.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
@@ -133,6 +159,33 @@ where
         keyframes: Vec<KeyFrame>,
         build_callback: CB,
         time_of: TF,
+    ) -> Self {
+        Self::new_with_cache_cap(
+            log_base,
+            app,
+            robot_clock,
+            clock_mock,
+            sections,
+            total_entries,
+            keyframes,
+            build_callback,
+            time_of,
+            DEFAULT_SECTION_CACHE_CAP,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new_with_cache_cap(
+        log_base: &Path,
+        app: App,
+        robot_clock: RobotClock,
+        clock_mock: RobotClockMock,
+        sections: Vec<SectionIndexEntry>,
+        total_entries: usize,
+        keyframes: Vec<KeyFrame>,
+        build_callback: CB,
+        time_of: TF,
+        cache_cap: usize,
     ) -> Self {
         Self {
             log_base: log_base.to_path_buf(),
@@ -149,7 +202,7 @@ where
             time_of,
             cache: HashMap::new(),
             cache_order: VecDeque::new(),
-            cache_cap: 8,
+            cache_cap: cache_cap.max(1),
             phantom: PhantomData,
         }
     }
