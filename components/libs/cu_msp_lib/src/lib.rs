@@ -24,7 +24,7 @@ pub(crate) type MspPacketDataBuffer = HeaplessVec<u8, MSP_MAX_PAYLOAD_LEN>;
 
 impl MspPacketData {
     pub(crate) fn new() -> MspPacketData {
-        MspPacketData(MspPacketDataBuffer::new())
+        MspPacketData::default()
     }
 
     pub fn as_mut_slice(&mut self) -> &mut [u8] {
@@ -46,6 +46,12 @@ impl Debug for MspPacketData {
             write!(f, "{byte:02X}")?;
         }
         Ok(())
+    }
+}
+
+impl Default for MspPacketData {
+    fn default() -> Self {
+        MspPacketData(MspPacketDataBuffer::new())
     }
 }
 
@@ -191,7 +197,7 @@ impl MspParser {
             packet_direction: MspPacketDirection::ToFlightController,
             packet_data_length_remaining: 0,
             packet_cmd: 0,
-            packet_data: MspPacketData::new(),
+            packet_data: MspPacketData::default(),
             packet_crc: 0,
             packet_crc_v2: CRCu8::crc8dvb_s2(),
             last_packet_info: None,
