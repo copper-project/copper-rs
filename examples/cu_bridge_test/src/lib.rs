@@ -1,12 +1,29 @@
+use clap::ValueEnum;
 use cu29::cubridge::CuBridge;
 use cu29::prelude::*;
-use once_cell::sync::Lazy;
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
+
+#[derive(Copy, Clone, Debug, ValueEnum)]
+pub enum MissionArg {
+    #[value(name = "BridgeOnlyAB")]
+    BridgeOnlyAb,
+    #[value(name = "BridgeLoopback")]
+    BridgeLoopback,
+    #[value(name = "SourceToBridge")]
+    SourceToBridge,
+    #[value(name = "BridgeToSink")]
+    BridgeToSink,
+    #[value(name = "BridgeTaskSame")]
+    BridgeTaskSame,
+    #[value(name = "BridgeFanout")]
+    BridgeFanout,
+}
 
 mod events {
     use super::*;
 
-    pub static EVENT_LOG: Lazy<Mutex<Vec<&'static str>>> = Lazy::new(|| Mutex::new(Vec::new()));
+    pub static EVENT_LOG: LazyLock<Mutex<Vec<&'static str>>> =
+        LazyLock::new(|| Mutex::new(Vec::new()));
 
     pub fn record(event: &'static str) {
         // debug!("Event: {}", event);
@@ -321,8 +338,7 @@ mod tests {
     use cu29::prelude::{CuApplication, CuResult};
     use cu29_helpers::basic_copper_setup;
     use cu29_unifiedlog::{UnifiedLoggerWrite, memmap::MmapSectionStorage};
-    use once_cell::sync::Lazy;
-    use std::sync::Mutex;
+    use std::sync::{LazyLock, Mutex};
     use tempfile::TempDir;
 
     use super::BridgeLoopback::BridgeSchedulerAppBuilder as BridgeLoopbackBuilder;
@@ -352,7 +368,7 @@ mod tests {
         events::take()
     }
 
-    static TEST_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+    static TEST_MUTEX: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
     #[test]
     fn bridge_only_ab_orders_bridges_like_sources_and_sinks() {
