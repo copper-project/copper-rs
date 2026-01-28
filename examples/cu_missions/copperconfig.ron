@@ -7,12 +7,14 @@
         ),
         (
             id: "taskA",
-            type: "tasks::ExampleTaskA",
+            type: "tasks::ExampleTask",
+            config: {"label": "Mission A"},
             missions: ["A"],
         ),
         (
             id: "taskB",
-            type: "tasks::ExampleTaskB",
+            type: "tasks::ExampleTask",
+            config: {"label": "Mission B"},
             missions: ["B"],
         ),
         (

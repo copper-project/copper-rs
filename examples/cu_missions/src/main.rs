@@ -10,7 +10,18 @@ struct App {}
 use A::AppBuilder as AppBuilderA;
 use B::AppBuilder as AppBuilderB;
 
-const SLAB_SIZE: Option<usize> = Some(1024 * 1024);
+const SLAB_SIZE: Option<usize> = Some(10 * 1024 * 1024);
+
+fn run_once<App>(app: &mut App) -> CuResult<()>
+where
+    App: CuApplication<memmap::MmapSectionStorage, UnifiedLoggerWrite>,
+{
+    app.start_all_tasks()?;
+    app.run_one_iteration()?;
+    app.stop_all_tasks()?;
+    Ok(())
+}
+
 fn main() {
     let tmp_dir = tempfile::TempDir::new().expect("could not create a tmp dir");
     let logger_path = tmp_dir.path().join("monitor.copper");
@@ -31,37 +42,11 @@ fn main() {
     let clock = copper_ctx.clock;
     debug!("Running... starting clock: {}.", clock.now());
     debug!("Starting Mission A.");
-    application_a
-        .start_all_tasks()
-        .expect("Failed to start application.");
-
-    // In the real world, execute this as many times as needed
-    application_a
-        .run_one_iteration()
-        .expect("Failed to run application.");
-
-    debug!("Stopping Mission A.");
-    // Let's switch mission now!
-    application_a
-        .stop_all_tasks()
-        .expect("Failed to stop application.");
+    run_once(&mut application_a).expect("Failed to run mission A.");
 
     debug!("Starting Mission B.");
     // Note if you don't end the tasks, you'll be up for a bad time because tasks can hog some resources.
-    application_b
-        .start_all_tasks()
-        .expect("Failed to start application.");
-
-    // In the real world, execute this as many times as needed
-    application_b
-        .run_one_iteration()
-        .expect("Failed to run application.");
-
-    debug!("Stopping Mission B.");
-    // End of all the missions.
-    application_b
-        .stop_all_tasks()
-        .expect("Failed to stop application.");
+    run_once(&mut application_b).expect("Failed to run mission B.");
 
     debug!("End of program: {}.", clock.now());
 }
