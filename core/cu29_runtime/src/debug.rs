@@ -293,10 +293,8 @@ where
             // ts is after the last section start; allow selecting the last section
             // if the timestamp still lies inside its recorded range.
             let last = self.sections.last().unwrap();
-            if let Some(last_ts) = last.last_ts {
-                if ts <= last_ts {
-                    return Some(self.sections.len() - 1);
-                }
+            if let Some(last_ts) = last.last_ts && ts <= last_ts {
+                return Some(self.sections.len() - 1);
             }
             return None;
         }
@@ -304,10 +302,10 @@ where
         // Fallback for sections missing timestamps: choose first window that contains ts;
         // if ts is earlier than the first timestamped section, pick that section; otherwise
         // only return None when ts is past the last known range.
-        if let Some(first_ts) = self.sections.first().and_then(|s| s.first_ts) {
-            if ts <= first_ts {
-                return Some(0);
-            }
+        if let Some(first_ts) = self.sections.first().and_then(|s| s.first_ts)
+            && ts <= first_ts
+        {
+            return Some(0);
         }
 
         if let Some(idx) = self
