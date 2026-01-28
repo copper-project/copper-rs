@@ -16,18 +16,18 @@ lint:
 
 # Formatting check only
 fmt-check: check-format-tools
-	cargo +stable fmt --all -- --check
-	git ls-files -z '*.toml' | xargs -0 taplo format --check
-	git ls-files -z '*.ron' ':!examples/modular_config_example/motors.ron' | xargs -0 -n 1 fmtron --input
-	rg --files -g '*.ron.bak' | xargs rm -f
-	git diff --exit-code -- '*.ron'
+	@cargo +stable fmt --all -- --check
+	@git ls-files -z '*.toml' | xargs -0 -r env RUST_LOG=warn taplo format --check
+	@git ls-files -z '*.ron' ':!examples/modular_config_example/motors.ron' | xargs -0 -r -n 1 fmtron --input
+	@rg --files -g '*.ron.bak' | xargs rm -f
+	@git diff --exit-code -- '*.ron'
 
 # Apply formatting to Rust, TOML, and RON files
 fmt: check-format-tools
-	cargo +stable fmt --all
-	git ls-files -z '*.toml' | xargs -0 taplo format
-	git ls-files -z '*.ron' ':!examples/modular_config_example/motors.ron' | xargs -0 -n 1 fmtron --input
-	rg --files -g '*.ron.bak' | xargs rm -f
+	@cargo +stable fmt --all
+	@git ls-files -z '*.toml' | xargs -0 -r env RUST_LOG=warn taplo format >/dev/null
+	@git ls-files -z '*.ron' ':!examples/modular_config_example/motors.ron' | xargs -0 -r -n 1 fmtron --input>/dev/null
+	@rg --files -g '*.ron.bak' | xargs rm -f
 
 # Ensure the formatters needed by fmt/fmt-check are installed.
 check-format-tools:
