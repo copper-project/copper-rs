@@ -64,7 +64,8 @@ jobs:
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
 
       - name: Detect host target
-        run: echo "HOST_TARGET=$(rustc +${{ inputs.toolchain }} -vV | sed -n 's/^host: //p')" >> $GITHUB_ENV
+        run: |
+          echo "HOST_TARGET=$(rustc +${{ inputs.toolchain }} -vV | sed -n 's/^host: //p')" >> "$GITHUB_ENV"
 
       - name: Clippy firmware (RP2350)
         working-directory: examples/cu_rp2350_skeleton
