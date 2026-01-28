@@ -10,7 +10,7 @@ struct App {}
 use A::AppBuilder as AppBuilderA;
 use B::AppBuilder as AppBuilderB;
 
-const SLAB_SIZE: Option<usize> = Some(1024 * 1024);
+const SLAB_SIZE: Option<usize> = Some(10 * 1024 * 1024);
 
 fn run_once<App>(app: &mut App) -> CuResult<()>
 where

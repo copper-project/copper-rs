@@ -22,7 +22,7 @@ impl CuSrcTask for ExampleSrc {
 }
 
 pub struct ExampleTask {
-    label: &'static str,
+    label: String,
 }
 
 impl Freezable for ExampleTask {}
@@ -39,9 +39,7 @@ impl CuTask for ExampleTask {
         let label = config
             .and_then(|cfg| cfg.get::<String>("label").ok().flatten())
             .unwrap_or_else(|| "Mission".to_string());
-        Ok(Self {
-            label: Box::leak(label.into_boxed_str()),
-        })
+        Ok(Self { label })
     }
 
     fn process(
@@ -50,7 +48,7 @@ impl CuTask for ExampleTask {
         input: &Self::Input<'_>,
         output: &mut Self::Output<'_>,
     ) -> CuResult<()> {
-        debug!("Processing from {}.", self.label);
+        debug!("Processing from {}.", &self.label);
         output.set_payload(input.payload().unwrap() + 1);
         Ok(())
     }
