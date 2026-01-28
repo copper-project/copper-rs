@@ -6,9 +6,11 @@
 extern crate alloc;
 
 use ConfigGraphs::{Missions, Simple};
+use core::any::type_name;
 use core::fmt;
 use core::fmt::Display;
 use cu29_traits::{CuError, CuResult};
+use cu29_value::Value as CuValue;
 use hashbrown::HashMap;
 pub use petgraph::Direction::Incoming;
 pub use petgraph::Direction::Outgoing;
@@ -19,7 +21,15 @@ use petgraph::visit::{Bfs, EdgeRef};
 use ron::extensions::Extensions;
 use ron::value::Value as RonValue;
 use ron::{Number, Options};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+#[cfg(not(feature = "std"))]
+use alloc::boxed::Box;
+#[cfg(not(feature = "std"))]
+use alloc::collections::BTreeMap;
+#[cfg(feature = "std")]
+use std::collections::BTreeMap;
 
 #[cfg(not(feature = "std"))]
 mod imp {
@@ -86,9 +96,91 @@ impl ComponentConfig {
     }
 
     #[allow(dead_code)]
+    /// Retrieve a structured config value by deserializing it with cu29-value.
+    ///
+    /// Example RON:
+    /// `{ "calibration": { "matrix": [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]], "enabled": true } }`
+    ///
+    /// ```rust,ignore
+    /// #[derive(serde::Deserialize)]
+    /// struct CalibrationCfg {
+    ///     matrix: [[f32; 3]; 3],
+    ///     enabled: bool,
+    /// }
+    /// let cfg: CalibrationCfg = config.get_value("calibration")?.unwrap();
+    /// ```
+    pub fn get_value<T>(&self, key: &str) -> Result<Option<T>, ConfigError>
+    where
+        T: DeserializeOwned,
+    {
+        let ComponentConfig(config) = self;
+        let Some(value) = config.get(key) else {
+            return Ok(None);
+        };
+        let cu_value = ron_value_to_cu_value(&value.0).map_err(|err| err.with_key(key))?;
+        cu_value
+            .deserialize_into::<T>()
+            .map(Some)
+            .map_err(|err| ConfigError {
+                message: format!(
+                    "Config key '{key}' failed to deserialize as {}: {err}",
+                    type_name::<T>()
+                ),
+            })
+    }
+
+    #[allow(dead_code)]
     pub fn set<T: Into<Value>>(&mut self, key: &str, value: T) {
         let ComponentConfig(config) = self;
         config.insert(key.to_string(), value.into());
+    }
+}
+
+fn ron_value_to_cu_value(value: &RonValue) -> Result<CuValue, ConfigError> {
+    match value {
+        RonValue::Bool(v) => Ok(CuValue::Bool(*v)),
+        RonValue::Char(v) => Ok(CuValue::Char(*v)),
+        RonValue::String(v) => Ok(CuValue::String(v.clone())),
+        RonValue::Bytes(v) => Ok(CuValue::Bytes(v.clone())),
+        RonValue::Unit => Ok(CuValue::Unit),
+        RonValue::Option(v) => {
+            let mapped = match v {
+                Some(inner) => Some(Box::new(ron_value_to_cu_value(inner)?)),
+                None => None,
+            };
+            Ok(CuValue::Option(mapped))
+        }
+        RonValue::Seq(seq) => {
+            let mut mapped = Vec::with_capacity(seq.len());
+            for item in seq {
+                mapped.push(ron_value_to_cu_value(item)?);
+            }
+            Ok(CuValue::Seq(mapped))
+        }
+        RonValue::Map(map) => {
+            let mut mapped = BTreeMap::new();
+            for (key, value) in map.iter() {
+                let mapped_key = ron_value_to_cu_value(key)?;
+                let mapped_value = ron_value_to_cu_value(value)?;
+                mapped.insert(mapped_key, mapped_value);
+            }
+            Ok(CuValue::Map(mapped))
+        }
+        RonValue::Number(num) => match num {
+            Number::I8(v) => Ok(CuValue::I8(*v)),
+            Number::I16(v) => Ok(CuValue::I16(*v)),
+            Number::I32(v) => Ok(CuValue::I32(*v)),
+            Number::I64(v) => Ok(CuValue::I64(*v)),
+            Number::U8(v) => Ok(CuValue::U8(*v)),
+            Number::U16(v) => Ok(CuValue::U16(*v)),
+            Number::U32(v) => Ok(CuValue::U32(*v)),
+            Number::U64(v) => Ok(CuValue::U64(*v)),
+            Number::F32(v) => Ok(CuValue::F32(v.0)),
+            Number::F64(v) => Ok(CuValue::F64(v.0)),
+            Number::__NonExhaustive(_) => Err(ConfigError {
+                message: "Unsupported RON number variant".to_string(),
+            }),
+        },
     }
 }
 
@@ -112,6 +204,12 @@ impl ConfigError {
     fn type_mismatch(expected: &'static str, value: &Value) -> Self {
         ConfigError {
             message: format!("Expected {expected} but got {value:?}"),
+        }
+    }
+
+    fn with_key(self, key: &str) -> Self {
+        ConfigError {
+            message: format!("Config key '{key}': {}", self.message),
         }
     }
 }
@@ -2353,6 +2451,7 @@ mod tests {
     use super::*;
     #[cfg(not(feature = "std"))]
     use alloc::vec;
+    use serde::Deserialize;
 
     #[test]
     fn test_plain_serialize() {
@@ -2389,6 +2488,149 @@ mod tests {
             .get_param::<i32>("resolution-height")
             .expect("resolution-height lookup failed");
         assert_eq!(resolution, Some(1080));
+    }
+
+    #[derive(Debug, Deserialize, PartialEq)]
+    struct InnerSettings {
+        threshold: u32,
+        flags: Option<bool>,
+    }
+
+    #[derive(Debug, Deserialize, PartialEq)]
+    struct SettingsConfig {
+        gain: f32,
+        matrix: [[f32; 3]; 3],
+        inner: InnerSettings,
+        tags: Vec<String>,
+    }
+
+    #[test]
+    fn test_component_config_get_value_structured() {
+        let txt = r#"
+            (
+                tasks: [
+                    (
+                        id: "task",
+                        type: "pkg::Task",
+                        config: {
+                            "settings": {
+                                "gain": 1.5,
+                                "matrix": [
+                                    [1.0, 0.0, 0.0],
+                                    [0.0, 1.0, 0.0],
+                                    [0.0, 0.0, 1.0],
+                                ],
+                                "inner": { "threshold": 42, "flags": Some(true) },
+                                "tags": ["alpha", "beta"],
+                            },
+                        },
+                    ),
+                ],
+                cnx: [],
+            )
+        "#;
+        let config = CuConfig::deserialize_ron(txt).unwrap();
+        let graph = config.graphs.get_graph(None).unwrap();
+        let node = graph.get_node(0).unwrap();
+        let component = node.get_instance_config().expect("missing config");
+        let settings = component
+            .get_value::<SettingsConfig>("settings")
+            .expect("settings lookup failed")
+            .expect("missing settings");
+        let expected = SettingsConfig {
+            gain: 1.5,
+            matrix: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+            inner: InnerSettings {
+                threshold: 42,
+                flags: Some(true),
+            },
+            tags: vec!["alpha".to_string(), "beta".to_string()],
+        };
+        assert_eq!(settings, expected);
+    }
+
+    #[test]
+    fn test_component_config_get_value_scalar_compatibility() {
+        let txt = r#"
+            (
+                tasks: [
+                    (id: "task", type: "pkg::Task", config: { "scalar": 7 }),
+                ],
+                cnx: [],
+            )
+        "#;
+        let config = CuConfig::deserialize_ron(txt).unwrap();
+        let graph = config.graphs.get_graph(None).unwrap();
+        let node = graph.get_node(0).unwrap();
+        let component = node.get_instance_config().expect("missing config");
+        let scalar = component
+            .get::<u32>("scalar")
+            .expect("scalar lookup failed");
+        assert_eq!(scalar, Some(7));
+    }
+
+    #[test]
+    fn test_component_config_get_value_mixed_usage() {
+        let txt = r#"
+            (
+                tasks: [
+                    (
+                        id: "task",
+                        type: "pkg::Task",
+                        config: {
+                            "scalar": 12,
+                            "settings": {
+                                "gain": 2.5,
+                                "matrix": [
+                                    [1.0, 2.0, 3.0],
+                                    [4.0, 5.0, 6.0],
+                                    [7.0, 8.0, 9.0],
+                                ],
+                                "inner": { "threshold": 7, "flags": None },
+                                "tags": ["gamma"],
+                            },
+                        },
+                    ),
+                ],
+                cnx: [],
+            )
+        "#;
+        let config = CuConfig::deserialize_ron(txt).unwrap();
+        let graph = config.graphs.get_graph(None).unwrap();
+        let node = graph.get_node(0).unwrap();
+        let component = node.get_instance_config().expect("missing config");
+        let scalar = component
+            .get::<u32>("scalar")
+            .expect("scalar lookup failed");
+        let settings = component
+            .get_value::<SettingsConfig>("settings")
+            .expect("settings lookup failed");
+        assert_eq!(scalar, Some(12));
+        assert!(settings.is_some());
+    }
+
+    #[test]
+    fn test_component_config_get_value_error_includes_key() {
+        let txt = r#"
+            (
+                tasks: [
+                    (
+                        id: "task",
+                        type: "pkg::Task",
+                        config: { "settings": { "gain": 1.0 } },
+                    ),
+                ],
+                cnx: [],
+            )
+        "#;
+        let config = CuConfig::deserialize_ron(txt).unwrap();
+        let graph = config.graphs.get_graph(None).unwrap();
+        let node = graph.get_node(0).unwrap();
+        let component = node.get_instance_config().expect("missing config");
+        let err = component
+            .get_value::<u32>("settings")
+            .expect_err("expected type mismatch");
+        assert!(err.to_string().contains("settings"));
     }
 
     #[test]
