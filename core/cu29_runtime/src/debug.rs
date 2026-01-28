@@ -477,8 +477,19 @@ fn scan_copperlist_section<
         ) {
             Ok(cl) => {
                 let ts = time_of(&cl);
+                if ts.is_none() {
+                    #[cfg(feature = "std")]
+                    eprintln!(
+                        "CuDebug index warning: missing timestamp on culistid {}; time-based seek may be less accurate",
+                        cl.id
+                    );
+                }
                 if first_id.is_none() {
                     first_id = Some(cl.id);
+                    first_ts = ts;
+                }
+                // Recover first_ts if the first entry lacked a timestamp but a later one has it.
+                if first_ts.is_none() {
                     first_ts = ts;
                 }
                 last_id = Some(cl.id);
@@ -498,7 +509,7 @@ fn scan_copperlist_section<
         }
     }
     let first_id = first_id.ok_or_else(|| CuError::from("Empty copperlist section"))?;
-    let last_id = last_id.unwrap();
+    let last_id = last_id.unwrap_or(first_id);
     Ok((count, first_id, last_id, first_ts, last_ts))
 }
 
