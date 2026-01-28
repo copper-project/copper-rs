@@ -2,7 +2,6 @@
     logging: (
         enable_task_logging: true,
         slab_size_mib: 16,
-        section_size_mib: 2,
         keyframe_interval: 3,
     ),
     tasks: [

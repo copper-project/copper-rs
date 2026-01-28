@@ -107,8 +107,7 @@ where
         build_callback: CB,
         time_of: TF,
     ) -> CuResult<Self> {
-        let (sections, keyframes, total_entries) =
-            index_log::<P, _>(log_base, &time_of, /*index_stride=*/ 1_000)?;
+        let (sections, keyframes, total_entries) = index_log::<P, _>(log_base, &time_of)?;
         Ok(Self::new(
             log_base,
             app,
@@ -520,7 +519,6 @@ fn read_section_at(log_base: &Path, pos: LogPosition) -> CuResult<(SectionHeader
 fn index_log<P, TF>(
     log_base: &Path,
     time_of: &TF,
-    index_stride: usize,
 ) -> CuResult<(Vec<SectionIndexEntry>, Vec<KeyFrame>, usize)>
 where
     P: CopperListTuple,
@@ -588,17 +586,6 @@ where
                 // ignore other sections
             }
         }
-    }
-
-    // Optional down-sampling of index to reduce memory for huge logs
-    if index_stride > 1 && !sections.is_empty() {
-        let mut filtered = Vec::with_capacity((sections.len() / index_stride) + 2);
-        for (i, s) in sections.iter().enumerate() {
-            if i % index_stride == 0 || i + 1 == sections.len() {
-                filtered.push(s.clone());
-            }
-        }
-        return Ok((filtered, keyframes, total_entries));
     }
 
     Ok((sections, keyframes, total_entries))

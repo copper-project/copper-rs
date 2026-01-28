@@ -157,7 +157,8 @@ fn record_log() -> CuResult<()> {
         .build()?;
 
     app.start_all_tasks(&mut sim_cb)?;
-    for _ in 0..12u32 {
+    // Record enough iterations to span multiple log sections and exercise indexing.
+    for _ in 0..512u32 {
         clock_mock.increment(CuDuration::from_millis(10));
         app.run_one_iteration(&mut sim_cb)?;
     }
@@ -293,6 +294,48 @@ fn run_debug_session() -> CuResult<()> {
     println!(
         "[step +1] -> CL{} replayed {}, wall {:?}",
         jump5.culistid, jump5.replayed, wall5
+    );
+
+    // Jump near the end of the log to exercise multi-section indexing.
+    let mut last_idx = 0usize;
+    while session.cl_at(last_idx + 1)?.is_some() {
+        last_idx += 1;
+    }
+    let last_id = session.cl_at(last_idx)?.expect("last CL present").id;
+
+    let t0 = Instant::now();
+    let jump_last = session.goto_cl(last_id)?;
+    let wall_last = t0.elapsed();
+    let val_last = session
+        .current_cl()?
+        .as_ref()
+        .and_then(|cl| cl.msgs.get_accum_output().payload())
+        .map(|p| p.sum)
+        .expect("payload at last CL");
+    session.with_app(|app: &mut DebugApp| {
+        let rt = app.copper_runtime_mut();
+        assert_eq!(
+            rt.tasks.1.sum, val_last,
+            "runtime state matches log at last CL"
+        );
+    });
+    println!(
+        "[jump end cl={}] keyframe {:?}, replayed {}, sum {}, wall {:?}",
+        jump_last.culistid, jump_last.keyframe_culistid, jump_last.replayed, val_last, wall_last
+    );
+
+    let t0 = Instant::now();
+    let back_one = session.step(-1)?;
+    let wall_back = t0.elapsed();
+    let val_back = session
+        .current_cl()?
+        .as_ref()
+        .and_then(|cl| cl.msgs.get_accum_output().payload())
+        .map(|p| p.sum)
+        .expect("payload at CL before last");
+    println!(
+        "[step -1 from end] -> CL{} sum {}, replayed {}, wall {:?}",
+        back_one.culistid, val_back, back_one.replayed, wall_back
     );
 
     Ok(())
