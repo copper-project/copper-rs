@@ -1,5 +1,13 @@
 #[cfg(mock)]
-mod mock;
+mod mock {
+    use std::io;
+
+    pub struct Spidev;
+
+    pub fn read_adc(_spi: &mut Spidev) -> io::Result<u16> {
+        Ok(0)
+    }
+}
 
 use bincode::{Decode, Encode};
 use cu29::prelude::*;
@@ -47,13 +55,6 @@ where
 /// This is the type of message that the ADS7883 driver will send.
 pub type ADSReadingPayload = ADCReadingPayload<u16>;
 
-// Some convenience function.
-impl From<ADSReadingPayload> for u16 {
-    fn from(msg: ADSReadingPayload) -> Self {
-        msg.analog_value
-    }
-}
-
 impl From<&ADCReadingPayload<u16>> for f32 {
     fn from(payload: &ADCReadingPayload<u16>) -> f32 {
         payload.analog_value as f32
@@ -97,59 +98,38 @@ impl CuSrcTask for ADS7883 {
     where
         Self: Sized,
     {
-        match config {
-            #[allow(unused_variables)]
-            Some(config) => {
-                let maybe_string: Option<String> = config.get::<String>("spi_dev")?;
-                let maybe_spidev: Option<&str> = maybe_string.as_deref();
-                let maybe_max_speed_hz: Option<u32> = config.get("max_speed_hz")?;
+        #[cfg(hardware)]
+        let spi = {
+            let (spi_dev, max_speed_hz) = read_spi_config(config)?;
+            open_spi(spi_dev.as_deref(), max_speed_hz)
+                .map_err(|e| CuError::new_with_cause("Could not open the ADS7883 SPI device", e))?
+        };
 
-                #[cfg(hardware)]
-                let spi = open_spi(maybe_spidev, maybe_max_speed_hz).map_err(|e| {
-                    CuError::new_with_cause("Could not open the ADS7883 SPI device", e)
-                })?;
+        #[cfg(mock)]
+        let spi = {
+            let _ = config;
+            Spidev {}
+        };
 
-                #[cfg(mock)]
-                let spi = Spidev {};
-
-                Ok(ADS7883 {
-                    spi,
-                    integrated_value: 0,
-                })
-            }
-            None => {
-                #[cfg(hardware)]
-                let spi = open_spi(None, None).map_err(|e| {
-                    CuError::new_with_cause("Could not open the ADS7883 SPI device (Note: no config specified for the node so it took the default config)", e)
-                })?;
-
-                #[cfg(mock)]
-                let spi = Spidev {};
-                Ok(ADS7883 {
-                    spi,
-                    integrated_value: 0,
-                })
-            }
-        }
+        Ok(ADS7883 {
+            spi,
+            integrated_value: 0,
+        })
     }
     fn start(&mut self, clock: &RobotClock) -> CuResult<()> {
         debug!("ADS7883 started at {}", clock.now());
         // initialize the integrated value.
-        self.integrated_value = read_adc(&mut self.spi).map_err(|e| {
-            CuError::new_with_cause("Could not read the ADC value from the ADS7883", e)
-        })? as u64;
+        self.integrated_value = read_adc_value(&mut self.spi)? as u64;
         self.integrated_value *= INTEGRATION_FACTOR;
         Ok(())
     }
     fn process(&mut self, clock: &RobotClock, new_msg: &mut Self::Output<'_>) -> CuResult<()> {
         let bf = clock.now();
-        let analog_value = read_adc(&mut self.spi).map_err(|e| {
-            CuError::new_with_cause("Could not read the ADC value from the ADS7883", e)
-        })?;
+        let analog_value = read_adc_value(&mut self.spi)?;
         // hard to know exactly when the value was read.
         // Should be within a couple of microseconds with the ioctl opverhead.
         let af = clock.now();
-        new_msg.tov = Some((af + bf) / 2u64).into();
+        let tov = (af + bf) / 2u64;
 
         self.integrated_value = ((self.integrated_value + analog_value as u64)
             * INTEGRATION_FACTOR)
@@ -160,7 +140,7 @@ impl CuSrcTask for ADS7883 {
             analog_value: result,
         };
         new_msg.set_payload(output);
-        new_msg.tov = ((clock.now() + bf) / 2u64).into();
+        new_msg.tov = Some(tov).into();
         new_msg.metadata.set_status(result);
         Ok(())
     }
@@ -189,4 +169,21 @@ pub mod test_support {
             Ok(())
         }
     }
+}
+
+#[cfg(hardware)]
+fn read_spi_config(config: Option<&ComponentConfig>) -> CuResult<(Option<String>, Option<u32>)> {
+    let config = match config {
+        Some(config) => config,
+        None => return Ok((None, None)),
+    };
+
+    let spi_dev = config.get::<String>("spi_dev")?;
+    let max_speed_hz = config.get::<u32>("max_speed_hz")?;
+    Ok((spi_dev, max_speed_hz))
+}
+
+fn read_adc_value(spi: &mut Spidev) -> CuResult<u16> {
+    read_adc(spi)
+        .map_err(|e| CuError::new_with_cause("Could not read the ADC value from the ADS7883", e))
 }
