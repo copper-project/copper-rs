@@ -1,4 +1,4 @@
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 use cu29::prelude::*;
 use cu29_helpers::basic_copper_setup;
 use cu29_unifiedlog::{UnifiedLoggerWrite, memmap::MmapSectionStorage};
@@ -6,7 +6,7 @@ use std::{fs, path::PathBuf};
 
 use cu_bridge_test::{
     BridgeFanoutBuilder, BridgeLoopbackBuilder, BridgeOnlyABBuilder, BridgeTaskSameBuilder,
-    BridgeToSinkBuilder, SourceToBridgeBuilder,
+    BridgeToSinkBuilder, MissionArg, SourceToBridgeBuilder,
 };
 
 const SLAB_SIZE: Option<usize> = Some(32 * 1024 * 1024);
@@ -17,22 +17,6 @@ struct Cli {
     /// Mission graph to run
     #[arg(value_enum, default_value_t = MissionArg::BridgeFanout, value_name = "MISSION")]
     mission: MissionArg,
-}
-
-#[derive(Copy, Clone, Debug, ValueEnum)]
-enum MissionArg {
-    #[value(name = "BridgeOnlyAB")]
-    BridgeOnlyAb,
-    #[value(name = "BridgeLoopback")]
-    BridgeLoopback,
-    #[value(name = "SourceToBridge")]
-    SourceToBridge,
-    #[value(name = "BridgeToSink")]
-    BridgeToSink,
-    #[value(name = "BridgeTaskSame")]
-    BridgeTaskSame,
-    #[value(name = "BridgeFanout")]
-    BridgeFanout,
 }
 
 fn run_once<App>(app: &mut App) -> CuResult<()>

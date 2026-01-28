@@ -1,0 +1,23 @@
+name: First time contributors
+
+on:
+  pull_request_target:
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  comment:
+    name: Comment on PRs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/first-interaction@v1.3.0
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          pr-message: |
+            Hi! Thanks for opening this pull request.
+
+            Because this is your first time contributing to this repository, please read our contributor guide:
+            https://github.com/copper-project/copper-rs/blob/master/CONTRIBUTING.md

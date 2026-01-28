@@ -15,6 +15,7 @@
 //! cargo run -p cu-yolo-human-pose --features cuda
 //! ```
 
+mod image;
 mod payloads;
 mod tasks;
 mod yolo;

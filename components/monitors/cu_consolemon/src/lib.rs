@@ -19,6 +19,10 @@ use cu29::monitoring::{
 use cu29::prelude::{CuCompactString, CuTime, pool};
 use cu29::{CuError, CuResult};
 use cu29_log::CuLogLevel;
+#[cfg(debug_assertions)]
+use cu29_log_runtime::{
+    format_message_only, register_live_log_listener, unregister_live_log_listener,
+};
 #[cfg(feature = "debug_pane")]
 use debug_pane::{StyledLine, StyledRun, UIExt};
 use ratatui::backend::CrosstermBackend;
@@ -2097,6 +2101,14 @@ impl CuMonitor for CuConsoleMon {
 
     fn start(&mut self, _clock: &RobotClock) -> CuResult<()> {
         if !should_start_ui() {
+            #[cfg(debug_assertions)]
+            {
+                register_live_log_listener(|entry, format_str, param_names| {
+                    if let Some(line) = format_headless_log_line(entry, format_str, param_names) {
+                        println!("{line}");
+                    }
+                });
+            }
             return Ok(());
         }
 
@@ -2300,6 +2312,11 @@ impl CuMonitor for CuConsoleMon {
             let _ = handle.join();
         }
 
+        #[cfg(debug_assertions)]
+        if !should_start_ui() {
+            unregister_live_log_listener();
+        }
+
         self.task_stats
             .lock()
             .unwrap()
@@ -2385,6 +2402,39 @@ fn setup_terminal() -> io::Result<()> {
 fn restore_terminal() -> io::Result<()> {
     execute!(stdout(), LeaveAlternateScreen, DisableMouseCapture)?;
     disable_raw_mode()
+}
+
+#[cfg(debug_assertions)]
+fn format_timestamp(time: CuDuration) -> String {
+    // Render CuTime/CuDuration as HH:mm:ss.xxxx (4 fractional digits of a second).
+    let nanos = time.as_nanos();
+    let total_seconds = nanos / 1_000_000_000;
+    let hours = total_seconds / 3600;
+    let minutes = (total_seconds / 60) % 60;
+    let seconds = total_seconds % 60;
+    let fractional_1e4 = (nanos % 1_000_000_000) / 100_000;
+    format!("{hours:02}:{minutes:02}:{seconds:02}.{fractional_1e4:04}")
+}
+
+#[cfg(debug_assertions)]
+fn format_headless_log_line(
+    entry: &cu29_log::CuLogEntry,
+    format_str: &str,
+    param_names: &[&str],
+) -> Option<String> {
+    let params: Vec<String> = entry.params.iter().map(|v| v.to_string()).collect();
+    let named: HashMap<String, String> = param_names
+        .iter()
+        .zip(params.iter())
+        .map(|(k, v)| (k.to_string(), v.clone()))
+        .collect();
+
+    format_message_only(format_str, params.as_slice(), &named)
+        .ok()
+        .map(|msg| {
+            let ts = format_timestamp(entry.time);
+            format!("{} [{:?}] {}", ts, entry.level, msg)
+        })
 }
 
 fn should_start_ui() -> bool {
