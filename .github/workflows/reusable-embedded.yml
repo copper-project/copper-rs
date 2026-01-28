@@ -63,12 +63,19 @@ jobs:
           toolchain: ${{ inputs.toolchain }}
           cargo_target_dir: ${{ inputs.cargo_target_dir }}
 
-      - name: Clippy an rp2350 example
+      - name: Detect host target
+        run: |
+          echo "HOST_TARGET=$(rustc +${{ inputs.toolchain }} -vV | sed -n 's/^host: //p')" >> "$GITHUB_ENV"
+
+      - name: Clippy firmware (RP2350)
         working-directory: examples/cu_rp2350_skeleton
-        run: cargo +${{ inputs.toolchain }} clippy
+        run: cargo +${{ inputs.toolchain }} clippy --target thumbv8m.main-none-eabihf --bin cu-blinky --features firmware
+      - name: Clippy host bins (RP2350)
+        working-directory: examples/cu_rp2350_skeleton
+        run: cargo +${{ inputs.toolchain }} clippy --no-default-features --features host --bins --target ${HOST_TARGET}
       - name: Cross compile an rp2350 example with Arm
         working-directory: examples/cu_rp2350_skeleton
         run: cargo +${{ inputs.toolchain }} build-arm
-      - name: Compile the logreader for the rp2350 example (host)
+      - name: Build logreader (RP2350 host)
         working-directory: examples/cu_rp2350_skeleton
-        run: cargo +${{ inputs.toolchain }} build-logreader
+        run: cargo +${{ inputs.toolchain }} build --no-default-features --features host --bin blinky-logreader --target ${HOST_TARGET}

@@ -68,7 +68,8 @@ nostd-ci: lint
 	cargo +stable nextest run --no-default-features
 	python3 support/ci/embedded_crates.py run --action clippy
 	python3 support/ci/embedded_crates.py run --action build
-	cd examples/cu_rp2350_skeleton && cargo +stable clippy
+	cd examples/cu_rp2350_skeleton && cargo +stable clippy --target thumbv8m.main-none-eabihf --bin cu-blinky --features firmware
+	cd examples/cu_rp2350_skeleton && cargo +stable clippy --no-default-features --features host --bins --target={{host_target}}
 	cd examples/cu_rp2350_skeleton && cargo +stable build-arm
 	cd examples/cu_rp2350_skeleton && cargo +stable build --target={{host_target}} --no-default-features --features host --bin blinky-logreader
 

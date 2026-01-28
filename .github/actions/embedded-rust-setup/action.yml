@@ -20,3 +20,17 @@ runs:
         toolchain: ${{ inputs.toolchain }}
         targets: aarch64-unknown-none,thumbv7em-none-eabihf,thumbv8m.main-none-eabihf,riscv32imac-unknown-none-elf
         components: rustc,cargo,rust-std,rustfmt,clippy
+    - name: Enable sccache
+      shell: bash
+      run: |
+        echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
+        echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+    - name: Run sccache-cache
+      uses: mozilla-actions/sccache-action@v0.0.9
+    - name: Setup rust-cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        prefix-key: embedded-${{ inputs.toolchain }}
+        shared-key: rust-embedded-${{ inputs.toolchain }}
+        cache-targets: "false"
+        cache-bin: "true"
