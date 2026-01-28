@@ -146,7 +146,6 @@ impl CuSrcTask for ADS7883 {
     }
 }
 
-#[cfg(test)]
 pub mod test_support {
     use super::*;
 
