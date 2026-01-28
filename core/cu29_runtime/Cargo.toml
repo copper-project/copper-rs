@@ -21,11 +21,10 @@ required-features = ["std"]
 cu29-clock = { workspace = true }
 cu29-log = { workspace = true }
 cu29-log-derive = { workspace = true }
-cu29-log-runtime = { workspace = true }      # needed
+cu29-log-runtime = { workspace = true } # needed
 cu29-traits = { workspace = true }
 cu29-unifiedlog = { workspace = true }
 cu29-value = { workspace = true }
-defmt = { version = "1.0", optional = true }
 
 bincode = { workspace = true }
 compact_str = { workspace = true }
@@ -77,12 +76,7 @@ tempfile = { workspace = true }
 
 [features]
 default = ["std"]
-defmt = [
-  "dep:defmt",
-  "cu29-log/defmt",
-  "cu29-log-derive/defmt",
-  "cu29-traits/defmt",
-]
+defmt = ["cu29-log/defmt", "cu29-log-derive/defmt", "cu29-traits/defmt"]
 cuda = ["dep:cudarc"]
 macro_debug = []
 std = [

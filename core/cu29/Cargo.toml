@@ -32,9 +32,6 @@ serde = { workspace = true }
 rayon = { workspace = true, optional = true }
 ctrlc = { version = "3.5", optional = true }
 
-[build-dependencies]
-cu29-intern-strs = { workspace = true }
-
 [features]
 default = ["std", "textlogs"]
 defmt = [

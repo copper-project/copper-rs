@@ -39,3 +39,6 @@ default = ["std"]
 macro_debug = ["cu29-runtime/macro_debug"]
 std = ["cu29-traits/std", "cu29-unifiedlog/std"]
 rtsan = []
+
+[package.metadata.cargo-shear]
+ignored-paths = ["tests/compile_fail/**.rs"]

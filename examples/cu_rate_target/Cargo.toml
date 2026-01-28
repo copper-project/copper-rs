@@ -23,3 +23,6 @@ cu29-export = { workspace = true }  # Keep
 [[bin]]
 name = "rate-target"
 path = "src/main.rs"
+
+[package.metadata.cargo-shear]
+ignored = ["serde", "cu29-export"]

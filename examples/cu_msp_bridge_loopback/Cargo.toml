@@ -25,3 +25,6 @@ cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0
 nix = { version = "0.31", default-features = false, features = ["term", "fs"] }
 serde = { workspace = true }
 ctrlc = "3"
+
+[package.metadata.cargo-shear]
+ignored = ["serde"]

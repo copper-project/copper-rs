@@ -20,6 +20,9 @@ embedded_target = "thumbv7em-none-eabihf"
 embedded_no_default_features = true
 embedded_features = "firmware"
 
+[package.metadata.cargo-shear]
+ignored = ["bincode"]
+
 [dependencies]
 ## Flight controller components
 

@@ -12,9 +12,10 @@ repository.workspace = true
 
 publish = false
 [dependencies]
-bincode = { workspace = true }
-# cu29 = { workspace = true, features = ["macro_debug"] }
 cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
 tempfile = { workspace = true }
 serde = { workspace = true }
+
+[package.metadata.cargo-shear]
+ignored = ["serde"]

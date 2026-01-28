@@ -212,6 +212,9 @@ rtsan-standalone = "0.3.0"
 # HashMap that is fast and has no std dependency
 hashbrown = { version = "0.16", features = ["serde"] }
 
+[workspace.metadata.cargo-shear]
+ignored = ["cu-consolemon"]
+
 [profile.screaming]
 inherits = "release"
 opt-level = 3
