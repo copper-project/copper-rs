@@ -119,6 +119,17 @@ fn run_one_copperlist(
         .expect("Failed to run application.");
 }
 
+fn open_log_reader(log_path: &Path, log_type: UnifiedLogType) -> CuResult<UnifiedLoggerIOReader> {
+    let UnifiedLogger::Read(reader) = UnifiedLoggerBuilder::new()
+        .file_base_name(log_path)
+        .build()
+        .map_err(|err| CuError::new_with_cause("failed to open log", err))?
+    else {
+        return Err(CuError::from("log file could not be opened for reading"));
+    };
+    Ok(UnifiedLoggerIOReader::new(reader, log_type))
+}
+
 fn main() {
     // Create the Copper App in simulation mode.
     #[allow(clippy::identity_op)]
@@ -144,14 +155,11 @@ fn main() {
         .expect("Failed to start all tasks.");
 
     // Restore tasks from the first keyframe so sim starts from the recorded state.
-    let UnifiedLogger::Read(dl_kf) = UnifiedLoggerBuilder::new()
-        .file_base_name(Path::new("logs/caterpillar.copper"))
-        .build()
-        .expect("Failed to create logger")
-    else {
-        panic!("Failed to create logger");
-    };
-    let mut keyframes_ioreader = UnifiedLoggerIOReader::new(dl_kf, UnifiedLogType::FrozenTasks);
+    let mut keyframes_ioreader = open_log_reader(
+        Path::new("logs/caterpillar.copper"),
+        UnifiedLogType::FrozenTasks,
+    )
+    .expect("Failed to open log");
     let mut kf_iter = keyframes_reader(&mut keyframes_ioreader).peekable();
 
     if let Some(first_kf) = kf_iter.peek() {
@@ -165,15 +173,11 @@ fn main() {
     }
 
     // Read back the logs from a previous run, applying keyframes exactly at their culistid.
-    let UnifiedLogger::Read(dl) = UnifiedLoggerBuilder::new()
-        .file_base_name(Path::new("logs/caterpillar.copper"))
-        .build()
-        .expect("Failed to create logger")
-    else {
-        panic!("Failed to create logger");
-    };
-
-    let mut copperlists = UnifiedLoggerIOReader::new(dl, UnifiedLogType::CopperList);
+    let mut copperlists = open_log_reader(
+        Path::new("logs/caterpillar.copper"),
+        UnifiedLogType::CopperList,
+    )
+    .expect("Failed to open log");
     let cl_iter = copperlists_reader::<default::CuStampedDataSet>(&mut copperlists);
     for entry in cl_iter {
         // Apply next keyframe if it corresponds to this CL id
