@@ -263,13 +263,35 @@ where
     }
 
     fn find_section_for_time(&self, ts: CuTime) -> Option<usize> {
-        self.sections
-            .iter()
-            .position(|s| match (s.first_ts, s.last_ts) {
-                (Some(a), Some(b)) => a <= ts && ts <= b,
-                (Some(a), None) => a <= ts,
-                _ => false,
-            })
+        // Fast path: sections are recorded in time order, so we can binary search.
+        if let Ok(idx) = self.sections.binary_search_by(|s| match (s.first_ts, s.last_ts) {
+            (Some(a), Some(b)) => {
+                if ts < a {
+                    std::cmp::Ordering::Greater
+                } else if ts > b {
+                    std::cmp::Ordering::Less
+                } else {
+                    std::cmp::Ordering::Equal
+                }
+            }
+            (Some(a), None) => {
+                if ts < a {
+                    std::cmp::Ordering::Greater
+                } else {
+                    std::cmp::Ordering::Equal
+                }
+            }
+            _ => std::cmp::Ordering::Greater,
+        }) {
+            return Some(idx);
+        }
+
+        // Fallback for sections missing timestamps.
+        self.sections.iter().position(|s| match (s.first_ts, s.last_ts) {
+            (Some(a), Some(b)) => a <= ts && ts <= b,
+            (Some(a), None) => a <= ts,
+            _ => false,
+        })
     }
 
     fn touch_cache(&mut self, key: usize) {
