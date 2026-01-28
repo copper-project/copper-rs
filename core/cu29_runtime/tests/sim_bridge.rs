@@ -15,9 +15,10 @@ use cu29_unifiedlog::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
 use cu29_unifiedlog::{UnifiedLogger, UnifiedLoggerBuilder};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use tempfile::TempDir;
 
 static BRIDGE_TX_CALLED: AtomicUsize = AtomicUsize::new(0);
 static BRIDGE_RX_CALLED: AtomicUsize = AtomicUsize::new(0);
@@ -171,10 +172,17 @@ fn build_logger(path: &Path) -> CuResult<Arc<Mutex<MmapUnifiedLoggerWrite>>> {
     Ok(Arc::new(Mutex::new(writer)))
 }
 
+fn build_test_logger() -> CuResult<(TempDir, PathBuf, Arc<Mutex<MmapUnifiedLoggerWrite>>)> {
+    let temp_dir = tempfile::tempdir()
+        .map_err(|e| cu29::CuError::new_with_cause("create temp log dir failed", e))?;
+    let log_path = temp_dir.path().join("sim_bridge.log");
+    let logger = build_logger(&log_path)?;
+    Ok((temp_dir, log_path, logger))
+}
+
 #[test]
 fn bridge_sim_callbacks_fire_and_override() -> CuResult<()> {
-    let log_path = Path::new("target/test-logs/sim_bridge.log");
-    let logger = build_logger(log_path)?;
+    let (_temp_dir, _log_path, logger) = build_test_logger()?;
     let (robot_clock, _mock) = RobotClock::mock();
 
     let mut lifecycle_calls = 0usize;
