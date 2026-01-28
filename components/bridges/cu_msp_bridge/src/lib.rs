@@ -52,6 +52,8 @@ use serde::{Deserialize, Serialize};
 const READ_BUFFER_SIZE: usize = 512;
 const MAX_REQUESTS_PER_BATCH: usize = 8;
 const MAX_RESPONSES_PER_BATCH: usize = 16;
+const MSP_REQUEST_BATCH_OVERFLOW: &str = "MSP request batch overflow";
+const MSP_RESPONSE_BATCH_OVERFLOW: &str = "MSP response batch overflow";
 const TX_BUFFER_CAPACITY: usize = MSP_MAX_PAYLOAD_LEN + 12;
 
 /// Batch of MSP messages transported over the bridge.
@@ -207,13 +209,13 @@ where
                         // This is an incoming request from the VTX
                         if let Some(request) = MspRequest::from_packet(&packet) {
                             self.pending_requests
-                                .push(request, "MSP request batch overflow")?;
+                                .push(request, MSP_REQUEST_BATCH_OVERFLOW)?;
                         }
                     } else {
                         // This is a response from the VTX
                         let response = MspResponse::from(packet);
                         self.pending_responses
-                            .push(response, "MSP response batch overflow")?;
+                            .push(response, MSP_RESPONSE_BATCH_OVERFLOW)?;
                     }
                 }
             }

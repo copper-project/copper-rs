@@ -289,7 +289,10 @@ mod tasks {
             } else {
                 let mut batch = MspRequestBatch::new();
                 debug!("Pushing MSP_RC request");
-                batch.push(cu_msp_lib::structs::MspRequest::MspRc)?;
+                batch.push(
+                    cu_msp_lib::structs::MspRequest::MspRc,
+                    "MSP request batch overflow",
+                )?;
                 output.set_payload(batch);
                 self.sent = true;
             }

@@ -20,6 +20,7 @@ use cu_msp_lib::structs::{
 use cu29::prelude::*;
 
 const VTX_SYM_VOLT: char = '\x06';
+const MSP_REQUEST_BATCH_OVERFLOW: &str = "MSP request batch overflow";
 
 pub struct VtxOsd {
     row: u8,
@@ -108,8 +109,14 @@ impl CuTask for VtxOsd {
             .map(|prev| now - prev >= CuDuration::from_millis(VTX_HEARTBEAT_PERIOD_MS))
             .unwrap_or(true);
         if heartbeat_due {
-            batch.push(MspRequest::MspDisplayPort(MspDisplayPort::heartbeat()))?;
-            batch.push(MspRequest::MspStatus(build_msp_status(self.last_armed)))?;
+            batch.push(
+                MspRequest::MspDisplayPort(MspDisplayPort::heartbeat()),
+                MSP_REQUEST_BATCH_OVERFLOW,
+            )?;
+            batch.push(
+                MspRequest::MspStatus(build_msp_status(self.last_armed)),
+                MSP_REQUEST_BATCH_OVERFLOW,
+            )?;
             self.last_heartbeat = Some(now);
         }
 
@@ -151,10 +158,14 @@ impl CuTask for VtxOsd {
         };
 
         if label_changed {
-            batch.push(MspRequest::MspDisplayPort(MspDisplayPort::clear_screen()))?;
-            batch.push(MspRequest::MspDisplayPort(MspDisplayPort::write_string(
-                self.row, col, 0, text,
-            )))?;
+            batch.push(
+                MspRequest::MspDisplayPort(MspDisplayPort::clear_screen()),
+                MSP_REQUEST_BATCH_OVERFLOW,
+            )?;
+            batch.push(
+                MspRequest::MspDisplayPort(MspDisplayPort::write_string(self.row, col, 0, text)),
+                MSP_REQUEST_BATCH_OVERFLOW,
+            )?;
             self.push_cell_voltage(&mut batch)?;
             self.push_watermark(&mut batch)?;
         }
@@ -168,7 +179,10 @@ impl CuTask for VtxOsd {
                 self.push_cell_voltage(&mut batch)?;
                 self.push_watermark(&mut batch)?;
             }
-            batch.push(MspRequest::MspDisplayPort(MspDisplayPort::draw_screen()))?;
+            batch.push(
+                MspRequest::MspDisplayPort(MspDisplayPort::draw_screen()),
+                MSP_REQUEST_BATCH_OVERFLOW,
+            )?;
             self.last_draw = Some(now);
         }
 
@@ -221,16 +235,25 @@ impl VtxOsd {
         for request in requests.iter() {
             match request {
                 MspRequest::MspApiVersionRequest => {
-                    batch.push(MspRequest::MspApiVersion(api_version))?;
+                    batch.push(
+                        MspRequest::MspApiVersion(api_version),
+                        MSP_REQUEST_BATCH_OVERFLOW,
+                    )?;
                 }
                 MspRequest::MspFcVersionRequest => {
-                    batch.push(MspRequest::MspFlightControllerVersion(fc_version))?;
+                    batch.push(
+                        MspRequest::MspFlightControllerVersion(fc_version),
+                        MSP_REQUEST_BATCH_OVERFLOW,
+                    )?;
                 }
                 MspRequest::MspBatteryStateRequest => {
-                    batch.push(MspRequest::MspBatteryState(battery_state))?;
+                    batch.push(
+                        MspRequest::MspBatteryState(battery_state),
+                        MSP_REQUEST_BATCH_OVERFLOW,
+                    )?;
                 }
                 MspRequest::MspAnalogRequest => {
-                    batch.push(MspRequest::MspAnalog(analog))?;
+                    batch.push(MspRequest::MspAnalog(analog), MSP_REQUEST_BATCH_OVERFLOW)?;
                 }
                 _ => {}
             }
@@ -255,12 +278,10 @@ impl VtxOsd {
             }
             col
         };
-        batch.push(MspRequest::MspDisplayPort(MspDisplayPort::write_string(
-            row,
-            col,
-            0,
-            text.as_str(),
-        )))?;
+        batch.push(
+            MspRequest::MspDisplayPort(MspDisplayPort::write_string(row, col, 0, text.as_str())),
+            MSP_REQUEST_BATCH_OVERFLOW,
+        )?;
         Ok(())
     }
 
@@ -297,9 +318,10 @@ impl VtxOsd {
             if text.is_empty() {
                 continue;
             }
-            batch.push(MspRequest::MspDisplayPort(MspDisplayPort::write_string(
-                row, col, 0, text,
-            )))?;
+            batch.push(
+                MspRequest::MspDisplayPort(MspDisplayPort::write_string(row, col, 0, text)),
+                MSP_REQUEST_BATCH_OVERFLOW,
+            )?;
         }
         Ok(())
     }
@@ -486,25 +508,43 @@ impl CuTask for VtxMspResponder {
         for request in requests.iter() {
             match request {
                 MspRequest::MspApiVersionRequest => {
-                    batch.push(MspRequest::MspApiVersion(api_version))?;
+                    batch.push(
+                        MspRequest::MspApiVersion(api_version),
+                        MSP_REQUEST_BATCH_OVERFLOW,
+                    )?;
                 }
                 MspRequest::MspFcVersionRequest => {
-                    batch.push(MspRequest::MspFlightControllerVersion(fc_version))?;
+                    batch.push(
+                        MspRequest::MspFlightControllerVersion(fc_version),
+                        MSP_REQUEST_BATCH_OVERFLOW,
+                    )?;
                 }
                 MspRequest::MspBatteryConfigRequest => {
-                    batch.push(MspRequest::MspBatteryConfig(battery_config))?;
+                    batch.push(
+                        MspRequest::MspBatteryConfig(battery_config),
+                        MSP_REQUEST_BATCH_OVERFLOW,
+                    )?;
                 }
                 MspRequest::MspBatteryStateRequest => {
-                    batch.push(MspRequest::MspBatteryState(battery_state))?;
+                    batch.push(
+                        MspRequest::MspBatteryState(battery_state),
+                        MSP_REQUEST_BATCH_OVERFLOW,
+                    )?;
                 }
                 MspRequest::MspAnalogRequest => {
-                    batch.push(MspRequest::MspAnalog(analog))?;
+                    batch.push(MspRequest::MspAnalog(analog), MSP_REQUEST_BATCH_OVERFLOW)?;
                 }
                 MspRequest::MspVoltageMeterConfigRequest => {
-                    batch.push(MspRequest::MspVoltageMeterConfig(voltage_meter_config))?;
+                    batch.push(
+                        MspRequest::MspVoltageMeterConfig(voltage_meter_config),
+                        MSP_REQUEST_BATCH_OVERFLOW,
+                    )?;
                 }
                 MspRequest::MspVoltageMetersRequest => {
-                    batch.push(MspRequest::MspVoltageMeter(voltage_meter))?;
+                    batch.push(
+                        MspRequest::MspVoltageMeter(voltage_meter),
+                        MSP_REQUEST_BATCH_OVERFLOW,
+                    )?;
                 }
                 _ => {}
             }
