@@ -1,8 +1,8 @@
 use crate::resources::{GlobalLog, SharedBus};
 use cu29::cubridge::{BridgeChannel, BridgeChannelConfig, BridgeChannelSet, CuBridge};
 use cu29::prelude::*;
+use cu29::resources;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub struct BusReading {
@@ -18,47 +18,20 @@ tx_channels! {
     stats_tx => BusReading
 }
 
-pub struct StatsBridgeResources {
-    pub bus: Arc<SharedBus>,
-    pub tag: Arc<String>,
-    pub global: Arc<GlobalLog>,
-}
+mod stats_bridge_resources {
+    use super::*;
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum Binding {
-    Bus,
-    Tag,
-    Global,
-}
-
-impl ResourceBindings<'_> for StatsBridgeResources {
-    type Binding = Binding;
-
-    fn from_bindings(
-        manager: &mut ResourceManager,
-        mapping: Option<&ResourceBindingMap<Self::Binding>>,
-    ) -> CuResult<Self> {
-        let mapping = mapping.ok_or_else(|| CuError::from("missing bridge bindings"))?;
-        let bus = manager.borrow(mapping.get(Binding::Bus).unwrap().typed::<Arc<SharedBus>>())?;
-        let tag = manager.borrow(mapping.get(Binding::Tag).unwrap().typed::<Arc<String>>())?;
-        let global = manager.borrow(
-            mapping
-                .get(Binding::Global)
-                .unwrap()
-                .typed::<Arc<GlobalLog>>(),
-        )?;
-        Ok(Self {
-            bus: bus.0.clone(),
-            tag: tag.0.clone(),
-            global: global.0.clone(),
-        })
-    }
+    resources!({
+        bus => Shared<SharedBus>,
+        tag => Shared<String>,
+        global => Shared<GlobalLog>,
+    });
 }
 
 pub struct StatsBridge {
-    bus: Arc<SharedBus>,
-    tag: Arc<String>,
-    global: Arc<GlobalLog>,
+    bus: SharedBus,
+    tag: String,
+    global: GlobalLog,
 }
 
 impl Freezable for StatsBridge {}
@@ -66,7 +39,7 @@ impl Freezable for StatsBridge {}
 impl CuBridge for StatsBridge {
     type Tx = TxChannels;
     type Rx = RxChannels;
-    type Resources<'r> = StatsBridgeResources;
+    type Resources<'r> = StatsBridgeResources<'r>;
 
     fn new(
         _config: Option<&ComponentConfig>,
@@ -77,10 +50,11 @@ impl CuBridge for StatsBridge {
     where
         Self: Sized,
     {
+        let stats_bridge_resources::Resources { bus, tag, global } = resources;
         Ok(Self {
-            bus: resources.bus,
-            tag: resources.tag,
-            global: resources.global,
+            bus: bus.0.clone(),
+            tag: tag.0.clone(),
+            global: global.0.clone(),
         })
     }
 
@@ -107,7 +81,7 @@ impl CuBridge for StatsBridge {
     {
         if matches!(channel.id(), RxId::StatsRx) {
             let reading = BusReading {
-                tag: (*self.tag).clone(),
+                tag: self.tag.clone(),
                 value: self.bus.get(),
             };
             let payload: &mut CuMsg<BusReading> = msg.downcast_mut()?;
@@ -120,3 +94,5 @@ impl CuBridge for StatsBridge {
         Ok(())
     }
 }
+
+type StatsBridgeResources<'r> = stats_bridge_resources::Resources<'r>;

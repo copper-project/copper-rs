@@ -1,8 +1,8 @@
 use crate::bridges::BusReading;
 use crate::resources::{GlobalLog, OwnedCounter, SharedBus};
 use cu29::prelude::*;
+use cu29::resources;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub struct Tick;
@@ -28,20 +28,20 @@ impl CuSrcTask for TriggerTask {
 
 pub struct SensorTask {
     counter: Owned<OwnedCounter>,
-    bus: Arc<SharedBus>,
-    tag: Arc<String>,
-    global: Arc<GlobalLog>,
+    bus: SharedBus,
+    tag: String,
+    global: GlobalLog,
 }
 
 impl Freezable for SensorTask {}
 
 impl CuTask for SensorTask {
-    type Resources<'r> = SensorResources;
+    type Resources<'r> = SensorResources<'r>;
     type Input<'m> = CuMsg<Tick>;
     type Output<'m> = CuMsg<BusReading>;
 
     fn new(_config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self> {
-        let SensorResources {
+        let sensor_resources::Resources {
             counter,
             bus,
             tag,
@@ -49,9 +49,9 @@ impl CuTask for SensorTask {
         } = resources;
         Ok(Self {
             counter,
-            bus,
-            tag,
-            global,
+            bus: bus.0.clone(),
+            tag: tag.0.clone(),
+            global: global.0.clone(),
         })
     }
 
@@ -63,20 +63,12 @@ impl CuTask for SensorTask {
     ) -> CuResult<()> {
         let value = self.counter.0.next();
         self.bus.set(value);
-        self.global.push(format!(
-            "sensor {} ({}) -> {}",
-            self.tag.as_str(),
-            self.bus.label(),
-            value
-        ));
-        info!(
-            "[sensor] {} ({}) -> {}",
-            self.tag.as_str(),
-            self.bus.label(),
-            value
+        record(
+            &self.global,
+            format!("sensor {} ({}) -> {}", self.tag, self.bus.label(), value),
         );
         output.set_payload(BusReading {
-            tag: (*self.tag).clone(),
+            tag: self.tag.clone(),
             value,
         });
         Ok(())
@@ -84,147 +76,72 @@ impl CuTask for SensorTask {
 }
 
 pub struct InspectorTask {
-    bus: Arc<SharedBus>,
-    note: Arc<String>,
-    global: Arc<GlobalLog>,
+    bus: SharedBus,
+    note: String,
+    global: GlobalLog,
 }
 
 impl Freezable for InspectorTask {}
 
 impl CuSinkTask for InspectorTask {
     type Input<'m> = CuMsg<BusReading>;
-    type Resources<'r> = InspectorResources;
+    type Resources<'r> = InspectorResources<'r>;
 
     fn new(_config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self> {
-        let InspectorResources { bus, note, global } = resources;
-        Ok(Self { bus, note, global })
-    }
-
-    fn process<'i>(&mut self, _clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
-        if let Some(reading) = input.payload() {
-            self.global.push(format!(
-                "inspector got {} from {} (note {})",
-                reading.value,
-                reading.tag.clone(),
-                self.note.as_str()
-            ));
-            info!(
-                "[inspector] got {} from {} (note {})",
-                reading.value,
-                reading.tag.clone(),
-                self.note.as_str()
-            );
-        } else {
-            let current = self.bus.get();
-            self.global.push(format!(
-                "inspector polled {} (note {})",
-                current,
-                self.note.as_str()
-            ));
-            info!(
-                "[inspector] polled {} (note {})",
-                current,
-                self.note.as_str()
-            );
-        }
-        Ok(())
-    }
-}
-
-pub struct SensorResources {
-    pub counter: Owned<OwnedCounter>,
-    pub bus: Arc<SharedBus>,
-    pub tag: Arc<String>,
-    pub global: Arc<GlobalLog>,
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum SensorBinding {
-    Counter,
-    Bus,
-    Tag,
-    Global,
-}
-
-impl ResourceBindings<'_> for SensorResources {
-    type Binding = SensorBinding;
-
-    fn from_bindings(
-        manager: &mut ResourceManager,
-        mapping: Option<&ResourceBindingMap<Self::Binding>>,
-    ) -> CuResult<Self> {
-        let mapping = mapping.ok_or_else(|| CuError::from("missing sensor bindings"))?;
-        let counter = manager.take(mapping.get(SensorBinding::Counter).unwrap().typed())?;
-        let bus = manager.borrow(
-            mapping
-                .get(SensorBinding::Bus)
-                .unwrap()
-                .typed::<Arc<SharedBus>>(),
-        )?;
-        let tag = manager.borrow(
-            mapping
-                .get(SensorBinding::Tag)
-                .unwrap()
-                .typed::<Arc<String>>(),
-        )?;
-        let global = manager.borrow(
-            mapping
-                .get(SensorBinding::Global)
-                .unwrap()
-                .typed::<Arc<GlobalLog>>(),
-        )?;
-        Ok(Self {
-            counter,
-            bus: bus.0.clone(),
-            tag: tag.0.clone(),
-            global: global.0.clone(),
-        })
-    }
-}
-
-pub struct InspectorResources {
-    pub bus: Arc<SharedBus>,
-    pub note: Arc<String>,
-    pub global: Arc<GlobalLog>,
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum InspectorBinding {
-    Bus,
-    Note,
-    Global,
-}
-
-impl ResourceBindings<'_> for InspectorResources {
-    type Binding = InspectorBinding;
-
-    fn from_bindings(
-        manager: &mut ResourceManager,
-        mapping: Option<&ResourceBindingMap<Self::Binding>>,
-    ) -> CuResult<Self> {
-        let mapping = mapping.ok_or_else(|| CuError::from("missing inspector bindings"))?;
-        let bus = manager.borrow(
-            mapping
-                .get(InspectorBinding::Bus)
-                .unwrap()
-                .typed::<Arc<SharedBus>>(),
-        )?;
-        let note = manager.borrow(
-            mapping
-                .get(InspectorBinding::Note)
-                .unwrap()
-                .typed::<Arc<String>>(),
-        )?;
-        let global = manager.borrow(
-            mapping
-                .get(InspectorBinding::Global)
-                .unwrap()
-                .typed::<Arc<GlobalLog>>(),
-        )?;
+        let inspector_resources::Resources { bus, note, global } = resources;
         Ok(Self {
             bus: bus.0.clone(),
             note: note.0.clone(),
             global: global.0.clone(),
         })
     }
+
+    fn process<'i>(&mut self, _clock: &RobotClock, input: &Self::Input<'i>) -> CuResult<()> {
+        if let Some(reading) = input.payload() {
+            record(
+                &self.global,
+                format!(
+                    "inspector got {} from {} (note {})",
+                    reading.value, reading.tag, self.note
+                ),
+            );
+        } else {
+            let current = self.bus.get();
+            record(
+                &self.global,
+                format!("inspector polled {} (note {})", current, self.note),
+            );
+        }
+        Ok(())
+    }
 }
+
+fn record(global: &GlobalLog, message: impl Into<String>) {
+    let msg = message.into();
+    global.push(msg.clone());
+    info!("{msg}");
+}
+
+mod sensor_resources {
+    use super::*;
+
+    resources!({
+        counter => Owned<OwnedCounter>,
+        bus => Shared<SharedBus>,
+        tag => Shared<String>,
+        global => Shared<GlobalLog>,
+    });
+}
+
+mod inspector_resources {
+    use super::*;
+
+    resources!({
+        bus => Shared<SharedBus>,
+        note => Shared<String>,
+        global => Shared<GlobalLog>,
+    });
+}
+
+type SensorResources<'r> = sensor_resources::Resources<'r>;
+type InspectorResources<'r> = inspector_resources::Resources<'r>;
