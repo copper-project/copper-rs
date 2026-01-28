@@ -9,6 +9,7 @@ pub mod memmap;
 #[cfg(feature = "std")]
 mod compat {
     // backward compatibility for the std implementation
+    pub use crate::memmap::LogPosition;
     pub use crate::memmap::MmapUnifiedLogger as UnifiedLogger;
     pub use crate::memmap::MmapUnifiedLoggerBuilder as UnifiedLoggerBuilder;
     pub use crate::memmap::MmapUnifiedLoggerRead as UnifiedLoggerRead;

@@ -16,6 +16,8 @@ pub mod cuasynctask; // no no-std version yet
 pub mod cubridge;
 pub mod curuntime;
 pub mod cutask;
+#[cfg(feature = "std")]
+pub mod debug;
 pub(crate) mod log;
 pub mod monitoring;
 pub mod payload;
