@@ -17,8 +17,7 @@ lint:
 # Formatting check only
 fmt-check: check-format-tools
 	@cargo +stable fmt --all -- --check
-	@export RUST_LOG=warn; \
-	git ls-files -z '*.toml' | xargs -0 -r taplo format --check
+	@git ls-files -z '*.toml' | xargs -0 -r env RUST_LOG=warn taplo format --check
 	@git ls-files -z '*.ron' ':!examples/modular_config_example/motors.ron' | xargs -0 -r -n 1 fmtron --input
 	@rg --files -g '*.ron.bak' | xargs rm -f
 	@git diff --exit-code -- '*.ron'
@@ -26,8 +25,7 @@ fmt-check: check-format-tools
 # Apply formatting to Rust, TOML, and RON files
 fmt: check-format-tools
 	@cargo +stable fmt --all
-	@export RUST_LOG=warn; \
-	git ls-files -z '*.toml' | xargs -0 -r taplo format >/dev/null
+	@git ls-files -z '*.toml' | xargs -0 -r env RUST_LOG=warn taplo format >/dev/null
 	@git ls-files -z '*.ron' ':!examples/modular_config_example/motors.ron' | xargs -0 -r -n 1 fmtron --input>/dev/null
 	@rg --files -g '*.ron.bak' | xargs rm -f
 
