@@ -17,12 +17,12 @@ use cu29_clock::{CuTime, RobotClock, RobotClockMock};
 use cu29_traits::{CopperListTuple, CuError, CuResult, UnifiedLogType};
 use cu29_unifiedlog::{
     LogPosition, SectionHeader, SectionStorage, UnifiedLogRead, UnifiedLogWrite, UnifiedLogger,
-    UnifiedLoggerBuilder,
+    UnifiedLoggerBuilder, UnifiedLoggerRead,
 };
 use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::marker::PhantomData;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 /// Result of a jump/step, useful for benchmarking cache effectiveness.
@@ -68,10 +68,10 @@ where
     S: SectionStorage,
     L: UnifiedLogWrite<S> + 'static,
 {
-    log_base: PathBuf,
     app: App,
     robot_clock: RobotClock,
     clock_mock: RobotClockMock,
+    log_reader: UnifiedLoggerRead,
     sections: Vec<SectionIndexEntry>,
     total_entries: usize,
     keyframes: Vec<KeyFrame>,
@@ -109,8 +109,9 @@ where
         time_of: TF,
     ) -> CuResult<Self> {
         let (sections, keyframes, total_entries) = index_log::<P, _>(log_base, &time_of)?;
+        let log_reader = build_read_logger(log_base)?;
         Ok(Self::new(
-            log_base,
+            log_reader,
             app,
             robot_clock,
             clock_mock,
@@ -133,8 +134,9 @@ where
         cache_cap: usize,
     ) -> CuResult<Self> {
         let (sections, keyframes, total_entries) = index_log::<P, _>(log_base, &time_of)?;
+        let log_reader = build_read_logger(log_base)?;
         Ok(Self::new_with_cache_cap(
-            log_base,
+            log_reader,
             app,
             robot_clock,
             clock_mock,
@@ -150,7 +152,7 @@ where
     /// Create a new session from prebuilt indices.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        log_base: &Path,
+        log_reader: UnifiedLoggerRead,
         app: App,
         robot_clock: RobotClock,
         clock_mock: RobotClockMock,
@@ -161,7 +163,7 @@ where
         time_of: TF,
     ) -> Self {
         Self::new_with_cache_cap(
-            log_base,
+            log_reader,
             app,
             robot_clock,
             clock_mock,
@@ -176,7 +178,7 @@ where
 
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new_with_cache_cap(
-        log_base: &Path,
+        log_reader: UnifiedLoggerRead,
         app: App,
         robot_clock: RobotClock,
         clock_mock: RobotClockMock,
@@ -188,10 +190,10 @@ where
         cache_cap: usize,
     ) -> Self {
         Self {
-            log_base: log_base.to_path_buf(),
             app,
             robot_clock,
             clock_mock,
+            log_reader,
             sections,
             total_entries,
             keyframes,
@@ -290,7 +292,7 @@ where
         }
 
         let entry = &self.sections[section_idx];
-        let (header, data) = read_section_at(&self.log_base, entry.pos)?;
+        let (header, data) = read_section_at(&mut self.log_reader, entry.pos)?;
         if header.entry_type != UnifiedLogType::CopperList {
             return Err(CuError::from(
                 "Section type mismatch while loading copperlists",
@@ -566,17 +568,25 @@ fn scan_copperlist_section<
     Ok((count, first_id, last_id, first_ts, last_ts))
 }
 
-/// Read a specific section at a given position from disk.
-fn read_section_at(log_base: &Path, pos: LogPosition) -> CuResult<(SectionHeader, Vec<u8>)> {
+/// Build a reusable read-only unified logger for this session.
+fn build_read_logger(log_base: &Path) -> CuResult<UnifiedLoggerRead> {
     let logger = UnifiedLoggerBuilder::new()
         .file_base_name(log_base)
         .build()
         .map_err(|e| CuError::new_with_cause("Failed to open unified log", e))?;
-    let UnifiedLogger::Read(mut dl) = logger else {
+    let UnifiedLogger::Read(dl) = logger else {
         return Err(CuError::from("Expected read-only unified logger"));
     };
-    dl.seek(pos)?;
-    dl.raw_read_section()
+    Ok(dl)
+}
+
+/// Read a specific section at a given position from disk using an existing handle.
+fn read_section_at(
+    log_reader: &mut UnifiedLoggerRead,
+    pos: LogPosition,
+) -> CuResult<(SectionHeader, Vec<u8>)> {
+    log_reader.seek(pos)?;
+    log_reader.raw_read_section()
 }
 
 /// Build a section-level index in one pass (copperlists + keyframes).
