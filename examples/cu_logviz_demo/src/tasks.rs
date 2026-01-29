@@ -41,8 +41,10 @@ impl CuSrcTask for LogvizDemoSrc {
         };
         let buffer = vec![0u8; (IMAGE_STRIDE * IMAGE_HEIGHT) as usize];
         let image = CuImage::new(format, CuHandle::new_detached(buffer));
-        let mut pointcloud = PointCloudSoa::default();
-        pointcloud.len = POINTS;
+        let pointcloud = PointCloudSoa {
+            len: POINTS,
+            ..Default::default()
+        };
         let point = PointCloud::new(cu29::clock::CuTime::from(0u64), 0.0, 0.0, 0.0, 0.0, None);
 
         Ok(Self {
