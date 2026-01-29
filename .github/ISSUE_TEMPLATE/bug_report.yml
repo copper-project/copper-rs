@@ -1,0 +1,92 @@
+name: Bug report
+description: Report a reproducible bug in Copper
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug! Please provide the details below so we can reproduce it.
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      description: Short description of the bug.
+      placeholder: "cu29_runtime panics when ..."
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Provide a minimal, ordered list of steps.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: "Expected ..."
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      placeholder: "Observed ..."
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / backtrace
+      description: Paste relevant logs, error messages, or backtrace output.
+      render: shell
+    validations:
+      required: false
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Linux
+        - Windows
+        - Other (please specify in Additional context)
+    validations:
+      required: true
+  - type: input
+    id: rust
+    attributes:
+      label: Rust toolchain
+      description: Output of `rustc -V` or `rustup show`.
+      placeholder: "rustc 1.xx.x (date)"
+    validations:
+      required: true
+  - type: input
+    id: copper
+    attributes:
+      label: Copper revision
+      description: Git commit SHA, tag, or branch.
+      placeholder: "master @ abcdef1"
+    validations:
+      required: false
+  - type: checkboxes
+    id: regression
+    attributes:
+      label: Regression
+      description: Did this work in a previous release or commit?
+      options:
+        - label: This is a regression
+          required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Anything else that could help us diagnose the issue.
+    validations:
+      required: false

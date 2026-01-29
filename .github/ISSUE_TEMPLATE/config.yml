@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Copper Discord
+    url: https://discord.gg/VkCG7Sb9Kw
+    about: Quick questions and community support.
+  - name: Copper Docs
+    url: https://copper-project.github.io/copper-rs/
+    about: Read the documentation and guides.
