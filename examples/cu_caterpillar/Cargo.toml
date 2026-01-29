@@ -36,7 +36,6 @@ path = "src/resim.rs"
 
 
 [dependencies]
-# cu29 = { workspace = true, features = ["macro_debug"] } # NEEDED FOR CUBUILD
 cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
 cu29-export = { workspace = true, features = ["python", "mcap"] }
