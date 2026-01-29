@@ -1,0 +1,47 @@
+name: Feature request
+description: Suggest a new feature or improvement
+title: "feature: "
+labels: ["feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to suggest an improvement.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What problem are you trying to solve? Why is it important?
+      placeholder: "Today it's hard to ..."
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the change you would like to see.
+      placeholder: "Add a ... that ..."
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you tried or considered.
+    validations:
+      required: false
+  - type: textarea
+    id: scope
+    attributes:
+      label: Impact / scope
+      description: Which crates, platforms, or features would this affect?
+      placeholder: "cu29_runtime, Windows, log export..."
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Links, examples, or relevant use cases.
+    validations:
+      required: false
