@@ -1,0 +1,39 @@
+(
+    tasks: [
+        (
+            id: "demo_src",
+            type: "tasks::LogvizDemoSrc",
+        ),
+        (
+            id: "demo_sink",
+            type: "tasks::LogvizDemoSink",
+        ),
+    ],
+    cnx: [
+        (
+            src: "demo_src",
+            dst: "demo_sink",
+            msg: "cu_sensor_payloads::CuImage<Vec<u8>>",
+        ),
+        (
+            src: "demo_src",
+            dst: "demo_sink",
+            msg: "cu_sensor_payloads::PointCloudSoa<64>",
+        ),
+        (
+            src: "demo_src",
+            dst: "demo_sink",
+            msg: "cu_sensor_payloads::PointCloud",
+        ),
+        (
+            src: "demo_src",
+            dst: "demo_sink",
+            msg: "cu_spatial_payloads::Transform3D<f32>",
+        ),
+        (
+            src: "demo_src",
+            dst: "demo_sink",
+            msg: "cu_sensor_payloads::ImuPayload",
+        ),
+    ],
+)

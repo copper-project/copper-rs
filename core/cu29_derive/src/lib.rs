@@ -5,8 +5,8 @@ use std::fs::read_to_string;
 use syn::Fields::{Named, Unnamed};
 use syn::meta::parser;
 use syn::{
-    Field, Fields, ItemImpl, ItemStruct, LitStr, Type, TypeTuple, parse_macro_input, parse_quote,
-    parse_str,
+    Field, Fields, GenericArgument, ItemImpl, ItemStruct, LitStr, PathArguments, PathSegment, Type,
+    TypeTuple, parse_macro_input, parse_quote, parse_str,
 };
 
 use crate::utils::{config_id_to_bridge_const, config_id_to_enum, config_id_to_struct_member};
@@ -47,6 +47,149 @@ fn rtsan_guard_tokens() -> proc_macro2::TokenStream {
         }
     } else {
         quote! {}
+    }
+}
+
+fn type_last_ident(ty: &Type) -> Option<String> {
+    match ty {
+        Type::Path(path) => path.path.segments.last().map(|seg| seg.ident.to_string()),
+        Type::Group(group) => type_last_ident(&group.elem),
+        Type::Paren(paren) => type_last_ident(&paren.elem),
+        _ => None,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LogvizDispatchKind {
+    AsComponentsImageVec,
+    AsComponentsPoint,
+    AsComponentsTransform,
+    LogImage,
+    LogPointCloud,
+    LogTransform,
+    LogImu,
+    Fallback,
+}
+
+fn type_last_segment(ty: &Type) -> Option<&PathSegment> {
+    match ty {
+        Type::Path(path) => path.path.segments.last(),
+        Type::Group(group) => type_last_segment(&group.elem),
+        Type::Paren(paren) => type_last_segment(&paren.elem),
+        _ => None,
+    }
+}
+
+fn type_first_generic_arg(seg: &PathSegment) -> Option<&Type> {
+    match &seg.arguments {
+        PathArguments::AngleBracketed(args) => args.args.iter().find_map(|arg| match arg {
+            GenericArgument::Type(ty) => Some(ty),
+            _ => None,
+        }),
+        _ => None,
+    }
+}
+
+fn type_is_vec_u8(ty: &Type) -> bool {
+    let Some(seg) = type_last_segment(ty) else {
+        return false;
+    };
+    if seg.ident != "Vec" {
+        return false;
+    }
+    let Some(inner) = type_first_generic_arg(seg) else {
+        return false;
+    };
+    matches!(type_last_ident(inner).as_deref(), Some("u8"))
+}
+
+fn type_is_cuimage_vec_u8(ty: &Type) -> bool {
+    let Some(seg) = type_last_segment(ty) else {
+        return false;
+    };
+    if seg.ident != "CuImage" {
+        return false;
+    }
+    let Some(inner) = type_first_generic_arg(seg) else {
+        return false;
+    };
+    type_is_vec_u8(inner)
+}
+
+fn type_is_transform_f32_f64(ty: &Type) -> bool {
+    let Some(seg) = type_last_segment(ty) else {
+        return false;
+    };
+    if seg.ident != "Transform3D" {
+        return false;
+    }
+    let Some(inner) = type_first_generic_arg(seg) else {
+        return false;
+    };
+    matches!(type_last_ident(inner).as_deref(), Some("f32" | "f64"))
+}
+
+fn logviz_dispatch_kind(payload_type: &Type) -> LogvizDispatchKind {
+    match type_last_ident(payload_type).as_deref() {
+        Some("PointCloud") => LogvizDispatchKind::AsComponentsPoint,
+        Some("PointCloudSoa") => LogvizDispatchKind::LogPointCloud,
+        Some("ImuPayload") => LogvizDispatchKind::LogImu,
+        Some("CuImage") => {
+            if type_is_cuimage_vec_u8(payload_type) {
+                LogvizDispatchKind::AsComponentsImageVec
+            } else {
+                LogvizDispatchKind::LogImage
+            }
+        }
+        Some("Transform3D") => {
+            if type_is_transform_f32_f64(payload_type) {
+                LogvizDispatchKind::AsComponentsTransform
+            } else {
+                LogvizDispatchKind::LogTransform
+            }
+        }
+        _ => LogvizDispatchKind::Fallback,
+    }
+}
+
+fn logviz_emit_tokens(payload_type: &Type) -> proc_macro2::TokenStream {
+    match logviz_dispatch_kind(payload_type) {
+        LogvizDispatchKind::AsComponentsImageVec => quote! {
+            ::cu29_logviz::log_as_components(
+                rec,
+                &path,
+                &::cu29_logviz::as_components::LogvizImageVec::new(payload),
+            )?;
+        },
+        LogvizDispatchKind::AsComponentsPoint => quote! {
+            ::cu29_logviz::log_as_components(
+                rec,
+                &path,
+                &::cu29_logviz::as_components::LogvizPoint::new(payload),
+            )?;
+        },
+        LogvizDispatchKind::AsComponentsTransform => quote! {
+            ::cu29_logviz::log_as_components(
+                rec,
+                &path,
+                &::cu29_logviz::as_components::LogvizTransform::new(payload),
+            )?;
+        },
+        LogvizDispatchKind::LogImage => quote! {
+            ::cu29_logviz::log_image(rec, &path, payload)?;
+        },
+        LogvizDispatchKind::LogPointCloud => quote! {
+            ::cu29_logviz::log_pointcloud(rec, &path, payload)?;
+        },
+        LogvizDispatchKind::LogTransform => quote! {
+            ::cu29_logviz::log_transform(rec, &path, payload)?;
+        },
+        LogvizDispatchKind::LogImu => quote! {
+            ::cu29_logviz::log_imu(rec, &path, payload)?;
+        },
+        LogvizDispatchKind::Fallback => quote! {
+            ::cu29_logviz::log_fallback_payload(rec, &path, payload)?;
+        },
     }
 }
 
@@ -330,6 +473,8 @@ fn gen_culist_support(
         .map(|(_, name)| name.clone())
         .collect();
 
+    let mut slot_task_names: Vec<Option<String>> = vec![None; output_packs.len()];
+
     let mut methods = Vec::new();
     for (node_id, name) in task_member_names {
         let output_position = node_output_positions
@@ -339,6 +484,7 @@ fn gen_culist_support(
             .get(*output_position)
             .unwrap_or_else(|| panic!("Missing output pack for task {name}"));
         let slot_index = syn::Index::from(*output_position);
+        slot_task_names[*output_position] = Some(name.clone());
 
         if pack.msg_types.len() == 1 {
             let fn_name = format_ident!("get_{}_output", name);
@@ -371,6 +517,70 @@ fn gen_culist_support(
         }
     }
 
+    let mut logviz_blocks = Vec::new();
+    for (slot_idx, pack) in output_packs.iter().enumerate() {
+        if pack.msg_types.is_empty() {
+            continue;
+        }
+        let slot_index = syn::Index::from(slot_idx);
+        let slot_name = slot_task_names.get(slot_idx).and_then(|name| name.as_ref());
+
+        if pack.is_multi() {
+            for (port_idx, payload_type) in pack.msg_types.iter().enumerate() {
+                let port_index = syn::Index::from(port_idx);
+                let log_tokens = logviz_emit_tokens(payload_type);
+                let path_expr = if let Some(name) = slot_name {
+                    let lit = LitStr::new(name, Span::call_site());
+                    quote! { format!("{}/{}", #lit, #port_idx) }
+                } else {
+                    quote! { format!("slot_{}/{}", #slot_idx, #port_idx) }
+                };
+                logviz_blocks.push(quote! {
+                    {
+                        let msg = &self.0.#slot_index.#port_index;
+                        if let Some(payload) = msg.payload() {
+                            ::cu29_logviz::apply_tov(rec, &msg.tov);
+                            let path = #path_expr;
+                            #log_tokens
+                        }
+                    }
+                });
+            }
+        } else {
+            let payload_type = pack.msg_types.first().unwrap();
+            let log_tokens = logviz_emit_tokens(payload_type);
+            let path_expr = if let Some(name) = slot_name {
+                let lit = LitStr::new(name, Span::call_site());
+                quote! { #lit.to_string() }
+            } else {
+                quote! { format!("slot_{}", #slot_idx) }
+            };
+            logviz_blocks.push(quote! {
+                {
+                    let msg = &self.0.#slot_index;
+                    if let Some(payload) = msg.payload() {
+                        ::cu29_logviz::apply_tov(rec, &msg.tov);
+                        let path = #path_expr;
+                        #log_tokens
+                    }
+                }
+            });
+        }
+    }
+
+    let logviz_impl = quote! {
+        #[cfg(feature = "logviz")]
+        impl ::cu29_logviz::LogvizDataSet for CuStampedDataSet {
+            fn logviz_emit(
+                &self,
+                rec: &::cu29_logviz::RecordingStream,
+            ) -> ::cu29::prelude::CuResult<()> {
+                #(#logviz_blocks)*
+                Ok(())
+            }
+        }
+    };
+
     // This generates a way to get the metadata of every single message of a culist at low cost
     quote! {
         #collect_metadata_function
@@ -395,6 +605,7 @@ fn gen_culist_support(
         }
 
         #payload_raw_bytes_impl
+        #logviz_impl
 
         impl MatchingTasks for CuStampedDataSet {
             #[allow(dead_code)]
@@ -428,6 +639,52 @@ fn gen_culist_support(
                 #(#zeroed_init_tokens)*
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod logviz_dispatch_tests {
+    use super::*;
+    use syn::parse_quote;
+
+    #[test]
+    fn logviz_dispatch_selects_expected_paths() {
+        assert_eq!(
+            logviz_dispatch_kind(&parse_quote!(CuImage<Vec<u8>>)),
+            LogvizDispatchKind::AsComponentsImageVec
+        );
+        assert_eq!(
+            logviz_dispatch_kind(&parse_quote!(CuImage<[u8; 4]>)),
+            LogvizDispatchKind::LogImage
+        );
+        assert_eq!(
+            logviz_dispatch_kind(&parse_quote!(PointCloud)),
+            LogvizDispatchKind::AsComponentsPoint
+        );
+        assert_eq!(
+            logviz_dispatch_kind(&parse_quote!(PointCloudSoa<64>)),
+            LogvizDispatchKind::LogPointCloud
+        );
+        assert_eq!(
+            logviz_dispatch_kind(&parse_quote!(Transform3D<f32>)),
+            LogvizDispatchKind::AsComponentsTransform
+        );
+        assert_eq!(
+            logviz_dispatch_kind(&parse_quote!(Transform3D<f64>)),
+            LogvizDispatchKind::AsComponentsTransform
+        );
+        assert_eq!(
+            logviz_dispatch_kind(&parse_quote!(Transform3D<u32>)),
+            LogvizDispatchKind::LogTransform
+        );
+        assert_eq!(
+            logviz_dispatch_kind(&parse_quote!(ImuPayload)),
+            LogvizDispatchKind::LogImu
+        );
+        assert_eq!(
+            logviz_dispatch_kind(&parse_quote!(CustomType)),
+            LogvizDispatchKind::Fallback
+        );
     }
 }
 
