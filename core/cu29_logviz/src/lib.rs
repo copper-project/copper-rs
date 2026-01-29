@@ -251,8 +251,10 @@ mod tests {
 
     #[test]
     fn pointcloud_positions_len() {
-        let mut pc = PointCloudSoa::<3>::default();
-        pc.len = 3;
+        let mut pc = PointCloudSoa::<3> {
+            len: 3,
+            ..Default::default()
+        };
         pc.x[0] = Distance::from(1.0);
         pc.y[0] = Distance::from(2.0);
         pc.z[0] = Distance::from(3.0);
@@ -263,8 +265,10 @@ mod tests {
 
     #[test]
     fn pointcloud_positions_respects_len() {
-        let mut pc = PointCloudSoa::<3>::default();
-        pc.len = 1;
+        let mut pc = PointCloudSoa::<3> {
+            len: 1,
+            ..Default::default()
+        };
         pc.x[0] = Distance::from(1.0);
         pc.y[0] = Distance::from(2.0);
         pc.z[0] = Distance::from(3.0);

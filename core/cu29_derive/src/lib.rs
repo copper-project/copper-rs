@@ -568,17 +568,20 @@ fn gen_culist_support(
         }
     }
 
-    let logviz_impl = quote! {
-        #[cfg(feature = "logviz")]
-        impl ::cu29_logviz::LogvizDataSet for CuStampedDataSet {
-            fn logviz_emit(
-                &self,
-                rec: &::cu29_logviz::RecordingStream,
-            ) -> ::cu29::prelude::CuResult<()> {
-                #(#logviz_blocks)*
-                Ok(())
+    let logviz_impl = if std::env::var("CARGO_FEATURE_LOGVIZ").is_ok() {
+        quote! {
+            impl ::cu29_logviz::LogvizDataSet for CuStampedDataSet {
+                fn logviz_emit(
+                    &self,
+                    rec: &::cu29_logviz::RecordingStream,
+                ) -> ::cu29::prelude::CuResult<()> {
+                    #(#logviz_blocks)*
+                    Ok(())
+                }
             }
         }
+    } else {
+        quote! {}
     };
 
     // This generates a way to get the metadata of every single message of a culist at low cost
