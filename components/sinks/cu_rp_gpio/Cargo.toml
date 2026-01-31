@@ -15,8 +15,6 @@ ignored = ["cu29-log", "cu29-log-runtime"] # proc macro
 
 [dependencies]
 cu29 = { workspace = true }
-cu29-log = { workspace = true }
-cu29-log-runtime = { workspace = true } # needed
 bincode = { workspace = true }
 serde = { workspace = true }
 

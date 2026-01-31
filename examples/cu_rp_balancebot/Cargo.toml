@@ -27,7 +27,6 @@ ignored = [
 
 [dependencies]
 # Core dependencies
-# cu29 = { workspace = true, features = ["macro_debug"] }
 cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
 serde = { workspace = true }
@@ -36,7 +35,6 @@ cu-rp-sn754410-new = { path = "../../components/sinks/cu_rp_sn754410", version =
 cu-rp-encoder = { path = "../../components/sources/cu_rp_encoder", version = "0.12.0" }
 cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0.12.0" }    # needed
 cu-pid = { path = "../../components/tasks/cu_pid", version = "0.12.0" }
-cu29-unifiedlog = { workspace = true }
 
 # Log reader depencies
 cu29-export = { workspace = true, optional = true, features = [

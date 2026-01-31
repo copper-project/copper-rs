@@ -12,7 +12,6 @@ repository.workspace = true
 
 publish = false
 [dependencies]
-# cu29 = { workspace = true, features = ["macro_debug"] }  # needed for cargo cubuild
 cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
 serde = { workspace = true }

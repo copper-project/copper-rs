@@ -60,9 +60,6 @@ cu-pid = { path = "../../components/tasks/cu_pid", default-features = false, ver
 cu-sensor-payloads = { path = "../../components/payloads/cu_sensor_payloads", default-features = false, version = "0.12.0" }
 bincode = { workspace = true }
 serde = { workspace = true }
-cu29-unifiedlog = { path = "../../core/cu29_unifiedlog", default-features = false, features = [
-  "compact",
-] }
 spin = { workspace = true }
 uom = { version = "0.37", default-features = false, features = [
   "serde",

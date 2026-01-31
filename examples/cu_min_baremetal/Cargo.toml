@@ -31,7 +31,6 @@ required-features = ["std"]
 [dependencies]
 
 bincode = { workspace = true }
-# cu29 = { path = "../../core/cu29", default-features = false, features = ["macro_debug"] }  # needed for cargo-cubuild
 cu29 = { path = "../../core/cu29", default-features = false, version = "0.12.0", features = [
   "textlogs",
 ] } # default-features = false -> enables no-std for all cu29 dependencies
