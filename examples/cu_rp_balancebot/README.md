@@ -22,7 +22,7 @@ See the UI help for the navigation.
 
 ```bash
 $ cd examples/cu_rp_balancebot
-$ cargo run --bin balancebot_resim --release
+$ cargo run --bin balancebot-resim --release
 ```
 
 It will recreate the logs from only the inputs of the previous run in `logs/balancebot_resim*.copper`.
