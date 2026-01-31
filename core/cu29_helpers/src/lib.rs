@@ -54,10 +54,6 @@ pub fn basic_copper_setup(
         4096 * 10,
     )?;
 
-    #[cfg(debug_assertions)]
-    let extra: Option<TermLogger> = None;
-
-    #[cfg(not(debug_assertions))]
     let extra: Option<TermLogger> = None;
 
     let clock = clock.unwrap_or_default();
