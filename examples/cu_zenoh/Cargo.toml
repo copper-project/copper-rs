@@ -11,9 +11,6 @@ repository.workspace = true
 description = "Copper example to use zenoh as a middleware."
 
 publish = false
-[package.metadata.cargo-machete]
-ignored = ["bincode", "cu-caterpillar", "cu-consolemon"]
-
 [dependencies]
 cu29 = { workspace = true }
 cu29-helpers = { workspace = true }
