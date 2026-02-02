@@ -7,7 +7,7 @@ use cu29::prelude::CuError;
 use hal::dma::Word;
 use hal::pac;
 use hal::pio::{PIOBuilder, StateMachineIndex, ValidStateMachine};
-use pio_proc::pio_file;
+use pio::pio_file;
 use rp235x_hal as hal;
 use spin::Mutex;
 

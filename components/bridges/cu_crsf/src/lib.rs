@@ -2,6 +2,17 @@
 
 extern crate alloc;
 
+#[cfg(all(feature = "embedded-io-06", feature = "embedded-io-07"))]
+compile_error!("Enable only one of `embedded-io-06` or `embedded-io-07` for cu-crsf.");
+
+#[cfg(not(any(feature = "embedded-io-06", feature = "embedded-io-07")))]
+compile_error!("Enable one of `embedded-io-06` or `embedded-io-07` for cu-crsf.");
+
+#[cfg(feature = "embedded-io-06")]
+use embedded_io_06 as embedded_io;
+#[cfg(feature = "embedded-io-07")]
+use embedded_io_07 as embedded_io;
+
 pub mod messages;
 
 pub use spin::Mutex;
@@ -208,7 +219,7 @@ where
 
 #[cfg(feature = "std")]
 pub mod std_serial {
-    use embedded_io_adapters::std::FromStd;
+    use embedded_io_adapters_06::std::FromStd;
     use std::boxed::Box;
     use std::time::Duration;
 

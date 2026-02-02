@@ -31,6 +31,7 @@ cu-bdshot = { path = "../../components/bridges/cu_bdshot", default-features = fa
 cu-crsf = { path = "../../components/bridges/cu_crsf", default-features = false, features = [
   "defmt",
   "alloc",
+  "embedded-io-06",
 ], optional = true }
 cu-msp-bridge = { path = "../../components/bridges/cu_msp_bridge", default-features = false, features = [
   "defmt",
