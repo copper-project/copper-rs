@@ -28,6 +28,7 @@ embedded-io-06 = ["dep:embedded-io-06"]
 embedded-io-07 = ["dep:embedded-io-07"]
 std = [
   "cu29/std",
+  "embedded-io-06",
   "embedded-io-06/std",
   "dep:embedded-io-adapters-06",
   "dep:serialport",

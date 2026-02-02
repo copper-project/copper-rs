@@ -8,6 +8,12 @@ compile_error!("Enable only one of `embedded-io-06` or `embedded-io-07` for cu-c
 #[cfg(not(any(feature = "embedded-io-06", feature = "embedded-io-07")))]
 compile_error!("Enable one of `embedded-io-06` or `embedded-io-07` for cu-crsf.");
 
+#[cfg(all(feature = "std", feature = "embedded-io-07"))]
+compile_error!(
+    "The `std` feature requires `embedded-io-06`. \
+     Use `embedded-io-07` only for no_std embedded targets."
+);
+
 #[cfg(feature = "embedded-io-06")]
 use embedded_io_06 as embedded_io;
 #[cfg(feature = "embedded-io-07")]
