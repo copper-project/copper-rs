@@ -44,7 +44,7 @@ embedded-sdmmc = { version = "0.9", features = [
   "defmt-log",
 ], default-features = false }
 panic-probe = { version = "1.0", features = ["defmt", "print-defmt"] }
-rp235x-hal = { version = "0.3", features = ["rt", "critical-section-impl"] }
+rp235x-hal = { version = "0.4", features = ["rt", "critical-section-impl"] }
 spin = { workspace = true }
 bincode = { workspace = true, features = ["alloc", "derive"] }
 serde = { workspace = true }
