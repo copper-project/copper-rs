@@ -215,16 +215,16 @@ impl ser::Serializer for Serializer {
         Ok(SerializeSeq(vec![]))
     }
 
-    fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple, Self::Error> {
-        Ok(SerializeTuple(vec![]))
+    fn serialize_tuple(self, len: usize) -> Result<Self::SerializeTuple, Self::Error> {
+        Ok(SerializeTuple(Vec::with_capacity(len)))
     }
 
     fn serialize_tuple_struct(
         self,
         _name: &'static str,
-        _len: usize,
+        len: usize,
     ) -> Result<Self::SerializeTupleStruct, Self::Error> {
-        Ok(SerializeTupleStruct(vec![]))
+        Ok(SerializeTupleStruct(Vec::with_capacity(len)))
     }
 
     fn serialize_tuple_variant(

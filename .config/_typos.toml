@@ -8,6 +8,7 @@ iterm = "iterm"
 NED = "NED"
 arange = "arange"
 mmaped = "mmaped"
+consts = "consts"
 
 [files]
 extend-exclude = ["patches/*", "components/payloads/cu_ros_payloads/**"]

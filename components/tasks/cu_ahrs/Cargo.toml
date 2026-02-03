@@ -50,7 +50,7 @@ panic-probe = { version = "1.0", features = [
 ], optional = true }
 cortex-m = { version = "0.7", optional = true }
 cortex-m-rt = { version = "0.7", optional = true }
-rp235x-hal = { version = "0.3", features = [
+rp235x-hal = { version = "0.4", features = [
   "rt",
   "critical-section-impl",
   "defmt",

@@ -176,16 +176,16 @@ fn main() -> ! {
 
     let clock = RobotClock::new_with_rtc(
         {
-            let timer = timer.clone();
-            move || timer.get_counter().ticks() * 1_000
+            let timer_for_counter = timer;
+            move || timer_for_counter.get_counter().ticks() * 1_000
         },
         {
-            let timer = timer.clone();
+            let timer_for_wait = timer;
             move |ns| {
                 // implements a simple busy sleep, we don't need anything fancy here.
-                let start = timer.get_counter().ticks(); // microseconds
+                let start = timer_for_wait.get_counter().ticks(); // microseconds
                 let wait_us = ns / 1_000;
-                while timer.get_counter().ticks().wrapping_sub(start) < wait_us {
+                while timer_for_wait.get_counter().ticks().wrapping_sub(start) < wait_us {
                     core::hint::spin_loop();
                 }
             }

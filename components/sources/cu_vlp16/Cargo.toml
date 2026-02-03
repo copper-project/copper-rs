@@ -10,9 +10,6 @@ categories.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
-[package.metadata.cargo-machete]
-ignored = ["cu29-log", "cu29-log-runtime", "cu29-soa-derive"] # proc macro
-
 [dependencies]
 cu29 = { workspace = true }
 cu-sensor-payloads = { workspace = true }

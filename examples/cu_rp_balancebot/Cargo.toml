@@ -16,15 +16,6 @@ publish = false
 [package.metadata.cargo-shear]
 ignored = ["serde"]
 
-[package.metadata.cargo-machete]
-ignored = [
-  "cu-consolemon",
-  "cu29-log",
-  "cu29-log-runtime",
-  "cu29-unifiedlog",
-  "copper-traits",
-] # proc macro and console
-
 [dependencies]
 # Core dependencies
 cu29 = { workspace = true }
