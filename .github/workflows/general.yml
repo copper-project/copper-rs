@@ -42,7 +42,7 @@ jobs:
         with:
           tool: taplo-cli, fmtron, typos
       - name: Check Rust, TOML, RON formatting
-      - uses: j178/prek-action@v1
+        uses: j178/prek-action@v1
 
   embedded:
     name: CI for embedded targets
