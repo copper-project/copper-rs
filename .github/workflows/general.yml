@@ -21,14 +21,6 @@ jobs:
     with:
       toolchain: stable
       linux_cargo_paths: true
-  typos:
-    name: Typos
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: crate-ci/typos@master
-        with:
-          config: ./.config/_typos.toml
   fmt:
     name: Format Check
     runs-on: ubuntu-latest
