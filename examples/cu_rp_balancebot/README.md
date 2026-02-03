@@ -11,7 +11,7 @@ with:
 
 ```bash
 $ cd examples/cu_rp_balancebot
-$ cargo run --release 
+$ cargo run --release
 ```
 
 See the UI help for the navigation.

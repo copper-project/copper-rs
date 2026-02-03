@@ -52,7 +52,7 @@ check-format-tools:
 	fi
 
 # Typo check only
-typos:
+ttypos:
 	typos -c .config/_typos.toml
 
 # Run the Unit-Tests job locally via act (debug/ubuntu matrix).
@@ -152,7 +152,7 @@ expand-runtime pkg bin features="": check-expand
 
 	cargo +stable expand -p "{{pkg}}" --bin "{{bin}}" $features_flag
 
-# expand macro of cu29-soa-derive test target 
+# expand macro of cu29-soa-derive test target
 expand-soa test="proctest": check-expand
 	# Usage: just expand-soa [test=proctest]
 	cargo +stable expand -p cu29-soa-derive --test "{{test}}"
