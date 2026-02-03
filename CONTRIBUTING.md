@@ -54,11 +54,11 @@ The `just std-ci` command runs the same checks as CI, including:
 - Unit tests with cargo-nextest
 - Project generation tests (debug mode only)
 
-### Pre-commit hooks (Recommended)
+### Prek hooks (Recommended)
 
 To mirror the CI lint steps locally, you can install prek hooks that run formatting and typos checks on each commit.
 
-1. Install `pre-commit`
+1. Install `prek`
     ```bash
     cargo binstall install prek
     # or
