@@ -11,5 +11,11 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-embedded-io = { version = "0.6.1", default-features = false }
+embedded-io-06 = { package = "embedded-io", version = "0.6.1", default-features = false, optional = true }
+embedded-io-07 = { package = "embedded-io", version = "0.7.1", default-features = false, optional = true }
 spin = { workspace = true }
+
+[features]
+default = ["embedded-io-06"]
+embedded-io-06 = ["dep:embedded-io-06"]
+embedded-io-07 = ["dep:embedded-io-07"]

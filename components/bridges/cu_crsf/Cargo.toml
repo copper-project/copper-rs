@@ -24,8 +24,8 @@ bincode = { workspace = true, features = ["alloc", "derive"] }
 
 [features]
 default = ["std", "embedded-io-06"]
-embedded-io-06 = ["dep:embedded-io-06"]
-embedded-io-07 = ["dep:embedded-io-07"]
+embedded-io-06 = ["dep:embedded-io-06", "cu-serial-util/embedded-io-06"]
+embedded-io-07 = ["dep:embedded-io-07", "cu-serial-util/embedded-io-07"]
 std = [
   "cu29/std",
   "embedded-io-06",

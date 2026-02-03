@@ -33,7 +33,9 @@ cu-crsf = { path = "../../components/bridges/cu_crsf", default-features = false,
   "alloc",
   "embedded-io-07",
 ] }
-cu-serial-util = { path = "../../components/libs/cu_serial_util", default-features = false }
+cu-serial-util = { path = "../../components/libs/cu_serial_util", default-features = false, features = [
+  "embedded-io-07",
+] }
 cu-sdlogger = { path = "../../components/libs/cu_sdlogger", default-features = false, features = [
   "eh1",
 ] }
