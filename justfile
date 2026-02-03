@@ -52,7 +52,7 @@ check-format-tools:
 	fi
 
 # Typo check only
-ttypos:
+typos:
 	typos -c .config/_typos.toml
 
 # Run the Unit-Tests job locally via act (debug/ubuntu matrix).
