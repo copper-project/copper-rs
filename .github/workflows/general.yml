@@ -37,6 +37,7 @@ jobs:
         uses: j178/prek-action@v1
         with:
           extra-args: >-
+            --all-files
             trailing-whitespace
             check-merge-conflict
             detect-private-key
