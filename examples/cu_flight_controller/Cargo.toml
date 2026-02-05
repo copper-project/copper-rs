@@ -218,7 +218,7 @@ required-features = ["logreader"]
 # name = "quad-sim"
 # path = "src/sim.rs"
 # required-features = ["sim"]
-# 
+#
 # [[bin]]
 # name = "quad-resim"
 # path = "src/resim.rs"

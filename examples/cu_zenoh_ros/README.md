@@ -22,7 +22,7 @@ Then run this example.
 
 ```bash
 $ cd cuexamples/cu_zenoh_ros
-$ cargo run --release 
+$ cargo run --release
 ```
 
 ## Run ROS from Docker (optional)
@@ -43,7 +43,7 @@ ros2 topic echo /output
 
 To inspect zenoh, this is suddedly some python stuff, so let's go and make a virtualenv.
 
-```bash 
+```bash
 python3 -m venv zcli
 source zcli/bin/activate
 pip install zenoh-cli

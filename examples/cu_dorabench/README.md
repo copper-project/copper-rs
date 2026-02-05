@@ -1,4 +1,4 @@
-## Cu-dorabench: let's drag race vs dora-rs 
+## Cu-dorabench: let's drag race vs dora-rs
 
 This is to compare apple to apple with dora-rs another rust middleware for robotics.
 

@@ -2,7 +2,7 @@
 
 Check out cu_rp_balancebot for a full example of how to use it.
 
-### Compatibility 
+### Compatibility
 
 This crate is compatible for std and no_std targets.
 
@@ -35,11 +35,11 @@ Then you can use it in your copper RON config:
             id: "my_pid",
             type: "mymod::MyPID", // Set your type alias here
             config: {
-                "kp": 0.015,  
+                "kp": 0.015,
                 "kd": 0.01,
                 "ki": 0.00005,
                  "setpoint": 3176.0,
-                 "cutoff": 170.0, 
+                 "cutoff": 170.0,
             },
         ),
  [...]

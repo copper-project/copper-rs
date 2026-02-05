@@ -123,5 +123,5 @@ mcap:
 resim:
   #!/usr/bin/env bash
   set -euo pipefail
-  cargo run --bin balancebot-resim -r 
-    
+  cargo run --bin balancebot-resim -r
+

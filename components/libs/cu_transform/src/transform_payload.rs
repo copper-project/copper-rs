@@ -167,7 +167,7 @@ where
         Parent::ID
     }
 
-    /// Get the child frame ID  
+    /// Get the child frame ID
     pub fn child_id(&self) -> u32 {
         Child::ID
     }

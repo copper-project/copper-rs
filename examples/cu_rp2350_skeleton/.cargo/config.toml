@@ -20,7 +20,7 @@ rustflags = [
   "-C",
   "link-arg=--nmagic",     # Turns off page alignment of sections (which saves flash space)
   "-C",
-  "link-arg=-Tlink.x",     # Tells the linker to use link.x as a linker script. This is usually provided by the cortex-m-rt crate, and by default the version in that crate will include a file called `memory.x` which describes the particular memory layout for your specific chip. 
+  "link-arg=-Tlink.x",     # Tells the linker to use link.x as a linker script. This is usually provided by the cortex-m-rt crate, and by default the version in that crate will include a file called `memory.x` which describes the particular memory layout for your specific chip.
   "-C",
   "link-arg=-Tdefmt.x",    # Tells the linker to use `defmt.x` as a secondary linker script. This is required to make defmt_rtt work.
   "-C",

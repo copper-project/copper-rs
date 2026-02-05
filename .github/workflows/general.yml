@@ -21,14 +21,6 @@ jobs:
     with:
       toolchain: stable
       linux_cargo_paths: true
-  typos:
-    name: Typos
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: crate-ci/typos@master
-        with:
-          config: ./.config/_typos.toml
   fmt:
     name: Format Check
     runs-on: ubuntu-latest
@@ -40,20 +32,26 @@ jobs:
       - name: Install taplo-cli
         uses: taiki-e/install-action@v2
         with:
-          tool: taplo-cli
-      - name: Install ronfmt
-        uses: taiki-e/install-action@v2
+          tool: taplo-cli, fmtron, typos
+      - name: Check Rust, TOML, RON formatting
+        uses: j178/prek-action@v1
         with:
-          tool: ronfmt
-      - name: Check Rust formatting
-        run: cargo +stable fmt --all -- --check
-      - name: Check TOML formatting
-        run: git ls-files -z '*.toml' | xargs -0 taplo format --check
-      - name: Check RON formatting
-        run: |
-          git ls-files -z '*.ron' ':!examples/modular_config_example/motors.ron' | xargs -0 -n 1 ronfmt
-          find . -name '*.ron.bak' -type f -delete
-          git diff --exit-code -- '*.ron'
+          extra-args: >-
+            --all-files
+            trailing-whitespace
+            check-merge-conflict
+            detect-private-key
+            check-case-conflict
+            check-added-large-files
+            check-yaml
+            check-json
+            check-xml
+            check-symlinks
+            mixed-line-ending
+            typos
+            check-rust
+            check-ron
+            check-toml
 
   embedded:
     name: CI for embedded targets

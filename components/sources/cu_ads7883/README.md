@@ -27,9 +27,9 @@ hardware: [Texas Instrument ADS7883](https://www.ti.com/product/ADS7883)
 First check if a spi module is loaded on your system:
 
 ```bash
-[gbin@copper7 ~]$ lsmod | grep -i spi                                                                                                                                                                                       
-spidev                 12288  0                                                                                                                                                                                             
-spi_bcm2835            16384  0 
+[gbin@copper7 ~]$ lsmod | grep -i spi
+spidev                 12288  0
+spi_bcm2835            16384  0
 ```
 
 This should give you a spi device:
@@ -37,7 +37,7 @@ This should give you a spi device:
 ```bash
 [gbin@copper7 ~]$ ls /dev/spi*
 /dev/spidev0.0  /dev/spidev0.1
-``` 
+```
 
 With the ADS connected to the SPI bus, you can use a simple SPI test program to check if the values are read correctly:
 

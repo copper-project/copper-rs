@@ -9,7 +9,7 @@ The goal of this Copper component is to align data from different sources.
            │                       │
   Msg1_S1 ─╯                       │ (discarded)
            │                       │
-═══════════╪═══════════════════════╪═══════════ TIME HORIZON ( present - stale_data_horizon_ms ) 
+═══════════╪═══════════════════════╪═══════════ TIME HORIZON ( present - stale_data_horizon_ms )
            │                       │
            │                       │
            │              Msg1_S2 ─┤
@@ -51,10 +51,10 @@ use cu29::cutask::CuTask;
 use cu29::cutask::CuMsg;
 
 // Defines a task that aligns two streams of messages, one with payloads f32, the other MyPayload (you can use any rust struct that to implement the traits for CuMsgPayload).
-define_task!(MyAlignerTask, 
-             0 => { 15, 7, f32 },  // 15 is the Maximum capacity in nb of messages the internal 
-                                   // buffer structure can hold before they will me discarded, 
-                                   // 7 is the Maximum size in nb of messages the output (aligned messages of this type) 
+define_task!(MyAlignerTask,
+             0 => { 15, 7, f32 },  // 15 is the Maximum capacity in nb of messages the internal
+                                   // buffer structure can hold before they will me discarded,
+                                   // 7 is the Maximum size in nb of messages the output (aligned messages of this type)
              1 => { 20, 5, u64 }   // or any CuMsgPayload
             // you can continue with 2 => etc...
             );

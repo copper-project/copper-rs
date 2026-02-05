@@ -15,13 +15,12 @@ jobs:
     steps:
       - uses: actions/first-interaction@v3.1.0
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          issue-message: |
+          issue_message: |
             Hi! Thanks for opening this issue.
 
             Because this is your first time contributing to this repository, please read our contributor guide:
             https://github.com/copper-project/copper-rs/blob/master/CONTRIBUTING.md
-          pr-message: |
+          pr_message: |
             Hi! Thanks for opening this pull request.
 
             Because this is your first time contributing to this repository, please read our contributor guide:
