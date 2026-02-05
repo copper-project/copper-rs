@@ -16,10 +16,10 @@
 
 ### Why Copper
 
-<p><strong style="color: #b87333;">🦀 Rust-first</strong> – ergonomic & safe  
-<p><strong style="color: #b87333;">⚡ Sub-microsecond latency</strong> – zero-alloc, data-oriented runtime  
-<p><strong style="color: #b87333;">⏱️ Deterministic replay</strong> – every run, bit-for-bit identical  
-<p><strong style="color: #b87333;">🧠 Interoperable with ROS2</strong> – bridges via Zenoh opening the path for a progressive migration.  
+<p><strong style="color: #b87333;">🦀 Rust-first</strong> – ergonomic & safe
+<p><strong style="color: #b87333;">⚡ Sub-microsecond latency</strong> – zero-alloc, data-oriented runtime
+<p><strong style="color: #b87333;">⏱️ Deterministic replay</strong> – every run, bit-for-bit identical
+<p><strong style="color: #b87333;">🧠 Interoperable with ROS2</strong> – bridges via Zenoh opening the path for a progressive migration.
 <p><strong style="color: #b87333;">🪶 Runs anywhere</strong> – from Linux servers, workstations, SBC to bare-metal MPUs
 <p><strong style="color: #b87333;">📦 Built to ship</strong> – one stack from simulation to production
 
@@ -33,7 +33,7 @@
 
 [![Copper in virtual action](https://img.youtube.com/vi/kC6sGRZUxLE/maxresdefault.jpg)](https://youtu.be/kC6sGRZUxLE)
 
-Here is a Copper-based robot in action in a Bevy simulation environment!  
+Here is a Copper-based robot in action in a Bevy simulation environment!
 The realistic sim is created using [Bevy](https://crates.io/crates/bevy) (A Rust Game Engine)
 and [Avian3d](https://crates.io/crates/avian3d) (Physics Engine in Rust).
 
@@ -57,7 +57,7 @@ The source code for this demo is available in the [examples/cu_rp_balancebot](ex
 
 ## Documentation
 
-[Link to the full documentation](https://copper-project.github.io/copper-rs/) 
+[Link to the full documentation](https://copper-project.github.io/copper-rs/)
 
 - Runtime concepts and SDK features: [Copper Runtime Overview](https://copper-project.github.io/copper-rs/Copper-Runtime-Overview)
 - Task lifecycle: [Task Lifecycle](https://copper-project.github.io/copper-rs/Task-Lifecycle)

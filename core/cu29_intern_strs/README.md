@@ -19,7 +19,7 @@ cu29-intern-strs = { version = "*", feature = ["macros_debug"] }
 
 To read the index after the fact:
 
-```rust 
+```rust
 use cu29_intern_strs::intern_strs;
 fn main() {
     let index = read_interned_strings("path/to/cu29_log_index"); // this file is generated at compile time

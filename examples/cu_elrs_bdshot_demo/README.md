@@ -28,13 +28,13 @@ An ELRS module wired like:
 
 ## Building & flashing
 
-`cargo run -p cu-elrs-bdshot-demo --release`  
+`cargo run -p cu-elrs-bdshot-demo --release`
 The `.cargo/config.toml` in this example already targets `thumbv8m.main-none-eabihf`
 and configures `probe-rs` with the onboard CMSIS-DAP probe, so `cargo run`
 builds and flashes the firmware automatically. The firmware configures the PIO0
 state machines and then registers the resulting board via
 `cu_bdshot::register_rp2350_board`, so you can swap pins/clocks by updating the
-board construction before launching Copper.  
+board construction before launching Copper.
 After flashing, use `probe-rs defmt` (or your RTT client of choice) to see the
 throttle ramps and telemetry logs.
 

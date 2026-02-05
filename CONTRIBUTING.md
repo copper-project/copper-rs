@@ -54,27 +54,27 @@ The `just std-ci` command runs the same checks as CI, including:
 - Unit tests with cargo-nextest
 - Project generation tests (debug mode only)
 
-### Pre-commit hooks (Recommended)
+### Prek hooks (Recommended)
 
-To mirror the CI lint steps locally, you can install pre-commit hooks that run formatting and typos checks on each commit.
+To mirror the CI lint steps locally, you can install prek hooks that run formatting and typos checks on each commit.
 
-1. Install `pre-commit` (via Homebrew or pip):
+1. Install `prek`
     ```bash
-    brew install pre-commit
+    cargo binstall install prek
     # or
-    python3 -m pip install pre-commit
+    cargo install install prek
     ```
-2. Install the hook:
+2. Reinstall the git hooks if you previously executed `pre-commit install`
     ```bash
-    pre-commit install
+    prek install -f
     ```
 
 3. Run once to verify:
     ```bash
-    pre-commit run -a
+    prek run --all-files
     ```
 
-If you want to customize pre-commit, please modify `.pre-commit-config.yaml`.
+If you want to customize prek, please modify `.pre-commit-config.yaml`.
 
 ### Proc-macro expansion (cargo expand)
 

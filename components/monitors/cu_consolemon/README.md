@@ -27,7 +27,7 @@ And in you copperconfig.ron:
     cnx: [
         ( ... ),
     ],
-    
+
     monitor: (
         type: "cu_consolemon::CuConsoleMon", // <== Here
     )

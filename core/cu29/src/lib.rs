@@ -23,7 +23,7 @@
 //!
 //! ## More examples to get you started
 //!
-//! - `examples/cu_caterpillar`: a minimal running example passing around booleans.  
+//! - `examples/cu_caterpillar`: a minimal running example passing around booleans.
 //! - `examples/cu_rp_balancebot`: a more complete example try Copper without hardware via
 //!   `cargo install cu-rp-balancebot` + `balancebot-sim` (Bevy + Avian3d).
 //!

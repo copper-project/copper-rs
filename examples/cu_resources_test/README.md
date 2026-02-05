@@ -11,7 +11,7 @@ Logging is disabled in `copperconfig.ron` to keep the demo lightweight and avoid
 
 ## Top-to-bottom resource flow
 
-1) **Config declares bundles**  
+1) **Config declares bundles**
 `copperconfig.ron` lists four bundles:
    - `global` (`GlobalBundle`): one shared `log` store used everywhere.
    - `board_a` and `board_b` (`BoardBundle`): each mission gets its own bus + counter + tag, with per-mission config (`label`, `offset`).
@@ -19,7 +19,7 @@ Logging is disabled in `copperconfig.ron` to keep the demo lightweight and avoid
 
    Tasks/bridges bind to concrete paths like `board_a.bus` or `global.log`. The macro keeps only the bindings relevant to the active mission.
 
-2) **Bundles build concrete resources**  
+2) **Bundles build concrete resources**
 Implementations live in `src/resources.rs`:
    - `BoardBundle`:
      - `bus` → shared `Arc<SharedBus>` (labeled, holds last value).
@@ -32,7 +32,7 @@ Implementations live in `src/resources.rs`:
 
    Each bundle uses its `bundle_resources!` ids to insert the right keys into the `ResourceManager`.
 
-3) **Tasks/bridges pull resources**  
+3) **Tasks/bridges pull resources**
 Resource binding structs implement `ResourceBindings` manually:
    - `SensorTask` grabs an owned counter, shared bus/tag, and shared global log. It increments the counter, updates the bus, logs, and emits `BusReading`.
    - `InspectorTask` borrows bus + note + global log; it logs any incoming `BusReading` (or polls the bus if empty).
@@ -40,7 +40,7 @@ Resource binding structs implement `ResourceBindings` manually:
 
    Owned resources move into the task; shared resources stay managed and are borrowed per tick.
 
-4) **Missions exercise variations**  
+4) **Missions exercise variations**
 Mission A uses `board_a` (offset +10) and bridge `stats_a`. Mission B uses `board_b` (offset -3) plus an extra note from `extras_b` and bridge `stats_b`. The same code runs in both missions; the config drives which concrete resources are wired in.
 
 ## Running

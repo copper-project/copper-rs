@@ -18,7 +18,7 @@ If you have a source that is going too fast, you can use this simple task to ski
 
 ### Configuration
 
-- `rate`: the maximum rate in Hz  
+- `rate`: the maximum rate in Hz
 
 ### Output
 

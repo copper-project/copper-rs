@@ -19,7 +19,7 @@ pub trait FrameId: Debug + Clone + Copy + PartialEq + Eq + 'static {
 pub struct FramePair<Parent: FrameId, Child: FrameId> {
     /// Parent frame type
     pub parent: std::marker::PhantomData<Parent>,
-    /// Child frame type  
+    /// Child frame type
     pub child: std::marker::PhantomData<Child>,
 }
 
@@ -66,7 +66,7 @@ impl FrameId for WorldFrame {
     const NAME: &'static str = "world";
 }
 
-/// Robot base frame  
+/// Robot base frame
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BaseFrame;
 

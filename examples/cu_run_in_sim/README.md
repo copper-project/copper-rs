@@ -58,7 +58,7 @@ You should see output similar to:
 [MySink] got value = 6
 [MySink] got value = 8
 [MySink] got value = 10
-Flushing the unified Logger ... 
+Flushing the unified Logger ...
 Unified Logger flushed.
 ```
 
