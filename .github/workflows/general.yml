@@ -35,6 +35,23 @@ jobs:
           tool: taplo-cli, fmtron, typos
       - name: Check Rust, TOML, RON formatting
         uses: j178/prek-action@v1
+        with:
+          extra-args: >-
+            --all-files
+            trailing-whitespace
+            check-merge-conflict
+            detect-private-key
+            check-case-conflict
+            check-added-large-files
+            check-yaml
+            check-json
+            check-xml
+            check-symlinks
+            mixed-line-ending
+            typos
+            check-rust
+            check-ron
+            check-toml
 
   embedded:
     name: CI for embedded targets

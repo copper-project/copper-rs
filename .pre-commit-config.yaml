@@ -23,17 +23,17 @@ repos:
         entry: typos -c .config/_typos.toml
         language: system
         pass_filenames: false
-      - id: rust format
+      - id: check-rust
         name: check rust format
         entry: cargo fmt --all
         language: system
         pass_filenames: false
-      - id: ron format
+      - id: check-ron
         name: check RON (with fmtron)
         entry: bash -c "git ls-files -z '*.ron' ':!examples/modular_config_example/motors.ron' | xargs -0 -r -n 1 fmtron --input>/dev/null; rg --files -g '*.ron.bak' | xargs rm -f"
         language: system
         pass_filenames: false
-      - id: taplo toml format
+      - id: check-toml
         name: check toml (with taplo)
         entry: bash -c "git ls-files -z '*.toml' | xargs -0 taplo format --check"
         language: system
