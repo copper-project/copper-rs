@@ -113,6 +113,7 @@ pub fn gen_cumsgs(config_path_lit: TokenStream) -> TokenStream {
         &culist_order,
         &node_output_positions,
         &task_member_names,
+        &bridge_specs,
     );
 
     let extra_imports = if !std {
@@ -163,6 +164,7 @@ fn gen_culist_support(
     culist_indices_in_plan_order: &[usize],
     node_output_positions: &HashMap<NodeId, usize>,
     task_member_names: &[(NodeId, String)],
+    bridge_specs: &[BridgeSpec],
 ) -> proc_macro2::TokenStream {
     #[cfg(feature = "macro_debug")]
     eprintln!("[Extract msgs types]");
@@ -368,6 +370,26 @@ fn gen_culist_support(
                     &self.0.#slot_index
                 }
             });
+        }
+    }
+
+    // Generate bridge channel getter methods
+    for spec in bridge_specs {
+        for channel in &spec.rx_channels {
+            if let Some(culist_index) = channel.culist_index {
+                let slot_index = syn::Index::from(culist_index);
+                let bridge_name = config_id_to_struct_member(spec.id.as_str());
+                let channel_name = config_id_to_struct_member(channel.id.as_str());
+                let fn_name = format_ident!("get_{}_rx_{}", bridge_name, channel_name);
+                let msg_type = &channel.msg_type;
+
+                methods.push(quote! {
+                    #[allow(dead_code)]
+                    pub fn #fn_name(&self) -> &CuMsg<#msg_type> {
+                        &self.0.#slot_index
+                    }
+                });
+            }
         }
     }
 
@@ -706,6 +728,7 @@ pub fn copper_runtime(args: TokenStream, input: TokenStream) -> TokenStream {
             &culist_call_order,
             &node_output_positions,
             &task_member_names,
+            &culist_bridge_specs,
         );
 
         let bundle_specs = match build_bundle_specs(&copper_config, mission.as_str()) {
