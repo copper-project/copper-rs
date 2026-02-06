@@ -25,6 +25,7 @@ pub struct CuV4LStream {
 use std::fs;
 use std::os::fd::RawFd;
 use std::path::PathBuf;
+use std::ptr;
 
 fn get_original_dev_path(fd: RawFd) -> Option<PathBuf> {
     let link_path = format!("/proc/self/fd/{fd}");
@@ -35,6 +36,10 @@ fn get_original_dev_path(fd: RawFd) -> Option<PathBuf> {
         return Some(path);
     }
     None
+}
+
+fn as_mut_void_ptr<T>(value: &mut T) -> *mut std::os::raw::c_void {
+    ptr::from_mut(value).cast::<std::os::raw::c_void>()
 }
 
 impl CuV4LStream {
@@ -122,7 +127,7 @@ impl CuV4LStream {
             v4l2::ioctl(
                 self.v4l_handle.fd(),
                 v4l2::vidioc::VIDIOC_G_FMT,
-                &mut v4l2_fmt as *mut _ as *mut std::os::raw::c_void,
+                as_mut_void_ptr(&mut v4l2_fmt),
             )?;
         }
 
@@ -135,7 +140,7 @@ impl CuV4LStream {
             v4l2::ioctl(
                 self.v4l_handle.fd(),
                 v4l2::vidioc::VIDIOC_REQBUFS,
-                &mut v4l2_reqbufs as *mut _ as *mut std::os::raw::c_void,
+                as_mut_void_ptr(&mut v4l2_reqbufs),
             )?;
         }
 
@@ -154,7 +159,7 @@ impl CuV4LStream {
             v4l2::ioctl(
                 self.v4l_handle.fd(),
                 v4l2::vidioc::VIDIOC_REQBUFS,
-                &mut v4l2_reqbufs as *mut _ as *mut std::os::raw::c_void,
+                as_mut_void_ptr(&mut v4l2_reqbufs),
             )
         }
     }
@@ -196,7 +201,7 @@ impl Stream for CuV4LStream {
             v4l2::ioctl(
                 self.v4l_handle.fd(),
                 v4l2::vidioc::VIDIOC_STREAMON,
-                &mut type_ as *mut _ as *mut std::os::raw::c_void,
+                as_mut_void_ptr(&mut type_),
             )?;
         }
         self.active = true;
@@ -210,7 +215,7 @@ impl Stream for CuV4LStream {
             v4l2::ioctl(
                 self.v4l_handle.fd(),
                 v4l2::vidioc::VIDIOC_STREAMOFF,
-                &mut type_ as *mut _ as *mut std::os::raw::c_void,
+                as_mut_void_ptr(&mut type_),
             )?;
         }
 
