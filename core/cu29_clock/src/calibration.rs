@@ -24,10 +24,13 @@ pub fn calibrate(
     let counter_diff = end_counter.saturating_sub(start_counter);
     let time_diff_ns = end_time.saturating_sub(start_time);
 
-    if counter_diff > 0
-        && let Some(time_diff) = core::num::NonZeroU128::new(u128::from(time_diff_ns))
-    {
-        let freq_ns_u128 = (u128::from(counter_diff) * 1_000_000_000u128) / time_diff.get();
+    if counter_diff > 0 {
+        assert!(
+            time_diff_ns > 0,
+            "cu29_clock calibration failed: RTC delta is zero; check RTC hardware/clock source"
+        );
+        let freq_ns_u128 =
+            (u128::from(counter_diff) * 1_000_000_000u128) / u128::from(time_diff_ns);
         let freq_ns = u64::try_from(freq_ns_u128).unwrap_or(u64::MAX);
         FREQUENCY_NS.store(freq_ns, Ordering::Relaxed);
         INIT_COUNTER.store(start_counter, Ordering::Relaxed);
@@ -43,5 +46,7 @@ pub fn counter_to_nanos(read_raw_counter: fn() -> u64) -> u64 {
     let counter = read_raw_counter();
     let counter_diff = counter.saturating_sub(init_counter);
 
+    // NOTE: If `freq == 0`, calibration did not succeed (typically broken RTC path).
+    // Panic on division by zero is intentional fail-fast behavior.
     init_time_ns.saturating_add(((counter_diff as u128 * 1_000_000_000) / freq as u128) as u64)
 }
