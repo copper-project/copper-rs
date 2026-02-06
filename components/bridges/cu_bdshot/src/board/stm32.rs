@@ -307,6 +307,9 @@ fn decode_telemetry(
             run_len += 1;
         } else {
             let len_bits = core::cmp::max(1, ((run_len + 1) / TELE_OVERSAMPLE) as i32);
+            if len_bits > 31 {
+                return None;
+            }
             let len_bits_u = len_bits as u32;
             bits += len_bits;
             value <<= len_bits_u;
