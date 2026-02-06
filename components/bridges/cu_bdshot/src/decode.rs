@@ -103,6 +103,10 @@ pub fn decode_telemetry_packet(payload: u16) -> DShotTelemetry {
                 return DShotTelemetry::EncodingError;
             }
             let period_us = base << exp;
+            let Some(period_us) = core::num::NonZeroU32::new(period_us) else {
+                return DShotTelemetry::EncodingError;
+            };
+            let period_us = period_us.get();
             let erpm = (60_000_000u32 + (period_us >> 1)) / period_us;
             DShotTelemetry::Erpm(erpm.min(u32::from(u16::MAX)) as u16)
         }
