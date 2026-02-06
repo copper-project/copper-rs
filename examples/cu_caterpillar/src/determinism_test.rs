@@ -1,13 +1,15 @@
 //! Determinism contract unit test.
 //!
 //! Contract:
-//!   1) record A == record B  (same inputs, same deterministic clock)
-//!   2) record A == resim(A)  (deterministic replay)
+//!   1) record A copperlists == record B copperlists
+//!   2) record A keyframes == record B keyframes
+//!   3) record A copperlists == resim(A) copperlists
+//!   4) record A keyframes == resim(A) keyframes
 
 use cu_rp_gpio::RPGpioPayload;
 use cu29::bincode;
 use cu29::prelude::*;
-use cu29_export::copperlists_reader;
+use cu29_export::{copperlists_reader, keyframes_reader};
 use cu29_helpers::basic_copper_setup;
 
 use crate::tasks;
@@ -27,7 +29,7 @@ const DET_LOG_SLAB_SIZE: Option<usize> = Some(256 * 1024 * 1024);
 
 // Put the runtime in sim_mode so we can drive a fixed number of iterations deterministically.
 // IMPORTANT: define this inside the module to avoid name collisions with the "real" app in main.rs.
-#[copper_runtime(config = "copperconfig.ron", sim_mode = true)]
+#[copper_runtime(config = "config/copperconfig_determinism.ron", sim_mode = true)]
 struct CaterpillarDeterminismApp {}
 
 fn out_root_dir() -> PathBuf {
@@ -142,6 +144,27 @@ fn read_copperlist_stream_encoded(log_base: &Path) -> CuResult<Vec<Vec<u8>>> {
     for cl in iter {
         let bytes = bincode::encode_to_vec(cl, bincode::config::standard())
             .expect("failed to bincode-encode copperlist");
+        out.push(bytes);
+    }
+    Ok(out)
+}
+
+fn read_keyframe_stream_encoded(log_base: &Path) -> CuResult<Vec<Vec<u8>>> {
+    let UnifiedLogger::Read(dl) = UnifiedLoggerBuilder::new()
+        .file_base_name(log_base)
+        .build()
+        .expect("failed to open log for read")
+    else {
+        panic!("expected read logger");
+    };
+
+    let mut io_reader = UnifiedLoggerIOReader::new(dl, UnifiedLogType::FrozenTasks);
+    let iter = keyframes_reader(&mut io_reader);
+
+    let mut out = Vec::new();
+    for kf in iter {
+        let bytes = bincode::encode_to_vec(kf, bincode::config::standard())
+            .expect("failed to bincode-encode keyframe");
         out.push(bytes);
     }
     Ok(out)
@@ -299,16 +322,25 @@ fn determinism_record_and_resim() {
 
     let a_stream = read_copperlist_stream_encoded(&a_base).expect("read A failed");
     let b_stream = read_copperlist_stream_encoded(&b_base).expect("read B failed");
+    let a_keyframes = read_keyframe_stream_encoded(&a_base).expect("read A keyframes failed");
+    let b_keyframes = read_keyframe_stream_encoded(&b_base).expect("read B keyframes failed");
 
-    // 2) A == B
+    // 2) A == B (copperlists + keyframes)
     assert_streams_equal("record_a", &a_stream, "record_b", &b_stream);
+    assert!(
+        !a_keyframes.is_empty(),
+        "determinism precondition failure: expected keyframes to be emitted"
+    );
+    assert_streams_equal("record_a_kf", &a_keyframes, "record_b_kf", &b_keyframes);
 
     // 3) resim(A)
     resim_run(&a_base, &r_base).expect("resim(A) failed");
     let r_stream = read_copperlist_stream_encoded(&r_base).expect("read resim failed");
+    let r_keyframes = read_keyframe_stream_encoded(&r_base).expect("read resim keyframes failed");
 
-    // 4) A == resim(A)
+    // 4) A == resim(A) (copperlists + keyframes)
     assert_streams_equal("record_a", &a_stream, "resim_a", &r_stream);
+    assert_streams_equal("record_a_kf", &a_keyframes, "resim_a_kf", &r_keyframes);
 
     // If you want to keep artifacts even on success, comment this out.
     let _ = fs::remove_dir_all(case_dir);
