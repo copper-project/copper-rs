@@ -332,6 +332,8 @@ fn gen_culist_support(
         .map(|(_, name)| name.clone())
         .collect();
 
+    let mut slot_task_names: Vec<Option<String>> = vec![None; output_packs.len()];
+
     let mut methods = Vec::new();
     for (node_id, name) in task_member_names {
         let output_position = node_output_positions
@@ -341,6 +343,7 @@ fn gen_culist_support(
             .get(*output_position)
             .unwrap_or_else(|| panic!("Missing output pack for task {name}"));
         let slot_index = syn::Index::from(*output_position);
+        slot_task_names[*output_position] = Some(name.clone());
 
         if pack.msg_types.len() == 1 {
             let fn_name = format_ident!("get_{}_output", name);
@@ -373,6 +376,69 @@ fn gen_culist_support(
         }
     }
 
+    let mut logviz_blocks = Vec::new();
+    for (slot_idx, pack) in output_packs.iter().enumerate() {
+        if pack.msg_types.is_empty() {
+            continue;
+        }
+        let slot_index = syn::Index::from(slot_idx);
+        let slot_name = slot_task_names.get(slot_idx).and_then(|name| name.as_ref());
+
+        if pack.is_multi() {
+            for (port_idx, _) in pack.msg_types.iter().enumerate() {
+                let port_index = syn::Index::from(port_idx);
+                let path_expr = if let Some(name) = slot_name {
+                    let lit = LitStr::new(name, Span::call_site());
+                    quote! { format!("{}/{}", #lit, #port_idx) }
+                } else {
+                    quote! { format!("slot_{}/{}", #slot_idx, #port_idx) }
+                };
+                logviz_blocks.push(quote! {
+                    {
+                        let msg = &self.0.#slot_index.#port_index;
+                        if let Some(payload) = msg.payload() {
+                            ::cu29_logviz::apply_tov(rec, &msg.tov);
+                            let path = #path_expr;
+                            ::cu29_logviz::log_payload_auto(rec, &path, payload)?;
+                        }
+                    }
+                });
+            }
+        } else {
+            let path_expr = if let Some(name) = slot_name {
+                let lit = LitStr::new(name, Span::call_site());
+                quote! { #lit.to_string() }
+            } else {
+                quote! { format!("slot_{}", #slot_idx) }
+            };
+            logviz_blocks.push(quote! {
+                {
+                    let msg = &self.0.#slot_index;
+                    if let Some(payload) = msg.payload() {
+                        ::cu29_logviz::apply_tov(rec, &msg.tov);
+                        let path = #path_expr;
+                        ::cu29_logviz::log_payload_auto(rec, &path, payload)?;
+                    }
+                }
+            });
+        }
+    }
+
+    let logviz_impl = if cfg!(feature = "logviz") {
+        quote! {
+            impl ::cu29_logviz::LogvizDataSet for CuStampedDataSet {
+                fn logviz_emit(
+                    &self,
+                    rec: &::cu29_logviz::RecordingStream,
+                ) -> ::cu29::prelude::CuResult<()> {
+                    #(#logviz_blocks)*
+                    Ok(())
+                }
+            }
+        }
+    } else {
+        quote! {}
+    };
     // Generate bridge channel getter methods
     for spec in bridge_specs {
         for channel in &spec.rx_channels {
@@ -417,6 +483,7 @@ fn gen_culist_support(
         }
 
         #payload_raw_bytes_impl
+        #logviz_impl
 
         impl MatchingTasks for CuStampedDataSet {
             #[allow(dead_code)]

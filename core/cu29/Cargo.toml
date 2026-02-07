@@ -43,6 +43,7 @@ defmt = [
 ] # for baremetal text logging
 textlogs = ["cu29-log-derive/textlogs"]
 macro_debug = ["cu29-derive/macro_debug", "cu29-log-derive/macro_debug"]
+logviz = ["cu29-derive/logviz"]
 log-level-debug = ["cu29-log-derive/log-level-debug"]
 log-level-info = ["cu29-log-derive/log-level-info"]
 log-level-warning = ["cu29-log-derive/log-level-warning"]
