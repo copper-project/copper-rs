@@ -27,6 +27,7 @@ members = [
   "components/payloads/cu_sensor_payloads",
   "components/payloads/cu_spatial_payloads",
   "components/res/cu_micoairh743",
+  "components/res/cu_linux_resources",
   "components/libs/cu_sdlogger",
   "components/bridges/cu_bdshot",
   "components/sinks/cu_rp_gpio",
@@ -136,6 +137,7 @@ cu29-unifiedlog = { path = "core/cu29_unifiedlog", default-features = false, fea
   "compact",
 ], version = "0.12.0" }
 cu29-value = { path = "core/cu29_value", default-features = false, version = "0.12.0" }
+cu-linux-resources = { path = "components/res/cu_linux_resources", default-features = false, version = "0.12.0" }
 
 # Payload definitions
 cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads", version = "0.12.0" }

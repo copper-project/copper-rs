@@ -4,7 +4,7 @@ Bridge that combines the MSP source/sink tasks into one serial transport.  It ex
 
 ## Resources and configuration
 
-The bridge expects a `serial` resource. For std targets use the built-in `StdSerialBundle`, which opens a serial port and stores it as `Mutex<StdSerial>` under `<bundle>.serial`.
+The bridge expects a `serial` resource. For std targets use `cu_linux_resources::LinuxResources` (or `cu_msp_bridge::StdSerialBundle` for legacy MSP defaults), which opens a serial port and stores it as an owned `serial` resource under `<bundle>.serial`.
 
 | Key          | Type   | Default        | Description                                                |
 |--------------|--------|----------------|------------------------------------------------------------|
@@ -16,7 +16,7 @@ The bridge expects a `serial` resource. For std targets use the built-in `StdSer
 resources: [
   (
     id: "fc",
-    provider: "cu_msp_bridge::StdSerialBundle",
+    provider: "cu_linux_resources::LinuxResources",
     config: { "device": "/dev/ttyUSB0", "baudrate": 115200 },
   ),
 ],
@@ -30,4 +30,4 @@ bridges: [
 ],
 ```
 
-For embedded targets, provide your own bundle that moves the UART into the `ResourceManager` (e.g. a `spin::Mutex<SerialPort>`). See `examples/cu_elrs_bdshot_demo` and `examples/cu_msp_bridge_loopback` for end-to-end wiring and config mutation.
+For embedded targets, provide your own bundle that moves the UART into the `ResourceManager` as an owned resource. See `examples/cu_elrs_bdshot_demo` and `examples/cu_msp_bridge_loopback` for end-to-end wiring and config mutation.

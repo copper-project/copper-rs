@@ -10,14 +10,7 @@ extern crate alloc;
 // std implementation
 #[cfg(feature = "std")]
 mod std_impl {
-    pub use std::{format, mem, string::String, vec::Vec};
-
-    pub const DEVICE_KEY: &str = "device";
-    pub const BAUD_KEY: &str = "baudrate";
-    pub const TIMEOUT_KEY: &str = "timeout_ms";
-    pub const DEFAULT_DEVICE: &str = "/dev/ttyUSB0";
-    pub const DEFAULT_BAUDRATE: u32 = 115_200;
-    pub const DEFAULT_TIMEOUT_MS: u64 = 50;
+    pub use std::{mem, vec::Vec};
 }
 
 // no-std implementation
@@ -48,7 +41,6 @@ use cu29::resource::{Owned, ResourceBindings, ResourceManager};
 use embedded_io::{ErrorType, Read, Write};
 use heapless::Vec as HeaplessVec;
 use serde::{Deserialize, Serialize};
-use spin::Mutex;
 
 const READ_BUFFER_SIZE: usize = 512;
 const MAX_REQUESTS_PER_BATCH: usize = 8;
@@ -365,21 +357,39 @@ where
     }
 }
 
-#[cfg(feature = "std")]
-pub mod std_serial {
-    use embedded_io_adapters::std::FromStd;
-    #[cfg(feature = "std")]
-    use std::boxed::Box;
-    #[cfg(feature = "std")]
-    use std::time::Duration;
+pub struct LockedSerial<T>(pub T);
 
-    pub type StdSerial = FromStd<Box<dyn serialport::SerialPort>>;
+impl<T> LockedSerial<T> {
+    pub const fn new(inner: T) -> Self {
+        Self(inner)
+    }
 
-    pub fn open(path: &str, baud: u32, timeout_ms: u64) -> std::io::Result<StdSerial> {
-        let port = serialport::new(path, baud)
-            .timeout(Duration::from_millis(timeout_ms))
-            .open()?;
-        Ok(FromStd::new(port))
+    pub fn into_inner(self) -> T {
+        self.0
+    }
+}
+
+// SAFETY: `LockedSerial` is used as an owned wrapper that is moved into a
+// single bridge instance.
+unsafe impl<T: Send> Sync for LockedSerial<T> {}
+
+impl<T: ErrorType> ErrorType for LockedSerial<T> {
+    type Error = T::Error;
+}
+
+impl<T: Read> Read for LockedSerial<T> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        self.0.read(buf)
+    }
+}
+
+impl<T: Write> Write for LockedSerial<T> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+        self.0.write(buf)
+    }
+
+    fn flush(&mut self) -> Result<(), Self::Error> {
+        self.0.flush()
     }
 }
 
@@ -403,53 +413,23 @@ impl ResourceBundle for StdSerialBundle {
             ))
         })?;
         let device = cfg
-            .get::<String>(DEVICE_KEY)?
+            .get::<String>("device")?
             .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| DEFAULT_DEVICE.to_string());
-        let baudrate = cfg.get::<u32>(BAUD_KEY)?.unwrap_or(DEFAULT_BAUDRATE);
-        let timeout_ms = cfg.get::<u64>(TIMEOUT_KEY)?.unwrap_or(DEFAULT_TIMEOUT_MS);
+            .unwrap_or_else(|| "/dev/ttyUSB0".to_string());
+        let baudrate = cfg.get::<u32>("baudrate")?.unwrap_or(115_200);
+        let timeout_ms = cfg.get::<u64>("timeout_ms")?.unwrap_or(50);
 
-        let serial = std_serial::open(&device, baudrate, timeout_ms).map_err(|err| {
-            CuError::from(format!(
-                "MSP bridge failed to open serial `{device}` at {baudrate} baud: {err}"
-            ))
-        })?;
+        let serial = cu_linux_resources::LinuxSerialPort::open(&device, baudrate, timeout_ms)
+            .map_err(|err| {
+                CuError::from(format!(
+                    "MSP bridge failed to open serial `{device}` at {baudrate} baud: {err}"
+                ))
+            })?;
         let key = bundle.key(StdSerialBundleId::Serial);
-        manager.add_owned(key, LockedSerial::new(serial))
-    }
-}
-
-pub struct LockedSerial<T>(pub Mutex<T>);
-
-impl<T> LockedSerial<T> {
-    pub fn new(inner: T) -> Self {
-        Self(Mutex::new(inner))
-    }
-}
-
-impl<T: ErrorType> ErrorType for LockedSerial<T> {
-    type Error = T::Error;
-}
-
-impl<T: Read> Read for LockedSerial<T> {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        let mut guard = self.0.lock();
-        guard.read(buf)
-    }
-}
-
-impl<T: Write> Write for LockedSerial<T> {
-    fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-        let mut guard = self.0.lock();
-        guard.write(buf)
-    }
-
-    fn flush(&mut self) -> Result<(), Self::Error> {
-        let mut guard = self.0.lock();
-        guard.flush()
+        manager.add_owned(key, serial)
     }
 }
 
 /// Type alias for MSP bridge using standard I/O (for backward compatibility)
 #[cfg(feature = "std")]
-pub type CuMspBridgeStd = CuMspBridge<LockedSerial<std_serial::StdSerial>, std::io::Error>;
+pub type CuMspBridgeStd = CuMspBridge<cu_linux_resources::LinuxSerialPort, std::io::Error>;
