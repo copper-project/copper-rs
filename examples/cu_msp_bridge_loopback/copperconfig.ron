@@ -2,7 +2,7 @@
     resources: [
         (
             id: "fc",
-            provider: "cu_msp_bridge::StdSerialBundle",
+            provider: "cu_linux_resources::LinuxResources",
             config: {
                 "device": "/dev/null",
                 "baudrate": 115200,
