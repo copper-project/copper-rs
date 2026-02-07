@@ -76,18 +76,10 @@ pub enum Binding {
     I2c,
 }
 
+#[derive(Default)]
 pub struct Wt901Resources {
     #[cfg(hardware)]
     pub i2c: Option<Owned<LinuxI2c>>,
-}
-
-impl Default for Wt901Resources {
-    fn default() -> Self {
-        Self {
-            #[cfg(hardware)]
-            i2c: None,
-        }
-    }
 }
 
 impl<'r> ResourceBindings<'r> for Wt901Resources {
@@ -293,7 +285,7 @@ impl CuSrcTask for WT901 {
                         .unwrap_or_else(|| I2C_BUS.to_string()),
                     None => I2C_BUS.to_string(),
                 };
-                debug!("Opening {}... ", bus);
+                debug!("Opening {}... ", &bus);
                 let i2cdev = I2cdev::new(&bus)
                     .map_err(|err| CuError::new_with_cause("Could not open WT901 I2C bus", err))?;
                 debug!("{} opened.", bus);

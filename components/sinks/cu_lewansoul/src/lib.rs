@@ -84,14 +84,9 @@ pub enum Binding {
     Serial,
 }
 
+#[derive(Default)]
 pub struct LewansoulResources {
     pub serial: Option<Owned<LinuxSerialPort>>,
-}
-
-impl Default for LewansoulResources {
-    fn default() -> Self {
-        Self { serial: None }
-    }
 }
 
 impl<'r> ResourceBindings<'r> for LewansoulResources {

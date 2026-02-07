@@ -29,22 +29,12 @@ pub enum Binding {
     DatPin,
 }
 
+#[derive(Default)]
 pub struct EncoderResources {
     #[cfg(hardware)]
     pub clk_pin: Option<Owned<InputPin>>,
     #[cfg(hardware)]
     pub dat_pin: Option<Owned<InputPin>>,
-}
-
-impl Default for EncoderResources {
-    fn default() -> Self {
-        Self {
-            #[cfg(hardware)]
-            clk_pin: None,
-            #[cfg(hardware)]
-            dat_pin: None,
-        }
-    }
 }
 
 impl<'r> ResourceBindings<'r> for EncoderResources {

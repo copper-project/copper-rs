@@ -21,18 +21,10 @@ pub enum Binding {
     Pin,
 }
 
+#[derive(Default)]
 pub struct GpioResources {
     #[cfg(hardware)]
     pub pin: Option<Owned<LinuxOutputPin>>,
-}
-
-impl Default for GpioResources {
-    fn default() -> Self {
-        Self {
-            #[cfg(hardware)]
-            pin: None,
-        }
-    }
 }
 
 impl<'r> ResourceBindings<'r> for GpioResources {
