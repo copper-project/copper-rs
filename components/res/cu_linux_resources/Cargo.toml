@@ -1,0 +1,27 @@
+[package]
+name = "cu-linux-resources"
+description = "Linux/host resource bundle for serial, I2C and GPIO devices."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+cu29 = { workspace = true }
+embedded-hal = { version = "1.0.0", default-features = false }
+embedded-io = { version = "0.6.1", default-features = false }
+serialport = { version = "4.8.1", optional = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+linux-embedded-hal = "0.4.0"
+rppal = { version = "0.22.1", default-features = false, features = ["hal"] }
+
+[features]
+default = ["std"]
+std = ["cu29/std", "embedded-io/std", "dep:serialport"]
+defmt = ["embedded-io/defmt-03", "embedded-hal/defmt-03", "cu29/defmt"]
+alloc = ["embedded-io/alloc"]
