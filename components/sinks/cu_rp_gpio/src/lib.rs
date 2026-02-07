@@ -1,13 +1,12 @@
 use bincode::{Decode, Encode};
 use cu29::prelude::*;
+#[cfg(hardware)]
+use cu29::resource::Owned;
+use cu29::resource::{ResourceBindingMap, ResourceBindings, ResourceManager};
 use serde::{Deserialize, Serialize};
 
 #[cfg(hardware)]
-use {
-    cu29::CuError,
-    rppal::gpio::{Gpio, Level, OutputPin},
-    std::sync::OnceLock,
-};
+use {cu_linux_resources::LinuxOutputPin, cu29::CuError, rppal::gpio::Gpio, std::sync::OnceLock};
 
 #[cfg(hardware)]
 static GPIO: OnceLock<Gpio> = OnceLock::new();
@@ -17,12 +16,59 @@ fn gpio() -> &'static Gpio {
     GPIO.get_or_init(|| Gpio::new().expect("Could not create GPIO bindings"))
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum Binding {
+    Pin,
+}
+
+pub struct GpioResources {
+    #[cfg(hardware)]
+    pub pin: Option<Owned<LinuxOutputPin>>,
+}
+
+impl Default for GpioResources {
+    fn default() -> Self {
+        Self {
+            #[cfg(hardware)]
+            pin: None,
+        }
+    }
+}
+
+impl<'r> ResourceBindings<'r> for GpioResources {
+    type Binding = Binding;
+
+    fn from_bindings(
+        manager: &'r mut ResourceManager,
+        mapping: Option<&ResourceBindingMap<Self::Binding>>,
+    ) -> CuResult<Self> {
+        #[cfg(hardware)]
+        {
+            let pin = match mapping.and_then(|m| m.get(Binding::Pin)) {
+                Some(path) => Some(
+                    manager
+                        .take::<LinuxOutputPin>(path.typed())
+                        .map_err(|e| e.add_cause("Failed to fetch GPIO output resource"))?,
+                ),
+                None => None,
+            };
+            Ok(Self { pin })
+        }
+        #[cfg(mock)]
+        {
+            let _ = manager;
+            let _ = mapping;
+            Ok(Self {})
+        }
+    }
+}
+
 /// Example of a GPIO output driver for the Raspberry Pi
 /// The config takes one config value: `pin` which is the pin you want to address
 /// Gpio uses BCM pin numbering. For example: BCM GPIO 23 is tied to physical pin 16.
 pub struct RPGpio {
     #[cfg(hardware)]
-    pin: OutputPin,
+    pin: LinuxOutputPin,
     #[cfg(mock)]
     pin: u8,
 }
@@ -44,45 +90,46 @@ impl From<RPGpioPayload> for u8 {
     }
 }
 
-#[cfg(hardware)]
-impl From<RPGpioPayload> for Level {
-    fn from(msg: RPGpioPayload) -> Self {
-        if msg.on { Level::Low } else { Level::High }
-    }
-}
-
 impl Freezable for RPGpio {}
 
 impl CuSinkTask for RPGpio {
-    type Resources<'r> = ();
+    type Resources<'r> = GpioResources;
     type Input<'m> = input_msg!(RPGpioPayload);
 
     fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
-        let ComponentConfig(kv) =
-            config.ok_or("RPGpio needs a config, None was passed as ComponentConfig")?;
-
-        let pin_nb: u8 = kv
-            .get("pin")
-            .expect("RPGpio expects a pin config value pointing to output pin you want to address")
-            .clone()
-            .into();
-
         #[cfg(hardware)]
-        let pin = gpio()
-            .get(pin_nb)
-            .map_err(|e| CuError::new_with_cause("Could not get pin", e))?
-            .into_output();
+        let pin = match _resources.pin {
+            Some(pin) => pin.0,
+            None => {
+                let pin_nb = pin_from_config(config)?;
+                LinuxOutputPin::new(
+                    gpio()
+                        .get(pin_nb)
+                        .map_err(|e| CuError::new_with_cause("Could not get pin", e))?
+                        .into_output(),
+                )
+            }
+        };
+
         #[cfg(mock)]
-        let pin = pin_nb;
+        let pin = pin_from_config(config)?;
+
         Ok(Self { pin })
     }
 
     fn process(&mut self, _clock: &RobotClock, msg: &Self::Input<'_>) -> CuResult<()> {
         #[cfg(hardware)]
-        self.pin.write((*msg.payload().unwrap()).into());
+        {
+            // Keep historical active-low behavior for compatibility.
+            if msg.payload().unwrap().on {
+                self.pin.get_mut().set_low();
+            } else {
+                self.pin.get_mut().set_high();
+            }
+        }
 
         #[cfg(mock)]
         debug!(
@@ -93,4 +140,17 @@ impl CuSinkTask for RPGpio {
 
         Ok(())
     }
+}
+
+fn pin_from_config(config: Option<&ComponentConfig>) -> CuResult<u8> {
+    let ComponentConfig(kv) =
+        config.ok_or("RPGpio needs a config, None was passed as ComponentConfig")?;
+
+    let pin_nb: u8 = kv
+        .get("pin")
+        .ok_or("RPGpio expects a pin config value pointing to output pin you want to address")?
+        .clone()
+        .into();
+
+    Ok(pin_nb)
 }

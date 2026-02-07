@@ -25,6 +25,10 @@ Add the driver like any other source in Copper:
 
 The `pin_clt` is the pin for the clock signal and the `pin_dat` is the pin for the direction signal.
 
+You can also provide both pins via resources:
+- `resources: { clk_pin: "<bundle>.gpio_in", dat_pin: "<bundle>.gpio_in" }`
+- using two `cu_linux_resources::LinuxResources` bundles configured with different `gpio_in_pin` values.
+
 When you connect this driver to the rest of the system you need to use the `cu_rp_encoder::EncoderMsg` message type.
 
 ```ron
