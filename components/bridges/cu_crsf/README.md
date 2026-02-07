@@ -12,19 +12,19 @@ The bridge expects a `serial` resource (anything implementing `embedded_io` `Rea
 
 **std builds**
 
-Use the built-in `StdSerialBundle`, which opens a serial port and stores it as `Mutex<StdSerial>` under `<bundle>.serial`.
+Use `cu_linux_resources::LinuxResources` (or `cu_crsf::StdSerialBundle` for legacy CRSF defaults), which opens a serial port and stores it as an owned `serial` resource under `<bundle>.serial`.
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `serial_path` | string | — | Path to the serial device (required). |
-| `baudrate` | u32 | `420000` | UART baud rate. |
-| `timeout_ms` | u32 | `100` | Read timeout in milliseconds. |
+| `serial_path` / `device` | string | — | Path to the serial device (required). |
+| `baudrate` | u32 | `115200` (`LinuxResources`) / `420000` (`StdSerialBundle`) | UART baud rate. |
+| `timeout_ms` | u64 | `50` (`LinuxResources`) / `100` (`StdSerialBundle`) | Read timeout in milliseconds. |
 
 ```ron
 resources: [
   (
     id: "radio",
-    provider: "cu_crsf::StdSerialBundle",
+    provider: "cu_linux_resources::LinuxResources",
     config: { "serial_path": "/dev/ttyUSB0", "baudrate": 420000 },
   ),
 ],
@@ -40,7 +40,7 @@ bridges: [
 
 **no-std builds**
 
-Provide your own bundle that moves a UART into the `ResourceManager` (typically a `spin::Mutex<SerialPort>`). The `resources` module in `examples/cu_elrs_bdshot_demo` shows a complete pattern:
+Provide your own bundle that moves a UART into the `ResourceManager` (as an owned resource). The `resources` module in `examples/cu_elrs_bdshot_demo` shows a complete pattern:
 
 ```ron
 resources: [
