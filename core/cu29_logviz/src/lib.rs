@@ -1,5 +1,5 @@
 use clap::Parser;
-use cu_sensor_payloads::{CuImage, ImuPayload, PointCloudSoa};
+use cu_sensor_payloads::{CuImage, ImuPayload, PointCloud, PointCloudSoa};
 use cu_spatial_payloads::Transform3D as CuTransform3D;
 use cu29::clock::Tov;
 use cu29::prelude::{
@@ -12,6 +12,7 @@ use rerun::components::{ImageBuffer, ImageFormat, TransformMat3x3};
 use rerun::datatypes::{Blob, ImageFormat as RerunImageFormat, Mat3x3};
 use rerun::{Image, Points3D, Scalars, TextDocument, Transform3D as RerunTransform3D};
 use serde::Serialize;
+use std::any::{Any, TypeId};
 use std::path::{Path, PathBuf};
 use uom::si::thermodynamic_temperature::degree_celsius;
 
@@ -98,6 +99,110 @@ pub fn log_as_components<A: rerun::AsComponents>(
 ) -> CuResult<()> {
     rec.log(path, value)
         .map_err(|e| CuError::new_with_cause("Failed to log rerun components", e))
+}
+
+pub fn log_payload_auto<T>(rec: &RecordingStream, path: &str, payload: &T) -> CuResult<()>
+where
+    T: Serialize + 'static,
+{
+    let any_payload = payload as &dyn Any;
+    let payload_id = any_payload.type_id();
+
+    if payload_id == TypeId::of::<CuImage<Vec<u8>>>() {
+        let image = any_payload
+            .downcast_ref::<CuImage<Vec<u8>>>()
+            .expect("downcast must match TypeId");
+        return log_as_components(rec, path, &as_components::LogvizImageVec::new(image));
+    }
+
+    if payload_id == TypeId::of::<PointCloud>() {
+        let point = any_payload
+            .downcast_ref::<PointCloud>()
+            .expect("downcast must match TypeId");
+        return log_as_components(rec, path, &as_components::LogvizPoint::new(point));
+    }
+
+    if payload_id == TypeId::of::<CuTransform3D<f32>>() {
+        let transform = any_payload
+            .downcast_ref::<CuTransform3D<f32>>()
+            .expect("downcast must match TypeId");
+        return log_as_components(rec, path, &as_components::LogvizTransform::new(transform));
+    }
+
+    if payload_id == TypeId::of::<CuTransform3D<f64>>() {
+        let transform = any_payload
+            .downcast_ref::<CuTransform3D<f64>>()
+            .expect("downcast must match TypeId");
+        return log_as_components(rec, path, &as_components::LogvizTransform::new(transform));
+    }
+
+    if payload_id == TypeId::of::<ImuPayload>() {
+        let imu = any_payload
+            .downcast_ref::<ImuPayload>()
+            .expect("downcast must match TypeId");
+        return log_imu(rec, path, imu);
+    }
+
+    if is_pointcloud_soa_type_name(core::any::type_name::<T>())
+        && let Some(points) = extract_pointcloud_soa_positions(payload)?
+    {
+        return rec
+            .log(path, &Points3D::new(points))
+            .map_err(|e| CuError::new_with_cause("Failed to log point cloud", e));
+    }
+
+    log_fallback_payload(rec, path, payload)
+}
+
+fn is_pointcloud_soa_type_name(type_name: &str) -> bool {
+    type_name.contains("PointCloudSoa<")
+}
+
+fn extract_pointcloud_soa_positions<T: Serialize>(
+    payload: &T,
+) -> CuResult<Option<Vec<rerun::Position3D>>> {
+    let value = serde_json::to_value(payload)
+        .map_err(|e| CuError::new_with_cause("Failed to serialize payload", e))?;
+    let object = match value.as_object() {
+        Some(object) => object,
+        None => return Ok(None),
+    };
+
+    let xs = match object.get("x").and_then(|v| v.as_array()) {
+        Some(values) => values,
+        None => return Ok(None),
+    };
+    let ys = match object.get("y").and_then(|v| v.as_array()) {
+        Some(values) => values,
+        None => return Ok(None),
+    };
+    let zs = match object.get("z").and_then(|v| v.as_array()) {
+        Some(values) => values,
+        None => return Ok(None),
+    };
+
+    let default_len = xs.len().min(ys.len()).min(zs.len());
+    let len = object
+        .get("len")
+        .and_then(|v| v.as_u64())
+        .map_or(default_len, |value| value as usize)
+        .min(default_len);
+
+    let mut points = Vec::with_capacity(len);
+    for i in 0..len {
+        let Some(x) = xs[i].as_f64() else {
+            return Ok(None);
+        };
+        let Some(y) = ys[i].as_f64() else {
+            return Ok(None);
+        };
+        let Some(z) = zs[i].as_f64() else {
+            return Ok(None);
+        };
+        points.push(rerun::Position3D::new(x as f32, y as f32, z as f32));
+    }
+
+    Ok(Some(points))
 }
 
 pub(crate) fn build_rerun_image<A>(image: &CuImage<A>) -> Image
@@ -205,7 +310,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cu_sensor_payloads::{CuImageBufferFormat, Distance, PointCloudSoa};
+    use cu_sensor_payloads::{CuImageBufferFormat, Distance, PointCloud, PointCloudSoa};
     use cu_spatial_payloads::Transform3D;
     use cu29::clock::CuTime;
     use rerun::{ChannelDatatype, ColorModel, Position3D};
@@ -304,5 +409,31 @@ mod tests {
         ]);
         let (translation, _mat3) = transform_parts(t);
         assert_eq!(translation, [1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn pointcloud_soa_type_name_is_detected() {
+        assert!(is_pointcloud_soa_type_name(core::any::type_name::<
+            PointCloudSoa<64>,
+        >()));
+        assert!(!is_pointcloud_soa_type_name(core::any::type_name::<
+            PointCloud,
+        >()));
+    }
+
+    #[test]
+    fn extract_pointcloud_soa_positions_uses_len_and_xyz_arrays() {
+        let payload = serde_json::json!({
+            "len": 2,
+            "x": [1.0, 4.0, 9.0],
+            "y": [2.0, 5.0, 9.0],
+            "z": [3.0, 6.0, 9.0],
+        });
+        let points = extract_pointcloud_soa_positions(&payload)
+            .expect("serialize")
+            .expect("pointcloud payload");
+        assert_eq!(points.len(), 2);
+        assert_eq!(points[0], Position3D::new(1.0, 2.0, 3.0));
+        assert_eq!(points[1], Position3D::new(4.0, 5.0, 6.0));
     }
 }

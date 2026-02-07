@@ -28,7 +28,13 @@ required-features = ["logviz"]
 
 [features]
 default = []
-logviz = ["dep:clap", "dep:cu29-export", "dep:cu29-logviz", "dep:rerun"]
+logviz = [
+  "dep:clap",
+  "dep:cu29-export",
+  "dep:cu29-logviz",
+  "dep:rerun",
+  "cu29/logviz",
+]
 
 [dependencies]
 clap = { workspace = true, optional = true }
