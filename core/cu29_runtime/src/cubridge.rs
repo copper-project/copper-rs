@@ -4,6 +4,7 @@
 
 use crate::config::ComponentConfig;
 use crate::cutask::{CuMsg, CuMsgPayload, Freezable};
+use crate::reflect::Reflect;
 use alloc::borrow::Cow;
 use alloc::string::String;
 use core::fmt::{Debug, Formatter};
@@ -153,7 +154,7 @@ pub trait BridgeChannelSet {
 /// A bridge behaves similarly to set of [`crate::cutask::CuSrcTask`] /
 /// [`crate::cutask::CuSinkTask`], but it owns the shared transport state and knows how to
 /// multiplex multiple channels on a single backend (serial, CAN, middleware, …).
-pub trait CuBridge: Freezable {
+pub trait CuBridge: Freezable + Reflect {
     /// Outgoing channels (Copper -> external world).
     type Tx: BridgeChannelSet;
     /// Incoming channels (external world -> Copper).

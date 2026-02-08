@@ -1,0 +1,43 @@
+(
+    logging: (
+        enable_task_logging: true,
+        slab_size_mib: 16,
+        keyframe_interval: 2,
+    ),
+    tasks: [
+        (
+            id: "src",
+            type: "tasks::MeasurementSource",
+            run_in_sim: true,
+        ),
+        (
+            id: "pid",
+            type: "tasks::PidTask",
+            run_in_sim: true,
+            config: {
+                "kp": 1.0,
+                "ki": 0.0,
+                "kd": 0.0,
+                "setpoint": 1.0,
+                "cutoff": 10.0,
+            },
+        ),
+        (
+            id: "sink",
+            type: "tasks::OutputSink",
+            run_in_sim: true,
+        ),
+    ],
+    cnx: [
+        (
+            src: "src",
+            dst: "pid",
+            msg: "tasks::MeasurementPayload",
+        ),
+        (
+            src: "pid",
+            dst: "sink",
+            msg: "cu_pid::PIDControlOutputPayload",
+        ),
+    ],
+)

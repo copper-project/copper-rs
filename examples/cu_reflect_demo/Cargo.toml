@@ -1,0 +1,23 @@
+[package]
+name = "cu-reflect-demo"
+description = "Standalone demo for reflected task introspection through CuDebugSession"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+publish = false
+
+[dependencies]
+cu29 = { workspace = true }
+cu29-helpers = { workspace = true }
+cu-pid = { workspace = true }
+serde = { workspace = true }
+bincode = { workspace = true }
+
+[package.metadata.cargo-shear]
+ignored = ["bincode"]

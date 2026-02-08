@@ -22,6 +22,7 @@ mod raw_counter;
 
 pub use raw_counter::*;
 
+use bevy_reflect::Reflect;
 use bincode::BorrowDecode;
 use bincode::de::BorrowDecoder;
 use bincode::de::Decoder;
@@ -81,7 +82,9 @@ impl Add<CuDuration> for CuInstant {
 
 /// For Robot times, the underlying type is a u64 representing nanoseconds.
 /// It is always positive to simplify the reasoning on the user side.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default, Reflect,
+)]
 pub struct CuDuration(pub u64);
 
 impl CuDuration {

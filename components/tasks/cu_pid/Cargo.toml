@@ -19,3 +19,4 @@ textlogs = ["cu29/textlogs"]
 cu29 = { path = "../../../core/cu29", version = "0.12.0", default-features = false }
 bincode = { workspace = true }
 serde = { workspace = true }
+bevy_reflect = { workspace = true }

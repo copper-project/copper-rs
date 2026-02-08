@@ -1,5 +1,6 @@
 use crate::config::ComponentConfig;
 use crate::cutask::{CuMsg, CuMsgPayload, CuTask, Freezable};
+use crate::reflect::{Reflect, TypePath};
 use cu29_clock::{CuTime, RobotClock};
 use cu29_traits::{CuError, CuResult};
 use rayon::ThreadPool;
@@ -21,15 +22,47 @@ fn record_async_error(state: &Mutex<AsyncState>, error: CuError) {
     guard.last_error = Some(error);
 }
 
+#[derive(Reflect)]
+#[reflect(no_field_bounds, from_reflect = false, type_path = false)]
 pub struct CuAsyncTask<T, O>
 where
     T: for<'m> CuTask<Output<'m> = CuMsg<O>> + Send + 'static,
     O: CuMsgPayload + Send + 'static,
 {
+    #[reflect(ignore)]
     task: Arc<Mutex<T>>,
+    #[reflect(ignore)]
     output: Arc<Mutex<CuMsg<O>>>,
+    #[reflect(ignore)]
     state: Arc<Mutex<AsyncState>>,
+    #[reflect(ignore)]
     tp: Arc<ThreadPool>,
+}
+
+impl<T, O> TypePath for CuAsyncTask<T, O>
+where
+    T: for<'m> CuTask<Output<'m> = CuMsg<O>> + Send + 'static,
+    O: CuMsgPayload + Send + 'static,
+{
+    fn type_path() -> &'static str {
+        "cu29_runtime::cuasynctask::CuAsyncTask"
+    }
+
+    fn short_type_path() -> &'static str {
+        "CuAsyncTask"
+    }
+
+    fn type_ident() -> Option<&'static str> {
+        Some("CuAsyncTask")
+    }
+
+    fn crate_name() -> Option<&'static str> {
+        Some("cu29_runtime")
+    }
+
+    fn module_path() -> Option<&'static str> {
+        Some("cuasynctask")
+    }
 }
 
 /// Resource bundle required by a backgrounded task.
