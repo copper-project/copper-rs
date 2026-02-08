@@ -167,8 +167,8 @@ macro_rules! defmt_error {
 }
 
 pub mod prelude {
-    pub use crate::{defmt_debug, defmt_error, defmt_info, defmt_warn};
     pub use crate::bevy_reflect;
+    pub use crate::{defmt_debug, defmt_error, defmt_info, defmt_warn};
     #[cfg(feature = "std")]
     pub use ctrlc;
     pub use cu29_clock::*;

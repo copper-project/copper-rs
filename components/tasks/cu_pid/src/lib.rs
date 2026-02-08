@@ -141,19 +141,6 @@ impl PIDController {
 }
 
 /// This is the Copper task encapsulating the PID controller.
-#[derive(Debug, Default, Reflect)]
-pub struct PIDTaskReflectState {
-    pub first_run: bool,
-    pub last_tov: CuTime,
-    pub setpoint: f32,
-    pub cutoff: f32,
-    pub integral: f32,
-    pub last_error: f32,
-    pub elapsed: CuDuration,
-    pub last_output: PIDControlOutputPayload,
-}
-
-/// This is the Copper task encapsulating the PID controller.
 #[derive(Reflect)]
 pub struct GenericPIDTask<I>
 where
@@ -166,7 +153,6 @@ where
     last_tov: CuTime,
     setpoint: f32,
     cutoff: f32,
-    reflect_state: PIDTaskReflectState,
 }
 
 impl<I> CuTask for GenericPIDTask<I>
@@ -227,17 +213,14 @@ where
                     sampling,
                 );
 
-                let mut instance = Self {
+                Ok(Self {
                     _marker: PhantomData,
                     pid,
                     first_run: true,
                     last_tov: CuTime::default(),
                     setpoint,
                     cutoff,
-                    reflect_state: PIDTaskReflectState::default(),
-                };
-                instance.sync_reflect_state();
-                Ok(instance)
+                })
             }
             None => Err(CuError::from("PIDTask needs a config.")),
         }
@@ -264,7 +247,6 @@ where
                     self.last_tov = tov;
                     self.pid.init_measurement(measure);
                     output.clear_payload();
-                    self.sync_reflect_state();
                     return Ok(());
                 }
                 let dt = tov - self.last_tov;
@@ -289,14 +271,12 @@ where
             }
             None => output.clear_payload(),
         };
-        self.sync_reflect_state();
         Ok(())
     }
 
     fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
         self.pid.reset();
         self.first_run = true;
-        self.sync_reflect_state();
         Ok(())
     }
 }
@@ -319,26 +299,7 @@ where
         self.pid.last_error = Decode::decode(decoder)?;
         self.pid.elapsed = Decode::decode(decoder)?;
         self.pid.last_output = Decode::decode(decoder)?;
-        self.sync_reflect_state();
         Ok(())
-    }
-}
-
-impl<I> GenericPIDTask<I>
-where
-    f32: for<'a> From<&'a I>,
-{
-    fn sync_reflect_state(&mut self) {
-        self.reflect_state = PIDTaskReflectState {
-            first_run: self.first_run,
-            last_tov: self.last_tov,
-            setpoint: self.setpoint,
-            cutoff: self.cutoff,
-            integral: self.pid.integral,
-            last_error: self.pid.last_error,
-            elapsed: self.pid.elapsed,
-            last_output: self.pid.last_output.clone(),
-        };
     }
 }
 
