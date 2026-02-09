@@ -446,6 +446,14 @@ where
 
         // Fast path: forward stepping from current state.
         if let Some(current) = self.current_idx {
+            if target_idx == current {
+                return Ok(JumpOutcome {
+                    culistid: target_culistid,
+                    keyframe_culistid: self.last_keyframe,
+                    replayed: 0,
+                });
+            }
+
             if target_idx >= current {
                 replay_start = current + 1;
                 keyframe_used = self.last_keyframe;
