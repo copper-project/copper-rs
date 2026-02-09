@@ -38,7 +38,7 @@ use cu29::prelude::*;
 #[cfg(feature = "std")]
 use cu29::resource::ResourceBundle;
 use cu29::resource::{Owned, ResourceBindings, ResourceManager};
-use embedded_io::{ErrorType, Read, Write};
+use embedded_io::{Read, Write};
 use heapless::Vec as HeaplessVec;
 use serde::{Deserialize, Serialize};
 
@@ -354,42 +354,6 @@ where
             }
         }
         Ok(())
-    }
-}
-
-pub struct LockedSerial<T>(pub T);
-
-impl<T> LockedSerial<T> {
-    pub const fn new(inner: T) -> Self {
-        Self(inner)
-    }
-
-    pub fn into_inner(self) -> T {
-        self.0
-    }
-}
-
-// SAFETY: `LockedSerial` is used as an owned wrapper that is moved into a
-// single bridge instance.
-unsafe impl<T: Send> Sync for LockedSerial<T> {}
-
-impl<T: ErrorType> ErrorType for LockedSerial<T> {
-    type Error = T::Error;
-}
-
-impl<T: Read> Read for LockedSerial<T> {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        self.0.read(buf)
-    }
-}
-
-impl<T: Write> Write for LockedSerial<T> {
-    fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-        self.0.write(buf)
-    }
-
-    fn flush(&mut self) -> Result<(), Self::Error> {
-        self.0.flush()
     }
 }
 
