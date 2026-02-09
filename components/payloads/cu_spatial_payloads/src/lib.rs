@@ -12,6 +12,9 @@ use uom::si::length::meter;
 #[cfg(feature = "glam")]
 use glam::{Affine3A, DAffine3, DMat4, Mat4};
 
+#[cfg(feature = "rerun")]
+mod rerun_components;
+
 /// Transform3D represents a 3D transformation (rotation + translation)
 /// When the glam feature is enabled, it uses glam's optimized types internally
 #[derive(Debug, Clone, Copy)]
