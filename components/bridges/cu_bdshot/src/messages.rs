@@ -1,6 +1,5 @@
 use bincode::{Decode, Encode};
-use cu29::bevy_reflect;
-use cu29::reflect::Reflect;
+use cu29::prelude::*;
 use serde::{Deserialize, Serialize};
 
 /// Telemetry payload decoded from a DSHOT ESC.

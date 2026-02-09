@@ -1,7 +1,4 @@
-use cu29::bevy_reflect;
-use cu29::reflect::Reflect;
-use cu29::resource::{ResourceBundle, ResourceManager};
-use cu29::{CuResult, bundle_resources};
+use cu29::prelude::*;
 use parking_lot::Mutex;
 use std::sync::Arc;
 
@@ -77,8 +74,8 @@ bundle_resources!(BoardBundle: Bus, Counter, Tag);
 
 impl ResourceBundle for BoardBundle {
     fn build(
-        bundle: cu29::resource::BundleContext<Self>,
-        config: Option<&cu29::config::ComponentConfig>,
+        bundle: BundleContext<Self>,
+        config: Option<&ComponentConfig>,
         manager: &mut ResourceManager,
     ) -> CuResult<()> {
         let label: String = match config {
@@ -111,8 +108,8 @@ bundle_resources!(ExtraBundle: Note);
 
 impl ResourceBundle for ExtraBundle {
     fn build(
-        bundle: cu29::resource::BundleContext<Self>,
-        config: Option<&cu29::config::ComponentConfig>,
+        bundle: BundleContext<Self>,
+        config: Option<&ComponentConfig>,
         manager: &mut ResourceManager,
     ) -> CuResult<()> {
         let note: String = match config {
@@ -133,8 +130,8 @@ bundle_resources!(GlobalBundle: Log);
 
 impl ResourceBundle for GlobalBundle {
     fn build(
-        bundle: cu29::resource::BundleContext<Self>,
-        _config: Option<&cu29::config::ComponentConfig>,
+        bundle: BundleContext<Self>,
+        _config: Option<&ComponentConfig>,
         manager: &mut ResourceManager,
     ) -> CuResult<()> {
         let log_key = bundle.key(GlobalBundleId::Log);

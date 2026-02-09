@@ -10,7 +10,7 @@ macro_rules! define_task {
 
        paste::paste! {
             #[allow(unused_imports)]
-            use cu29::bevy_reflect as bevy_reflect;
+            use cu29::prelude::*;
 
             $crate::buffers::alignment_buffers!(
                 AlignmentBuffers,
@@ -20,7 +20,7 @@ macro_rules! define_task {
             );
         }
 
-        #[derive(cu29::reflect::Reflect)]
+        #[derive(Reflect)]
         #[reflect(from_reflect = false)]
         pub struct $name {
             #[reflect(ignore)]
@@ -33,21 +33,21 @@ macro_rules! define_task {
     type Resources<'r> = ();
             type Input<'m> = input_msg!('m, $($p),*);
             type Output<'m> = output_msg!(($(
-                cu29::payload::CuArray<$p, { $mos }>
+                CuArray<$p, { $mos }>
             ),*));
 
             fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
             where
                 Self: Sized,
             {
-                let config = config.ok_or_else(|| cu29::CuError::from("Config Missing"))?;
+                let config = config.ok_or_else(|| CuError::from("Config Missing"))?;
                 let target_alignment_window_ms: u64 = config
                     .get::<u32>("target_alignment_window_ms")?
-                    .ok_or_else(|| cu29::CuError::from("Missing target_alignment_window"))?
+                    .ok_or_else(|| CuError::from("Missing target_alignment_window"))?
                     .into();
                 let stale_data_horizon_ms: u64 = config
                     .get::<u32>("stale_data_horizon_ms")?
-                    .ok_or_else(|| cu29::CuError::from("Missing stale_data_horizon"))?
+                    .ok_or_else(|| CuError::from("Missing stale_data_horizon"))?
                     .into();
 
                 let target_alignment_window =
@@ -67,7 +67,7 @@ macro_rules! define_task {
 
             fn process(
                 &mut self,
-                _clock: &cu29::clock::RobotClock,
+                _clock: &RobotClock,
                 input: &Self::Input<'_>,
                 output: &mut Self::Output<'_>,
             ) -> CuResult<()> {
@@ -98,15 +98,7 @@ macro_rules! define_task {
 
 #[cfg(test)]
 mod tests {
-    use cu29::CuResult;
-    use cu29::config::ComponentConfig;
-    use cu29::cutask::CuMsg;
-    use cu29::cutask::CuTask;
-    use cu29::cutask::Freezable;
-    use cu29::cutask::{CuMsgMetadata, CuStampedData};
-    use cu29::input_msg;
-    use cu29::output_msg;
-    use cu29::payload::CuArray;
+    use cu29::prelude::*;
 
     define_task!(AlignerTask, 0 => { 10, 5, f32 }, 1 => { 5, 10, i32 });
     #[test]
@@ -121,13 +113,12 @@ mod tests {
         let m3 = CuStampedData::<(CuArray<f32, 5>, CuArray<i32, 10>), CuMsgMetadata>::default();
         let mut output: <AlignerTask as CuTask>::Output<'_> = m3;
 
-        let clock = cu29::clock::RobotClock::new();
+        let clock = RobotClock::new();
         let result = aligner.process(&clock, &input, &mut output);
         assert!(result.is_ok());
     }
     mod string_payload {
         use super::*;
-        use cu29::clock::{CuDuration, Tov};
 
         define_task!(StringAlignerTask, 0 => { 4, 4, String }, 1 => { 4, 4, String });
 
@@ -148,7 +139,7 @@ mod tests {
             let mut output =
                 CuStampedData::<(CuArray<String, 4>, CuArray<String, 4>), CuMsgMetadata>::default();
 
-            let clock = cu29::clock::RobotClock::new();
+            let clock = RobotClock::new();
             aligner.process(&clock, &input, &mut output).unwrap();
 
             let payload = output.payload().unwrap();

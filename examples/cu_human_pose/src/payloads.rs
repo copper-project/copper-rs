@@ -1,6 +1,5 @@
 use bincode::{Decode, Encode};
-use cu29::bevy_reflect;
-use cu29::reflect::Reflect;
+use cu29::prelude::*;
 use serde::{Deserialize, Serialize};
 
 /// Maximum number of poses to detect per frame

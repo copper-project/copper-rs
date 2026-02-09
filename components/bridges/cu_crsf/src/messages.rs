@@ -3,8 +3,7 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use crsf::{LinkStatistics, RcChannels};
-use cu29::bevy_reflect;
-use cu29::reflect::Reflect;
+use cu29::prelude::*;
 use serde::{Deserialize, Serialize};
 
 /// Copper-friendly wrapper for CRSF RC channel data.

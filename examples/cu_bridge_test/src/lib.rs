@@ -1,5 +1,4 @@
 use clap::ValueEnum;
-use cu29::cubridge::CuBridge;
 use cu29::prelude::*;
 use std::sync::{LazyLock, Mutex};
 
@@ -41,8 +40,7 @@ mod events {
 
 pub mod messages {
     use bincode::{Decode, Encode};
-    use cu29::bevy_reflect;
-    use cu29::reflect::Reflect;
+    use cu29::prelude::*;
     use serde::{Deserialize, Serialize};
 
     #[derive(
@@ -346,8 +344,7 @@ pub type BridgeFanoutBuilder = BridgeFanout::BridgeSchedulerAppBuilder;
 #[cfg(test)]
 mod tests {
     use super::events;
-    use cu29::curuntime::CopperContext;
-    use cu29::prelude::{CuApplication, CuResult};
+    use cu29::prelude::*;
     use cu29_helpers::basic_copper_setup;
     use cu29_unifiedlog::{UnifiedLoggerWrite, memmap::MmapSectionStorage};
     use std::sync::{LazyLock, Mutex};

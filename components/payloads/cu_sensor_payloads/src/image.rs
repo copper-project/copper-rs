@@ -3,11 +3,7 @@ use bincode::de::Decoder;
 use bincode::error::DecodeError;
 use bincode::{Decode, Encode};
 use core::fmt::Debug;
-use cu29::bevy_reflect;
-use cu29::prelude::{ArrayLike, CuHandle};
-use cu29::reflect::Reflect;
-#[allow(unused_imports)]
-use cu29::{CuError, CuResult};
+use cu29::prelude::*;
 
 #[cfg(feature = "image")]
 use image::{ImageBuffer, Pixel};
@@ -43,7 +39,7 @@ where
     pub buffer_handle: CuHandle<A>,
 }
 
-impl<A> cu29::reflect::TypePath for CuImage<A>
+impl<A> TypePath for CuImage<A>
 where
     A: ArrayLike<Element = u8> + Send + Sync + 'static,
 {

@@ -1,8 +1,7 @@
 use bincode::de::{BorrowDecode, BorrowDecoder, Decode, Decoder};
 use bincode::enc::{Encode, Encoder};
 use bincode::error::{DecodeError, EncodeError};
-use cu29::bevy_reflect;
-use cu29::reflect::Reflect;
+use cu29::prelude::*;
 use cu29_clock::CuTime;
 use cu29_soa_derive::Soa;
 use derive_more::{Add, Deref, Div, From, Mul, Sub};
