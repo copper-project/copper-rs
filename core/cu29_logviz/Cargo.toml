@@ -14,8 +14,8 @@ repository.workspace = true
 clap = { workspace = true }
 cu29 = { workspace = true }
 cu29-export = { workspace = true }
-cu-sensor-payloads = { workspace = true }
-cu-spatial-payloads = { workspace = true }
+cu-sensor-payloads = { workspace = true, features = ["rerun"] }
+cu-spatial-payloads = { workspace = true, features = ["rerun"] }
 rerun = { workspace = true, features = ["sdk", "clap"] }
 serde = { workspace = true }
 serde_json = { workspace = true }

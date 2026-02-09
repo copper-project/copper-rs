@@ -3,24 +3,19 @@ use cu_sensor_payloads::{CuImage, ImuPayload, PointCloud, PointCloudSoa};
 use cu_spatial_payloads::Transform3D as CuTransform3D;
 use cu29::clock::Tov;
 use cu29::prelude::{
-    ArrayLike, CopperListTuple, CuError, CuResult, UnifiedLogType, UnifiedLogger,
-    UnifiedLoggerBuilder, UnifiedLoggerIOReader, UnifiedLoggerRead,
+    CopperListTuple, CuError, CuResult, UnifiedLogType, UnifiedLogger, UnifiedLoggerBuilder,
+    UnifiedLoggerIOReader, UnifiedLoggerRead,
 };
 use cu29_export::copperlists_reader;
 pub use rerun::RecordingStream;
-use rerun::components::{ImageBuffer, ImageFormat, TransformMat3x3};
-use rerun::datatypes::{Blob, ImageFormat as RerunImageFormat, Mat3x3};
-use rerun::{Image, Points3D, Scalars, TextDocument, Transform3D as RerunTransform3D};
+use rerun::{Points3D, Scalars, TextDocument};
 use serde::Serialize;
 use std::any::{Any, TypeId};
 use std::path::{Path, PathBuf};
 use uom::si::thermodynamic_temperature::degree_celsius;
 
-pub mod as_components;
-mod convert;
 mod fallback;
 
-pub use convert::{image_format_from_cu, pointcloud_positions, transform_parts};
 pub use fallback::{extract_scalars, flatten_json};
 
 pub fn tov_to_secs(tov: &Tov) -> Option<f64> {
@@ -50,11 +45,9 @@ fn log_scalar(rec: &RecordingStream, path: &str, value: f64) -> CuResult<()> {
 
 pub fn log_image<A>(rec: &RecordingStream, path: &str, image: &CuImage<A>) -> CuResult<()>
 where
-    A: ArrayLike<Element = u8>,
+    A: cu29::prelude::ArrayLike<Element = u8>,
 {
-    let rr_image = build_rerun_image(image);
-    rec.log(path, &rr_image)
-        .map_err(|e| CuError::new_with_cause("Failed to log image", e))
+    log_as_components(rec, path, image)
 }
 
 pub fn log_pointcloud<const N: usize>(
@@ -62,19 +55,18 @@ pub fn log_pointcloud<const N: usize>(
     path: &str,
     pc: &PointCloudSoa<N>,
 ) -> CuResult<()> {
-    let points = pointcloud_positions(pc);
-    rec.log(path, &Points3D::new(points))
-        .map_err(|e| CuError::new_with_cause("Failed to log point cloud", e))
+    log_as_components(rec, path, pc)
 }
 
-pub fn log_transform<T: Copy + Into<f64> + std::fmt::Debug + Default + 'static>(
+pub fn log_transform<T: Copy + std::fmt::Debug + 'static>(
     rec: &RecordingStream,
     path: &str,
     transform: &CuTransform3D<T>,
-) -> CuResult<()> {
-    let rr_transform = build_rerun_transform(transform);
-    rec.log(path, &rr_transform)
-        .map_err(|e| CuError::new_with_cause("Failed to log transform", e))
+) -> CuResult<()>
+where
+    CuTransform3D<T>: rerun::AsComponents,
+{
+    log_as_components(rec, path, transform)
 }
 
 pub fn log_imu(rec: &RecordingStream, base: &str, imu: &ImuPayload) -> CuResult<()> {
@@ -112,28 +104,28 @@ where
         let image = any_payload
             .downcast_ref::<CuImage<Vec<u8>>>()
             .expect("downcast must match TypeId");
-        return log_as_components(rec, path, &as_components::LogvizImageVec::new(image));
+        return log_as_components(rec, path, image);
     }
 
     if payload_id == TypeId::of::<PointCloud>() {
         let point = any_payload
             .downcast_ref::<PointCloud>()
             .expect("downcast must match TypeId");
-        return log_as_components(rec, path, &as_components::LogvizPoint::new(point));
+        return log_as_components(rec, path, point);
     }
 
     if payload_id == TypeId::of::<CuTransform3D<f32>>() {
         let transform = any_payload
             .downcast_ref::<CuTransform3D<f32>>()
             .expect("downcast must match TypeId");
-        return log_as_components(rec, path, &as_components::LogvizTransform::new(transform));
+        return log_as_components(rec, path, transform);
     }
 
     if payload_id == TypeId::of::<CuTransform3D<f64>>() {
         let transform = any_payload
             .downcast_ref::<CuTransform3D<f64>>()
             .expect("downcast must match TypeId");
-        return log_as_components(rec, path, &as_components::LogvizTransform::new(transform));
+        return log_as_components(rec, path, transform);
     }
 
     if payload_id == TypeId::of::<ImuPayload>() {
@@ -203,39 +195,6 @@ fn extract_pointcloud_soa_positions<T: Serialize>(
     }
 
     Ok(Some(points))
-}
-
-pub(crate) fn build_rerun_image<A>(image: &CuImage<A>) -> Image
-where
-    A: ArrayLike<Element = u8>,
-{
-    let (pixel_format, color_model, channel_datatype) = image_format_from_cu(image.format);
-    let format = ImageFormat(RerunImageFormat {
-        width: image.format.width,
-        height: image.format.height,
-        pixel_format,
-        color_model,
-        channel_datatype,
-    });
-    let blob = image
-        .buffer_handle
-        .with_inner(|inner| Blob::from(&inner[..]));
-    let image_buffer = ImageBuffer::from(blob);
-    Image::new(image_buffer, format)
-}
-
-pub(crate) fn build_rerun_transform<T>(transform: &CuTransform3D<T>) -> RerunTransform3D
-where
-    T: Copy + Into<f64> + std::fmt::Debug + Default + 'static,
-{
-    let (translation, mat3) = transform_parts(*transform);
-    let mat_flat = [
-        mat3[0][0], mat3[0][1], mat3[0][2], mat3[1][0], mat3[1][1], mat3[1][2], mat3[2][0],
-        mat3[2][1], mat3[2][2],
-    ];
-    RerunTransform3D::new()
-        .with_translation(translation)
-        .with_mat3x3(TransformMat3x3::from(Mat3x3(mat_flat)))
 }
 
 pub fn log_fallback_payload<T: Serialize>(
@@ -310,10 +269,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cu_sensor_payloads::{CuImageBufferFormat, Distance, PointCloud, PointCloudSoa};
-    use cu_spatial_payloads::Transform3D;
+    use cu_sensor_payloads::{PointCloud, PointCloudSoa};
     use cu29::clock::CuTime;
-    use rerun::{ChannelDatatype, ColorModel, Position3D};
+    use rerun::Position3D;
     use serde::Serialize;
 
     #[test]
@@ -352,63 +310,6 @@ mod tests {
         assert_eq!(flat["root/b/c"], serde_json::json!(2.5));
         assert_eq!(flat["root/arr/0"], serde_json::json!(3));
         assert_eq!(flat["root/arr/1"], serde_json::json!(4));
-    }
-
-    #[test]
-    fn pointcloud_positions_len() {
-        let mut pc = PointCloudSoa::<3> {
-            len: 3,
-            ..Default::default()
-        };
-        pc.x[0] = Distance::from(1.0);
-        pc.y[0] = Distance::from(2.0);
-        pc.z[0] = Distance::from(3.0);
-        let pts = pointcloud_positions(&pc);
-        assert_eq!(pts.len(), 3);
-        let _ = Position3D::new(0.0, 0.0, 0.0);
-    }
-
-    #[test]
-    fn pointcloud_positions_respects_len() {
-        let mut pc = PointCloudSoa::<3> {
-            len: 1,
-            ..Default::default()
-        };
-        pc.x[0] = Distance::from(1.0);
-        pc.y[0] = Distance::from(2.0);
-        pc.z[0] = Distance::from(3.0);
-        pc.x[1] = Distance::from(9.0);
-        pc.y[1] = Distance::from(9.0);
-        pc.z[1] = Distance::from(9.0);
-        let pts = pointcloud_positions(&pc);
-        assert_eq!(pts.len(), 1);
-        assert_eq!(pts[0], Position3D::new(1.0, 2.0, 3.0));
-    }
-
-    #[test]
-    fn map_rgb3_to_color_model() {
-        let fmt = CuImageBufferFormat {
-            width: 2,
-            height: 1,
-            stride: 2,
-            pixel_format: *b"RGB3",
-        };
-        let (pf, cm, cd) = image_format_from_cu(fmt);
-        assert!(pf.is_none());
-        assert_eq!(cm, Some(ColorModel::RGB));
-        assert_eq!(cd, Some(ChannelDatatype::U8));
-    }
-
-    #[test]
-    fn transform_translation_extracted() {
-        let t = Transform3D::<f32>::from_matrix([
-            [1.0, 0.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0, 0.0],
-            [0.0, 0.0, 1.0, 0.0],
-            [1.0, 2.0, 3.0, 1.0],
-        ]);
-        let (translation, _mat3) = transform_parts(t);
-        assert_eq!(translation, [1.0, 2.0, 3.0]);
     }
 
     #[test]
