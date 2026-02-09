@@ -45,6 +45,15 @@ SECTIONS {
 _stext = ADDR(.start_block) + SIZEOF(.start_block);
 
 SECTIONS {
+    .init_array : ALIGN(4)
+    {
+        /* Required by crates that emit startup constructors (for example, reflection auto-registration). */
+        KEEP(*(SORT_BY_INIT_PRIORITY(.init_array.*)))
+        KEEP(*(.init_array))
+    } > FLASH
+} INSERT AFTER .text;
+
+SECTIONS {
     /* ### Picotool 'Binary Info' Entries
      *
      * Picotool looks through this block (as we have pointers to it in our
@@ -61,7 +70,7 @@ SECTIONS {
         /* We put this in the header */
         __bi_entries_end = .;
     } > FLASH
-} INSERT AFTER .text;
+} INSERT AFTER .init_array;
 
 SECTIONS {
     /* ### Boot ROM extra info

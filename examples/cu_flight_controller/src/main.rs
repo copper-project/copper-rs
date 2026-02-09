@@ -2,6 +2,7 @@
 #![no_main]
 
 extern crate alloc;
+extern crate cu29 as bevy;
 
 use alloc::sync::Arc;
 use alloc::vec;

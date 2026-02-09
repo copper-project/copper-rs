@@ -83,7 +83,7 @@ static LOG_RC: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::ne
 static LOG_RATE: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new());
 static LOG_MOTORS: spin::Mutex<LogRateLimiter> = spin::Mutex::new(LogRateLimiter::new());
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Reflect)]
 enum StatusLabel {
     Disarmed,
     Angle,
@@ -502,8 +502,11 @@ impl AxisPid {
 }
 
 #[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct AttitudeController {
+    #[reflect(ignore)]
     roll_pid: AxisPid,
+    #[reflect(ignore)]
     pitch_pid: AxisPid,
     angle_limit_rad: f32,
     rate_limit_rad: f32,
@@ -651,9 +654,13 @@ impl CuTask for AttitudeController {
 }
 
 #[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct RateController {
+    #[reflect(ignore)]
     roll_pid: AxisPid,
+    #[reflect(ignore)]
     pitch_pid: AxisPid,
+    #[reflect(ignore)]
     yaw_pid: AxisPid,
     output_limit: f32,
     dt_fallback: CuDuration,

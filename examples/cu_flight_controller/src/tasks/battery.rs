@@ -5,7 +5,9 @@ resources!({
 });
 
 #[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct BatteryAdcSource {
+    #[reflect(ignore)]
     adc: cu_micoairh743::BatteryAdc,
     vref_mv: u32,
     vbat_scale: u32,
