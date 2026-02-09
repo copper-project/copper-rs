@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"macro":["input_msg","output_msg","rx_channels","tx_channels"],"mod":["app","config","copperlist","cuasynctask","cubridge","curuntime","cutask","debug","monitoring","payload","pool","resource","simulation"]};
+window.SIDEBAR_ITEMS = {"macro":["input_msg","output_msg","rx_channels","tx_channels"],"mod":["app","config","copperlist","cuasynctask","cubridge","curuntime","cutask","debug","monitoring","payload","pool","reflect","resource","simulation"]};
