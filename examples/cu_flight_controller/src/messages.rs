@@ -3,17 +3,7 @@ use cu29::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(
-    Debug,
-    Default,
-    Clone,
-    Copy,
-    Encode,
-    Decode,
-    Serialize,
-    Deserialize,
-    PartialEq,
-    Eq,
-    Reflect,
+    Debug, Default, Clone, Copy, Encode, Decode, Serialize, Deserialize, PartialEq, Eq, Reflect,
 )]
 #[repr(u8)]
 pub enum FlightMode {

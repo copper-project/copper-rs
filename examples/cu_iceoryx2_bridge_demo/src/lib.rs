@@ -5,17 +5,13 @@ pub mod messages {
     use super::*;
     use cu29::prelude::*;
 
-    #[derive(
-        Debug, Default, Clone, Encode, Decode, Serialize, Deserialize, Reflect,
-    )]
+    #[derive(Debug, Default, Clone, Encode, Decode, Serialize, Deserialize, Reflect)]
     pub struct Ping {
         pub seq: u64,
         pub note: String,
     }
 
-    #[derive(
-        Debug, Default, Clone, Encode, Decode, Serialize, Deserialize, Reflect,
-    )]
+    #[derive(Debug, Default, Clone, Encode, Decode, Serialize, Deserialize, Reflect)]
     pub struct Pong {
         pub seq: u64,
         pub reply: String,
