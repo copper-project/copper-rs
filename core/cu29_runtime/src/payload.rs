@@ -3,6 +3,7 @@ use crate::reflect::Reflect;
 ///
 /// The constraint on the messages is that they can be part of a copper list, fixed sized and bincode serializable.
 use arrayvec::ArrayVec;
+#[cfg(feature = "reflect")]
 use bevy_reflect;
 use bincode::BorrowDecode;
 use bincode::de::{BorrowDecoder, Decoder};

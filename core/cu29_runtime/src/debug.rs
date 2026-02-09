@@ -569,6 +569,15 @@ where
     /// Dumps the reflected runtime state of one task.
     pub fn dump_reflected_task(&self, task_id: &str) -> CuResult<String> {
         let task = self.reflected_task(task_id)?;
+        #[cfg(not(feature = "reflect"))]
+        {
+            let _ = task;
+            return Err(CuError::from(
+                "Task introspection is disabled. Rebuild with the `reflect` feature.",
+            ));
+        }
+
+        #[cfg(feature = "reflect")]
         Ok(format!("{task:#?}"))
     }
 

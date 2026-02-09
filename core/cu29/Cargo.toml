@@ -48,6 +48,7 @@ log-level-info = ["cu29-log-derive/log-level-info"]
 log-level-warning = ["cu29-log-derive/log-level-warning"]
 log-level-error = ["cu29-log-derive/log-level-error"]
 log-level-critical = ["cu29-log-derive/log-level-critical"]
+reflect = ["cu29-clock/reflect", "cu29-runtime/reflect"]
 std = [
   "rayon",
   "ctrlc",

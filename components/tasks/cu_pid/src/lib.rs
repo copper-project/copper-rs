@@ -3,14 +3,13 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
-use ::bevy_reflect;
 use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use core::marker::PhantomData;
 use cu29::prelude::*;
-use cu29::reflect::{Reflect, TypePath};
+use cu29::reflect::{Reflect, ReflectTypePath};
 use serde::{Deserialize, Serialize};
 
 #[cfg(not(feature = "std"))]
@@ -159,7 +158,7 @@ where
 impl<I> CuTask for GenericPIDTask<I>
 where
     f32: for<'a> From<&'a I>,
-    I: CuMsgPayload + TypePath + 'static,
+    I: CuMsgPayload + ReflectTypePath + 'static,
 {
     type Resources<'r> = ();
     type Input<'m> = input_msg!(I);

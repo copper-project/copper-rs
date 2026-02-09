@@ -30,7 +30,9 @@ cu-consolemon = { path = "../../components/monitors/cu_consolemon", version = "0
 [[bin]]
 name = "resim"
 path = "src/resim.rs"
+required-features = ["reflect"]
 
 [features]
 default = []
 macro_debug = ["cu29/macro_debug"]
+reflect = ["cu29/reflect"]
