@@ -2,7 +2,7 @@
 use std::mem::ManuallyDrop;
 
 #[cfg(unix)]
-use apriltag::{DetectorBuilder, Family, Image, TagParams};
+use apriltag::{Detector, DetectorBuilder, Family, Image, TagParams};
 
 #[cfg(unix)]
 use apriltag_sys::image_u8_t;
@@ -142,7 +142,22 @@ pub struct AprilTags {
     fy: f64,
     cx: f64,
     cy: f64,
+    #[reflect(ignore)]
+    detector: CachedDetector,
+    #[reflect(ignore)]
+    tag_params: TagParams,
 }
+
+#[cfg(unix)]
+struct CachedDetector(Detector);
+
+// SAFETY: The runtime processes each task with exclusive `&mut self` access,
+// and detector state is never aliased across concurrent mutable accesses.
+#[cfg(unix)]
+unsafe impl Send for CachedDetector {}
+// SAFETY: Shared references do not expose mutable detector operations.
+#[cfg(unix)]
+unsafe impl Sync for CachedDetector {}
 
 #[cfg(not(unix))]
 pub struct AprilTags {}
@@ -202,34 +217,46 @@ impl CuTask for AprilTags {
     where
         Self: Sized,
     {
-        if let Some(config) = _config {
-            let family_cfg = config
+        let (family, bits_corrected, tagsize, fx, fy, cx, cy) = if let Some(config) = _config {
+            let family = config
                 .get::<String>("family")?
                 .unwrap_or(FAMILY.to_string());
-            let bits_corrected: u32 = config.get::<u32>("bits_corrected")?.unwrap_or(1);
+            let bits_corrected = config.get::<u32>("bits_corrected")?.unwrap_or(1) as usize;
             let tagsize = config.get::<f64>("tag_size")?.unwrap_or(TAG_SIZE);
             let fx = config.get::<f64>("fx")?.unwrap_or(FX);
             let fy = config.get::<f64>("fy")?.unwrap_or(FY);
             let cx = config.get::<f64>("cx")?.unwrap_or(CX);
             let cy = config.get::<f64>("cy")?.unwrap_or(CY);
-            return Ok(Self {
-                family: family_cfg,
-                bits_corrected: bits_corrected as usize,
-                tagsize,
-                fx,
-                fy,
-                cx,
-                cy,
-            });
-        }
+            (family, bits_corrected, tagsize, fx, fy, cx, cy)
+        } else {
+            (FAMILY.to_string(), 1, TAG_SIZE, FX, FY, CX, CY)
+        };
+
+        let family_for_detector: Family = family
+            .parse()
+            .map_err(|_| CuError::from("invalid apriltag family"))?;
+        let detector = DetectorBuilder::default()
+            .add_family_bits(family_for_detector, bits_corrected)
+            .build()
+            .map_err(|e| CuError::new_with_cause("failed to build apriltag detector", e))?;
+        let tag_params = TagParams {
+            fx,
+            fy,
+            cx,
+            cy,
+            tagsize,
+        };
+
         Ok(Self {
-            family: FAMILY.to_string(),
-            bits_corrected: 1,
-            tagsize: TAG_SIZE,
-            fx: FX,
-            fy: FY,
-            cx: CX,
-            cy: CY,
+            family,
+            bits_corrected,
+            tagsize,
+            fx,
+            fy,
+            cx,
+            cy,
+            detector: CachedDetector(detector),
+            tag_params,
         })
     }
 
@@ -241,25 +268,10 @@ impl CuTask for AprilTags {
     ) -> CuResult<()> {
         let mut result = AprilTagDetections::new();
         if let Some(payload) = input.payload() {
-            let family: Family = self
-                .family
-                .parse()
-                .map_err(|_| CuError::from("invalid apriltag family"))?;
-            let mut detector = DetectorBuilder::default()
-                .add_family_bits(family, self.bits_corrected)
-                .build()
-                .map_err(|e| CuError::new_with_cause("failed to build apriltag detector", e))?;
-            let tag_params = TagParams {
-                fx: self.fx,
-                fy: self.fy,
-                cx: self.cx,
-                cy: self.cy,
-                tagsize: self.tagsize,
-            };
             let image = image_from_cuimage(payload);
-            let detections = detector.detect(&image);
+            let detections = self.detector.0.detect(&image);
             for detection in detections {
-                if let Some(aprilpose) = detection.estimate_tag_pose(&tag_params) {
+                if let Some(aprilpose) = detection.estimate_tag_pose(&self.tag_params) {
                     let translation = aprilpose.translation();
                     let rotation = aprilpose.rotation();
                     let mut mat: [[f32; 4]; 4] = [[0.0, 0.0, 0.0, 0.0]; 4];
