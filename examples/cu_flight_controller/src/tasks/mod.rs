@@ -514,6 +514,7 @@ pub struct AttitudeController {
     acro_expo: f32,
     dt_fallback: CuDuration,
     last_time: Option<CuTime>,
+    #[reflect(ignore)]
     last_mode: FlightMode,
 }
 

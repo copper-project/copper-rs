@@ -2,8 +2,6 @@ use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
-use cu29::bevy_reflect;
-use cu29::reflect::Reflect;
 use serde::{Deserialize, Serialize};
 use uom::si::acceleration::meter_per_second_squared;
 use uom::si::angular_velocity::radian_per_second;
@@ -12,8 +10,7 @@ use uom::si::magnetic_flux_density::microtesla;
 use uom::si::thermodynamic_temperature::degree_celsius;
 
 /// Standardized IMU payload carrying acceleration, angular velocity, and optional magnetometer data.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, Reflect)]
-#[reflect(opaque, from_reflect = false)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ImuPayload {
     pub accel_x: Acceleration,
     pub accel_y: Acceleration,
