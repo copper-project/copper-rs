@@ -8,6 +8,8 @@ use cu29::resource::{ResourceBundle, ResourceManager};
 
 #[cfg(feature = "std")]
 use embedded_io::{Read as EmbeddedRead, Write as EmbeddedWrite};
+#[cfg(feature = "embedded-io-07")]
+use embedded_io_07 as embedded_io07;
 
 #[cfg(feature = "std")]
 use std::string::String;
@@ -40,6 +42,9 @@ pub const DEFAULT_SERIAL_TIMEOUT_MS: u64 = 50;
 
 /// Wrapper for resources that are logically exclusive/owned by a single
 /// component but still need to satisfy `Sync` bounds at registration time.
+///
+/// This keeps synchronization adaptation at the bundle/resource boundary instead
+/// of pushing wrappers into every bridge/task that consumes the resource.
 pub struct Exclusive<T>(T);
 
 impl<T> Exclusive<T> {
@@ -74,6 +79,29 @@ impl<T: std::io::Write> std::io::Write for Exclusive<T> {
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
+        self.0.flush()
+    }
+}
+
+#[cfg(feature = "embedded-io-07")]
+impl<T: embedded_io07::ErrorType> embedded_io07::ErrorType for Exclusive<T> {
+    type Error = T::Error;
+}
+
+#[cfg(feature = "embedded-io-07")]
+impl<T: embedded_io07::Read> embedded_io07::Read for Exclusive<T> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        self.0.read(buf)
+    }
+}
+
+#[cfg(feature = "embedded-io-07")]
+impl<T: embedded_io07::Write> embedded_io07::Write for Exclusive<T> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+        self.0.write(buf)
+    }
+
+    fn flush(&mut self) -> Result<(), Self::Error> {
         self.0.flush()
     }
 }
@@ -339,4 +367,71 @@ impl ResourceBundle for LinuxResources {
 #[cfg(feature = "std")]
 fn get_string(cfg: &ComponentConfig, key: &str) -> CuResult<Option<String>> {
     Ok(cfg.get::<String>(key)?.filter(|value| !value.is_empty()))
+}
+
+#[cfg(all(test, feature = "embedded-io-07"))]
+mod tests {
+    use super::Exclusive;
+
+    struct MockIo {
+        rx: [u8; 4],
+        rx_len: usize,
+        tx: [u8; 4],
+        tx_len: usize,
+    }
+
+    impl MockIo {
+        fn new(rx: &[u8]) -> Self {
+            let mut buf = [0_u8; 4];
+            buf[..rx.len()].copy_from_slice(rx);
+            Self {
+                rx: buf,
+                rx_len: rx.len(),
+                tx: [0; 4],
+                tx_len: 0,
+            }
+        }
+    }
+
+    impl embedded_io_07::ErrorType for MockIo {
+        type Error = core::convert::Infallible;
+    }
+
+    impl embedded_io_07::Read for MockIo {
+        fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+            let n = core::cmp::min(buf.len(), self.rx_len);
+            buf[..n].copy_from_slice(&self.rx[..n]);
+            Ok(n)
+        }
+    }
+
+    impl embedded_io_07::Write for MockIo {
+        fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+            let n = core::cmp::min(buf.len(), self.tx.len());
+            self.tx[..n].copy_from_slice(&buf[..n]);
+            self.tx_len = n;
+            Ok(n)
+        }
+
+        fn flush(&mut self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn exclusive_forwards_embedded_io_07_traits() {
+        let mut wrapped = Exclusive::new(MockIo::new(&[1, 2, 3]));
+
+        let mut rx = [0_u8; 4];
+        let read = embedded_io_07::Read::read(&mut wrapped, &mut rx).unwrap();
+        assert_eq!(read, 3);
+        assert_eq!(&rx[..3], &[1, 2, 3]);
+
+        let written = embedded_io_07::Write::write(&mut wrapped, &[9, 8]).unwrap();
+        assert_eq!(written, 2);
+        embedded_io_07::Write::flush(&mut wrapped).unwrap();
+
+        let inner = wrapped.into_inner();
+        assert_eq!(&inner.tx[..inner.tx_len], &[9, 8]);
+    }
 }
