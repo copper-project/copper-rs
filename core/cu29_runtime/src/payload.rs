@@ -1,14 +1,14 @@
+use crate::reflect::Reflect;
 /// This module is a collection of Copper friendly data structures for message payloads.
 ///
 /// The constraint on the messages is that they can be part of a copper list, fixed sized and bincode serializable.
 use arrayvec::ArrayVec;
+use bevy_reflect;
 use bincode::BorrowDecode;
 use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
-use bevy_reflect as bevy_reflect;
-use crate::reflect::Reflect;
 use serde_derive::{Deserialize, Serialize};
 
 #[cfg(not(feature = "std"))]

@@ -3,7 +3,7 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
-use ::bevy_reflect as bevy_reflect;
+use ::bevy_reflect;
 use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};

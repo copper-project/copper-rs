@@ -3,7 +3,7 @@ use bincode::de::Decoder;
 use bincode::error::DecodeError;
 use bincode::{Decode, Encode};
 use core::fmt::Debug;
-use cu29::bevy_reflect as bevy_reflect;
+use cu29::bevy_reflect;
 use cu29::prelude::{ArrayLike, CuHandle};
 use cu29::reflect::Reflect;
 #[allow(unused_imports)]

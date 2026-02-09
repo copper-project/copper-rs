@@ -1,5 +1,5 @@
 use bincode::{Decode, Encode};
-use cu29::bevy_reflect as bevy_reflect;
+use cu29::bevy_reflect;
 use cu29::reflect::Reflect;
 use serde::{Deserialize, Serialize};
 
@@ -43,17 +43,7 @@ impl EscCommand {
 
 /// Telemetry sample received from the ESC bridge.
 #[derive(
-    Clone,
-    Copy,
-    Debug,
-    Default,
-    PartialEq,
-    Eq,
-    Serialize,
-    Deserialize,
-    Encode,
-    Decode,
-    Reflect
+    Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, Reflect,
 )]
 pub struct EscTelemetry {
     pub sample: Option<DShotTelemetry>,

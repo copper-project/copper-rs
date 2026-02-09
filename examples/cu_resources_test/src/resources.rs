@@ -1,6 +1,6 @@
-use cu29::resource::{ResourceBundle, ResourceManager};
-use cu29::bevy_reflect as bevy_reflect;
+use cu29::bevy_reflect;
 use cu29::reflect::Reflect;
+use cu29::resource::{ResourceBundle, ResourceManager};
 use cu29::{CuResult, bundle_resources};
 use parking_lot::Mutex;
 use std::sync::Arc;

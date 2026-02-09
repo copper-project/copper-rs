@@ -1,5 +1,5 @@
 use bincode::{Decode, Encode};
-use cu29::bevy_reflect as bevy_reflect;
+use cu29::bevy_reflect;
 use cu29::reflect::Reflect;
 use serde::{Deserialize, Serialize};
 

@@ -5,14 +5,7 @@ use cu29::resources;
 use serde::{Deserialize, Serialize};
 
 #[derive(
-    Default,
-    Debug,
-    Clone,
-    Serialize,
-    Deserialize,
-    bincode::Encode,
-    bincode::Decode,
-    Reflect
+    Default, Debug, Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode, Reflect,
 )]
 pub struct BusReading {
     pub tag: String,

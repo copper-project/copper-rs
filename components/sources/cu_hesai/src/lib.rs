@@ -9,10 +9,10 @@ use chrono::Utc;
 use cu_sensor_payloads::{PointCloud, PointCloudSoa};
 use cu29::prelude::*;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
-use std::ops::{Deref, DerefMut};
 use std::io::ErrorKind;
 use std::io::Read;
 use std::net::SocketAddr;
+use std::ops::{Deref, DerefMut};
 use uom::si::f32::{Angle, Length};
 
 /// By default, Hesai broadcasts on this address.
@@ -53,14 +53,7 @@ impl Freezable for Xt32 {}
 
 const MAX_POINTS: usize = 32 * 10;
 
-#[derive(
-    Default,
-    Clone,
-    Debug,
-    serde::Serialize,
-    serde::Deserialize,
-    Reflect
-)]
+#[derive(Default, Clone, Debug, serde::Serialize, serde::Deserialize, Reflect)]
 #[reflect(opaque, from_reflect = false)]
 pub struct LidarCuMsgPayload(pub PointCloudSoa<MAX_POINTS>);
 

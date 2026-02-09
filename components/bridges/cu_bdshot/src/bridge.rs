@@ -66,10 +66,8 @@ where
     }
 }
 
-impl<P: BdshotBoardProvider + 'static> Freezable for CuBdshotBridge<P> where
-    P::Board: Send + 'static
-{
-}
+impl<P: BdshotBoardProvider + 'static> Freezable for CuBdshotBridge<P> where P::Board: Send + 'static
+{}
 
 impl<P: BdshotBoardProvider + 'static> CuBridge for CuBdshotBridge<P>
 where

@@ -34,14 +34,7 @@ impl Freezable for Tele15 {}
 
 const MAX_POINTS: usize = 100;
 
-#[derive(
-    Default,
-    Clone,
-    Debug,
-    serde::Serialize,
-    serde::Deserialize,
-    Reflect
-)]
+#[derive(Default, Clone, Debug, serde::Serialize, serde::Deserialize, Reflect)]
 #[reflect(opaque, from_reflect = false)]
 pub struct LidarCuMsgPayload(pub PointCloudSoa<MAX_POINTS>);
 
