@@ -8,7 +8,9 @@ mod tests {
     use std::time::Duration;
 
     #[derive(Reflect)]
+    #[reflect(from_reflect = false)]
     struct GStreamerTester {
+        #[reflect(ignore)]
         rec: RecordingStream,
     }
 

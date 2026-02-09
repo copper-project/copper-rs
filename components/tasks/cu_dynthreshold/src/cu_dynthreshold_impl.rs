@@ -103,8 +103,10 @@ fn adaptive_threshold(
 
 /// A task that computes a dynamic threshold for a grayscale image.
 #[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct DynThreshold {
     integral_img: Vec<u32>,
+    #[reflect(ignore)]
     pool: Arc<CuHostMemoryPool<Vec<u8>>>,
     height: u32,
     width: u32,
