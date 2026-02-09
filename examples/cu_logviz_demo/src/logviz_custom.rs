@@ -8,7 +8,6 @@ use cu29::prelude::{
     UnifiedLoggerRead, gen_cumsgs,
 };
 use cu29_export::copperlists_reader;
-use cu29_logviz::as_components::{LogvizImageVec, LogvizPoint, LogvizTransform};
 use cu29_logviz::{apply_tov, log_as_components, log_imu, log_pointcloud};
 use rerun::RecordingStream;
 use rerun::components::ViewCoordinates as ViewCoordinatesComponent;
@@ -103,7 +102,7 @@ fn log_image_vec_as_components(
     path: &str,
     image: &CuImage<Vec<u8>>,
 ) -> CuResult<()> {
-    log_as_components(rec, path, &LogvizImageVec::new(image))
+    log_as_components(rec, path, image)
 }
 
 fn log_transform_as_components(
@@ -111,11 +110,11 @@ fn log_transform_as_components(
     path: &str,
     transform: &Transform3D<f32>,
 ) -> CuResult<()> {
-    log_as_components(rec, path, &LogvizTransform::new(transform))
+    log_as_components(rec, path, transform)
 }
 
 fn log_point_as_components(rec: &RecordingStream, path: &str, point: &PointCloud) -> CuResult<()> {
-    log_as_components(rec, path, &LogvizPoint::new(point))
+    log_as_components(rec, path, point)
 }
 
 #[derive(Debug, Parser)]
@@ -223,7 +222,6 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::{DemoPaths, PointCloud, demo_sensor_transforms};
-    use cu29_logviz::transform_parts;
     use rerun::components::{PinholeProjection, Resolution};
 
     #[test]
@@ -240,13 +238,26 @@ mod tests {
     #[test]
     fn demo_sensor_transforms_match_expected() {
         let transforms = demo_sensor_transforms();
-        let (lidar_t, _) = transform_parts(transforms.lidar);
-        let (camera_t, _) = transform_parts(transforms.camera);
-        let (imu_t, _) = transform_parts(transforms.imu);
+        let lidar_matrix = transforms.lidar.to_matrix();
+        let camera_matrix = transforms.camera.to_matrix();
+        let imu_matrix = transforms.imu.to_matrix();
 
-        assert_eq!(lidar_t, [0.2, 0.0, 0.1]);
-        assert_eq!(camera_t, [0.1, 0.05, 0.2]);
-        assert_eq!(imu_t, [0.0, 0.0, 0.05]);
+        assert_eq!(
+            [lidar_matrix[3][0], lidar_matrix[3][1], lidar_matrix[3][2]],
+            [0.2, 0.0, 0.1]
+        );
+        assert_eq!(
+            [
+                camera_matrix[3][0],
+                camera_matrix[3][1],
+                camera_matrix[3][2]
+            ],
+            [0.1, 0.05, 0.2]
+        );
+        assert_eq!(
+            [imu_matrix[3][0], imu_matrix[3][1], imu_matrix[3][2]],
+            [0.0, 0.0, 0.05]
+        );
     }
 
     #[test]

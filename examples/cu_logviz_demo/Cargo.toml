@@ -34,6 +34,8 @@ logviz = [
   "dep:cu29-logviz",
   "dep:rerun",
   "cu29/logviz",
+  "cu-sensor-payloads/rerun",
+  "cu-spatial-payloads/rerun",
 ]
 
 [dependencies]
