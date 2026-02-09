@@ -93,11 +93,8 @@ impl<TxId: Copy, RxId: Copy> RuntimeContext<TxId, RxId> {
         }
     }
 
-    fn get_mut(&self) -> &mut IceoryxContext<TxId, RxId> {
-        // SAFETY:
-        // Access is serialized through `&mut self` on `Iceoryx2Bridge`.
-        // The bridge never exposes aliases to this mutable reference.
-        unsafe { &mut *self.inner.get() }
+    fn get_mut(&mut self) -> &mut IceoryxContext<TxId, RxId> {
+        self.inner.get_mut()
     }
 }
 
@@ -173,7 +170,7 @@ where
     Rx::Id: Send + Sync + 'static,
 {
     fn ctx_mut(&mut self) -> CuResult<&mut IceoryxContext<Tx::Id, Rx::Id>> {
-        let Some(ctx) = self.ctx.as_deref() else {
+        let Some(ctx) = self.ctx.as_deref_mut() else {
             return Err(CuError::from("Iceoryx2Bridge: Context not initialized"));
         };
         Ok(ctx.get_mut())
