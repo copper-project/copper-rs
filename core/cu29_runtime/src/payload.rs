@@ -18,6 +18,8 @@ pub use alloc::format;
 pub use alloc::vec::Vec;
 
 /// Copper friendly wrapper for a fixed size array.
+/// `T: Clone` is required because this type derives `Reflect`, and
+/// the reflection path requires the reflected value to be cloneable.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Reflect)]
 #[reflect(opaque, from_reflect = false, no_field_bounds)]
 pub struct CuArray<T: Clone, const N: usize> {
