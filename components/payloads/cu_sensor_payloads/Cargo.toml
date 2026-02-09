@@ -15,6 +15,7 @@ bincode = { workspace = true }
 cu29-soa-derive = { workspace = true }
 cu29-clock = { path = "../../../core/cu29_clock", version = "0.12.0", default-features = false }
 cu29 = { path = "../../../core/cu29", version = "0.12.0", default-features = false }
+rerun = { workspace = true, optional = true }
 uom = { version = "0.37", default-features = false, features = [
   "serde",
   "f32",
@@ -34,3 +35,4 @@ std = ["cu29/std", "cu29-clock/std"]
 textlogs = ["cu29/textlogs"]
 image = ["std", "dep:image"]
 kornia = ["std", "dep:kornia-image"]
+rerun = ["std", "dep:rerun"]
