@@ -3,8 +3,8 @@
 //! This module provides functionality to export Copper CopperLists to the MCAP format,
 //! which is compatible with Foxglove visualization tools.
 //!
-//! Schemas are generated at compile time using serde-reflection, which traces the
-//! complete type structure including all enum variants and optional fields.
+//! Payload schemas are provided by `PayloadSchemas` and wrapped into the full
+//! exported MCAP message envelope (`payload`, `tov`, `process_time`, `status_txt`).
 
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -24,15 +24,34 @@ pub use cu29::prelude::PayloadSchemas;
 /// This captures the full message including payload, tov, and metadata.
 #[derive(serde::Serialize)]
 struct McapMessageData<'a> {
-    payload: Option<&'a dyn erased_serde::Serialize>,
-    tov: &'a Tov,
+    payload: &'a dyn erased_serde::Serialize,
+    tov: McapTovData,
     process_time: PartialCuTimeRange,
     status_txt: String,
+}
+
+/// Metadata-only record for messages where payload is absent.
+#[derive(serde::Serialize)]
+struct McapMetadataOnlyData {
+    tov: McapTovData,
+    process_time: PartialCuTimeRange,
+    status_txt: String,
+    payload_missing: bool,
+}
+
+/// Foxglove-friendly serialization for TOV without JSON Schema oneOf.
+#[derive(serde::Serialize)]
+struct McapTovData {
+    kind: &'static str,
+    time_ns: u64,
+    start_ns: u64,
+    end_ns: u64,
 }
 
 /// Information about a channel.
 struct ChannelInfo {
     channel_id: u16,
+    metadata_channel_id: u16,
 }
 
 /// Convert a Tov (Time of Validity) to nanoseconds for MCAP timestamps.
@@ -50,11 +69,223 @@ fn option_cutime_to_nanos(opt: &cu29_clock::OptionCuTime) -> u64 {
     opt_cutime.map(|t: CuTime| -> u64 { t.into() }).unwrap_or(0)
 }
 
-/// Export CopperLists to MCAP format with compile-time schemas.
+fn mcap_tov_data(tov: &Tov) -> McapTovData {
+    match tov {
+        Tov::None => McapTovData {
+            kind: "none",
+            time_ns: 0,
+            start_ns: 0,
+            end_ns: 0,
+        },
+        Tov::Time(t) => {
+            let time_ns: u64 = (*t).into();
+            McapTovData {
+                kind: "time",
+                time_ns,
+                start_ns: time_ns,
+                end_ns: time_ns,
+            }
+        }
+        Tov::Range(range) => McapTovData {
+            kind: "range",
+            time_ns: 0,
+            start_ns: range.start.into(),
+            end_ns: range.end.into(),
+        },
+    }
+}
+
+fn mcap_tov_schema() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "kind": {
+                "type": "string",
+                "enum": ["none", "time", "range"]
+            },
+            "time_ns": { "type": "integer", "minimum": 0 },
+            "start_ns": { "type": "integer", "minimum": 0 },
+            "end_ns": { "type": "integer", "minimum": 0 }
+        },
+        "required": ["kind", "time_ns", "start_ns", "end_ns"],
+        "additionalProperties": false
+    })
+}
+
+fn metadata_only_message_schema() -> String {
+    let process_time_schema = inline_schema_local_refs(parse_schema_or_unknown(
+        &crate::trace_type_to_jsonschema::<cu29_clock::PartialCuTimeRange>(),
+    ));
+    let (process_time_root, _) = split_schema_root_and_defs(process_time_schema);
+
+    let schema = serde_json::json!({
+        "$schema": "https://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+            "tov": mcap_tov_schema(),
+            "process_time": process_time_root,
+            "status_txt": { "type": "string" },
+            "payload_missing": { "type": "boolean", "const": true }
+        },
+        "required": ["tov", "process_time", "status_txt", "payload_missing"],
+        "additionalProperties": false
+    });
+
+    serde_json::to_string_pretty(&schema).unwrap_or_else(|_| "{}".to_string())
+}
+
+fn schema_is_full_mcap_message(schema: &serde_json::Value) -> bool {
+    let Some(properties) = schema.get("properties").and_then(|value| value.as_object()) else {
+        return false;
+    };
+
+    properties.contains_key("payload")
+        && properties.contains_key("tov")
+        && properties.contains_key("process_time")
+        && properties.contains_key("status_txt")
+}
+
+fn split_schema_root_and_defs(
+    mut schema: serde_json::Value,
+) -> (
+    serde_json::Value,
+    serde_json::Map<String, serde_json::Value>,
+) {
+    let mut defs = serde_json::Map::new();
+
+    if let Some(schema_obj) = schema.as_object_mut() {
+        schema_obj.remove("$schema");
+        if let Some(serde_json::Value::Object(found_defs)) = schema_obj.remove("$defs") {
+            defs = found_defs;
+        }
+    }
+
+    (schema, defs)
+}
+
+fn parse_schema_or_unknown(schema: &str) -> serde_json::Value {
+    serde_json::from_str::<serde_json::Value>(schema).unwrap_or_else(|_| serde_json::json!({}))
+}
+
+fn unescape_json_pointer(segment: &str) -> String {
+    segment.replace("~1", "/").replace("~0", "~")
+}
+
+fn resolve_local_ref(
+    reference: &str,
+    defs: &serde_json::Map<String, serde_json::Value>,
+    stack: &mut Vec<String>,
+) -> Option<serde_json::Value> {
+    let key = unescape_json_pointer(reference.strip_prefix("#/$defs/")?);
+
+    if stack.iter().any(|seen| seen == &key) {
+        return Some(serde_json::json!({
+            "description": format!("Recursive schema reference omitted for `{key}`")
+        }));
+    }
+
+    let target = defs.get(&key)?.clone();
+    stack.push(key);
+    let resolved = inline_local_refs_in_value(target, defs, stack);
+    stack.pop();
+    Some(resolved)
+}
+
+fn inline_local_refs_in_value(
+    value: serde_json::Value,
+    defs: &serde_json::Map<String, serde_json::Value>,
+    stack: &mut Vec<String>,
+) -> serde_json::Value {
+    match value {
+        serde_json::Value::Object(mut map) => {
+            if let Some(reference) = map.get("$ref").and_then(|v| v.as_str()) {
+                if let Some(mut resolved) = resolve_local_ref(reference, defs, stack) {
+                    map.remove("$ref");
+
+                    if !map.is_empty() {
+                        let mut merged = resolved.as_object().cloned().unwrap_or_default();
+                        for (k, v) in map {
+                            merged.insert(k, inline_local_refs_in_value(v, defs, stack));
+                        }
+                        resolved = serde_json::Value::Object(merged);
+                    }
+
+                    return resolved;
+                }
+            }
+
+            let mut resolved = serde_json::Map::new();
+            for (k, v) in map {
+                resolved.insert(k, inline_local_refs_in_value(v, defs, stack));
+            }
+            serde_json::Value::Object(resolved)
+        }
+        serde_json::Value::Array(values) => serde_json::Value::Array(
+            values
+                .into_iter()
+                .map(|v| inline_local_refs_in_value(v, defs, stack))
+                .collect(),
+        ),
+        primitive => primitive,
+    }
+}
+
+fn inline_schema_local_refs(mut schema: serde_json::Value) -> serde_json::Value {
+    let mut defs = serde_json::Map::new();
+
+    if let Some(schema_obj) = schema.as_object_mut() {
+        schema_obj.remove("$schema");
+        if let Some(serde_json::Value::Object(found_defs)) = schema_obj.remove("$defs") {
+            defs = found_defs;
+        }
+    }
+
+    inline_local_refs_in_value(schema, &defs, &mut Vec::new())
+}
+
+/// Wrap a payload-only schema into the full MCAP JSON message envelope.
 ///
-/// This function exports CopperLists using schemas that were generated at compile
-/// time via serde-reflection. This ensures complete and accurate schema coverage
-/// including all enum variants and optional fields.
+/// If `schema_json` already describes the MCAP envelope, this returns it unchanged.
+fn wrap_payload_schema_for_mcap_message(schema_json: &str) -> String {
+    let parsed_payload = inline_schema_local_refs(parse_schema_or_unknown(schema_json));
+    if schema_is_full_mcap_message(&parsed_payload) {
+        return serde_json::to_string_pretty(&parsed_payload).unwrap_or_else(|_| "{}".to_string());
+    }
+
+    let (payload_root, mut defs) = split_schema_root_and_defs(parsed_payload);
+
+    let tov_root = mcap_tov_schema();
+
+    let process_time_schema = inline_schema_local_refs(parse_schema_or_unknown(
+        &crate::trace_type_to_jsonschema::<cu29_clock::PartialCuTimeRange>(),
+    ));
+    let (process_time_root, process_time_defs) = split_schema_root_and_defs(process_time_schema);
+    defs.extend(process_time_defs);
+
+    let mut schema = serde_json::json!({
+        "$schema": "https://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+            "payload": payload_root,
+            "tov": tov_root,
+            "process_time": process_time_root,
+            "status_txt": { "type": "string" }
+        },
+        "required": ["payload", "tov", "process_time", "status_txt"],
+        "additionalProperties": false
+    });
+
+    if !defs.is_empty() {
+        schema["$defs"] = serde_json::Value::Object(defs);
+    }
+
+    serde_json::to_string_pretty(&schema).unwrap_or_else(|_| "{}".to_string())
+}
+
+/// Export CopperLists to MCAP format with payload schemas.
+///
+/// This function uses `PayloadSchemas` for per-task payload schemas and wraps each
+/// payload schema into the full JSON envelope emitted in MCAP messages.
 ///
 /// # Arguments
 /// * `src` - Reader for the CopperList log data
@@ -67,7 +298,7 @@ where
     P: CopperListTuple + PayloadSchemas,
     R: Read,
 {
-    // Get compile-time schemas for all payload types
+    // Get payload schemas for all task outputs
     let schemas = P::get_payload_schemas();
     let task_ids = P::get_all_task_ids();
 
@@ -77,7 +308,7 @@ where
 /// Export CopperLists to MCAP format with explicitly provided schemas.
 ///
 /// This is the lower-level export function that takes explicit schemas.
-/// Use `export_to_mcap` for the simpler interface with compile-time schemas.
+/// Use `export_to_mcap` for the simpler interface with payload schemas.
 ///
 /// # Arguments
 /// * `src` - Reader for the CopperList log data
@@ -110,14 +341,22 @@ where
 
     // Register schemas and channels
     let mut channel_infos: Vec<Option<ChannelInfo>> = Vec::with_capacity(task_ids.len());
+    let metadata_schema_id = mcap_writer
+        .add_schema(
+            "copper.meta",
+            "jsonschema",
+            metadata_only_message_schema().as_bytes(),
+        )
+        .map_err(|e| CuError::new_with_cause("Failed to add metadata schema", e))?;
 
     for task_id in task_ids.iter() {
         if let Some(schema_json) = schema_map.get(task_id) {
+            let wrapped_schema = wrap_payload_schema_for_mcap_message(schema_json);
             let schema_id = mcap_writer
                 .add_schema(
                     &format!("copper.{}", task_id),
                     "jsonschema",
-                    schema_json.as_bytes(),
+                    wrapped_schema.as_bytes(),
                 )
                 .map_err(|e| {
                     CuError::new_with_cause(&format!("Failed to add schema for {}", task_id), e)
@@ -133,8 +372,24 @@ where
                 .map_err(|e| {
                     CuError::new_with_cause(&format!("Failed to add channel for {}", task_id), e)
                 })?;
+            let metadata_channel_id = mcap_writer
+                .add_channel(
+                    metadata_schema_id,
+                    &format!("/{task_id}/__meta"),
+                    "json",
+                    &BTreeMap::new(),
+                )
+                .map_err(|e| {
+                    CuError::new_with_cause(
+                        &format!("Failed to add metadata channel for {}", task_id),
+                        e,
+                    )
+                })?;
 
-            channel_infos.push(Some(ChannelInfo { channel_id }));
+            channel_infos.push(Some(ChannelInfo {
+                channel_id,
+                metadata_channel_id,
+            }));
         } else {
             // No schema for this task - create channel without schema
             let channel_id = mcap_writer
@@ -142,8 +397,24 @@ where
                 .map_err(|e| {
                     CuError::new_with_cause(&format!("Failed to add channel for {}", task_id), e)
                 })?;
+            let metadata_channel_id = mcap_writer
+                .add_channel(
+                    metadata_schema_id,
+                    &format!("/{task_id}/__meta"),
+                    "json",
+                    &BTreeMap::new(),
+                )
+                .map_err(|e| {
+                    CuError::new_with_cause(
+                        &format!("Failed to add metadata channel for {}", task_id),
+                        e,
+                    )
+                })?;
 
-            channel_infos.push(Some(ChannelInfo { channel_id }));
+            channel_infos.push(Some(ChannelInfo {
+                channel_id,
+                metadata_channel_id,
+            }));
         }
     }
 
@@ -158,28 +429,44 @@ where
 
         for (idx, msg) in msgs.iter().enumerate() {
             if let Some(channel_info) = channel_infos.get(idx).and_then(|c| c.as_ref()) {
-                // Create message data structure
-                let msg_data = McapMessageData {
-                    payload: msg.payload(),
-                    tov: &msg.tov(),
-                    process_time: msg.metadata().process_time(),
-                    status_txt: msg.metadata().status_txt().0.to_string(),
+                let msg_tov = msg.tov();
+                let msg_tov_data = mcap_tov_data(&msg_tov);
+                let process_time = msg.metadata().process_time();
+                let status_txt = msg.metadata().status_txt().0.to_string();
+
+                let (target_channel, json_data) = if let Some(payload) = msg.payload() {
+                    let msg_data = McapMessageData {
+                        payload,
+                        tov: msg_tov_data,
+                        process_time,
+                        status_txt,
+                    };
+                    let json_data = serde_json::to_vec(&msg_data).map_err(|e| {
+                        CuError::new_with_cause("Failed to serialize message to JSON", e)
+                    })?;
+                    (channel_info.channel_id, json_data)
+                } else {
+                    let msg_data = McapMetadataOnlyData {
+                        tov: msg_tov_data,
+                        process_time,
+                        status_txt,
+                        payload_missing: true,
+                    };
+                    let json_data = serde_json::to_vec(&msg_data).map_err(|e| {
+                        CuError::new_with_cause("Failed to serialize metadata message to JSON", e)
+                    })?;
+                    (channel_info.metadata_channel_id, json_data)
                 };
 
-                // Serialize to JSON
-                let json_data = serde_json::to_vec(&msg_data).map_err(|e| {
-                    CuError::new_with_cause("Failed to serialize message to JSON", e)
-                })?;
-
                 // Calculate timestamps
-                let publish_time = tov_to_nanos(&msg.tov());
-                let log_time = option_cutime_to_nanos(&msg.metadata().process_time().start);
+                let publish_time = tov_to_nanos(&msg_tov);
+                let log_time = option_cutime_to_nanos(&process_time.start);
 
                 // Write message
                 mcap_writer
                     .write_to_known_channel(
                         &MessageHeader {
-                            channel_id: channel_info.channel_id,
+                            channel_id: target_channel,
                             sequence,
                             log_time,
                             publish_time,
@@ -380,7 +667,7 @@ mod tests {
     use bincode::{Decode, Encode, config::standard, encode_into_slice};
     use cu29::prelude::{
         CopperList, CuMsgMetadata, CuStampedData, ErasedCuStampedData, ErasedCuStampedDataSet,
-        MatchingTasks,
+        MatchingTasks, Reflect,
     };
     use cu29_clock::OptionCuTime;
     use serde::{Deserialize, Serialize};
@@ -388,13 +675,13 @@ mod tests {
     use tempfile::tempdir;
 
     // Test payload types
-    #[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq)]
+    #[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, Reflect)]
     struct TestPayloadA {
         value: i32,
         name: String,
     }
 
-    #[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq)]
+    #[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, Reflect)]
     struct TestPayloadB {
         temperature: f64,
         active: bool,
@@ -548,7 +835,7 @@ mod tests {
 
     #[test]
     fn test_generated_schemas_are_complete() {
-        // Get compile-time schemas
+        // Get payload schemas
         let schemas = TestMsgs::get_payload_schemas();
 
         assert_eq!(schemas.len(), 2);
@@ -558,17 +845,173 @@ mod tests {
         assert_eq!(*task_a_id, "task_a");
         let parsed_a: serde_json::Value =
             serde_json::from_str(schema_a).expect("Invalid JSON schema A");
-        assert_eq!(parsed_a["type"], "object");
-        assert!(parsed_a["properties"]["value"].is_object());
-        assert!(parsed_a["properties"]["name"].is_object());
+        let root_a = parsed_a["$defs"]
+            .as_object()
+            .and_then(|defs| {
+                defs.iter()
+                    .find_map(|(k, v)| k.ends_with("TestPayloadA").then_some(v))
+            })
+            .expect("Missing TestPayloadA definition");
+        assert_eq!(root_a["type"], "object");
+        assert!(root_a["properties"]["value"].is_object());
+        assert!(root_a["properties"]["name"].is_object());
 
         // Parse and validate schema for TestPayloadB
         let (task_b_id, schema_b) = &schemas[1];
         assert_eq!(*task_b_id, "task_b");
         let parsed_b: serde_json::Value =
             serde_json::from_str(schema_b).expect("Invalid JSON schema B");
-        assert_eq!(parsed_b["type"], "object");
-        assert!(parsed_b["properties"]["temperature"].is_object());
-        assert!(parsed_b["properties"]["active"].is_object());
+        let root_b = parsed_b["$defs"]
+            .as_object()
+            .and_then(|defs| {
+                defs.iter()
+                    .find_map(|(k, v)| k.ends_with("TestPayloadB").then_some(v))
+            })
+            .expect("Missing TestPayloadB definition");
+        assert_eq!(root_b["type"], "object");
+        assert!(root_b["properties"]["temperature"].is_object());
+        assert!(root_b["properties"]["active"].is_object());
+    }
+
+    #[test]
+    fn test_payload_schema_is_wrapped_into_message_schema() {
+        fn contains_key_recursive(value: &serde_json::Value, key: &str) -> bool {
+            match value {
+                serde_json::Value::Object(map) => {
+                    map.contains_key(key)
+                        || map
+                            .values()
+                            .any(|inner| contains_key_recursive(inner, key))
+                }
+                serde_json::Value::Array(values) => values
+                    .iter()
+                    .any(|inner| contains_key_recursive(inner, key)),
+                _ => false,
+            }
+        }
+
+        let payload_schema = crate::trace_type_to_jsonschema::<TestPayloadA>();
+        let wrapped = wrap_payload_schema_for_mcap_message(&payload_schema);
+        let parsed: serde_json::Value =
+            serde_json::from_str(&wrapped).expect("Invalid wrapped schema");
+
+        assert_eq!(parsed["type"], "object");
+        assert!(parsed["properties"]["payload"].is_object());
+        assert!(parsed["properties"]["tov"].is_object());
+        assert!(parsed["properties"]["process_time"].is_object());
+        assert_eq!(parsed["properties"]["status_txt"]["type"], "string");
+        assert!(parsed["properties"]["payload"].get("oneOf").is_none());
+        assert!(parsed["properties"]["tov"].get("oneOf").is_none());
+        assert_eq!(parsed["properties"]["tov"]["type"], "object");
+        assert_eq!(
+            parsed["properties"]["tov"]["properties"]["kind"]["enum"],
+            serde_json::json!(["none", "time", "range"])
+        );
+        assert!(!contains_key_recursive(&parsed, "$ref"));
+        assert!(!contains_key_recursive(&parsed, "$defs"));
+    }
+
+    #[test]
+    fn test_exported_messages_match_channel_json_schema() {
+        let dir = tempdir().expect("Failed to create temp dir");
+        let mcap_path = dir.path().join("validated_output.mcap");
+
+        let mut buffer = vec![0u8; 4096];
+        let mut offset = 0;
+
+        for i in 0..2 {
+            let mut msgs = TestMsgs::default();
+            msgs.0.set_payload(TestPayloadA {
+                value: i * 5,
+                name: format!("schema_check_{}", i),
+            });
+            msgs.1.set_payload(TestPayloadB {
+                temperature: 20.0 + (i as f64),
+                active: i % 2 == 0,
+            });
+            let cl = CopperList::new(i as u32, msgs);
+            offset += encode_into_slice(&cl, &mut buffer[offset..], standard()).unwrap();
+        }
+
+        let cursor = Cursor::new(&buffer[..offset]);
+        export_to_mcap::<TestMsgs, _>(cursor, &mcap_path).expect("Failed to export MCAP");
+
+        let mcap_data = std::fs::read(&mcap_path).expect("Failed to read MCAP file");
+        let messages: Vec<_> = mcap::MessageStream::new(mcap_data.as_slice())
+            .expect("Failed to parse MCAP")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("Failed to read messages");
+
+        for msg in messages {
+            let schema_data = &msg
+                .channel
+                .schema
+                .as_ref()
+                .expect("Channel should contain schema")
+                .data;
+
+            let schema: serde_json::Value =
+                serde_json::from_slice(schema_data).expect("Invalid schema JSON");
+            let instance: serde_json::Value =
+                serde_json::from_slice(&msg.data).expect("Invalid message JSON");
+
+            let validator = jsonschema::validator_for(&schema).expect("Invalid JSON Schema");
+            if let Err(error) = validator.validate(&instance) {
+                panic!("Exported message did not match channel schema: {error}");
+            }
+        }
+    }
+
+    #[test]
+    fn test_export_routes_missing_payload_to_metadata_channel() {
+        let dir = tempdir().expect("Failed to create temp dir");
+        let mcap_path = dir.path().join("metadata_only_payloads.mcap");
+
+        let mut buffer = vec![0u8; 4096];
+        let mut offset = 0;
+
+        // One list with only task_a payload, task_b left as None.
+        let mut msgs = TestMsgs::default();
+        msgs.0.set_payload(TestPayloadA {
+            value: 1,
+            name: "only_a".to_string(),
+        });
+        let cl = CopperList::new(0, msgs);
+        offset += encode_into_slice(&cl, &mut buffer[offset..], standard()).unwrap();
+
+        // One list with no payloads at all.
+        let cl_empty = CopperList::new(1, TestMsgs::default());
+        offset += encode_into_slice(&cl_empty, &mut buffer[offset..], standard()).unwrap();
+
+        let cursor = Cursor::new(&buffer[..offset]);
+        export_to_mcap::<TestMsgs, _>(cursor, &mcap_path).expect("Failed to export MCAP");
+
+        let mcap_data = std::fs::read(&mcap_path).expect("Failed to read MCAP file");
+        let messages: Vec<_> = mcap::MessageStream::new(mcap_data.as_slice())
+            .expect("Failed to parse MCAP")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("Failed to read messages");
+
+        assert_eq!(messages.len(), 4);
+
+        let mut main_count = 0usize;
+        let mut meta_count = 0usize;
+
+        for message in &messages {
+            let instance: serde_json::Value =
+                serde_json::from_slice(&message.data).expect("Invalid message JSON");
+            if message.channel.topic.ends_with("/__meta") {
+                meta_count += 1;
+                assert_eq!(instance["payload_missing"], serde_json::json!(true));
+                assert!(instance.get("payload").is_none());
+            } else {
+                main_count += 1;
+                assert!(instance.get("payload").is_some());
+                assert!(!instance["payload"].is_null(), "payload must never be null");
+            }
+        }
+
+        assert_eq!(main_count, 1);
+        assert_eq!(meta_count, 3);
     }
 }

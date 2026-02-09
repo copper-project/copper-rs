@@ -427,7 +427,7 @@ fn gen_culist_support(
 
         // Note: PayloadSchemas is NOT implemented here.
         // Users who want MCAP export with schemas should implement it manually
-        // using cu29_export::serde_to_jsonschema::trace_type_to_jsonschema.
+        // using cu29_export::trace_type_to_jsonschema.
 
         // Adds the bincode support for the copper list tuple
         #msgs_types_tuple_encode

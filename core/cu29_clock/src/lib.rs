@@ -346,6 +346,7 @@ pub fn busy_wait_until(time: CuInstant) {
 
 /// Homebrewed `Option<CuDuration>` to avoid using 128bits just to represent an Option.
 #[derive(Copy, Clone, Debug, PartialEq, Encode, Decode, Serialize, Deserialize)]
+#[cfg_attr(feature = "reflect", derive(Reflect))]
 pub struct OptionCuTime(CuTime);
 
 const NONE_VALUE: u64 = 0xFFFFFFFFFFFFFFFF;
@@ -418,6 +419,7 @@ impl From<CuTime> for OptionCuTime {
 
 /// Represents a time range.
 #[derive(Copy, Clone, Debug, Encode, Decode, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "reflect", derive(Reflect))]
 pub struct CuTimeRange {
     pub start: CuTime,
     pub end: CuTime,
@@ -436,6 +438,7 @@ impl From<&[CuTime]> for CuTimeRange {
 
 /// Represents a time range with possible undefined start or end or both.
 #[derive(Default, Copy, Clone, Debug, Encode, Decode, Serialize, Deserialize)]
+#[cfg_attr(feature = "reflect", derive(Reflect))]
 pub struct PartialCuTimeRange {
     pub start: OptionCuTime,
     pub end: OptionCuTime,
@@ -460,6 +463,7 @@ impl Display for PartialCuTimeRange {
 /// The time of validity of a message can be more than one time but can be a time range of Tovs.
 /// For example a sub scan for a lidar, a set of images etc... can have a range of validity.
 #[derive(Default, Clone, Debug, PartialEq, Encode, Decode, Serialize, Deserialize, Copy)]
+#[cfg_attr(feature = "reflect", derive(Reflect))]
 pub enum Tov {
     #[default]
     None,

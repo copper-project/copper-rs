@@ -17,7 +17,7 @@ name = "cu29_export"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-cu29 = { workspace = true }
+cu29 = { workspace = true, features = ["reflect"] }
 cu29-clock = { workspace = true }
 cu29-intern-strs = { workspace = true }
 clap = { workspace = true }
@@ -33,18 +33,19 @@ serde_json = "1.0"
 
 [dev-dependencies]
 tempfile = { workspace = true }
+jsonschema = "0.37"
 
 [features]
 default = []
 python = ["dep:pyo3"]
-mcap = ["dep:mcap", "dep:serde-reflection", "dep:erased-serde", "dep:indicatif"]
+mcap = [
+  "dep:mcap",
+  "dep:erased-serde",
+  "dep:indicatif",
+]
 
 [dependencies.mcap]
 version = "0.24"
-optional = true
-
-[dependencies.serde-reflection]
-version = "0.5"
 optional = true
 
 [dependencies.erased-serde]
