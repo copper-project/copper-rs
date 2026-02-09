@@ -7,6 +7,7 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::any::Any;
+use core::cell::UnsafeCell;
 use core::marker::PhantomData;
 
 use cu29::cubridge::{BridgeChannel, BridgeChannelConfig, BridgeChannelSet, CuBridge};
@@ -81,6 +82,33 @@ struct IceoryxContext<TxId: Copy, RxId: Copy> {
     rx_channels: Vec<IceoryxRxChannelEntry<RxId>>,
 }
 
+struct RuntimeContext<TxId: Copy, RxId: Copy> {
+    inner: UnsafeCell<IceoryxContext<TxId, RxId>>,
+}
+
+impl<TxId: Copy, RxId: Copy> RuntimeContext<TxId, RxId> {
+    fn new(inner: IceoryxContext<TxId, RxId>) -> Self {
+        Self {
+            inner: UnsafeCell::new(inner),
+        }
+    }
+
+    fn get_mut(&self) -> &mut IceoryxContext<TxId, RxId> {
+        // SAFETY:
+        // Access is serialized through `&mut self` on `Iceoryx2Bridge`.
+        // The bridge never exposes aliases to this mutable reference.
+        unsafe { &mut *self.inner.get() }
+    }
+}
+
+// SAFETY:
+// `RuntimeContext` is only accessed via methods that require `&mut Iceoryx2Bridge`,
+// which provides exclusive access and prevents concurrent mutation.
+unsafe impl<TxId: Copy, RxId: Copy> Send for RuntimeContext<TxId, RxId> {}
+// SAFETY:
+// See `Send` rationale above; synchronized access is guaranteed by external `&mut self`.
+unsafe impl<TxId: Copy, RxId: Copy> Sync for RuntimeContext<TxId, RxId> {}
+
 #[derive(Reflect)]
 #[reflect(from_reflect = false, no_field_bounds, type_path = false)]
 pub struct Iceoryx2Bridge<Tx, Rx>
@@ -97,7 +125,7 @@ where
     #[reflect(ignore)]
     rx_channels: Vec<IceoryxChannelConfig<Rx::Id>>,
     #[reflect(ignore)]
-    ctx: Option<usize>,
+    ctx: Option<Box<RuntimeContext<Tx::Id, Rx::Id>>>,
 }
 
 impl<Tx, Rx> Freezable for Iceoryx2Bridge<Tx, Rx>
@@ -145,14 +173,10 @@ where
     Rx::Id: Send + Sync + 'static,
 {
     fn ctx_mut(&mut self) -> CuResult<&mut IceoryxContext<Tx::Id, Rx::Id>> {
-        let Some(raw) = self.ctx else {
+        let Some(ctx) = self.ctx.as_deref() else {
             return Err(CuError::from("Iceoryx2Bridge: Context not initialized"));
         };
-        let ptr = raw as *mut IceoryxContext<Tx::Id, Rx::Id>;
-        // SAFETY:
-        // `ptr` comes from `Box::into_raw` in `start()` and remains valid until `stop()`/`drop()`.
-        // Access is serialized through `&mut self`.
-        Ok(unsafe { &mut *ptr })
+        Ok(ctx.get_mut())
     }
 
     fn parse_default_max_payload(config: Option<&ComponentConfig>) -> CuResult<usize> {
@@ -459,12 +483,12 @@ where
             .create::<IceoryxService>()
             .map_err(|e| CuError::new_with_cause("Iceoryx2Bridge: Failed to create node", e))?;
 
-        let ctx = Box::new(IceoryxContext::<Tx::Id, Rx::Id> {
+        let ctx = IceoryxContext::<Tx::Id, Rx::Id> {
             node,
             tx_channels: Vec::new(),
             rx_channels: Vec::new(),
-        });
-        self.ctx = Some(Box::into_raw(ctx) as usize);
+        };
+        self.ctx = Some(Box::new(RuntimeContext::new(ctx)));
         Ok(())
     }
 
@@ -539,27 +563,7 @@ where
     }
 
     fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
-        if let Some(raw) = self.ctx.take() {
-            let ptr = raw as *mut IceoryxContext<Tx::Id, Rx::Id>;
-            // SAFETY: pointer was created by `Box::into_raw` in `start()`.
-            unsafe { drop(Box::from_raw(ptr)) };
-        }
+        self.ctx = None;
         Ok(())
-    }
-}
-
-impl<Tx, Rx> Drop for Iceoryx2Bridge<Tx, Rx>
-where
-    Tx: BridgeChannelSet + 'static,
-    Rx: BridgeChannelSet + 'static,
-    Tx::Id: Send + Sync + 'static,
-    Rx::Id: Send + Sync + 'static,
-{
-    fn drop(&mut self) {
-        if let Some(raw) = self.ctx.take() {
-            let ptr = raw as *mut IceoryxContext<Tx::Id, Rx::Id>;
-            // SAFETY: pointer was created by `Box::into_raw` in `start()`.
-            unsafe { drop(Box::from_raw(ptr)) };
-        }
     }
 }
