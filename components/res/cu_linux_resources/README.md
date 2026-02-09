@@ -41,3 +41,9 @@ resources: [
 - `gpio_in_pin` (u8)
 
 Each key is optional; only configured resources are created.
+
+## Exclusive wrapper
+
+`cu_linux_resources::Exclusive<T>` is the bundle-layer wrapper for owned peripherals that are logically single-owner but do not implement `Sync`.
+
+Why this exists: `ResourceManager::add_owned` requires `T: Send + Sync`, so adaptation must happen when registering resources. Keeping this wrapper in the resource layer avoids bridge/task-specific serial wrappers and keeps consumer code uniform.

@@ -4,7 +4,7 @@ Bridge that combines the MSP source/sink tasks into one serial transport.  It ex
 
 ## Resources and configuration
 
-The bridge expects a `serial` resource. For std targets use `cu_linux_resources::LinuxResources` (or `cu_msp_bridge::StdSerialBundle` for legacy MSP defaults), which opens a serial port and stores it as an owned `serial` resource under `<bundle>.serial`.
+The bridge expects a `serial` resource. For std targets, use `cu_linux_resources::LinuxResources` as the default provider. `cu_msp_bridge::StdSerialBundle` is kept only for backward compatibility with older configs. Both open a serial port and store it as an owned `serial` resource under `<bundle>.serial`.
 
 | Key          | Type   | Default        | Description                                                |
 |--------------|--------|----------------|------------------------------------------------------------|
@@ -30,4 +30,4 @@ bridges: [
 ],
 ```
 
-For embedded targets, provide your own bundle that moves the UART into the `ResourceManager` as an owned resource. See `examples/cu_elrs_bdshot_demo` and `examples/cu_msp_bridge_loopback` for end-to-end wiring and config mutation.
+For embedded targets, provide your own bundle that moves the UART into the `ResourceManager` as an owned resource. If your UART type is not `Sync`, wrap it once at bundle registration time with `cu_linux_resources::Exclusive<T>`. See `examples/cu_elrs_bdshot_demo` and `examples/cu_msp_bridge_loopback` for end-to-end wiring and config mutation.

@@ -12,7 +12,7 @@ The bridge expects a `serial` resource (anything implementing `embedded_io` `Rea
 
 **std builds**
 
-Use `cu_linux_resources::LinuxResources` (or `cu_crsf::StdSerialBundle` for legacy CRSF defaults), which opens a serial port and stores it as an owned `serial` resource under `<bundle>.serial`.
+Use `cu_linux_resources::LinuxResources` as the default provider. `cu_crsf::StdSerialBundle` is kept only for backward compatibility with older configs. Both open a serial port and store it as an owned `serial` resource under `<bundle>.serial`.
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -40,7 +40,9 @@ bridges: [
 
 **no-std builds**
 
-Provide your own bundle that moves a UART into the `ResourceManager` (as an owned resource). The `resources` module in `examples/cu_elrs_bdshot_demo` shows a complete pattern:
+Provide your own bundle that moves a UART into the `ResourceManager` (as an owned resource). If your UART type is not `Sync`, wrap it once at bundle registration time with `cu_linux_resources::Exclusive<T>`.
+
+The `resources` module in `examples/cu_elrs_bdshot_demo` shows a complete pattern:
 
 ```ron
 resources: [
