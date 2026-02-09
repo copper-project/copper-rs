@@ -160,6 +160,8 @@ unsafe impl Send for CachedDetector {}
 unsafe impl Sync for CachedDetector {}
 
 #[cfg(not(unix))]
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct AprilTags {}
 
 #[cfg(not(windows))]
