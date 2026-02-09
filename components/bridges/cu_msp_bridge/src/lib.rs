@@ -56,7 +56,8 @@ const MAX_RESPONSES_PER_BATCH: usize = 16;
 const TX_BUFFER_CAPACITY: usize = MSP_MAX_PAYLOAD_LEN + 12;
 
 /// Batch of MSP requests transported over the bridge.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Reflect)]
+#[reflect(opaque, from_reflect = false)]
 pub struct MspRequestBatch(pub HeaplessVec<MspRequest, MAX_REQUESTS_PER_BATCH>);
 
 impl MspRequestBatch {
@@ -106,7 +107,8 @@ impl Decode<()> for MspRequestBatch {
 }
 
 /// Batch of MSP responses collected by the bridge.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Reflect)]
+#[reflect(opaque, from_reflect = false)]
 pub struct MspResponseBatch(pub HeaplessVec<MspResponse, MAX_RESPONSES_PER_BATCH>);
 
 impl MspResponseBatch {
@@ -173,21 +175,31 @@ rx_channels! {
 }
 
 /// Bridge that multiplexes MSP traffic on a single serial link.
+#[derive(Reflect)]
+#[reflect(from_reflect = false, no_field_bounds, type_path = false)]
 pub struct CuMspBridge<S, E>
 where
-    S: Write<Error = E> + Read<Error = E>,
+    S: Write<Error = E> + Read<Error = E> + Send + Sync + 'static,
+    E: 'static,
 {
+    #[reflect(ignore)]
     serial: S,
+    #[reflect(ignore)]
     parser: MspParser,
+    #[reflect(ignore)]
     read_buffer: [u8; READ_BUFFER_SIZE],
+    #[reflect(ignore)]
     pending_responses: MspResponseBatch,
+    #[reflect(ignore)]
     pending_requests: MspRequestBatch,
+    #[reflect(ignore)]
     tx_buffer: HeaplessVec<u8, TX_BUFFER_CAPACITY>,
 }
 
 impl<S, E> CuMspBridge<S, E>
 where
-    S: Write<Error = E> + Read<Error = E>,
+    S: Write<Error = E> + Read<Error = E> + Send + Sync + 'static,
+    E: 'static,
 {
     fn from_serial(serial: S) -> Self {
         Self {
@@ -253,7 +265,38 @@ where
     }
 }
 
-impl<S, E> Freezable for CuMspBridge<S, E> where S: Write<Error = E> + Read<Error = E> {}
+impl<S, E> Freezable for CuMspBridge<S, E>
+where
+    S: Write<Error = E> + Read<Error = E> + Send + Sync + 'static,
+    E: 'static,
+{
+}
+
+impl<S, E> cu29::reflect::TypePath for CuMspBridge<S, E>
+where
+    S: Write<Error = E> + Read<Error = E> + Send + Sync + 'static,
+    E: 'static,
+{
+    fn type_path() -> &'static str {
+        "cu_msp_bridge::CuMspBridge"
+    }
+
+    fn short_type_path() -> &'static str {
+        "CuMspBridge"
+    }
+
+    fn type_ident() -> Option<&'static str> {
+        Some("CuMspBridge")
+    }
+
+    fn crate_name() -> Option<&'static str> {
+        Some("cu_msp_bridge")
+    }
+
+    fn module_path() -> Option<&'static str> {
+        Some("cu_msp_bridge")
+    }
+}
 
 pub struct MspResources<S> {
     pub serial: Owned<S>,
@@ -290,6 +333,7 @@ where
 impl<S, E> CuBridge for CuMspBridge<S, E>
 where
     S: Write<Error = E> + Read<Error = E> + Send + Sync + 'static,
+    E: 'static,
 {
     type Resources<'r> = MspResources<S>;
     type Tx = TxChannels;

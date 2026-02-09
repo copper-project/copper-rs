@@ -4,6 +4,7 @@ resources!({
     battery_adc => Owned<cu_micoairh743::BatteryAdc>,
 });
 
+#[derive(Reflect)]
 pub struct BatteryAdcSource {
     adc: cu_micoairh743::BatteryAdc,
     vref_mv: u32,

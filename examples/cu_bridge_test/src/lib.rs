@@ -41,25 +41,37 @@ mod events {
 
 pub mod messages {
     use bincode::{Decode, Encode};
+    use cu29::bevy_reflect;
+    use cu29::reflect::Reflect;
     use serde::{Deserialize, Serialize};
 
-    #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
+    #[derive(
+        Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, Reflect,
+    )]
     pub struct IngressMsg {
         pub sequence: u32,
     }
 
-    #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
+    #[derive(
+        Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, Reflect,
+    )]
     pub struct LoopbackMsg;
 
-    #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
+    #[derive(
+        Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, Reflect,
+    )]
     pub struct FromSource {
         pub tag: u32,
     }
 
-    #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
+    #[derive(
+        Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, Reflect,
+    )]
     pub struct SinkPayload;
 
-    #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
+    #[derive(
+        Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, Reflect,
+    )]
     pub struct ChainPayload {
         pub hops: u32,
     }
@@ -70,7 +82,7 @@ pub mod tasks {
     use super::messages;
     use cu29::prelude::*;
 
-    #[derive(Default)]
+    #[derive(Default, Reflect)]
     pub struct SourceToBridge {
         next: u32,
     }
@@ -100,7 +112,7 @@ pub mod tasks {
         }
     }
 
-    #[derive(Default)]
+    #[derive(Default, Reflect)]
     pub struct PassthroughChain;
 
     impl Freezable for PassthroughChain {}
@@ -133,7 +145,7 @@ pub mod tasks {
         }
     }
 
-    #[derive(Default)]
+    #[derive(Default, Reflect)]
     pub struct SinkFromBridge;
 
     impl Freezable for SinkFromBridge {}
@@ -182,7 +194,7 @@ pub mod bridges {
         }
     }
 
-    #[derive(Default)]
+    #[derive(Default, Reflect)]
     pub struct AlphaBridge;
 
     impl Freezable for AlphaBridge {}
@@ -263,7 +275,7 @@ pub mod bridges {
         const STATIC_CHANNELS: &'static [&'static dyn BridgeChannelInfo<Self::Id>] = &[];
     }
 
-    #[derive(Default)]
+    #[derive(Default, Reflect)]
     pub struct BetaBridge;
 
     impl Freezable for BetaBridge {}

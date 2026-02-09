@@ -9,11 +9,14 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 static GST_LOG_COUNT: AtomicUsize = AtomicUsize::new(0);
 
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct GstToCuImage {
     width: u32,
     height: u32,
     stride: u32,
     pixel_format: [u8; 4],
+    #[reflect(ignore)]
     pool: Arc<CuHostMemoryPool<Vec<u8>>>,
     last_payload_ns: Option<u64>,
     last_warn_ns: u64,

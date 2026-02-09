@@ -245,6 +245,7 @@ mod tests {
 
     static READY_RX: OnceLock<Arc<Mutex<mpsc::Receiver<CuTime>>>> = OnceLock::new();
     static DONE_TX: OnceLock<mpsc::Sender<()>> = OnceLock::new();
+    #[derive(Reflect)]
     struct TestTask {}
 
     impl Freezable for TestTask {}
@@ -301,6 +302,7 @@ mod tests {
         }
     }
 
+    #[derive(Reflect)]
     struct ControlledTask;
 
     impl Freezable for ControlledTask {}

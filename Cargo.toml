@@ -188,7 +188,9 @@ compact_str = { version = "0.9", default-features = false, features = [
 # The derive pattern happens a lot across the codebase, this is a helper for that.
 derive_more = { version = "2.0", features = ["full"] }
 paste = { version = "1.0.15", default-features = false }
-bevy_reflect = { version = "0.18.0", default-features = false }
+bevy_reflect = { version = "0.18.0", default-features = false, features = [
+  "auto_register_inventory",
+] }
 
 # used across testing
 tempfile = "3.23"

@@ -6,6 +6,7 @@ use cu29::prelude::*;
 use serde::{Deserialize, Serialize};
 use serialport::{DataBits, FlowControl, Parity, SerialPort, StopBits};
 use std::io::{self, Read, Write};
+use std::sync::Mutex;
 use std::time::Duration;
 use uom::si::angle::{degree, radian};
 use uom::si::f32::Angle;
@@ -71,8 +72,11 @@ fn angle_to_position(angle: Angle) -> i16 {
 }
 
 /// This is a driver for the LewanSoul LX-16A, LX-225 etc.  Serial Bus Servos.
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct Lewansoul {
-    port: Box<dyn SerialPort>,
+    #[reflect(ignore)]
+    port: Mutex<Box<dyn SerialPort>>,
     #[allow(dead_code)]
     ids: [u8; 8], // TODO: WIP
 }
@@ -85,7 +89,11 @@ impl Lewansoul {
         packet.push(checksum);
 
         // println!("Packet: {:02x?}", packet);
-        self.port.write_all(&packet)?;
+        let mut port = self
+            .port
+            .lock()
+            .map_err(|_| io::Error::other("serial port lock poisoned"))?;
+        port.write_all(&packet)?;
         Ok(())
     }
 
@@ -150,7 +158,11 @@ impl Lewansoul {
 
     fn read_response(&mut self) -> io::Result<(u8, u8, Vec<u8>)> {
         let mut header = [0; 5];
-        self.port.read_exact(&mut header)?;
+        let mut port = self
+            .port
+            .lock()
+            .map_err(|_| io::Error::other("serial port lock poisoned"))?;
+        port.read_exact(&mut header)?;
         if header[0] != 0x55 || header[1] != 0x55 {
             return Err(io::Error::other("Invalid header"));
         }
@@ -158,7 +170,7 @@ impl Lewansoul {
         let length = header[3];
         let command = header[4];
         let mut remaining = vec![0; length as usize - 2]; // -2 for length itself already read + command already read
-        self.port.read_exact(&mut remaining)?;
+        port.read_exact(&mut remaining)?;
         let checksum = compute_checksum(
             header[2..]
                 .iter()
@@ -176,7 +188,8 @@ impl Freezable for Lewansoul {
     // This driver is stateless as the IDs are recreate at new time, we keep the default implementation.
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Reflect)]
+#[reflect(opaque, from_reflect = false)]
 pub struct ServoPositionsPayload {
     pub positions: [Angle; MAX_SERVOS],
 }
@@ -238,7 +251,10 @@ impl CuSinkTask for Lewansoul {
             .open()
             .map_err(|e| format!("Error opening serial port: {e:?}"))?;
 
-        Ok(Lewansoul { port, ids })
+        Ok(Lewansoul {
+            port: Mutex::new(port),
+            ids,
+        })
     }
 
     fn process(&mut self, _clock: &RobotClock, _input: &Self::Input<'_>) -> CuResult<()> {

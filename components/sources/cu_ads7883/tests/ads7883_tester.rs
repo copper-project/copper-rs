@@ -5,6 +5,7 @@ use cu29_helpers::basic_copper_setup;
 #[copper_runtime(config = "tests/copperconfig.ron")]
 struct ADS78883Tester {}
 
+#[derive(Reflect)]
 pub struct ADS78883TestSink {}
 
 impl Freezable for ADS78883TestSink {}

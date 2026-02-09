@@ -1,5 +1,6 @@
 use cu29::prelude::*;
 
+#[derive(Reflect)]
 pub struct ExampleSrc;
 
 impl Freezable for ExampleSrc {}
@@ -21,6 +22,7 @@ impl CuSrcTask for ExampleSrc {
     }
 }
 
+#[derive(Reflect)]
 pub struct ExampleTask {
     label: String,
 }
@@ -54,6 +56,7 @@ impl CuTask for ExampleTask {
     }
 }
 
+#[derive(Reflect)]
 pub struct ExampleSink;
 
 impl Freezable for ExampleSink {}

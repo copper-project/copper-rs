@@ -7,6 +7,8 @@ use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
+use bevy_reflect as bevy_reflect;
+use crate::reflect::Reflect;
 use serde_derive::{Deserialize, Serialize};
 
 #[cfg(not(feature = "std"))]
@@ -15,12 +17,13 @@ pub use alloc::format;
 pub use alloc::vec::Vec;
 
 /// Copper friendly wrapper for a fixed size array.
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct CuArray<T, const N: usize> {
+#[derive(Clone, Debug, Default, Serialize, Deserialize, Reflect)]
+#[reflect(opaque, from_reflect = false, no_field_bounds)]
+pub struct CuArray<T: Clone, const N: usize> {
     inner: ArrayVec<T, N>,
 }
 
-impl<T, const N: usize> CuArray<T, N> {
+impl<T: Clone, const N: usize> CuArray<T, N> {
     pub fn new() -> Self {
         Self {
             inner: ArrayVec::new(),
@@ -56,7 +59,7 @@ impl<T, const N: usize> CuArray<T, N> {
 
 impl<T, const N: usize> Encode for CuArray<T, N>
 where
-    T: Encode,
+    T: Encode + Clone,
 {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         // Encode the length first
@@ -73,7 +76,7 @@ where
 
 impl<T, const N: usize> Decode<()> for CuArray<T, N>
 where
-    T: Decode<()>,
+    T: Decode<()> + Clone,
 {
     fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
         // Decode the length first

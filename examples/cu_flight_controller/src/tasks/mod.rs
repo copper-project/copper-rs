@@ -114,6 +114,7 @@ fn estimate_cell_count(voltage_centi: u16) -> Option<u8> {
     Some(clamp_u8(cells.min(u32::from(u8::MAX)) as u16))
 }
 
+#[derive(Reflect)]
 pub struct ImuLogger {
     last_tov: Option<CuTime>,
 }
@@ -180,6 +181,7 @@ impl Freezable for BodyRateSetpoint {}
 impl Freezable for BodyCommand {}
 impl Freezable for BatteryVoltage {}
 
+#[derive(Reflect)]
 pub struct RcMapper {
     rc_min: u16,
     rc_mid: u16,
@@ -354,6 +356,7 @@ impl CuTask for RcMapper {
     }
 }
 
+#[derive(Reflect)]
 pub struct ImuCalibrator {
     bias: [f32; 3],
     sum: [f32; 3],
@@ -498,6 +501,7 @@ impl AxisPid {
     }
 }
 
+#[derive(Reflect)]
 pub struct AttitudeController {
     roll_pid: AxisPid,
     pitch_pid: AxisPid,
@@ -646,6 +650,7 @@ impl CuTask for AttitudeController {
     }
 }
 
+#[derive(Reflect)]
 pub struct RateController {
     roll_pid: AxisPid,
     pitch_pid: AxisPid,
@@ -840,6 +845,7 @@ impl MotorLogState {
 
 static MOTOR_LOG: spin::Mutex<MotorLogState> = spin::Mutex::new(MotorLogState::new());
 
+#[derive(Reflect)]
 pub struct QuadXMixer {
     motor_index: usize,
     props_out: bool,

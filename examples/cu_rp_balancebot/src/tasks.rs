@@ -7,6 +7,7 @@ use cu29::prelude::*;
 pub type BalPID = GenericPIDTask<ADSReadingPayload>;
 pub type PosPID = GenericPIDTask<EncoderPayload>;
 
+#[derive(Reflect)]
 pub struct PIDMerger {}
 
 impl Freezable for PIDMerger {}

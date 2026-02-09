@@ -7,6 +7,7 @@ mod tests {
     use std::thread::sleep;
     use std::time::Duration;
 
+    #[derive(Reflect)]
     struct GStreamerTester {
         rec: RecordingStream,
     }

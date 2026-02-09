@@ -945,10 +945,12 @@ mod tests {
     use crate::cutask::CuSinkTask;
     use crate::cutask::{CuSrcTask, Freezable};
     use crate::monitoring::NoMonitor;
+    use crate::reflect::Reflect;
     use bincode::Encode;
     use cu29_traits::{ErasedCuStampedData, ErasedCuStampedDataSet, MatchingTasks};
     use serde_derive::{Deserialize, Serialize};
 
+    #[derive(Reflect)]
     pub struct TestSource {}
 
     impl Freezable for TestSource {}
@@ -972,6 +974,7 @@ mod tests {
         }
     }
 
+    #[derive(Reflect)]
     pub struct TestSink {}
 
     impl Freezable for TestSink {}

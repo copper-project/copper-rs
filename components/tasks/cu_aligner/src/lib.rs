@@ -9,6 +9,9 @@ macro_rules! define_task {
     ($name:ident, $($index:tt => { $mis:expr, $mos:expr, $p:ty }),+) => {
 
        paste::paste! {
+            #[allow(unused_imports)]
+            use cu29::bevy_reflect as bevy_reflect;
+
             $crate::buffers::alignment_buffers!(
                 AlignmentBuffers,
                 $(
@@ -17,7 +20,10 @@ macro_rules! define_task {
             );
         }
 
+        #[derive(cu29::reflect::Reflect)]
+        #[reflect(from_reflect = false)]
         pub struct $name {
+            #[reflect(ignore)]
             aligner: AlignmentBuffers,
         }
 

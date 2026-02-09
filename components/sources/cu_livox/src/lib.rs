@@ -1,16 +1,25 @@
 pub mod parser;
 
 use crate::parser::RefTime;
+use bincode::de::Decoder;
+use bincode::enc::Encoder;
+use bincode::error::{DecodeError, EncodeError};
+use bincode::{Decode, Encode};
 use chrono::Utc;
 use cu_sensor_payloads::{PointCloud, PointCloudSoa};
 use cu29::prelude::*;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use std::io::{ErrorKind, Read};
 use std::net::SocketAddr;
+use std::ops::{Deref, DerefMut};
 const DEFAULT_ADDR: &str = "0.0.0.0:56001";
 
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct Tele15 {
+    #[reflect(ignore)]
     socket: Socket,
+    #[reflect(ignore)]
     reftime: RefTime,
 }
 
@@ -25,7 +34,42 @@ impl Freezable for Tele15 {}
 
 const MAX_POINTS: usize = 100;
 
-pub type LidarCuMsgPayload = PointCloudSoa<MAX_POINTS>;
+#[derive(
+    Default,
+    Clone,
+    Debug,
+    serde::Serialize,
+    serde::Deserialize,
+    Reflect
+)]
+#[reflect(opaque, from_reflect = false)]
+pub struct LidarCuMsgPayload(pub PointCloudSoa<MAX_POINTS>);
+
+impl Deref for LidarCuMsgPayload {
+    type Target = PointCloudSoa<MAX_POINTS>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for LidarCuMsgPayload {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl Encode for LidarCuMsgPayload {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        self.0.encode(encoder)
+    }
+}
+
+impl Decode<()> for LidarCuMsgPayload {
+    fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        Ok(Self(PointCloudSoa::<MAX_POINTS>::decode(decoder)?))
+    }
+}
 
 impl CuSrcTask for Tele15 {
     type Resources<'r> = ();

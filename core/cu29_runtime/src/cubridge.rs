@@ -556,7 +556,7 @@ mod tests {
     }
 
     // ---- User-authored bridge implementation --------------------------------
-    #[derive(Default)]
+    #[derive(Default, Reflect)]
     struct ExampleBridge {
         port: String,
         imu_samples: Vec<i32>,

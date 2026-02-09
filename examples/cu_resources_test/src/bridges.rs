@@ -4,7 +4,16 @@ use cu29::prelude::*;
 use cu29::resources;
 use serde::{Deserialize, Serialize};
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
+#[derive(
+    Default,
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    bincode::Encode,
+    bincode::Decode,
+    Reflect
+)]
 pub struct BusReading {
     pub tag: String,
     pub value: i64,
@@ -28,6 +37,8 @@ mod stats_bridge_resources {
     });
 }
 
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct StatsBridge {
     bus: SharedBus,
     tag: String,

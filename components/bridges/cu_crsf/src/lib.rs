@@ -64,19 +64,27 @@ resources!(for<S, E> where S: Write<Error = E> + Read<Error = E> + Send + Sync +
 });
 
 /// Crossfire bridge for Copper-rs.
+#[derive(Reflect)]
+#[reflect(from_reflect = false, no_field_bounds, type_path = false)]
 pub struct CrsfBridge<S, E>
 where
-    S: Write<Error = E> + Read<Error = E>,
+    S: Write<Error = E> + Read<Error = E> + Send + Sync + 'static,
+    E: 'static,
 {
+    #[reflect(ignore)]
     serial_port: S,
+    #[reflect(ignore)]
     parser: PacketParser<PARSER_BUFFER_SIZE>,
+    #[reflect(ignore)]
     last_lq: Option<LinkStatistics>,
+    #[reflect(ignore)]
     last_rc: Option<RcChannels>,
 }
 
 impl<S, E> CrsfBridge<S, E>
 where
-    S: Write<Error = E> + Read<Error = E>,
+    S: Write<Error = E> + Read<Error = E> + Send + Sync + 'static,
+    E: 'static,
 {
     fn from_serial(serial_port: S) -> Self {
         Self {
@@ -124,11 +132,43 @@ where
     }
 }
 
-impl<S, E> Freezable for CrsfBridge<S, E> where S: Write<Error = E> + Read<Error = E> {}
+impl<S, E> cu29::reflect::TypePath for CrsfBridge<S, E>
+where
+    S: Write<Error = E> + Read<Error = E> + Send + Sync + 'static,
+    E: 'static,
+{
+    fn type_path() -> &'static str {
+        "cu_crsf::CrsfBridge"
+    }
+
+    fn short_type_path() -> &'static str {
+        "CrsfBridge"
+    }
+
+    fn type_ident() -> Option<&'static str> {
+        Some("CrsfBridge")
+    }
+
+    fn crate_name() -> Option<&'static str> {
+        Some("cu_crsf")
+    }
+
+    fn module_path() -> Option<&'static str> {
+        Some("cu_crsf")
+    }
+}
+
+impl<S, E> Freezable for CrsfBridge<S, E>
+where
+    S: Write<Error = E> + Read<Error = E> + Send + Sync + 'static,
+    E: 'static,
+{
+}
 
 impl<S, E> CuBridge for CrsfBridge<S, E>
 where
     S: Write<Error = E> + Read<Error = E> + Send + Sync + 'static,
+    E: 'static,
 {
     type Tx = TxChannels;
     type Rx = RxChannels;

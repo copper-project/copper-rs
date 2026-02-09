@@ -3,13 +3,14 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
-use ::bevy_reflect::{Reflect, TypePath};
+use ::bevy_reflect as bevy_reflect;
 use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use core::marker::PhantomData;
 use cu29::prelude::*;
+use cu29::reflect::{Reflect, TypePath};
 use serde::{Deserialize, Serialize};
 
 #[cfg(not(feature = "std"))]

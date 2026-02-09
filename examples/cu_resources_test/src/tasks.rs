@@ -4,9 +4,19 @@ use cu29::prelude::*;
 use cu29::resources;
 use serde::{Deserialize, Serialize};
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
+#[derive(
+    Default,
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    bincode::Encode,
+    bincode::Decode,
+    Reflect
+)]
 pub struct Tick;
 
+#[derive(Reflect)]
 pub struct TriggerTask;
 
 impl Freezable for TriggerTask {}
@@ -26,10 +36,15 @@ impl CuSrcTask for TriggerTask {
     }
 }
 
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct SensorTask {
+    #[reflect(ignore)]
     counter: Owned<OwnedCounter>,
+    #[reflect(ignore)]
     bus: SharedBus,
     tag: String,
+    #[reflect(ignore)]
     global: GlobalLog,
 }
 
@@ -75,9 +90,13 @@ impl CuTask for SensorTask {
     }
 }
 
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct InspectorTask {
+    #[reflect(ignore)]
     bus: SharedBus,
     note: String,
+    #[reflect(ignore)]
     global: GlobalLog,
 }
 

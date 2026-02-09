@@ -2,7 +2,7 @@
 use std::mem::ManuallyDrop;
 
 #[cfg(unix)]
-use apriltag::{Detector, DetectorBuilder, Family, Image, TagParams};
+use apriltag::{DetectorBuilder, Family, Image, TagParams};
 
 #[cfg(unix)]
 use apriltag_sys::image_u8_t;
@@ -33,7 +33,8 @@ const CY: f64 = 520.0;
 #[cfg(not(windows))]
 const FAMILY: &str = "tag16h5";
 
-#[derive(Default, Debug, Clone, Encode)]
+#[derive(Default, Debug, Clone, Encode, Reflect)]
+#[reflect(opaque, from_reflect = false)]
 pub struct AprilTagDetections {
     pub ids: CuArrayVec<usize, MAX_DETECTIONS>,
     pub poses: CuArrayVec<CuPose<f32>, MAX_DETECTIONS>,
@@ -131,9 +132,16 @@ impl AprilTagDetections {
 }
 
 #[cfg(unix)]
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct AprilTags {
-    detector: Detector,
-    tag_params: TagParams,
+    family: String,
+    bits_corrected: usize,
+    tagsize: f64,
+    fx: f64,
+    fy: f64,
+    cx: f64,
+    cy: f64,
 }
 
 #[cfg(not(unix))]
@@ -198,42 +206,30 @@ impl CuTask for AprilTags {
             let family_cfg = config
                 .get::<String>("family")?
                 .unwrap_or(FAMILY.to_string());
-            let family: Family = family_cfg.parse().unwrap();
             let bits_corrected: u32 = config.get::<u32>("bits_corrected")?.unwrap_or(1);
             let tagsize = config.get::<f64>("tag_size")?.unwrap_or(TAG_SIZE);
             let fx = config.get::<f64>("fx")?.unwrap_or(FX);
             let fy = config.get::<f64>("fy")?.unwrap_or(FY);
             let cx = config.get::<f64>("cx")?.unwrap_or(CX);
             let cy = config.get::<f64>("cy")?.unwrap_or(CY);
-            let tag_params = TagParams {
+            return Ok(Self {
+                family: family_cfg,
+                bits_corrected: bits_corrected as usize,
+                tagsize,
                 fx,
                 fy,
                 cx,
                 cy,
-                tagsize,
-            };
-
-            let detector = DetectorBuilder::default()
-                .add_family_bits(family, bits_corrected as usize)
-                .build()
-                .unwrap();
-            return Ok(Self {
-                detector,
-                tag_params,
             });
         }
         Ok(Self {
-            detector: DetectorBuilder::default()
-                .add_family_bits(FAMILY.parse::<Family>().unwrap(), 1)
-                .build()
-                .unwrap(),
-            tag_params: TagParams {
-                fx: FX,
-                fy: FY,
-                cx: CX,
-                cy: CY,
-                tagsize: TAG_SIZE,
-            },
+            family: FAMILY.to_string(),
+            bits_corrected: 1,
+            tagsize: TAG_SIZE,
+            fx: FX,
+            fy: FY,
+            cx: CX,
+            cy: CY,
         })
     }
 
@@ -245,10 +241,25 @@ impl CuTask for AprilTags {
     ) -> CuResult<()> {
         let mut result = AprilTagDetections::new();
         if let Some(payload) = input.payload() {
+            let family: Family = self
+                .family
+                .parse()
+                .map_err(|_| CuError::from("invalid apriltag family"))?;
+            let mut detector = DetectorBuilder::default()
+                .add_family_bits(family, self.bits_corrected)
+                .build()
+                .map_err(|e| CuError::new_with_cause("failed to build apriltag detector", e))?;
+            let tag_params = TagParams {
+                fx: self.fx,
+                fy: self.fy,
+                cx: self.cx,
+                cy: self.cy,
+                tagsize: self.tagsize,
+            };
             let image = image_from_cuimage(payload);
-            let detections = self.detector.detect(&image);
+            let detections = detector.detect(&image);
             for detection in detections {
-                if let Some(aprilpose) = detection.estimate_tag_pose(&self.tag_params) {
+                if let Some(aprilpose) = detection.estimate_tag_pose(&tag_params) {
                     let translation = aprilpose.translation();
                     let rotation = aprilpose.rotation();
                     let mut mat: [[f32; 4]; 4] = [[0.0, 0.0, 0.0, 0.0]; 4];

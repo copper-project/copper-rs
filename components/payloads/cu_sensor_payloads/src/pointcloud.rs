@@ -1,6 +1,8 @@
 use bincode::de::{BorrowDecode, BorrowDecoder, Decode, Decoder};
 use bincode::enc::{Encode, Encoder};
 use bincode::error::{DecodeError, EncodeError};
+use cu29::bevy_reflect as bevy_reflect;
+use cu29::reflect::Reflect;
 use cu29_clock::CuTime;
 use cu29_soa_derive::Soa;
 use derive_more::{Add, Deref, Div, From, Mul, Sub};
@@ -10,8 +12,22 @@ use uom::si::length::meter;
 use uom::si::ratio::percent;
 
 #[derive(
-    Default, PartialEq, Debug, Copy, Clone, Add, Deref, Sub, From, Mul, Div, Serialize, Deserialize,
+    Default,
+    PartialEq,
+    Debug,
+    Copy,
+    Clone,
+    Add,
+    Deref,
+    Sub,
+    From,
+    Mul,
+    Div,
+    Serialize,
+    Deserialize,
+    Reflect,
 )]
+#[reflect(opaque, from_reflect = false)]
 pub struct Reflectivity(Ratio);
 
 impl From<f32> for Reflectivity {
@@ -45,8 +61,22 @@ impl<'de> BorrowDecode<'de, ()> for Reflectivity {
 }
 
 #[derive(
-    Default, PartialEq, Debug, Copy, Clone, Add, Deref, Sub, From, Mul, Div, Serialize, Deserialize,
+    Default,
+    PartialEq,
+    Debug,
+    Copy,
+    Clone,
+    Add,
+    Deref,
+    Sub,
+    From,
+    Mul,
+    Div,
+    Serialize,
+    Deserialize,
+    Reflect,
 )]
+#[reflect(opaque, from_reflect = false)]
 pub struct Distance(pub Length);
 
 /// Encode it as a f32 in m
@@ -83,7 +113,8 @@ impl<'de> BorrowDecode<'de, ()> for Distance {
 /// note: the derive(Soa) will generate a PointCloudSoa struct that will store the data in a SoA format.
 /// The Soa format is appropriate for early pipeline operations like changing their frame of reference.
 /// important: The ToV of the points are not assumed to be sorted.
-#[derive(Default, Clone, PartialEq, Debug, Soa, Serialize, Deserialize)]
+#[derive(Default, Clone, PartialEq, Debug, Soa, Serialize, Deserialize, Reflect)]
+#[reflect(from_reflect = false)]
 pub struct PointCloud {
     pub tov: CuTime, // Time of Validity, not sorted.
     pub x: Distance,

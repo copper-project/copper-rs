@@ -3,14 +3,33 @@ use serde::{Deserialize, Serialize};
 
 pub mod messages {
     use super::*;
+    use cu29::bevy_reflect as bevy_reflect;
 
-    #[derive(Debug, Default, Clone, Encode, Decode, Serialize, Deserialize)]
+    #[derive(
+        Debug,
+        Default,
+        Clone,
+        Encode,
+        Decode,
+        Serialize,
+        Deserialize,
+        cu29::reflect::Reflect
+    )]
     pub struct Ping {
         pub seq: u64,
         pub note: String,
     }
 
-    #[derive(Debug, Default, Clone, Encode, Decode, Serialize, Deserialize)]
+    #[derive(
+        Debug,
+        Default,
+        Clone,
+        Encode,
+        Decode,
+        Serialize,
+        Deserialize,
+        cu29::reflect::Reflect
+    )]
     pub struct Pong {
         pub seq: u64,
         pub reply: String,
@@ -43,6 +62,7 @@ pub mod tasks {
     use super::messages::{Ping, Pong};
     use cu29::prelude::*;
 
+    #[derive(Reflect)]
     pub struct PingSource {
         seq: u64,
         label: String,
@@ -78,6 +98,7 @@ pub mod tasks {
         }
     }
 
+    #[derive(Reflect)]
     pub struct PongResponder {
         label: String,
     }
@@ -121,6 +142,7 @@ pub mod tasks {
         }
     }
 
+    #[derive(Reflect)]
     pub struct PongSink {
         label: String,
     }

@@ -9,12 +9,13 @@ use cu29::prelude::*;
 use cu29::simulation::{CuTaskCallbackState, SimOverride};
 use serde::{Deserialize, Serialize};
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize, Encode, Decode, Reflect)]
 pub struct MyMsg {
     pub value: u32,
 }
 
 // A real source (we won’t run it in sim when run_in_sim = true)
+#[derive(Reflect)]
 pub struct MySource {
     next: u32,
 }
@@ -36,6 +37,7 @@ impl CuSrcTask for MySource {
 }
 
 // A normal “regular” task (run_in_sim is ignored for regular tasks)
+#[derive(Reflect)]
 pub struct Doubler;
 impl Freezable for Doubler {}
 impl CuTask for Doubler {
@@ -63,6 +65,7 @@ impl CuTask for Doubler {
 }
 
 // A real sink (we want the real code to run in simulation => run_in_sim = true in config)
+#[derive(Reflect)]
 pub struct MySink;
 impl Freezable for MySink {}
 impl CuSinkTask for MySink {

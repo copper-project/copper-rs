@@ -8,6 +8,8 @@ use embedded_hal::i2c::I2c;
 #[cfg(hardware)]
 use linux_embedded_hal::{I2CError, I2cdev};
 use std::fmt::Display;
+#[cfg(hardware)]
+use std::sync::Mutex;
 use uom::si::acceleration::{meter_per_second_squared, standard_gravity};
 use uom::si::angle::{degree, radian};
 use uom::si::angular_velocity::{degree_per_second, radian_per_second};
@@ -60,12 +62,16 @@ use serde::de::{Deserialize, Deserializer};
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 use uom::fmt::DisplayStyle::Abbreviation;
 
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct WT901 {
     #[cfg(hardware)]
-    i2c: Box<dyn I2c<Error = I2CError>>,
+    #[reflect(ignore)]
+    i2c: Mutex<Box<dyn I2c<Error = I2CError> + Send>>,
 }
 
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone, Debug, Reflect)]
+#[reflect(opaque, from_reflect = false)]
 pub struct PositionalReadingsPayload {
     acc_x: Acceleration,
     acc_y: Acceleration,
@@ -197,8 +203,8 @@ impl WT901 {
         #[cfg(hardware)]
         {
             let mut buf = [0u8; REGISTER_SPAN_SIZE];
-            self.i2c
-                .write_read(WT901_I2C_ADDRESS, &[Registers::AccX as u8], &mut buf)
+            let mut i2c = self.i2c.lock().expect("WT901 I2C mutex poisoned");
+            i2c.write_read(WT901_I2C_ADDRESS, &[Registers::AccX as u8], &mut buf)
                 .expect("Error reading WT901");
             pr.acc_x = convert_acc(get_vec_i16(&buf, Registers::AccX.offset()));
             pr.acc_y = convert_acc(get_vec_i16(&buf, Registers::AccY.offset()));
@@ -235,7 +241,7 @@ impl CuSrcTask for WT901 {
         debug!("{} opened.", I2C_BUS);
         Ok(WT901 {
             #[cfg(hardware)]
-            i2c: Box::new(i2cdev),
+            i2c: Mutex::new(Box::new(i2cdev)),
         })
     }
 

@@ -81,29 +81,80 @@ struct IceoryxContext<TxId: Copy, RxId: Copy> {
     rx_channels: Vec<IceoryxRxChannelEntry<RxId>>,
 }
 
+#[derive(Reflect)]
+#[reflect(from_reflect = false, no_field_bounds, type_path = false)]
 pub struct Iceoryx2Bridge<Tx, Rx>
 where
-    Tx: BridgeChannelSet,
-    Rx: BridgeChannelSet,
+    Tx: BridgeChannelSet + 'static,
+    Rx: BridgeChannelSet + 'static,
+    Tx::Id: Send + Sync + 'static,
+    Rx::Id: Send + Sync + 'static,
 {
+    #[reflect(ignore)]
     node_name: Option<NodeName>,
+    #[reflect(ignore)]
     tx_channels: Vec<IceoryxChannelConfig<Tx::Id>>,
+    #[reflect(ignore)]
     rx_channels: Vec<IceoryxChannelConfig<Rx::Id>>,
-    ctx: Option<IceoryxContext<Tx::Id, Rx::Id>>,
+    #[reflect(ignore)]
+    ctx: Option<usize>,
 }
 
 impl<Tx, Rx> Freezable for Iceoryx2Bridge<Tx, Rx>
 where
-    Tx: BridgeChannelSet,
-    Rx: BridgeChannelSet,
+    Tx: BridgeChannelSet + 'static,
+    Rx: BridgeChannelSet + 'static,
+    Tx::Id: Send + Sync + 'static,
+    Rx::Id: Send + Sync + 'static,
 {
+}
+
+impl<Tx, Rx> cu29::reflect::TypePath for Iceoryx2Bridge<Tx, Rx>
+where
+    Tx: BridgeChannelSet + 'static,
+    Rx: BridgeChannelSet + 'static,
+    Tx::Id: Send + Sync + 'static,
+    Rx::Id: Send + Sync + 'static,
+{
+    fn type_path() -> &'static str {
+        "cu_iceoryx2_bridge::Iceoryx2Bridge"
+    }
+
+    fn short_type_path() -> &'static str {
+        "Iceoryx2Bridge"
+    }
+
+    fn type_ident() -> Option<&'static str> {
+        Some("Iceoryx2Bridge")
+    }
+
+    fn crate_name() -> Option<&'static str> {
+        Some("cu_iceoryx2_bridge")
+    }
+
+    fn module_path() -> Option<&'static str> {
+        Some("cu_iceoryx2_bridge")
+    }
 }
 
 impl<Tx, Rx> Iceoryx2Bridge<Tx, Rx>
 where
-    Tx: BridgeChannelSet,
-    Rx: BridgeChannelSet,
+    Tx: BridgeChannelSet + 'static,
+    Rx: BridgeChannelSet + 'static,
+    Tx::Id: Send + Sync + 'static,
+    Rx::Id: Send + Sync + 'static,
 {
+    fn ctx_mut(&mut self) -> CuResult<&mut IceoryxContext<Tx::Id, Rx::Id>> {
+        let Some(raw) = self.ctx else {
+            return Err(CuError::from("Iceoryx2Bridge: Context not initialized"));
+        };
+        let ptr = raw as *mut IceoryxContext<Tx::Id, Rx::Id>;
+        // SAFETY:
+        // `ptr` comes from `Box::into_raw` in `start()` and remains valid until `stop()`/`drop()`.
+        // Access is serialized through `&mut self`.
+        Ok(unsafe { &mut *ptr })
+    }
+
     fn parse_default_max_payload(config: Option<&ComponentConfig>) -> CuResult<usize> {
         if let Some(config) = config
             && let Some(value) = config.get::<u64>("max_payload_bytes")?
@@ -348,10 +399,10 @@ where
 
 impl<Tx, Rx> CuBridge for Iceoryx2Bridge<Tx, Rx>
 where
-    Tx: BridgeChannelSet,
-    Rx: BridgeChannelSet,
-    Tx::Id: core::fmt::Debug,
-    Rx::Id: core::fmt::Debug,
+    Tx: BridgeChannelSet + 'static,
+    Rx: BridgeChannelSet + 'static,
+    Tx::Id: core::fmt::Debug + Send + Sync + 'static,
+    Rx::Id: core::fmt::Debug + Send + Sync + 'static,
 {
     type Tx = Tx;
     type Rx = Rx;
@@ -408,11 +459,12 @@ where
             .create::<IceoryxService>()
             .map_err(|e| CuError::new_with_cause("Iceoryx2Bridge: Failed to create node", e))?;
 
-        self.ctx = Some(IceoryxContext {
+        let ctx = Box::new(IceoryxContext::<Tx::Id, Rx::Id> {
             node,
             tx_channels: Vec::new(),
             rx_channels: Vec::new(),
         });
+        self.ctx = Some(Box::into_raw(ctx) as usize);
         Ok(())
     }
 
@@ -434,10 +486,7 @@ where
         let service = cfg.service.clone();
         let max_payload_bytes = cfg.max_payload_bytes;
 
-        let ctx = self
-            .ctx
-            .as_mut()
-            .ok_or_else(|| CuError::from("Iceoryx2Bridge: Context not initialized"))?;
+        let ctx = self.ctx_mut()?;
 
         if let Some(tx_channel) =
             Self::find_tx_channel_mut::<Payload>(&mut ctx.tx_channels, channel.id())?
@@ -472,10 +521,7 @@ where
         })?;
         let service = cfg.service.clone();
 
-        let ctx = self
-            .ctx
-            .as_mut()
-            .ok_or_else(|| CuError::from("Iceoryx2Bridge: Context not initialized"))?;
+        let ctx = self.ctx_mut()?;
 
         if let Some(rx_channel) =
             Self::find_rx_channel_mut::<Payload>(&mut ctx.rx_channels, channel.id())?
@@ -493,9 +539,27 @@ where
     }
 
     fn stop(&mut self, _clock: &RobotClock) -> CuResult<()> {
-        if let Some(ctx) = self.ctx.take() {
-            drop(ctx);
+        if let Some(raw) = self.ctx.take() {
+            let ptr = raw as *mut IceoryxContext<Tx::Id, Rx::Id>;
+            // SAFETY: pointer was created by `Box::into_raw` in `start()`.
+            unsafe { drop(Box::from_raw(ptr)) };
         }
         Ok(())
+    }
+}
+
+impl<Tx, Rx> Drop for Iceoryx2Bridge<Tx, Rx>
+where
+    Tx: BridgeChannelSet + 'static,
+    Rx: BridgeChannelSet + 'static,
+    Tx::Id: Send + Sync + 'static,
+    Rx::Id: Send + Sync + 'static,
+{
+    fn drop(&mut self) {
+        if let Some(raw) = self.ctx.take() {
+            let ptr = raw as *mut IceoryxContext<Tx::Id, Rx::Id>;
+            // SAFETY: pointer was created by `Box::into_raw` in `start()`.
+            unsafe { drop(Box::from_raw(ptr)) };
+        }
     }
 }

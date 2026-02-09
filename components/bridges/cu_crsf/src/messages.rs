@@ -3,10 +3,13 @@ use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use crsf::{LinkStatistics, RcChannels};
+use cu29::bevy_reflect as bevy_reflect;
+use cu29::reflect::Reflect;
 use serde::{Deserialize, Serialize};
 
 /// Copper-friendly wrapper for CRSF RC channel data.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Reflect)]
+#[reflect(opaque, from_reflect = false)]
 pub struct RcChannelsPayload(pub RcChannels);
 
 impl RcChannelsPayload {
@@ -86,7 +89,8 @@ impl<'de> Deserialize<'de> for RcChannelsPayload {
 }
 
 /// Copper-friendly wrapper for CRSF link statistics packets.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Reflect)]
+#[reflect(opaque, from_reflect = false)]
 pub struct LinkStatisticsPayload(pub LinkStatistics);
 
 impl LinkStatisticsPayload {
