@@ -3,8 +3,11 @@ resources!({
     led => Owned<spin::Mutex<GreenLed>>,
 });
 
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct ActivityLed {
     on: bool,
+    #[reflect(ignore)]
     led: spin::Mutex<GreenLed>,
 }
 

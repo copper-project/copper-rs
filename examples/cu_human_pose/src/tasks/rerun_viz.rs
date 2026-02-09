@@ -16,7 +16,10 @@ static IMAGE_LOG_COUNT: AtomicUsize = AtomicUsize::new(0);
 ///
 /// Displays the camera image with overlaid pose skeletons,
 /// keypoints, and bounding boxes.
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct RerunPoseViz {
+    #[reflect(ignore)]
     rec: RecordingStream,
 }
 

@@ -11,16 +11,17 @@ use std::fs;
 use std::path::Path;
 use std::time::Instant;
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize, Encode, Decode, Reflect)]
 pub struct CounterMsg {
     pub value: u32,
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize, Encode, Decode, Reflect)]
 pub struct AccumMsg {
     pub sum: u32,
 }
 
+#[derive(Reflect)]
 pub struct CounterSrc {
     pub next: u32,
 }
@@ -49,6 +50,7 @@ impl CuSrcTask for CounterSrc {
     }
 }
 
+#[derive(Reflect)]
 pub struct Accumulator {
     pub sum: u32,
 }
@@ -87,6 +89,7 @@ impl CuTask for Accumulator {
     }
 }
 
+#[derive(Reflect)]
 pub struct SpySink {
     pub last: Option<u32>,
 }

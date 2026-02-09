@@ -264,7 +264,7 @@ mod tasks {
         }
     }
 
-    #[derive(Default)]
+    #[derive(Default, Reflect)]
     pub struct LoopbackSource {
         sent: bool,
     }
@@ -297,7 +297,7 @@ mod tasks {
         }
     }
 
-    #[derive(Default)]
+    #[derive(Default, Reflect)]
     pub struct LoopbackSink;
 
     impl Freezable for LoopbackSink {}

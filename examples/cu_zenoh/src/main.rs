@@ -11,6 +11,7 @@ pub mod tasks {
 
     use cu29::prelude::*;
 
+    #[derive(Reflect)]
     pub struct ExampleSrc;
 
     impl Freezable for ExampleSrc {}

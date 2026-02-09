@@ -58,6 +58,8 @@ pub use cu29_runtime::input_msg;
 pub use cu29_runtime::monitoring;
 pub use cu29_runtime::output_msg;
 pub use cu29_runtime::payload;
+pub use cu29_runtime::reflect;
+pub use cu29_runtime::reflect as bevy_reflect;
 pub use cu29_runtime::resource;
 pub use cu29_runtime::rx_channels;
 #[cfg(feature = "std")]
@@ -165,6 +167,7 @@ macro_rules! defmt_error {
 }
 
 pub mod prelude {
+    pub use crate::bevy_reflect;
     pub use crate::{defmt_debug, defmt_error, defmt_info, defmt_warn};
     #[cfg(feature = "std")]
     pub use ctrlc;
@@ -188,6 +191,10 @@ pub mod prelude {
     pub use cu29_runtime::monitoring::*;
     pub use cu29_runtime::output_msg;
     pub use cu29_runtime::payload::*;
+    pub use cu29_runtime::reflect::{
+        GetTypeRegistration, Reflect, ReflectTaskIntrospection, TypeInfo, TypePath, TypeRegistry,
+        dump_type_registry_schema,
+    };
     pub use cu29_runtime::resource::*;
     pub use cu29_runtime::rx_channels;
     #[cfg(feature = "std")]

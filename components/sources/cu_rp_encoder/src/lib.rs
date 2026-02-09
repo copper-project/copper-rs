@@ -32,7 +32,7 @@ fn get_pin(pin_nb: u8) -> CuResult<InputPin> {
         .into_input())
 }
 
-#[derive(Default, Clone, Debug, Encode, Decode, Serialize, Deserialize)]
+#[derive(Default, Clone, Debug, Encode, Decode, Serialize, Deserialize, Reflect)]
 pub struct EncoderPayload {
     pub ticks: i32,
 }
@@ -45,8 +45,12 @@ impl From<&EncoderPayload> for f32 {
 }
 
 #[allow(dead_code)]
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct Encoder {
+    #[reflect(ignore)]
     clk_pin: InputPin,
+    #[reflect(ignore)]
     data_from_interrupts: Arc<Mutex<InterruptData>>,
 }
 

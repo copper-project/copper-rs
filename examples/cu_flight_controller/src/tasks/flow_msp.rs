@@ -2,6 +2,7 @@ use super::*;
 use cu_msp_bridge::MspRequestBatch;
 use cu_msp_lib::structs::MspRequest;
 
+#[derive(Reflect)]
 pub struct FlowMspLogger;
 
 impl Freezable for FlowMspLogger {}

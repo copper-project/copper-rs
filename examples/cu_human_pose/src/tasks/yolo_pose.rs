@@ -10,8 +10,12 @@ use cu29::prelude::*;
 /// YOLOv8 Pose estimation task
 ///
 /// Processes incoming camera images and outputs detected poses with keypoints.
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct YoloPose {
+    #[reflect(ignore)]
     model: YoloV8Pose,
+    #[reflect(ignore)]
     device: Device,
     conf_threshold: f32,
     iou_threshold: f32,

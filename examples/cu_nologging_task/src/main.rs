@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 pub mod tasks {
     use cu29::prelude::*;
 
+    #[derive(Reflect)]
     pub struct ExampleSrc;
 
     impl Freezable for ExampleSrc {}
@@ -27,6 +28,7 @@ pub mod tasks {
         }
     }
 
+    #[derive(Reflect)]
     pub struct ExampleTask;
 
     impl Freezable for ExampleTask {}
@@ -55,6 +57,7 @@ pub mod tasks {
         }
     }
 
+    #[derive(Reflect)]
     pub struct ExampleSink;
 
     impl Freezable for ExampleSink {}

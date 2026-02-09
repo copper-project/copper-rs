@@ -19,6 +19,7 @@ embedded_config = "examples/cu_flight_controller/.cargo/config-firmware.toml"
 embedded_target = "thumbv7em-none-eabihf"
 embedded_no_default_features = true
 embedded_features = "firmware"
+embedded_build_release = true
 
 [package.metadata.cargo-shear]
 ignored = ["bincode"]

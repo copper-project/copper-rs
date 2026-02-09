@@ -72,6 +72,7 @@ members = [
   "examples/cu_resources_test",
   "examples/cu_nologging_task",
   "examples/cu_rate_target",
+  "examples/cu_reflect_demo",
   "examples/cu_pointclouds",
   "examples/cu_rp_balancebot",
   "examples/cu_run_in_sim",
@@ -140,6 +141,7 @@ cu29-value = { path = "core/cu29_value", default-features = false, version = "0.
 # Payload definitions
 cu-sensor-payloads = { path = "components/payloads/cu_sensor_payloads", version = "0.12.0" }
 cu-ros-payloads = { path = "components/payloads/cu_ros_payloads", version = "0.12.0" }
+cu-pid = { path = "components/tasks/cu_pid", version = "0.12.0" }
 
 # External serialization
 bincode = { package = "cu-bincode", version = "2.0", default-features = false, features = [
@@ -186,6 +188,9 @@ compact_str = { version = "0.9", default-features = false, features = [
 # The derive pattern happens a lot across the codebase, this is a helper for that.
 derive_more = { version = "2.0", features = ["full"] }
 paste = { version = "1.0.15", default-features = false }
+bevy_reflect = { version = "0.18.0", default-features = false, features = [
+  "auto_register_static",
+] }
 
 # used across testing
 tempfile = "3.23"

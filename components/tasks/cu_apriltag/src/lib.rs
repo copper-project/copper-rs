@@ -33,7 +33,8 @@ const CY: f64 = 520.0;
 #[cfg(not(windows))]
 const FAMILY: &str = "tag16h5";
 
-#[derive(Default, Debug, Clone, Encode)]
+#[derive(Default, Debug, Clone, Encode, Reflect)]
+#[reflect(opaque, from_reflect = false)]
 pub struct AprilTagDetections {
     pub ids: CuArrayVec<usize, MAX_DETECTIONS>,
     pub poses: CuArrayVec<CuPose<f32>, MAX_DETECTIONS>,
@@ -131,12 +132,36 @@ impl AprilTagDetections {
 }
 
 #[cfg(unix)]
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct AprilTags {
-    detector: Detector,
+    family: String,
+    bits_corrected: usize,
+    tagsize: f64,
+    fx: f64,
+    fy: f64,
+    cx: f64,
+    cy: f64,
+    #[reflect(ignore)]
+    detector: CachedDetector,
+    #[reflect(ignore)]
     tag_params: TagParams,
 }
 
+#[cfg(unix)]
+struct CachedDetector(Detector);
+
+// SAFETY: The runtime processes each task with exclusive `&mut self` access,
+// and detector state is never aliased across concurrent mutable accesses.
+#[cfg(unix)]
+unsafe impl Send for CachedDetector {}
+// SAFETY: Shared references do not expose mutable detector operations.
+#[cfg(unix)]
+unsafe impl Sync for CachedDetector {}
+
 #[cfg(not(unix))]
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct AprilTags {}
 
 #[cfg(not(windows))]
@@ -194,46 +219,46 @@ impl CuTask for AprilTags {
     where
         Self: Sized,
     {
-        if let Some(config) = _config {
-            let family_cfg = config
+        let (family, bits_corrected, tagsize, fx, fy, cx, cy) = if let Some(config) = _config {
+            let family = config
                 .get::<String>("family")?
                 .unwrap_or(FAMILY.to_string());
-            let family: Family = family_cfg.parse().unwrap();
-            let bits_corrected: u32 = config.get::<u32>("bits_corrected")?.unwrap_or(1);
+            let bits_corrected = config.get::<u32>("bits_corrected")?.unwrap_or(1) as usize;
             let tagsize = config.get::<f64>("tag_size")?.unwrap_or(TAG_SIZE);
             let fx = config.get::<f64>("fx")?.unwrap_or(FX);
             let fy = config.get::<f64>("fy")?.unwrap_or(FY);
             let cx = config.get::<f64>("cx")?.unwrap_or(CX);
             let cy = config.get::<f64>("cy")?.unwrap_or(CY);
-            let tag_params = TagParams {
-                fx,
-                fy,
-                cx,
-                cy,
-                tagsize,
-            };
+            (family, bits_corrected, tagsize, fx, fy, cx, cy)
+        } else {
+            (FAMILY.to_string(), 1, TAG_SIZE, FX, FY, CX, CY)
+        };
 
-            let detector = DetectorBuilder::default()
-                .add_family_bits(family, bits_corrected as usize)
-                .build()
-                .unwrap();
-            return Ok(Self {
-                detector,
-                tag_params,
-            });
-        }
+        let family_for_detector: Family = family
+            .parse()
+            .map_err(|_| CuError::from("invalid apriltag family"))?;
+        let detector = DetectorBuilder::default()
+            .add_family_bits(family_for_detector, bits_corrected)
+            .build()
+            .map_err(|e| CuError::new_with_cause("failed to build apriltag detector", e))?;
+        let tag_params = TagParams {
+            fx,
+            fy,
+            cx,
+            cy,
+            tagsize,
+        };
+
         Ok(Self {
-            detector: DetectorBuilder::default()
-                .add_family_bits(FAMILY.parse::<Family>().unwrap(), 1)
-                .build()
-                .unwrap(),
-            tag_params: TagParams {
-                fx: FX,
-                fy: FY,
-                cx: CX,
-                cy: CY,
-                tagsize: TAG_SIZE,
-            },
+            family,
+            bits_corrected,
+            tagsize,
+            fx,
+            fy,
+            cx,
+            cy,
+            detector: CachedDetector(detector),
+            tag_params,
         })
     }
 
@@ -246,7 +271,7 @@ impl CuTask for AprilTags {
         let mut result = AprilTagDetections::new();
         if let Some(payload) = input.payload() {
             let image = image_from_cuimage(payload);
-            let detections = self.detector.detect(&image);
+            let detections = self.detector.0.detect(&image);
             for detection in detections {
                 if let Some(aprilpose) = detection.estimate_tag_pose(&self.tag_params) {
                     let translation = aprilpose.translation();

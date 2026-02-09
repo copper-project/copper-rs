@@ -3,19 +3,21 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
+use ::bevy_reflect;
 use bincode::de::Decoder;
 use bincode::enc::Encoder;
 use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use core::marker::PhantomData;
 use cu29::prelude::*;
+use cu29::reflect::{Reflect, TypePath};
 use serde::{Deserialize, Serialize};
 
 #[cfg(not(feature = "std"))]
 use alloc::format;
 
 /// Output of the PID controller.
-#[derive(Debug, Default, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Encode, Decode, Serialize, Deserialize, Reflect)]
 pub struct PIDControlOutputPayload {
     /// Proportional term
     pub p: f32,
@@ -28,6 +30,7 @@ pub struct PIDControlOutputPayload {
 }
 
 /// This is the underlying standard PID controller.
+#[derive(Reflect)]
 pub struct PIDController {
     // Configuration
     kp: f32,
@@ -139,11 +142,13 @@ impl PIDController {
 }
 
 /// This is the Copper task encapsulating the PID controller.
+#[derive(Reflect)]
 pub struct GenericPIDTask<I>
 where
     f32: for<'a> From<&'a I>,
 {
-    _marker: PhantomData<I>,
+    #[reflect(ignore)]
+    _marker: PhantomData<fn() -> I>,
     pid: PIDController,
     first_run: bool,
     last_tov: CuTime,
@@ -154,7 +159,7 @@ where
 impl<I> CuTask for GenericPIDTask<I>
 where
     f32: for<'a> From<&'a I>,
-    I: CuMsgPayload,
+    I: CuMsgPayload + TypePath + 'static,
 {
     type Resources<'r> = ();
     type Input<'m> = input_msg!(I);

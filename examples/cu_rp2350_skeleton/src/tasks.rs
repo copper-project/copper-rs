@@ -51,6 +51,7 @@ mod imp {
 
 pub use imp::*;
 
+#[derive(Reflect)]
 pub struct BooleanSource {
     state: bool,
 }
@@ -73,6 +74,7 @@ impl CuSrcTask for BooleanSource {
     }
 }
 
+#[derive(Reflect)]
 pub struct LEDSink;
 impl Freezable for LEDSink {}
 impl CuSinkTask for LEDSink {

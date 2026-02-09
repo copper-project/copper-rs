@@ -13,8 +13,12 @@ define_task!(
     1 => { BUFFER_CAP, OUTPUT_CAP, CuImage<Vec<u8>> }
 );
 
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct ImageSrcTask {
+    #[reflect(ignore)]
     pool: Arc<CuHostMemoryPool<Vec<u8>>>,
+    #[reflect(ignore)]
     format: CuImageBufferFormat,
     seq: u64,
     base_value: u8,
@@ -90,6 +94,7 @@ impl CuSrcTask for ImageSrcTask {
     }
 }
 
+#[derive(Reflect)]
 pub struct AlignedImageSink;
 
 impl Freezable for AlignedImageSink {}

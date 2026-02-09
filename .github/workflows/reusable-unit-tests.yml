@@ -225,7 +225,15 @@ jobs:
           echo "EMBEDDED_EXCLUDES=$EXCLUDES" >> $GITHUB_ENV
 
       - name: Run Unit Tests with all features on (${{ matrix.os }} | ${{ matrix.mode }})
-        run: cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
+        run: |
+          if [[ '${{ matrix.mode }}' == 'cuda-debug' && '${{ runner.os }}' == 'Linux' ]]; then
+            if ! ldconfig -p 2>/dev/null | grep -q 'libcuda\.so\.1'; then
+              echo "libcuda.so.1 not found; compiling all-feature tests without executing them."
+              cargo +${{ inputs.toolchain }} test --no-run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
+              exit 0
+            fi
+          fi
+          cargo +${{ inputs.toolchain }} nextest run $RELEASE_FLAG --all-targets $WORKSPACE_FLAG $FEATURES_FLAG $EMBEDDED_EXCLUDES
 
   templates:
     name: Templates (debug)

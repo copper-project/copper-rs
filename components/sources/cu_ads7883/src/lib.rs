@@ -19,7 +19,10 @@ use spidev::{SpiModeFlags, Spidev, SpidevOptions, SpidevTransfer};
 #[cfg(mock)]
 use mock::Spidev;
 
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct ADS7883 {
+    #[reflect(ignore)]
     spi: Spidev,
     integrated_value: u64,
 }
@@ -44,10 +47,12 @@ fn open_spi(dev_device: Option<&str>, max_speed_hz: Option<u32>) -> std::io::Res
     Ok(spi)
 }
 
-#[derive(Debug, Clone, Copy, Default, Encode, Decode, PartialEq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Default, Encode, Decode, PartialEq, Serialize, Deserialize, Reflect,
+)]
 pub struct ADCReadingPayload<T>
 where
-    T: Into<u128> + Copy, // Trick to say all unsigned integers.
+    T: Into<u128> + Copy + Reflect, // Trick to say all unsigned integers.
 {
     pub analog_value: T,
 }
@@ -149,6 +154,7 @@ impl CuSrcTask for ADS7883 {
 pub mod test_support {
     use super::*;
 
+    #[derive(Reflect)]
     pub struct ADS78883TestSink;
 
     impl Freezable for ADS78883TestSink {}

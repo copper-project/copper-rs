@@ -5,6 +5,7 @@ use cu29_helpers::basic_copper_setup;
 use std::thread::sleep;
 use std::time::Duration;
 
+#[derive(Reflect)]
 struct WT910TestSink {}
 
 impl Freezable for WT910TestSink {}

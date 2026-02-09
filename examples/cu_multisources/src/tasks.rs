@@ -1,6 +1,7 @@
 use cu29::prelude::*;
 
 /// A source task that generates an integer at each cycle.
+#[derive(Reflect)]
 pub struct IntegerSrcTask {
     pub value: i32,
 }
@@ -22,6 +23,7 @@ impl CuSrcTask for IntegerSrcTask {
 }
 
 /// Example Source that produces a float at each cycle.
+#[derive(Reflect)]
 pub struct FloatSrcTask {
     pub value: f32,
 }
@@ -43,6 +45,7 @@ impl CuSrcTask for FloatSrcTask {
 }
 
 /// Example Sink that receives an integer and a float from the 2 sources (IntegerSrcTask and FloatSrcTask).
+#[derive(Reflect)]
 pub struct MergingSinkTask;
 
 impl Freezable for MergingSinkTask {}
@@ -67,6 +70,7 @@ impl CuSinkTask for MergingSinkTask {
 }
 
 /// Example Task that merges the integer and float messages into a tuple message.
+#[derive(Reflect)]
 pub struct MergerTask;
 
 impl Freezable for MergerTask {}
@@ -98,6 +102,7 @@ impl CuTask for MergerTask {
 }
 
 /// Sink to close off the pipeline correctly fed from the merger task.
+#[derive(Reflect)]
 pub struct MergedSinkTask;
 
 impl Freezable for MergedSinkTask {}

@@ -1,7 +1,9 @@
+use crate::reflect::Reflect;
 /// This module is a collection of Copper friendly data structures for message payloads.
 ///
 /// The constraint on the messages is that they can be part of a copper list, fixed sized and bincode serializable.
 use arrayvec::ArrayVec;
+use bevy_reflect;
 use bincode::BorrowDecode;
 use bincode::de::{BorrowDecoder, Decoder};
 use bincode::enc::Encoder;
@@ -15,12 +17,15 @@ pub use alloc::format;
 pub use alloc::vec::Vec;
 
 /// Copper friendly wrapper for a fixed size array.
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct CuArray<T, const N: usize> {
+/// `T: Clone` is required because this type derives `Reflect`, and
+/// the reflection path requires the reflected value to be cloneable.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, Reflect)]
+#[reflect(opaque, from_reflect = false, no_field_bounds)]
+pub struct CuArray<T: Clone, const N: usize> {
     inner: ArrayVec<T, N>,
 }
 
-impl<T, const N: usize> CuArray<T, N> {
+impl<T: Clone, const N: usize> CuArray<T, N> {
     pub fn new() -> Self {
         Self {
             inner: ArrayVec::new(),
@@ -56,7 +61,7 @@ impl<T, const N: usize> CuArray<T, N> {
 
 impl<T, const N: usize> Encode for CuArray<T, N>
 where
-    T: Encode,
+    T: Encode + Clone,
 {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         // Encode the length first
@@ -73,7 +78,7 @@ where
 
 impl<T, const N: usize> Decode<()> for CuArray<T, N>
 where
-    T: Decode<()>,
+    T: Decode<()> + Clone,
 {
     fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
         // Decode the length first

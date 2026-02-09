@@ -105,8 +105,39 @@ where
 /// - `ACC`: Accelerometer chip-select GPIO implementing `OutputPin`
 /// - `GYR`: Gyroscope chip-select GPIO implementing `OutputPin`
 /// - `D`: Delay provider implementing `DelayMs<u32>`
+#[derive(Reflect)]
+#[reflect(no_field_bounds, from_reflect = false, type_path = false)]
 pub struct Bmi088Source<SPI, ACC, GYR, D> {
+    #[reflect(ignore)]
     driver: Bmi088Driver<SPI, ACC, GYR, D>,
+}
+
+impl<SPI, ACC, GYR, D> TypePath for Bmi088Source<SPI, ACC, GYR, D>
+where
+    SPI: 'static,
+    ACC: 'static,
+    GYR: 'static,
+    D: 'static,
+{
+    fn type_path() -> &'static str {
+        "cu_bmi088::Bmi088Source"
+    }
+
+    fn short_type_path() -> &'static str {
+        "Bmi088Source"
+    }
+
+    fn type_ident() -> Option<&'static str> {
+        Some("Bmi088Source")
+    }
+
+    fn crate_name() -> Option<&'static str> {
+        Some("cu_bmi088")
+    }
+
+    fn module_path() -> Option<&'static str> {
+        Some("")
+    }
 }
 
 impl<SPI, ACC, GYR, D> Freezable for Bmi088Source<SPI, ACC, GYR, D>

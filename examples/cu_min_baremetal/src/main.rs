@@ -39,6 +39,25 @@ struct MyEmbeddedLogger {}
 use core::panic::PanicInfo;
 
 #[cfg(not(feature = "std"))]
+struct BaremetalCriticalSection;
+
+#[cfg(not(feature = "std"))]
+critical_section::set_impl!(BaremetalCriticalSection);
+
+#[cfg(not(feature = "std"))]
+unsafe impl critical_section::Impl for BaremetalCriticalSection {
+    unsafe fn acquire() -> critical_section::RawRestoreState {
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+        // Compile-time smoke target: no restore state is needed for this mock backend.
+        unsafe { core::mem::zeroed() }
+    }
+
+    unsafe fn release(_restore_state: critical_section::RawRestoreState) {
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+#[cfg(not(feature = "std"))]
 #[panic_handler]
 fn panic(_: &PanicInfo) -> ! {
     loop {

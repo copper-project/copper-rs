@@ -3,6 +3,7 @@ use cu29::prelude::*;
 use crate::messages::MyPayload;
 
 // Defines a processing task
+#[derive(Reflect)]
 pub struct MyTask {
     // if you add some task state here, you need to implement the Freezable trait
 }

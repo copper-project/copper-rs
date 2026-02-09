@@ -6,7 +6,10 @@ use cu29::prelude::*;
 use serde::{Deserialize, Serialize, Serializer};
 use std::sync::Arc;
 
+#[derive(Reflect)]
+#[reflect(no_field_bounds, from_reflect = false)]
 pub struct DoraSource<const S: usize> {
+    #[reflect(ignore)]
     pub pool: Arc<CuHostMemoryPool<Vec<u8>>>,
 }
 
@@ -33,6 +36,8 @@ impl<const S: usize> CuSrcTask for DoraSource<S> {
     }
 }
 
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct DoraSink<const S: usize> {}
 
 impl<const S: usize> Freezable for DoraSink<S> {}
@@ -64,7 +69,8 @@ pub type FortyMegSrc = DoraSource<FORTY_MEG>;
 #[allow(dead_code)]
 pub type FortyMegSink = DoraSink<FORTY_MEG>;
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Reflect)]
+#[reflect(opaque, from_reflect = false)]
 pub struct DoraPayload(CuHandle<Vec<u8>>);
 
 impl Decode<()> for DoraPayload {

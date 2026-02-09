@@ -26,17 +26,53 @@ rx_channels! {
 
 const MAX_ESC_CHANNELS: usize = 4;
 
-pub struct CuBdshotBridge<P: BdshotBoardProvider> {
-    board: P::Board,
+#[derive(Reflect)]
+#[reflect(from_reflect = false, no_field_bounds, type_path = false)]
+pub struct CuBdshotBridge<P: BdshotBoardProvider + 'static>
+where
+    P::Board: Send + 'static,
+{
+    #[reflect(ignore)]
+    board: spin::Mutex<P::Board>,
+    #[reflect(ignore)]
     telemetry_cache: [Option<EscTelemetry>; MAX_ESC_CHANNELS],
     active_channels: [bool; MAX_ESC_CHANNELS],
     send_interval: Option<CuDuration>,
     last_send: [Option<CuTime>; MAX_ESC_CHANNELS],
 }
 
-impl<P: BdshotBoardProvider> Freezable for CuBdshotBridge<P> {}
+impl<P: BdshotBoardProvider + 'static> cu29::reflect::TypePath for CuBdshotBridge<P>
+where
+    P::Board: Send + 'static,
+{
+    fn type_path() -> &'static str {
+        "cu_bdshot::CuBdshotBridge"
+    }
 
-impl<P: BdshotBoardProvider> CuBridge for CuBdshotBridge<P> {
+    fn short_type_path() -> &'static str {
+        "CuBdshotBridge"
+    }
+
+    fn type_ident() -> Option<&'static str> {
+        Some("CuBdshotBridge")
+    }
+
+    fn crate_name() -> Option<&'static str> {
+        Some("cu_bdshot")
+    }
+
+    fn module_path() -> Option<&'static str> {
+        Some("cu_bdshot")
+    }
+}
+
+impl<P: BdshotBoardProvider + 'static> Freezable for CuBdshotBridge<P> where P::Board: Send + 'static
+{}
+
+impl<P: BdshotBoardProvider + 'static> CuBridge for CuBdshotBridge<P>
+where
+    P::Board: Send + 'static,
+{
     type Resources<'r> = ();
     type Tx = TxChannels;
     type Rx = RxChannels;
@@ -76,7 +112,7 @@ impl<P: BdshotBoardProvider> CuBridge for CuBdshotBridge<P> {
             None
         };
         Ok(Self {
-            board,
+            board: spin::Mutex::new(board),
             telemetry_cache: Default::default(),
             active_channels: active,
             send_interval,
@@ -95,8 +131,12 @@ impl<P: BdshotBoardProvider> CuBridge for CuBdshotBridge<P> {
                     continue;
                 }
                 debug!("Sending disarm frames {}", idx);
-                self.board.delay(200);
-                if let Some(sample) = self.board.exchange(idx, idle_frame) {
+                let sample = {
+                    let mut board = self.board.lock();
+                    board.delay(200);
+                    board.exchange(idx, idle_frame)
+                };
+                if let Some(sample) = sample {
                     self.telemetry_cache[idx] = Some(EscTelemetry {
                         sample: Some(sample),
                     });
@@ -125,8 +165,9 @@ impl<P: BdshotBoardProvider> CuBridge for CuBdshotBridge<P> {
                 if !self.active_channels[idx] {
                     continue;
                 }
-                self.board.delay(200);
-                let _ = self.board.exchange(idx, telemetry_frame);
+                let mut board = self.board.lock();
+                board.delay(200);
+                let _ = board.exchange(idx, telemetry_frame);
             }
         }
 
@@ -161,7 +202,11 @@ impl<P: BdshotBoardProvider> CuBridge for CuBdshotBridge<P> {
         let payload: &CuMsg<EscCommand> = msg.downcast_ref()?;
         let command = payload.payload().cloned().unwrap_or_default();
         let frame = encode_frame(command);
-        if let Some(telemetry) = self.board.exchange(idx, frame) {
+        let telemetry = {
+            let mut board = self.board.lock();
+            board.exchange(idx, frame)
+        };
+        if let Some(telemetry) = telemetry {
             self.telemetry_cache[idx] = Some(EscTelemetry {
                 sample: Some(telemetry),
             });
