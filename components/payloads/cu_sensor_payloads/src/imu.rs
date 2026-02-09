@@ -211,10 +211,10 @@ impl Encode for ImuWithMagPayload {
 
 impl Decode<()> for ImuWithMagPayload {
     fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let imu = ImuPayload::decode(decoder)?;
+        let imu: ImuPayload = Decode::decode(decoder)?;
         let has_mag: bool = Decode::decode(decoder)?;
         let mag = if has_mag {
-            Some(MagnetometerPayload::decode(decoder)?)
+            Some(Decode::decode(decoder)?)
         } else {
             None
         };

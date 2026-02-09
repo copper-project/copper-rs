@@ -125,23 +125,23 @@ pub struct PointCloud {
 
 impl Encode for PointCloud {
     fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
-        self.tov.encode(encoder)?;
-        self.x.encode(encoder)?;
-        self.y.encode(encoder)?;
-        self.z.encode(encoder)?;
-        self.i.encode(encoder)?;
-        self.return_order.encode(encoder)
+        Encode::encode(&self.tov, encoder)?;
+        Encode::encode(&self.x, encoder)?;
+        Encode::encode(&self.y, encoder)?;
+        Encode::encode(&self.z, encoder)?;
+        Encode::encode(&self.i, encoder)?;
+        Encode::encode(&self.return_order, encoder)
     }
 }
 
 impl Decode<()> for PointCloud {
     fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let tov = CuTime::decode(decoder)?;
-        let x = Distance::decode(decoder)?;
-        let y = Distance::decode(decoder)?;
-        let z = Distance::decode(decoder)?;
-        let i = Reflectivity::decode(decoder)?;
-        let return_order = u8::decode(decoder)?;
+        let tov: CuTime = Decode::decode(decoder)?;
+        let x: Distance = Decode::decode(decoder)?;
+        let y: Distance = Decode::decode(decoder)?;
+        let z: Distance = Decode::decode(decoder)?;
+        let i: Reflectivity = Decode::decode(decoder)?;
+        let return_order: u8 = Decode::decode(decoder)?;
         Ok(PointCloud {
             tov,
             x,

@@ -66,9 +66,9 @@ where
 
 impl Decode<()> for CuImage<Vec<u8>> {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let seq = u64::decode(decoder)?;
-        let format = CuImageBufferFormat::decode(decoder)?;
-        let buffer = Vec::decode(decoder)?;
+        let seq: u64 = Decode::decode(decoder)?;
+        let format: CuImageBufferFormat = Decode::decode(decoder)?;
+        let buffer: Vec<u8> = Decode::decode(decoder)?;
         let buffer_handle = CuHandle::new_detached(buffer);
 
         Ok(Self {
