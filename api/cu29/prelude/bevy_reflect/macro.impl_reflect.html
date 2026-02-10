@@ -1,0 +1,27 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="A replacement for `#[derive(Reflect)]` to be used with foreign types which the definitions of cannot be altered."><title>impl_reflect in cu29::prelude::bevy_reflect - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-b7b9f40b.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="cu29" data-themes="" data-resource-suffix="" data-rustdoc-version="1.95.0-nightly (18d13b533 2026-02-09)" data-channel="nightly" data-search-js="search-fb33671b.js" data-stringdex-js="stringdex-b897f86f.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-f9617a14.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../../static.files/main-12f88f4f.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc macro"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">impl_reflect</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../cu29/index.html">cu29</a><span class="version">0.12.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">impl_<wbr>reflect</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#example" title="Example">Example</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="index.html">In cu29::<wbr>prelude::<wbr>bevy_<wbr>reflect</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">cu29</a>::<wbr><a href="../index.html">prelude</a>::<wbr><a href="index.html">bevy_reflect</a></div><h1>Macro <span class="macro">impl_<wbr>reflect</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"></span></div><pre class="rust item-decl"><code>impl_reflect!() { <span class="comment">/* proc-macro */</span> }</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>A replacement for <code>#[derive(Reflect)]</code> to be used with foreign types which
+the definitions of cannot be altered.</p>
+<p>This macro is an alternative to <a href="../../reflect/macro.impl_reflect_opaque.html" title="macro cu29::reflect::impl_reflect_opaque"><code>impl_reflect_opaque!</code></a> and <a href="../../reflect/macro.impl_from_reflect_opaque.html" title="macro cu29::reflect::impl_from_reflect_opaque"><code>impl_from_reflect_opaque!</code></a>
+which implement foreign types as Opaque types. Note that there is no <code>impl_from_reflect</code>,
+as this macro will do the job of both. This macro implements them using one of the reflect
+variant traits (<code>bevy_reflect::{Struct, TupleStruct, Enum}</code>, etc.),
+which have greater functionality. The type being reflected must be in scope, as you cannot
+qualify it in the macro as e.g. <code>bevy::prelude::Vec3</code>.</p>
+<p>It is necessary to add a <code>#[type_path = "my_crate::foo"]</code> attribute to all types.</p>
+<p>It may be necessary to add <code>#[reflect(Default)]</code> for some types, specifically non-constructible
+foreign types. Without <code>Default</code> reflected for such types, you will usually get an arcane
+error message and fail to compile. If the type does not implement <code>Default</code>, it may not
+be possible to reflect without extending the macro.</p>
+<h2 id="example"><a class="doc-anchor" href="#example">§</a>Example</h2>
+<p>Implementing <code>Reflect</code> for <code>bevy::prelude::Vec3</code> as a struct type:</p>
+
+<div class="example-wrap ignore"><a href="#" class="tooltip" title="This example is not tested">ⓘ</a><pre class="rust rust-example-rendered"><code><span class="kw">use </span>bevy::prelude::Vec3;
+
+<span class="macro">impl_reflect!</span>(
+    <span class="attr">#[reflect(PartialEq, Serialize, Deserialize, Default)]
+    #[type_path = <span class="string">"bevy::prelude"</span>]
+    </span><span class="kw">struct </span>Vec3 {
+        x: f32,
+        y: f32,
+        z: f32
+    }
+);</code></pre></div></div></details></section></div></main></body></html>

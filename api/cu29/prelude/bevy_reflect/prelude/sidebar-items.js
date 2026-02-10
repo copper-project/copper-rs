@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"attr":["reflect_trait"],"derive":["FromReflect","Reflect","TypePath"],"struct":["ReflectDefault","ReflectDeserialize","ReflectFromReflect","ReflectSerialize"],"trait":["FromReflect","GetField","GetPath","GetTupleStructField","PartialReflect","Reflect","ReflectPath","Struct","TupleStruct","TypePath"]};

@@ -1,0 +1,129 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Allows overriding the default serialization behavior of `ReflectSerializer` and `TypedReflectSerializer` for specific values."><title>ReflectSerializerProcessor in cu29::prelude::reflect::serde - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-b7b9f40b.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="cu29" data-themes="" data-resource-suffix="" data-rustdoc-version="1.95.0-nightly (18d13b533 2026-02-09)" data-channel="nightly" data-search-js="search-fb33671b.js" data-stringdex-js="stringdex-b897f86f.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../../static.files/storage-f9617a14.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../../../static.files/main-12f88f4f.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc trait"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">ReflectSerializerProcessor</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../cu29/index.html">cu29</a><span class="version">0.12.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Reflect<wbr>Serializer<wbr>Processor</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#compared-to-serializewithregistry" title="Compared to `SerializeWithRegistry`">Compared to <code>SerializeWithRegistry</code></a></li><li><a href="#examples" title="Examples">Examples</a></li></ul><h3><a href="#required-methods">Required Methods</a></h3><ul class="block"><li><a href="#tymethod.try_serialize" title="try_serialize">try_serialize</a></li></ul><h3><a href="#foreign-impls">Implementations on Foreign Types</a></h3><ul class="block"><li><a href="#impl-ReflectSerializerProcessor-for-()" title="()">()</a></li></ul><h3><a href="#dyn-compatibility">Dyn Compatibility</a></h3><h3><a href="#implementors">Implementors</a></h3></section><div id="rustdoc-modnav"><h2><a href="index.html">In cu29::<wbr>prelude::<wbr>reflect::<wbr>serde</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../index.html">cu29</a>::<wbr><a href="../../index.html">prelude</a>::<wbr><a href="../index.html">reflect</a>::<wbr><a href="index.html">serde</a></div><h1>Trait <span class="trait">Reflect<wbr>Serializer<wbr>Processor</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"></span></div><pre class="rust item-decl"><code>pub trait ReflectSerializerProcessor {
+    // Required method
+    fn <a href="#tymethod.try_serialize" class="fn">try_serialize</a>&lt;S&gt;(
+        &amp;self,
+        value: &amp;(dyn <a class="trait" href="../../../reflect/trait.PartialReflect.html" title="trait cu29::reflect::PartialReflect">PartialReflect</a> + 'static),
+        registry: &amp;<a class="struct" href="../../struct.TypeRegistry.html" title="struct cu29::prelude::TypeRegistry">TypeRegistry</a>,
+        serializer: S,
+    ) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;&lt;S as <a class="trait" href="https://docs.rs/serde_core/1.0.228/serde_core/ser/trait.Serializer.html" title="trait serde_core::ser::Serializer">Serializer</a>&gt;::<a class="associatedtype" href="https://docs.rs/serde_core/1.0.228/serde_core/ser/trait.Serializer.html#associatedtype.Ok" title="type serde_core::ser::Serializer::Ok">Ok</a>, S&gt;, &lt;S as <a class="trait" href="https://docs.rs/serde_core/1.0.228/serde_core/ser/trait.Serializer.html" title="trait serde_core::ser::Serializer">Serializer</a>&gt;::<a class="associatedtype" href="https://docs.rs/serde_core/1.0.228/serde_core/ser/trait.Serializer.html#associatedtype.Error" title="type serde_core::ser::Serializer::Error">Error</a>&gt;
+       <span class="where">where S: <a class="trait" href="https://docs.rs/serde_core/1.0.228/serde_core/ser/trait.Serializer.html" title="trait serde_core::ser::Serializer">Serializer</a></span>;
+}</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Allows overriding the default serialization behavior of
+<a href="../../struct.ReflectSerializer.html" title="struct cu29::prelude::ReflectSerializer"><code>ReflectSerializer</code></a> and <a href="../../struct.TypedReflectSerializer.html" title="struct cu29::prelude::TypedReflectSerializer"><code>TypedReflectSerializer</code></a> for specific values.</p>
+<p>When serializing a reflected value, you may want to override the default
+behavior and use your own logic for serialization. This logic may also be
+context-dependent, and only apply for a single use of your
+<a href="../../struct.ReflectSerializer.html" title="struct cu29::prelude::ReflectSerializer"><code>ReflectSerializer</code></a>. To achieve this, you can create a processor and pass
+it into your serializer.</p>
+<p>Whenever the serializer attempts to serialize a value, it will first call
+<a href="../../reflect_serde/trait.ReflectSerializerProcessor.html#tymethod.try_serialize" title="method cu29::prelude::reflect_serde::ReflectSerializerProcessor::try_serialize"><code>try_serialize</code></a> on your processor, which may take ownership of the
+serializer and write into the serializer (successfully or not), or return
+ownership of the serializer back, and continue with the default logic.</p>
+<p>The deserialization equivalent of this is <a href="../../reflect_serde/trait.ReflectDeserializerProcessor.html" title="trait cu29::prelude::reflect_serde::ReflectDeserializerProcessor"><code>ReflectDeserializerProcessor</code></a>.</p>
+<h2 id="compared-to-serializewithregistry"><a class="doc-anchor" href="#compared-to-serializewithregistry">§</a>Compared to <a href="../../reflect_serde/trait.SerializeWithRegistry.html" title="trait cu29::prelude::reflect_serde::SerializeWithRegistry"><code>SerializeWithRegistry</code></a></h2>
+<p><a href="../../reflect_serde/trait.SerializeWithRegistry.html" title="trait cu29::prelude::reflect_serde::SerializeWithRegistry"><code>SerializeWithRegistry</code></a> allows you to define how your type will be
+serialized by a <a href="../../struct.TypedReflectSerializer.html" title="struct cu29::prelude::TypedReflectSerializer"><code>TypedReflectSerializer</code></a>, given the extra context of the
+<a href="../../struct.TypeRegistry.html" title="struct cu29::prelude::TypeRegistry"><code>TypeRegistry</code></a>. If your type can be serialized entirely using that, then
+you should prefer implementing that trait instead of using a processor.</p>
+<p>However, you may need more context-dependent data which is only present in
+the scope where you create the <a href="../../struct.TypedReflectSerializer.html" title="struct cu29::prelude::TypedReflectSerializer"><code>TypedReflectSerializer</code></a>. For example, if
+you need to use a reference to a value while serializing, then there is no
+way to do this with <a href="../../reflect_serde/trait.SerializeWithRegistry.html" title="trait cu29::prelude::reflect_serde::SerializeWithRegistry"><code>SerializeWithRegistry</code></a> as you can’t pass that
+reference into anywhere. This is where a processor is useful, as the
+processor can capture local variables.</p>
+<p>A <a href="../../reflect_serde/trait.ReflectSerializerProcessor.html" title="trait cu29::prelude::reflect_serde::ReflectSerializerProcessor"><code>ReflectSerializerProcessor</code></a> always takes priority over a
+<a href="../../reflect_serde/trait.SerializeWithRegistry.html" title="trait cu29::prelude::reflect_serde::SerializeWithRegistry"><code>SerializeWithRegistry</code></a> implementation, so this is also useful for
+overriding serialization behavior if you need to do something custom.</p>
+<h2 id="examples"><a class="doc-anchor" href="#examples">§</a>Examples</h2>
+<p>Serializing a reflected value when saving an asset to disk, and replacing
+asset handles with the handle path (if it has one):</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="attr">#[derive(Debug, Clone, Reflect)]
+</span><span class="kw">struct </span>MyAsset {
+    name: String,
+    mesh: Handle&lt;Mesh&gt;,
+}
+
+<span class="kw">struct </span>HandleProcessor;
+
+<span class="kw">impl </span>ReflectSerializerProcessor <span class="kw">for </span>HandleProcessor {
+    <span class="kw">fn </span>try_serialize&lt;S&gt;(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        value: <span class="kw-2">&amp;</span><span class="kw">dyn </span>PartialReflect,
+        registry: <span class="kw-2">&amp;</span>TypeRegistry,
+        serializer: S,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Result</span>&lt;S::Ok, S&gt;, S::Error&gt;
+    <span class="kw">where
+        </span>S: serde::Serializer,
+    {
+        <span class="kw">let </span><span class="prelude-val">Some</span>(value) = value.try_as_reflect() <span class="kw">else </span>{
+            <span class="comment">// we don't have any info on this type; do the default serialization logic
+            </span><span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">Err</span>(serializer));
+        };
+        <span class="kw">let </span>type_id = value.reflect_type_info().type_id();
+        <span class="kw">let </span><span class="prelude-val">Some</span>(reflect_handle) = registry.get_type_data::&lt;ReflectHandle&gt;(type_id) <span class="kw">else </span>{
+            <span class="comment">// this isn't a `Handle&lt;T&gt;`
+            </span><span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">Err</span>(serializer));
+        };
+
+        <span class="kw">let </span>untyped_handle = reflect_handle
+            .downcast_handle_untyped(value.as_any())
+            .unwrap();
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(path) = untyped_handle.path() {
+            <span class="prelude-val">Ok</span>(<span class="prelude-val">Ok</span>(serializer.serialize_str(path)<span class="question-mark">?</span>))
+        } <span class="kw">else </span>{
+            <span class="prelude-val">Ok</span>(<span class="prelude-val">Ok</span>(serializer.serialize_unit()<span class="question-mark">?</span>))
+        }
+    }
+}
+
+<span class="kw">fn </span>save(type_registry: <span class="kw-2">&amp;</span>TypeRegistry, asset: <span class="kw-2">&amp;</span>MyAsset) -&gt; <span class="prelude-ty">Result</span>&lt;String, AssetError&gt; {
+    <span class="kw">let </span><span class="kw-2">mut </span>asset_string = String::new();
+
+    <span class="kw">let </span>processor = HandleProcessor;
+    <span class="kw">let </span>serializer = ReflectSerializer::with_processor(asset, type_registry, <span class="kw-2">&amp;</span>processor);
+    <span class="kw">let </span><span class="kw-2">mut </span>ron_serializer = ron::Serializer::new(<span class="kw-2">&amp;mut </span>asset_string, <span class="prelude-val">None</span>)<span class="question-mark">?</span>;
+
+    serializer.serialize(<span class="kw-2">&amp;mut </span>ron_serializer)<span class="question-mark">?</span>;
+    <span class="prelude-val">Ok</span>(asset_string)
+}</code></pre></div></div></details><h2 id="required-methods" class="section-header">Required Methods<a href="#required-methods" class="anchor">§</a></h2><div class="methods"><details class="toggle method-toggle" open><summary><section id="tymethod.try_serialize" class="method"><h4 class="code-header">fn <a href="#tymethod.try_serialize" class="fn">try_serialize</a>&lt;S&gt;(
+    &amp;self,
+    value: &amp;(dyn <a class="trait" href="../../../reflect/trait.PartialReflect.html" title="trait cu29::reflect::PartialReflect">PartialReflect</a> + 'static),
+    registry: &amp;<a class="struct" href="../../struct.TypeRegistry.html" title="struct cu29::prelude::TypeRegistry">TypeRegistry</a>,
+    serializer: S,
+) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;&lt;S as <a class="trait" href="https://docs.rs/serde_core/1.0.228/serde_core/ser/trait.Serializer.html" title="trait serde_core::ser::Serializer">Serializer</a>&gt;::<a class="associatedtype" href="https://docs.rs/serde_core/1.0.228/serde_core/ser/trait.Serializer.html#associatedtype.Ok" title="type serde_core::ser::Serializer::Ok">Ok</a>, S&gt;, &lt;S as <a class="trait" href="https://docs.rs/serde_core/1.0.228/serde_core/ser/trait.Serializer.html" title="trait serde_core::ser::Serializer">Serializer</a>&gt;::<a class="associatedtype" href="https://docs.rs/serde_core/1.0.228/serde_core/ser/trait.Serializer.html#associatedtype.Error" title="type serde_core::ser::Serializer::Error">Error</a>&gt;<div class="where">where
+    S: <a class="trait" href="https://docs.rs/serde_core/1.0.228/serde_core/ser/trait.Serializer.html" title="trait serde_core::ser::Serializer">Serializer</a>,</div></h4></section></summary><div class="docblock"><p>Attempts to serialize the value which a <a href="../../struct.TypedReflectSerializer.html" title="struct cu29::prelude::TypedReflectSerializer"><code>TypedReflectSerializer</code></a> is
+currently looking at.</p>
+<p>If you want to override the default serialization, return
+<code>Ok(Ok(value))</code> with an <code>Ok</code> output from the serializer.</p>
+<p>If you don’t want to override the serialization, return ownership of
+the serializer back via <code>Ok(Err(serializer))</code>.</p>
+<p>You can use the type registry to read info about the type you’re
+serializing, or just try to downcast the value directly:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">struct </span>I32AsStringProcessor;
+
+<span class="kw">impl </span>ReflectSerializerProcessor <span class="kw">for </span>I32AsStringProcessor {
+    <span class="kw">fn </span>try_serialize&lt;S&gt;(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        value: <span class="kw-2">&amp;</span><span class="kw">dyn </span>PartialReflect,
+        registry: <span class="kw-2">&amp;</span>TypeRegistry,
+        serializer: S,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Result</span>&lt;S::Ok, S&gt;, S::Error&gt;
+    <span class="kw">where
+        </span>S: serde::Serializer
+    {
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(value) = value.try_downcast_ref::&lt;i32&gt;() {
+            <span class="kw">let </span>value_as_string = <span class="macro">format!</span>(<span class="string">"{value:?}"</span>);
+            <span class="prelude-val">Ok</span>(<span class="prelude-val">Ok</span>(serializer.serialize_str(<span class="kw-2">&amp;</span>value_as_string)<span class="question-mark">?</span>))
+        } <span class="kw">else </span>{
+            <span class="comment">// Not an `i32`, just do the default serialization
+            </span><span class="prelude-val">Ok</span>(<span class="prelude-val">Err</span>(serializer))
+        }
+    }
+}</code></pre></div></div></details></div><h2 id="dyn-compatibility" class="section-header">Dyn Compatibility<a href="#dyn-compatibility" class="anchor">§</a></h2><div class="dyn-compatibility-info"><p>This trait is <b>not</b> <a href="https://doc.rust-lang.org/nightly/reference/items/traits.html#dyn-compatibility">dyn compatible</a>.</p><p><i>In older versions of Rust, dyn compatibility was called "object safety", so this trait is not object safe.</i></p></div><h2 id="foreign-impls" class="section-header">Implementations on Foreign Types<a href="#foreign-impls" class="anchor">§</a></h2><details class="toggle implementors-toggle"><summary><section id="impl-ReflectSerializerProcessor-for-()" class="impl"><a href="#impl-ReflectSerializerProcessor-for-()" class="anchor">§</a><h3 class="code-header">impl <a class="trait" href="../../reflect_serde/trait.ReflectSerializerProcessor.html" title="trait cu29::prelude::reflect_serde::ReflectSerializerProcessor">ReflectSerializerProcessor</a> for <a class="primitive" href="https://doc.rust-lang.org/nightly/std/primitive.unit.html">()</a></h3></section></summary><div class="impl-items"><section id="method.try_serialize" class="method trait-impl"><a href="#method.try_serialize" class="anchor">§</a><h4 class="code-header">fn <a href="#tymethod.try_serialize" class="fn">try_serialize</a>&lt;S&gt;(
+    &amp;self,
+    _value: &amp;(dyn <a class="trait" href="../../../reflect/trait.PartialReflect.html" title="trait cu29::reflect::PartialReflect">PartialReflect</a> + 'static),
+    _registry: &amp;<a class="struct" href="../../struct.TypeRegistry.html" title="struct cu29::prelude::TypeRegistry">TypeRegistry</a>,
+    serializer: S,
+) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;&lt;S as <a class="trait" href="https://docs.rs/serde_core/1.0.228/serde_core/ser/trait.Serializer.html" title="trait serde_core::ser::Serializer">Serializer</a>&gt;::<a class="associatedtype" href="https://docs.rs/serde_core/1.0.228/serde_core/ser/trait.Serializer.html#associatedtype.Ok" title="type serde_core::ser::Serializer::Ok">Ok</a>, S&gt;, &lt;S as <a class="trait" href="https://docs.rs/serde_core/1.0.228/serde_core/ser/trait.Serializer.html" title="trait serde_core::ser::Serializer">Serializer</a>&gt;::<a class="associatedtype" href="https://docs.rs/serde_core/1.0.228/serde_core/ser/trait.Serializer.html#associatedtype.Error" title="type serde_core::ser::Serializer::Error">Error</a>&gt;<div class="where">where
+    S: <a class="trait" href="https://docs.rs/serde_core/1.0.228/serde_core/ser/trait.Serializer.html" title="trait serde_core::ser::Serializer">Serializer</a>,</div></h4></section></div></details><h2 id="implementors" class="section-header">Implementors<a href="#implementors" class="anchor">§</a></h2><div id="implementors-list"></div><script src="../../../../trait.impl/bevy_reflect/serde/ser/processor/trait.ReflectSerializerProcessor.js" data-ignore-extern-crates="std" async></script></section></div></main></body></html>
