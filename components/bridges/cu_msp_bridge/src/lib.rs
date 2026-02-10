@@ -35,8 +35,6 @@ use cu29::cubridge::{
     BridgeChannel, BridgeChannelConfig, BridgeChannelInfo, BridgeChannelSet, CuBridge,
 };
 use cu29::prelude::*;
-#[cfg(feature = "std")]
-use cu29::resource::ResourceBundle;
 use cu29::resource::{Owned, ResourceBindings, ResourceManager};
 use embedded_io::{Read, Write};
 use heapless::Vec as HeaplessVec;
@@ -354,43 +352,6 @@ where
             }
         }
         Ok(())
-    }
-}
-
-#[cfg(feature = "std")]
-pub struct StdSerialBundle;
-
-#[cfg(feature = "std")]
-bundle_resources!(StdSerialBundle: Serial);
-
-#[cfg(feature = "std")]
-impl ResourceBundle for StdSerialBundle {
-    fn build(
-        bundle: cu29::resource::BundleContext<Self>,
-        config: Option<&ComponentConfig>,
-        manager: &mut ResourceManager,
-    ) -> CuResult<()> {
-        let cfg = config.ok_or_else(|| {
-            CuError::from(format!(
-                "MSP serial bundle `{}` requires configuration",
-                bundle.bundle_id()
-            ))
-        })?;
-        let device = cfg
-            .get::<String>("device")?
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| "/dev/ttyUSB0".to_string());
-        let baudrate = cfg.get::<u32>("baudrate")?.unwrap_or(115_200);
-        let timeout_ms = cfg.get::<u64>("timeout_ms")?.unwrap_or(50);
-
-        let serial = cu_linux_resources::LinuxSerialPort::open(&device, baudrate, timeout_ms)
-            .map_err(|err| {
-                CuError::from(format!(
-                    "MSP bridge failed to open serial `{device}` at {baudrate} baud: {err}"
-                ))
-            })?;
-        let key = bundle.key(StdSerialBundleId::Serial);
-        manager.add_owned(key, serial)
     }
 }
 
