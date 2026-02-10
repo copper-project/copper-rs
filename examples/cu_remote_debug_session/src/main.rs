@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 use std::fs;
 use std::path::Path;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, Encode, Decode, Reflect)]
 pub struct CounterMsg {
@@ -248,6 +248,79 @@ fn call_step(
     Ok(result)
 }
 
+fn wait_for_server_ready(
+    client: &RemoteDebugZenohClient,
+    timeout: Duration,
+    poll_interval: Duration,
+) -> CuResult<()> {
+    println!("[session] Waiting for server readiness via health.ping");
+    let start = Instant::now();
+    let mut attempts = 0u32;
+    loop {
+        attempts = attempts.saturating_add(1);
+        match client.call(None, "health.ping", json!({})) {
+            Ok(response) if response.ok => {
+                println!("[session] Server ready after {attempts} probe(s)");
+                return Ok(());
+            }
+            Ok(response) => {
+                let msg = response
+                    .error
+                    .map(|e| format!("{}: {}", e.code, e.message))
+                    .unwrap_or_else(|| "unknown response error".to_string());
+                println!("[session] Server not ready yet (probe {attempts}): {msg}");
+            }
+            Err(err) => {
+                println!("[session] Server not ready yet (probe {attempts}): {err}");
+            }
+        }
+
+        if start.elapsed() >= timeout {
+            return Err(CuError::from(format!(
+                "Timed out waiting for remote debug server readiness after {} ms",
+                timeout.as_millis()
+            )));
+        }
+        thread::sleep(poll_interval);
+    }
+}
+
+fn connect_client_when_ready(
+    paths: &RemoteDebugPaths,
+    client_id: &str,
+    timeout: Duration,
+    poll_interval: Duration,
+) -> CuResult<RemoteDebugZenohClient> {
+    println!("[session] Connecting remote debug client");
+    let start = Instant::now();
+    let mut attempts = 0u32;
+    loop {
+        attempts = attempts.saturating_add(1);
+        match RemoteDebugZenohClient::builder(paths.clone(), client_id)
+            .codec(WireCodec::Cbor)
+            .build()
+        {
+            Ok(client) => {
+                println!("[session] Client connected after {attempts} attempt(s)");
+                let remaining = timeout.saturating_sub(start.elapsed());
+                wait_for_server_ready(&client, remaining, poll_interval)?;
+                return Ok(client);
+            }
+            Err(err) => {
+                println!("[session] Client connect attempt {attempts} failed: {err}");
+            }
+        }
+
+        if start.elapsed() >= timeout {
+            return Err(CuError::from(format!(
+                "Timed out connecting remote debug client after {} ms",
+                timeout.as_millis()
+            )));
+        }
+        thread::sleep(poll_interval);
+    }
+}
+
 fn run_remote_debug_session() -> CuResult<()> {
     println!("[session] Preparing remote debug paths");
     let paths = RemoteDebugPaths::new("copper/examples/cu_remote_debug_session/debug/v1");
@@ -270,13 +343,12 @@ fn run_remote_debug_session() -> CuResult<()> {
         result
     });
 
-    println!("[session] Waiting for server startup");
-    thread::sleep(Duration::from_millis(300));
-
-    println!("[session] Creating remote debug client");
-    let client = RemoteDebugZenohClient::builder(paths.clone(), "demo_client")
-        .codec(WireCodec::Cbor)
-        .build()?;
+    let client = connect_client_when_ready(
+        &paths,
+        "demo_client",
+        Duration::from_secs(10),
+        Duration::from_millis(100),
+    )?;
 
     let open = call_step(
         &client,
