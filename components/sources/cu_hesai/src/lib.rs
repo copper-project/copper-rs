@@ -1,6 +1,10 @@
 pub mod parser;
 
 use crate::parser::{RefTime, generate_default_elevation_calibration};
+use bincode::de::Decoder;
+use bincode::enc::Encoder;
+use bincode::error::{DecodeError, EncodeError};
+use bincode::{Decode, Encode};
 use chrono::Utc;
 use cu_sensor_payloads::{PointCloud, PointCloudSoa};
 use cu29::prelude::*;
@@ -8,6 +12,7 @@ use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use std::io::ErrorKind;
 use std::io::Read;
 use std::net::SocketAddr;
+use std::ops::{Deref, DerefMut};
 use uom::si::f32::{Angle, Length};
 
 /// By default, Hesai broadcasts on this address.
@@ -26,9 +31,14 @@ fn spherical_to_cartesian(
     (x, y, z)
 }
 
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct Xt32 {
+    #[reflect(ignore)]
     socket: Socket,
+    #[reflect(ignore)]
     reftime: RefTime,
+    #[reflect(ignore)]
     channel_elevations: [Angle; 32],
 }
 
@@ -43,7 +53,35 @@ impl Freezable for Xt32 {}
 
 const MAX_POINTS: usize = 32 * 10;
 
-pub type LidarCuMsgPayload = PointCloudSoa<MAX_POINTS>;
+#[derive(Default, Clone, Debug, serde::Serialize, serde::Deserialize, Reflect)]
+#[reflect(opaque, from_reflect = false)]
+pub struct LidarCuMsgPayload(pub PointCloudSoa<MAX_POINTS>);
+
+impl Deref for LidarCuMsgPayload {
+    type Target = PointCloudSoa<MAX_POINTS>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for LidarCuMsgPayload {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl Encode for LidarCuMsgPayload {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
+        self.0.encode(encoder)
+    }
+}
+
+impl Decode<()> for LidarCuMsgPayload {
+    fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        Ok(Self(PointCloudSoa::<MAX_POINTS>::decode(decoder)?))
+    }
+}
 
 // In each round of firing, the firing sequence is from Channel 1 to Channel 32.
 // Assuming that the start time of Block 6 is t6, the laser firing time of Channel i is

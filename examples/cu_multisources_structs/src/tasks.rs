@@ -3,13 +3,13 @@ use cu29::prelude::*;
 use serde::{Deserialize, Serialize};
 
 // Define a message type
-#[derive(Default, Debug, Clone, Encode, Decode, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Encode, Decode, Serialize, Deserialize, Reflect)]
 pub struct MyPayload {
     value: i32,
 }
 
 // Defines a source (ie. driver)
-#[derive(Default)]
+#[derive(Default, Reflect)]
 pub struct MySource {}
 
 // Needs to be fully implemented if you want to have a stateful task.
@@ -36,6 +36,7 @@ impl CuSrcTask for MySource {
 }
 
 // Defines a processing task
+#[derive(Reflect)]
 pub struct MyTask {
     // if you add some task state here, you need to implement the Freezable trait
 }
@@ -71,7 +72,7 @@ impl CuTask for MyTask {
 }
 
 // Defines a sink (ie. actualtion)
-#[derive(Default)]
+#[derive(Default, Reflect)]
 pub struct MySink {}
 
 // Needs to be fully implemented if you want to have a stateful task.

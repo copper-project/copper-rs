@@ -17,7 +17,9 @@ use core::mem::size_of;
 use core::ptr;
 
 /// Pose expressed as Euler angles (radians) using the aerospace body frame.
-#[derive(Debug, Clone, Copy, Default, Encode, Decode, Serialize, Deserialize, PartialEq)]
+#[derive(
+    Debug, Clone, Copy, Default, Encode, Decode, Serialize, Deserialize, PartialEq, Reflect,
+)]
 pub struct AhrsPose {
     pub roll: f32,
     pub pitch: f32,
@@ -35,7 +37,10 @@ impl AhrsPose {
 }
 
 /// Copper AHRS task that fuses IMU payloads into roll/pitch/yaw.
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct CuAhrs {
+    #[reflect(ignore)]
     dcm: DCMIMU,
     reference: Option<AhrsPose>,
     last_tov: Option<CuTime>,
@@ -97,6 +102,7 @@ pub mod sinks {
     use super::*;
 
     /// Logs incoming RPY to stdout/log and forwards the payload.
+    #[derive(Reflect)]
     pub struct RpyPrinter;
 
     impl Freezable for RpyPrinter {}

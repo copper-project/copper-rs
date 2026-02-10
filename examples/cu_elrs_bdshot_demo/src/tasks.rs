@@ -5,7 +5,7 @@ use cu29::prelude::*;
 
 const CRSF_THROTTLE_INDEX: usize = 2; // 0 is aileron, 1, elevator, 2 is throttle, 3 is rudder
 
-#[derive(Default)]
+#[derive(Default, Reflect)]
 pub struct ThrottleControl {}
 
 impl Freezable for ThrottleControl {}
@@ -40,7 +40,10 @@ impl CuTask for ThrottleControl {
     }
 }
 
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct TelemetrySink<const ESC: usize> {
+    #[reflect(ignore)]
     _marker: PhantomData<EscTelemetry>,
 }
 

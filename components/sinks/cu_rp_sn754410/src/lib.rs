@@ -11,18 +11,24 @@ use rppal::pwm::{Channel, Polarity, Pwm};
 #[cfg(hardware)]
 const PWM_FREQUENCY: f64 = 1000.0; // Frequency in Hz
 
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct SN754410 {
     current_power: f32, // retain what was the last state so we don't bang the hardware at each iteration.
     deadzone: f32,
     dryrun: bool,
+    #[cfg_attr(hardware, reflect(ignore))]
     #[cfg(hardware)]
     pwm0: Pwm,
+    #[cfg_attr(hardware, reflect(ignore))]
     #[cfg(hardware)]
     pwm1: Pwm,
     last_update: CuTime,
 }
 
-#[derive(Debug, Clone, Copy, Default, Encode, Decode, PartialEq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Default, Encode, Decode, PartialEq, Serialize, Deserialize, Reflect,
+)]
 pub struct MotorPayload {
     pub power: f32, // -1.0 to 1.0
 }
@@ -222,6 +228,7 @@ pub mod test_support {
     use crate::MotorPayload;
     use cu29::prelude::*;
 
+    #[derive(Reflect)]
     pub struct SN754410TestSrc;
 
     impl Freezable for SN754410TestSrc {}

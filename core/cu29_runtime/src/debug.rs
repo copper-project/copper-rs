@@ -9,6 +9,7 @@
 
 use crate::app::CuSimApplication;
 use crate::curuntime::KeyFrame;
+use crate::reflect::{ReflectTaskIntrospection, TypeRegistry, dump_type_registry_schema};
 use crate::simulation::SimOverride;
 use bincode::config::standard;
 use bincode::decode_from_std_read;
@@ -445,6 +446,14 @@ where
 
         // Fast path: forward stepping from current state.
         if let Some(current) = self.current_idx {
+            if target_idx == current {
+                return Ok(JumpOutcome {
+                    culistid: target_culistid,
+                    keyframe_culistid: self.last_keyframe,
+                    replayed: 0,
+                });
+            }
+
             if target_idx >= current {
                 replay_start = current + 1;
                 keyframe_used = self.last_keyframe;
@@ -525,6 +534,63 @@ where
     /// Borrow the underlying application for inspection (e.g., task state asserts).
     pub fn with_app<R>(&mut self, f: impl FnOnce(&mut App) -> R) -> R {
         f(&mut self.app)
+    }
+}
+
+impl<App, P, CB, TF, S, L> CuDebugSession<App, P, CB, TF, S, L>
+where
+    App: CuSimApplication<S, L> + ReflectTaskIntrospection,
+    L: UnifiedLogWrite<S> + 'static,
+    S: SectionStorage,
+    P: CopperListTuple,
+    CB: for<'a> Fn(
+        &'a crate::copperlist::CopperList<P>,
+        RobotClock,
+    ) -> Box<dyn for<'z> FnMut(App::Step<'z>) -> SimOverride + 'a>,
+    TF: Fn(&crate::copperlist::CopperList<P>) -> Option<CuTime> + Clone,
+{
+    /// Returns a reflected view of the current task instance by task id.
+    pub fn reflected_task(&self, task_id: &str) -> CuResult<&dyn crate::reflect::Reflect> {
+        self.app
+            .reflect_task(task_id)
+            .ok_or_else(|| CuError::from(format!("Task '{task_id}' was not found.")))
+    }
+
+    /// Mutable reflected task view by task id.
+    pub fn reflected_task_mut(
+        &mut self,
+        task_id: &str,
+    ) -> CuResult<&mut dyn crate::reflect::Reflect> {
+        self.app
+            .reflect_task_mut(task_id)
+            .ok_or_else(|| CuError::from(format!("Task '{task_id}' was not found.")))
+    }
+
+    /// Dumps the reflected runtime state of one task.
+    pub fn dump_reflected_task(&self, task_id: &str) -> CuResult<String> {
+        let task = self.reflected_task(task_id)?;
+        #[cfg(not(feature = "reflect"))]
+        {
+            let _ = task;
+            Err(CuError::from(
+                "Task introspection is disabled. Rebuild with the `reflect` feature.",
+            ))
+        }
+
+        #[cfg(feature = "reflect")]
+        {
+            Ok(format!("{task:#?}"))
+        }
+    }
+
+    /// Dumps reflected schemas registered by this application.
+    pub fn dump_reflected_task_schemas(&self) -> String {
+        #[cfg(feature = "reflect")]
+        let mut registry = TypeRegistry::default();
+        #[cfg(not(feature = "reflect"))]
+        let mut registry = TypeRegistry;
+        <App as ReflectTaskIntrospection>::register_reflect_types(&mut registry);
+        dump_type_registry_schema(&registry)
     }
 }
 

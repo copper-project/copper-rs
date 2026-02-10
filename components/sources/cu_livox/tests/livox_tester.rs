@@ -1,3 +1,5 @@
+#![cfg(feature = "hardware")]
+
 use cu_livox::LidarCuMsgPayload;
 use cu_livox::parser::LidarFrame;
 use cu_udp_inject::PcapStreamer;
@@ -6,6 +8,7 @@ use cu29_helpers::basic_copper_setup;
 
 use std::thread;
 use std::time::Duration;
+#[derive(Reflect)]
 struct LivoxTestSink {}
 
 impl Freezable for LivoxTestSink {}

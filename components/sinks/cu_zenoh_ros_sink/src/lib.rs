@@ -28,12 +28,17 @@ const PUBLISHER_ID: u32 = NODE_ID + 1;
 /// This is a sink task that sends ROS-compatible messages to a Zenoh topic.
 /// P is the payload type of the messages, which must be convertible to ROS format.
 /// Hence, the payload type must implement the `RosMsgAdapter` trait.
+#[derive(Reflect)]
+#[reflect(from_reflect = false, no_field_bounds, type_path = false)]
 pub struct ZenohRosSink<P>
 where
     P: CuMsgPayload + RosMsgAdapter<'static>,
 {
-    _marker: PhantomData<P>,
+    #[reflect(ignore)]
+    _marker: PhantomData<fn() -> P>,
+    #[reflect(ignore)]
     config: ZenohRosConfig,
+    #[reflect(ignore)]
     ctx: Option<ZenohRosContext>,
 }
 
@@ -58,9 +63,34 @@ pub struct ZenohRosContext {
 
 impl<P> Freezable for ZenohRosSink<P> where P: CuMsgPayload + RosMsgAdapter<'static> {}
 
+impl<P> cu29::reflect::TypePath for ZenohRosSink<P>
+where
+    P: CuMsgPayload + RosMsgAdapter<'static> + 'static,
+{
+    fn type_path() -> &'static str {
+        "cu_zenoh_ros_sink::ZenohRosSink"
+    }
+
+    fn short_type_path() -> &'static str {
+        "ZenohRosSink"
+    }
+
+    fn type_ident() -> Option<&'static str> {
+        Some("ZenohRosSink")
+    }
+
+    fn crate_name() -> Option<&'static str> {
+        Some("cu_zenoh_ros_sink")
+    }
+
+    fn module_path() -> Option<&'static str> {
+        Some("cu_zenoh_ros_sink")
+    }
+}
+
 impl<P> CuSinkTask for ZenohRosSink<P>
 where
-    P: CuMsgPayload + RosMsgAdapter<'static>,
+    P: CuMsgPayload + RosMsgAdapter<'static> + 'static,
 {
     type Resources<'r> = ();
     type Input<'m> = input_msg!(P);
@@ -79,7 +109,7 @@ where
         };
 
         Ok(Self {
-            _marker: Default::default(),
+            _marker: PhantomData,
             config: ZenohRosConfig {
                 session: session_config,
                 domain_id: config.get::<u32>("domain_id")?.unwrap_or(0),

@@ -10,12 +10,17 @@ use std::marker::PhantomData;
 /// This is a sink task that sends messages to a zenoh topic.
 /// P is the payload type of the messages.
 /// Copper messages and Zenoh payloads are compatible.
+#[derive(Reflect)]
+#[reflect(from_reflect = false, no_field_bounds, type_path = false)]
 pub struct ZenohSink<P>
 where
     P: CuMsgPayload,
 {
-    _marker: PhantomData<P>,
+    #[reflect(ignore)]
+    _marker: PhantomData<fn() -> P>,
+    #[reflect(ignore)]
     config: ZenohConfig,
+    #[reflect(ignore)]
     ctx: Option<ZenohContext>,
 }
 
@@ -38,6 +43,31 @@ fn cu_error_map(msg: &str) -> impl FnOnce(ZenohError) -> CuError + '_ {
 }
 
 impl<P> Freezable for ZenohSink<P> where P: CuMsgPayload {}
+
+impl<P> cu29::reflect::TypePath for ZenohSink<P>
+where
+    P: CuMsgPayload + 'static,
+{
+    fn type_path() -> &'static str {
+        "cu_zenoh_sink::ZenohSink"
+    }
+
+    fn short_type_path() -> &'static str {
+        "ZenohSink"
+    }
+
+    fn type_ident() -> Option<&'static str> {
+        Some("ZenohSink")
+    }
+
+    fn crate_name() -> Option<&'static str> {
+        Some("cu_zenoh_sink")
+    }
+
+    fn module_path() -> Option<&'static str> {
+        Some("cu_zenoh_sink")
+    }
+}
 
 impl<P> CuSinkTask for ZenohSink<P>
 where
@@ -64,7 +94,7 @@ where
             .unwrap_or("copper".to_owned());
 
         Ok(Self {
-            _marker: Default::default(),
+            _marker: PhantomData,
             config: ZenohConfig {
                 config: session_config,
                 topic,

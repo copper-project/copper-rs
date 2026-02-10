@@ -37,6 +37,7 @@ def _load_embedded_packages() -> List[Dict[str, Any]]:
                 "manifest_path": pkg["manifest_path"],
                 "target": copper_meta.get("embedded_target"),
                 "config": copper_meta.get("embedded_config"),
+                "build_release": bool(copper_meta.get("embedded_build_release", False)),
                 "no_default_features": bool(
                     copper_meta.get("embedded_no_default_features", False)
                 ),
@@ -78,6 +79,10 @@ def _run_action(
             cmd.extend(["--target", pkg["target"]])
         if pkg["config"]:
             cmd.extend(["--config", pkg["config"]])
+        # Some embedded crates are expected to be linked with optimizations to fit
+        # target memory; allow opting into release builds via package metadata.
+        if action == "build" and pkg.get("build_release"):
+            cmd.append("--release")
         if action == "clippy":
             cmd.extend(["--", "--deny", "warnings"])
 

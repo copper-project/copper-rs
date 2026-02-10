@@ -3,9 +3,7 @@ use bincode::de::Decoder;
 use bincode::error::DecodeError;
 use bincode::{Decode, Encode};
 use core::fmt::Debug;
-use cu29::prelude::{ArrayLike, CuHandle};
-#[allow(unused_imports)]
-use cu29::{CuError, CuResult};
+use cu29::prelude::*;
 
 #[cfg(feature = "image")]
 use image::{ImageBuffer, Pixel};
@@ -15,7 +13,7 @@ use kornia_image::Image;
 use kornia_image::allocator::ImageAllocator;
 use serde::{Deserialize, Serialize, Serializer};
 
-#[derive(Default, Debug, Encode, Decode, Clone, Copy, Serialize, Deserialize)]
+#[derive(Default, Debug, Encode, Decode, Clone, Copy, Serialize, Deserialize, Reflect)]
 pub struct CuImageBufferFormat {
     pub width: u32,
     pub height: u32,
@@ -29,21 +27,48 @@ impl CuImageBufferFormat {
     }
 }
 
-#[derive(Debug, Default, Clone, Encode)]
+#[derive(Debug, Default, Clone, Encode, Reflect)]
+#[reflect(from_reflect = false, no_field_bounds, type_path = false)]
 pub struct CuImage<A>
 where
-    A: ArrayLike<Element = u8>,
+    A: ArrayLike<Element = u8> + Send + Sync + 'static,
 {
     pub seq: u64,
     pub format: CuImageBufferFormat,
+    #[reflect(ignore)]
     pub buffer_handle: CuHandle<A>,
+}
+
+impl<A> TypePath for CuImage<A>
+where
+    A: ArrayLike<Element = u8> + Send + Sync + 'static,
+{
+    fn type_path() -> &'static str {
+        "cu_sensor_payloads::CuImage"
+    }
+
+    fn short_type_path() -> &'static str {
+        "CuImage"
+    }
+
+    fn type_ident() -> Option<&'static str> {
+        Some("CuImage")
+    }
+
+    fn crate_name() -> Option<&'static str> {
+        Some("cu_sensor_payloads")
+    }
+
+    fn module_path() -> Option<&'static str> {
+        Some("cu_sensor_payloads")
+    }
 }
 
 impl Decode<()> for CuImage<Vec<u8>> {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let seq = u64::decode(decoder)?;
-        let format = CuImageBufferFormat::decode(decoder)?;
-        let buffer = Vec::decode(decoder)?;
+        let seq: u64 = Decode::decode(decoder)?;
+        let format: CuImageBufferFormat = Decode::decode(decoder)?;
+        let buffer: Vec<u8> = Decode::decode(decoder)?;
         let buffer_handle = CuHandle::new_detached(buffer);
 
         Ok(Self {
@@ -77,7 +102,7 @@ impl<'de> Deserialize<'de> for CuImage<Vec<u8>> {
 
 impl<A> Serialize for CuImage<A>
 where
-    A: ArrayLike<Element = u8>,
+    A: ArrayLike<Element = u8> + Send + Sync + 'static,
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -96,7 +121,7 @@ where
 
 impl<A> CuImage<A>
 where
-    A: ArrayLike<Element = u8>,
+    A: ArrayLike<Element = u8> + Send + Sync + 'static,
 {
     pub fn new(format: CuImageBufferFormat, buffer_handle: CuHandle<A>) -> Self {
         assert!(
@@ -113,7 +138,7 @@ where
 
 impl<A> CuImage<A>
 where
-    A: ArrayLike<Element = u8>,
+    A: ArrayLike<Element = u8> + Send + Sync + 'static,
 {
     /// Builds an ImageBuffer from the image crate backed by the CuImage's pixel data.
     #[cfg(feature = "image")]

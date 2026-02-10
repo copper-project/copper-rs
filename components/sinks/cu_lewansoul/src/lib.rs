@@ -68,7 +68,10 @@ fn angle_to_position(angle: Angle) -> i16 {
 }
 
 /// This is a driver for the LewanSoul LX-16A, LX-225 etc.  Serial Bus Servos.
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct Lewansoul {
+    #[reflect(ignore)]
     port: LinuxSerialPort,
     #[allow(dead_code)]
     ids: [u8; 8], // TODO: WIP
@@ -202,7 +205,8 @@ impl Freezable for Lewansoul {
     // This driver is stateless as the IDs are recreate at new time, we keep the default implementation.
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Reflect)]
+#[reflect(opaque, from_reflect = false)]
 pub struct ServoPositionsPayload {
     pub positions: [Angle; MAX_SERVOS],
 }

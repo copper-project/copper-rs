@@ -41,6 +41,7 @@ cu-rp-gpio = { path = "../../components/sinks/cu_rp_gpio", version = "0.12.0" }
 default = ["mock"]
 mock = ["cu-rp-gpio/mock"]
 rtsan = ["cu29/rtsan"]
+determinism_ci = []
 
 [package.metadata.cargo-shear]
 ignored = ["serde"]

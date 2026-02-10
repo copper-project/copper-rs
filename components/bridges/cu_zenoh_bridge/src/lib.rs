@@ -62,28 +62,68 @@ struct ZenohContext<TxId: Copy, RxId: Copy> {
     rx_channels: Vec<ZenohRxChannel<RxId>>,
 }
 
+#[derive(Reflect)]
+#[reflect(from_reflect = false, no_field_bounds, type_path = false)]
 pub struct ZenohBridge<Tx, Rx>
 where
-    Tx: BridgeChannelSet,
-    Rx: BridgeChannelSet,
+    Tx: BridgeChannelSet + 'static,
+    Rx: BridgeChannelSet + 'static,
+    Tx::Id: Send + Sync + 'static,
+    Rx::Id: Send + Sync + 'static,
 {
+    #[reflect(ignore)]
     session_config: Config,
+    #[reflect(ignore)]
     tx_channels: Vec<ZenohChannelConfig<Tx::Id>>,
+    #[reflect(ignore)]
     rx_channels: Vec<ZenohChannelConfig<Rx::Id>>,
+    #[reflect(ignore)]
     ctx: Option<ZenohContext<Tx::Id, Rx::Id>>,
 }
 
 impl<Tx, Rx> Freezable for ZenohBridge<Tx, Rx>
 where
-    Tx: BridgeChannelSet,
-    Rx: BridgeChannelSet,
+    Tx: BridgeChannelSet + 'static,
+    Rx: BridgeChannelSet + 'static,
+    Tx::Id: Send + Sync + 'static,
+    Rx::Id: Send + Sync + 'static,
 {
+}
+
+impl<Tx, Rx> cu29::reflect::TypePath for ZenohBridge<Tx, Rx>
+where
+    Tx: BridgeChannelSet + 'static,
+    Rx: BridgeChannelSet + 'static,
+    Tx::Id: Send + Sync + 'static,
+    Rx::Id: Send + Sync + 'static,
+{
+    fn type_path() -> &'static str {
+        "cu_zenoh_bridge::ZenohBridge"
+    }
+
+    fn short_type_path() -> &'static str {
+        "ZenohBridge"
+    }
+
+    fn type_ident() -> Option<&'static str> {
+        Some("ZenohBridge")
+    }
+
+    fn crate_name() -> Option<&'static str> {
+        Some("cu_zenoh_bridge")
+    }
+
+    fn module_path() -> Option<&'static str> {
+        Some("cu_zenoh_bridge")
+    }
 }
 
 impl<Tx, Rx> ZenohBridge<Tx, Rx>
 where
-    Tx: BridgeChannelSet,
-    Rx: BridgeChannelSet,
+    Tx: BridgeChannelSet + 'static,
+    Rx: BridgeChannelSet + 'static,
+    Tx::Id: Send + Sync + 'static,
+    Rx::Id: Send + Sync + 'static,
 {
     fn parse_session_config(config: Option<&ComponentConfig>) -> CuResult<Config> {
         if let Some(config) = config {
@@ -192,10 +232,10 @@ where
 
 impl<Tx, Rx> CuBridge for ZenohBridge<Tx, Rx>
 where
-    Tx: BridgeChannelSet,
-    Rx: BridgeChannelSet,
-    Tx::Id: core::fmt::Debug,
-    Rx::Id: core::fmt::Debug,
+    Tx: BridgeChannelSet + 'static,
+    Rx: BridgeChannelSet + 'static,
+    Tx::Id: core::fmt::Debug + Send + Sync + 'static,
+    Rx::Id: core::fmt::Debug + Send + Sync + 'static,
 {
     type Tx = Tx;
     type Rx = Rx;

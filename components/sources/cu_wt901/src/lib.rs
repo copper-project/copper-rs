@@ -61,8 +61,11 @@ use serde::de::{Deserialize, Deserializer};
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 use uom::fmt::DisplayStyle::Abbreviation;
 
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct WT901 {
     #[cfg(hardware)]
+    #[reflect(ignore)]
     i2c: LinuxI2c,
 }
 
@@ -105,7 +108,8 @@ impl<'r> ResourceBindings<'r> for Wt901Resources {
     }
 }
 
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone, Debug, Reflect)]
+#[reflect(opaque, from_reflect = false)]
 pub struct PositionalReadingsPayload {
     acc_x: Acceleration,
     acc_y: Acceleration,

@@ -8,11 +8,15 @@ use std::time::Duration;
 use velodyne_lidar::iter::try_packet_to_frame_xyz;
 use velodyne_lidar::types::frame_xyz::FrameXyz;
 
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct Vlp16 {
+    #[reflect(ignore)]
     velo_config: Config,
     listen_addr: String,
     #[allow(dead_code)]
     test_mode: bool,
+    #[reflect(ignore)]
     socket: Option<UdpSocket>,
 }
 

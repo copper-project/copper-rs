@@ -21,6 +21,7 @@ use cu29::prelude::*;
 
 const VTX_SYM_VOLT: char = '\x06';
 
+#[derive(Reflect)]
 pub struct VtxOsd {
     row: u8,
     cols: u8,
@@ -332,6 +333,7 @@ fn build_msp_status(armed: bool) -> MspStatus {
     }
 }
 
+#[derive(Reflect)]
 pub struct VtxMspResponder {
     last_voltage_centi: Option<u16>,
     battery_cells: Option<u8>,

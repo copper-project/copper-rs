@@ -50,14 +50,19 @@ impl<'r> ResourceBindings<'r> for GpioResources {
 /// Example of a GPIO output driver for the Raspberry Pi
 /// The config takes one config value: `pin` which is the pin you want to address
 /// Gpio uses BCM pin numbering. For example: BCM GPIO 23 is tied to physical pin 16.
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct RPGpio {
+    #[cfg_attr(hardware, reflect(ignore))]
     #[cfg(hardware)]
     pin: LinuxOutputPin,
     #[cfg(mock)]
     pin: u8,
 }
 
-#[derive(Debug, Clone, Copy, Encode, Decode, Default, PartialEq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Encode, Decode, Default, PartialEq, Serialize, Deserialize, Reflect,
+)]
 pub struct RPGpioPayload {
     pub on: bool,
 }

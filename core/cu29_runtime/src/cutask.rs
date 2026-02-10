@@ -2,6 +2,7 @@
 //! or interact with to create a Copper task.
 
 use crate::config::ComponentConfig;
+use crate::reflect::Reflect;
 use bincode::de::{Decode, Decoder};
 use bincode::enc::{Encode, Encoder};
 use bincode::error::{DecodeError, EncodeError};
@@ -292,7 +293,7 @@ impl<'a, T: Freezable + ?Sized> Encode for BincodeAdapter<'a, T> {
 /// They are in push mode from the runtime.
 /// To set the frequency of the pulls and align them to any hw, see the runtime configuration.
 /// Note: A source has the privilege to have a clock passed to it vs a frozen clock.
-pub trait CuSrcTask: Freezable {
+pub trait CuSrcTask: Freezable + Reflect {
     type Output<'m>: CuMsgPayload;
     /// Resources required by the task.
     type Resources<'r>;
@@ -334,7 +335,7 @@ pub trait CuSrcTask: Freezable {
 }
 
 /// This is the most generic Task of copper. It is a "transform" task deriving an output from an input.
-pub trait CuTask: Freezable {
+pub trait CuTask: Freezable + Reflect {
     type Input<'m>: CuMsgPack;
     type Output<'m>: CuMsgPayload;
     /// Resources required by the task.
@@ -382,7 +383,7 @@ pub trait CuTask: Freezable {
 }
 
 /// A Sink Task is a task that only consumes messages. For example drivers for actuators are Sink Tasks.
-pub trait CuSinkTask: Freezable {
+pub trait CuSinkTask: Freezable + Reflect {
     type Input<'m>: CuMsgPack;
     /// Resources required by the task.
     type Resources<'r>;

@@ -11,6 +11,7 @@ pub mod tasks {
     use cu29::prelude::*;
     use std::time::Duration;
 
+    #[derive(Reflect)]
     pub struct ExampleSrc;
 
     impl Freezable for ExampleSrc {}

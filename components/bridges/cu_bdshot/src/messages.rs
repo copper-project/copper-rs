@@ -1,8 +1,9 @@
 use bincode::{Decode, Encode};
+use cu29::prelude::*;
 use serde::{Deserialize, Serialize};
 
 /// Telemetry payload decoded from a DSHOT ESC.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, Reflect)]
 pub enum DShotTelemetry {
     EncodingError,
     Erpm(u16),
@@ -16,7 +17,7 @@ pub enum DShotTelemetry {
 }
 
 /// Command sent from Copper into the ESC bridge.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, Reflect)]
 pub struct EscCommand {
     /// Raw throttle value (0 - 2047). Values >= 48 arm the ESC per DSHOT spec.
     pub throttle: u16,
@@ -40,7 +41,9 @@ impl EscCommand {
 }
 
 /// Telemetry sample received from the ESC bridge.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Encode, Decode, Reflect,
+)]
 pub struct EscTelemetry {
     pub sample: Option<DShotTelemetry>,
 }

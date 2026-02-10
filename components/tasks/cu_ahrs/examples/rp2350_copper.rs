@@ -21,6 +21,7 @@ mod firmware {
     pub mod tasks {
         use super::*;
 
+        #[derive(Reflect)]
         pub struct RpySink;
 
         impl Freezable for RpySink {}

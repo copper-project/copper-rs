@@ -29,3 +29,6 @@ fn main() {
         debug!("Application Ended: {}", error)
     }
 }
+
+#[cfg(all(test, feature = "determinism_ci"))]
+mod determinism_test;

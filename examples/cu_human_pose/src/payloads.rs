@@ -1,4 +1,5 @@
 use bincode::{Decode, Encode};
+use cu29::prelude::*;
 use serde::{Deserialize, Serialize};
 
 /// Maximum number of poses to detect per frame
@@ -37,7 +38,7 @@ pub const SKELETON_CONNECTIONS: [(usize, usize); 19] = [
 ];
 
 /// A single keypoint with x, y coordinates and confidence score
-#[derive(Debug, Clone, Copy, Default, Encode, Decode, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, Encode, Decode, Serialize, Deserialize, Reflect)]
 pub struct Keypoint {
     pub x: f32,
     pub y: f32,
@@ -56,7 +57,7 @@ impl Keypoint {
 }
 
 /// A single detected pose with bounding box and keypoints
-#[derive(Debug, Clone, Default, Encode, Decode, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Encode, Decode, Serialize, Deserialize, Reflect)]
 pub struct Pose {
     /// Bounding box in format [x_center, y_center, width, height]
     pub bbox: [f32; 4],
@@ -79,7 +80,7 @@ impl Pose {
 }
 
 /// Collection of detected poses in a frame
-#[derive(Debug, Clone, Default, Encode, Decode, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Encode, Decode, Serialize, Deserialize, Reflect)]
 pub struct CuPoses {
     pub poses: Vec<Pose>,
 }

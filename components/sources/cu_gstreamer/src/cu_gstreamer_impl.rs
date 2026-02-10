@@ -14,7 +14,8 @@ use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Reflect)]
+#[reflect(opaque, from_reflect = false)]
 pub struct CuGstBuffer(pub Buffer);
 
 impl Serialize for CuGstBuffer {
@@ -76,9 +77,14 @@ impl Encode for CuGstBuffer {
 
 pub type CuDefaultGStreamer = CuGStreamer<8>;
 
+#[derive(Reflect)]
+#[reflect(from_reflect = false)]
 pub struct CuGStreamer<const N: usize> {
+    #[reflect(ignore)]
     pipeline: Pipeline,
+    #[reflect(ignore)]
     circular_buffer: Arc<Mutex<CircularBuffer<N, CuGstBuffer>>>,
+    #[reflect(ignore)]
     _appsink: AppSink,
 }
 
