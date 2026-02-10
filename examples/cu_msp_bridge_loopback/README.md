@@ -12,7 +12,7 @@ cargo run -p cu-msp-bridge-loopback
 
 1. Preallocates Copper unified log slabs under `logs/`.
 2. Creates a PTY pair and exposes the emulator slave via a symlink (`logs/msp_bridge_loopback_slave`).
-3. Overrides `LinuxResources.tty_usb0_path` to point at that symlink.
+3. Overrides `LinuxResources.serial3_dev` (the config slot backing `serial_usb0`) to point at that symlink.
 4. Sends exactly one `MSP_RC` request from the `LoopbackSource` task.
 5. The emulator echoes back an `MSP_RC` response.
 6. `LoopbackSink` inspects the response and marks the run as validated.

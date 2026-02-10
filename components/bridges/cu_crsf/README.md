@@ -12,21 +12,25 @@ The bridge expects a `serial` resource (anything implementing `embedded_io` `Rea
 
 **std builds**
 
-Use `cu_linux_resources::LinuxResources` as the serial provider; it stores an owned
-resource in fixed slots like `<bundle>.serial_acm0` and `<bundle>.serial_usb0`.
+Use `cu_linux_resources::LinuxResources` as the serial provider; it stores owned
+resources in fixed slots like `<bundle>.serial_acm0` and `<bundle>.serial_usb0`.
+
+For example, to back `serial_usb0`, configure serial slot `serial3_*`:
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `tty_acm0_path` / `tty_usb0_path` | string | `/dev/ttyACM0` / `/dev/ttyUSB0` | Path override for a serial slot. |
-| `serial_baudrate` | u32 | `115200` | UART baud rate for Linux serial slots. |
-| `serial_timeout_ms` | u64 | `50` | Read timeout in milliseconds. |
+| `serial3_dev` | string | `/dev/ttyUSB0` | Device node for the `serial_usb0` resource slot. |
+| `serial3_baudrate` | u32 | `115200` | UART baudrate for this slot. |
+| `serial3_parity` | string | `none` | Parity for this slot (`none`, `odd`, `even`). |
+| `serial3_stopbits` | u8 | `1` | Stop bits for this slot (`1` or `2`). |
+| `serial3_timeout_ms` | u64 | `50` | Read timeout for this slot in milliseconds. |
 
 ```ron
 resources: [
   (
     id: "radio",
     provider: "cu_linux_resources::LinuxResources",
-    config: { "tty_usb0_path": "/dev/ttyUSB0", "serial_baudrate": 420000 },
+    config: { "serial3_dev": "/dev/ttyUSB0", "serial3_baudrate": 420000 },
   ),
 ],
 bridges: [
@@ -47,13 +51,13 @@ The `resources` module in `examples/cu_elrs_bdshot_demo` shows a complete patter
 
 ```ron
 resources: [
-  ( id: "fc", provider: "my_app::resources::RadioBundle" ),
+  ( id: "radio", provider: "my_app::resources::RadioBundle" ),
 ],
 bridges: [
   (
     id: "crsf",
     type: "cu_crsf::CrsfBridge<SerialResource, SerialPortError>",
-    resources: { serial: "fc.serial" },
+    resources: { serial: "radio.serial" },
     channels: [ Rx (id: "rc_rx"), Tx (id: "lq_tx") ],
   ),
 ],

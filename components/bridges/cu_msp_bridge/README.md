@@ -1,32 +1,36 @@
 # cu-msp-bridge
 
-Bridge that combines the MSP source/sink tasks into one serial transport.  It exposes a single TX channel (`requests`) that accepts batches of [`cu_msp_lib::structs::MspRequest`] messages and a single RX channel (`responses`) that yields [`MspResponse`] batches decoded from the line.
+Bridge that combines the MSP source/sink tasks into one serial transport. It exposes a single TX channel (`requests`) that accepts batches of [`cu_msp_lib::structs::MspRequest`] messages and a single RX channel (`responses`) that yields [`MspResponse`] batches decoded from the line.
 
 ## Resources and configuration
 
 The bridge expects a `serial` resource. For std targets, use
-`cu_linux_resources::LinuxResources` as the provider. It opens the serial port
+`cu_linux_resources::LinuxResources` as the provider. It opens serial devices
 and exposes fixed serial slots such as `<bundle>.serial_usb0`.
 
-| Key                | Type   | Default        | Description                                                     |
-|--------------------|--------|----------------|-----------------------------------------------------------------|
-| `tty_usb0_path`    | string | `/dev/ttyUSB0` | Path for the `serial_usb0` slot (can be a PTY).                |
-| `serial_baudrate`  | u32    | `115200`       | Serial baud rate for all Linux serial slots.                   |
-| `serial_timeout_ms`| u64    | `50`           | Read timeout passed to the serial driver in milliseconds.      |
+For `serial_usb0`, configure serial slot `serial3_*` in the Linux bundle:
+
+| Key | Type | Default | Description |
+| --- | --- | --- | --- |
+| `serial3_dev` | string | `/dev/ttyUSB0` | Device node for the `serial_usb0` resource slot. |
+| `serial3_baudrate` | u32 | `115200` | UART baudrate for this slot. |
+| `serial3_parity` | string | `none` | Parity for this slot (`none`, `odd`, `even`). |
+| `serial3_stopbits` | u8 | `1` | Stop bits for this slot (`1` or `2`). |
+| `serial3_timeout_ms` | u64 | `50` | Read timeout for this slot in milliseconds. |
 
 ```ron
 resources: [
   (
-    id: "fc",
+    id: "linux",
     provider: "cu_linux_resources::LinuxResources",
-    config: { "tty_usb0_path": "/dev/ttyUSB0", "serial_baudrate": 115200 },
+    config: { "serial3_dev": "/dev/ttyUSB0", "serial3_baudrate": 115200 },
   ),
 ],
 bridges: [
   (
     id: "msp_bridge",
     type: "cu_msp_bridge::CuMspBridgeStd",
-    resources: { serial: "fc.serial_usb0" },
+    resources: { serial: "linux.serial_usb0" },
     channels: [ Tx (id: "requests"), Rx (id: "responses") ],
   ),
 ],
