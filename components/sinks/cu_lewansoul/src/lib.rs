@@ -6,9 +6,7 @@ use cu_linux_resources::LinuxSerialPort;
 use cu29::prelude::*;
 use cu29::resource::{Owned, ResourceBindingMap, ResourceBindings, ResourceManager};
 use serde::{Deserialize, Serialize};
-use serialport::{DataBits, FlowControl, Parity, StopBits};
 use std::io::{self, Read, Write};
-use std::time::Duration;
 use uom::si::angle::{degree, radian};
 use uom::si::f32::Angle;
 
@@ -44,9 +42,6 @@ mod servo {
     pub const SERVO_LED_ERROR_WRITE: u8 = 35; // 4 bytes
     pub const SERVO_LED_ERROR_READ: u8 = 36; // 3 bytes
 }
-
-const SERIAL_SPEED: u32 = 115200; // only this speed is supported by the servos
-const TIMEOUT: Duration = Duration::from_secs(1); // TODO: add that as a parameter in the config
 
 const MAX_SERVOS: usize = 8; // in theory it could be higher. Revisit if needed.
 
@@ -84,9 +79,8 @@ pub enum Binding {
     Serial,
 }
 
-#[derive(Default)]
 pub struct LewansoulResources {
-    pub serial: Option<Owned<LinuxSerialPort>>,
+    pub serial: Owned<LinuxSerialPort>,
 }
 
 impl<'r> ResourceBindings<'r> for LewansoulResources {
@@ -96,14 +90,15 @@ impl<'r> ResourceBindings<'r> for LewansoulResources {
         manager: &'r mut ResourceManager,
         mapping: Option<&ResourceBindingMap<Self::Binding>>,
     ) -> CuResult<Self> {
-        let serial = match mapping.and_then(|m| m.get(Binding::Serial)) {
-            Some(path) => Some(
-                manager
-                    .take::<LinuxSerialPort>(path.typed())
-                    .map_err(|e| e.add_cause("Failed to fetch Lewansoul serial resource"))?,
-            ),
-            None => None,
-        };
+        let mapping = mapping.ok_or_else(|| {
+            CuError::from("Lewansoul requires a `serial` resource mapping in copperconfig")
+        })?;
+        let path = mapping.get(Binding::Serial).ok_or_else(|| {
+            CuError::from("Lewansoul resources must include `serial: <bundle.resource>`")
+        })?;
+        let serial = manager
+            .take::<LinuxSerialPort>(path.typed())
+            .map_err(|e| e.add_cause("Failed to fetch Lewansoul serial resource"))?;
         Ok(Self { serial })
     }
 }
@@ -252,28 +247,7 @@ impl CuSinkTask for Lewansoul {
             }
         }
 
-        let port = match resources.serial {
-            Some(serial) => serial.0,
-            None => {
-                let serial_dev: String = kv
-                    .get("serial_dev")
-                    .ok_or(
-                        "Lewansoul expects a serial_dev config entry or a `serial` resource binding.",
-                    )?
-                    .clone()
-                    .into();
-
-                let port = serialport::new(serial_dev.as_str(), SERIAL_SPEED)
-                    .data_bits(DataBits::Eight)
-                    .flow_control(FlowControl::None)
-                    .parity(Parity::None)
-                    .stop_bits(StopBits::One)
-                    .timeout(TIMEOUT)
-                    .open()
-                    .map_err(|e| format!("Error opening serial port: {e:?}"))?;
-                LinuxSerialPort::new(port)
-            }
-        };
+        let port = resources.serial.0;
 
         Ok(Lewansoul { port, ids })
     }
