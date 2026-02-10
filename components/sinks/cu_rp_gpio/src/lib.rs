@@ -80,15 +80,15 @@ impl CuSinkTask for RPGpio {
     type Resources<'r> = GpioResources;
     type Input<'m> = input_msg!(RPGpioPayload);
 
-    fn new(config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
         #[cfg(hardware)]
-        let pin = resources.pin.0;
+        let pin = _resources.pin.0;
 
         #[cfg(mock)]
-        let pin = pin_from_config(config)?;
+        let pin = pin_from_config(_config)?;
 
         Ok(Self { pin })
     }
@@ -115,6 +115,7 @@ impl CuSinkTask for RPGpio {
     }
 }
 
+#[cfg(mock)]
 fn pin_from_config(config: Option<&ComponentConfig>) -> CuResult<u8> {
     let ComponentConfig(kv) =
         config.ok_or("RPGpio needs a config, None was passed as ComponentConfig")?;
