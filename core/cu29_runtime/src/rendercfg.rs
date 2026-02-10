@@ -3906,9 +3906,7 @@ fn provider_resource_slots(provider: &str) -> Option<&'static [&'static str]> {
         .filter(|segment| !segment.is_empty())
         .collect();
     let is_linux_bundle = segments.last().copied() == Some("LinuxResources")
-        && segments
-            .iter()
-            .any(|segment| *segment == "cu_linux_resources");
+        && segments.contains(&"cu_linux_resources");
     if is_linux_bundle {
         Some(&LINUX_RESOURCE_SLOT_NAMES)
     } else {
