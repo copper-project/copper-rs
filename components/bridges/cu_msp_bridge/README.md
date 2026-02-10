@@ -6,27 +6,27 @@ Bridge that combines the MSP source/sink tasks into one serial transport.  It ex
 
 The bridge expects a `serial` resource. For std targets, use
 `cu_linux_resources::LinuxResources` as the provider. It opens the serial port
-and stores it as an owned `serial` resource under `<bundle>.serial`.
+and exposes fixed serial slots such as `<bundle>.serial_usb0`.
 
-| Key          | Type   | Default        | Description                                                |
-|--------------|--------|----------------|------------------------------------------------------------|
-| `device`     | string | `/dev/ttyUSB0` | Path to the serial device (can be a PTY).                  |
-| `baudrate`   | u32    | `115200`       | Serial baud rate.                                          |
-| `timeout_ms` | u64    | `50`           | Read timeout passed to the serial driver in milliseconds.  |
+| Key                | Type   | Default        | Description                                                     |
+|--------------------|--------|----------------|-----------------------------------------------------------------|
+| `tty_usb0_path`    | string | `/dev/ttyUSB0` | Path for the `serial_usb0` slot (can be a PTY).                |
+| `serial_baudrate`  | u32    | `115200`       | Serial baud rate for all Linux serial slots.                   |
+| `serial_timeout_ms`| u64    | `50`           | Read timeout passed to the serial driver in milliseconds.      |
 
 ```ron
 resources: [
   (
     id: "fc",
     provider: "cu_linux_resources::LinuxResources",
-    config: { "device": "/dev/ttyUSB0", "baudrate": 115200 },
+    config: { "tty_usb0_path": "/dev/ttyUSB0", "serial_baudrate": 115200 },
   ),
 ],
 bridges: [
   (
     id: "msp_bridge",
     type: "cu_msp_bridge::CuMspBridgeStd",
-    resources: { serial: "fc.serial" },
+    resources: { serial: "fc.serial_usb0" },
     channels: [ Tx (id: "requests"), Rx (id: "responses") ],
   ),
 ],

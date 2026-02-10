@@ -148,7 +148,7 @@ impl FlightControllerEmulator {
             .find(|b| b.id == "fc")
             .ok_or_else(|| CuError::from("config missing `fc` resource bundle"))?;
         let component = bundle_cfg.config.get_or_insert_with(ComponentConfig::new);
-        component.set("device", device_path);
+        component.set("tty_usb0_path", device_path);
         Ok(())
     }
 }

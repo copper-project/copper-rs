@@ -4,9 +4,9 @@
             id: "fc",
             provider: "cu_linux_resources::LinuxResources",
             config: {
-                "device": "/dev/null",
-                "baudrate": 115200,
-                "timeout_ms": 20,
+                "tty_usb0_path": "/dev/null",
+                "serial_baudrate": 115200,
+                "serial_timeout_ms": 20,
             },
         ),
     ],
@@ -24,7 +24,7 @@
         (
             id: "msp_bridge",
             type: "cu_msp_bridge::CuMspBridgeStd",
-            resources: {"serial": "fc.serial"},
+            resources: {"serial": "fc.serial_usb0"},
             channels: [
                 Tx(id: "requests"),
                 Rx(id: "responses"),

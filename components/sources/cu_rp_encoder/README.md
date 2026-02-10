@@ -13,14 +13,12 @@ On Linux hardware, provide both GPIO inputs through resource bindings:
 ```ron
 resources: [
     (
-        id: "enc_clk",
+        id: "enc",
         provider: "cu_linux_resources::LinuxResources",
-        config: { "gpio_in_pin": 17 },
-    ),
-    (
-        id: "enc_dat",
-        provider: "cu_linux_resources::LinuxResources",
-        config: { "gpio_in_pin": 18 },
+        config: {
+            "gpio_in0_pin": 17,
+            "gpio_in1_pin": 18,
+        },
     ),
 ],
 tasks: [
@@ -28,8 +26,8 @@ tasks: [
         id: "src",
         type: "cu_rp_encoder::Encoder",
         resources: {
-            clk_pin: "enc_clk.gpio_in",
-            dat_pin: "enc_dat.gpio_in",
+            clk_pin: "enc.gpio_in0",
+            dat_pin: "enc.gpio_in1",
         },
     ),
 ]

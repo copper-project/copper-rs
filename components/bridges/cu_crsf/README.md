@@ -13,27 +13,27 @@ The bridge expects a `serial` resource (anything implementing `embedded_io` `Rea
 **std builds**
 
 Use `cu_linux_resources::LinuxResources` as the serial provider; it stores an owned
-`serial` resource under `<bundle>.serial`.
+resource in fixed slots like `<bundle>.serial_acm0` and `<bundle>.serial_usb0`.
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `serial_path` / `device` | string | — | Path to the serial device (required). |
-| `baudrate` | u32 | `115200` | UART baud rate. |
-| `timeout_ms` | u64 | `50` | Read timeout in milliseconds. |
+| `tty_acm0_path` / `tty_usb0_path` | string | `/dev/ttyACM0` / `/dev/ttyUSB0` | Path override for a serial slot. |
+| `serial_baudrate` | u32 | `115200` | UART baud rate for Linux serial slots. |
+| `serial_timeout_ms` | u64 | `50` | Read timeout in milliseconds. |
 
 ```ron
 resources: [
   (
     id: "radio",
     provider: "cu_linux_resources::LinuxResources",
-    config: { "serial_path": "/dev/ttyUSB0", "baudrate": 420000 },
+    config: { "tty_usb0_path": "/dev/ttyUSB0", "serial_baudrate": 420000 },
   ),
 ],
 bridges: [
   (
     id: "crsf",
     type: "cu_crsf::CrsfBridgeStd",
-    resources: { serial: "radio.serial" },
+    resources: { serial: "radio.serial_usb0" },
     channels: [ Rx (id: "rc_rx"), Rx (id: "lq_rx") ],
   ),
 ],
