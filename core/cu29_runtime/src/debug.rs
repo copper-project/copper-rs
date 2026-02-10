@@ -588,7 +588,6 @@ where
         dump_type_registry_schema(&registry)
     }
 }
-
 /// Decode all copperlists contained in a single unified-log section.
 #[allow(clippy::type_complexity)]
 fn decode_copperlists<
