@@ -485,13 +485,6 @@ impl ResourceBundle for LinuxResources {
             }
         }
 
-        #[cfg(not(target_os = "linux"))]
-        {
-            let _ = bundle;
-            let _ = config;
-            let _ = manager;
-        }
-
         #[cfg(target_os = "linux")]
         {
             let gpio = rppal::gpio::Gpio::new().map_err(|err| {
