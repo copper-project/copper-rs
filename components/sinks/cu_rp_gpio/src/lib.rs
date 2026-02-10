@@ -6,25 +6,16 @@ use cu29::resource::{ResourceBindingMap, ResourceBindings, ResourceManager};
 use serde::{Deserialize, Serialize};
 
 #[cfg(hardware)]
-use {cu_linux_resources::LinuxOutputPin, cu29::CuError, rppal::gpio::Gpio, std::sync::OnceLock};
-
-#[cfg(hardware)]
-static GPIO: OnceLock<Gpio> = OnceLock::new();
-
-#[cfg(hardware)]
-fn gpio() -> &'static Gpio {
-    GPIO.get_or_init(|| Gpio::new().expect("Could not create GPIO bindings"))
-}
+use cu_linux_resources::LinuxOutputPin;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Binding {
     Pin,
 }
 
-#[derive(Default)]
 pub struct GpioResources {
     #[cfg(hardware)]
-    pub pin: Option<Owned<LinuxOutputPin>>,
+    pub pin: Owned<LinuxOutputPin>,
 }
 
 impl<'r> ResourceBindings<'r> for GpioResources {
@@ -36,14 +27,15 @@ impl<'r> ResourceBindings<'r> for GpioResources {
     ) -> CuResult<Self> {
         #[cfg(hardware)]
         {
-            let pin = match mapping.and_then(|m| m.get(Binding::Pin)) {
-                Some(path) => Some(
-                    manager
-                        .take::<LinuxOutputPin>(path.typed())
-                        .map_err(|e| e.add_cause("Failed to fetch GPIO output resource"))?,
-                ),
-                None => None,
-            };
+            let mapping = mapping.ok_or_else(|| {
+                CuError::from("RPGpio requires a `pin` resource mapping in copperconfig")
+            })?;
+            let path = mapping.get(Binding::Pin).ok_or_else(|| {
+                CuError::from("RPGpio resources must include `pin: <bundle.resource>`")
+            })?;
+            let pin = manager
+                .take::<LinuxOutputPin>(path.typed())
+                .map_err(|e| e.add_cause("Failed to fetch GPIO output resource"))?;
             Ok(Self { pin })
         }
         #[cfg(mock)]
@@ -88,23 +80,12 @@ impl CuSinkTask for RPGpio {
     type Resources<'r> = GpioResources;
     type Input<'m> = input_msg!(RPGpioPayload);
 
-    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new(config: Option<&ComponentConfig>, resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
         #[cfg(hardware)]
-        let pin = match _resources.pin {
-            Some(pin) => pin.0,
-            None => {
-                let pin_nb = pin_from_config(config)?;
-                LinuxOutputPin::new(
-                    gpio()
-                        .get(pin_nb)
-                        .map_err(|e| CuError::new_with_cause("Could not get pin", e))?
-                        .into_output(),
-                )
-            }
-        };
+        let pin = resources.pin.0;
 
         #[cfg(mock)]
         let pin = pin_from_config(config)?;
