@@ -28,7 +28,6 @@ std = [
   "cu-msp-lib/std",
   "embedded-io/std",
   "dep:cu-linux-resources",
-  "cu-linux-resources/std",
 ]
 defmt = ["embedded-io/defmt-03", "cu29/defmt"]
 alloc = ["embedded-io/alloc"]

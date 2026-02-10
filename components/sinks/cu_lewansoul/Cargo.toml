@@ -16,4 +16,4 @@ uom = { workspace = true }
 cu29 = { workspace = true }
 bincode = { workspace = true }
 serde = { workspace = true }
-cu-linux-resources = { workspace = true, features = ["std"] }
+cu-linux-resources = { workspace = true }

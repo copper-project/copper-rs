@@ -11,19 +11,22 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-cu29 = { path = "../../../core/cu29", version = "0.12.0", default-features = false }
+cu29 = { path = "../../../core/cu29", version = "0.12.0", default-features = false, features = [
+  "std",
+] }
 embedded-hal = { version = "1.0.0", default-features = false }
-embedded-io = { version = "0.6.1", default-features = false }
+embedded-io = { version = "0.6.1", default-features = false, features = [
+  "std",
+] }
 embedded-io-07 = { package = "embedded-io", version = "0.7.1", default-features = false, optional = true }
-serialport = { version = "4.8.1", optional = true }
+serialport = { version = "4.8.1" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 linux-embedded-hal = "0.4.0"
 rppal = { version = "0.22.1", default-features = false, features = ["hal"] }
 
 [features]
-default = ["std"]
-std = ["cu29/std", "embedded-io/std", "dep:serialport"]
+default = []
 embedded-io-07 = ["dep:embedded-io-07"]
 defmt = ["embedded-io/defmt-03", "embedded-hal/defmt-03", "cu29/defmt"]
 alloc = ["embedded-io/alloc"]

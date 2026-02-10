@@ -29,7 +29,6 @@ std = [
   "embedded-io-06",
   "embedded-io-06/std",
   "dep:cu-linux-resources",
-  "cu-linux-resources/std",
 ]
 defmt = ["cu29/defmt"]
 alloc = []
