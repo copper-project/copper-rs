@@ -55,7 +55,7 @@ pub use cu29_runtime::cutask;
 #[cfg(feature = "std")]
 pub use cu29_runtime::debug;
 #[cfg(feature = "remote-debug")]
-pub use cu29_runtime::debug_remote;
+pub use cu29_runtime::remote_debug;
 pub use cu29_runtime::input_msg;
 pub use cu29_runtime::monitoring;
 pub use cu29_runtime::output_msg;
@@ -190,7 +190,7 @@ pub mod prelude {
     #[cfg(feature = "std")]
     pub use cu29_runtime::debug::*;
     #[cfg(feature = "remote-debug")]
-    pub use cu29_runtime::debug_remote::*;
+    pub use cu29_runtime::remote_debug::*;
     pub use cu29_runtime::input_msg;
     pub use cu29_runtime::monitoring::*;
     pub use cu29_runtime::output_msg;

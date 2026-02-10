@@ -2,7 +2,7 @@ use cu29::bincode::de::Decoder;
 use cu29::bincode::enc::Encoder;
 use cu29::bincode::error::{DecodeError, EncodeError};
 use cu29::bincode::{Decode, Encode};
-use cu29::debug_remote::{
+use cu29::remote_debug::{
     RemoteDebugPaths, RemoteDebugZenohClient, RemoteDebugZenohServer, SessionOpenParams, WireCodec,
 };
 use cu29::prelude::CopperList;
