@@ -27,8 +27,6 @@ use cu29::cubridge::{
     BridgeChannel, BridgeChannelConfig, BridgeChannelInfo, BridgeChannelSet, CuBridge,
 };
 use cu29::prelude::*;
-#[cfg(feature = "std")]
-use cu29::resource::{ResourceBundle, ResourceManager};
 use cu29::resources;
 use embedded_io::{Read, Write};
 
@@ -207,45 +205,6 @@ where
             }
         }
         Ok(())
-    }
-}
-
-#[cfg(feature = "std")]
-pub struct StdSerialBundle;
-
-#[cfg(feature = "std")]
-bundle_resources!(StdSerialBundle: Serial);
-
-#[cfg(feature = "std")]
-impl ResourceBundle for StdSerialBundle {
-    fn build(
-        bundle: cu29::resource::BundleContext<Self>,
-        config: Option<&ComponentConfig>,
-        manager: &mut ResourceManager,
-    ) -> CuResult<()> {
-        let cfg = config.ok_or_else(|| {
-            CuError::from(format!(
-                "CRSF serial bundle `{}` requires configuration",
-                bundle.bundle_id()
-            ))
-        })?;
-        let path = cfg.get::<String>("serial_path")?.ok_or_else(|| {
-            CuError::from(format!(
-                "CRSF serial bundle `{}` missing `serial_path` entry",
-                bundle.bundle_id()
-            ))
-        })?;
-        let baud = cfg.get::<u32>("baudrate")?.unwrap_or(420_000);
-        let timeout_ms = cfg.get::<u64>("timeout_ms")?.unwrap_or(100);
-
-        let serial =
-            cu_linux_resources::LinuxSerialPort::open(&path, baud, timeout_ms).map_err(|err| {
-                CuError::from(format!(
-                    "Failed to open serial `{path}` at {baud} baud: {err}"
-                ))
-            })?;
-        let key = bundle.key(StdSerialBundleId::Serial);
-        manager.add_owned(key, serial)
     }
 }
 

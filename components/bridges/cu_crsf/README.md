@@ -12,13 +12,14 @@ The bridge expects a `serial` resource (anything implementing `embedded_io` `Rea
 
 **std builds**
 
-Use `cu_linux_resources::LinuxResources` as the default provider. `cu_crsf::StdSerialBundle` is kept only for backward compatibility with older configs. Both open a serial port and store it as an owned `serial` resource under `<bundle>.serial`.
+Use `cu_linux_resources::LinuxResources` as the serial provider; it stores an owned
+`serial` resource under `<bundle>.serial`.
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
 | `serial_path` / `device` | string | — | Path to the serial device (required). |
-| `baudrate` | u32 | `115200` (`LinuxResources`) / `420000` (`StdSerialBundle`) | UART baud rate. |
-| `timeout_ms` | u64 | `50` (`LinuxResources`) / `100` (`StdSerialBundle`) | Read timeout in milliseconds. |
+| `baudrate` | u32 | `115200` | UART baud rate. |
+| `timeout_ms` | u64 | `50` | Read timeout in milliseconds. |
 
 ```ron
 resources: [
