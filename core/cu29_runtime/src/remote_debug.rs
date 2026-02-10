@@ -798,10 +798,21 @@ where
             CuError::from(format!("RemoteDebug: failed to receive RPC request: {e}"))
         })?;
         let payload = sample.payload().to_bytes();
-        let (request, codec) = decode_request(payload.as_ref())?;
+        let (request, codec) = match decode_request(payload.as_ref()) {
+            Ok(v) => v,
+            Err(err) => {
+                eprintln!("RemoteDebug: dropping malformed request frame: {err}");
+                return Ok(());
+            }
+        };
 
         let response = self.handle_request(request.clone());
-        self.publish_reply(&request.reply_to, &response, codec)?;
+        if let Err(err) = self.publish_reply(&request.reply_to, &response, codec) {
+            eprintln!(
+                "RemoteDebug: failed to publish reply to '{}': {err}",
+                request.reply_to
+            );
+        }
         Ok(())
     }
 
@@ -821,9 +832,21 @@ where
         };
 
         let payload = sample.payload().to_bytes();
-        let (request, codec) = decode_request(payload.as_ref())?;
+        let (request, codec) = match decode_request(payload.as_ref()) {
+            Ok(v) => v,
+            Err(err) => {
+                eprintln!("RemoteDebug: dropping malformed request frame: {err}");
+                return Ok(true);
+            }
+        };
         let response = self.handle_request(request.clone());
-        self.publish_reply(&request.reply_to, &response, codec)?;
+        if let Err(err) = self.publish_reply(&request.reply_to, &response, codec) {
+            eprintln!(
+                "RemoteDebug: failed to publish reply to '{}': {err}",
+                request.reply_to
+            );
+            return Ok(true);
+        }
         Ok(true)
     }
 
