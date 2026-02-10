@@ -192,8 +192,8 @@ pub mod prelude {
     pub use cu29_runtime::output_msg;
     pub use cu29_runtime::payload::*;
     pub use cu29_runtime::reflect::{
-        GetTypeRegistration, Reflect, ReflectTaskIntrospection, TypeInfo, TypePath, TypeRegistry,
-        dump_type_registry_schema,
+        GetTypeRegistration, Reflect, ReflectTaskIntrospection, ReflectTypePath, TypeInfo,
+        TypePath, TypeRegistry, dump_type_registry_schema,
     };
     pub use cu29_runtime::resource::*;
     pub use cu29_runtime::rx_channels;
