@@ -1,7 +1,211 @@
-//! Remote debug API (`debug.v1`) over Zenoh.
+//! Remote debug protocol (`debug.v1`) over Zenoh.
 //!
-//! This module exposes a JSON-RPC-like protocol over Zenoh pub/sub to control
-//! [`CuDebugSession`](crate::debug::CuDebugSession) remotely.
+//! This module exposes a JSON-RPC-like request/reply protocol over Zenoh pub/sub
+//! to control [`CuDebugSession`](crate::debug::CuDebugSession) remotely.
+//!
+//! ## Entry Points
+//!
+//! | Kind | Item | Purpose |
+//! | --- | --- | --- |
+//! | Server | [`RemoteDebugZenohServer::new`] | Build server, bind request subscriber + event publishers. |
+//! | Server | [`RemoteDebugZenohServer::serve_next`] | Process a single RPC request. |
+//! | Server | [`RemoteDebugZenohServer::serve_until_stopped`] | Serve loop until `admin.stop`. |
+//! | Client | [`RemoteDebugZenohClient::new`] | Client using CBOR codec by default. |
+//! | Client | [`RemoteDebugZenohClient::new_with_codec`] | Client with explicit wire codec. |
+//! | Client | [`RemoteDebugZenohClient::call`] | Send one RPC call and wait for matching response. |
+//! | Shared | [`RemoteDebugPaths::new`] | Build request/event topic tree from a base keyexpr prefix. |
+//!
+//! ## Transport and Topics
+//!
+//! With `base = "copper/examples/my_app/debug/v1"`, the protocol uses:
+//!
+//! | Topic | Direction | Payload |
+//! | --- | --- | --- |
+//! | `{base}/rpc/request` | client -> server | [`DebugRpcRequest`] |
+//! | `{base}/rpc/reply/{client_id}` | server -> client | [`DebugRpcResponse`] |
+//! | `{base}/events/cursor` | server -> client(s) | event JSON (reserved, currently not emitted by handlers) |
+//! | `{base}/events/run` | server -> client(s) | event JSON (reserved, currently not emitted by handlers) |
+//! | `{base}/events/watch` | server -> client(s) | watch event JSON (topic exposed, emission helper exists) |
+//! | `{base}/events/health` | server -> client(s) | event JSON (reserved, currently not emitted by handlers) |
+//!
+//! ## Wire Format
+//!
+//! The wire payload can be CBOR or JSON ([`WireCodec`]):
+//!
+//! - Request decoding is tolerant: server tries `CBOR` first, then `JSON`.
+//! - Response encoding matches the request codec used for that call.
+//! - `session.open` also returns a `wire_codec` field after codec negotiation.
+//!
+//! ## Envelope Schema
+//!
+//! ### Request: [`DebugRpcRequest`]
+//!
+//! | Field | Type | Required | Notes |
+//! | --- | --- | --- | --- |
+//! | `api` | `string` | yes | Must be `"debug.v1"`. |
+//! | `request_id` | `string` | yes | Correlation key echoed in response. |
+//! | `session_id` | `string \| null` | no | Required for most methods except `session.open` and `admin.stop`. |
+//! | `method` | `string` | yes | RPC method name (`"nav.seek"`, `"state.read"`, ...). |
+//! | `params` | `object` | yes | Method-specific params (can be `{}`). |
+//! | `reply_to` | `string` | yes | Reply topic keyexpr. |
+//!
+//! ### Response: [`DebugRpcResponse`]
+//!
+//! | Field | Type | Present when | Notes |
+//! | --- | --- | --- | --- |
+//! | `request_id` | `string` | always | Matches request. |
+//! | `ok` | `bool` | always | `true` on success, `false` on failure. |
+//! | `result` | `json` | `ok == true` | Method result payload. |
+//! | `error` | [`DebugRpcError`] | `ok == false` | `{ code, message, details? }`. |
+//! | `cursor_rev` | `u64` | cursor-aware methods | Monotonic cursor revision for a session. |
+//! | `resolved_at` | [`ResolvedAt`] | target-resolving methods | Concrete `(cl, ts_ns?, idx)` resolution outcome. |
+//!
+//! ## Session and Cursor State Model
+//!
+//! This protocol is stateful per `session_id`.
+//!
+//! | State | Meaning | Entered by | Exited by |
+//! | --- | --- | --- | --- |
+//! | `NoSession` | Session id not known to server. | startup / `session.close` | `session.open` |
+//! | `OpenCursorUnset` | Session opened, cursor not initialized yet. | `session.open` | first successful nav that positions cursor |
+//! | `OpenCursorSet` | Cursor points to a concrete copperlist index. | `nav.seek`, `nav.step`, `nav.run_until`, mutating `timeline.get_cl`, replay, mutating `state.* at` | `session.close` |
+//! | `ServerStopping` | Server loop is terminating. | `admin.stop` | process shutdown / loop exit |
+//!
+//! Cursor revision (`cursor_rev`) behavior:
+//!
+//! - Increments whenever replay/navigation mutates session cursor via `update_after_jump`.
+//! - Some non-mutating state reads with `at` perform temporary seek/restore internally;
+//!   this currently bumps revision during the temporary move + restore.
+//!
+//! ## Target and Resolution Semantics
+//!
+//! `Target` is either:
+//!
+//! - `{"kind":"cl","cl":<u32>}`
+//! - `{"kind":"ts","ts_ns":<u64>}`
+//!
+//! `ResolveMode`:
+//!
+//! | Mode | Meaning |
+//! | --- | --- |
+//! | `exact` | Require exact match. |
+//! | `at_or_after` | First entry with value >= target. |
+//! | `at_or_before` | Last entry with value <= target. |
+//!
+//! Resolution always yields a concrete [`ResolvedAt`] (`cl`, optional `ts_ns`, and backing `idx`).
+//!
+//! ## RPC Method Matrix
+//!
+//! `admin.stop` is handled specially before normal dispatch.
+//!
+//! ### Session/Admin
+//!
+//! | Method | Session required | Params | Result (key fields) |
+//! | --- | --- | --- | --- |
+//! | `session.open` | no | [`SessionOpenParams`] | `session_id`, `capabilities`, `wire_codec`, `initial_cursor` |
+//! | `session.close` | yes | `{}` | `closed: bool` |
+//! | `session.capabilities` | yes | `{}` | protocol capability descriptor |
+//! | `session.cancel` | yes | `{ op_id }` | `cancelled` (currently always `false`, placeholder) |
+//! | `admin.stop` | no | `{}` | `stopping: true` |
+//!
+//! ### Navigation
+//!
+//! | Method | Session required | Params | Cursor mutation |
+//! | --- | --- | --- | --- |
+//! | `nav.seek` | yes | `{ target, resolve? }` | yes |
+//! | `nav.run_until` | yes | `{ target, resolve?, max_steps?, timeout_ms?, progress_every_n_steps? }` | yes |
+//! | `nav.step` | yes | `{ delta }` | yes |
+//! | `nav.replay` | yes | `{ at? }` | yes (replays current step; optional pre-seek) |
+//!
+//! Notes:
+//!
+//! - Current `nav.run_until` is synchronous and implemented as a resolved seek/jump,
+//!   returning an `op_id` for protocol shape consistency.
+//! - Current `session.cancel` does not cancel active work yet (reserved behavior).
+//!
+//! ### Timeline
+//!
+//! | Method | Session required | Params | Result |
+//! | --- | --- | --- | --- |
+//! | `timeline.get_cursor` | yes | `{}` | current cursor snapshot |
+//! | `timeline.get_cl` | yes | `{ at?, include_payloads?, include_metadata?, include_raw? }` | `cl_snapshot` (+ optional resolution) |
+//! | `timeline.list` | yes | `{ from, to, page? }` | list of `{ idx, cl, ts_ns }` + `next_offset` |
+//!
+//! ### Schema
+//!
+//! | Method | Session required | Params | Result |
+//! | --- | --- | --- | --- |
+//! | `schema.get_stack` | yes | `{}` | stack config schema JSON |
+//! | `schema.list_types` | yes | `{ filter? }` | `type_paths[]` |
+//! | `schema.get_type` | yes | `{ type_path, format? }` | schema/reflect dump |
+//! | `schema.get_payload_map` | yes | `{}` | output index -> task id map |
+//!
+//! ### State
+//!
+//! | Method | Session required | Params | Result |
+//! | --- | --- | --- | --- |
+//! | `state.inspect` | yes | `{ path="/", at?, depth?, page? }` | node kind + children preview |
+//! | `state.read` | yes | `{ path="/", at?, depth?, page?, format="json" }` | JSON value slice |
+//! | `state.search` | yes | `{ query, at?, page? }` | path/kind/preview matches |
+//! | `state.watch.open` | yes | `{ path, at?, mode? }` | `watch_id`, `event_topic` |
+//! | `state.watch.close` | yes | `{ watch_id }` | `closed: bool` |
+//!
+//! ### Health
+//!
+//! | Method | Session required | Params | Result |
+//! | --- | --- | --- | --- |
+//! | `health.ping` | no (or valid session if provided) | `{}` | `now_ns`, `status` |
+//! | `health.stats` | yes | `{}` | uptime, replay perf, watch count, cursor revision |
+//!
+//! ## Expected Call Flows
+//!
+//! Minimal control flow:
+//!
+//! 1. `session.open` -> get `session_id`
+//! 2. `session.capabilities`
+//! 3. one or more `nav.*` / `timeline.*` / `schema.*` / `state.*` / `health.*`
+//! 4. `session.close`
+//! 5. `admin.stop` (if caller owns server lifecycle)
+//!
+//! Example replay-focused flow:
+//!
+//! 1. `session.open`
+//! 2. `nav.seek` to a known CL
+//! 3. `timeline.get_cl` with payloads/metadata
+//! 4. `state.inspect` or `state.read` at same/derived target
+//! 5. `nav.step` or `nav.replay`
+//! 6. `health.stats`
+//! 7. `session.close`
+//!
+//! ## Error Model
+//!
+//! Errors are returned as:
+//!
+//! - `ok = false`
+//! - `error.code` + `error.message`
+//!
+//! Common codes include:
+//!
+//! | Code | Typical cause |
+//! | --- | --- |
+//! | `InvalidApi` | `api` field is not `"debug.v1"`. |
+//! | `UnknownMethod` | Method not in dispatch table. |
+//! | `MissingSession` | Session-required call omitted `session_id`. |
+//! | `SessionNotFound` | Unknown session id. |
+//! | `InvalidParams` | JSON decode error for method params. |
+//! | `ResolveFailed` | Target could not be resolved with requested mode. |
+//! | `SeekFailed` / `StepFailed` / `ReplayFailed` / `RunUntilFailed` | Navigation/replay operation failed. |
+//! | `GetClFailed` / `TimelineListFailed` / `CursorFailed` | Timeline query failure. |
+//! | `StateFailed` / `PathNotFound` | State-tree query failure. |
+//! | `TypeNotFound` | `schema.get_type` requested unknown type path. |
+//!
+//! ## Current Implementation Notes
+//!
+//! - Protocol version constant is `debug.v1`.
+//! - Method capabilities reported by `session.capabilities` do not list `admin.stop`
+//!   even though server handles it explicitly.
+//! - Event publishers are declared and helper methods exist, but core handlers are
+//!   currently request/reply oriented and do not emit continuous event streams yet.
 
 use crate::app::CuSimApplication;
 use crate::config::{BridgeChannelConfigRepresentation, Flavor, read_configuration_str};
