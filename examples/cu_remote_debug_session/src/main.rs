@@ -145,7 +145,9 @@ fn clean_logs() -> CuResult<()> {
 }
 
 fn record_log() -> CuResult<()> {
+    println!("[record] Cleaning existing session logs");
     clean_logs()?;
+    println!("[record] Creating mock clock and logger context");
     let (clock, clock_mock) = RobotClock::mock();
     let ctx = basic_copper_setup(
         Path::new(LOG_PATH),
@@ -156,17 +158,24 @@ fn record_log() -> CuResult<()> {
 
     let mut sim_cb = |_step: default::SimStep| SimOverride::ExecuteByRuntime;
 
+    println!("[record] Building debug app");
     let mut app = DebugAppBuilder::new()
         .with_context(&ctx)
         .with_sim_callback(&mut sim_cb)
         .build()?;
 
+    println!("[record] Starting tasks");
     app.start_all_tasks(&mut sim_cb)?;
-    for _ in 0..128u32 {
+    for i in 0..128u32 {
         clock_mock.increment(CuDuration::from_millis(10));
         app.run_one_iteration(&mut sim_cb)?;
+        if (i + 1) % 32 == 0 {
+            println!("[record] Completed {}/128 iterations", i + 1);
+        }
     }
+    println!("[record] Stopping tasks");
     app.stop_all_tasks(&mut sim_cb)?;
+    println!("[record] Log recording complete");
     Ok(())
 }
 
@@ -189,6 +198,7 @@ fn build_cb<'a>(
 }
 
 fn app_factory(_params: &SessionOpenParams) -> CuResult<(DebugApp, RobotClock, RobotClockMock)> {
+    println!("[server] Building replay app instance");
     let (clock, clock_mock) = RobotClock::mock();
     let ctx = basic_copper_setup(
         Path::new(REPLAY_LOG_PATH),
@@ -223,11 +233,28 @@ fn call_ok(
     Ok(response.result.unwrap_or(Value::Null))
 }
 
+fn call_step(
+    client: &RemoteDebugZenohClient,
+    session_id: Option<&str>,
+    method: &str,
+    params: Value,
+) -> CuResult<Value> {
+    match session_id {
+        Some(id) => println!("[rpc] -> {method} (session: {id})"),
+        None => println!("[rpc] -> {method}"),
+    }
+    let result = call_ok(client, session_id, method, params)?;
+    println!("[rpc] <- {method} ok");
+    Ok(result)
+}
+
 fn run_remote_debug_session() -> CuResult<()> {
+    println!("[session] Preparing remote debug paths");
     let paths = RemoteDebugPaths::new("copper/examples/cu_remote_debug_session/debug/v1");
 
     let server_paths = paths.clone();
     let server_handle = thread::spawn(move || -> CuResult<()> {
+        println!("[server] Starting RemoteDebugZenohServer");
         let mut server = RemoteDebugZenohServer::<
             DebugApp,
             default::CuStampedDataSet,
@@ -243,11 +270,16 @@ fn run_remote_debug_session() -> CuResult<()> {
             build_cb,
             time_of,
         )?;
-        server.serve_until_stopped()
+        println!("[server] Serving until admin.stop");
+        let result = server.serve_until_stopped();
+        println!("[server] Server loop exited");
+        result
     });
 
+    println!("[session] Waiting for server startup");
     thread::sleep(Duration::from_millis(300));
 
+    println!("[session] Creating remote debug client");
     let client = RemoteDebugZenohClient::new_with_codec(
         zenoh::Config::default(),
         paths.clone(),
@@ -255,7 +287,7 @@ fn run_remote_debug_session() -> CuResult<()> {
         WireCodec::Cbor,
     )?;
 
-    let open = call_ok(
+    let open = call_step(
         &client,
         None,
         "session.open",
@@ -271,24 +303,25 @@ fn run_remote_debug_session() -> CuResult<()> {
         .and_then(Value::as_str)
         .ok_or_else(|| CuError::from("missing session_id"))?
         .to_string();
+    println!("[session] Opened session_id={session_id}");
 
-    let _ = call_ok(
+    let _ = call_step(
         &client,
         Some(&session_id),
         "session.capabilities",
         json!({}),
     )?;
 
-    let _ = call_ok(
+    let _ = call_step(
         &client,
         Some(&session_id),
         "nav.seek",
         json!({ "target": {"kind": "cl", "cl": 7}, "resolve": "exact" }),
     )?;
 
-    let _ = call_ok(&client, Some(&session_id), "timeline.get_cursor", json!({}))?;
+    let _ = call_step(&client, Some(&session_id), "timeline.get_cursor", json!({}))?;
 
-    let _ = call_ok(
+    let _ = call_step(
         &client,
         Some(&session_id),
         "timeline.get_cl",
@@ -298,7 +331,7 @@ fn run_remote_debug_session() -> CuResult<()> {
             "include_raw": true,
         }),
     )?;
-    let ts_list = call_ok(
+    let ts_list = call_step(
         &client,
         Some(&session_id),
         "timeline.list",
@@ -314,8 +347,9 @@ fn run_remote_debug_session() -> CuResult<()> {
         .and_then(|item| item.get("ts_ns"))
         .and_then(Value::as_u64)
         .ok_or_else(|| CuError::from("missing timestamp in timeline.list"))?;
+    println!("[session] Using timestamp ts_ns={ts_ns} from timeline.list");
 
-    let _ = call_ok(
+    let _ = call_step(
         &client,
         Some(&session_id),
         "timeline.get_cl",
@@ -331,14 +365,14 @@ fn run_remote_debug_session() -> CuResult<()> {
         }),
     )?;
 
-    let _ = call_ok(
+    let _ = call_step(
         &client,
         Some(&session_id),
         "nav.seek",
         json!({ "target": {"kind": "ts", "ts_ns": ts_ns}, "resolve": "at_or_after" }),
     )?;
 
-    let run_until = call_ok(
+    let run_until = call_step(
         &client,
         Some(&session_id),
         "nav.run_until",
@@ -355,17 +389,18 @@ fn run_remote_debug_session() -> CuResult<()> {
         .and_then(Value::as_str)
         .ok_or_else(|| CuError::from("missing op_id from nav.run_until"))?
         .to_string();
+    println!("[session] Received op_id={op_id} from nav.run_until");
 
-    let _ = call_ok(
+    let _ = call_step(
         &client,
         Some(&session_id),
         "session.cancel",
         json!({"op_id": op_id}),
     )?;
 
-    let _ = call_ok(&client, Some(&session_id), "nav.step", json!({"delta": -1}))?;
+    let _ = call_step(&client, Some(&session_id), "nav.step", json!({"delta": -1}))?;
 
-    let _ = call_ok(
+    let _ = call_step(
         &client,
         Some(&session_id),
         "nav.replay",
@@ -378,9 +413,9 @@ fn run_remote_debug_session() -> CuResult<()> {
         }),
     )?;
 
-    let _ = call_ok(&client, Some(&session_id), "schema.get_stack", json!({}))?;
+    let _ = call_step(&client, Some(&session_id), "schema.get_stack", json!({}))?;
 
-    let types = call_ok(
+    let types = call_step(
         &client,
         Some(&session_id),
         "schema.list_types",
@@ -393,22 +428,23 @@ fn run_remote_debug_session() -> CuResult<()> {
         .and_then(Value::as_str)
         .ok_or_else(|| CuError::from("schema.list_types returned no type"))?
         .to_string();
+    println!("[session] First type from schema.list_types: {first_type}");
 
-    let _ = call_ok(
+    let _ = call_step(
         &client,
         Some(&session_id),
         "schema.get_type",
         json!({"type_path": first_type, "format": "jsonschema"}),
     )?;
 
-    let _ = call_ok(
+    let _ = call_step(
         &client,
         Some(&session_id),
         "schema.get_payload_map",
         json!({}),
     )?;
 
-    let _ = call_ok(
+    let _ = call_step(
         &client,
         Some(&session_id),
         "state.inspect",
@@ -423,7 +459,7 @@ fn run_remote_debug_session() -> CuResult<()> {
         }),
     )?;
 
-    let _ = call_ok(
+    let _ = call_step(
         &client,
         Some(&session_id),
         "state.read",
@@ -438,7 +474,7 @@ fn run_remote_debug_session() -> CuResult<()> {
         }),
     )?;
 
-    let _ = call_ok(
+    let _ = call_step(
         &client,
         Some(&session_id),
         "state.search",
@@ -452,7 +488,7 @@ fn run_remote_debug_session() -> CuResult<()> {
         }),
     )?;
 
-    let watch_open = call_ok(
+    let watch_open = call_step(
         &client,
         Some(&session_id),
         "state.watch.open",
@@ -470,31 +506,36 @@ fn run_remote_debug_session() -> CuResult<()> {
         .get("watch_id")
         .and_then(Value::as_u64)
         .ok_or_else(|| CuError::from("missing watch_id"))?;
+    println!("[session] Opened state watch_id={watch_id}");
 
-    let _ = call_ok(
+    let _ = call_step(
         &client,
         Some(&session_id),
         "state.watch.close",
         json!({"watch_id": watch_id}),
     )?;
 
-    let _ = call_ok(&client, Some(&session_id), "health.ping", json!({}))?;
-    let _ = call_ok(&client, Some(&session_id), "health.stats", json!({}))?;
+    let _ = call_step(&client, Some(&session_id), "health.ping", json!({}))?;
+    let _ = call_step(&client, Some(&session_id), "health.stats", json!({}))?;
 
-    let _ = call_ok(&client, Some(&session_id), "session.close", json!({}))?;
+    let _ = call_step(&client, Some(&session_id), "session.close", json!({}))?;
 
-    let _ = call_ok(&client, None, "admin.stop", json!({}))?;
+    let _ = call_step(&client, None, "admin.stop", json!({}))?;
 
+    println!("[session] Waiting for server thread to finish");
     let server_result = server_handle
         .join()
         .map_err(|_| CuError::from("remote debug server thread panicked"))?;
     server_result?;
+    println!("[session] Server thread finished cleanly");
 
     println!("Remote debug API demo completed successfully (all endpoints exercised).");
     Ok(())
 }
 
 fn main() -> CuResult<()> {
+    println!("[main] Recording baseline log");
     record_log()?;
+    println!("[main] Running remote debug API session");
     run_remote_debug_session()
 }
