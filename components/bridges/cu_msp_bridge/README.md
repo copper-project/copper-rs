@@ -4,7 +4,9 @@ Bridge that combines the MSP source/sink tasks into one serial transport.  It ex
 
 ## Resources and configuration
 
-The bridge expects a `serial` resource. For std targets, use `cu_linux_resources::LinuxResources` as the default provider. `cu_msp_bridge::StdSerialBundle` is kept only for backward compatibility with older configs. Both open a serial port and store it as an owned `serial` resource under `<bundle>.serial`.
+The bridge expects a `serial` resource. For std targets, use
+`cu_linux_resources::LinuxResources` as the provider. It opens the serial port
+and stores it as an owned `serial` resource under `<bundle>.serial`.
 
 | Key          | Type   | Default        | Description                                                |
 |--------------|--------|----------------|------------------------------------------------------------|
