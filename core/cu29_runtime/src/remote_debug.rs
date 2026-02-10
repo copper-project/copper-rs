@@ -82,8 +82,8 @@
 //! Cursor revision (`cursor_rev`) behavior:
 //!
 //! - Increments whenever replay/navigation mutates session cursor via `update_after_jump`.
-//! - Some non-mutating state reads with `at` perform temporary seek/restore internally;
-//!   this currently bumps revision during the temporary move + restore.
+//! - Non-mutating `state.*` queries with `at` perform temporary seek/restore internally
+//!   while preserving `cursor_rev`.
 //!
 //! ## Target and Resolution Semantics
 //!
@@ -2537,29 +2537,40 @@ where
             return Ok((root, Some(resolved)));
         }
 
-        let previous_idx = state.session.current_index();
-        let previous = match previous_idx {
-            Some(idx) => state.session.cl_at(idx)?,
-            None => None,
+        let previous_idx = state.session.current_index().ok_or_else(|| {
+            CuError::from("Non-mutating at queries require an initialized cursor")
+        })?;
+        let saved_rev = state.cursor_rev;
+        let saved_last_keyframe = state.last_keyframe;
+        let saved_last_replayed = state.last_replayed;
+
+        let did_temp_seek = resolved.idx != previous_idx;
+        if did_temp_seek {
+            let _ = seek_to_index(&mut state.session, resolved.idx)?;
+        }
+
+        let root_result = build_state_root_json::<App, P, CB, TF, S, L>(state, time_of);
+        let restore_result = if did_temp_seek {
+            seek_to_index(&mut state.session, previous_idx).map(|_| ())
+        } else {
+            Ok(())
         };
 
-        if previous.is_none() {
-            return Err(CuError::from(
-                "Non-mutating at queries require an initialized cursor",
-            ));
-        }
+        // Preserve logical cursor revision/metrics for non-mutating queries.
+        state.cursor_rev = saved_rev;
+        state.last_keyframe = saved_last_keyframe;
+        state.last_replayed = saved_last_replayed;
 
-        let jump = seek_to_index(&mut state.session, resolved.idx)?;
-        update_after_jump(state, &jump);
-
-        let root = build_state_root_json::<App, P, CB, TF, S, L>(state, time_of)?;
-
-        if let Some(prev) = previous {
-            let _ = state.session.goto_cl(prev.id)?;
-            state.bump_rev();
-        }
-
-        return Ok((root, Some(resolved)));
+        return match (root_result, restore_result) {
+            (Ok(root), Ok(())) => Ok((root, Some(resolved))),
+            (Err(e), Ok(())) => Err(e),
+            (Ok(_), Err(restore_err)) => Err(CuError::from(format!(
+                "Failed to restore cursor after non-mutating query: {restore_err}"
+            ))),
+            (Err(query_err), Err(restore_err)) => Err(CuError::from(format!(
+                "Non-mutating query failed: {query_err}; additionally failed to restore cursor: {restore_err}"
+            ))),
+        };
     }
 
     let root = build_state_root_json::<App, P, CB, TF, S, L>(state, time_of)?;
