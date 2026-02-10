@@ -18,14 +18,14 @@ pub mod curuntime;
 pub mod cutask;
 #[cfg(feature = "std")]
 pub mod debug;
-#[cfg(feature = "remote-debug")]
-pub mod remote_debug;
 pub(crate) mod log;
 pub mod monitoring;
 pub mod payload;
 #[cfg(feature = "std")]
 pub mod pool;
 pub mod reflect;
+#[cfg(feature = "remote-debug")]
+pub mod remote_debug;
 pub mod resource;
 #[cfg(feature = "std")]
 pub mod simulation;

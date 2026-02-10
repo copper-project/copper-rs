@@ -2,12 +2,12 @@ use cu29::bincode::de::Decoder;
 use cu29::bincode::enc::Encoder;
 use cu29::bincode::error::{DecodeError, EncodeError};
 use cu29::bincode::{Decode, Encode};
-use cu29::remote_debug::{
-    RemoteDebugPaths, RemoteDebugZenohClient, RemoteDebugZenohServer, SessionOpenParams, WireCodec,
-};
 use cu29::prelude::CopperList;
 use cu29::prelude::memmap::{MmapSectionStorage, MmapUnifiedLoggerWrite};
 use cu29::prelude::*;
+use cu29::remote_debug::{
+    RemoteDebugPaths, RemoteDebugZenohClient, RemoteDebugZenohServer, SessionOpenParams, WireCodec,
+};
 use cu29_helpers::basic_copper_setup;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
