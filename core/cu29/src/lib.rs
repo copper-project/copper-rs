@@ -191,6 +191,12 @@ pub mod prelude {
     pub use cu29_runtime::monitoring::*;
     pub use cu29_runtime::output_msg;
     pub use cu29_runtime::payload::*;
+    #[cfg(feature = "reflect")]
+    pub use cu29_runtime::reflect::serde as reflect_serde;
+    #[cfg(feature = "reflect")]
+    pub use cu29_runtime::reflect::serde::{
+        ReflectSerializer, SerializationData, TypedReflectSerializer,
+    };
     pub use cu29_runtime::reflect::{
         GetTypeRegistration, Reflect, ReflectTaskIntrospection, ReflectTypePath, TypeInfo,
         TypePath, TypeRegistry, dump_type_registry_schema,
