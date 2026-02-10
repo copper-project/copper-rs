@@ -8,7 +8,34 @@ Any encoder with a base clock + a direction trigger.
 
 ## Usage
 
-Add the driver like any other source in Copper:
+On Linux hardware, provide both GPIO inputs through resource bindings:
+
+```ron
+resources: [
+    (
+        id: "enc_clk",
+        provider: "cu_linux_resources::LinuxResources",
+        config: { "gpio_in_pin": 17 },
+    ),
+    (
+        id: "enc_dat",
+        provider: "cu_linux_resources::LinuxResources",
+        config: { "gpio_in_pin": 18 },
+    ),
+],
+tasks: [
+    (
+        id: "src",
+        type: "cu_rp_encoder::Encoder",
+        resources: {
+            clk_pin: "enc_clk.gpio_in",
+            dat_pin: "enc_dat.gpio_in",
+        },
+    ),
+]
+```
+
+In `mock` mode, pins can be supplied through task config:
 
 ```ron
     tasks: [
@@ -16,18 +43,14 @@ Add the driver like any other source in Copper:
             id: "src",
             type: "cu_rp_encoder::Encoder",
             params: {
-                pin_clt: 17,
-                pin_dat: 18,
+                clk_pin: 17,
+                dat_pin: 18,
             },
         ),
     ]
 ```
 
-The `pin_clt` is the pin for the clock signal and the `pin_dat` is the pin for the direction signal.
-
-You can also provide both pins via resources:
-- `resources: { clk_pin: "<bundle>.gpio_in", dat_pin: "<bundle>.gpio_in" }`
-- using two `cu_linux_resources::LinuxResources` bundles configured with different `gpio_in_pin` values.
+The `clk_pin` is the pin for the clock signal and the `dat_pin` is the pin for the direction signal.
 
 When you connect this driver to the rest of the system you need to use the `cu_rp_encoder::EncoderMsg` message type.
 

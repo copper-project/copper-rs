@@ -17,7 +17,7 @@ use cu_linux_resources::LinuxInputPin;
 #[cfg(mock)]
 use mock::{InputPin, get_pin};
 #[cfg(hardware)]
-use rppal::gpio::{Gpio, Level, Trigger};
+use rppal::gpio::{Level, Trigger};
 use serde::Deserialize;
 
 #[cfg(hardware)]
@@ -29,12 +29,11 @@ pub enum Binding {
     DatPin,
 }
 
-#[derive(Default)]
 pub struct EncoderResources {
     #[cfg(hardware)]
-    pub clk_pin: Option<Owned<InputPin>>,
+    pub clk_pin: Owned<InputPin>,
     #[cfg(hardware)]
-    pub dat_pin: Option<Owned<InputPin>>,
+    pub dat_pin: Owned<InputPin>,
 }
 
 impl<'r> ResourceBindings<'r> for EncoderResources {
@@ -46,22 +45,21 @@ impl<'r> ResourceBindings<'r> for EncoderResources {
     ) -> CuResult<Self> {
         #[cfg(hardware)]
         {
-            let clk_pin = match mapping.and_then(|m| m.get(Binding::ClkPin)) {
-                Some(path) => Some(
-                    manager
-                        .take::<InputPin>(path.typed())
-                        .map_err(|e| e.add_cause("Failed to fetch encoder clk pin resource"))?,
-                ),
-                None => None,
-            };
-            let dat_pin = match mapping.and_then(|m| m.get(Binding::DatPin)) {
-                Some(path) => Some(
-                    manager
-                        .take::<InputPin>(path.typed())
-                        .map_err(|e| e.add_cause("Failed to fetch encoder dat pin resource"))?,
-                ),
-                None => None,
-            };
+            let mapping = mapping.ok_or_else(|| {
+                CuError::from("Encoder requires `clk_pin` and `dat_pin` resource mappings")
+            })?;
+            let clk_pin = mapping.get(Binding::ClkPin).ok_or_else(|| {
+                CuError::from("Encoder resources must include `clk_pin: <bundle.resource>`")
+            })?;
+            let dat_pin = mapping.get(Binding::DatPin).ok_or_else(|| {
+                CuError::from("Encoder resources must include `dat_pin: <bundle.resource>`")
+            })?;
+            let clk_pin = manager
+                .take::<InputPin>(clk_pin.typed())
+                .map_err(|e| e.add_cause("Failed to fetch encoder clk pin resource"))?;
+            let dat_pin = manager
+                .take::<InputPin>(dat_pin.typed())
+                .map_err(|e| e.add_cause("Failed to fetch encoder dat pin resource"))?;
             Ok(Self { clk_pin, dat_pin })
         }
         #[cfg(mock)]
@@ -78,17 +76,6 @@ struct InterruptData {
     dat_pin: InputPin,
     ticks: i32,
     tov: CuDuration,
-}
-
-#[cfg(hardware)]
-fn get_pin(pin_nb: u8) -> CuResult<InputPin> {
-    // Gpio manages a singleton behind the scene.
-    let pin = Gpio::new()
-        .expect("Could not create GPIO bindings")
-        .get(pin_nb)
-        .map_err(|e| CuError::new_with_cause("Could not get pin", e))?
-        .into_input();
-    Ok(InputPin::new(pin))
 }
 
 #[derive(Default, Clone, Debug, Encode, Decode, Serialize, Deserialize)]
@@ -117,39 +104,25 @@ impl CuSrcTask for Encoder {
     type Resources<'r> = EncoderResources;
     type Output<'m> = output_msg!(EncoderPayload);
 
-    fn new(config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
+    fn new(_config: Option<&ComponentConfig>, _resources: Self::Resources<'_>) -> CuResult<Self>
     where
         Self: Sized,
     {
         #[cfg(hardware)]
-        let clk_pin: InputPin = match _resources.clk_pin {
-            #[cfg(hardware)]
-            Some(clk_pin) => clk_pin.0,
-            _ => {
-                let clk_pin = pin_from_config(config, "clk_pin")?;
-                get_pin(clk_pin)?
-            }
-        };
+        let clk_pin: InputPin = _resources.clk_pin.0;
 
         #[cfg(mock)]
         let clk_pin: InputPin = {
-            let clk_pin = pin_from_config(config, "clk_pin")?;
+            let clk_pin = pin_from_config(_config, "clk_pin")?;
             get_pin(clk_pin)?
         };
 
         #[cfg(hardware)]
-        let dat_pin: InputPin = match _resources.dat_pin {
-            #[cfg(hardware)]
-            Some(dat_pin) => dat_pin.0,
-            _ => {
-                let dat_pin = pin_from_config(config, "dat_pin")?;
-                get_pin(dat_pin)?
-            }
-        };
+        let dat_pin: InputPin = _resources.dat_pin.0;
 
         #[cfg(mock)]
         let dat_pin: InputPin = {
-            let dat_pin = pin_from_config(config, "dat_pin")?;
+            let dat_pin = pin_from_config(_config, "dat_pin")?;
             get_pin(dat_pin)?
         };
 
@@ -200,6 +173,7 @@ impl CuSrcTask for Encoder {
     }
 }
 
+#[cfg(mock)]
 fn pin_from_config(config: Option<&ComponentConfig>, key: &str) -> CuResult<u8> {
     let config = config.ok_or("Encoder needs a config with clk_pin and dat_pin.")?;
     config
