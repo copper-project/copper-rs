@@ -10,6 +10,7 @@
 //! | Server | [`RemoteDebugZenohServer::new`] | Build server with local-only default transport (Unix socket + SHM optimization). |
 //! | Server | [`RemoteDebugZenohServer::new_with_config`] | Build server with fully custom Zenoh config. |
 //! | Server | [`RemoteDebugZenohServer::serve_next`] | Process a single RPC request. |
+//! | Server | [`RemoteDebugZenohServer::serve_next_timeout`] | Poll for one RPC request with bounded wait. |
 //! | Server | [`RemoteDebugZenohServer::serve_until_stopped`] | Serve loop until `admin.stop`. |
 //! | Client | [`RemoteDebugZenohClient::new`] | Client with local-only default transport and CBOR codec. |
 //! | Client | [`RemoteDebugZenohClient::builder`] | Builder for selecting codec and/or custom Zenoh config. |
@@ -89,7 +90,8 @@
 //!
 //! - Idle timeout: 15 minutes since last request touching the session.
 //! - Maximum active sessions: 64.
-//! - Cleanup policy: stale sessions are evicted opportunistically on incoming requests.
+//! - Cleanup policy: stale sessions are evicted opportunistically on incoming requests
+//!   and on server receive-timeout ticks.
 //!
 //! ## Target and Resolution Semantics
 //!
@@ -247,6 +249,7 @@ const API_VERSION: &str = "debug.v1";
 const LOCAL_SHM_MESSAGE_THRESHOLD_BYTES: u64 = 1;
 const DEFAULT_SESSION_IDLE_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const DEFAULT_MAX_ACTIVE_SESSIONS: usize = 64;
+const SERVER_RECV_POLL_TIMEOUT: Duration = Duration::from_millis(250);
 
 type ZenohSubscriber =
     zenoh::pubsub::Subscriber<zenoh::handlers::FifoChannelHandler<zenoh::sample::Sample>>;
@@ -785,7 +788,7 @@ where
 
     pub fn serve_until_stopped(&mut self) -> CuResult<()> {
         while !self.stop_requested {
-            self.serve_next()?;
+            let _ = self.serve_next_timeout(SERVER_RECV_POLL_TIMEOUT)?;
         }
         Ok(())
     }
@@ -800,6 +803,28 @@ where
         let response = self.handle_request(request.clone());
         self.publish_reply(&request.reply_to, &response, codec)?;
         Ok(())
+    }
+
+    pub fn serve_next_timeout(&mut self, timeout: Duration) -> CuResult<bool> {
+        let maybe_sample = self.request_sub.recv_timeout(timeout).map_err(|e| {
+            CuError::from(format!(
+                "RemoteDebug: failed to receive RPC request with timeout: {e}"
+            ))
+        })?;
+
+        let sample = match maybe_sample {
+            Some(sample) => sample,
+            None => {
+                self.cleanup_expired_sessions();
+                return Ok(false);
+            }
+        };
+
+        let payload = sample.payload().to_bytes();
+        let (request, codec) = decode_request(payload.as_ref())?;
+        let response = self.handle_request(request.clone());
+        self.publish_reply(&request.reply_to, &response, codec)?;
+        Ok(true)
     }
 
     fn handle_request(&mut self, request: DebugRpcRequest) -> DebugRpcResponse {
@@ -2163,11 +2188,11 @@ fn capabilities_json(session_lifecycle: SessionLifecycleLimits) -> Value {
         "version": API_VERSION,
         "wire_codecs": ["cbor", "json"],
         "supports_targets": ["cl", "ts"],
-        "session_lifecycle": {
-            "idle_timeout_ms": session_lifecycle.idle_timeout.as_millis() as u64,
-            "max_sessions": session_lifecycle.max_sessions,
-            "cleanup_policy": "on_each_request",
-        },
+            "session_lifecycle": {
+                "idle_timeout_ms": session_lifecycle.idle_timeout.as_millis() as u64,
+                "max_sessions": session_lifecycle.max_sessions,
+                "cleanup_policy": "on_each_request_or_timeout_tick",
+            },
         "supports_methods": [
             "session.open",
             "session.close",
