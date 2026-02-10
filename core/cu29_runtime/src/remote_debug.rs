@@ -249,6 +249,7 @@ const API_VERSION: &str = "debug.v1";
 const LOCAL_SHM_MESSAGE_THRESHOLD_BYTES: u64 = 1;
 const DEFAULT_SESSION_IDLE_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const DEFAULT_MAX_ACTIVE_SESSIONS: usize = 64;
+const MAX_PAGE_LIMIT: u32 = 1000;
 const SERVER_RECV_POLL_TIMEOUT: Duration = Duration::from_millis(250);
 
 type ZenohSubscriber =
@@ -496,6 +497,16 @@ impl Default for Page {
             limit: 100,
         }
     }
+}
+
+fn validated_page(page: Page) -> Result<Page, String> {
+    if page.limit > MAX_PAGE_LIMIT {
+        return Err(format!(
+            "page.limit must be <= {MAX_PAGE_LIMIT}, got {}",
+            page.limit
+        ));
+    }
+    Ok(page)
 }
 
 #[derive(Debug, Clone)]
@@ -1457,7 +1468,10 @@ where
             Err(err) => return param_err_response(request_id, err),
         };
 
-        let page = parsed.page.unwrap_or_default();
+        let page = match validated_page(parsed.page.unwrap_or_default()) {
+            Ok(v) => v,
+            Err(err) => return param_err_response(request_id, err),
+        };
 
         let state = match self.session_mut(session_id) {
             Ok(v) => v,
@@ -1666,7 +1680,10 @@ where
             Err(e) => return err_response(request_id, "PathNotFound", &e),
         };
 
-        let page = parsed.page.unwrap_or_default();
+        let page = match validated_page(parsed.page.unwrap_or_default()) {
+            Ok(v) => v,
+            Err(err) => return param_err_response(request_id, err),
+        };
         let inspected = inspect_value(node, page);
         let cursor = cursor_snapshot(state, &time_of).ok();
 
@@ -1713,7 +1730,10 @@ where
             Err(e) => return err_response(request_id, "PathNotFound", &e),
         };
 
-        let page = parsed.page.unwrap_or_default();
+        let page = match validated_page(parsed.page.unwrap_or_default()) {
+            Ok(v) => v,
+            Err(err) => return param_err_response(request_id, err),
+        };
         let value = apply_page(node.clone(), page);
         let cursor = cursor_snapshot(state, &time_of).ok();
 
@@ -1753,17 +1773,16 @@ where
                 Err(e) => return err_response(request_id, "StateFailed", &e.to_string()),
             };
 
-        let mut matches = Vec::new();
-        collect_matches(&root, "", &parsed.query.to_ascii_lowercase(), &mut matches);
-
-        let page = parsed.page.unwrap_or_default();
-        let start = page.offset as usize;
-        let end = (start + page.limit as usize).min(matches.len());
-        let sliced = if start < matches.len() {
-            matches[start..end].to_vec()
-        } else {
-            Vec::new()
+        let page = match validated_page(parsed.page.unwrap_or_default()) {
+            Ok(v) => v,
+            Err(err) => return param_err_response(request_id, err),
         };
+        let start = page.offset as usize;
+        let end = start.saturating_add(page.limit as usize);
+        let needle = parsed.query.to_ascii_lowercase();
+        let mut total = 0usize;
+        let mut matches = Vec::with_capacity(page.limit as usize);
+        collect_matches_paged(&root, "", &needle, start, end, &mut total, &mut matches);
 
         let cursor = cursor_snapshot(state, &time_of).ok();
 
@@ -1771,8 +1790,8 @@ where
             request_id,
             json!({
                 "cursor": cursor,
-                "matches": sliced,
-                "total": matches.len(),
+                "matches": matches,
+                "total": total,
             }),
             Some(state.cursor_rev),
             resolved_at,
@@ -2814,7 +2833,15 @@ fn apply_page(value: Value, page: Page) -> Value {
     }
 }
 
-fn collect_matches(value: &Value, path: &str, needle: &str, out: &mut Vec<Value>) {
+fn collect_matches_paged(
+    value: &Value,
+    path: &str,
+    needle: &str,
+    start: usize,
+    end: usize,
+    total: &mut usize,
+    out: &mut Vec<Value>,
+) {
     match value {
         Value::Object(map) => {
             for (k, v) in map {
@@ -2824,13 +2851,9 @@ fn collect_matches(value: &Value, path: &str, needle: &str, out: &mut Vec<Value>
                     format!("{path}/{k}")
                 };
                 if k.to_ascii_lowercase().contains(needle) {
-                    out.push(json!({
-                        "path": child_path,
-                        "kind": kind_of(v),
-                        "preview": preview_json(v),
-                    }));
+                    push_paged_match(child_path.clone(), v, start, end, total, out);
                 }
-                collect_matches(v, &child_path, needle, out);
+                collect_matches_paged(v, &child_path, needle, start, end, total, out);
             }
         }
         Value::Array(list) => {
@@ -2840,20 +2863,34 @@ fn collect_matches(value: &Value, path: &str, needle: &str, out: &mut Vec<Value>
                 } else {
                     format!("{path}/{i}")
                 };
-                collect_matches(v, &child_path, needle, out);
+                collect_matches_paged(v, &child_path, needle, start, end, total, out);
             }
         }
         _ => {
             let text = value.to_string().to_ascii_lowercase();
             if text.contains(needle) {
-                out.push(json!({
-                    "path": path,
-                    "kind": kind_of(value),
-                    "preview": preview_json(value),
-                }));
+                push_paged_match(path.to_string(), value, start, end, total, out);
             }
         }
     }
+}
+
+fn push_paged_match(
+    path: String,
+    value: &Value,
+    start: usize,
+    end: usize,
+    total: &mut usize,
+    out: &mut Vec<Value>,
+) {
+    if *total >= start && *total < end {
+        out.push(json!({
+            "path": path,
+            "kind": kind_of(value),
+            "preview": preview_json(value),
+        }));
+    }
+    *total = total.saturating_add(1);
 }
 
 fn kind_of(value: &Value) -> &'static str {
