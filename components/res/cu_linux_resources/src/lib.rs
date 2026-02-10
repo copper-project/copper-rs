@@ -1,63 +1,63 @@
-#![cfg_attr(not(feature = "std"), no_std)]
-
-#[cfg(feature = "std")]
-use cu29::prelude::*;
-
-#[cfg(feature = "std")]
 use cu29::bundle_resources;
-
-#[cfg(feature = "std")]
+use cu29::prelude::*;
 use cu29::resource::{ResourceBundle, ResourceManager};
-
-#[cfg(feature = "std")]
 use embedded_io::{Read as EmbeddedRead, Write as EmbeddedWrite};
 #[cfg(feature = "embedded-io-07")]
 use embedded_io_07 as embedded_io07;
-
-#[cfg(feature = "std")]
+use serialport::{Parity as SerialParity, StopBits as SerialStopBits};
 use std::string::String;
 
-#[cfg(feature = "std")]
-pub const SERIAL_ACM0_PATH_KEY: &str = "tty_acm0_path";
-#[cfg(feature = "std")]
-pub const SERIAL_ACM1_PATH_KEY: &str = "tty_acm1_path";
-#[cfg(feature = "std")]
-pub const SERIAL_ACM2_PATH_KEY: &str = "tty_acm2_path";
-#[cfg(feature = "std")]
-pub const SERIAL_USB0_PATH_KEY: &str = "tty_usb0_path";
-#[cfg(feature = "std")]
-pub const SERIAL_USB1_PATH_KEY: &str = "tty_usb1_path";
-#[cfg(feature = "std")]
-pub const SERIAL_USB2_PATH_KEY: &str = "tty_usb2_path";
-#[cfg(feature = "std")]
-pub const SERIAL_BAUDRATE_KEY: &str = "serial_baudrate";
-#[cfg(feature = "std")]
-pub const SERIAL_TIMEOUT_MS_KEY: &str = "serial_timeout_ms";
+pub const SERIAL0_DEV_KEY: &str = "serial0_dev";
+pub const SERIAL0_BAUDRATE_KEY: &str = "serial0_baudrate";
+pub const SERIAL0_PARITY_KEY: &str = "serial0_parity";
+pub const SERIAL0_STOPBITS_KEY: &str = "serial0_stopbits";
+pub const SERIAL0_TIMEOUT_MS_KEY: &str = "serial0_timeout_ms";
 
-#[cfg(feature = "std")]
-pub const I2C0_PATH_KEY: &str = "i2c0_path";
-#[cfg(feature = "std")]
-pub const I2C1_PATH_KEY: &str = "i2c1_path";
-#[cfg(feature = "std")]
-pub const I2C2_PATH_KEY: &str = "i2c2_path";
+pub const SERIAL1_DEV_KEY: &str = "serial1_dev";
+pub const SERIAL1_BAUDRATE_KEY: &str = "serial1_baudrate";
+pub const SERIAL1_PARITY_KEY: &str = "serial1_parity";
+pub const SERIAL1_STOPBITS_KEY: &str = "serial1_stopbits";
+pub const SERIAL1_TIMEOUT_MS_KEY: &str = "serial1_timeout_ms";
 
-#[cfg(feature = "std")]
+pub const SERIAL2_DEV_KEY: &str = "serial2_dev";
+pub const SERIAL2_BAUDRATE_KEY: &str = "serial2_baudrate";
+pub const SERIAL2_PARITY_KEY: &str = "serial2_parity";
+pub const SERIAL2_STOPBITS_KEY: &str = "serial2_stopbits";
+pub const SERIAL2_TIMEOUT_MS_KEY: &str = "serial2_timeout_ms";
+
+pub const SERIAL3_DEV_KEY: &str = "serial3_dev";
+pub const SERIAL3_BAUDRATE_KEY: &str = "serial3_baudrate";
+pub const SERIAL3_PARITY_KEY: &str = "serial3_parity";
+pub const SERIAL3_STOPBITS_KEY: &str = "serial3_stopbits";
+pub const SERIAL3_TIMEOUT_MS_KEY: &str = "serial3_timeout_ms";
+
+pub const SERIAL4_DEV_KEY: &str = "serial4_dev";
+pub const SERIAL4_BAUDRATE_KEY: &str = "serial4_baudrate";
+pub const SERIAL4_PARITY_KEY: &str = "serial4_parity";
+pub const SERIAL4_STOPBITS_KEY: &str = "serial4_stopbits";
+pub const SERIAL4_TIMEOUT_MS_KEY: &str = "serial4_timeout_ms";
+
+pub const SERIAL5_DEV_KEY: &str = "serial5_dev";
+pub const SERIAL5_BAUDRATE_KEY: &str = "serial5_baudrate";
+pub const SERIAL5_PARITY_KEY: &str = "serial5_parity";
+pub const SERIAL5_STOPBITS_KEY: &str = "serial5_stopbits";
+pub const SERIAL5_TIMEOUT_MS_KEY: &str = "serial5_timeout_ms";
+
+pub const I2C0_DEV_KEY: &str = "i2c0_dev";
+pub const I2C1_DEV_KEY: &str = "i2c1_dev";
+pub const I2C2_DEV_KEY: &str = "i2c2_dev";
+
 pub const GPIO_OUT0_PIN_KEY: &str = "gpio_out0_pin";
-#[cfg(feature = "std")]
 pub const GPIO_OUT1_PIN_KEY: &str = "gpio_out1_pin";
-#[cfg(feature = "std")]
 pub const GPIO_OUT2_PIN_KEY: &str = "gpio_out2_pin";
-#[cfg(feature = "std")]
 pub const GPIO_IN0_PIN_KEY: &str = "gpio_in0_pin";
-#[cfg(feature = "std")]
 pub const GPIO_IN1_PIN_KEY: &str = "gpio_in1_pin";
-#[cfg(feature = "std")]
 pub const GPIO_IN2_PIN_KEY: &str = "gpio_in2_pin";
 
-#[cfg(feature = "std")]
 pub const DEFAULT_SERIAL_BAUDRATE: u32 = 115_200;
-#[cfg(feature = "std")]
 pub const DEFAULT_SERIAL_TIMEOUT_MS: u64 = 50;
+pub const DEFAULT_SERIAL_PARITY: SerialParity = SerialParity::None;
+pub const DEFAULT_SERIAL_STOPBITS: SerialStopBits = SerialStopBits::One;
 
 /// Wrapper for resources that are logically exclusive/owned by a single
 /// component but still need to satisfy `Sync` bounds at registration time.
@@ -84,14 +84,12 @@ impl<T> Exclusive<T> {
 // resources. The wrapped `T` is not concurrently aliased through this wrapper.
 unsafe impl<T: Send> Sync for Exclusive<T> {}
 
-#[cfg(feature = "std")]
 impl<T: std::io::Read> std::io::Read for Exclusive<T> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.0.read(buf)
     }
 }
 
-#[cfg(feature = "std")]
 impl<T: std::io::Write> std::io::Write for Exclusive<T> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.0.write(buf)
@@ -208,12 +206,10 @@ where
     }
 }
 
-#[cfg(feature = "std")]
 pub struct LinuxSerialPort {
     inner: Exclusive<Box<dyn serialport::SerialPort>>,
 }
 
-#[cfg(feature = "std")]
 impl LinuxSerialPort {
     pub fn new(inner: Box<dyn serialport::SerialPort>) -> Self {
         Self {
@@ -221,22 +217,33 @@ impl LinuxSerialPort {
         }
     }
 
-    pub fn open(path: &str, baudrate: u32, timeout_ms: u64) -> std::io::Result<Self> {
-        let port = serialport::new(path, baudrate)
-            .timeout(std::time::Duration::from_millis(timeout_ms))
+    pub fn open(dev: &str, baudrate: u32, timeout_ms: u64) -> std::io::Result<Self> {
+        let config = SerialSlotConfig {
+            dev: dev.to_string(),
+            baudrate,
+            parity: DEFAULT_SERIAL_PARITY,
+            stop_bits: DEFAULT_SERIAL_STOPBITS,
+            timeout_ms,
+        };
+        Self::open_with_config(&config)
+    }
+
+    pub fn open_with_config(config: &SerialSlotConfig) -> std::io::Result<Self> {
+        let port = serialport::new(config.dev.as_str(), config.baudrate)
+            .parity(config.parity)
+            .stop_bits(config.stop_bits)
+            .timeout(std::time::Duration::from_millis(config.timeout_ms))
             .open()?;
         Ok(Self::new(port))
     }
 }
 
-#[cfg(feature = "std")]
 impl std::io::Read for LinuxSerialPort {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.inner.read(buf)
     }
 }
 
-#[cfg(feature = "std")]
 impl std::io::Write for LinuxSerialPort {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.inner.write(buf)
@@ -247,19 +254,16 @@ impl std::io::Write for LinuxSerialPort {
     }
 }
 
-#[cfg(feature = "std")]
 impl embedded_io::ErrorType for LinuxSerialPort {
     type Error = std::io::Error;
 }
 
-#[cfg(feature = "std")]
 impl EmbeddedRead for LinuxSerialPort {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
         std::io::Read::read(self, buf)
     }
 }
 
-#[cfg(feature = "std")]
 impl EmbeddedWrite for LinuxSerialPort {
     fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
         std::io::Write::write(self, buf)
@@ -270,17 +274,15 @@ impl EmbeddedWrite for LinuxSerialPort {
     }
 }
 
-#[cfg(all(feature = "std", target_os = "linux"))]
+#[cfg(target_os = "linux")]
 pub type LinuxI2c = Exclusive<linux_embedded_hal::I2cdev>;
-#[cfg(all(feature = "std", target_os = "linux"))]
+#[cfg(target_os = "linux")]
 pub type LinuxOutputPin = Exclusive<rppal::gpio::OutputPin>;
-#[cfg(all(feature = "std", target_os = "linux"))]
+#[cfg(target_os = "linux")]
 pub type LinuxInputPin = Exclusive<rppal::gpio::InputPin>;
 
-#[cfg(feature = "std")]
 pub struct LinuxResources;
 
-#[cfg(feature = "std")]
 bundle_resources!(
     LinuxResources:
         SerialAcm0,
@@ -300,7 +302,6 @@ bundle_resources!(
         GpioIn2
 );
 
-#[cfg(feature = "std")]
 pub const LINUX_RESOURCE_SLOT_NAMES: &[&str] = &[
     "serial_acm0",
     "serial_acm1",
@@ -319,80 +320,111 @@ pub const LINUX_RESOURCE_SLOT_NAMES: &[&str] = &[
     "gpio_in2",
 ];
 
-#[cfg(feature = "std")]
 struct SerialSlot {
     id: LinuxResourcesId,
-    key: &'static str,
-    default_path: &'static str,
+    default_dev: &'static str,
+    dev_key: &'static str,
+    baudrate_key: &'static str,
+    parity_key: &'static str,
+    stopbits_key: &'static str,
+    timeout_ms_key: &'static str,
 }
 
-#[cfg(feature = "std")]
+#[derive(Clone, Debug)]
+pub struct SerialSlotConfig {
+    pub dev: String,
+    pub baudrate: u32,
+    pub parity: SerialParity,
+    pub stop_bits: SerialStopBits,
+    pub timeout_ms: u64,
+}
+
 const SERIAL_SLOTS: &[SerialSlot] = &[
     SerialSlot {
         id: LinuxResourcesId::SerialAcm0,
-        key: SERIAL_ACM0_PATH_KEY,
-        default_path: "/dev/ttyACM0",
+        default_dev: "/dev/ttyACM0",
+        dev_key: SERIAL0_DEV_KEY,
+        baudrate_key: SERIAL0_BAUDRATE_KEY,
+        parity_key: SERIAL0_PARITY_KEY,
+        stopbits_key: SERIAL0_STOPBITS_KEY,
+        timeout_ms_key: SERIAL0_TIMEOUT_MS_KEY,
     },
     SerialSlot {
         id: LinuxResourcesId::SerialAcm1,
-        key: SERIAL_ACM1_PATH_KEY,
-        default_path: "/dev/ttyACM1",
+        default_dev: "/dev/ttyACM1",
+        dev_key: SERIAL1_DEV_KEY,
+        baudrate_key: SERIAL1_BAUDRATE_KEY,
+        parity_key: SERIAL1_PARITY_KEY,
+        stopbits_key: SERIAL1_STOPBITS_KEY,
+        timeout_ms_key: SERIAL1_TIMEOUT_MS_KEY,
     },
     SerialSlot {
         id: LinuxResourcesId::SerialAcm2,
-        key: SERIAL_ACM2_PATH_KEY,
-        default_path: "/dev/ttyACM2",
+        default_dev: "/dev/ttyACM2",
+        dev_key: SERIAL2_DEV_KEY,
+        baudrate_key: SERIAL2_BAUDRATE_KEY,
+        parity_key: SERIAL2_PARITY_KEY,
+        stopbits_key: SERIAL2_STOPBITS_KEY,
+        timeout_ms_key: SERIAL2_TIMEOUT_MS_KEY,
     },
     SerialSlot {
         id: LinuxResourcesId::SerialUsb0,
-        key: SERIAL_USB0_PATH_KEY,
-        default_path: "/dev/ttyUSB0",
+        default_dev: "/dev/ttyUSB0",
+        dev_key: SERIAL3_DEV_KEY,
+        baudrate_key: SERIAL3_BAUDRATE_KEY,
+        parity_key: SERIAL3_PARITY_KEY,
+        stopbits_key: SERIAL3_STOPBITS_KEY,
+        timeout_ms_key: SERIAL3_TIMEOUT_MS_KEY,
     },
     SerialSlot {
         id: LinuxResourcesId::SerialUsb1,
-        key: SERIAL_USB1_PATH_KEY,
-        default_path: "/dev/ttyUSB1",
+        default_dev: "/dev/ttyUSB1",
+        dev_key: SERIAL4_DEV_KEY,
+        baudrate_key: SERIAL4_BAUDRATE_KEY,
+        parity_key: SERIAL4_PARITY_KEY,
+        stopbits_key: SERIAL4_STOPBITS_KEY,
+        timeout_ms_key: SERIAL4_TIMEOUT_MS_KEY,
     },
     SerialSlot {
         id: LinuxResourcesId::SerialUsb2,
-        key: SERIAL_USB2_PATH_KEY,
-        default_path: "/dev/ttyUSB2",
+        default_dev: "/dev/ttyUSB2",
+        dev_key: SERIAL5_DEV_KEY,
+        baudrate_key: SERIAL5_BAUDRATE_KEY,
+        parity_key: SERIAL5_PARITY_KEY,
+        stopbits_key: SERIAL5_STOPBITS_KEY,
+        timeout_ms_key: SERIAL5_TIMEOUT_MS_KEY,
     },
 ];
 
-#[cfg(feature = "std")]
 struct I2cSlot {
     id: LinuxResourcesId,
-    key: &'static str,
-    default_path: &'static str,
+    dev_key: &'static str,
+    default_dev: &'static str,
 }
 
-#[cfg(feature = "std")]
 const I2C_SLOTS: &[I2cSlot] = &[
     I2cSlot {
         id: LinuxResourcesId::I2c0,
-        key: I2C0_PATH_KEY,
-        default_path: "/dev/i2c-0",
+        dev_key: I2C0_DEV_KEY,
+        default_dev: "/dev/i2c-0",
     },
     I2cSlot {
         id: LinuxResourcesId::I2c1,
-        key: I2C1_PATH_KEY,
-        default_path: "/dev/i2c-1",
+        dev_key: I2C1_DEV_KEY,
+        default_dev: "/dev/i2c-1",
     },
     I2cSlot {
         id: LinuxResourcesId::I2c2,
-        key: I2C2_PATH_KEY,
-        default_path: "/dev/i2c-2",
+        dev_key: I2C2_DEV_KEY,
+        default_dev: "/dev/i2c-2",
     },
 ];
 
-#[cfg(feature = "std")]
 struct GpioSlot {
     id: LinuxResourcesId,
     key: &'static str,
 }
 
-#[cfg(feature = "std")]
 const GPIO_OUT_SLOTS: &[GpioSlot] = &[
     GpioSlot {
         id: LinuxResourcesId::GpioOut0,
@@ -408,7 +440,6 @@ const GPIO_OUT_SLOTS: &[GpioSlot] = &[
     },
 ];
 
-#[cfg(feature = "std")]
 const GPIO_IN_SLOTS: &[GpioSlot] = &[
     GpioSlot {
         id: LinuxResourcesId::GpioIn0,
@@ -424,29 +455,23 @@ const GPIO_IN_SLOTS: &[GpioSlot] = &[
     },
 ];
 
-#[cfg(feature = "std")]
 impl ResourceBundle for LinuxResources {
     fn build(
         bundle: cu29::resource::BundleContext<Self>,
         config: Option<&ComponentConfig>,
         manager: &mut ResourceManager,
     ) -> CuResult<()> {
-        let baudrate = get_u32(config, SERIAL_BAUDRATE_KEY)?.unwrap_or(DEFAULT_SERIAL_BAUDRATE);
-        let timeout_ms =
-            get_u64(config, SERIAL_TIMEOUT_MS_KEY)?.unwrap_or(DEFAULT_SERIAL_TIMEOUT_MS);
-
         for slot in SERIAL_SLOTS {
-            let path =
-                get_string(config, slot.key)?.unwrap_or_else(|| String::from(slot.default_path));
-            match LinuxSerialPort::open(&path, baudrate, timeout_ms) {
+            let serial_config = read_serial_slot_config(config, slot)?;
+            match LinuxSerialPort::open_with_config(&serial_config) {
                 Ok(serial) => {
                     manager.add_owned(bundle.key(slot.id), serial)?;
                 }
                 Err(err) => {
                     eprintln!(
-                        "LinuxResources: skipping serial slot {} ({}): {}",
+                        "LinuxResources: skipping serial slot {} (dev {}): {}",
                         slot_name(slot.id),
-                        path,
+                        serial_config.dev,
                         err
                     );
                 }
@@ -455,17 +480,17 @@ impl ResourceBundle for LinuxResources {
 
         #[cfg(target_os = "linux")]
         for slot in I2C_SLOTS {
-            let path =
-                get_string(config, slot.key)?.unwrap_or_else(|| String::from(slot.default_path));
-            match linux_embedded_hal::I2cdev::new(&path) {
-                Ok(dev) => {
-                    manager.add_owned(bundle.key(slot.id), Exclusive::new(dev))?;
+            let dev =
+                get_string(config, slot.dev_key)?.unwrap_or_else(|| String::from(slot.default_dev));
+            match linux_embedded_hal::I2cdev::new(&dev) {
+                Ok(i2c) => {
+                    manager.add_owned(bundle.key(slot.id), Exclusive::new(i2c))?;
                 }
                 Err(err) => {
                     eprintln!(
-                        "LinuxResources: skipping i2c slot {} ({}): {}",
+                        "LinuxResources: skipping i2c slot {} (dev {}): {}",
                         slot_name(slot.id),
-                        path,
+                        dev,
                         err
                     );
                 }
@@ -545,12 +570,72 @@ impl ResourceBundle for LinuxResources {
     }
 }
 
-#[cfg(feature = "std")]
+fn read_serial_slot_config(
+    config: Option<&ComponentConfig>,
+    slot: &SerialSlot,
+) -> CuResult<SerialSlotConfig> {
+    let dev = get_string(config, slot.dev_key)?.unwrap_or_else(|| String::from(slot.default_dev));
+    let baudrate = get_u32(config, slot.baudrate_key)?.unwrap_or(DEFAULT_SERIAL_BAUDRATE);
+    let parity = get_serial_parity(config, slot.parity_key)?.unwrap_or(DEFAULT_SERIAL_PARITY);
+    let stop_bits =
+        get_serial_stop_bits(config, slot.stopbits_key)?.unwrap_or(DEFAULT_SERIAL_STOPBITS);
+    let timeout_ms = get_u64(config, slot.timeout_ms_key)?.unwrap_or(DEFAULT_SERIAL_TIMEOUT_MS);
+
+    Ok(SerialSlotConfig {
+        dev,
+        baudrate,
+        parity,
+        stop_bits,
+        timeout_ms,
+    })
+}
+
+fn get_serial_parity(
+    config: Option<&ComponentConfig>,
+    key: &str,
+) -> CuResult<Option<SerialParity>> {
+    let Some(raw) = get_string(config, key)? else {
+        return Ok(None);
+    };
+    Ok(Some(parse_serial_parity_value(raw.as_str())?))
+}
+
+fn get_serial_stop_bits(
+    config: Option<&ComponentConfig>,
+    key: &str,
+) -> CuResult<Option<SerialStopBits>> {
+    let Some(raw) = get_u8(config, key)? else {
+        return Ok(None);
+    };
+    Ok(Some(parse_serial_stop_bits_value(raw)?))
+}
+
+fn parse_serial_parity_value(raw: &str) -> CuResult<SerialParity> {
+    let normalized = raw.trim().to_ascii_lowercase();
+    match normalized.as_str() {
+        "none" => Ok(SerialParity::None),
+        "odd" => Ok(SerialParity::Odd),
+        "even" => Ok(SerialParity::Even),
+        _ => Err(CuError::from(format!(
+            "Invalid parity '{raw}'. Expected one of: none, odd, even"
+        ))),
+    }
+}
+
+fn parse_serial_stop_bits_value(raw: u8) -> CuResult<SerialStopBits> {
+    match raw {
+        1 => Ok(SerialStopBits::One),
+        2 => Ok(SerialStopBits::Two),
+        _ => Err(CuError::from(format!(
+            "Invalid stopbits value '{raw}'. Expected 1 or 2"
+        ))),
+    }
+}
+
 fn slot_name(id: LinuxResourcesId) -> &'static str {
     LINUX_RESOURCE_SLOT_NAMES[id as usize]
 }
 
-#[cfg(feature = "std")]
 fn get_string(config: Option<&ComponentConfig>, key: &str) -> CuResult<Option<String>> {
     match config {
         Some(cfg) => Ok(cfg.get::<String>(key)?.filter(|value| !value.is_empty())),
@@ -558,7 +643,6 @@ fn get_string(config: Option<&ComponentConfig>, key: &str) -> CuResult<Option<St
     }
 }
 
-#[cfg(feature = "std")]
 fn get_u8(config: Option<&ComponentConfig>, key: &str) -> CuResult<Option<u8>> {
     match config {
         Some(cfg) => Ok(cfg.get::<u8>(key)?),
@@ -566,7 +650,6 @@ fn get_u8(config: Option<&ComponentConfig>, key: &str) -> CuResult<Option<u8>> {
     }
 }
 
-#[cfg(feature = "std")]
 fn get_u32(config: Option<&ComponentConfig>, key: &str) -> CuResult<Option<u32>> {
     match config {
         Some(cfg) => Ok(cfg.get::<u32>(key)?),
@@ -574,7 +657,6 @@ fn get_u32(config: Option<&ComponentConfig>, key: &str) -> CuResult<Option<u32>>
     }
 }
 
-#[cfg(feature = "std")]
 fn get_u64(config: Option<&ComponentConfig>, key: &str) -> CuResult<Option<u64>> {
     match config {
         Some(cfg) => Ok(cfg.get::<u64>(key)?),
@@ -582,10 +664,50 @@ fn get_u64(config: Option<&ComponentConfig>, key: &str) -> CuResult<Option<u64>>
     }
 }
 
-#[cfg(all(test, feature = "embedded-io-07"))]
+#[cfg(test)]
 mod tests {
-    use super::Exclusive;
+    use super::*;
 
+    #[test]
+    fn parse_serial_parity_value_accepts_expected_inputs() {
+        assert!(matches!(
+            parse_serial_parity_value("none").unwrap(),
+            SerialParity::None
+        ));
+        assert!(matches!(
+            parse_serial_parity_value("Odd").unwrap(),
+            SerialParity::Odd
+        ));
+        assert!(matches!(
+            parse_serial_parity_value("EVEN").unwrap(),
+            SerialParity::Even
+        ));
+    }
+
+    #[test]
+    fn parse_serial_parity_value_rejects_invalid_input() {
+        assert!(parse_serial_parity_value("mark").is_err());
+    }
+
+    #[test]
+    fn parse_serial_stop_bits_value_accepts_expected_inputs() {
+        assert!(matches!(
+            parse_serial_stop_bits_value(1).unwrap(),
+            SerialStopBits::One
+        ));
+        assert!(matches!(
+            parse_serial_stop_bits_value(2).unwrap(),
+            SerialStopBits::Two
+        ));
+    }
+
+    #[test]
+    fn parse_serial_stop_bits_value_rejects_invalid_input() {
+        assert!(parse_serial_stop_bits_value(0).is_err());
+        assert!(parse_serial_stop_bits_value(3).is_err());
+    }
+
+    #[cfg(feature = "embedded-io-07")]
     struct MockIo {
         rx: [u8; 4],
         rx_len: usize,
@@ -593,6 +715,7 @@ mod tests {
         tx_len: usize,
     }
 
+    #[cfg(feature = "embedded-io-07")]
     impl MockIo {
         fn new(rx: &[u8]) -> Self {
             let mut buf = [0_u8; 4];
@@ -606,10 +729,12 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "embedded-io-07")]
     impl embedded_io_07::ErrorType for MockIo {
         type Error = core::convert::Infallible;
     }
 
+    #[cfg(feature = "embedded-io-07")]
     impl embedded_io_07::Read for MockIo {
         fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
             let n = core::cmp::min(buf.len(), self.rx_len);
@@ -618,6 +743,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "embedded-io-07")]
     impl embedded_io_07::Write for MockIo {
         fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
             let n = core::cmp::min(buf.len(), self.tx.len());
@@ -631,6 +757,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "embedded-io-07")]
     #[test]
     fn exclusive_forwards_embedded_io_07_traits() {
         let mut wrapped = Exclusive::new(MockIo::new(&[1, 2, 3]));

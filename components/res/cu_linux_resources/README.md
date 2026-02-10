@@ -1,6 +1,6 @@
 # cu-linux-resources
 
-Shared Linux/host resource bundle for serial, I2C, and GPIO peripherals.
+Linux/host resource bundle for serial, I2C, and GPIO peripherals.
 
 ## Provider
 
@@ -12,10 +12,12 @@ resources: [
     id: "linux",
     provider: "cu_linux_resources::LinuxResources",
     config: {
-      "tty_usb0_path": "/dev/ttyUSB0",
-      "serial_baudrate": 420000,
-      "serial_timeout_ms": 100,
-      "i2c1_path": "/dev/i2c-1",
+      "serial3_dev": "/dev/ttyUSB0",
+      "serial3_baudrate": 420000,
+      "serial3_parity": "none",
+      "serial3_stopbits": 1,
+      "serial3_timeout_ms": 100,
+      "i2c1_dev": "/dev/i2c-1",
       "gpio_out0_pin": 23,
       "gpio_in0_pin": 24,
     },
@@ -37,19 +39,32 @@ Bind tasks/bridges to these slots via `<bundle>.<slot>` (for example `linux.seri
 ## Config Keys
 
 ### Serial
-- `tty_acm0_path`, `tty_acm1_path`, `tty_acm2_path`
-- `tty_usb0_path`, `tty_usb1_path`, `tty_usb2_path`
-- `serial_baudrate` (`u32`, default `115200`)
-- `serial_timeout_ms` (`u64`, default `50`)
 
-If a serial path key is omitted, the default Linux device path is used (`/dev/ttyACM*`, `/dev/ttyUSB*`).
+Per-slot keys are anonymous (`serial0..serial5`). Each slot maps to a fixed resource id and default device:
+
+- `serial0_*` -> `serial_acm0` (default dev `/dev/ttyACM0`)
+- `serial1_*` -> `serial_acm1` (default dev `/dev/ttyACM1`)
+- `serial2_*` -> `serial_acm2` (default dev `/dev/ttyACM2`)
+- `serial3_*` -> `serial_usb0` (default dev `/dev/ttyUSB0`)
+- `serial4_*` -> `serial_usb1` (default dev `/dev/ttyUSB1`)
+- `serial5_*` -> `serial_usb2` (default dev `/dev/ttyUSB2`)
+
+Supported keys per serial slot `serialN`:
+
+- `serialN_dev` (`string`)
+- `serialN_baudrate` (`u32`, default `115200`)
+- `serialN_parity` (`string`: `none`, `odd`, `even`; default `none`)
+- `serialN_stopbits` (`u8`: `1` or `2`; default `1`)
+- `serialN_timeout_ms` (`u64`, default `50`)
 
 ### I2C
-- `i2c0_path` (default `/dev/i2c-0`)
-- `i2c1_path` (default `/dev/i2c-1`)
-- `i2c2_path` (default `/dev/i2c-2`)
+
+- `i2c0_dev` (default `/dev/i2c-0`)
+- `i2c1_dev` (default `/dev/i2c-1`)
+- `i2c2_dev` (default `/dev/i2c-2`)
 
 ### GPIO
+
 - Output pins: `gpio_out0_pin`, `gpio_out1_pin`, `gpio_out2_pin`
 - Input pins: `gpio_in0_pin`, `gpio_in1_pin`, `gpio_in2_pin`
 
