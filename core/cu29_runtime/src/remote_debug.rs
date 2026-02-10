@@ -85,6 +85,12 @@
 //! - Non-mutating `state.*` queries with `at` perform temporary seek/restore internally
 //!   while preserving `cursor_rev`.
 //!
+//! Session lifecycle limits (default):
+//!
+//! - Idle timeout: 15 minutes since last request touching the session.
+//! - Maximum active sessions: 64.
+//! - Cleanup policy: stale sessions are evicted opportunistically on incoming requests.
+//!
 //! ## Target and Resolution Semantics
 //!
 //! `Target` is either:
@@ -200,6 +206,7 @@
 //! | `UnknownMethod` | Method not in dispatch table. |
 //! | `MissingSession` | Session-required call omitted `session_id`. |
 //! | `SessionNotFound` | Unknown session id. |
+//! | `SessionLimitReached` | `session.open` denied because active session cap is reached. |
 //! | `InvalidParams` | JSON decode error for method params. |
 //! | `ResolveFailed` | Target could not be resolved with requested mode. |
 //! | `SeekFailed` / `StepFailed` / `ReplayFailed` / `RunUntilFailed` | Navigation/replay operation failed. |
@@ -212,6 +219,8 @@
 //! - Protocol version constant is `debug.v1`.
 //! - Method capabilities reported by `session.capabilities` do not list `admin.stop`
 //!   even though server handles it explicitly.
+//! - `session.capabilities` and `session.open` expose lifecycle limits under
+//!   `session_lifecycle` in the capability payload.
 //! - Event publishers are declared and helper methods exist, but core handlers are
 //!   currently request/reply oriented and do not emit continuous event streams yet.
 
@@ -230,13 +239,15 @@ use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use zenoh::bytes::Encoding;
 use zenoh::key_expr::KeyExpr;
 use zenoh::{Config as ZenohConfig, Error as ZenohError};
 
 const API_VERSION: &str = "debug.v1";
 const LOCAL_SHM_MESSAGE_THRESHOLD_BYTES: u64 = 1;
+const DEFAULT_SESSION_IDLE_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+const DEFAULT_MAX_ACTIVE_SESSIONS: usize = 64;
 
 type ZenohSubscriber =
     zenoh::pubsub::Subscriber<zenoh::handlers::FifoChannelHandler<zenoh::sample::Sample>>;
@@ -513,6 +524,7 @@ where
 {
     session: CuDebugSession<App, P, CB, TF, S, L>,
     opened_at: Instant,
+    last_touched_at: Instant,
     cursor_rev: u64,
     last_keyframe: Option<u32>,
     last_replayed: usize,
@@ -529,6 +541,21 @@ where
 {
     fn bump_rev(&mut self) {
         self.cursor_rev = self.cursor_rev.saturating_add(1);
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct SessionLifecycleLimits {
+    idle_timeout: Duration,
+    max_sessions: usize,
+}
+
+impl Default for SessionLifecycleLimits {
+    fn default() -> Self {
+        Self {
+            idle_timeout: DEFAULT_SESSION_IDLE_TIMEOUT,
+            max_sessions: DEFAULT_MAX_ACTIVE_SESSIONS,
+        }
     }
 }
 
@@ -672,6 +699,7 @@ where
     next_op_id: u64,
     stop_requested: bool,
     stack_schema: Value,
+    session_lifecycle: SessionLifecycleLimits,
 }
 
 impl<App, P, CB, TF, S, L, AF> RemoteDebugZenohServer<App, P, CB, TF, S, L, AF>
@@ -752,6 +780,7 @@ where
             next_op_id: 1,
             stop_requested: false,
             stack_schema,
+            session_lifecycle: SessionLifecycleLimits::default(),
         })
     }
 
@@ -793,6 +822,7 @@ where
             return ok_response(request_id, json!({"stopping": true}), None, None);
         }
 
+        self.cleanup_expired_sessions();
         self.dispatch_request(&request)
     }
 
@@ -893,6 +923,17 @@ where
             Ok(v) => v,
             Err(err) => return param_err_response(request_id, err),
         };
+        self.cleanup_expired_sessions();
+        if self.sessions.len() >= self.session_lifecycle.max_sessions {
+            return err_response(
+                request_id,
+                "SessionLimitReached",
+                &format!(
+                    "Maximum active sessions ({}) reached",
+                    self.session_lifecycle.max_sessions
+                ),
+            );
+        }
         let wire_codec = negotiate_codec(parsed.codecs.as_deref()).unwrap_or(WireCodec::Cbor);
 
         let path = PathBuf::from(&parsed.log_base);
@@ -934,6 +975,7 @@ where
             SessionState {
                 session,
                 opened_at: Instant::now(),
+                last_touched_at: Instant::now(),
                 cursor_rev: 0,
                 last_keyframe: None,
                 last_replayed: 0,
@@ -946,7 +988,7 @@ where
             request_id,
             json!({
                 "session_id": session_id,
-                "capabilities": capabilities_json(),
+                "capabilities": capabilities_json(self.session_lifecycle),
                 "wire_codec": wire_codec,
                 "initial_cursor": Value::Null,
             }),
@@ -985,11 +1027,16 @@ where
             Some(v) => v,
             None => return err_response(request_id, "MissingSession", "session_id is required"),
         };
-        if !self.sessions.contains_key(sid) {
-            return err_response(request_id, "SessionNotFound", "session not found");
+        if let Err(e) = self.session_mut(Some(sid)) {
+            return err_response(request_id, "SessionNotFound", &e.to_string());
         }
 
-        ok_response(request_id, capabilities_json(), None, None)
+        ok_response(
+            request_id,
+            capabilities_json(self.session_lifecycle),
+            None,
+            None,
+        )
     }
 
     fn handle_session_cancel(
@@ -1002,8 +1049,8 @@ where
             Some(v) => v,
             None => return err_response(request_id, "MissingSession", "session_id is required"),
         };
-        if !self.sessions.contains_key(sid) {
-            return err_response(request_id, "SessionNotFound", "session not found");
+        if let Err(e) = self.session_mut(Some(sid)) {
+            return err_response(request_id, "SessionNotFound", &e.to_string());
         }
         let parsed: SessionCancelParams = match from_params(params) {
             Ok(v) => v,
@@ -1780,7 +1827,7 @@ where
         _params: &Value,
     ) -> DebugRpcResponse {
         if let Some(sid) = session_id
-            && !self.sessions.contains_key(sid)
+            && self.session_mut(Some(sid)).is_err()
         {
             return err_response(request_id, "SessionNotFound", "session not found");
         }
@@ -1808,9 +1855,9 @@ where
             None => return err_response(request_id, "MissingSession", "session_id is required"),
         };
 
-        let state = match self.sessions.get(sid) {
-            Some(v) => v,
-            None => return err_response(request_id, "SessionNotFound", "session not found"),
+        let state = match self.session_mut(Some(sid)) {
+            Ok(v) => v,
+            Err(e) => return err_response(request_id, "SessionNotFound", &e.to_string()),
         };
 
         ok_response(
@@ -1929,9 +1976,20 @@ where
         session_id: Option<&str>,
     ) -> CuResult<&mut SessionState<App, P, CB, TF, S, L>> {
         let sid = session_id.ok_or_else(|| CuError::from("session_id is required"))?;
-        self.sessions
+        let state = self
+            .sessions
             .get_mut(sid)
-            .ok_or_else(|| CuError::from(format!("Session '{sid}' not found")))
+            .ok_or_else(|| CuError::from(format!("Session '{sid}' not found")))?;
+        state.last_touched_at = Instant::now();
+        Ok(state)
+    }
+
+    fn cleanup_expired_sessions(&mut self) {
+        let now = Instant::now();
+        let idle_timeout = self.session_lifecycle.idle_timeout;
+        self.sessions.retain(|_, state| {
+            now.saturating_duration_since(state.last_touched_at) <= idle_timeout
+        });
     }
 }
 
@@ -2101,11 +2159,16 @@ impl RemoteDebugZenohClient {
     }
 }
 
-fn capabilities_json() -> Value {
+fn capabilities_json(session_lifecycle: SessionLifecycleLimits) -> Value {
     json!({
         "version": API_VERSION,
         "wire_codecs": ["cbor", "json"],
         "supports_targets": ["cl", "ts"],
+        "session_lifecycle": {
+            "idle_timeout_ms": session_lifecycle.idle_timeout.as_millis() as u64,
+            "max_sessions": session_lifecycle.max_sessions,
+            "cleanup_policy": "on_each_request",
+        },
         "supports_methods": [
             "session.open",
             "session.close",
