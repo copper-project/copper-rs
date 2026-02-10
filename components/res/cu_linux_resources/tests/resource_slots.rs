@@ -1,9 +1,9 @@
-use cu_linux_resources::LINUX_RESOURCES_ID_NAMES;
+use cu_linux_resources::LINUX_RESOURCE_SLOT_NAMES;
 
 #[test]
 fn linux_resources_exposes_fixed_serial_and_i2c_slots() {
     assert_eq!(
-        LINUX_RESOURCES_ID_NAMES,
+        LINUX_RESOURCE_SLOT_NAMES,
         &[
             "serial_acm0",
             "serial_acm1",

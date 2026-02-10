@@ -4,6 +4,9 @@
 use cu29::prelude::*;
 
 #[cfg(feature = "std")]
+use cu29::bundle_resources;
+
+#[cfg(feature = "std")]
 use cu29::resource::{ResourceBundle, ResourceManager};
 
 #[cfg(feature = "std")]
@@ -278,43 +281,27 @@ pub type LinuxInputPin = Exclusive<rppal::gpio::InputPin>;
 pub struct LinuxResources;
 
 #[cfg(feature = "std")]
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-#[repr(usize)]
-pub enum LinuxResourcesId {
-    SerialAcm0,
-    SerialAcm1,
-    SerialAcm2,
-    SerialUsb0,
-    SerialUsb1,
-    SerialUsb2,
-    I2c0,
-    I2c1,
-    I2c2,
-    GpioOut0,
-    GpioOut1,
-    GpioOut2,
-    GpioIn0,
-    GpioIn1,
-    GpioIn2,
-}
+bundle_resources!(
+    LinuxResources:
+        SerialAcm0,
+        SerialAcm1,
+        SerialAcm2,
+        SerialUsb0,
+        SerialUsb1,
+        SerialUsb2,
+        I2c0,
+        I2c1,
+        I2c2,
+        GpioOut0,
+        GpioOut1,
+        GpioOut2,
+        GpioIn0,
+        GpioIn1,
+        GpioIn2
+);
 
 #[cfg(feature = "std")]
-impl cu29::resource::ResourceId for LinuxResourcesId {
-    const COUNT: usize = 15;
-
-    fn index(self) -> usize {
-        self as usize
-    }
-}
-
-#[cfg(feature = "std")]
-impl cu29::resource::ResourceBundleDecl for LinuxResources {
-    type Id = LinuxResourcesId;
-}
-
-#[cfg(feature = "std")]
-#[allow(dead_code)]
-pub const LINUX_RESOURCES_ID_NAMES: &[&str] = &[
+pub const LINUX_RESOURCE_SLOT_NAMES: &[&str] = &[
     "serial_acm0",
     "serial_acm1",
     "serial_acm2",
@@ -560,7 +547,7 @@ impl ResourceBundle for LinuxResources {
 
 #[cfg(feature = "std")]
 fn slot_name(id: LinuxResourcesId) -> &'static str {
-    LINUX_RESOURCES_ID_NAMES[id as usize]
+    LINUX_RESOURCE_SLOT_NAMES[id as usize]
 }
 
 #[cfg(feature = "std")]
