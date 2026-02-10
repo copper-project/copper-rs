@@ -199,20 +199,20 @@ fn inline_local_refs_in_value(
 ) -> serde_json::Value {
     match value {
         serde_json::Value::Object(mut map) => {
-            if let Some(reference) = map.get("$ref").and_then(|v| v.as_str()) {
-                if let Some(mut resolved) = resolve_local_ref(reference, defs, stack) {
-                    map.remove("$ref");
+            if let Some(reference) = map.get("$ref").and_then(|v| v.as_str())
+                && let Some(mut resolved) = resolve_local_ref(reference, defs, stack)
+            {
+                map.remove("$ref");
 
-                    if !map.is_empty() {
-                        let mut merged = resolved.as_object().cloned().unwrap_or_default();
-                        for (k, v) in map {
-                            merged.insert(k, inline_local_refs_in_value(v, defs, stack));
-                        }
-                        resolved = serde_json::Value::Object(merged);
+                if !map.is_empty() {
+                    let mut merged = resolved.as_object().cloned().unwrap_or_default();
+                    for (k, v) in map {
+                        merged.insert(k, inline_local_refs_in_value(v, defs, stack));
                     }
-
-                    return resolved;
+                    resolved = serde_json::Value::Object(merged);
                 }
+
+                return resolved;
             }
 
             let mut resolved = serde_json::Map::new();
