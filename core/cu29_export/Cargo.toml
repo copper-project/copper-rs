@@ -38,11 +38,7 @@ jsonschema = "0.37"
 [features]
 default = []
 python = ["dep:pyo3"]
-mcap = [
-  "dep:mcap",
-  "dep:erased-serde",
-  "dep:indicatif",
-]
+mcap = ["dep:mcap", "dep:erased-serde", "dep:indicatif"]
 
 [dependencies.mcap]
 version = "0.24"

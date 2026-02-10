@@ -49,10 +49,7 @@ pub fn registry_to_jsonschema(registry: &TypeRegistry, root_type: &str) -> Strin
     serde_json::to_string_pretty(&schema).unwrap_or_else(|_| "{}".to_string())
 }
 
-fn find_root_type_info<'a>(
-    registry: &'a TypeRegistry,
-    root_type: &str,
-) -> Option<&'static TypeInfo> {
+fn find_root_type_info(registry: &TypeRegistry, root_type: &str) -> Option<&'static TypeInfo> {
     registry
         .get_with_type_path(root_type)
         .map(|registration| registration.type_info())

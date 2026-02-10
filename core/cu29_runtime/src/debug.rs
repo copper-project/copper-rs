@@ -582,23 +582,27 @@ where
         #[cfg(not(feature = "reflect"))]
         {
             let _ = task;
-            return Err(CuError::from(
+            Err(CuError::from(
                 "Task introspection is disabled. Rebuild with the `reflect` feature.",
-            ));
+            ))
         }
 
         #[cfg(feature = "reflect")]
-        Ok(format!("{task:#?}"))
+        {
+            Ok(format!("{task:#?}"))
+        }
     }
 
     /// Dumps reflected schemas registered by this application.
     pub fn dump_reflected_task_schemas(&self) -> String {
+        #[cfg(feature = "reflect")]
         let mut registry = TypeRegistry::default();
+        #[cfg(not(feature = "reflect"))]
+        let mut registry = TypeRegistry;
         <App as ReflectTaskIntrospection>::register_reflect_types(&mut registry);
         dump_type_registry_schema(&registry)
     }
 }
-
 /// Decode all copperlists contained in a single unified-log section.
 #[allow(clippy::type_complexity)]
 fn decode_copperlists<

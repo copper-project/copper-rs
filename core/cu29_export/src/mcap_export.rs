@@ -113,9 +113,10 @@ fn mcap_tov_schema() -> serde_json::Value {
 }
 
 fn metadata_only_message_schema() -> String {
-    let process_time_schema = inline_schema_local_refs(parse_schema_or_unknown(
-        &crate::trace_type_to_jsonschema::<cu29_clock::PartialCuTimeRange>(),
-    ));
+    let process_time_schema =
+        inline_schema_local_refs(parse_schema_or_unknown(&crate::trace_type_to_jsonschema::<
+            cu29_clock::PartialCuTimeRange,
+        >()));
     let (process_time_root, _) = split_schema_root_and_defs(process_time_schema);
 
     let schema = serde_json::json!({
@@ -198,20 +199,20 @@ fn inline_local_refs_in_value(
 ) -> serde_json::Value {
     match value {
         serde_json::Value::Object(mut map) => {
-            if let Some(reference) = map.get("$ref").and_then(|v| v.as_str()) {
-                if let Some(mut resolved) = resolve_local_ref(reference, defs, stack) {
-                    map.remove("$ref");
+            if let Some(reference) = map.get("$ref").and_then(|v| v.as_str())
+                && let Some(mut resolved) = resolve_local_ref(reference, defs, stack)
+            {
+                map.remove("$ref");
 
-                    if !map.is_empty() {
-                        let mut merged = resolved.as_object().cloned().unwrap_or_default();
-                        for (k, v) in map {
-                            merged.insert(k, inline_local_refs_in_value(v, defs, stack));
-                        }
-                        resolved = serde_json::Value::Object(merged);
+                if !map.is_empty() {
+                    let mut merged = resolved.as_object().cloned().unwrap_or_default();
+                    for (k, v) in map {
+                        merged.insert(k, inline_local_refs_in_value(v, defs, stack));
                     }
-
-                    return resolved;
+                    resolved = serde_json::Value::Object(merged);
                 }
+
+                return resolved;
             }
 
             let mut resolved = serde_json::Map::new();
@@ -256,9 +257,10 @@ fn wrap_payload_schema_for_mcap_message(schema_json: &str) -> String {
 
     let tov_root = mcap_tov_schema();
 
-    let process_time_schema = inline_schema_local_refs(parse_schema_or_unknown(
-        &crate::trace_type_to_jsonschema::<cu29_clock::PartialCuTimeRange>(),
-    ));
+    let process_time_schema =
+        inline_schema_local_refs(parse_schema_or_unknown(&crate::trace_type_to_jsonschema::<
+            cu29_clock::PartialCuTimeRange,
+        >()));
     let (process_time_root, process_time_defs) = split_schema_root_and_defs(process_time_schema);
     defs.extend(process_time_defs);
 
@@ -879,9 +881,7 @@ mod tests {
             match value {
                 serde_json::Value::Object(map) => {
                     map.contains_key(key)
-                        || map
-                            .values()
-                            .any(|inner| contains_key_recursive(inner, key))
+                        || map.values().any(|inner| contains_key_recursive(inner, key))
                 }
                 serde_json::Value::Array(values) => values
                     .iter()
