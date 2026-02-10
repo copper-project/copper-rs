@@ -1,0 +1,36 @@
+(
+    logging: (
+        enable_task_logging: true,
+        slab_size_mib: 16,
+        keyframe_interval: 3,
+    ),
+    tasks: [
+        (
+            id: "src",
+            type: "CounterSrc",
+            run_in_sim: true,
+        ),
+        (
+            id: "accum",
+            type: "Accumulator",
+            run_in_sim: true,
+        ),
+        (
+            id: "sink",
+            type: "SpySink",
+            run_in_sim: true,
+        ),
+    ],
+    cnx: [
+        (
+            src: "src",
+            dst: "accum",
+            msg: "CounterMsg",
+        ),
+        (
+            src: "accum",
+            dst: "sink",
+            msg: "AccumMsg",
+        ),
+    ],
+)

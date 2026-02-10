@@ -18,6 +18,8 @@ pub mod curuntime;
 pub mod cutask;
 #[cfg(feature = "std")]
 pub mod debug;
+#[cfg(feature = "remote-debug")]
+pub mod debug_remote;
 pub(crate) mod log;
 pub mod monitoring;
 pub mod payload;

@@ -49,6 +49,7 @@ log-level-warning = ["cu29-log-derive/log-level-warning"]
 log-level-error = ["cu29-log-derive/log-level-error"]
 log-level-critical = ["cu29-log-derive/log-level-critical"]
 reflect = ["cu29-clock/reflect", "cu29-runtime/reflect"]
+remote-debug = ["cu29-runtime/remote-debug"]
 std = [
   "rayon",
   "ctrlc",
