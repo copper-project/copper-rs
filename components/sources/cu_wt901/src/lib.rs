@@ -10,8 +10,6 @@ use cu29::resource::Owned;
 use cu29::resource::{ResourceBindingMap, ResourceBindings, ResourceManager};
 #[cfg(hardware)]
 use embedded_hal::i2c::I2c;
-#[cfg(hardware)]
-use linux_embedded_hal::I2cdev;
 use std::fmt::Display;
 use uom::si::acceleration::{meter_per_second_squared, standard_gravity};
 use uom::si::angle::{degree, radian};
@@ -22,9 +20,6 @@ use uom::si::f32::AngularVelocity;
 use uom::si::f32::MagneticFluxDensity;
 use uom::si::magnetic_flux_density::{nanotesla, tesla};
 
-// FIXME: remove.
-#[cfg(hardware)]
-const I2C_BUS: &str = "/dev/i2c-9";
 #[allow(unused)]
 const WT901_I2C_ADDRESS: u8 = 0x50;
 
@@ -76,10 +71,9 @@ pub enum Binding {
     I2c,
 }
 
-#[derive(Default)]
 pub struct Wt901Resources {
     #[cfg(hardware)]
-    pub i2c: Option<Owned<LinuxI2c>>,
+    pub i2c: Owned<LinuxI2c>,
 }
 
 impl<'r> ResourceBindings<'r> for Wt901Resources {
@@ -91,14 +85,15 @@ impl<'r> ResourceBindings<'r> for Wt901Resources {
     ) -> CuResult<Self> {
         #[cfg(hardware)]
         {
-            let i2c = match mapping.and_then(|m| m.get(Binding::I2c)) {
-                Some(path) => Some(
-                    manager
-                        .take::<LinuxI2c>(path.typed())
-                        .map_err(|e| e.add_cause("Failed to fetch WT901 I2C resource"))?,
-                ),
-                None => None,
-            };
+            let mapping = mapping.ok_or_else(|| {
+                CuError::from("WT901 requires an `i2c` resource mapping in copperconfig")
+            })?;
+            let path = mapping.get(Binding::I2c).ok_or_else(|| {
+                CuError::from("WT901 resources must include `i2c: <bundle.resource>`")
+            })?;
+            let i2c = manager
+                .take::<LinuxI2c>(path.typed())
+                .map_err(|e| e.add_cause("Failed to fetch WT901 I2C resource"))?;
             Ok(Self { i2c })
         }
         #[cfg(mock)]
@@ -274,24 +269,9 @@ impl CuSrcTask for WT901 {
     where
         Self: Sized,
     {
+        let _ = _config;
         #[cfg(hardware)]
-        let i2c = match _resources.i2c {
-            Some(i2c) => i2c.0,
-            None => {
-                let bus = match _config {
-                    Some(cfg) => cfg
-                        .get::<String>("i2c_bus")?
-                        .filter(|bus| !bus.is_empty())
-                        .unwrap_or_else(|| I2C_BUS.to_string()),
-                    None => I2C_BUS.to_string(),
-                };
-                debug!("Opening {}... ", &bus);
-                let i2cdev = I2cdev::new(&bus)
-                    .map_err(|err| CuError::new_with_cause("Could not open WT901 I2C bus", err))?;
-                debug!("{} opened.", bus);
-                LinuxI2c::new(i2cdev)
-            }
-        };
+        let i2c = _resources.i2c.0;
         Ok(WT901 {
             #[cfg(hardware)]
             i2c,
