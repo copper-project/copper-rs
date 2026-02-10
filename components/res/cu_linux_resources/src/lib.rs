@@ -15,25 +15,41 @@ use embedded_io_07 as embedded_io07;
 use std::string::String;
 
 #[cfg(feature = "std")]
-pub const SERIAL_PATH_KEY: &str = "serial_path";
+pub const SERIAL_ACM0_PATH_KEY: &str = "tty_acm0_path";
 #[cfg(feature = "std")]
-pub const SERIAL_DEVICE_KEY: &str = "device";
+pub const SERIAL_ACM1_PATH_KEY: &str = "tty_acm1_path";
 #[cfg(feature = "std")]
-pub const SERIAL_BAUDRATE_KEY: &str = "baudrate";
+pub const SERIAL_ACM2_PATH_KEY: &str = "tty_acm2_path";
 #[cfg(feature = "std")]
-pub const SERIAL_TIMEOUT_MS_KEY: &str = "timeout_ms";
+pub const SERIAL_USB0_PATH_KEY: &str = "tty_usb0_path";
+#[cfg(feature = "std")]
+pub const SERIAL_USB1_PATH_KEY: &str = "tty_usb1_path";
+#[cfg(feature = "std")]
+pub const SERIAL_USB2_PATH_KEY: &str = "tty_usb2_path";
+#[cfg(feature = "std")]
+pub const SERIAL_BAUDRATE_KEY: &str = "serial_baudrate";
+#[cfg(feature = "std")]
+pub const SERIAL_TIMEOUT_MS_KEY: &str = "serial_timeout_ms";
 
 #[cfg(feature = "std")]
-pub const I2C_BUS_KEY: &str = "i2c_bus";
+pub const I2C0_PATH_KEY: &str = "i2c0_path";
 #[cfg(feature = "std")]
-pub const I2C_DEVICE_KEY: &str = "bus";
+pub const I2C1_PATH_KEY: &str = "i2c1_path";
+#[cfg(feature = "std")]
+pub const I2C2_PATH_KEY: &str = "i2c2_path";
 
 #[cfg(feature = "std")]
-pub const GPIO_OUT_PIN_KEY: &str = "gpio_out_pin";
+pub const GPIO_OUT0_PIN_KEY: &str = "gpio_out0_pin";
 #[cfg(feature = "std")]
-pub const GPIO_IN_PIN_KEY: &str = "gpio_in_pin";
+pub const GPIO_OUT1_PIN_KEY: &str = "gpio_out1_pin";
 #[cfg(feature = "std")]
-pub const GPIO_PIN_KEY: &str = "pin";
+pub const GPIO_OUT2_PIN_KEY: &str = "gpio_out2_pin";
+#[cfg(feature = "std")]
+pub const GPIO_IN0_PIN_KEY: &str = "gpio_in0_pin";
+#[cfg(feature = "std")]
+pub const GPIO_IN1_PIN_KEY: &str = "gpio_in1_pin";
+#[cfg(feature = "std")]
+pub const GPIO_IN2_PIN_KEY: &str = "gpio_in2_pin";
 
 #[cfg(feature = "std")]
 pub const DEFAULT_SERIAL_BAUDRATE: u32 = 115_200;
@@ -262,7 +278,164 @@ pub type LinuxInputPin = Exclusive<rppal::gpio::InputPin>;
 pub struct LinuxResources;
 
 #[cfg(feature = "std")]
-bundle_resources!(LinuxResources: Serial, I2c, GpioOut, GpioIn);
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[repr(usize)]
+pub enum LinuxResourcesId {
+    SerialAcm0,
+    SerialAcm1,
+    SerialAcm2,
+    SerialUsb0,
+    SerialUsb1,
+    SerialUsb2,
+    I2c0,
+    I2c1,
+    I2c2,
+    GpioOut0,
+    GpioOut1,
+    GpioOut2,
+    GpioIn0,
+    GpioIn1,
+    GpioIn2,
+}
+
+#[cfg(feature = "std")]
+impl cu29::resource::ResourceId for LinuxResourcesId {
+    const COUNT: usize = 15;
+
+    fn index(self) -> usize {
+        self as usize
+    }
+}
+
+#[cfg(feature = "std")]
+impl cu29::resource::ResourceBundleDecl for LinuxResources {
+    type Id = LinuxResourcesId;
+}
+
+#[cfg(feature = "std")]
+#[allow(dead_code)]
+pub const LINUX_RESOURCES_ID_NAMES: &[&str] = &[
+    "serial_acm0",
+    "serial_acm1",
+    "serial_acm2",
+    "serial_usb0",
+    "serial_usb1",
+    "serial_usb2",
+    "i2c0",
+    "i2c1",
+    "i2c2",
+    "gpio_out0",
+    "gpio_out1",
+    "gpio_out2",
+    "gpio_in0",
+    "gpio_in1",
+    "gpio_in2",
+];
+
+#[cfg(feature = "std")]
+struct SerialSlot {
+    id: LinuxResourcesId,
+    key: &'static str,
+    default_path: &'static str,
+}
+
+#[cfg(feature = "std")]
+const SERIAL_SLOTS: &[SerialSlot] = &[
+    SerialSlot {
+        id: LinuxResourcesId::SerialAcm0,
+        key: SERIAL_ACM0_PATH_KEY,
+        default_path: "/dev/ttyACM0",
+    },
+    SerialSlot {
+        id: LinuxResourcesId::SerialAcm1,
+        key: SERIAL_ACM1_PATH_KEY,
+        default_path: "/dev/ttyACM1",
+    },
+    SerialSlot {
+        id: LinuxResourcesId::SerialAcm2,
+        key: SERIAL_ACM2_PATH_KEY,
+        default_path: "/dev/ttyACM2",
+    },
+    SerialSlot {
+        id: LinuxResourcesId::SerialUsb0,
+        key: SERIAL_USB0_PATH_KEY,
+        default_path: "/dev/ttyUSB0",
+    },
+    SerialSlot {
+        id: LinuxResourcesId::SerialUsb1,
+        key: SERIAL_USB1_PATH_KEY,
+        default_path: "/dev/ttyUSB1",
+    },
+    SerialSlot {
+        id: LinuxResourcesId::SerialUsb2,
+        key: SERIAL_USB2_PATH_KEY,
+        default_path: "/dev/ttyUSB2",
+    },
+];
+
+#[cfg(feature = "std")]
+struct I2cSlot {
+    id: LinuxResourcesId,
+    key: &'static str,
+    default_path: &'static str,
+}
+
+#[cfg(feature = "std")]
+const I2C_SLOTS: &[I2cSlot] = &[
+    I2cSlot {
+        id: LinuxResourcesId::I2c0,
+        key: I2C0_PATH_KEY,
+        default_path: "/dev/i2c-0",
+    },
+    I2cSlot {
+        id: LinuxResourcesId::I2c1,
+        key: I2C1_PATH_KEY,
+        default_path: "/dev/i2c-1",
+    },
+    I2cSlot {
+        id: LinuxResourcesId::I2c2,
+        key: I2C2_PATH_KEY,
+        default_path: "/dev/i2c-2",
+    },
+];
+
+#[cfg(feature = "std")]
+struct GpioSlot {
+    id: LinuxResourcesId,
+    key: &'static str,
+}
+
+#[cfg(feature = "std")]
+const GPIO_OUT_SLOTS: &[GpioSlot] = &[
+    GpioSlot {
+        id: LinuxResourcesId::GpioOut0,
+        key: GPIO_OUT0_PIN_KEY,
+    },
+    GpioSlot {
+        id: LinuxResourcesId::GpioOut1,
+        key: GPIO_OUT1_PIN_KEY,
+    },
+    GpioSlot {
+        id: LinuxResourcesId::GpioOut2,
+        key: GPIO_OUT2_PIN_KEY,
+    },
+];
+
+#[cfg(feature = "std")]
+const GPIO_IN_SLOTS: &[GpioSlot] = &[
+    GpioSlot {
+        id: LinuxResourcesId::GpioIn0,
+        key: GPIO_IN0_PIN_KEY,
+    },
+    GpioSlot {
+        id: LinuxResourcesId::GpioIn1,
+        key: GPIO_IN1_PIN_KEY,
+    },
+    GpioSlot {
+        id: LinuxResourcesId::GpioIn2,
+        key: GPIO_IN2_PIN_KEY,
+    },
+];
 
 #[cfg(feature = "std")]
 impl ResourceBundle for LinuxResources {
@@ -271,92 +444,120 @@ impl ResourceBundle for LinuxResources {
         config: Option<&ComponentConfig>,
         manager: &mut ResourceManager,
     ) -> CuResult<()> {
-        let cfg = config.ok_or_else(|| {
-            CuError::from(format!(
-                "Linux resource bundle `{}` requires configuration",
-                bundle.bundle_id()
-            ))
-        })?;
+        let baudrate = get_u32(config, SERIAL_BAUDRATE_KEY)?.unwrap_or(DEFAULT_SERIAL_BAUDRATE);
+        let timeout_ms =
+            get_u64(config, SERIAL_TIMEOUT_MS_KEY)?.unwrap_or(DEFAULT_SERIAL_TIMEOUT_MS);
 
-        let serial_path = get_string(cfg, SERIAL_PATH_KEY)?.or(get_string(cfg, SERIAL_DEVICE_KEY)?);
-        if let Some(path) = serial_path {
-            let baudrate = cfg
-                .get::<u32>(SERIAL_BAUDRATE_KEY)?
-                .unwrap_or(DEFAULT_SERIAL_BAUDRATE);
-            let timeout_ms = cfg
-                .get::<u64>(SERIAL_TIMEOUT_MS_KEY)?
-                .unwrap_or(DEFAULT_SERIAL_TIMEOUT_MS);
-            let serial = LinuxSerialPort::open(&path, baudrate, timeout_ms).map_err(|err| {
-                CuError::from(format!(
-                    "Failed to open serial `{path}` at {baudrate} baud: {err}"
-                ))
+        for slot in SERIAL_SLOTS {
+            let path =
+                get_string(config, slot.key)?.unwrap_or_else(|| String::from(slot.default_path));
+            match LinuxSerialPort::open(&path, baudrate, timeout_ms) {
+                Ok(serial) => {
+                    manager.add_owned(bundle.key(slot.id), serial)?;
+                }
+                Err(err) => {
+                    eprintln!(
+                        "LinuxResources: skipping serial slot {} ({}): {}",
+                        slot_name(slot.id),
+                        path,
+                        err
+                    );
+                }
+            }
+        }
+
+        #[cfg(target_os = "linux")]
+        for slot in I2C_SLOTS {
+            let path =
+                get_string(config, slot.key)?.unwrap_or_else(|| String::from(slot.default_path));
+            match linux_embedded_hal::I2cdev::new(&path) {
+                Ok(dev) => {
+                    manager.add_owned(bundle.key(slot.id), Exclusive::new(dev))?;
+                }
+                Err(err) => {
+                    eprintln!(
+                        "LinuxResources: skipping i2c slot {} ({}): {}",
+                        slot_name(slot.id),
+                        path,
+                        err
+                    );
+                }
+            }
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = bundle;
+            let _ = config;
+            let _ = manager;
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            let gpio = rppal::gpio::Gpio::new().map_err(|err| {
+                CuError::new_with_cause("Failed to initialize GPIO subsystem", err)
             })?;
-            let serial_key = bundle.key(LinuxResourcesId::Serial);
-            manager.add_owned(serial_key, serial)?;
-        }
 
-        let i2c_bus = get_string(cfg, I2C_BUS_KEY)?.or(get_string(cfg, I2C_DEVICE_KEY)?);
-        if let Some(bus) = i2c_bus {
-            #[cfg(target_os = "linux")]
-            {
-                let dev = linux_embedded_hal::I2cdev::new(&bus)
-                    .map_err(|err| CuError::new_with_cause("Failed to open I2C bus", err))?;
-                let i2c_key = bundle.key(LinuxResourcesId::I2c);
-                manager.add_owned(i2c_key, Exclusive::new(dev))?;
+            for slot in GPIO_OUT_SLOTS {
+                if let Some(pin) = get_u8(config, slot.key)? {
+                    match gpio.get(pin) {
+                        Ok(pin) => {
+                            manager.add_owned(
+                                bundle.key(slot.id),
+                                Exclusive::new(pin.into_output()),
+                            )?;
+                        }
+                        Err(err) => {
+                            eprintln!(
+                                "LinuxResources: skipping gpio output slot {} (pin {}): {}",
+                                slot_name(slot.id),
+                                pin,
+                                err
+                            );
+                        }
+                    }
+                }
             }
-            #[cfg(not(target_os = "linux"))]
-            {
-                return Err(CuError::from(format!(
-                    "I2C bus `{bus}` requested in `{}` but I2C is only supported on Linux",
-                    bundle.bundle_id()
-                )));
-            }
-        }
 
-        let gpio_out_pin = cfg
-            .get::<u8>(GPIO_OUT_PIN_KEY)?
-            .or(cfg.get::<u8>(GPIO_PIN_KEY)?);
-        if let Some(pin) = gpio_out_pin {
-            #[cfg(target_os = "linux")]
-            {
-                let gpio = rppal::gpio::Gpio::new().map_err(|err| {
-                    CuError::new_with_cause("Failed to initialize GPIO subsystem", err)
-                })?;
-                let output = gpio
-                    .get(pin)
-                    .map_err(|err| CuError::new_with_cause("Failed to get GPIO output pin", err))?
-                    .into_output();
-                let gpio_out_key = bundle.key(LinuxResourcesId::GpioOut);
-                manager.add_owned(gpio_out_key, Exclusive::new(output))?;
-            }
-            #[cfg(not(target_os = "linux"))]
-            {
-                return Err(CuError::from(format!(
-                    "GPIO output pin `{pin}` requested in `{}` but GPIO is only supported on Linux",
-                    bundle.bundle_id()
-                )));
+            for slot in GPIO_IN_SLOTS {
+                if let Some(pin) = get_u8(config, slot.key)? {
+                    match gpio.get(pin) {
+                        Ok(pin) => {
+                            manager
+                                .add_owned(bundle.key(slot.id), Exclusive::new(pin.into_input()))?;
+                        }
+                        Err(err) => {
+                            eprintln!(
+                                "LinuxResources: skipping gpio input slot {} (pin {}): {}",
+                                slot_name(slot.id),
+                                pin,
+                                err
+                            );
+                        }
+                    }
+                }
             }
         }
 
-        if let Some(pin) = cfg.get::<u8>(GPIO_IN_PIN_KEY)? {
-            #[cfg(target_os = "linux")]
-            {
-                let gpio = rppal::gpio::Gpio::new().map_err(|err| {
-                    CuError::new_with_cause("Failed to initialize GPIO subsystem", err)
-                })?;
-                let input = gpio
-                    .get(pin)
-                    .map_err(|err| CuError::new_with_cause("Failed to get GPIO input pin", err))?
-                    .into_input();
-                let gpio_in_key = bundle.key(LinuxResourcesId::GpioIn);
-                manager.add_owned(gpio_in_key, Exclusive::new(input))?;
+        #[cfg(not(target_os = "linux"))]
+        {
+            for slot in GPIO_OUT_SLOTS {
+                if let Some(pin) = get_u8(config, slot.key)? {
+                    eprintln!(
+                        "LinuxResources: requested gpio output slot {} on pin {} but GPIO is only supported on Linux",
+                        slot_name(slot.id),
+                        pin
+                    );
+                }
             }
-            #[cfg(not(target_os = "linux"))]
-            {
-                return Err(CuError::from(format!(
-                    "GPIO input pin `{pin}` requested in `{}` but GPIO is only supported on Linux",
-                    bundle.bundle_id()
-                )));
+            for slot in GPIO_IN_SLOTS {
+                if let Some(pin) = get_u8(config, slot.key)? {
+                    eprintln!(
+                        "LinuxResources: requested gpio input slot {} on pin {} but GPIO is only supported on Linux",
+                        slot_name(slot.id),
+                        pin
+                    );
+                }
             }
         }
 
@@ -365,8 +566,40 @@ impl ResourceBundle for LinuxResources {
 }
 
 #[cfg(feature = "std")]
-fn get_string(cfg: &ComponentConfig, key: &str) -> CuResult<Option<String>> {
-    Ok(cfg.get::<String>(key)?.filter(|value| !value.is_empty()))
+fn slot_name(id: LinuxResourcesId) -> &'static str {
+    LINUX_RESOURCES_ID_NAMES[id as usize]
+}
+
+#[cfg(feature = "std")]
+fn get_string(config: Option<&ComponentConfig>, key: &str) -> CuResult<Option<String>> {
+    match config {
+        Some(cfg) => Ok(cfg.get::<String>(key)?.filter(|value| !value.is_empty())),
+        None => Ok(None),
+    }
+}
+
+#[cfg(feature = "std")]
+fn get_u8(config: Option<&ComponentConfig>, key: &str) -> CuResult<Option<u8>> {
+    match config {
+        Some(cfg) => Ok(cfg.get::<u8>(key)?),
+        None => Ok(None),
+    }
+}
+
+#[cfg(feature = "std")]
+fn get_u32(config: Option<&ComponentConfig>, key: &str) -> CuResult<Option<u32>> {
+    match config {
+        Some(cfg) => Ok(cfg.get::<u32>(key)?),
+        None => Ok(None),
+    }
+}
+
+#[cfg(feature = "std")]
+fn get_u64(config: Option<&ComponentConfig>, key: &str) -> CuResult<Option<u64>> {
+    match config {
+        Some(cfg) => Ok(cfg.get::<u64>(key)?),
+        None => Ok(None),
+    }
 }
 
 #[cfg(all(test, feature = "embedded-io-07"))]
