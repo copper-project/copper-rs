@@ -265,14 +265,15 @@ mod tests {
     #[ignore]
     fn end2end_2_servos() {
         let mut config = ComponentConfig::default();
-        config
-            .0
-            .insert("serial_dev".to_string(), "/dev/ttyACM0".to_string().into());
-
         config.0.insert("servo0".to_string(), 1.into());
         config.0.insert("servo1".to_string(), 2.into());
 
-        let mut lewansoul = Lewansoul::new(Some(&config), LewansoulResources::default()).unwrap();
+        let serial = cu_linux_resources::LinuxSerialPort::open("/dev/ttyACM0", 115_200, 100)
+            .expect("open /dev/ttyACM0");
+        let resources = LewansoulResources {
+            serial: Owned(serial),
+        };
+        let mut lewansoul = Lewansoul::new(Some(&config), resources).unwrap();
         let _position = lewansoul.read_current_position(1).unwrap();
 
         let _angle_limits = lewansoul.read_angle_limits(1).unwrap();
