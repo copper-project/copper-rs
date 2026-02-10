@@ -51,7 +51,9 @@ serde_json = { version = "1.0", default-features = false, features = [
   "std",
 ], optional = true }
 zenoh = { version = "1.7.0", default-features = false, features = [
+  "shared-memory",
   "transport_tcp",
+  "transport_unixsock-stream",
 ], optional = true }
 minicbor-serde = { version = "0.6.2", default-features = false, features = [
   "alloc",

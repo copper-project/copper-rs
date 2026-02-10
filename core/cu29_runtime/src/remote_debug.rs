@@ -7,11 +7,12 @@
 //!
 //! | Kind | Item | Purpose |
 //! | --- | --- | --- |
-//! | Server | [`RemoteDebugZenohServer::new`] | Build server, bind request subscriber + event publishers. |
+//! | Server | [`RemoteDebugZenohServer::new`] | Build server with local-only default transport (Unix socket + SHM optimization). |
+//! | Server | [`RemoteDebugZenohServer::new_with_config`] | Build server with fully custom Zenoh config. |
 //! | Server | [`RemoteDebugZenohServer::serve_next`] | Process a single RPC request. |
 //! | Server | [`RemoteDebugZenohServer::serve_until_stopped`] | Serve loop until `admin.stop`. |
-//! | Client | [`RemoteDebugZenohClient::new`] | Client using CBOR codec by default. |
-//! | Client | [`RemoteDebugZenohClient::new_with_codec`] | Client with explicit wire codec. |
+//! | Client | [`RemoteDebugZenohClient::new`] | Client with local-only default transport and CBOR codec. |
+//! | Client | [`RemoteDebugZenohClient::builder`] | Builder for selecting codec and/or custom Zenoh config. |
 //! | Client | [`RemoteDebugZenohClient::call`] | Send one RPC call and wait for matching response. |
 //! | Shared | [`RemoteDebugPaths::new`] | Build request/event topic tree from a base keyexpr prefix. |
 //!
@@ -35,6 +36,13 @@
 //! - Request decoding is tolerant: server tries `CBOR` first, then `JSON`.
 //! - Response encoding matches the request codec used for that call.
 //! - `session.open` also returns a `wire_codec` field after codec negotiation.
+//!
+//! Default constructor transport profile:
+//!
+//! - local Unix socket endpoint derived from `paths.base`
+//! - multicast + gossip scouting disabled
+//! - shared-memory enabled
+//! - shared-memory transport optimization enabled with threshold `1` byte
 //!
 //! ## Envelope Schema
 //!
@@ -217,6 +225,8 @@ use cu29_unifiedlog::{SectionStorage, UnifiedLogWrite};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::HashMap;
+use std::fs;
+use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -226,6 +236,7 @@ use zenoh::key_expr::KeyExpr;
 use zenoh::{Config as ZenohConfig, Error as ZenohError};
 
 const API_VERSION: &str = "debug.v1";
+const LOCAL_SHM_MESSAGE_THRESHOLD_BYTES: u64 = 1;
 
 type ZenohSubscriber =
     zenoh::pubsub::Subscriber<zenoh::handlers::FifoChannelHandler<zenoh::sample::Sample>>;
@@ -545,6 +556,86 @@ impl RemoteDebugPaths {
     }
 }
 
+fn local_socket_path(base: &str) -> PathBuf {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    base.hash(&mut hasher);
+    let id = hasher.finish();
+    PathBuf::from(format!("/tmp/cu29_remote_debug_{id:016x}.sock"))
+}
+
+fn local_endpoint(base: &str) -> String {
+    format!("unixsock-stream/{}", local_socket_path(base).display())
+}
+
+fn set_config_json5(config: &mut ZenohConfig, key: &str, value: &str) -> CuResult<()> {
+    config
+        .insert_json5(key, value)
+        .map_err(|e| CuError::from(format!("RemoteDebug: invalid zenoh config '{key}': {e}")))
+}
+
+fn local_server_zenoh_config(paths: &RemoteDebugPaths) -> CuResult<ZenohConfig> {
+    let socket_path = local_socket_path(&paths.base);
+    if socket_path.exists() {
+        let _ = fs::remove_file(&socket_path);
+    }
+
+    let endpoint = local_endpoint(&paths.base);
+    let endpoint_json = serde_json::to_string(&endpoint)
+        .map_err(|e| CuError::new_with_cause("RemoteDebug: endpoint encoding failed", e))?;
+
+    let mut config = ZenohConfig::default();
+    set_config_json5(&mut config, "mode", "\"peer\"")?;
+    set_config_json5(&mut config, "scouting/multicast/enabled", "false")?;
+    set_config_json5(&mut config, "scouting/gossip/enabled", "false")?;
+    set_config_json5(&mut config, "connect/endpoints", "[]")?;
+    set_config_json5(
+        &mut config,
+        "listen/endpoints",
+        &format!("[{endpoint_json}]"),
+    )?;
+    set_config_json5(&mut config, "transport/shared_memory/enabled", "true")?;
+    set_config_json5(
+        &mut config,
+        "transport/shared_memory/transport_optimization/enabled",
+        "true",
+    )?;
+    set_config_json5(
+        &mut config,
+        "transport/shared_memory/transport_optimization/message_size_threshold",
+        &LOCAL_SHM_MESSAGE_THRESHOLD_BYTES.to_string(),
+    )?;
+    Ok(config)
+}
+
+fn local_client_zenoh_config(paths: &RemoteDebugPaths) -> CuResult<ZenohConfig> {
+    let endpoint = local_endpoint(&paths.base);
+    let endpoint_json = serde_json::to_string(&endpoint)
+        .map_err(|e| CuError::new_with_cause("RemoteDebug: endpoint encoding failed", e))?;
+
+    let mut config = ZenohConfig::default();
+    set_config_json5(&mut config, "mode", "\"client\"")?;
+    set_config_json5(&mut config, "scouting/multicast/enabled", "false")?;
+    set_config_json5(&mut config, "scouting/gossip/enabled", "false")?;
+    set_config_json5(&mut config, "listen/endpoints", "[]")?;
+    set_config_json5(
+        &mut config,
+        "connect/endpoints",
+        &format!("[{endpoint_json}]"),
+    )?;
+    set_config_json5(&mut config, "transport/shared_memory/enabled", "true")?;
+    set_config_json5(
+        &mut config,
+        "transport/shared_memory/transport_optimization/enabled",
+        "true",
+    )?;
+    set_config_json5(
+        &mut config,
+        "transport/shared_memory/transport_optimization/message_size_threshold",
+        &LOCAL_SHM_MESSAGE_THRESHOLD_BYTES.to_string(),
+    )?;
+    Ok(config)
+}
+
 #[allow(dead_code)]
 struct EventPublishers {
     cursor: zenoh::pubsub::Publisher<'static>,
@@ -599,6 +690,16 @@ where
     AF: Fn(&SessionOpenParams) -> CuResult<(App, RobotClock, RobotClockMock)>,
 {
     pub fn new(
+        paths: RemoteDebugPaths,
+        app_factory: AF,
+        build_callback: CB,
+        time_of: TF,
+    ) -> CuResult<Self> {
+        let zenoh_config = local_server_zenoh_config(&paths)?;
+        Self::new_with_config(zenoh_config, paths, app_factory, build_callback, time_of)
+    }
+
+    pub fn new_with_config(
         zenoh_config: ZenohConfig,
         paths: RemoteDebugPaths,
         app_factory: AF,
@@ -1879,16 +1980,48 @@ pub struct RemoteDebugZenohClient {
     codec: WireCodec,
 }
 
-impl RemoteDebugZenohClient {
-    pub fn new(
-        zenoh_config: ZenohConfig,
-        paths: RemoteDebugPaths,
-        client_id: &str,
-    ) -> CuResult<Self> {
-        Self::new_with_codec(zenoh_config, paths, client_id, WireCodec::Cbor)
+pub struct RemoteDebugZenohClientBuilder {
+    paths: RemoteDebugPaths,
+    client_id: String,
+    codec: WireCodec,
+    zenoh_config: Option<ZenohConfig>,
+}
+
+impl RemoteDebugZenohClientBuilder {
+    pub fn codec(mut self, codec: WireCodec) -> Self {
+        self.codec = codec;
+        self
     }
 
-    pub fn new_with_codec(
+    pub fn zenoh_config(mut self, zenoh_config: ZenohConfig) -> Self {
+        self.zenoh_config = Some(zenoh_config);
+        self
+    }
+
+    pub fn build(self) -> CuResult<RemoteDebugZenohClient> {
+        let zenoh_config = match self.zenoh_config {
+            Some(config) => config,
+            None => local_client_zenoh_config(&self.paths)?,
+        };
+        RemoteDebugZenohClient::open(zenoh_config, self.paths, &self.client_id, self.codec)
+    }
+}
+
+impl RemoteDebugZenohClient {
+    pub fn new(paths: RemoteDebugPaths, client_id: &str) -> CuResult<Self> {
+        Self::builder(paths, client_id).build()
+    }
+
+    pub fn builder(paths: RemoteDebugPaths, client_id: &str) -> RemoteDebugZenohClientBuilder {
+        RemoteDebugZenohClientBuilder {
+            paths,
+            client_id: client_id.to_string(),
+            codec: WireCodec::Cbor,
+            zenoh_config: None,
+        }
+    }
+
+    fn open(
         zenoh_config: ZenohConfig,
         paths: RemoteDebugPaths,
         client_id: &str,

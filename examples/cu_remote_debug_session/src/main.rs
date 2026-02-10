@@ -263,13 +263,7 @@ fn run_remote_debug_session() -> CuResult<()> {
             MmapSectionStorage,
             MmapUnifiedLoggerWrite,
             _,
-        >::new(
-            zenoh::Config::default(),
-            server_paths,
-            app_factory,
-            build_cb,
-            time_of,
-        )?;
+        >::new(server_paths, app_factory, build_cb, time_of)?;
         println!("[server] Serving until admin.stop");
         let result = server.serve_until_stopped();
         println!("[server] Server loop exited");
@@ -280,12 +274,9 @@ fn run_remote_debug_session() -> CuResult<()> {
     thread::sleep(Duration::from_millis(300));
 
     println!("[session] Creating remote debug client");
-    let client = RemoteDebugZenohClient::new_with_codec(
-        zenoh::Config::default(),
-        paths.clone(),
-        "demo_client",
-        WireCodec::Cbor,
-    )?;
+    let client = RemoteDebugZenohClient::builder(paths.clone(), "demo_client")
+        .codec(WireCodec::Cbor)
+        .build()?;
 
     let open = call_step(
         &client,
