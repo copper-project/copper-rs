@@ -60,6 +60,8 @@ pub use cu29_runtime::output_msg;
 pub use cu29_runtime::payload;
 pub use cu29_runtime::reflect;
 pub use cu29_runtime::reflect as bevy_reflect;
+#[cfg(feature = "remote-debug")]
+pub use cu29_runtime::remote_debug;
 pub use cu29_runtime::resource;
 pub use cu29_runtime::rx_channels;
 #[cfg(feature = "std")]
@@ -104,7 +106,7 @@ pub use bincode;
 pub use cu29_clock as clock;
 #[cfg(feature = "defmt")]
 pub mod defmt {
-    pub use ::defmt::{debug, error, info, warn};
+    pub use defmt::{debug, error, info, warn};
 }
 #[cfg(feature = "std")]
 pub use cu29_runtime::config::read_configuration;
@@ -201,6 +203,8 @@ pub mod prelude {
         GetTypeRegistration, Reflect, ReflectTaskIntrospection, ReflectTypePath, TypeInfo,
         TypePath, TypeRegistry, dump_type_registry_schema,
     };
+    #[cfg(feature = "remote-debug")]
+    pub use cu29_runtime::remote_debug::*;
     pub use cu29_runtime::resource::*;
     pub use cu29_runtime::rx_channels;
     #[cfg(feature = "std")]

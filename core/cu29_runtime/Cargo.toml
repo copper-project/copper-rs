@@ -50,6 +50,14 @@ svg = { version = "0.18", optional = true }
 serde_json = { version = "1.0", default-features = false, features = [
   "std",
 ], optional = true }
+zenoh = { version = "1.7.0", default-features = false, features = [
+  "shared-memory",
+  "transport_tcp",
+  "transport_unixsock-stream",
+], optional = true }
+minicbor-serde = { version = "0.6.2", default-features = false, features = [
+  "alloc",
+], optional = true }
 
 # std only dependencies
 clap = { workspace = true, optional = true }       # CLI
@@ -82,6 +90,13 @@ defmt = ["cu29-log/defmt", "cu29-log-derive/defmt", "cu29-traits/defmt"]
 cuda = ["dep:cudarc"]
 macro_debug = []
 reflect = ["dep:bevy_reflect"]
+remote-debug = [
+  "std",
+  "reflect",
+  "dep:serde_json",
+  "dep:zenoh",
+  "dep:minicbor-serde",
+]
 std = [
   "dep:clap",
   "dep:rayon",

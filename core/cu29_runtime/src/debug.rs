@@ -531,6 +531,16 @@ where
         Ok(Some(self.copperlist_at(idx)?.0))
     }
 
+    /// Total number of copperlists indexed in this session.
+    pub fn total_entries(&self) -> usize {
+        self.total_entries
+    }
+
+    /// Current absolute cursor index, if initialized.
+    pub fn current_index(&self) -> Option<usize> {
+        self.current_idx
+    }
+
     /// Borrow the underlying application for inspection (e.g., task state asserts).
     pub fn with_app<R>(&mut self, f: impl FnOnce(&mut App) -> R) -> R {
         f(&mut self.app)

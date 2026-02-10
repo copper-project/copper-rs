@@ -83,6 +83,7 @@ members = [
   "examples/cu_zenoh_ros",
   "examples/cu_human_pose",
   "examples/cu_debug_session",
+  "examples/cu_remote_debug_session",
 ]
 
 # put only the core crates here that are not platform specific
