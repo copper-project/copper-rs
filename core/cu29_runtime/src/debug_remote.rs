@@ -995,7 +995,11 @@ where
                 match state.session.cl_at(resolved.idx) {
                     Ok(Some(cl)) => cl,
                     Ok(None) => {
-                        return err_response(request_id, "GetClFailed", "target copperlist missing");
+                        return err_response(
+                            request_id,
+                            "GetClFailed",
+                            "target copperlist missing",
+                        );
                     }
                     Err(e) => return err_response(request_id, "GetClFailed", &e.to_string()),
                 }

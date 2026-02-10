@@ -17,7 +17,9 @@ cu29 = { workspace = true, features = ["reflect", "remote-debug"] }
 cu29-helpers = { workspace = true }
 serde = { workspace = true }
 bincode = { workspace = true }
-zenoh = { version = "1.7.0", default-features = false, features = ["transport_tcp"] }
+zenoh = { version = "1.7.0", default-features = false, features = [
+  "transport_tcp",
+] }
 serde_json = "1.0"
 
 [package.metadata.cargo-shear]
