@@ -237,8 +237,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use zenoh::bytes::Encoding;
 use zenoh::key_expr::KeyExpr;
@@ -2993,19 +2992,5 @@ fn hex_digit(n: u8) -> char {
     match n {
         0..=9 => (b'0' + n) as char,
         _ => (b'a' + (n - 10)) as char,
-    }
-}
-
-pub struct RemoteDebugServerHandle {
-    stop: Arc<AtomicBool>,
-}
-
-impl RemoteDebugServerHandle {
-    pub fn stop(&self) {
-        self.stop.store(true, Ordering::SeqCst);
-    }
-
-    pub fn is_stopped(&self) -> bool {
-        self.stop.load(Ordering::SeqCst)
     }
 }
