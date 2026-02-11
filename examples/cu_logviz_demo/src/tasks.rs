@@ -10,6 +10,8 @@ const IMAGE_HEIGHT: u32 = 48;
 const IMAGE_STRIDE: u32 = IMAGE_WIDTH * 3;
 const POINTS: usize = 64;
 
+#[derive(Clone, Reflect)]
+#[reflect(opaque, from_reflect = false)]
 pub struct LogvizDemoSrc {
     tick: u64,
     image: CuImage<Vec<u8>>,
@@ -121,6 +123,7 @@ impl CuSrcTask for LogvizDemoSrc {
     }
 }
 
+#[derive(Reflect)]
 pub struct LogvizDemoSink;
 
 impl Freezable for LogvizDemoSink {}
