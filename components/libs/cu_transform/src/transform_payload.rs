@@ -156,9 +156,10 @@ where
 
     /// Get the timestamp from the message
     pub fn timestamp(&self) -> Option<CuTime> {
-        match self.transform.tov {
-            Tov::Time(time) => Some(time),
-            _ => None,
+        if let Tov::Time(time) = self.transform.tov {
+            Some(time)
+        } else {
+            None
         }
     }
 
@@ -230,28 +231,44 @@ where
         self.sort_by_time();
     }
 
+    fn transform_at(&self, index: usize) -> Option<&TypedTransform<T, Parent, Child>> {
+        self.transforms.get(index)?.as_ref()
+    }
+
+    fn timed_indices(&self) -> Vec<(usize, CuTime)> {
+        (0..self.count)
+            .filter_map(|index| {
+                let transform = self.transform_at(index)?;
+                Some((index, transform.timestamp()?))
+            })
+            .collect()
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn transform_pair(
+        &self,
+        first: usize,
+        second: usize,
+    ) -> Option<(
+        &TypedTransform<T, Parent, Child>,
+        &TypedTransform<T, Parent, Child>,
+    )> {
+        Some((self.transform_at(first)?, self.transform_at(second)?))
+    }
+
     /// Sort transforms by timestamp
     fn sort_by_time(&mut self) {
-        // Create a temporary vector of (timestamp, index) pairs
-        let mut time_indices: Vec<(CuTime, usize)> = Vec::new();
-
-        for i in 0..self.count {
-            if let Some(ref transform) = self.transforms[i]
-                && let Some(time) = transform.timestamp()
-            {
-                time_indices.push((time, i));
-            }
-        }
+        let mut time_indices = self.timed_indices();
 
         // Sort by timestamp
-        time_indices.sort_by_key(|(time, _)| *time);
+        time_indices.sort_by_key(|(_, time)| *time);
 
         // Create a new ordered array
         let mut new_transforms: [Option<TypedTransform<T, Parent, Child>>; N] =
             std::array::from_fn(|_| None);
 
-        for (idx, (_, old_idx)) in time_indices.iter().enumerate() {
-            new_transforms[idx] = self.transforms[*old_idx].take();
+        for (new_idx, (old_idx, _)) in time_indices.into_iter().enumerate() {
+            new_transforms[new_idx] = self.transforms[old_idx].take();
         }
 
         self.transforms = new_transforms;
@@ -259,12 +276,9 @@ where
 
     /// Get the latest transform
     pub fn get_latest_transform(&self) -> Option<&TypedTransform<T, Parent, Child>> {
-        if self.count == 0 {
-            return None;
-        }
-
-        // Since we maintain sorted order, the latest is the last one
-        self.transforms[self.count - 1].as_ref()
+        self.count
+            .checked_sub(1)
+            .and_then(|index| self.transform_at(index))
     }
 
     /// Get transform closest to specified time
@@ -273,27 +287,14 @@ where
             return None;
         }
 
-        let mut closest_idx = 0;
-        let mut closest_diff = u64::MAX;
+        let closest_idx = self
+            .timed_indices()
+            .into_iter()
+            .min_by_key(|(_, transform_time)| time.as_nanos().abs_diff(transform_time.as_nanos()))
+            .map(|(index, _)| index)
+            .unwrap_or(0);
 
-        for i in 0..self.count {
-            if let Some(ref transform) = self.transforms[i]
-                && let Some(transform_time) = transform.timestamp()
-            {
-                let diff = if time.as_nanos() > transform_time.as_nanos() {
-                    time.as_nanos() - transform_time.as_nanos()
-                } else {
-                    transform_time.as_nanos() - time.as_nanos()
-                };
-
-                if diff < closest_diff {
-                    closest_diff = diff;
-                    closest_idx = i;
-                }
-            }
-        }
-
-        self.transforms[closest_idx].as_ref()
+        self.transform_at(closest_idx)
     }
 
     /// Get time range of stored transforms
@@ -303,8 +304,9 @@ where
         }
 
         // Since we maintain sorted order, first is min, last is max
-        let start = self.transforms[0].as_ref()?.timestamp()?;
-        let end = self.transforms[self.count - 1].as_ref()?.timestamp()?;
+        let end_index = self.count.checked_sub(1)?;
+        let start = self.transform_at(0)?.timestamp()?;
+        let end = self.transform_at(end_index)?.timestamp()?;
 
         Some(CuTimeRange { start, end })
     }
@@ -327,45 +329,25 @@ where
         let mut after_idx = None;
 
         for i in 0..self.count {
-            if let Some(ref transform) = self.transforms[i]
-                && let Some(transform_time) = transform.timestamp()
-            {
-                if transform_time <= time {
-                    before_idx = Some(i);
-                } else if after_idx.is_none() {
-                    after_idx = Some(i);
-                    break;
-                }
+            let Some(transform) = self.transform_at(i) else {
+                continue;
+            };
+            let Some(transform_time) = transform.timestamp() else {
+                continue;
+            };
+
+            if transform_time <= time {
+                before_idx = Some(i);
+            } else if after_idx.is_none() {
+                after_idx = Some(i);
+                break;
             }
         }
 
         match (before_idx, after_idx) {
-            (Some(before), Some(after)) => Some((
-                self.transforms[before].as_ref()?,
-                self.transforms[after].as_ref()?,
-            )),
-            (Some(before), None) => {
-                // Time is after all our transforms, use last two
-                if before > 0 {
-                    Some((
-                        self.transforms[before - 1].as_ref()?,
-                        self.transforms[before].as_ref()?,
-                    ))
-                } else {
-                    None
-                }
-            }
-            (None, Some(after)) => {
-                // Time is before all our transforms, use first two
-                if after + 1 < self.count {
-                    Some((
-                        self.transforms[after].as_ref()?,
-                        self.transforms[after + 1].as_ref()?,
-                    ))
-                } else {
-                    None
-                }
-            }
+            (Some(before), Some(after)) => self.transform_pair(before, after),
+            (Some(before), None) if before > 0 => self.transform_pair(before - 1, before),
+            (None, Some(after)) if after + 1 < self.count => self.transform_pair(after, after + 1),
             _ => None,
         }
     }
