@@ -396,12 +396,14 @@ const SERIAL_SLOTS: &[SerialSlot] = &[
     },
 ];
 
+#[cfg(target_os = "linux")]
 struct I2cSlot {
     id: LinuxResourcesId,
     dev_key: &'static str,
     default_dev: &'static str,
 }
 
+#[cfg(target_os = "linux")]
 const I2C_SLOTS: &[I2cSlot] = &[
     I2cSlot {
         id: LinuxResourcesId::I2c0,
