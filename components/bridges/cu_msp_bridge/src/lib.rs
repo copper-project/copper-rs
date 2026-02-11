@@ -45,6 +45,40 @@ const MAX_REQUESTS_PER_BATCH: usize = 8;
 const MAX_RESPONSES_PER_BATCH: usize = 16;
 const TX_BUFFER_CAPACITY: usize = MSP_MAX_PAYLOAD_LEN + 12;
 
+fn take_pending_batch<T: Default>(pending: &mut T) -> T {
+    let mut batch = T::default();
+    mem::swap(&mut batch, pending);
+    batch
+}
+
+fn decode_bounded_vec<T, const N: usize, D>(
+    decoder: &mut D,
+) -> Result<HeaplessVec<T, N>, DecodeError>
+where
+    T: Decode<()>,
+    D: Decoder<Context = ()>,
+{
+    let values = <Vec<T> as Decode<()>>::decode(decoder)?;
+    let count = values.len();
+    if count > N {
+        return Err(DecodeError::ArrayLengthMismatch {
+            required: N,
+            found: count,
+        });
+    }
+
+    let mut batch = HeaplessVec::new();
+    for value in values {
+        batch
+            .push(value)
+            .map_err(|_| DecodeError::ArrayLengthMismatch {
+                required: N,
+                found: count,
+            })?;
+    }
+    Ok(batch)
+}
+
 /// Batch of MSP requests transported over the bridge.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Reflect)]
 #[reflect(opaque, from_reflect = false)]
@@ -74,25 +108,7 @@ impl Encode for MspRequestBatch {
 
 impl Decode<()> for MspRequestBatch {
     fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let values = <Vec<MspRequest> as Decode<()>>::decode(decoder)?;
-        let count = values.len();
-        if count > MAX_REQUESTS_PER_BATCH {
-            return Err(DecodeError::ArrayLengthMismatch {
-                required: MAX_REQUESTS_PER_BATCH,
-                found: count,
-            });
-        }
-        let mut batch = MspRequestBatch::new();
-        for value in values {
-            batch
-                .0
-                .push(value)
-                .map_err(|_| DecodeError::ArrayLengthMismatch {
-                    required: MAX_REQUESTS_PER_BATCH,
-                    found: count,
-                })?;
-        }
-        Ok(batch)
+        decode_bounded_vec::<MspRequest, MAX_REQUESTS_PER_BATCH, _>(decoder).map(MspRequestBatch)
     }
 }
 
@@ -129,25 +145,7 @@ impl Encode for MspResponseBatch {
 
 impl Decode<()> for MspResponseBatch {
     fn decode<D: Decoder<Context = ()>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        let values = <Vec<MspResponse> as Decode<()>>::decode(decoder)?;
-        let count = values.len();
-        if count > MAX_RESPONSES_PER_BATCH {
-            return Err(DecodeError::ArrayLengthMismatch {
-                required: MAX_RESPONSES_PER_BATCH,
-                found: count,
-            });
-        }
-        let mut batch = MspResponseBatch::new();
-        for value in values {
-            batch
-                .0
-                .push(value)
-                .map_err(|_| DecodeError::ArrayLengthMismatch {
-                    required: MAX_RESPONSES_PER_BATCH,
-                    found: count,
-                })?;
-        }
-        Ok(batch)
+        decode_bounded_vec::<MspResponse, MAX_RESPONSES_PER_BATCH, _>(decoder).map(MspResponseBatch)
     }
 }
 
@@ -384,15 +382,11 @@ where
         match channel.id() {
             RxId::Responses => {
                 let response_msg: &mut CuMsg<MspResponseBatch> = msg.downcast_mut()?;
-                let mut batch = MspResponseBatch::new();
-                mem::swap(&mut batch, &mut self.pending_responses);
-                response_msg.set_payload(batch);
+                response_msg.set_payload(take_pending_batch(&mut self.pending_responses));
             }
             RxId::Incoming => {
                 let request_msg: &mut CuMsg<MspRequestBatch> = msg.downcast_mut()?;
-                let mut batch = MspRequestBatch::new();
-                mem::swap(&mut batch, &mut self.pending_requests);
-                request_msg.set_payload(batch);
+                request_msg.set_payload(take_pending_batch(&mut self.pending_requests));
             }
         }
         Ok(())
