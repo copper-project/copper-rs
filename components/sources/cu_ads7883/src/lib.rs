@@ -179,14 +179,12 @@ pub mod test_support {
 
 #[cfg(hardware)]
 fn read_spi_config(config: Option<&ComponentConfig>) -> CuResult<(Option<String>, Option<u32>)> {
-    let config = match config {
-        Some(config) => config,
-        None => return Ok((None, None)),
-    };
-
-    let spi_dev = config.get::<String>("spi_dev")?;
-    let max_speed_hz = config.get::<u32>("max_speed_hz")?;
-    Ok((spi_dev, max_speed_hz))
+    config.map_or(Ok((None, None)), |cfg| {
+        Ok((
+            cfg.get::<String>("spi_dev")?,
+            cfg.get::<u32>("max_speed_hz")?,
+        ))
+    })
 }
 
 fn read_adc_value(spi: &mut Spidev) -> CuResult<u16> {

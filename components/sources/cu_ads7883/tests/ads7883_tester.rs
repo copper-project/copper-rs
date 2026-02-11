@@ -6,7 +6,7 @@ use cu29_helpers::basic_copper_setup;
 struct ADS78883Tester {}
 
 #[derive(Reflect)]
-pub struct ADS78883TestSink {}
+pub struct ADS78883TestSink;
 
 impl Freezable for ADS78883TestSink {}
 
@@ -17,7 +17,7 @@ impl CuSinkTask for ADS78883TestSink {
     where
         Self: Sized,
     {
-        Ok(Self {})
+        Ok(Self)
     }
 
     fn process(&mut self, _clock: &RobotClock, new_msg: &Self::Input<'_>) -> CuResult<()> {
